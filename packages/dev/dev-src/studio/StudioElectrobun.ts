@@ -172,6 +172,9 @@ function configSource(options: {
         identifier: ${JSON.stringify(options.bundleIdentifier)},
         version: ${JSON.stringify(options.version)},
       },
+      runtime: {
+        exitOnLastWindowClosed: true,
+      },
       build: {
         mainProcess: 'bun',
         bun: {
@@ -329,7 +332,7 @@ function mainSource(): string {
         label: 'File',
         submenu: [
           { label: 'Open Project…', action: 'open-project', accelerator: 'o' },
-          { role: 'close' },
+          { role: 'close', accelerator: 'w' },
         ],
       },
       {
@@ -367,8 +370,8 @@ function mainSource(): string {
       }
     })
 
-    const welcomeWindow = createStudioWindow('Welcome')
     const projectWindow = initialProjectUrl === undefined ? undefined : createStudioWindow('Project')
+    const welcomeWindow = projectWindow === undefined ? createStudioWindow('Welcome') : undefined
     void applyAvailableUpdate(false).catch(error => console.error('Tao Studio update check failed.', error))
 
     async function openProjectDialog(): Promise<void> {

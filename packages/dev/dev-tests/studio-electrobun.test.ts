@@ -14,6 +14,10 @@ Describe('Studio Electrobun project', () => {
     const generated = StudioElectrobun.sources(options)
 
     Expect(generated.config).toContain("mainProcess: 'bun'")
+    Expect(generated.config).toContain('exitOnLastWindowClosed: true')
+    Expect(generated.config.indexOf('exitOnLastWindowClosed: true')).toBeLessThan(
+      generated.config.indexOf('build: {'),
+    )
     Expect(generated.config).toContain("entrypoint: 'src/bun/index.ts'")
     Expect(generated.main).toContain('import Electrobun, {')
     Expect(generated.main).toContain("} from 'electrobun/main'")
@@ -71,11 +75,25 @@ Describe('Studio Electrobun project', () => {
     const main = StudioElectrobun.sources(options).main
     const menuIndex = main.indexOf('ApplicationMenu.setApplicationMenu([')
     const quitIndex = main.indexOf("{ role: 'quit', accelerator: 'q' }")
+    const closeIndex = main.indexOf("{ role: 'close', accelerator: 'w' }")
     const welcomeWindowIndex = main.indexOf("createStudioWindow('Welcome')")
 
     Expect(menuIndex).toBeGreaterThan(-1)
     Expect(quitIndex).toBeGreaterThan(menuIndex)
+    Expect(closeIndex).toBeGreaterThan(menuIndex)
     Expect(welcomeWindowIndex).toBeGreaterThan(quitIndex)
+  })
+
+  Test('opens one initial native window', () => {
+    const main = StudioElectrobun.sources(options).main
+
+    Expect(main).toContain(
+      "const projectWindow = initialProjectUrl === undefined ? undefined : createStudioWindow('Project')",
+    )
+    Expect(main).toContain(
+      "const welcomeWindow = projectWindow === undefined ? createStudioWindow('Welcome') : undefined",
+    )
+    Expect(main).not.toContain("const welcomeWindow = createStudioWindow('Welcome')")
   })
 
   Test('materializes a clean executable project and exact Hutch commands', async () => {

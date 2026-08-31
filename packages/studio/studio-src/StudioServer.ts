@@ -187,6 +187,9 @@ async function startManagedStudioServer(
         }
         const resource = manager.get(route.sessionId)
         if (resource === undefined) {
+          if (request.method === 'GET' && url.searchParams.get('native-window') === 'project') {
+            return htmlResponse(StudioWelcome.sessionUnavailable(), 404)
+          }
           return response(request, url, requestOptions, { error: 'Studio session not found.' }, 404)
         }
         subscribeSession(route.sessionId)
@@ -547,8 +550,9 @@ function dataFillRequest(value: unknown): StudioServerFillRequest {
   }
 }
 
-function htmlResponse(html: string): Response {
+function htmlResponse(html: string, status = 200): Response {
   return new Response(html, {
+    status,
     headers: {
       'content-type': 'text/html; charset=utf-8',
       'x-content-type-options': 'nosniff',

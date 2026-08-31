@@ -83,6 +83,42 @@ export const StudioWelcome = {
 </script></body>
 </html>`
   },
+  sessionUnavailable(): string {
+    return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Project session unavailable — Tao Studio</title>
+  <style>
+    :root { color: #e8e7e3; background: #171918; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; }
+    body { align-items: center; display: grid; margin: 0; min-height: 100vh; padding: 32px; }
+    main { background: #202321; border: 1px solid #353936; border-radius: 12px; box-sizing: border-box; margin: 0 auto; max-width: 620px; padding: 32px; width: 100%; }
+    .eyebrow { color: #e58b83; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+    h1 { font-size: 26px; margin: 8px 0 12px; }
+    p { color: #b4bbb5; margin: 0 0 24px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    a, button { background: #2b302c; border: 1px solid #454b46; border-radius: 7px; color: inherit; font: inherit; font-weight: 650; padding: 9px 14px; text-decoration: none; }
+    a { background: #315d45; border-color: #467b5e; }
+    a:hover, button:hover { filter: brightness(1.12); cursor: pointer; }
+    small { color: #858d86; display: block; margin-top: 22px; }
+  </style>
+</head>
+<body><main>
+  <div class="eyebrow">Project unavailable</div>
+  <h1>This Studio session is no longer open.</h1>
+  <p>The window refers to a session owned by an earlier Studio server. This commonly happens after Studio restarts or a previous development process exits.</p>
+  <div class="actions">
+    <a href="/welcome?native-window=welcome">Choose a project</a>
+    <button type="button" id="close-window">Close window</button>
+  </div>
+  <small>You can also close this window with Command-W.</small>
+</main>
+<script>document.querySelector('#close-window').addEventListener('click', () => window.close())</script>
+</body>
+</html>`
+  },
 } as const
 
 function escapeHtml(value: string): string {

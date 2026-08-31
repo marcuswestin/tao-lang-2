@@ -247,6 +247,15 @@ Describe('Studio session manager', () => {
     Expect(html).toContain('&lt;Garden&gt;')
     Expect(html).not.toContain('/tmp/<secret>')
   })
+
+  Test('explains how to recover from a stale native project session', () => {
+    const html = StudioWelcome.sessionUnavailable()
+
+    Expect(html).toContain('This Studio session is no longer open.')
+    Expect(html).toContain('/welcome?native-window=welcome')
+    Expect(html).toContain('Close window')
+    Expect(html).toContain('Command-W')
+  })
 })
 
 function resource(projectRoot: string, appName: string, closed: string[]): StudioSessionResource {
