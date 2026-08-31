@@ -29,9 +29,12 @@ const config = require('../metro.config.cjs') as MetroConfig
 Describe('Expo Metro configuration', () => {
   Test('resolves packages through the physical root install used by linked worktrees', async () => {
     const installedNodeModules = await FS.realPath(Repo.resolvePath('node_modules'))
+    const runtimeToolchainNodeModules = await FS.realPath(Repo.resolvePath('packages/runtime-toolchain/node_modules'))
 
     Expect(config.resolver.nodeModulesPaths).toContain(installedNodeModules)
+    Expect(config.resolver.nodeModulesPaths).toContain(runtimeToolchainNodeModules)
     Expect(config.watchFolders).toContain(installedNodeModules)
+    Expect(config.watchFolders).toContain(runtimeToolchainNodeModules)
   })
 
   Test('keeps the Bun phantom-dependency farm out of module resolution', async () => {

@@ -7,6 +7,7 @@ const config = getDefaultConfig(__dirname)
 const runtimeToolchainSourceRoot = process.env.TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT || __dirname
 const repositoryNodeModules = nodePath.resolve(runtimeToolchainSourceRoot, '..', '..', 'node_modules')
 const installedNodeModules = nodeFs.realpathSync(repositoryNodeModules)
+const runtimeToolchainNodeModules = nodeFs.realpathSync(nodePath.resolve(__dirname, 'node_modules'))
 const runtimeSourceRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', 'runtime', 'TaoRuntime-src')
 const sharedCoreSourceRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', 'shared', 'shared-src', 'core')
 
@@ -26,6 +27,7 @@ config.watchFolders = [
   ...new Set([
     ...config.watchFolders,
     installedNodeModules,
+    runtimeToolchainNodeModules,
     runtimeSourceRoot,
     sharedCoreSourceRoot,
   ]),
@@ -33,6 +35,7 @@ config.watchFolders = [
 config.resolver.nodeModulesPaths = [
   ...new Set([
     ...config.resolver.nodeModulesPaths,
+    runtimeToolchainNodeModules,
     installedNodeModules,
   ]),
 ]
