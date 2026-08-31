@@ -13,6 +13,7 @@ app feature and Tao test proves each capability).
 
 - [x] Rename UI to Scene
 - [x] Upgrade all dependencies of e.g expo/react-native/expo-router/etc
+- [ ] Think about making Tao apps easily keyboard driven.
 - [ ] Deep links and navigation persistence
 - [ ] Enable Codex to interact with studio on its own for testing and development of it.
 - [ ] Instructions to keep track of all dev env/process issues along the way, and then list them when done implementing with suggested solutions.
