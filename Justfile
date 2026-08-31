@@ -85,7 +85,8 @@ fix: _parser-gen
     ./tao fix
 
 # Check and test all code
-check: _compile-word-flower-app _parallel-check
+check: _compile-word-flower-app
+    ./dev gates _ide-extension-build _repo-lint _dependency-check _tao-check _dprint-check _typecheck _test _runtime-pack-check --skipped "studio-smoke=slow lane; run just studio-smoke <file>"
 
 # Run lint only
 lint: _repo-lint
@@ -126,7 +127,8 @@ clean-all: clean
     rm -rf .artifacts packages/runtime-toolchain/ios packages/runtime-toolchain/android
 
 # Prepare all code for commit
-verify: fix _compile-word-flower-app _parallel-verify-check
+verify: fix _compile-word-flower-app
+    ./dev gates _ide-extension-build _repo-lint _dependency-check _typecheck _test _runtime-pack-check --json .artifacts/logs/verify/summary.json --skipped "_tao-check=covered by check" "_dprint-check=fix already formatted this tree" "studio-smoke=slow lane; run just studio-smoke <file>"
 
 # Private
 #########
@@ -136,12 +138,6 @@ _agent-config:
 
 _dependency-health:
     cd packages/runtime-toolchain && "{{ DEVENV_NODE }}" -e 'require("expo/metro-config"); require("jest-expo/jest-preset")'
-
-[parallel]
-_parallel-check: _ide-extension-build _repo-lint _dependency-check _tao-check _dprint-check _typecheck _test _runtime-pack-check
-
-[parallel]
-_parallel-verify-check: _ide-extension-build _repo-lint _dependency-check _typecheck _test _runtime-pack-check
 
 _bench-check:
     bun test packages/dev/performance-checks/language-performance.test.ts
@@ -185,4 +181,4 @@ _android-expo-go:
     bun run packages/dev/dev-src/dev.ts android-expo-go
 
 _parser-gen:
-    cd packages/parser && "{{ DEVENV_NODE }}" node_modules/langium-cli/bin/langium.js generate
+    bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts

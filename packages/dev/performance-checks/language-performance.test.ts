@@ -1,4 +1,4 @@
-import { FS, Repo } from '@shared'
+import { CLI, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   type LanguagePerformanceReport,
@@ -20,15 +20,17 @@ Describe('language performance reporting', () => {
     Expect(() => parseIterations('1.5')).toThrow('Performance iterations must be a positive integer')
   })
 
-  Test('keeps the benchmark command guarded without a competing parallel check', async () => {
-    const justfile = await FS.readText(Repo.resolvePath('Justfile'))
+  Test('runs the benchmark only from `bench`, never alongside a check or verify gate', async () => {
+    // A benchmark that shares a machine with the other gates measures contention, not the
+    // language service, so `check` and `verify` must not reach it however they are structured.
+    const benchCommands = await justCommands('bench')
+    Expect(benchCommands).toContain('language-performance.test.ts')
+    Expect(benchCommands).toContain('language-performance.ts')
 
-    Expect(justfile).toContain('bench iterations="10": _bench-check')
-    Expect(justfile).toContain('language-performance.ts "{{ iterations }}"')
-    Expect(justfile).toMatch(/_parallel-check: (?!.*_bench-check)/)
-    Expect(justfile).toMatch(/_parallel-verify-check: (?!.*_bench-check)/)
-    Expect(justfile).toContain('_bench-check:')
-    Expect(justfile).not.toMatch(/_test PATTERN="":\n(?:    .*\n)*    .*performance-checks/)
+    for (const lane of ['check', 'verify']) {
+      Expect(await justCommands(lane)).not.toContain('_bench-check')
+      Expect(await justCommands(lane)).not.toContain('performance-checks')
+    }
   })
 
   Test('renders fixture metadata, latency percentiles, and aggregate timing', () => {
@@ -57,3 +59,10 @@ Describe('language performance reporting', () => {
     Expect(output).toContain('wall 1.2s, measured sum 1.1s')
   })
 })
+
+/** justCommands returns the commands a lane would run, so the assertion is about behavior. */
+async function justCommands(name: string): Promise<string> {
+  const result = await CLI.run('just', { args: ['--dry-run', name], cwd: Repo.getRoot() })
+  Expect(result.exitCode).toBe(0)
+  return `${result.stdout}${result.stderr}`
+}

@@ -2,6 +2,7 @@ import { Errors, HCI, Platform, Switch } from '@shared'
 import { runWithCommands } from './cli/run-with-commands'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { ExpoRunner } from './expo-dev-loop/expo-runner/ExpoRunner'
+import { formatGateSummary, gateExitCode, runGates } from './repository-tests/GateRunner'
 import { TestRunner } from './repository-tests/TestRunner'
 import { TestTUI } from './repository-tests/TestTUI'
 import { runStudioDev } from './studio/StudioDev'
@@ -38,6 +39,24 @@ await runWithCommands(commands => {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
       }
+    })
+
+  commands
+    .command('gates')
+    .description('Run repository gates in parallel and report one verification summary.')
+    .argument('<gates...>', 'Just recipe names to run as gates.')
+    .option('--jobs <count>', 'Maximum number of gates to run at once.')
+    .option('--json <path>', 'Also write the summary as a JSON artifact at this path.')
+    .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
+    .action(async (gates: string[], options: { jobs?: string; json?: string; skipped?: string[] } = {}) => {
+      const summary = await runGates({
+        gates,
+        jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
+        jsonPath: options.json,
+        skipped: options.skipped,
+      })
+      HCI.writeLine(formatGateSummary(summary))
+      Platform.runtimeProcess.exit(gateExitCode(summary))
     })
 
   commands
