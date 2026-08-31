@@ -13,6 +13,7 @@ import {
   type StudioFixtureValue,
   type StudioJsonObject,
   type StudioJsonValue,
+  type StudioPreviewRuntimeUpdateMessage,
   type StudioPreviewSourceIdentity,
   StudioProtocol,
   studioProtocolChannel,
@@ -204,6 +205,7 @@ function reconcileElementChildren(parent: HTMLElement, next: readonly HTMLElemen
 
 export type StudioPreviewConnection = {
   activate?: () => void
+  appliedRevision?: number
   capture?: {
     button: HTMLButtonElement
     fixtureName: string
@@ -219,10 +221,12 @@ export type StudioPreviewConnection = {
   frame?: HTMLElement
   iframe: HTMLIFrameElement
   interactionMode: StudioInteractionMode
+  expectedRevision?: number
   origin: string
   previewInstanceId: string
   reconfigureEnvironment?: (environment: StudioCellEnvironment) => Promise<void>
   refresh?: Promise<void>
+  revisionTimeout?: ReturnType<typeof setTimeout>
   replayRuntimeCapture?: (capture: StudioRuntimeCaptureArtifact) => Promise<void>
   runtimeCaptureRequest?: {
     reject: (error: Error) => void
@@ -245,6 +249,10 @@ export function disconnectPreviews(
   reason = 'The Tao Studio preview was disconnected.',
 ): void {
   for (const preview of previews) {
+    if (preview.revisionTimeout !== undefined) {
+      clearTimeout(preview.revisionTimeout)
+      preview.revisionTimeout = undefined
+    }
     if (preview.capture !== undefined) {
       clearTimeout(preview.capture.timeout)
       preview.capture = undefined
@@ -471,7 +479,17 @@ async function connectCellPreview(
   const iframe = document.createElement('iframe')
   iframe.src = StudioPreviewFrameUrl.create(previewUrl, previewInstanceId, window.location, true)
   iframe.title = `${cell.scenarioId} live preview`
-  return { cell, cellIdentity, iframe, interactionMode: 'edit', origin, previewInstanceId }
+  const connection: StudioPreviewConnection = {
+    cell,
+    cellIdentity,
+    expectedRevision: manifest.compileRevision,
+    iframe,
+    interactionMode: 'edit',
+    origin,
+    previewInstanceId,
+  }
+  schedulePreviewRevisionFallback(connection)
+  return connection
 }
 
 export function configureInteractionMode(
@@ -515,6 +533,24 @@ function postInteractionMode(preview: StudioPreviewConnection, handshake: Studio
     protocolVersion: studioProtocolVersion,
     type: 'set-interaction-mode',
   }, preview.origin)
+}
+
+function postPreviewRuntimeUpdate(
+  preview: StudioPreviewConnection,
+  runtime: StudioCellRuntimeResponse,
+): void {
+  const target = preview.iframe.contentWindow
+  if (target === null) {
+    return
+  }
+  const message: StudioPreviewRuntimeUpdateMessage<StudioCellRuntimeResponse> = {
+    channel: studioProtocolChannel,
+    identity: { ...runtime.identity, previewInstanceId: preview.previewInstanceId },
+    protocolVersion: studioProtocolVersion,
+    runtime,
+    type: 'preview-runtime-update',
+  }
+  target.postMessage(message, preview.origin)
 }
 
 function renderCellPreview(
@@ -1248,6 +1284,7 @@ function observePreviewVisibility(frame: HTMLElement, connection: StudioPreviewC
       connection.suspendedSource = undefined
       if (source !== undefined) {
         connection.iframe.src = source
+        schedulePreviewRevisionFallback(connection)
       }
     }
   }, { root: frame.closest<HTMLElement>('.studio-preview-grid'), rootMargin: '600px' })
@@ -1261,6 +1298,41 @@ function setPreviewSource(connection: StudioPreviewConnection, source: string): 
   } else {
     connection.iframe.src = source
   }
+}
+
+function expectPreviewRevision(connection: StudioPreviewConnection, compileRevision: number): void {
+  connection.expectedRevision = compileRevision
+  if (connection.revisionTimeout !== undefined) {
+    clearTimeout(connection.revisionTimeout)
+    connection.revisionTimeout = undefined
+  }
+  schedulePreviewRevisionFallback(connection)
+}
+
+function schedulePreviewRevisionFallback(connection: StudioPreviewConnection): void {
+  const expected = connection.expectedRevision
+  if (
+    expected === undefined
+    || (connection.appliedRevision ?? -1) >= expected
+    || connection.suspended === true
+    || connection.revisionTimeout !== undefined
+  ) {
+    return
+  }
+  connection.revisionTimeout = setTimeout(() => {
+    connection.revisionTimeout = undefined
+    if (
+      connection.expectedRevision !== expected
+      || (connection.appliedRevision ?? -1) >= expected
+      || connection.suspended === true
+    ) {
+      return
+    }
+    const source = connection.iframe.src
+    if (source !== '' && source !== 'about:blank') {
+      connection.iframe.src = source
+    }
+  }, 750)
 }
 
 /** Adds Studio-owned viewport/network state without allowing unregistered domains into a capture. */
@@ -1444,8 +1516,26 @@ export async function handlePreviewMessage(
   }
   if (message.type === 'preview-applied') {
     postInteractionMode(preview, handshake)
-    if (preview.cellIdentity !== undefined) {
+    const identity = preview.cellIdentity
+    const currentCell = identity === undefined || (
+      message.identity.cellId === identity.cellId
+      && message.identity.cellRevision === identity.cellRevision
+      && message.identity.compileRevision === identity.compileRevision
+      && message.identity.manifestRevision === identity.manifestRevision
+    )
+    if (!currentCell) {
       return
+    }
+    if (identity !== undefined) {
+      preview.appliedRevision = Math.max(preview.appliedRevision ?? 0, message.appliedRevision)
+      if (
+        preview.expectedRevision !== undefined
+        && preview.appliedRevision >= preview.expectedRevision
+        && preview.revisionTimeout !== undefined
+      ) {
+        clearTimeout(preview.revisionTimeout)
+        preview.revisionTimeout = undefined
+      }
     }
     await StudioApiClient.previewApplied(message)
     return
@@ -1782,6 +1872,11 @@ export async function refreshCellPreviews(
       preview.generationNotice = 'The Tao source changed while generation was running; its result was ignored.'
     }
     preview.cellIdentity = pendingIdentity
+    preview.expectedRevision = manifest.compileRevision
+    if (preview.revisionTimeout !== undefined) {
+      clearTimeout(preview.revisionTimeout)
+      preview.revisionTimeout = undefined
+    }
     const refresh = async (): Promise<void> => {
       const runtime = await StudioRetainedPreview.register<StudioCellRuntimeResponse>(
         identities,
@@ -1803,6 +1898,9 @@ export async function refreshCellPreviews(
       preview.cell = runtime.cell
       preview.cellIdentity = runtime.identity
       preview.iframe.title = `${runtime.cell.scenarioId} live preview`
+      expectPreviewRevision(preview, runtime.identity.compileRevision)
+      postPreviewRuntimeUpdate(preview, runtime)
+      postInteractionMode(preview, handshake)
       if (preview.frame !== undefined) {
         renderCellPreview(preview.frame, preview, previewUrl, manifest)
       }

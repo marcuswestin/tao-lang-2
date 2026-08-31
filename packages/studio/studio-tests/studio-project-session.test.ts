@@ -663,6 +663,7 @@ Test('Studio registers one preview instance and acknowledges only its compiled r
 
 Test('Studio project session exposes concurrent matrix cells and rejects stale reconfiguration', async () => {
   await withStudioProject(async session => {
+    const compiled = await session.compileInitial()
     const cell = {
       args: {},
       cellId: 'cell:phone',
@@ -678,7 +679,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     const manifest = {
       capabilities: { captureDomains: ['data'], scheme: 'inert' as const },
       cells: [cell],
-      compileRevision: 0,
+      compileRevision: compiled.compileRevision,
       fixtures: [{
         fixtureId: 'fixture:base',
         label: 'Base',
@@ -717,6 +718,22 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     session.setMatrixManifest(manifest)
     const identity = StudioPreviewManifest.cellIdentity(manifest, cell)
     const registered = session.registerCellPreview({ ...identity, previewInstanceId: 'cell-preview-1' })
+    const applied = {
+      appliedRevision: compiled.compileRevision,
+      channel: studioProtocolChannel,
+      compileRevision: compiled.compileRevision,
+      identity: { ...registered.identity, previewInstanceId: 'cell-preview-1' },
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-applied',
+    }
+    Expect(session.acknowledgePreview(applied)).toBe(true)
+    Expect(session.compileSnapshot().appliedRevision).toBe(compiled.compileRevision)
+    Expect(() =>
+      session.acknowledgePreview({
+        ...applied,
+        identity: { ...applied.identity, previewInstanceId: 'stale-cell-preview' },
+      })
+    ).toThrow('no longer current')
     const replay = {
       capturedAt: 1_788_100_000_000,
       domains: [{ domain: 'data', value: { snapshots: {} }, version: 1 }],
@@ -736,7 +753,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     session.setMatrixManifest({
       ...manifest,
       cells: [{ ...cell, cellRevision: 0 }],
-      compileRevision: 1,
+      compileRevision: compiled.compileRevision + 1,
       manifestRevision: 'manifest-2',
     })
     unsubscribe()
@@ -752,7 +769,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     })
     Expect(refreshed.identity).toMatchObject({
       cellRevision: 1,
-      compileRevision: 1,
+      compileRevision: compiled.compileRevision + 1,
       manifestRevision: 'manifest-2',
     })
     Expect(refreshed.cell.environment.network.latencyMs).toBe(250)

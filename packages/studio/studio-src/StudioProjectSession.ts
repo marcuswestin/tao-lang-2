@@ -440,6 +440,28 @@ export class StudioProjectSession {
     if (message?.type !== 'preview-applied') {
       throw new Errors.UserInputError('Expected a valid Tao Studio preview-applied message.')
     }
+    if (message.identity.cellId !== undefined) {
+      const identity = message.identity
+      const cellId = identity.cellId
+      if (
+        cellId === undefined
+        || identity.cellRevision === undefined
+        || identity.compileRevision === undefined
+        || identity.manifestRevision === undefined
+      ) {
+        throw new Errors.UserInputError('Expected a complete Studio cell preview identity.')
+      }
+      this.#requireMatrix().assertCurrentInstance({
+        appName: identity.appName,
+        cellId,
+        cellRevision: identity.cellRevision,
+        compileRevision: identity.compileRevision,
+        manifestRevision: identity.manifestRevision,
+        previewInstanceId: identity.previewInstanceId,
+        project: identity.project,
+      })
+      return this.#coordinator.acknowledgeCompiledRevision(message)
+    }
     return this.#coordinator.acknowledgePreview(message)
   }
 

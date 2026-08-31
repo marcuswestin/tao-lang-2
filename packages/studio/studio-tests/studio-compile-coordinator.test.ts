@@ -158,6 +158,26 @@ Describe('Studio compile coordinator', () => {
     Expect(states).toContain(compiled.compileRevision)
   })
 
+  Test('tracks an authenticated matrix revision without replacing the legacy preview instance', async () => {
+    const coordinator = new StudioCompileCoordinator({
+      appName: 'Garden',
+      async compile() {},
+      project: '/workspace/garden',
+    })
+    coordinator.setPreviewInstance('legacy-preview')
+    const compiled = await coordinator.requestInitialCompile()
+    const message = appliedMessage('matrix-preview', compiled.compileRevision)
+
+    Expect(coordinator.acknowledgeCompiledRevision(message)).toBe(true)
+    Expect(coordinator.snapshot().appliedRevision).toBe(compiled.compileRevision)
+    Expect(coordinator.acknowledgeCompiledRevision(message)).toBe(false)
+    Expect(coordinator.acknowledgeCompiledRevision({
+      ...message,
+      appliedRevision: compiled.compileRevision + 1,
+      compileRevision: compiled.compileRevision + 1,
+    })).toBe(false)
+  })
+
   Test('continues with a queued revision after a compile error', async () => {
     const gate = deferred<void>()
     const requests: StudioCompileRequest[] = []

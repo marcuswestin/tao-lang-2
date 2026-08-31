@@ -87,6 +87,15 @@ export type StudioPreviewAppliedMessage = {
   type: 'preview-applied'
 }
 
+/** Parent-to-preview publication of the runtime state paired with one compiled generated module revision. */
+export type StudioPreviewRuntimeUpdateMessage<Runtime = StudioJsonObject> = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  runtime: Runtime
+  type: 'preview-runtime-update'
+}
+
 export type StudioPreviewSourceMessage = {
   channel: typeof studioProtocolChannel
   identity: StudioPreviewSourceIdentity

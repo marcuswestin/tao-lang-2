@@ -193,6 +193,17 @@ export class StudioCompileCoordinator {
       message.identity.project !== this.#project.project
       || message.identity.appName !== this.#project.appName
       || message.identity.previewInstanceId !== this.#previewInstanceId
+    ) {
+      return false
+    }
+    return this.acknowledgeCompiledRevision(message)
+  }
+
+  /** Matrix sessions authenticate cell-instance identity before advancing the shared applied revision. */
+  acknowledgeCompiledRevision(message: StudioPreviewAppliedMessage): boolean {
+    if (
+      message.identity.project !== this.#project.project
+      || message.identity.appName !== this.#project.appName
       || message.compileRevision !== message.appliedRevision
       || message.appliedRevision <= this.#appliedRevision
       || !this.#compiledRevisions.has(message.appliedRevision)
