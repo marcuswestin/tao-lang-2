@@ -55,7 +55,7 @@ view WorkspaceList() {
             on submit AddWorkspace
          }
          Text(when WorkspaceName {
-            empty -> "Workspace name is required"
+            empty -> "Workspace name is required!"
             otherwise -> WorkspaceName
          }) [body]
          Text(WordFlowerTagline) [body]
