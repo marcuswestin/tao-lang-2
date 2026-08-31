@@ -10,6 +10,7 @@
     "./protocol": "./studio-src/StudioProtocol.ts"
   },
   "dependencies": {
+    "@tao/code-editor": "workspace:*",
     "@codemirror/lsp-client": "^6.2.5",
     "@codemirror/state": "6.7.1",
     "@codemirror/view": "6.43.8",
