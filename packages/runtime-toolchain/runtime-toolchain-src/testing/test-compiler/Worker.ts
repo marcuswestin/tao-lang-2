@@ -9,6 +9,20 @@ type PendingRequest = {
   resolve: (output: TestCompiler.Worker.Output) => void
 }
 
+type WaitForCommandClose = (
+  close: Promise<CLI.CommandCloseResult>,
+  timeoutMs: number,
+) => Promise<CLI.CommandCloseResult | undefined>
+
+type StopCommandOptions = {
+  forceTimeoutMs?: number
+  gracefulTimeoutMs?: number
+  terminateTimeoutMs?: number
+  waitForClose?: WaitForCommandClose
+}
+
+const DEFAULT_STOP_TIMEOUT_MS = 250
+
 const WORKER_PATH = FS.resolvePath(
   'runtime-toolchain-src/testing/test-compiler/WorkerProcess.ts',
   RuntimeToolchainPaths.packageRoot,
@@ -20,6 +34,11 @@ export const Worker = {
   compileTestPlan,
   createSession,
   stop,
+} as const
+
+/** WorkerTesting exposes deterministic lifecycle seams to package tests. */
+export const WorkerTesting = {
+  stopCommand,
 } as const
 
 /** CompileTestPlanOptions configures one worker test-plan compilation request. */
@@ -132,9 +151,14 @@ class Session {
   private nextRequestId = 1
   private pending = new Map<number, PendingRequest>()
   private stderr = ''
+  private stopPromise: Promise<void> | undefined
+  private stopped = false
   private stdout = { pending: '' }
 
   async request(input: TestCompiler.Worker.Input): Promise<TestCompiler.Worker.Output> {
+    if (this.stopped) {
+      throw new Error('Test compiler worker session is stopped.')
+    }
     await this.start()
     const command = this.command
     if (command === undefined) {
@@ -153,36 +177,38 @@ class Session {
   }
 
   async stop(): Promise<void> {
+    this.stopped = true
+    this.rejectPending('Test compiler worker session stopped.')
+    this.stopPromise ??= this.stopCommands()
+    await this.stopPromise
+  }
+
+  private async stopCommands(): Promise<void> {
     const commands = [...this.commands]
     this.commands.clear()
     this.command = undefined
     if (commands.length === 0) {
       return
     }
-    for (const command of commands) {
-      command.endStdin()
-      // No request is pending once a session is stopped. Explicitly terminate the owned worker
-      // because EOF/close alone can leave Bun children alive and keep the calling CLI open.
-      command.kill('SIGTERM')
-    }
-    const results = await Promise.all(commands.map(command => command.waitForClose()))
-    for (const command of commands) {
-      command.dispose()
-    }
-    const result = results.at(-1)
-    this.rejectPending(`Test compiler worker stopped with exit ${result?.exitCode ?? 'unknown'}.`)
+    await Promise.all(commands.map(command => stopCommand(command)))
   }
 
   private async start(): Promise<void> {
     if (this.command !== undefined) {
       return
     }
-    const command = CLI.start(await bunPath(), {
+    const executable = await bunPath()
+    if (this.stopped) {
+      throw new Error('Test compiler worker session is stopped.')
+    }
+    if (this.command !== undefined) {
+      return
+    }
+    const command = CLI.start(executable, {
       args: ['run', WORKER_PATH],
       cwd: Repo.resolvePath(),
       onOutput: (stream, chunk) => this.handleOutput(stream, chunk),
       stdio: ['pipe', 'pipe', 'pipe'],
-      unref: true,
     })
     this.command = command
     this.commands.add(command)
@@ -230,6 +256,41 @@ class Session {
     }
     this.pending.clear()
   }
+}
+
+/** Gives a worker EOF, then escalates through TERM and KILL without waiting forever. */
+async function stopCommand(command: CLI.StartedCommand, options: StopCommandOptions = {}): Promise<void> {
+  const close = command.waitForClose()
+  const waitForClose = options.waitForClose ?? waitForCommandClose
+  try {
+    command.endStdin()
+    if (await waitForClose(close, options.gracefulTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS) !== undefined) {
+      return
+    }
+    command.kill('SIGTERM')
+    if (await waitForClose(close, options.terminateTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS) !== undefined) {
+      return
+    }
+    command.kill('SIGKILL')
+    await waitForClose(close, options.forceTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS)
+  } finally {
+    await command.closeOutput()
+    command.dispose()
+  }
+}
+
+async function waitForCommandClose(
+  close: Promise<CLI.CommandCloseResult>,
+  timeoutMs: number,
+): Promise<CLI.CommandCloseResult | undefined> {
+  return await new Promise(resolve => {
+    const timeout = setTimeout(() => resolve(undefined), timeoutMs)
+    close.then(result => {
+      clearTimeout(timeout)
+      resolve(result)
+      return result
+    })
+  })
 }
 
 function formatWorkerClose(result: CLI.CommandCloseResult, stderr: string): string {

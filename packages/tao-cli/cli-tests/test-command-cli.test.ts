@@ -1,3 +1,4 @@
+import { FS, Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { runTaoCliForTest, withTaoFixture } from './test-cli-files'
 
@@ -48,12 +49,26 @@ Describe('tao test CLI', () => {
       'One/App.test.tao': test('One'),
       'Two/App.tao': app('Two'),
       'Two/App.test.tao': test('Two'),
+      // This test owns compiler-worker lifecycle coverage. Keep the runtime runner inert so
+      // nested Jest startup cannot consume Bun's test timeout under repository-wide load.
+      'jest-stub.mjs': '',
     }, async rootDir => {
-      const result = await runTaoCliForTest(['test', rootDir])
+      const envName = 'TAO_TEST_JEST_PATH'
+      const previousJestPath = Platform.runtimeProcess.env[envName]
+      Platform.runtimeProcess.env[envName] = FS.resolvePath('jest-stub.mjs', rootDir)
+      try {
+        const result = await runTaoCliForTest(['test', rootDir])
 
-      Expect(result.exitCode).toBe(0)
-      Expect(result.stdout).toContain('Found 2 Tao test files')
-      Expect(result.stdout).toContain('Tao tests finished')
+        Expect(result.exitCode).toBe(0)
+        Expect(result.stdout).toContain('Found 2 Tao test files')
+        Expect(result.stdout).toContain('Tao tests finished')
+      } finally {
+        if (previousJestPath === undefined) {
+          delete Platform.runtimeProcess.env[envName]
+        } else {
+          Platform.runtimeProcess.env[envName] = previousJestPath
+        }
+      }
     })
   })
 })
