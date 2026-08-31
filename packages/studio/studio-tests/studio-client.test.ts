@@ -6,6 +6,7 @@ import {
   StudioDiagnosticNavigation,
   StudioFixtureProposal,
   StudioOpenFileLifecycle,
+  StudioSourcePath,
 } from '../studio-src/StudioClient'
 import { StudioClientAssets } from '../studio-src/StudioClientAssets'
 import {
@@ -55,6 +56,10 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
 })
 
 Test('Studio generated fixture proposals use the captured-fixture source-action flow', () => {
+  Expect(StudioSourcePath.relative('/project', '/project/Scenarios.tao')).toBe('Scenarios.tao')
+  Expect(StudioSourcePath.relative('/project', 'Scenarios.tao')).toBe('Scenarios.tao')
+  Expect(StudioSourcePath.relative('/project', '/other/Scenarios.tao')).toBeUndefined()
+
   const identity = {
     appName: 'WordFlower',
     cellId: 'Workspace.focused#cell',
@@ -68,11 +73,11 @@ Test('Studio generated fixture proposals use the captured-fixture source-action 
   }
   const plan = {
     accounts: [],
-    creates: [{ entity: 'Workspace', fields: { Title: 'Roadmap' }, name: 'Main' }],
+    creates: [{ entity: 'Workspace', fields: { CreatedAt: { kind: 'now' as const }, Title: 'Roadmap' }, name: 'Main' }],
   }
 
   Expect(StudioFixtureProposal.source('GeneratedState', plan)).toContain(
-    'fixture GeneratedState {\n   Main = create Workspace { Title: "Roadmap" }\n}',
+    'fixture GeneratedState {\n   Main = create Workspace { CreatedAt: now, Title: "Roadmap" }\n}',
   )
   Expect(StudioFixtureProposal.sourceAction({
     fixtureName: 'GeneratedState',

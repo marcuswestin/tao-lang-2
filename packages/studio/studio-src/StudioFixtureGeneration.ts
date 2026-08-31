@@ -113,7 +113,7 @@ export class StudioFixtureGeneration {
           status: 'failed',
         }
       }
-      const modelFields = studioFixtureFields(result.value, row.entity)
+      const modelFields = generatedStudioFixtureFields(result.value, declaration)
       creates.push({ entity: row.entity, fields: { ...modelFields, ...relationFields }, name: row.name })
     }
 
@@ -174,6 +174,25 @@ function studioFixtureFields(
       throw new Errors.UserInputError(`Generated ${owner}.${name} is not a Tao fixture value.`)
     }),
   )
+}
+
+function generatedStudioFixtureFields(
+  value: Readonly<Record<string, unknown>>,
+  declaration: EntityGenerationDeclaration,
+): Record<string, StudioFixtureValue> {
+  const fields = studioFixtureFields(value, declaration.name)
+  for (const field of declaration.fields) {
+    if (
+      field.type.kind === 'scalar'
+      && field.type.scalar === 'time'
+      && typeof fields[field.name] === 'string'
+    ) {
+      // Tao's current executable time expression is `now`; it has no authored timestamp literal.
+      // The model's schema value still passes through validation before we lower it for fixture source.
+      fields[field.name] = { kind: 'now' }
+    }
+  }
+  return fields
 }
 
 function failed(code: GenerationFailure['code'], error: string): StudioFixtureGenerationResult {

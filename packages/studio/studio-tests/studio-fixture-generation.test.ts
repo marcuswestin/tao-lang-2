@@ -20,7 +20,11 @@ Describe('Studio fixture generation', () => {
 
   Test('generates fixture rows, excludes secrets, and preserves explicit relation topology', async () => {
     const provider = new ScriptedGenerationProvider([
-      { kind: 'answer', partials: [{ Title: 'Road' }], value: { Title: 'Roadmap' } },
+      {
+        kind: 'answer',
+        partials: [{ Title: 'Road' }],
+        value: { CreatedAt: '2026-08-30T21:40:20.733Z', Title: 'Roadmap' },
+      },
       { kind: 'answer', value: { Title: 'Introduction' } },
     ])
     const generation = new StudioFixtureGeneration(provider)
@@ -30,7 +34,11 @@ Describe('Studio fixture generation', () => {
       fixture: {
         accounts: [],
         creates: [
-          { entity: 'Workspace', fields: { Title: 'Roadmap' }, name: 'Main' },
+          {
+            entity: 'Workspace',
+            fields: { CreatedAt: { kind: 'now' }, Title: 'Roadmap' },
+            name: 'Main',
+          },
           {
             entity: 'Document',
             fields: { Title: 'Introduction', Workspace: { handle: 'Main', kind: 'fixture-reference' } },
@@ -155,6 +163,13 @@ const generationDeclarations: readonly GenerationDeclaration[] = [
     collection: 'Workspaces',
     fields: [
       { name: 'Title', optional: false, secret: false, type: { kind: 'scalar', scalar: 'text' } },
+      {
+        defaultValue: { kind: 'now' },
+        name: 'CreatedAt',
+        optional: false,
+        secret: false,
+        type: { kind: 'scalar', scalar: 'time' },
+      },
       { name: 'PrivateNotes', optional: true, secret: true, type: { kind: 'scalar', scalar: 'text' } },
     ],
     kind: 'entity',

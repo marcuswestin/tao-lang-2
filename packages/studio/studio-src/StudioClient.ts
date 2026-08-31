@@ -366,7 +366,10 @@ async function mountStudio(): Promise<void> {
       })
     }
 
-    async function applySourceAction(envelope: StudioSourceActionEnvelope): Promise<void> {
+    async function applySourceAction(
+      envelope: StudioSourceActionEnvelope,
+      propagateFailure = false,
+    ): Promise<void> {
       sourceActionBusy = true
       renderInspector()
       view.status.dataset['state'] = 'compiling'
@@ -385,6 +388,9 @@ async function mountStudio(): Promise<void> {
         view.status.textContent = 'Source action applied; compiling preview…'
       } catch (error) {
         showSourceActionError(view.status, error)
+        if (propagateFailure) {
+          throw error
+        }
       } finally {
         sourceActionBusy = false
         renderInspector()
@@ -413,19 +419,22 @@ async function mountStudio(): Promise<void> {
     }
 
     async function submitPreviewAction(envelope: StudioSourceActionEnvelope): Promise<void> {
-      if (sourceActionBusy || !await flushVisualEditDraft()) {
-        return
+      if (sourceActionBusy) {
+        throw new Error('Another Studio source action is already in progress.')
       }
-      const path = projectRelativePath(handshake.identity.project, envelope.identity.path)
-      if (
-        path === undefined
-        || (path === activePath && envelope.identity.sourceVersion !== activeFile?.sourceVersion)
-      ) {
+      if (!await flushVisualEditDraft()) {
+        throw new Error('Finish the invalid Tao draft before applying this source edit.')
+      }
+      const path = StudioSourcePath.relative(handshake.identity.project, envelope.identity.path)
+      if (path === undefined) {
+        throw new Error('The source edit is outside the open Studio project.')
+      }
+      if (path === activePath && envelope.identity.sourceVersion !== activeFile?.sourceVersion) {
         view.status.dataset['state'] = 'error'
         view.status.textContent = 'Wait for the refreshed preview before editing this render.'
-        return
+        throw new Error('Wait for the refreshed preview before applying this source edit.')
       }
-      await applySourceAction(envelope)
+      await applySourceAction(envelope, true)
     }
 
     for (const connection of previews) {
@@ -1411,6 +1420,10 @@ export const StudioFixtureProposal = {
   sourceAction: fixtureProposalSourceAction,
 } as const
 
+export const StudioSourcePath = {
+  relative: sourceActionProjectRelativePath,
+} as const
+
 async function proposeAndSaveFixture(options: {
   applySourceAction?: (envelope: StudioSourceActionEnvelope) => Promise<void>
   button: HTMLButtonElement
@@ -1840,6 +1853,14 @@ function absoluteSourcePath(project: string, path: string): string {
 function projectRelativePath(project: string, sourcePath: string): string | undefined {
   const prefix = `${project.replace(/\/$/, '')}/`
   return sourcePath.startsWith(prefix) ? sourcePath.slice(prefix.length) : undefined
+}
+
+function sourceActionProjectRelativePath(project: string, sourcePath: string): string | undefined {
+  const absolute = projectRelativePath(project, sourcePath)
+  if (absolute !== undefined) {
+    return absolute
+  }
+  return sourcePath.startsWith('/') ? undefined : sourcePath
 }
 
 function webSocketUrl(path: string): string {
