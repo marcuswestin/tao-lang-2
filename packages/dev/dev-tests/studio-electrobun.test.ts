@@ -67,6 +67,17 @@ Describe('Studio Electrobun project', () => {
     Expect(main).toContain("navigated?.pathname === '/welcome'")
   })
 
+  Test('installs the quit accelerator before creating native windows', () => {
+    const main = StudioElectrobun.sources(options).main
+    const menuIndex = main.indexOf('ApplicationMenu.setApplicationMenu([')
+    const quitIndex = main.indexOf("{ role: 'quit', accelerator: 'q' }")
+    const welcomeWindowIndex = main.indexOf("createStudioWindow('Welcome')")
+
+    Expect(menuIndex).toBeGreaterThan(-1)
+    Expect(quitIndex).toBeGreaterThan(menuIndex)
+    Expect(welcomeWindowIndex).toBeGreaterThan(quitIndex)
+  })
+
   Test('materializes a clean executable project and exact Hutch commands', async () => {
     const outputRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-electrobun-', FS.tmpdir()))
     try {

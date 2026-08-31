@@ -316,16 +316,13 @@ function mainSource(): string {
       return window
     }
 
-    const welcomeWindow = createStudioWindow('Welcome')
-    const projectWindow = initialProjectUrl === undefined ? undefined : createStudioWindow('Project')
-    void applyAvailableUpdate(false).catch(error => console.error('Tao Studio update check failed.', error))
-
+    // Electrobun ignores ApplicationMenu installed after the first BrowserWindow.
     ApplicationMenu.setApplicationMenu([
       {
         submenu: [
           { label: 'About Tao Studio', action: 'about' },
           { type: 'separator' },
-          { role: 'quit' },
+          { role: 'quit', accelerator: 'q' },
         ],
       },
       {
@@ -369,6 +366,10 @@ function mainSource(): string {
         void applyAvailableUpdate(true).catch(showNativeError)
       }
     })
+
+    const welcomeWindow = createStudioWindow('Welcome')
+    const projectWindow = initialProjectUrl === undefined ? undefined : createStudioWindow('Project')
+    void applyAvailableUpdate(false).catch(error => console.error('Tao Studio update check failed.', error))
 
     async function openProjectDialog(): Promise<void> {
       const paths = await Utils.openFileDialog({
