@@ -38,11 +38,11 @@ const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 260, right: 
 const paneStorageKey = 'tao-studio:pane-sizes:v2'
 
 export const studioShellRailPanels = [
-  { icon: 'F', label: 'Files', panel: 'files' },
-  { icon: 'C', label: 'Components', panel: 'components' },
-  { icon: 'S', label: 'Screens', panel: 'screens' },
-  { icon: 'T', label: 'Design tokens', panel: 'tokens' },
-  { icon: 'D', label: 'Data', panel: 'data' },
+  { icon: '▤', label: 'Files', panel: 'files' },
+  { icon: '◇', label: 'Components', panel: 'components' },
+  { icon: '▱', label: 'Screens', panel: 'screens' },
+  { icon: '✦', label: 'Design tokens', panel: 'tokens' },
+  { icon: '▦', label: 'Data', panel: 'data' },
   { icon: '⌕', label: 'Search', panel: 'search' },
 ] as const
 
@@ -69,18 +69,27 @@ export function studioShellMarkup(options: StudioShellOptions = {}): string {
   return `
     <section class="studio-shell${embedded ? ' studio-shell--embedded' : ''}">
       <header class="studio-toolbar">
-        <span class="studio-wordmark">Tao Studio</span>
-        <button class="studio-project studio-picker" type="button" title="Project picker"></button>
-        <select class="studio-app-picker studio-picker" aria-label="App variant" title="App variant" disabled></select>
-        <nav class="studio-layout-presets" aria-label="Layout presets">
-          <button data-preset="design" type="button">Design</button>
-          <button data-preset="code" type="button">Code</button>
-          <button data-preset="run" type="button">Run</button>
-        </nav>
-        <button class="studio-command-palette" type="button" aria-keyshortcuts="Meta+K">⌘K</button>
-        <button class="studio-interaction-mode" type="button">Mode: Edit</button>
-        <button class="studio-reload" type="button">Reload preview</button>
-        <span class="studio-status" role="status">Connecting…</span>
+        <div class="studio-toolbar-context">
+          <span class="studio-wordmark" aria-label="Tao Studio" title="Tao Studio">
+            <span class="studio-wordmark-mark" aria-hidden="true">T</span>
+            <span class="studio-wordmark-label">Tao Studio</span>
+          </span>
+          <button class="studio-project studio-picker" type="button" title="Project picker"></button>
+          <select class="studio-app-picker studio-picker" aria-label="App variant" title="App variant" disabled></select>
+        </div>
+        <div class="studio-toolbar-mode">
+          <nav class="studio-layout-presets" aria-label="Layout presets">
+            <button data-preset="design" type="button">Design</button>
+            <button data-preset="code" type="button">Code</button>
+            <button data-preset="run" type="button">Run</button>
+          </nav>
+          <button class="studio-command-palette" type="button" aria-keyshortcuts="Meta+K">⌘K</button>
+        </div>
+        <div class="studio-toolbar-actions">
+          <button class="studio-interaction-mode" type="button">Mode: Edit</button>
+          <button class="studio-reload" type="button">Reload preview</button>
+          <span class="studio-status" role="status">Connecting…</span>
+        </div>
       </header>
       <section class="studio-body">
         <nav class="studio-rail" aria-label="Studio panels">

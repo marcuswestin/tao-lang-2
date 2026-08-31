@@ -55,6 +55,7 @@ import { StudioTestOutput } from '../studio-src/StudioTestRunner'
 
 Test('Studio browser assets produce a self-contained CodeMirror client and escape injected config', async () => {
   const bundle = await StudioClientAssets.bundle({ validationMode: 'release' })
+  const moduleInputs = await StudioClientAssets.testing.moduleInputs('release')
   const html = StudioClientAssets.html({
     previewUrl: 'http://127.0.0.1:55102/?value=</script><script>bad()</script>',
   })
@@ -79,6 +80,8 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('capture-runtime')
   Expect(bundle).toContain('No console messages from the active preview.')
   Expect(bundle).toContain('/api/design')
+  Expect(moduleInputs.some(path => path.includes('/react@19.1.0/'))).toBe(true)
+  Expect(moduleInputs.some(path => path.includes('/react@19.2.8/'))).toBe(false)
   Expect(bundle).toContain('Reload preview')
   Expect(bundle).toContain('Mode: Edit')
   Expect(bundle).toContain('Mode: Run')
@@ -122,6 +125,8 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).not.toContain('taoStudioArgs')
   Expect(bundle).not.toContain('taoStudioState')
   Expect(bundle).not.toContain('sourceMappingURL=data:')
+  Expect(html).toContain('--studio-accent: #5b8def')
+  Expect(html).toContain('rel="icon" href="data:image/svg+xml,')
   Expect(html).toContain('<script type="module" src="/studio.js"></script>')
   Expect(html).not.toContain('</script><script>bad()</script>')
   Expect(html).toContain('\\u003c/script>')
@@ -284,6 +289,10 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
   for (const item of studioShellRailPanels) {
     Expect(markup).toContain(`data-panel="${item.panel}"`)
   }
+  Expect(markup).toContain('studio-toolbar-context')
+  Expect(markup).toContain('studio-toolbar-mode')
+  Expect(markup).toContain('studio-toolbar-actions')
+  Expect(markup).toContain('studio-wordmark-mark')
   Expect(markup).toContain('studio-shell studio-shell--embedded')
 })
 
