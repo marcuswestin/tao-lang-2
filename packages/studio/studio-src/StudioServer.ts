@@ -1,4 +1,4 @@
-import { AppleOnDeviceGenerationProvider, type GenerationProvider } from '@generation'
+import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
 import { Errors } from '@shared'
 import { StudioClientAssets } from './StudioClientAssets'
 import { StudioFixtureGeneration } from './StudioFixtureGeneration'
@@ -44,7 +44,8 @@ export async function startStudioServer(
   }
 
   const fixtureGeneration = new StudioFixtureGeneration(
-    options.generationProvider ?? new AppleOnDeviceGenerationProvider(),
+    options.generationProvider
+      ?? new UnavailableGenerationProvider('Apple Foundation Models is not configured for this Studio server.'),
   )
 
   const eventClients = new Set<StudioSocket>()

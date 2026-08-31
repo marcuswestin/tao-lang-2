@@ -1,4 +1,12 @@
-export { AppleOnDeviceGenerationProvider } from './apple-on-device-provider'
+export {
+  AppleFoundationModelsProvider,
+  type AppleFoundationModelsProviderOptions,
+} from './apple-foundation-models-provider'
+export {
+  type AppleFoundationModelsService,
+  startAppleFoundationModelsService,
+  UnavailableGenerationProvider,
+} from './apple-foundation-models-service'
 export type {
   CaseGenerationDeclaration,
   CompiledGenerationSchema,

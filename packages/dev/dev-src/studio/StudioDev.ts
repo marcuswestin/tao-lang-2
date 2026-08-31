@@ -1,5 +1,6 @@
 /// <reference path="../expo-dev-loop/expo-runner/better-opn.d.ts" />
 
+import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation'
 import { Errors, HCI, Platform, Repo } from '@shared'
 import {
   openStudioPreviewSession,
@@ -58,6 +59,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   let native: StartedStudioNative | undefined
   let watcher: StartedStudioFileWatcher | undefined
   let server: StartedStudioServer | undefined
+  let foundationModels: AppleFoundationModelsService | undefined
 
   try {
     const project = await resolveStudioProjectRoot(options.projectRoot)
@@ -74,8 +76,17 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       projectRoot: project.projectRoot,
     })
     watcher = await startStudioFileWatcher(preview.session)
+    foundationModels = await startAppleFoundationModelsService()
+    const intelligence = await foundationModels.provider.availability()
+    HCI.logProcessInfo(
+      'studio',
+      intelligence.status === 'available'
+        ? 'Apple Foundation Models: available'
+        : `Apple Foundation Models: unavailable (${intelligence.reason})`,
+    )
     server = await startStudioServer(preview.session, {
       allowedOrigins: [expo.config.EXPO_ORIGIN],
+      generationProvider: foundationModels.provider,
       hostname: options.hostname,
       port: options.port,
       previewUrl: expo.config.EXPO_ORIGIN,
@@ -110,6 +121,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       () => native?.stop(),
       () => watcher?.close(),
       () => server?.stop(),
+      () => foundationModels?.stop(),
       () => expoServer?.stop(),
       () => preview?.close(),
       () => expo?.releasePortReservation(),
