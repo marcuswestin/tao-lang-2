@@ -206,6 +206,79 @@ Describe('Studio native wrapper foundation', () => {
     }
   })
 
+  Test('finds only prior native development processes from the selected artifact root', () => {
+    const output = [
+      'p4300',
+      'chutch-engine',
+      'fcwd',
+      'n/workspace/native',
+      'p4312',
+      'clauncher',
+      'fcwd',
+      'n/workspace/native/build/dev-macos-arm64/Tao Studio-dev.app/Contents/MacOS',
+      'p4313',
+      'cbun',
+      'fcwd',
+      'n/workspace/native/build/dev-macos-arm64/Tao Studio-dev.app/Contents/MacOS (deleted)',
+      'p9000',
+      'cbun',
+      'fcwd',
+      'n/workspace/other/build/dev-macos-arm64/Tao Studio-dev.app/Contents/MacOS',
+    ].join('\n')
+
+    Expect(StudioNative.testing.nativeDevelopmentProcessIds(output, '/workspace/native')).toEqual([
+      4300,
+      4312,
+      4313,
+    ])
+  })
+
+  Test('stops prior native processes before launching another shell from the same artifact root', async () => {
+    const calls: Array<{ args: readonly string[] | undefined; command: string }> = []
+    let probes = 0
+    const stopped = await StudioNative.testing.stopExistingNativeDevelopmentProcesses(
+      '/workspace/native',
+      async (command, spec) => {
+        calls.push({ args: spec.args, command })
+        if (command === '/usr/sbin/lsof') {
+          return {
+            ...commandResult(command, spec, 0),
+            stdout: 'p4312\ncbun\nfcwd\nn/workspace/native/build/dev-macos-arm64/Tao Studio-dev.app/Contents/MacOS\n',
+          }
+        }
+        if (spec.args?.[0] === '-0') {
+          probes += 1
+          return commandResult(command, spec, probes === 1 ? 0 : 1)
+        }
+        return commandResult(command, spec, 0)
+      },
+      async () => {},
+    )
+
+    Expect(stopped).toBe(1)
+    Expect(calls).toEqual([
+      { args: ['-nP', '-d', 'cwd', '-Fpcn'], command: '/usr/sbin/lsof' },
+      { args: ['-TERM', '4312'], command: '/bin/kill' },
+      { args: ['-0', '4312'], command: '/bin/kill' },
+      { args: ['-0', '4312'], command: '/bin/kill' },
+    ])
+  })
+
+  Test('fails clearly when a prior native process cannot be stopped', async () => {
+    await Expect(StudioNative.testing.stopExistingNativeDevelopmentProcesses(
+      '/workspace/native',
+      async (command, spec) => {
+        if (command === '/usr/sbin/lsof') {
+          return {
+            ...commandResult(command, spec, 0),
+            stdout: 'p4312\ncbun\nfcwd\nn/workspace/native/build/dev-macos-arm64/Tao Studio-dev.app/Contents/MacOS\n',
+          }
+        }
+        return { ...commandResult(command, spec, 1), stderr: 'kill: 4312: Operation not permitted' }
+      },
+    )).rejects.toThrow('Existing native Studio processes could not be stopped (4312)')
+  })
+
   Test('recognizes fatal native child exits without treating watch rebuilds as failures', () => {
     Expect(StudioNative.testing.nativeRuntimeCloseResult('Child process exited with code: 7')).toEqual({
       exitCode: 7,

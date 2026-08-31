@@ -66,6 +66,7 @@ type StoppableCommand = StudioProcessTree
 
 type WaitForNativeClose = () => Promise<number>
 type CommandRunner = (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
+type Sleep = (milliseconds: number) => Promise<void>
 type NativeRuntimeCloseResult = {
   exitCode: number
   message: string
@@ -82,11 +83,13 @@ export const StudioNative = {
     materializeStudioNodeRuntime,
     materializeStudioServicePayload,
     nativeRuntimeCloseResult,
+    nativeDevelopmentProcessIds,
     prepareElectrobun,
     processGroupKillSpec,
     resolveHutchExecutablePath,
     stageStudioClientBundle,
     stageStudioPackagedServiceBundle,
+    stopExistingNativeDevelopmentProcesses,
     stopCommand,
     validateStudioRelease,
     waitForProbeResult,
@@ -96,6 +99,15 @@ export const StudioNative = {
 async function start(options: StudioNativeOptions): Promise<StartedStudioNative> {
   const hutchPath = await resolveHutchExecutablePath(options.hutchPath)
   const artifactRoot = FS.resolvePath(options.artifactRoot ?? '.artifacts/user/studio-native', Repo.getRoot())
+  const stoppedNativeProcesses = await stopExistingNativeDevelopmentProcesses(artifactRoot)
+  if (stoppedNativeProcesses > 0) {
+    HCI.logProcessInfo(
+      'studio-native',
+      `Stopped ${stoppedNativeProcesses} existing native Studio ${
+        stoppedNativeProcesses === 1 ? 'process' : 'processes'
+      }.`,
+    )
+  }
   const project = await StudioElectrobun.create({
     appName: defaultAppName,
     bundleIdentifier: defaultBundleIdentifier,
@@ -161,6 +173,83 @@ async function start(options: StudioNativeOptions): Promise<StartedStudioNative>
       }
       return waitForProbeResult(project.runtimeResultPath, command, Time.sleep)
     },
+  }
+}
+
+/** Stops a prior dev watcher and app so neither can reclaim the generated shell or its build lock. */
+async function stopExistingNativeDevelopmentProcesses(
+  artifactRoot: string,
+  runner: CommandRunner = CLI.run,
+  sleep: Sleep = Time.sleep,
+): Promise<number> {
+  const result = await runner('/usr/sbin/lsof', { args: ['-nP', '-d', 'cwd', '-Fpcn'] })
+  if (result.exitCode !== 0 && result.stdout.trim() === '') {
+    throw new Errors.UnexpectedBehaviorError(
+      `Could not inspect existing native Studio processes: ${result.stderr.trim() || 'lsof failed'}`,
+    )
+  }
+  const processIds = nativeDevelopmentProcessIds(result.stdout, artifactRoot)
+  if (processIds.length === 0) {
+    return 0
+  }
+
+  const terminated = await runner('/bin/kill', { args: ['-TERM', ...processIds.map(String)] })
+  assertNativeProcessesSignalable(terminated, processIds)
+  let remaining = processIds
+  for (let attempt = 0; attempt < 30 && remaining.length > 0; attempt += 1) {
+    remaining = await runningProcessIds(remaining, runner)
+    if (remaining.length > 0) {
+      await sleep(100)
+    }
+  }
+  if (remaining.length > 0) {
+    const killed = await runner('/bin/kill', { args: ['-KILL', ...remaining.map(String)] })
+    assertNativeProcessesSignalable(killed, remaining)
+  }
+  return processIds.length
+}
+
+function nativeDevelopmentProcessIds(output: string, artifactRoot: string): number[] {
+  const buildRoot = FS.resolvePath('build', artifactRoot)
+  const processIds = new Set<number>()
+  let processId: number | undefined
+  let command: string | undefined
+  for (const line of output.split(/\r?\n/)) {
+    if (line.startsWith('p')) {
+      const parsed = Number(line.slice(1))
+      processId = Number.isInteger(parsed) && parsed > 1 ? parsed : undefined
+      command = undefined
+    } else if (line.startsWith('c')) {
+      command = line.slice(1)
+    } else if (line.startsWith('n') && processId !== undefined) {
+      const cwd = line.slice(1).replace(/ \(deleted\)$/, '')
+      const relative = FS.relativePath(buildRoot, cwd)
+      const isNativeApp = /^dev-[^/]+\/[^/]+-dev\.app\/Contents\/MacOS$/.test(relative)
+      const isHutchEngine = cwd === FS.resolvePath(artifactRoot) && command === 'hutch-engine'
+      if (isNativeApp || isHutchEngine) {
+        processIds.add(processId)
+      }
+    }
+  }
+  return [...processIds].sort((left, right) => left - right)
+}
+
+async function runningProcessIds(processIds: readonly number[], runner: CommandRunner): Promise<number[]> {
+  const probes = await Promise.all(processIds.map(async processId => ({
+    processId,
+    result: await runner('/bin/kill', { args: ['-0', String(processId)] }),
+  })))
+  for (const probe of probes) {
+    assertNativeProcessesSignalable(probe.result, [probe.processId])
+  }
+  return probes.filter(probe => probe.result.exitCode === 0).map(probe => probe.processId)
+}
+
+function assertNativeProcessesSignalable(result: CLI.CommandResult, processIds: readonly number[]): void {
+  if (result.exitCode !== 0 && /operation not permitted/i.test(result.stderr)) {
+    throw new Errors.UnexpectedBehaviorError(
+      `Existing native Studio processes could not be stopped (${processIds.join(', ')}). Close Tao Studio and retry.`,
+    )
   }
 }
 
