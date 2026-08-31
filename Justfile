@@ -108,8 +108,12 @@ install-ide-extension: _ide-extension-package
 android: _compile-word-flower-app _android-emulator _android-expo-go
     bun run packages/dev/dev-src/dev.ts expo-android
 
+# Reclaim bootstrap scratch a failed dependency install abandoned, reporting what it freed
+clean-scratch:
+    zsh -c 'source "{{ justfile_directory() }}/packages/dev/dev-src/cli/agent-worktree-profile.zsh"; tao_prune_bootstrap_scratch "{{ justfile_directory() }}/.artifacts/tmp" --report'
+
 # Clean run dependencies and build artifacts
-clean:
+clean: clean-scratch
     rm -rf .artifacts/build .artifacts/dev packages/runtime-toolchain/.expo packages/runtime-toolchain/_gen_tao-app
     find . -name node_modules -type d -prune -exec rm -rf {} +
 

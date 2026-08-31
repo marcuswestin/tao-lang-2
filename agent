@@ -13,6 +13,7 @@ INSTALL_LOCK="$BUILD_DIR/dev-deps.lock"
 BUILD_STAMP="$BUILD_DIR/agent-dev.stamp"
 BUILD_LOCK="$BUILD_DIR/agent-dev.lock"
 DEVENV_PROFILE="$SCRIPT_DIR/.devenv/profile"
+INSTALL_ATTEMPTS=3
 
 source "$DEV_PACKAGE_DIR/dev-src/cli/agent-worktree-profile.zsh"
 
@@ -43,22 +44,50 @@ function needs_install() {
   return 1
 }
 
+# Explain a failed install in terms of the operation that was actually denied, because the
+# two denials Bun reports here need opposite responses: a temporary-directory denial resumes
+# after the scratch is reclaimed, while a denied destination path repeats forever.
+function report_install_failure() {
+  local install_output="$1"
+  echo "Bun could not install dependencies in $SCRIPT_DIR." >&2
+  echo "Bun temporary directory: $BUN_TEMP_DIR" >&2
+
+  if [[ "$install_output" == *"unable to write files to tempdir"* ]]; then
+    echo "Denied operation: writing Bun's install scratch." >&2
+    echo "Recover with: just clean-scratch && direnv exec . ./agent setup" >&2
+    return
+  fi
+
+  if [[ "$install_output" =~ 'PermissionDenied: ([a-z ]+) (.+)' ]]; then
+    echo "Denied operation: ${match[1]} ${match[2]}" >&2
+    echo "The host sandbox denies writes to that path itself, not to the temporary directory," >&2
+    echo "so reinstalling inside the sandbox will fail the same way. Some npm packages ship" >&2
+    echo "files under paths an agent sandbox protects, such as .gitmodules or .idea/." >&2
+    echo "Recover from an unsandboxed shell: bun install --cwd \"$SCRIPT_DIR\"" >&2
+    echo "or start a session with the sandbox off: just claude-unsandboxed" >&2
+    return
+  fi
+
+  echo "Recover with: just clean-scratch && direnv exec . ./agent setup" >&2
+}
+
 function install_dev_deps() {
   local install_output
-  if install_output="$(TMPDIR="$BUN_TEMP_DIR" bun "${BUN_INSTALL_ARGS[@]}" 2>&1)"; then
-    touch "$INSTALL_STAMP"
-    return
-  fi
+  local attempt
+  for (( attempt = 1; attempt <= INSTALL_ATTEMPTS; attempt++ )); do
+    if install_output="$(TMPDIR="$BUN_TEMP_DIR" bun "${BUN_INSTALL_ARGS[@]}" 2>&1)"; then
+      touch "$INSTALL_STAMP"
+      return
+    fi
 
-  # Bun can leave a resumable partial install after a transient sandbox temp-directory denial.
-  if [[ "$install_output" == *"unable to write files to tempdir: PermissionDenied"* ]] &&
-    install_output="$(TMPDIR="$BUN_TEMP_DIR" bun "${BUN_INSTALL_ARGS[@]}" 2>&1)"
-  then
-    touch "$INSTALL_STAMP"
-    return
-  fi
+    # Only a temporary-directory denial leaves a resumable partial install. Every other failure
+    # repeats identically, so retrying it costs minutes and more abandoned scratch.
+    [[ "$install_output" == *"unable to write files to tempdir"* ]] || break
+    tao_prune_bootstrap_scratch "$AGENT_TEMP_DIR"
+  done
 
   echo "$install_output" >&2
+  report_install_failure "$install_output"
   exit 1
 }
 
@@ -108,6 +137,7 @@ function ensure_agent_build() {
   tao_run_with_lock "$BUILD_LOCK" 30 build_agent_if_needed
 }
 
+tao_warn_on_detached_head "$SCRIPT_DIR"
 ensure_dev_deps
 ensure_agent_build
 

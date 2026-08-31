@@ -111,6 +111,115 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
+  Test("rejects a temporary directory that allows files but denies Bun's nested writes", async () => {
+    const testRoot = await mkTestDir('tao-agent-shallow-temp-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const fallback = FS.resolvePath('fallback-temp', testRoot)
+      await FS.mkdir(fallback)
+      // A directory whose only denial is the rename Bun publishes each package with: the
+      // previous single-file probe accepted it and the install then failed part-way through.
+      const result = await runProfileScript(
+        ['function mv() { return 1 }', 'tao_bun_temp_dir "$3"'].join('\n'),
+        fixture,
+        fallback,
+      )
+
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout.trim()).toBe(`${await FS.realPath(fallback)}/`)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test("prefers the worktree's own scratch under an agent sandbox", async () => {
+    const testRoot = await mkTestDir('tao-agent-sandbox-temp-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const fallback = FS.resolvePath('fallback-temp', testRoot)
+      await FS.mkdir(fallback)
+      fixture.env['SANDBOX_RUNTIME'] = '1'
+      const result = await runProfileScript('tao_bun_temp_dir "$3"', fixture, fallback)
+
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout.trim()).toBe(`${await FS.realPath(fallback)}/`)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('reclaims abandoned bootstrap scratch without leaving its root', async () => {
+    const testRoot = await mkTestDir('tao-agent-scratch-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const scratch = FS.resolvePath('.artifacts/tmp', fixture.worktree)
+      await FS.writeText(FS.resolvePath('bun/partial/package.json', scratch), '{}')
+      await FS.writeText(FS.resolvePath('.hidden-partial', scratch), 'partial')
+      const result = await runProfileScript(
+        'tao_prune_bootstrap_scratch "$2/.artifacts/tmp" --report',
+        fixture,
+        scratch,
+      )
+
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).toContain('Reclaimed')
+      Expect(await FS.exists(scratch)).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('bun', scratch))).toBe(false)
+      Expect(await FS.exists(FS.resolvePath('.hidden-partial', scratch))).toBe(false)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('refuses to prune anything outside a repository .artifacts root', async () => {
+    const testRoot = await mkTestDir('tao-agent-scratch-guard-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const tracked = FS.resolvePath('packages/dev', fixture.worktree)
+      await FS.writeText(FS.resolvePath('keep.ts', tracked), 'keep')
+      const result = await runProfileScript(
+        'tao_prune_bootstrap_scratch "$2/packages/dev"',
+        fixture,
+        tracked,
+      )
+
+      Expect(result.exitCode).toBe(1)
+      Expect(result.stderr).toContain('Refusing to prune bootstrap scratch outside')
+      Expect(await FS.exists(FS.resolvePath('keep.ts', tracked))).toBe(true)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('warns on a detached HEAD and stays quiet on a named branch', async () => {
+    const testRoot = await mkTestDir('tao-agent-head-')
+    try {
+      const repository = FS.resolvePath('detached-repo', testRoot)
+      await FS.writeText(FS.resolvePath('file.txt', repository), 'one')
+      await git(repository, ['init', '--quiet', '--initial-branch', 'main'])
+      await git(repository, ['add', 'file.txt'])
+      await git(repository, ['-c', 'user.email=t@t', '-c', 'user.name=T', 'commit', '--quiet', '-m', 'one'])
+
+      const warn = async () =>
+        await CLI.run('zsh', {
+          args: ['-c', `source "$1"\ntao_warn_on_detached_head "$2"`, 'head-test', PROFILE_SCRIPT, repository],
+        })
+
+      const onBranch = await warn()
+      Expect(onBranch.exitCode).toBe(0)
+      Expect(onBranch.stderr).toBe('')
+
+      await git(repository, ['checkout', '--quiet', '--detach', 'HEAD'])
+      const detached = await warn()
+
+      Expect(detached.exitCode).toBe(0)
+      Expect(detached.stderr).toContain('detached HEAD')
+      Expect(detached.stderr).toContain('git switch -c feat/<name>')
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
   Test('uses copyfile installation only for linked worktrees', async () => {
     const testRoot = await mkTestDir('tao-agent-install-')
     try {
@@ -178,14 +287,58 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
-  Test('reuses checkout-specific installation arguments after a transient failure', async () => {
-    const source = await FS.readText(Repo.resolvePath('agent'))
+  Test('retries a resumable temporary-directory denial and reclaims its scratch', async () => {
+    const testRoot = await mkTestDir('tao-agent-install-retry-')
+    try {
+      const outcome = await runAgentInstall(testRoot, [
+        'unable to write files to tempdir: PermissionDenied',
+        '',
+      ])
 
-    Expect(source.split('bun "${BUN_INSTALL_ARGS[@]}"').length - 1).toBe(2)
-    Expect(source).toContain('unable to write files to tempdir: PermissionDenied')
-    Expect(source).not.toContain('bun install --backend=copyfile')
-    Expect(source).not.toContain('command -v lockf')
-    Expect(source).not.toContain('BUN_TMPDIR=')
+      Expect(outcome.result.exitCode).toBe(0)
+      Expect(outcome.attempts).toBe(2)
+      Expect(await FS.exists(FS.resolvePath('.artifacts/tmp/bun/partial', testRoot))).toBe(false)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('stops after a bounded number of resumable attempts', async () => {
+    const testRoot = await mkTestDir('tao-agent-install-bounded-')
+    try {
+      const outcome = await runAgentInstall(
+        testRoot,
+        Array.from({ length: 6 }, () => 'unable to write files to tempdir: PermissionDenied'),
+      )
+
+      Expect(outcome.result.exitCode).toBe(1)
+      Expect(outcome.attempts).toBe(3)
+      Expect(outcome.result.stderr).toContain("Denied operation: writing Bun's install scratch.")
+      Expect(outcome.result.stderr).toContain('just clean-scratch')
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('names the denied path and an unsandboxed recovery for a denied destination', async () => {
+    const testRoot = await mkTestDir('tao-agent-install-denied-')
+    try {
+      const outcome = await runAgentInstall(testRoot, [
+        'PermissionDenied: copy file android/.idea/migrations.xml',
+        '',
+      ])
+
+      // Retrying a denied destination repeats identically, so it must not consume attempts.
+      Expect(outcome.attempts).toBe(1)
+      Expect(outcome.result.exitCode).toBe(1)
+      Expect(outcome.result.stderr).toContain(
+        'Denied operation: copy file android/.idea/migrations.xml',
+      )
+      Expect(outcome.result.stderr).toContain(`Bun temporary directory: ${testRoot}/.artifacts/tmp/`)
+      Expect(outcome.result.stderr).toContain('just claude-unsandboxed')
+    } finally {
+      await FS.remove(testRoot)
+    }
   })
 
   Test('activates the pinned profile before the developer CLI starts', async () => {
@@ -199,14 +352,22 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(source).toContain('direnv allow && direnv exec . ./agent setup')
   })
 
-  Test('repairs incomplete dependency graphs from repository-local Bun storage', async () => {
-    const source = await FS.readText(Repo.resolvePath('Justfile'))
+  Test('installs dependencies from repository-local Bun storage and repairs an incomplete graph', async () => {
+    const commands = await justCommands('deps')
 
-    Expect(source).toContain('BUN_CACHE_DIR := justfile_directory() + "/.artifacts/cache/bun"')
-    Expect(source).toContain('BUN_TMP_DIR := justfile_directory() + "/.artifacts/tmp/bun"')
-    Expect(source).toContain('TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile')
-    Expect(source).toContain('bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"')
-    Expect(source).toContain('require("expo/metro-config"); require("jest-expo/jest-preset")')
+    Expect(commands).toContain(`${Repo.getRoot()}/.artifacts/tmp/bun`)
+    Expect(commands).toContain(`${Repo.getRoot()}/.artifacts/cache/bun`)
+    Expect(commands).toContain('bun install --frozen-lockfile')
+    Expect(commands).toContain('--force')
+    Expect(await justCommands('_dependency-health')).toContain(
+      'require("expo/metro-config"); require("jest-expo/jest-preset")',
+    )
+  })
+
+  Test('exposes scratch reclamation as its own recipe and as part of cleaning', async () => {
+    Expect(await justRecipeNames()).toContain('clean-scratch')
+    Expect(await justCommands('clean-scratch')).toContain('tao_prune_bootstrap_scratch')
+    Expect(await justCommands('clean')).toContain('tao_prune_bootstrap_scratch')
   })
 
   Test('keeps dprint caches out of developer home directories', async () => {
@@ -217,6 +378,95 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(dprintCommands.every(command => command.includes('--incremental=false'))).toBe(true)
   })
 })
+
+async function git(cwd: string, args: readonly string[]): Promise<void> {
+  const result = await CLI.run('git', { args: [...args], cwd })
+  Expect(result.exitCode).toBe(0)
+}
+
+/** justCommands returns the commands a recipe would run, so tests assert behavior, not layout. */
+async function justCommands(name: string): Promise<string> {
+  const result = await CLI.run('just', { args: ['--dry-run', name], cwd: Repo.getRoot() })
+  Expect(result.exitCode).toBe(0)
+  return `${result.stdout}${result.stderr}`
+}
+
+async function justRecipeNames(): Promise<string[]> {
+  const result = await CLI.run('just', { args: ['--summary'], cwd: Repo.getRoot() })
+  Expect(result.exitCode).toBe(0)
+  return result.stdout.trim().split(/\s+/)
+}
+
+type AgentInstallOutcome = {
+  attempts: number
+  result: CLI.CommandResult
+}
+
+/**
+ * Runs `./agent`'s dependency installation against a scripted Bun whose failures are supplied
+ * per attempt, so retry bounds, scratch reclamation, and diagnostics are observed rather than
+ * matched against the script's text.
+ */
+async function runAgentInstall(testRoot: string, attemptOutputs: readonly string[]): Promise<AgentInstallOutcome> {
+  const fakeBin = FS.resolvePath('bin', testRoot)
+  const attemptLog = FS.resolvePath('attempts.log', testRoot)
+  const scratch = FS.resolvePath('.artifacts/tmp', testRoot)
+  await FS.writeText(FS.resolvePath('.artifacts/tmp/bun/partial/package.json', testRoot), '{}')
+  const outputsDir = FS.resolvePath('outputs', testRoot)
+  for (const [index, output] of attemptOutputs.entries()) {
+    await FS.writeText(FS.resolvePath(`${index + 1}.txt`, outputsDir), output)
+  }
+  await FS.writeText(
+    FS.resolvePath('bun', fakeBin),
+    [
+      '#!/bin/zsh',
+      'print -r -- attempt >> "$TAO_TEST_ATTEMPT_LOG"',
+      'attempt=$(wc -l < "$TAO_TEST_ATTEMPT_LOG" | tr -d " ")',
+      'output_file="$TAO_TEST_OUTPUTS/$attempt.txt"',
+      '[[ -f "$output_file" ]] || exit 0',
+      'output="$(<"$output_file")"',
+      '[[ -z "$output" ]] && exit 0',
+      'print -r -- "$output" >&2',
+      'exit 1',
+      '',
+    ].join('\n'),
+  )
+  await makeExecutable(FS.resolvePath('bun', fakeBin))
+
+  const script = [
+    `SCRIPT_DIR=${JSON.stringify(testRoot)}`,
+    `AGENT_TEMP_DIR=${JSON.stringify(scratch)}`,
+    'BUN_TEMP_DIR="$AGENT_TEMP_DIR/"',
+    'INSTALL_STAMP="$SCRIPT_DIR/install.stamp"',
+    'typeset -a BUN_INSTALL_ARGS',
+    'BUN_INSTALL_ARGS=(install)',
+    'INSTALL_ATTEMPTS=3',
+    `source ${JSON.stringify(PROFILE_SCRIPT)}`,
+    agentFunctionSource(await FS.readText(Repo.resolvePath('agent'))),
+    'install_dev_deps',
+  ].join('\n')
+
+  const result = await CLI.run('zsh', {
+    args: ['-c', script],
+    cwd: testRoot,
+    env: {
+      PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+      TAO_TEST_ATTEMPT_LOG: attemptLog,
+      TAO_TEST_OUTPUTS: outputsDir,
+    },
+  })
+  const log = await FS.exists(attemptLog) ? await FS.readText(attemptLog) : ''
+  return { attempts: log.split('\n').filter(Boolean).length, result }
+}
+
+/** Extracts `./agent`'s installation functions so the test exercises the shipped implementation. */
+function agentFunctionSource(source: string): string {
+  const start = source.indexOf('function report_install_failure()')
+  const end = source.indexOf('function install_dev_deps_if_needed()')
+  Expect(start).toBeGreaterThan(0)
+  Expect(end).toBeGreaterThan(start)
+  return source.slice(start, end)
+}
 
 async function createProfileFixture(testRoot: string, withPrimaryProfile: boolean): Promise<ProfileFixture> {
   const fakeBin = FS.resolvePath('bin', testRoot)
@@ -259,7 +509,12 @@ async function createProfileFixture(testRoot: string, withPrimaryProfile: boolea
   return {
     commonGitDir,
     env: {
+      // Cleared so temp-directory selection is deterministic: the suite itself may be running
+      // inside an agent host's sandbox, which changes which directory the script prefers.
+      CLAUDE_CODE_TMPDIR: '',
+      CODEX_SANDBOX: '',
       PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+      SANDBOX_RUNTIME: '',
       TAO_TEST_COMMON_GIT_DIR: commonGitDir,
       TAO_TEST_DARWIN_TEMP_DIR: systemTempAlias,
       TAO_TEST_GIT_DIR: linkedGitDir,
