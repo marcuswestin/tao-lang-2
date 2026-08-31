@@ -85,6 +85,7 @@ export const StudioNative = {
     nativeRuntimeCloseResult,
     nativeDevelopmentProcessIds,
     prepareElectrobun,
+    portableStudioClientBundle,
     processGroupKillSpec,
     resolveHutchExecutablePath,
     stageStudioClientBundle,
@@ -489,7 +490,15 @@ async function stageStudioClientBundle(path: string): Promise<void> {
 
 function portableStudioClientBundle(source: string): string {
   const repositoryPrefix = `${FS.slashPath(Repo.getRoot()).replace(/\/$/, '')}/`
-  return source.replaceAll(repositoryPrefix, '')
+  const sourcePathPrefix = new RegExp(
+    `(source\\s*:\\s*\\{\\s*path\\s*:\\s*["'])${escapeRegularExpression(repositoryPrefix)}`,
+    'g',
+  )
+  return source.replace(sourcePathPrefix, (_match, property: string) => property)
+}
+
+function escapeRegularExpression(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 async function materializeStudioNodeRuntime(

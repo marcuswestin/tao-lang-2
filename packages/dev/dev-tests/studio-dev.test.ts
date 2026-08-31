@@ -2,7 +2,7 @@ import { FS, Repo, Time } from '@shared'
 import type { CLI, Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { StudioClientAssets } from '@studio'
-import { startStudioClientDevReload } from '../dev-src/studio/StudioClientDevReload'
+import { startStudioClientDevReload, StudioClientDevReload } from '../dev-src/studio/StudioClientDevReload'
 import { createRecentProjectStore, StudioDev } from '../dev-src/studio/StudioDev'
 import { StudioNative } from '../dev-src/studio/StudioNative'
 import { packagedExpoCommand } from '../dev-src/studio/StudioPackagedService'
@@ -84,6 +84,19 @@ Describe('Studio native wrapper foundation', () => {
     } finally {
       await FS.remove(root)
     }
+  })
+
+  Test('removes repository roots only from generated Tao source metadata', () => {
+    const repositoryPrefix = `${Repo.getRoot()}/`
+    const source = [
+      `const view={source:{path:"${repositoryPrefix}Apps/Example.tao",start:1}}`,
+      `const userLiteral="${repositoryPrefix}keep-this-value"`,
+    ].join(';')
+
+    const portable = StudioNative.testing.portableStudioClientBundle(source)
+
+    Expect(portable).toContain('source:{path:"Apps/Example.tao"')
+    Expect(portable).toContain(`userLiteral="${repositoryPrefix}keep-this-value"`)
   })
 
   Test('builds the packaged Studio service with the prebuilt browser asset boundary', async () => {
@@ -444,6 +457,17 @@ Describe('Studio native wrapper foundation', () => {
 })
 
 Describe('Studio smoke resource isolation', () => {
+  Test('injects preview configuration without interpreting replacement tokens', () => {
+    const marker = JSON.stringify({ previewUrl: '__TAO_STUDIO_DEV_PREVIEW_URL__' })
+    const assets = StudioClientDevReload.testing.studioClientAssetSnapshot({
+      bundle: 'bundle',
+      html: `<script>globalThis.config=${marker}</script>`,
+    })
+    const previewUrl = "http://127.0.0.1:8081/$&-$1-$`-$'"
+
+    Expect(assets.html({ previewUrl })).toContain(JSON.stringify({ previewUrl }))
+  })
+
   Test('publishes only complete rebuilt Studio browser clients', async () => {
     let changed: (() => Promise<void>) | undefined
     let closed = 0

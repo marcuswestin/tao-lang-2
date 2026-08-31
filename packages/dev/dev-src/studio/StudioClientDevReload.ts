@@ -16,6 +16,12 @@ export type StartedStudioClientDevReload = {
   revision: () => number
 }
 
+export const StudioClientDevReload = {
+  testing: {
+    studioClientAssetSnapshot,
+  },
+} as const
+
 /** Rebuilds the browser-owned Studio shell and publishes only complete client bundles. */
 export async function startStudioClientDevReload(
   options: StudioClientDevReloadOptions = {},
@@ -96,7 +102,7 @@ function studioClientAssetSnapshot(snapshot: StudioClientAssetSnapshot): StudioC
     },
     html(config) {
       const serializedConfig = JSON.stringify(config).replaceAll('<', '\\u003c')
-      return snapshot.html.replace(clientConfigMarker, serializedConfig)
+      return snapshot.html.replace(clientConfigMarker, () => serializedConfig)
     },
   }
 }
