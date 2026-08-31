@@ -1,12 +1,12 @@
 import { Errors, FS, Text } from '@shared'
 
-const defaultAppName = 'Tao Studio Electrobun Spike'
-const defaultBundleIdentifier = 'dev.tao-lang.studio.spike'
+const defaultAppName = 'Tao Studio'
+const defaultBundleIdentifier = 'dev.tao-lang.studio'
 const defaultVersion = '0.0.1'
 const electrobunVersion = '2.0.2-beta.12'
 const bunTypesVersion = '1.4.0'
 
-export type StudioElectrobunSpikeOptions = {
+export type StudioElectrobunOptions = {
   appName?: string
   bundleIdentifier?: string
   outputRoot: string
@@ -21,38 +21,27 @@ export type StudioElectrobunSpikeOptions = {
   version?: string
 }
 
-export type StudioElectrobunSpikeProject = {
-  buildCanary: StudioElectrobunSpikeCommand
-  buildStable: StudioElectrobunSpikeCommand
+export type StudioElectrobunProject = {
+  buildCanary: StudioElectrobunCommand
+  buildStable: StudioElectrobunCommand
   configPath: string
-  dev: StudioElectrobunSpikeCommand
-  install: StudioElectrobunSpikeCommand
+  dev: StudioElectrobunCommand
+  install: StudioElectrobunCommand
   mainPath: string
-  prepare: StudioElectrobunSpikeCommand
+  prepare: StudioElectrobunCommand
   root: string
   runtimeResultPath: string
-  sync: StudioElectrobunSpikeCommand
+  sync: StudioElectrobunCommand
 }
 
-export type StudioElectrobunSpikeCommand = {
+export type StudioElectrobunCommand = {
   args: readonly string[]
   command: 'hutch'
   cwd: string
   env?: Readonly<Record<string, string>>
 }
 
-export type StudioElectrobunCapabilityReport = {
-  differentialUpdates: boolean
-  fileDialogs: boolean
-  iframeToMetroOrigin: boolean
-  multiWindow: boolean
-  nativeMenus: boolean
-  shortcuts: boolean
-  signedMacBuildConfigured: boolean
-  websocketToStudioServer: boolean
-}
-
-export type StudioElectrobunSpikeSources = {
+export type StudioElectrobunSources = {
   config: string
   hutchConfig: string
   main: string
@@ -60,23 +49,28 @@ export type StudioElectrobunSpikeSources = {
   tsconfig: Record<string, unknown>
 }
 
-/** StudioElectrobunSpike creates an isolated executable proof without changing Studio's browser lifecycle. */
-export const StudioElectrobunSpike = {
-  capabilities,
+/** Materializes Tao Studio's native Electrobun project. */
+export const StudioElectrobun = {
   create,
   sources,
 } as const
 
-async function create(options: StudioElectrobunSpikeOptions): Promise<StudioElectrobunSpikeProject> {
+async function create(options: StudioElectrobunOptions): Promise<StudioElectrobunProject> {
   const root = FS.resolvePath(options.outputRoot)
   const generated = sources(options)
-  const report = capabilities(generated)
-  if (Object.values(report).includes(false)) {
-    throw new Errors.UnexpectedBehaviorError(
-      'The generated Electrobun spike does not cover every required capability.',
-    )
+  for (
+    const relativePath of [
+      'artifacts',
+      'electrobun.config.ts',
+      'hutch.config.ts',
+      'package.json',
+      'service',
+      'src',
+      'tsconfig.json',
+    ]
+  ) {
+    await FS.remove(FS.resolvePath(relativePath, root))
   }
-
   const mainPath = FS.resolvePath('src/bun/index.ts', root)
   const configPath = FS.resolvePath('electrobun.config.ts', root)
   const runtimeResultPath = FS.resolvePath('artifacts/runtime-result.json', root)
@@ -102,7 +96,9 @@ async function create(options: StudioElectrobunSpikeOptions): Promise<StudioElec
     TAO_STUDIO_ELECTROBUN_RUN_PROBE: options.runProbe === true ? 'true' : 'false',
     TAO_STUDIO_ELECTROBUN_SHOW_WINDOWS: options.showWindow === false ? 'false' : 'true',
     TAO_STUDIO_PREVIEW_URL: localHttpUrl(options.previewUrl, 'Studio preview').href,
-    TAO_STUDIO_PROJECT_URL: localHttpUrl(options.projectUrl ?? options.studioUrl, 'Studio project').href,
+    ...(options.projectUrl === undefined
+      ? {}
+      : { TAO_STUDIO_PROJECT_URL: localHttpUrl(options.projectUrl, 'Studio project').href }),
     TAO_STUDIO_URL: localHttpUrl(options.studioUrl, 'Studio server').href,
   }
   return {
@@ -119,7 +115,7 @@ async function create(options: StudioElectrobunSpikeOptions): Promise<StudioElec
   }
 }
 
-function sources(options: StudioElectrobunSpikeOptions): StudioElectrobunSpikeSources {
+function sources(options: StudioElectrobunOptions): StudioElectrobunSources {
   localHttpUrl(options.studioUrl, 'Studio server')
   localHttpUrl(options.previewUrl, 'Studio preview')
   const appName = safeAppName(options.appName ?? defaultAppName)
@@ -137,7 +133,7 @@ function sources(options: StudioElectrobunSpikeOptions): StudioElectrobunSpikeSo
     hutchConfig: hutchConfigSource(),
     main: mainSource(),
     packageJson: {
-      name: 'tao-studio-electrobun-spike',
+      name: 'tao-studio-electrobun',
       private: true,
       type: 'module',
       devDependencies: {
@@ -150,33 +146,11 @@ function sources(options: StudioElectrobunSpikeOptions): StudioElectrobunSpikeSo
   }
 }
 
-function capabilities(
-  generated: Pick<StudioElectrobunSpikeSources, 'config' | 'main'>,
-): StudioElectrobunCapabilityReport {
-  return {
-    differentialUpdates: generated.config.includes('generatePatch: true')
-      && generated.main.includes('Updater.checkForUpdate()')
-      && generated.main.includes('Updater.downloadUpdate()')
-      && generated.main.includes('Updater.applyUpdate()'),
-    fileDialogs: generated.main.includes('Utils.openFileDialog('),
-    iframeToMetroOrigin: generated.main.includes("document.createElement('iframe')"),
-    multiWindow: generated.main.includes("createStudioWindow('Welcome')")
-      && generated.main.includes("createStudioWindow('Project')"),
-    nativeMenus: generated.main.includes('ApplicationMenu.setApplicationMenu('),
-    shortcuts: generated.main.includes("accelerator: 'k'")
-      && generated.main.includes('GlobalShortcut.register('),
-    signedMacBuildConfigured: generated.config.includes('codesign: true')
-      && generated.config.includes('notarize: true')
-      && generated.config.includes('createDmg: true'),
-    websocketToStudioServer: generated.main.includes('new WebSocket(websocketUrl('),
-  }
-}
-
 function command(
   cwd: string,
   args: readonly string[],
   env?: Readonly<Record<string, string>>,
-): StudioElectrobunSpikeCommand {
+): StudioElectrobunCommand {
   return { args, command: 'hutch', cwd, env }
 }
 
@@ -250,6 +224,7 @@ function mainSource(): string {
         stdlibRoot: import.meta.dir + '/../service/packages/stdlib',
         testCommandPath: import.meta.dir + '/../service/test-command.js',
         testNodePath: import.meta.dir + '/../service/bin/node',
+        studioClientBundlePath: import.meta.dir + '/../service/studio.js',
         userStateRoot: Utils.paths.userData,
       })
       : undefined
@@ -550,9 +525,15 @@ function mainSource(): string {
         capabilities: Object.fromEntries(results),
         manualChecks: ['Choose File > Open Project… and confirm the native directory picker opens.'],
       }
-      console.log('TAO_STUDIO_ELECTROBUN_SPIKE_RESULT ' + JSON.stringify(result))
+      console.log('TAO_STUDIO_ELECTROBUN_RESULT ' + JSON.stringify(result))
       if (resultPath !== undefined) {
-        await Bun.write(resultPath, JSON.stringify(result, null, 2) + '\\n')
+        const temporaryResultPath = resultPath + '.' + crypto.randomUUID() + '.tmp'
+        try {
+          await Bun.write(temporaryResultPath, JSON.stringify(result, null, 2) + '\\n')
+          await import('node:fs/promises').then(fs => fs.rename(temporaryResultPath, resultPath))
+        } finally {
+          await import('node:fs/promises').then(fs => fs.rm(temporaryResultPath, { force: true }))
+        }
       }
       server.stop(true)
       if (!showWindows) {
@@ -644,7 +625,7 @@ function safeAppName(value: string): string {
   if (appName !== '' && !/[/:\\]/.test(appName)) {
     return appName
   }
-  throw new Errors.UserInputError('Electrobun spike app name must be a non-empty macOS file name.')
+  throw new Errors.UserInputError('Electrobun app name must be a non-empty macOS file name.')
 }
 
 function safeBundleIdentifier(value: string): string {
@@ -652,7 +633,7 @@ function safeBundleIdentifier(value: string): string {
   if (/^[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/.test(bundleIdentifier)) {
     return bundleIdentifier
   }
-  throw new Errors.UserInputError('Electrobun spike bundle identifier must be a reverse-DNS identifier.')
+  throw new Errors.UserInputError('Electrobun bundle identifier must be a reverse-DNS identifier.')
 }
 
 function safeVersion(value: string): string {
@@ -660,5 +641,5 @@ function safeVersion(value: string): string {
   if (/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
     return version
   }
-  throw new Errors.UserInputError('Electrobun spike version must be a semantic version.')
+  throw new Errors.UserInputError('Electrobun version must be a semantic version.')
 }

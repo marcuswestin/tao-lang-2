@@ -1,11 +1,13 @@
-import { FS, Repo } from '@shared'
+import { FS, Repo, Time } from '@shared'
 import type { CLI, Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { StudioDev } from '../dev-src/studio/StudioDev'
+import { StudioClientAssets } from '@studio'
+import { createRecentProjectStore, StudioDev } from '../dev-src/studio/StudioDev'
 import { StudioNative } from '../dev-src/studio/StudioNative'
+import { packagedExpoCommand } from '../dev-src/studio/StudioPackagedService'
 import { StudioPreviewRuntime } from '../dev-src/studio/StudioPreviewRuntime'
 import { StudioSmoke } from '../dev-src/studio/StudioSmoke'
-import { StudioTestProcessOutput } from '../dev-src/studio/StudioTestProcessRunner'
+import { StudioTestProcessOutput, StudioTestProcessRunner } from '../dev-src/studio/StudioTestProcessRunner'
 
 Describe('Studio test process output', () => {
   Test('bounds displayed output while retaining structured failure locations', () => {
@@ -21,9 +23,71 @@ Describe('Studio test process output', () => {
     Expect(output.parseText()).toContain('Source: /projects/My Notes/Notes.test.tao:12:7')
     Expect(output.parseText()).toContain('Expected one saved note.')
   })
+
+  Test('truncates on UTF-8 boundaries and parses ANSI failure output idempotently', () => {
+    const output = new StudioTestProcessOutput(11)
+    output.write(Buffer.from('old 😀😀 tail\n\u001b[31mTao check failed: unicode\u001b[0m\n'))
+    output.write(Buffer.from('  \u001b[33mSource: /tmp/Unicode.test.tao:2:3\u001b[0m\nExpected 😀.'))
+
+    Expect(output.text()).not.toContain('�')
+    const first = output.parseText()
+    Expect(first).toContain('Tao check failed: unicode')
+    Expect(first).toContain('Source: /tmp/Unicode.test.tao:2:3')
+    Expect(first).toContain('Expected 😀.')
+    Expect(output.parseText()).toBe(first)
+  })
+
+  Test('bounds shutdown of a stubborn test subprocess tree', async () => {
+    const runner = new StudioTestProcessRunner({
+      args: ['-c', "trap '' TERM; while :; do sleep 1; done"],
+      command: '/bin/sh',
+      cwd: FS.tmpdir(),
+      stopTimeoutMs: 20,
+    })
+    const running = runner.run()
+    await Time.sleep(30)
+
+    const startedAt = Date.now()
+    await runner.close()
+    const result = await running
+
+    Expect(Date.now() - startedAt).toBeLessThan(1_000)
+    Expect(result.status).toBe('cancelled')
+    Expect(runner.status().running).toBe(false)
+  })
 })
 
 Describe('Studio native wrapper foundation', () => {
+  Test('serves the prebuilt browser asset installed by packaged Studio', async () => {
+    StudioClientAssets.usePrebuiltBundle('globalThis.__TAO_STUDIO_PACKAGED__ = true')
+    try {
+      await Expect(StudioClientAssets.bundle()).resolves.toBe('globalThis.__TAO_STUDIO_PACKAGED__ = true')
+    } finally {
+      StudioClientAssets.testing.resetBundle()
+    }
+  })
+
+  Test('builds a nonempty Studio browser artifact for the native payload', async () => {
+    const root = await FS.mkTmpDir(FS.resolvePath('tao-studio-browser-bundle-', FS.tmpdir()))
+    const path = FS.resolvePath('studio.js', root)
+    try {
+      await StudioNative.testing.stageStudioClientBundle(path)
+      Expect((await FS.readText(path)).length).toBeGreaterThan(1_000)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('runs packaged Expo through the shipped Node runtime instead of host bunx', () => {
+    Expect(packagedExpoCommand({
+      runtimeToolchainRoot: '/Applications/Tao Studio.app/Contents/Resources/service/packages/runtime-toolchain',
+      testNodePath: '/Applications/Tao Studio.app/Contents/Resources/service/bin/node',
+    })).toEqual({
+      argsPrefix: ['/Applications/Tao Studio.app/Contents/Resources/service/node_modules/expo/bin/cli'],
+      executable: '/Applications/Tao Studio.app/Contents/Resources/service/bin/node',
+    })
+  })
+
   Test('recognizes an explicit Hutch executable instead of accepting a missing candidate', async () => {
     const packageRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-electrobun-', FS.tmpdir()))
     try {
@@ -111,6 +175,13 @@ Describe('Studio native wrapper foundation', () => {
     Expect(fake.events).toEqual(['kill SIGTERM', 'kill SIGKILL', 'close-output', 'dispose'])
   })
 
+  Test('signals the complete detached native process group', () => {
+    Expect(StudioNative.testing.processGroupKillSpec(4312, 'SIGKILL')).toEqual({
+      args: ['-KILL', '--', '-4312'],
+      command: '/bin/kill',
+    })
+  })
+
   Test('requires HTTPS release hosting before invoking Hutch packaging', async () => {
     await Expect(StudioNative.packageApp({
       releaseBaseUrl: 'http://releases.example.com/tao-studio',
@@ -151,7 +222,7 @@ Describe('Studio smoke resource isolation', () => {
   Test('persists and reloads validated recent projects in device-local Studio state', async () => {
     const stateRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-state-', FS.tmpdir()))
     const statePath = FS.resolvePath('recent-projects.json', stateRoot)
-    const store = StudioDev.testing.createRecentProjectStore(statePath)
+    const store = createRecentProjectStore(statePath)
     const recent = [
       { appName: 'First', lastOpenedAt: '2026-08-30T12:00:00.000Z', project: '/projects/first' },
       { appName: 'Second', lastOpenedAt: '2026-08-29T12:00:00.000Z', project: '/projects/second' },
@@ -161,7 +232,7 @@ Describe('Studio smoke resource isolation', () => {
       await store.save(recent)
       await store.flush()
 
-      await Expect(StudioDev.testing.createRecentProjectStore(statePath).load()).resolves.toEqual(recent)
+      await Expect(createRecentProjectStore(statePath).load()).resolves.toEqual(recent)
       Expect(await FS.readJson(statePath)).toEqual({ recent, version: 1 })
     } finally {
       await FS.remove(stateRoot)
@@ -171,7 +242,7 @@ Describe('Studio smoke resource isolation', () => {
   Test('ignores malformed or unsupported recent-project state', async () => {
     const stateRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-state-', FS.tmpdir()))
     const statePath = FS.resolvePath('recent-projects.json', stateRoot)
-    const store = StudioDev.testing.createRecentProjectStore(statePath)
+    const store = createRecentProjectStore(statePath)
     try {
       await FS.writeText(statePath, '{not json')
       await Expect(store.load()).resolves.toEqual([])

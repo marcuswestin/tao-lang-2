@@ -40,7 +40,6 @@ export const StudioDev = {
   testing: {
     cleanup: cleanupStudioDev,
     createProjectOpeners,
-    createRecentProjectStore,
     withCleanup,
   },
 }
@@ -150,6 +149,10 @@ export async function openStudioProjectResource(
     runtimeToolchainRoot?: string
     stop: (exitCode: number) => void
     testCommandArgs?: (projectRoot: string) => readonly string[]
+    expoCommand?: {
+      argsPrefix?: readonly string[]
+      executable: string
+    }
     testCommandEnv?: Readonly<Record<string, string>>
     testCommandPath?: string
     validationMode?: 'development' | 'release'
@@ -173,6 +176,7 @@ export async function openStudioProjectResource(
     const runtimeToolchainRoot = options.runtimeToolchainRoot ?? Repo.resolvePath(expo.config.RUNTIME_TOOLCHAIN_PATH)
     previewRuntime = await StudioPreviewRuntime.create(runtimeToolchainRoot, options.previewArtifactRoot)
     expoServer = expo.createServer(previewRuntime.root, {
+      command: options.expoCommand,
       logRoot: options.logRoot,
       runtimeToolchainSourceRoot: runtimeToolchainRoot,
     })
@@ -246,13 +250,13 @@ function withCleanup<Value extends object>(
   }
 }
 
-type RecentProjectStore = {
+export type RecentProjectStore = {
   flush(): Promise<void>
   load(): Promise<readonly StudioRecentProject[]>
   save(recent: readonly StudioRecentProject[]): Promise<void>
 }
 
-function createRecentProjectStore(path: string): RecentProjectStore {
+export function createRecentProjectStore(path: string): RecentProjectStore {
   let pending = Promise.resolve()
   return {
     flush() {

@@ -35,8 +35,9 @@ export class ExpoServer {
       : FS.resolvePath(FS.basename(this.config.EXPO_LOG_PATH), this.options.logRoot)
     await FS.mkdir(FS.dirname(logPath))
     this.logFile = await FS.openAppend(logPath)
-    this.child = CLI.start('bunx', {
-      args: this.config.EXPO_START_ARGS,
+    const launcher = this.options.command ?? { executable: 'bunx' }
+    this.child = CLI.start(launcher.executable, {
+      args: [...(launcher.argsPrefix ?? []), ...this.config.EXPO_START_ARGS],
       cwd: this.runtimeRoot,
       env: {
         ...this.config.EXPO_START_ENV,

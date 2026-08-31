@@ -11,8 +11,10 @@ let clientModuleInputs: readonly string[] = []
 export const StudioClientAssets = {
   bundle,
   html,
+  usePrebuiltBundle,
   testing: {
     moduleInputs,
+    resetBundle,
   },
 } as const
 
@@ -24,6 +26,20 @@ async function bundle(): Promise<string> {
 async function moduleInputs(): Promise<readonly string[]> {
   await bundle()
   return clientModuleInputs
+}
+
+/** usePrebuiltBundle installs the browser artifact shipped by a packaged Studio application. */
+function usePrebuiltBundle(source: string): void {
+  if (source.trim() === '') {
+    throw new Error('The packaged Tao Studio browser bundle is empty.')
+  }
+  clientBundle = Promise.resolve(source)
+  clientModuleInputs = []
+}
+
+function resetBundle(): void {
+  clientBundle = undefined
+  clientModuleInputs = []
 }
 
 function html(config: StudioClientConfig): string {

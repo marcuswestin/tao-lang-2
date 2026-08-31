@@ -1,9 +1,10 @@
 import { FS } from '@shared'
-import { startStudioSessionServer, StudioSessionManager } from '@studio'
-import { openStudioProjectResource, StudioDev } from './StudioDev'
+import { startStudioSessionServer, StudioClientAssets, StudioSessionManager } from '@studio'
+import { createRecentProjectStore, openStudioProjectResource } from './StudioDev'
 
 export type StudioPackagedServiceOptions = {
   runtimeToolchainRoot: string
+  studioClientBundlePath: string
   stdlibRoot: string
   testCommandPath: string
   testNodePath: string
@@ -15,13 +16,27 @@ export type StartedStudioPackagedService = {
   url: string
 }
 
+/** packagedExpoCommand resolves Expo through the Node runtime and dependencies shipped in the app. */
+export function packagedExpoCommand(
+  options: Pick<StudioPackagedServiceOptions, 'runtimeToolchainRoot' | 'testNodePath'>,
+): {
+  argsPrefix: readonly string[]
+  executable: string
+} {
+  return {
+    argsPrefix: [FS.resolvePath('../../node_modules/expo/bin/cli', options.runtimeToolchainRoot)],
+    executable: options.testNodePath,
+  }
+}
+
 /** Starts the repository Studio service from paths copied into an installed Electrobun app. */
 export async function startStudioPackagedService(
   options: StudioPackagedServiceOptions,
 ): Promise<StartedStudioPackagedService> {
   let stopping = false
   let stopPromise: Promise<void> | undefined
-  const recentProjects = StudioDev.testing.createRecentProjectStore(
+  StudioClientAssets.usePrebuiltBundle(await FS.readText(options.studioClientBundlePath))
+  const recentProjects = createRecentProjectStore(
     FS.resolvePath('recent-projects.json', options.userStateRoot),
   )
   const manager = new StudioSessionManager({
@@ -33,6 +48,7 @@ export async function startStudioPackagedService(
     async openProject(request) {
       return await openStudioProjectResource(request, {
         entryPath: request.entryPath,
+        expoCommand: packagedExpoCommand(options),
         isStopping: () => stopping,
         logRoot: FS.resolvePath('logs', options.userStateRoot),
         previewArtifactRoot: FS.resolvePath('preview', options.userStateRoot),

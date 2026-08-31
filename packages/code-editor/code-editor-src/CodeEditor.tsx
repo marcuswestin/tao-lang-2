@@ -1,5 +1,5 @@
 import { languageServerExtensions, LSPClient, type Transport } from '@codemirror/lsp-client'
-import { EditorState, type Extension } from '@codemirror/state'
+import { EditorState, type Extension, StateEffect } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { basicSetup } from 'codemirror'
 import React from 'react'
@@ -40,46 +40,67 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
   content.current = props.Content
 
   React.useEffect(() => {
+    const parent = mount.current
+    if (parent === null) {
+      return
+    }
     let cancelled = false
     let ownedClient: LSPClient | undefined
+    const view = new EditorView({
+      doc: content.current,
+      extensions: [
+        ...codeEditorBaseExtensions,
+        EditorView.updateListener.of(update => {
+          if (update.docChanged && !applyingExternalContent.current) {
+            void invokeEditorChange(change.current, update.state.doc.toString())
+          }
+        }),
+      ],
+      parent,
+    })
+    editor.current = view
 
-    const start = async (): Promise<void> => {
-      const extensions: Extension[] = [...codeEditorBaseExtensions]
-      if (props.Lsp) {
-        ownedClient = new LSPClient({
+    const startLsp = async (): Promise<void> => {
+      if (props.Lsp === undefined) {
+        return
+      }
+      try {
+        const client = new LSPClient({
           extensions: languageServerExtensions(),
           rootUri: props.Lsp.rootUri,
           timeout: 10_000,
-        }).connect(await props.Lsp.transport)
-        await ownedClient.initializing
+        })
+        ownedClient = client
+        const transport = await props.Lsp.transport
         if (cancelled) {
-          ownedClient.disconnect()
+          client.disconnect()
           return
         }
-        extensions.push(ownedClient.plugin(props.Lsp.documentUri, props.Lsp.languageId ?? 'tao'))
+        client.connect(transport)
+        await client.initializing
+        if (cancelled) {
+          client.disconnect()
+          return
+        }
+        view.dispatch({
+          effects: StateEffect.appendConfig.of(
+            client.plugin(props.Lsp.documentUri, props.Lsp.languageId ?? 'tao'),
+          ),
+        })
+      } catch (error) {
+        ownedClient?.disconnect()
+        ownedClient = undefined
+        console.error('Tao CodeEditor language support could not start; continuing without LSP.', error)
       }
-      if (cancelled || !mount.current) {
-        return
-      }
-      editor.current = new EditorView({
-        doc: content.current,
-        extensions: [
-          ...extensions,
-          EditorView.updateListener.of(update => {
-            if (update.docChanged && !applyingExternalContent.current) {
-              void invokeEditorChange(change.current, update.state.doc.toString())
-            }
-          }),
-        ],
-        parent: mount.current,
-      })
     }
-    void start()
+    void startLsp()
 
     return () => {
       cancelled = true
-      editor.current?.destroy()
-      editor.current = undefined
+      view.destroy()
+      if (editor.current === view) {
+        editor.current = undefined
+      }
       ownedClient?.disconnect()
     }
   }, [props.Lsp?.documentUri, props.Lsp?.languageId, props.Lsp?.rootUri, props.Lsp?.transport])
@@ -129,7 +150,9 @@ export function webSocketTransport(url: string): Promise<Transport> {
   return new Promise((resolve, reject) => {
     const handlers = new Set<(value: string) => void>()
     const socket = new WebSocket(url)
-    socket.addEventListener('open', () =>
+    let settled = false
+    socket.addEventListener('open', () => {
+      settled = true
       resolve({
         send(message) {
           socket.send(message)
@@ -140,12 +163,19 @@ export function webSocketTransport(url: string): Promise<Transport> {
         unsubscribe(handler) {
           handlers.delete(handler)
         },
-      }))
+      })
+    })
     socket.addEventListener('message', event => {
       for (const handler of handlers) {
         handler(String(event.data))
       }
     })
-    socket.addEventListener('error', () => reject(new Error('Could not connect to the Tao language server.')))
+    socket.addEventListener('error', () => {
+      if (!settled) {
+        settled = true
+        socket.close()
+        reject(new Error('Could not connect to the Tao language server.'))
+      }
+    })
   })
 }
