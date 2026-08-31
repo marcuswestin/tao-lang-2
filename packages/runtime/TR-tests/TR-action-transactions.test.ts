@@ -336,11 +336,37 @@ Describe('Tao action transactions', () => {
       },
       'OptionalEffect',
       [],
+      { requiredArguments: 0 },
     )
 
     await action.jsValue.invoke(undefined)
 
     Expect(received).toEqual([undefined])
+  })
+
+  Test('reports a missing required foreign argument without calling the host implementation', async () => {
+    const reports: any[] = []
+    const stop = TR.Errors.onFailure(report => reports.push(report))
+    let calls = 0
+    const action = TR.ForeignAction(
+      (_required = 'host default') => {
+        calls += 1
+      },
+      'RequiredEffect',
+      [],
+      { requiredArguments: 1 },
+    )
+
+    await action.jsValue.invoke()
+    stop()
+
+    Expect(calls).toBe(0)
+    Expect(reports).toHaveLength(1)
+    Expect(reports[0]).toMatchObject({
+      action: 'RequiredEffect',
+      message: "Foreign action 'RequiredEffect' is missing required argument 1 of 1.",
+      retryEligible: true,
+    })
   })
 
   Test('retains only the latest 50 redacted action failures for capture', () => {

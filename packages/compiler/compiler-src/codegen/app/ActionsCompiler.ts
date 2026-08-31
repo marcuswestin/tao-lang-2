@@ -254,6 +254,7 @@ function compileForeignAction(action: AST.ActionDeclaration): Compiled {
   Assert.defined(foreign, 'foreign action has an implementation')
   const implementation = { name: foreignActionBindingName(action) }
   const parameters = actionParameters(action)
+  const requiredArguments = parameters.filter(({ parameter }) => parameter.defaultValue === undefined).length
   const adaptedImplementation = parameters.some(({ parameter }) => parameter.defaultValue !== undefined)
     ? gen`(${gen.join(parameters, parameter => actionRuntimeParameterName(parameter.index))}) =>
       TR.BlockScope(_Scope, _Scope => {
@@ -276,7 +277,7 @@ function compileForeignAction(action: AST.ActionDeclaration): Compiled {
       sentence: ${gen.jsLiteral(failure.sentence)},
     }`)
   }],
-    ${action.runsLatest ? gen`{ runs: "latest" }` : gen`{}`},
+    { ${action.runsLatest ? gen`runs: "latest", ` : gen``}requiredArguments: ${requiredArguments} },
   )`
 }
 

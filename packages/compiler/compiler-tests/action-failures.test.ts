@@ -19,7 +19,7 @@ Describe('compiler: action failures', () => {
     Expect(code).toContain("import { Publish as __tao_foreign_action_Publish_1__ } from './Api'")
     Expect(code).toContain('TR.ForeignAction( __tao_foreign_action_Publish_1__, "Publish"')
     Expect(code).toContain('sentence: "Unavailable."')
-    Expect(code).toContain('{ runs: "latest" }')
+    Expect(code).toContain('{ runs: "latest", requiredArguments: 1 }')
   })
 
   Test('binds foreign action defaults before crossing the JavaScript boundary', async () => {
@@ -38,6 +38,7 @@ Describe('compiler: action failures', () => {
     Expect(code).toContain(
       '__tao_foreign_action_Publish_1__(_Scope.Title.evaluate().jsValue, _Scope.Copies.evaluate().jsValue)',
     )
+    Expect(code).toContain('{ requiredArguments: 0 }')
   })
 
   Test('does not mark an outer action interruptible for a respond owned by a nested action value', async () => {
@@ -53,5 +54,21 @@ Describe('compiler: action failures', () => {
     const code = compiled.code.replace(/\s+/g, ' ')
 
     Expect(code.match(/interrupt: true/g)).toHaveLength(1)
+  })
+
+  Test('marks an action interruptible when its detached async block can respond', async () => {
+    const compiled = await Compiler.compileCode(`
+      app RespondApp { view Prompt }
+      type Result is one of Done
+      view Prompt() responds Result {
+        action ReplyLater() { async { respond Done } }
+        render Label("Ready")
+      }
+      view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+    `)
+    const code = compiled.code.replace(/\s+/g, ' ')
+
+    Expect(code).toContain('TR.Async(() =>')
+    Expect(code).toContain('name: "ReplyLater", interrupt: true')
   })
 })

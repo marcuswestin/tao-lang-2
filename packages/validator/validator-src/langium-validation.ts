@@ -12,9 +12,10 @@ export function registerTaoValidationChecks(
 ): void {
   const registry = services.validation.ValidationRegistry
   const checks: Langium.ValidationChecks<AST.TaoLangAstType> = {
-    TaoFile: (file, accept) => {
+    TaoFile: async (file, accept) => {
       const ctx = Validation.createContext(accept, contextForFile(file))
       Validate.TaoFile(file, ctx)
+      await Validate.ForeignImplementationFiles(file, ctx)
     },
   }
   registry.register(checks)

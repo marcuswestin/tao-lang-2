@@ -54,6 +54,7 @@ export const ViewsValidator = {
     [AST.TagStatement.$type]: validateTag,
   } satisfies NodeValidationChecks,
   messages: viewValidationMessages,
+  validateForeignFiles: validateForeignViewFiles,
 }
 
 function validateLoopSelectHandler(handler: AST.LoopSelectHandler, ctx: ValidationContext): void {
@@ -115,20 +116,28 @@ function validateForeignView(view: AST.ViewDeclaration, ctx: ValidationContext):
   }
   if (!/^\.\.?\/.+\.tsx?$/.test(foreign.path)) {
     ctx.error(viewValidationMessages.foreignViewPath, foreign)
-  } else {
-    const documentDirectory = FS.dirname(AST.getDocument(foreign).uri.path)
-    if (
-      FS.existsSync(documentDirectory)
-      && !FS.existsSync(FS.resolvePath(foreign.path, documentDirectory))
-    ) {
-      ctx.error(viewValidationMessages.foreignViewMissing(foreign.path), foreign)
-    }
   }
   if (foreign.accepts && foreign.content === undefined && foreign.slots.length === 0) {
     ctx.error(viewValidationMessages.foreignViewAccepts, foreign)
   }
   if (foreign.content !== undefined && foreign.content !== 'content') {
     ctx.error(viewValidationMessages.foreignViewAccepts, foreign)
+  }
+}
+
+async function validateForeignViewFiles(file: AST.TaoFile, ctx: ValidationContext): Promise<void> {
+  for (const view of AST.streamAllContents(file).filter(AST.isViewDeclaration)) {
+    const foreign = view.foreign
+    if (!foreign || !/^\.\.?\/.+\.tsx?$/.test(foreign.path)) {
+      continue
+    }
+    const documentDirectory = FS.dirname(AST.getDocument(foreign).uri.path)
+    if (
+      await FS.isDirectory(documentDirectory)
+      && !await FS.exists(FS.resolvePath(foreign.path, documentDirectory))
+    ) {
+      ctx.error(viewValidationMessages.foreignViewMissing(foreign.path), foreign)
+    }
   }
 }
 

@@ -456,7 +456,11 @@ Describe('compiler: files and packages', () => {
         }
         view Empty() { render inject \`\`\`ts return null \`\`\` }
       `,
-      'Api.ts': "import { helper } from './Missing'\nexport function Publish() { helper() }",
+      'Api.ts': [
+        "import { helper } from './Missing'",
+        'export function Publish() { helper() }',
+        "export { helper as missingHelper } from './Missing'",
+      ].join('\n'),
     }, async paths => {
       try {
         await Workspace.compile(paths['Main.tao']!)

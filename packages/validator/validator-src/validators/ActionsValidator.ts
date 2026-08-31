@@ -55,8 +55,6 @@ export const ActionsValidator = {
       if (action.foreign) {
         if (!/^\.\.?\/.+\.tsx?$/.test(action.foreign.path)) {
           ctx.error(actionValidationMessages.foreignActionPath, action.foreign)
-        } else {
-          reportMissingForeignAction(action, ctx)
         }
       }
     },
@@ -69,19 +67,22 @@ export const ActionsValidator = {
   } satisfies NodeValidationChecks,
   messages: actionValidationMessages,
   registerTypeValidation,
+  validateForeignFiles: validateForeignActionFiles,
 } as const
 
-function reportMissingForeignAction(action: AST.ActionDeclaration, ctx: ValidationContext): void {
-  const foreign = action.foreign
-  if (!foreign) {
-    return
-  }
-  const documentDirectory = FS.dirname(AST.getDocument(foreign).uri.path)
-  if (
-    FS.existsSync(documentDirectory)
-    && !FS.existsSync(FS.resolvePath(foreign.path, documentDirectory))
-  ) {
-    ctx.error(actionValidationMessages.foreignActionMissing(foreign.path), foreign)
+async function validateForeignActionFiles(file: AST.TaoFile, ctx: ValidationContext): Promise<void> {
+  for (const action of AST.streamAllContents(file).filter(AST.isActionDeclaration)) {
+    const foreign = action.foreign
+    if (!foreign || !/^\.\.?\/.+\.tsx?$/.test(foreign.path)) {
+      continue
+    }
+    const documentDirectory = FS.dirname(AST.getDocument(foreign).uri.path)
+    if (
+      await FS.isDirectory(documentDirectory)
+      && !await FS.exists(FS.resolvePath(foreign.path, documentDirectory))
+    ) {
+      ctx.error(actionValidationMessages.foreignActionMissing(foreign.path), foreign)
+    }
   }
 }
 

@@ -571,7 +571,13 @@ function relativeModuleSpecifiers(source: string): SidecarSpecifier[] {
       }
     }
   }
-  return [...new Map(specifiers.map(specifier => [specifier.value, specifier])).values()]
+  const firstByValue = new Map<string, SidecarSpecifier>()
+  for (const specifier of specifiers) {
+    if (!firstByValue.has(specifier.value)) {
+      firstByValue.set(specifier.value, specifier)
+    }
+  }
+  return [...firstByValue.values()]
 }
 
 function sidecarSourceRange(source: string, start: number, end: number): {

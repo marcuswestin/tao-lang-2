@@ -34,6 +34,9 @@ export function actionBlockContainsRespond(block: AST.ActionBlock | undefined): 
     if (AST.isRespondStatement(statement)) {
       return true
     }
+    if (AST.isAsyncActionStatement(statement)) {
+      return actionBlockContainsRespond(statement.block)
+    }
     if (AST.isIfActionStatement(statement)) {
       return actionBlockContainsRespond(statement.block)
     }

@@ -40,6 +40,21 @@ Describe('validator: apps and views', () => {
     Expect(validationErrorMessages(result)).toEqual([])
   })
 
+  Test('accepts an app persisted case-set state', async () => {
+    const result = await testValidateCode(`
+      use StackNav from @tao/nav
+      type Theme is one of Light, Dark
+      app Workspace {
+        Name "Workspace"
+        state CurrentTheme is Theme = Light (persist)
+        Navigator StackNav { Initial Main }
+      }
+      view Main() { Title "Main" render Empty() }
+      ${stubView('Empty')}
+    `)
+    Expect(validationErrorMessages(result)).toEqual([])
+  })
+
   Test('requires app state to be typed and persisted', async () => {
     const result = await testValidateCodeWithErrors(`
       use StackNav from @tao/nav
@@ -70,6 +85,38 @@ Describe('validator: apps and views', () => {
     `)
     Expect(validationErrorMessages(result)).toContain(
       StateValidator.messages.persistedTypeUnsupported('OnSave', 'action()'),
+    )
+  })
+
+  Test('rejects self-referential persisted items without recursing forever', async () => {
+    const result = await testValidateCodeWithErrors(`
+      type Person is { Friend Person }
+      app Cyclic {
+        state Current is Person = "invalid" (persist)
+        view Main
+      }
+      view Main() { render Empty() }
+      ${stubView('Empty')}
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(
+      StateValidator.messages.persistedTypeUnsupported('Current', 'Person'),
+    )
+  })
+
+  Test('rejects persisted item aliases whose runtime shape is unresolved', async () => {
+    const result = await testValidateCodeWithErrors(`
+      type Bag is item
+      app Shapeless {
+        state Current is Bag = "invalid" (persist)
+        view Main
+      }
+      view Main() { render Empty() }
+      ${stubView('Empty')}
+    `)
+
+    Expect(validationErrorMessages(result)).toContain(
+      StateValidator.messages.persistedTypeUnsupported('Current', 'Bag'),
     )
   })
 

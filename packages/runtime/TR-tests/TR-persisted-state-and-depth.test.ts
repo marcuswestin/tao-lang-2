@@ -141,6 +141,73 @@ Describe('persisted app state and recursive view depth', () => {
     }
   })
 
+  Test('persists enum case names and restores the current declaration-owned runtime token', async () => {
+    const storage = memoryStorage()
+    const restore = TR.Persisted.setStorageForTests(storage)
+    const declaration = identity('DocumentStatus')
+    const enumType = {
+      cases: ['Draft', 'Published'],
+      declaration: declaration.canonical,
+      kind: 'enum',
+    } as const
+    try {
+      const Status = TR.Enum(declaration, enumType.cases)
+      const state = TR.PersistedState(() => Status['Draft']!, identity('EnumOwner'), 'Status', enumType)
+      await state.load()
+      state.set(Status['Published']!)
+      await Promise.resolve()
+
+      const persisted = JSON.parse(storage.values.get(state.key)!)
+      Expect(persisted.value).toEqual({
+        caseName: 'Published',
+        declaration: declaration.canonical,
+      })
+
+      const RecompiledStatus = TR.Enum(declaration, enumType.cases)
+      const restoredState = TR.PersistedState(
+        () => RecompiledStatus['Draft']!,
+        identity('EnumOwner'),
+        'Status',
+        enumType,
+      )
+      await restoredState.load()
+      Expect(restoredState.evaluate().jsValue).toBe(RecompiledStatus['Published']!.evaluate().jsValue)
+      Expect(TR.IsCase(restoredState, RecompiledStatus['Published']!).evaluate().jsValue).toBe(true)
+    } finally {
+      restore()
+    }
+  })
+
+  Test('keeps the enum default when persisted case identity is stale or unknown', async () => {
+    const storage = memoryStorage()
+    const restore = TR.Persisted.setStorageForTests(storage)
+    const declaration = identity('SafeStatus')
+    const enumType = {
+      cases: ['Draft', 'Published'],
+      declaration: declaration.canonical,
+      kind: 'enum',
+    } as const
+    const Status = TR.Enum(declaration, enumType.cases)
+    const warn = console.warn
+    console.warn = () => {}
+    try {
+      const state = TR.PersistedState(() => Status['Draft']!, identity('SafeEnumOwner'), 'Status', enumType)
+      storage.values.set(
+        state.key,
+        JSON.stringify({
+          formatVersion: 1,
+          type: enumType,
+          value: { caseName: 'Removed', declaration: declaration.canonical },
+        }),
+      )
+      await state.load()
+      Expect(state.evaluate().jsValue).toBe(Status['Draft']!.evaluate().jsValue)
+    } finally {
+      console.warn = warn
+      restore()
+    }
+  })
+
   Test('accepts exactly 256 view frames and fails frame 257 without argument inspection', () => {
     Expect(() => TR.AssertViewDepth({ viewDepth: 256 }, 'Recursive')).not.toThrow()
     try {
