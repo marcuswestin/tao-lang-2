@@ -35,7 +35,12 @@ import {
   StudioProductCapabilities,
 } from '../studio-src/client/StudioProductPanels'
 import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
-import { StudioPaneSizes, studioShellMarkup, studioShellRailPanels } from '../studio-src/client/StudioShell'
+import {
+  StudioPaneMinimums,
+  StudioPaneSizes,
+  studioShellMarkup,
+  studioShellRailPanels,
+} from '../studio-src/client/StudioShell'
 import { studioInspectorContexts } from '../studio-src/client/StudioVisualEditing'
 import {
   isStudioSaveShortcut,
@@ -74,6 +79,7 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
     previewUrl: 'http://127.0.0.1:55102/?value=</script><script>bad()</script>',
   })
   Expect(html).toContain('overscroll-behavior-x: contain')
+  Expect(html).toContain('flex: none')
 
   Expect(bundle).toContain('Tao Studio root is missing')
   Expect(bundle).toContain('/api/language/lsp')
@@ -345,6 +351,7 @@ Test('Studio preview teardown releases observers and pending capture work', () =
 })
 
 Test('Studio pane sizes load safe defaults and persist all divider dimensions', () => {
+  Expect(StudioPaneMinimums).toEqual({ bottom: 96, left: 180, preview: 280, right: 320 })
   let stored: string | null = '{"left":312,"right":296,"bottom":205,"preview":516}'
   const storage = {
     getItem: () => stored,

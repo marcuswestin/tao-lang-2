@@ -358,7 +358,7 @@ button { color: inherit; font: inherit; }
 .studio-panel-note { color: #7f8981; font-size: 12px; padding: 10px; }
 .studio-unavailable strong { color: #b9c0ba; }
 .studio-inspector {
-  background: #1d201e; display: grid; grid-template-columns: minmax(190px, .9fr) minmax(210px, 1.1fr);
+  background: #1d201e; display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
   min-height: 0; min-width: 0; overflow: hidden;
 }
 .studio-inspector-pane { min-height: 0; min-width: 0; overflow: auto; }
@@ -481,7 +481,7 @@ button { color: inherit; font: inherit; }
   overscroll-behavior-x: contain; padding: 2px 2px 10px; scroll-snap-type: x proximity;
 }
 .studio-preview-group-cells > .studio-preview-cell { scroll-snap-align: start; }
-.studio-preview-cell { display: grid; gap: 8px; justify-items: start; min-width: 0; }
+.studio-preview-cell { display: grid; flex: none; gap: 8px; justify-items: start; min-width: 0; }
 .studio-preview-cell[aria-current="true"] > .studio-preview-cell-label { color: #f3c969; }
 .studio-preview-cell:focus-visible { outline: 2px solid #f3c969; outline-offset: 5px; }
 .studio-preview-cell-label {

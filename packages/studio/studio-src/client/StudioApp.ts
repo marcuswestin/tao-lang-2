@@ -686,8 +686,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       scenarioPanel.className = 'studio-scenario-inspector'
       renderScenarioInspector(scenarioPanel, activePreview.current())
       view.scenarioInspector.replaceChildren(scenarioPanel)
-      const sourcePanel = document.createElement('section')
-      renderInspectorAccordions(sourcePanel, {
+      renderInspectorAccordions(view.inspector, {
         busy: sourceActionBusy,
         canUndo: undoCheckpoints.at(-1)?.path === activePath,
         currentSourceVersion: activeFile?.sourceVersion,
@@ -700,7 +699,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         onUndo: () => void undoLatestSourceAction(),
         selection: inspected,
       })
-      view.inspector.replaceChildren(sourcePanel)
       renderDesignEditor()
     }
 

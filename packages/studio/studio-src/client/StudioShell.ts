@@ -38,6 +38,8 @@ type PaneName = 'bottom' | 'left' | 'preview' | 'right'
 const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 360, preview: 440, right: 440 }
 const paneStorageKey = 'tao-studio:pane-sizes:v4'
 
+export const StudioPaneMinimums: Record<PaneName, number> = { bottom: 96, left: 180, preview: 280, right: 320 }
+
 export const studioShellRailPanels = [
   { icon: '🗂️', label: 'Files', panel: 'files' },
   { icon: '▦', label: 'Components', panel: 'components' },
@@ -294,7 +296,7 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
         return
       }
       event.preventDefault()
-      const minimum = pane === 'bottom' ? 96 : pane === 'preview' ? 280 : 180
+      const minimum = StudioPaneMinimums[pane]
       const base = sizes[pane] === 0 ? minimum : sizes[pane]
       setSize(pane, Math.max(minimum, base + direction * (event.shiftKey ? 40 : 12)))
     })
@@ -309,7 +311,7 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
           : pane === 'preview'
           ? start - moveEvent.clientX
           : moveEvent.clientX - start
-        const minimum = pane === 'bottom' ? 96 : pane === 'preview' ? 280 : 180
+        const minimum = StudioPaneMinimums[pane]
         sizes[pane] = Math.max(minimum, initial + delta)
         apply()
       }

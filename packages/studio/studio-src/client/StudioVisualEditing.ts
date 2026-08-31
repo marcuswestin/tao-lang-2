@@ -187,6 +187,12 @@ export function renderInspectorPanel(
 
 /** Renders every visual editing context as an independently collapsible, initially open section. */
 export function renderInspectorAccordions(parent: HTMLElement, options: StudioInspectorPanelOptions): void {
+  const previousOpen = new Map(
+    [...parent.querySelectorAll<HTMLDetailsElement>('[data-tao-studio-inspector-context]')].map(details => [
+      details.dataset['taoStudioInspectorContext'] as StudioInspectorContext,
+      details.open,
+    ]),
+  )
   const heading = document.createElement('h2')
   heading.textContent = 'Visual properties'
   const undo = document.createElement('button')
@@ -221,7 +227,8 @@ export function renderInspectorAccordions(parent: HTMLElement, options: StudioIn
   accordions.append(...studioInspectorContexts.map(context => {
     const details = document.createElement('details')
     details.className = 'studio-inspector-accordion'
-    details.open = true
+    details.dataset['taoStudioInspectorContext'] = context
+    details.open = previousOpen.get(context) ?? true
     const label = document.createElement('summary')
     label.textContent = context
     const content = document.createElement('div')
