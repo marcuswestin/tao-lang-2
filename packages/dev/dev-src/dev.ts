@@ -5,6 +5,7 @@ import { ExpoRunner } from './expo-dev-loop/expo-runner/ExpoRunner'
 import { TestRunner } from './repository-tests/TestRunner'
 import { TestTUI } from './repository-tests/TestTUI'
 import { runStudioDev } from './studio/StudioDev'
+import { StudioLifecycleCommand } from './studio/StudioLifecycleCommand'
 import { StudioNative } from './studio/StudioNative'
 import { StudioSmoke } from './studio/StudioSmoke'
 
@@ -56,6 +57,7 @@ await runWithCommands(commands => {
     .option('--host <hostname>', 'Studio server hostname.', '127.0.0.1')
     .option('--port <port>', 'Studio server port; defaults to an available port.')
     .option('--no-browser', 'Do not open Studio in a browser.')
+    .option('--json', 'Print a machine-readable readiness payload once Studio answers.')
     .action(async (project, options) => {
       Platform.runtimeProcess.exit(
         await runStudioDev({
@@ -63,10 +65,37 @@ await runWithCommands(commands => {
           browser: options.browser,
           entryPath: options.entry,
           hostname: options.host,
+          json: options.json === true,
           port: parseOptionalPositiveInteger(options.port, '--port'),
           projectRoot: project,
         }),
       )
+    })
+
+  commands
+    .command('studio-ps')
+    .description('List recorded Tao Studio launches and whether each is still live.')
+    .option('--json', 'Print a versioned structured listing.')
+    .action(async (options: { json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(await StudioLifecycleCommand.ps({ json: options.json === true }))
+    })
+
+  commands
+    .command('studio-stop')
+    .description('Stop the processes a recorded Tao Studio launch owns.')
+    .option('--launch <id>', 'Stop only the launch with this id.')
+    .option('--all', 'Stop every recorded launch.')
+    .option('--json', 'Print a versioned structured report.')
+    .action(async (options: { all?: boolean; json?: boolean; launch?: string } = {}) => {
+      Platform.runtimeProcess.exit(await StudioLifecycleCommand.stop(options))
+    })
+
+  commands
+    .command('studio-doctor')
+    .description('Diagnose Tao Studio on top of the repository doctor, without changing anything.')
+    .option('--json', 'Print a versioned structured report.')
+    .action(async (options: { json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(await StudioLifecycleCommand.doctor({ json: options.json === true }))
     })
 
   commands
@@ -79,13 +108,16 @@ await runWithCommands(commands => {
     .option('--port <port>', 'Studio server port; defaults to an available port.')
     .option('--artifact-root <path>', 'Generated Electrobun project and runtime artifact root.')
     .option('--hutch <path>', 'Explicit Hutch executable path.', 'hutch')
+    .option('--no-browser', 'Open the Welcome window only, with no extra project window.')
+    .option('--json', 'Print a machine-readable readiness payload once Studio answers.')
     .action(async (project, options) => {
       Platform.runtimeProcess.exit(
         await runStudioDev({
           appName: options.app,
-          browser: false,
+          browser: options.browser,
           entryPath: options.entry,
           hostname: options.host,
+          json: options.json === true,
           native: true,
           nativeArtifactRoot: options.artifactRoot,
           nativeHutchPath: options.hutch,

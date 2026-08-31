@@ -25,7 +25,8 @@ export type StudioNativeOptions = {
   artifactRoot?: string
   hutchPath?: string
   previewUrl: string
-  projectUrl: string
+  /** Undefined opens the Welcome window only: `--no-browser` must not add a project window. */
+  projectUrl?: string
   probe?: boolean
   showWindow?: boolean
   studioUrl: string
