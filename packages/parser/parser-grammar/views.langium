@@ -19,10 +19,22 @@ TagStatement:
 // `public view Button = native.Button`. The alias publishes the target under this name; its
 // interface is the target's. Every other capability is inferred from the body: a view accepts
 // caller content iff it places `@@content`, and offers named render slots iff it declares them.
+// A foreign view declares the same interface in its head because there is no Tao body to infer:
+// `view Native(Value text) accepts content slots @header from ./Native.tsx`.
 ViewDeclaration:
     visibility=DeclarationVisibility? 'view' name=ID
-    (parameterList=ParameterList ('responds' response=[TypeDeclaration:ID])? block=ViewBlock
+    (parameterList=ParameterList ('responds' response=[TypeDeclaration:ID])?
+        (block=ViewBlock | foreign=ForeignViewImplementation)
         | '=' aliasTarget=PackageMemberReference);
+
+ForeignViewImplementation:
+    // Parse `content` as an ID and validate its spelling so the canonical layout word remains an ID
+    // everywhere else rather than becoming a global lexer keyword.
+    (accepts?='accepts' content=ID? ('slots' slots+=ForeignViewSlotDeclaration (',' slots+=ForeignViewSlotDeclaration)*)?)?
+    'from' path=USE_IMPORT_PATH;
+
+ForeignViewSlotDeclaration:
+    name=USE_IMPORT_PATH;
 
 // The source is context-sensitive here: bare supplied slots belong only to declaration bodies,
 // while nested render blocks retain the ordinary statement grammar. Returning Block preserves the
@@ -35,8 +47,10 @@ ViewBlock returns Block:
 RenderSlotDeclaration:
     name=USE_IMPORT_PATH '=' 'empty';
 
+type RenderSlotContract = RenderSlotDeclaration | ForeignViewSlotDeclaration;
+
 RenderSlotUse:
-    slot=[RenderSlotDeclaration:USE_IMPORT_PATH] render=ViewRender?;
+    slot=[RenderSlotContract:USE_IMPORT_PATH] render=ViewRender?;
 
 // A content-accepting view places its opaque unnamed caller content explicitly in its render tree.
 CallerContentStatement:

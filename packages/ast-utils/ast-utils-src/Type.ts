@@ -975,6 +975,9 @@ class TypeResolutionContext {
   }
 
   private stateDeclarationType(state: AST.StateDeclaration): TaoType {
+    if (state.type) {
+      return this.ofReference(state.type)
+    }
     if (this.stateAlreadySeen(state)) {
       return unresolvedType()
     }

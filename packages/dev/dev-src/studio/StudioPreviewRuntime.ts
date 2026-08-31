@@ -17,8 +17,10 @@ export const StudioPreviewRuntime = {
   create,
 }
 
-async function create(sourceRoot: string): Promise<CreatedStudioPreviewRuntime> {
-  const artifactRoot = Repo.resolvePath('.artifacts/dev/studio-preview')
+async function create(
+  sourceRoot: string,
+  artifactRoot = Repo.resolvePath('.artifacts/dev/studio-preview'),
+): Promise<CreatedStudioPreviewRuntime> {
   await FS.mkdir(artifactRoot)
   const root = await FS.mkTmpDir(FS.resolvePath('runtime-', artifactRoot))
   try {

@@ -66,9 +66,10 @@ Describe('TR.Action', () => {
     const calls: number[] = []
     const action = TR.Action((step: number) => calls.push(step))
 
-    TR.Do(action, 3)
+    const completion = TR.Do(action, 3)
 
     Expect(calls).toEqual([3])
+    Expect(completion).toBeUndefined()
   })
 
   Test('preserves reactive intent metadata for one bound invocation', () => {

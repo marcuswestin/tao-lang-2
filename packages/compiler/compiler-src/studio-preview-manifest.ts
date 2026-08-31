@@ -71,6 +71,7 @@ export type StudioPreviewScenarioManifest = {
     network?: 'offline' | 'online'
   }
   fixtureId: string
+  group: string
   id: string
   name: string
   prepare: readonly {
@@ -101,7 +102,7 @@ export type StudioPreviewManifest = {
     source: StudioPreviewSource
   }[]
   fixtures: readonly StudioPreviewFixtureManifest[]
-  formatVersion: 1
+  formatVersion: 2
   scenarios: readonly StudioPreviewScenarioManifest[]
   selectedAppName: string
   views: readonly StudioPreviewViewManifest[]
@@ -121,8 +122,12 @@ export function compileStudioPreviewManifest(
       }))
     ),
     fixtures: files.flatMap(file => file.ast.statements.filter(AST.isFixtureDeclaration).map(compileFixture)),
-    formatVersion: 1,
-    scenarios: files.flatMap(file => file.ast.statements.filter(AST.isScenarioDeclaration).map(compileScenario)),
+    formatVersion: 2,
+    scenarios: files.flatMap(file =>
+      file.ast.statements.filter(AST.isScenarioGroupDeclaration).flatMap(group =>
+        AST.scenarioDeclarations(group).map(scenario => compileScenario(group, scenario))
+      )
+    ),
     selectedAppName,
     views: files.flatMap(file =>
       file.ast.statements.filter(AST.isViewDeclaration).map(view => ({
@@ -164,43 +169,48 @@ function compileFixture(fixture: AST.FixtureDeclaration): StudioPreviewFixtureMa
   }
 }
 
-function compileScenario(scenario: AST.ScenarioDeclaration): StudioPreviewScenarioManifest {
-  const entries = scenario.block.entries
-  const fixture = entries.find(AST.isScenarioFixtureClause)?.fixture.ref
-  const device = entries.find(AST.isScenarioDeviceClause)!
-  const run = entries.find(AST.isScenarioRunClause)
-  const render = entries.find(AST.isScenarioRenderClause)
-  const app = run?.app.ref
-  const view = render?.view.ref
-  const appearance = entries.find(AST.isScenarioAppearanceClause)?.appearance
-  const locale = entries.find(AST.isScenarioLocaleClause)
-  const network = entries.find(AST.isScenarioNetworkClause)?.network
+function compileScenario(
+  group: AST.ScenarioGroupDeclaration,
+  scenario: AST.ScenarioDeclaration,
+): StudioPreviewScenarioManifest {
+  const fixture = AST.effectiveScenarioClause(scenario, AST.isScenarioFixtureClause)?.fixture.ref
+  const device = AST.effectiveScenarioClause(scenario, AST.isScenarioDeviceClause)!
+  const subjectClause = AST.effectiveScenarioSubjectClause(scenario)
+  const run = AST.isScenarioRunClause(subjectClause) ? subjectClause : undefined
+  const render = AST.isScenarioRenderClause(subjectClause) ? subjectClause : undefined
+  const subject = AST.scenarioSubjectDeclaration(scenario)
+  const app = AST.isAppValueDeclaration(subject) ? subject : undefined
+  const view = AST.isViewDeclaration(subject) ? subject : undefined
+  const appearance = AST.effectiveScenarioClause(scenario, AST.isScenarioAppearanceClause)?.appearance
+  const locale = AST.effectiveScenarioClause(scenario, AST.isScenarioLocaleClause)
+  const network = AST.effectiveScenarioClause(scenario, AST.isScenarioNetworkClause)?.network
+  const direction = AST.effectiveScenarioClause(scenario, AST.isScenarioDirectionClause)
+  const prepare = AST.effectiveScenarioClause(scenario, AST.isScenarioPrepareClause)
   return {
     environment: {
       ...(appearance === undefined ? {} : { appearance }),
       device: deviceEnvironment(device),
-      ...(entries.some(AST.isScenarioDirectionClause) ? { direction: 'rightToLeft' as const } : {}),
+      ...(direction === undefined ? {} : { direction: 'rightToLeft' as const }),
       ...(locale === undefined ? {} : { locale: locale.pseudolocale ? 'pseudolocale' as const : locale.locale! }),
       ...(network === undefined ? {} : { network }),
     },
     fixtureId: fixture === undefined ? '' : fixtureId(fixture),
-    id: scenarioId(scenario),
+    group: group.name,
+    id: scenarioId(group, scenario),
     name: scenario.name,
-    prepare: entries.filter(AST.isScenarioPrepareClause).flatMap(prepare =>
-      prepare.block.statements.map(update => ({
-        fields: fieldsOf(update.block),
-        target: update.target.$refText,
-      }))
-    ),
+    prepare: (prepare?.block.statements ?? []).map(update => ({
+      fields: fieldsOf(update.block),
+      target: update.target.$refText,
+    })),
     source: sourceOf(scenario),
-    subject: run !== undefined && app !== undefined
+    subject: app !== undefined
       ? {
         appName: app.name,
-        arguments: (run.argumentList?.arguments ?? []).map(argument => ({
+        arguments: (run?.argumentList?.arguments ?? []).map(argument => ({
           ...(argument.label === undefined ? {} : { label: argument.label }),
           value: fixtureValue(argument.value),
         })),
-        ...(run.destination === undefined ? {} : { destination: run.destination }),
+        ...(run?.destination === undefined ? {} : { destination: run.destination }),
         kind: 'app',
         subjectId: appId(app),
       }
@@ -263,8 +273,10 @@ function fixtureId(fixture: AST.FixtureDeclaration): string {
   return `${AST.getDocument(fixture).uri.fsPath}#fixture:${fixture.name}`
 }
 
-function scenarioId(scenario: AST.ScenarioDeclaration): string {
-  return `${AST.getDocument(scenario).uri.fsPath}#scenario:${scenario.name}`
+function scenarioId(group: AST.ScenarioGroupDeclaration, scenario: AST.ScenarioDeclaration): string {
+  return `${AST.getDocument(group).uri.fsPath}#scenario:${encodeURIComponent(group.name)}:${
+    encodeURIComponent(scenario.name)
+  }`
 }
 
 function viewId(view: AST.ViewDeclaration): string {

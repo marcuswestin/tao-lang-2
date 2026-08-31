@@ -50,7 +50,7 @@ export const StatementsCompiler = {
       RenderSlotUse: Compile.RenderSlotUse,
       CallerContentStatement: Compile.CallerContentStatement,
       RunStep: Compile.RunStep,
-      ScenarioDeclaration: Compile.ScenarioDeclaration,
+      ScenarioGroupDeclaration: Compile.ScenarioGroupDeclaration,
       StateDeclaration: Compile.StateDeclaration,
       SubmitInputStep: Compile.SubmitInputStep,
       TagSubmitStep: Compile.TagSubmitStep,
@@ -88,8 +88,8 @@ export const StatementsCompiler = {
     return gen.noop()
   },
 
-  /** ScenarioDeclaration is Studio/review metadata and emits no production app binding. */
-  ScenarioDeclaration(): Compiled {
+  /** ScenarioGroupDeclaration is Studio/review metadata and emits no production app binding. */
+  ScenarioGroupDeclaration(): Compiled {
     return gen.noop()
   },
 

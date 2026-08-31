@@ -1,6 +1,7 @@
 import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
 import { resolveDataWriteBindings } from './data-write-bindings'
+import { standardDesignElementName } from './design'
 import { guardBranches } from './guards'
 import { injectionArgumentName } from './injections'
 import {
@@ -34,6 +35,7 @@ export const ASTUtils = {
   resolveItemPropertyBindings,
   resolveRenderInvocation,
   rootAppValue,
+  standardDesignElementName,
 } as const
 
 export namespace ASTUtils {

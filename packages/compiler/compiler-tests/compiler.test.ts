@@ -8,6 +8,57 @@ const tsFence = '```ts'
 const fence = '```'
 
 Describe('compiler: language lowering', () => {
+  Test('keeps synchronous actions synchronous and marks ask responses as queue interrupts', async () => {
+    const compiled = await Compiler.compileCode(`
+      use StackNav from @tao/nav
+      use Button, Text from @tao/ui
+      app Actions { Name "Actions" Navigator StackNav { Initial Main } }
+      type Answer is one of Confirmed
+      view Main() {
+        Title "Main"
+        state Count = 0
+        action Increment() { set Count += 1 }
+        action AddOne() { do Increment() }
+        action AskFirst() { let Result = ask Dialogue() }
+        render Button("Increment") { on press AddOne }
+      }
+      view Dialogue() responds Answer {
+        render Button("Confirm") { on press -> { respond Confirmed } }
+      }
+    `)
+
+    Expect(compiled.code).toContain('_Scope.Increment = TR.Action(() =>')
+    Expect(compiled.code).toContain('_Scope.AddOne = TR.Action(() =>')
+    Expect(compiled.code).toContain('TR.Do(_Scope.Increment.evaluate())')
+    Expect(compiled.code).not.toContain('await TR.Do(_Scope.Increment.evaluate())')
+    Expect(compiled.code).toContain('_Scope.AskFirst = TR.Action(async () =>')
+    Expect(compiled.code).toContain('{ interrupt: true }')
+  })
+
+  Test('lowers app persisted state as a writable SplitNav width binding', async () => {
+    const compiled = await Compiler.compileCode(`
+      use SplitNav from @tao/nav
+      app Workspace {
+        Name "Workspace"
+        state PaneWidth is number = 320 (persist)
+        Navigator SplitNav { @pane { Content Pane Width PaneWidth Resizable true } }
+      }
+      view Pane() { render inject ${tsFence} return null ${fence} }
+    `)
+    Expect(compiled.code).toContain('_Scope.PaneWidth = TR.PersistedState(')
+    Expect(compiled.code).toContain('{ kind: "primitive", name: "number" }')
+    Expect(compiled.code).toContain('"Width": _Scope.PaneWidth')
+    Expect(compiled.code).toContain('TR.UsePersistedState(_Scope.PaneWidth)')
+  })
+
+  Test('guards every generated recursive view frame at runtime', async () => {
+    const compiled = await Compiler.compileCode(`
+      app RecursiveApp { view Recursive }
+      view Recursive() { render Recursive() }
+    `)
+    Expect(compiled.code).toContain('TR.AssertViewDepth(_ViewProps.__tao, "Recursive")')
+    Expect(compiled.code).toContain('TR.ViewTaoProps(')
+  })
   Test('compiles bare app slot blocks through their inferred declaration identities', async () => {
     const compiled = await Compiler.compileCode(`
       public type Navigator is nav with {

@@ -9,6 +9,7 @@ import type {
   TaoSelectionNavConfiguration,
   TaoSelectionNavItemDefinition,
   TaoSlotNavConfiguration,
+  TaoSplitNavConfiguration,
   TaoStackNavConfiguration,
 } from './TR-navigation'
 import { BasicStackSurface } from './TR-navigation-basic-stack'
@@ -33,6 +34,184 @@ import {
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 import { Views } from './TR-views'
+
+type SplitWidthBinding = TaoSplitNavConfiguration['items'][string]['width']
+
+/** RuntimeSplitNav renders all keyed panes and owns their resize affordances. */
+export class RuntimeSplitNav extends RuntimeNavigationValue {
+  readonly kind = 'split'
+  readonly name: string
+
+  constructor(readonly descriptor: TaoNavDescriptor<'split', TaoSplitNavConfiguration>) {
+    super()
+    this.name = descriptor.declaration.name
+    for (const item of Object.values(descriptor.config.items)) {
+      if (isNavigation(item.content)) {
+        item.content.subscribe(() => this.emit())
+      }
+    }
+  }
+
+  present(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
+    const target = [...Object.values(this.descriptor.config.items)].reverse()
+      .map(item => item.content).find(isNavigation)
+    target ? target.present(presentable, arguments_) : this.presentOverlay(presentable, arguments_)
+  }
+
+  patched(patch: TaoNavigationPatch): RuntimeNavigationValue {
+    assertPatchKeys(patch, [], this.name)
+    return this
+  }
+
+  protected canGoBackContent(): boolean {
+    return Object.values(this.descriptor.config.items).some(item =>
+      isNavigation(item.content) && item.content.canGoBack
+    )
+  }
+
+  protected backContent(): boolean {
+    const target = [...Object.values(this.descriptor.config.items)].reverse()
+      .map(item => item.content).find(item => isNavigation(item) && item.canGoBack)
+    return target && isNavigation(target) ? target.back() : false
+  }
+
+  protected dismissContent(): boolean {
+    return this.backContent()
+  }
+
+  protected resetContent(): void {
+    for (const item of Object.values(this.descriptor.config.items)) {
+      if (isNavigation(item.content)) {
+        item.content.reset()
+      }
+    }
+  }
+
+  protected renderContent(taoProps?: TaoProps): React.ReactNode {
+    return React.createElement(SplitNavSurface, { navigation: this, taoProps })
+  }
+
+  protected snapshotRestorationContent(codec: TaoNavigationRestorationCodec): TaoNavigationContentSnapshot {
+    return {
+      items: Object.fromEntries(
+        Object.entries(this.descriptor.config.items).map((
+          [key, item],
+        ) => [
+          key,
+          isNavigation(item.content) && hasRestorationCapability(item.content)
+            ? { navigation: item.content.navigationRestorationSnapshot(codec, codec.exclusions) }
+            : {},
+        ]),
+      ),
+      kind: 'split',
+    }
+  }
+
+  protected restoreRestorationContent(
+    snapshot: TaoNavigationContentSnapshot,
+    codec: TaoNavigationRestorationCodec,
+  ): void {
+    if (snapshot.kind !== 'split') {
+      throw new Error(`Restored content is not a split for '${this.name}'.`)
+    }
+    for (const [key, restored] of Object.entries(snapshot.items)) {
+      const content = this.descriptor.config.items[key]?.content
+      if (restored.navigation && content && isNavigation(content) && hasRestorationCapability(content)) {
+        content.restoreNavigationSnapshot(restored.navigation, codec)
+      }
+    }
+  }
+}
+
+function SplitNavSurface(props: { navigation: RuntimeSplitNav; taoProps?: TaoProps }): React.JSX.Element {
+  const runtime = requireReactNativeRuntime()
+  const items = Object.entries(props.navigation.descriptor.config.items)
+  const [localWidths, setLocalWidths] = React.useState<Record<string, number>>({})
+  const widths = items.map(([key, item]) => localWidths[key] ?? numericWidth(item.width))
+  const drag = React.useRef<{ index: number; moved: boolean; start: number; width: number } | undefined>(undefined)
+  const lastTap = React.useRef<Record<string, number>>({})
+  const children: React.ReactNode[] = []
+  items.forEach(([key, item], index) => {
+    children.push(React.createElement(runtime.View, {
+      children: renderPresentable(item.content, {}, navigationProps(props.taoProps, props.navigation)),
+      key,
+      style: { flexBasis: widths[index], flexGrow: 0, flexShrink: 0 },
+    }))
+    if (index >= items.length - 1 || item.resizable.evaluate().jsValue !== true) {
+      return
+    }
+    const setWidth = (width: number) => {
+      const bounded = Math.max(0, width)
+      if (typeof item.width.set === 'function') {
+        item.width.set(runtimeNumber(bounded))
+      } else {
+        setLocalWidths(current => ({ ...current, [key]: bounded }))
+      }
+    }
+    const reset = () => {
+      if (typeof item.width.reset === 'function') {
+        item.width.reset()
+      } else {
+        setLocalWidths(current => {
+          const next = { ...current }
+          delete next[key]
+          return next
+        })
+      }
+    }
+    children.push(React.createElement(runtime.View, {
+      accessibilityLabel: `Resize ${key}`,
+      accessibilityRole: 'adjustable',
+      key: `${key}-resize`,
+      onDoubleClick: reset,
+      onResponderGrant: (event: any) => {
+        drag.current = { index, moved: false, start: event.nativeEvent.pageX, width: widths[index]! }
+      },
+      onResponderMove: (event: any) => {
+        if (drag.current?.index === index) {
+          const delta = event.nativeEvent.pageX - drag.current.start
+          if (Math.abs(delta) > 2) {
+            drag.current.moved = true
+          }
+          setWidth(drag.current.width + delta)
+        }
+      },
+      onResponderRelease: () => {
+        const completed = drag.current
+        drag.current = undefined
+        if (!completed || completed.index !== index || completed.moved) {
+          return
+        }
+        const now = Date.now()
+        if (now - (lastTap.current[key] ?? 0) <= 300) {
+          delete lastTap.current[key]
+          reset()
+        } else {
+          lastTap.current[key] = now
+        }
+      },
+      onResponderTerminate: () => {
+        drag.current = undefined
+      },
+      onStartShouldSetResponder: () => true,
+      style: { cursor: 'col-resize', width: 8 },
+    }))
+  })
+  return React.createElement(runtime.View, { children, style: { flex: 1, flexDirection: 'row' } })
+}
+
+function numericWidth(width: SplitWidthBinding): number {
+  const value = width.evaluate().jsValue
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new Error('SplitNav Width must be a finite non-negative number.')
+  }
+  return value
+}
+
+function runtimeNumber(jsValue: number): any {
+  const result = { evaluate: () => result, jsValue }
+  return result
+}
 
 /** RuntimeStackNav owns an ordered presentation history and preserves covered entries. */
 export class RuntimeStackNav extends RuntimeNavigationValue {

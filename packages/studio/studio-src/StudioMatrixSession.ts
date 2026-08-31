@@ -5,26 +5,29 @@ import {
   type StudioCellInstanceIdentity,
   type StudioPreviewCell,
   StudioPreviewManifest,
-  type StudioPreviewManifestV1,
+  type StudioPreviewManifestV2,
 } from './StudioPreviewManifest'
-import type { StudioJsonObject } from './StudioProtocol'
+import type { StudioJsonObject, StudioRuntimeCaptureArtifact } from './StudioProtocol'
 import { type StudioResolvedState, StudioStateLibrary } from './StudioStateLibrary'
 
 export type StudioCellReconfigureRequest = StudioCellIdentity & {
   args?: StudioJsonObject
   environment?: StudioCellEnvironment
+  replay?: StudioRuntimeCaptureArtifact
   stateLayers?: readonly string[]
 }
 
 export type StudioCellRuntime = {
   cell: StudioPreviewCell
   identity: StudioCellIdentity
+  replay?: StudioRuntimeCaptureArtifact
   resolvedState: StudioResolvedState
 }
 
 type StudioCellOverrides = {
   args?: StudioJsonObject
   environment?: StudioCellEnvironment
+  replay?: StudioRuntimeCaptureArtifact
   stateLayers?: readonly string[]
 }
 
@@ -45,7 +48,7 @@ export class StudioMatrixSession {
   readonly #overrides = new Map<string, StudioCellOverrides>()
   readonly #states: StudioStateLibrary
 
-  constructor(readonly manifest: StudioPreviewManifestV1) {
+  constructor(readonly manifest: StudioPreviewManifestV2) {
     StudioPreviewManifest.define(manifest)
     this.#states = new StudioStateLibrary(manifest.states, manifest.capabilities.captureDomains)
     for (const cell of manifest.cells) {
@@ -66,7 +69,7 @@ export class StudioMatrixSession {
   }
 
   /** rebase carries compatible explicit cell configuration onto a fresh compiler manifest. */
-  rebase(manifest: StudioPreviewManifestV1): StudioMatrixSession {
+  rebase(manifest: StudioPreviewManifestV2): StudioMatrixSession {
     const rebased = new StudioMatrixSession(manifest)
     for (const [cellId, overrides] of this.#overrides) {
       const base = rebased.#cells.get(cellId)
@@ -151,12 +154,16 @@ export class StudioMatrixSession {
     }
     StudioPreviewManifest.validateArgs(this.manifest, next.scenarioId, next.args)
     StudioPreviewManifest.validateEnvironment(next.environment)
+    if (request.replay !== undefined) {
+      this.#validateReplay(request.replay)
+    }
     this.#states.resolve(next.stateLayers)
     this.#cells.set(next.cellId, next)
     this.#overrides.set(next.cellId, {
       ...this.#overrides.get(next.cellId),
       ...(request.args === undefined ? {} : { args: request.args }),
       ...(request.environment === undefined ? {} : { environment: request.environment }),
+      replay: request.replay,
       ...(request.stateLayers === undefined ? {} : { stateLayers: request.stateLayers }),
     })
     const previousId = this.#instanceByCell.get(next.cellId)
@@ -179,10 +186,20 @@ export class StudioMatrixSession {
   }
 
   #runtime(cell: StudioPreviewCell): StudioCellRuntime {
+    const replay = this.#overrides.get(cell.cellId)?.replay
     return {
       cell,
       identity: StudioPreviewManifest.cellIdentity(this.manifest, cell),
+      ...(replay === undefined ? {} : { replay }),
       resolvedState: this.#states.resolve(cell.stateLayers),
+    }
+  }
+
+  #validateReplay(replay: StudioRuntimeCaptureArtifact): void {
+    const supported = new Set(this.manifest.capabilities.captureDomains)
+    const unsupported = replay.domains.find(domain => !supported.has(domain.domain))
+    if (unsupported !== undefined) {
+      throw new Errors.UserInputError(`Studio runtime capture domain is not supported: ${unsupported.domain}`)
     }
   }
 

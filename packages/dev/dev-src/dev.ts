@@ -62,15 +62,14 @@ await runWithCommands(commands => {
 
   commands
     .command('studio-native')
-    .description('Launch Tao Studio in the optional local Electron wrapper.')
+    .description('Launch Tao Studio in its local Electrobun shell.')
     .argument('[project]', 'Tao project folder.', '.')
     .option('--entry <path>', 'Entry Tao file within the selected project.')
     .option('--app <name>', 'App declaration within the selected project.')
     .option('--host <hostname>', 'Studio server hostname.', '127.0.0.1')
     .option('--port <port>', 'Studio server port; defaults to an available port.')
-    .option('--artifact-root <path>', 'Electron wrapper artifact and user-data root.')
-    .option('--electron <path>', 'Explicit Electron executable path.')
-    .option('--remote-debugging-port <port>', 'Optional Electron CDP port.')
+    .option('--artifact-root <path>', 'Generated Electrobun project and runtime artifact root.')
+    .option('--hutch <path>', 'Explicit Hutch executable path.', 'hutch')
     .action(async (project, options) => {
       Platform.runtimeProcess.exit(
         await runStudioDev({
@@ -80,11 +79,7 @@ await runWithCommands(commands => {
           hostname: options.host,
           native: true,
           nativeArtifactRoot: options.artifactRoot,
-          nativeElectronPath: options.electron,
-          nativeRemoteDebuggingPort: parseOptionalPositiveInteger(
-            options.remoteDebuggingPort,
-            '--remote-debugging-port',
-          ),
+          nativeHutchPath: options.hutch,
           port: parseOptionalPositiveInteger(options.port, '--port'),
           projectRoot: project,
         }),
@@ -93,18 +88,32 @@ await runWithCommands(commands => {
 
   commands
     .command('package-studio-native')
-    .description('Package a local macOS Tao Studio application from Electron.app.')
+    .description('Build Tao Studio release artifacts with Electrobun and Hutch.')
     .option('--output-root <path>', 'Application bundle output root.', '.artifacts/build/studio-native')
     .option('--app-name <name>', 'Application display and bundle name.', 'Tao Studio')
     .option('--bundle-identifier <id>', 'macOS application bundle identifier.', 'dev.tao-lang.studio')
+    .option('--channel <channel>', 'Electrobun release channel: canary or stable.', 'stable')
+    .option('--hutch <path>', 'Explicit Hutch executable path.', 'hutch')
+    .option('--node <path>', 'Standalone Node executable to bundle; Nix Node is relocated when needed.')
+    .requiredOption('--release-base-url <url>', 'HTTPS base URL for Studio release and update artifacts.')
+    .option('--version <version>', 'Studio semantic version.', '0.0.1')
     .action(async options => {
       try {
         const packaged = await StudioNative.packageApp({
           appName: options.appName,
           bundleIdentifier: options.bundleIdentifier,
+          channel: parseStudioReleaseChannel(options.channel),
+          hutchPath: options.hutch,
+          nodePath: options.node,
           outputRoot: options.outputRoot,
+          releaseBaseUrl: options.releaseBaseUrl,
+          version: options.version,
         })
-        HCI.logProcessInfo('studio-native', `Packaged: ${packaged.appPath}`)
+        HCI.logProcessInfo(
+          'studio-native',
+          `Hutch completed the ${packaged.channel} build with ${packaged.artifactPaths.length} artifacts.`,
+        )
+        HCI.logProcessInfo('studio-native', `Artifacts: ${packaged.artifactsRoot}`)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         HCI.logProcessError('studio-native', Errors.formatForLog(error))
@@ -119,7 +128,7 @@ await runWithCommands(commands => {
     .requiredOption('--run-id <id>', 'Run identifier used to isolate artifacts.')
     .option('--shard <index>', 'Zero-based smoke shard index.', '0')
     .option('--worker <index>', 'Zero-based worker index.', '0')
-    .option('--native', 'Run the smoke through the local Electron wrapper instead of Chrome.')
+    .option('--native', 'Run the shell smoke through Electrobun instead of Chrome.')
     .action(async (files, options) => {
       Platform.runtimeProcess.exit(
         await StudioSmoke.run({
@@ -188,4 +197,11 @@ function parseNonNegativeInteger(value: string, label: string): number {
     return parsed
   }
   Errors.throwUserInput(`${label} must be a non-negative integer.`)
+}
+
+function parseStudioReleaseChannel(value: string): 'canary' | 'stable' {
+  if (value === 'canary' || value === 'stable') {
+    return value
+  }
+  Errors.throwUserInput("--channel must be 'canary' or 'stable'.")
 }

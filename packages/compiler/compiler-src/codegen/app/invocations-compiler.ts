@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
+import { actionBlockContainsRespond, actionBlockRequiresAsync } from './action-control-flow'
 
 export default {
   /** RenderStatementBody compiles a Tao render statement into a JSX fragment. */
@@ -134,17 +135,18 @@ export default {
     const eventInput = parameterType.kind === 'primitive' && parameterType.primitive === 'action'
       ? parameterType.parameters[0]
       : undefined
+    const asyncKeyword = actionBlockRequiresAsync(handler.block) ? gen`async ` : gen``
     return gen`
-      TR.Action(async (${
+      TR.Action(${asyncKeyword}(${
       eventInput
         ? gen`_TaoEventValue: ${Compile.RuntimeType(eventInput.type)}`
         : ''
     }) => {
-        return TR.BlockScope(_Scope, async _Scope => {
+        return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
           ${handler.payload ? gen`${gen.scopeName(handler.payload)} = _TaoEventValue` : ''}
           ${Compile.ActionBlockBody(handler.block)}
         })
-      })
+      }${actionBlockContainsRespond(handler.block) ? gen`, { interrupt: true }` : gen``})
     `
   },
 

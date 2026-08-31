@@ -126,6 +126,9 @@ async function stop(): Promise<void> {
 
 class Session {
   private command: CLI.StartedCommand | undefined
+  // Bun can report a child as closed while its process and stdio remain alive. Retain every
+  // command the session created so stop owns and terminates the complete worker process set.
+  private readonly commands = new Set<CLI.StartedCommand>()
   private nextRequestId = 1
   private pending = new Map<number, PendingRequest>()
   private stderr = ''
@@ -150,15 +153,24 @@ class Session {
   }
 
   async stop(): Promise<void> {
-    const command = this.command
+    const commands = [...this.commands]
+    this.commands.clear()
     this.command = undefined
-    if (command === undefined) {
+    if (commands.length === 0) {
       return
     }
-    command.endStdin()
-    const result = await command.waitForClose()
-    command.dispose()
-    this.rejectPending(`Test compiler worker stopped with exit ${result.exitCode ?? 'unknown'}.`)
+    for (const command of commands) {
+      command.endStdin()
+      // No request is pending once a session is stopped. Explicitly terminate the owned worker
+      // because EOF/close alone can leave Bun children alive and keep the calling CLI open.
+      command.kill('SIGTERM')
+    }
+    const results = await Promise.all(commands.map(command => command.waitForClose()))
+    for (const command of commands) {
+      command.dispose()
+    }
+    const result = results.at(-1)
+    this.rejectPending(`Test compiler worker stopped with exit ${result?.exitCode ?? 'unknown'}.`)
   }
 
   private async start(): Promise<void> {
@@ -173,8 +185,11 @@ class Session {
       unref: true,
     })
     this.command = command
+    this.commands.add(command)
     command.waitForClose().then(result => {
-      this.command = undefined
+      if (this.command === command) {
+        this.command = undefined
+      }
       command.dispose()
       this.rejectPending(formatWorkerClose(result, this.stderr))
       return result

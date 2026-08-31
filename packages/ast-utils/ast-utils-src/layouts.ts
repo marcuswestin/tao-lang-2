@@ -11,6 +11,7 @@ export function layoutEntryValues(entry: AST.LayoutEntry): TaoLayoutTermValue[] 
 /** layoutTermValue returns a compact runtime value for one parsed layout term. */
 export function layoutTermValue(term: AST.LayoutTerm): TaoLayoutTermValue {
   return Switch.type(term, {
+    LayoutColorLiteral: color => color.value,
     LayoutNumberLiteral: numberLiteral => numberLiteral.value,
     LayoutWord: word => [word.value, ...word.suffixes].join('-'),
   })

@@ -112,6 +112,10 @@ function registerAstInferenceRules(typir: TaoTypirServices): void {
       TypeSystemHelpers.taoType(Type.ofExpression(node), typir)
         ?? InferenceRuleNotApplicable,
     StateDeclaration: (node) => {
+      if (node.type) {
+        return TypeSystemHelpers.taoType(Type.ofReference(node.type), typir)
+          ?? InferenceRuleNotApplicable
+      }
       const valueType = TypeSystemHelpers.safeInferType(typir, node.value)
       const underlying = TypeSystemHelpers.underlyingPrimitiveName(valueType)
       return underlying

@@ -7,7 +7,7 @@ import "./expressions"
 import "./terminals"
 
 entry ScenariosGrammarEntrypoint:
-    FixtureDeclaration | ScenarioDeclaration;
+    FixtureDeclaration | ScenarioGroupDeclaration;
 
 // A fixture is reusable setup truth: named accounts plus named rows created in declaration order.
 // This slice intentionally carries only the literal/reference value surface Decisions §16 spells.
@@ -48,27 +48,30 @@ FixtureValue:
 FixtureValueReference:
     target=[FixtureValueDeclaration:ID];
 
-// A scenario is a named, buildable app or focused-view state. Environment spellings not fixed by
-// Decisions §16 remain deliberately absent.
+// A scenario group is a named row of related app or focused-view states. The optional subject is
+// the default app or view for every entry; any clause in an entry replaces the same group clause.
+ScenarioGroupDeclaration:
+    'scenarios' subject=[ScenarioSubjectDeclaration:ID]? name=STRING block=ScenarioGroupBlock;
+
+type ScenarioSubjectDeclaration = AppValueDeclaration | ViewDeclaration;
+
+ScenarioGroupBlock:
+    '{' entries+=(ScenarioFixtureClause | ScenarioPrepareClause | ScenarioRunClause
+        | ScenarioRenderClause | ScenarioDeviceClause | ScenarioAppearanceClause
+        | ScenarioLocaleClause | ScenarioDirectionClause | ScenarioNetworkClause
+        | ScenarioDeclaration)* '}';
+
+// Entry strings are the stable identities within their group. A one-entry group is the canonical
+// spelling for a single display; there is no separate singular top-level form.
 ScenarioDeclaration:
-    'scenario' name=ScenarioName block=ScenarioBlock;
-
-ScenarioName returns string:
-    ID ('.' ScenarioNamePart)*;
-
-// Scenario suffixes are names, even when they reuse an environment keyword. Keeping the allowance
-// local avoids making those keywords identifiers everywhere else in Tao.
-ScenarioNamePart returns string:
-    ID | 'phone' | 'tablet' | 'laptop' | 'pseudolocale'
-    | 'light' | 'dark' | 'online' | 'offline' | 'rightToLeft';
+    'scenario' name=STRING block=ScenarioBlock;
 
 ScenarioBlock:
     '{' entries+=(ScenarioFixtureClause | ScenarioPrepareClause | ScenarioRunClause
-        | ScenarioRenderClause
-        | ScenarioDeviceClause | ScenarioAppearanceClause | ScenarioLocaleClause
-        | ScenarioDirectionClause | ScenarioNetworkClause)* '}';
+        | ScenarioRenderClause | ScenarioDeviceClause | ScenarioAppearanceClause
+        | ScenarioLocaleClause | ScenarioDirectionClause | ScenarioNetworkClause)* '}';
 
-type ScenarioEntry = ScenarioFixtureClause | ScenarioPrepareClause | ScenarioRunClause
+type ScenarioClause = ScenarioFixtureClause | ScenarioPrepareClause | ScenarioRunClause
     | ScenarioRenderClause
     | ScenarioDeviceClause | ScenarioAppearanceClause | ScenarioLocaleClause
     | ScenarioDirectionClause | ScenarioNetworkClause;
@@ -88,11 +91,11 @@ ScenarioPrepareUpdate:
     'update' target=[FixtureValueDeclaration:ID] block=FixtureFieldBlock;
 
 ScenarioRunClause:
-    'run' app=[AppValueDeclaration:ID]
+    'run' app=[AppValueDeclaration:ID]?
     ('at' destination=ID '(' argumentList=FixtureArgumentList? ')')?;
 
 ScenarioRenderClause:
-    'render' view=[ViewDeclaration:ID] '(' argumentList=ScenarioRenderArgumentList? ')';
+    'render' view=[ViewDeclaration:ID]? '(' argumentList=ScenarioRenderArgumentList? ')';
 
 ScenarioRenderArgumentList:
     arguments+=ScenarioRenderArgument (',' arguments+=ScenarioRenderArgument)*;

@@ -71,4 +71,17 @@ Describe('parser: minimal design declarations', () => {
       ['width', 'max', 720],
     ])
   })
+
+  Test('parses raw color explorations in render and bundle clauses', async () => {
+    const parsed = await testParseCode(`
+      design Theme { alert [fg #c00] }
+      view Main() { render Surface() [bg #fff, alert] }
+      view Surface() { }
+    `)
+
+    const entries = [...AST.streamAllContents(parsed.entry.ast).filter(AST.isLayoutEntry)]
+      .map(ASTUtils.layoutEntryValues)
+    Expect(entries).toContainEqual(['fg', '#c00'])
+    Expect(entries).toContainEqual(['bg', '#fff'])
+  })
 })

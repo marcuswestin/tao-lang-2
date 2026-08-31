@@ -22,12 +22,17 @@ export {
   type StudioMessageExpectation,
   type StudioPreviewAppliedMessage,
   type StudioPreviewIdentity,
+  type StudioPreviewRuntimeFailureMessage,
   type StudioPreviewSourceIdentity,
   type StudioPreviewSourceMessage,
   type StudioProjectIdentity,
   StudioProtocol,
   studioProtocolChannel,
   studioProtocolVersion,
+  type StudioRuntimeCaptureArtifact,
+  type StudioRuntimeCaptureDomain,
+  type StudioRuntimeFailure,
+  type StudioRuntimeFailureFrame,
   type StudioSourceActionCheckpoint,
   type StudioSourceActionEnvelope,
   type StudioSourceActionUndoEnvelope,
@@ -56,12 +61,12 @@ export {
 } from './StudioClientAssets'
 
 export {
+  type StudioEditorSnippet,
   StudioInspector,
-  type StudioInspectorLayoutAction,
-  studioInspectorLayoutActions,
   type StudioInspectorSelection,
   type StudioPaletteComponent,
   studioPaletteComponents,
+  type StudioProjectViewPaletteItem,
 } from './StudioInspector'
 
 export {
@@ -91,12 +96,21 @@ export {
 } from './StudioFileWatcher'
 
 export {
+  type StudioCheckpointSummary,
+  type StudioCreateFileRequest,
+  type StudioCreateFileResult,
+  type StudioDeleteFileRequest,
+  type StudioDeleteFileResult,
+  type StudioDesignValue,
   type StudioDraftWriteRequest,
   type StudioDraftWriteResult,
+  type StudioFileDraftState,
   type StudioProjectFile,
   type StudioProjectFileContent,
   StudioProjectSession,
   type StudioProjectSessionOptions,
+  type StudioRenameFileRequest,
+  type StudioRenameFileResult,
   type StudioSessionEvent,
   type StudioSessionHandshake,
   type StudioSourceActionResult,
@@ -105,10 +119,54 @@ export {
 } from './StudioProjectSession'
 
 export {
+  type StudioServerCheckpointRow,
+  StudioServerDatasource,
+  type StudioServerDiagnosticRow,
+  type StudioServerEntityName,
+  type StudioServerEntityRow,
+  type StudioServerFileRow,
+  type StudioServerFillRequest,
+  type StudioServerFillResult,
+  type StudioServerInvalidation,
+  type StudioServerScenarioRow,
+  type StudioServerScreenRow,
+  type StudioServerViewRow,
+} from './StudioServerDatasource'
+
+export {
+  StudioForeignActionFailure,
+  type StudioForeignActionFetch,
+  studioServerForeignActionContract,
+  StudioServerForeignActions,
+} from './StudioServerForeignActions'
+
+export {
   type StartedStudioServer,
   startStudioServer,
+  startStudioSessionServer,
   type StudioServerOptions,
 } from './StudioServer'
+
+export {
+  type StudioTestFailure,
+  StudioTestOutput,
+  type StudioTestRun,
+  type StudioTestRunner,
+  type StudioTestStatus,
+} from './StudioTestRunner'
+
+export {
+  type StudioCurrentSession,
+  type StudioProjectOpenRequest,
+  type StudioRecentProject,
+  type StudioSessionListing,
+  StudioSessionManager,
+  type StudioSessionManagerEvent,
+  type StudioSessionManagerOptions,
+  type StudioSessionResource,
+} from './StudioSessionManager'
+
+export { StudioWelcome } from './StudioWelcome'
 
 export {
   type StudioCellEnvironment,
@@ -118,7 +176,7 @@ export {
   type StudioParameterSchema,
   type StudioPreviewCell,
   StudioPreviewManifest,
-  type StudioPreviewManifestV1,
+  type StudioPreviewManifestV2,
   studioPreviewManifestVersion,
   type StudioScenario,
   type StudioScenarioSubject,

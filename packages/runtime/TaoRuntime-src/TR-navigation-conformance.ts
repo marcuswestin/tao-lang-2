@@ -5,6 +5,7 @@ import type {
   TaoPresentable,
   TaoSelectionNavConfiguration,
   TaoSlotNavConfiguration,
+  TaoSplitNavConfiguration,
   TaoStackNavConfiguration,
 } from './TR-navigation'
 import { createNavDeclaration } from './TR-navigation-configuration'
@@ -76,7 +77,7 @@ function conformanceConfiguration(
   profile: TaoNavKindProfile,
   home: TaoPresentable,
   detail: TaoPresentable,
-): TaoStackNavConfiguration | TaoSlotNavConfiguration | TaoSelectionNavConfiguration {
+): TaoStackNavConfiguration | TaoSlotNavConfiguration | TaoSelectionNavConfiguration | TaoSplitNavConfiguration {
   if (profile === 'selection') {
     return {
       display: { evaluate: () => ({ jsValue: 'automatic' }) },
@@ -86,6 +87,10 @@ function conformanceConfiguration(
         settings: { content: detail, label: { evaluate: () => ({ jsValue: 'Settings' }) } },
       },
     }
+  }
+  if (profile === 'split') {
+    const scalar = (jsValue: unknown) => ({ evaluate: () => ({ jsValue }) })
+    return { items: { home: { content: home, resizable: scalar(false), width: scalar(320) } } }
   }
   return {
     initial: home,
@@ -121,6 +126,11 @@ function testNavKindProfile(
       kind.present(mount, detail, {})
       assertNavKind(kind.back(mount), 'Selection back must pop content from the active keyed child.')
       assertNavKind(!kind.canGoBack(mount), 'Selection back must restore the keyed child root.')
+    },
+    split: () => {
+      kind.present(mount, detail, {})
+      assertNavKind(kind.back(mount), 'Split back must dismiss a presentation above its panes.')
+      assertNavKind(!kind.canGoBack(mount), 'Split back must restore its pane roots.')
     },
   })
 }

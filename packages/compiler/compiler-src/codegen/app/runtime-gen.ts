@@ -38,7 +38,7 @@ export default {
   },
 
   /** ViewRegistrations emits eager canonical view registrations for restoration and link arrival. */
-  ViewRegistrations(taoFile: AST.TaoFile): string {
-    return Langium.toString(Compile.ViewRegistrations(taoFile))
+  ViewRegistrations(taoFile: AST.TaoFile, options: { studio?: boolean } = {}): string {
+    return Langium.toString(Compile.ViewRegistrations(taoFile, options))
   },
 } as const

@@ -92,6 +92,9 @@
       "@studio/*": [
         "./studio/studio-src/*"
       ],
+      "@tao/code-editor": [
+        "./code-editor/code-editor-src/CodeEditor.tsx"
+      ],
       "@stdlib": [
         "./stdlib/stdlib-src/stdlib.ts"
       ],

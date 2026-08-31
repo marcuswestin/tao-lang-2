@@ -1,0 +1,4 @@
+project {
+   id "tao-studio-client"
+   name "Tao Studio Client"
+}

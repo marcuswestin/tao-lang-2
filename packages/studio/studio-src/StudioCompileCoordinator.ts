@@ -46,7 +46,7 @@ export type StudioCompileSnapshot = StudioProjectIdentity & {
 
 export type StudioWrite = {
   path: string
-  sourceVersion: string
+  sourceVersion?: string
   writeId: string
 }
 
@@ -122,14 +122,24 @@ export class StudioCompileCoordinator {
   }
 
   /** noteStudioWrite schedules its compile and records the exact source version the watcher should acknowledge. */
-  noteStudioWrite(write: StudioWrite): Promise<StudioCompileCompletion> {
-    const completion = this.#requestCompile('studio-write', [{ path: write.path, sourceVersion: write.sourceVersion }])
-    const writes = this.#studioWrites.get(write.path) ?? []
-    writes.push({ ...write, completion })
-    if (writes.length > trackedStudioWriteLimit) {
-      writes.splice(0, writes.length - trackedStudioWriteLimit)
+  noteStudioWrite(write: StudioWrite & { sourceVersion: string }): Promise<StudioCompileCompletion> {
+    return this.noteStudioFileMutation([write])
+  }
+
+  /** noteStudioFileMutation compiles and tracks create, rename, and deletion watcher echoes as one mutation. */
+  noteStudioFileMutation(writes: readonly StudioWrite[]): Promise<StudioCompileCompletion> {
+    const completion = this.#requestCompile(
+      'studio-write',
+      writes.map(({ path, sourceVersion }) => ({ path, sourceVersion })),
+    )
+    for (const write of writes) {
+      const tracked = this.#studioWrites.get(write.path) ?? []
+      tracked.push({ ...write, completion })
+      if (tracked.length > trackedStudioWriteLimit) {
+        tracked.splice(0, tracked.length - trackedStudioWriteLimit)
+      }
+      this.#studioWrites.set(write.path, tracked)
     }
-    this.#studioWrites.set(write.path, writes)
     return completion
   }
 
@@ -293,9 +303,6 @@ export class StudioCompileCoordinator {
   }
 
   #takeMatchingStudioWrite(change: StudioSourceChange): TrackedStudioWrite | undefined {
-    if (change.sourceVersion === undefined) {
-      return undefined
-    }
     const writes = this.#studioWrites.get(change.path)
     const index = writes?.findIndex(write => write.sourceVersion === change.sourceVersion) ?? -1
     if (writes === undefined || index < 0) {

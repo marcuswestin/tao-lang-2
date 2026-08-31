@@ -26,3 +26,14 @@ type SelectionNav is nav with {
 
    nav SelectionNavKind from ./NavKinds.ts
 }
+
+public
+type SplitNav is nav with {
+   @key {
+      Content view
+      Width number
+      Resizable boolean is false
+   }
+
+   nav SplitNavKind from ./NavKinds.ts
+}

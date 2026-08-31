@@ -214,7 +214,9 @@ Describe('Tao runtime app generation', () => {
       runtimePackageRoot,
     })
 
-    const scenario = generated.studioManifest?.scenarios.find(candidate => candidate.name === 'WorkspaceRow.novel')
+    const scenario = generated.studioManifest?.scenarios.find(candidate =>
+      candidate.group === 'states' && candidate.name === 'novel'
+    )
     const taoApp = await FS.readText(generatedPreviewPath(runtimePackageRoot, 'TaoApp.tsx'))
     const stableRoot = await FS.readText(generated.outputPath)
     Expect(scenario?.subject.kind).toBe('view')
@@ -558,6 +560,55 @@ Describe('Tao runtime app generation', () => {
         const sidecarDeclaration = generatedModule.__tao_type_SidecarStack
         Expect(sidecarDeclaration.kind.profile).toBe('stack')
         TR.testNavKind(sidecarDeclaration.kind, 'stack')
+      },
+    )
+  })
+
+  Test('copies the relative import graph for a foreign view while leaving installed packages external', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    await withTaoFiles(
+      'tao-runtime-foreign-view-',
+      {
+        'Main.tao': `
+          app ForeignApp { view Main }
+          view Main() {
+            action Change(Value text) { }
+            render CodeEditor("draft", Change)
+          }
+          view CodeEditor(Content text, Change action(text)) from ./CodeEditor.tsx
+        `,
+        'CodeEditor.tsx': `
+          import React from 'react'
+          import { editorTheme } from './editor/theme.js'
+
+          // import './editor/comment-only'
+          const documentation = "export { fake } from './editor/string-only'"
+
+          export function CodeEditor(props: { Content: string; Change: { invoke(value: unknown): unknown } }) {
+            void React
+            void props
+            void documentation
+            return editorTheme === 'tao' ? null : null
+          }
+        `,
+        'editor/theme.ts': `
+          export { editorTheme } from './tokens'
+        `,
+        'editor/tokens.ts': `
+          export const editorTheme = 'tao'
+        `,
+      },
+      async paths => {
+        const generated = await Runtime.generateApp(paths['Main.tao'], { runtimePackageRoot })
+        const codeEditorPath = await findGeneratedModule(runtimePackageRoot, 'CodeEditor.tsx')
+        const themePath = await findGeneratedModule(runtimePackageRoot, 'theme.ts')
+        const tokensPath = await findGeneratedModule(runtimePackageRoot, 'tokens.ts')
+
+        Expect(await FS.exists(codeEditorPath)).toBe(true)
+        Expect(await FS.exists(themePath)).toBe(true)
+        Expect(await FS.exists(tokensPath)).toBe(true)
+        Expect(generated.code).toContain("from './CodeEditor.files/CodeEditor'")
+        Expect(await FS.readText(codeEditorPath)).toContain("from 'react'")
       },
     )
   })

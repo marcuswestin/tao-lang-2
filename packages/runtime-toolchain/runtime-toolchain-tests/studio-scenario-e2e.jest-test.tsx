@@ -56,6 +56,7 @@ Describe('Tao Studio scenario runtime', () => {
       fixtures: Array<TaoStudioFixturePlan & { id: string }>
       scenarios: Array<{
         fixtureId: string
+        group: string
         name: string
         prepare: readonly []
         subject: {
@@ -65,7 +66,7 @@ Describe('Tao Studio scenario runtime', () => {
         }
       }>
     }
-    const scenario = manifest.scenarios.find(candidate => candidate.name === 'WorkspaceRow.novel')
+    const scenario = manifest.scenarios.find(candidate => candidate.group === 'states' && candidate.name === 'novel')
     Assert.defined(scenario, 'real WordFlower focused-view scenario exists')
     const fixture = manifest.fixtures.find(candidate => candidate.id === scenario.fixtureId)
     Assert.defined(fixture, 'real WordFlower scenario fixture exists')
@@ -133,13 +134,15 @@ Describe('Tao Studio scenario runtime', () => {
           Novel = create Workspace { Name: "Novel" }
         }
 
-        scenario WorkspaceRow.novel {
+        scenarios WorkspaceRow "states" {
           fixture StudioWorkspace
-          render WorkspaceRow(Workspace: Novel)
           device phone
           appearance light
           network online
           locale "en"
+          scenario "novel" {
+            render (Workspace: Novel)
+          }
         }
       `,
       'Workspaces.tao': `
@@ -183,6 +186,7 @@ Describe('Tao Studio scenario runtime', () => {
           fixtures: Array<TaoStudioFixturePlan & { id: string }>
           scenarios: Array<{
             fixtureId: string
+            group: string
             name: string
             prepare: readonly []
             subject: {
@@ -194,7 +198,7 @@ Describe('Tao Studio scenario runtime', () => {
         }
       }
       const manifest = manifestModule.default
-      const scenario = manifest.scenarios.find(candidate => candidate.name === 'WorkspaceRow.novel')
+      const scenario = manifest.scenarios.find(candidate => candidate.group === 'states' && candidate.name === 'novel')
       Assert.defined(scenario, 'fixture-backed focused-view scenario exists')
       Assert(scenario.subject.kind === 'view', 'scenario focuses a view')
       const fixture = manifest.fixtures.find(candidate => candidate.id === scenario.fixtureId)

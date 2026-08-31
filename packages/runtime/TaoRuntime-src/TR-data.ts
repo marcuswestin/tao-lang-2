@@ -4,19 +4,25 @@ import { testDataConnection, UnboundConnection } from './TR-data-provider'
 import {
   beginTest as beginDataTest,
   bindConfiguredDataSchema,
+  canResetAllDataSchemas,
+  captureDataSchemas,
   type DataStatus,
   endTest as endDataTest,
   isDataTestMode,
   registerDataSchema,
+  resetAllDataSchemas,
+  restoreDataSchemas,
   revision as dataRevision,
   setTestStatus as setDataTestStatus,
   settleAllDataSchemas,
   subscribeAll as subscribeToAllData,
 } from './TR-data-registry'
+import type { TaoDataCapture } from './TR-data-registry'
 import { RuntimeDataSchema } from './TR-data-schema'
 import { type Evaluable, evaluatedFields } from './TR-data-values'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import { canonicalDescriptor } from './TR-navigation-identity'
+import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import { StudioEnvironmentControls } from './TR-studio-environment'
 
 export { testProvider } from './TR-data-provider'
@@ -409,7 +415,31 @@ export const DataControls = {
   setTestStatus(status: DataStatus, message = ''): void {
     setDataTestStatus(status, message)
   },
+
+  Capture(): TaoDataCapture {
+    return captureDataSchemas()
+  },
+
+  Restore(captured: TaoDataCapture): Promise<void> {
+    return restoreDataSchemas(captured)
+  },
+
+  CanResetAll(): boolean {
+    return canResetAllDataSchemas()
+  },
+
+  /** ResetAll returns the pre-reset backup and never starts unless every provider supports reset. */
+  ResetAll(): Promise<TaoDataCapture> {
+    return resetAllDataSchemas()
+  },
 } as const
+
+registerRuntimeCaptureDomain({
+  capture: () => captureDataSchemas() as TaoRuntimeJson,
+  domain: 'data',
+  restore: value => restoreDataSchemas(value as unknown as TaoDataCapture),
+  version: 1,
+})
 
 function datasourceBindingIdentity(
   declaration: TaoDatasourceDeclaration,

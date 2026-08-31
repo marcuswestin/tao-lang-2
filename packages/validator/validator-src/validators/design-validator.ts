@@ -1,5 +1,6 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
+import { designValidationCodes } from '../diagnostic-codes'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { LayoutValidator } from './layout-validator'
@@ -37,6 +38,8 @@ const designValidationMessages = {
   bundleCycle: (design: string, path: readonly string[]) =>
     `Design '${design}' has a bundle cycle: ${path.join(' -> ')}.`,
   duplicateMember: (name: string) => `Design member '${name}' is declared more than once.`,
+  exploration: (entry: string) =>
+    `Inline design exploration '${entry}' must be promoted to a token, style bundle, or element default for release.`,
   malformedColor: (value: string) => `Design color '${value}' must use exactly 3, 4, 6, or 8 hexadecimal digits.`,
   malformedTag: (value: string) =>
     `Tag '${value}' must start with a letter or underscore and contain only letters, digits, or underscores.`,
@@ -100,6 +103,11 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   const clause = render.layoutClause
   if (!clause) {
     return
+  }
+  for (const entry of clause.entries.filter(isInlineDesignExploration)) {
+    ctx.warning(designValidationMessages.exploration(entryText(entry)), entry, {
+      code: designValidationCodes.exploration,
+    })
   }
   const designEntries = clause.entries.filter(entry => !LayoutValidator.isLayoutEntry(entry))
   if (designEntries.length === 0) {
@@ -204,6 +212,10 @@ function validateVisualEntry(
     const token = terms.length === 1 && typeof terms[0] === 'string' ? terms[0] : undefined
     if (!token) {
       ctx.error(designValidationMessages.malformedVisual(entryText(entry)), entry)
+    } else if (token.startsWith('#')) {
+      if (!cssHexColor.test(token)) {
+        ctx.error(designValidationMessages.malformedColor(token), entry)
+      }
     } else if (design && tokens && !tokens.has(token)) {
       ctx.error(designValidationMessages.unknownToken(design.name, token), entry)
     }
@@ -328,9 +340,24 @@ function isVisualEntry(entry: AST.LayoutEntry): boolean {
 function requiresDesignLookup(entry: AST.LayoutEntry): boolean {
   const values = ASTUtils.layoutEntryValues(entry)
   if (isVisualEntry(entry)) {
-    return colorHeads.has(String(values[0])) && values.length === 2 && typeof values[1] === 'string'
+    return colorHeads.has(String(values[0]))
+      && values.length === 2
+      && typeof values[1] === 'string'
+      && !values[1].startsWith('#')
   }
   return values.length === 1
+}
+
+function isInlineDesignExploration(entry: AST.LayoutEntry): boolean {
+  if (LayoutValidator.isLayoutEntry(entry)) {
+    return true
+  }
+  const values = ASTUtils.layoutEntryValues(entry)
+  if (!isVisualEntry(entry) || values.length !== 2) {
+    return false
+  }
+  return typeof values[1] === 'number'
+    || (typeof values[1] === 'string' && values[1].startsWith('#'))
 }
 
 function entryHead(entry: AST.LayoutEntry): string {

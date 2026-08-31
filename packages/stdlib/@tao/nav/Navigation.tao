@@ -10,3 +10,6 @@ type SlotNav = native.SlotNav
 
 public
 type SelectionNav = native.SelectionNav
+
+public
+type SplitNav = native.SplitNav

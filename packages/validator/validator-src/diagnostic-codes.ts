@@ -10,3 +10,8 @@ export const useValidationCodes = {
 export const viewValidationCodes = {
   renderNotLast: 'tao-render-not-last',
 } as const
+
+/** designValidationCodes marks inline explorations that release compilation alone promotes to errors. */
+export const designValidationCodes = {
+  exploration: 'design-check-exploration',
+} as const

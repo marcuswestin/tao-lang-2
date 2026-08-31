@@ -52,6 +52,17 @@ export default {
 
   FixtureValueReference() {},
 
+  ScenarioGroupDeclaration(f) {
+    f.oneSpaceAfter('scenarios')
+    f.oneSpaceBetweenProperties('subject', 'name')
+  },
+
+  ScenarioGroupBlock(f) {
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock(f.node.entries)
+    f.lineSeparatedList(f.node.entries)
+  },
+
   ScenarioDeclaration(f) {
     f.oneSpaceAfter('scenario')
   },
@@ -89,7 +100,11 @@ export default {
 
   ScenarioRenderClause(f) {
     f.oneSpaceAfter('render')
-    f.noSpaceBefore('(')
+    if (f.node.view) {
+      f.noSpaceBefore('(')
+    } else {
+      f.oneSpaceBefore('(')
+    }
     f.noSpaceAfter('(')
     f.noSpaceBefore(')')
   },

@@ -21,6 +21,7 @@ import {
 import type { Evaluable } from './TR-navigation-presentables'
 import { presentableRegistryVersion, resolvePresentable } from './TR-navigation-registry'
 import { NavigationRestorationController } from './TR-navigation-restoration'
+import type { RestorationEnvelope } from './TR-navigation-restoration'
 import type { PresentableEntry, Subscription } from './TR-navigation-state'
 import {
   observeNavigationActivation,
@@ -28,6 +29,7 @@ import {
   withBrowserHistoryEntry,
 } from './TR-navigation-value'
 import { requireReactNativeRuntime } from './TR-react-native'
+import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import type { TaoProps } from './TR-TaoProps'
 import { Clock } from './TR-units'
 
@@ -50,6 +52,13 @@ type NavigationLaneRecord = {
 }
 
 const navigationOwners = new WeakMap<TaoNavigationValue, Set<NavigationOwner>>()
+const runtimeApps = new Set<RuntimeAppDefinition>()
+
+type NavigationAppCapture = Readonly<{
+  name: string
+  state: RestorationEnvelope
+  unreplayable: readonly Readonly<{ kind: 'ask'; restore: 'nearest-durable-screen' }>[]
+}>
 
 export function ownerOfNavigation(navigation: TaoNavigationValue): NavigationOwner | undefined {
   const owners = navigationOwners.get(navigation)
@@ -104,6 +113,7 @@ export class RuntimeAppDefinition implements Subscription {
 
   constructor(readonly definition: TaoAppDefinition) {
     this.declaration = definition.declaration ?? createAppDeclaration(definition.name)
+    runtimeApps.add(this)
   }
 
   readonly subscribe = (listener: () => void): () => void => {
@@ -357,6 +367,26 @@ export class RuntimeAppDefinition implements Subscription {
     this.emit()
   }
 
+  captureNavigation(): NavigationAppCapture {
+    void this.navigator
+    void this.auxiliaries
+    const mounts = new Set([...this.navigationLaneRecords.values()].flatMap(record => record.mounts))
+    const asks = [...mounts].reduce((count, mount) => count + mount.unreplayableOccurrences(), 0)
+    return {
+      name: this.definition.name,
+      state: this.restoration.capture(),
+      unreplayable: Object.freeze(Array.from({ length: asks }, () => ({
+        kind: 'ask' as const,
+        restore: 'nearest-durable-screen' as const,
+      }))),
+    }
+  }
+
+  restoreNavigation(capture: NavigationAppCapture): void {
+    this.reset()
+    this.restoration.restoreCapture(capture.state)
+  }
+
   private emit(): void {
     this.version += 1
     for (const listener of this.listeners) {
@@ -555,6 +585,36 @@ export class RuntimeAppDefinition implements Subscription {
     this.emit()
   }
 }
+
+function appCaptureKey(app: RuntimeAppDefinition): string {
+  return app.declaration.canonicalIdentity?.canonical ?? app.definition.name
+}
+
+function captureNavigationApps(): TaoRuntimeJson {
+  return Object.fromEntries(
+    [...runtimeApps].map(app => [appCaptureKey(app), app.captureNavigation()]),
+  ) as TaoRuntimeJson
+}
+
+function restoreNavigationApps(value: TaoRuntimeJson): void {
+  if (!value || Array.isArray(value) || typeof value !== 'object') {
+    return
+  }
+  const captures = value as Readonly<Record<string, TaoRuntimeJson>>
+  for (const app of runtimeApps) {
+    const capture = captures[appCaptureKey(app)]
+    if (capture && typeof capture === 'object' && !Array.isArray(capture)) {
+      app.restoreNavigation(capture as unknown as NavigationAppCapture)
+    }
+  }
+}
+
+registerRuntimeCaptureDomain({
+  capture: captureNavigationApps,
+  domain: 'navigation',
+  restore: restoreNavigationApps,
+  version: 1,
+})
 
 const toastSurfaceStyle = {
   alignSelf: 'center',

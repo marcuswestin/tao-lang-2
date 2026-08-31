@@ -77,18 +77,25 @@ Describe('compiler: Studio render occurrences', () => {
         ) { render Native() }
         view Native() { render inject ${tsFence} return null ${fence} }
         view OwnerCard(Owner Account) { render Native() }
+        view TitleCard(Title text) { render Native() }
 
         fixture StudioCards {
           Lead = create Account { Name: "Ada" }
         }
-        scenario OwnerCard.lead {
+        scenarios OwnerCard "states" {
           fixture StudioCards
-          render OwnerCard(Owner: Lead)
           device phone
           appearance dark
           network offline
           locale pseudolocale
           direction rightToLeft
+          scenario "lead" {
+            render (Owner: Lead)
+          }
+          scenario "long name" {
+            render TitleCard(Title: "A much longer card title")
+            appearance light
+          }
         }
       `,
       'More.tao': `
@@ -99,9 +106,16 @@ Describe('compiler: Studio render occurrences', () => {
       const compiled = await Workspace.compile(paths['Main.tao'], { studio: true })
       const manifest = compiled.studioManifest
 
-      Expect(manifest?.formatVersion).toBe(1)
+      Expect(manifest?.formatVersion).toBe(2)
       Expect(manifest?.selectedAppName).toBe('Preview')
-      Expect(manifest?.views.map(view => view.name)).toEqual(['Main', 'Card', 'Native', 'OwnerCard', 'Detail'])
+      Expect(manifest?.views.map(view => view.name)).toEqual([
+        'Main',
+        'Card',
+        'Native',
+        'OwnerCard',
+        'TitleCard',
+        'Detail',
+      ])
       Expect(manifest?.views.find(view => view.name === 'Card')?.parameters).toEqual([
         { kind: 'text', name: 'Title', required: true, typeName: 'text' },
         { kind: 'boolean', name: 'Enabled', required: true, typeName: 'boolean' },
@@ -123,16 +137,35 @@ Describe('compiler: Studio render occurrences', () => {
           locale: 'pseudolocale',
           network: 'offline',
         },
-        name: 'OwnerCard.lead',
+        group: 'states',
+        name: 'lead',
         subject: {
           arguments: { Owner: { handle: 'Lead', kind: 'fixture-reference' } },
           kind: 'view',
           viewName: 'OwnerCard',
         },
       })
+      Expect(manifest?.scenarios[0]?.id).toContain('#scenario:states:lead')
+      Expect(manifest?.scenarios[1]).toMatchObject({
+        environment: {
+          appearance: 'light',
+          device: { height: 844, preset: 'phone', width: 390 },
+          direction: 'rightToLeft',
+          locale: 'pseudolocale',
+          network: 'offline',
+        },
+        group: 'states',
+        name: 'long name',
+        subject: {
+          arguments: { Title: 'A much longer card title' },
+          kind: 'view',
+          viewName: 'TitleCard',
+        },
+      })
+      Expect(manifest?.scenarios[1]?.id).toContain('#scenario:states:long%20name')
 
       const generated = compiled.files.find(file => file.relativePath === 'TaoStudioManifest.ts')
-      Expect(generated?.code).toContain('"formatVersion":1')
+      Expect(generated?.code).toContain('"formatVersion":2')
       Expect(generated?.code).toContain(JSON.stringify(paths['Main.tao']))
       Expect(compiled.code).toContain(
         "import { _TaoDataCatalog, Accounts, Detail } from './modules/More.tao'",

@@ -1,0 +1,1368 @@
+import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client'
+import type { StudioRenderInspection } from '@source-actions'
+import { EditorView } from 'codemirror'
+import { type StudioDraftFile, StudioDraftSync, type StudioDraftSyncResult } from '../StudioDraftSync'
+import {
+  StudioInspector,
+  type StudioInspectorSelection,
+  studioPaletteComponents,
+} from '../StudioInspector'
+import type { StudioPreviewManifestV2 } from '../StudioPreviewManifest'
+import type { StudioDesignValue } from '../StudioProjectSession'
+import {
+  type StudioCanonicalSourceAction,
+  type StudioPreviewSourceIdentity,
+  type StudioSourceActionEnvelope,
+} from '../StudioProtocol'
+import type { StudioTestFailure, StudioTestStatus } from '../StudioTestRunner'
+import { StudioTextMateLanguage } from '../StudioTextMateLanguage'
+import {
+  StudioApiClient,
+  StudioApiRoutes,
+  type StudioCompileDiagnostic,
+  type StudioCompileState,
+  type StudioFile,
+} from './StudioApiClient'
+import {
+  fileUri,
+  projectRelativePath,
+  sanitizeLspHtml,
+  StudioCodeEditor,
+  StudioDiagnosticNavigation,
+  StudioEditorInsertion,
+  StudioOpenFileLifecycle,
+} from './StudioEditor'
+import { StudioEditorTabs } from './StudioEditorTabs'
+import { mountStudioFileTree, StudioFileTreeTransitions } from './StudioFileTree'
+import {
+  configureInteractionMode,
+  connectPreviews,
+  currentSourceIdentity,
+  handlePreviewMessage,
+  postEditorSelection,
+  refreshCellPreviews,
+  renderScenarioInspector,
+  requestRuntimeCapture,
+  StudioActivePreview,
+  StudioRuntimeData,
+  type StudioRuntimeDataTable,
+} from './StudioMatrixView'
+import {
+  renderCommandResults,
+  renderDesignValues,
+  renderDrawerContent,
+  type StudioCommandItem,
+  StudioCommandPalette,
+  type StudioDrawerTab,
+} from './StudioProductPanels'
+import {
+  renderScreens,
+  renderSearchResults,
+  StudioRailPanels,
+  type StudioScreenItem,
+  type StudioSearchResult,
+} from './StudioRailPanels'
+import {
+  createStudioShell,
+  showOpenFile,
+  type StudioClientConfig,
+} from './StudioShell'
+import {
+  renderComponentPalette,
+  renderInspectorPanel,
+  renderProjectViews,
+  showSourceActionError,
+  sourceActionLabel,
+  type StudioInspectorContext,
+  studioPaletteMime,
+  StudioPaletteTransfer,
+} from './StudioVisualEditing'
+
+type StudioOpenFile = {
+  editor: EditorView
+  file: StudioDraftFile
+}
+
+type StudioOpenEditorTab = StudioOpenFile & {
+  dirty: boolean
+  draft: StudioDraftSync
+  stale: boolean
+}
+
+declare global {
+  interface Window {
+    TaoStudioConfig?: StudioClientConfig
+  }
+}
+
+/** Coalesces a burst of invalidations into one current fill after any in-flight fill. */
+export class StudioDataFillCoordinator {
+  #completedRevision = 0
+  #requestedRevision = 0
+  #running: Promise<void> | undefined
+  readonly #fill: (isLatest: () => boolean) => Promise<void>
+
+  constructor(fill: (isLatest: () => boolean) => Promise<void>) {
+    this.#fill = fill
+  }
+
+  request(): Promise<void> {
+    this.#requestedRevision += 1
+    this.#running ??= this.#drain()
+    return this.#running
+  }
+
+  async #drain(): Promise<void> {
+    try {
+      while (this.#completedRevision < this.#requestedRevision) {
+        const revision = this.#requestedRevision
+        await this.#fill(() => revision === this.#requestedRevision)
+        this.#completedRevision = revision
+      }
+    } finally {
+      this.#running = undefined
+    }
+  }
+}
+
+export async function mountStudio(): Promise<void> {
+  const root = document.querySelector<HTMLElement>('#tao-studio-root')
+  if (root === null) {
+    throw new Error('Tao Studio root is missing.')
+  }
+
+  const config = window.TaoStudioConfig ?? {}
+  const view = createStudioShell(root, config)
+  try {
+    const handshake = await StudioApiClient.handshake()
+    view.project.textContent = `${handshake.identity.appName} — ${handshake.identity.project}`
+    updateStatus(view.status, handshake.compile, diagnostic => void openCompileDiagnostic(diagnostic))
+    const previews = await connectPreviews(view.preview, config.previewUrl, handshake)
+    const activePreview = new StudioActivePreview(previews)
+    configureInteractionMode(view.interactionMode, previews, handshake)
+
+    const transport = await StudioApiClient.lspTransport()
+    const languageClient = new LSPClient({
+      extensions: languageServerExtensions(),
+      rootUri: fileUri(handshake.identity.project),
+      sanitizeHTML: sanitizeLspHtml,
+      timeout: 10_000,
+    }).connect(transport)
+    await languageClient.initializing
+
+    let editor: EditorView | undefined
+    let draftSync: StudioDraftSync | undefined
+    let compileState = handshake.compile
+    let dataError: string | undefined
+    let dataLoading = false
+    let dataResult: readonly StudioRuntimeDataTable[] = []
+    let dataTimer: ReturnType<typeof setInterval> | undefined
+    let designRequestRevision = 0
+    let designValues: readonly StudioDesignValue[] = []
+    let drawerTab: StudioDrawerTab = 'Problems'
+    let highlightRequestRevision = 0
+    let highlightTimer: ReturnType<typeof setTimeout> | undefined
+    let activeFile: StudioDraftFile | undefined
+    let activePath: string | undefined
+    let projectFiles: readonly StudioFile[] = handshake.files
+    let fileTree: ReturnType<typeof mountStudioFileTree> | undefined
+    let inspected: StudioInspectorSelection | undefined
+    let inspection: StudioRenderInspection | undefined
+    let inspectorContext: StudioInspectorContext = 'Layout'
+    let inspectorRequestRevision = 0
+    let previewManifest = handshake.previewManifest
+    let searchRevision = 0
+    let sourceActionBusy = false
+    let testError: string | undefined
+    let testStatus: StudioTestStatus | undefined
+    let testWatch = false
+    const undoCheckpoints: Array<{ id: string; path: string }> = []
+    const openFileLifecycle = new StudioOpenFileLifecycle()
+    const openTabs = new Map<string, StudioOpenEditorTab>()
+    const editorTabs = new StudioEditorTabs({
+      appName: handshake.identity.appName,
+      availablePaths: projectFiles.map(file => file.path),
+      project: handshake.identity.project,
+      storage: window.localStorage,
+    })
+    let preparedActiveMutationPath: string | undefined
+    let preparedOpenMutationPath: string | undefined
+
+    async function openFile(path: string, refresh = false): Promise<StudioOpenFile | undefined> {
+      if (path === activePath && !refresh) {
+        return { editor: editor!, file: activeFile! }
+      }
+      const attempt = openFileLifecycle.begin()
+      if (!refresh) {
+        const result = await draftSync?.flush()
+        if (!attempt.isCurrent()) {
+          return undefined
+        }
+        if (result?.saved === false) {
+          view.status.dataset['state'] = 'error'
+          view.status.textContent = 'Fix or revert the invalid Tao draft before switching files.'
+          return { editor: editor!, file: activeFile! }
+        }
+        const existing = openTabs.get(path)
+        if (existing !== undefined && !existing.stale) {
+          editorTabs.activate(path)
+          activateEditorTab(path)
+          return existing
+        }
+      }
+      const file = await StudioApiClient.file(path)
+      if (!attempt.isCurrent()) {
+        return undefined
+      }
+      const fileDraftSync = new StudioDraftSync(file, {
+        onResult(result) {
+          const current = openTabs.get(path)
+          if (current?.draft !== fileDraftSync) {
+            return
+          }
+          if (result.saved) {
+            current.file = result.file
+            current.dirty = false
+            if (activePath === path) {
+              activeFile = result.file
+              postEditorSelection(activePreview.current(), handshake, activeFile, current.editor)
+            }
+          } else {
+            current.dirty = true
+          }
+          renderEditorTabs()
+          showDraftResult(view.status, result)
+        },
+        write: StudioApiClient.draft,
+      })
+      let fileEditor!: EditorView
+      let fileTab!: StudioOpenEditorTab
+      fileEditor = new EditorView({
+        doc: file.content,
+        extensions: [
+          StudioCodeEditor.extension,
+          StudioTextMateLanguage.extension,
+          languageClient.plugin(fileUri(handshake.identity.project, path), 'tao'),
+          EditorView.updateListener.of(update => {
+            if (update.docChanged) {
+              const content = update.state.doc.toString()
+              fileTab.dirty = true
+              fileDraftSync.update(content)
+              renderEditorTabs()
+              scheduleHighlight(update.view, content)
+            }
+            if (editor === update.view && update.selectionSet && !update.docChanged) {
+              postEditorSelection(activePreview.current(), handshake, activeFile, update.view)
+            }
+          }),
+          EditorView.theme({
+            '&': { backgroundColor: '#171918', color: '#e8e7e3' },
+            '.cm-content': { caretColor: '#f3c969' },
+            '.cm-gutters': { backgroundColor: '#202321', border: 'none', color: '#6f786f' },
+            '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#252a26' },
+          }, { dark: true }),
+        ],
+        parent: view.editor,
+      })
+      configurePaletteEditorDrop(fileEditor)
+      fileTab = { dirty: false, draft: fileDraftSync, editor: fileEditor, file, stale: false }
+      openTabs.get(path)?.editor.destroy()
+      openTabs.set(path, fileTab)
+      const snapshot = editorTabs.open(path)
+      for (const [candidatePath, candidate] of openTabs) {
+        if (!snapshot.paths.includes(candidatePath)) {
+          candidate.editor.destroy()
+          openTabs.delete(candidatePath)
+        }
+      }
+      activateEditorTab(path)
+      return fileTab
+    }
+
+    function activateEditorTab(path: string): void {
+      const tab = openTabs.get(path)
+      if (tab === undefined) {
+        return
+      }
+      highlightRequestRevision += 1
+      clearTimeout(highlightTimer)
+      for (const candidate of openTabs.values()) {
+        candidate.editor.dom.hidden = candidate !== tab
+      }
+      activeFile = tab.file
+      activePath = path
+      draftSync = tab.draft
+      editor = tab.editor
+      designValues = []
+      fileTree?.render()
+      showOpenFile(view, path)
+      renderEditorTabs()
+      renderProjectViews(view.projectViews, previewManifest, insertProjectView)
+      scheduleHighlight(tab.editor, tab.editor.state.doc.toString(), 0)
+      renderInspector()
+      const designRevision = ++designRequestRevision
+      void StudioApiClient.design({ path: tab.file.path, sourceVersion: tab.file.sourceVersion }).then(values => {
+        if (designRevision === designRequestRevision && activeFile?.sourceVersion === tab.file.sourceVersion) {
+          designValues = values
+          renderDesignEditor()
+        }
+      }).catch(error => {
+        if (designRevision === designRequestRevision) {
+          designValues = []
+          view.status.dataset['state'] = 'error'
+          view.status.textContent = error instanceof Error ? error.message : String(error)
+          renderDesignEditor()
+        }
+      })
+    }
+
+    function renderEditorTabs(): void {
+      const metadata = new Map(projectFiles.map(file => [file.path, file]))
+      const items = editorTabs.snapshot().paths.flatMap(path => {
+        const tab = openTabs.get(path)
+        if (tab === undefined) {
+          return []
+        }
+        const item = document.createElement('span')
+        item.className = 'studio-editor-tab-item'
+        if (path === activePath) {
+          item.setAttribute('aria-current', 'page')
+        }
+        const activate = document.createElement('button')
+        activate.className = 'studio-editor-tab'
+        activate.type = 'button'
+        activate.title = path
+        const label = path.split('/').at(-1) ?? path
+        activate.textContent = `${tab.dirty || metadata.get(path)?.dirty === true ? '● ' : ''}${label}`
+        activate.addEventListener('click', () => void openFile(path))
+        const close = document.createElement('button')
+        close.className = 'studio-editor-tab-close'
+        close.type = 'button'
+        close.title = `Close ${path}`
+        close.setAttribute('aria-label', `Close ${path}`)
+        close.textContent = '×'
+        close.addEventListener('click', () => void closeEditorTab(path))
+        item.append(activate, close)
+        return [item]
+      })
+      view.editorTabs.replaceChildren(...items)
+    }
+
+    async function closeEditorTab(path: string): Promise<void> {
+      const tab = openTabs.get(path)
+      if (tab === undefined) {
+        return
+      }
+      const result = await tab.draft.flush()
+      if (result?.saved === false) {
+        editorTabs.activate(path)
+        activateEditorTab(path)
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = 'Fix or revert the invalid Tao draft before closing this tab.'
+        return
+      }
+      const wasActive = path === activePath
+      const snapshot = editorTabs.close(path)
+      openTabs.delete(path)
+      tab.editor.destroy()
+      if (wasActive) {
+        editor = undefined
+        draftSync = undefined
+        activeFile = undefined
+        activePath = undefined
+        if (snapshot.activePath !== undefined) {
+          activateEditorTab(snapshot.activePath)
+        } else {
+          view.breadcrumbs.replaceChildren()
+          fileTree?.render()
+          renderInspector()
+        }
+      }
+      renderEditorTabs()
+    }
+
+    async function flushAllTabs(message: string): Promise<boolean> {
+      for (const path of editorTabs.snapshot().paths) {
+        const tab = openTabs.get(path)
+        if (tab === undefined) {
+          continue
+        }
+        const result = await tab.draft.flush()
+        if (result?.saved === false) {
+          editorTabs.activate(path)
+          activateEditorTab(path)
+          view.status.dataset['state'] = 'error'
+          view.status.textContent = message
+          return false
+        }
+      }
+      return true
+    }
+
+    function configureProjectAndAppPickers(): void {
+      const currentSessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
+      view.project.disabled = currentSessionId === undefined
+      view.project.title = currentSessionId === undefined
+        ? 'Project selection requires a managed Studio window.'
+        : 'Choose another project'
+      view.project.addEventListener('click', () => void selectProject())
+
+      const duplicateNames = new Set(
+        handshake.apps.filter((app, index) =>
+          handshake.apps.some((candidate, candidateIndex) =>
+            candidateIndex !== index && candidate.appName === app.appName
+          )
+        ).map(app => app.appName),
+      )
+      view.appPicker.replaceChildren(...handshake.apps.map((app, index) => {
+        const option = document.createElement('option')
+        option.value = String(index)
+        option.textContent = duplicateNames.has(app.appName)
+          ? `${app.appName} — ${app.entryPath}`
+          : app.appName
+        option.selected = app.appName === handshake.identity.appName && app.entryPath === handshake.entryPath
+        return option
+      }))
+      view.appPicker.disabled = currentSessionId === undefined || handshake.apps.length < 2
+      view.appPicker.addEventListener('change', () => void selectAppVariant())
+    }
+
+    async function selectProject(): Promise<void> {
+      if (!await flushAllTabs('Fix or revert invalid Tao drafts before choosing another project.')) {
+        return
+      }
+      view.project.disabled = true
+      try {
+        await StudioApiClient.closeCurrentSession()
+        const welcome = new URL('/welcome', window.location.origin)
+        if (window.location.search.includes('native-window=project')) {
+          welcome.searchParams.set('native-window', 'welcome')
+        }
+        window.location.assign(`${welcome.pathname}${welcome.search}`)
+      } catch (error) {
+        view.project.disabled = false
+        showSourceActionError(view.status, error)
+      }
+    }
+
+    async function selectAppVariant(): Promise<void> {
+      const selected = handshake.apps[Number(view.appPicker.value)]
+      const currentIndex = handshake.apps.findIndex(app =>
+        app.appName === handshake.identity.appName && app.entryPath === handshake.entryPath
+      )
+      if (
+        selected === undefined || (
+          selected.appName === handshake.identity.appName && selected.entryPath === handshake.entryPath
+        )
+      ) {
+        return
+      }
+      if (!await flushAllTabs('Fix or revert invalid Tao drafts before switching app variants.')) {
+        view.appPicker.value = String(currentIndex)
+        return
+      }
+      view.appPicker.disabled = true
+      view.status.dataset['state'] = 'compiling'
+      view.status.textContent = `Opening ${selected.appName}…`
+      try {
+        const transition = await StudioApiClient.switchApp({
+          appName: selected.appName,
+          entryPath: selected.entryPath,
+          projectPath: handshake.identity.project,
+        })
+        window.location.assign(StudioApiRoutes.transitionUrl(transition, new URL(window.location.href)))
+      } catch (error) {
+        view.appPicker.disabled = false
+        view.appPicker.value = String(currentIndex)
+        showSourceActionError(view.status, error)
+      }
+    }
+
+    async function openCompileDiagnostic(diagnostic: StudioCompileDiagnostic): Promise<void> {
+      if (diagnostic.filePath === undefined) {
+        return
+      }
+      const path = projectRelativePath(handshake.identity.project, diagnostic.filePath)
+      if (path === undefined) {
+        return
+      }
+      const opened = await openFile(path)
+      if (opened === undefined || diagnostic.range === undefined) {
+        return
+      }
+      const selection = StudioDiagnosticNavigation.selection(opened.editor.state.doc, diagnostic.range)
+      opened.editor.dispatch({
+        effects: EditorView.scrollIntoView(selection.anchor, { y: 'center' }),
+        selection,
+      })
+      opened.editor.focus()
+    }
+
+    async function openScreen(item: StudioScreenItem): Promise<void> {
+      const scenarioIds = new Set(
+        (previewManifest?.scenarios ?? []).filter(scenario => scenario.subjectId === item.id)
+          .map(scenario => scenario.scenarioId),
+      )
+      const preview = previews.find(candidate =>
+        candidate.cell !== undefined && scenarioIds.has(candidate.cell.scenarioId)
+      )
+      if (preview !== undefined) {
+        activePreview.activate(preview)
+        preview.frame?.scrollIntoView({ block: 'center' })
+      }
+      const path = projectRelativePath(handshake.identity.project, item.path) ?? item.path
+      const opened = await openFile(path)
+      if (opened === undefined) {
+        return
+      }
+      const offset = Math.min(item.start, opened.editor.state.doc.length)
+      opened.editor.dispatch({
+        effects: EditorView.scrollIntoView(offset, { y: 'center' }),
+        selection: { anchor: offset },
+      })
+      opened.editor.focus()
+    }
+
+    async function openSearchResult(result: StudioSearchResult): Promise<void> {
+      const path = projectRelativePath(handshake.identity.project, result.path) ?? result.path
+      const opened = await openFile(path)
+      if (opened === undefined) {
+        return
+      }
+      const selection = result.kind === 'diagnostic' && result.range !== undefined
+        ? StudioDiagnosticNavigation.selection(opened.editor.state.doc, result.range)
+        : {
+          anchor: Math.min(result.start ?? 0, opened.editor.state.doc.length),
+          head: Math.min(result.end ?? result.start ?? 0, opened.editor.state.doc.length),
+        }
+      opened.editor.dispatch({
+        effects: EditorView.scrollIntoView(selection.anchor, { y: 'center' }),
+        selection,
+      })
+      opened.editor.focus()
+    }
+
+    async function searchProject(): Promise<void> {
+      const revision = ++searchRevision
+      const query = view.searchInput.value
+      if (query.trim() === '') {
+        renderSearchResults(view.searchResults, [], result => void openSearchResult(result))
+        return
+      }
+      let documents: Array<{ content: string; path: string }>
+      try {
+        documents = await Promise.all(projectFiles.map(async file => ({
+          content: openTabs.get(file.path)?.editor.state.doc.toString()
+            ?? (await StudioApiClient.file(file.path)).content,
+          path: file.path,
+        })))
+      } catch (error) {
+        if (revision === searchRevision) {
+          showSourceActionError(view.status, error)
+        }
+        return
+      }
+      if (revision !== searchRevision) {
+        return
+      }
+      renderSearchResults(
+        view.searchResults,
+        StudioRailPanels.search(documents, compileState.diagnostics ?? [], query),
+        result => void openSearchResult(result),
+      )
+    }
+
+    function scheduleHighlight(target: EditorView, content: string, delayMs = 60): void {
+      const revision = ++highlightRequestRevision
+      clearTimeout(highlightTimer)
+      highlightTimer = setTimeout(() => {
+        void StudioApiClient.highlight(content).then(highlight => {
+          if (
+            revision === highlightRequestRevision
+            && editor === target
+            && target.state.doc.toString() === content
+          ) {
+            target.dispatch({ effects: StudioTextMateLanguage.setHighlight(highlight) })
+          }
+        }).catch(() => {
+          // Highlighting is presentation-only; LSP editing and preview compilation remain available.
+        })
+      }, delayMs)
+    }
+
+    function renderInspector(): void {
+      const scenarioPanel = document.createElement('section')
+      scenarioPanel.className = 'studio-scenario-inspector'
+      renderScenarioInspector(scenarioPanel, activePreview.current())
+      const sourcePanel = document.createElement('section')
+      renderInspectorPanel(sourcePanel, {
+        busy: sourceActionBusy,
+        canUndo: undoCheckpoints.at(-1)?.path === activePath,
+        context: inspectorContext,
+        currentSourceVersion: activeFile?.sourceVersion,
+        inspection,
+        onAction: action => {
+          if (inspected !== undefined) {
+            void submitLocalAction(action, inspected.identity)
+          }
+        },
+        onUndo: () => void undoLatestSourceAction(),
+        selection: inspected,
+      })
+      view.inspector.replaceChildren(scenarioPanel, sourcePanel)
+      renderDesignEditor()
+    }
+
+    function renderDesignEditor(): void {
+      renderDesignValues(view.designValues, {
+        busy: sourceActionBusy,
+        currentSourceVersion: activeFile?.sourceVersion,
+        design: designValues,
+        onAction: action => {
+          if (inspected !== undefined) {
+            void submitLocalAction(action, inspected.identity)
+          }
+        },
+        renderId: inspected?.renderId,
+        selectedSourceVersion: inspected?.identity.sourceVersion,
+      })
+    }
+
+    function renderDrawer(): void {
+      renderDrawerContent(view.drawerContent, drawerTab, {
+        compile: compileState,
+        data: dataResult,
+        dataError,
+        dataLoading,
+        logs: activePreview.current()?.runtimeLogs ?? [],
+        onCaptureFixture: focusCaptureFixture,
+        onClearLogs() {
+          const preview = activePreview.current()
+          if (preview !== undefined) {
+            preview.runtimeLogs = []
+          }
+          renderDrawer()
+        },
+        onDiagnostic: diagnostic => void openCompileDiagnostic(diagnostic),
+        onRefreshData: () => void loadData(),
+        onRunTests: () => void runTests(),
+        onTestFailure: failure => void openTestFailure(failure),
+        onTestWatch(watch) {
+          testWatch = watch
+          if (watch) {
+            void runTests()
+          }
+        },
+        testError,
+        testStatus,
+        testWatch,
+      })
+    }
+
+    function selectDrawer(tab: StudioDrawerTab): void {
+      drawerTab = tab
+      for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('button')) {
+        if (button.textContent === tab) {
+          button.setAttribute('aria-current', 'true')
+        } else {
+          button.removeAttribute('aria-current')
+        }
+      }
+      renderDrawer()
+      if (tab === 'Data') {
+        void loadData()
+        dataTimer ??= setInterval(() => void loadData(), 2_000)
+      } else if (dataTimer !== undefined) {
+        clearInterval(dataTimer)
+        dataTimer = undefined
+      }
+    }
+
+    const dataFill = new StudioDataFillCoordinator(async isLatest => {
+      dataLoading = true
+      dataError = undefined
+      renderDrawer()
+      try {
+        const preview = activePreview.current()
+        if (preview === undefined) {
+          throw new Error('Select a connected preview cell to inspect live app data.')
+        }
+        const capture = await requestRuntimeCapture(preview, handshake)
+        if (isLatest() && preview === activePreview.current()) {
+          dataResult = StudioRuntimeData.tables(capture)
+          dataLoading = false
+          renderDrawer()
+        }
+      } catch (error) {
+        if (isLatest()) {
+          dataLoading = false
+          dataError = error instanceof Error ? error.message : String(error)
+          renderDrawer()
+        }
+      }
+    })
+
+    async function loadData(): Promise<void> {
+      await dataFill.request()
+    }
+
+    async function loadTestStatus(): Promise<void> {
+      try {
+        testStatus = await StudioApiClient.testStatus()
+        testError = undefined
+      } catch (error) {
+        testError = error instanceof Error ? error.message : String(error)
+      }
+      if (drawerTab === 'Tests') {
+        renderDrawer()
+      }
+    }
+
+    async function runTests(): Promise<void> {
+      if (testStatus?.running === true) {
+        return
+      }
+      testError = undefined
+      testStatus = { ...(testStatus ?? { available: true }), available: true, running: true }
+      if (drawerTab === 'Tests') {
+        renderDrawer()
+      }
+      try {
+        const lastRun = await StudioApiClient.testRun()
+        testStatus = { available: true, lastRun, running: false }
+      } catch (error) {
+        testError = error instanceof Error ? error.message : String(error)
+        testStatus = { ...(testStatus ?? { available: true }), running: false }
+      }
+      if (drawerTab === 'Tests') {
+        renderDrawer()
+      }
+    }
+
+    async function openTestFailure(failure: StudioTestFailure): Promise<void> {
+      const path = projectRelativePath(handshake.identity.project, failure.filePath) ?? failure.filePath
+      const opened = await openFile(path)
+      if (opened === undefined || failure.line === undefined) {
+        return
+      }
+      const line = opened.editor.state.doc.line(Math.min(failure.line, opened.editor.state.doc.lines))
+      const position = Math.min(line.to, line.from + Math.max(0, (failure.column ?? 1) - 1))
+      opened.editor.dispatch({
+        effects: EditorView.scrollIntoView(position, { y: 'center' }),
+        selection: { anchor: position },
+      })
+      opened.editor.focus()
+    }
+
+    void loadTestStatus()
+
+    function focusCaptureFixture(): void {
+      const preview = activePreview.current()
+      const input = preview?.scenarioControls?.querySelector<HTMLInputElement>('.studio-preview-fixture-name')
+      if (preview === undefined || input === null || input === undefined) {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = 'The active preview cell does not expose fixture capture controls.'
+        return
+      }
+      preview.frame?.scrollIntoView({ block: 'center' })
+      input.focus()
+    }
+
+    async function inspectSelection(selection: StudioInspectorSelection): Promise<void> {
+      const revision = ++inspectorRequestRevision
+      inspection = undefined
+      renderInspector()
+      const path = projectRelativePath(handshake.identity.project, selection.identity.path) ?? selection.identity.path
+      try {
+        const result = await StudioApiClient.inspectRender({
+          path,
+          renderId: selection.renderId,
+          sourceVersion: selection.identity.sourceVersion,
+        })
+        if (revision === inspectorRequestRevision && inspected?.renderId === selection.renderId) {
+          inspection = result
+          renderInspector()
+        }
+      } catch (error) {
+        if (revision === inspectorRequestRevision) {
+          showSourceActionError(view.status, error)
+        }
+      }
+    }
+
+    function configurePaletteEditorDrop(target: EditorView): void {
+      target.dom.addEventListener('dragover', event => {
+        if (event.dataTransfer?.types.includes(studioPaletteMime)) {
+          event.preventDefault()
+        }
+      })
+      target.dom.addEventListener('drop', event => {
+        const item = StudioPaletteTransfer.parse(event.dataTransfer?.getData(studioPaletteMime) ?? '')
+        if (item === undefined) {
+          return
+        }
+        event.preventDefault()
+        const position = target.posAtCoords({ x: event.clientX, y: event.clientY }) ?? target.state.selection.main.head
+        insertEditorSnippet(target, item.snippet, position)
+        target.focus()
+      })
+    }
+
+    function insertEditorSnippet(
+      target: EditorView,
+      snippet: Parameters<typeof StudioEditorInsertion.transaction>[1],
+      position: number,
+    ): void {
+      target.dispatch(StudioEditorInsertion.transaction(target.state.doc, snippet, position))
+    }
+
+    function insertProjectView(projectView: ReturnType<typeof StudioInspector.projectViews>[number]): void {
+      const activeSourcePath = activeFile === undefined
+        ? undefined
+        : `${handshake.identity.project.replace(/\/$/, '')}/${activeFile.path.replace(/^\//, '')}`
+      if (
+        editor !== undefined
+        && (projectView.snippet.placeholders.length > 0 || projectView.sourcePath !== activeSourcePath)
+      ) {
+        insertEditorSnippet(editor, projectView.snippet, editor.state.selection.main.head)
+        editor.focus()
+        return
+      }
+      const identity = currentSourceIdentity(handshake, activePreview.current(), activeFile)
+      if (identity !== undefined) {
+        void submitLocalAction({
+          ...(inspected === undefined ? {} : { beforeId: inspected.renderId }),
+          kind: 'insert-project-view',
+          viewName: projectView.viewName,
+        }, identity)
+      }
+    }
+
+    async function applySourceAction(envelope: StudioSourceActionEnvelope): Promise<void> {
+      sourceActionBusy = true
+      renderInspector()
+      view.status.dataset['state'] = 'compiling'
+      view.status.textContent = `Applying ${sourceActionLabel(envelope.action)}…`
+      try {
+        const result = await StudioApiClient.sourceAction(envelope)
+        if (result.checkpoint.status === 'committed' && undoCheckpoints.at(-1)?.id !== result.checkpoint.id) {
+          undoCheckpoints.push({ id: result.checkpoint.id, path: result.path })
+        }
+        inspected = undefined
+        inspection = undefined
+        await openFile(result.path, true)
+        view.status.textContent = 'Source action applied; compiling preview…'
+      } catch (error) {
+        showSourceActionError(view.status, error)
+      } finally {
+        sourceActionBusy = false
+        renderInspector()
+      }
+    }
+
+    async function submitLocalAction(
+      action: StudioCanonicalSourceAction,
+      identity: StudioPreviewSourceIdentity,
+    ): Promise<void> {
+      if (sourceActionBusy || !await flushVisualEditDraft()) {
+        return
+      }
+      if (activeFile === undefined || identity.sourceVersion !== activeFile.sourceVersion) {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = 'Wait for the refreshed preview before editing this render.'
+        return
+      }
+      const operationId = crypto.randomUUID()
+      await applySourceAction(StudioInspector.singleAction({
+        action,
+        checkpointId: `checkpoint:${operationId}`,
+        identity,
+        requestId: `request:${operationId}`,
+      }))
+    }
+
+    async function submitPreviewAction(envelope: StudioSourceActionEnvelope): Promise<void> {
+      if (sourceActionBusy || !await flushVisualEditDraft()) {
+        return
+      }
+      const path = projectRelativePath(handshake.identity.project, envelope.identity.path)
+      if (
+        path === undefined
+        || (path === activePath && envelope.identity.sourceVersion !== activeFile?.sourceVersion)
+      ) {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = 'Wait for the refreshed preview before editing this render.'
+        return
+      }
+      await applySourceAction(envelope)
+    }
+
+    async function undoLatestSourceAction(): Promise<void> {
+      const checkpoint = undoCheckpoints.at(-1)
+      if (
+        checkpoint === undefined || checkpoint.path !== activePath || sourceActionBusy || !await flushVisualEditDraft()
+      ) {
+        return
+      }
+      const identity = currentSourceIdentity(handshake, activePreview.current(), activeFile)
+      if (identity === undefined) {
+        return
+      }
+      sourceActionBusy = true
+      renderInspector()
+      try {
+        const result = await StudioApiClient.undoSourceAction(StudioInspector.undo({
+          checkpointId: checkpoint.id,
+          identity,
+          requestId: `undo:${crypto.randomUUID()}`,
+        }))
+        undoCheckpoints.pop()
+        inspected = undefined
+        inspection = undefined
+        await openFile(result.path, true)
+        view.status.textContent = 'Visual source edit undone; compiling preview…'
+      } catch (error) {
+        showSourceActionError(view.status, error)
+      } finally {
+        sourceActionBusy = false
+        renderInspector()
+      }
+    }
+
+    async function flushVisualEditDraft(): Promise<boolean> {
+      await draftSync?.flush()
+      if (activeFile !== undefined && editor?.state.doc.toString() === activeFile.content) {
+        return true
+      }
+      view.status.dataset['state'] = 'error'
+      view.status.textContent = 'Finish the invalid Tao draft before applying a visual source edit.'
+      return false
+    }
+
+    function insertComponent(component: (typeof studioPaletteComponents)[number]): void {
+      const identity = currentSourceIdentity(handshake, activePreview.current(), activeFile)
+      if (identity !== undefined) {
+        void submitLocalAction({
+          ...(inspected === undefined ? {} : { beforeId: inspected.renderId }),
+          component: component.component,
+          kind: 'insert-component',
+        }, identity)
+      }
+    }
+
+    function publishProjectFiles(files: readonly StudioFile[]): void {
+      projectFiles = files
+      const available = new Set(files.map(file => file.path))
+      const snapshot = editorTabs.reconcile([...available])
+      let activeWasRemoved = false
+      for (const [path, tab] of openTabs) {
+        if (!available.has(path)) {
+          activeWasRemoved ||= path === activePath
+          tab.editor.destroy()
+          openTabs.delete(path)
+          continue
+        }
+        const metadata = files.find(file => file.path === path)
+        if (
+          metadata !== undefined
+          && metadata.sourceVersion !== tab.file.sourceVersion
+          && !tab.dirty
+          && path !== activePath
+        ) {
+          tab.stale = true
+        }
+      }
+      if (activeWasRemoved) {
+        editor = undefined
+        draftSync = undefined
+        activeFile = undefined
+        activePath = undefined
+        if (snapshot.activePath !== undefined && openTabs.has(snapshot.activePath)) {
+          activateEditorTab(snapshot.activePath)
+        } else {
+          view.breadcrumbs.replaceChildren()
+        }
+      }
+      renderEditorTabs()
+      renderCommands()
+      if (view.searchInput.value.trim() !== '') {
+        void searchProject()
+      }
+      if (drawerTab === 'Data') {
+        void loadData()
+      }
+    }
+
+    async function prepareFileMutation(file: StudioFile): Promise<StudioFile | undefined> {
+      preparedActiveMutationPath = activePath
+      const tab = openTabs.get(file.path)
+      preparedOpenMutationPath = tab === undefined ? undefined : file.path
+      if (tab === undefined) {
+        return projectFiles.find(candidate => candidate.path === file.path)
+      }
+      const result = await tab.draft.flush()
+      if (result?.saved === false || tab.editor.state.doc.toString() !== tab.file.content) {
+        editorTabs.activate(file.path)
+        activateEditorTab(file.path)
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = 'Fix or revert the invalid Tao draft before changing this file.'
+        return undefined
+      }
+      await fileTree?.refresh()
+      return projectFiles.find(candidate => candidate.path === file.path)
+    }
+
+    const wirePreview = (preview: (typeof previews)[number]): void => {
+      preview.changed = () => {
+        if (preview === activePreview.current()) {
+          renderInspector()
+        }
+      }
+    }
+    activePreview.subscribe(() => {
+      renderInspector()
+      renderDrawer()
+      if (drawerTab === 'Data') {
+        void loadData()
+      }
+    })
+    activePreview.reconcile(wirePreview)
+    renderScreens(view.screens, previewManifest, item => void openScreen(item))
+    renderSearchResults(view.searchResults, [], result => void openSearchResult(result))
+    view.searchInput.addEventListener('input', () => void searchProject())
+
+    renderComponentPalette(view.components, insertComponent)
+    view.preview.addEventListener('dragover', event => {
+      if (event.dataTransfer?.types.includes(studioPaletteMime)) {
+        event.preventDefault()
+      }
+    })
+    view.preview.addEventListener('drop', event => {
+      const item = StudioPaletteTransfer.parse(event.dataTransfer?.getData(studioPaletteMime) ?? '')
+      const identity = currentSourceIdentity(handshake, activePreview.current(), activeFile)
+      if (item === undefined || identity === undefined || inspected === undefined) {
+        return
+      }
+      event.preventDefault()
+      const gap = { beforeId: inspected.renderId }
+      void submitLocalAction(
+        item.kind === 'component'
+          ? { ...gap, component: item.component, kind: 'insert-component' }
+          : { ...gap, kind: 'insert-project-view', viewName: item.viewName },
+        identity,
+      )
+    })
+
+    for (const button of view.inspectorTabs.querySelectorAll<HTMLButtonElement>('button')) {
+      button.addEventListener('click', () => {
+        inspectorContext = button.textContent as StudioInspectorContext
+        view.inspectorTabs.querySelectorAll('button').forEach(candidate => candidate.removeAttribute('aria-current'))
+        button.setAttribute('aria-current', 'true')
+        renderInspector()
+      })
+    }
+    view.inspectorTabs.querySelector<HTMLButtonElement>('button')?.setAttribute('aria-current', 'true')
+
+    for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('button')) {
+      button.addEventListener('click', () => selectDrawer(button.textContent as StudioDrawerTab))
+    }
+    view.rail.addEventListener('click', event => {
+      const panel = (event.target as HTMLElement).closest<HTMLElement>('[data-panel]')?.dataset['panel']
+      if (panel === 'data') {
+        selectDrawer('Data')
+      } else if (panel === 'search') {
+        view.searchInput.focus()
+      }
+    })
+    selectDrawer('Problems')
+
+    fileTree = mountStudioFileTree(view.files, {
+      activePath: () => activePath,
+      files: projectFiles,
+      onCreated: async result => {
+        await openFile(StudioFileTreeTransitions.afterCreate(result))
+      },
+      onDeleted: async result => {
+        const previousActivePath = preparedActiveMutationPath
+        preparedActiveMutationPath = undefined
+        preparedOpenMutationPath = undefined
+        const nextPath = StudioFileTreeTransitions.afterDelete(previousActivePath, handshake.entryPath, result)
+        if (previousActivePath === result.deleted.path && nextPath !== undefined) {
+          await openFile(nextPath)
+        }
+      },
+      onError: error => showSourceActionError(view.status, error),
+      onFiles: publishProjectFiles,
+      onOpen: file => void openFile(file.path),
+      onRenamed: async result => {
+        const previousActivePath = preparedActiveMutationPath
+        const wasOpen = preparedOpenMutationPath === result.previousPath
+        preparedActiveMutationPath = undefined
+        preparedOpenMutationPath = undefined
+        const nextPath = StudioFileTreeTransitions.afterRename(previousActivePath, result)
+        if (wasOpen) {
+          await openFile(result.file.path)
+          if (nextPath !== undefined && nextPath !== result.file.path) {
+            await openFile(nextPath)
+          }
+        }
+      },
+      prepareMutation: prepareFileMutation,
+      protectedPath: handshake.entryPath,
+    })
+    configureProjectAndAppPickers()
+    const restoredTabs = editorTabs.snapshot()
+    const restoredPaths = restoredTabs.paths.length === 0 ? [handshake.entryPath] : restoredTabs.paths
+    for (const path of restoredPaths) {
+      await openFile(path)
+    }
+    if (restoredTabs.activePath !== undefined && restoredTabs.activePath !== activePath) {
+      await openFile(restoredTabs.activePath)
+    }
+    connectEvents(view.status, diagnostic => void openCompileDiagnostic(diagnostic), {
+      onCompile(state) {
+        compileState = state
+        renderDrawer()
+        if (view.searchInput.value.trim() !== '') {
+          void searchProject()
+        }
+        if (state.status !== 'compiling') {
+          void fileTree?.refresh().catch(error => showSourceActionError(view.status, error))
+        }
+        if (drawerTab === 'Data') {
+          void loadData()
+        }
+        if (testWatch && state.status === 'compiled') {
+          void runTests()
+        }
+      },
+      onFile(file) {
+        const found = projectFiles.some(candidate => candidate.path === file.path)
+        fileTree?.setFiles(
+          found
+            ? projectFiles.map(candidate => candidate.path === file.path ? file : candidate)
+            : [...projectFiles, file],
+        )
+        const tab = openTabs.get(file.path)
+        if (tab !== undefined && file.sourceVersion !== tab.file.sourceVersion) {
+          if (tab.editor.state.doc.toString() === tab.file.content) {
+            tab.stale = true
+          }
+          if (file.path === activePath && tab.stale) {
+            void openFile(file.path, true)
+          } else if (file.path === activePath) {
+            view.status.dataset['state'] = 'error'
+            view.status.textContent = 'This file changed on disk while the editor has an unsaved draft.'
+          }
+        }
+        if (drawerTab === 'Data') {
+          void loadData()
+        }
+      },
+      onFiles(files) {
+        fileTree?.setFiles(files)
+      },
+      onManifest(manifest) {
+        previewManifest = manifest
+        renderProjectViews(view.projectViews, manifest, insertProjectView)
+        renderScreens(view.screens, manifest, item => void openScreen(item))
+        if (config.previewUrl !== undefined) {
+          void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
+            activePreview.reconcile(wirePreview)
+          }).catch(error => {
+            view.status.dataset['state'] = 'error'
+            view.status.textContent = error instanceof Error ? error.message : String(error)
+          })
+        }
+        renderCommands()
+        if (drawerTab === 'Data') {
+          void loadData()
+        }
+      },
+    })
+    view.reload.addEventListener('click', () => {
+      if (previews.length > 0) {
+        for (const connection of previews) {
+          connection.iframe.src = connection.iframe.src
+        }
+        view.status.textContent = 'Reloading preview…'
+      }
+    })
+    if (previews.length > 0) {
+      window.addEventListener('message', event => {
+        const connection = previews.find(candidate => candidate.iframe.contentWindow === event.source)
+        if (connection === undefined) {
+          return
+        }
+        void handlePreviewMessage(event, connection, handshake, openFile, {
+          activate: () => activePreview.activate(connection),
+          applySourceAction: submitPreviewAction,
+          changed() {
+            if (drawerTab === 'Logs') {
+              renderDrawer()
+            }
+            if (drawerTab === 'Data') {
+              void loadData()
+            }
+          },
+          inspect(selection) {
+            inspected = selection
+            void inspectSelection(selection)
+          },
+        })
+      })
+    }
+    function commandItems(): readonly StudioCommandItem[] {
+      return StudioCommandPalette.items({
+        files: projectFiles,
+        manifest: previewManifest,
+        projectViews: StudioInspector.projectViews(previewManifest),
+      })
+    }
+
+    function renderCommands(): void {
+      renderCommandResults(
+        view.commandResults,
+        StudioCommandPalette.filter(commandItems(), view.commandInput.value),
+        executeCommand,
+      )
+    }
+
+    function closeCommands(): void {
+      view.commandOverlay.hidden = true
+    }
+
+    function executeCommand(item: StudioCommandItem): void {
+      closeCommands()
+      const target = item.target
+      if (target.kind === 'file') {
+        void openFile(target.path)
+      } else if (target.kind === 'view') {
+        const path = projectRelativePath(handshake.identity.project, target.path)
+        if (path !== undefined) {
+          void openFile(path)
+        }
+      } else if (target.kind === 'scenario') {
+        const preview = previews.find(candidate => candidate.cell?.scenarioId === target.scenarioId)
+        if (preview !== undefined) {
+          activePreview.activate(preview)
+          if (drawerTab === 'Data') {
+            void loadData()
+          }
+          if (drawerTab === 'Logs') {
+            renderDrawer()
+          }
+          preview.frame?.scrollIntoView({ block: 'center' })
+          preview.iframe.focus()
+        }
+      } else if (target.kind === 'insert-component') {
+        insertComponent(target.component)
+      } else if (target.kind === 'insert-view') {
+        insertProjectView(target.view)
+      } else if (target.command === 'reload') {
+        view.reload.click()
+      } else if (target.command === 'toggle-mode') {
+        view.interactionMode.click()
+      } else {
+        selectDrawer(target.command === 'compile' ? 'Compile' : target.command === 'data' ? 'Data' : 'Problems')
+      }
+    }
+
+    const toggleCommands = (): void => {
+      view.commandOverlay.hidden = !view.commandOverlay.hidden
+      if (!view.commandOverlay.hidden) {
+        view.commandInput.value = ''
+        renderCommands()
+        view.commandInput.focus()
+      }
+    }
+    view.commandButton.addEventListener('click', toggleCommands)
+    view.commandInput.addEventListener('input', renderCommands)
+    view.commandInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        view.commandResults.querySelector<HTMLButtonElement>('button')?.click()
+      }
+    })
+    window.addEventListener('keydown', event => {
+      if (event.metaKey && event.key.toLocaleLowerCase() === 'k') {
+        event.preventDefault()
+        toggleCommands()
+      } else if (event.key === 'Escape' && !view.commandOverlay.hidden) {
+        closeCommands()
+      }
+    })
+    window.addEventListener('beforeunload', () => {
+      clearTimeout(highlightTimer)
+      if (dataTimer !== undefined) {
+        clearInterval(dataTimer)
+      }
+      for (const tab of openTabs.values()) {
+        tab.editor.destroy()
+      }
+      languageClient.disconnect()
+    })
+  } catch (error) {
+    view.status.dataset['state'] = 'error'
+    view.status.textContent = error instanceof Error ? error.message : String(error)
+  }
+}
+
+function connectEvents(
+  status: HTMLElement,
+  openDiagnostic: (diagnostic: StudioCompileDiagnostic) => void,
+  handlers: {
+    onCompile: (state: StudioCompileState) => void
+    onFile: (file: StudioFile) => void
+    onFiles: (files: readonly StudioFile[]) => void
+    onManifest: (manifest: StudioPreviewManifestV2) => void
+  },
+): WebSocket {
+  return StudioApiClient.connectEvents({
+    onCompile: state => {
+      updateStatus(status, state, openDiagnostic)
+      handlers.onCompile(state)
+    },
+    onDisconnect() {
+      status.dataset['state'] = 'error'
+      status.textContent = 'Studio server disconnected; reconnecting…'
+      setTimeout(() => connectEvents(status, openDiagnostic, handlers), 500)
+    },
+    onFile: handlers.onFile,
+    onFiles: handlers.onFiles,
+    onManifest: handlers.onManifest,
+  })
+}
+
+function updateStatus(
+  element: HTMLElement,
+  state: StudioCompileState,
+  openDiagnostic?: (diagnostic: StudioCompileDiagnostic) => void,
+): void {
+  element.dataset['state'] = state.status
+  const revisions = state.status === 'compiled'
+    ? `compiled ${state.compileRevision} · applied ${state.appliedRevision}`
+    : state.status
+  const text = `${revisions} — ${state.message}`
+  const diagnostic = state.status === 'error' ? state.diagnostics?.find(item => item.filePath !== undefined) : undefined
+  if (diagnostic === undefined || openDiagnostic === undefined) {
+    element.textContent = text
+    return
+  }
+  const button = document.createElement('button')
+  button.className = 'studio-status-diagnostic'
+  button.textContent = text
+  button.type = 'button'
+  const location = diagnostic.range === undefined ? '' : `:${diagnostic.range.start.line + 1}`
+  button.title = `Open ${diagnostic.filePath}${location}`
+  button.addEventListener('click', () => openDiagnostic(diagnostic))
+  element.replaceChildren(button)
+}
+
+function showDraftResult(element: HTMLElement, result: StudioDraftSyncResult): void {
+  if (result.saved) {
+    element.textContent = 'Saved; compiling preview…'
+    return
+  }
+  element.dataset['state'] = 'error'
+  element.textContent = result.diagnostics[0] ?? 'Draft is not valid Tao yet; preview kept the last good source.'
+}

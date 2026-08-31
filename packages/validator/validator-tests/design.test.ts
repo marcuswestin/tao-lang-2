@@ -1,10 +1,23 @@
-import { Describe, Test } from '@shared/test'
+import { Describe, Expect, Test } from '@shared/test'
+import { designValidationCodes } from '../validator-src/diagnostic-codes'
+import Validator from '../validator-src/validator'
 import { DesignValidator } from '../validator-src/validators/design-validator'
 import { accepts, fence, rejects, tsFence } from './test-validate'
 
 const messages = DesignValidator.messages
 
 Describe('validator: minimal design', () => {
+  Test('reports inline design explorations as stable warnings during ordinary validation', async () => {
+    const result = await Validator.validateCode(`
+      view Main() { render Surface() [gap 8, size 14, fg #fff] }
+      ${surfaceView}
+    `)
+    const diagnostics = result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.exploration)
+
+    Expect(diagnostics).toHaveLength(3)
+    Expect(diagnostics.every(diagnostic => diagnostic.severity === 'warning')).toBe(true)
+  })
+
   Test(
     'accepts exact hex forms, WordFlower bundles, and decomposed later layout effects',
     accepts(designApp(

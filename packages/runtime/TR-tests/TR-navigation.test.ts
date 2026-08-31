@@ -181,9 +181,11 @@ Describe('TR.Navigation', () => {
     TR.testNavKind(TR.NavKind.Stack(), 'stack')
     TR.testNavKind(TR.NavKind.Slot(), 'slot')
     TR.testNavKind(TR.NavKind.Selection(), 'selection')
+    TR.testNavKind(TR.NavKind.Split(), 'split')
     TR.testNavKind(TR.NavKind.Basic.Stack(), 'stack')
     TR.testNavKind(TR.NavKind.Basic.Slot(), 'slot')
     TR.testNavKind(TR.NavKind.Basic.Selection(), 'selection')
+    TR.testNavKind(TR.NavKind.Basic.Split(), 'split')
 
     const kind = TR.NavKind.Stack()
     const declaration = TR.NavKind.Declaration('ThirdPartyStack')

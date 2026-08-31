@@ -17,8 +17,9 @@ and `.Error` members are retired. Every entity handle exposes stable text `.Id`,
 row becomes missing; application code may retain that identity without gaining access to raw rows.
 
 The executable language includes precedence-aware arithmetic, comparison, equality, and boolean
-expressions; unit values and dimensional arithmetic; pure functions; immutable `let`; reactive `state`; named and inline actions; `set`,
-compound `set`, `toggle`, and `do`; subject `when`; block-scoped `guard`; homogeneous list literals;
+expressions; unit values and dimensional arithmetic; pure functions; immutable `let`; reactive `state`;
+named, inline, and typed foreign actions; inferred `fail` cases; `set`, compound `set`, `toggle`, and
+`do`; subject `when`; block-scoped `guard`; homogeneous list literals;
 `loop`; first-class `view` and configured `nav` values under the collapsed primitive hierarchy
 (`view` is the one renderable primitive; `nav` refines it); top-level data/query/write forms;
 declaration-owned configuration; `ask`/`respond` on views declaring `responds`; the
@@ -78,8 +79,10 @@ function Double(Value number) {
 
 Lists declare their element type as `list of T`. Enums are nominal types whose cases are nominal
 values; a one-case set is valid. Optional item fields use `Field Type?`. `async { ... }`
-runs its block without delaying later statements and surfaces failures as provider error state;
-async functions, `await`, scheduling, and fork/concurrency policy remain future work.
+runs as a detached serialized root after its enclosing action finishes, without delaying later caller
+statements, and reports an unowned failure through the action diagnostics. The joined transaction, failure,
+and diagnostic contract is specified in [Tao Actions](Tao%20Actions.md). Async functions, `await`, and a
+broader scheduling and fork/concurrency policy remain future work.
 
 Primitive declarations may supply defaulted slots inherited by refinements. Primitive `view`
 currently supplies optional `Title` and `Toolbar`; a view body fills them as capitalized members,
@@ -144,6 +147,10 @@ Empty calls use `()`. A render layout clause and child block follow the closing 
 never part of the argument list. The `render` keyword may be omitted only for child invocations
 inside a render block; parentheses remain mandatory.
 
+View references may be recursive directly or through other views. Resolution and validation do not
+reject the cycle or compare argument identity. The runtime counts generated view frames, accepts exactly
+256, and throws a contained `TaoViewDepthError` from frame 257. This is the only recursion guard.
+
 ### Interpolated strings and expressions
 
 A quoted string may contain scalar expressions:
@@ -194,6 +201,25 @@ or an inline handler; `on change -> Entered { ... }` introduces the supplied tex
 handler scope. A direct writable-state `Value:` reference receives synthesized two-way change
 behavior only when no explicit change handler exists. Computed values, aliases, parameters, and
 entity fields require an explicit handler.
+
+### Persisted app state
+
+App-level state may declare an explicit type and device-local persistence:
+
+```tao
+app Workbench {
+   state SidebarWidth is number = 280 (persist)
+   // ...
+}
+```
+
+`(persist)` is separate from a user-facing `preference`. Its storage key derives from the canonical app
+declaration identity and state name, so moving or renaming that declaration intentionally severs
+compatibility. The runtime renders the declared default first, then loads a version-1 envelope
+asynchronously. Hydration accepts only the generated runtime type and cannot overwrite a local write made
+before load finishes. Saves serialize in write order. Persisted state participates in action overlays and
+the explicit runtime-capture registry. This slice permits `(persist)` only on app state; view-local keying
+remains future work.
 
 ### Subject `when`
 
@@ -358,8 +384,35 @@ one Tao action. This is not a URL primitive or an action-body escape hatch; any 
 publish the action type it implements. Calls used as value expressions keep the ordinary wrapped
 result behavior.
 
-`render inject` remains the separate authoring mode for a view whose implementation Tao does not
-own. Value-position `inject <type>` and its inline `ts` fence are retired.
+A named foreign action can instead publish its parameter and failure contract directly:
+
+```tao
+action SyncDraft(Path text, Version text, Content text) runs latest from ./StudioActions.ts
+action RenameFile(Path text, Version text, Target text)
+   fails Conflict "This file changed under this edit."
+   from ./StudioActions.ts
+```
+
+The module exports the matching function name. `fails` clauses declare what a native body's `fail`
+statements would infer. `runs latest` is valid only on a foreign action and retains at most the newest
+not-yet-started argument set while one call is in flight; the detailed transaction and skipped-call
+contract is specified in [Tao Actions](Tao%20Actions.md).
+
+A view may publish the same typed boundary directly:
+
+```tao
+view CodeEditor(Content text, Change action(text)) accepts content slots @toolbar from ./CodeEditor.tsx
+```
+
+The named TypeScript export receives evaluated parameter values; action parameters remain invokable.
+It also receives `Layout` and `Tag`, an optional `Slots` record keyed by declared slot name, and caller
+children when the head declares `accepts content`. The foreign component owns its native root: it
+must honor layout/tag metadata and place each accepted content channel exactly once. Ordinary view
+invocation validation enforces the declared content and slot contract. A foreign view may retain a
+`responds T` contract.
+
+`render inject` remains supported as the separate occurrence-level escape hatch. Value-position
+`inject <type>` and its inline `ts` fence are retired.
 
 ## Declaration-owned configuration
 

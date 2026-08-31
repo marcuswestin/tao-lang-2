@@ -10,10 +10,11 @@ import type {
   TaoPresentable,
   TaoSelectionNavConfiguration,
   TaoSlotNavConfiguration,
+  TaoSplitNavConfiguration,
   TaoStackNavConfiguration,
 } from './TR-navigation'
 import { createNavDeclaration, freezeNavConfiguration } from './TR-navigation-configuration'
-import { RuntimeSelectionNav, RuntimeSlotNav, RuntimeStackNav } from './TR-navigation-mounts'
+import { RuntimeSelectionNav, RuntimeSlotNav, RuntimeSplitNav, RuntimeStackNav } from './TR-navigation-mounts'
 import type { TaoProps } from './TR-TaoProps'
 
 type NavMountFactory<ProfileT extends TaoNavKindProfile, ConfigurationT extends object> = (
@@ -155,16 +156,25 @@ const basicSelectionNavKind = Object.freeze(
     descriptor => new RuntimeSelectionNav(descriptor, false),
   ),
 )
+const splitNavKind = Object.freeze(
+  new RuntimeNavKind<'split', TaoSplitNavConfiguration>(
+    'split',
+    noHostSlots,
+    descriptor => new RuntimeSplitNav(descriptor),
+  ),
+)
 
 /** NavKindControls publishes the built-in implementations used by Tao `implement inject`. */
 export const NavKindControls = {
   Declaration: createNavDeclaration,
   Selection: (): TaoNavKind<'selection', TaoSelectionNavConfiguration> => nativeSelectionNavKind,
   Slot: (): TaoNavKind<'slot', TaoSlotNavConfiguration> => nativeSlotNavKind,
+  Split: (): TaoNavKind<'split', TaoSplitNavConfiguration> => splitNavKind,
   Stack: (): TaoNavKind<'stack', TaoStackNavConfiguration> => nativeStackNavKind,
   Basic: Object.freeze({
     Selection: (): TaoNavKind<'selection', TaoSelectionNavConfiguration> => basicSelectionNavKind,
     Slot: (): TaoNavKind<'slot', TaoSlotNavConfiguration> => basicSlotNavKind,
+    Split: (): TaoNavKind<'split', TaoSplitNavConfiguration> => splitNavKind,
     Stack: (): TaoNavKind<'stack', TaoStackNavConfiguration> => basicStackNavKind,
   }),
 } as const

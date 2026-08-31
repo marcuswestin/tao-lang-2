@@ -36,8 +36,12 @@ export type TaoProps = TaoLayoutProps & {
   studio?: TaoStudioIdentity
   /** designSpec preserves one combined render-site clause list until its mounted app resolves it. */
   designSpec?: TaoDesignSpec
+  /** designDefault names the linked stdlib element bundle applied before render-site clauses. */
+  designDefault?: string
   /** testTag is private Tao metadata lowered to the existing concrete native root. */
   testTag?: string
+  /** viewDepth counts generated Tao view frames without inspecting argument identity. */
+  viewDepth?: number
 }
 
 /** TaoAmbientContext is navigation-owned context propagated independently of layout caller props. */
@@ -176,12 +180,13 @@ function resolveDesignProps(props: TaoProps | undefined, design: TaoDesign | und
   if (!props) {
     return undefined
   }
-  const resolved = DesignControls.resolve(design, props.designSpec)
+  const resolved = DesignControls.resolve(design, props.designSpec, props.designDefault)
   const callerProps = resolveDesignProps(props.callerProps, design)
   const style = mergeResolvedStyles(props.style, resolved.style)
   return {
     ...props,
     callerProps,
+    designDefault: undefined,
     designSpec: undefined,
     layout: LayoutControls.merge(props.layout, resolved.layout),
     style,

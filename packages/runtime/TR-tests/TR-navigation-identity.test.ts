@@ -1,4 +1,5 @@
 import { Describe, Expect, Test } from '@shared/test'
+import React from 'react'
 import TR from '../TaoRuntime-src/TR'
 import { canonicalDescriptor, declarationIdentity, fnv1a } from '../TaoRuntime-src/TR-navigation-identity'
 import { configuredStack } from './TR-navigation-test-fixtures'
@@ -91,7 +92,13 @@ Describe('canonical navigation identity', () => {
     })
 
     Expect(second).not.toBe(first)
-    Expect(firstApp.resolvePresentable(identity.canonical).render({})).toBe('first')
-    Expect(secondApp.resolvePresentable(identity.canonical).render({})).toBe('second')
+    Expect(renderContained(firstApp.resolvePresentable(identity.canonical).render({}))).toBe('first')
+    Expect(renderContained(secondApp.resolvePresentable(identity.canonical).render({}))).toBe('second')
   })
 })
+
+function renderContained(node: unknown): unknown {
+  const boundary = node as React.ReactElement<{ children: React.ReactElement<Record<string, unknown>> }>
+  const content = boundary.props.children
+  return (content.type as (props: Record<string, unknown>) => unknown)(content.props)
+}

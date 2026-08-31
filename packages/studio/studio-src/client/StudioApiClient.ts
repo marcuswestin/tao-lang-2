@@ -1,0 +1,259 @@
+import type { Transport } from '@codemirror/lsp-client'
+import type { StudioRenderInspection } from '@source-actions'
+import type { StudioDraftFile, StudioDraftSyncRequest, StudioDraftSyncResult } from '../StudioDraftSync'
+import type { StudioLanguageHighlight } from '../StudioHighlight'
+import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../StudioPreviewManifest'
+import type {
+  StudioAppVariant,
+  StudioCreateFileRequest,
+  StudioCreateFileResult,
+  StudioDeleteFileRequest,
+  StudioDeleteFileResult,
+  StudioDesignValue,
+  StudioRenameFileRequest,
+  StudioRenameFileResult,
+} from '../StudioProjectSession'
+import type { StudioSourceActionEnvelope } from '../StudioProtocol'
+import type { StudioTestRun, StudioTestStatus } from '../StudioTestRunner'
+
+export type StudioCompileDiagnostic = {
+  filePath?: string
+  message: string
+  range?: StudioDiagnosticRange
+}
+
+export type StudioCompileState = {
+  appliedRevision: number
+  compileRevision: number
+  diagnostics?: readonly StudioCompileDiagnostic[]
+  message: string
+  status: 'idle' | 'compiling' | 'compiled' | 'error'
+}
+
+export type StudioDiagnosticRange = {
+  end: { character: number; line: number }
+  start: { character: number; line: number }
+}
+
+export type StudioFile = {
+  diagnosticCount: number
+  dirty: boolean
+  path: string
+  sourceVersion: string
+}
+
+export type StudioHandshake = {
+  apps: readonly StudioAppVariant[]
+  compile: StudioCompileState
+  entryPath: string
+  files: readonly StudioFile[]
+  identity: { appName: string; project: string }
+  previewManifest?: StudioPreviewManifestV2
+}
+
+export type StudioEvent =
+  | { state: StudioCompileState; type: 'compile-state' }
+  | { file: StudioFile; type: 'file-changed' }
+  | { files: readonly StudioFile[]; type: 'files-changed' }
+  | { manifest: StudioPreviewManifestV2; type: 'preview-manifest-changed' }
+  | { type: 'studio-writes-acknowledged' }
+
+export type StudioCellRuntimeResponse = {
+  cell: StudioPreviewCell
+  identity: StudioCellIdentity
+}
+
+export type StudioSourceActionResult = {
+  checkpoint: { id: string; status: 'committed' | 'open' }
+  content: string
+  path: string
+  sourceVersion: string
+}
+
+export type StudioSourceActionUndoResult = {
+  checkpoint: { id: string; status: 'undone' }
+  content: string
+  path: string
+  sourceVersion: string
+}
+
+export type StudioApiEventHandlers = {
+  onCompile: (state: StudioCompileState) => void
+  onFile: (file: StudioFile) => void
+  onFiles?: (files: readonly StudioFile[]) => void
+  onManifest: (manifest: StudioPreviewManifestV2) => void
+  onDisconnect: () => void
+}
+
+export const StudioApiRoutes = {
+  currentSessionId(locationPath: string): string | undefined {
+    return locationPath.match(/^\/sessions\/([A-Za-z0-9_-]{1,128})(?:\/|$)/)?.[1]
+  },
+  sessionPath(locationPath: string, endpoint: string): string {
+    const sessionId = this.currentSessionId(locationPath)
+    return sessionId === undefined ? endpoint : `/sessions/${sessionId}${endpoint}`
+  },
+  transitionUrl(
+    transition: Pick<StudioSessionTransition, 'previewUrl' | 'url'>,
+    current: URL,
+  ): string {
+    const target = new URL(transition.url, current.origin)
+    if (target.origin !== current.origin || !/^\/sessions\/[A-Za-z0-9_-]{1,128}$/.test(target.pathname)) {
+      throw new Error('Studio returned an invalid managed session URL.')
+    }
+    if (current.searchParams.get('native-window') === 'project') {
+      target.searchParams.set('native-window', 'project')
+      if (transition.previewUrl !== undefined) {
+        target.searchParams.set('native-preview-url', transition.previewUrl)
+      }
+    }
+    return `${target.pathname}${target.search}`
+  },
+} as const
+
+export type StudioSessionTransition = Readonly<{
+  previewUrl?: string
+  session: Readonly<{ appName: string; project: string; sessionId: string }>
+  url: string
+}>
+
+/** Typed boundary around Studio's HTTP and WebSocket endpoints. */
+export const StudioApiClient = {
+  captureFixture: async <Result>(body: unknown): Promise<Result> => await request('/api/source-action', body),
+  cellInstance: async (body: unknown): Promise<unknown> => await request('/api/preview/cell/instance', body),
+  connectEvents,
+  createFile: async (body: StudioCreateFileRequest): Promise<StudioCreateFileResult> =>
+    await request('/api/file/create', body),
+  design: async (body: { path: string; sourceVersion: string }): Promise<readonly StudioDesignValue[]> =>
+    await request('/api/design', body),
+  draft: async (body: StudioDraftSyncRequest): Promise<StudioDraftSyncResult> => await request('/api/file/draft', body),
+  deleteFile: async (body: StudioDeleteFileRequest): Promise<StudioDeleteFileResult> =>
+    await request('/api/file/delete', body),
+  file: async (path: string): Promise<StudioDraftFile> => await get(`/api/file?path=${encodeURIComponent(path)}`),
+  files: async (): Promise<{ files: readonly StudioFile[] }> => await get('/api/files'),
+  handshake: async (): Promise<StudioHandshake> => await get('/api/protocol'),
+  highlight: async (content: string): Promise<StudioLanguageHighlight> =>
+    await request('/api/language/highlight', { content }),
+  inspectRender: async (
+    body: { path: string; renderId: string; sourceVersion: string },
+  ): Promise<StudioRenderInspection> => await request('/api/source-action/inspect', body),
+  lspTransport: async (): Promise<Transport> =>
+    await webSocketTransport(webSocketUrl(studioSessionPath('/api/language/lsp'))),
+  previewApplied: async (body: unknown): Promise<unknown> => await request('/api/preview/applied', body),
+  previewInstance: async (body: unknown): Promise<unknown> => await request('/api/preview/instance', body),
+  reconfigureCell: async (body: unknown): Promise<StudioCellRuntimeResponse> =>
+    await request('/api/preview/cell/reconfigure', body),
+  renameFile: async (body: StudioRenameFileRequest): Promise<StudioRenameFileResult> =>
+    await request('/api/file/rename', body),
+  closeCurrentSession: async (): Promise<void> => {
+    const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
+    if (sessionId === undefined) {
+      throw new Error('Project selection requires a managed Studio session.')
+    }
+    await rootRequest(`/api/sessions/${encodeURIComponent(sessionId)}/close`, {})
+  },
+  sourceAction: async (body: StudioSourceActionEnvelope | unknown): Promise<StudioSourceActionResult> =>
+    await request('/api/source-action', body),
+  switchApp: async (
+    body: { appName: string; entryPath: string; projectPath: string },
+  ): Promise<StudioSessionTransition> => {
+    const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
+    if (sessionId === undefined) {
+      throw new Error('App switching requires a managed Studio session.')
+    }
+    return await rootRequest(`/api/sessions/${encodeURIComponent(sessionId)}/switch`, body)
+  },
+  testRun: async (): Promise<StudioTestRun> => await request('/api/tests/run', {}),
+  testStatus: async (): Promise<StudioTestStatus> => await get('/api/tests/status'),
+  undoSourceAction: async (body: unknown): Promise<StudioSourceActionUndoResult> =>
+    await request('/api/source-action/undo', body),
+} as const
+
+async function get<Result>(path: string): Promise<Result> {
+  return await response<Result>(await fetch(studioSessionPath(path)))
+}
+
+async function request<Result>(path: string, body: unknown): Promise<Result> {
+  return await response<Result>(
+    await fetch(studioSessionPath(path), {
+      body: JSON.stringify(body),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    }),
+  )
+}
+
+async function rootRequest<Result>(path: string, body: unknown): Promise<Result> {
+  return await response<Result>(
+    await fetch(path, {
+      body: JSON.stringify(body),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    }),
+  )
+}
+
+async function response<Result>(value: Response): Promise<Result> {
+  const body = await value.json() as Result | { error?: string }
+  if (!value.ok) {
+    const message = typeof body === 'object' && body !== null && 'error' in body ? body.error : undefined
+    throw new Error(message ?? `Tao Studio request failed (${value.status}).`)
+  }
+  return body as Result
+}
+
+function connectEvents(handlers: StudioApiEventHandlers): WebSocket {
+  const socket = new WebSocket(webSocketUrl(studioSessionPath('/events')))
+  socket.addEventListener('message', event => {
+    const message = JSON.parse(String(event.data)) as StudioHandshake | StudioEvent
+    if (!('type' in message)) {
+      return
+    }
+    if (message.type === 'compile-state') {
+      handlers.onCompile(message.state)
+    } else if (message.type === 'file-changed') {
+      handlers.onFile(message.file)
+    } else if (message.type === 'files-changed') {
+      handlers.onFiles?.(message.files)
+    } else if (message.type === 'preview-manifest-changed') {
+      handlers.onManifest(message.manifest)
+    }
+  })
+  socket.addEventListener('close', handlers.onDisconnect)
+  return socket
+}
+
+function webSocketTransport(url: string): Promise<Transport> {
+  return new Promise((resolve, reject) => {
+    const handlers = new Set<(value: string) => void>()
+    const socket = new WebSocket(url)
+    socket.addEventListener('open', () =>
+      resolve({
+        send(message) {
+          socket.send(message)
+        },
+        subscribe(handler) {
+          handlers.add(handler)
+        },
+        unsubscribe(handler) {
+          handlers.delete(handler)
+        },
+      }))
+    socket.addEventListener('message', event => {
+      for (const handler of handlers) {
+        handler(String(event.data))
+      }
+    })
+    socket.addEventListener('error', () => reject(new Error('Could not connect to the Tao language server.')))
+  })
+}
+
+function studioSessionPath(path: string): string {
+  return StudioApiRoutes.sessionPath(window.location.pathname, path)
+}
+
+function webSocketUrl(path: string): string {
+  const url = new URL(path, window.location.href)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  return url.toString()
+}

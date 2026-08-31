@@ -267,14 +267,14 @@ Describe('parser: core language syntax', () => {
     Expect.Is(resetRender, AST.isRenderStatement)
     Expect.Is(inlineRender, AST.isRenderStatement)
 
-    const [setStep] = addStep.block.statements
+    const [setStep] = addStep.block!.statements
     Expect.Is(setStep, AST.isSetStatement)
     Expect(setStep.target.ref).toBe(countState)
     Expect(setStep.operator).toBe('+=')
     Expect.Is(setStep.value, AST.isValueReference)
     Expect(setStep.value.target.ref).toBe(AST.parametersOf(addStep)[0])
 
-    const [doAddStep] = addFive.block.statements
+    const [doAddStep] = addFive.block!.statements
     Expect.Is(doAddStep, AST.isDoStatement)
     Expect.Is(doAddStep.action, AST.isValueReference)
     Expect(doAddStep.action.target.ref).toBe(addStep)
@@ -824,6 +824,23 @@ Describe('parser: core language syntax', () => {
     Expect(responses).toHaveLength(2)
     Expect(responses[0]?.case?.ref?.name).toBe('Confirmed')
     Expect(responses[1]?.case).toBeUndefined()
+  })
+
+  Test('parses typed app-level persisted state and a direct configuration binding', async () => {
+    const result = await testParseSyntax(`
+      app Workspace {
+        state PaneWidth is number = 320 (persist)
+        Navigator SplitNav { @pane { Content Pane Width PaneWidth Resizable true } }
+      }
+    `)
+    const app = result.entry.ast.statements.find(AST.isAppDeclaration)
+    Expect.Is(app, AST.isAppDeclaration)
+    const state = app.block?.statements.find(AST.isStateDeclaration)
+    Expect.Is(state, AST.isStateDeclaration)
+    Expect(state.name).toBe('PaneWidth')
+    Expect(state.persist).toBe(true)
+    Expect.Is(state.type, AST.isPrimitiveTypeReference)
+    Expect(state.type.primitive).toBe('number')
   })
 })
 

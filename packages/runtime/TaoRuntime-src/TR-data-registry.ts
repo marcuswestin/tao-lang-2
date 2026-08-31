@@ -9,6 +9,11 @@ const schemas = new Set<TaoDataSchema>()
 const activeTestSchemas = new Set<TaoDataSchema>()
 const globalListeners = new Set<() => void>()
 let globalRevision = 0
+let lastResetBackup: TaoDataCapture | undefined
+
+export type TaoDataCapture = Readonly<{
+  entries: readonly Readonly<{ key: string; snapshot: string }>[]
+}>
 
 export function isDataTestMode(): boolean {
   return testMode
@@ -59,6 +64,65 @@ export async function settleAllDataSchemas(): Promise<void> {
   for (const schema of schemas) {
     await schema.settle()
   }
+}
+
+export function captureDataSchemas(): TaoDataCapture {
+  const occurrences = new Map<string, number>()
+  return Object.freeze({
+    entries: Object.freeze([...schemas].map(schema => {
+      const identity = schema.captureIdentity()
+      const occurrence = occurrences.get(identity) ?? 0
+      occurrences.set(identity, occurrence + 1)
+      return Object.freeze({ key: JSON.stringify([identity, occurrence]), snapshot: schema.captureSnapshot() })
+    })),
+  })
+}
+
+export async function restoreDataSchemas(captured: TaoDataCapture): Promise<void> {
+  const byKey = new Map(captured.entries.map(entry => [entry.key, entry.snapshot]))
+  const occurrences = new Map<string, number>()
+  for (const schema of schemas) {
+    const identity = schema.captureIdentity()
+    const occurrence = occurrences.get(identity) ?? 0
+    occurrences.set(identity, occurrence + 1)
+    const snapshot = byKey.get(JSON.stringify([identity, occurrence]))
+    if (snapshot !== undefined) {
+      await schema.restoreCapturedSnapshot(snapshot)
+    }
+  }
+}
+
+export function canResetAllDataSchemas(): boolean {
+  return schemas.size > 0 && [...schemas].every(schema => schema.canReset())
+}
+
+/** resetAllDataSchemas captures every schema before the first destructive provider call. */
+export async function resetAllDataSchemas(): Promise<TaoDataCapture> {
+  if (!canResetAllDataSchemas()) {
+    throw new Error('Not every active datasource supports reset.')
+  }
+  const backup = captureDataSchemas()
+  lastResetBackup = backup
+  try {
+    for (const schema of schemas) {
+      await schema.resetFromRecovery()
+    }
+    return backup
+  } catch (error) {
+    try {
+      await restoreDataSchemas(backup)
+    } catch (restoreError) {
+      throw new AggregateError(
+        [error, restoreError],
+        'Datasource reset failed and its backup could not be fully restored.',
+      )
+    }
+    throw error
+  }
+}
+
+export function lastDataResetBackup(): TaoDataCapture | undefined {
+  return lastResetBackup
 }
 
 export function subscribeAll(listener: () => void): () => void {

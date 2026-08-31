@@ -21,6 +21,8 @@ const viewValidationMessages = {
   loopSelectInline: '`on select` requires an inline action block.',
   renderTarget: '`render` must target a view or inject block.',
   renderInjectPlacement: '`render inject` must be the only statement in a view body.',
+  foreignViewPath: 'A foreign view implementation path must name a relative TypeScript or TSX module.',
+  foreignViewAccepts: '`accepts` must declare content, one or more named slots, or both.',
   callerContentCount: (name: string) => `View '${name}' may place caller content at most once with @@content.`,
   callerContentPlacement: '@@content is only available inside the render tree of a view.',
   leafContent: (name: string) => `View '${name}' places no @@content and cannot accept unnamed caller content.`,
@@ -101,6 +103,23 @@ function validateViewDeclaration(view: AST.ViewDeclaration, ctx: ValidationConte
   }
   validateCallerContentContract(view, ctx)
   validateRenderSlots(view, ctx)
+  validateForeignView(view, ctx)
+}
+
+function validateForeignView(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+  const foreign = view.foreign
+  if (!foreign) {
+    return
+  }
+  if (!/^\.\.?\/.+\.tsx?$/.test(foreign.path)) {
+    ctx.error(viewValidationMessages.foreignViewPath, foreign)
+  }
+  if (foreign.accepts && foreign.content === undefined && foreign.slots.length === 0) {
+    ctx.error(viewValidationMessages.foreignViewAccepts, foreign)
+  }
+  if (foreign.content !== undefined && foreign.content !== 'content') {
+    ctx.error(viewValidationMessages.foreignViewAccepts, foreign)
+  }
 }
 
 function validateDuplicateParameters(view: AST.ViewDeclaration, ctx: ValidationContext): void {
@@ -120,7 +139,7 @@ function validateDuplicateParameters(view: AST.ViewDeclaration, ctx: ValidationC
 
 function validateRenderCount(view: AST.ViewDeclaration, ctx: ValidationContext): void {
   // A pass-through alias renders whatever its target renders; it has no body of its own.
-  if (view.aliasTarget) {
+  if (view.aliasTarget || view.foreign) {
     return
   }
   const renderCount = AST.blockStatementOf(view, { filter: AST.isRenderStatement }).length
@@ -306,6 +325,9 @@ function validateRenderSlots(view: AST.ViewDeclaration, ctx: ValidationContext):
     }
     seen.add(declaration.name)
 
+    if (view.foreign) {
+      continue
+    }
     const placements = AST.streamAllContents(view)
       .filter(AST.isRenderSlotUse)
       .filter(use => !use.render && use.slot.$refText === declaration.name)
@@ -336,8 +358,10 @@ function validateRenderSlotUse(use: AST.RenderSlotUse, ctx: ValidationContext): 
   const declaration = use.slot.ref
   const declarationBlock = declaration?.$container
   const validOwner = AST.isViewDeclaration(target)
-    && AST.isBlock(declarationBlock)
-    && declarationBlock.$container === target
+    && (
+      (AST.isBlock(declarationBlock) && declarationBlock.$container === target)
+      || (AST.isForeignViewImplementation(declarationBlock) && target.foreign === declarationBlock)
+    )
   if (!validOwner) {
     ctx.error(viewValidationMessages.renderSlotFillPlacement, use)
   }

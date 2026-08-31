@@ -1,5 +1,18 @@
 import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
+import {
+  actionFailureCaseName,
+  captureActionHistory,
+  deferDetached,
+  existingTransactionResource,
+  markExternalEffect,
+  onActionFailure,
+  resetActionDiagnostics,
+  runAction,
+  TaoActionFailure,
+  type TaoDeclaredFailure,
+  transactionResource,
+} from './TR-action-transactions'
 import { AppShell, AppSurfaceFrame } from './TR-app-shell'
 import { createClipboard, type TaoPasteboard } from './TR-clipboard'
 import {
@@ -29,7 +42,14 @@ import {
   type TaoDesign,
   type TaoDesignSpec,
 } from './TR-design'
-import { reportUnownedFailure } from './TR-errors'
+import {
+  captureArguments,
+  latestFailureCapture,
+  onRuntimeFailure,
+  recoveryBackup,
+  TaoErrorBoundary,
+} from './TR-error-containment'
+import { TaoViewDepthError } from './TR-errors'
 import { createHaptic, type TaoHapticKinds, type TaoHaptics } from './TR-haptic'
 import { LayoutControls } from './TR-layout'
 import { NativeHosts } from './TR-native-hosts'
@@ -54,8 +74,26 @@ import {
   type TaoStackNavConfiguration,
   testNavKind as testNavigationKind,
 } from './TR-navigation'
+import type { TaoDeclarationIdentity } from './TR-navigation-identity'
+import {
+  capturePersistedState,
+  RuntimePersistedState,
+  setPersistedStateStorageForTests,
+  type TaoWritableState,
+  usePersistedState,
+} from './TR-persisted-state'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { isReactiveValue } from './TR-reactive'
+import {
+  captureRuntime,
+  registerRuntimeCaptureDomain,
+  restoreRuntimeCapture,
+  type TaoRuntimeCaptureArtifact,
+  type TaoRuntimeCaptureDomainRegistration,
+  type TaoRuntimeFailure,
+  type TaoRuntimeFailureFrame,
+  type TaoRuntimeJson,
+} from './TR-runtime-capture'
 import { SelectableRow } from './TR-selectable-row'
 import { createShareSheet, type TaoShareSheet } from './TR-share'
 import {
@@ -209,6 +247,7 @@ class TR {
     collection: TR.Evaluable,
     render: (value: TR.Value<any>, index: number) => React.ReactNode,
     select?: (value: TR.Value<any>, index: number) => unknown,
+    frame?: Omit<TaoRuntimeFailureFrame, 'arguments' | 'boundary'>,
   ): React.ReactNode {
     const values = collection.evaluate().jsValue
     if (!Array.isArray(values)) {
@@ -216,13 +255,17 @@ class TR {
     }
     return values.map((value, index) => {
       const runtimeValue = new RuntimeValue(value)
-      const content = render(runtimeValue, index)
       return React.createElement(
-        React.Fragment,
-        { key: stableListKey(value, index) },
-        select
-          ? React.createElement(SelectableRow, { onSelect: () => select(runtimeValue, index) }, content)
-          : content,
+        TaoErrorBoundary,
+        {
+          boundaryId: `item:${frame?.source?.path ?? 'unknown'}:${frame?.source?.start ?? 0}:${
+            String(stableListKey(value, index))
+          }`,
+          frame: { ...frame, arguments: captureArguments({ index, value }), boundary: 'item' },
+          key: stableListKey(value, index),
+          stateKey: JSON.stringify(captureArguments({ index, value })),
+        },
+        React.createElement(ForEachItem, { index, render, runtimeValue, select }),
       )
     })
   }
@@ -233,6 +276,36 @@ class TR {
     metadata: RuntimeActionMetadata<Args> = {},
   ): TR.Action<Args> {
     return new RuntimeAction(body, metadata)
+  }
+
+  /** ForeignAction adapts a named TypeScript effect and its declared Tao failure contract. */
+  static ForeignAction<Args extends TR.Evaluable[]>(
+    implementation: (...arguments_: any[]) => unknown,
+    name: string,
+    failures: readonly TaoDeclaredFailure[],
+    options: Readonly<{ runs?: 'latest' }> = {},
+  ): TR.Action<Args> {
+    return new RuntimeAction(
+      async (...arguments_: Args) => {
+        markExternalEffect()
+        try {
+          await implementation(...arguments_.map(argument => argument.evaluate().jsValue))
+        } catch (error) {
+          if (error instanceof TaoActionFailure) {
+            throw error
+          }
+          const providerCase = providerFailureCase(error)
+          const declared = failures.find(failure => actionFailureCaseName(failure.case) === providerCase)
+          throw new TaoActionFailure(
+            providerCase || (declared ? actionFailureCaseName(declared.case) : 'Unexpected'),
+            declared?.sentence ?? '',
+            error instanceof Error ? error.message : undefined,
+          )
+        }
+      },
+      { name },
+      options.runs,
+    )
   }
 
   /** ActionTitle evaluates an intent's reactive Title for one bound command invocation. */
@@ -258,14 +331,14 @@ class TR {
     implementation: (...arguments_: any[]) => unknown,
   ): TR.Action<Args> {
     return TR.Action(async (...arguments_: Args) => {
+      markExternalEffect()
       await implementation(...arguments_.map(argument => argument.evaluate().jsValue))
     })
   }
 
   /** Async starts detached action work immediately and reports the failure its absent caller cannot observe. */
   static Async(body: () => PromiseLike<unknown>): void {
-    // The async wrapper gives a synchronous throw the same reported outcome as a rejection.
-    void (async () => await body())().catch(reportUnownedFailure)
+    deferDetached(body)
   }
 
   /** Alias creates live runtime Tao aliases that intentionally re-evaluate their initializer on every read. */
@@ -294,8 +367,8 @@ class TR {
   }
 
   /** Do invokes a Tao action value with already-compiled runtime arguments. */
-  static async Do<Args extends any[]>(action: TR.Action<Args>, ...args: Args): Promise<void> {
-    await action.evaluate().jsValue.invoke(...args)
+  static Do<Args extends any[]>(action: TR.Action<Args>, ...args: Args): void | Promise<void> {
+    return action.evaluate().jsValue.invokeJoined(...args)
   }
 
   /** Set updates a Tao state value. */
@@ -308,13 +381,20 @@ class TR {
     state.set(new RuntimeValue(!state.evaluate().jsValue))
   }
 
+  /** Fail aborts the complete joined action transaction and skips the remaining caller block. */
+  static Fail(failureCase: TR.Evaluable, sentence: string): never {
+    throw new TaoActionFailure(actionFailureCaseName(failureCase), sentence)
+  }
+
   /**
    * State creates view-local reactive Tao state. A library value that changes on its own — an
    * ticker or device reading — is held like any other value, and the holder re-renders while it is
    * mounted, which is what gives the value the holder's lifetime.
    */
   static State<T>(initialValue: () => TR.Value<T>): TR.State<T> {
-    const [jsValue, setJsValue] = React.useState<T>(() => initialValue().evaluate().jsValue)
+    const initial = React.useRef<TR.Value<T> | undefined>(undefined)
+    initial.current ??= initialValue().evaluate()
+    const [jsValue, setJsValue] = React.useState<T>(() => initial.current!.jsValue)
     const [, onSelfDrivenChange] = React.useReducer((count: number) => count + 1, 0)
     React.useEffect(
       () => isReactiveValue(jsValue) ? jsValue.subscribe(onSelfDrivenChange) : undefined,
@@ -322,7 +402,22 @@ class TR {
     )
     const jsValueRef = React.useRef(jsValue)
     jsValueRef.current = jsValue
-    return new RuntimeState(jsValueRef, setJsValue)
+    return new RuntimeState(jsValueRef, setJsValue, initial.current.jsValue)
+  }
+
+  /** PersistedState creates one app-declaration-owned, device-local state store. */
+  static PersistedState<T>(
+    initialValue: () => TR.Value<T>,
+    identity: TR.DeclarationIdentity,
+    name: string,
+    type: import('./TR-persisted-state').TaoPersistedStateType,
+  ): RuntimePersistedState<T> {
+    return new RuntimePersistedState(initialValue(), identity, name, type)
+  }
+
+  /** UsePersistedState mounts one persisted store and begins its asynchronous load. */
+  static UsePersistedState(state: RuntimePersistedState<unknown>): void {
+    usePersistedState(state)
   }
 
   /** Element creates one React element; the escape hatch native pass-through implementations use. */
@@ -430,6 +525,24 @@ class TR {
       : { ...localProps, callerProps }
   }
 
+  /** ViewTaoProps advances the render-frame depth carried to one generated Tao view. */
+  static ViewTaoProps(
+    localProps: TR.TaoProps,
+    callerProps?: TR.TaoProps,
+    inheritCallerProps = true,
+  ): TR.TaoProps {
+    const props = { ...localProps, viewDepth: (callerProps?.viewDepth ?? 1) + 1 }
+    return inheritCallerProps ? TR.TaoProps(props, callerProps) : props
+  }
+
+  /** AssertViewDepth fails the first generated view frame beyond the exact 256-frame cap. */
+  static AssertViewDepth(props: TR.TaoProps | undefined, view: string): void {
+    const depth = props?.viewDepth ?? 1
+    if (depth > 256) {
+      throw new TaoViewDepthError(view, depth)
+    }
+  }
+
   /** TaoContext carries presentation context across generated view boundaries without carrying layout. */
   static TaoContext(callerProps: TR.TaoProps | undefined): TRTaoProps.TaoAmbientContext {
     return TRTaoProps.TaoPropsControls.ambientContext(callerProps)
@@ -477,6 +590,29 @@ class TR {
     ...StudioPreview,
     Environment: StudioEnvironmentControls,
     State: StudioStateControls,
+  } as const
+
+  /** Errors exposes contained action reports and bounded, redacted diagnostic history. */
+  static readonly Errors = {
+    capture: captureActionHistory,
+    onFailure: onActionFailure,
+    reset: resetActionDiagnostics,
+  } as const
+
+  /** Capture is the explicit semantic replay boundary; it never scrapes arbitrary host objects. */
+  static readonly Capture = {
+    capture: captureRuntime,
+    onFailure: onRuntimeFailure,
+    latestFailure: latestFailureCapture,
+    recoveryBackup,
+    register: registerRuntimeCaptureDomain,
+    restore: restoreRuntimeCapture,
+  } as const
+
+  /** Persisted exposes capture and test seams for the device-local app-state domain. */
+  static readonly Persisted = {
+    capture: capturePersistedState,
+    setStorageForTests: setPersistedStateStorageForTests,
   } as const
 
   /** Data exposes provider-neutral reactive schemas, queries, and mutations. */
@@ -534,25 +670,107 @@ class RuntimeState<T> {
   constructor(
     private readonly jsValueRef: { current: T },
     private readonly setJsValue: React.Dispatch<React.SetStateAction<T>>,
+    private readonly initialValue: T,
   ) {}
 
+  defaultValue(): RuntimeValue<T> {
+    return new RuntimeValue(this.initialValue)
+  }
+
   evaluate(): RuntimeValue<T> {
-    return new RuntimeValue(this.jsValueRef.current)
+    return new RuntimeValue(existingTransactionResource<{ value: T }>(this)?.value ?? this.jsValueRef.current)
   }
 
   set(value: TR.Value<T>): void {
     const nextValue = value.evaluate().jsValue
-    this.jsValueRef.current = nextValue
-    this.setJsValue(nextValue)
+    const overlay = transactionResource(
+      this,
+      () => ({ previous: this.jsValueRef.current, value: this.jsValueRef.current }),
+      committed => this.commit(committed.value),
+      undefined,
+      committed => this.commit(committed.previous),
+    )
+    if (overlay) {
+      overlay.value = nextValue
+      return
+    }
+    this.commit(nextValue)
+  }
+
+  reset(): void {
+    this.set(new RuntimeValue(this.initialValue))
+  }
+
+  private commit(value: T): void {
+    this.jsValueRef.current = value
+    this.setJsValue(value)
   }
 }
 
 class RuntimeActionValue<Args extends any[] = any[]> {
-  constructor(private readonly body: (...args: Args) => unknown) {}
+  readonly #latest: LatestActionInvocations<Args> | undefined
+
+  constructor(
+    private readonly body: (...args: Args) => unknown,
+    private readonly name = 'action',
+    runs?: 'latest',
+    private readonly interrupt = false,
+  ) {
+    this.#latest = runs === 'latest' ? new LatestActionInvocations<Args>() : undefined
+  }
 
   invoke(...args: Args): void | Promise<void> {
-    const result = this.body(...args)
-    return isPromiseLike(result) ? Promise.resolve(result).then(() => undefined) : undefined
+    const run = (latestArgs: Args) =>
+      runAction(this.name, latestArgs, () => this.body(...latestArgs), false, this.interrupt)
+    return this.#latest?.invoke(args, run) ?? run(args)
+  }
+
+  invokeJoined(...args: Args): void | Promise<void> {
+    const run = (latestArgs: Args) => runAction(this.name, latestArgs, () => this.body(...latestArgs), true)
+    return this.#latest?.invoke(args, run) ?? run(args)
+  }
+}
+
+type LatestActionInvocation<Args extends any[]> = {
+  args: Args
+  reject(error: unknown): void
+  resolve(): void
+  run(args: Args): void | Promise<void>
+}
+
+/** LatestActionInvocations keeps one running effect and at most one newest not-yet-started call. */
+class LatestActionInvocations<Args extends any[]> {
+  #active = false
+  #pending: LatestActionInvocation<Args> | undefined
+
+  invoke(args: Args, run: (args: Args) => void | Promise<void>): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const invocation = { args, reject, resolve, run }
+      if (!this.#active) {
+        this.#active = true
+        void this.#execute(invocation)
+        return
+      }
+      this.#pending?.resolve()
+      this.#pending = invocation
+    })
+  }
+
+  async #execute(invocation: LatestActionInvocation<Args>): Promise<void> {
+    try {
+      await invocation.run(invocation.args)
+      invocation.resolve()
+    } catch (error) {
+      invocation.reject(error)
+    } finally {
+      const next = this.#pending
+      this.#pending = undefined
+      if (next) {
+        void this.#execute(next)
+      } else {
+        this.#active = false
+      }
+    }
   }
 }
 
@@ -560,6 +778,9 @@ type RuntimeActionMetadata<Args extends any[] = any[]> = {
   description?: (...args: Args) => TR.Evaluable
   summary?: (...args: Args) => TR.Evaluable
   title?: (...args: Args) => TR.Evaluable
+  name?: string
+  /** interrupt is compiler-owned and marks a response action that may settle its suspended ask. */
+  interrupt?: boolean
 }
 
 const runtimeActionMetadata = new WeakMap<object, RuntimeActionMetadata>()
@@ -570,8 +791,9 @@ class RuntimeAction<Args extends any[] = any[]> {
   constructor(
     body: (...args: Args) => unknown,
     metadata: RuntimeActionMetadata<Args> = {},
+    runs?: 'latest',
   ) {
-    this.jsValue = new RuntimeActionValue(body)
+    this.jsValue = new RuntimeActionValue(body, metadata.name ?? 'action', runs, metadata.interrupt)
     runtimeActionMetadata.set(this, metadata)
   }
 
@@ -595,6 +817,29 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
     && typeof value.then === 'function'
 }
 
+function providerFailureCase(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) {
+    return undefined
+  }
+  const value = 'case' in error
+    ? (error as { case: unknown }).case
+    : 'caseName' in error
+    ? (error as { caseName: unknown }).caseName
+    : undefined
+  if (typeof value === 'string') {
+    return value
+  }
+  if (
+    typeof value === 'object'
+    && value !== null
+    && 'evaluate' in value
+    && typeof value.evaluate === 'function'
+  ) {
+    return actionFailureCaseName(value as TR.Evaluable)
+  }
+  return undefined
+}
+
 function stableListKey(value: unknown, index: number): string | number {
   if (typeof value === 'object' && value !== null) {
     const record = value as Record<string, unknown>
@@ -604,6 +849,18 @@ function stableListKey(value: unknown, index: number): string | number {
     }
   }
   return index
+}
+
+function ForEachItem(props: {
+  index: number
+  render(value: TR.Value<any>, index: number): React.ReactNode
+  runtimeValue: TR.Value<any>
+  select?: (value: TR.Value<any>, index: number) => unknown
+}): React.ReactNode {
+  const content = props.render(props.runtimeValue, props.index)
+  return props.select
+    ? React.createElement(SelectableRow, { onSelect: () => props.select!(props.runtimeValue, props.index) }, content)
+    : content
 }
 
 namespace TR {
@@ -621,6 +878,13 @@ namespace TR {
   export type CompoundSetOperator = '+=' | '-=' | '*=' | '/='
   /** Evaluable declares runtime values that can collapse to their current value. */
   export type Evaluable = { evaluate(): any }
+  export type RuntimeCaptureArtifact = TaoRuntimeCaptureArtifact
+  export type RuntimeCaptureDomainRegistration = TaoRuntimeCaptureDomainRegistration
+  export type RuntimeFailure = TaoRuntimeFailure
+  export type RuntimeFailureFrame = TaoRuntimeFailureFrame
+  export type RuntimeJson = TaoRuntimeJson
+  /** DeclarationIdentity is the stable owner-relative identity used by persisted runtime domains. */
+  export type DeclarationIdentity = TaoDeclarationIdentity
   /** EnumCaseIdentity is the opaque runtime token owned by one enum declaration and case. */
   export type EnumCaseIdentity = Readonly<{ identity: symbol }>
   /** SubjectCaseName declares runtime-recognized built-in subject states. */
@@ -639,7 +903,7 @@ namespace TR {
   /** Function declares a runtime Tao pure function. */
   export type Function = RuntimeFunction
   /** State declares a runtime Tao state wrapper. */
-  export type State<T> = RuntimeState<T>
+  export type State<T> = RuntimeState<T> | TaoWritableState<T>
   /** Value declares a runtime Tao value wrapper. */
   export type Value<T> = RuntimeValue<T>
   /** Ticker declares the reactive value `@tao/time`'s `Interval` returns. */

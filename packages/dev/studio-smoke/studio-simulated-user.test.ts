@@ -1,10 +1,11 @@
 import { FS, Platform, Time } from '@shared'
 import { Expect, Test } from '@shared/test'
 import {
-  startStudioServer,
+  startStudioSessionServer,
   StudioProjectSession,
   studioProtocolChannel,
   studioProtocolVersion,
+  StudioSessionManager,
   studioSourceActionVersion,
 } from '@studio'
 import { StudioCdp } from '../dev-src/studio/StudioCdp'
@@ -20,7 +21,7 @@ view MainView() {
 }
 `
 
-Test('simulated user edits, moves, and undoes through the real Studio browser shell', async () => {
+Test('simulated user exercises the browser editor or the native Electrobun shell', async () => {
   const artifactParent = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT'] ?? FS.tmpdir()
   await FS.mkdir(artifactParent)
   const projectRoot = await FS.mkTmpDir(FS.resolvePath('simulated-user-', artifactParent))
@@ -28,7 +29,8 @@ Test('simulated user edits, moves, and undoes through the real Studio browser sh
   let browser: StudioCdp | undefined
   let native: StartedStudioNative | undefined
   let preview: ReturnType<typeof startPreviewServer> | undefined
-  let studio: Awaited<ReturnType<typeof startStudioServer>> | undefined
+  let studio: Awaited<ReturnType<typeof startStudioSessionServer>> | undefined
+  let manager: StudioSessionManager | undefined
   try {
     await FS.writeText(sourcePath, initialSource)
     preview = startPreviewServer(smokePort('TAO_STUDIO_SMOKE_PREVIEW_PORT', 42_001))
@@ -39,48 +41,50 @@ Test('simulated user edits, moves, and undoes through the real Studio browser sh
       entryPath: sourcePath,
       projectRoot,
     })
-    studio = await startStudioServer(session, {
-      allowedOrigins: [preview.url],
+    manager = new StudioSessionManager()
+    const current = manager.add({ previewUrl: preview.url, session })
+    studio = await startStudioSessionServer(manager, {
       hostname: '127.0.0.1',
       port: smokePort('TAO_STUDIO_SMOKE_SERVER_PORT', 42_000),
-      previewUrl: preview.url,
     })
+    const projectUrl = `${studio.url}/sessions/${encodeURIComponent(current.sessionId)}`
     if (Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_NATIVE'] === 'true') {
-      const remoteDebuggingPort = smokePort('TAO_STUDIO_SMOKE_ELECTRON_DEBUGGING_PORT', 42_002)
       native = await StudioNative.start({
-        artifactRoot: FS.resolvePath('electron', artifactParent),
-        remoteDebuggingPort,
+        artifactRoot: FS.resolvePath('electrobun', artifactParent),
+        previewUrl: preview.url,
+        projectUrl,
+        probe: true,
         showWindow: false,
         studioUrl: studio.url,
       })
-      browser = await StudioCdp.attach({
-        baseUrl: `http://127.0.0.1:${remoteDebuggingPort}`,
-        targetUrlPrefix: studio.url,
-      })
+      const result = await native.waitForProbe()
+      Expect(result.passed).toBe(true)
+      Expect(Object.values(result.capabilities).every(capability => capability.passed)).toBe(true)
     } else {
       browser = await StudioCdp.launchChrome()
+      await browser.goto(projectUrl)
+      await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('Text(\"First\")')", {
+        timeoutMs: 30_000,
+      })
+
+      const typedSource = initialSource.replace('Text("First")', 'Text("First typed")')
+      await browser.click('.cm-content')
+      await browser.pressShortcut('a')
+      await browser.insertText(typedSource)
+      await waitForSource(sourcePath, source => source === typedSource)
+
+      await browser.clickInFrame(preview.url, '#move-third')
+      await waitForSource(sourcePath, source => ordered(source, ['First typed', 'Third', 'Second']))
+      await browser.waitFor("document.querySelector('[data-tao-studio-undo]')?.disabled === false")
+      await browser.click('[data-tao-studio-undo]')
+      await waitForSource(sourcePath, source => source === typedSource)
+      Expect(await FS.readText(sourcePath)).toBe(typedSource)
     }
-    await browser.goto(studio.url)
-    await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('Text(\"First\")')", {
-      timeoutMs: 30_000,
-    })
-
-    const typedSource = initialSource.replace('Text("First")', 'Text("First typed")')
-    await browser.click('.cm-content')
-    await browser.pressShortcut('a')
-    await browser.insertText(typedSource)
-    await waitForSource(sourcePath, source => source === typedSource)
-
-    await browser.clickInFrame(preview.url, '#move-third')
-    await waitForSource(sourcePath, source => ordered(source, ['First typed', 'Third', 'Second']))
-    await browser.waitFor("document.querySelector('[data-tao-studio-undo]')?.disabled === false")
-    await browser.click('[data-tao-studio-undo]')
-    await waitForSource(sourcePath, source => source === typedSource)
-    Expect(await FS.readText(sourcePath)).toBe(typedSource)
   } finally {
     await browser?.close()
     await native?.stop()
     studio?.stop()
+    await manager?.closeAll()
     preview?.stop()
     await FS.remove(projectRoot)
   }

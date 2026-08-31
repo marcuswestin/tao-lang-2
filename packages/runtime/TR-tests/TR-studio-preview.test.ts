@@ -100,6 +100,23 @@ Describe('Studio preview runtime bridge', () => {
     cleanup()
   })
 
+  Test('forwards bounded preview console records and restores the console on cleanup', () => {
+    const fake = previewHost([])
+    const original = fake.host.console?.log
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+
+    fake.host.console?.log?.('loaded', { count: 2 })
+
+    Expect(fake.consoleCalls).toEqual([['loaded', { count: 2 }]])
+    Expect(fake.messages.at(-1)?.message).toMatchObject({
+      arguments: ['loaded', { count: 2 }],
+      level: 'log',
+      type: 'preview-console',
+    })
+    cleanup()
+    Expect(fake.host.console?.log).toBe(original)
+  })
+
   Test('reports applied revisions and maps pointer identity back to trusted Studio source messages', () => {
     const render = renderElement('/project/Main.tao', 12, 28, { height: 30, left: 20, top: 10, width: 80 })
     const fake = previewHost([render])
@@ -386,6 +403,7 @@ function interactionModeMessage(mode: 'edit' | 'run', parent: StudioPreviewHost[
 }
 
 function previewHost(renderElements: StudioPreviewElement[]): {
+  consoleCalls: unknown[][]
   dispatchDocument(type: string, event: unknown): void
   dispatchWindow(type: string, event: unknown): void
   host: StudioPreviewHost
@@ -397,11 +415,15 @@ function previewHost(renderElements: StudioPreviewElement[]): {
   const documentListeners = new Map<string, Set<Listener>>()
   const windowListeners = new Map<string, Set<Listener>>()
   const messages: PostedMessage[] = []
+  const consoleCalls: unknown[][] = []
   const overlays: FakeOverlay[] = []
   const parent = {
     postMessage: (message: unknown, targetOrigin: string) => messages.push({ message, targetOrigin }),
   }
   const host: StudioPreviewHost = {
+    console: {
+      log: (...arguments_) => consoleCalls.push(arguments_),
+    },
     document: {
       addEventListener: (type, listener) => {
         addListener(documentListeners, type, listener as unknown as Listener)
@@ -439,6 +461,7 @@ function previewHost(renderElements: StudioPreviewElement[]): {
     },
   }
   return {
+    consoleCalls,
     dispatchDocument: (type, event) => dispatch(documentListeners, type, event),
     dispatchWindow: (type, event) => dispatch(windowListeners, type, event),
     host,

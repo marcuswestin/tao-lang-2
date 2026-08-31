@@ -602,6 +602,18 @@ Describe('Tao formatter views and blocks', () => {
   )
 
   Test(
+    'formats typed persisted app state',
+    formats(
+      `app Workspace{state PaneWidth is number=320(persist)}`,
+      `
+        app Workspace {
+           state PaneWidth is number = 320 (persist)
+        }
+      `,
+    ),
+  )
+
+  Test(
     'formats responds-view declarations, asks, and explicit or bare responses',
     formats(
       `view Confirm(Title text)responds ConfirmResult{action Close(){respond Confirmed} action Cancel(){respond} render Empty()} view Editor(){action Close(){let Result=ask Confirm( "Draft" ) if Result is Confirmed{dismiss}} render Empty()}`,

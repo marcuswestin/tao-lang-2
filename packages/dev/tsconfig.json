@@ -3,7 +3,8 @@
   "include": [
     "dev-src/**/*",
     "dev-tests/**/*",
-    "performance-checks/**/*"
+    "performance-checks/**/*",
+    "studio-smoke/**/*"
   ],
   "compilerOptions": {
     "composite": false,

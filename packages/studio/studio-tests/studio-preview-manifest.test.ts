@@ -1,7 +1,7 @@
 import { Describe, Expect, Test } from '@shared/test'
 import {
   StudioPreviewManifest,
-  type StudioPreviewManifestV1,
+  type StudioPreviewManifestV2,
 } from '../studio-src/StudioPreviewManifest'
 
 Describe('Studio preview manifest', () => {
@@ -10,6 +10,8 @@ Describe('Studio preview manifest', () => {
     const defined = StudioPreviewManifest.define(manifest)
 
     Expect(defined.subjects.map(subject => subject.kind)).toEqual(['view', 'app'])
+    Expect(defined.version).toBe(2)
+    Expect(defined.scenarios.map(scenario => scenario.group)).toEqual(['Cards', 'Application'])
     Expect(defined.cells.map(cell => cell.cellId)).toEqual(['card-phone', 'app-desktop'])
     Expect(defined.cells[0]?.environment).toEqual({
       network: { latencyMs: 120, outcome: 'normal' },
@@ -38,6 +40,10 @@ Describe('Studio preview manifest', () => {
     const activeScheme = fixture()
     ;(activeScheme.cells[0]!.environment.scheme as { status: string }).status = 'active'
     Expect(() => StudioPreviewManifest.define(activeScheme)).toThrow('Scheme is not active')
+
+    const missingGroup = fixture()
+    ;(missingGroup.scenarios[0] as { group: string }).group = ''
+    Expect(() => StudioPreviewManifest.define(missingGroup)).toThrow('scenario group')
   })
 
   Test('rejects unknown state layers and invalid deterministic network simulation', () => {
@@ -48,10 +54,14 @@ Describe('Studio preview manifest', () => {
     const missingError = fixture()
     missingError.cells[0]!.environment.network = { latencyMs: 0, outcome: 'error' }
     Expect(() => StudioPreviewManifest.define(missingError)).toThrow('requires an explicit error')
+
+    const legacy = fixture()
+    ;(legacy as { version: number }).version = 1
+    Expect(() => StudioPreviewManifest.define(legacy)).toThrow('Unsupported Studio preview manifest version: 1')
   })
 })
 
-function fixture(): StudioPreviewManifestV1 & { cells: Array<StudioPreviewManifestV1['cells'][number]> } {
+function fixture(): StudioPreviewManifestV2 & { cells: Array<StudioPreviewManifestV2['cells'][number]> } {
   const source = { kind: 'tao' as const, path: '/project/Scenarios.tao', range: { end: 20, start: 0 } }
   return {
     capabilities: { captureDomains: ['data', 'scene'], scheme: 'inert' },
@@ -93,6 +103,7 @@ function fixture(): StudioPreviewManifestV1 & { cells: Array<StudioPreviewManife
       {
         args: { title: 'Hello' },
         fixtureId: 'fixture:base',
+        group: 'Cards',
         label: 'Default Card',
         prepare: [],
         scenarioId: 'card-default',
@@ -103,6 +114,7 @@ function fixture(): StudioPreviewManifestV1 & { cells: Array<StudioPreviewManife
       {
         args: {},
         fixtureId: 'fixture:base',
+        group: 'Application',
         label: 'Default App',
         prepare: [],
         scenarioId: 'app-default',
@@ -124,6 +136,6 @@ function fixture(): StudioPreviewManifestV1 & { cells: Array<StudioPreviewManife
       { kind: 'view', source, subjectId: 'card', viewName: 'Card' },
       { appName: 'Demo', kind: 'app', source, subjectId: 'demo' },
     ],
-    version: 1,
+    version: 2,
   }
 }

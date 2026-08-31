@@ -54,6 +54,7 @@ export type TaoNavigationArguments = Record<string, Evaluable>
 export type TaoPresentableDefinition = {
   identity?: TaoDeclarationIdentity
   name: string
+  source?: Readonly<{ end: number; path: string; start: number }>
   render(
     arguments_: TaoNavigationArguments,
     taoProps?: TaoProps,
@@ -65,6 +66,18 @@ export type TaoSelectionNavItemDefinition = {
   content: TaoPresentable | TaoNavigationValue
   icon?: Evaluable
   label: Evaluable
+}
+
+export type TaoSplitNavItemDefinition = {
+  content: TaoPresentable | TaoNavigationValue
+  resizable: Evaluable
+  width:
+    & Evaluable
+    & Partial<{
+      defaultValue(): Evaluable
+      reset(): void
+      set(value: Evaluable): void
+    }>
 }
 
 export type TaoAppDeclaration = Readonly<{
@@ -105,7 +118,7 @@ type TaoToastPresentationOptions = {
   key: Evaluable
 }
 
-export type TaoNavKindProfile = 'selection' | 'slot' | 'stack'
+export type TaoNavKindProfile = 'selection' | 'slot' | 'split' | 'stack'
 export type TaoNavHostSlot = 'Title' | 'Toolbar'
 export type TaoNavHostSlotContract = Readonly<{
   reads: readonly TaoNavHostSlot[]
@@ -139,6 +152,10 @@ export type TaoSelectionNavConfiguration = Readonly<{
   hostSlots?: TaoNavHostSlotConfiguration
   initial: string
   items: Readonly<Record<string, Readonly<TaoSelectionNavItemDefinition>>>
+}>
+
+export type TaoSplitNavConfiguration = Readonly<{
+  items: Readonly<Record<string, Readonly<TaoSplitNavItemDefinition>>>
 }>
 
 export type TaoNavDescriptor<

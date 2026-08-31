@@ -1,91 +1,99 @@
 // The states this app is reviewed, screenshotted, and audited in.
 //
-// A scenario is a named, buildable app state: a fixture, a place to open, a device, and the human
+// A scenario entry is a named, buildable app state: a fixture, a place to open, a device, and the human
 // settings that matter. It reuses the same fixtures the journeys use, so a screenshot and a check cannot
 // drift apart. `just scenarios` renders them; `just design-check` holds them to the design's rules.
 
-scenario Library.empty {
-   fixture NewCook
-   run Skillet
-   prepare { do StartKitchen("Foxglove") }
-   at @recipes
-   device phone
-   appearance light
+scenarios "Library" {
+   scenario "empty" {
+      fixture NewCook
+      run Skillet
+      prepare { do StartKitchen("Foxglove") }
+      at @recipes
+      device phone
+      appearance light
+   }
+   scenario "full" {
+      fixture HomeKitchen
+      run Skillet
+      at @recipes
+      device laptop 1440 x 900
+      pointer precise
+      keyboard present
+   }
 }
 
-scenario Library.full {
-   fixture HomeKitchen
-   run Skillet
-   at @recipes
-   device laptop 1440 x 900
-   pointer precise
-   keyboard present
+scenarios "Recipe" {
+   scenario "longTitleLargeText" {
+      fixture HomeKitchen
+      prepare { update Shakshuka { Title: "Shakshuka with roasted red pepper and a soft egg" } }
+      run Skillet at RecipeLink(Shakshuka)
+      device phone
+      textScale 200%
+   }
+   scenario "spanish" {
+      fixture HomeKitchen
+      prepare { update Me { Language: "es" } }
+      run Skillet at RecipeLink(Shakshuka)
+      device phone
+   }
 }
 
-scenario Recipe.longTitleLargeText {
-   fixture HomeKitchen
-   prepare { update Shakshuka { Title: "Shakshuka with roasted red pepper and a soft egg" } }
-   run Skillet at RecipeLink(Shakshuka)
-   device phone
-   textScale 200%
+scenarios "Shop" {
+   scenario "foldedOffline" {
+      fixture HomeKitchen
+      prepare { do AddMealToList(TomorrowsShakshuka) }
+      run Skillet
+      at @shop
+      device phone
+      network offline
+   }
+   scenario "withStores" {
+      fixture HomeKitchen
+      prepare { do AddMealToList(TomorrowsShakshuka) }
+      run Skillet
+      at @shop
+      device tablet landscape
+      location granted
+   }
 }
 
-scenario Recipe.spanish {
-   fixture HomeKitchen
-   prepare { update Me { Language: "es" } }
-   run Skillet at RecipeLink(Shakshuka)
-   device phone
+scenarios "Cook" {
+   scenario "running" {
+      fixture HomeKitchen
+      prepare { create Timer { Household: Home, Step: Simmer, StartedBy: Ro, EndsAt: now + 12 minutes, Running } }
+      run Skillet at CookLink(Shakshuka)
+      device tablet landscape
+      appearance dark
+   }
+   scenario "reducedMotionHighContrast" {
+      fixture HomeKitchen
+      run Skillet at CookLink(Shakshuka)
+      device tablet landscape
+      appearance dark
+      contrast high
+      motion reduced
+   }
 }
 
-scenario Shop.foldedOffline {
-   fixture HomeKitchen
-   prepare { do AddMealToList(TomorrowsShakshuka) }
-   run Skillet
-   at @shop
-   device phone
-   network offline
+scenarios "Kitchen" {
+   scenario "guest" {
+      fixture HomeKitchen
+      prepare { update SamMember { Role: Guest } }
+      signed in as Sam
+      run Skillet
+      at @kitchen
+      device phone
+   }
 }
 
-scenario Shop.withStores {
-   fixture HomeKitchen
-   prepare { do AddMealToList(TomorrowsShakshuka) }
-   run Skillet
-   at @shop
-   device tablet landscape
-   location granted
-}
-
-scenario Cook.running {
-   fixture HomeKitchen
-   prepare { create Timer { Household: Home, Step: Simmer, StartedBy: Ro, EndsAt: now + 12 minutes, Running } }
-   run Skillet at CookLink(Shakshuka)
-   device tablet landscape
-   appearance dark
-}
-
-scenario Cook.reducedMotionHighContrast {
-   fixture HomeKitchen
-   run Skillet at CookLink(Shakshuka)
-   device tablet landscape
-   appearance dark
-   contrast high
-   motion reduced
-}
-
-scenario Kitchen.guest {
-   fixture HomeKitchen
-   prepare { update SamMember { Role: Guest } }
-   signed in as Sam
-   run Skillet
-   at @kitchen
-   device phone
-}
-
-scenario Recovery.deletedRecipe {
-   fixture HomeKitchen
-   run Skillet at RecipeLink(Shakshuka)
-   prepare { delete Shakshuka }
-   device phone
+scenarios "Recovery" {
+   scenario "deletedRecipe" {
+      fixture HomeKitchen
+      run Skillet at RecipeLink(Shakshuka)
+      prepare { delete Shakshuka }
+      device phone
+   }
 }
 
 // Every rule in SkilletDesign's `rules { }` is checked in every scenario; these are the check-only requirements.

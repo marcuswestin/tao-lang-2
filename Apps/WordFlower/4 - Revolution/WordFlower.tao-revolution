@@ -1154,12 +1154,13 @@ unsafe ts FormatNativeTitle Document -> text
 // `<expression> from <path>` reaches TypeScript from any expression position.
 let BuildStamp is text = BuildStamp() from ./Shell.ts
 
-// Scenarios name the states a design is reviewed and checked against.
-scenario ReadingView.empty {
-   Document.Body = ""
-   Document.Paragraphs = []
-}
-
-scenario ReadingView.longTitle {
-   Document.Title = "A Complete History of the Semicolon, Volume Two"
+// Scenario groups name the rows and states a design is reviewed and checked against.
+scenarios "ReadingView" {
+   scenario "empty" {
+      Document.Body = ""
+      Document.Paragraphs = []
+   }
+   scenario "longTitle" {
+      Document.Title = "A Complete History of the Semicolon, Volume Two"
+   }
 }

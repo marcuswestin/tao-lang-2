@@ -1,0 +1,98 @@
+import { EditorState, type Extension } from '@codemirror/state'
+import { basicSetup } from 'codemirror'
+import type { StudioEditorSnippet } from '../StudioInspector'
+import type { StudioDiagnosticRange } from './StudioApiClient'
+
+export type StudioOpenFileAttempt = {
+  isCurrent: () => boolean
+}
+
+/** CodeMirror's standard keymap plus the Tao syntax data its commands require. */
+export const StudioCodeEditor = {
+  extension: [
+    basicSetup,
+    EditorState.languageData.of(() => [{ commentTokens: { line: '//' } }]),
+  ] as Extension,
+} as const
+
+/** Invalidates async file opens as soon as a newer navigation begins. */
+export class StudioOpenFileLifecycle {
+  #revision = 0
+
+  begin(): StudioOpenFileAttempt {
+    const revision = ++this.#revision
+    return { isCurrent: () => revision === this.#revision }
+  }
+}
+
+/** Converts a zero-based compiler range into a bounded CodeMirror selection. */
+export const StudioDiagnosticNavigation = {
+  selection(
+    document: { line(number: number): { from: number; to: number }; lines: number },
+    range: StudioDiagnosticRange,
+  ): { anchor: number; head: number } {
+    const startLine = document.line(Math.min(document.lines, Math.max(1, range.start.line + 1)))
+    const endLine = document.line(Math.min(document.lines, Math.max(1, range.end.line + 1)))
+    const anchor = Math.min(startLine.to, startLine.from + Math.max(0, range.start.character))
+    const head = Math.max(anchor, Math.min(endLine.to, endLine.from + Math.max(0, range.end.character)))
+    return { anchor, head }
+  },
+} as const
+
+/** StudioEditorInsertion preserves Tao snippet indentation and selects its first required placeholder. */
+export const StudioEditorInsertion = {
+  transaction(
+    document: { lineAt(position: number): { from: number; text: string } },
+    snippet: StudioEditorSnippet,
+    position: number,
+  ): { changes: { from: number; insert: string; to: number }; selection: { anchor: number; head: number } } {
+    const line = document.lineAt(position)
+    const indent = /^[ \t]*/.exec(line.text)?.[0] ?? ''
+    const insert = snippet.text.replaceAll('\n', `\n${indent}`)
+    const first = snippet.placeholders[0]
+    const selection = first === undefined
+      ? { anchor: position + insert.length, head: position + insert.length }
+      : {
+        anchor: position + expandedOffset(snippet.text, first.start, indent.length),
+        head: position + expandedOffset(snippet.text, first.end, indent.length),
+      }
+    return { changes: { from: position, insert, to: position }, selection }
+  },
+} as const
+
+function expandedOffset(text: string, offset: number, indentLength: number): number {
+  return offset + (text.slice(0, offset).match(/\n/g)?.length ?? 0) * indentLength
+}
+
+export function fileUri(project: string, path?: string): string {
+  const absolutePath = path === undefined ? project : absoluteSourcePath(project, path)
+  return `file://${
+    absolutePath.split('/').map((part, index) => index === 0 ? part : encodeURIComponent(part)).join('/')
+  }`
+}
+
+export function absoluteSourcePath(project: string, path: string): string {
+  return `${project.replace(/\/$/, '')}/${path.replace(/^\//, '')}`
+}
+
+export function projectRelativePath(project: string, sourcePath: string): string | undefined {
+  const prefix = `${project.replace(/\/$/, '')}/`
+  return sourcePath.startsWith(prefix) ? sourcePath.slice(prefix.length) : undefined
+}
+
+export function sanitizeLspHtml(html: string): string {
+  const template = document.createElement('template')
+  template.innerHTML = html
+  for (const unsafe of template.content.querySelectorAll('script, style, iframe, object, embed, link, meta, base')) {
+    unsafe.remove()
+  }
+  for (const element of template.content.querySelectorAll<HTMLElement>('*')) {
+    for (const attribute of [...element.attributes]) {
+      const value = attribute.value.trim().toLowerCase()
+      if (attribute.name.toLowerCase().startsWith('on') || value.startsWith('javascript:')) {
+        element.removeAttribute(attribute.name)
+      }
+    }
+  }
+  return template.innerHTML
+}
