@@ -132,6 +132,7 @@ async function runCompiledTaoTests(
       'node_modules/jest/bin/jest.js',
       '--config',
       'jest.tao-test.config.cjs',
+      '--no-watchman',
     ],
     cwd: compiled.runtimeRoot,
     env: { [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath },
