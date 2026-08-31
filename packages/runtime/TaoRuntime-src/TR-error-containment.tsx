@@ -15,6 +15,11 @@ export type TaoErrorBoundaryProps = Readonly<{
   app?: RuntimeAppDefinition
   boundaryId: string
   children?: React.ReactNode
+  frame: TaoRuntimeFailureFrame | (() => TaoRuntimeFailureFrame)
+  stateKey: string | number | (() => string | number)
+}>
+
+type ResolvedDiagnostics = Readonly<{
   frame: TaoRuntimeFailureFrame
   stateKey: string | number
 }>
@@ -57,6 +62,7 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
   override state: BoundaryState = { phase: 'healthy', revision: 0 }
   #bareComponentStack: string | undefined
   #effectRevision = 0
+  #resolvedDiagnostics: ResolvedDiagnostics | undefined
   #retryFingerprint: string | undefined
 
   static getDerivedStateFromError(error: unknown): Partial<BoundaryState> {
@@ -90,7 +96,7 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
       app: this.props.app,
       confirmReset: this.state.confirmReset === true,
       failure: this.state.failure,
-      level: this.props.frame.boundary,
+      level: this.#diagnostics().frame.boundary,
       onResetData: () => this.#requestResetData(),
       onRestart: () => this.#restart(),
       onRetry: () => this.#retry(),
@@ -102,7 +108,8 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
     if (this.state.phase !== 'diagnostic') {
       return
     }
-    const fingerprint = failureFingerprint(error, this.props.stateKey)
+    const diagnostics = this.#diagnostics()
+    const fingerprint = failureFingerprint(error, diagnostics.stateKey)
     const repeated = this.#retryFingerprint === fingerprint
     const failure: FailureState = {
       componentStack,
@@ -110,9 +117,9 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
       fingerprint,
       retryEligible: currentExternalEffectRevision() === this.#effectRevision,
     }
-    const report = runtimeFailure(this.props, failure, repeated)
+    const report = runtimeFailure(this.props, diagnostics.frame, failure, repeated)
     void publishFailure(report)
-    if (repeated && this.props.frame.boundary !== 'app') {
+    if (repeated && diagnostics.frame.boundary !== 'app') {
       this.setState({ error: new TaoBoundaryEscalation(report), phase: 'escalate', revision: this.state.revision })
       return
     }
@@ -124,12 +131,14 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
       return
     }
     this.#retryFingerprint = this.state.failure.fingerprint
+    this.#resolvedDiagnostics = undefined
     this.setState({ phase: 'healthy', revision: this.state.revision + 1 })
   }
 
   #restart(): void {
     this.props.app?.reset()
     this.#retryFingerprint = undefined
+    this.#resolvedDiagnostics = undefined
     this.setState({ phase: 'healthy', revision: this.state.revision + 1 })
   }
 
@@ -162,6 +171,14 @@ export class TaoErrorBoundary extends React.Component<TaoErrorBoundaryProps, Bou
         failure: { ...this.state.failure, recoveryError: errorShape(error).message },
       })
     }
+  }
+
+  #diagnostics(): ResolvedDiagnostics {
+    this.#resolvedDiagnostics ??= {
+      frame: typeof this.props.frame === 'function' ? this.props.frame() : this.props.frame,
+      stateKey: typeof this.props.stateKey === 'function' ? this.props.stateKey() : this.props.stateKey,
+    }
+    return this.#resolvedDiagnostics
   }
 }
 
@@ -270,11 +287,16 @@ function RecoveryButton(props: { label: string; onPress(): void }): React.JSX.El
   })
 }
 
-function runtimeFailure(props: TaoErrorBoundaryProps, failure: FailureState, stopper: boolean): TaoRuntimeFailure {
+function runtimeFailure(
+  props: TaoErrorBoundaryProps,
+  frame: TaoRuntimeFailureFrame,
+  failure: FailureState,
+  stopper: boolean,
+): TaoRuntimeFailure {
   return Object.freeze({
     boundaryId: props.boundaryId,
     error: errorShape(failure.error),
-    frame: { ...props.frame, ...(failure.componentStack ? { componentStack: failure.componentStack } : {}) },
+    frame: { ...frame, ...(failure.componentStack ? { componentStack: failure.componentStack } : {}) },
     retryEligible: failure.retryEligible,
     stopper,
     timestamp: Date.now(),

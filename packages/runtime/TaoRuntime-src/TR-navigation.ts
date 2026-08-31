@@ -1,4 +1,5 @@
 import type React from 'react'
+import { deferTransactionCommit } from './TR-action-transactions'
 import type { TaoDesign } from './TR-design'
 import { UnexpectedBehaviorError } from './TR-errors'
 import { ownerOfNavigation, RuntimeAppDefinition } from './TR-navigation-app'
@@ -362,7 +363,7 @@ export const NavigationControls = {
     if (!response) {
       throw new Error('Cannot respond: no enclosing ask occurrence.')
     }
-    response.respond(value)
+    deferTransactionCommit(() => response.respond(value))
   },
 
   /** Dismiss delegates to the nearest enclosing navigation container. */

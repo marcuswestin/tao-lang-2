@@ -31,25 +31,27 @@ export class RuntimePresentable {
     taoProps?: TaoProps,
     host?: RuntimeHostReadChannel,
   ): React.ReactNode {
-    const capturedArguments = Object.fromEntries(
-      Object.entries(arguments_).map(([name, value]) => [
-        name,
-        value.evaluate().jsValue,
-      ]),
-    )
+    let capturedArguments: ReturnType<typeof captureArguments> | undefined
+    const diagnosticsArguments = () =>
+      capturedArguments ??= captureArguments(Object.fromEntries(
+        Object.entries(arguments_).map(([name, value]) => [
+          name,
+          value.evaluate().jsValue,
+        ]),
+      ))
     const identity = this.definition.identity?.canonical ?? this.definition.name
     return React.createElement(
       TaoErrorBoundary,
       {
         app: TaoPropsControls.appInChain(taoProps),
         boundaryId: `screen:${identity}`,
-        frame: {
-          arguments: captureArguments(capturedArguments),
-          boundary: 'screen',
+        frame: () => ({
+          arguments: diagnosticsArguments(),
+          boundary: 'screen' as const,
           declaration: this.definition.name,
           ...(this.definition.source ? { source: this.definition.source } : {}),
-        },
-        stateKey: JSON.stringify([taoProps?.navigation?.snapshot(), captureArguments(capturedArguments)]),
+        }),
+        stateKey: () => JSON.stringify([taoProps?.navigation?.snapshot(), diagnosticsArguments()]),
       },
       React.createElement(PresentableContent, { arguments_, definition: this.definition, host, taoProps }),
     )

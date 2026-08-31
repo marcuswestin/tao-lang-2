@@ -1,5 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
+import { FS } from '@shared'
 import { viewValidationCodes } from '../diagnostic-codes'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
@@ -22,6 +23,7 @@ const viewValidationMessages = {
   renderTarget: '`render` must target a view or inject block.',
   renderInjectPlacement: '`render inject` must be the only statement in a view body.',
   foreignViewPath: 'A foreign view implementation path must name a relative TypeScript or TSX module.',
+  foreignViewMissing: (path: string) => `Foreign view implementation '${path}' does not exist.`,
   foreignViewAccepts: '`accepts` must declare content, one or more named slots, or both.',
   callerContentCount: (name: string) => `View '${name}' may place caller content at most once with @@content.`,
   callerContentPlacement: '@@content is only available inside the render tree of a view.',
@@ -113,6 +115,14 @@ function validateForeignView(view: AST.ViewDeclaration, ctx: ValidationContext):
   }
   if (!/^\.\.?\/.+\.tsx?$/.test(foreign.path)) {
     ctx.error(viewValidationMessages.foreignViewPath, foreign)
+  } else {
+    const documentDirectory = FS.dirname(AST.getDocument(foreign).uri.path)
+    if (
+      FS.existsSync(documentDirectory)
+      && !FS.existsSync(FS.resolvePath(foreign.path, documentDirectory))
+    ) {
+      ctx.error(viewValidationMessages.foreignViewMissing(foreign.path), foreign)
+    }
   }
   if (foreign.accepts && foreign.content === undefined && foreign.slots.length === 0) {
     ctx.error(viewValidationMessages.foreignViewAccepts, foreign)

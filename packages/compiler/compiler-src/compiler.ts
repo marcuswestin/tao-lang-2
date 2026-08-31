@@ -1,6 +1,6 @@
 import { ASTUtils, Packages } from '@ast-utils'
 import { AST, type ParsedFile } from '@parser'
-import { Assert, Diagnostics, FS } from '@shared'
+import { Assert, Diagnostics, Errors, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { designValidationCodes } from '@validator/diagnostic-codes'
 import {
@@ -505,13 +505,22 @@ function sidecarSourceGraph(rootPath: string): readonly string[] {
     graph.push(sourcePath)
     const source = FS.readTextSync(sourcePath)
     for (const specifier of relativeModuleSpecifiers(source)) {
-      if (specifier.endsWith('.tao')) {
+      if (specifier.value.endsWith('.tao')) {
         continue
       }
-      const dependency = resolveRelativeSidecarImport(sourcePath, specifier)
-      Assert.defined(dependency, `Sidecar relative import '${specifier}' could not be resolved.`, {
-        sourcePath,
-      })
+      const dependency = resolveRelativeSidecarImport(sourcePath, specifier.value)
+      if (dependency === undefined) {
+        const message = `Sidecar relative import '${specifier.value}' could not be resolved.`
+        Errors.throwUserInput(message, {
+          diagnostics: [{
+            filePath: sourcePath,
+            message,
+            range: sidecarSourceRange(source, specifier.start, specifier.end),
+            severity: 'error',
+            source: 'compiler',
+          }],
+        })
+      }
       visit(dependency)
     }
   }
@@ -519,15 +528,22 @@ function sidecarSourceGraph(rootPath: string): readonly string[] {
   return graph
 }
 
-type SidecarToken = Readonly<{ kind: 'identifier' | 'punctuation' | 'string'; value: string }>
+type SidecarToken = Readonly<{
+  end: number
+  kind: 'identifier' | 'punctuation' | 'string'
+  start: number
+  value: string
+}>
+
+type SidecarSpecifier = Readonly<{ end: number; start: number; value: string }>
 
 /** Covers imports, re-exports, side-effect imports, and dynamic import calls without false comment/string edges. */
-function relativeModuleSpecifiers(source: string): string[] {
+function relativeModuleSpecifiers(source: string): SidecarSpecifier[] {
   const tokens = sidecarTokens(source)
-  const specifiers: string[] = []
+  const specifiers: SidecarSpecifier[] = []
   const add = (token: SidecarToken | undefined): void => {
     if (token?.kind === 'string' && (token.value.startsWith('./') || token.value.startsWith('../'))) {
-      specifiers.push(token.value)
+      specifiers.push({ end: token.end, start: token.start, value: token.value })
     }
   }
   for (let index = 0; index < tokens.length; index++) {
@@ -555,7 +571,19 @@ function relativeModuleSpecifiers(source: string): string[] {
       }
     }
   }
-  return [...new Set(specifiers)]
+  return [...new Map(specifiers.map(specifier => [specifier.value, specifier])).values()]
+}
+
+function sidecarSourceRange(source: string, start: number, end: number): {
+  start: { line: number; character: number }
+  end: { line: number; character: number }
+} {
+  const position = (offset: number) => {
+    const prefix = source.slice(0, offset)
+    const lines = prefix.split('\n')
+    return { line: lines.length - 1, character: lines.at(-1)?.length ?? 0 }
+  }
+  return { start: position(start), end: position(end) }
 }
 
 /** sidecarTokens is a deliberately small JS/TS lexical scanner; comments and literal bodies never become code. */
@@ -581,6 +609,7 @@ function sidecarTokens(source: string): SidecarToken[] {
       continue
     }
     if (current === '"' || current === "'") {
+      const start = index
       const quote = current
       let value = ''
       index += 1
@@ -594,7 +623,7 @@ function sidecarTokens(source: string): SidecarToken[] {
         }
       }
       index += index < source.length ? 1 : 0
-      tokens.push({ kind: 'string', value })
+      tokens.push({ end: index, kind: 'string', start, value })
       continue
     }
     if (current === '`') {
@@ -614,15 +643,16 @@ function sidecarTokens(source: string): SidecarToken[] {
       continue
     }
     if (/[A-Za-z_$]/.test(current)) {
+      const start = index
       let end = index + 1
       while (end < source.length && /[\w$]/.test(source[end]!)) {
         end += 1
       }
-      tokens.push({ kind: 'identifier', value: source.slice(index, end) })
+      tokens.push({ end, kind: 'identifier', start, value: source.slice(index, end) })
       index = end
       continue
     }
-    tokens.push({ kind: 'punctuation', value: current })
+    tokens.push({ end: index + 1, kind: 'punctuation', start: index, value: current })
     index += 1
   }
   return tokens

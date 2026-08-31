@@ -1,6 +1,6 @@
-import { Describe, Test } from '@shared/test'
+import { Describe, Expect, Test } from '@shared/test'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
-import { accepts, rejects, stubView } from './test-validate'
+import { accepts, rejects, stubView, validationErrorMessages, withValidatedFiles } from './test-validate'
 
 Describe('validator: foreign views', () => {
   Test(
@@ -40,4 +40,19 @@ Describe('validator: foreign views', () => {
       ViewsValidator.messages.foreignViewAccepts,
     ),
   )
+
+  Test('reports a missing foreign view sidecar at its Tao declaration', async () => {
+    await withValidatedFiles('Main.tao', {
+      'Main.tao': 'app Missing { view Foreign } view Foreign() from ./Missing.tsx',
+    }, result => {
+      Expect(validationErrorMessages(result)).toContain(
+        ViewsValidator.messages.foreignViewMissing('./Missing.tsx'),
+      )
+      const diagnostic = result.diagnostics.find(candidate =>
+        candidate.message === ViewsValidator.messages.foreignViewMissing('./Missing.tsx')
+      )
+      Expect(diagnostic?.filePath).toContain('Main.tao')
+      Expect(diagnostic?.range).toBeDefined()
+    })
+  })
 })

@@ -1,10 +1,12 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
+import { deferTransactionCommit, transactionResource } from '../TaoRuntime-src/TR-action-transactions'
 import type {
   TaoDataConnection,
   TaoDataConnectionObserver,
   TaoDataSchemaDefinition,
 } from '../TaoRuntime-src/TR-data'
+import { onUnownedFailure } from '../TaoRuntime-src/TR-errors'
 
 const definition: TaoDataSchemaDefinition = {
   name: 'TransactionalNotes',
@@ -46,6 +48,43 @@ Describe('Tao action transactions', () => {
     await pending
     await TR.Data.Settle(schema)
 
+    Expect(schema.query({ entity: 'Note', filters: [] })).toHaveLength(2)
+    Expect(saved).toHaveLength(1)
+  })
+
+  Test('settles a response only after its async interrupt transaction releases the asking transaction', async () => {
+    const { saved, schema } = recordingSchema()
+    let settleAnswer!: () => void
+    let releaseResponse!: () => void
+    const answer = new Promise<void>(resolve => {
+      settleAnswer = resolve
+    })
+    const responseGate = new Promise<void>(resolve => {
+      releaseResponse = resolve
+    })
+    let askingSettled = false
+    const asking = TR.Action(async () => {
+      TR.Data.Create(schema, 'Note', { Title: TR.Value('Before ask') })
+      await answer
+      TR.Data.Create(schema, 'Note', { Title: TR.Value('After ask') })
+      askingSettled = true
+    }, { name: 'AskFirst' })
+    const response = TR.Action(async () => {
+      TR.Navigation.Respond({ response: { respond: settleAnswer } })
+      await responseGate
+    }, { interrupt: true, name: 'Respond' })
+
+    const askingPending = asking.jsValue.invoke()
+    const responsePending = response.jsValue.invoke()
+    await Promise.resolve()
+    Expect(askingSettled).toBe(false)
+
+    releaseResponse()
+    await responsePending
+    await askingPending
+    await TR.Data.Settle(schema)
+
+    Expect(askingSettled).toBe(true)
     Expect(schema.query({ entity: 'Note', filters: [] })).toHaveLength(2)
     Expect(saved).toHaveLength(1)
   })
@@ -188,6 +227,67 @@ Describe('Tao action transactions', () => {
     Expect(failures).toHaveLength(1)
   })
 
+  Test('rolls back resources already published when a later publish fails', async () => {
+    const firstKey = {}
+    const secondKey = {}
+    let firstPublished = 'before'
+    let secondPublished = 'before'
+    const failures: unknown[] = []
+    const stop = TR.Errors.onFailure(failure => failures.push(failure))
+    const action = TR.Action(() => {
+      transactionResource(
+        firstKey,
+        () => 'after',
+        value => {
+          firstPublished = value
+        },
+        undefined,
+        () => {
+          firstPublished = 'before'
+        },
+      )
+      transactionResource(
+        secondKey,
+        () => 'after',
+        value => {
+          secondPublished = value
+          throw new Error('second publish failed')
+        },
+        undefined,
+        () => {
+          secondPublished = 'before'
+        },
+      )
+    }, { name: 'PublishBoth' })
+
+    await action.jsValue.invoke()
+    stop()
+
+    Expect(firstPublished).toBe('before')
+    Expect(secondPublished).toBe('before')
+    Expect(failures).toHaveLength(1)
+  })
+
+  Test('isolates a post-commit effect failure and continues later post-commit cleanup', () => {
+    const unowned: unknown[] = []
+    const completed: string[] = []
+    const stop = onUnownedFailure(error => unowned.push(error))
+    try {
+      const action = TR.Action(() => {
+        deferTransactionCommit(() => {
+          throw new Error('response publication failed')
+        })
+        deferTransactionCommit(() => completed.push('later effect'))
+      }, { name: 'PostCommitEffects' })
+
+      Expect(action.jsValue.invoke()).toBeUndefined()
+      Expect(completed).toEqual(['later effect'])
+      Expect(unowned).toHaveLength(1)
+    } finally {
+      stop()
+    }
+  })
+
   Test('uses the failure-message ladder and disables retry after a foreign effect', async () => {
     const Failure = TR.Enum(['Offline'])
     const reports: any[] = []
@@ -226,6 +326,21 @@ Describe('Tao action transactions', () => {
       message: "Couldn't finish 'Publish.' Nothing was changed.",
       retryEligible: false,
     }))
+  })
+
+  Test('passes an omitted optional foreign argument across the boundary as undefined', async () => {
+    const received: unknown[] = []
+    const action = TR.ForeignAction(
+      value => {
+        received.push(value)
+      },
+      'OptionalEffect',
+      [],
+    )
+
+    await action.jsValue.invoke(undefined)
+
+    Expect(received).toEqual([undefined])
   })
 
   Test('retains only the latest 50 redacted action failures for capture', () => {

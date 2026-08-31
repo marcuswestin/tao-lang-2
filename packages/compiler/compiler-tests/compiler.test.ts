@@ -59,6 +59,17 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.AssertViewDepth(_ViewProps.__tao, "Recursive")')
     Expect(compiled.code).toContain('TR.ViewTaoProps(')
   })
+
+  Test('propagates view depth through nested render statements without inheriting layout props', async () => {
+    const compiled = await Compiler.compileCode(`
+      app RecursiveApp { view Recursive }
+      view Recursive() {
+        render Frame() { if true { render Recursive() } }
+      }
+      view Frame() { render inject Content @@content \`\`\`ts return Content \`\`\` }
+    `)
+    Expect(compiled.code).toContain('}, _ViewProps.__tao, false)} />')
+  })
   Test('compiles bare app slot blocks through their inferred declaration identities', async () => {
     const compiled = await Compiler.compileCode(`
       public type Navigator is nav with {

@@ -57,4 +57,38 @@ Describe('TR.ForEach selectable rows', () => {
 
     Expect(rendered).toBe(content)
   })
+
+  Test('does not capture healthy list-item arguments before a failure', () => {
+    let capturedReads = 0
+    const value = Object.defineProperty({}, 'Title', {
+      enumerable: true,
+      get: () => {
+        capturedReads += 1
+        return 'Draft'
+      },
+    })
+
+    TR.ForEach(TR.Value([value]), () => null)
+
+    Expect(capturedReads).toBe(0)
+  })
+
+  Test('does not evaluate healthy screen arguments only for diagnostics', () => {
+    let evaluations = 0
+    const screen = TR.Navigation.View({
+      name: 'LazyDiagnosticsScreen',
+      render: () => null,
+    })
+
+    screen.render({
+      Value: {
+        evaluate: () => {
+          evaluations += 1
+          return { jsValue: 'Draft' }
+        },
+      },
+    })
+
+    Expect(evaluations).toBe(0)
+  })
 })

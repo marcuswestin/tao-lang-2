@@ -1,4 +1,4 @@
-import { Type } from '@ast-utils'
+import { type ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationProblemAcceptor } from 'typir'
 import { DeclarationOrder } from '../DeclarationOrder'
@@ -18,6 +18,8 @@ const stateValidationMessages = {
   persistedOnlyInApp: (state: string) => `Persisted state '${state}' is only allowed directly inside an app.`,
   appStateMustPersist: (state: string) => `App state '${state}' must declare (persist).`,
   persistedTypeRequired: (state: string) => `Persisted state '${state}' must declare its type with 'is'.`,
+  persistedTypeUnsupported: (state: string, type: string) =>
+    `Persisted state '${state}' cannot use nonpersistable type '${type}'.`,
   initialTypeMismatch: (state: string, expected: string, actual: string) =>
     `State '${state}' declares ${expected}, got initial value ${actual}.`,
 } as const
@@ -43,12 +45,33 @@ function reportStatePlacement(state: AST.StateDeclaration, ctx: ValidationContex
     }
     if (!state.type) {
       ctx.error(stateValidationMessages.persistedTypeRequired(state.name), state)
+    } else {
+      const type = Type.ofReference(state.type)
+      if (type.kind !== 'unresolved' && !isPersistableType(type)) {
+        ctx.error(stateValidationMessages.persistedTypeUnsupported(state.name, Type.displayName(type)), state.type)
+      }
     }
     return
   }
   if (state.persist) {
     ctx.error(stateValidationMessages.persistedOnlyInApp(state.name), state)
   }
+}
+
+function isPersistableType(type: ASTUtils.TaoType): boolean {
+  if (type.kind === 'primitive') {
+    return ['boolean', 'duration', 'none', 'number', 'text', 'time'].includes(type.primitive)
+  }
+  if (type.kind === 'list') {
+    return type.element === undefined || isPersistableType(type.element)
+  }
+  if (type.kind === 'item' && type.item) {
+    return type.item.properties.every(property => isPersistableType(Type.ofProperty(property)))
+  }
+  if (type.kind === 'union') {
+    return type.members.every(isPersistableType)
+  }
+  return false
 }
 
 function reportToggleTarget(toggle: AST.ToggleStatement, ctx: ValidationContext): void {

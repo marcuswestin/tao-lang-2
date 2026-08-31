@@ -255,15 +255,17 @@ class TR {
     }
     return values.map((value, index) => {
       const runtimeValue = new RuntimeValue(value)
+      let capturedArguments: TaoRuntimeJson | undefined
+      const diagnosticsArguments = () => capturedArguments ??= captureArguments({ index, value })
       return React.createElement(
         TaoErrorBoundary,
         {
           boundaryId: `item:${frame?.source?.path ?? 'unknown'}:${frame?.source?.start ?? 0}:${
             String(stableListKey(value, index))
           }`,
-          frame: { ...frame, arguments: captureArguments({ index, value }), boundary: 'item' },
+          frame: () => ({ ...frame, arguments: diagnosticsArguments(), boundary: 'item' as const }),
           key: stableListKey(value, index),
-          stateKey: JSON.stringify(captureArguments({ index, value })),
+          stateKey: () => JSON.stringify(diagnosticsArguments()),
         },
         React.createElement(ForEachItem, { index, render, runtimeValue, select }),
       )
@@ -279,7 +281,7 @@ class TR {
   }
 
   /** ForeignAction adapts a named TypeScript effect and its declared Tao failure contract. */
-  static ForeignAction<Args extends TR.Evaluable[]>(
+  static ForeignAction<Args extends Array<TR.Evaluable | undefined>>(
     implementation: (...arguments_: any[]) => unknown,
     name: string,
     failures: readonly TaoDeclaredFailure[],
@@ -289,7 +291,7 @@ class TR {
       async (...arguments_: Args) => {
         markExternalEffect()
         try {
-          await implementation(...arguments_.map(argument => argument.evaluate().jsValue))
+          await implementation(...arguments_.map(argument => argument?.evaluate().jsValue))
         } catch (error) {
           if (error instanceof TaoActionFailure) {
             throw error

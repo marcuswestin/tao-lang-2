@@ -240,7 +240,7 @@ describe('runtime failure containment and Studio capture', () => {
 
         view Recursive(Depth number) {
           render Frame(Depth) {
-            if Depth > 0 { Recursive(Depth - 1) }
+            if Depth > 0 { render Recursive(Depth - 1) }
           }
         }
 

@@ -5,6 +5,7 @@ import { StateValidator } from '../validator-src/validators/StateValidator'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
 import {
   accepts,
+  acceptsFiles,
   fence,
   rejects,
   stubContainer,
@@ -50,9 +51,45 @@ Describe('validator: apps and views', () => {
       view Pane() { Title "Pane" render Empty() }
       ${stubView('Empty')}
     `)
-    Expect(validationErrorMessages(result)).toContain(StateValidator.messages.appStateMustPersist('PaneWidth'))
-    Expect(validationErrorMessages(result)).toContain(StateValidator.messages.persistedTypeRequired('PaneWidth'))
+    Expect(validationErrorMessages(result)).toEqual([
+      StateValidator.messages.appStateMustPersist('PaneWidth'),
+      StateValidator.messages.persistedTypeRequired('PaneWidth'),
+    ])
   })
+
+  Test('rejects persisted state whose declared runtime shape cannot be encoded', async () => {
+    const result = await testValidateCodeWithErrors(`
+      use StackNav from @tao/nav
+      app Workspace {
+        Name "Workspace"
+        state OnSave is action() = action { } (persist)
+        Navigator StackNav { Initial Pane }
+      }
+      view Pane() { Title "Pane" render Empty() }
+      ${stubView('Empty')}
+    `)
+    Expect(validationErrorMessages(result)).toContain(
+      StateValidator.messages.persistedTypeUnsupported('OnSave', 'action()'),
+    )
+  })
+
+  Test(
+    'accepts cross-file derived primitive types for persisted app state',
+    acceptsFiles({
+      'Main.tao': `
+        use PaneWidth from ./Types.tao
+        use StackNav from @tao/nav
+        app Workspace {
+          Name "Workspace"
+          state Width is PaneWidth = PaneWidth 320 (persist)
+          Navigator StackNav { Initial Pane }
+        }
+        view Pane() { Title "Pane" render Empty() }
+        ${stubView('Empty')}
+      `,
+      'Types.tao': 'workspace type PaneWidth is number',
+    }),
+  )
   Test(
     'rejects unsupported top-level statements',
     rejects(

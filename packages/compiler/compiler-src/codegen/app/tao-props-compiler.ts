@@ -32,7 +32,9 @@ function compileTaoPropsForRenderStatement(
 ): Compiled {
   const inheritsCallerProps = AST.isBlock(render.$container)
     && AST.isViewDeclaration(render.$container.$container)
-  const callerProps = inheritsCallerProps ? gen`, _ViewProps.__tao` : gen``
+  // Nested `render` statements must still advance the generated-view depth. They intentionally
+  // omit the full caller-props chain, matching ViewRender, because only a view's root inherits it.
+  const callerProps = gen`, _ViewProps.__tao${inheritsCallerProps ? gen`` : gen`, false`}`
   return gen` __tao={TR.ViewTaoProps({ ...TR.TaoContext(_ViewProps.__tao), layout: ${layout}, designSpec: ${designSpec}${
     designDefault ? gen`, designDefault: ${designDefault}` : ''
   }${testTag ? gen`, testTag: ${gen.jsLiteral(testTag)}` : ''}${

@@ -21,4 +21,37 @@ Describe('compiler: action failures', () => {
     Expect(code).toContain('sentence: "Unavailable."')
     Expect(code).toContain('{ runs: "latest" }')
   })
+
+  Test('binds foreign action defaults before crossing the JavaScript boundary', async () => {
+    const compiled = await Compiler.compileCode(`
+      app DefaultsApp { view Main }
+      view Main() {
+        action Publish(Title text default "Untitled", Copies number default 1) from ./Api.ts
+        render Label("Ready")
+      }
+      view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+    `)
+    const code = compiled.code.replace(/\s+/g, ' ')
+
+    Expect(code).toContain('_TaoActionArg0 == null ? TR.Value("Untitled") : TR.Value(_TaoActionArg0)')
+    Expect(code).toContain('_TaoActionArg1 == null ? TR.Value(1) : TR.Value(_TaoActionArg1)')
+    Expect(code).toContain(
+      '__tao_foreign_action_Publish_1__(_Scope.Title.evaluate().jsValue, _Scope.Copies.evaluate().jsValue)',
+    )
+  })
+
+  Test('does not mark an outer action interruptible for a respond owned by a nested action value', async () => {
+    const compiled = await Compiler.compileCode(`
+      app RespondApp { view Prompt }
+      type Result is one of Done
+      view Prompt() responds Result {
+        action Outer() { do action { respond Done }() }
+        render Label("Ready")
+      }
+      view Label(Value text) { render inject Value \`\`\`ts return null \`\`\` }
+    `)
+    const code = compiled.code.replace(/\s+/g, ' ')
+
+    Expect(code.match(/interrupt: true/g)).toHaveLength(1)
+  })
 })

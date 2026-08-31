@@ -1,6 +1,6 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Switch } from '@shared'
+import { FS, Switch } from '@shared'
 import type { ValidationProblemAcceptor } from 'typir'
 import type { NodeValidationChecks } from '../node-validation'
 import { type TaoSpecifics, type TaoTypirServices } from '../TypeSystemHelpers'
@@ -39,6 +39,7 @@ const actionValidationMessages = {
   doTypeMismatch: (actual: string) => `do expects an action, got ${actual}.`,
   asyncPlacement: '`async` is allowed only inside an action block.',
   foreignActionPath: 'A foreign action implementation path must name a relative TypeScript or TSX module.',
+  foreignActionMissing: (path: string) => `Foreign action implementation '${path}' does not exist.`,
   runsLatestNative: '`runs latest` is allowed only on a foreign action.',
 }
 
@@ -51,8 +52,12 @@ export const ActionsValidator = {
       if (action.runsLatest && !action.foreign) {
         ctx.error(actionValidationMessages.runsLatestNative, action)
       }
-      if (action.foreign && !/^\.\.?\/.+\.tsx?$/.test(action.foreign.path)) {
-        ctx.error(actionValidationMessages.foreignActionPath, action.foreign)
+      if (action.foreign) {
+        if (!/^\.\.?\/.+\.tsx?$/.test(action.foreign.path)) {
+          ctx.error(actionValidationMessages.foreignActionPath, action.foreign)
+        } else {
+          reportMissingForeignAction(action, ctx)
+        }
       }
     },
     [AST.AsyncActionStatement.$type]: (statement, ctx) => {
@@ -65,6 +70,20 @@ export const ActionsValidator = {
   messages: actionValidationMessages,
   registerTypeValidation,
 } as const
+
+function reportMissingForeignAction(action: AST.ActionDeclaration, ctx: ValidationContext): void {
+  const foreign = action.foreign
+  if (!foreign) {
+    return
+  }
+  const documentDirectory = FS.dirname(AST.getDocument(foreign).uri.path)
+  if (
+    FS.existsSync(documentDirectory)
+    && !FS.existsSync(FS.resolvePath(foreign.path, documentDirectory))
+  ) {
+    ctx.error(actionValidationMessages.foreignActionMissing(foreign.path), foreign)
+  }
+}
 
 function registerTypeValidation(typir: TaoTypirServices): void {
   typir.validation.Collector.addValidationRulesForAstNodes({
