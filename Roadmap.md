@@ -152,6 +152,14 @@ tests written in Tao, green in Current, for every construct introduced.
 
 Product and codebase backlog, unordered.
 
+- [ ] Execute the repository simplification plan
+  - A full-repository audit produced per-area dispositions: dead code and API removals, a test
+    consolidation plan (Test Apps 17 → 10 and package-test cuts with named surviving proofs),
+    tooling and gate simplification, ranked convention sweeps, per-file documentation dispositions,
+    and the Ro decisions that gate the biggest wins. Plan:
+    `Docs/Roadmap/Repository simplification/Plan - Repository simplification.md`. It makes concrete
+    the test-review, TR-cleanup, markdown-rework, export-pattern, and magical-string items elsewhere
+    in this file; reconcile those entries as its slices land.
 - [ ] Finish simulation mode in Tao Studio
   - The versioned cell matrix, viewport/network contract, provider overlay, exact data snapshot codec,
     fixture/scenario metadata, generated-host provider wiring, and captured-fixture save exist.
