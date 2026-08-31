@@ -28,7 +28,7 @@ import {
   type StudioCellRuntimeResponse,
   type StudioHandshake,
 } from './StudioApiClient'
-import { absoluteSourcePath, projectRelativePath } from './StudioEditor'
+import { absoluteSourcePath, projectRelativePath, StudioSourceNavigation } from './StudioEditor'
 
 export type StudioMatrixCell<Item> = {
   id: string
@@ -1609,28 +1609,16 @@ export async function handlePreviewMessage(
     return
   }
   actions.activate?.()
-  const path = projectRelativePath(handshake.identity.project, message.identity.path)
-  if (path === undefined) {
-    return
-  }
-  const opened = await openFile(path)
+  const opened = await StudioSourceNavigation.openAndSelect({
+    identity: message.identity,
+    openFile,
+    project: handshake.identity.project,
+    range: message.range,
+  })
   if (opened === undefined) {
     return
   }
-  const { editor, file } = opened
-  if (
-    file.path !== path
-    || message.identity.sourceVersion !== file.sourceVersion
-    || message.range.end > editor.state.doc.length
-  ) {
-    return
-  }
   actions.inspect(StudioInspector.selection(message))
-  editor.dispatch({
-    effects: EditorView.scrollIntoView(message.range.start, { y: 'center' }),
-    selection: { anchor: message.range.start, head: message.range.end },
-  })
-  editor.focus()
 }
 
 export function requestRuntimeCapture(
