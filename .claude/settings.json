@@ -14,6 +14,7 @@
       "Bash(docker ps *)",
       "Bash(dprint *)",
       "Bash(emulator *)",
+      "Bash(git merge *)",
       "Bash(just *)",
       "Bash(xcrun simctl *)",
       "Read(~/code/tao-lang/**)",
@@ -22,9 +23,6 @@
       "mcp__Claude_Browser__*",
       "mcp__Claude_Code_iOS_Simulator__*",
       "mcp__claude-in-chrome__*"
-    ],
-    "ask": [
-      "Bash(git merge *)"
     ],
     "deny": [
       "Read(**/.env)",

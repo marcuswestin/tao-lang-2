@@ -26,7 +26,7 @@
       "Require review for actions that transmit secrets, credentials, tokens, private keys, private repository contents, or other sensitive local data to external services.",
       "Require review for publishing, deployment, package publication, git push, force push, remote branch mutation, or other externally visible mutations.",
       "Require review for reading or writing .env files, ~/.ssh, ~/.aws, or other credential stores.",
-      "Always require review before merging, squashing, or fast-forwarding any branch into main."
+      "Require review before pushing main, force pushing, or renaming a remote branch, even when the merge that produced them was approved."
     ]
   }
 }

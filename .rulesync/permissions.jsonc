@@ -21,8 +21,10 @@
       "docker ps *": "allow",
       "emulator *": "allow",
       "xcrun simctl *": "allow",
-      // Landing a feature branch on main is Ro's decision, not an agent's.
-      "git merge *": "ask",
+      // Merging runs without a prompt. Which branch lands on main, and when, is still Ro's
+      // decision — an agent merges because Ro asked, not on its own initiative. Pushing is the
+      // outward-facing step and is deliberately absent from this list.
+      "git merge *": "allow",
     },
     "read": {
       // The previous repository is reference material (see AGENTS.md).
