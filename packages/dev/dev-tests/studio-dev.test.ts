@@ -78,6 +78,20 @@ Describe('Studio native wrapper foundation', () => {
       Expect(source).toContain('tao-studio-product-host')
       Expect(source).toContain('/api/data/fill')
       Expect(source).not.toContain('sourceMappingURL=data:')
+      Expect(source).not.toContain(Repo.getRoot())
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('builds the packaged Studio service with the prebuilt browser asset boundary', async () => {
+    const root = await FS.mkTmpDir(FS.resolvePath('tao-studio-service-bundle-', FS.tmpdir()))
+    const path = FS.resolvePath('service.js', root)
+    try {
+      await StudioNative.testing.stageStudioPackagedServiceBundle(path)
+      const source = await FS.readText(path)
+      Expect(source.length).toBeGreaterThan(1_000)
+      Expect(source).toContain('The packaged Tao Studio service requires its prebuilt browser bundle.')
     } finally {
       await FS.remove(root)
     }
@@ -107,6 +121,100 @@ Describe('Studio native wrapper foundation', () => {
     } finally {
       await FS.remove(packageRoot)
     }
+  })
+
+  Test('resolves Hutch from PATH before the installer home fallback', async () => {
+    const root = await FS.mkTmpDir(FS.resolvePath('tao-studio-hutch-resolution-', FS.tmpdir()))
+    const pathRoot = FS.resolvePath('path-bin', root)
+    const homeRoot = FS.resolvePath('home', root)
+    const pathHutch = FS.resolvePath('hutch', pathRoot)
+    const homeHutch = FS.resolvePath('.hutch/bin/hutch', homeRoot)
+    try {
+      await FS.mkdir(pathRoot)
+      await FS.mkdir(FS.dirname(homeHutch))
+      await FS.writeText(pathHutch, '#!/bin/sh\n')
+      await FS.writeText(homeHutch, '#!/bin/sh\n')
+
+      await Expect(StudioNative.testing.resolveHutchExecutablePath('hutch', {
+        homeDirectory: homeRoot,
+        path: pathRoot,
+      })).resolves.toBe(pathHutch)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('uses an installed Hutch launcher before a refreshed shell PATH is available', async () => {
+    const homeRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-hutch-home-', FS.tmpdir()))
+    const homeHutch = FS.resolvePath('.hutch/bin/hutch', homeRoot)
+    try {
+      await FS.mkdir(FS.dirname(homeHutch))
+      await FS.writeText(homeHutch, '#!/bin/sh\n')
+
+      await Expect(StudioNative.testing.resolveHutchExecutablePath('hutch', {
+        homeDirectory: homeRoot,
+        path: '',
+      })).resolves.toBe(homeHutch)
+    } finally {
+      await FS.remove(homeRoot)
+    }
+  })
+
+  Test('gives exact Hutch installation and browser fallback guidance when the launcher is absent', async () => {
+    const homeRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-no-hutch-', FS.tmpdir()))
+    try {
+      await Expect(StudioNative.testing.resolveHutchExecutablePath('hutch', {
+        homeDirectory: homeRoot,
+        path: '',
+      })).rejects.toThrow(
+        /Hutch is not installed[\s\S]*curl -fsSL https:\/\/hutch\.blackboard\.sh\/hutch\/install\.sh \| sh[\s\S]*--hutch[\s\S]*\.\/dev studio/,
+      )
+    } finally {
+      await FS.remove(homeRoot)
+    }
+  })
+
+  Test('rejects a missing explicit Hutch path with the resolved location', async () => {
+    const root = await FS.mkTmpDir(FS.resolvePath('tao-studio-explicit-hutch-', FS.tmpdir()))
+    const missing = FS.resolvePath('missing-hutch', root)
+    try {
+      await Expect(StudioNative.testing.resolveHutchExecutablePath(missing)).rejects.toThrow(
+        `The Hutch executable specified by --hutch was not found: ${missing}`,
+      )
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('preflights Hutch before generating native artifacts', async () => {
+    const root = await FS.mkTmpDir(FS.resolvePath('tao-studio-native-preflight-', FS.tmpdir()))
+    const artifactRoot = FS.resolvePath('native-artifacts', root)
+    const missingHutch = FS.resolvePath('missing-hutch', root)
+    try {
+      await Expect(StudioNative.start({
+        artifactRoot,
+        hutchPath: missingHutch,
+        previewUrl: 'http://127.0.0.1:8081',
+        projectUrl: 'http://127.0.0.1:55101/sessions/test',
+        studioUrl: 'http://127.0.0.1:55101',
+      })).rejects.toThrow('The Hutch executable specified by --hutch was not found')
+      Expect(await FS.exists(artifactRoot)).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('recognizes fatal native child exits without treating watch rebuilds as failures', () => {
+    Expect(StudioNative.testing.nativeRuntimeCloseResult('Child process exited with code: 7')).toEqual({
+      exitCode: 7,
+      message: 'Native Studio runtime exited with code 7.',
+    })
+    Expect(StudioNative.testing.nativeRuntimeCloseResult('Child process terminated by signal: 6')).toEqual({
+      exitCode: 1,
+      message: 'Native Studio runtime terminated by signal 6.',
+    })
+    Expect(StudioNative.testing.nativeRuntimeCloseResult('Child process terminated by signal: 15')).toBeUndefined()
+    Expect(StudioNative.testing.nativeRuntimeCloseResult('Watching for changes...')).toBeUndefined()
   })
 
   Test('installs and prepares the generated project through the selected Hutch launcher', async () => {
@@ -224,6 +332,10 @@ Describe('Studio native wrapper foundation', () => {
 })
 
 Describe('Studio smoke resource isolation', () => {
+  Test('allocates every Studio preview server from an ephemeral port', () => {
+    Expect(StudioDev.testing.preferredExpoPort()).toBe(0)
+  })
+
   Test('persists and reloads validated recent projects in device-local Studio state', async () => {
     const stateRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-state-', FS.tmpdir()))
     const statePath = FS.resolvePath('recent-projects.json', stateRoot)

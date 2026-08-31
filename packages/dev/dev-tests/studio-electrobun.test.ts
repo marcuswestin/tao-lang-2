@@ -24,6 +24,9 @@ Describe('Studio Electrobun project', () => {
     Expect(generated.hutchConfig).toContain('// @hutch cli=0.24.3 cottontail=0.5.0')
     Expect(generated.hutchConfig).toContain('electrobun: { version: "2.0.2-beta.12" }')
     Expect(generated.hutchConfig).not.toContain('packageManager')
+    Expect(generated.packageJson).toMatchObject({
+      devDependencies: { '@types/bun': '1.4.0', ws: '8.21.0' },
+    })
     Expect(() => new Bun.Transpiler({ loader: 'ts' }).transformSync(generated.main)).not.toThrow()
     try {
       const project = await StudioElectrobun.create({ ...options, outputRoot })

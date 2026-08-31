@@ -5,6 +5,7 @@ const defaultBundleIdentifier = 'dev.tao-lang.studio'
 const defaultVersion = '0.0.1'
 const electrobunVersion = '2.0.2-beta.12'
 const bunTypesVersion = '1.4.0'
+const webSocketVersion = '8.21.0'
 
 export type StudioElectrobunOptions = {
   appName?: string
@@ -138,6 +139,7 @@ function sources(options: StudioElectrobunOptions): StudioElectrobunSources {
       type: 'module',
       devDependencies: {
         '@types/bun': bunTypesVersion,
+        ws: webSocketVersion,
       },
     },
     tsconfig: {

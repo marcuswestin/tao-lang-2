@@ -41,6 +41,7 @@ export const StudioDev = {
   testing: {
     cleanup: cleanupStudioDev,
     createProjectOpeners,
+    preferredExpoPort,
     withCleanup,
   },
 }
@@ -69,12 +70,16 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   )
 
   try {
+    const nativeHutchPath = options.native
+      ? await StudioNative.resolveHutchExecutablePath(options.nativeHutchPath)
+      : undefined
     const projects = createProjectOpeners(
       options.entryPath,
       async (request, entryPath) =>
         await openStudioProjectResource(request, {
           entryPath,
           isStopping: () => requestedStop,
+          preferredExpoPort: preferredExpoPort(),
           stop,
           testCommandPath: Repo.resolvePath('tao'),
         }),
@@ -114,7 +119,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     if (options.native && !requestedStop) {
       native = await StudioNative.start({
         artifactRoot: options.nativeArtifactRoot,
-        hutchPath: options.nativeHutchPath,
+        hutchPath: nativeHutchPath,
         previewUrl: initialResource.previewUrl ?? 'http://127.0.0.1:1',
         projectUrl,
         probe: options.nativeProbe,
@@ -151,6 +156,10 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   }
 }
 
+function preferredExpoPort(): number {
+  return 0
+}
+
 export async function openStudioProjectResource(
   request: StudioProjectOpenRequest,
   options: {
@@ -158,6 +167,7 @@ export async function openStudioProjectResource(
     isStopping: () => boolean
     logRoot?: string
     previewArtifactRoot?: string
+    preferredExpoPort?: number
     runtimeToolchainRoot?: string
     stop: (exitCode: number) => void
     testCommandArgs?: (projectRoot: string) => readonly string[]
@@ -171,7 +181,7 @@ export async function openStudioProjectResource(
   },
 ): Promise<StudioSessionResource> {
   const project = await resolveStudioProjectRoot(request.projectPath)
-  const expo = await ExpoRunner.createSessionWithAvailablePort()
+  const expo = await ExpoRunner.createSessionWithAvailablePort(options.preferredExpoPort)
   let expoServer: ReturnType<typeof ExpoRunner.createServer> | undefined
   let previewRuntime: CreatedStudioPreviewRuntime | undefined
   let preview: StudioPreviewSession | undefined
