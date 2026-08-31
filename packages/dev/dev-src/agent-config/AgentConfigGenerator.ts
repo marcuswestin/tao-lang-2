@@ -1,7 +1,23 @@
 import { resolve } from 'node:path'
-import { generate, type GenerateOptions, type ToolTarget } from 'rulesync'
+import { type Feature, generate, type GenerateOptions, type ToolTarget } from 'rulesync'
 
-const targets = ['codexcli', 'claudecode'] satisfies ToolTarget[]
+/**
+ * Codex CLI keeps its own hand-written `.codex/config.toml`: rulesync's Codex permissions
+ * translator cannot express that profile's loopback binding, Unix sockets, or curated domain
+ * list, so generating them would replace a narrow policy with an open one.
+ */
+const targetFeatures = {
+  codexcli: ['subagents'],
+  claudecode: ['subagents', 'permissions'],
+} satisfies Record<string, Feature[]>
+
+const targets = Object.keys(targetFeatures) as ToolTarget[]
+
+/** Outputs a sandboxed session is expected to be denied, keyed by the target that writes them. */
+const guardedOutputs: Record<string, string[]> = {
+  codexcli: ['.codex/agents'],
+  claudecode: ['.claude/agents', '.claude/settings.json'],
+}
 
 type GenerateAgentConfigOptions = {
   generate?: (options: GenerateOptions) => Promise<unknown>
@@ -15,6 +31,7 @@ async function generateAgentConfigs(options: GenerateAgentConfigOptions): Promis
     try {
       await generateTarget({
         configPath: '.rulesync/rulesync.jsonc',
+        features: targetFeatures[target as keyof typeof targetFeatures],
         inputRoot: options.root,
         outputRoots: [options.root],
         targets: [target],
@@ -30,12 +47,14 @@ async function generateAgentConfigs(options: GenerateAgentConfigOptions): Promis
 }
 
 function isBlockedAdapterOutput(error: unknown, target: ToolTarget, root: string): boolean {
-  const adapterDirectory = target === 'codexcli' ? '.codex/agents' : '.claude/agents'
-  const expectedPath = resolve(root, adapterDirectory)
   const { code, path } = error as NodeJS.ErrnoException
-  return (code === 'EACCES' || code === 'EPERM')
-    && typeof path === 'string'
-    && (path === expectedPath || path.startsWith(`${expectedPath}/`))
+  if ((code !== 'EACCES' && code !== 'EPERM') || typeof path !== 'string') {
+    return false
+  }
+  return (guardedOutputs[target] ?? []).some(output => {
+    const expectedPath = resolve(root, output)
+    return path === expectedPath || path.startsWith(`${expectedPath}/`)
+  })
 }
 
 /** AgentConfigGenerator renders canonical subagent definitions into tool adapters. */

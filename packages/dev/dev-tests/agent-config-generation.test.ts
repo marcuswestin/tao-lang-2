@@ -24,8 +24,37 @@ Describe('agent config generation', () => {
       })
 
       Expect(calls.map(call => call.targets)).toEqual([['codexcli'], ['claudecode']])
+      Expect(calls.map(call => call.features)).toEqual([
+        ['subagents'],
+        ['subagents', 'permissions'],
+      ])
       Expect(skipped).toEqual([
         `Skipped codexcli agent config: ${FS.resolvePath('.codex/agents', root)} is not writable.`,
+      ])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('continues when a sandbox denies the generated Claude Code settings', async () => {
+    const root = await mkTestDir('tao-agent-config-settings-')
+    try {
+      const skipped: string[] = []
+      await AgentConfigGenerator.generate({
+        generate: async options => {
+          if (options.targets?.[0] === 'claudecode') {
+            throw Object.assign(new Error('blocked'), {
+              code: 'EPERM',
+              path: FS.resolvePath('.claude/settings.json', root),
+            })
+          }
+        },
+        onSkip: message => skipped.push(message),
+        root,
+      })
+
+      Expect(skipped).toEqual([
+        `Skipped claudecode agent config: ${FS.resolvePath('.claude/settings.json', root)} is not writable.`,
       ])
     } finally {
       await FS.remove(root)

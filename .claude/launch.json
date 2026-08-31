@@ -4,7 +4,20 @@
     {
       "name": "hnreader-dev",
       "runtimeExecutable": "direnv",
-      "runtimeArgs": ["exec", ".", "./tao", "dev", "Apps/HNReader", "--app", "HNReader"],
+      "runtimeArgs": [
+        "exec",
+        ".",
+        "./tao",
+        "dev",
+        "Apps/HNReader",
+        "--app",
+        "HNReader"
+      ],
+      "port": 8081
+    },
+    {
+      "name": "tao-dev",
+      "url": "http://localhost:8081",
       "port": 8081
     }
   ]

@@ -16,6 +16,10 @@ help:
 # Setup dependencies and generated agent adapters
 setup: deps _agent-config
 
+# Launch Claude Code with the Bash sandbox off; switch a running session with /sandbox
+claude-unsandboxed *ARGS:
+    claude --settings "{{ justfile_directory() }}/.claude/settings.unsandboxed.json" {{ ARGS }}
+
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [positional-arguments]
 dev app_path="Apps" APP="":

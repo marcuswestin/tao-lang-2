@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(./agent *)",
+      "Bash(./dev *)",
+      "Bash(./tao *)",
+      "Bash(adb *)",
+      "Bash(bun install *)",
+      "Bash(bun run *)",
+      "Bash(bun test *)",
+      "Bash(direnv exec . *)",
+      "Bash(docker compose *)",
+      "Bash(docker ps *)",
+      "Bash(dprint *)",
+      "Bash(emulator *)",
+      "Bash(just *)",
+      "Bash(xcrun simctl *)",
+      "Read(~/code/tao-lang/**)",
+      "WebFetch",
+      "WebSearch",
+      "mcp__Claude_Browser__*",
+      "mcp__Claude_Code_iOS_Simulator__*",
+      "mcp__claude-in-chrome__*"
+    ],
+    "ask": [
+      "Bash(git merge *)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(~/.aws/**)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.ssh/**)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "excludedCommands": [
+      "docker *",
+      "gh *",
+      "adb *",
+      "emulator *"
+    ],
+    "filesystem": {
+      "allowWrite": [
+        "~/.bun",
+        "~/.cache",
+        "~/.gradle",
+        "~/.android",
+        "~/Library/Caches"
+      ]
+    },
+    "network": {
+      "allowLocalBinding": true,
+      "allowUnixSockets": [
+        "/nix/var/nix/daemon-socket/socket"
+      ],
+      "allowedDomains": [
+        "registry.npmjs.org",
+        "*.npmjs.org",
+        "nodejs.org",
+        "*.nodejs.org",
+        "github.com",
+        "*.github.com",
+        "*.githubusercontent.com",
+        "expo.dev",
+        "*.expo.dev",
+        "*.expo.io",
+        "exp.host",
+        "cache.nixos.org",
+        "*.cachix.org",
+        "*.anthropic.com",
+        "*.openai.com"
+      ]
+    }
+  }
+}
