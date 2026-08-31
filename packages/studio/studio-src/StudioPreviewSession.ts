@@ -66,7 +66,10 @@ export function matrixManifest(
   if (compiler === undefined || publication === undefined) {
     throw new Error('Tao Studio matrix manifests require a preview compilation.')
   }
-  validatePreviewScenarios(session, compiler.scenarios)
+  const previewScenarios = compiler.scenarios.filter(scenario =>
+    scenario.subject.kind !== 'app' || scenario.subject.appName === session.appName
+  )
+  validatePreviewScenarios(session, previewScenarios)
   const subjects: StudioScenarioSubject[] = [
     ...compiler.apps.map(app => ({
       appName: app.name,
@@ -95,7 +98,7 @@ export function matrixManifest(
       ] as const
     ),
   ])
-  const scenarios = compiler.scenarios.map(scenario => ({
+  const scenarios = previewScenarios.map(scenario => ({
     args: scenario.subject.kind === 'view'
       ? jsonObject(scenario.subject.arguments)
       : {},
@@ -113,7 +116,7 @@ export function matrixManifest(
       captureDomains: ['action-history', 'data', 'environment', 'navigation', 'persisted-state'],
       scheme: 'inert',
     },
-    cells: compiler.scenarios.map(scenario => ({
+    cells: previewScenarios.map(scenario => ({
       args: scenario.subject.kind === 'view' ? jsonObject(scenario.subject.arguments) : {},
       cellId: `${scenario.id}#cell`,
       cellRevision: 0,
@@ -175,11 +178,6 @@ function validatePreviewScenarios(
     }
     if (scenario.subject.kind !== 'app') {
       continue
-    }
-    if (scenario.subject.appName !== session.appName) {
-      throw new Errors.UserInputError(
-        `Tao Studio cannot run app ${scenario.subject.appName} from a ${session.appName} preview session. Open that app in Studio instead.`,
-      )
     }
     if (scenario.subject.destination !== undefined) {
       throw new Errors.UserInputError(

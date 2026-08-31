@@ -49,6 +49,7 @@ export type StudioHandshake = {
   files: readonly StudioFile[]
   identity: { appName: string; project: string }
   previewManifest?: StudioPreviewManifestV2
+  type: 'handshake'
 }
 
 export type StudioLspTransport = Transport & Readonly<{ close: () => void }>
@@ -146,6 +147,22 @@ export class StudioApiError extends Error {
   constructor(message: string, readonly status: number) {
     super(message)
   }
+}
+
+export const StudioApiEventStream = {
+  dispatch(message: StudioHandshake | StudioEvent, handlers: StudioApiEventHandlers): void {
+    if (message.type === 'handshake') {
+      handlers.onHandshake?.(message)
+    } else if (message.type === 'compile-state') {
+      handlers.onCompile(message.state)
+    } else if (message.type === 'file-changed') {
+      handlers.onFile(message.file)
+    } else if (message.type === 'files-changed') {
+      handlers.onFiles?.(message.files)
+    } else if (message.type === 'preview-manifest-changed') {
+      handlers.onManifest(message.manifest)
+    }
+  },
 }
 
 /** Typed boundary around Studio's HTTP and WebSocket endpoints. */
@@ -246,19 +263,7 @@ function connectEvents(handlers: StudioApiEventHandlers): WebSocket {
   const socket = new WebSocket(webSocketUrl(studioSessionPath('/events')))
   socket.addEventListener('message', event => {
     const message = JSON.parse(String(event.data)) as StudioHandshake | StudioEvent
-    if (!('type' in message)) {
-      handlers.onHandshake?.(message)
-      return
-    }
-    if (message.type === 'compile-state') {
-      handlers.onCompile(message.state)
-    } else if (message.type === 'file-changed') {
-      handlers.onFile(message.file)
-    } else if (message.type === 'files-changed') {
-      handlers.onFiles?.(message.files)
-    } else if (message.type === 'preview-manifest-changed') {
-      handlers.onManifest(message.manifest)
-    }
+    StudioApiEventStream.dispatch(message, handlers)
   })
   socket.addEventListener('open', () => handlers.onConnect?.())
   socket.addEventListener('close', handlers.onDisconnect)

@@ -1,7 +1,12 @@
 import { EditorState, type Transaction } from '@codemirror/state'
 import { type Command, type EditorView, keymap } from '@codemirror/view'
 import { Expect, Test } from '@shared/test'
-import { StudioApiError, StudioApiRoutes, type StudioHandshake } from '../studio-src/client/StudioApiClient'
+import {
+  StudioApiError,
+  StudioApiEventStream,
+  StudioApiRoutes,
+  type StudioHandshake,
+} from '../studio-src/client/StudioApiClient'
 import { StudioDataFillCoordinator, StudioProjectContext } from '../studio-src/client/StudioApp'
 import { StudioEditorTabs } from '../studio-src/client/StudioEditorTabs'
 import {
@@ -158,6 +163,25 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(html).toContain('<script type="module" src="/studio.js"></script>')
   Expect(html).not.toContain('</script><script>bad()</script>')
   Expect(html).toContain('\\u003c/script>')
+})
+
+Test('Studio events dispatch typed handshakes so startup scenario manifests are not missed', () => {
+  const handshake = {
+    type: 'handshake',
+  } as StudioHandshake
+  let received: StudioHandshake | undefined
+
+  StudioApiEventStream.dispatch(handshake, {
+    onCompile() {},
+    onDisconnect() {},
+    onFile() {},
+    onHandshake(value) {
+      received = value
+    },
+    onManifest() {},
+  })
+
+  Expect(received).toBe(handshake)
 })
 
 Test('Studio generated fixture proposals use the captured-fixture source-action flow', () => {
