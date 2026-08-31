@@ -87,11 +87,16 @@ function tao_activate_devenv_profile() {
   export PATH="$devenv_profile/bin:$PATH"
 }
 
-# Bun's installer requires the host's per-user temporary directory on macOS.
-# A workspace-local TMPDIR is writable to the shell but Bun rejects it during
-# package extraction. Fall back to a caller-owned directory on other hosts.
+# Bun normally requires the host's per-user temporary directory on macOS. Codex's
+# managed sandbox grants ordinary workspace writes but Bun cannot use the host
+# directory, so prefer the caller-owned artifact directory there.
 function tao_bun_temp_dir() {
   local fallback_dir="$1"
+  if [[ -n "${CODEX_SANDBOX:-}" && -d "$fallback_dir" && -w "$fallback_dir" ]]; then
+    print -r -- "${fallback_dir:A}/"
+    return
+  fi
+
   local darwin_temp_dir
   darwin_temp_dir="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null)" || darwin_temp_dir=""
   if [[ -n "$darwin_temp_dir" && -d "$darwin_temp_dir" && -w "$darwin_temp_dir" ]]; then

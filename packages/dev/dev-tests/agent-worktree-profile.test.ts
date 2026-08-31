@@ -83,10 +83,29 @@ Describe('agent worktree profile bootstrap', () => {
       const fixture = await createProfileFixture(testRoot, true)
       const fallback = FS.resolvePath('fallback-temp', testRoot)
       await FS.mkdir(fallback)
-      const result = await runProfileScript('tao_bun_temp_dir "$2"', fixture, fallback)
+      const result = await runProfileScript('CODEX_SANDBOX= tao_bun_temp_dir "$2"', fixture, fallback)
 
       Expect(result.exitCode).toBe(0)
       Expect(result.stdout.trim()).toBe(`${await FS.realPath(fixture.systemTemp)}/`)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
+  Test('keeps Bun bootstrap temporary files inside a managed workspace', async () => {
+    const testRoot = await mkTestDir('tao-agent-sandbox-temp-')
+    try {
+      const fixture = await createProfileFixture(testRoot, true)
+      const fallback = FS.resolvePath('fallback-temp', testRoot)
+      await FS.mkdir(fallback)
+      const result = await runProfileScript(
+        'CODEX_SANDBOX=managed tao_bun_temp_dir "$3"',
+        fixture,
+        fallback,
+      )
+
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout.trim()).toBe(`${await FS.realPath(fallback)}/`)
     } finally {
       await FS.remove(testRoot)
     }
