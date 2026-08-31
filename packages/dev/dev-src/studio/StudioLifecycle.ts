@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, Repo, Time } from '@shared'
 import {
+  isSameProcess,
   type OwnershipProbes,
   readLaunches,
   removeLaunch,
@@ -22,6 +23,7 @@ import {
 /** How long a stopped process group is given to exit before SIGKILL. */
 const TERM_POLL_MS = 50
 const TERM_POLLS = 60
+const KILL_POLLS = 20
 
 /** LaunchRow is one line of `studio ps`, live and stale launches alike. */
 export type LaunchRow = {
@@ -199,12 +201,28 @@ async function stopLaunch(
   const killedPids = remaining.map(process => process.pid)
   if (killedPids.length > 0) {
     await signal('SIGKILL', killedPids)
+    // A signal can be sent and still not land: the host may deny it, or the process may ignore
+    // even SIGKILL while stuck in the kernel. Removing the manifest here would throw away the
+    // only record of what is still running, so the outcome is proven before it is claimed.
+    for (let poll = 0; poll < KILL_POLLS && remaining.length > 0; poll += 1) {
+      await sleep(TERM_POLL_MS)
+      remaining = await stillOwned(remaining, probes)
+    }
   }
 
   const cleanup: StudioCleanupResult = {
     killedPids,
     releasedPorts: validated.ownedPorts,
     signaledPids,
+  }
+  if (remaining.length > 0) {
+    return {
+      cleanup,
+      launchId,
+      manifestRemoved: false,
+      outcome: 'refused',
+      reason: `still running after SIGKILL: ${remaining.map(process => process.pid).join(' ')}`,
+    }
   }
   await finalizeManifest(stored, cleanup)
   return { cleanup, launchId, manifestRemoved: await removeLaunch(stored), outcome: 'stopped' }
@@ -221,15 +239,18 @@ async function finalizeManifest(stored: StoredLaunch, cleanup: StudioCleanupResu
   })
 }
 
+/**
+ * Re-runs the same ownership test the launch was validated with, start time included. Anything
+ * weaker would let an id freed during the termination window, and reused by another copy of the
+ * same executable, inherit the SIGKILL meant for the process that has already exited.
+ */
 async function stillOwned(
   processes: readonly StudioLaunchProcess[],
   probes: OwnershipProbes,
 ): Promise<StudioLaunchProcess[]> {
   const running: StudioLaunchProcess[] = []
   for (const process of processes) {
-    const fact = await probes.processFact(process.pid)
-    // Only the still-recognisable process is escalated to: an id freed mid-stop is left alone.
-    if (fact.running && (fact.command === undefined || fact.command === process.command)) {
+    if (isSameProcess(process, await probes.processFact(process.pid))) {
       running.push(process)
     }
   }

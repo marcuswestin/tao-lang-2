@@ -112,15 +112,17 @@ await runWithCommands(commands => {
     .command('studio-release-check')
     .description('Validate a built native Studio release without publishing anything.')
     .requiredOption('--payload-root <path>', 'Staged service payload directory.')
+    .requiredOption('--artifacts-root <path>', 'Directory the build wrote its artifacts into.')
     .option('--app <path>', 'Built .app bundle, for signature and notarization checks.')
     .option('--dmg <path>', 'Built disk image, for the mount check.')
-    .option('--artifact <name...>', 'Names of the artifacts the build produced.')
     .option('--release-base-url <url>', 'The HTTPS host installed copies fetch updates from.')
+    .option('--allow-unverified', 'Succeed even when a gate could not be checked on this machine.')
     .action(
       async (
         options: {
+          allowUnverified?: boolean
           app?: string
-          artifact?: string[]
+          artifactsRoot: string
           dmg?: string
           payloadRoot: string
           releaseBaseUrl?: string
@@ -128,8 +130,9 @@ await runWithCommands(commands => {
       ) => {
         Platform.runtimeProcess.exit(
           await StudioCanaryCommand.releaseCheck({
+            allowUnverified: options.allowUnverified === true,
             appPath: options.app,
-            artifactNames: options.artifact,
+            artifactsRoot: options.artifactsRoot,
             diskImagePath: options.dmg,
             payloadRoot: options.payloadRoot,
             releaseBaseUrl: options.releaseBaseUrl,

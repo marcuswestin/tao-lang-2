@@ -29,7 +29,9 @@ session prefix carries the opaque session ID that its HTTP and WebSocket routes 
 
 ## Readiness
 
-`--json` prints exactly one line on stdout after the session page has answered its readiness probe:
+`--json` prints one JSON line after the session page has answered its readiness probe. Human log
+lines and child-process output share stdout, so read the line that parses as JSON and carries
+`"version": 1` rather than assuming it is the only one:
 
 ```json
 {
@@ -49,7 +51,9 @@ session prefix carries the opaque session ID that its HTTP and WebSocket routes 
 ```
 
 Scripts and smoke lanes read this instead of scraping logs. It is emitted only after the URL it
-advertises actually answers, so a caller that sees it can open that address immediately.
+advertises actually answers, so a caller that sees it can open that address immediately. The launch
+manifest reaches `ready` at the same moment and for the same reason; a launch whose page never
+answers is recorded `failed` and stops, rather than idling in a state that reads as usable.
 
 ## Ports
 
@@ -199,13 +203,18 @@ just studio-package https://releases.example.com/tao-studio stable
 Then validate what was built, without publishing anything:
 
 ```bash
-just studio-release-check .artifacts/build/studio-native/service-stage/payload --app "<built>.app" --dmg "<built>.dmg" --release-base-url https://releases.example.com/tao-studio
+just studio-release-check .artifacts/build/studio-native/service-stage/payload .artifacts/build/studio-native/project/artifacts --app "<built>.app" --dmg "<built>.dmg" --release-base-url https://releases.example.com/tao-studio
 ```
+
+The artifact names are read from the directory the build wrote, never from the command line, so a
+name nobody produced cannot pass a check.
 
 The validation reports a standalone payload (no `bunx`, no repository paths, no devenv profile), the
 packaged Node runtime and native library inventory, an HTTPS update manifest, differential updates,
 and — through Apple's own tools — deep signing, notarization, and disk image validity. A gate whose
-tool is missing is reported **UNVERIFIED**, never as passed.
+tool is missing is reported **UNVERIFIED**, never as passed, and an unverified gate **fails the
+command**: a build nobody could confirm was signed is not publishable. `--allow-unverified` exits
+zero for inspecting a build on a machine that was never going to be able to check it.
 
 ### Operator steps for the external gates
 

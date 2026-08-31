@@ -176,12 +176,24 @@ function versionDrift(label: string, installed: string | undefined, pinned: stri
   return `${label} ${installed} is installed but the generated project pins ${pinned}`
 }
 
+/**
+ * Whether AppKit registration will actually succeed is not knowable without attempting it: a
+ * process inside an agent host's coalition reports an Aqua session and still aborts on launch.
+ * So this reports the one thing it can see, and points at the canary as the real test rather
+ * than claiming a pass it cannot support.
+ */
 function appKitCheck(facts: StudioDoctorFacts): DoctorCheck {
   if (facts.appKitAvailable) {
-    return { detail: 'this host can register a native application', name: 'native shell host', status: 'pass' }
+    return {
+      detail: 'a window server session is attached; whether AppKit registration succeeds is only '
+        + 'known by attempting it',
+      name: 'native shell host',
+      remediation: 'Prove it with: just studio-canary',
+      status: 'warn',
+    }
   }
   return {
-    detail: facts.appKitReason ?? 'this host cannot register a native application',
+    detail: facts.appKitReason ?? 'no window server session is attached, so no native application can register',
     name: 'native shell host',
     remediation: 'Run native Studio from a terminal in the logged-in desktop session, or use ./dev studio.',
     status: 'warn',

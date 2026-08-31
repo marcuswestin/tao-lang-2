@@ -23,7 +23,7 @@ import { createStudioLifecycleLog, type StudioLifecycleLog } from './StudioLifec
 import { StudioNative } from './StudioNative'
 import type { StartedStudioNative } from './StudioNative'
 import { type CreatedStudioPreviewRuntime, StudioPreviewRuntime } from './StudioPreviewRuntime'
-import { openTarget, type StudioReadiness, waitForReadyUrl, writeReadiness } from './StudioReadiness'
+import { openTarget, waitForReadyUrl, writeReadiness } from './StudioReadiness'
 import { StudioTestProcessRunner } from './StudioTestProcessRunner'
 
 export type StudioDevOptions = {
@@ -147,7 +147,6 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       processes: [await describeOwnProcess('studio-server')],
       sessionId: initial.sessionId,
       sessionUrl,
-      state: 'ready',
       studioPort: server.port,
       studioUrl: server.url,
     })
@@ -167,20 +166,33 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
         stop(exitCode)
       })
     }
-    if (options.json === true && !requestedStop) {
-      await announceReadiness({
-        appName: options.appName,
-        artifactRoot,
-        launchId: launch.launchId,
-        lifecycleLogPath: lifecycle.path,
-        manifestPath: launch.path,
-        mode,
-        previewUrl: initialResource.previewUrl,
-        projectRoot: initial.project,
-        sessionId: initial.sessionId,
-        sessionUrl,
-        studioUrl: server.url,
-      })
+    if (!requestedStop) {
+      // `ready` is a claim about the page, so it is only made once the page has answered. A
+      // launch whose page never answers is `failed`, and stops rather than idling in a state
+      // that reads as usable to `studio-ps` and to anything scripting it.
+      if (await waitForReadyUrl(sessionUrl)) {
+        await launch.update({ state: 'ready' })
+        if (options.json === true) {
+          writeReadiness({
+            appName: options.appName,
+            artifactRoot,
+            launchId: launch.launchId,
+            lifecycleLogPath: lifecycle.path,
+            manifestPath: launch.path,
+            mode,
+            previewUrl: initialResource.previewUrl,
+            projectRoot: initial.project,
+            sessionId: initial.sessionId,
+            sessionUrl,
+            studioUrl: server.url,
+            version: 1,
+          })
+        }
+      } else {
+        await launch.update({ shutdownReason: 'the session page never answered', state: 'failed' })
+        HCI.logProcessError('studio', `Studio did not answer at ${sessionUrl}.`)
+        stop(1)
+      }
     }
     const target = options.native === true
       ? undefined
@@ -213,21 +225,14 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
           HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
         }),
       async () => {
-        await launch?.finalize({ processes: [], shutdownReason: 'studio exited' })
+        // The process record is kept, not cleared: a caller checking for survivors after shutdown
+        // needs to know what this launch owned. Liveness is decided by validation, not by absence.
+        await launch?.finalize({ shutdownReason: 'studio exited' })
         lifecycle?.record({ component: 'studio-server', event: 'manifest-finalized' })
         await lifecycle?.close()
       },
     ])
   }
-}
-
-/** Emits readiness only once the advertised page answers, so no caller opens a dead address. */
-async function announceReadiness(readiness: Omit<StudioReadiness, 'version'>): Promise<void> {
-  if (!await waitForReadyUrl(readiness.sessionUrl)) {
-    HCI.logProcessError('studio', `Studio did not answer at ${readiness.sessionUrl}.`)
-    return
-  }
-  writeReadiness({ ...readiness, version: 1 })
 }
 
 function addStopSignalHandlers(

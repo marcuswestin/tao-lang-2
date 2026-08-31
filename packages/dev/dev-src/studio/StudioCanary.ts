@@ -34,6 +34,8 @@ export type CanaryStatus = 'blocked' | 'failed' | 'passed'
 export type CanaryReport = {
   /** Capabilities the probe reported, with the reason for each failure. */
   capabilities: Readonly<Record<string, { message?: string; passed: boolean }>>
+  /** The exit status of the launch itself. A nonzero one fails the run whatever the probe said. */
+  exitCode?: number
   /** Why the canary could not run, when it could not. */
   blockedReason?: string
   manualChecks: readonly string[]
@@ -48,6 +50,7 @@ export type CanaryReport = {
 /** evaluateCanary decides a run's outcome from the probe result and what survived shutdown. */
 export function evaluateCanary(input: {
   blockedReason?: string
+  exitCode?: number
   probe?: StudioNativeProbeResult
   survivingPids?: readonly number[]
 }): CanaryReport {
@@ -56,6 +59,7 @@ export function evaluateCanary(input: {
     return {
       blockedReason: input.blockedReason ?? 'the native runtime probe produced no result',
       capabilities: {},
+      exitCode: input.exitCode,
       manualChecks: [...MANUAL_CHECKS],
       missingCapabilities: [...REQUIRED_CAPABILITIES],
       status: 'blocked',
@@ -66,12 +70,18 @@ export function evaluateCanary(input: {
   const capabilities = input.probe.capabilities
   const missingCapabilities = REQUIRED_CAPABILITIES.filter(name => capabilities[name] === undefined)
   const failed = Object.values(capabilities).some(capability => !capability.passed)
+  // Three independent ways to fail, and a probe that passed does not excuse any of them: a
+  // capability missing from the report, an owned process still running, or a launch that exited
+  // nonzero after reporting.
+  const exitedBadly = input.exitCode !== undefined && input.exitCode !== 0
   return {
     capabilities,
+    exitCode: input.exitCode,
     manualChecks: [...MANUAL_CHECKS],
     missingCapabilities,
-    // A surviving owned process is a failure in its own right: the canary proves cleanup too.
-    status: failed || missingCapabilities.length > 0 || survivingPids.length > 0 ? 'failed' : 'passed',
+    status: failed || missingCapabilities.length > 0 || survivingPids.length > 0 || exitedBadly
+      ? 'failed'
+      : 'passed',
     survivingPids,
     version: 1,
   }
@@ -100,6 +110,13 @@ export function formatCanaryReport(report: CanaryReport): string {
       ? 'PASS      shutdown: no owned process survived'
       : `FAIL      shutdown: ${report.survivingPids.join(' ')} still running`,
   )
+  if (report.exitCode !== undefined) {
+    lines.push(
+      report.exitCode === 0
+        ? 'PASS      exit: the launch exited cleanly'
+        : `FAIL      exit: the launch exited ${report.exitCode}`,
+    )
+  }
   lines.push('', 'Still to check by hand:')
   for (const check of report.manualChecks) {
     lines.push(`- ${check}`)

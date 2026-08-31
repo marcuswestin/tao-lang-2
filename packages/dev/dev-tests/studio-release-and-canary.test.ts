@@ -12,6 +12,7 @@ import {
   type ExternalGateResults,
   formatReleaseValidation,
   type PayloadInventory,
+  readArtifactInventory,
   readPayloadInventory,
   releaseExitCode,
   releaseValidation,
@@ -25,6 +26,7 @@ const payload: PayloadInventory = {
 const artifacts: ArtifactInventory = {
   names: ['stable-1.0.0-update.json', 'Tao Studio.dmg', 'stable-1.0.0.tar.zst', 'stable-1.0.0.patch'],
   releaseBaseUrl: 'https://releases.example.com/tao-studio',
+  root: '/build/artifacts',
 }
 
 const gates: ExternalGateResults = { deepSigned: true, diskImageValid: true, notarized: true }
@@ -42,15 +44,32 @@ Describe('Studio release validation', () => {
     Expect(releaseExitCode(validation)).toBe(0)
   })
 
-  Test('never reports an unrunnable external gate as passed', () => {
+  Test('refuses to call a build publishable when a gate could not be checked', () => {
     const validation = releaseValidation(payload, artifacts, {})
 
     Expect(validation.status).toBe('unverified')
     Expect(check(validation, 'notarization')?.status).toBe('unverified')
     Expect(check(validation, 'notarization')?.remediation).toContain('xcrun stapler validate')
-    Expect(formatReleaseValidation(validation)).toContain('UNVERIFIED gates were not checked here')
-    // Unverified is not a failure either: it must not block a build on a machine without Xcode.
-    Expect(releaseExitCode(validation)).toBe(0)
+    Expect(formatReleaseValidation(validation)).toContain('not publishable from here')
+    // A gate nobody ran is not a gate that passed, so the default is to fail.
+    Expect(releaseExitCode(validation)).toBe(1)
+    Expect(releaseExitCode(validation, { allowUnverified: true })).toBe(0)
+  })
+
+  Test('reads the artifact names from disk rather than from the caller', async () => {
+    const root = await mkTestDir('tao-release-artifacts-')
+    try {
+      await FS.writeText(FS.resolvePath('stable-1.0.0-update.json', root), '{}')
+      await FS.writeText(FS.resolvePath('stable-1.0.0.tar.zst', root), 'archive')
+      const inventory = await readArtifactInventory(root, 'https://releases.example.com/tao-studio')
+
+      Expect(inventory.names).toEqual(['stable-1.0.0-update.json', 'stable-1.0.0.tar.zst'])
+      Expect(inventory.root).toBe(root)
+      // A name nobody produced cannot be claimed, because nothing accepts a claimed name.
+      Expect(inventory.names).not.toContain('fictional-9.9.9-update.json')
+    } finally {
+      await FS.remove(root)
+    }
   })
 
   Test('fails a payload that depends on the machine that built it', () => {
@@ -98,7 +117,7 @@ Describe('Studio release validation', () => {
 
     Expect(check(firstRelease, 'differential update')?.status).toBe('unverified')
     Expect(check(firstRelease, 'differential update')?.remediation).toContain('first release')
-    Expect(releaseExitCode(firstRelease)).toBe(0)
+    Expect(releaseExitCode(firstRelease, { allowUnverified: true })).toBe(0)
   })
 
   Test('reads a staged payload and reports what it references', async () => {
@@ -137,13 +156,21 @@ Describe('Studio native canary', () => {
     passed: true,
   }
 
-  Test('passes when every capability reported and nothing survived shutdown', () => {
-    const report = evaluateCanary({ probe: passingProbe, survivingPids: [] })
+  Test('passes when every capability reported, nothing survived, and the launch exited cleanly', () => {
+    const report = evaluateCanary({ exitCode: 0, probe: passingProbe, survivingPids: [] })
 
     Expect(report.status).toBe('passed')
     Expect(report.missingCapabilities).toEqual([])
     Expect(report.manualChecks).toEqual([...MANUAL_CHECKS])
     Expect(canaryExitCode(report)).toBe(0)
+  })
+
+  Test('fails a launch that exited nonzero even when the probe passed', () => {
+    const report = evaluateCanary({ exitCode: 1, probe: passingProbe, survivingPids: [] })
+
+    Expect(report.status).toBe('failed')
+    Expect(formatCanaryReport(report)).toContain('FAIL      exit: the launch exited 1')
+    Expect(canaryExitCode(report)).toBe(1)
   })
 
   Test('fails when a process the launch owned is still running', () => {

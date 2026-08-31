@@ -42,10 +42,16 @@ export type PayloadInventory = {
   nonPortableReferences: readonly { file: string; reason: string }[]
 }
 
-/** ArtifactInventory is what the build produced, by file name. */
+/**
+ * ArtifactInventory is what the build actually produced. `names` is read from the artifact
+ * directory on disk, never supplied by the caller: a release gate that trusts a list of names
+ * it was handed proves only that the caller can type.
+ */
 export type ArtifactInventory = {
   names: readonly string[]
   releaseBaseUrl?: string
+  /** The directory the names were read from, for the report. */
+  root?: string
 }
 
 /** ExternalGateResults are the outcomes of the Apple tools, or undefined when a tool is absent. */
@@ -87,9 +93,20 @@ export function releaseValidation(
   return { checks, status, version: 1 }
 }
 
-/** releaseExitCode fails only on a real failure; an unverified external gate is reported, not failed. */
-export function releaseExitCode(validation: ReleaseValidation): number {
-  return validation.status === 'failed' ? 1 : 0
+/**
+ * releaseExitCode fails a release whose gates could not all be checked. An unverified gate is not
+ * a pass: a build nobody could confirm was signed must not be publishable just because the tool
+ * that checks it was absent. `allowUnverified` is for inspecting a build on a machine that was
+ * never going to be able to check it.
+ */
+export function releaseExitCode(
+  validation: ReleaseValidation,
+  options: { allowUnverified?: boolean } = {},
+): number {
+  if (validation.status === 'failed') {
+    return 1
+  }
+  return validation.status === 'unverified' && options.allowUnverified !== true ? 1 : 0
 }
 
 function standalonePayloadCheck(payload: PayloadInventory): ReleaseCheck {
@@ -134,7 +151,9 @@ function updateManifestCheck(artifacts: ArtifactInventory): ReleaseCheck {
   const manifest = artifacts.names.find(name => name.endsWith('-update.json'))
   if (manifest === undefined) {
     return {
-      detail: 'no update manifest was produced, so installed copies can never update',
+      detail: artifacts.root === undefined
+        ? 'no artifact directory was inspected, so no update manifest could be found'
+        : `no update manifest in ${artifacts.root}, so installed copies can never update`,
       name: 'update manifest',
       remediation: 'Check the Electrobun release configuration for this channel.',
       status: 'failed',
@@ -225,6 +244,18 @@ export async function readPayloadInventory(payloadRoot: string): Promise<Payload
   return { files: files.sort(), nonPortableReferences }
 }
 
+/** readArtifactInventory lists what the build actually left on disk. */
+export async function readArtifactInventory(
+  artifactsRoot: string,
+  releaseBaseUrl?: string,
+): Promise<ArtifactInventory> {
+  const names: string[] = []
+  for await (const path of FS.walk(artifactsRoot)) {
+    names.push(FS.relativePath(artifactsRoot, path))
+  }
+  return { names: names.sort(), releaseBaseUrl, root: artifactsRoot }
+}
+
 /** readExternalGates runs Apple's own validators, reporting undefined when one is unavailable. */
 export async function readExternalGates(options: {
   appPath?: string
@@ -260,7 +291,8 @@ export function formatReleaseValidation(validation: ReleaseValidation): string {
     validation.status === 'failed'
       ? 'release: this build must not be published.'
       : validation.status === 'unverified'
-      ? 'release: every check that could run passed; the UNVERIFIED gates were not checked here.'
+      ? 'release: not publishable from here — the UNVERIFIED gates were never checked. '
+        + "Rerun where Apple's tools are available, or pass --allow-unverified to inspect only."
       : 'release: every gate passed.',
   )
   return lines.join('\n')

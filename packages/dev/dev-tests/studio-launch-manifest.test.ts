@@ -255,8 +255,13 @@ Describe('Studio lifecycle commands', () => {
         repositoryRoot: root,
         signal: async (signal, pids) => {
           signals.push({ pids, signal })
+          // 100 stops on TERM; 101 only stops when it is killed.
           if (signal === 'SIGTERM') {
             processes[100] = { pid: 100, running: false }
+          } else {
+            for (const pid of pids) {
+              processes[pid] = { pid, running: false }
+            }
           }
         },
         sleep: async () => {},
@@ -300,10 +305,13 @@ Describe('Studio lifecycle commands', () => {
     const root = await mkTestDir('tao-studio-stop-idempotent-')
     try {
       await publish(root)
+      const processes: Record<number, ProcessFact> = { 100: alive(100, 'bun') }
       const dependencies = {
-        probes: probes({ processes: { 100: alive(100, 'bun') } }),
+        probes: probes({ processes }),
         repositoryRoot: root,
-        signal: async () => {},
+        signal: async () => {
+          processes[100] = { pid: 100, running: false }
+        },
         sleep: async () => {},
       }
       const first = await stopLaunches(dependencies)
@@ -334,6 +342,57 @@ Describe('Studio lifecycle commands', () => {
       Expect(signals).toEqual([])
       Expect(report.outcomes[0]?.outcome).toBe('already-stopped')
       Expect(report.outcomes[0]?.reason).toContain('no longer this launch')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('never escalates to an id reused by another copy of the same program', async () => {
+    const root = await mkTestDir('tao-studio-stop-reuse-window-')
+    try {
+      await publish(root)
+      const signals: { pids: readonly number[]; signal: string }[] = []
+      // The recorded process exits under SIGTERM and its id is immediately taken by another
+      // `bun`. Only the start time separates them, so only the start time prevents the SIGKILL.
+      const processes: Record<number, ProcessFact> = { 100: alive(100, 'bun') }
+      const report = await stopLaunches({
+        probes: probes({ processes }),
+        repositoryRoot: root,
+        signal: async (signal, pids) => {
+          signals.push({ pids, signal })
+          if (signal === 'SIGTERM') {
+            processes[100] = alive(100, 'bun', 'Tue Feb  2 09:00:00 2026')
+          }
+        },
+        sleep: async () => {},
+      })
+
+      Expect(signals.map(entry => entry.signal)).toEqual(['SIGTERM'])
+      Expect(report.outcomes[0]?.outcome).toBe('stopped')
+      Expect(report.outcomes[0]?.cleanup.killedPids).toEqual([])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('keeps the manifest when a process survives SIGKILL, rather than claiming success', async () => {
+    const root = await mkTestDir('tao-studio-stop-survivor-')
+    try {
+      await publish(root)
+      const report = await stopLaunches({
+        // Nothing this stop does changes the process: it ignores every signal.
+        probes: probes({ processes: { 100: alive(100, 'bun') } }),
+        repositoryRoot: root,
+        signal: async () => {},
+        sleep: async () => {},
+      })
+
+      Expect(report.outcomes[0]?.outcome).toBe('refused')
+      Expect(report.outcomes[0]?.reason).toContain('still running after SIGKILL: 100')
+      Expect(report.outcomes[0]?.manifestRemoved).toBe(false)
+      Expect(stopExitCode(report)).toBe(1)
+      // The record survives, because it is the only thing that still knows what is running.
+      Expect((await readLaunches(root)).length).toBe(1)
     } finally {
       await FS.remove(root)
     }
@@ -386,11 +445,14 @@ Describe('Studio lifecycle commands', () => {
       await publish(root, { launchId: 'browser-one' })
       await publish(root, { launchId: 'browser-two', startedAt: '2026-01-02T00:00:00.000Z' })
 
+      const processes: Record<number, ProcessFact> = { 100: alive(100, 'bun') }
       const report = await stopLaunches({
         launchId: 'browser-two',
-        probes: probes({ processes: { 100: alive(100, 'bun') } }),
+        probes: probes({ processes }),
         repositoryRoot: root,
-        signal: async () => {},
+        signal: async () => {
+          processes[100] = { pid: 100, running: false }
+        },
         sleep: async () => {},
       })
 
