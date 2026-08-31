@@ -1,0 +1,226 @@
+import { FS } from '@shared'
+
+/**
+ * Codex CLI's permission profile is generated here rather than by rulesync: rulesync's Codex
+ * translator cannot express loopback binding, Unix sockets, or a curated domain allowlist, and
+ * emits an open `"*" = "allow"` profile instead. This renderer reads the same canonical rules
+ * Claude Code's settings come from, so the two policies cannot drift apart by hand.
+ */
+const PERMISSIONS_SOURCE = '.rulesync/permissions.jsonc'
+const CODEX_CONFIG_OUTPUT = '.codex/config.toml'
+
+/** The profile name every generated rule hangs off, and the Codex built-in it narrows. */
+const PROFILE = 'tao-workspace'
+const PROFILE_BASE = ':workspace'
+
+/**
+ * Paths and settings Codex needs that the canonical rules do not describe, because they are
+ * Codex-shaped rather than policy-shaped. The Git directory is spelled for the primary checkout
+ * on purpose: the generated file is committed, so it cannot carry a linked worktree's path.
+ */
+const PRIMARY_GIT_DIRECTORY = '~/code/tao-lang-2/.git'
+const DOCKER_SOCKET = '/var/run/docker.sock'
+
+/** CanonicalPermissions is the subset of `.rulesync/permissions.jsonc` this renderer reads. */
+export type CanonicalPermissions = {
+  claudecode?: {
+    sandbox?: {
+      network?: {
+        allowLocalBinding?: boolean
+        allowedDomains?: readonly string[]
+      }
+    }
+  }
+  permission?: {
+    read?: Record<string, string>
+  }
+}
+
+type GenerateCodexConfigOptions = {
+  onSkip?: (message: string) => void
+  root: string
+  writeText?: (path: string, content: string) => Promise<void>
+}
+
+async function generateCodexConfig(options: GenerateCodexConfigOptions): Promise<void> {
+  const permissions = parsePermissions(await FS.readText(FS.resolvePath(PERMISSIONS_SOURCE, options.root)))
+  const outputPath = FS.resolvePath(CODEX_CONFIG_OUTPUT, options.root)
+  try {
+    await (options.writeText ?? FS.writeText)(outputPath, renderCodexConfig(permissions))
+  } catch (error) {
+    const { code } = error as NodeJS.ErrnoException
+    if (code !== 'EACCES' && code !== 'EPERM') {
+      throw error
+    }
+    ;(options.onSkip ?? console.warn)(`Skipped codexcli permissions: ${outputPath} is not writable.`)
+  }
+}
+
+/** parsePermissions reads the canonical JSONC rules, whose comments JSON itself rejects. */
+export function parsePermissions(source: string): CanonicalPermissions {
+  return JSON.parse(stripJsonc(source)) as CanonicalPermissions
+}
+
+/** renderCodexConfig renders the whole `.codex/config.toml` from canonical permission rules. */
+export function renderCodexConfig(permissions: CanonicalPermissions): string {
+  const read = permissions.permission?.read ?? {}
+  const network = permissions.claudecode?.sandbox?.network ?? {}
+  return [
+    ...header(),
+    '',
+    `default_permissions = ${quote(PROFILE)}`,
+    'approval_policy = "on-request"',
+    'approvals_reviewer = "auto_review"',
+    '',
+    '# Live retrieval so agents can research language, tooling, and dependency questions',
+    '# without an approval round-trip.',
+    'web_search = "live"',
+    '',
+    '# Required for the per-profile domain rules below to be enforced.',
+    '[features]',
+    'network_proxy = true',
+    '',
+    `[permissions.${PROFILE}]`,
+    `extends = ${quote(PROFILE_BASE)}`,
+    'description = "Tao worktree: write the workspace, read the reference repo, reach documentation and package hosts."',
+    '',
+    ...filesystemSection(read),
+    '',
+    ...workspaceRootsSection(read),
+    '',
+    `[permissions.${PROFILE}.network]`,
+    'enabled = true',
+    ...(network.allowLocalBinding === true
+      ? [
+        "# Tao's dev loop binds Metro, Studio, and the local InstantDB stack to loopback ports.",
+        'allow_local_binding = true',
+      ]
+      : []),
+    '',
+    '# Docker Compose drives the local InstantDB stack. Allowing the daemon socket is broad by',
+    '# nature: a command that can reach it can reach the host. It is enabled deliberately.',
+    `[permissions.${PROFILE}.network.unix_sockets]`,
+    `${quote(DOCKER_SOCKET)} = "allow"`,
+    '',
+    "# Allowlist-first: shell egress is limited to the hosts Tao's toolchain and research need.",
+    `[permissions.${PROFILE}.network.domains]`,
+    ...codexDomains(network.allowedDomains ?? []).map(domain => `${quote(domain)} = "allow"`),
+    '',
+  ].join('\n')
+}
+
+/**
+ * Codex spells "this apex and everything under it" as `**.example.com`, where Claude Code needs
+ * the apex and a `*.` wildcard as two entries. Collapsing them keeps one allowlist authoritative:
+ * a bare host already covered by a wildcard apex is dropped rather than emitted twice.
+ */
+export function codexDomains(allowedDomains: readonly string[]): string[] {
+  const wildcardApexes = allowedDomains
+    .filter(domain => domain.startsWith('*.'))
+    .map(domain => domain.slice(2))
+  const covered = (domain: string) => wildcardApexes.some(apex => domain === apex || domain.endsWith(`.${apex}`))
+  const domains = allowedDomains.flatMap(domain =>
+    domain.startsWith('*.') ? [`**.${domain.slice(2)}`] : covered(domain) ? [] : [domain]
+  )
+  return [...new Set(domains)].sort()
+}
+
+function header(): string[] {
+  return [
+    '# Repo-local filesystem, network, and approval settings for Tao development.',
+    '# Git metadata writes outside the worktree are routed through Auto-review.',
+    '#',
+    `# Generated by \`./agent setup\` from ${PERMISSIONS_SOURCE}. Edit that file, not this one:`,
+    "# rulesync's own Codex translator cannot express loopback binding, Unix sockets, or a",
+    '# curated domain allowlist, so this profile is rendered by',
+    '# packages/dev/dev-src/agent-config/CodexConfigGenerator.ts instead.',
+  ]
+}
+
+function filesystemSection(read: Record<string, string>): string[] {
+  return [
+    `[permissions.${PROFILE}.filesystem]`,
+    `${quote(PRIMARY_GIT_DIRECTORY)} = "write"`,
+    '# The previous repository is reference material only (see AGENTS.md).',
+    ...homePathRules(read, 'allow').map(path => `${quote(path)} = "read"`),
+    ...homePathRules(read, 'deny').map(path => `${quote(path)} = "deny"`),
+  ]
+}
+
+function workspaceRootsSection(read: Record<string, string>): string[] {
+  return [
+    `[permissions.${PROFILE}.filesystem.":workspace_roots"]`,
+    "# Not `.env*`: that pattern also matches this repository's own `.envrc`.",
+    ...workspaceRules(read, 'deny').map(pattern => `${quote(pattern)} = "deny"`),
+  ]
+}
+
+/**
+ * Home-scoped read rules become filesystem rules. Codex reads a directory prefix rather than a
+ * glob, so a trailing `/**` is dropped; an allow additionally names the directory itself, because
+ * Codex grants read access to a tree by naming its root.
+ */
+function homePathRules(read: Record<string, string>, action: string): string[] {
+  return Object.entries(read)
+    .filter(([pattern, value]) => pattern.startsWith('~') && value === action)
+    .map(([pattern]) => (action === 'allow' ? pattern.replace(/\/\*\*$/, '') : pattern))
+}
+
+/** Repository-relative read rules bind inside every workspace root Codex opens. */
+function workspaceRules(read: Record<string, string>, action: string): string[] {
+  return Object.entries(read)
+    .filter(([pattern, value]) => !pattern.startsWith('~') && value === action)
+    .map(([pattern]) => pattern)
+}
+
+/** stripJsonc removes the comments and trailing commas JSONC allows and JSON.parse rejects. */
+function stripJsonc(source: string): string {
+  let output = ''
+  let index = 0
+  let inString = false
+  while (index < source.length) {
+    const character = source[index]!
+    if (inString) {
+      output += character
+      if (character === '\\') {
+        output += source[index + 1] ?? ''
+        index += 2
+        continue
+      }
+      inString = character !== '"'
+      index += 1
+      continue
+    }
+    if (character === '"') {
+      inString = true
+      output += character
+      index += 1
+      continue
+    }
+    if (character === '/' && source[index + 1] === '/') {
+      const lineEnd = source.indexOf('\n', index)
+      index = lineEnd === -1 ? source.length : lineEnd
+      continue
+    }
+    if (character === '/' && source[index + 1] === '*') {
+      const blockEnd = source.indexOf('*/', index + 2)
+      index = blockEnd === -1 ? source.length : blockEnd + 2
+      continue
+    }
+    output += character
+    index += 1
+  }
+  return output.replace(/,(\s*[}\]])/g, '$1')
+}
+
+function quote(value: string): string {
+  return JSON.stringify(value)
+}
+
+/** CodexConfigGenerator renders Codex CLI's permission profile from the canonical rules. */
+export const CodexConfigGenerator = {
+  codexDomains,
+  generate: generateCodexConfig,
+  parsePermissions,
+  render: renderCodexConfig,
+}

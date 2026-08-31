@@ -1,10 +1,11 @@
 import { resolve } from 'node:path'
 import { type Feature, generate, type GenerateOptions, type ToolTarget } from 'rulesync'
+import { CodexConfigGenerator } from './CodexConfigGenerator'
 
 /**
- * Codex CLI keeps its own hand-written `.codex/config.toml`: rulesync's Codex permissions
- * translator cannot express that profile's loopback binding, Unix sockets, or curated domain
- * list, so generating them would replace a narrow policy with an open one.
+ * Codex CLI's permissions come from `CodexConfigGenerator` instead of rulesync: rulesync's Codex
+ * permissions translator cannot express that profile's loopback binding, Unix sockets, or curated
+ * domain list, so generating them through it would replace a narrow policy with an open one.
  */
 const targetFeatures = {
   codexcli: ['subagents'],
@@ -21,6 +22,7 @@ const guardedOutputs: Record<string, string[]> = {
 
 type GenerateAgentConfigOptions = {
   generate?: (options: GenerateOptions) => Promise<unknown>
+  generateCodexConfig?: (options: { onSkip?: (message: string) => void; root: string }) => Promise<void>
   onSkip?: (message: string) => void
   root: string
 }
@@ -44,6 +46,10 @@ async function generateAgentConfigs(options: GenerateAgentConfigOptions): Promis
       ;(options.onSkip ?? console.warn)(`Skipped ${target} agent config: ${path} is not writable.`)
     }
   }
+  await (options.generateCodexConfig ?? CodexConfigGenerator.generate)({
+    onSkip: options.onSkip,
+    root: options.root,
+  })
 }
 
 function isBlockedAdapterOutput(error: unknown, target: ToolTarget, root: string): boolean {
