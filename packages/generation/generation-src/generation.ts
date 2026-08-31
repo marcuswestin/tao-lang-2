@@ -2,11 +2,6 @@ export {
   AppleFoundationModelsProvider,
   type AppleFoundationModelsProviderOptions,
 } from './apple-foundation-models-provider'
-export {
-  type AppleFoundationModelsService,
-  startAppleFoundationModelsService,
-  UnavailableGenerationProvider,
-} from './apple-foundation-models-service'
 export type {
   CaseGenerationDeclaration,
   CompiledGenerationSchema,
@@ -41,6 +36,7 @@ export {
   type ScriptedGeneration,
   ScriptedGenerationProvider,
 } from './scripted-provider'
+export { UnavailableGenerationProvider } from './unavailable-generation-provider'
 export {
   generateValidated,
   type GenerateValidatedOptions,

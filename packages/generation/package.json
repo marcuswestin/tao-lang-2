@@ -6,7 +6,8 @@
   "types": "generation-src/generation.ts",
   "exports": {
     ".": "./generation-src/generation.ts",
-    "./apple": "./generation-src/apple-foundation-models-provider.ts"
+    "./apple": "./generation-src/apple-foundation-models-provider.ts",
+    "./apple/server": "./generation-src/apple-server.ts"
   },
   "dependencies": {
     "tao-shared": "workspace:*"

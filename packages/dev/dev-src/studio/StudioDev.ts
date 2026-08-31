@@ -1,6 +1,6 @@
 /// <reference path="../expo-dev-loop/expo-runner/better-opn.d.ts" />
 
-import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation'
+import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation/apple-server'
 import { Errors, HCI, Platform, Repo } from '@shared'
 import {
   openStudioPreviewSession,

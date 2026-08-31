@@ -54,6 +54,7 @@ Describe('Apple Foundation Models HTTP provider', () => {
     const requestBody = await requests[1]?.json() as { prompt: string; schema: GenerationJsonSchema }
     Expect(requestBody.schema).toEqual(schema)
     Expect(requestBody.prompt).toContain('"Mood":"cozy"')
+    Expect(requestBody).toMatchObject({ deadlineMs: 60_000 })
   })
 
   Test('declares helper and schema failures without retrying', async () => {
@@ -79,9 +80,119 @@ Describe('Apple Foundation Models HTTP provider', () => {
       issues: ['$.Servings is required.'],
     })
   })
+
+  Test('uses the first terminal event and rejects malformed availability', async () => {
+    const provider = new AppleFoundationModelsProvider({
+      fetch: async input =>
+        String(input).endsWith('/availability')
+          ? Response.json({})
+          : ndjson([
+            { type: 'failure', code: 'provider_error', message: 'First failure.' },
+            { type: 'success', value: { Title: 'Too late', Servings: 4 } },
+          ]),
+      token: 'token',
+      url: 'http://127.0.0.1:1',
+    })
+
+    Expect(await provider.availability()).toEqual({
+      status: 'unavailable',
+      reason: 'Foundation Models helper returned an invalid availability response.',
+    })
+    Expect(await provider.generate(schema, [], 'Generate.').final).toEqual({
+      status: 'failure',
+      code: 'provider_error',
+      message: 'First failure.',
+      issues: undefined,
+    })
+  })
+
+  Test('declares a single-attempt deadline and stops accepting partials', async () => {
+    const provider = new AppleFoundationModelsProvider({
+      fetch: async () => await new Promise<Response>(() => undefined),
+      generationTimeoutMs: 5,
+      token: 'token',
+      url: 'http://127.0.0.1:1',
+    })
+    const run = provider.generate(schema, [], 'Generate.')
+
+    Expect(await run.final).toEqual({
+      status: 'failure',
+      code: 'cancelled',
+      message: 'Apple Foundation Models generation exceeded its 5ms deadline.',
+      issues: undefined,
+    })
+    Expect(await collect(run.partials)).toEqual([])
+  })
+
+  Test('reports a supervised helper death without making another request', async () => {
+    let requests = 0
+    const provider = new AppleFoundationModelsProvider({
+      fetch: async () => {
+        requests += 1
+        return Response.json({ status: 'available' })
+      },
+      helperFailure: () => 'Foundation Models helper exited.',
+      token: 'token',
+      url: 'http://127.0.0.1:1',
+    })
+
+    Expect(await provider.availability()).toEqual({
+      status: 'unavailable',
+      reason: 'Foundation Models helper exited.',
+    })
+    Expect(await provider.generate(schema, [], 'Generate.').final).toMatchObject({
+      status: 'failure',
+      code: 'model_unavailable',
+    })
+    Expect(requests).toBe(0)
+  })
+
+  Test('declares malformed helper events as provider failures', async () => {
+    const provider = new AppleFoundationModelsProvider({
+      fetch: async () => new Response('{"type":"success"}\n'),
+      token: 'token',
+      url: 'http://127.0.0.1:1',
+    })
+
+    Expect(await provider.generate(schema, [], 'Generate.').final).toEqual({
+      status: 'failure',
+      code: 'provider_error',
+      message: 'Foundation Models helper returned an invalid event.',
+      issues: undefined,
+    })
+  })
+
+  Test('bounds queued partial snapshots when callers only await the final result', async () => {
+    const events = Array.from({ length: 70 }, (_, index) => ({
+      type: 'partial',
+      value: { Title: `Draft ${index}` },
+    }))
+    const provider = new AppleFoundationModelsProvider({
+      fetch: async () =>
+        ndjson([
+          ...events,
+          { type: 'success', value: { Title: 'Final', Servings: 2 } },
+        ]),
+      token: 'token',
+      url: 'http://127.0.0.1:1',
+    })
+    const run = provider.generate(schema, [], 'Generate.')
+    Expect(await run.final).toMatchObject({ status: 'success' })
+    const partials = await collect(run.partials)
+    Expect(partials).toHaveLength(64)
+    Expect(partials[0]).toEqual({ Title: 'Draft 6' })
+  })
 })
 
 function ndjson(events: readonly unknown[]): Response {
   const body = events.map(event => `${JSON.stringify(event)}\n`).join('')
   return new Response(body, { headers: { 'content-type': 'application/x-ndjson' } })
+}
+
+async function collect<Value>(values: AsyncIterable<Value>): Promise<Value[]> {
+  const collected: Value[] = []
+  for await (const value of values) {
+    collected.push(value)
+  }
+  return collected
 }

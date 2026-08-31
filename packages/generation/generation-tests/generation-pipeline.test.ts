@@ -109,6 +109,18 @@ Describe('scripted generation and validate gate', () => {
     })
   })
 
+  Test('rejects additional properties at the validate gate', async () => {
+    const result = await validateGeneratedDraft(
+      { Title: 'Unexpected', Servings: 2, InternalOnly: true },
+      { schema },
+    )
+    Expect(result).toMatchObject({
+      status: 'failure',
+      code: 'schema_mismatch',
+      issues: ['$.InternalOnly is not allowed.'],
+    })
+  })
+
   Test('rejects non-finite numbers as non-JSON values', async () => {
     for (const value of [Number.NaN, Number.POSITIVE_INFINITY]) {
       const result = await validateGeneratedDraft(
@@ -146,6 +158,29 @@ Describe('scripted generation and validate gate', () => {
     })
     Expect(accepted).toBe(false)
     Expect(provider.calls).toHaveLength(1)
+  })
+
+  Test('declares an acceptance failure after all draft gates pass', async () => {
+    const provider = new ScriptedGenerationProvider([{
+      kind: 'answer',
+      value: { Title: 'Valid draft', Servings: 2 },
+    }])
+    const result = await generateValidated<JsonObject>({
+      provider,
+      schema,
+      inputs: [],
+      guide: 'Generate.',
+      accept: () => {
+        throw new Error('Storage unavailable.')
+      },
+    }).final
+
+    Expect(result).toEqual({
+      status: 'failure',
+      code: 'accept_failed',
+      message: 'The generated draft could not be accepted: Storage unavailable.',
+      issues: undefined,
+    })
   })
 
   Test('does not consume a scripted answer while unavailable', async () => {
