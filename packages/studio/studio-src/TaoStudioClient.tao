@@ -1,23 +1,20 @@
 // Tao Studio client strangler contract. Its mounted slice is a native Tao recursive Files panel over
-// the live StudioServer datasource. The production multi-pane shell and selection protocols remain
-// TypeScript-owned; EditorBoundary is the compiled foreign-editor contract they can adopt next.
-use CodeEditor from @tao/code-editor
-use StackNav from @tao/nav
-use Col, FormButton, Row, Text, TextInput from @tao/ui
+// the live StudioServer datasource. The compiled root owns the Files and editor workbench slots;
+// the host publishes versioned browser-local selection state into the external editor boundary.
+use SlotNav from @tao/nav
+use Col, Text from @tao/ui
 
 // File contents remain editor buffers and never appear in Files or any related entity.
 app TaoStudioFiles {
    Name "Tao Studio Files"
    Design StudioDesign
-   Navigator StackNav {
+   Navigator SlotNav {
       Initial StudioRoot
    }
    Datasource StudioServer { }
 }
 
-design StudioDesign {
-   filesPanel [gap 8, pad 12]
-}
+design StudioDesign { }
 
 type StudioServer is datasource with {
    ServerOrigin text is ""
@@ -95,41 +92,40 @@ action DeleteFile(Path text, SourceVersion text) fails Conflict "This file chang
 
 action OpenFile(Path text) from ./TaoStudioProductHost.tsx
 
+action ApplyActiveCellEnvironment(Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number) fails Conflict "This preview changed while its environment was being edited." from ./TaoStudioProductHost.tsx
+
 view FilesPanel() {
-   Title "Files"
    state NewPath = ""
    action Create() {
       do CreateFile(NewPath)
       set NewPath = ""
    }
-   render Col() [filesPanel] {
-      Text("Files")
-      TextInput(Value: NewPath, Label: "New Tao file", Placeholder: "Folder/New.tao") {
-         on change -> Value { set NewPath = Value }
-         on submit Create
-      }
-      FormButton("Create file") {
-         on press Create
-      }
+   action ChangeNewPath(Value text) {
+      set NewPath = Value
+   }
+   render FilesPanelSurface() {
+      FileCreateBar(NewPath, ChangeNewPath, Create)
       FileTree("")
 }  }
+
+view FilesPanelSurface() accepts content from ./TaoStudioProductHost.tsx
+
+view FileCreateBar(Path text, Change action(text), Create action()) from ./TaoStudioProductHost.tsx
 
 // Disclosure stays Studio-local: Tao has no generic tree construct. Its expansion is view-local
 // because persisted view-instance keying is deliberately deferred by the current language.
 view Disclosure(Label text) {
    state Expanded = true
-   render Col() {
-      FormButton(Label) {
-         on press -> { toggle Expanded }
-      }
+   action Toggle() {
+      toggle Expanded
+   }
+   render TreeFolder(Label, Expanded, Toggle) {
       when Expanded {
          true -> { @@content }
          otherwise -> { }
 }  }  }
 
-function HasDiagnostics(Count number) returns boolean {
-   return Count > 0
-}
+view TreeFolder(Label text, Expanded boolean, Toggle action()) accepts content from ./TaoStudioProductHost.tsx
 
 view FileTree(FolderPath text) {
    query Files as Children {
@@ -150,57 +146,95 @@ view FileTree(FolderPath text) {
 
 view FileRow(File) {
    state RenamePath = File.Path
+   state Renaming = false
    state ConfirmDelete = false
+   action Open() {
+      do OpenFile(File.Path)
+   }
+   action ChangeRenamePath(Value text) {
+      set RenamePath = Value
+   }
+   action BeginRename() {
+      set ConfirmDelete = false
+      set Renaming = true
+   }
+   action CancelRename() {
+      set RenamePath = File.Path
+      set Renaming = false
+   }
    action Rename() {
       do RenameFile(Path: File.Path, SourceVersion: File.Version, TargetPath: RenamePath)
+      set Renaming = false
    }
-   render Col() {
-      Row() {
-         FormButton(File.Name) {
-            on press -> { do OpenFile(File.Path) }
-         }
-         when File.Dirty {
-            true -> { Text("●") }
-            otherwise -> { }
-         }
-         when HasDiagnostics(File.DiagnosticCount) {
-            true -> { Text("{ File.DiagnosticCount } problems") }
-            otherwise -> { }
-      }  }
-      TextInput(Value: RenamePath, Label: "Rename { File.Name }") {
-         on change -> Value { set RenamePath = Value }
-         on submit Rename
-      }
-      FormButton("Rename") {
-         on press Rename
-      }
-      when ConfirmDelete {
-         true -> {
-            Text("Delete { File.Path }?")
-            FormButton("Cancel") {
-               on press -> { set ConfirmDelete = false }
-            }
-            FormButton("Delete") {
-               on press -> { do DeleteFile(Path: File.Path, SourceVersion: File.Version) }
-         }  }
-         otherwise -> { FormButton("Delete") {
-            on press -> { set ConfirmDelete = true }
-         } }
-}  }  }
-
-// This real boundary syncs edits through the declared latest-wins foreign action. It is deliberately
-// not mounted until the TypeScript shell can supply active-file content and selection as Tao values.
-view EditorBoundary(File, Content text) {
-   action Change(NextContent text) {
-      do SyncDraft(Path: File.Path, SourceVersion: File.Version, Content: NextContent)
+   action BeginDelete() {
+      set Renaming = false
+      set ConfirmDelete = true
    }
-   render CodeEditor(Content, Change)
+   action CancelDelete() {
+      set ConfirmDelete = false
+   }
+   action Delete() {
+      do DeleteFile(Path: File.Path, SourceVersion: File.Version)
+   }
+   render TreeFileRow(Name: File.Name, Path: File.Path, Dirty: File.Dirty, DiagnosticCount: File.DiagnosticCount, RenamePath: RenamePath, Renaming: Renaming, ConfirmDelete: ConfirmDelete, Open: Open, ChangeRenamePath: ChangeRenamePath, BeginRename: BeginRename, CancelRename: CancelRename, Rename: Rename, BeginDelete: BeginDelete, CancelDelete: CancelDelete, Delete: Delete)
 }
 
+view TreeFileRow(Name text, Path text, Dirty boolean, DiagnosticCount number, RenamePath text, Renaming boolean, ConfirmDelete boolean, Open action(), ChangeRenamePath action(text), BeginRename action(), CancelRename action(), Rename action(), BeginDelete action(), CancelDelete action(), Delete action()) from ./TaoStudioProductHost.tsx
+
+view StudioEditorSurface() from ./TaoStudioProductHost.tsx
+
+view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, ActiveFileContent text, ActiveFileVersion text, SelectionAnchor number, SelectionHead number, SelectedRenderId text, SelectedRenderPath text, SelectedRenderVersion text, ActiveCellId text, CellRevision number, ActiveScenarioId text, ViewportPresetId text, ViewportWidth number, ViewportHeight number, NetworkOutcome text, NetworkLatencyMs number, NetworkErrorMessage text, NetworkErrorStatus number, SchemeRequested text, SchemeStatus text) {
+   state Preset = ViewportPresetId
+   state Width = ViewportWidth
+   state Height = ViewportHeight
+   state Network = NetworkOutcome
+   state Latency = NetworkLatencyMs
+   state ErrorMessage = NetworkErrorMessage
+   state ErrorStatus = NetworkErrorStatus
+   action ChangePreset(Value text) {
+      set Preset = Value
+   }
+   action ChangeWidth(Value number) {
+      set Preset = "custom"
+      set Width = Value
+   }
+   action ChangeHeight(Value number) {
+      set Preset = "custom"
+      set Height = Value
+   }
+   action ChangeNetwork(Value text) {
+      set Network = Value
+   }
+   action ChangeLatency(Value number) {
+      set Latency = Value
+   }
+   action ChangeErrorMessage(Value text) {
+      set ErrorMessage = Value
+   }
+   action ChangeErrorStatus(Value number) {
+      set ErrorStatus = Value
+   }
+   action ApplyEnvironment() {
+      do ApplyActiveCellEnvironment(Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus)
+   }
+   render StudioContextPanelSurface() {
+      StudioContextSummary(FilePath: ActiveFilePath, ScenarioId: ActiveScenarioId, CellId: ActiveCellId, RenderId: SelectedRenderId, ViewportWidth: ViewportWidth, ViewportHeight: ViewportHeight)
+      when ActiveCellId {
+         empty -> { }
+         otherwise -> { StudioScenarioEnvironmentControls(Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus, SchemeRequested: SchemeRequested, SchemeStatus: SchemeStatus, ChangePreset: ChangePreset, ChangeWidth: ChangeWidth, ChangeHeight: ChangeHeight, ChangeNetwork: ChangeNetwork, ChangeLatency: ChangeLatency, ChangeErrorMessage: ChangeErrorMessage, ChangeErrorStatus: ChangeErrorStatus, Apply: ApplyEnvironment) }
+}  }  }
+
+view StudioContextPanelSurface() accepts content from ./TaoStudioProductHost.tsx
+
+view StudioContextSummary(FilePath text, ScenarioId text, CellId text, RenderId text, ViewportWidth number, ViewportHeight number) from ./TaoStudioProductHost.tsx
+
+view StudioScenarioEnvironmentControls(Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number, SchemeRequested text, SchemeStatus text, ChangePreset action(text), ChangeWidth action(number), ChangeHeight action(number), ChangeNetwork action(text), ChangeLatency action(number), ChangeErrorMessage action(text), ChangeErrorStatus action(number), Apply action()) from ./TaoStudioProductHost.tsx
+
 view StudioRoot() {
-   Title "Tao Studio"
    render ProductHostBoundary() {
-      FilesPanel()
+      @files FilesPanel()
+      @editor StudioEditorSurface()
+      @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", ActiveCellId: "", CellRevision: 0, ActiveScenarioId: "", ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "light", SchemeStatus: "inert")
 }  }
 
-view ProductHostBoundary() accepts content from ./TaoStudioProductHost.tsx
+view ProductHostBoundary() accepts content slots @files, @editor, @inspector from ./TaoStudioProductHost.tsx

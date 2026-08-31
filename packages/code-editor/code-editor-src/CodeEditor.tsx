@@ -18,6 +18,8 @@ export type CodeEditorProps = {
   Content: string
   Layout?: TR.TaoVisualLayout
   Lsp?: CodeEditorLsp
+  Selection?: Readonly<{ anchor: number; head?: number }>
+  SelectionChange?: (selection: Readonly<{ anchor: number; head: number }>) => void
   Slots?: Readonly<Record<string, React.ReactNode>>
   Tag?: string
   children?: React.ReactNode
@@ -35,9 +37,11 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
   const editor = React.useRef<EditorView | undefined>(undefined)
   const change = React.useRef(props.Change)
   const content = React.useRef(props.Content)
+  const selectionChange = React.useRef(props.SelectionChange)
   const applyingExternalContent = React.useRef(false)
   change.current = props.Change
   content.current = props.Content
+  selectionChange.current = props.SelectionChange
 
   React.useEffect(() => {
     const parent = mount.current
@@ -53,6 +57,12 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
         EditorView.updateListener.of(update => {
           if (update.docChanged && !applyingExternalContent.current) {
             void invokeEditorChange(change.current, update.state.doc.toString())
+          }
+          if (update.selectionSet) {
+            selectionChange.current?.({
+              anchor: update.state.selection.main.anchor,
+              head: update.state.selection.main.head,
+            })
           }
         }),
       ],
@@ -117,6 +127,18 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
       applyingExternalContent.current = false
     }
   }, [props.Content])
+
+  React.useEffect(() => {
+    const view = editor.current
+    if (!view || props.Selection === undefined) {
+      return
+    }
+    const anchor = Math.max(0, Math.min(props.Selection.anchor, view.state.doc.length))
+    const head = Math.max(0, Math.min(props.Selection.head ?? anchor, view.state.doc.length))
+    if (view.state.selection.main.anchor !== anchor || view.state.selection.main.head !== head) {
+      view.dispatch({ selection: { anchor, head } })
+    }
+  }, [props.Selection?.anchor, props.Selection?.head])
 
   const native = TR.VisualNativeProps(props.Layout, props.Tag)
   const dataSet = native['dataSet']

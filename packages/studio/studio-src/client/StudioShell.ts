@@ -34,16 +34,16 @@ export type StudioShellOptions = Readonly<{ embedded?: boolean }>
 
 type PaneName = 'bottom' | 'left' | 'right'
 
-const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 260, right: 280 }
-const paneStorageKey = 'tao-studio:pane-sizes:v2'
+const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 360, right: 440 }
+const paneStorageKey = 'tao-studio:pane-sizes:v3'
 
 export const studioShellRailPanels = [
-  { icon: '▤', label: 'Files', panel: 'files' },
-  { icon: '◇', label: 'Components', panel: 'components' },
-  { icon: '▱', label: 'Screens', panel: 'screens' },
-  { icon: '✦', label: 'Design tokens', panel: 'tokens' },
-  { icon: '▦', label: 'Data', panel: 'data' },
-  { icon: '⌕', label: 'Search', panel: 'search' },
+  { icon: '🗂️', label: 'Files', panel: 'files' },
+  { icon: '▦', label: 'Components', panel: 'components' },
+  { icon: '🧭', label: 'Screens', panel: 'screens' },
+  { icon: '🎨', label: 'Design tokens', panel: 'tokens' },
+  { icon: '🗄️', label: 'Data', panel: 'data' },
+  { icon: '🔍', label: 'Search', panel: 'search' },
 ] as const
 
 export const StudioPaneSizes = {
@@ -70,9 +70,8 @@ export function studioShellMarkup(options: StudioShellOptions = {}): string {
     <section class="studio-shell${embedded ? ' studio-shell--embedded' : ''}">
       <header class="studio-toolbar">
         <div class="studio-toolbar-context">
-          <span class="studio-wordmark" aria-label="Tao Studio" title="Tao Studio">
-            <span class="studio-wordmark-mark" aria-hidden="true">T</span>
-            <span class="studio-wordmark-label">Tao Studio</span>
+          <span class="studio-window-controls" aria-hidden="true">
+            <i></i><i></i><i></i>
           </span>
           <button class="studio-project studio-picker" type="button" title="Project picker"></button>
           <select class="studio-app-picker studio-picker" aria-label="App variant" title="App variant" disabled></select>
@@ -83,7 +82,7 @@ export function studioShellMarkup(options: StudioShellOptions = {}): string {
             <button data-preset="code" type="button">Code</button>
             <button data-preset="run" type="button">Run</button>
           </nav>
-          <button class="studio-command-palette" type="button" aria-keyshortcuts="Meta+K">⌘K</button>
+          <button class="studio-command-palette" type="button" aria-keyshortcuts="Meta+K Control+K">⌘K</button>
         </div>
         <div class="studio-toolbar-actions">
           <button class="studio-interaction-mode" type="button">Mode: Edit</button>
@@ -112,6 +111,15 @@ export function studioShellMarkup(options: StudioShellOptions = {}): string {
         </aside>
         <div class="studio-divider studio-divider-left" data-divider="left" role="separator" aria-orientation="vertical"></div>
         <section class="studio-center">
+          <aside class="studio-inspector studio-pane-right" aria-label="Inspector">
+            <nav class="studio-inspector-tabs" aria-label="Inspector contexts">
+              ${inspectorTab('Layout')}${inspectorTab('Style')}${inspectorTab('Data')}${inspectorTab('Actions')}
+              <button class="studio-pane-collapse studio-collapse-right" type="button" aria-label="Collapse inspector" title="Collapse inspector">‹</button>
+            </nav>
+            <div class="studio-inspector-tao-context"></div>
+            <div class="studio-inspector-content"></div>
+          </aside>
+          <div class="studio-divider studio-divider-right" data-divider="right" role="separator" aria-orientation="vertical"></div>
           <section class="studio-workbench">
             <section class="studio-editor-pane">
               <nav class="studio-editor-tabs" aria-label="Open files"></nav>
@@ -124,17 +132,11 @@ export function studioShellMarkup(options: StudioShellOptions = {}): string {
           <section class="studio-drawer">
             <nav class="studio-drawer-tabs" aria-label="Bottom drawer">
               ${['Problems', 'Tests', 'Data', 'Logs', 'Compile'].map(drawerTab).join('')}
+              <button class="studio-pane-collapse studio-collapse-bottom" type="button" aria-label="Collapse bottom drawer" title="Collapse bottom drawer">⌄</button>
             </nav>
             <div class="studio-drawer-content"></div>
           </section>
         </section>
-        <div class="studio-divider studio-divider-right" data-divider="right" role="separator" aria-orientation="vertical"></div>
-        <aside class="studio-inspector studio-pane-right" aria-label="Inspector">
-          <nav class="studio-inspector-tabs" aria-label="Inspector contexts">
-            ${drawerTab('Layout')}${drawerTab('Style')}${drawerTab('Data')}${drawerTab('Actions')}
-          </nav>
-          <div class="studio-inspector-content"></div>
-        </aside>
       </section>
       <section class="studio-command-overlay" hidden aria-label="Command palette">
         <label><span>Command</span><input type="search" placeholder="Files, views, scenarios, commands, insertions"></label>
@@ -206,26 +208,80 @@ function railButton(panel: string, label: string, icon: string): string {
 }
 
 function drawerTab(label: string): string {
-  return `<button type="button">${label}</button>`
+  return `<button data-drawer-tab="${label}" type="button">${label}</button>`
+}
+
+function inspectorTab(label: string): string {
+  return `<button data-inspector-context="${label}" type="button">${label}</button>`
 }
 
 function configurePanes(root: HTMLElement): { showLeft: () => void } {
   const sizes = StudioPaneSizes.load(window.localStorage)
+  const lastExpanded = {
+    bottom: sizes.bottom > 0 ? sizes.bottom : paneDefaults.bottom,
+    left: sizes.left > 0 ? sizes.left : paneDefaults.left,
+    right: sizes.right > 0 ? sizes.right : paneDefaults.right,
+  }
   const shell = requiredElement(root, '.studio-body')
   const center = requiredElement(root, '.studio-center')
   const left = requiredElement(root, '.studio-pane-left')
+  const right = requiredElement(root, '.studio-pane-right')
+  const bottom = requiredElement(root, '.studio-drawer')
   const apply = (): void => {
-    shell.style.setProperty('--studio-left-size', `${left.hidden ? 0 : sizes.left}px`)
+    left.hidden = sizes.left === 0
+    right.hidden = sizes.right === 0
+    bottom.hidden = sizes.bottom === 0
+    shell.style.setProperty('--studio-left-size', `${sizes.left}px`)
     shell.style.setProperty('--studio-right-size', `${sizes.right}px`)
     center.style.setProperty('--studio-bottom-size', `${sizes.bottom}px`)
+    for (const divider of root.querySelectorAll<HTMLElement>('[data-divider]')) {
+      const pane = divider.dataset['divider'] as PaneName
+      divider.setAttribute('aria-valuemin', '0')
+      divider.setAttribute('aria-valuenow', String(Math.round(sizes[pane])))
+      divider.setAttribute('title', `Drag to resize ${pane} pane; double-click or press Enter to collapse or restore`)
+      divider.tabIndex = 0
+    }
   }
+  const save = (): void => StudioPaneSizes.save(window.localStorage, sizes)
+  const setSize = (pane: PaneName, value: number): void => {
+    if (value > 0) {
+      lastExpanded[pane] = value
+    }
+    sizes[pane] = value
+    apply()
+    save()
+  }
+  const toggle = (pane: PaneName): void => setSize(pane, sizes[pane] === 0 ? lastExpanded[pane] : 0)
   apply()
   requiredButton(root, '.studio-collapse-left').addEventListener('click', () => {
-    left.hidden = !left.hidden
-    apply()
+    toggle('left')
   })
+  requiredButton(root, '.studio-collapse-right').addEventListener('click', () => toggle('right'))
+  requiredButton(root, '.studio-collapse-bottom').addEventListener('click', () => toggle('bottom'))
   for (const divider of root.querySelectorAll<HTMLElement>('[data-divider]')) {
     const pane = divider.dataset['divider'] as PaneName
+    divider.addEventListener('dblclick', () => toggle(pane))
+    divider.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        toggle(pane)
+        return
+      }
+      const direction = pane === 'bottom'
+        ? event.key === 'ArrowUp' ? 1 : event.key === 'ArrowDown' ? -1 : 0
+        : event.key === 'ArrowRight'
+        ? 1
+        : event.key === 'ArrowLeft'
+        ? -1
+        : 0
+      if (direction === 0) {
+        return
+      }
+      event.preventDefault()
+      const minimum = pane === 'bottom' ? 96 : 180
+      const base = sizes[pane] === 0 ? minimum : sizes[pane]
+      setSize(pane, Math.max(minimum, base + direction * (event.shiftKey ? 40 : 12)))
+    })
     divider.addEventListener('pointerdown', event => {
       event.preventDefault()
       const start = pane === 'bottom' ? event.clientY : event.clientX
@@ -234,15 +290,16 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
       const move = (moveEvent: PointerEvent): void => {
         const delta = pane === 'bottom'
           ? start - moveEvent.clientY
-          : pane === 'right'
-          ? start - moveEvent.clientX
           : moveEvent.clientX - start
         sizes[pane] = Math.max(pane === 'bottom' ? 96 : 180, initial + delta)
         apply()
       }
       const finish = (): void => {
         divider.removeEventListener('pointermove', move)
-        StudioPaneSizes.save(window.localStorage, sizes)
+        if (sizes[pane] > 0) {
+          lastExpanded[pane] = sizes[pane]
+        }
+        save()
       }
       divider.addEventListener('pointermove', move)
       divider.addEventListener('pointerup', finish, { once: true })
@@ -251,8 +308,9 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
   }
   return {
     showLeft() {
-      left.hidden = false
-      apply()
+      if (sizes.left === 0) {
+        setSize('left', lastExpanded.left)
+      }
     },
   }
 }

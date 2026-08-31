@@ -81,6 +81,16 @@ export type StudioSourceActionResult = {
   sourceVersion: string
 }
 
+export type StudioSourceActionProposal = {
+  content: string
+  diff: string
+  edits: readonly { end: number; replacement: string; start: number }[]
+  path: string
+  proposedSourceVersion: string
+  requestId: string
+  sourceVersion: string
+}
+
 export type StudioSourceActionUndoResult = {
   checkpoint: { id: string; status: 'undone' }
   content: string
@@ -181,6 +191,8 @@ export const StudioApiClient = {
   },
   sourceAction: async (body: StudioSourceActionEnvelope | unknown): Promise<StudioSourceActionResult> =>
     await request('/api/source-action', body),
+  sourceActionProposal: async (body: StudioSourceActionEnvelope | unknown): Promise<StudioSourceActionProposal> =>
+    await request('/api/source-action/propose', body),
   switchApp: async (
     body: { appName: string; entryPath: string; projectPath: string },
   ): Promise<StudioSessionTransition> => {
