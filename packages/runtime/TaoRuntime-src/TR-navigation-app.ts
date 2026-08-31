@@ -1,5 +1,6 @@
 import React from 'react'
 import type { TaoDesign } from './TR-design'
+import { mountedDesignStyle } from './TR-mounted-design'
 import type {
   TaoAppDeclaration,
   TaoAppDefinition,
@@ -302,7 +303,10 @@ export class RuntimeAppDefinition implements Subscription {
       // background: bare text over arbitrary content is not reliably legible.
       React.createElement(
         runtime.View,
-        { key: entry.instanceId, style: toastSurfaceStyle },
+        {
+          key: entry.instanceId,
+          style: [toastSurfaceStyle, mountedDesignStyle(taoProps, 'ToastSurface')],
+        },
         entry.presentable.render(entry.arguments, { ...taoProps, app: this }),
       )
     )

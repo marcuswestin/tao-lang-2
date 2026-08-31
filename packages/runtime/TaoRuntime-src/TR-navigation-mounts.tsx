@@ -1,5 +1,6 @@
 import React from 'react'
 import { AppSurfaceFrame } from './TR-app-shell'
+import { mountedDesignStyle } from './TR-mounted-design'
 import type {
   TaoNavDescriptor,
   TaoNavigationArguments,
@@ -695,6 +696,10 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
               { key: item.key },
               Views.Pressable(
                 {
+                  __tao: {
+                    ...taoProps,
+                    designDefault: item.key === this.activeKey ? 'NavigationTabActive' : 'NavigationTab',
+                  },
                   action: {
                     invoke: () => {
                       this.activate(item.key)
@@ -712,7 +717,10 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
             )
           ),
           key: 'selection-controls',
-          style: display === 'drawer' ? selectionDrawerControlsStyle : selectionTabControlsStyle,
+          style: [
+            display === 'drawer' ? selectionDrawerControlsStyle : selectionTabControlsStyle,
+            mountedDesignStyle(taoProps, 'NavigationTabs', display === 'drawer' ? 'column' : 'row'),
+          ],
         }),
         React.createElement(runtime.View, {
           children: this.items.flatMap(item =>
@@ -729,10 +737,10 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
             )
           ),
           key: 'selection-content',
-          style: selectionContentStyle,
+          style: [selectionContentStyle, mountedDesignStyle(taoProps, 'NavigationContent')],
         }),
       ],
-      style: navigationHostStyle,
+      style: [navigationHostStyle, mountedDesignStyle(taoProps, 'NavigationHost')],
     })
   }
 
@@ -752,7 +760,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     // scroll frame the app host would normally provide renders inside the native screen instead.
     return React.createElement(
       AppSurfaceFrame,
-      { nativeInsets: true },
+      { nativeInsets: true, taoProps: this.entryTaoProps(item, taoProps) },
       item.entries.map((entry, index) =>
         React.createElement(NavigationLevel, {
           children: renderPresentable(entry.presentable, entry.arguments, this.entryTaoProps(item, taoProps)),

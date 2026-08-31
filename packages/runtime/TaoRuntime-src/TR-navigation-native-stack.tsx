@@ -70,7 +70,7 @@ function NativeStackItem(props: {
       activityState: 2,
       children: React.createElement(
         AppSurfaceFrame,
-        { nativeInsets: true },
+        { nativeInsets: true, taoProps: props.taoProps },
         renderPresentable(props.entry.presentable, props.entry.arguments, props.taoProps, props.entry.host),
       ),
       headerConfig: {

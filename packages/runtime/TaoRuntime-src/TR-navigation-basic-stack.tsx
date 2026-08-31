@@ -1,5 +1,6 @@
 import React from 'react'
 import { AppSurfaceFrame } from './TR-app-shell'
+import { mountedDesignStyle } from './TR-mounted-design'
 import { NavigationCommandButton } from './TR-navigation-command-button'
 import {
   type RuntimeHostReadChannel,
@@ -33,7 +34,7 @@ export function BasicStackSurface(props: {
         taoProps: props.taoProps,
       })
     ),
-    style: stackStyle,
+    style: [stackStyle, mountedDesignStyle(props.taoProps, 'NavigationHost')],
   })
 }
 
@@ -57,7 +58,11 @@ function BasicStackLevel(props: {
             observable && props.navigation.depth > 1
               ? React.cloneElement(
                 Views.Pressable(
-                  { action: { invoke: () => props.navigation.back() }, title: 'Back' },
+                  {
+                    __tao: { ...props.taoProps, designDefault: 'NavigationChromeButton' },
+                    action: { invoke: () => props.navigation.back() },
+                    title: 'Back',
+                  },
                   { nativeProps: { accessibilityLabel: 'Back', accessibilityRole: 'button' } },
                 ),
                 { key: 'back' },
@@ -67,20 +72,26 @@ function BasicStackLevel(props: {
               accessibilityRole: 'header',
               children: slots.title ?? '',
               key: 'title',
+              style: mountedDesignStyle(props.taoProps, 'NavigationTitle'),
               testID: observable ? navigationTitleTestId : undefined,
             }),
-            React.createElement(BasicToolbar, { commands: slots.toolbar, key: 'toolbar', observable }),
+            React.createElement(BasicToolbar, {
+              commands: slots.toolbar,
+              key: 'toolbar',
+              observable,
+              taoProps: props.taoProps,
+            }),
           ],
           key: 'header',
-          style: headerStyle,
+          style: [headerStyle, mountedDesignStyle(props.taoProps, 'NavigationHeader', 'row')],
         }),
         React.createElement(
           AppSurfaceFrame,
-          { key: 'content' },
+          { key: 'content', taoProps: props.taoProps },
           renderPresentable(props.entry.presentable, props.entry.arguments, props.taoProps, props.entry.host),
         ),
       ],
-      style: stackStyle,
+      style: [stackStyle, mountedDesignStyle(props.taoProps, 'NavigationHost')],
     }),
   })
 }
@@ -88,6 +99,7 @@ function BasicStackLevel(props: {
 function BasicToolbar(props: {
   commands: readonly TaoNavigationCommand[]
   observable: boolean
+  taoProps?: TaoProps
 }): React.JSX.Element | null {
   const [expanded, setExpanded] = React.useState(false)
   const runtime = requireReactNativeRuntime()
@@ -99,11 +111,15 @@ function BasicToolbar(props: {
   return React.createElement(runtime.View, {
     accessibilityRole: 'toolbar',
     children: [
-      ...direct.map(command => commandButton(command, props.observable)),
+      ...direct.map(command => commandButton(command, props.observable, undefined, props.taoProps)),
       overflow.length > 0
         ? React.cloneElement(
           Views.Pressable(
-            { action: { invoke: () => setExpanded(value => !value) }, title: 'More' },
+            {
+              __tao: { ...props.taoProps, designDefault: 'NavigationChromeButton' },
+              action: { invoke: () => setExpanded(value => !value) },
+              title: 'More',
+            },
             { nativeProps: { accessibilityLabel: 'More', accessibilityRole: 'button' } },
           ),
           { key: 'more' },
@@ -115,6 +131,7 @@ function BasicToolbar(props: {
           key: 'overflow',
           observable: props.observable,
           onClose: () => setExpanded(false),
+          taoProps: props.taoProps,
         })
         : null,
     ],
@@ -126,6 +143,7 @@ function BasicOverflowMenu(props: {
   commands: readonly TaoNavigationCommand[]
   observable: boolean
   onClose(): void
+  taoProps?: TaoProps
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
   const content = React.createElement(runtime.View, {
@@ -136,10 +154,11 @@ function BasicOverflowMenu(props: {
         key: command.identity,
         onInvoke: props.onClose,
         role: 'menuitem',
+        taoProps: props.taoProps,
         testID: props.observable ? navigationCommandTestId(command.label) : undefined,
       })
     ),
-    style: overflowStyle,
+    style: [overflowStyle, mountedDesignStyle(props.taoProps, 'NavigationHeader')],
   })
   if (!runtime.Modal) {
     return content
@@ -165,12 +184,14 @@ function commandButton(
   command: TaoNavigationCommand,
   observable: boolean,
   beforeInvoke?: () => void,
+  taoProps?: TaoProps,
 ): React.JSX.Element {
   const focusedCommand = observable ? command : { ...command, enabled: false }
   return React.createElement(NavigationCommandButton, {
     command: focusedCommand,
     key: command.identity,
     onInvoke: beforeInvoke,
+    taoProps,
     testID: observable ? navigationCommandTestId(command.label) : undefined,
   })
 }

@@ -486,6 +486,7 @@ function compileConfigurationReference(value: AST.ConfigurationReference): Compi
   }
   if (
     AST.isAliasDeclaration(target)
+    || AST.isDesignDeclaration(target)
     || AST.isNavDeclaration(target)
     || AST.isDatasourceDeclaration(target)
   ) {
