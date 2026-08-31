@@ -1,5 +1,6 @@
 import { Errors, HCI, Platform, Switch } from '@shared'
 import { runWithCommands } from './cli/run-with-commands'
+import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { ExpoRunner } from './expo-dev-loop/expo-runner/ExpoRunner'
 import { TestRunner } from './repository-tests/TestRunner'
 import { TestTUI } from './repository-tests/TestTUI'
@@ -36,6 +37,14 @@ await runWithCommands(commands => {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
       }
+    })
+
+  commands
+    .command('doctor')
+    .description('Diagnose this checkout without changing it.')
+    .option('--json', 'Print a versioned structured report instead of PASS/WARN/FAIL lines.')
+    .action(async (options: { json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(await RepositoryDoctorCommand.run({ json: options.json === true }))
     })
 
   commands

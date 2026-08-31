@@ -90,6 +90,10 @@ check: _compile-word-flower-app _parallel-check
 # Run lint only
 lint: _repo-lint
 
+# Diagnose this checkout without changing it; pass --json for a structured report
+doctor *ARGS:
+    ./dev doctor {{ ARGS }}
+
 # Benchmark cold and steady-state language-service performance
 bench iterations="10": _bench-check
     bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
