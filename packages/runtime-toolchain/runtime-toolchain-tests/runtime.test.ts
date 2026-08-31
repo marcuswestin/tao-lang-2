@@ -31,6 +31,14 @@ function generatedPreviewPath(runtimePackageRoot: string, relativePath: string):
   return FS.resolvePath(`_gen_tao-app/${relativePath}`, runtimePackageRoot)
 }
 
+function generatedPreviewRevisionPath(
+  runtimePackageRoot: string,
+  revision: number,
+  relativePath: string,
+): string {
+  return generatedPreviewPath(runtimePackageRoot, `revisions/revision-${revision}/${relativePath}`)
+}
+
 function previewOptions(
   revision: number,
   overrides: Partial<GeneratePreviewOptions> = {},
@@ -104,6 +112,7 @@ Describe('Tao runtime app generation', () => {
         })
         const stableRoot = await FS.readText(generated.outputPath)
         const taoAppPath = generatedPreviewPath(runtimePackageRoot, 'TaoApp.tsx')
+        const activePreviewPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioActivePreview.ts')
         const revisionPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioRevision.ts')
         const projectPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioProject.ts')
 
@@ -117,9 +126,9 @@ Describe('Tao runtime app generation', () => {
         Expect(generated.studioManifest?.views.map(view => view.name)).toEqual(['Main'])
         Expect(generated.code).toBe(stableRoot)
         Expect(stableRoot).toContain("import TR from '@runtime/TR'")
-        Expect(stableRoot).toContain("import TaoApp from './TaoApp'")
-        Expect(stableRoot).toContain("import TaoStudioProject from './TaoStudioProject'")
-        Expect(stableRoot).toContain("import TaoStudioRevision from './TaoStudioRevision'")
+        Expect(stableRoot).toContain(
+          "import { TaoApp, TaoStudioManifest, TaoStudioPublication } from './TaoStudioActivePreview'",
+        )
         Expect(stableRoot).toContain("params.get('taoStudioParentOrigin')")
         Expect(stableRoot).toContain("params.get('taoStudioPreviewInstanceId')")
         Expect(stableRoot).toContain("params.get('taoStudioSessionId')")
@@ -127,6 +136,9 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).toContain("'/api/preview/cell/bootstrap'")
         Expect(stableRoot).toContain("'/sessions/' + encodeURIComponent(TaoStudioPreviewBootstrap.sessionId)")
         Expect(stableRoot).toContain('setBootstrapError(error)')
+        Expect(stableRoot).toContain("value?.type === 'preview-runtime-update'")
+        Expect(stableRoot).toContain('event.source !== window.parent')
+        Expect(stableRoot).toContain('runtimeMatchesPublication(cell, TaoStudioPublication)')
         Expect(stableRoot).toContain('<TR.Studio.Pending />')
         Expect(stableRoot).toContain('<TR.Studio.Failure error={bootstrapError} />')
         Expect(stableRoot).toContain('<TR.Studio.ErrorBoundary')
@@ -136,6 +148,11 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).toContain('<TR.Studio.PreviewBridge config={config}>')
         Expect(stableRoot).toContain('</TR.Studio.PreviewBridge>')
         Expect(await FS.readText(taoAppPath)).toContain('export default TaoApps["Preview"]')
+        Expect(await FS.readText(generatedPreviewRevisionPath(runtimePackageRoot, 7, 'TaoApp.tsx'))).toContain(
+          'export default TaoApps["Preview"]',
+        )
+        Expect(await FS.readText(activePreviewPath)).toContain("from './revisions/revision-7/TaoApp'")
+        Expect(await FS.readText(activePreviewPath)).toContain('"compileRevision":7')
         Expect(await FS.readText(projectPath)).toContain(
           JSON.stringify({
             appName: 'Preview',
@@ -160,6 +177,11 @@ Describe('Tao runtime app generation', () => {
         Expect(await FS.readText(generated.outputPath)).toBe(stableRoot)
         Expect(await FS.readText(revisionPath)).toContain('"compileRevision":8')
         Expect(await FS.readText(revisionPath)).toContain('text-v8')
+        Expect(await FS.readText(activePreviewPath)).toContain("from './revisions/revision-8/TaoApp'")
+        Expect(await FS.readText(activePreviewPath)).toContain('"compileRevision":8')
+        // The prior graph remains for one publication so Metro can finish applying the active-module update.
+        Expect(await FS.exists(generatedPreviewRevisionPath(runtimePackageRoot, 7, 'TaoApp.tsx'))).toBe(true)
+        Expect(await FS.exists(generatedPreviewRevisionPath(runtimePackageRoot, 8, 'TaoApp.tsx'))).toBe(true)
 
         const typecheck = await typecheckGeneratedApp(runtimePackageRoot)
         Assert(typecheck.exitCode === 0, 'generated Studio preview bridge type-checks', {
@@ -173,6 +195,7 @@ Describe('Tao runtime app generation', () => {
         Expect(await FS.readText(standard.outputPath)).toBe(standard.code)
         Expect(standard.code).not.toContain("import TaoApp from './TaoApp'")
         Expect(await FS.exists(taoAppPath)).toBe(false)
+        Expect(await FS.exists(activePreviewPath)).toBe(false)
         Expect(await FS.exists(projectPath)).toBe(false)
         Expect(await FS.exists(revisionPath)).toBe(false)
       },
@@ -404,14 +427,27 @@ Describe('Tao runtime app generation', () => {
         for await (const path of FS.walk(generatedRoot)) {
           generatedFiles.push(FS.relativePath(generatedRoot, path))
         }
-        Expect(generatedFiles.toSorted()).toEqual([
-          'App.injection-1.tsx',
-          'App.tsx',
-          'TaoApp.tsx',
-          'TaoStudioManifest.ts',
-          'TaoStudioProject.ts',
-          'TaoStudioRevision.ts',
-        ])
+        for (
+          const expected of [
+            'App.injection-1.tsx',
+            'App.tsx',
+            'TaoApp.tsx',
+            'TaoStudioActivePreview.ts',
+            'TaoStudioManifest.ts',
+            'TaoStudioProject.ts',
+            'TaoStudioRevision.ts',
+            'revisions/revision-20/App.injection-1.tsx',
+            'revisions/revision-20/TaoApp.tsx',
+            'revisions/revision-20/TaoStudioManifest.ts',
+            'revisions/revision-21/App.injection-1.tsx',
+            'revisions/revision-21/TaoApp.tsx',
+            'revisions/revision-21/TaoStudioManifest.ts',
+          ]
+        ) {
+          Expect(generatedFiles).toContain(expected)
+        }
+        Expect(generatedFiles.filter(path => path.startsWith('revisions/revision-20/'))).toHaveLength(122)
+        Expect(generatedFiles.filter(path => path.startsWith('revisions/revision-21/'))).toHaveLength(3)
       },
     )
   })
