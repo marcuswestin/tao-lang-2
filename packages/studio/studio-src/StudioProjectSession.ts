@@ -307,6 +307,8 @@ const sourceActionResultLimit = 100
 
 /** StudioProjectSession owns one project/app's disk-synced source and serialized compile state. */
 export class StudioProjectSession {
+  static readonly testing = { sourceActionProposalDiff }
+
   readonly #actionCheckpoints = new Map<string, SourceActionCheckpoint>()
   readonly #actionResults = new Map<string, SourceActionCacheEntry>()
   readonly #actionUndoResults = new Map<string, SourceActionUndoCacheEntry>()
@@ -1349,10 +1351,12 @@ function sourceActionProposalDiff(path: string, before: string, after: string): 
   }
   const removed = beforeLines.slice(prefix, beforeLines.length - suffix)
   const added = afterLines.slice(prefix, afterLines.length - suffix)
+  const beforeStart = removed.length === 0 ? prefix : prefix + 1
+  const afterStart = added.length === 0 ? prefix : prefix + 1
   return [
     `--- ${path}`,
     `+++ ${path} (proposed)`,
-    `@@ -${prefix + 1},${removed.length} +${prefix + 1},${added.length} @@`,
+    `@@ -${beforeStart},${removed.length} +${afterStart},${added.length} @@`,
     ...removed.map(line => `-${line}`),
     ...added.map(line => `+${line}`),
   ].join('\n')

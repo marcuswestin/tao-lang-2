@@ -47,14 +47,22 @@ export class StudioDraftSync {
     }
     this.#pendingContent = undefined
     const save = this.#working.then(async () => {
-      const result = await this.#write({
-        content,
-        path: this.#file.path,
-        sourceVersion: this.#file.sourceVersion,
-        writeId: `editor-${Date.now()}-${this.#nextWrite++}`,
-      })
+      let result: StudioDraftSyncResult
+      try {
+        result = await this.#write({
+          content,
+          path: this.#file.path,
+          sourceVersion: this.#file.sourceVersion,
+          writeId: `editor-${Date.now()}-${this.#nextWrite++}`,
+        })
+      } catch (error) {
+        this.#restoreFailedContent(content)
+        throw error
+      }
       if (result.saved) {
         this.#file = result.file
+      } else {
+        this.#restoreFailedContent(content)
       }
       this.#lastResult = result
       this.#onResult?.(result)
@@ -62,5 +70,9 @@ export class StudioDraftSync {
     })
     this.#working = save.then(() => undefined, () => undefined)
     return await save
+  }
+
+  #restoreFailedContent(content: string): void {
+    this.#pendingContent ??= content
   }
 }

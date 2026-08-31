@@ -476,6 +476,17 @@ Test('Studio saves a captured provider state as a named Tao fixture through the 
   })
 })
 
+Test('Studio source-action proposals anchor pure insertions as a valid unified diff hunk', () => {
+  const diff = StudioProjectSession.testing.sourceActionProposalDiff(
+    'Garden.tao',
+    'first\nlast',
+    'first\ninserted\nlast',
+  )
+
+  Expect(diff).toContain('@@ -1,0 +2,1 @@')
+  Expect(diff).toContain('+inserted')
+})
+
 Test('Studio restores the original Tao source when a captured fixture fails compilation', async () => {
   let compileCount = 0
   await withStudioProject(async (session, paths) => {

@@ -8,13 +8,15 @@ export type StudioClientConfig = {
 
 export type StudioClientBundleMode = 'development' | 'release'
 
+type StudioClientBundleBuild = Readonly<{ cacheable: boolean; source: string }>
+
 /** StudioClientAssetProvider supplies one browser shell revision to the Studio HTTP server. */
 export type StudioClientAssetProvider = {
   bundle: (options?: { validationMode?: StudioClientBundleMode }) => Promise<string>
   html: (config: StudioClientConfig) => string
 }
 
-const clientBundles = new Map<StudioClientBundleMode, Promise<string>>()
+const clientBundles = new Map<StudioClientBundleMode, Promise<StudioClientBundleBuild>>()
 let prebuiltClientBundle: string | undefined
 const clientModuleInputs = new Map<StudioClientBundleMode, readonly string[]>()
 
@@ -24,6 +26,7 @@ export const StudioClientAssets = {
   html,
   usePrebuiltBundle,
   testing: {
+    cachedBundle,
     moduleInputs,
     resetBundle,
   },
@@ -34,12 +37,31 @@ async function bundle(options: { validationMode?: StudioClientBundleMode } = {})
     return prebuiltClientBundle
   }
   const validationMode = options.validationMode ?? 'development'
-  let clientBundle = clientBundles.get(validationMode)
-  if (clientBundle === undefined) {
-    clientBundle = buildClientBundle(validationMode)
-    clientBundles.set(validationMode, clientBundle)
+  return await cachedBundle(clientBundles, validationMode, () => buildClientBundle(validationMode))
+}
+
+async function cachedBundle(
+  cache: Map<StudioClientBundleMode, Promise<StudioClientBundleBuild>>,
+  validationMode: StudioClientBundleMode,
+  build: () => Promise<StudioClientBundleBuild>,
+): Promise<string> {
+  let pending = cache.get(validationMode)
+  if (pending === undefined) {
+    pending = build()
+    cache.set(validationMode, pending)
   }
-  return await clientBundle
+  try {
+    const result = await pending
+    if (!result.cacheable && cache.get(validationMode) === pending) {
+      cache.delete(validationMode)
+    }
+    return result.source
+  } catch (error) {
+    if (cache.get(validationMode) === pending) {
+      cache.delete(validationMode)
+    }
+    throw error
+  }
 }
 
 async function moduleInputs(validationMode: StudioClientBundleMode = 'development'): Promise<readonly string[]> {
@@ -84,7 +106,7 @@ function html(config: StudioClientConfig): string {
 `
 }
 
-async function buildClientBundle(validationMode: StudioClientBundleMode): Promise<string> {
+async function buildClientBundle(validationMode: StudioClientBundleMode): Promise<StudioClientBundleBuild> {
   const generatedRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-browser-', FS.tmpdir()))
   let generated: Awaited<ReturnType<typeof Runtime.generateApp>>
   try {
@@ -99,7 +121,7 @@ async function buildClientBundle(validationMode: StudioClientBundleMode): Promis
       throw new Error('Could not compile the release Tao Studio browser client.', { cause: error })
     }
     console.error('Tao Studio client compilation failed; using the direct TypeScript development fallback.', error)
-    return await buildDirectClientBundle()
+    return { cacheable: false, source: await buildDirectClientBundle() }
   }
   try {
     const result = await Bun.build({
@@ -110,7 +132,7 @@ async function buildClientBundle(validationMode: StudioClientBundleMode): Promis
       sourcemap: validationMode === 'development' ? 'inline' : 'none',
       target: 'browser',
     })
-    return await completedBundle(result, 'Tao-authored', validationMode)
+    return { cacheable: true, source: await completedBundle(result, 'Tao-authored', validationMode) }
   } finally {
     await FS.remove(generatedRoot)
   }

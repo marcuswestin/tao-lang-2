@@ -176,6 +176,22 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(html).toContain('\\u003c/script>')
 })
 
+Test('Studio client bundle cache retries Tao compilation after serving a development fallback', async () => {
+  const cache = new Map()
+  let builds = 0
+  const build = async () => {
+    builds += 1
+    return builds === 1
+      ? { cacheable: false, source: 'direct fallback' }
+      : { cacheable: true, source: 'Tao client' }
+  }
+
+  Expect(await StudioClientAssets.testing.cachedBundle(cache, 'development', build)).toBe('direct fallback')
+  Expect(await StudioClientAssets.testing.cachedBundle(cache, 'development', build)).toBe('Tao client')
+  Expect(await StudioClientAssets.testing.cachedBundle(cache, 'development', build)).toBe('Tao client')
+  Expect(builds).toBe(2)
+})
+
 Test('Studio events dispatch typed handshakes so startup scenario manifests are not missed', () => {
   const handshake = {
     type: 'handshake',
@@ -492,6 +508,8 @@ Test('Studio editor tabs rename onto an existing tab without corrupting order an
     tabs.open(path)
   }
   Expect(tabs.evictionCandidate('File21.tao')).toBe('File1.tao')
+  tabs.activate('File1.tao')
+  Expect(tabs.evictionCandidate('File21.tao')).toBe('File0.tao')
   Expect(tabs.evictionCandidate('File0.tao')).toBe(undefined)
 })
 
@@ -1293,11 +1311,39 @@ Test('Studio draft sync keeps the last saved version after an invalid draft', as
 
   sync.update('invalid')
   Expect((await sync.save())?.saved).toBe(false)
-  sync.update('valid again')
   Expect((await sync.save())?.saved).toBe(true)
 
   Expect(writes.map(write => write.sourceVersion)).toEqual(['source-1', 'source-1'])
+  Expect(writes.map(write => write.content)).toEqual(['invalid', 'invalid'])
   Expect(results.map(result => result.saved)).toEqual([false, true])
+})
+
+Test('Studio draft sync restores a rejected save without overwriting newer editor content', async () => {
+  const firstWrite = deferred<StudioDraftSyncResult>()
+  const writes: StudioDraftSyncRequest[] = []
+  const sync = new StudioDraftSync({
+    content: 'before',
+    path: 'Garden.tao',
+    sourceVersion: 'source-1',
+  }, {
+    async write(request) {
+      writes.push(request)
+      if (writes.length === 1) {
+        return await firstWrite.promise
+      }
+      return saved(request, 'source-2')
+    },
+  })
+
+  sync.update('first draft')
+  const firstSave = sync.save()
+  await until(() => writes.length === 1)
+  sync.update('newer draft')
+  firstWrite.reject(new Error('Connection closed.'))
+  await Expect(firstSave).rejects.toThrow('Connection closed.')
+  await sync.save()
+
+  Expect(writes.map(write => write.content)).toEqual(['first draft', 'newer draft'])
 })
 
 Test('Studio recognizes command and control save without consuming modified shortcuts', () => {
@@ -1315,12 +1361,14 @@ function saved(request: StudioDraftSyncRequest, sourceVersion: string): StudioDr
   }
 }
 
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+function deferred<T>(): { promise: Promise<T>; reject: (reason?: unknown) => void; resolve: (value: T) => void } {
+  let reject!: (reason?: unknown) => void
   let resolve!: (value: T) => void
-  const promise = new Promise<T>(promiseResolve => {
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    reject = promiseReject
     resolve = promiseResolve
   })
-  return { promise, resolve }
+  return { promise, reject, resolve }
 }
 
 async function until(predicate: () => boolean): Promise<void> {

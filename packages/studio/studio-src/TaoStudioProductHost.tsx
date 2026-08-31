@@ -1,10 +1,11 @@
 import TR from '@runtime/TR'
-import { CodeEditor } from '@tao/code-editor'
+import { CodeEditor, type CodeEditorLsp } from '@tao/code-editor'
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { StudioApiClient } from './client/StudioApiClient'
 import { mountStudio } from './client/StudioApp'
 import { fileUri } from './client/StudioEditor'
+import { StudioProductHostLspLifecycle } from './StudioProductHostLsp'
 import {
   rejectPendingStudioProductHostActions,
   requestStudioProductHostApplyActiveCellEnvironment,
@@ -369,15 +370,7 @@ export function StudioEditorSurface(): React.ReactElement {
     studioProductHostState,
   )
   const file = state.activeFile
-  const lsp = React.useMemo(() =>
-    file === undefined || state.projectRoot === undefined
-      ? undefined
-      : {
-        documentUri: fileUri(state.projectRoot, file.path),
-        languageId: 'tao',
-        rootUri: fileUri(state.projectRoot),
-        transport: StudioApiClient.lspTransport(),
-      }, [file?.path, state.projectRoot])
+  const lsp = useStudioEditorLsp(file?.path, state.projectRoot)
   const change = React.useMemo(() =>
     ({
       invoke(value: TR.Value<string>) {
@@ -420,6 +413,48 @@ export function StudioEditorSurface(): React.ReactElement {
       />
     </div>
   )
+}
+
+function useStudioEditorLsp(path: string | undefined, projectRoot: string | undefined): CodeEditorLsp | undefined {
+  const [connected, setConnected] = React.useState<
+    Readonly<{ lsp: CodeEditorLsp; path: string; projectRoot: string }> | undefined
+  >(undefined)
+  React.useEffect(() => {
+    if (path === undefined || projectRoot === undefined) {
+      return
+    }
+    let cancelled = false
+    const controller = new AbortController()
+    const lifecycle = new StudioProductHostLspLifecycle(
+      () => StudioApiClient.lspTransport(controller.signal),
+      () => controller.abort(),
+    )
+    void lifecycle.open().then(transport => {
+      if (transport !== undefined) {
+        setConnected({
+          lsp: {
+            documentUri: fileUri(projectRoot, path),
+            languageId: 'tao',
+            rootUri: fileUri(projectRoot),
+            transport,
+          },
+          path,
+          projectRoot,
+        })
+      }
+    }).catch(error => {
+      if (!cancelled) {
+        console.error('Tao Studio ProductHost language support could not connect.', error)
+      }
+    })
+    return () => {
+      cancelled = true
+      lifecycle.close()
+    }
+  }, [path, projectRoot])
+  return connected !== undefined && connected.path === path && connected.projectRoot === projectRoot
+    ? connected.lsp
+    : undefined
 }
 
 /** FilesPanelSurface keeps Tao's query-owned tree inside the shell's existing Files destination. */

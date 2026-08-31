@@ -40,7 +40,9 @@ export class StudioEditorTabs {
   }
 
   evictionCandidate(path: string): string | undefined {
-    return !this.#paths.includes(path) && this.#paths.length >= maximumTabs ? this.#paths[0] : undefined
+    return !this.#paths.includes(path) && this.#paths.length >= maximumTabs
+      ? this.#paths.find(candidate => candidate !== this.#activePath)
+      : undefined
   }
 
   open(path: string): StudioEditorTabSnapshot {
