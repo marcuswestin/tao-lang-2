@@ -315,16 +315,6 @@ fixture StudioWorkspace {
       Name: "Novel"
 }  }
 
-scenarios WorkspaceRow "states" {
-   fixture StudioWorkspace
-   device phone
-   appearance light
-   network online
-   locale "en"
-   scenario "novel" {
-      render (Workspace: Novel)
-}  }
-
 scenarios WordFlower "devices" {
    fixture StudioWorkspace
    scenario "phone" {
@@ -339,6 +329,16 @@ scenarios WordFlower "devices" {
       network offline
       locale pseudolocale
       direction rightToLeft
+}  }
+
+scenarios WorkspaceRow "states" {
+   fixture StudioWorkspace
+   device phone
+   appearance light
+   network online
+   locale "en"
+   scenario "novel" {
+      render (Workspace: Novel)
 }  }
 
 // A configured datasource is a named value like any other. The bare constructor block is the

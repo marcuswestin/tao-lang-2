@@ -54,13 +54,12 @@ view WorkspaceList() {
             }
             on submit AddWorkspace
          }
-         Text(WordFlowerTagline) [body]
-         // In a render, a matched guard shows its handler and skips the rest of its ENCLOSING BLOCK
          Text(when WorkspaceName {
             empty -> "Workspace name is required"
             otherwise -> WorkspaceName
          }) [body]
-
+         Text(WordFlowerTagline) [body]
+         // In a render, a matched guard shows its handler and skips the rest of its ENCLOSING BLOCK
          #addWorkspace
          FormButton("Add workspace", Disabled: WorkspaceName is empty) {
             on press AddWorkspace
@@ -234,17 +233,19 @@ view NoWorkspacesYet() {
 workspace
 view WorkspaceRow(Workspace) {
    render Col() [gap 6, pad 10] {
-      Text(Workspace.Name) [body]
-
       #openWorkspace
       FormButton("Open workspace") {
          on press -> { present WorkspaceDetail(Workspace) }
       }
+      Text("New text")
+      Text("New text")
 
       #deleteWorkspace
       FormButton("Delete workspace") [gap 16] {
          on press -> { delete Workspace }
-}  }  }
+      }
+      Text(Workspace.Name) [body]
+}  }
 
 // One unfinished document: open it, finish it, or discard it.
 view DraftRow(Document) {
