@@ -1,7 +1,8 @@
 use Documents, Workspaces from @data
 use WorkspaceNav from @nav
 use Join from @tao/text
-use Col, FormButton, Image, Panes, ScrollView, Spinner, Text, TextInput from @tao/ui
+use Col, Image, Panes, ScrollView, Spinner, Text, TextInput from @tao/ui
+use FormButton from @tao/ui/basic
 use DocumentScreen from ./
 
 type PromptTitle is text
@@ -38,52 +39,63 @@ view WorkspaceList() {
    // `ScrollView` scrolls its content; `width max` keeps a readable column on a wide screen, and
    // `centered` places that column in the middle of the available space.
    render ScrollView() [screen] {
-      Col() [width max 720, centered, gap 10] {
-         Text("WordFlower") [title]
+      Col() [width max 960, centered, gap 24] {
+         Col() [hero] {
+            Text("YOUR WRITING HOME") [eyebrow]
+            Text("WordFlower") [display]
+            Text(WordFlowerTagline) [body]
+         }
          guard Workspaces {
             loading -> { Spinner() }
             error -> Message {
                Text("Could not load WordFlower") [title]
                Text(Message) [body]
          }  }
+         Panes() [gap 20] {
+            Col() [panel] {
+               Text("CREATE A SPACE") [eyebrow]
+               Text("Begin somewhere quiet") [sectionTitle]
+               Text("Give this collection a name. You can change it whenever the writing takes a new shape.") [body]
 
-         #workspaceName
-         TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Home") {
-            on change -> NewWorkspaceName { // an explicit handler replaces the default binding
-               set WorkspaceName = NewWorkspaceName
-            }
-            on submit AddWorkspace
-         }
-         Text(WordFlowerTagline) [body]
-         // In a render, a matched guard shows its handler and skips the rest of its ENCLOSING BLOCK
-         Text(when WorkspaceName {
-            empty -> "Workspace name is required"
-            otherwise -> WorkspaceName
-         }) [body]
+               #workspaceName
+               TextInput(Value: WorkspaceName, Label: "Workspace name", Placeholder: "Home") {
+                  on change -> NewWorkspaceName { // an explicit handler replaces the default binding
+                     set WorkspaceName = NewWorkspaceName
+                  }
+                  on submit AddWorkspace
+               }
+               // In a render, a matched guard shows its handler and skips the rest of its ENCLOSING BLOCK
+               Text(when WorkspaceName {
+                  empty -> "Workspace name is required"
+                  otherwise -> "Ready to create { WorkspaceName }"
+               }) [validation]
 
-         #addWorkspace
-         FormButton("Add workspace", Disabled: WorkspaceName is empty) {
-            on press AddWorkspace
-         }
+               #addWorkspace
+               FormButton("Add workspace", Disabled: WorkspaceName is empty) {
+                  on press AddWorkspace
+               }
 
-         #activateWorkspaceTab
-         FormButton("Go to workspaces") {
-            on press -> { // target-only activation reveals an item without new content
-               present @workspace
-         }  }
-         guard Workspaces empty -> { NoWorkspacesYet() }
+               #activateWorkspaceTab
+               FormButton("Browse all workspaces") [buttonSecondary] {
+                  on press -> { // target-only activation reveals an item without new content
+                     present @workspace
+            }  }  }
+            Col() [panel] {
+               Text("YOUR LIBRARY") [eyebrow]
+               Text("Recent workspaces") [sectionTitle]
+               Text("Open a writing space or clear one you no longer need.") [body]
+               guard Workspaces empty -> { NoWorkspacesYet() }
 
-         #workspaces
-         loop Workspaces / Workspace {
-            WorkspaceRow(Workspace)
-      }  }
-      WorkspaceChooser()
-}  }
+               #workspaces
+               loop Workspaces / Workspace {
+                  WorkspaceRow(Workspace)
+}  }  }  }  }  }
 
 // Presented above the nearest nav; overlays stack above content and are dismissible.
 view WorkspaceNameNotice() {
-   render Col() [gap 6, pad 10] {
-      Text("A workspace needs a name") [body]
+   render Col() [panel, width max 420] {
+      Text("A workspace needs a name") [sectionTitle]
+      Text("Add a short name before creating this writing space.") [body]
 
       #dismissNotice
       FormButton("Dismiss") {
@@ -120,17 +132,12 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
       set DocumentTitle = ""
    }
    render ScrollView() [screen] {
-      Col() [width max 960, centered, gap 10] {
-         Text("Workspace: { Workspace.Name }") [title]
-
-         #workspaceTitle
-         TextInput(Value: WorkspaceNameDraft, Label: "Workspace title", Placeholder: "Workspace title") {
-            on submit SaveWorkspace
-         }
-
-         #saveWorkspace
-         FormButton("Save workspace", Disabled: WorkspaceNameDraft is empty) {
-            on press SaveWorkspace
+      Col() [width max 960, centered, gap 24] {
+         Col() [hero] {
+            Text("WORKSPACE") [eyebrow]
+            Text(Workspace.Name) [display]
+            Text("Workspace: { Workspace.Name }") [caption]
+            Text("Shape the space, then keep the words moving.") [body]
          }
          guard Drafts { // a guard takes exactly one subject; guard each query separately
             loading -> { Spinner() }
@@ -140,33 +147,52 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
             loading -> { Spinner() }
             error -> Message { Text("Could not load documents: { Message }") [body] }
          }
+         Panes() [gap 20] {
+            Col() [panel] {
+               Text("WORKSPACE DETAILS") [eyebrow]
+               Text("Name this space") [sectionTitle]
 
-         #newDocumentTitle
-         TextInput(Value: DocumentTitle, Label: "New document title", Placeholder: "Draft the next chapter") {
-            on submit AddDocument
-         }
-         when DocumentTitle {
-            empty -> { Text("Document title is required") [body] }
-            otherwise -> { Text(DocumentTitle) [body] }
-         }
+               #workspaceTitle
+               TextInput(Value: WorkspaceNameDraft, Label: "Workspace title", Placeholder: "Workspace title") {
+                  on submit SaveWorkspace
+               }
 
-         #addDocument
-         FormButton("Add document", Disabled: DocumentTitle is empty) {
-            on press AddDocument
-         }
+               #saveWorkspace
+               FormButton("Save workspace", Disabled: WorkspaceNameDraft is empty) {
+                  on press SaveWorkspace
+            }  }
+            Col() [panel] {
+               Text("NEW DOCUMENT") [eyebrow]
+               Text("Start the next page") [sectionTitle]
+
+               #newDocumentTitle
+               TextInput(Value: DocumentTitle, Label: "Document title", Placeholder: "Draft the next chapter") {
+                  on submit AddDocument
+               }
+               when DocumentTitle {
+                  empty -> { Text("Document title is required") [validation] }
+                  otherwise -> { Text("Ready to write { DocumentTitle }") [caption] }
+               }
+
+               #addDocument
+               FormButton("Add document", Disabled: DocumentTitle is empty) {
+                  on press AddDocument
+         }  }  }
          // `Panes` lays its children side by side when the container is wide enough and stacks them
          // otherwise. Children size themselves with the ordinary layout clauses.
-         Panes() [gap 16] {
-            Col() [gap 6] {
-               Text("Drafts: { Drafts.Count }") [title]
+         Panes() [gap 20] {
+            Col() [panel] {
+               Text("DRAFTS") [eyebrow]
+               Text("Drafts: { Drafts.Count }") [sectionTitle]
                guard Drafts empty -> { Text("No drafts") [body] }
                // A tagged list can be selected by 1-based row index: #drafts[INDEX] { press #edit }
                #drafts
                loop Drafts / Document {
                   DraftRow(Document)
             }  }
-            Col() [gap 6] {
-               Text("Finished") [title]
+            Col() [panel] {
+               Text("ARCHIVE") [eyebrow]
+               Text("Finished") [sectionTitle]
                guard FinishedDocuments empty -> { Text("No finished documents") [body] }
 
                #finishedDocuments
@@ -177,26 +203,33 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
 workspace
 view WorkspaceChooser() {
    query Workspaces { }
-   render Col() [screen, width max 720, centered, gap 10] {
-      Text("Choose a workspace") [title]
+   render Col() [screen, width max 720, centered, gap 20] {
+      Col() [hero] {
+         Text("YOUR LIBRARY") [eyebrow]
+         Text("Choose a workspace") [display]
+         Text("Pick up where you left off.") [body]
+      }
       guard Workspaces empty -> { Text("No workspaces yet") [body] }
       // A loop with `on select` makes each row selectable. Its singular name scopes both the template and
       // `on select`, so a selectable collection needs no stdlib List or per-row button.
       #chooseWorkspace
       loop Workspaces / Workspace {
-         Text(Workspace.Name) [body]
+         Text(Workspace.Name) [card, sectionTitle]
          on select -> { present WorkspaceDocuments(Workspace) in WorkspaceNav }
 }  }  }
 
 view WorkspaceDocuments(Workspace) {
    query Documents from Workspace.Documents { }
-   render Col() [screen, width max 720, centered, gap 10] {
-      Text("Documents in { Workspace.Name }") [title]
+   render Col() [screen, width max 720, centered, gap 20] {
+      Col() [hero] {
+         Text("{ Workspace.Name }") [eyebrow]
+         Text("Documents in { Workspace.Name }") [display]
+      }
       guard Documents empty -> { Text("No documents yet") [body] }
 
       #workspaceDocuments
       loop Documents / Document {
-         Text(Document.Title) [body]
+         Text(Document.Title) [card, sectionTitle]
          on select -> { present DocumentScreen(Document) }
 }  }  }
 
@@ -218,14 +251,14 @@ view TagSummary(Tags PromptTags) {
 
 // Shown while the library is empty: what WordFlower is for, and something to start from.
 view NoWorkspacesYet() {
-   render Col() [gap 10] {
+   render Col() [subtlePanel] {
       // A decorative image needs no accessibility label. This tranche represents assets as text
       // paths.
       Image("./images/empty-workspaces.png", Decorative: true) [width 160, centered]
-      Text("No workspaces yet") [title]
+      Text("No workspaces yet") [sectionTitle]
       Text("Create one to start capturing documents.") [body]
-      Text("Try writing for { StarterPrompt.PromptMinutes } minutes") [body]
       Text("Starter prompt: { StarterPrompt.PromptTitle }") [body]
+      Text("Try writing for { StarterPrompt.PromptMinutes } minutes") [body]
       TagSummary(StarterPrompt.PromptTags)
 }  }
 
@@ -233,23 +266,24 @@ view NoWorkspacesYet() {
 // workspace instead of receiving an `Open action()` from the screen that lists it.
 workspace
 view WorkspaceRow(Workspace) {
-   render Col() [gap 6, pad 10] {
-      Text(Workspace.Name) [body]
+   render Col() [card] {
+      Text(Workspace.Name) [sectionTitle]
+      Text("A quiet place to collect drafts and finished work.") [caption]
+
+      #deleteWorkspace
+      FormButton("Delete workspace") [buttonDanger] {
+         on press -> { delete Workspace }
+      }
 
       #openWorkspace
       FormButton("Open workspace") {
          on press -> { present WorkspaceDetail(Workspace) }
-      }
-
-      #deleteWorkspace
-      FormButton("Delete workspace") [gap 16] {
-         on press -> { delete Workspace }
 }  }  }
 
 // One unfinished document: open it, finish it, or discard it.
 view DraftRow(Document) {
-   render Col() [gap 6, pad 10] {
-      Text(Document.Title) [body]
+   render Col() [card] {
+      Text(Document.Title) [sectionTitle]
 
       #edit
       FormButton("Open document") {
@@ -257,30 +291,30 @@ view DraftRow(Document) {
       }
 
       #finish
-      FormButton("Finish document") {
+      FormButton("Finish document") [buttonSecondary] {
          on press -> { update Document {
             Final
          } } // boolean cases are written by name
       }
 
       #delete
-      FormButton("Delete document") {
+      FormButton("Delete document") [buttonDanger] {
          on press -> { delete Document }
 }  }  }
 
 // One finished document: reopen it or discard it.
 view FinishedRow(Document) {
-   render Col() [gap 6, pad 10] {
-      Text(Document.Title) [body]
+   render Col() [card] {
+      Text(Document.Title) [sectionTitle]
 
       #reopen
-      FormButton("Reopen document") {
+      FormButton("Reopen document") [buttonSecondary] {
          on press -> { update Document {
             Draft
          } }
       }
 
       #deleteFinished
-      FormButton("Delete finished document") {
+      FormButton("Delete finished document") [buttonDanger] {
          on press -> { delete Document }
 }  }  }
