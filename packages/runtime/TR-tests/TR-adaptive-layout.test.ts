@@ -2,8 +2,8 @@ import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 
 Describe('TR adaptive layout', () => {
-  Test('lowers width max to React Native maxWidth', () => {
-    Expect(TR.Layout.resolve({ entries: [['width', 'max', 720]] })).toEqual({ maxWidth: 720 })
+  Test('keeps width max fluid below its React Native maximum', () => {
+    Expect(TR.Layout.resolve({ entries: [['width', 'max', 720]] })).toEqual({ maxWidth: 720, width: '100%' })
   })
 
   Test('replaces a concrete width with a later width maximum', () => {
@@ -13,7 +13,7 @@ Describe('TR adaptive layout', () => {
     )
 
     Expect(merged?.entries).toEqual([['width', 'max', 720]])
-    Expect(TR.Layout.resolve({ entries: merged?.entries ?? [] })).toEqual({ maxWidth: 720 })
+    Expect(TR.Layout.resolve({ entries: merged?.entries ?? [] })).toEqual({ maxWidth: 720, width: '100%' })
   })
 
   Test('replaces repeated direct dimensions before lowering their distinct native effects', () => {
@@ -24,7 +24,10 @@ Describe('TR adaptive layout', () => {
     ])
 
     Expect(layout.entries).toEqual([['width', 'max', 720]])
-    Expect(TR.Layout.resolve({ entries: layout.entries, parentDirection: 'row' })).toEqual({ maxWidth: 720 })
+    Expect(TR.Layout.resolve({ entries: layout.entries, parentDirection: 'row' })).toEqual({
+      maxWidth: 720,
+      width: '100%',
+    })
   })
 
   Test('keeps a later overlay at the end of the semantic list', () => {
@@ -95,7 +98,7 @@ Describe('TR adaptive layout', () => {
   Test('composes a width maximum with bare fill in either source order', () => {
     const fillThenMaximum = TR.Layout.create([['fill'], ['width', 'max', 720]])
     const maximumThenFill = TR.Layout.create([['width', 'max', 720], ['fill']])
-    const expected = { alignSelf: 'stretch', flexGrow: 1, maxWidth: 720 }
+    const expected = { alignSelf: 'stretch', flexGrow: 1, maxWidth: 720, width: '100%' }
 
     Expect(TR.Layout.resolve({ entries: fillThenMaximum.entries, parentDirection: 'row' })).toEqual(expected)
     Expect(TR.Layout.resolve({ entries: maximumThenFill.entries, parentDirection: 'row' })).toEqual(expected)

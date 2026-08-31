@@ -177,6 +177,10 @@ function applyDimension(
 ): void {
   const [dimension, term] = entry
   if (dimension === 'width' && term === 'max') {
+    // React Native Web lets a centered flex item keep its intrinsic width even when that width is
+    // wider than its parent. Pairing the cap with a percentage width keeps readable regions fluid:
+    // they take the available width on small screens and stop growing at the declared maximum.
+    style['width'] = '100%'
     style['maxWidth'] = entry[2]
     return
   }
