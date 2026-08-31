@@ -71,7 +71,7 @@ tests written in Tao, green in Current, for every construct introduced.
     multi-project sessions and grouped scenario matrices, and establish the Tao-client strangler.
     Remaining integration and native-validation gates are tracked in the living ledger:
     `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md`. The v1 plan is retained only as a historical
-    ledger.
+    ledger. `Docs/Spec/Tao Studio Development.md` owns how to run, inspect, and recover Studio.
   - A native phone as a Studio canvas is feasible for an explicitly instrumented Expo development
     build, limited for internal preview builds, and rejected as an unrestricted production-code path.
     No native transport is implemented and a real-iPhone spike remains required. Exploration:
