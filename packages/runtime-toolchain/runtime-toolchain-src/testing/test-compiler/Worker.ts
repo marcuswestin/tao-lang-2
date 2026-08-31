@@ -128,8 +128,17 @@ function unexpectedOutput(requestDescription: string): (output: TestCompiler.Wor
 }
 
 async function bunPath(): Promise<string> {
-  const devenvBun = Repo.resolvePath('.devenv/profile/bin/bun')
+  const devenvBun = Repo.tryResolvePath('.devenv/profile/bin/bun')
+  if (devenvBun === undefined) {
+    return 'bun'
+  }
   return await FS.isFile(devenvBun) ? devenvBun : 'bun'
+}
+
+// Test sources live outside the repository whenever `tao test` runs against an installed
+// toolchain or a temporary fixture, so the worker falls back to its own package root.
+function workerWorkingDirectory(): string {
+  return Repo.tryGetRoot() ?? RuntimeToolchainPaths.packageRoot
 }
 
 function workerSession(): WorkerSession {
@@ -206,7 +215,7 @@ class Session {
     }
     const command = CLI.start(executable, {
       args: ['run', WORKER_PATH],
-      cwd: Repo.resolvePath(),
+      cwd: workerWorkingDirectory(),
       onOutput: (stream, chunk) => this.handleOutput(stream, chunk),
       stdio: ['pipe', 'pipe', 'pipe'],
     })

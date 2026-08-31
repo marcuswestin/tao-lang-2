@@ -41,6 +41,8 @@ in
   packages = [
     nodePkg
     pkgs.cocoapods
+    # GNU coreutils for `timeout`, which repository scripts and agents use to bound a run.
+    pkgs.coreutils
     pkgs.dprint
     pkgs.fd
     pkgs.git
@@ -72,10 +74,6 @@ in
   scripts.f = {
     exec = ''just fix "$@"'';
     description = "just fix";
-  };
-  scripts.b = {
-    exec = ''just build "$@"'';
-    description = "just build";
   };
   scripts.v = {
     exec = ''just verify "$@"'';

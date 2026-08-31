@@ -78,6 +78,10 @@ export const runtimeProcess = {
   cwd: process.cwd.bind(process),
   env: process.env,
   execPath: process.execPath,
+  /** The current process id, for recording which process owns a resource. */
+  get pid(): number {
+    return process.pid
+  },
   exit(exitCode?: number | string | null): never {
     process.exit(exitCode)
     throw new Error(`process.exit(${exitCode ?? 0}) returned unexpectedly.`)

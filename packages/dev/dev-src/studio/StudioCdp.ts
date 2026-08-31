@@ -4,7 +4,7 @@ type CdpResponse = {
   error?: { message: string }
   id?: number
   method?: string
-  params?: unknown
+  params?: Record<string, unknown>
   result?: unknown
 }
 
@@ -33,13 +33,41 @@ const chromeCandidates = [
 ] as const
 
 /** StudioCdp drives the real Studio browser shell for explicit slow smoke tests. */
+/** BrowserConsoleEntry is one message the page logged, kept so a smoke run can gate on errors. */
+export type BrowserConsoleEntry = {
+  level: 'error' | 'warning'
+  text: string
+}
+
 export class StudioCdp {
   private closed = false
+  private readonly consoleEntries: BrowserConsoleEntry[] = []
 
   private constructor(
     private readonly client: CdpClient,
     private readonly cleanup: () => Promise<void>,
-  ) {}
+  ) {
+    // A blank Studio usually says why in the console and nowhere else, so every error and
+    // uncaught exception is retained for the smoke run to fail on and for its artifacts.
+    client.onEvent((method, params) => {
+      const entry = consoleEntry(method, params)
+      if (entry !== undefined) {
+        this.consoleEntries.push(entry)
+      }
+    })
+  }
+
+  /** consoleErrors returns the page errors seen so far, in the order they were logged. */
+  consoleErrors(): readonly BrowserConsoleEntry[] {
+    return this.consoleEntries.filter(entry => entry.level === 'error')
+  }
+
+  /** captureScreenshot writes a PNG of the current page, creating parent directories. */
+  async captureScreenshot(path: string): Promise<string> {
+    const result = await this.client.send<{ data: string }>('Page.captureScreenshot', { format: 'png' })
+    await FS.writeFile(path, Buffer.from(result.data, 'base64'))
+    return path
+  }
 
   static async launchChrome(): Promise<StudioCdp> {
     const chromePath = await findChromePath()
@@ -208,6 +236,7 @@ export class StudioCdp {
 
 class CdpClient {
   private nextId = 1
+  private readonly eventListeners: ((method: string, params: Record<string, unknown>) => void)[] = []
   private readonly pending = new Map<number, PendingCommand>()
 
   private constructor(private readonly socket: WebSocket) {
@@ -252,9 +281,19 @@ class CdpClient {
     this.rejectAll('Chrome DevTools connection closed.')
   }
 
+  /** onEvent receives every DevTools event, which is how console errors are noticed at all. */
+  onEvent(listener: (method: string, params: Record<string, unknown>) => void): void {
+    this.eventListeners.push(listener)
+  }
+
   private handleMessage(raw: string): void {
     const response = JSON.parse(raw) as CdpResponse
     if (response.id === undefined) {
+      if (typeof response.method === 'string') {
+        for (const listener of this.eventListeners) {
+          listener(response.method, response.params ?? {})
+        }
+      }
       return
     }
     const pending = this.pending.get(response.id)
@@ -275,6 +314,24 @@ class CdpClient {
     }
     this.pending.clear()
   }
+}
+
+/** consoleEntry reads the two DevTools events that carry a page-side failure. */
+function consoleEntry(method: string, params: Record<string, unknown>): BrowserConsoleEntry | undefined {
+  if (method === 'Runtime.exceptionThrown') {
+    const details = params['exceptionDetails'] as { exception?: { description?: string }; text?: string } | undefined
+    return { level: 'error', text: details?.exception?.description ?? details?.text ?? 'Uncaught exception' }
+  }
+  if (method !== 'Runtime.consoleAPICalled') {
+    return undefined
+  }
+  const type = params['type']
+  if (type !== 'error' && type !== 'warning') {
+    return undefined
+  }
+  const args = (params['args'] as { description?: string; value?: unknown }[] | undefined) ?? []
+  const text = args.map(argument => argument.description ?? String(argument.value ?? '')).join(' ')
+  return { level: type, text }
 }
 
 async function configure(client: CdpClient): Promise<void> {

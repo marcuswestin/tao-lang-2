@@ -41,6 +41,16 @@ Electrobun build, but the host process aborts while registering AppKit under the
 coalition. Signing/notarization credentials and an HTTPS artifact host are also unavailable here, so none
 of the repository tests proves a running signed/notarized Electrobun app or differential update.
 
+Those boundaries are now commands rather than prose. `./dev studio-canary` launches the native shell,
+evaluates its runtime probe against the required capability set, and fails when any process the launch
+owned survives shutdown; a host without Hutch or without a window server session is reported as blocked,
+which is neither a pass nor a repository failure. It names the directory picker, Command-W, and
+quit-on-last-window as manual every run, because no in-process probe can drive them.
+`./dev studio-release-check` validates a built release's standalone payload, packaged runtime inventory,
+HTTPS update manifest, and differential updates, and reports deep signing, notarization, and disk-image
+validity as unverified when Apple's tools are absent rather than as passed. `Docs/Spec/Tao Studio
+Development.md` carries the operator steps for the external gates.
+
 ## Next integration gates
 
 1. Run the native command outside the Codex host coalition and exercise the actual project picker, windows,

@@ -1,9 +1,13 @@
 import { Errors, HCI, Platform, Switch } from '@shared'
 import { runWithCommands } from './cli/run-with-commands'
+import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { ExpoRunner } from './expo-dev-loop/expo-runner/ExpoRunner'
+import { formatGateSummary, gateExitCode, runGates } from './repository-tests/GateRunner'
 import { TestRunner } from './repository-tests/TestRunner'
 import { TestTUI } from './repository-tests/TestTUI'
+import { StudioCanaryCommand } from './studio/StudioCanaryCommand'
 import { runStudioDev } from './studio/StudioDev'
+import { StudioLifecycleCommand } from './studio/StudioLifecycleCommand'
 import { StudioNative } from './studio/StudioNative'
 import { StudioSmoke } from './studio/StudioSmoke'
 
@@ -39,6 +43,32 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('gates')
+    .description('Run repository gates in parallel and report one verification summary.')
+    .argument('<gates...>', 'Just recipe names to run as gates.')
+    .option('--jobs <count>', 'Maximum number of gates to run at once.')
+    .option('--json <path>', 'Also write the summary as a JSON artifact at this path.')
+    .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
+    .action(async (gates: string[], options: { jobs?: string; json?: string; skipped?: string[] } = {}) => {
+      const summary = await runGates({
+        gates,
+        jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
+        jsonPath: options.json,
+        skipped: options.skipped,
+      })
+      HCI.writeLine(formatGateSummary(summary))
+      Platform.runtimeProcess.exit(gateExitCode(summary))
+    })
+
+  commands
+    .command('doctor')
+    .description('Diagnose this checkout without changing it.')
+    .option('--json', 'Print a versioned structured report instead of PASS/WARN/FAIL lines.')
+    .action(async (options: { json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(await RepositoryDoctorCommand.run({ json: options.json === true }))
+    })
+
+  commands
     .command('studio')
     .description('Launch Tao Studio against a project folder.')
     .argument('[project]', 'Tao project folder.', '.')
@@ -47,6 +77,7 @@ await runWithCommands(commands => {
     .option('--host <hostname>', 'Studio server hostname.', '127.0.0.1')
     .option('--port <port>', 'Studio server port; defaults to an available port.')
     .option('--no-browser', 'Do not open Studio in a browser.')
+    .option('--json', 'Print a machine-readable readiness payload once Studio answers.')
     .action(async (project, options) => {
       Platform.runtimeProcess.exit(
         await runStudioDev({
@@ -54,10 +85,87 @@ await runWithCommands(commands => {
           browser: options.browser,
           entryPath: options.entry,
           hostname: options.host,
+          json: options.json === true,
           port: parseOptionalPositiveInteger(options.port, '--port'),
           projectRoot: project,
         }),
       )
+    })
+
+  commands
+    .command('studio-canary')
+    .description('Run native Tao Studio against a deterministic project and report what it proved.')
+    .option('--project <path>', 'Tao project folder to open.')
+    .option('--app <name>', 'App declaration within the selected project.')
+    .option('--artifact-root <path>', 'Where the canary writes its artifacts.')
+    .option('--hutch <path>', 'Explicit Hutch executable path.')
+    .action(async (options: { artifactRoot?: string; hutch?: string; project?: string } = {}) => {
+      Platform.runtimeProcess.exit(
+        await StudioCanaryCommand.canary({
+          artifactRoot: options.artifactRoot,
+          hutchPath: options.hutch,
+          projectRoot: options.project,
+        }),
+      )
+    })
+
+  commands
+    .command('studio-release-check')
+    .description('Validate a built native Studio release without publishing anything.')
+    .requiredOption('--payload-root <path>', 'Staged service payload directory.')
+    .requiredOption('--artifacts-root <path>', 'Directory the build wrote its artifacts into.')
+    .option('--app <path>', 'Built .app bundle, for signature and notarization checks.')
+    .option('--dmg <path>', 'Built disk image, for the mount check.')
+    .option('--release-base-url <url>', 'The HTTPS host installed copies fetch updates from.')
+    .option('--allow-unverified', 'Succeed even when a gate could not be checked on this machine.')
+    .action(
+      async (
+        options: {
+          allowUnverified?: boolean
+          app?: string
+          artifactsRoot: string
+          dmg?: string
+          payloadRoot: string
+          releaseBaseUrl?: string
+        },
+      ) => {
+        Platform.runtimeProcess.exit(
+          await StudioCanaryCommand.releaseCheck({
+            allowUnverified: options.allowUnverified === true,
+            appPath: options.app,
+            artifactsRoot: options.artifactsRoot,
+            diskImagePath: options.dmg,
+            payloadRoot: options.payloadRoot,
+            releaseBaseUrl: options.releaseBaseUrl,
+          }),
+        )
+      },
+    )
+
+  commands
+    .command('studio-ps')
+    .description('List recorded Tao Studio launches and whether each is still live.')
+    .option('--json', 'Print a versioned structured listing.')
+    .action(async (options: { json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(await StudioLifecycleCommand.ps({ json: options.json === true }))
+    })
+
+  commands
+    .command('studio-stop')
+    .description('Stop the processes a recorded Tao Studio launch owns.')
+    .option('--launch <id>', 'Stop only the launch with this id.')
+    .option('--all', 'Stop every recorded launch.')
+    .option('--json', 'Print a versioned structured report.')
+    .action(async (options: { all?: boolean; json?: boolean; launch?: string } = {}) => {
+      Platform.runtimeProcess.exit(await StudioLifecycleCommand.stop(options))
+    })
+
+  commands
+    .command('studio-doctor')
+    .description('Diagnose Tao Studio on top of the repository doctor, without changing anything.')
+    .option('--json', 'Print a versioned structured report.')
+    .action(async (options: { json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(await StudioLifecycleCommand.doctor({ json: options.json === true }))
     })
 
   commands
@@ -70,13 +178,16 @@ await runWithCommands(commands => {
     .option('--port <port>', 'Studio server port; defaults to an available port.')
     .option('--artifact-root <path>', 'Generated Electrobun project and runtime artifact root.')
     .option('--hutch <path>', 'Explicit Hutch executable path.', 'hutch')
+    .option('--no-browser', 'Open the Welcome window only, with no extra project window.')
+    .option('--json', 'Print a machine-readable readiness payload once Studio answers.')
     .action(async (project, options) => {
       Platform.runtimeProcess.exit(
         await runStudioDev({
           appName: options.app,
-          browser: false,
+          browser: options.browser,
           entryPath: options.entry,
           hostname: options.host,
+          json: options.json === true,
           native: true,
           nativeArtifactRoot: options.artifactRoot,
           nativeHutchPath: options.hutch,

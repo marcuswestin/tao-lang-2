@@ -18,9 +18,12 @@ import {
 import betterOpen from 'better-opn'
 import { ExpoRunner } from '../expo-dev-loop/expo-runner/ExpoRunner'
 import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
+import { describeOwnProcess, openLaunchRecord, type StudioLaunchRecord } from './StudioLaunchManifest'
+import { createStudioLifecycleLog, type StudioLifecycleLog } from './StudioLifecycleLog'
 import { StudioNative } from './StudioNative'
 import type { StartedStudioNative } from './StudioNative'
 import { type CreatedStudioPreviewRuntime, StudioPreviewRuntime } from './StudioPreviewRuntime'
+import { openTarget, waitForReadyUrl, writeReadiness } from './StudioReadiness'
 import { StudioTestProcessRunner } from './StudioTestProcessRunner'
 
 export type StudioDevOptions = {
@@ -28,6 +31,8 @@ export type StudioDevOptions = {
   browser?: boolean
   entryPath?: string
   hostname?: string
+  /** Emit a machine-readable readiness payload once the advertised page answers. */
+  json?: boolean
   native?: boolean
   nativeArtifactRoot?: string
   nativeHutchPath?: string
@@ -67,11 +72,22 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   let foundationModels: AppleFoundationModelsService | undefined
   let manager: StudioSessionManager | undefined
   let studioClientReload: StartedStudioClientDevReload | undefined
-  const recentProjects = createRecentProjectStore(
-    FS.resolvePath('recent-projects.json', options.userStateRoot ?? Repo.resolvePath('.artifacts/user/studio')),
-  )
+  const userStateRoot = options.userStateRoot ?? Repo.resolvePath('.artifacts/user/studio')
+  const recentProjects = createRecentProjectStore(FS.resolvePath('recent-projects.json', userStateRoot))
+  const mode = options.native === true ? 'native' : 'browser'
+  const artifactRoot = FS.resolvePath(`launches/${mode}`, userStateRoot)
+  let launch: StudioLaunchRecord | undefined
+  let lifecycle: StudioLifecycleLog | undefined
 
   try {
+    launch = await openLaunchRecord({
+      appName: options.appName,
+      artifactRoot,
+      mode,
+      projectRoot: options.projectRoot,
+    })
+    lifecycle = createStudioLifecycleLog({ artifactRoot, launchId: launch.launchId })
+    lifecycle.record({ component: 'studio-server', event: 'launch-requested', pid: Platform.runtimeProcess.pid })
     const nativeHutchPath = options.native
       ? await StudioNative.resolveHutchExecutablePath(options.nativeHutchPath)
       : undefined
@@ -118,21 +134,71 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       hostname: options.hostname,
       port: options.port,
     })
-    const projectUrl = `${server.url}/sessions/${encodeURIComponent(initial.sessionId)}`
-    HCI.logProcessInfo('studio', `Studio: ${server.url}`)
+    const sessionUrl = `${server.url}/sessions/${encodeURIComponent(initial.sessionId)}`
+    lifecycle.record({ component: 'studio-server', event: 'port-allocated', port: server.port })
+    lifecycle.record({ component: 'studio-server', event: 'server-ready', port: server.port })
+    lifecycle.record({ component: 'studio-server', event: 'session-created', sessionId: initial.sessionId })
+    lifecycle.record({ component: 'preview', event: 'preview-published', message: initialResource.previewUrl })
+    // Only the session page is advertised: the server root is not the page a person can use.
+    HCI.logProcessInfo('studio', `Studio: ${sessionUrl}`)
     HCI.logProcessInfo('studio', `Preview: ${initialResource.previewUrl}`)
+    await launch.update({
+      previewUrl: initialResource.previewUrl,
+      processes: [await describeOwnProcess('studio-server')],
+      sessionId: initial.sessionId,
+      sessionUrl,
+      studioPort: server.port,
+      studioUrl: server.url,
+    })
     if (options.native && !requestedStop) {
       native = await StudioNative.start({
         artifactRoot: options.nativeArtifactRoot,
         hutchPath: nativeHutchPath,
         previewUrl: initialResource.previewUrl ?? 'http://127.0.0.1:1',
-        projectUrl,
+        // `--no-browser` also means "no extra project window" for the native shell.
+        projectUrl: options.browser === false ? undefined : sessionUrl,
         probe: options.nativeProbe,
         studioUrl: server.url,
       })
-      void native.waitForClose().then(exitCode => stop(exitCode))
-    } else if (options.browser !== false && !requestedStop) {
-      await betterOpen(projectUrl)
+      lifecycle.record({ component: 'native-shell', event: 'process-started' })
+      void native.waitForClose().then(exitCode => {
+        lifecycle?.record({ component: 'native-shell', event: 'process-exited' })
+        stop(exitCode)
+      })
+    }
+    if (!requestedStop) {
+      // `ready` is a claim about the page, so it is only made once the page has answered. A
+      // launch whose page never answers is `failed`, and stops rather than idling in a state
+      // that reads as usable to `studio-ps` and to anything scripting it.
+      if (await waitForReadyUrl(sessionUrl)) {
+        await launch.update({ state: 'ready' })
+        if (options.json === true) {
+          writeReadiness({
+            appName: options.appName,
+            artifactRoot,
+            launchId: launch.launchId,
+            lifecycleLogPath: lifecycle.path,
+            manifestPath: launch.path,
+            mode,
+            previewUrl: initialResource.previewUrl,
+            projectRoot: initial.project,
+            sessionId: initial.sessionId,
+            sessionUrl,
+            studioUrl: server.url,
+            version: 1,
+          })
+        }
+      } else {
+        await launch.update({ shutdownReason: 'the session page never answered', state: 'failed' })
+        HCI.logProcessError('studio', `Studio did not answer at ${sessionUrl}.`)
+        stop(1)
+      }
+    }
+    const target = options.native === true
+      ? undefined
+      : openTarget({ browser: options.browser, opened: requestedStop, sessionUrl })
+    if (target !== undefined) {
+      await betterOpen(target)
     }
     if (!requestedStop) {
       HCI.logProcessInfo('studio', 'Press Ctrl+C to stop Tao Studio.')
@@ -147,6 +213,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     return 1
   } finally {
     removeStopSignalHandlers()
+    lifecycle?.record({ component: 'studio-server', event: 'shutdown-requested' })
     await cleanupStudioDev([
       () => native?.stop(),
       () => studioClientReload?.close(),
@@ -157,6 +224,13 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
         recentProjects.flush().catch(error => {
           HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
         }),
+      async () => {
+        // The process record is kept, not cleared: a caller checking for survivors after shutdown
+        // needs to know what this launch owned. Liveness is decided by validation, not by absence.
+        await launch?.finalize({ shutdownReason: 'studio exited' })
+        lifecycle?.record({ component: 'studio-server', event: 'manifest-finalized' })
+        await lifecycle?.close()
+      },
     ])
   }
 }

@@ -9,6 +9,7 @@ Describe('agent config generation', () => {
     try {
       const calls: GenerateOptions[] = []
       const skipped: string[] = []
+      const codexRoots: string[] = []
       await AgentConfigGenerator.generate({
         generate: async options => {
           calls.push(options)
@@ -19,11 +20,15 @@ Describe('agent config generation', () => {
             })
           }
         },
+        generateCodexConfig: async options => {
+          codexRoots.push(options.root)
+        },
         onSkip: message => skipped.push(message),
         root,
       })
 
       Expect(calls.map(call => call.targets)).toEqual([['codexcli'], ['claudecode']])
+      Expect(codexRoots).toEqual([root])
       Expect(calls.map(call => call.features)).toEqual([
         ['subagents'],
         ['subagents', 'permissions'],
@@ -49,6 +54,7 @@ Describe('agent config generation', () => {
             })
           }
         },
+        generateCodexConfig: async () => {},
         onSkip: message => skipped.push(message),
         root,
       })

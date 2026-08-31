@@ -47,6 +47,21 @@ export function resolvePath(inputPath = '.', cwd?: string): string {
   return FS.resolvePath(inputPath, getRoot(cwd))
 }
 
+/** tryGetRoot returns the Git worktree root for `cwd`, or undefined outside a worktree. */
+export function tryGetRoot(cwd = runtimeProcess.cwd()): string | undefined {
+  try {
+    return getRoot(cwd)
+  } catch {
+    return undefined
+  }
+}
+
+/** tryResolvePath resolves a repository-relative path, or undefined outside a worktree. */
+export function tryResolvePath(inputPath = '.', cwd?: string): string | undefined {
+  const root = tryGetRoot(cwd)
+  return root === undefined ? undefined : FS.resolvePath(inputPath, root)
+}
+
 /** filesUnder returns files under a path using Git ignore rules when the path is in a Git worktree. */
 export async function filesUnder(inputPath: string, options: FilesUnderOptions = {}): Promise<string[]> {
   const root = FS.resolvePath(inputPath)
@@ -191,14 +206,6 @@ function restoreInputPath(path: string, realRoot: string, inputRoot: string): st
     return path
   }
   return FS.resolvePath(path.slice(realRoot.length + 1), inputRoot)
-}
-
-function tryGetRoot(cwd: string): string | undefined {
-  try {
-    return getRoot(cwd)
-  } catch {
-    return undefined
-  }
 }
 
 function findGitMarkerRoot(cwd: string): string | undefined {

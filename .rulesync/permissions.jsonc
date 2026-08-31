@@ -1,0 +1,122 @@
+{
+  "$schema": "https://github.com/dyoshikawa/rulesync/releases/latest/download/permissions-schema.json",
+  // Canonical agent permission rules for this repository. `./agent setup` renders them into
+  // .claude/settings.json (via rulesync) and .codex/config.toml (via packages/dev's
+  // CodexConfigGenerator). Edit this file, never the generated ones.
+  "permission": {
+    "bash": {
+      // The repository's own workflow surface. Agents run these without asking.
+      "./agent *": "allow",
+      "./dev *": "allow",
+      "./tao *": "allow",
+      "just *": "allow",
+      "bun install *": "allow",
+      "bun run *": "allow",
+      "bun test *": "allow",
+      "direnv exec . *": "allow",
+      "dprint *": "allow",
+      // Local device and container tooling for the Expo and InstantDB dev loops.
+      "adb *": "allow",
+      "docker compose *": "allow",
+      "docker ps *": "allow",
+      "emulator *": "allow",
+      "xcrun simctl *": "allow",
+      // Merging runs without a prompt. Which branch lands on main, and when, is still Ro's
+      // decision — an agent merges because Ro asked, not on its own initiative. Pushing is the
+      // outward-facing step and is deliberately absent from this list.
+      "git merge *": "allow",
+    },
+    "read": {
+      // The previous repository is reference material (see AGENTS.md).
+      "~/code/tao-lang/**": "allow",
+      // Not `.env*`: that pattern also matches this repository's own `.envrc`.
+      "**/.env": "deny",
+      "**/.env.*": "deny",
+      "~/.aws/**": "deny",
+      "~/.config/gh/**": "deny",
+      "~/.ssh/**": "deny",
+    },
+    "webfetch": {
+      "*": "allow",
+    },
+    "websearch": {
+      "*": "allow",
+    },
+    "mcp__Claude_Browser__*": {
+      "*": "allow",
+    },
+    "mcp__Claude_Code_iOS_Simulator__*": {
+      "*": "allow",
+    },
+    "mcp__claude-in-chrome__*": {
+      "*": "allow",
+    },
+  },
+  "claudecode": {
+    "sandbox": {
+      "enabled": true,
+      "excludedCommands": [
+        "docker *",
+        "gh *",
+        "adb *",
+        "emulator *",
+      ],
+      // The `read` deny rules above only bind the file tools. These bind sandboxed shell
+      // commands, which would otherwise be able to cat the same files.
+      "credentials": {
+        "files": [
+          { "path": "~/.ssh", "mode": "deny" },
+          { "path": "~/.aws", "mode": "deny" },
+          { "path": "~/.config/gh", "mode": "deny" },
+        ],
+      },
+      // Caches the pinned toolchain writes outside the worktree. Expo's native-module cache,
+      // Hutch's launcher root, and Watchman's state directory are as much part of the dev loop
+      // as Bun's and Gradle's: without them Studio, native Studio, and file watching all fail.
+      "filesystem": {
+        "allowWrite": [
+          "~/.bun",
+          "~/.cache",
+          "~/.gradle",
+          "~/.android",
+          "~/.expo",
+          "~/.hutch",
+          "~/.local/state/watchman",
+          "~/Library/Caches",
+        ],
+      },
+      "network": {
+        "allowLocalBinding": true,
+        // Watchman's client talks to its server over this socket, and Metro falls back to
+        // watching through the OS without it — which this repository exceeds, so Metro dies
+        // with EMFILE partway through its first bundle. The `<user>-state` segment is
+        // Watchman's own naming; a glob is not matched here, so the path is spelled out.
+        "allowUnixSockets": [
+          "/nix/var/nix/daemon-socket/socket",
+          "~/.local/state/watchman/ro-state/sock",
+        ],
+        "allowedDomains": [
+          "registry.npmjs.org",
+          "*.npmjs.org",
+          "nodejs.org",
+          "*.nodejs.org",
+          "github.com",
+          "*.github.com",
+          "*.githubusercontent.com",
+          "expo.dev",
+          "*.expo.dev",
+          "*.expo.io",
+          "exp.host",
+          "cache.nixos.org",
+          "*.cachix.org",
+          "*.anthropic.com",
+          "*.openai.com",
+        ],
+      },
+    },
+    // Deliberately not set here: `env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`. It scrubs only
+    // Anthropic and cloud-provider credentials from subprocess environments, and in exchange
+    // pins every session in this repository to the `default` permission mode — no acceptEdits,
+    // no auto. The credential denies above cover the files this repository actually holds.
+  },
+}

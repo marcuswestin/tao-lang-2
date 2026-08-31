@@ -59,6 +59,14 @@ studio-smoke-native test_file run_id="local":
 studio-proof-real-app run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-real-app.test.ts
 
+# Run native Tao Studio against a deterministic project and report what it proved
+studio-canary project="Apps/HNReader" app="HNReader":
+    ./dev studio-canary --project "{{ project }}" --app "{{ app }}"
+
+# Validate a built native Studio release without publishing anything
+studio-release-check payload_root artifacts_root *ARGS:
+    ./dev studio-release-check --payload-root "{{ payload_root }}" --artifacts-root "{{ artifacts_root }}" {{ ARGS }}
+
 # Build signed/notarized Tao Studio artifacts through Electrobun and Hutch
 studio-package release_base_url channel="stable" output_root=".artifacts/build/studio-native":
     ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"
@@ -83,12 +91,18 @@ fmt: _parser-gen
 fix: _parser-gen
     dprint fmt --incremental=false
     ./tao fix
+    just --fmt
 
 # Check and test all code
-check: _compile-word-flower-app _parallel-check
+check: _compile-word-flower-app
+    ./dev gates _ide-extension-build _repo-lint _dependency-check _tao-check _dprint-check _typecheck _test _runtime-pack-check --skipped "studio-smoke=slow lane; run just studio-smoke <file>"
 
 # Run lint only
 lint: _repo-lint
+
+# Diagnose this checkout without changing it; pass --json for a structured report
+doctor *ARGS:
+    ./dev doctor {{ ARGS }}
 
 # Benchmark cold and steady-state language-service performance
 bench iterations="10": _bench-check
@@ -108,8 +122,12 @@ install-ide-extension: _ide-extension-package
 android: _compile-word-flower-app _android-emulator _android-expo-go
     bun run packages/dev/dev-src/dev.ts expo-android
 
+# Reclaim bootstrap scratch a failed dependency install abandoned, reporting what it freed
+clean-scratch:
+    zsh -c 'source "{{ justfile_directory() }}/packages/dev/dev-src/cli/agent-worktree-profile.zsh"; tao_prune_bootstrap_scratch "{{ justfile_directory() }}/.artifacts/tmp" --report'
+
 # Clean run dependencies and build artifacts
-clean:
+clean: clean-scratch
     rm -rf .artifacts/build .artifacts/dev packages/runtime-toolchain/.expo packages/runtime-toolchain/_gen_tao-app
     find . -name node_modules -type d -prune -exec rm -rf {} +
 
@@ -118,7 +136,8 @@ clean-all: clean
     rm -rf .artifacts packages/runtime-toolchain/ios packages/runtime-toolchain/android
 
 # Prepare all code for commit
-verify: fix _compile-word-flower-app _parallel-verify-check
+verify: fix _compile-word-flower-app
+    ./dev gates _ide-extension-build _repo-lint _dependency-check _typecheck _test _runtime-pack-check --json .artifacts/logs/verify/summary.json --skipped "_tao-check=covered by check" "_dprint-check=fix formatted this tree with dprint and just --fmt" "studio-smoke=slow lane; run just studio-smoke <file>"
 
 # Private
 #########
@@ -128,12 +147,6 @@ _agent-config:
 
 _dependency-health:
     cd packages/runtime-toolchain && "{{ DEVENV_NODE }}" -e 'require("expo/metro-config"); require("jest-expo/jest-preset")'
-
-[parallel]
-_parallel-check: _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _test _runtime-pack-check
-
-[parallel]
-_parallel-verify-check: _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check
 
 _bench-check:
     bun test packages/dev/performance-checks/language-performance.test.ts
@@ -161,6 +174,9 @@ _dprint-check:
 _repo-lint:
     bun run packages/dev/dev-src/repository-tests/repo-lint.ts
 
+_dependency-check:
+    bun run packages/dev/dev-src/repository-tests/DependencyCompatibility.ts
+
 _typecheck:
     bunx tsc --build packages/*/tsconfig.json
 
@@ -174,4 +190,4 @@ _android-expo-go:
     bun run packages/dev/dev-src/dev.ts android-expo-go
 
 _parser-gen:
-    cd packages/parser && "{{ DEVENV_NODE }}" node_modules/langium-cli/bin/langium.js generate
+    bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts

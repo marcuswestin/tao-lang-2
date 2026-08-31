@@ -305,6 +305,10 @@ routing, so a separately hosted cross-origin Tao surface would need correspondin
 
 ## Current boundary
 
+`Tao Studio Development.md` owns the operational contract around Studio: launch modes and their
+options, ports, artifact roots, launch manifests, `doctor`, the smoke lanes, the native canary, and
+the release steps. This section states what Studio implements.
+
 The local web Studio shell, editor/LSP connection, stable Expo preview publication, bidirectional
 source/render selection, visual source actions, review checkpoint/undo, file CRUD, live Data tables,
 failure capture/replay, Electrobun project and packaged-service scaffold, compiler manifest, matrix

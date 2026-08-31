@@ -16,6 +16,6 @@ description: >-
 - Keep canonical agent sources under `agents/`: project skills in `agents/skills/` and reusable profiles in `agents/subagents/`.
 - Keep `.claude/CLAUDE.md` as the root-instruction include. Point `.agents/skills`, `.codex/skills`, and `.claude/skills` at `agents/skills`; point `.rulesync/subagents` at `agents/subagents`.
 - Generate tool-specific subagent adapters with `./agent setup`. Do not edit or commit generated `.codex/agents/` or `.claude/agents/` files.
-- Keep shared permission rules in `.rulesync/permissions.jsonc`; `./agent setup` generates `.claude/settings.json` from them. That generated file is committed, unlike the subagent adapters, so it exists before any harness starts. Update the hand-maintained `.codex/config.toml` and `.cursor/permissions.json` in the same change.
+- Keep shared permission rules in `.rulesync/permissions.jsonc`; `./agent setup` generates `.claude/settings.json` (through rulesync) and `.codex/config.toml` (through `packages/dev/dev-src/agent-config/CodexConfigGenerator.ts`) from them. Both generated files are committed, unlike the subagent adapters, so they exist before any harness starts. Update the hand-maintained `.cursor/permissions.json` in the same change.
 - After edits, search active code and docs for removed names, paths, commands, and duplicated ownership. Keep `Docs/Roadmap/Archive/` frozen after merge unless Ro explicitly asks; other `Docs/Roadmap/` documents remain live.
 - Run `./agent verify` after instruction or automation changes.

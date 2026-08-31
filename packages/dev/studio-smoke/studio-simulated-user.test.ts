@@ -95,6 +95,13 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.click('[data-tao-studio-undo]')
       await waitForSource(sourcePath, source => source === typedSource)
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
+
+      // A blank or broken Studio usually reports itself only in the browser console, so the run
+      // fails on any page error and keeps the evidence beside the run's other artifacts.
+      await browser.captureScreenshot(FS.resolvePath('screenshots/simulated-user.png', artifactParent))
+      const consoleErrors = browser.consoleErrors()
+      await FS.writeJson(FS.resolvePath('logs/browser-console.json', artifactParent), consoleErrors)
+      Expect(consoleErrors.map(entry => entry.text)).toEqual([])
     }
   } finally {
     await browser?.close()
