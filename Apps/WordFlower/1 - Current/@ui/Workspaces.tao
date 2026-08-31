@@ -268,7 +268,7 @@ workspace
 view WorkspaceRow(Workspace) {
    render Col() [card] {
       Text(Workspace.Name) [sectionTitle]
-      Text("A quiet place to collect drafts and finished work.") [caption]
+      TextMultiline("A quiet place to collect drafts and finished work.") [caption]
 
       #deleteWorkspace
       FormButton("Delete workspace") [buttonDanger] {
