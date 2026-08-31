@@ -3,8 +3,10 @@ import { Dev } from './dev-runtime/TR-dev'
 import { DevMenu } from './dev-runtime/TR-dev-menu'
 import { DataLoadRecoveryBoundary } from './TR-data-load-recovery'
 import type { TaoLayoutProps } from './TR-layout'
+import { mountedDesignStyle } from './TR-mounted-design'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { requireReactNativeRuntime } from './TR-react-native'
+import type { TaoProps } from './TR-TaoProps'
 
 type AppShellProps = {
   children?: React.ReactNode
@@ -77,6 +79,7 @@ export function AppSurfaceFrame(props: {
   children?: React.ReactNode
   /** Inside a native screen the platform supplies the safe-area and bar insets itself. */
   nativeInsets?: boolean
+  taoProps?: TaoProps
 }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
   const platformOS = RN.Platform?.OS ?? 'web'
@@ -101,7 +104,7 @@ export function AppSurfaceFrame(props: {
       contentContainerStyle: [contentStyle, contentPadding],
       keyboardDismissMode: platformOS === 'ios' ? 'interactive' : 'on-drag',
       keyboardShouldPersistTaps: 'handled',
-      style: rootStyle,
+      style: [rootStyle, mountedDesignStyle(props.taoProps, 'AppSurface')],
     },
     React.createElement(
       ParentDirectionContext.Provider,

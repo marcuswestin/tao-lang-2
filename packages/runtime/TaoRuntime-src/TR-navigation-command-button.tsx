@@ -1,6 +1,8 @@
 import React from 'react'
+import { mountedDesignStyle } from './TR-mounted-design'
 import type { TaoNavigationCommand } from './TR-navigation-host-slots'
 import { requireReactNativeRuntime } from './TR-react-native'
+import type { TaoProps } from './TR-TaoProps'
 
 type CommandRole = 'button' | 'menuitem'
 
@@ -14,9 +16,12 @@ export function NavigationCommandButton(props: {
   command: TaoNavigationCommand
   onInvoke?: () => void
   role?: CommandRole
+  taoProps?: TaoProps
   testID?: string
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
+  const designStyle = mountedDesignStyle(props.taoProps, 'NavigationChromeButton', 'row')
+  const textStyle = navigationTextStyle(designStyle)
   const Icon = props.command.icon ? fontAwesomeIcon() : undefined
   const icon = supportedIcon(props.command.icon, Icon)
   const fallbackGlyph = props.command.icon ? iconFallbacks[props.command.icon]?.fallback : undefined
@@ -33,6 +38,7 @@ export function NavigationCommandButton(props: {
           return props.command.invoke()
         }
         : undefined,
+      style: [designStyle, { opacity: props.command.enabled ? 1 : 0.5 }],
       testID: props.testID,
     },
     React.createElement(
@@ -41,6 +47,7 @@ export function NavigationCommandButton(props: {
       icon
         ? React.createElement(Icon!, {
           accessible: false,
+          color: designStyle?.['color'],
           name: icon.glyph as any,
           size: 16,
           testID: navigationCommandIconTestId(icon.source),
@@ -49,12 +56,25 @@ export function NavigationCommandButton(props: {
         ? React.createElement(runtime.Text, {
           accessible: false,
           children: fallbackGlyph,
+          style: textStyle,
           testID: navigationCommandIconTestId(props.command.icon!),
         })
         : null,
-      React.createElement(runtime.Text, { accessible: false }, props.command.label),
+      React.createElement(runtime.Text, { accessible: false, style: textStyle }, props.command.label),
     ),
   )
+}
+
+function navigationTextStyle(style: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!style) {
+    return undefined
+  }
+  const text = Object.fromEntries(
+    ['color', 'fontSize', 'fontWeight', 'lineHeight']
+      .filter(property => style[property] !== undefined)
+      .map(property => [property, style[property]]),
+  )
+  return Object.keys(text).length > 0 ? text : undefined
 }
 
 function supportedIcon(

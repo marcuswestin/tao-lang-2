@@ -154,6 +154,62 @@ Describe('TR.Views explicit visual props', () => {
     })
   })
 
+  Test('carries a themed pressable foreground onto its native title', () => {
+    const app = styledElementApp('Dark', {
+      FormButton: TR.Design.Spec([
+        ['bg', 'surface'],
+        ['fg', 'ink'],
+        ['radius', 12],
+        ['weight', 700],
+      ]),
+    }, { ink: '#edf3ee', surface: '#202a22' })
+    const button = renderRuntimeElement(TR.Views.Pressable({
+      __tao: { app, designDefault: 'FormButton' },
+      action: { invoke: () => undefined },
+      title: 'Add workspace',
+    }))
+    const title = button.props['children'] as RuntimeElement
+
+    Expect(flattenStyle(button.props['style'])).toEqual({
+      backgroundColor: '#202a22',
+      borderRadius: 12,
+      color: '#edf3ee',
+      fontWeight: '700',
+    })
+    Expect(flattenStyle(title.props['style'])).toEqual({
+      color: '#edf3ee',
+      fontWeight: '700',
+    })
+  })
+
+  Test('applies mounted input colors to the field instead of painting its layout wrapper', () => {
+    const app = styledElementApp('Dark', {
+      TextInput: TR.Design.Spec([
+        ['bg', 'surface'],
+        ['border', 'line'],
+        ['fg', 'ink'],
+        ['radius', 12],
+      ]),
+    }, { ink: '#edf3ee', line: '#34453a', surface: '#202a22' })
+    const wrapper = renderRuntimeElement(TR.Views.TextInput({
+      __tao: { app, designDefault: 'TextInput' },
+      label: 'Workspace name',
+      placeholder: 'Home',
+      value: '',
+    }))
+    const [label, input] = fragmentChildren(wrapper)
+
+    Expect(flattenStyle(wrapper.props['style'])['backgroundColor']).toBe(undefined)
+    Expect(flattenStyle(label!.props['style'])['color']).toBe('#edf3ee')
+    Expect(flattenStyle(input!.props['style'])).toMatchObject({
+      backgroundColor: '#202a22',
+      borderColor: '#34453a',
+      borderRadius: 12,
+      color: '#edf3ee',
+    })
+    Expect(input!.props['placeholderTextColor']).toBe('#edf3ee8c')
+  })
+
   Test('keeps identical bundle names local to each mounted app', () => {
     const light = styledApp('Light', '#ffffff')
     const dark = styledApp('Dark', '#000000')
@@ -398,6 +454,22 @@ function styledApp(name: string, surface: string): ReturnType<typeof TR.Navigati
     tokens: { surface },
     bundles: { panel: TR.Design.Spec([['bg', 'surface']]) },
   })
+  return TR.Navigation.App({
+    name,
+    auxiliaries: () => ({}),
+    design: () => design,
+    navigator: () => {
+      throw new Error('design resolution must not mount navigation')
+    },
+  })
+}
+
+function styledElementApp(
+  name: string,
+  bundles: Parameters<typeof TR.Design.Declaration>[0]['bundles'],
+  tokens: Parameters<typeof TR.Design.Declaration>[0]['tokens'],
+): ReturnType<typeof TR.Navigation.App> {
+  const design = TR.Design.Declaration({ bundles, name, tokens })
   return TR.Navigation.App({
     name,
     auxiliaries: () => ({}),

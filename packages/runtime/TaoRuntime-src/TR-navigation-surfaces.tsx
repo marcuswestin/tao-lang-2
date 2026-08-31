@@ -1,4 +1,5 @@
 import React from 'react'
+import { mountedDesignStyle } from './TR-mounted-design'
 import type { TaoNavigationValue } from './TR-navigation'
 import { backNavigation } from './TR-navigation-registry'
 import type { OverlayEntry, ResponseOccurrenceState } from './TR-navigation-state'
@@ -113,7 +114,11 @@ function modalSheet(
     return React.createElement(
       runtime.View,
       { style: sheetInlineScrimStyle },
-      React.createElement(runtime.View, { style: sheetInlineSurfaceStyle }, content),
+      React.createElement(
+        runtime.View,
+        { style: [sheetInlineSurfaceStyle, mountedDesignStyle(taoProps, 'ModalSurface')] },
+        content,
+      ),
     )
   }
   // The modal is a portal above the overlay lane, so covering it cannot rely on the enclosing
@@ -131,7 +136,11 @@ function modalSheet(
       presentationStyle: 'pageSheet',
       visible,
     },
-    React.createElement(runtime.View, { style: sheetModalSurfaceStyle }, content),
+    React.createElement(
+      runtime.View,
+      { style: [sheetModalSurfaceStyle, mountedDesignStyle(taoProps, 'ModalSurface')] },
+      content,
+    ),
   )
 }
 
@@ -154,7 +163,7 @@ export function NavigationSurface(props: {
         )
         return React.createElement(NavigationLevel, {
           children: entry.response
-            ? modalAsk(content)
+            ? modalAsk(content, props.taoProps)
             : entry.sheet
             ? modalSheet(content, props.navigation, props.taoProps, index === props.overlays.length - 1)
             : content,
@@ -169,7 +178,10 @@ export function NavigationSurface(props: {
     : null
   return React.createElement(
     runtime.View,
-    { pointerEvents: 'box-none', style: navigationHostStyle },
+    {
+      pointerEvents: 'box-none',
+      style: [navigationHostStyle, mountedDesignStyle(props.taoProps, 'NavigationHost')],
+    },
     props.content,
     overlays,
   )
@@ -180,12 +192,16 @@ function appInProps(props: TaoProps | undefined): TaoProps['app'] {
 }
 
 /** modalAsk centres one asked view on a dimming scrim, which is what makes it read as modal. */
-function modalAsk(content: React.ReactNode): React.ReactNode {
+function modalAsk(content: React.ReactNode, taoProps: TaoProps | undefined): React.ReactNode {
   const runtime = requireReactNativeRuntime()
   return React.createElement(
     runtime.View,
     { style: askScrimStyle },
-    React.createElement(runtime.View, { style: askSurfaceStyle }, content),
+    React.createElement(
+      runtime.View,
+      { style: [askSurfaceStyle, mountedDesignStyle(taoProps, 'ModalSurface')] },
+      content,
+    ),
   )
 }
 
