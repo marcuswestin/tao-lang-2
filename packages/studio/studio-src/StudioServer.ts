@@ -1,5 +1,7 @@
+import { AppleOnDeviceGenerationProvider, type GenerationProvider } from '@generation'
 import { Errors } from '@shared'
 import { StudioClientAssets } from './StudioClientAssets'
+import { StudioFixtureGeneration } from './StudioFixtureGeneration'
 import { StudioHighlight } from './StudioHighlight'
 import { StudioLsp, type StudioLspSession } from './StudioLsp'
 import { StudioMatrixConflictError } from './StudioMatrixSession'
@@ -13,6 +15,7 @@ import {
 export type StudioServerOptions = {
   allowedOrigins?: readonly string[]
   compileOnStart?: boolean
+  generationProvider?: GenerationProvider
   hostname?: string
   port?: number
   previewUrl?: string
@@ -40,6 +43,10 @@ export async function startStudioServer(
     await session.compileInitial()
   }
 
+  const fixtureGeneration = new StudioFixtureGeneration(
+    options.generationProvider ?? new AppleOnDeviceGenerationProvider(),
+  )
+
   const eventClients = new Set<StudioSocket>()
   const server = Bun.serve<StudioSocketData>({
     fetch: async (request, bunServer) => {
@@ -62,7 +69,7 @@ export async function startStudioServer(
         return upgraded ? undefined : response(request, url, options, { error: 'WebSocket upgrade failed.' }, 400)
       }
       try {
-        return await handleRequest(session, request, url, options)
+        return await handleRequest(session, fixtureGeneration, request, url, options)
       } catch (error) {
         return errorResponse(request, url, options, error)
       }
@@ -113,6 +120,7 @@ export async function startStudioServer(
 
 async function handleRequest(
   session: StudioProjectSession,
+  fixtureGeneration: StudioFixtureGeneration,
   request: Request,
   url: URL,
   options: StudioServerOptions,
@@ -143,6 +151,16 @@ async function handleRequest(
   }
   if (request.method === 'POST' && url.pathname === '/api/source-action/undo') {
     return response(request, url, options, await session.undoSourceAction(await request.json()))
+  }
+  if (request.method === 'GET' && url.pathname === '/api/ai/availability') {
+    return response(request, url, options, await fixtureGeneration.availability())
+  }
+  if (request.method === 'POST' && url.pathname === '/api/ai/fixture') {
+    const manifest = session.previewManifest()
+    if (manifest === undefined) {
+      return response(request, url, options, { error: 'Studio preview manifest is not available yet.' }, 404)
+    }
+    return response(request, url, options, await fixtureGeneration.generate(manifest, await request.json()))
   }
   if (request.method === 'POST' && url.pathname === '/api/preview/instance') {
     return response(request, url, options, session.registerPreview(await request.json()))
@@ -307,6 +325,7 @@ function forbiddenResponse(message: string): Response {
 }
 
 export const StudioServerTesting = {
+  handleRequest,
   requestAllowed,
   serverOrigin,
 } as const

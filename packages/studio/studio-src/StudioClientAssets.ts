@@ -171,11 +171,16 @@ button { color: inherit; font: inherit; }
   background: #2c4935; border: 1px solid #487555; border-radius: 5px; color: #dcebe0; cursor: pointer;
   font-size: 11px; padding: 4px 7px;
 }
-.studio-preview-cell-promote {
+.studio-preview-cell-promote, .studio-preview-cell-capture, .studio-preview-cell-generate {
   background: #292e2a; border: 1px solid #485049; border-radius: 5px; color: #dce3dd; cursor: pointer;
   font-size: 11px; padding: 4px 7px;
 }
-.studio-preview-cell-apply:disabled, .studio-preview-cell-promote:disabled { cursor: wait; opacity: .55; }
+.studio-preview-fixture-name {
+  background: #242824; border: 1px solid #424943; border-radius: 4px; color: #e2e6e1; font: inherit;
+  min-width: 110px; padding: 4px 6px;
+}
+.studio-preview-cell-apply:disabled, .studio-preview-cell-promote:disabled,
+.studio-preview-cell-capture:disabled, .studio-preview-cell-generate:disabled { cursor: wait; opacity: .55; }
 .studio-preview-cell-status { color: #91a096; font-size: 10px; overflow-wrap: anywhere; }
 .studio-preview-cell-status[data-state="error"] { color: #ff9c8c; }
 .studio-preview-cell-viewport {

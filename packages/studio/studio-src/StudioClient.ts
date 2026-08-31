@@ -73,6 +73,7 @@ type StudioEvent =
   | { type: 'studio-writes-acknowledged' }
 
 type StudioPreviewConnection = {
+  applySourceAction?: (envelope: StudioSourceActionEnvelope) => Promise<void>
   capture?: {
     button: HTMLButtonElement
     fixtureName: string
@@ -98,6 +99,15 @@ type StudioCellRuntimeResponse = {
   cell: StudioPreviewCell
   identity: StudioCellIdentity
 }
+
+type StudioAIAvailability = {
+  reason?: string
+  status: 'available' | 'unavailable'
+}
+
+type StudioGeneratedFixtureResult =
+  | { fixture: StudioFixturePlan; status: 'ready' }
+  | { error: string; status: 'failed' }
 
 type StudioOpenFile = {
   editor: EditorView
@@ -416,6 +426,10 @@ async function mountStudio(): Promise<void> {
         return
       }
       await applySourceAction(envelope)
+    }
+
+    for (const connection of previews) {
+      connection.applySourceAction = submitPreviewAction
     }
 
     async function undoLatestSourceAction(): Promise<void> {
@@ -761,10 +775,15 @@ function renderCellPreview(
   capture.textContent = 'Capture fixture'
   capture.type = 'button'
   capture.disabled = scenario === undefined
+  const generate = document.createElement('button')
+  generate.className = 'studio-preview-cell-generate'
+  generate.textContent = 'Checking AI…'
+  generate.type = 'button'
+  generate.disabled = true
   const status = document.createElement('span')
   status.className = 'studio-preview-cell-status'
   status.setAttribute('role', 'status')
-  actions.append(apply, promote, fixtureName, capture, status)
+  actions.append(apply, promote, fixtureName, capture, generate, status)
   form.append(argumentControls.element, viewportControls.element, networkControls.element, schemeControls, actions)
 
   const disclosure = document.createElement('details')
@@ -843,31 +862,73 @@ function renderCellPreview(
       },
     )
   })
+  if (scenario !== undefined) {
+    void configureGenerationAvailability(generate)
+  }
+  generate.addEventListener('click', () => {
+    if (scenario === undefined || connection.cellIdentity === undefined) {
+      return
+    }
+    const name = fixtureName.value.trim()
+    if (!isTaoIdentifier(name)) {
+      status.dataset['state'] = 'error'
+      status.textContent = 'Fixture name must be a Tao identifier.'
+      return
+    }
+    const identity = fixtureSourceIdentity(connection, manifest, scenario)
+    if (identity === undefined) {
+      status.dataset['state'] = 'error'
+      status.textContent = 'Fixture generation source identity is unavailable.'
+      return
+    }
+    generate.disabled = true
+    status.dataset['state'] = 'busy'
+    status.textContent = 'Generating a realistic fixture…'
+    void request<StudioGeneratedFixtureResult>('/api/ai/fixture', {
+      body: JSON.stringify({ scenarioId: scenario.scenarioId }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    }).then(async result => {
+      if (result.status === 'failed') {
+        generate.disabled = false
+        status.dataset['state'] = 'error'
+        status.textContent = result.error
+        return
+      }
+      await proposeAndSaveFixture({
+        applySourceAction: connection.applySourceAction,
+        button: generate,
+        fixtureName: name,
+        identity,
+        origin: 'generated',
+        plan: result.fixture,
+        requestId: crypto.randomUUID(),
+        status,
+      })
+    }).catch(error => {
+      generate.disabled = false
+      status.dataset['state'] = 'error'
+      status.textContent = error instanceof Error ? error.message : String(error)
+    })
+  })
   capture.addEventListener('click', () => {
     if (scenario === undefined || connection.cellIdentity === undefined) {
       return
     }
     const name = fixtureName.value.trim()
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    if (!isTaoIdentifier(name)) {
       status.dataset['state'] = 'error'
       status.textContent = 'Fixture name must be a Tao identifier.'
       return
     }
-    const sourceVersion = manifest.sourceVersions[scenario.source.path]
-    const sourcePath = projectRelativePath(manifest.project.root, scenario.source.path)
+    const identity = fixtureSourceIdentity(connection, manifest, scenario)
     const target = connection.iframe.contentWindow
-    if (sourceVersion === undefined || sourcePath === undefined || target === null) {
+    if (identity === undefined || target === null) {
       status.dataset['state'] = 'error'
       status.textContent = 'Fixture capture source identity is unavailable.'
       return
     }
     const requestId = crypto.randomUUID()
-    const identity: StudioPreviewSourceIdentity = {
-      ...connection.cellIdentity,
-      path: sourcePath,
-      previewInstanceId: connection.previewInstanceId,
-      sourceVersion,
-    }
     const timeout = setTimeout(() => {
       if (connection.capture?.requestId !== requestId) {
         return
@@ -894,6 +955,42 @@ function renderCellPreview(
   })
 
   frame.replaceChildren(label, disclosure, viewport)
+}
+
+async function configureGenerationAvailability(button: HTMLButtonElement): Promise<void> {
+  try {
+    const availability = await request<StudioAIAvailability>('/api/ai/availability')
+    button.textContent = availability.status === 'available' ? 'Generate fixture' : 'AI unavailable'
+    button.disabled = availability.status !== 'available'
+    button.title = availability.status === 'available'
+      ? 'Generate a realistic state for this scene.'
+      : availability.reason ?? 'On-device generation is unavailable.'
+  } catch (error) {
+    button.textContent = 'AI unavailable'
+    button.disabled = true
+    button.title = error instanceof Error ? error.message : String(error)
+  }
+}
+
+function fixtureSourceIdentity(
+  connection: StudioPreviewConnection,
+  manifest: StudioPreviewManifestV1,
+  scenario: StudioPreviewManifestV1['scenarios'][number],
+): StudioPreviewSourceIdentity | undefined {
+  const sourceVersion = manifest.sourceVersions[scenario.source.path]
+  const path = projectRelativePath(manifest.project.root, scenario.source.path)
+  return connection.cellIdentity === undefined || sourceVersion === undefined || path === undefined
+    ? undefined
+    : {
+      ...connection.cellIdentity,
+      path,
+      previewInstanceId: connection.previewInstanceId,
+      sourceVersion,
+    }
+}
+
+function isTaoIdentifier(value: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(value)
 }
 
 async function promoteScenarioArguments(
@@ -1270,25 +1367,16 @@ async function handlePreviewMessage(
       capture.status.textContent = message.error
       return
     }
-    const proposal = fixtureProposalSource(capture.fixtureName, message.fixture)
-    if (!window.confirm(`Save this captured Tao fixture?\n\n${proposal}`)) {
-      capture.button.disabled = false
-      capture.status.dataset['state'] = 'idle'
-      capture.status.textContent = 'Captured fixture was not saved.'
-      return
-    }
-    capture.status.textContent = 'Saving captured state as Tao source…'
-    await actions.applySourceAction(StudioInspector.singleAction({
-      action: {
-        fixtureName: capture.fixtureName,
-        kind: 'insert-captured-fixture',
-        plan: message.fixture,
-      },
-      checkpointId: `captured-fixture:${capture.requestId}`,
+    await proposeAndSaveFixture({
+      applySourceAction: actions.applySourceAction,
+      button: capture.button,
+      fixtureName: capture.fixtureName,
       identity: capture.identity,
+      origin: 'captured',
+      plan: message.fixture,
       requestId: capture.requestId,
-    }))
-    window.location.reload()
+      status: capture.status,
+    })
     return
   }
   if (message.type !== 'preview-select-source') {
@@ -1316,6 +1404,67 @@ async function handlePreviewMessage(
     selection: { anchor: message.range.start, head: message.range.end },
   })
   editor.focus()
+}
+
+export const StudioFixtureProposal = {
+  source: fixtureProposalSource,
+  sourceAction: fixtureProposalSourceAction,
+} as const
+
+async function proposeAndSaveFixture(options: {
+  applySourceAction?: (envelope: StudioSourceActionEnvelope) => Promise<void>
+  button: HTMLButtonElement
+  fixtureName: string
+  identity: StudioPreviewSourceIdentity
+  origin: 'captured' | 'generated'
+  plan: StudioFixturePlan
+  requestId: string
+  status: HTMLElement
+}): Promise<void> {
+  const proposal = StudioFixtureProposal.source(options.fixtureName, options.plan)
+  if (!window.confirm(`Save this ${options.origin} Tao fixture?\n\n${proposal}`)) {
+    options.button.disabled = false
+    options.status.dataset['state'] = 'idle'
+    options.status.textContent = options.origin === 'captured'
+      ? 'Captured fixture was not saved.'
+      : 'Generated fixture was not saved.'
+    return
+  }
+  if (options.applySourceAction === undefined) {
+    options.button.disabled = false
+    options.status.dataset['state'] = 'error'
+    options.status.textContent = 'Studio source actions are not ready yet.'
+    return
+  }
+  options.status.textContent = options.origin === 'captured'
+    ? 'Saving captured state as Tao source…'
+    : 'Saving generated state as Tao source…'
+  try {
+    await options.applySourceAction(StudioFixtureProposal.sourceAction(options))
+    window.location.reload()
+  } catch (error) {
+    options.button.disabled = false
+    options.status.dataset['state'] = 'error'
+    options.status.textContent = error instanceof Error ? error.message : String(error)
+  }
+}
+
+function fixtureProposalSourceAction(options: {
+  fixtureName: string
+  identity: StudioPreviewSourceIdentity
+  plan: StudioFixturePlan
+  requestId: string
+}): StudioSourceActionEnvelope {
+  return StudioInspector.singleAction({
+    action: {
+      fixtureName: options.fixtureName,
+      kind: 'insert-captured-fixture',
+      plan: options.plan,
+    },
+    checkpointId: `captured-fixture:${options.requestId}`,
+    identity: options.identity,
+    requestId: options.requestId,
+  })
 }
 
 function fixtureProposalSource(name: string, plan: StudioFixturePlan): string {

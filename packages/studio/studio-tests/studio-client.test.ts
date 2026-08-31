@@ -4,6 +4,7 @@ import { Expect, Test } from '@shared/test'
 import {
   StudioCodeEditor,
   StudioDiagnosticNavigation,
+  StudioFixtureProposal,
   StudioOpenFileLifecycle,
 } from '../studio-src/StudioClient'
 import { StudioClientAssets } from '../studio-src/StudioClientAssets'
@@ -27,6 +28,8 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).not.toContain('createHighlighterCore')
   Expect(bundle).toContain('/api/file/draft')
   Expect(bundle).toContain('/api/source-action/undo')
+  Expect(bundle).toContain('/api/ai/availability')
+  Expect(bundle).toContain('/api/ai/fixture')
   Expect(bundle).toContain('Reload preview')
   Expect(bundle).toContain('Mode: Edit')
   Expect(bundle).toContain('Mode: Run')
@@ -37,6 +40,8 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('Apply & remount')
   Expect(bundle).toContain('Scenario details')
   Expect(bundle).toContain('Save to scenario')
+  Expect(bundle).toContain('Generate fixture')
+  Expect(bundle).toContain('Generating a realistic fixture')
   Expect(bundle).toContain('set-scenario-arguments')
   Expect(bundle).toContain('No editable arguments')
   Expect(bundle).toContain('Injected Studio network failure')
@@ -47,6 +52,40 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(html).toContain('<script type="module" src="/studio.js"></script>')
   Expect(html).not.toContain('</script><script>bad()</script>')
   Expect(html).toContain('\\u003c/script>')
+})
+
+Test('Studio generated fixture proposals use the captured-fixture source-action flow', () => {
+  const identity = {
+    appName: 'WordFlower',
+    cellId: 'Workspace.focused#cell',
+    cellRevision: 0,
+    compileRevision: 1,
+    manifestRevision: 'compile:1',
+    path: 'Scenarios.tao',
+    previewInstanceId: 'preview-1',
+    project: '/project',
+    sourceVersion: 'text-v1:scenarios',
+  }
+  const plan = {
+    accounts: [],
+    creates: [{ entity: 'Workspace', fields: { Title: 'Roadmap' }, name: 'Main' }],
+  }
+
+  Expect(StudioFixtureProposal.source('GeneratedState', plan)).toContain(
+    'fixture GeneratedState {\n   Main = create Workspace { Title: "Roadmap" }\n}',
+  )
+  Expect(StudioFixtureProposal.sourceAction({
+    fixtureName: 'GeneratedState',
+    identity,
+    plan,
+    requestId: 'generation-1',
+  })).toMatchObject({
+    action: { fixtureName: 'GeneratedState', kind: 'insert-captured-fixture', plan },
+    checkpoint: { id: 'captured-fixture:generation-1', phase: 'single' },
+    identity,
+    requestId: 'generation-1',
+    type: 'source-action',
+  })
 })
 
 Test('Studio browser assets bundle one CodeMirror view singleton', async () => {

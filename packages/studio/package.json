@@ -20,6 +20,7 @@
     "@shikijs/types": "^4.3.0",
     "chokidar": "^5.0.0",
     "codemirror": "^6.0.2",
+    "tao-generation": "workspace:*",
     "tao-formatter": "workspace:*",
     "tao-parser": "workspace:*",
     "tao-runtime-toolchain": "workspace:*",

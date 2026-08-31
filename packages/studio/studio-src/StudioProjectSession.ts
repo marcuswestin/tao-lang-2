@@ -186,6 +186,8 @@ const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
   { method: 'POST', path: '/api/language/highlight' },
   { method: 'POST', path: '/api/source-action' },
   { method: 'POST', path: '/api/source-action/undo' },
+  { method: 'GET', path: '/api/ai/availability' },
+  { method: 'POST', path: '/api/ai/fixture' },
   { method: 'POST', path: '/api/preview/instance' },
   { method: 'POST', path: '/api/preview/applied' },
   { method: 'GET', path: '/api/preview/manifest' },

@@ -111,6 +111,11 @@ export {
 } from './StudioServer'
 
 export {
+  StudioFixtureGeneration,
+  type StudioFixtureGenerationResult,
+} from './StudioFixtureGeneration'
+
+export {
   type StudioCellEnvironment,
   type StudioCellIdentity,
   type StudioCellInstanceIdentity,

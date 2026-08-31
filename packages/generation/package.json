@@ -1,0 +1,26 @@
+{
+  "name": "tao-generation",
+  "private": true,
+  "type": "module",
+  "module": "generation-src/generation.ts",
+  "types": "generation-src/generation.ts",
+  "exports": {
+    ".": "./generation-src/generation.ts",
+    "./apple": "./generation-src/apple-on-device-provider.ts"
+  },
+  "dependencies": {
+    "tao-shared": "workspace:*"
+  },
+  "devDependencies": {
+    "ai": "^5.0.0",
+    "zod": "^3.25.67"
+  },
+  "optionalDependencies": {
+    "@meridius-labs/apple-on-device-ai": "1.6.2"
+  },
+  "scripts": {
+    "test": "bun test generation-tests",
+    "test:live:apple": "TAO_LIVE_APPLE_AI=1 bun test ./generation-live/apple-on-device.live.ts",
+    "typecheck": "tsc --project tsconfig.json"
+  }
+}

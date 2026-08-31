@@ -363,6 +363,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
         plan: {},
         source: { kind: 'tao' as const, path: 'Garden.tao', range: { end: 10, start: 0 } },
       }],
+      generationDeclarations: [],
       manifestRevision: 'manifest-1',
       parametersBySubject: { 'app:Garden': [] },
       project: {
@@ -428,6 +429,8 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     Expect(events.some(event => event.type === 'preview-manifest-changed')).toBe(true)
     Expect(handshake.capabilities.matrix).toEqual({ concurrentCells: true, scheme: 'inert', version: 1 })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/preview/cell/reconfigure' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'GET', path: '/api/ai/availability' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/ai/fixture' })
     await Expect(
       Promise.resolve().then(() =>
         session.registerCellPreview({
