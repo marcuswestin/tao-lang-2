@@ -96,6 +96,7 @@ await runWithCommands(commands => {
     .command('studio-canary')
     .description('Run native Tao Studio against a deterministic project and report what it proved.')
     .option('--project <path>', 'Tao project folder to open.')
+    .option('--app <name>', 'App declaration within the selected project.')
     .option('--artifact-root <path>', 'Where the canary writes its artifacts.')
     .option('--hutch <path>', 'Explicit Hutch executable path.')
     .action(async (options: { artifactRoot?: string; hutch?: string; project?: string } = {}) => {

@@ -341,15 +341,28 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
-  Test('activates the pinned profile before the developer CLI starts', async () => {
-    const source = await FS.readText(Repo.resolvePath('dev'))
-    const activation = source.indexOf('tao_activate_devenv_profile')
-    const launch = source.indexOf('exec bun run')
+  Test('refuses to start the developer CLI without the pinned profile', async () => {
+    // Asserting that the source mentions the activation call passes against a commented-out one.
+    // `./dev` resolves its own directory, so proving the behaviour needs a copy in a root that
+    // genuinely has no profile to link.
+    const testRoot = await mkTestDir('tao-dev-no-profile-')
+    try {
+      const fixture = await createProfileFixture(testRoot, false)
+      const devPath = FS.resolvePath('dev', fixture.worktree)
+      await FS.writeText(devPath, await FS.readText(Repo.resolvePath('dev')))
+      await FS.writeText(
+        FS.resolvePath('packages/dev/dev-src/cli/agent-worktree-profile.zsh', fixture.worktree),
+        await FS.readText(PROFILE_SCRIPT),
+      )
+      await makeExecutable(devPath)
+      const result = await CLI.run(devPath, { args: ['--help'], env: fixture.env })
 
-    Expect(source).toContain('source "$SCRIPT_DIR/packages/dev/dev-src/cli/agent-worktree-profile.zsh"')
-    Expect(activation).toBeGreaterThan(0)
-    Expect(launch).toBeGreaterThan(activation)
-    Expect(source).toContain('direnv allow && direnv exec . ./agent setup')
+      Expect(result.exitCode).not.toBe(0)
+      Expect(result.stderr).toContain('pinned devenv profile is unavailable')
+      Expect(result.stderr).toContain('direnv allow && direnv exec . ./agent setup')
+    } finally {
+      await FS.remove(testRoot)
+    }
   })
 
   Test('installs dependencies from repository-local Bun storage and repairs an incomplete graph', async () => {
@@ -370,12 +383,22 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(await justCommands('clean')).toContain('tao_prune_bootstrap_scratch')
   })
 
-  Test('keeps dprint caches out of developer home directories', async () => {
-    const source = await FS.readText(Repo.resolvePath('Justfile'))
-    const dprintCommands = source.split('\n').filter(line => line.trimStart().startsWith('dprint '))
+  Test('never runs dprint with the incremental cache that would live in a home directory', async () => {
+    for (const lane of ['fix', 'fmt', '_dprint-check']) {
+      const dprintCommands = (await justCommands(lane)).split('\n')
+        .filter(line => line.trimStart().startsWith('dprint '))
+      Expect(dprintCommands.every(command => command.includes('--incremental=false'))).toBe(true)
+    }
+    // And the checking gate, which `check` runs, uses the same flag.
+    Expect(await justCommands('_dprint-check')).toContain('dprint check --incremental=false')
+  })
 
-    Expect(dprintCommands.length).toBeGreaterThan(0)
-    Expect(dprintCommands.every(command => command.includes('--incremental=false'))).toBe(true)
+  Test('formats the Justfile in the same lane that checks its formatting', async () => {
+    // `verify` skips `_dprint-check`, which is also where `just --fmt --check` lives. If `fix`
+    // does not format the Justfile, `verify` can pass a tree that `check` then rejects.
+    Expect(await justCommands('fix')).toContain('just --fmt')
+    Expect(await justCommands('_dprint-check')).toContain('just --fmt --check')
+    Expect(await justCommands('check')).toContain('_dprint-check')
   })
 })
 

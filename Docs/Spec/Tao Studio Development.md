@@ -21,8 +21,12 @@ Shared options:
 - `--app <name>` selects one app declaration in the project.
 - `--entry <path>` selects the entry Tao file.
 - `--port <port>` pins the Studio server port; the default is an available one.
-- `--no-browser` opens nothing at all: no browser tab, and no extra native project window.
+- `--no-browser` suppresses the browser tab in browser mode and the project window in native mode. The native Welcome window still opens.
+- `--host <hostname>` binds the Studio server; the default is `127.0.0.1`.
 - `--json` prints a machine-readable readiness payload once the advertised page answers.
+
+`studio-native` additionally takes `--artifact-root <path>` for the generated Electrobun project
+and `--hutch <path>` for an explicit Hutch executable.
 
 Studio advertises the **session URL**, never the server root. The root is not a usable page: a
 session prefix carries the opaque session ID that its HTTP and WebSocket routes hang off.
@@ -72,7 +76,8 @@ answers is recorded `failed` and stops, rather than idling in a state that reads
 | Path                                                          | Holds                                                |
 | ------------------------------------------------------------- | ---------------------------------------------------- |
 | `.artifacts/user/studio/launches/`                            | One launch manifest per Studio launch                |
-| `.artifacts/user/studio/launches/<mode>/logs/lifecycle.jsonl` | The launch's structured lifecycle log                |
+| `.artifacts/user/studio/launches/<mode>/logs/lifecycle.jsonl` | Structured lifecycle records, one file per mode      |
+| `.artifacts/user/studio-native/`                              | The generated Electrobun project and its build       |
 | `.artifacts/user/studio/recent-projects.json`                 | Welcome's recent-project history                     |
 | `.artifacts/dev/`                                             | Expo logs and the generated preview runtime          |
 | `.artifacts/tests/studio-smoke/<runId>/`                      | One smoke run's isolated lane                        |
@@ -105,11 +110,13 @@ those processes. Nothing is ever stopped by matching a process name.
 `--launch <id>` or `--all` rather than guessing. It is idempotent, it succeeds when there is nothing
 left to stop, and it never invokes `kill` with no operands. Both commands take `--json`.
 
-**Run these outside an agent's Bash sandbox.** That sandbox denies both inspecting and signalling
-processes outside itself, so ownership can never be confirmed from inside it: `studio-ps` reports a
-running launch as `STALE`, and `studio-stop` correctly refuses to signal what it cannot validate,
-leaving the launch running. This is the fail-safe behaving as designed, not a bug — but it means an
-agent must run them from an unsandboxed shell, or stop Studio with Ctrl+C in its own terminal.
+**Run these outside an agent's Bash sandbox.** What a sandbox permits varies: `ps` is commonly
+denied outright, and signalling a process started by a different sandbox instance is denied even
+when signalling within one is allowed. Ownership therefore often cannot be established from inside
+one. When that happens the launch is reported `UNDETERMINED` rather than stale, and `studio-stop`
+refuses — it neither signals nor deletes the manifest, because a record of something that may
+still be running is the last thing to throw away. Run them from an ordinary shell, or stop Studio
+with Ctrl+C in its own terminal.
 
 ## Diagnostics
 
@@ -133,6 +140,10 @@ Chrome or Chromium the smoke lane would use, recorded launches and stale manifes
 processes no manifest claims, Watchman and Metro watch coverage, and the presence — never the
 contents — of release and notarization prerequisites.
 
+It reports whether a window server session is attached, but **not** whether AppKit registration
+will succeed: a process inside an agent host's coalition reports a session and still aborts on
+launch. Only the canary can answer that.
+
 ## Lifecycle telemetry
 
 Each launch writes JSON lines to `<artifactRoot>/logs/lifecycle.jsonl` carrying, where known, the
@@ -155,9 +166,13 @@ just studio-proof-real-app
 
 Each run gets deterministic ports from base 42000 by shard and worker, and its own artifact root.
 The browser lane drives headless Chrome over the DevTools protocol, honours `TAO_STUDIO_CHROME_PATH`,
-captures a screenshot and the browser console under the run's artifact root, and fails the run on any
-page error. It stops what it started through the launch manifest, not by killing the command it
-spawned.
+captures a screenshot and the browser console under the run's artifact root, and fails the run on a
+console error or an uncaught exception. It does not yet see failed resource loads or CSP violations,
+which need `Log.enable`.
+
+`StudioSmokeLaunch` starts Studio through `./dev studio --json` and stops it through its manifest,
+and is the intended way for a lane to drive a real launch. The existing smoke files still wire
+Studio in-process and have not adopted it.
 
 The deterministic parts of the same behaviour — save-to-preview synchronization and scenario-group
 startup — live in `packages/studio/studio-tests` and run in the ordinary lane, so `./agent verify`
@@ -277,15 +292,17 @@ installed Expo SDK pins are the contract; `packages/dev` is allowed its own Reac
 peer range starts above Expo's pin, and its copy never reaches a bundle.
 
 **A stale session URL.** Session IDs are per launch. `./dev studio-ps` distinguishes live launches
-from stale manifests; `./dev studio-stop --all` clears the stale ones. Studio never auto-opens a
-prior generation's session.
+from stale manifests; `./dev studio-stop --all` clears the stale ones — from an ordinary shell, so
+that a launch whose ownership cannot be confirmed is refused rather than forgotten. Studio never
+auto-opens a prior generation's session.
 
 **A port is occupied.** `./agent doctor` names the process holding each conventional port and the
 `kill -TERM` command for it. `./dev studio-doctor` additionally reports ports held by processes no
 launch manifest claims — identify those with `ps` before stopping anything.
 
-**`studio-ps` says `STALE` for a launch that is plainly running.** You are inside an agent's Bash
-sandbox, which cannot inspect processes outside it. Run the command from an ordinary shell.
+**`studio-ps` says `UNDETERMINED` for a launch that is plainly running.** You are inside an agent's
+Bash sandbox, which will not say whether a process outside it exists. Run the command from an
+ordinary shell. `studio-stop` refuses in this state rather than guessing, so nothing is lost.
 
 **Metro dies with `EMFILE: too many open files`.** Watchman is not answering, so Metro is watching
 through the OS and this repository exceeds the descriptor limit. `./agent doctor` reports it. Watchman
@@ -298,8 +315,9 @@ reports it as optional with the installer command.
 to an executable.
 
 **Native Studio will not register.** AppKit application registration aborts under an agent host
-coalition. Run it from an ordinary Terminal in the logged-in desktop session, or use `./dev studio`.
-`./dev studio-doctor` reports the host as unable to register a native application.
+coalition, and the runtime dies by signal before it can report. `just studio-canary` names this;
+`./dev studio-doctor` cannot, because a coalition still reports a window server session. Run it
+from an ordinary Terminal in the logged-in desktop session, or use `./dev studio`.
 
 **A linked worktree will not bootstrap.** `./agent` reports the denied operation and its recovery.
 Two failures look alike and need opposite responses: a denied _temporary directory_ is resumable —

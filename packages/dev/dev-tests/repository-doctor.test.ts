@@ -1,5 +1,5 @@
-import { CLI, Repo } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { CLI, FS, Repo } from '@shared'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   type DoctorFacts,
   doctorReport,
@@ -99,6 +99,17 @@ Describe('repository doctor', () => {
     Expect(check(report, 'ports')?.remediation).toBe('Stop it with: kill -TERM 4242')
   })
 
+  Test('never offers to kill a process this repository does not recognise', () => {
+    const report = doctorReport(facts({
+      ports: [{ listeners: [{ command: 'Python', pid: 60803 }], port: 8081, purpose: 'Expo Metro' }],
+    }))
+
+    // A read-only diagnosis handing out `kill -TERM` for somebody else's process is the one
+    // way it could do harm.
+    Expect(check(report, 'ports')?.remediation).not.toContain('kill -TERM')
+    Expect(check(report, 'ports')?.remediation).toContain('ps -p 60803')
+  })
+
   Test('reports an unreadable port as unknown rather than free', () => {
     const report = doctorReport(facts({ ports: [{ port: 8081, purpose: 'Expo Metro' }] }))
 
@@ -115,11 +126,26 @@ Describe('repository doctor', () => {
     )
   })
 
+  Test('creates nothing in a checkout that has never been built', async () => {
+    // `git status` cannot see this: `.artifacts` is gitignored, so the mutation the doctor used
+    // to make was invisible to the assertion that claimed to rule it out.
+    const root = await mkTestDir('tao-doctor-untouched-')
+    try {
+      await readDoctorFacts(root)
+
+      Expect(await FS.listDir(root)).toEqual([])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('reads this checkout without changing it', async () => {
     const before = await CLI.run('git', { args: ['status', '--porcelain'], cwd: Repo.getRoot() })
+    const listedBefore = (await FS.listDir(Repo.resolvePath('.artifacts'))).toSorted()
     const report = doctorReport(await readDoctorFacts())
     const after = await CLI.run('git', { args: ['status', '--porcelain'], cwd: Repo.getRoot() })
 
+    Expect((await FS.listDir(Repo.resolvePath('.artifacts'))).toSorted()).toEqual(listedBefore)
     Expect(after.stdout).toBe(before.stdout)
     Expect(report.repositoryRoot).toBe(Repo.getRoot())
     Expect(check(report, 'dependency compatibility')?.status).toBe('pass')

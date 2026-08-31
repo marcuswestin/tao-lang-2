@@ -33,12 +33,17 @@ function probes(state: Partial<ProbeState> = {}): OwnershipProbes {
   return {
     listenerPidsOnPort: async port => listeners[port] ?? [],
     pathExists: async path => !missingPaths.includes(path),
-    processFact: async pid => processes[pid] ?? { pid, running: false },
+    processFact: async pid => processes[pid] ?? { evidence: 'gone', pid },
   }
 }
 
 function alive(pid: number, command: string, startedAt = 'Mon Jan  1 00:00:00 2026'): ProcessFact {
-  return { command, pid, running: true, startedAt }
+  return { command, evidence: 'alive', pid, startedAt }
+}
+
+/** A host that will not describe its process table: alive, with no identity to compare. */
+function undetermined(pid: number): ProcessFact {
+  return { evidence: 'unknown', pid }
 }
 
 async function publish(
@@ -141,13 +146,107 @@ Describe('Studio launch manifests', () => {
     }
   })
 
-  Test('keeps a launch visible on a host whose process table cannot be read', async () => {
-    // Inside an agent sandbox `ps` is denied, so a fact carries liveness and no command. A launch
-    // must still be listable and stoppable there, or every agent is blind to its own Studio.
+  Test('matches a command the two hosts spell differently', async () => {
+    // `ps -o comm=` gives an absolute path; a process describing itself falls back to a basename.
+    // Comparing them literally disowns every launch recorded on one host and stopped from another.
     const recorded = { command: 'bun', pid: 100, role: 'studio-server' as const, startedAt: 'Mon Jan  1 00:00:00 2026' }
 
-    Expect(isSameProcess(recorded, { pid: 100, running: true })).toBe(true)
-    Expect(isSameProcess(recorded, { pid: 100, running: false })).toBe(false)
+    Expect(isSameProcess(recorded, alive(100, '/opt/homebrew/bin/bun'))).toBe(true)
+    Expect(isSameProcess(recorded, alive(100, '/opt/homebrew/bin/node'))).toBe(false)
+  })
+
+  Test('never owns a process on liveness alone', async () => {
+    const recorded = { command: 'bun', pid: 100, role: 'studio-server' as const, startedAt: 'Mon Jan  1 00:00:00 2026' }
+
+    // Alive, but the host said nothing about what it is. That is not identity.
+    Expect(isSameProcess(recorded, { evidence: 'alive', pid: 100 })).toBe(false)
+    Expect(isSameProcess(recorded, undetermined(100))).toBe(false)
+    Expect(isSameProcess(recorded, { evidence: 'gone', pid: 100 })).toBe(false)
+  })
+
+  Test('owns an unidentifiable process only when it holds a port this launch recorded', async () => {
+    const root = await mkTestDir('tao-studio-port-identity-')
+    try {
+      await publish(root)
+      const listing = await listLaunches({
+        // The process table says only "alive"; the recorded port says "and it is serving mine".
+        probes: probes({ listeners: { 42100: [100] }, processes: { 100: { evidence: 'alive', pid: 100 } } }),
+        repositoryRoot: root,
+      })
+
+      Expect(listing.launches[0]?.status).toBe('live')
+      Expect(listing.launches[0]?.ownedPids).toEqual([100])
+      Expect(listing.launches[0]?.ports.owned).toEqual([42100])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('refuses to stop, or to forget, what this host will not answer about', async () => {
+    const root = await mkTestDir('tao-studio-undetermined-')
+    try {
+      await publish(root)
+      let signalled = false
+      const report = await stopLaunches({
+        probes: probes({ processes: { 100: undetermined(100) } }),
+        repositoryRoot: root,
+        signal: async () => {
+          signalled = true
+        },
+      })
+
+      Expect(signalled).toBe(false)
+      Expect(report.outcomes[0]?.outcome).toBe('refused')
+      Expect(report.outcomes[0]?.reason).toContain('would not say whether 100')
+      Expect(report.outcomes[0]?.manifestRemoved).toBe(false)
+      // The record survives, because it is the only thing that knows what might still be running.
+      Expect((await readLaunches(root)).length).toBe(1)
+      Expect(stopExitCode(report)).toBe(1)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('refuses to forget a launch whose recorded port is still held', async () => {
+    const root = await mkTestDir('tao-studio-held-port-')
+    try {
+      await publish(root)
+      const report = await stopLaunches({
+        // The recorded pid is genuinely gone, but something is still serving the launch's port.
+        probes: probes({ listeners: { 42100: [999] } }),
+        repositoryRoot: root,
+        signal: async () => {},
+      })
+
+      Expect(report.outcomes[0]?.outcome).toBe('refused')
+      Expect(report.outcomes[0]?.reason).toContain('port 42100 is still held')
+      Expect(report.outcomes[0]?.manifestRemoved).toBe(false)
+      Expect((await readLaunches(root)).length).toBe(1)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('reports only the ports it observed become free', async () => {
+    const root = await mkTestDir('tao-studio-released-ports-')
+    try {
+      await publish(root)
+      const listeners: Record<number, readonly number[]> = { 42100: [100] }
+      const report = await stopLaunches({
+        probes: probes({ listeners, processes: { 100: alive(100, 'bun') } }),
+        repositoryRoot: root,
+        signal: async () => {
+          // The process dies but something else takes the port straight away.
+          listeners[42100] = [777]
+        },
+        sleep: async () => {},
+      })
+
+      Expect(report.outcomes[0]?.cleanup.signaledPids).toEqual([100])
+      Expect(report.outcomes[0]?.cleanup.releasedPorts).toEqual([])
+    } finally {
+      await FS.remove(root)
+    }
   })
 
   Test('disowns a recorded id that a different program now holds', async () => {
@@ -156,7 +255,7 @@ Describe('Studio launch manifests', () => {
     Expect(isSameProcess(recorded, alive(100, 'bun'))).toBe(true)
     Expect(isSameProcess(recorded, alive(100, 'Google Chrome'))).toBe(false)
     Expect(isSameProcess(recorded, alive(100, 'bun', 'Tue Feb  2 00:00:00 2026'))).toBe(false)
-    Expect(isSameProcess(recorded, { pid: 100, running: false })).toBe(false)
+    Expect(isSameProcess(recorded, { evidence: 'gone' as const, pid: 100 })).toBe(false)
   })
 
   Test('refuses a manifest whose schema version this build does not understand', async () => {
@@ -250,17 +349,19 @@ Describe('Studio lifecycle commands', () => {
         100: alive(100, 'bun'),
         101: alive(101, 'node'),
       }
+      const listeners: Record<number, readonly number[]> = { 42100: [100] }
       const report = await stopLaunches({
-        probes: probes({ listeners: { 42100: [100] }, processes }),
+        probes: probes({ listeners, processes }),
         repositoryRoot: root,
         signal: async (signal, pids) => {
           signals.push({ pids, signal })
-          // 100 stops on TERM; 101 only stops when it is killed.
+          // 100 stops on TERM and frees its port; 101 only stops when it is killed.
           if (signal === 'SIGTERM') {
-            processes[100] = { pid: 100, running: false }
+            processes[100] = { evidence: 'gone' as const, pid: 100 }
+            listeners[42100] = []
           } else {
             for (const pid of pids) {
-              processes[pid] = { pid, running: false }
+              processes[pid] = { evidence: 'gone' as const, pid }
             }
           }
         },
@@ -310,7 +411,7 @@ Describe('Studio lifecycle commands', () => {
         probes: probes({ processes }),
         repositoryRoot: root,
         signal: async () => {
-          processes[100] = { pid: 100, running: false }
+          processes[100] = { evidence: 'gone' as const, pid: 100 }
         },
         sleep: async () => {},
       }
@@ -451,7 +552,7 @@ Describe('Studio lifecycle commands', () => {
         probes: probes({ processes }),
         repositoryRoot: root,
         signal: async () => {
-          processes[100] = { pid: 100, running: false }
+          processes[100] = { evidence: 'gone' as const, pid: 100 }
         },
         sleep: async () => {},
       })

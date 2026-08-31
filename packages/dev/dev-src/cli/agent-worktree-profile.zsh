@@ -140,6 +140,10 @@ function tao_bun_temp_dir() {
 # backend can leave gigabytes of. Only repository `.artifacts` scratch roots are ever emptied,
 # and only their contents: a caller that names anything else is refused rather than obeyed.
 function tao_prune_bootstrap_scratch() {
+  # Sourced into whatever shell the caller already has, so its options are not inherited: the
+  # `(DN)` qualifiers and `:A` below change meaning under a non-default option set.
+  emulate -L zsh
+  unsetopt BASH_REMATCH
   local scratch_dir="${1:A}"
   local report="${2:-}"
   case "$scratch_dir" in

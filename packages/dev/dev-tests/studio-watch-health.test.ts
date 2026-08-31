@@ -84,4 +84,22 @@ Describe('Studio watch health', () => {
     Expect(installed.metroWatchFolders.length).toBeGreaterThan(0)
     Expect(unwatchedSourceRoots(installed)).toEqual([])
   })
+
+  Test('this repository watches three trees twice, and no more than that', async () => {
+    const installed = await readWatchFacts(Repo.getRoot())
+    const overlaps = overlappingWatchFolders(installed.metroWatchFolders)
+      .map(overlap =>
+        `${FS.relativePath(Repo.getRoot(), overlap.nested)} inside ${FS.relativePath(Repo.getRoot(), overlap.inside)}`
+      )
+      .toSorted()
+
+    // Each of these is a package root watched alongside a source root inside it, so one save
+    // there is delivered twice. Recorded rather than asserted away: shrinking this list is a
+    // real improvement to the edit-to-preview loop, and growing it is a regression.
+    Expect(overlaps).toEqual([
+      'packages/runtime-toolchain/node_modules inside packages/runtime-toolchain',
+      'packages/runtime/TaoRuntime-src inside packages/runtime',
+      'packages/shared/shared-src/core inside packages/shared',
+    ])
+  })
 })

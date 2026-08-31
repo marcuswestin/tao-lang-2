@@ -7,8 +7,10 @@ import {
 
 /**
  * The repository half of `doctor`: everything a checkout needs before any Tao command can work.
- * Read-only by contract — it never installs, never starts a process, and never signals one — so
- * running it can only ever tell you something. `StudioDoctor` layers Studio's own checks on top.
+ * It never installs, never mutates the checkout, and never signals a process, so running it can
+ * only ever tell you something. It does *run* processes to ask them about themselves — `git`,
+ * `bun`, `node`, `watchman`, `direnv`, `du`, `lsof` — including a Node require of the Expo config
+ * to prove the dependency graph resolves. `StudioDoctor` layers Studio's own checks on top.
  */
 
 /** The Node major devenv.nix pins, and the Bun the lockfile and workflow scripts assume. */
@@ -25,6 +27,9 @@ export const CONVENTIONAL_PORTS = [
 /** Where Langium's generator is configured, and the modules every language command imports. */
 const LANGIUM_CONFIG = 'packages/parser/langium-config.json'
 const GENERATED_PARSER_MODULES = ['ast.ts', 'grammar.ts', 'module.ts']
+
+/** Commands this repository actually starts on its conventional ports. */
+const TAO_PROCESS_COMMANDS = new Set(['bun', 'node', 'hutch', 'watchman'])
 
 /** Scratch trees whose size is worth reporting, because a failed install can leave gigabytes. */
 const ARTIFACT_ROOTS = ['.artifacts/tmp', '.artifacts/cache', '.artifacts/build', '.artifacts/logs']
@@ -352,10 +357,17 @@ function portChecks(facts: DoctorFacts): DoctorCheck[] {
       return { detail: `port ${occupancy.port} (${occupancy.purpose}) is free`, name: 'ports', status: 'pass' as const }
     }
     const owners = occupancy.listeners.map(listener => `${listener.command} pid ${listener.pid}`).join(', ')
+    const pids = occupancy.listeners.map(listener => listener.pid)
+    // A kill command is only offered for a process this repository recognises as its own. The
+    // holder of a conventional port is often somebody else's, and a read-only diagnosis has no
+    // business handing out a command that would terminate it.
+    const ours = occupancy.listeners.every(listener => TAO_PROCESS_COMMANDS.has(listener.command))
     return {
       detail: `port ${occupancy.port} (${occupancy.purpose}) is held by ${owners}`,
       name: 'ports',
-      remediation: `Stop it with: kill -TERM ${occupancy.listeners.map(listener => listener.pid).join(' ')}`,
+      remediation: ours
+        ? `Stop it with: kill -TERM ${pids.join(' ')}`
+        : `Identify it before stopping anything: ps -p ${pids.join(',')} -o pid,command`,
       status: 'warn' as const,
     }
   })
@@ -502,7 +514,22 @@ async function readArtifactRoot(repositoryRoot: string, path: string): Promise<A
 
 async function readBunTempDir(repositoryRoot: string): Promise<{ path: string; writable: boolean } | undefined> {
   const path = FS.resolvePath('.artifacts/tmp', repositoryRoot)
-  return { path, writable: await isWritable(path) }
+  // A checkout that has never been built has no scratch directory yet, and a read-only diagnosis
+  // must not be the thing that creates one. Probe the nearest ancestor that already exists.
+  return { path, writable: await isWritable(await nearestExistingAncestor(path)) }
+}
+
+/** nearestExistingAncestor walks up until it finds a directory that is already there. */
+async function nearestExistingAncestor(path: string): Promise<string> {
+  let current = path
+  while (!await FS.isDirectory(current)) {
+    const parent = FS.dirname(current)
+    if (parent === current) {
+      return current
+    }
+    current = parent
+  }
+  return current
 }
 
 /** Probes with a real nested write, which is what a sandbox actually denies. */

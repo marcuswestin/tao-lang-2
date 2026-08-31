@@ -7,6 +7,13 @@ import {
 } from '../dev-src/studio/StudioLifecycleLog'
 import { openTarget, waitForReadyUrl } from '../dev-src/studio/StudioReadiness'
 
+/** A root whose child cannot be a directory, so every log write fails on any host. */
+async function unwritableRoot(): Promise<string> {
+  const root = await mkTestDir('tao-studio-unwritable-')
+  await FS.writeText(FS.resolvePath('not-a-directory', root), 'a file, not a directory')
+  return root
+}
+
 async function readRecords(path: string): Promise<StudioLifecycleRecord[]> {
   return (await FS.readText(path)).split('\n').filter(Boolean).map(line => JSON.parse(line) as StudioLifecycleRecord)
 }
@@ -141,14 +148,21 @@ Describe('Studio lifecycle telemetry', () => {
   })
 
   Test('never stops a launch because its log could not be written', async () => {
+    const announced: string[] = []
     const log = createStudioLifecycleLog({
-      announce: () => {},
-      artifactRoot: '/proc/tao-cannot-write-here',
+      announce: line => announced.push(line),
+      // Unwritable on any host: a path under a file rather than a directory.
+      artifactRoot: FS.resolvePath('not-a-directory/logs', await unwritableRoot()),
       launchId: 'browser-1',
     })
-    log.record({ component: 'studio-server', event: 'launch-requested' })
+    log.record({ component: 'studio-server', event: 'server-ready', port: 42100 })
 
     await log.close()
+
+    // The record still reached the terminal, and closing resolved rather than rejecting — which
+    // is the whole property. Without an assertion this test proved nothing on a permissive host.
+    Expect(announced).toEqual(['studio-server server-ready (port 42100)'])
+    Expect(await FS.exists(log.path)).toBe(false)
   })
 
   Test('formats a record without leaking source or secrets', () => {

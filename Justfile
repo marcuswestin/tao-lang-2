@@ -64,8 +64,8 @@ studio-canary project="Apps/HNReader" app="HNReader":
     ./dev studio-canary --project "{{ project }}" --app "{{ app }}"
 
 # Validate a built native Studio release without publishing anything
-studio-release-check payload_root *ARGS:
-    ./dev studio-release-check --payload-root "{{ payload_root }}" {{ ARGS }}
+studio-release-check payload_root artifacts_root *ARGS:
+    ./dev studio-release-check --payload-root "{{ payload_root }}" --artifacts-root "{{ artifacts_root }}" {{ ARGS }}
 
 # Build signed/notarized Tao Studio artifacts through Electrobun and Hutch
 studio-package release_base_url channel="stable" output_root=".artifacts/build/studio-native":
@@ -91,6 +91,7 @@ fmt: _parser-gen
 fix: _parser-gen
     dprint fmt --incremental=false
     ./tao fix
+    just --fmt
 
 # Check and test all code
 check: _compile-word-flower-app
@@ -136,7 +137,7 @@ clean-all: clean
 
 # Prepare all code for commit
 verify: fix _compile-word-flower-app
-    ./dev gates _ide-extension-build _repo-lint _dependency-check _typecheck _test _runtime-pack-check --json .artifacts/logs/verify/summary.json --skipped "_tao-check=covered by check" "_dprint-check=fix already formatted this tree" "studio-smoke=slow lane; run just studio-smoke <file>"
+    ./dev gates _ide-extension-build _repo-lint _dependency-check _typecheck _test _runtime-pack-check --json .artifacts/logs/verify/summary.json --skipped "_tao-check=covered by check" "_dprint-check=fix formatted this tree with dprint and just --fmt" "studio-smoke=slow lane; run just studio-smoke <file>"
 
 # Private
 #########

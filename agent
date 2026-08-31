@@ -1,5 +1,10 @@
 #!/bin/zsh
 
+# Run under zsh's own defaults regardless of the developer's ~/.zshenv. `BASH_REMATCH` in
+# particular moves regex captures out of `match`, which would blank the denied path in exactly
+# the install diagnostic that exists to name it, and `emulate zsh` alone does not reset it.
+emulate zsh
+unsetopt BASH_REMATCH
 set -e
 
 SCRIPT_DIR="${0:A:h}"

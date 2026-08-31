@@ -96,6 +96,28 @@ Describe('Codex config generation', () => {
     }
   })
 
+  Test('keeps the committed Claude Code settings in step with the canonical rules', async () => {
+    // The generator skips this write when a sandbox denies it, so an agent can edit the canonical
+    // rules, watch `./agent setup` succeed, and commit rules that never reached the settings file.
+    // Nothing else notices; this does.
+    const root = Repo.getRoot()
+    const rules = CodexConfigGenerator.parsePermissions(
+      await FS.readText(FS.resolvePath('.rulesync/permissions.jsonc', root)),
+    )
+    const settings = await FS.readJson<{
+      permissions?: { allow?: string[]; ask?: string[]; deny?: string[] }
+      sandbox?: { network?: { allowUnixSockets?: string[]; allowedDomains?: string[] } }
+    }>(FS.resolvePath('.claude/settings.json', root))
+
+    for (const [pattern, action] of Object.entries(rules.permission?.read ?? {})) {
+      const rendered = `Read(${pattern})`
+      const list = action === 'deny' ? settings.permissions?.deny : settings.permissions?.allow
+      Expect(list ?? []).toContain(rendered)
+    }
+    Expect(settings.sandbox?.network?.allowedDomains ?? [])
+      .toEqual(rules.claudecode?.sandbox?.network?.allowedDomains ?? [])
+  })
+
   Test('keeps the committed Codex profile identical to a fresh render', async () => {
     const root = Repo.getRoot()
     const rendered = CodexConfigGenerator.render(

@@ -1,4 +1,4 @@
-import { CLI, FS, Platform, Repo } from '@shared'
+import { CLI, FS, HCI, Platform, Repo } from '@shared'
 
 /**
  * Every running Studio publishes one manifest describing exactly what it owns, so a later
@@ -70,14 +70,21 @@ export type StoredLaunch = {
 }
 
 /**
- * ProcessFact is what the live machine says about one recorded process id. `command` is absent
- * when the process table could not be read at all — some agent sandboxes deny `ps` — in which
- * case liveness is still known but the program behind the id is not.
+ * ProcessEvidence separates the three answers a host can give about a process id. Collapsing
+ * `unknown` into `gone` is what makes a stop delete the record of a launch that is still running;
+ * collapsing it into `alive` is what makes a stop signal a stranger. Both have happened here.
+ */
+export type ProcessEvidence = 'alive' | 'gone' | 'unknown'
+
+/**
+ * ProcessFact is what the live machine says about one recorded process id. `command` and
+ * `startedAt` are absent when the process table could not be read — agent sandboxes commonly deny
+ * `ps` — so identity can be unavailable even when liveness is not.
  */
 export type ProcessFact = {
   command?: string
+  evidence: ProcessEvidence
   pid: number
-  running: boolean
   startedAt?: string
 }
 
@@ -94,6 +101,8 @@ export type ValidatedLaunch = {
   owned: readonly StudioLaunchProcess[]
   /** Recorded processes whose id is now held by a different program, or by nothing. */
   disowned: readonly StudioLaunchProcess[]
+  /** Recorded processes this host would not answer about. Never owned, and never signalled. */
+  undetermined: readonly StudioLaunchProcess[]
   /** Ports whose current listener is one of the owned processes. */
   ownedPorts: readonly number[]
   /** Ports listened on by something this launch does not own. */
@@ -159,10 +168,13 @@ export async function openLaunchRecord(options: OpenLaunchOptions): Promise<Stud
   const write = async (update: Partial<StudioLaunchManifest>): Promise<StudioLaunchManifest> => {
     manifest = { ...manifest, ...update, generation: manifest.generation + 1 }
     const snapshot = manifest
-    const writing = pending.then(
-      () => writeManifestAtomically(path, snapshot),
-      () => writeManifestAtomically(path, snapshot),
-    )
+    // Publishing a manifest is a convenience for later commands, never a precondition for the
+    // launch itself: an unwritable artifact root must not turn a working Studio into an exit 1.
+    const publish = () =>
+      writeManifestAtomically(path, snapshot).catch(error => {
+        HCI.logProcessWarn('studio', `Could not write the launch manifest: ${(error as Error).message}`)
+      })
+    const writing = pending.then(publish, publish)
     pending = writing
     await writing
     return snapshot
@@ -270,12 +282,13 @@ export async function validateLaunch(
   probes: OwnershipProbes,
 ): Promise<ValidatedLaunch> {
   const manifest = stored.manifest
-  const base: Pick<ValidatedLaunch, 'disowned' | 'foreignPorts' | 'manifest' | 'owned' | 'ownedPorts'> = {
+  const base = {
     disowned: manifest.processes,
     foreignPorts: [],
     manifest,
     owned: [],
     ownedPorts: [],
+    undetermined: [],
   }
   if (!stored.supported) {
     return {
@@ -295,18 +308,34 @@ export async function validateLaunch(
     return { ...base, stale: true, unusableReason: `repository root ${manifest.repositoryRoot} no longer exists` }
   }
 
+  // Ports are read first: a listener on a port this manifest itself recorded is the one piece of
+  // identity evidence available on a host that will not describe its own process table.
+  const listenersByPort = new Map<number, readonly number[] | undefined>()
+  for (const port of recordedPorts(manifest)) {
+    listenersByPort.set(port, await probes.listenerPidsOnPort(port))
+  }
+  const listeningPids = new Set(
+    [...listenersByPort.values()].flatMap(pids => pids === undefined ? [] : [...pids]),
+  )
+
   const owned: StudioLaunchProcess[] = []
   const disowned: StudioLaunchProcess[] = []
+  const undetermined: StudioLaunchProcess[] = []
   for (const process of manifest.processes) {
     const fact = await probes.processFact(process.pid)
-    ;(isSameProcess(process, fact) ? owned : disowned).push(process)
+    if (isSameProcess(process, fact) || (fact.evidence === 'alive' && listeningPids.has(process.pid))) {
+      owned.push(process)
+    } else if (fact.evidence === 'unknown') {
+      undetermined.push(process)
+    } else {
+      disowned.push(process)
+    }
   }
 
   const ownedPids = new Set(owned.map(process => process.pid))
   const ownedPorts: number[] = []
   const foreignPorts: number[] = []
-  for (const port of recordedPorts(manifest)) {
-    const listeners = await probes.listenerPidsOnPort(port)
+  for (const [port, listeners] of listenersByPort) {
     if (listeners === undefined || listeners.length === 0) {
       continue
     }
@@ -319,23 +348,37 @@ export async function validateLaunch(
     manifest,
     owned,
     ownedPorts,
-    stale: owned.length === 0,
+    // Nothing is claimed and nothing is uncertain: only then is a manifest genuinely spent.
+    stale: owned.length === 0 && undetermined.length === 0 && foreignPorts.length === 0,
+    undetermined,
   }
 }
 
-/** isSameProcess decides whether a live process id is still the process that was recorded. */
+/**
+ * isSameProcess decides whether a live id is still the process that was recorded, from the process
+ * table alone. It requires positive identity rather than mere liveness: ids are reused, and the
+ * only question worth answering is "is this still ours", never "is something there".
+ *
+ * Commands are compared by basename because the two sides disagree by host: `ps -o comm=` reports
+ * an absolute path, while a process describing itself falls back to its executable's basename.
+ */
 export function isSameProcess(recorded: StudioLaunchProcess, fact: ProcessFact): boolean {
-  if (!fact.running) {
+  if (fact.evidence !== 'alive') {
     return false
   }
-  if (fact.command !== undefined && fact.command !== recorded.command) {
+  if (fact.command !== undefined && !sameCommand(fact.command, recorded.command)) {
     return false
   }
-  // A recorded start time is the only defence against an id reused by the same program.
   if (recorded.startedAt !== undefined && fact.startedAt !== undefined && fact.startedAt !== recorded.startedAt) {
     return false
   }
-  return true
+  // Alive with nothing to compare against is not identity; only a recorded port can corroborate it.
+  return fact.command !== undefined || (recorded.startedAt !== undefined && fact.startedAt !== undefined)
+}
+
+/** sameCommand compares command strings by basename, so `/opt/bin/bun` matches `bun`. */
+export function sameCommand(left: string, right: string): boolean {
+  return FS.basename(left) === FS.basename(right)
 }
 
 /** recordedPorts returns the ports a manifest claims, in a stable order. */
@@ -370,37 +413,48 @@ export const systemOwnershipProbes: OwnershipProbes = {
   },
   pathExists: async path => await FS.exists(path),
   processFact: async pid => {
-    const result = await runQuietly('ps', ['-o', 'comm=,lstart=', '-p', String(pid)])
-    if (result === undefined) {
-      // The process table is unreadable here, which is the ordinary case inside an agent
-      // sandbox. Liveness alone still distinguishes a running launch from a finished one; what
-      // is lost is the command check that would catch a reused id, so this is reported rather
-      // than silently assumed. Signalling still only ever reaches the recorded process group.
-      return { pid, running: await processIsAlive(pid) }
+    const listed = await runQuietly('ps', ['-o', 'comm=,lstart=', '-p', String(pid)])
+    if (listed !== undefined) {
+      const line = listed.stdout.trim()
+      if (listed.exitCode === 0 && line !== '') {
+        // `comm` may be an absolute path containing spaces, and `lstart` is a fixed five fields,
+        // so the command is everything before them rather than the first whitespace-run.
+        const fields = line.split(/\s+/)
+        const startedAt = fields.slice(-5).join(' ')
+        return { command: line.slice(0, line.length - startedAt.length).trim(), evidence: 'alive', pid, startedAt }
+      }
+      // `ps` ran and reported nothing for this id, which is a real answer.
+      return { evidence: 'gone', pid }
     }
-    const line = result.stdout.trim()
-    if (result.exitCode !== 0 || line === '') {
-      return { pid, running: false }
-    }
-    // `comm` is a path with no spaces on macOS, so the first field is the command.
-    const [command, ...startedAt] = line.split(/\s+/)
-    return { command, pid, running: true, startedAt: startedAt.join(' ') }
+    return { evidence: await processEvidenceFromSignal(pid), pid }
   },
 }
 
-/** processIsAlive asks the kernel directly, which every host permits even when `ps` is denied. */
-async function processIsAlive(pid: number): Promise<boolean> {
+/**
+ * When the process table is unreadable, the kernel is asked directly — but only to separate
+ * "gone" from "there, and not mine to describe". A host that denies signalling answers neither,
+ * and `unknown` is carried forward rather than guessed at in either direction.
+ */
+async function processEvidenceFromSignal(pid: number): Promise<ProcessEvidence> {
   const result = await runQuietly('/bin/kill', ['-0', String(pid)])
-  return result !== undefined && result.exitCode === 0
+  if (result === undefined) {
+    return 'unknown'
+  }
+  if (result.exitCode === 0) {
+    return 'alive'
+  }
+  return /no such process/i.test(result.stderr) ? 'gone' : 'unknown'
 }
 
 async function runQuietly(
   command: string,
   args: readonly string[],
-): Promise<{ exitCode: number | null; stdout: string } | undefined> {
+): Promise<{ exitCode: number | null; stderr: string; stdout: string } | undefined> {
   try {
     const result = await CLI.run(command, { args: [...args] })
-    return result.error === undefined ? { exitCode: result.exitCode, stdout: result.stdout } : undefined
+    return result.error === undefined
+      ? { exitCode: result.exitCode, stderr: result.stderr, stdout: result.stdout }
+      : undefined
   } catch {
     return undefined
   }
@@ -417,7 +471,8 @@ export async function describeOwnProcess(
 ): Promise<StudioLaunchProcess> {
   const fact = await systemOwnershipProbes.processFact(pid)
   return {
-    command: fact.command ?? FS.basename(Platform.runtimeProcess.execPath),
+    // Recorded as a basename either way, because that is the only form both hosts agree on.
+    command: FS.basename(fact.command ?? Platform.runtimeProcess.execPath),
     pid,
     role,
     startedAt: fact.startedAt,

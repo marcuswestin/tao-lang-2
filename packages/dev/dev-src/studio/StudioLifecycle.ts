@@ -32,11 +32,13 @@ export type LaunchRow = {
   mode: string
   ownedPids: readonly number[]
   disownedPids: readonly number[]
+  /** Recorded processes this host refused to answer about. */
+  undeterminedPids: readonly number[]
   ports: { owned: readonly number[]; foreign: readonly number[] }
   project?: string
   sessionUrl?: string
   state: string
-  status: 'live' | 'stale' | 'unusable'
+  status: 'live' | 'stale' | 'undetermined' | 'unusable'
   studioUrl?: string
   unusableReason?: string
 }
@@ -97,8 +99,15 @@ function launchRow(validated: ValidatedLaunch): LaunchRow {
     project: manifest.projectRoot,
     sessionUrl: manifest.sessionUrl,
     state: manifest.state,
-    status: validated.unusableReason !== undefined ? 'unusable' : validated.stale ? 'stale' : 'live',
+    status: validated.unusableReason !== undefined
+      ? 'unusable'
+      : validated.undetermined.length > 0
+      ? 'undetermined'
+      : validated.stale
+      ? 'stale'
+      : 'live',
     studioUrl: manifest.studioUrl,
+    undeterminedPids: validated.undetermined.map(process => process.pid),
     unusableReason: validated.unusableReason,
   }
 }
@@ -117,6 +126,9 @@ export function formatLaunchListing(listing: LaunchListing): string {
       row.sessionUrl === undefined ? undefined : `  session ${row.sessionUrl}`,
       row.disownedPids.length === 0 ? undefined : `  no longer owned: ${row.disownedPids.join(' ')}`,
       row.ports.foreign.length === 0 ? undefined : `  held by another process: ${row.ports.foreign.join(' ')}`,
+      row.undeterminedPids.length === 0
+        ? undefined
+        : `  this host would not say whether these are running: ${row.undeterminedPids.join(' ')}`,
       row.unusableReason === undefined ? undefined : `  unusable: ${row.unusableReason}`,
     ].filter((line): line is string => line !== undefined)
     return [`${row.status.toUpperCase().padEnd(8)}${row.launchId}`, ...detail].join('\n')
@@ -141,7 +153,18 @@ export async function stopLaunches(options: StopOptions = {}): Promise<StopRepor
 
   const outcomes: StopOutcome[] = []
   for (const launch of selected) {
-    outcomes.push(await stopLaunch(await validateLaunch(launch, probes), launch, options))
+    try {
+      outcomes.push(await stopLaunch(await validateLaunch(launch, probes), launch, options))
+    } catch (error) {
+      // `--all` must still report what it already did, and which launch it could not finish.
+      outcomes.push({
+        cleanup: { killedPids: [], releasedPorts: [], signaledPids: [] },
+        launchId: launch.manifest.launchId,
+        manifestRemoved: false,
+        outcome: 'refused',
+        reason: (error as Error).message,
+      })
+    }
   }
   return { outcomes, version: 1 }
 }
@@ -172,6 +195,31 @@ async function stopLaunch(
 
   if (validated.unusableReason !== undefined) {
     return { cleanup: empty, launchId, manifestRemoved: false, outcome: 'refused', reason: validated.unusableReason }
+  }
+  // Evidence this host would not give is not evidence of absence. Discarding the manifest here
+  // would throw away the only record of a launch that may well still be running.
+  if (validated.undetermined.length > 0) {
+    return {
+      cleanup: empty,
+      launchId,
+      manifestRemoved: false,
+      outcome: 'refused',
+      reason: `this host would not say whether ${
+        validated.undetermined.map(process => process.pid).join(' ')
+      } is still running. Stop Tao Studio in its own terminal, or rerun outside the sandbox.`,
+    }
+  }
+  // A port this launch recorded, still held by something: the machine is saying the launch is
+  // alive even though its process ids no longer resolve. Keep the record and say so.
+  if (validated.owned.length === 0 && validated.foreignPorts.length > 0) {
+    return {
+      cleanup: empty,
+      launchId,
+      manifestRemoved: false,
+      outcome: 'refused',
+      reason: `port ${validated.foreignPorts.join(' ')} is still held, but none of this launch's `
+        + 'process ids could be confirmed. Identify the holder before stopping anything.',
+    }
   }
   if (validated.owned.length === 0) {
     // An empty process list is a successful stop, not a reason to invoke kill with no operands.
@@ -212,7 +260,9 @@ async function stopLaunch(
 
   const cleanup: StudioCleanupResult = {
     killedPids,
-    releasedPorts: validated.ownedPorts,
+    // Observed after the fact, not copied from the pre-signal probe: a port is reported released
+    // only once nothing is listening on it.
+    releasedPorts: await releasedPorts(validated.ownedPorts, probes),
     signaledPids,
   }
   if (remaining.length > 0) {
@@ -244,6 +294,18 @@ async function finalizeManifest(stored: StoredLaunch, cleanup: StudioCleanupResu
  * weaker would let an id freed during the termination window, and reused by another copy of the
  * same executable, inherit the SIGKILL meant for the process that has already exited.
  */
+/** releasedPorts re-probes each port this launch held and returns only the ones now free. */
+async function releasedPorts(ports: readonly number[], probes: OwnershipProbes): Promise<number[]> {
+  const released: number[] = []
+  for (const port of ports) {
+    const listeners = await probes.listenerPidsOnPort(port)
+    if (listeners !== undefined && listeners.length === 0) {
+      released.push(port)
+    }
+  }
+  return released
+}
+
 async function stillOwned(
   processes: readonly StudioLaunchProcess[],
   probes: OwnershipProbes,

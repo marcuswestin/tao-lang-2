@@ -150,6 +150,32 @@ Describe('runtime dependency compatibility', () => {
   })
 
   Test('holds for the installed workspace', async () => {
-    Expect(dependencyCompatibilityIssues(await readDependencyFacts())).toEqual([])
+    const installed = await readDependencyFacts()
+
+    // Without these the rules below have nothing to compare against and every one short-circuits,
+    // so the assertion would pass on a partially installed checkout — the case it exists for.
+    Expect(Object.keys(installed.expoBundledVersions).length).toBeGreaterThan(0)
+    Expect(installed.reactNativeTypesPeer).toBeDefined()
+    Expect(installed.resolvedByPackage['tao-runtime-toolchain']?.['react']).toBeDefined()
+    Expect(dependencyCompatibilityIssues(installed)).toEqual([])
+  })
+
+  Test("reports rather than skips when Expo's own pins cannot be read", () => {
+    const issues = dependencyCompatibilityIssues(facts(INSTALLED_WORKSPACE, { expoBundledVersions: {} }))
+
+    Expect(issues.length).toBeGreaterThan(0)
+    Expect(issues[0]).toContain('could not be read')
+    Expect(issues[0]).toContain('just deps')
+  })
+
+  Test('rejects a second react-dom in the Studio bundle, not only a second react', () => {
+    const issues = dependencyCompatibilityIssues(facts({
+      'tao-runtime-toolchain': { react: '19.1.0', 'react-dom': '19.1.0', 'react-test-renderer': '19.1.0' },
+      'tao-studio': { react: '19.1.0', 'react-dom': '18.3.1' },
+    }))
+
+    Expect(issues.length).toBe(1)
+    Expect(issues[0]).toContain('tao-studio resolves react-dom 18.3.1')
+    Expect(issues[0]).toContain('packages/studio/package.json')
   })
 })

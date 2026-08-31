@@ -66,6 +66,15 @@ function reactSingletonIssues(facts: DependencyFacts): string[] {
   if (anchor === undefined) {
     return [`${REACT_SINGLETON_ANCHOR} is missing, so Tao Studio has no React singleton to resolve through.`]
   }
+  // Every rule below compares against Expo's own pins. Without them there is nothing to compare,
+  // and silently skipping would report agreement that was never checked.
+  if (REACT_PACKAGES.some(name => facts.expoBundledVersions[name] === undefined)) {
+    return [
+      "The installed Expo SDK's bundled versions could not be read from "
+      + 'expo/bundledNativeModules.json, so no runtime version could be checked at all. '
+      + 'Install dependencies with: just deps',
+    ]
+  }
   for (const name of REACT_PACKAGES) {
     const expected = facts.expoBundledVersions[name]
     const resolved = anchor[name]
@@ -97,17 +106,22 @@ function bundledReactIssues(facts: DependencyFacts): string[] {
   if (anchorReact === undefined) {
     return []
   }
-  return BUNDLED_PACKAGES.flatMap(name => {
-    const resolved = facts.resolvedByPackage[name]?.['react']
-    if (resolved === undefined || resolved === anchorReact) {
-      return []
-    }
-    return [
-      `${name} resolves react ${resolved} while ${REACT_SINGLETON_ANCHOR} resolves ${anchorReact}. `
-      + `Both are bundled into Tao Studio, and two React copies in one bundle render nothing at all. `
-      + `Pin "react": "${anchorReact}" in ${manifestPath(facts, name)}.`,
-    ]
-  })
+  // Every React package, not just `react`: a second react-dom in one bundle is the same blank
+  // Studio, and packages/studio declares react-dom in its own right.
+  return BUNDLED_PACKAGES.flatMap(name =>
+    REACT_PACKAGES.flatMap(reactPackage => {
+      const anchorVersion = facts.resolvedByPackage[REACT_SINGLETON_ANCHOR]?.[reactPackage]
+      const resolved = facts.resolvedByPackage[name]?.[reactPackage]
+      if (anchorVersion === undefined || resolved === undefined || resolved === anchorVersion) {
+        return []
+      }
+      return [
+        `${name} resolves ${reactPackage} ${resolved} while ${REACT_SINGLETON_ANCHOR} resolves `
+        + `${anchorVersion}. Both are bundled into Tao Studio, and two React copies in one bundle `
+        + `render nothing at all. Pin "${reactPackage}": "${anchorVersion}" in ${manifestPath(facts, name)}.`,
+      ]
+    })
+  )
 }
 
 /** A second React is legitimate only for a host tool that is documented and never bundled. */

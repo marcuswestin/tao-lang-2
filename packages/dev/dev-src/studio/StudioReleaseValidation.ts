@@ -275,9 +275,15 @@ export async function readExternalGates(options: {
 }
 
 async function toolOutcome(command: string, args: readonly string[]): Promise<boolean | undefined> {
-  const result = await CLI.run(command, { args: [...args] })
-  // A missing tool is not a failed check: it is a check that did not happen.
-  return result.error !== undefined ? undefined : result.exitCode === 0
+  try {
+    const result = await CLI.run(command, { args: [...args] })
+    // A missing tool is not a failed check: it is a check that did not happen.
+    return result.error !== undefined ? undefined : result.exitCode === 0
+  } catch {
+    // A host that refuses to spawn the tool at all throws rather than reporting, and that is
+    // still a check that did not happen — not a release that failed one.
+    return undefined
+  }
 }
 
 /** formatReleaseValidation renders the release gates as status lines. */

@@ -23,10 +23,15 @@ export type GateStatus = 'failed' | 'passed' | 'skipped'
 export type FailureKind = 'environment-setup' | 'optional-tooling' | 'repository' | 'sandbox-restriction'
 
 const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
-  { kind: 'sandbox-restriction', pattern: /operation not permitted|permissiondenied|EPERM|EACCES/i },
   { kind: 'environment-setup', pattern: /pinned devenv profile is unavailable|command not found: (bun|node|just)/i },
-  { kind: 'environment-setup', pattern: /cannot find (module|package)|node_modules/i },
+  { kind: 'environment-setup', pattern: /^error: Cannot find (module|package)/im },
   { kind: 'optional-tooling', pattern: /\b(watchman|hutch|chrome|chromium|lsof|docker) (is )?not (installed|found)/i },
+  // Last, and anchored to a line of its own: `EPERM` inside a test's own assertion text is a
+  // repository failure, not a host restriction, and it is far more common than the real thing.
+  {
+    kind: 'sandbox-restriction',
+    pattern: /^(?!.*expect).*\b(operation not permitted|PermissionDenied|EPERM|EACCES)\b/im,
+  },
 ]
 
 /** classifyFailure names the kind of failure a gate's output describes. */
@@ -76,6 +81,9 @@ export type RunGatesOptions = {
 
 const FAILURE_OUTPUT_LINES = 40
 
+/** Lines worth surfacing from a gate that still passed, including tool diagnostics. */
+const WARNING_PATTERN = /\b(warning|warn):|is declared but never referenced|deprecated/i
+
 /** runGates executes every gate, streams their output, and returns the rollup. */
 export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
@@ -86,8 +94,10 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const startedAt = now()
   const outputs = new Map<string, string>()
   const results = new Map<string, GateResult>()
-  for (const entry of options.skipped ?? []) {
-    const [name, reason] = splitSkip(entry)
+  // A gate that is both run and declared skipped is run: the declaration is stale, and counting
+  // it twice would make the totals disagree with the list above them.
+  const skipped = (options.skipped ?? []).map(splitSkip).filter(([name]) => !options.gates.includes(name))
+  for (const [name, reason] of skipped) {
     results.set(name, { elapsedMs: 0, name, reason, status: 'skipped' })
   }
 
@@ -114,7 +124,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     }
   }))
 
-  const ordered = [...(options.skipped ?? []).map(entry => splitSkip(entry)[0]), ...options.gates]
+  const ordered = [...skipped.map(([name]) => name), ...options.gates]
     .map(name => results.get(name))
     .filter((result): result is GateResult => result !== undefined)
   const firstFailed = options.gates.map(name => results.get(name)).find(result => result?.status === 'failed')
@@ -196,7 +206,7 @@ function collectWarnings(outputs: ReadonlyMap<string, string>): string[] {
   const warnings = new Set<string>()
   for (const [name, output] of outputs) {
     for (const line of output.split('\n')) {
-      if (/\b(warning|warn):/i.test(line) && line.trim().length > 0) {
+      if (WARNING_PATTERN.test(line) && line.trim().length > 0) {
         warnings.add(`${name}: ${OutputText.stripAnsi(line).trim()}`)
       }
     }

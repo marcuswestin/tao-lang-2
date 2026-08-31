@@ -10,7 +10,7 @@ description: >-
 - Keep Worktrunk's blocking `pre-start` hook routed through `direnv allow && direnv exec . just setup` so trust, dependencies, and generated agent adapters exist before a launched harness reads them.
 - Keep `./agent` able to reuse the primary checkout's pinned devenv profile in linked worktrees where sandboxing hides `.envrc`; never fall back to an unpinned host Node. `direnv allow && direnv exec . ./agent setup` remains the fallback when no shared profile exists.
 - Expose formatting, fixing, testing, checking, and final validation as thin `./agent` passthroughs to the matching Just recipes.
-- Keep the Justfile the definition point for which gates belong to `check` and `verify`; `./dev gates` owns running them and reporting the one verification summary. Declare a lane's deliberately unrun gates with `--skipped <name>=<reason>` so they are reported as skipped rather than omitted.
+- Keep the Justfile the definition point for which gates belong to `check` and `verify`; `./dev gates` owns running them and reporting the one verification summary. Its help states how to declare a lane's deliberately unrun gates.
 - Derive `./agent help` descriptions for passthrough commands from live `just help` output instead of duplicating recipe help.
 - Keep ordinary shell and Tao CLI commands outside `./agent`; run them directly or through `./tao`.
 - Keep commands typed, focused, and covered by package tests or repository validation.

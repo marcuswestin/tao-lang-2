@@ -35,7 +35,8 @@ export function writeReadiness(readiness: StudioReadiness): void {
 }
 
 export type ProbeOptions = {
-  fetchUrl?: (url: string) => Promise<{ ok: boolean }>
+  fetchUrl?: (url: string, timeoutMs: number) => Promise<{ ok: boolean }>
+  now?: () => number
   pollMs?: number
   sleep?: (milliseconds: number) => Promise<void>
   timeoutMs?: number
@@ -50,9 +51,13 @@ export async function waitForReadyUrl(url: string, options: ProbeOptions = {}): 
   const fetchUrl = options.fetchUrl ?? defaultFetch
   const sleep = options.sleep ?? Time.sleep
   const pollMs = options.pollMs ?? READY_POLL_MS
-  const attempts = Math.max(1, Math.ceil((options.timeoutMs ?? READY_TIMEOUT_MS) / pollMs))
-  for (let attempt = 0; attempt < attempts; attempt += 1) {
-    if ((await fetchUrl(url).catch(() => ({ ok: false }))).ok) {
+  const timeoutMs = options.timeoutMs ?? READY_TIMEOUT_MS
+  // A wall-clock deadline, not an attempt count: a server that accepts the connection and never
+  // answers would otherwise hold this open forever, and the launch's Ctrl+C handler with it.
+  const deadline = (options.now ?? Time.nowMs)() + timeoutMs
+  const now = options.now ?? Time.nowMs
+  while (now() < deadline) {
+    if ((await fetchUrl(url, pollMs * 2).catch(() => ({ ok: false }))).ok) {
       return true
     }
     await sleep(pollMs)
@@ -60,9 +65,17 @@ export async function waitForReadyUrl(url: string, options: ProbeOptions = {}): 
   return false
 }
 
-async function defaultFetch(url: string): Promise<{ ok: boolean }> {
-  const response = await fetch(url, { redirect: 'follow' })
-  return { ok: response.ok }
+async function defaultFetch(url: string, timeoutMs: number): Promise<{ ok: boolean }> {
+  // Each attempt gets its own deadline, and the body is consumed so the socket is not left open.
+  const abort = new AbortController()
+  const abortTimer = setTimeout(() => abort.abort(), timeoutMs)
+  try {
+    const response = await fetch(url, { redirect: 'follow', signal: abort.signal } as RequestInit)
+    await response.arrayBuffer().catch(() => undefined)
+    return { ok: response.ok }
+  } finally {
+    clearTimeout(abortTimer)
+  }
 }
 
 /**

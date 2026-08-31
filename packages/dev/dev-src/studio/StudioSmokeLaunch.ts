@@ -1,5 +1,4 @@
 import { CLI, Errors, FS, Repo } from '@shared'
-import { readLaunches } from './StudioLaunchManifest'
 import { stopLaunches } from './StudioLifecycle'
 import type { StudioReadiness } from './StudioReadiness'
 
@@ -117,8 +116,10 @@ async function stopSmokeLaunch(
   repositoryRoot: string,
   readiness: () => StudioReadiness | undefined,
 ): Promise<void> {
+  // Only the launch this run was told about is stopped. Falling back to "the newest manifest in
+  // the repository" would stop a Studio somebody else started, which is exactly what a run that
+  // never reached readiness must not do.
   const launchId = readiness()?.launchId
-    ?? (await readLaunches(repositoryRoot)).find(launch => launch.manifest.state !== 'stopped')?.manifest.launchId
   if (launchId !== undefined) {
     await stopLaunches({ launchId, repositoryRoot }).catch(() => undefined)
   }
