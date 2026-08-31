@@ -36,6 +36,7 @@ import {
 } from '../studio-src/client/StudioProductPanels'
 import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
 import { StudioPaneSizes, studioShellMarkup, studioShellRailPanels } from '../studio-src/client/StudioShell'
+import { studioInspectorContexts } from '../studio-src/client/StudioVisualEditing'
 import {
   isStudioSaveShortcut,
   StudioCodeEditor,
@@ -72,6 +73,7 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   const html = StudioClientAssets.html({
     previewUrl: 'http://127.0.0.1:55102/?value=</script><script>bad()</script>',
   })
+  Expect(html).toContain('overscroll-behavior-x: contain')
 
   Expect(bundle).toContain('Tao Studio root is missing')
   Expect(bundle).toContain('/api/language/lsp')
@@ -107,6 +109,9 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('Control+K')
   Expect(bundle).toContain('Refreshing live app data')
   Expect(bundle).toContain('Collapse inspector')
+  Expect(bundle).toContain('Switching app…')
+  Expect(bundle).toContain('studio-global-loading-spinner')
+  Expect(bundle).toContain('studio-inspector-accordion')
   Expect(bundle).toContain('Collapse bottom drawer')
   Expect(bundle).toContain('tao-studio:pane-sizes:v4')
   Expect(bundle).toContain('tao-studio:editor-tabs:v1')
@@ -373,7 +378,11 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
   Expect(markup).toContain('studio-toolbar-mode')
   Expect(markup).toContain('studio-toolbar-actions')
   Expect(markup).toContain('studio-window-controls')
-  Expect(markup).toContain('data-inspector-context="Layout"')
+  Expect(studioInspectorContexts).toEqual(['Layout', 'Style', 'Data', 'Actions'])
+  Expect(markup).toContain('aria-label="Environment and scenario"')
+  Expect(markup).toContain('aria-label="Layout, style, data, and actions"')
+  Expect(markup).toContain('studio-scenario-inspector-content')
+  Expect(markup).toContain('studio-global-loading')
   Expect(markup).toContain('data-drawer-tab="Problems"')
   Expect(markup).toContain('aria-label="Collapse inspector"')
   Expect(markup).toContain('aria-label="Collapse bottom drawer"')

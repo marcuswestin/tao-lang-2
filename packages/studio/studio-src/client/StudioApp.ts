@@ -76,11 +76,10 @@ import {
 } from './StudioShell'
 import {
   renderComponentPalette,
-  renderInspectorPanel,
+  renderInspectorAccordions,
   renderProjectViews,
   showSourceActionError,
   sourceActionLabel,
-  type StudioInspectorContext,
   studioPaletteMime,
   StudioPaletteTransfer,
 } from './StudioVisualEditing'
@@ -188,7 +187,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let fileTree: ReturnType<typeof mountStudioFileTree> | undefined
     let inspected: StudioInspectorSelection | undefined
     let inspection: StudioRenderInspection | undefined
-    let inspectorContext: StudioInspectorContext = 'Layout'
     let inspectorRequestRevision = 0
     let previewManifest = handshake.previewManifest
     const searchDocuments = new Map<string, { content: string; sourceVersion: string }>()
@@ -533,6 +531,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       view.appPicker.disabled = true
       view.status.dataset['state'] = 'compiling'
       view.status.textContent = `Opening ${selected.appName}…`
+      const loadingTimer = setTimeout(() => {
+        const heading = view.globalLoading.querySelector<HTMLElement>('strong')
+        if (heading !== null) {
+          heading.textContent = `Switching to ${selected.appName}…`
+        }
+        view.globalLoading.hidden = false
+      }, 300)
       try {
         const transition = await StudioApiClient.switchApp({
           appName: selected.appName,
@@ -541,6 +546,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         })
         window.location.assign(StudioApiRoutes.transitionUrl(transition, new URL(window.location.href)))
       } catch (error) {
+        clearTimeout(loadingTimer)
+        view.globalLoading.hidden = true
         view.appPicker.disabled = false
         view.appPicker.value = String(currentIndex)
         showSourceActionError(view.status, error)
@@ -678,11 +685,11 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       const scenarioPanel = document.createElement('section')
       scenarioPanel.className = 'studio-scenario-inspector'
       renderScenarioInspector(scenarioPanel, activePreview.current())
+      view.scenarioInspector.replaceChildren(scenarioPanel)
       const sourcePanel = document.createElement('section')
-      renderInspectorPanel(sourcePanel, {
+      renderInspectorAccordions(sourcePanel, {
         busy: sourceActionBusy,
         canUndo: undoCheckpoints.at(-1)?.path === activePath,
-        context: inspectorContext,
         currentSourceVersion: activeFile?.sourceVersion,
         inspection,
         onAction: action => {
@@ -693,7 +700,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         onUndo: () => void undoLatestSourceAction(),
         selection: inspected,
       })
-      view.inspector.replaceChildren(scenarioPanel, sourcePanel)
+      view.inspector.replaceChildren(sourcePanel)
       renderDesignEditor()
     }
 
@@ -1161,20 +1168,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         identity,
       )
     })
-
-    for (const button of view.inspectorTabs.querySelectorAll<HTMLButtonElement>('[data-inspector-context]')) {
-      button.addEventListener('click', () => {
-        inspectorContext = button.dataset['inspectorContext'] as StudioInspectorContext
-        view.inspectorTabs.querySelectorAll('[data-inspector-context]')
-          .forEach(candidate => candidate.removeAttribute('aria-current'))
-        button.setAttribute('aria-current', 'true')
-        renderInspector()
-      })
-    }
-    view.inspectorTabs.querySelector<HTMLButtonElement>('[data-inspector-context]')?.setAttribute(
-      'aria-current',
-      'true',
-    )
 
     for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('[data-drawer-tab]')) {
       button.addEventListener('click', () => selectDrawer(button.dataset['drawerTab'] as StudioDrawerTab))

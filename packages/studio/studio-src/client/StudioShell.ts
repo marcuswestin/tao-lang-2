@@ -16,8 +16,8 @@ export type StudioClientView = {
   editor: HTMLElement
   editorTabs: HTMLElement
   files: HTMLElement
+  globalLoading: HTMLElement
   inspector: HTMLElement
-  inspectorTabs: HTMLElement
   interactionMode: HTMLButtonElement
   preview: HTMLElement
   project: HTMLButtonElement
@@ -25,6 +25,7 @@ export type StudioClientView = {
   rail: HTMLElement
   reload: HTMLButtonElement
   screens: HTMLElement
+  scenarioInspector: HTMLElement
   searchInput: HTMLInputElement
   searchResults: HTMLElement
   status: HTMLElement
@@ -113,12 +114,18 @@ export function studioShellMarkup(options: StudioShellOptions = {}): string {
         <div class="studio-divider studio-divider-left" data-divider="left" role="separator" aria-orientation="vertical"></div>
         <section class="studio-center">
           <aside class="studio-inspector studio-pane-right" aria-label="Inspector">
-            <nav class="studio-inspector-tabs" aria-label="Inspector contexts">
-              ${inspectorTab('Layout')}${inspectorTab('Style')}${inspectorTab('Data')}${inspectorTab('Actions')}
-              <button class="studio-pane-collapse studio-collapse-right" type="button" aria-label="Collapse inspector" title="Collapse inspector">‹</button>
-            </nav>
-            <div class="studio-inspector-tao-context"></div>
-            <div class="studio-inspector-content"></div>
+            <section class="studio-inspector-pane studio-environment-pane" aria-label="Environment and scenario">
+              <header class="studio-inspector-pane-header"><strong>Environment &amp; scenario</strong></header>
+              <div class="studio-scenario-inspector-content"></div>
+            </section>
+            <section class="studio-inspector-pane studio-visual-pane" aria-label="Layout, style, data, and actions">
+              <header class="studio-inspector-pane-header">
+                <strong>Selection</strong>
+                <button class="studio-pane-collapse studio-collapse-right" type="button" aria-label="Collapse inspector" title="Collapse inspector">‹</button>
+              </header>
+              <div class="studio-inspector-tao-context"></div>
+              <div class="studio-inspector-content"></div>
+            </section>
           </aside>
           <div class="studio-divider studio-divider-right" data-divider="right" role="separator" aria-orientation="vertical"></div>
           <section class="studio-workbench">
@@ -143,6 +150,10 @@ export function studioShellMarkup(options: StudioShellOptions = {}): string {
       <section class="studio-command-overlay" hidden aria-label="Command palette">
         <label><span>Command</span><input type="search" placeholder="Files, views, scenarios, commands, insertions"></label>
         <div class="studio-command-results" role="listbox"></div>
+      </section>
+      <section class="studio-global-loading" hidden aria-live="assertive" aria-label="Studio is loading" role="status">
+        <span class="studio-global-loading-spinner" aria-hidden="true"></span>
+        <span><strong>Switching app…</strong><small>Please wait while Studio prepares the new preview.</small></span>
       </section>
     </section>
   `
@@ -175,8 +186,8 @@ export function createStudioShell(
     editor: requiredElement(root, '.studio-editor'),
     editorTabs: requiredElement(root, '.studio-editor-tabs'),
     files: requiredElement(root, '.studio-files'),
+    globalLoading: requiredElement(root, '.studio-global-loading'),
     inspector: requiredElement(root, '.studio-inspector-content'),
-    inspectorTabs: requiredElement(root, '.studio-inspector-tabs'),
     interactionMode: requiredButton(root, '.studio-interaction-mode'),
     preview,
     project: requiredButton(root, '.studio-project'),
@@ -184,6 +195,7 @@ export function createStudioShell(
     rail: requiredElement(root, '.studio-rail'),
     reload: requiredButton(root, '.studio-reload'),
     screens: requiredElement(root, '.studio-screens'),
+    scenarioInspector: requiredElement(root, '.studio-scenario-inspector-content'),
     searchInput: requiredInput(root, '.studio-search-input'),
     searchResults: requiredElement(root, '.studio-search-results'),
     status: requiredElement(root, '.studio-status'),
@@ -211,10 +223,6 @@ function railButton(panel: string, label: string, icon: string): string {
 
 function drawerTab(label: string): string {
   return `<button data-drawer-tab="${label}" type="button">${label}</button>`
-}
-
-function inspectorTab(label: string): string {
-  return `<button data-inspector-context="${label}" type="button">${label}</button>`
 }
 
 function configurePanes(root: HTMLElement): { showLeft: () => void } {
