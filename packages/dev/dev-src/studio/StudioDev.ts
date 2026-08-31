@@ -40,6 +40,7 @@ export type StudioDevOptions = {
 /** StudioDev exposes narrow lifecycle seams for focused developer-tool tests. */
 export const StudioDev = {
   testing: {
+    addStopSignalHandlers,
     cleanup: cleanupStudioDev,
     createProjectOpeners,
     preferredExpoPort,
@@ -60,8 +61,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       finish?.(exitCode)
     }
   }
-  const removeSigint = Platform.onProcessSignal('SIGINT', () => stop(130))
-  const removeSigterm = Platform.onProcessSignal('SIGTERM', () => stop(143))
+  const removeStopSignalHandlers = addStopSignalHandlers(stop)
   let native: StartedStudioNative | undefined
   let server: StartedStudioServer | undefined
   let foundationModels: AppleFoundationModelsService | undefined
@@ -146,8 +146,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     HCI.logProcessError('studio', Errors.formatForLog(error))
     return 1
   } finally {
-    removeSigint()
-    removeSigterm()
+    removeStopSignalHandlers()
     await cleanupStudioDev([
       () => native?.stop(),
       () => studioClientReload?.close(),
@@ -159,6 +158,22 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
           HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
         }),
     ])
+  }
+}
+
+function addStopSignalHandlers(
+  stop: (exitCode: number) => void,
+  onSignal = Platform.onProcessSignal,
+): () => void {
+  const removeHandlers = [
+    onSignal('SIGHUP', () => stop(129)),
+    onSignal('SIGINT', () => stop(130)),
+    onSignal('SIGTERM', () => stop(143)),
+  ]
+  return () => {
+    for (const removeHandler of removeHandlers) {
+      removeHandler()
+    }
   }
 }
 

@@ -1,9 +1,13 @@
 import { CLI, Platform, Time } from '@shared'
 
-export type StudioProcessTree = Pick<
-  CLI.StartedCommand,
-  'closeOutput' | 'dispose' | 'exitCode' | 'kill' | 'signalCode' | 'waitForClose'
->
+export type StudioProcessTree =
+  & Pick<
+    CLI.StartedCommand,
+    'closeOutput' | 'dispose' | 'exitCode' | 'kill' | 'onceClose' | 'onceError' | 'signalCode' | 'waitForClose'
+  >
+  & {
+    isRunning: () => boolean
+  }
 
 export type StudioProcessTreeSpec = Pick<CLI.CommandSpec, 'args' | 'cwd' | 'env' | 'onOutput'> & {
   onError?: (error: Error) => void
@@ -50,6 +54,20 @@ export function startStudioProcessTree(command: string, spec: StudioProcessTreeS
       const kill = processGroupKillSpec(pid, signal)
       return Platform.spawnSync(kill.command, { args: kill.args, stdio: 'ignore' }).status === 0
     },
+    isRunning() {
+      const pid = child.pid
+      if (pid === undefined) {
+        return false
+      }
+      const probe = processGroupProbeSpec(pid)
+      return Platform.spawnSync(probe.command, { args: probe.args, stdio: 'ignore' }).status === 0
+    },
+    onceClose(listener) {
+      child.once('close', listener)
+    },
+    onceError(listener) {
+      child.once('error', listener)
+    },
     get signalCode() {
       return child.signalCode
     },
@@ -69,12 +87,17 @@ export async function stopStudioProcessTree(
   const waitForClose = options.waitForClose ?? finalizeStudioProcessTree(command)
   const closed = waitForClose().then(() => true)
   command.kill('SIGTERM')
-  const gracefullyClosed = command.exitCode !== null || command.signalCode !== null
-    ? await closed
-    : await Promise.race([
-      closed,
-      (options.sleep ?? Time.sleep)(options.timeoutMs ?? defaultStopTimeoutMs).then(() => false),
+  const sleep = options.sleep ?? Time.sleep
+  const stopped = Promise.all([
+    closed,
+    waitForStudioProcessGroupExit(command, sleep),
+  ]).then(() => true)
+  const gracefullyClosed = command.isRunning()
+    ? await Promise.race([
+      stopped,
+      sleep(options.timeoutMs ?? defaultStopTimeoutMs).then(() => false),
     ])
+    : await closed
   if (!gracefullyClosed) {
     command.kill('SIGKILL')
   }
@@ -102,4 +125,17 @@ export function processGroupKillSpec(
   signal: Platform.ProcessSignal,
 ): { args: string[]; command: string } {
   return { args: [`-${signal.replace(/^SIG/, '')}`, '--', `-${pid}`], command: '/bin/kill' }
+}
+
+export function processGroupProbeSpec(pid: number): { args: string[]; command: string } {
+  return { args: ['-0', '--', `-${pid}`], command: '/bin/kill' }
+}
+
+async function waitForStudioProcessGroupExit(
+  command: StudioProcessTree,
+  sleep: (milliseconds: number) => Promise<void>,
+): Promise<void> {
+  while (command.isRunning()) {
+    await sleep(25)
+  }
 }

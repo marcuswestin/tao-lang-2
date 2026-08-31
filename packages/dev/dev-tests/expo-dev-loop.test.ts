@@ -1,9 +1,9 @@
-import { Errors } from '@shared'
+import { CLI, Errors, FS, Time } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { OutputText } from '../dev-src/cli/OutputText'
 import { DevLoopTUI } from '../dev-src/expo-dev-loop/DevLoopTUI'
 import { createExpoConfig } from '../dev-src/expo-dev-loop/expo-runner/expo-config'
-import { formatExpoExitFailure } from '../dev-src/expo-dev-loop/expo-runner/expo-server'
+import { ExpoServer, formatExpoExitFailure } from '../dev-src/expo-dev-loop/expo-runner/expo-server'
 import { ExpoRunner } from '../dev-src/expo-dev-loop/expo-runner/ExpoRunner'
 import { parseIfconfigIPv4, preferredLanIPv4 } from '../dev-src/expo-dev-loop/expo-runner/lan-host'
 import {
@@ -65,6 +65,50 @@ Describe('Expo dev-loop command helpers', () => {
       'Error: Cannot find module ./publicFolder',
       'Expo exited with code=1.',
     ].join('\n'))
+  })
+
+  Test('stops the complete Expo subprocess tree when Metro outlives its launcher', async () => {
+    const root = await FS.mkTmpDir(FS.resolvePath('tao-expo-process-tree-', FS.tmpdir()))
+    const descendantPidPath = FS.resolvePath('descendant.pid', root)
+    const shellScript = [
+      '(trap "" TERM; while :; do sleep 1; done) &',
+      'descendant=$!;',
+      'echo "$descendant" > "$0";',
+      'wait "$descendant"',
+    ].join(' ')
+    const server = new ExpoServer(root, createExpoConfig(49_153), async () => {}, {
+      command: { argsPrefix: ['-c', shellScript, descendantPidPath], executable: '/bin/sh' },
+      logRoot: root,
+      runtimeToolchainSourceRoot: root,
+      stopTimeoutMs: 25,
+    })
+    let descendantPid: number | undefined
+    try {
+      await server.start()
+      for (let attempt = 0; attempt < 100 && descendantPid === undefined; attempt += 1) {
+        if (await FS.isFile(descendantPidPath)) {
+          const candidate = Number((await FS.readText(descendantPidPath)).trim())
+          descendantPid = Number.isInteger(candidate) && candidate > 0 ? candidate : undefined
+        }
+        await Time.sleep(10)
+      }
+      if (descendantPid === undefined) {
+        throw new Error('The fake Expo launcher did not start its descendant process.')
+      }
+
+      await server.stop()
+
+      for (let attempt = 0; attempt < 100 && await processExists(descendantPid); attempt += 1) {
+        await Time.sleep(10)
+      }
+      Expect(await processExists(descendantPid)).toBe(false)
+    } finally {
+      await server.stop().catch(() => undefined)
+      if (descendantPid !== undefined) {
+        await CLI.run('/bin/kill', { args: ['-KILL', String(descendantPid)] })
+      }
+      await FS.remove(root)
+    }
   })
 })
 
@@ -252,3 +296,7 @@ Describe('Expo dev-loop dashboard layout', () => {
     Expect(layout.columnsPerRow).toBe(1)
   })
 })
+
+async function processExists(pid: number): Promise<boolean> {
+  return (await CLI.run('/bin/kill', { args: ['-0', String(pid)] })).exitCode === 0
+}

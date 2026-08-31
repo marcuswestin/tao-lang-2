@@ -25,6 +25,7 @@ export type ExpoServerOptions = {
   }
   logRoot?: string
   runtimeToolchainSourceRoot?: string
+  stopTimeoutMs?: number
 }
 
 export type ExpoRunnerSession = ReturnType<typeof createSessionFromConfig>

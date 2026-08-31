@@ -7,6 +7,7 @@ import { createRecentProjectStore, StudioDev } from '../dev-src/studio/StudioDev
 import { StudioNative } from '../dev-src/studio/StudioNative'
 import { packagedExpoCommand } from '../dev-src/studio/StudioPackagedService'
 import { StudioPreviewRuntime } from '../dev-src/studio/StudioPreviewRuntime'
+import { stopStudioProcessTree, type StudioProcessTree } from '../dev-src/studio/StudioProcessTree'
 import { StudioSmoke } from '../dev-src/studio/StudioSmoke'
 import { StudioTestProcessOutput, StudioTestProcessRunner } from '../dev-src/studio/StudioTestProcessRunner'
 
@@ -289,6 +290,43 @@ Describe('Studio native wrapper foundation', () => {
     Expect(fake.events).toEqual(['kill SIGTERM', 'kill SIGKILL', 'close-output', 'dispose'])
   })
 
+  Test('forces surviving descendants closed after their process-group leader exits', async () => {
+    const events: string[] = []
+    let running = true
+    let resolveClose!: (result: CLI.CommandCloseResult) => void
+    const close = new Promise<CLI.CommandCloseResult>(resolve => {
+      resolveClose = resolve
+    })
+    const command: StudioProcessTree = {
+      closeOutput: async () => {
+        events.push('close-output')
+      },
+      dispose: () => events.push('dispose'),
+      exitCode: null,
+      isRunning: () => running,
+      kill(signal = 'SIGTERM') {
+        events.push(`kill ${signal}`)
+        if (signal === 'SIGTERM') {
+          resolveClose({ exitCode: 0, signal: null })
+        } else {
+          running = false
+        }
+        return true
+      },
+      onceClose() {},
+      onceError() {},
+      signalCode: null,
+      waitForClose: () => close,
+    }
+
+    await stopStudioProcessTree(command, { sleep: async () => {} })
+
+    Expect(events[0]).toBe('kill SIGTERM')
+    Expect(events).toContain('kill SIGKILL')
+    Expect(events).toContain('close-output')
+    Expect(events).toContain('dispose')
+  })
+
   Test('signals the complete detached native process group', () => {
     Expect(StudioNative.testing.processGroupKillSpec(4312, 'SIGKILL')).toEqual({
       args: ['-KILL', '--', '-4312'],
@@ -382,6 +420,27 @@ Describe('Studio smoke resource isolation', () => {
 
   Test('allocates every Studio preview server from an ephemeral port', () => {
     Expect(StudioDev.testing.preferredExpoPort()).toBe(0)
+  })
+
+  Test('cleans up Studio resources when its terminal hangs up', () => {
+    const handlers = new Map<Platform.ProcessSignal, () => void>()
+    const removed: Platform.ProcessSignal[] = []
+    const stops: number[] = []
+    const remove = StudioDev.testing.addStopSignalHandlers(
+      exitCode => stops.push(exitCode),
+      (signal, listener) => {
+        handlers.set(signal, listener)
+        return () => removed.push(signal)
+      },
+    )
+
+    handlers.get('SIGHUP')?.()
+    handlers.get('SIGINT')?.()
+    handlers.get('SIGTERM')?.()
+    remove()
+
+    Expect(stops).toEqual([129, 130, 143])
+    Expect(removed).toEqual(['SIGHUP', 'SIGINT', 'SIGTERM'])
   })
 
   Test('persists and reloads validated recent projects in device-local Studio state', async () => {
@@ -536,7 +595,12 @@ function commandResult(command: string, spec: CLI.CommandSpec, exitCode: number)
 }
 
 function fakeCommand(graceful: boolean): {
-  command: Pick<CLI.StartedCommand, 'closeOutput' | 'dispose' | 'exitCode' | 'kill' | 'signalCode' | 'waitForClose'>
+  command:
+    & Pick<
+      CLI.StartedCommand,
+      'closeOutput' | 'dispose' | 'exitCode' | 'kill' | 'onceClose' | 'onceError' | 'signalCode' | 'waitForClose'
+    >
+    & { isRunning: () => boolean }
   events: string[]
 } {
   const events: string[] = []
@@ -568,6 +632,11 @@ function fakeCommand(graceful: boolean): {
         }
         return true
       },
+      isRunning() {
+        return exitCode === null && signalCode === null
+      },
+      onceClose() {},
+      onceError() {},
       get signalCode() {
         return signalCode
       },

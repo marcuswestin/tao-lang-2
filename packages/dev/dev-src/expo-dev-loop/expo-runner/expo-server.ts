@@ -1,5 +1,12 @@
-import { CLI, FS, Repo, Time } from '@shared'
+import { FS, Repo } from '@shared'
 import { OutputText } from '../../cli/OutputText'
+import {
+  finalizeStudioProcessTree,
+  startStudioProcessTree,
+  stopStudioProcessTree,
+  type StudioProcessTree,
+  type WaitForStudioProcessTreeClose,
+} from '../../studio/StudioProcessTree'
 import { DevLoopTUI } from '../DevLoopTUI'
 import type { ExpoSessionConfig } from './expo-config'
 import type { ExpoServerOptions } from './ExpoRunner'
@@ -9,7 +16,8 @@ const EXPO_FAILURE_OUTPUT_LINE_LIMIT = 40
 
 /** ExpoServer owns the Expo CLI process and its log output. */
 export class ExpoServer {
-  private child?: CLI.StartedCommand
+  private child?: StudioProcessTree
+  private childClose?: WaitForStudioProcessTreeClose
   private closeOutputAndLogPromise?: Promise<void>
   private logFile?: FS.FileHandle
   private recentOutputChunks: string[] = []
@@ -36,7 +44,7 @@ export class ExpoServer {
     await FS.mkdir(FS.dirname(logPath))
     this.logFile = await FS.openAppend(logPath)
     const launcher = this.options.command ?? { executable: 'bunx' }
-    this.child = CLI.start(launcher.executable, {
+    this.child = startStudioProcessTree(launcher.executable, {
       args: [...(launcher.argsPrefix ?? []), ...this.config.EXPO_START_ARGS],
       cwd: this.runtimeRoot,
       env: {
@@ -50,6 +58,7 @@ export class ExpoServer {
         void this.logFile?.write(chunk)
       },
     })
+    this.childClose = finalizeStudioProcessTree(this.child)
     this.child.onceClose((exitCode, signal) => {
       void this.closeOutputAndLog()
       if (!this.stopping) {
@@ -74,14 +83,10 @@ export class ExpoServer {
       return
     }
     this.stopping = true
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill('SIGTERM')
-      await Promise.race([child.waitForClose(), Time.sleep(this.config.EXPO_STOP_TIMEOUT_MS)])
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill('SIGKILL')
-        await child.waitForClose()
-      }
-    }
+    await stopStudioProcessTree(child, {
+      timeoutMs: this.options.stopTimeoutMs ?? this.config.EXPO_STOP_TIMEOUT_MS,
+      waitForClose: this.childClose,
+    })
     await this.closeOutputAndLog()
   }
 
