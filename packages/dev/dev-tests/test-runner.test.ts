@@ -14,6 +14,17 @@ Describe('test runner suite scheduling', () => {
     Expect(devSuite?.args).toContain('--test-name-pattern=one package only')
   })
 
+  Test('runs performance checks as a dashboard suite', async () => {
+    const suites = await TestRunner.discoverTestSuites()
+    const performanceSuite = suites.find(suite => suite.name === 'performance-checks')
+
+    Expect(
+      performanceSuite?.args.some(argument =>
+        argument.endsWith('/packages/dev/performance-checks/language-performance.test.ts')
+      ),
+    ).toBe(true)
+  })
+
   Test('a costly suite reserves the whole capacity before cheap suites start', async () => {
     const events: string[] = []
     const states = [suiteState('cheap-a'), suiteState('tao-apps', 0.1), suiteState('cheap-b')]

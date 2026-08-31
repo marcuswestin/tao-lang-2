@@ -20,13 +20,13 @@ Describe('language performance reporting', () => {
     Expect(() => parseIterations('1.5')).toThrow('Performance iterations must be a positive integer')
   })
 
-  Test('keeps benchmark checks separate and forwards recipe iterations', async () => {
+  Test('keeps the benchmark command guarded without a competing parallel check', async () => {
     const justfile = await FS.readText(Repo.resolvePath('Justfile'))
 
     Expect(justfile).toContain('bench iterations="10": _bench-check')
     Expect(justfile).toContain('language-performance.ts "{{ iterations }}"')
-    Expect(justfile).toContain('_parallel-check:')
-    Expect(justfile).toContain('_parallel-verify-check:')
+    Expect(justfile).toMatch(/_parallel-check: (?!.*_bench-check)/)
+    Expect(justfile).toMatch(/_parallel-verify-check: (?!.*_bench-check)/)
     Expect(justfile).toContain('_bench-check:')
     Expect(justfile).not.toMatch(/_test PATTERN="":\n(?:    .*\n)*    .*performance-checks/)
   })

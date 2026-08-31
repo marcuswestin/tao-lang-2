@@ -91,6 +91,7 @@ async function discoverTestSuites(pattern = ''): Promise<TestSuite[]> {
     suites.push(...packageSuites(packageName, testFiles, pattern))
   }
 
+  suites.push(...performanceCheckSuites(pattern))
   suites.push(...runtimeJestSuites(pattern))
   suites.push(...taoAppsSuites(pattern))
   return suites
@@ -197,6 +198,14 @@ function bunSuite(name: string, testFiles: string[], pattern: string): TestSuite
     ...(pattern ? ['--pass-with-no-tests', `--test-name-pattern=${pattern}`] : []),
   ]
   return { name, command: 'bun', args, cwd: Shared.Repo.resolvePath() }
+}
+
+function performanceCheckSuites(pattern: string): TestSuite[] {
+  return [bunSuite(
+    'performance-checks',
+    [Shared.Repo.resolvePath('packages/dev/performance-checks/language-performance.test.ts')],
+    pattern,
+  )]
 }
 
 function runtimeJestSuites(pattern: string): TestSuite[] {
