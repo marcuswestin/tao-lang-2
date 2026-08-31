@@ -2,7 +2,9 @@ import type TR from '@runtime/TR'
 
 const serverEntity = {
   Checkpoint: 'Checkpoints',
+  DesignToken: 'DesignTokens',
   File: 'Files',
+  Problem: 'Problems',
   Scenario: 'Scenarios',
   Screen: 'Screens',
   View: 'Views',
@@ -10,7 +12,19 @@ const serverEntity = {
 
 const fields = {
   Checkpoint: ['AfterVersion', 'BeforeVersion', 'Path', 'Status'],
+  DesignToken: ['Name', 'SourcePath', 'SourceVersion', 'Value'],
   File: ['DiagnosticCount', 'Dirty', 'Folder', 'Name', 'ParentPath', 'Path', 'Version'],
+  Problem: [
+    'EndCharacter',
+    'EndLine',
+    'Message',
+    'ProjectFile',
+    'Source',
+    'SourcePath',
+    'SourceVersion',
+    'StartCharacter',
+    'StartLine',
+  ],
   Scenario: ['Group', 'Name', 'SourcePath', 'SubjectId'],
   Screen: ['Name', 'SourcePath'],
   View: ['Name', 'SourcePath'],
@@ -57,6 +71,7 @@ export function StudioServerProvider(options: StudioServerProviderOptions = {}):
         },
         subscribe(observer) {
           let completed = 0
+          let lastInvalidationRevision = 0
           let requested = 0
           let running: Promise<void> | undefined
           const refresh = (): void => {
@@ -82,7 +97,14 @@ export function StudioServerProvider(options: StudioServerProviderOptions = {}):
           const socket = openSocket(webSocketEndpoint(configuredOrigin, '/events'))
           socket.addEventListener('message', event => {
             const message = parseMessage(event.data)
-            if (message?.type === 'data-invalidated') {
+            if (
+              message?.type === 'data-invalidated'
+              && message.revision !== undefined
+              // A lower revision identifies a newly created server-side datasource generation.
+              // WebSocket delivery is ordered within one generation, so only an equal revision is a duplicate.
+              && message.revision !== lastInvalidationRevision
+            ) {
+              lastInvalidationRevision = message.revision
               refresh()
             }
           })
@@ -106,17 +128,30 @@ async function completeSnapshot(
   origin: string,
   schema: TR.DataProviderContext['schema'],
 ): Promise<string> {
+  const requestedEntities = new Set<StudioEntity>()
+  for (const entity of Object.keys(schema.entities)) {
+    if (entity === 'Diagnostic') {
+      requestedEntities.add('File')
+      continue
+    }
+    if (entity in serverEntity) {
+      requestedEntities.add(entity as StudioEntity)
+    }
+  }
   const entries = await Promise.all(
-    Object.entries(serverEntity).map(async ([entity, remote]) => {
+    [...requestedEntities].map(async entity => {
+      const remote = serverEntity[entity]
       const result = await post<StudioFillResult>(request, endpoint(origin, '/api/data/fill'), { entity: remote })
-      return [entity as StudioEntity, result.rows] as const
+      return [entity, result.rows] as const
     }),
   )
-  const remoteRows = Object.fromEntries(entries) as Record<StudioEntity, readonly Readonly<Record<string, unknown>>[]>
+  const remoteRows = Object.fromEntries(entries) as Partial<
+    Record<StudioEntity, readonly Readonly<Record<string, unknown>>[]>
+  >
   const rows: Record<string, Readonly<Record<string, unknown>>[]> = {}
   for (const entity of Object.keys(schema.entities)) {
     if (entity === 'Diagnostic') {
-      rows[entity] = remoteRows.File.flatMap(file =>
+      rows[entity] = (remoteRows.File ?? []).flatMap(file =>
         ((file['Diagnostics'] as readonly Readonly<Record<string, unknown>>[] | undefined) ?? []).map(diagnostic => ({
           File: storedId('File', file['Id']),
           Id: storedId('Diagnostic', diagnostic['Id']),
@@ -190,10 +225,19 @@ function studioSessionPath(path: string): string {
   return matched === null ? path : `/sessions/${matched[1]}${path}`
 }
 
-function parseMessage(value: unknown): { type?: string } | undefined {
+function parseMessage(value: unknown): { revision?: number; type?: string } | undefined {
   try {
     const parsed = JSON.parse(String(value)) as unknown
-    return typeof parsed === 'object' && parsed !== null ? parsed as { type?: string } : undefined
+    if (typeof parsed !== 'object' || parsed === null) {
+      return undefined
+    }
+    const record = parsed as Readonly<Record<string, unknown>>
+    return {
+      ...(typeof record['revision'] === 'number' && Number.isSafeInteger(record['revision'])
+        ? { revision: record['revision'] }
+        : {}),
+      ...(typeof record['type'] === 'string' ? { type: record['type'] } : {}),
+    }
   } catch {
     return undefined
   }

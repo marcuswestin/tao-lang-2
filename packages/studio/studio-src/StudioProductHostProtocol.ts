@@ -1,14 +1,32 @@
+import type { StudioRenderInspection } from '@source-actions'
 import { StudioApiError } from './client/StudioApiClient'
+import type { StudioProductHostPanels } from './client/StudioPanelProjection'
+import type { StudioInspectorSelection } from './StudioInspector'
+import type { StudioCanonicalSourceAction } from './StudioProtocol'
 import { StudioForeignActionFailure } from './TaoStudioServerActions'
 
 export type StudioProductHostActions = Readonly<{
-  applyActiveCellEnvironment: (environment: StudioProductHostEnvironment) => Promise<void>
+  applyActiveCellEnvironment: (
+    identity: StudioProductHostCellIdentity,
+    environment: StudioProductHostEnvironment,
+  ) => Promise<void>
   changeActiveFile: (content: string) => void
   createFile: (path: string) => Promise<void>
   deleteFile: (path: string, sourceVersion: string) => Promise<void>
+  insertComponent: (component: string) => void
+  insertProjectView: (viewName: string) => void
+  applyInspectorAction: (action: StudioCanonicalSourceAction, proposed: boolean) => Promise<void>
   openFile: (path: string) => Promise<void>
+  openScreen: (subjectId: string) => Promise<void>
+  productPanelAction: (name: string, payload: string) => Promise<void>
   renameFile: (path: string, sourceVersion: string, targetPath: string) => Promise<void>
   selectActiveFile: (anchor: number, head: number) => void
+  undoInspectorAction: () => Promise<void>
+}>
+
+export type StudioProductHostCellIdentity = Readonly<{
+  cellId: string
+  cellRevision: number
 }>
 
 export type StudioProductHostEnvironment = Readonly<{
@@ -32,9 +50,12 @@ export type StudioProductHostState = Readonly<{
     networkErrorStatus?: number
     networkLatencyMs: number
     networkOutcome: StudioProductHostEnvironment['network']['outcome']
+    scenarioModel: string
     scenarioId: string
-    schemeRequested: 'dark' | 'light'
-    schemeStatus: 'inert'
+    schemeCapability: 'fixed-light-native' | 'reactive-browser'
+    schemeRequested: 'dark' | 'light' | 'system'
+    schemeResolved: 'dark' | 'light'
+    schemeSource: 'native-fixed' | 'preference' | 'scenario' | 'system'
     viewportHeight: number
     viewportPresetId?: string
     viewportWidth: number
@@ -48,6 +69,14 @@ export type StudioProductHostState = Readonly<{
   }>
   projectRoot?: string
   revision: number
+  inspector?: Readonly<{
+    busy: boolean
+    canUndo: boolean
+    currentSourceVersion?: string
+    inspection?: StudioRenderInspection
+    selection?: StudioInspectorSelection
+  }>
+  panels?: StudioProductHostPanels
   selectedRender?: Readonly<{
     path: string
     renderId: string
@@ -56,11 +85,21 @@ export type StudioProductHostState = Readonly<{
 }>
 
 type StudioProductHostRequest =
-  | Readonly<{ environment: StudioProductHostEnvironment; kind: 'apply-active-cell-environment' }>
+  | Readonly<{
+    environment: StudioProductHostEnvironment
+    identity: StudioProductHostCellIdentity
+    kind: 'apply-active-cell-environment'
+  }>
+  | Readonly<{ action: StudioCanonicalSourceAction; kind: 'apply-inspector-action'; proposed: boolean }>
   | Readonly<{ kind: 'create-file'; path: string }>
   | Readonly<{ kind: 'delete-file'; path: string; sourceVersion: string }>
+  | Readonly<{ component: string; kind: 'insert-component' }>
+  | Readonly<{ kind: 'insert-project-view'; viewName: string }>
   | Readonly<{ kind: 'open-file'; path: string }>
+  | Readonly<{ kind: 'open-screen'; subjectId: string }>
+  | Readonly<{ kind: 'product-panel-action'; name: string; payload: string }>
   | Readonly<{ kind: 'rename-file'; path: string; sourceVersion: string; targetPath: string }>
+  | Readonly<{ kind: 'undo-inspector-action' }>
 
 type PendingRequest = Readonly<{
   action: StudioProductHostRequest
@@ -104,6 +143,8 @@ export function publishStudioProductHostState(
     ...state,
     activeCell: freezeOptional(state.activeCell),
     activeFile: freezeOptional(state.activeFile),
+    inspector: freezeOptional(state.inspector),
+    panels: freezeOptional(state.panels),
     revision: activeState.revision + 1,
     selectedRender: freezeOptional(state.selectedRender),
   })
@@ -149,11 +190,13 @@ export async function requestStudioProductHostCreateFile(path: string): Promise<
 }
 
 export async function requestStudioProductHostApplyActiveCellEnvironment(
+  identity: StudioProductHostCellIdentity,
   environment: StudioProductHostEnvironment,
 ): Promise<void> {
+  assertStudioProductHostCellIdentity(identity)
   assertStudioProductHostEnvironment(environment)
   await requestConflictAction(
-    { environment, kind: 'apply-active-cell-environment' },
+    { environment, identity, kind: 'apply-active-cell-environment' },
     'This preview changed while its environment was being edited.',
   )
 }
@@ -167,6 +210,40 @@ export async function requestStudioProductHostDeleteFile(path: string, sourceVer
 export async function requestStudioProductHostOpenFile(path: string): Promise<void> {
   assertStudioProductHostPath(path)
   await request({ kind: 'open-file', path })
+}
+
+export async function requestStudioProductHostInsertComponent(component: string): Promise<void> {
+  assertNonEmptyProductHostIdentity(component, 'component')
+  await request({ component, kind: 'insert-component' })
+}
+
+export async function requestStudioProductHostInsertProjectView(viewName: string): Promise<void> {
+  assertNonEmptyProductHostIdentity(viewName, 'project view')
+  await request({ kind: 'insert-project-view', viewName })
+}
+
+export async function requestStudioProductHostOpenScreen(subjectId: string): Promise<void> {
+  assertNonEmptyProductHostIdentity(subjectId, 'screen')
+  await request({ kind: 'open-screen', subjectId })
+}
+
+export async function requestStudioProductHostApplyInspectorAction(
+  action: StudioCanonicalSourceAction,
+  proposed: boolean,
+): Promise<void> {
+  await request({ action, kind: 'apply-inspector-action', proposed })
+}
+
+export async function requestStudioProductHostUndoInspectorAction(): Promise<void> {
+  await request({ kind: 'undo-inspector-action' })
+}
+
+export async function requestStudioProductHostPanelAction(name: string, payload: string): Promise<void> {
+  assertNonEmptyProductHostIdentity(name, 'panel')
+  if (payload.length > 1_000_000) {
+    throw new Error('Tao Studio panel action payloads must be at most one megabyte.')
+  }
+  await request({ kind: 'product-panel-action', name, payload })
 }
 
 export async function requestStudioProductHostRenameFile(
@@ -206,7 +283,7 @@ async function requestConflictAction(action: StudioProductHostRequest, message: 
     await request(action)
   } catch (error) {
     if (error instanceof StudioApiError && error.status === 409) {
-      throw new StudioForeignActionFailure('Conflict', message, error.status)
+      throw new StudioForeignActionFailure('Conflict', message, error.status, error.details)
     }
     throw error
   }
@@ -214,8 +291,11 @@ async function requestConflictAction(action: StudioProductHostRequest, message: 
 
 async function execute(actions: StudioProductHostActions, action: StudioProductHostRequest): Promise<void> {
   switch (action.kind) {
+    case 'apply-inspector-action':
+      await actions.applyInspectorAction(action.action, action.proposed)
+      return
     case 'apply-active-cell-environment':
-      await actions.applyActiveCellEnvironment(action.environment)
+      await actions.applyActiveCellEnvironment(action.identity, action.environment)
       return
     case 'create-file':
       await actions.createFile(action.path)
@@ -223,11 +303,38 @@ async function execute(actions: StudioProductHostActions, action: StudioProductH
     case 'delete-file':
       await actions.deleteFile(action.path, action.sourceVersion)
       return
+    case 'insert-component':
+      actions.insertComponent(action.component)
+      return
+    case 'insert-project-view':
+      actions.insertProjectView(action.viewName)
+      return
     case 'open-file':
       await actions.openFile(action.path)
       return
+    case 'open-screen':
+      await actions.openScreen(action.subjectId)
+      return
+    case 'product-panel-action':
+      await actions.productPanelAction(action.name, action.payload)
+      return
     case 'rename-file':
       await actions.renameFile(action.path, action.sourceVersion, action.targetPath)
+      return
+    case 'undo-inspector-action':
+      await actions.undoInspectorAction()
+  }
+}
+
+function assertNonEmptyProductHostIdentity(value: string, label: string): void {
+  if (value.trim() === '' || value.length > 1_024) {
+    throw new Error(`Tao Studio ${label} actions require a stable identity.`)
+  }
+}
+
+function assertStudioProductHostCellIdentity(identity: StudioProductHostCellIdentity): void {
+  if (identity.cellId.trim() === '' || !Number.isInteger(identity.cellRevision) || identity.cellRevision < 0) {
+    throw new Error('Tao Studio scenario actions require a current cell identity and revision.')
   }
 }
 

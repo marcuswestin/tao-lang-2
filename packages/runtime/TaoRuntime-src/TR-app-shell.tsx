@@ -2,10 +2,10 @@ import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
 import { DevMenu } from './dev-runtime/TR-dev-menu'
 import { DataLoadRecoveryBoundary } from './TR-data-load-recovery'
-import type { TaoLayoutProps } from './TR-layout'
 import { mountedDesignStyle } from './TR-mounted-design'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { requireReactNativeRuntime } from './TR-react-native'
+import { SchemeControls, type TaoScheme } from './TR-scheme'
 import type { TaoProps } from './TR-TaoProps'
 
 type AppShellProps = {
@@ -53,6 +53,7 @@ function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContext
   const platformOS = RN.Platform?.OS ?? 'web'
   // Subscribing to dev mode re-renders the frame on every change, including layout-bounds toggles.
   const devMode = Dev.useMode()
+  const scheme = SchemeControls.use()
 
   return React.createElement(
     RN.KeyboardAvoidingView,
@@ -63,7 +64,7 @@ function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContext
     React.createElement(
       DataLoadRecoveryBoundary,
       null,
-      appRootChildren(props.children, devMode),
+      appRootChildren(props.children, devMode, scheme.resolved),
     ),
     devMode.enabled ? React.createElement(DevMenu) : null,
   )
@@ -117,15 +118,16 @@ export function AppSurfaceFrame(props: {
 // The generated app root reaches AppShell as a stable `children` element, so React skips
 // re-rendering that subtree when only the frame re-renders. Cloning the root hands React fresh
 // elements for dev-mode repaints and supplies default Tao layout props to root injected layouts.
-function appRootChildren(children: React.ReactNode, devMode: unknown): React.ReactNode {
+function appRootChildren(children: React.ReactNode, devMode: unknown, scheme: TaoScheme): React.ReactNode {
   return React.Children.map(children, child => {
     if (!React.isValidElement(child)) {
       return child
     }
 
-    const childProps = child.props as { __tao?: TaoLayoutProps }
-    return React.cloneElement(child as React.ReactElement<{ __tao?: TaoLayoutProps; __taoDevMode?: unknown }>, {
-      __tao: ParentDirectionContext.propsWithDefault(childProps.__tao),
+    const childProps = child.props as { __tao?: TaoProps }
+    const taoProps: TaoProps = { ...ParentDirectionContext.propsWithDefault(childProps.__tao), scheme }
+    return React.cloneElement(child as React.ReactElement<{ __tao?: TaoProps; __taoDevMode?: unknown }>, {
+      __tao: taoProps,
       __taoDevMode: devMode,
     })
   })

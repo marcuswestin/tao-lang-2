@@ -10,16 +10,15 @@ import {
   TaoStudioOfflineError,
 } from '../TaoRuntime-src/TR-studio-environment'
 
-const inertScheme = {
-  capability: 'inert',
-  reason: 'Reactive Scheme and Appearance are not implemented.',
+const scenarioScheme = {
   requested: 'dark',
+  source: 'scenario',
 } as const
 
 function environment(overrides: Partial<TaoStudioEnvironment['network']> = {}): TaoStudioEnvironment {
   return {
     network: { mode: 'online', ...overrides },
-    scheme: inertScheme,
+    scheme: scenarioScheme,
     version: studioEnvironmentVersion,
   }
 }
@@ -263,15 +262,49 @@ Describe('Studio isolated provider environment', () => {
     await second.fill!(fillRequest('Story'), collectingOps())
   })
 
-  Test('keeps Scheme explicitly inert and returns the same immutable configuration', () => {
-    Expect(TR.Studio.Environment.Scheme(inertScheme)).toBe(inertScheme)
+  Test('resolves Scheme through the shared browser and fixed-Light native semantics', () => {
+    Expect(TR.Studio.Environment.Scheme(
+      scenarioScheme,
+      { platform: 'web', system: 'light' },
+    )).toEqual({
+      capability: 'reactive-browser',
+      requested: 'dark',
+      resolved: 'dark',
+      source: 'scenario',
+    })
+    Expect(TR.Studio.Environment.Scheme(
+      scenarioScheme,
+      { platform: 'native', system: 'dark' },
+    )).toEqual({
+      capability: 'fixed-light-native',
+      requested: 'dark',
+      resolved: 'light',
+      source: 'native-fixed',
+    })
     Expect(() =>
       TR.Studio.Environment.Scheme({
-        capability: 'inert',
-        reason: '',
         requested: 'system',
-      })
-    ).toThrow('explicitly inert with a visible reason')
+        source: 'scenario',
+      }, { platform: 'web', system: 'light' })
+    ).toThrow('valid requested appearance and request source')
+  })
+
+  Test('mounts a replayed Scheme from its captured resolution before live environment precedence', () => {
+    Expect(TR.Studio.Environment.Scheme({
+      replay: {
+        capability: 'reactive-browser',
+        requested: 'system',
+        resolved: 'dark',
+        source: 'system',
+      },
+      requested: 'light',
+      source: 'scenario',
+    }, { platform: 'web', system: 'light' })).toEqual({
+      capability: 'reactive-browser',
+      requested: 'system',
+      resolved: 'dark',
+      source: 'system',
+    })
   })
 })
 

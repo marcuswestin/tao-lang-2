@@ -9,7 +9,12 @@ export function mountedDesignStyle(
   direction?: TaoLayoutDirection,
 ): TaoResolvedLayoutStyle | undefined {
   const design = mountedApp(props)?.design
-  const resolved = DesignControls.resolve(design, undefined, elementDefault)
+  const resolved = DesignControls.resolve(
+    design,
+    undefined,
+    elementDefault,
+    schemeInProps(props),
+  )
   const layoutStyle = resolved.layout
     ? LayoutControls.resolve({ direction, entries: resolved.layout.entries })
     : undefined
@@ -17,6 +22,10 @@ export function mountedDesignStyle(
     return undefined
   }
   return { ...layoutStyle, ...resolved.style }
+}
+
+function schemeInProps(props: TaoProps | undefined): 'dark' | 'light' {
+  return props?.scheme ?? (props?.callerProps === undefined ? 'light' : schemeInProps(props.callerProps))
 }
 
 function mountedApp(props: TaoProps | undefined): NonNullable<TaoProps['app']> | undefined {

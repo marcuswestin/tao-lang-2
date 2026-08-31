@@ -12,6 +12,7 @@ import {
   StudioProjectSession,
   type StudioRenameFileRequest,
   type StudioSessionEvent,
+  StudioSourceActionConflictError,
   StudioSourceConflictError,
 } from './StudioProjectSession'
 import {
@@ -533,7 +534,7 @@ function designRequest(value: unknown): { path: string; sourceVersion: string } 
 }
 
 function dataFillRequest(value: unknown): StudioServerFillRequest {
-  const entities = new Set(['Checkpoints', 'Files', 'Scenarios', 'Screens', 'Views'])
+  const entities = new Set(['Checkpoints', 'DesignTokens', 'Files', 'Problems', 'Scenarios', 'Screens', 'Views'])
   if (!isRecord(value) || typeof value['entity'] !== 'string' || !entities.has(value['entity'])) {
     throw new Errors.UserInputError('Expected a valid StudioServer entity fill request.')
   }
@@ -674,18 +675,25 @@ function errorResponse(
   options: StudioServerOptions,
   error: unknown,
 ): Response {
-  const status = error instanceof StudioSourceConflictError || error instanceof StudioMatrixConflictError
+  const status = error instanceof StudioSourceActionConflictError || error instanceof StudioMatrixConflictError
     ? 409
     : error instanceof Errors.UserInputError || error instanceof SyntaxError
     ? 400
     : 500
   const message = error instanceof Error ? error.message : String(error)
-  const details = error instanceof StudioSourceConflictError
+  const details = error instanceof StudioSourceActionConflictError
     ? {
-      actualSourceVersion: error.actualSourceVersion,
-      expectedSourceVersion: error.expectedSourceVersion,
-      path: error.path,
+      code: error.code,
+      ...error.details,
+      ...(error instanceof StudioSourceConflictError
+        ? {
+          actualSourceVersion: error.actualSourceVersion,
+          expectedSourceVersion: error.expectedSourceVersion,
+        }
+        : {}),
     }
+    : error instanceof StudioMatrixConflictError
+    ? { code: error.code }
     : undefined
   return response(request, url, options, { details, error: message }, status)
 }
@@ -760,6 +768,7 @@ function forbiddenResponse(message: string): Response {
 }
 
 export const StudioServerTesting = {
+  errorResponse,
   handleRequest: handleRequestForTesting,
   handleTestRequest,
   initializeEventSocket,

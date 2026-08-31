@@ -1,8 +1,7 @@
 # Proposed Decisions amendment - Scenario groups
 
-Status: proposed wording for Ro to incorporate into
-`Docs/Roadmap/Tao Revolution/Decisions.md`. The implementation and migrations use this settled project
-decision, but this document does not replace the authoritative Decisions file.
+Status: adopted by Ro on 2026-08-31 and incorporated into
+`Docs/Roadmap/Tao Revolution/Decisions.md` §16. This file retains the Studio-specific migration record.
 
 ## Replace dotted singular scenarios with named groups
 
@@ -60,6 +59,6 @@ address an entry with `scenarioGroupName` plus `scenarioName`.
 
 The implementation covers grammar, scoping, validation, formatting, compiler and preview identity,
 source actions, Future-app and WordFlower migration, generated focused-view execution, grouped browser
-rows, keyed cell reconciliation, and offscreen iframe suspension. What remains is product validation: a
-complete multi-group browser/native interaction pass, imported-scenario mounting or explicit rejection,
-and execution or explicit rejection of `run App at Destination(...)` rather than default-route fallback.
+rows, keyed cell reconciliation, and offscreen iframe suspension. Imported scenarios and
+`run App at Destination(...)` are rejected explicitly rather than publishing unmountable or incorrectly
+routed cells. The complete multi-group browser/native interaction pass remains an external validation gate.

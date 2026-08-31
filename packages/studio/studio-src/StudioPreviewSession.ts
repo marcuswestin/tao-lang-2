@@ -113,8 +113,8 @@ export function matrixManifest(
   }))
   return {
     capabilities: {
-      captureDomains: ['action-history', 'data', 'environment', 'navigation', 'persisted-state'],
-      scheme: 'inert',
+      captureDomains: ['action-history', 'data', 'environment', 'navigation', 'persisted-state', 'scheme'],
+      scheme: 'reactive-browser',
     },
     cells: previewScenarios.map(scenario => ({
       args: scenario.subject.kind === 'view' ? jsonObject(scenario.subject.arguments) : {},
@@ -126,8 +126,10 @@ export function matrixManifest(
           outcome: scenario.environment.network === 'offline' ? 'offline' : 'normal',
         },
         scheme: {
-          requested: scenario.environment.appearance ?? 'light',
-          status: 'inert',
+          capability: 'reactive-browser',
+          requested: scenario.environment.appearance ?? 'system',
+          resolved: scenario.environment.appearance ?? 'light',
+          source: scenario.environment.appearance === undefined ? 'system' : 'scenario',
         },
         viewport: {
           height: scenario.environment.device.height,

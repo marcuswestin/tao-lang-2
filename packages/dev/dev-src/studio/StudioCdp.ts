@@ -1,4 +1,5 @@
 import { CLI, Errors, FS, Platform, Time } from '@shared'
+import { Buffer } from 'node:buffer'
 
 type CdpResponse = {
   error?: { message: string }
@@ -24,6 +25,33 @@ type FrameTree = {
   frame: { id: string; url: string }
 }
 
+type CdpEventListener = (params: unknown) => void
+
+export type StudioCdpTransport = {
+  send<Result = Record<string, never>>(
+    method: string,
+    params?: Record<string, unknown>,
+  ): Promise<Result>
+  subscribe(method: string, listener: CdpEventListener): () => void
+  onEvent?(listener: (method: string, params: Record<string, unknown>) => void): void
+}
+
+export type StudioCdpBrowserEvent = {
+  kind: 'console' | 'exception'
+  level: string
+  text: string
+  timestamp?: number
+}
+
+type Point = {
+  x: number
+  y: number
+}
+
+type StudioCdpOptions = {
+  artifactRoot?: string
+}
+
 const chromeCandidates = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
@@ -40,16 +68,23 @@ export type BrowserConsoleEntry = {
 }
 
 export class StudioCdp {
+  private readonly collectedBrowserEvents: StudioCdpBrowserEvent[] = []
+  private readonly unsubscribeBrowserEvents: Array<() => void>
   private closed = false
   private readonly consoleEntries: BrowserConsoleEntry[] = []
 
   private constructor(
-    private readonly client: CdpClient,
+    private readonly client: StudioCdpTransport,
     private readonly cleanup: () => Promise<void>,
+    private readonly options: StudioCdpOptions = {},
   ) {
+    this.unsubscribeBrowserEvents = [
+      client.subscribe('Runtime.consoleAPICalled', params => this.collectConsoleEvent(params)),
+      client.subscribe('Runtime.exceptionThrown', params => this.collectExceptionEvent(params)),
+    ]
     // A blank Studio usually says why in the console and nowhere else, so every error and
     // uncaught exception is retained for the smoke run to fail on and for its artifacts.
-    client.onEvent((method, params) => {
+    client.onEvent?.((method, params) => {
       const entry = consoleEntry(method, params)
       if (entry !== undefined) {
         this.consoleEntries.push(entry)
@@ -62,16 +97,10 @@ export class StudioCdp {
     return this.consoleEntries.filter(entry => entry.level === 'error')
   }
 
-  /** captureScreenshot writes a PNG of the current page, creating parent directories. */
-  async captureScreenshot(path: string): Promise<string> {
-    const result = await this.client.send<{ data: string }>('Page.captureScreenshot', { format: 'png' })
-    await FS.writeFile(path, Buffer.from(result.data, 'base64'))
-    return path
-  }
-
-  static async launchChrome(): Promise<StudioCdp> {
+  static async launchChrome(options: StudioCdpOptions = {}): Promise<StudioCdp> {
     const chromePath = await findChromePath()
     const userDataRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-chrome-', FS.tmpdir()))
+    const startupOutput: string[] = []
     const command = CLI.start(chromePath, {
       args: [
         '--remote-debugging-port=0',
@@ -82,14 +111,16 @@ export class StudioCdp {
         '--no-first-run',
         'about:blank',
       ],
+      onOutput(stream, chunk) {
+        startupOutput.push(`${stream}: ${chunk.toString('utf8')}`)
+      },
       stdio: 'pipe',
     })
     try {
-      const port = await waitForActivePort(userDataRoot, command)
+      const port = await waitForActivePort(userDataRoot, command, startupOutput)
       const target = await waitForTarget(`http://127.0.0.1:${port}`)
       const client = await CdpClient.connect(requireWebSocketUrl(target))
-      await configure(client)
-      return new StudioCdp(client, async () => {
+      const studio = new StudioCdp(client, async () => {
         client.close()
         if (command.exitCode === null && command.signalCode === null) {
           command.kill('SIGTERM')
@@ -102,9 +133,14 @@ export class StudioCdp {
         await command.closeOutput()
         command.dispose()
         await FS.remove(userDataRoot)
-      })
+      }, options)
+      await configure(client)
+      return studio
     } catch (error) {
-      command.kill('SIGKILL')
+      if (command.exitCode === null && command.signalCode === null) {
+        command.kill('SIGKILL')
+        await command.waitForClose()
+      }
       await command.closeOutput()
       command.dispose()
       await FS.remove(userDataRoot)
@@ -112,18 +148,43 @@ export class StudioCdp {
     }
   }
 
-  static async attach(options: { baseUrl: string; targetUrlPrefix?: string }): Promise<StudioCdp> {
+  static async attach(options: {
+    artifactRoot?: string
+    baseUrl: string
+    targetUrlPrefix?: string
+  }): Promise<StudioCdp> {
     const target = await waitForTarget(options.baseUrl, options.targetUrlPrefix)
     const client = await CdpClient.connect(requireWebSocketUrl(target))
+    const studio = new StudioCdp(client, async () => client.close(), { artifactRoot: options.artifactRoot })
     await configure(client)
-    return new StudioCdp(client, async () => client.close())
+    return studio
+  }
+
+  static readonly testing = {
+    create(client: StudioCdpTransport, options: StudioCdpOptions = {}): StudioCdp {
+      return new StudioCdp(client, async () => {}, options)
+    },
   }
 
   async close(): Promise<void> {
     if (!this.closed) {
       this.closed = true
+      for (const unsubscribe of this.unsubscribeBrowserEvents) {
+        unsubscribe()
+      }
       await this.cleanup()
     }
+  }
+
+  async setViewport(width: number, height: number): Promise<void> {
+    requirePositiveInteger(width, 'Studio browser viewport width')
+    requirePositiveInteger(height, 'Studio browser viewport height')
+    await this.client.send('Emulation.setDeviceMetricsOverride', {
+      deviceScaleFactor: 1,
+      height,
+      mobile: false,
+      width,
+    })
   }
 
   async goto(url: string): Promise<void> {
@@ -134,12 +195,7 @@ export class StudioCdp {
   }
 
   async click(selector: string): Promise<void> {
-    const point = await this.evaluate<{ x: number; y: number }>(`(() => {
-      const element = document.querySelector(${JSON.stringify(selector)})
-      if (!(element instanceof HTMLElement)) throw new Error('Missing clickable element: ${selector}')
-      const rect = element.getBoundingClientRect()
-      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
-    })()`)
+    const point = await this.elementCenter(selector, 'clickable')
     await this.client.send('Input.dispatchMouseEvent', {
       button: 'left',
       buttons: 1,
@@ -154,6 +210,109 @@ export class StudioCdp {
       type: 'mouseReleased',
       ...point,
     })
+  }
+
+  async drag(fromSelector: string, toSelector: string, options: { steps?: number } = {}): Promise<void> {
+    const steps = options.steps ?? 8
+    requirePositiveInteger(steps, 'Studio browser drag steps')
+    const points = await this.evaluate<{ end: Point; start: Point }>(`(() => {
+      const center = (selector, label) => {
+        const element = document.querySelector(selector)
+        if (!(element instanceof HTMLElement)) throw new Error('Missing ' + label + ' element: ' + selector)
+        const rect = element.getBoundingClientRect()
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+      }
+      return {
+        start: center(${JSON.stringify(fromSelector)}, 'drag source'),
+        end: center(${JSON.stringify(toSelector)}, 'drag target'),
+      }
+    })()`)
+    await this.dispatchDrag(points.start, points.end, steps)
+  }
+
+  async dragBy(selector: string, delta: Point, options: { steps?: number } = {}): Promise<void> {
+    const steps = options.steps ?? 8
+    requirePositiveInteger(steps, 'Studio browser drag steps')
+    requireFiniteNumber(delta.x, 'Studio browser horizontal drag delta')
+    requireFiniteNumber(delta.y, 'Studio browser vertical drag delta')
+    const start = await this.elementCenter(selector, 'drag source')
+    await this.dispatchDrag(start, { x: start.x + delta.x, y: start.y + delta.y }, steps)
+  }
+
+  private async dispatchDrag(start: Point, end: Point, steps: number): Promise<void> {
+    await this.client.send('Input.dispatchMouseEvent', {
+      button: 'none',
+      buttons: 0,
+      type: 'mouseMoved',
+      ...start,
+    })
+    await this.client.send('Input.dispatchMouseEvent', {
+      button: 'left',
+      buttons: 1,
+      clickCount: 1,
+      type: 'mousePressed',
+      ...start,
+    })
+    for (let step = 1; step <= steps; step += 1) {
+      await this.client.send('Input.dispatchMouseEvent', {
+        button: 'left',
+        buttons: 1,
+        type: 'mouseMoved',
+        x: start.x + (end.x - start.x) * step / steps,
+        y: start.y + (end.y - start.y) * step / steps,
+      })
+    }
+    await this.client.send('Input.dispatchMouseEvent', {
+      button: 'left',
+      buttons: 0,
+      clickCount: 1,
+      type: 'mouseReleased',
+      ...end,
+    })
+  }
+
+  async captureScreenshot(name: string): Promise<string> {
+    const artifactRoot = this.options.artifactRoot
+      ?? Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
+    if (artifactRoot === undefined || artifactRoot.length === 0) {
+      throw new Errors.UserInputError(
+        'Studio browser screenshots require TAO_STUDIO_SMOKE_ARTIFACT_ROOT.',
+      )
+    }
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(name)) {
+      throw new Errors.UserInputError(
+        'Studio browser screenshot names must use only letters, numbers, dots, underscores, or dashes.',
+      )
+    }
+    const fileName = name.endsWith('.png') ? name : `${name}.png`
+    const path = FS.resolvePath(`screenshots/${fileName}`, artifactRoot)
+    const screenshot = await this.client.send<{ data: string }>('Page.captureScreenshot', {
+      captureBeyondViewport: false,
+      format: 'png',
+      fromSurface: true,
+    })
+    await FS.writeFile(path, Buffer.from(screenshot.data, 'base64'))
+    return path
+  }
+
+  async captureScreenshotAt(path: string): Promise<string> {
+    const screenshot = await this.client.send<{ data: string }>('Page.captureScreenshot', { format: 'png' })
+    await FS.writeFile(path, Buffer.from(screenshot.data, 'base64'))
+    return path
+  }
+
+  browserEvents(): readonly StudioCdpBrowserEvent[] {
+    return this.collectedBrowserEvents.map(event => ({ ...event }))
+  }
+
+  browserFailures(): readonly StudioCdpBrowserEvent[] {
+    return this.browserEvents().filter(event =>
+      event.kind === 'exception' || event.level === 'error' || event.level === 'assert'
+    )
+  }
+
+  clearBrowserEvents(): void {
+    this.collectedBrowserEvents.length = 0
   }
 
   async clickInFrame(urlPrefix: string, selector: string): Promise<void> {
@@ -232,9 +391,51 @@ export class StudioCdp {
     }
     return response.result.value as Result
   }
+
+  private async elementCenter(selector: string, label: string): Promise<Point> {
+    return await this.evaluate<Point>(`(() => {
+      const selector = ${JSON.stringify(selector)}
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) throw new Error('Missing ${label} element: ' + selector)
+      const rect = element.getBoundingClientRect()
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+    })()`)
+  }
+
+  private collectConsoleEvent(params: unknown): void {
+    if (!isRecord(params)) {
+      return
+    }
+    const args = Array.isArray(params['args']) ? params['args'] : []
+    this.collectedBrowserEvents.push(withTimestamp({
+      kind: 'console',
+      level: typeof params['type'] === 'string' ? params['type'] : 'log',
+      text: args.map(formatRemoteObject).join(' '),
+    }, params['timestamp']))
+  }
+
+  private collectExceptionEvent(params: unknown): void {
+    if (!isRecord(params) || !isRecord(params['exceptionDetails'])) {
+      return
+    }
+    const details = params['exceptionDetails']
+    const exception = isRecord(details['exception']) ? details['exception'] : undefined
+    const description = exception === undefined ? undefined : exception['description']
+    const text = typeof description === 'string'
+      ? description
+      : typeof details['text'] === 'string'
+      ? details['text']
+      : 'Uncaught browser exception'
+    this.collectedBrowserEvents.push(withTimestamp({
+      kind: 'exception',
+      level: 'error',
+      text,
+    }, details['timestamp']))
+  }
 }
 
-class CdpClient {
+class CdpClient implements StudioCdpTransport {
+  private readonly listeners = new Map<string, Set<CdpEventListener>>()
   private nextId = 1
   private readonly eventListeners: ((method: string, params: Record<string, unknown>) => void)[] = []
   private readonly pending = new Map<number, PendingCommand>()
@@ -279,6 +480,19 @@ class CdpClient {
   close(): void {
     this.socket.close()
     this.rejectAll('Chrome DevTools connection closed.')
+    this.listeners.clear()
+  }
+
+  subscribe(method: string, listener: CdpEventListener): () => void {
+    const listeners = this.listeners.get(method) ?? new Set<CdpEventListener>()
+    listeners.add(listener)
+    this.listeners.set(method, listeners)
+    return () => {
+      listeners.delete(listener)
+      if (listeners.size === 0) {
+        this.listeners.delete(method)
+      }
+    }
   }
 
   /** onEvent receives every DevTools event, which is how console errors are noticed at all. */
@@ -289,7 +503,10 @@ class CdpClient {
   private handleMessage(raw: string): void {
     const response = JSON.parse(raw) as CdpResponse
     if (response.id === undefined) {
-      if (typeof response.method === 'string') {
+      if (response.method !== undefined) {
+        for (const listener of this.listeners.get(response.method) ?? []) {
+          listener(response.params)
+        }
         for (const listener of this.eventListeners) {
           listener(response.method, response.params ?? {})
         }
@@ -330,11 +547,10 @@ function consoleEntry(method: string, params: Record<string, unknown>): BrowserC
     return undefined
   }
   const args = (params['args'] as { description?: string; value?: unknown }[] | undefined) ?? []
-  const text = args.map(argument => argument.description ?? String(argument.value ?? '')).join(' ')
-  return { level: type, text }
+  return { level: type, text: args.map(argument => argument.description ?? String(argument.value ?? '')).join(' ') }
 }
 
-async function configure(client: CdpClient): Promise<void> {
+async function configure(client: StudioCdpTransport): Promise<void> {
   await client.send('Page.enable')
   await client.send('Runtime.enable')
   await client.send('Emulation.setDeviceMetricsOverride', {
@@ -344,6 +560,49 @@ async function configure(client: CdpClient): Promise<void> {
     width: 1440,
   })
   await client.send('Page.bringToFront')
+}
+
+function requirePositiveInteger(value: number, label: string): void {
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Errors.UserInputError(`${label} must be a positive integer.`)
+  }
+}
+
+function requireFiniteNumber(value: number, label: string): void {
+  if (!Number.isFinite(value)) {
+    throw new Errors.UserInputError(`${label} must be finite.`)
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function formatRemoteObject(value: unknown): string {
+  if (!isRecord(value)) {
+    return String(value)
+  }
+  if ('value' in value) {
+    const remoteValue = value['value']
+    if (typeof remoteValue === 'string') {
+      return remoteValue
+    }
+    return JSON.stringify(remoteValue) ?? String(remoteValue)
+  }
+  if (typeof value['unserializableValue'] === 'string') {
+    return value['unserializableValue']
+  }
+  if (typeof value['description'] === 'string') {
+    return value['description']
+  }
+  return typeof value['type'] === 'string' ? value['type'] : 'unknown'
+}
+
+function withTimestamp(
+  event: StudioCdpBrowserEvent,
+  timestamp: unknown,
+): StudioCdpBrowserEvent {
+  return typeof timestamp === 'number' ? { ...event, timestamp } : event
 }
 
 async function findChromePath(): Promise<string> {
@@ -364,7 +623,11 @@ async function executableOnPath(command: string): Promise<boolean> {
   return (await CLI.run('which', { args: [command], stdio: 'pipe' })).exitCode === 0
 }
 
-async function waitForActivePort(userDataRoot: string, command: CLI.StartedCommand): Promise<number> {
+async function waitForActivePort(
+  userDataRoot: string,
+  command: CLI.StartedCommand,
+  startupOutput: readonly string[] = [],
+): Promise<number> {
   const path = FS.resolvePath('DevToolsActivePort', userDataRoot)
   const deadline = Date.now() + 20_000
   while (Date.now() < deadline) {
@@ -375,7 +638,14 @@ async function waitForActivePort(userDataRoot: string, command: CLI.StartedComma
       }
     }
     if (command.exitCode !== null || command.signalCode !== null || command.error !== undefined) {
-      throw new Error(`Chrome exited before exposing DevTools: ${command.error?.message ?? command.exitCode}`)
+      const diagnostic = startupOutput.join('').trim().slice(-4_000)
+      throw new Error(
+        `Chrome exited before exposing DevTools (exit ${command.exitCode ?? 'none'}, signal ${
+          command.signalCode ?? 'none'
+        })${command.error === undefined ? '' : `: ${command.error.message}`}${
+          diagnostic === '' ? '' : `\n${diagnostic}`
+        }`,
+      )
     }
     await Time.sleep(100)
   }

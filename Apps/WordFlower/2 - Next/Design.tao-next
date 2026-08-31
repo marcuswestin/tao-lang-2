@@ -9,14 +9,17 @@
 // the other files ([screen], [title], [body]); landing their resolver last avoided restyling the
 // primitives twice.
 //
-// This tranche implements exactly the flat tokens and named clause bundles exercised below. Do not
-// generalize the implementation beyond those two represented forms.
+// The absorbed flat tokens and named bundles remain compatibility forcing. Studio Slice 6 adds the
+// explicitly exercised structured subset below; it does not imply that every Decisions §13 construct
+// has landed.
 // ============================================================================================
 // A design declaration is ordinary Tao source, subject to the same visibility, imports, and
 // validation as everything else. An app selects one with its `Design` property. `#...` lexes as
 // `TagOrHexColor`; in these value positions the validator accepts exactly 3-, 4-, 6-, or 8-digit
 // CSS hexadecimal colors. The values deliberately include both letter-leading forms that also fit
 // tag lexemes and digit-leading forms, proving that lexical choice never decides their AST meaning.
+// Component defaults use the decided `background` and `ink` source heads; the compiler lowers them
+// to the current runtime's compatible `bg` and `fg` representation.
 folder
 design WordFlowerDesign {
    // A warm paper palette keeps the writing surface quiet while the green accent gives actions and
@@ -33,19 +36,50 @@ design WordFlowerDesign {
    danger #a43d3d
    dangerSoft #f8e6e3
    onAccent #ffffff
+   canvasDark #101612
+   surfaceRaisedDark #202a22
+   inkDark #edf3ee
+   lineDark #34453a
+
+   // Slice 6 forces the decided structured surface through WordFlower's real app default while
+   // the remaining absorbed flat catalog migrates incrementally.
+   colors {
+      schemeAccent accent {
+         20 accentSoft,
+         60 accentStrong
+      }
+      schemeCanvas when Scheme is Dark canvasDark / not canvas
+      schemeInk when Scheme is Dark inkDark / not ink
+   }
+   sizes {
+      designSm 8.px,
+      designMd designSm + 4.px,
+      designReadable 1.rem
+   }
+   text {
+      schemeBody [size designReadable, line designMd, ink schemeInk]
+   }
+   screens {
+      narrow below 500.px,
+      medium below 1000.px,
+      wide
+   }
+   styles {
+      AppSurface [background schemeCanvas]
+      schemeCard [background schemeCanvas, ink schemeInk, radius designMd, pad designMd, gap designSm]
+   }
 
    // Capitalized bundles are defaults for linked stdlib elements. The navigation bundles are
    // consumed by Tao's portable/web host so product chrome and content use one mounted design.
-   Text [fg ink]
-   TextInput [bg surfaceRaised, border line, fg ink, radius 12, size 16]
+   Text [ink ink, ink inkDark when Scheme is Dark]
+   TextInput [background surfaceRaised, background surfaceRaisedDark when Scheme is Dark, border line, border lineDark when Scheme is Dark, ink ink, ink inkDark when Scheme is Dark, radius 12, size 16]
    FormButton [bg accentStrong, fg onAccent, radius 12, weight 700]
    Checkbox [fg ink]
    Progress [bg line, fg accent, radius 999]
-   AppSurface [bg canvas]
-   NavigationHost [bg canvas]
-   NavigationContent [bg canvas]
-   NavigationHeader [bg surfaceRaised, border line]
-   NavigationTitle [size 18, weight 700, fg ink]
+   NavigationHost [background canvas, background canvasDark when Scheme is Dark]
+   NavigationContent [background canvas, background canvasDark when Scheme is Dark]
+   NavigationHeader [background surfaceRaised, background surfaceRaisedDark when Scheme is Dark, border line, border lineDark when Scheme is Dark]
+   NavigationTitle [size 18, weight 700, ink ink, ink inkDark when Scheme is Dark]
    NavigationTabs [gap 6, pad 6, bg surfaceRaised, border line]
    NavigationTab [pad 10, radius 10, fg inkMuted, weight 600]
    NavigationTabActive [NavigationTab, bg accentSoft, fg accentStrong]
@@ -55,7 +89,7 @@ design WordFlowerDesign {
 
    // Product bundles describe hierarchy rather than individual screens. Later entries at a render
    // site remain free to tune layout without respelling the palette or type scale.
-   screen [fill, content top stretch, pad 24, bg canvas]
+   screen [fill, content top stretch, pad 24, background canvas, background canvasDark when Scheme is Dark]
    hero [gap 8, pad 24, radius 20, bg accentSoft, border line]
    display [size 40, line 46, weight 700, fg ink]
    eyebrow [size 13, line 18, weight 700, fg accentStrong]
@@ -87,8 +121,8 @@ design WordFlowerDarkDesign {
    danger #ef9189
    dangerSoft #412724
    onAccent #102016
-   Text [fg ink]
-   TextInput [bg surfaceRaised, border line, fg ink, radius 12, size 16]
+   Text [ink ink]
+   TextInput [background surfaceRaised, border line, ink ink, radius 12, size 16]
    FormButton [bg accentStrong, fg onAccent, radius 12, weight 700]
    Checkbox [fg ink]
    Progress [bg line, fg accent, radius 999]

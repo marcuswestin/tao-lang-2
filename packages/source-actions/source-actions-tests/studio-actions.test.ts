@@ -262,6 +262,39 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content).toContain('Text("First") [gap 8, body, size 18]')
   })
 
+  Test('inspects and promotes decided visual aliases and representable numeric families', async () => {
+    const document = await parseDocument(`
+      use Text from @tao/ui
+      workspace design Theme { ink #111 body [ink ink, size 16] }
+      view MainView() {
+         render Text("First") [body, background #c00, radius 8, pad 12]
+      }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+    const inspection = SourceActions.inspectStudioRender(document, id)
+
+    Expect(inspection.styleEntries).toEqual([['body'], ['background', '#c00'], ['radius', 8]])
+    Expect(inspection.explorations).toEqual([['background', '#c00'], ['radius', 8], ['pad', 12]])
+
+    const token = await SourceActions.applyStudioPatch(document, {
+      entry: ['background', '#c00'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName: 'danger' },
+      renderId: id,
+    })
+    Expect(token.content).toContain('danger #c00')
+    Expect(token.content).toContain('background danger')
+
+    const promoted = await SourceActions.applyStudioPatch(document, {
+      entry: ['radius', 8],
+      kind: 'set-style-entry',
+      landing: { elementName: 'Text', kind: 'element-default' },
+      renderId: id,
+    })
+    Expect(promoted.content).toContain('Text [radius 8]')
+    Expect(promoted.content).not.toContain('background danger')
+  })
+
   Test('edits and forks a uniquely named current-dialect design bundle', async () => {
     const document = await parseDocument(`
       workspace design Theme { ink #111 body [fg ink, size 14] }
@@ -284,6 +317,144 @@ Describe('Studio source-action patch bus', () => {
     })
     Expect(fork.content).toContain('bodyVariant [fg ink, size 18]')
     Expect(fork.content).toContain('Text("First") [bodyVariant]')
+  })
+
+  Test('inspects and lands edits, forks, defaults, colors, and sizes in structured design blocks', async () => {
+    const document = await parseDocument(`
+      use Text from @tao/ui
+      workspace design Theme {
+         colors { ink #111 }
+         sizes { sm 8.px }
+         text { body [size sm, ink ink] }
+         styles {
+            card [radius sm, pad sm]
+            Text [ink ink]
+         }
+      }
+      view MainView() {
+         render Stack() {
+            Text("First") [card, body, size 18, background #c00]
+            Text("Second") [card, size 18]
+         }
+      }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+    const inspection = SourceActions.inspectStudioRender(document, id)
+    Expect(inspection.styleProvenance.slice(0, 2)).toEqual([
+      {
+        blastRadius: 2,
+        chain: ['card', 'radius sm', 'pad sm'],
+        landing: { bundleName: 'card', kind: 'style-bundle', mode: 'edit' },
+      },
+      {
+        blastRadius: 1,
+        chain: ['body', 'size sm', 'ink ink'],
+        landing: { bundleName: 'body', kind: 'style-bundle', mode: 'edit' },
+      },
+    ])
+
+    const edited = await SourceActions.applyStudioPatch(document, {
+      entry: ['radius', 12],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'card', kind: 'style-bundle', mode: 'edit' },
+      renderId: id,
+    })
+    Expect(edited.content).toContain('styles {\n      card [pad sm, radius 12]')
+
+    const forked = await SourceActions.applyStudioPatch(document, {
+      entry: ['radius', 12],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'card', forkName: 'raisedCard', kind: 'style-bundle', mode: 'fork' },
+      renderId: id,
+    })
+    Expect(forked.content).toContain('raisedCard [radius 12, pad sm]')
+    Expect(forked.content).toContain('Text("First") [raisedCard, body, size 18, background #c00]')
+    Expect(forked.content).toContain('Text("Second") [card, size 18]')
+
+    const defaulted = await SourceActions.applyStudioPatch(document, {
+      entry: ['size', 18],
+      kind: 'set-style-entry',
+      landing: { elementName: 'Text', kind: 'element-default' },
+      renderId: id,
+    })
+    Expect(defaulted.content).toContain('Text [ink ink, size 18]')
+
+    const colored = await SourceActions.applyStudioPatch(document, {
+      entry: ['background', '#c00'],
+      kind: 'set-style-entry',
+      landing: { kind: 'token', tokenName: 'danger' },
+      renderId: id,
+    })
+    Expect(colored.content).toContain('colors {\n      ink #111\n      danger #c00')
+    Expect(colored.content).toContain('background danger')
+
+    const sized = await SourceActions.applyStudioPatch(document, {
+      entry: ['size', 18],
+      kind: 'set-style-entry',
+      landing: { kind: 'size-token', tokenName: 'titleSize' },
+      renderId: id,
+    })
+    Expect(sized.content).toContain('sizes {\n      sm 8.px\n      titleSize 18.px')
+    Expect(sized.content).toContain('Text("First") [card, body, size titleSize, background #c00]')
+    Expect(sized.content).toContain('Text("Second") [card, size 18]')
+  })
+
+  Test('promotes a numeric dimensional exploration into a sizes block with release-safe source shape', async () => {
+    const document = await parseDocument(`
+      workspace design Theme { colors { ink #111 } styles { card [ink ink] } }
+      view MainView() { render Text("First") [card, pad 12] }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+    const promoted = await SourceActions.applyStudioPatch(document, {
+      entry: ['pad', 12],
+      kind: 'set-style-entry',
+      landing: { kind: 'size-token', tokenName: 'cardPad' },
+      renderId: id,
+    })
+    Expect(promoted.content).toContain('sizes {\n      cardPad 12.px\n   }')
+    Expect(promoted.content).toContain('Text("First") [card, pad cardPad]')
+    Expect(promoted.content).not.toContain('pad 12')
+    await parseRawDocument(promoted.content)
+  })
+
+  Test('replaces visual aliases by their canonical slot instead of creating invalid duplicates', async () => {
+    const document = await parseDocument(`
+      use Text from @tao/ui
+      workspace design Theme {
+         canvas #fff
+         ink #111
+         card [bg canvas, fg ink]
+         Text [bg canvas]
+      }
+      view Main() { render Text("First") [card, bg #c00] }
+    `)
+    const id = renderId(requireRenderByText(document, 'Text("First")'))
+
+    const edited = await SourceActions.applyStudioPatch(document, {
+      entry: ['background', 'canvas'],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'card', kind: 'style-bundle', mode: 'edit' },
+      renderId: id,
+    })
+    Expect(edited.content).toContain('card [fg ink, background canvas]')
+    Expect(edited.content).not.toContain('card [bg canvas')
+
+    const forked = await SourceActions.applyStudioPatch(document, {
+      entry: ['ink', 'ink'],
+      kind: 'set-style-entry',
+      landing: { bundleName: 'card', kind: 'style-bundle', mode: 'fork' },
+      renderId: id,
+    })
+    Expect(forked.content).toContain('cardVariant [bg canvas, ink ink]')
+
+    const element = await SourceActions.applyStudioPatch(document, {
+      entry: ['background', 'canvas'],
+      kind: 'set-style-entry',
+      landing: { elementName: 'Text', kind: 'element-default' },
+      renderId: id,
+    })
+    Expect(element.content).toContain('Text [background canvas]')
+    Expect(element.content).not.toContain('Text [bg canvas, background canvas]')
   })
 
   Test('promotes a raw inline color to a token and replaces only the selected render entry', async () => {
@@ -358,12 +529,17 @@ Describe('Studio source-action patch bus', () => {
       ['content', 'top', 'stretch'],
       ['fill'],
       ['gap', 8],
+      ['gap', 'spacing.compact'],
       ['height', 'fill'],
+      ['height', 'surface.row'],
       ['hug'],
       ['margin', 'horizontal', 8, 'top', 4],
+      ['margin', 'horizontal', 'spacing.gutter', 'top', 'spacing.compact'],
       ['pad', 8],
+      ['pad', 'spacing.panel'],
       ['rigid'],
       ['width', 'max', 720],
+      ['width', 'max', 'surface.readable'],
     ]
 
     for (const entry of supportedEntries) {
@@ -425,6 +601,65 @@ Describe('Studio source-action patch bus', () => {
       kind: 'set-layout-entry',
       renderId: renderId(requireRenderByText(conflictDocument, 'Stack()')),
     })).rejects.toThrow("incompatible 'claim' and 'rigid'")
+  })
+
+  Test('moves edited semantic layout slots last and preserves a composable width cap', async () => {
+    const growthDocument = await parseDocument(`
+      view MainView() {
+         render Stack() [fill, hug] { Text("First") }
+      }
+    `)
+    const growthPatch = await SourceActions.applyStudioPatch(growthDocument, {
+      entry: ['fill'],
+      kind: 'set-layout-entry',
+      renderId: renderId(requireRenderByText(growthDocument, 'Stack()')),
+    })
+    Expect(growthPatch.content).toContain('Stack() [hug, fill]')
+
+    const widthDocument = await parseDocument(`
+      view MainView() {
+         render Stack() [width fill, width max 720] { Text("First") }
+      }
+    `)
+    const widthPatch = await SourceActions.applyStudioPatch(widthDocument, {
+      entry: ['width', 320],
+      kind: 'set-layout-entry',
+      renderId: renderId(requireRenderByText(widthDocument, 'Stack()')),
+    })
+    Expect(widthPatch.content).toContain('Stack() [width max 720, width 320]')
+  })
+
+  Test('binds a render mutation to its exact owner and rejects a fabricated future node kind', async () => {
+    const document = await parseDocument(`
+      view MainView() {
+         render Stack() { Text("First") }
+      }
+    `)
+    const renderIdValue = renderId(requireRenderByText(document, 'Stack()'))
+    const request = {
+      entry: ['gap', 16] as const,
+      kind: 'set-layout-entry' as const,
+      renderId: renderIdValue,
+    }
+    const patch = await SourceActions.applyStudioPatch(document, request, {
+      occurrence: { nodeKind: 'render', renderOwner: 'MainView' },
+    })
+    Expect(patch.content).toContain('Stack() [gap 16]')
+
+    await Expect(SourceActions.applyStudioPatch(document, request, {
+      occurrence: { nodeKind: 'render', renderOwner: 'OtherView' },
+    })).rejects.toMatchObject({
+      actual: 'MainView',
+      code: 'render-owner-mismatch',
+      expected: 'OtherView',
+    })
+    await Expect(SourceActions.applyStudioPatch(document, request, {
+      occurrence: { nodeKind: 'view', renderOwner: 'MainView' },
+    })).rejects.toMatchObject({
+      actual: 'render',
+      code: 'node-kind-mismatch',
+      expected: 'view',
+    })
   })
 
   Test('wraps a render in a current-dialect Stack() container', async () => {
@@ -839,6 +1074,7 @@ Describe('Studio source-action patch bus', () => {
     `)
 
     const patch = await SourceActions.applyStudioPatch(document, {
+      appearance: 'dark',
       arguments: {
         Owner: { handle: 'Lead', kind: 'fixture-reference' },
         Title: 'Promoted',
@@ -850,6 +1086,7 @@ Describe('Studio source-action patch bus', () => {
     const updated = await parseRawDocument(patch.content)
 
     Expect(patch.content).toContain('render (Owner: Lead, Title: "Promoted")')
+    Expect(patch.content).toContain('appearance dark')
     Expect(updated.parseResult.lexerErrors).toEqual([])
     Expect(updated.parseResult.parserErrors).toEqual([])
   })

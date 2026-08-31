@@ -7,6 +7,7 @@ import {
   type StudioInspectorSelection,
   studioPaletteComponents,
 } from '../StudioInspector'
+import { StudioPanelPayloads } from '../StudioPanelPayloads'
 import type { StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import {
   publishStudioProductHostState,
@@ -15,13 +16,15 @@ import {
 import type { StudioDesignValue } from '../StudioProjectSession'
 import {
   type StudioCanonicalSourceAction,
-  type StudioPreviewSourceIdentity,
+  type StudioJsonObject,
   type StudioSourceActionEnvelope,
+  type StudioSourceActionIdentity,
 } from '../StudioProtocol'
 import type { StudioTestFailure, StudioTestStatus } from '../StudioTestRunner'
 import { StudioTextMateLanguage } from '../StudioTextMateLanguage'
 import {
   StudioApiClient,
+  StudioApiError,
   StudioApiRoutes,
   type StudioCompileDiagnostic,
   type StudioCompileState,
@@ -29,6 +32,7 @@ import {
   type StudioLspTransport,
 } from './StudioApiClient'
 import {
+  absoluteSourcePath,
   fileUri,
   isStudioSaveShortcut,
   projectRelativePath,
@@ -54,6 +58,7 @@ import {
   StudioRuntimeData,
   type StudioRuntimeDataTable,
 } from './StudioMatrixView'
+import { StudioPanelProjection } from './StudioPanelProjection'
 import {
   renderCommandResults,
   renderDesignValues,
@@ -69,6 +74,7 @@ import {
   type StudioScreenItem,
   type StudioSearchResult,
 } from './StudioRailPanels'
+import { StudioScenarioControls } from './StudioScenarioControls'
 import {
   createStudioShell,
   showOpenFile,
@@ -190,13 +196,14 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let inspectorRequestRevision = 0
     let previewManifest = handshake.previewManifest
     const searchDocuments = new Map<string, { content: string; sourceVersion: string }>()
+    let searchResults: readonly StudioSearchResult[] = []
     let searchRevision = 0
     let searchTimer: ReturnType<typeof setTimeout> | undefined
     let sourceActionBusy = false
     let testError: string | undefined
     let testStatus: StudioTestStatus | undefined
     let testWatch = false
-    const undoCheckpoints: Array<{ id: string; path: string }> = []
+    const undoCheckpoints: Array<{ id: string; identity: StudioSourceActionIdentity; path: string }> = []
     const openFileLifecycle = new StudioOpenFileLifecycle()
     const openTabs = partialOpenTabs
     const editorTabs = new StudioEditorTabs({
@@ -221,9 +228,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             networkErrorStatus: preview.cell.environment.network.error?.status,
             networkLatencyMs: preview.cell.environment.network.latencyMs,
             networkOutcome: preview.cell.environment.network.outcome,
+            scenarioModel: JSON.stringify(preview.scenarioModel ?? null),
             scenarioId: preview.cell.scenarioId,
+            schemeCapability: preview.cell.environment.scheme.capability,
             schemeRequested: preview.cell.environment.scheme.requested,
-            schemeStatus: preview.cell.environment.scheme.status,
+            schemeResolved: preview.cell.environment.scheme.resolved,
+            schemeSource: preview.cell.environment.scheme.source,
             viewportHeight: preview.cell.environment.viewport.height,
             viewportPresetId: preview.cell.environment.viewport.presetId,
             viewportWidth: preview.cell.environment.viewport.width,
@@ -238,6 +248,35 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             sourceVersion: activeFile.sourceVersion,
           },
         projectRoot: handshake.identity.project,
+        inspector: {
+          busy: sourceActionBusy,
+          canUndo: undoCheckpoints.at(-1)?.path === activePath,
+          currentSourceVersion: activeFile?.sourceVersion,
+          inspection,
+          selection: inspected,
+        },
+        panels: StudioPanelProjection.project({
+          compile: compileState,
+          data: dataResult,
+          dataError,
+          dataLoading,
+          dataSource: preview?.cell === undefined
+            ? undefined
+            : { cellId: preview.cell.cellId, cellRevision: preview.cell.cellRevision },
+          logs: preview?.runtimeLogs ?? [],
+          logSource: preview?.cell === undefined
+            ? undefined
+            : { cellId: preview.cell.cellId, cellRevision: preview.cell.cellRevision },
+          search: searchResults,
+          sourceVersions: Object.fromEntries(projectFiles.flatMap(file => [
+            [file.path, file.sourceVersion],
+            [absoluteSourcePath(handshake.identity.project, file.path), file.sourceVersion],
+          ])),
+          tab: drawerTab,
+          testError,
+          testStatus,
+          testWatch,
+        }),
         selectedRender: inspected === undefined
           ? undefined
           : {
@@ -315,6 +354,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
               view.status.dataset['state'] = 'idle'
               view.status.textContent = 'Unsaved changes — press ⌘S to save.'
               scheduleHighlight(update.view, content)
+              if (view.searchInput.value.trim() !== '') {
+                scheduleSearch()
+              }
             }
             if (editor === update.view && update.selectionSet && !update.docChanged) {
               postEditorSelection(activePreview.current(), handshake, activeFile, update.view)
@@ -365,7 +407,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       fileTree?.render()
       showOpenFile(view, path)
       renderEditorTabs()
-      renderProjectViews(view.projectViews, previewManifest, insertProjectView)
+      if (options.embedded !== true) {
+        renderProjectViews(view.projectViews, previewManifest, insertProjectView)
+      }
       scheduleHighlight(tab.editor, tab.editor.state.doc.toString(), 0)
       renderInspector()
       publishProductHostState()
@@ -601,6 +645,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
 
     async function openSearchResult(result: StudioSearchResult): Promise<void> {
       const path = projectRelativePath(handshake.identity.project, result.path) ?? result.path
+      const current = projectFiles.find(file => file.path === path)
+      if (result.sourceVersion !== undefined && current?.sourceVersion !== result.sourceVersion) {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = 'This search result is stale; refreshing project search.'
+        scheduleSearch(0)
+        return
+      }
       const opened = await openFile(path)
       if (opened === undefined) {
         return
@@ -622,16 +673,21 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       const revision = ++searchRevision
       const query = view.searchInput.value
       if (query.trim() === '') {
-        renderSearchResults(view.searchResults, [], result => void openSearchResult(result))
+        searchResults = []
+        renderSearchPanel()
         return
       }
-      let documents: Array<{ content: string; path: string }>
+      let documents: Array<{ content: string; path: string; sourceVersion?: string }>
       try {
-        documents = await Promise.all(projectFiles.map(async file => ({
-          content: openTabs.get(file.path)?.editor.state.doc.toString()
-            ?? await cachedSearchDocument(file),
-          path: file.path,
-        })))
+        documents = await Promise.all(projectFiles.map(async file => {
+          const opened = openTabs.get(file.path)
+          const content = opened?.editor.state.doc.toString() ?? await cachedSearchDocument(file)
+          return {
+            content,
+            path: file.path,
+            ...(opened !== undefined && content !== opened.file.content ? {} : { sourceVersion: file.sourceVersion }),
+          }
+        }))
       } catch (error) {
         if (revision === searchRevision) {
           showSourceActionError(view.status, error)
@@ -641,11 +697,24 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       if (revision !== searchRevision) {
         return
       }
-      renderSearchResults(
-        view.searchResults,
-        StudioRailPanels.search(documents, compileState.diagnostics ?? [], query),
-        result => void openSearchResult(result),
+      searchResults = StudioRailPanels.search(
+        documents,
+        compileState.diagnostics ?? [],
+        query,
+        Object.fromEntries(projectFiles.flatMap(file => [
+          [file.path, file.sourceVersion],
+          [absoluteSourcePath(handshake.identity.project, file.path), file.sourceVersion],
+        ])),
       )
+      renderSearchPanel()
+    }
+
+    function renderSearchPanel(): void {
+      if (options.embedded === true) {
+        publishProductHostState()
+        return
+      }
+      renderSearchResults(view.searchResults, searchResults, result => void openSearchResult(result))
     }
 
     async function cachedSearchDocument(file: StudioFile): Promise<string> {
@@ -682,6 +751,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
 
     function renderInspector(): void {
+      if (options.embedded === true) {
+        view.scenarioInspector.replaceChildren()
+        view.inspector.replaceChildren()
+        publishProductHostState()
+        return
+      }
       const scenarioPanel = document.createElement('section')
       scenarioPanel.className = 'studio-scenario-inspector'
       renderScenarioInspector(scenarioPanel, activePreview.current())
@@ -696,6 +771,11 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             void submitLocalAction(action, inspected.identity)
           }
         },
+        onStyleAction: action => {
+          if (inspected !== undefined) {
+            void submitProposedLocalAction(action, inspected.identity)
+          }
+        },
         onUndo: () => void undoLatestSourceAction(),
         selection: inspected,
       })
@@ -703,6 +783,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
 
     function renderDesignEditor(): void {
+      if (options.embedded === true) {
+        return
+      }
       renderDesignValues(view.designValues, {
         busy: sourceActionBusy,
         currentSourceVersion: activeFile?.sourceVersion,
@@ -718,11 +801,23 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
 
     function renderDrawer(): void {
+      const activeCell = activePreview.current()?.cell
+      if (options.embedded === true) {
+        view.drawerContent.replaceChildren()
+        publishProductHostState()
+        return
+      }
       renderDrawerContent(view.drawerContent, drawerTab, {
         compile: compileState,
         data: dataResult,
         dataError,
         dataLoading,
+        dataSource: activeCell === undefined
+          ? undefined
+          : { cellId: activeCell.cellId, cellRevision: activeCell.cellRevision },
+        logSource: activeCell === undefined
+          ? undefined
+          : { cellId: activeCell.cellId, cellRevision: activeCell.cellRevision },
         logs: activePreview.current()?.runtimeLogs ?? [],
         onCaptureFixture: focusCaptureFixture,
         onClearLogs() {
@@ -935,7 +1030,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       try {
         const result = await StudioApiClient.sourceAction(envelope)
         if (result.checkpoint.status === 'committed' && undoCheckpoints.at(-1)?.id !== result.checkpoint.id) {
-          undoCheckpoints.push({ id: result.checkpoint.id, path: result.path })
+          undoCheckpoints.push({ id: result.checkpoint.id, identity: envelope.identity, path: result.path })
         }
         inspected = undefined
         inspection = undefined
@@ -952,7 +1047,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
 
     async function submitLocalAction(
       action: StudioCanonicalSourceAction,
-      identity: StudioPreviewSourceIdentity,
+      identity: StudioSourceActionIdentity,
     ): Promise<void> {
       if (sourceActionBusy || !requireVisualEditDraftSaved()) {
         return
@@ -962,13 +1057,60 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         view.status.textContent = 'Wait for the refreshed preview before editing this render.'
         return
       }
+      await applySourceAction(localActionEnvelope(action, identity))
+    }
+
+    async function submitProposedLocalAction(
+      action: StudioCanonicalSourceAction,
+      identity: StudioSourceActionIdentity,
+    ): Promise<void> {
+      if (sourceActionBusy || !requireVisualEditDraftSaved()) {
+        return
+      }
+      if (activeFile === undefined || identity.sourceVersion !== activeFile.sourceVersion) {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = 'Wait for the refreshed preview before editing this render.'
+        return
+      }
+      const envelope = localActionEnvelope(action, identity)
+      sourceActionBusy = true
+      renderInspector()
+      view.status.dataset['state'] = 'compiling'
+      view.status.textContent = 'Preparing a canonical source proposal…'
+      try {
+        const proposal = await StudioApiClient.sourceActionProposal(envelope)
+        if (!window.confirm(`Apply this shared style edit?\n\n${proposal.diff}`)) {
+          view.status.dataset['state'] = 'idle'
+          view.status.textContent = 'Style edit was not applied.'
+          return
+        }
+      } catch (error) {
+        showSourceActionError(view.status, error)
+        return
+      } finally {
+        sourceActionBusy = false
+        renderInspector()
+      }
+      await applySourceAction(envelope)
+    }
+
+    function localActionEnvelope(
+      action: StudioCanonicalSourceAction,
+      identity: StudioSourceActionIdentity,
+    ): StudioSourceActionEnvelope {
       const operationId = crypto.randomUUID()
-      await applySourceAction(StudioInspector.singleAction({
+      const occurrence = sourceActionUsesRenderOccurrence(action)
+        ? identity.occurrence ?? inspected?.identity.occurrence
+        : undefined
+      return StudioInspector.singleAction({
         action,
         checkpointId: `checkpoint:${operationId}`,
-        identity,
+        identity: {
+          ...identity,
+          ...(occurrence === undefined ? {} : { occurrence }),
+        },
         requestId: `request:${operationId}`,
-      }))
+      })
     }
 
     async function submitPreviewAction(envelope: StudioSourceActionEnvelope): Promise<void> {
@@ -997,9 +1139,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       ) {
         return
       }
-      const identity = currentSourceIdentity(handshake, activePreview.current(), activeFile)
-      if (identity === undefined) {
+      const currentIdentity = currentSourceIdentity(handshake, activePreview.current(), activeFile)
+      if (currentIdentity === undefined) {
         return
+      }
+      const identity: StudioSourceActionIdentity = {
+        ...currentIdentity,
+        ...(checkpoint.identity.occurrence === undefined ? {} : { occurrence: checkpoint.identity.occurrence }),
       }
       sourceActionBusy = true
       renderInspector()
@@ -1119,6 +1265,15 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
 
     const wirePreview = (preview: (typeof previews)[number]): void => {
+      preview.applySourceAction = async envelope => {
+        if (sourceActionBusy) {
+          throw new Error('Wait for the current Studio source action to finish.')
+        }
+        if (!requireVisualEditDraftSaved()) {
+          throw new Error('Save the active draft before changing Tao source through Studio.')
+        }
+        await applySourceAction(envelope)
+      }
       preview.changed = () => {
         if (preview === activePreview.current()) {
           publishProductHostState()
@@ -1141,11 +1296,15 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       }
     })
     activePreview.reconcile(wirePreview)
-    renderScreens(view.screens, previewManifest, item => void openScreen(item))
-    renderSearchResults(view.searchResults, [], result => void openSearchResult(result))
+    if (options.embedded !== true) {
+      renderScreens(view.screens, previewManifest, item => void openScreen(item))
+    }
+    renderSearchPanel()
     view.searchInput.addEventListener('input', () => scheduleSearch())
 
-    renderComponentPalette(view.components, insertComponent)
+    if (options.embedded !== true) {
+      renderComponentPalette(view.components, insertComponent)
+    }
     view.preview.addEventListener('dragover', event => {
       if (event.dataTransfer?.types.includes(studioPaletteMime)) {
         event.preventDefault()
@@ -1272,8 +1431,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       },
       onManifest(manifest) {
         previewManifest = manifest
-        renderProjectViews(view.projectViews, manifest, insertProjectView)
-        renderScreens(view.screens, manifest, item => void openScreen(item))
+        if (options.embedded !== true) {
+          renderProjectViews(view.projectViews, manifest, insertProjectView)
+          renderScreens(view.screens, manifest, item => void openScreen(item))
+        }
         if (config.previewUrl !== undefined) {
           void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
             activePreview.reconcile(wirePreview)
@@ -1427,10 +1588,29 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     window.addEventListener('beforeunload', beforeUnloadListener)
     const unregisterProductHost = registerStudioProductHostActions({
-      async applyActiveCellEnvironment(environment) {
+      async applyInspectorAction(action, proposed) {
+        if (inspected === undefined) {
+          throw new Error('Select a rendered element before editing its source.')
+        }
+        if (proposed) {
+          await submitProposedLocalAction(action, inspected.identity)
+        } else {
+          await submitLocalAction(action, inspected.identity)
+        }
+      },
+      async applyActiveCellEnvironment(identity, environment) {
         const preview = activePreview.current()
         if (preview?.cell === undefined || preview.reconfigureEnvironment === undefined) {
           throw new Error('Select a Studio scenario cell before changing its environment.')
+        }
+        if (preview.cell.cellId !== identity.cellId || preview.cell.cellRevision !== identity.cellRevision) {
+          throw new StudioApiError('The selected Studio preview changed while its environment was being edited.', 409, {
+            actualCellId: preview.cell.cellId,
+            actualCellRevision: preview.cell.cellRevision,
+            code: 'stale-cell',
+            expectedCellId: identity.cellId,
+            expectedCellRevision: identity.cellRevision,
+          })
         }
         await preview.reconfigureEnvironment({
           network: environment.network,
@@ -1450,11 +1630,146 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       async deleteFile(path, sourceVersion) {
         await fileTree!.delete(path, sourceVersion)
       },
+      insertComponent(componentName) {
+        const component = studioPaletteComponents.find(candidate => candidate.component === componentName)
+        if (component === undefined) {
+          throw new Error(`Tao Studio does not expose the component ${componentName}.`)
+        }
+        insertComponent(component)
+      },
+      insertProjectView(viewName) {
+        const projectView = StudioInspector.projectViews(previewManifest).find(candidate =>
+          candidate.viewName === viewName
+        )
+        if (projectView === undefined) {
+          throw new Error(`Tao Studio project view is no longer available: ${viewName}`)
+        }
+        insertProjectView(projectView)
+      },
       async openFile(path) {
         if (!projectFiles.some(file => file.path === path)) {
           throw new Error(`Tao Studio file is no longer available: ${path}`)
         }
         await openFile(path)
+      },
+      async openScreen(subjectId) {
+        const screen = StudioRailPanels.screens(previewManifest).find(candidate => candidate.id === subjectId)
+        if (screen === undefined) {
+          throw new Error(`Tao Studio screen is no longer available: ${subjectId}`)
+        }
+        await openScreen(screen)
+      },
+      async productPanelAction(name, payload) {
+        if (name.startsWith('scenario-')) {
+          const command = parseScenarioPanelCommand(name, payload)
+          const preview = activePreview.current()
+          const model = preview?.scenarioModel
+          if (
+            preview?.cell === undefined
+            || model === undefined
+            || preview.cell.cellId !== command.cellId
+            || preview.cell.cellRevision !== command.cellRevision
+          ) {
+            throw new StudioApiError('The selected Studio preview changed while its scenario was being edited.', 409, {
+              actualCellId: preview?.cell?.cellId,
+              actualCellRevision: preview?.cell?.cellRevision,
+              code: 'stale-cell',
+              expectedCellId: command.cellId,
+              expectedCellRevision: command.cellRevision,
+            })
+          }
+          if (command.kind === 'scenario-apply-arguments') {
+            const checked = StudioScenarioControls.validateArguments(model, command.arguments)
+            if (!checked.ok) {
+              throw new Error(checked.issues.join(' '))
+            }
+            if (preview.reconfigureArguments === undefined) {
+              throw new Error('The active scenario cannot currently remount arguments.')
+            }
+            await preview.reconfigureArguments(checked.value)
+            return
+          }
+          if (command.kind === 'scenario-save-arguments') {
+            const action = StudioScenarioControls.saveArgumentsAction(
+              model,
+              command.arguments,
+              crypto.randomUUID(),
+              command.appearance,
+            )
+            if (!action.ok) {
+              throw new Error(action.issues.join(' '))
+            }
+            if (sourceActionBusy || !requireVisualEditDraftSaved()) {
+              return
+            }
+            await applySourceAction(action.value)
+            return
+          }
+          if (command.kind === 'scenario-capture-fixture') {
+            if (preview.captureFixture === undefined) {
+              throw new Error('The active scenario cannot currently capture a fixture.')
+            }
+            await preview.captureFixture(command.fixtureName)
+            return
+          }
+          const replay = StudioScenarioControls.replay(
+            model,
+            command.kind === 'scenario-replay-failure' ? undefined : command.capture,
+          )
+          if (!replay.ok) {
+            throw new Error(replay.issues.join(' '))
+          }
+          if (preview.replayRuntimeCapture === undefined) {
+            throw new Error('The active scenario cannot currently replay captured state.')
+          }
+          await preview.replayRuntimeCapture(replay.value)
+          return
+        }
+        if (name === 'capture-fixture') {
+          focusCaptureFixture()
+          return
+        }
+        if (name === 'clear-logs') {
+          const preview = activePreview.current()
+          if (preview !== undefined) {
+            preview.runtimeLogs = []
+          }
+          renderDrawer()
+          return
+        }
+        if (name === 'open-diagnostic') {
+          await openCompileDiagnostic(StudioPanelPayloads.compileDiagnostic(payload))
+          return
+        }
+        if (name === 'refresh-data') {
+          await loadData()
+          return
+        }
+        if (name === 'run-tests') {
+          await runTests()
+          return
+        }
+        if (name === 'open-test-failure') {
+          await openTestFailure(StudioPanelPayloads.testFailure(payload))
+          return
+        }
+        if (name === 'test-watch') {
+          const watch = JSON.parse(payload) as unknown
+          if (typeof watch !== 'boolean') {
+            throw new Error('Tao Studio test-watch actions require a boolean payload.')
+          }
+          testWatch = watch
+          renderDrawer()
+          if (watch) {
+            await runTests()
+          }
+          return
+        }
+        if (name === 'open-search-result') {
+          await openSearchResult(StudioPanelPayloads.searchResult(payload))
+          return
+        }
+        throw new Error(`Unsupported Tao Studio panel action: ${name}`)
       },
       async renameFile(path, sourceVersion, targetPath) {
         await fileTree!.rename(path, sourceVersion, targetPath)
@@ -1468,6 +1783,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         if (editor.state.selection.main.anchor !== safeAnchor || editor.state.selection.main.head !== safeHead) {
           editor.dispatch({ selection: { anchor: safeAnchor, head: safeHead } })
         }
+      },
+      async undoInspectorAction() {
+        await undoLatestSourceAction()
       },
     })
     let disposed = false
@@ -1626,3 +1944,110 @@ export const StudioProjectContext = {
     return /^\d+\s*-\s*/.test(leaf) ? segments.at(-2) ?? fallback : leaf
   },
 } as const
+
+function sourceActionUsesRenderOccurrence(action: StudioCanonicalSourceAction): boolean {
+  return action.kind === 'move-render'
+    || action.kind === 'set-layout-entry'
+    || action.kind === 'set-style-entry'
+    || action.kind === 'wrap-render'
+    || (action.kind === 'insert-component' || action.kind === 'insert-project-view')
+      && (typeof action['beforeId'] === 'string' || typeof action['afterId'] === 'string')
+}
+
+type StudioScenarioPanelCommand =
+  | Readonly<{
+    arguments: StudioJsonObject
+    cellId: string
+    cellRevision: number
+    kind: 'scenario-apply-arguments'
+  }>
+  | Readonly<{
+    appearance: 'dark' | 'light'
+    arguments: StudioJsonObject
+    cellId: string
+    cellRevision: number
+    kind: 'scenario-save-arguments'
+  }>
+  | Readonly<{
+    cellId: string
+    cellRevision: number
+    fixtureName: string
+    kind: 'scenario-capture-fixture'
+  }>
+  | Readonly<{
+    cellId: string
+    cellRevision: number
+    kind: 'scenario-replay-failure'
+  }>
+  | Readonly<{
+    capture: unknown
+    cellId: string
+    cellRevision: number
+    kind: 'scenario-replay-capture'
+  }>
+
+export function parseScenarioPanelCommand(name: string, payload: string): StudioScenarioPanelCommand {
+  let value: unknown
+  try {
+    value = JSON.parse(payload) as unknown
+  } catch {
+    throw new Error('Tao Studio scenario actions require a valid object payload.')
+  }
+  if (value === null || typeof value !== 'object') {
+    throw new Error('Tao Studio scenario actions require an object payload.')
+  }
+  const input = value as Record<string, unknown>
+  if (
+    typeof input['cellId'] !== 'string'
+    || input['cellId'].trim() === ''
+    || !Number.isInteger(input['cellRevision'])
+    || (input['cellRevision'] as number) < 0
+  ) {
+    throw new Error('Tao Studio scenario actions require the active cell identity and revision.')
+  }
+  const identity = { cellId: input['cellId'], cellRevision: input['cellRevision'] as number }
+  if (name === 'scenario-apply-arguments' || name === 'scenario-save-arguments') {
+    if (!studioJsonObject(input['arguments'])) {
+      throw new Error('Tao Studio scenario arguments require a JSON object payload.')
+    }
+    const appearance = input['appearance']
+    if (name === 'scenario-save-arguments' && appearance !== 'dark' && appearance !== 'light') {
+      throw new Error('Tao Studio scenario saves require a resolved light or dark appearance.')
+    }
+    return {
+      ...identity,
+      ...(name === 'scenario-save-arguments' ? { appearance } : {}),
+      arguments: input['arguments'],
+      kind: name,
+    } as StudioScenarioPanelCommand
+  }
+  if (name === 'scenario-capture-fixture') {
+    if (typeof input['fixtureName'] !== 'string') {
+      throw new Error('Tao Studio fixture capture requires a fixture name.')
+    }
+    return { ...identity, fixtureName: input['fixtureName'], kind: name }
+  }
+  if (name === 'scenario-replay-failure') {
+    return { ...identity, kind: name }
+  }
+  if (name === 'scenario-replay-capture') {
+    return { ...identity, capture: input['capture'], kind: name }
+  }
+  throw new Error(`Unsupported Tao Studio scenario action: ${name}`)
+}
+
+function studioJsonObject(value: unknown): value is StudioJsonObject {
+  return value !== null
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && Object.values(value).every(studioJsonValue)
+}
+
+function studioJsonValue(value: unknown): value is StudioJsonObject[keyof StudioJsonObject] {
+  return value === null
+    || typeof value === 'boolean'
+    || typeof value === 'number' && Number.isFinite(value)
+    || typeof value === 'string'
+    || Array.isArray(value) && value.every(studioJsonValue)
+    || studioJsonObject(value)
+}

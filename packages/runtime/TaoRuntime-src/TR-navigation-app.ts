@@ -464,7 +464,11 @@ export class RuntimeAppDefinition implements Subscription {
 
   private localPresentable(presentable: TaoPresentable): TaoPresentable {
     const identity = presentable.definition.identity?.canonical
-    return identity ? this.resolvePresentable(identity) : presentable
+    if (!identity) {
+      return presentable
+    }
+    const local = this.resolvePresentable(identity)
+    return presentable.boundArguments ? local.bind(presentable.boundArguments) : local
   }
 
   private activateNavigationLane(record: NavigationLaneRecord): void {

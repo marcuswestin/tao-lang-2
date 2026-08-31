@@ -8,6 +8,30 @@ const tsFence = '```ts'
 const fence = '```'
 
 Describe('compiler: language lowering', () => {
+  Test('lowers app-owned actions and live bound-view arguments into configured navigation', async () => {
+    const compiled = await Compiler.compileCode(`
+      use StackNav from @tao/nav
+      app BoundApp {
+        Name "Bound"
+        state Expanded is list of text = [] (persist)
+        action ChangeExpanded(Value list of text) { set Expanded = Value }
+        Navigator StackNav {
+          Initial Root(Expanded: Expanded, ChangeExpanded: ChangeExpanded)
+        }
+      }
+      view Root(Expanded list of text, ChangeExpanded action(list of text)) {
+        Title "Root"
+        render Empty()
+      }
+      view Empty() { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.code).toContain('_Scope.ChangeExpanded = TR.Action(')
+    Expect(compiled.code).toContain('TR.Navigation.BindView(')
+    Expect(compiled.code).toContain('["Expanded"]: TR.Alias(() => _Scope.Expanded.evaluate())')
+    Expect(compiled.code).toContain('["ChangeExpanded"]: TR.Alias(() => _Scope.ChangeExpanded.evaluate())')
+  })
+
   Test('keeps synchronous actions synchronous and marks ask responses as queue interrupts', async () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav

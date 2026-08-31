@@ -1,10 +1,13 @@
 import type { FormatHandlers } from '../formatting'
 
-/** DesignFormatter formats the minimal flat-token and named-bundle declaration surface. */
+/** DesignFormatter formats the structured §13 surface and its absorbed flat compatibility form. */
 export default {
   DesignDeclaration(f) {
     f.visibilityOnOwnLine()
     f.oneSpaceAfter('design')
+  },
+
+  DesignBlock(f) {
     f.oneSpaceBefore('{')
     f.indentedBraceBlock(f.node.members)
   },
@@ -16,4 +19,84 @@ export default {
   DesignBundle(f) {
     f.oneSpaceBeforeProperty('spec')
   },
+
+  DesignColorsBlock(f) {
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock(f.node.entries)
+    f.lineSeparatedList(f.node.entries)
+    f.commaLineList()
+  },
+
+  DesignColorEntry(f) {
+    f.oneSpaceBeforeProperty('value')
+    f.oneSpaceBeforeProperty('family')
+  },
+
+  DesignColorFamily(f) {
+    f.indentedBraceBlock(f.node.members)
+    f.lineSeparatedList(f.node.members)
+    f.commaLineList()
+  },
+
+  DesignColorFamilyMember(f) {
+    f.oneSpaceBeforeProperty('value')
+  },
+
+  DesignConditionalColor(f) {
+    f.oneSpaceAround('when', 'is', '/', 'not')
+  },
+
+  DesignColorAtom() {},
+
+  DesignSizesBlock(f) {
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock(f.node.entries)
+    f.lineSeparatedList(f.node.entries)
+    f.commaLineList()
+  },
+
+  DesignSizeEntry(f) {
+    f.oneSpaceBeforeProperty('value')
+  },
+
+  DesignSizeExpression(f) {
+    f.oneSpaceAround('+')
+  },
+
+  DesignSizeAtom() {},
+
+  DesignDimension() {},
+
+  DesignTextBlock(f) {
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock(f.node.entries)
+    f.lineSeparatedList(f.node.entries)
+  },
+
+  DesignTextEntry(f) {
+    f.oneSpaceBeforeProperty('spec')
+  },
+
+  DesignScreensBlock(f) {
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock(f.node.entries)
+    f.lineSeparatedList(f.node.entries)
+    f.commaLineList()
+  },
+
+  DesignScreenEntry(f) {
+    f.oneSpaceAround('below')
+  },
+
+  DesignStylesBlock(f) {
+    f.oneSpaceBefore('{')
+    f.indentedBraceBlock(f.node.entries)
+    f.lineSeparatedList(f.node.entries)
+  },
+
+  DesignStyleEntry(f) {
+    f.oneSpaceBeforeProperty('spec')
+  },
+
+  DesignValuePath() {},
 } satisfies Partial<FormatHandlers>

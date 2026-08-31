@@ -1,8 +1,9 @@
 # Proposed Decisions amendment - Action failures and transactions
 
-Status: proposed wording for Ro to incorporate into
-`Docs/Roadmap/Tao Revolution/Decisions.md`. The action failure and transaction core is implemented, but
-this document does not replace the authoritative Decisions file.
+Status: partially adopted by Ro on 2026-08-31. Native `fail` inference, foreign declaration-head `fails`,
+foreign `runs latest`, and automatic containment are incorporated into
+`Docs/Roadmap/Tao Revolution/Decisions.md` §§8 and 15. The runtime action-transaction model and generalized
+semantic capture/replay contract are explicitly deferred in `Roadmap.md`.
 
 ## Conflict with current Decisions
 
@@ -23,7 +24,7 @@ Decisions also reserves `transaction` for the future authority and all-or-nothin
 implemented action overlay must be described as today's runtime action transaction, not as completion of
 that broader Revolution contract.
 
-## Proposed action failure wording
+## Adopted action failure and scheduling wording
 
 An expected native action failure is written at the detection site:
 
@@ -90,7 +91,7 @@ labels and humanized action names are not part of the implemented fallback contr
   case and message, retry eligibility, and time. Runtime history is bounded to 50 reports and structurally
   excludes credentials and common secret-bearing fields.
 
-## Implemented error architecture boundary
+## Adopted containment and deferred capture boundary
 
 The automatic render-error architecture is now implemented at loop-item, screen/presentation, and app
 boundaries. The happy path renders directly. After a crash, the boundary reruns its subtree through a
@@ -99,11 +100,13 @@ Try again. The same failure against the same state escalates from item or screen
 instead of retrying forever. Restart app remounts the app without clearing data. Reset app data appears only
 when every participating provider grants reset, requires a second confirmation, and captures a backup first.
 
-Runtime capture is an explicit, versioned registry rather than object-graph serialization. The implemented
+Containment and its guarded recovery controls are adopted. Generalized runtime capture/replay is deferred;
+the current implementation uses an explicit, versioned registry rather than object-graph serialization. Its
 domains are `action-history`, `data`, `navigation`, and `persisted-state`; Studio adds its cell environment,
 receives the complete failure artifact over the trusted preview bridge, links to its source range, and can
 load or paste the artifact to remount one cell with restored semantic state. Credentials and opaque stores
-cannot enter unless a future domain explicitly registers them.
+cannot enter unless a future domain explicitly registers them. These implemented details are not yet an
+adopted language contract.
 
 This implementation still does not claim:
 

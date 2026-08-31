@@ -1,5 +1,5 @@
 import type React from 'react'
-import { DesignControls, type TaoDesign, type TaoDesignSpec } from './TR-design'
+import { DesignControls, type TaoDesign, type TaoDesignSource, type TaoDesignSpec } from './TR-design'
 import {
   LayoutControls,
   LayoutRuntime,
@@ -10,6 +10,7 @@ import {
 import type { TaoNavigationValue } from './TR-navigation'
 import type { TaoRuntimeApp } from './TR-navigation'
 import { ParentDirectionContext } from './TR-parent-direction'
+import type { TaoScheme } from './TR-scheme'
 
 /** TaoStudioIdentity locates one concrete render occurrence in Tao source. */
 export type TaoStudioIdentity = {
@@ -32,10 +33,14 @@ export type TaoProps = TaoLayoutProps & {
   navigationHostActive?: boolean
   /** response is private occurrence-owned ask metadata inherited by nested generated views. */
   response?: TaoResponseOccurrence
+  /** scheme is the resolved read-only appearance environment propagated independently of layout. */
+  scheme?: TaoScheme
   /** studio is private occurrence identity lowered only onto the concrete native root. */
   studio?: TaoStudioIdentity
   /** designSpec preserves one combined render-site clause list until its mounted app resolves it. */
   designSpec?: TaoDesignSpec
+  /** designSource locates the concrete clause occurrence without changing Design.Spec's flat ABI. */
+  designSource?: TaoDesignSource
   /** designDefault names the linked stdlib element bundle applied before render-site clauses. */
   designDefault?: string
   /** testTag is private Tao metadata lowered to the existing concrete native root. */
@@ -45,7 +50,7 @@ export type TaoProps = TaoLayoutProps & {
 }
 
 /** TaoAmbientContext is navigation-owned context propagated independently of layout caller props. */
-export type TaoAmbientContext = Pick<TaoProps, 'app' | 'navigation' | 'navigationHostActive' | 'response'>
+export type TaoAmbientContext = Pick<TaoProps, 'app' | 'navigation' | 'navigationHostActive' | 'response' | 'scheme'>
 
 /** TaoResponseOccurrence settles exactly one independently asked view. */
 export type TaoResponseOccurrence = {
@@ -92,6 +97,7 @@ export const TaoPropsControls = {
   mergeViewProps,
   nativePropsWithStyle,
   navigationInChain,
+  schemeInChain,
   visualNativeProps,
   visualLayout,
   visualTag,
@@ -103,11 +109,13 @@ function ambientContext(props: TaoProps | undefined): TaoAmbientContext {
   const response = responseInChain(props)
   const navigation = navigationInChain(props)
   const navigationHostActive = navigationHostActiveInChain(props)
+  const scheme = schemeInChain(props)
   return {
     ...(app ? { app } : {}),
     ...(response ? { response } : {}),
     ...(navigation ? { navigation } : {}),
     ...(navigationHostActive === undefined ? {} : { navigationHostActive }),
+    ...(scheme === undefined ? {} : { scheme }),
   }
 }
 
@@ -116,6 +124,13 @@ function navigationHostActiveInChain(props: TaoProps | undefined): boolean | und
     return undefined
   }
   return props.navigationHostActive ?? navigationHostActiveInChain(props.callerProps)
+}
+
+function schemeInChain(props: TaoProps | undefined): TaoScheme | undefined {
+  if (!props) {
+    return undefined
+  }
+  return props.scheme ?? schemeInChain(props.callerProps)
 }
 
 /** Finds the nearest enclosing mounted app accepted by an optional declaration-identity match. */
@@ -159,14 +174,15 @@ function mergeViewProps(
     : props.__tao
   const mountedApp = appInChain(taoRuntimeProps) ?? appInChain(explicitLayoutProps)
   const design = mountedApp?.design
+  const scheme = schemeInChain(taoRuntimeProps) ?? schemeInChain(explicitLayoutProps) ?? 'light'
   return {
     children: props.children,
     direction,
     nativeProps,
     props: LayoutRuntime.resolveProps(
       direction,
-      resolveDesignProps(taoRuntimeProps, design),
-      resolveDesignProps(explicitLayoutProps, design),
+      resolveDesignProps(taoRuntimeProps, design, scheme),
+      resolveDesignProps(explicitLayoutProps, design, scheme),
       ParentDirectionContext.propsForDirection(parentDirection),
     ),
     studio: studioIdentityInChain(props.__tao)
@@ -176,17 +192,25 @@ function mergeViewProps(
   }
 }
 
-function resolveDesignProps(props: TaoProps | undefined, design: TaoDesign | undefined): TaoProps | undefined {
+function resolveDesignProps(
+  props: TaoProps | undefined,
+  design: TaoDesign | undefined,
+  scheme: TaoScheme,
+): TaoProps | undefined {
   if (!props) {
     return undefined
   }
-  const resolved = DesignControls.resolve(design, props.designSpec, props.designDefault)
-  const callerProps = resolveDesignProps(props.callerProps, design)
+  const designSpec = props.designSpec === undefined || props.designSource === undefined
+    ? props.designSpec
+    : DesignControls.Source(props.designSpec, props.designSource)
+  const resolved = DesignControls.resolve(design, designSpec, props.designDefault, scheme)
+  const callerProps = resolveDesignProps(props.callerProps, design, scheme)
   const style = mergeResolvedStyles(props.style, resolved.style)
   return {
     ...props,
     callerProps,
     designDefault: undefined,
+    designSource: undefined,
     designSpec: undefined,
     layout: LayoutControls.merge(props.layout, resolved.layout),
     style,
@@ -212,7 +236,7 @@ function visualLayout(props: TaoProps | undefined): TaoVisualLayout | undefined 
   const resolved = LayoutRuntime.resolveProps(
     undefined,
     undefined,
-    resolveDesignProps(props, mountedDesign),
+    resolveDesignProps(props, mountedDesign, schemeInChain(props) ?? 'light'),
     ParentDirectionContext.propsForDirection(ParentDirectionContext.use()),
   )
   const studio = studioIdentityInChain(props)

@@ -19,7 +19,7 @@ export const StatementsCompiler = {
       EntityDataDeclaration: Compile.EntityDataDeclaration,
       EntityQueryDeclaration: Compile.EntityQueryDeclaration,
       DatasourceDeclaration: Compile.PrimitiveValueDeclaration,
-      DesignDeclaration: Compile.DesignDeclaration,
+      DesignDeclaration: value => Compile.DesignDeclaration(value, options),
       EnterTextStep: Compile.EnterTextStep,
       TagEnterStep: Compile.TagEnterStep,
       EventHandler: Compile.EventHandler,

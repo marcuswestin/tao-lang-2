@@ -1,8 +1,7 @@
 # Proposed Decisions amendment - Foreign views
 
-Status: proposed wording for Ro to incorporate into
-`Docs/Roadmap/Tao Revolution/Decisions.md`. Foreign views and transitive sidecars are implemented, but
-this document does not replace the authoritative Decisions file.
+Status: adopted by Ro on 2026-08-31 and incorporated into
+`Docs/Roadmap/Tao Revolution/Decisions.md` §15. This file retains the Studio-specific implementation record.
 
 ## Typed foreign views
 
@@ -24,7 +23,7 @@ view CodeEditor(Content text, Change action(text)) accepts content slots @toolba
 - `render inject` remains supported for an occurrence-level native implementation and is not replaced
   by this declaration form.
 
-The concrete `accepts content slots @name` spelling and the single `Slots` record prop are the proposed
+The concrete `accepts content slots @name` spelling and the single `Slots` record prop are the adopted
 resolution for the named-slot detail that the Studio v2 project brief did not spell exactly.
 
 ## Transitive sidecar graph
@@ -40,7 +39,7 @@ The parser, validator, formatter, compiler, runtime bridge, generated declaratio
 copying are implemented and focused tests execute imported foreign views. `@tao/code-editor` supplies the
 reusable CodeMirror 6 foreign view and can attach the existing JSON-over-WebSocket LSP transport.
 
-The production Studio browser client still constructs CodeMirror directly. `TaoStudioClient.tao` is an
-executable Files-panel strangler, but it does not yet mount the editor package or replace the TypeScript
-shell, canvas, inspector, or file-tree controller. Those are product migrations, not missing foreign-view
-language semantics.
+The production Tao client mounts `@tao/code-editor` through this boundary. Tao now owns the migrated panel
+structure and ordinary controls; the TypeScript workbench still owns file lifecycle, preview iframe
+lifecycle, trusted serialization/controller boundaries, and primitive leaves Tao cannot yet express.
+Those retained seams are product-host responsibilities, not missing foreign-view language semantics.

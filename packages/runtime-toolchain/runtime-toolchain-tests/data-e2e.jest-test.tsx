@@ -276,9 +276,8 @@ Describe('Expo runtime', () => {
       environment: {
         network: { mode: 'online' },
         scheme: {
-          capability: 'inert',
-          reason: 'Reactive Scheme is not implemented yet.',
           requested: 'light',
+          source: 'scenario',
         },
         version: 1,
       },

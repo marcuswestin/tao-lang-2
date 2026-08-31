@@ -1,10 +1,18 @@
-import type { StudioRenderInspection, StudioStyleLandingScope } from '@source-actions'
+import type {
+  StudioLayoutAlignment,
+  StudioLayoutContentTerm,
+  StudioLayoutEntry,
+  StudioLayoutSizeValue,
+  StudioRenderInspection,
+  StudioStyleLandingScope,
+} from '@source-actions'
 import {
   type StudioEditorSnippet,
   StudioInspector,
   type StudioInspectorSelection,
   studioPaletteComponents,
   type StudioProjectViewPaletteItem,
+  studioStyleProperties,
 } from '../StudioInspector'
 import type { StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import type { StudioCanonicalSourceAction } from '../StudioProtocol'
@@ -19,6 +27,8 @@ type StudioInspectorPanelOptions = {
   currentSourceVersion?: string
   inspection?: StudioRenderInspection
   onAction: (action: StudioCanonicalSourceAction) => void
+  /** Style actions use the server proposal/review/apply path rather than direct application. */
+  onStyleAction?: (action: StudioCanonicalSourceAction) => void
   onUndo: () => void
   selection?: StudioInspectorSelection
 }
@@ -276,19 +286,30 @@ function renderLayoutControls(
   const controls = document.createElement('div')
   controls.className = 'studio-inspector-controls'
   const disabled = options.busy || selection.identity.sourceVersion !== options.currentSourceVersion
+  const model = StudioInspector.layout(inspection)
   controls.append(
-    numericLayoutControl('Gap', 'gap', inspection, disabled, options.onAction, selection.renderId),
-    numericLayoutControl('Padding', 'pad', inspection, disabled, options.onAction, selection.renderId),
-    dimensionLayoutControl('Width', 'width', inspection, disabled, options.onAction, selection.renderId),
-    dimensionLayoutControl('Height', 'height', inspection, disabled, options.onAction, selection.renderId),
-    choiceLayoutControl(
-      'Alignment',
-      'aligned',
-      ['baseline', 'bottom', 'center', 'left', 'right', 'top'],
-      inspection,
+    numericLayoutControl('Gap', model.gap, disabled, value => ['gap', value], options.onAction, selection.renderId),
+    spacingLayoutControl('Padding', 'pad', model.padding, disabled, options.onAction, selection.renderId),
+    spacingLayoutControl('Margin', 'margin', model.margin, disabled, options.onAction, selection.renderId),
+    dimensionLayoutControl('Width', 'width', model.width, disabled, options.onAction, selection.renderId),
+    numericLayoutControl(
+      'Max width',
+      model.widthCap,
       disabled,
+      value => ['width', 'max', value],
       options.onAction,
       selection.renderId,
+    ),
+    dimensionLayoutControl('Height', 'height', model.height, disabled, options.onAction, selection.renderId),
+    growthLayoutControl(model.growth, model.shrink, disabled, options.onAction, selection.renderId),
+    shrinkLayoutControl(model.shrink, model.growth.mode, disabled, options.onAction, selection.renderId),
+    alignmentLayoutControl(model.alignment, disabled, options.onAction, selection.renderId),
+    contentLayoutControl(model.content, disabled, options.onAction, selection.renderId),
+    inspectorActionButton(
+      'Wrap in Stack',
+      'wrap-stack-layout',
+      disabled,
+      () => options.onAction({ kind: 'wrap-render', renderId: selection.renderId, wrapper: 'Stack' }),
     ),
   )
   return controls
@@ -296,21 +317,44 @@ function renderLayoutControls(
 
 function numericLayoutControl(
   label: string,
-  head: 'gap' | 'pad',
-  inspection: StudioRenderInspection,
+  current: StudioLayoutSizeValue | undefined,
+  disabled: boolean,
+  entry: (value: StudioLayoutSizeValue) => StudioLayoutEntry,
+  apply: (action: StudioCanonicalSourceAction) => void,
+  renderId: string,
+): HTMLElement {
+  const input = document.createElement('input')
+  input.disabled = disabled
+  input.placeholder = '8 or spacing.compact'
+  input.type = 'text'
+  input.value = current === undefined ? '' : String(current)
+  input.addEventListener('change', () => {
+    const value = StudioInspector.layoutSizeDraft(input.value)
+    input.setAttribute('aria-invalid', String(value === undefined))
+    if (value !== undefined) {
+      apply(StudioInspector.layoutAction(renderId, entry(value)))
+    }
+  })
+  return inspectorField(label, input)
+}
+
+function spacingLayoutControl(
+  label: string,
+  head: 'margin' | 'pad',
+  current: StudioLayoutEntry | undefined,
   disabled: boolean,
   apply: (action: StudioCanonicalSourceAction) => void,
   renderId: string,
 ): HTMLElement {
   const input = document.createElement('input')
   input.disabled = disabled
-  input.min = '1'
-  input.step = '1'
-  input.type = 'number'
-  input.value = String(layoutEntry(inspection, head)?.[1] ?? 8)
+  input.placeholder = '8 or horizontal 8 vertical 4'
+  input.value = current?.[0] === head ? current.slice(1).join(' ') : ''
   input.addEventListener('change', () => {
-    if (Number.isFinite(input.valueAsNumber)) {
-      apply({ entry: [head, input.valueAsNumber], kind: 'set-layout-entry', renderId })
+    const entry = StudioInspector.spacingEntryDraft(head, input.value)
+    input.setAttribute('aria-invalid', String(entry === undefined))
+    if (entry !== undefined) {
+      apply(StudioInspector.layoutAction(renderId, entry))
     }
   })
   return inspectorField(label, input)
@@ -319,35 +363,47 @@ function numericLayoutControl(
 function dimensionLayoutControl(
   label: string,
   head: 'height' | 'width',
-  inspection: StudioRenderInspection,
+  current: ReturnType<typeof StudioInspector.layout>['width'],
   disabled: boolean,
   apply: (action: StudioCanonicalSourceAction) => void,
   renderId: string,
 ): HTMLElement {
-  const current = layoutEntry(inspection, head)
   const mode = document.createElement('select')
-  for (const [value, text] of [['fill', 'Fill'], ['fixed', 'Fixed']] as const) {
+  const modes = [
+    ['unset', 'Not set'],
+    ['fill', 'Fill'],
+    ['fixed', 'Fixed'],
+  ] as const
+  for (const [value, text] of modes) {
     const option = document.createElement('option')
+    option.disabled = value === 'unset'
     option.value = value
     option.textContent = text
     mode.append(option)
   }
   mode.disabled = disabled
-  mode.value = typeof current?.[1] === 'number' ? 'fixed' : 'fill'
+  mode.value = current.mode
   const value = document.createElement('input')
   value.disabled = disabled || mode.value !== 'fixed'
-  value.min = '1'
-  value.type = 'number'
-  value.value = String(typeof current?.[1] === 'number' ? current[1] : 320)
+  value.placeholder = '320 or surface.card'
+  value.type = 'text'
+  value.value = 'value' in current ? String(current.value) : ''
   const commit = (): void => {
-    const next = mode.value === 'fill' ? 'fill' : value.valueAsNumber
-    if (next === 'fill' || Number.isFinite(next)) {
-      apply({ entry: [head, next], kind: 'set-layout-entry', renderId })
+    if (mode.value === 'fill') {
+      apply(StudioInspector.layoutAction(renderId, [head, 'fill']))
+      return
+    }
+    const next = StudioInspector.layoutSizeDraft(value.value)
+    value.setAttribute('aria-invalid', String(next === undefined))
+    if (next !== undefined) {
+      apply(StudioInspector.layoutAction(renderId, [head, next]))
     }
   }
   mode.addEventListener('change', () => {
     value.disabled = disabled || mode.value !== 'fixed'
-    commit()
+    if (mode.value !== 'unset') {
+      commit()
+    }
   })
   value.addEventListener('change', commit)
   const row = document.createElement('span')
@@ -356,44 +412,224 @@ function dimensionLayoutControl(
   return inspectorField(label, row)
 }
 
-function choiceLayoutControl(
-  label: string,
-  head: string,
-  values: readonly string[],
-  inspection: StudioRenderInspection,
+function growthLayoutControl(
+  current: ReturnType<typeof StudioInspector.layout>['growth'],
+  shrink: ReturnType<typeof StudioInspector.layout>['shrink'],
+  disabled: boolean,
+  apply: (action: StudioCanonicalSourceAction) => void,
+  renderId: string,
+): HTMLElement {
+  const mode = document.createElement('select')
+  for (
+    const [value, text] of [
+      ['unset', 'Not set'],
+      ['fill', 'Fill'],
+      ['claim', 'Claim'],
+      ['hug', 'Hug'],
+    ] as const
+  ) {
+    const option = document.createElement('option')
+    option.disabled = value === 'unset' || (value === 'claim' && shrink === 'rigid')
+    option.textContent = text
+    option.value = value
+    mode.append(option)
+  }
+  mode.disabled = disabled
+  mode.value = current.mode
+  const value = document.createElement('input')
+  value.disabled = disabled || mode.value !== 'claim'
+  value.min = '1'
+  value.type = 'number'
+  value.value = current.mode === 'claim' ? String(current.value) : ''
+  const commit = (): void => {
+    if (mode.value === 'fill' || mode.value === 'hug') {
+      apply(StudioInspector.layoutAction(renderId, [mode.value]))
+      return
+    }
+    const claim = StudioInspector.positiveNumberDraft(value.value)
+    value.setAttribute('aria-invalid', String(claim === undefined))
+    if (mode.value === 'claim' && claim !== undefined) {
+      apply(StudioInspector.layoutAction(renderId, ['claim', claim]))
+    }
+  }
+  mode.addEventListener('change', () => {
+    value.disabled = disabled || mode.value !== 'claim'
+    if (mode.value !== 'unset') {
+      commit()
+    }
+  })
+  value.addEventListener('change', commit)
+  const row = document.createElement('span')
+  row.className = 'studio-inspector-inline-controls'
+  row.append(mode, value)
+  return inspectorField('Growth', row)
+}
+
+function shrinkLayoutControl(
+  current: ReturnType<typeof StudioInspector.layout>['shrink'],
+  growth: ReturnType<typeof StudioInspector.layout>['growth']['mode'],
   disabled: boolean,
   apply: (action: StudioCanonicalSourceAction) => void,
   renderId: string,
 ): HTMLElement {
   const select = document.createElement('select')
-  select.disabled = disabled
-  for (const value of values) {
+  for (const [value, text] of [['unset', 'Not set'], ['compress', 'Compress'], ['rigid', 'Rigid']] as const) {
     const option = document.createElement('option')
-    option.textContent = value
+    option.disabled = value === 'unset' || (value === 'rigid' && growth === 'claim')
+    option.textContent = text
     option.value = value
     select.append(option)
   }
-  select.value = String(layoutEntry(inspection, head)?.[1] ?? values[0])
-  select.addEventListener('change', () => apply({ entry: [head, select.value], kind: 'set-layout-entry', renderId }))
-  return inspectorField(label, select)
+  select.disabled = disabled
+  select.value = current
+  select.addEventListener('change', () => {
+    if (select.value === 'compress' || select.value === 'rigid') {
+      apply(StudioInspector.layoutAction(renderId, [select.value]))
+    }
+  })
+  return inspectorField('Shrink', select)
+}
+
+function alignmentLayoutControl(
+  current: ReturnType<typeof StudioInspector.layout>['alignment'],
+  disabled: boolean,
+  apply: (action: StudioCanonicalSourceAction) => void,
+  renderId: string,
+): HTMLElement {
+  const select = document.createElement('select')
+  const values = [
+    ['unset', 'Not set'],
+    ['fill', 'Fill cross axis'],
+    ['centered', 'Centered'],
+    ...(['baseline', 'bottom', 'center', 'left', 'right', 'top'] as const).map(value => [`aligned:${value}`, value]),
+  ] as const
+  for (const [value, text] of values) {
+    const option = document.createElement('option')
+    option.disabled = value === 'unset'
+    option.textContent = text
+    option.value = value
+    select.append(option)
+  }
+  select.disabled = disabled
+  select.value = current.mode === 'aligned' ? `aligned:${current.value}` : current.mode
+  select.addEventListener('change', () => {
+    const alignment = select.value.startsWith('aligned:')
+      ? select.value.slice('aligned:'.length) as StudioLayoutAlignment
+      : undefined
+    const entry: StudioLayoutEntry | undefined = alignment === undefined
+      ? select.value === 'fill' || select.value === 'centered' ? [select.value] : undefined
+      : ['aligned', alignment]
+    if (entry !== undefined) {
+      apply(StudioInspector.layoutAction(renderId, entry))
+    }
+  })
+  return inspectorField('Self alignment', select)
+}
+
+function contentLayoutControl(
+  current: readonly StudioLayoutContentTerm[] | undefined,
+  disabled: boolean,
+  apply: (action: StudioCanonicalSourceAction) => void,
+  renderId: string,
+): HTMLElement {
+  const terms: readonly StudioLayoutContentTerm[] = [
+    'baseline',
+    'bottom',
+    'center',
+    'left',
+    'right',
+    'top',
+    'spread',
+    'spread-balanced',
+    'spread-inset',
+    'stretch',
+  ]
+  const first = contentTermSelect('Not set', current?.[0], terms, disabled)
+  const second = contentTermSelect('One term', current?.[1], terms, disabled)
+  const commit = (): void => {
+    if (first.value === '') {
+      return
+    }
+    const selected = [first.value, ...(second.value === '' ? [] : [second.value])] as StudioLayoutContentTerm[]
+    const entry = StudioInspector.contentEntry(selected)
+    second.setAttribute('aria-invalid', String(entry === undefined))
+    if (entry !== undefined) {
+      apply(StudioInspector.layoutAction(renderId, entry))
+    }
+  }
+  first.addEventListener('change', () => {
+    const paired = second.value === ''
+      ? undefined
+      : StudioInspector.contentEntry([first.value, second.value] as StudioLayoutContentTerm[])
+    if (paired === undefined) {
+      second.value = ''
+    }
+    commit()
+  })
+  second.addEventListener('change', commit)
+  const row = document.createElement('span')
+  row.className = 'studio-inspector-inline-controls'
+  row.append(first, second)
+  return inspectorField('Content', row)
+}
+
+function contentTermSelect(
+  emptyLabel: string,
+  current: StudioLayoutContentTerm | undefined,
+  terms: readonly StudioLayoutContentTerm[],
+  disabled: boolean,
+): HTMLSelectElement {
+  const select = document.createElement('select')
+  const empty = document.createElement('option')
+  empty.textContent = emptyLabel
+  empty.value = ''
+  select.append(empty)
+  for (const term of terms) {
+    const option = document.createElement('option')
+    option.textContent = term
+    option.value = term
+    select.append(option)
+  }
+  select.disabled = disabled
+  select.value = current ?? ''
+  return select
 }
 
 function renderStyleControls(
   inspection: StudioRenderInspection,
   selection: StudioInspectorSelection,
-  options: { busy: boolean; currentSourceVersion?: string; onAction: (action: StudioCanonicalSourceAction) => void },
+  options: {
+    busy: boolean
+    currentSourceVersion?: string
+    onStyleAction?: (action: StudioCanonicalSourceAction) => void
+  },
 ): HTMLElement {
   const controls = document.createElement('div')
   controls.className = 'studio-inspector-controls'
   const bundle = inspection.styleProvenance.find(provenance => provenance.landing.kind === 'style-bundle')
-  const current = inspection.explorations[0]
-    ?? bundle?.chain[1]?.split(/\s+/)
-    ?? inspection.styleEntries[0]
-    ?? ['fg', 'ink']
-  const head = document.createElement('input')
+  const current =
+    inspection.explorations.find(entry => studioStyleProperties.some(property => property.head === entry[0]))
+      ?? bundle?.chain[1]?.split(/\s+/)
+      ?? inspection.styleEntries[0]
+      ?? ['fg', 'ink']
+  const head = document.createElement('select')
   const value = document.createElement('input')
+  for (const property of studioStyleProperties) {
+    const option = document.createElement('option')
+    option.textContent = property.label
+    option.value = property.head
+    head.append(option)
+  }
+  if (!studioStyleProperties.some(property => property.head === current[0])) {
+    const unsupported = document.createElement('option')
+    unsupported.disabled = true
+    unsupported.textContent = `Unsupported: ${String(current[0])}`
+    unsupported.value = String(current[0])
+    head.append(unsupported)
+  }
   head.value = String(current[0])
   value.value = current.slice(1).join(' ')
+  value.type = 'text'
   const landing = document.createElement('select')
   const scopes: Array<{ disabled?: boolean; label: string; landing: StudioStyleLandingScope }> = [
     { label: 'Element inline', landing: { kind: 'element-inline' } },
@@ -426,7 +662,7 @@ function renderStyleControls(
     })
   }
   if (
-    (current[0] === 'bg' || current[0] === 'border' || current[0] === 'fg')
+    isStudioColorHead(current[0])
     && typeof current[1] === 'string'
     && current[1].startsWith('#')
   ) {
@@ -452,37 +688,26 @@ function renderStyleControls(
   }
   const apply = document.createElement('button')
   apply.className = 'studio-inspector-button'
-  apply.disabled = options.busy || selection.identity.sourceVersion !== options.currentSourceVersion
+  apply.disabled = options.busy
+    || selection.identity.sourceVersion !== options.currentSourceVersion
+    || options.onStyleAction === undefined
   apply.textContent = 'Apply style entry'
   apply.type = 'button'
   apply.addEventListener('click', () => {
-    const terms = value.value.trim().split(/\s+/).filter(Boolean).map(term => {
-      const number = Number(term)
-      return Number.isFinite(number) && term !== '' ? number : term
-    })
-    const scope = scopes[Number(landing.value)]?.landing ?? { kind: 'element-inline' as const }
-    const provenance = inspection.styleProvenance.find(candidate =>
-      candidate.landing.kind === 'style-bundle'
-      && scope.kind === 'style-bundle'
-      && candidate.landing.bundleName === scope.bundleName
-    )
-    if (
-      provenance !== undefined
-      && provenance.blastRadius > 1
-      && !window.confirm(
-        `Edit shared style '${
-          scope.kind === 'style-bundle' ? scope.bundleName : ''
-        }' across ${provenance.blastRadius} renders? Choose the fork landing to affect only this render.`,
-      )
-    ) {
+    if (options.onStyleAction === undefined) {
       return
     }
-    options.onAction({
-      entry: [head.value, ...terms],
-      kind: 'set-style-entry',
+    const entry = StudioInspector.styleEntryDraft(head.value, value.value)
+    value.setAttribute('aria-invalid', String(entry === undefined))
+    if (entry === undefined) {
+      return
+    }
+    const scope = scopes[Number(landing.value)]?.landing ?? { kind: 'element-inline' as const }
+    options.onStyleAction(StudioInspector.styleAction({
+      entry,
       landing: scope,
       renderId: selection.renderId,
-    })
+    }))
   })
   controls.append(
     inspectorField('Property', head),
@@ -490,7 +715,12 @@ function renderStyleControls(
     inspectorField('Landing', landing),
     apply,
   )
-  const unavailable = options.busy || selection.identity.sourceVersion !== options.currentSourceVersion
+  if (options.onStyleAction === undefined) {
+    controls.append(inspectorNote('Style editing is waiting for the server proposal/review path.'))
+  }
+  const unavailable = options.busy
+    || selection.identity.sourceVersion !== options.currentSourceVersion
+    || options.onStyleAction === undefined
   for (const exploration of inspection.explorations) {
     const label = exploration.join(' ')
     const promotion = document.createElement('div')
@@ -499,17 +729,17 @@ function renderStyleControls(
       provenance.editable !== false && provenance.landing.kind === 'style-bundle'
     )
     if (localBundle?.landing.kind === 'style-bundle') {
+      const bundleName = localBundle.landing.bundleName
       promotion.append(inspectorActionButton(
         `Promote ${label} to forked style`,
         'promote-style-fork',
         unavailable,
         () =>
-          options.onAction({
+          options.onStyleAction?.(StudioInspector.styleAction({
             entry: exploration,
-            kind: 'set-style-entry',
-            landing: { ...localBundle.landing, mode: 'fork' },
+            landing: { bundleName, kind: 'style-bundle', mode: 'fork' },
             renderId: selection.renderId,
-          }),
+          })),
       ))
     }
     if (inspection.elementName !== undefined) {
@@ -518,16 +748,15 @@ function renderStyleControls(
         'promote-element-default',
         unavailable || inspection.design?.editable === false,
         () =>
-          options.onAction({
+          options.onStyleAction?.(StudioInspector.styleAction({
             entry: exploration,
-            kind: 'set-style-entry',
             landing: { elementName: inspection.elementName!, kind: 'element-default' },
             renderId: selection.renderId,
-          }),
+          })),
       ))
     }
     if (
-      (exploration[0] === 'bg' || exploration[0] === 'border' || exploration[0] === 'fg')
+      isStudioColorHead(exploration[0])
       && typeof exploration[1] === 'string'
       && exploration[1].startsWith('#')
     ) {
@@ -536,12 +765,11 @@ function renderStyleControls(
         'promote-color-token',
         unavailable || inspection.design?.editable === false,
         () =>
-          options.onAction({
+          options.onStyleAction?.(StudioInspector.styleAction({
             entry: exploration,
-            kind: 'set-style-entry',
             landing: { kind: 'token', tokenName: `${exploration[0]}Color` },
             renderId: selection.renderId,
-          }),
+          })),
       ))
     }
     if (promotion.childElementCount > 0) {
@@ -561,6 +789,11 @@ function renderStyleControls(
   return controls
 }
 
+function isStudioColorHead(value: string | number | undefined): boolean {
+  return typeof value === 'string'
+    && studioStyleProperties.some(property => property.head === value && property.valueKind === 'color')
+}
+
 function renderActionControls(
   selection: StudioInspectorSelection,
   options: { busy: boolean; currentSourceVersion?: string; onAction: (action: StudioCanonicalSourceAction) => void },
@@ -574,10 +807,6 @@ function renderActionControls(
     () => options.onAction({ kind: 'wrap-render', renderId: selection.renderId, wrapper: 'Stack' }),
   ))
   return controls
-}
-
-function layoutEntry(inspection: StudioRenderInspection, head: string): readonly (number | string)[] | undefined {
-  return inspection.layoutEntries.findLast(entry => entry[0] === head)
 }
 
 function inspectorField(label: string, control: HTMLElement): HTMLElement {

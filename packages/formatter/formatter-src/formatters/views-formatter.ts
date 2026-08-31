@@ -54,6 +54,12 @@ export default {
   /** LayoutEntry formats one layout entry's head and terms. */
   LayoutEntry(f) {
     f.oneSpaceBeforeProperty('terms')
+    f.oneSpaceBeforeProperty('condition')
+  },
+
+  /** LayoutCondition formats the narrow postfix design condition as one readable clause. */
+  LayoutCondition(f) {
+    f.oneSpaceAround('when', 'is')
   },
 
   /** LayoutWord is a single token with no interior formatting. */

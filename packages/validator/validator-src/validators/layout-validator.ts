@@ -19,7 +19,6 @@ const layoutValidationMessages = {
 
 const alignTermValues = ['top', 'bottom', 'left', 'right', 'center', 'baseline'] as const
 const padSideValues = ['top', 'right', 'bottom', 'left', 'horizontal', 'vertical'] as const
-const dimensionTermValues = ['fill'] as const
 const contentTermValues = [
   'top',
   'bottom',
@@ -35,7 +34,6 @@ const contentTermValues = [
 
 type AlignTerm = (typeof alignTermValues)[number]
 type ContentTerm = (typeof contentTermValues)[number]
-type DimensionTerm = (typeof dimensionTermValues)[number]
 type PadSide = (typeof padSideValues)[number]
 type PhysicalPadSide = 'bottom' | 'left' | 'right' | 'top'
 type ContentTermConflictKey = 'center' | 'cross-alignment' | 'horizontal' | 'main-distribution' | 'vertical'
@@ -96,7 +94,7 @@ function isPotentialDesignEntry(entry: AST.LayoutEntry): boolean {
   return entry.terms.length === 0 || designVisualHeads.has(head)
 }
 
-const designVisualHeads = new Set(['bg', 'border', 'fg', 'line', 'radius', 'size', 'weight'])
+const designVisualHeads = new Set<string>(ASTUtils.designVisualHeads)
 
 function validateLayoutEntry(
   entry: AST.LayoutEntry,
@@ -115,9 +113,9 @@ function validateLayoutEntry(
   }
 
   Switch(headValue, {
-    claim: () => validateSingleNumber(entry, ctx),
+    claim: () => validateSingleNumber(entry, ctx, false),
     content: () => validateContent(entry, ctx),
-    gap: () => validateSingleNumber(entry, ctx),
+    gap: () => validateSingleNumber(entry, ctx, true),
     margin: () => validateSpacing(entry, ctx, 'margin'),
     pad: () => validateSpacing(entry, ctx, 'pad'),
     width: () => validateDimension(entry, ctx, { supportsMaximum: true }),
@@ -144,13 +142,18 @@ function validateContent(
   validateContentTermConflicts(entry, contentTerms, ctx)
 }
 
-function validateSingleNumber(entry: AST.LayoutEntry, ctx: ValidationContext): void {
+function validateSingleNumber(entry: AST.LayoutEntry, ctx: ValidationContext, allowToken: boolean): void {
   const terms = entry.terms
-  if (terms.length !== 1 || !AST.isLayoutNumberLiteral(terms[0])) {
+  if (
+    terms.length !== 1
+    || (!AST.isLayoutNumberLiteral(terms[0]) && !(allowToken && isDesignSizeReference(terms[0])))
+  ) {
     ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
     return
   }
-  validatePositiveNumber(entry, terms[0], ctx)
+  if (AST.isLayoutNumberLiteral(terms[0])) {
+    validatePositiveNumber(entry, terms[0], ctx)
+  }
 }
 
 function validatePositiveNumber(
@@ -165,8 +168,10 @@ function validatePositiveNumber(
 
 function validateSpacing(entry: AST.LayoutEntry, ctx: ValidationContext, head: 'margin' | 'pad'): void {
   const terms = entry.terms
-  if (terms.length === 1 && AST.isLayoutNumberLiteral(terms[0])) {
-    validatePositiveNumber(entry, terms[0], ctx)
+  if (terms.length === 1 && (AST.isLayoutNumberLiteral(terms[0]) || isDesignSizeReference(terms[0]))) {
+    if (AST.isLayoutNumberLiteral(terms[0])) {
+      validatePositiveNumber(entry, terms[0], ctx)
+    }
     return
   }
   if (terms.length < 2 || terms.length % 2 !== 0) {
@@ -179,11 +184,13 @@ function validateSpacing(entry: AST.LayoutEntry, ctx: ValidationContext, head: '
     const sideTerm = terms[index]
     const value = terms[index + 1]
     const side = sideTerm && AST.isLayoutWord(sideTerm) ? padSideValue(sideTerm) : undefined
-    if (!side || !value || !AST.isLayoutNumberLiteral(value)) {
+    if (!side || !value || (!AST.isLayoutNumberLiteral(value) && !isDesignSizeReference(value))) {
       ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
       return
     }
-    validatePositiveNumber(entry, value, ctx)
+    if (AST.isLayoutNumberLiteral(value)) {
+      validatePositiveNumber(entry, value, ctx)
+    }
     for (const physicalSide of padPhysicalSides(side)) {
       sideConflictItems.push({ keys: [physicalSide], label: `${head} ${physicalSide}`, node: entry })
     }
@@ -198,8 +205,10 @@ function validateDimension(
 ): void {
   const terms = entry.terms
   if (options.supportsMaximum && terms[0] && AST.isLayoutWord(terms[0]) && layoutWordText(terms[0]) === 'max') {
-    if (terms.length === 2 && AST.isLayoutNumberLiteral(terms[1])) {
-      validatePositiveNumber(entry, terms[1], ctx)
+    if (terms.length === 2 && (AST.isLayoutNumberLiteral(terms[1]) || isDesignSizeReference(terms[1]))) {
+      if (AST.isLayoutNumberLiteral(terms[1])) {
+        validatePositiveNumber(entry, terms[1], ctx)
+      }
       return
     }
     ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
@@ -214,7 +223,11 @@ function validateDimension(
     validatePositiveNumber(entry, value, ctx)
     return
   }
-  if (AST.isLayoutWord(value) && dimensionTermValue(value)) {
+  if (AST.isLayoutWord(value) && layoutWordText(value) === 'fill') {
+    return
+  }
+  // A non-keyword word or dotted path is resolved as a selected design size by DesignValidator.
+  if (isDesignSizeReference(value)) {
     return
   }
   ctx.error(layoutValidationMessages.unsupportedTerm(layoutEntryText(entry), layoutTermText(value)), entry)
@@ -314,6 +327,21 @@ const layoutHeads = [
   'width',
 ] as const
 
+const reservedDesignSizeTerms = new Set<string>([
+  ...layoutHeads,
+  ...alignTermValues,
+  ...contentTermValues,
+  ...padSideValues,
+  'max',
+  'shrink',
+])
+
+function isDesignSizeReference(term: AST.LayoutTerm | undefined): term is AST.LayoutWord {
+  return term !== undefined
+    && AST.isLayoutWord(term)
+    && !reservedDesignSizeTerms.has(layoutWordText(term))
+}
+
 type LayoutHead = (typeof layoutHeads)[number]
 
 function layoutHeadValue(head: AST.LayoutWord): LayoutHead | undefined {
@@ -354,10 +382,6 @@ function alignTermValue(term: AST.LayoutWord): AlignTerm | undefined {
 
 function contentTermValue(term: AST.LayoutWord): ContentTerm | undefined {
   return layoutWordValue(term, contentTermValues)
-}
-
-function dimensionTermValue(term: AST.LayoutWord): DimensionTerm | undefined {
-  return layoutWordValue(term, dimensionTermValues)
 }
 
 function padSideValue(term: AST.LayoutWord): PadSide | undefined {

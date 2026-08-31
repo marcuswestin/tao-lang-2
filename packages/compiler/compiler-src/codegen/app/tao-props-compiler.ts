@@ -8,6 +8,9 @@ export const TaoPropsCompiler = {
   /** RenderTaoProps compiles the __tao prop fragment for a render invocation. */
   RenderTaoProps(render: AST.Render, options: CodegenOptions = {}): Compiled {
     const designSpec = render.layoutClause ? Compile.DesignSpec(render.layoutClause) : gen`undefined`
+    const designSource = options.studio === true && render.layoutClause
+      ? Compile.DesignSpecSource(render.layoutClause)
+      : undefined
     const elementName = ASTUtils.standardDesignElementName(render)
     const designDefault = elementName === undefined ? undefined : gen`${gen.jsLiteral(elementName)}`
     // Every view occurrence takes the same defaults; layout comes only from the call site's clauses.
@@ -16,8 +19,16 @@ export const TaoPropsCompiler = {
     const studio = options.studio === true ? compileStudioRenderOccurrence(render) : undefined
     return Switch.type(render, {
       RenderStatement: renderStatement =>
-        compileTaoPropsForRenderStatement(layout, designSpec, designDefault, testTag, studio, renderStatement),
-      ViewRender: () => compileTaoPropsForViewRender(layout, designSpec, designDefault, testTag, studio),
+        compileTaoPropsForRenderStatement(
+          layout,
+          designSpec,
+          designSource,
+          designDefault,
+          testTag,
+          studio,
+          renderStatement,
+        ),
+      ViewRender: () => compileTaoPropsForViewRender(layout, designSpec, designSource, designDefault, testTag, studio),
     })
   },
 } as const
@@ -25,6 +36,7 @@ export const TaoPropsCompiler = {
 function compileTaoPropsForRenderStatement(
   layout: Compiled,
   designSpec: Compiled,
+  designSource: Compiled | undefined,
   designDefault: Compiled | undefined,
   testTag: string | undefined,
   studio: Compiled | undefined,
@@ -36,24 +48,25 @@ function compileTaoPropsForRenderStatement(
   // omit the full caller-props chain, matching ViewRender, because only a view's root inherits it.
   const callerProps = gen`, _ViewProps.__tao${inheritsCallerProps ? gen`` : gen`, false`}`
   return gen` __tao={TR.ViewTaoProps({ ...TR.TaoContext(_ViewProps.__tao), layout: ${layout}, designSpec: ${designSpec}${
-    designDefault ? gen`, designDefault: ${designDefault}` : ''
-  }${testTag ? gen`, testTag: ${gen.jsLiteral(testTag)}` : ''}${
-    studio ? gen`, studio: ${studio}` : ''
-  } }${callerProps})}`
+    designSource ? gen`, designSource: ${designSource}` : ''
+  }${designDefault ? gen`, designDefault: ${designDefault}` : ''}${
+    testTag ? gen`, testTag: ${gen.jsLiteral(testTag)}` : ''
+  }${studio ? gen`, studio: ${studio}` : ''} }${callerProps})}`
 }
 
 function compileTaoPropsForViewRender(
   layout: Compiled,
   designSpec: Compiled,
+  designSource: Compiled | undefined,
   designDefault: Compiled | undefined,
   testTag: string | undefined,
   studio: Compiled | undefined,
 ): Compiled {
   return gen` __tao={TR.ViewTaoProps({ ...TR.TaoContext(_ViewProps.__tao), layout: ${layout}, designSpec: ${designSpec}${
-    designDefault ? gen`, designDefault: ${designDefault}` : ''
-  }${testTag ? gen`, testTag: ${gen.jsLiteral(testTag)}` : ''}${
-    studio ? gen`, studio: ${studio}` : ''
-  } }, _ViewProps.__tao, false)}`
+    designSource ? gen`, designSource: ${designSource}` : ''
+  }${designDefault ? gen`, designDefault: ${designDefault}` : ''}${
+    testTag ? gen`, testTag: ${gen.jsLiteral(testTag)}` : ''
+  }${studio ? gen`, studio: ${studio}` : ''} }, _ViewProps.__tao, false)}`
 }
 
 /** compileStudioRenderOccurrence emits one version-bound source locator for a rendered occurrence. */

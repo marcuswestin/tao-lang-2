@@ -351,6 +351,9 @@ function effectiveConfigurationProperties(
 }
 
 function configurationValueType(value: AST.ConfigurationValue): ASTUtils.TaoType {
+  if (AST.isViewBinding(value)) {
+    return { kind: 'primitive', primitive: 'view' }
+  }
   if (AST.isConfigurationReference(value)) {
     return referencedConfigurationType(value.target.ref)
   }

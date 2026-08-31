@@ -15,7 +15,7 @@ type SourceFile = {
   source: string
 }
 
-/** wordFlowerDirectoryIssues checks the WordFlower tranche status headers. */
+/** wordFlowerDirectoryIssues checks status headers and enforces mapped byte parity at absorption. */
 export function wordFlowerDirectoryIssues(directory: WordFlowerDirectory): string[] {
   const currentStatuses = directoryTrancheStatuses(directory.currentFiles)
   const nextStatuses = directoryTrancheStatuses(directory.nextFiles)
@@ -28,8 +28,45 @@ export function wordFlowerDirectoryIssues(directory: WordFlowerDirectory): strin
   }
   if (nextStatuses.length !== 1) {
     issues.push(`${directory.nextPath} must contain exactly one tranche status header across the directory.`)
+  } else if (nextStatuses[0] === 'absorbed') {
+    issues.push(...wordFlowerAbsorbedParityIssues(directory))
   }
   return issues
+}
+
+function wordFlowerAbsorbedParityIssues(directory: WordFlowerDirectory): string[] {
+  const current = new Map(directory.currentFiles.map(file => [file.path, file]))
+  const next = new Map(directory.nextFiles.map(file => [currentWordFlowerPath(file.path), file]))
+  const paths = [...new Set([...current.keys(), ...next.keys()])].sort()
+  return paths.flatMap(path => {
+    const currentFile = current.get(path)
+    const nextFile = next.get(path)
+    if (currentFile === undefined) {
+      return [`${directory.nextPath} is absorbed but ${path} is missing from ${directory.currentPath}.`]
+    }
+    if (nextFile === undefined) {
+      return [`${directory.nextPath} is absorbed but ${path} is missing from its mapped files.`]
+    }
+    return Buffer.from(normalizedWordFlowerBytes(currentFile)).equals(normalizedWordFlowerBytes(nextFile))
+      ? []
+      : [`${directory.nextPath} is absorbed but ${path} differs from ${directory.currentPath}.`]
+  })
+}
+
+function currentWordFlowerPath(path: string): string {
+  return path.endsWith('.tao-next') ? path.slice(0, -'-next'.length) : path
+}
+
+function normalizedWordFlowerBytes(file: SourceFile): Uint8Array {
+  const bytes = file.bytes ?? Buffer.from(file.source)
+  const binary = Buffer.from(bytes).toString('latin1')
+  return Buffer.from(
+    binary.replace(
+      /^\/\/ Tranche status: (?:open|absorbed)$/gm,
+      '// Tranche status: normalized',
+    ),
+    'latin1',
+  )
 }
 
 /** missingTestAppReadmeEntries returns Test App directories without an exact README heading. */

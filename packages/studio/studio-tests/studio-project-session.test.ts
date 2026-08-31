@@ -94,10 +94,114 @@ Test('Studio project session exposes parser-owned design tokens and local bundle
     })
     const file = await session.readFile('Garden.tao')
 
-    Expect(await session.inspectDesign({ path: file.path, sourceVersion: file.sourceVersion })).toEqual([
-      { kind: 'token', name: 'ink', value: '#121826' },
-      { entries: ['gap 8', 'fg ink'], kind: 'bundle', name: 'card' },
+    const values = await session.inspectDesign({ path: file.path, sourceVersion: file.sourceVersion })
+    Expect(values).toHaveLength(2)
+    Expect(values[0]).toMatchObject({ designName: 'GardenDesign', kind: 'token', name: 'ink', value: '#121826' })
+    Expect(values[1]).toMatchObject({
+      designName: 'GardenDesign',
+      entries: ['gap 8', 'fg ink'],
+      kind: 'bundle',
+      name: 'card',
+    })
+    for (const value of values) {
+      Expect(file.content.slice(value.start, value.end)).toContain(value.name)
+    }
+  })
+})
+
+Test('Studio project session inventories every structured design family with exact source identity', async () => {
+  await withTaoFiles('tao-studio-structured-design-', {
+    'Garden.tao': `
+      design GardenDesign {
+         colors { ember #d9622b { 20 #f4d7c8 } canvas when Scheme is Dark ember.20 / not #fff }
+         sizes { sm 8.px, md sm + 4.px }
+         text { body [size sm, ink canvas] }
+         screens { narrow below 500.px, wide }
+         styles { card [radius md] Text [ink canvas] }
+      }
+      app Garden { view Main Design GardenDesign }
+      view Main() { render Text("Garden") [card, body] }
+    `,
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    const file = await session.readFile('Garden.tao')
+    const values = await session.inspectDesign({ path: file.path, sourceVersion: file.sourceVersion })
+    Expect(values.map(value => ({ kind: value.kind, name: value.name }))).toEqual([
+      { kind: 'color', name: 'ember' },
+      { kind: 'color', name: 'ember.20' },
+      { kind: 'color', name: 'canvas' },
+      { kind: 'size', name: 'sm' },
+      { kind: 'size', name: 'md' },
+      { kind: 'text', name: 'body' },
+      { kind: 'screen', name: 'narrow' },
+      { kind: 'screen', name: 'wide' },
+      { kind: 'style', name: 'card' },
+      { kind: 'default', name: 'Text' },
     ])
+    for (const value of values.filter(value => 'start' in value)) {
+      Expect(value.designName).toBe('GardenDesign')
+      Expect(value.start).toBeLessThan(value.end)
+      Expect(file.content.slice(value.start, value.end)).toContain(value.name.split('.').at(-1)!)
+    }
+  })
+})
+
+Test('Studio applies and undoes structured size promotion through the versioned source-action bus', async () => {
+  await withTaoFiles('tao-studio-size-promotion-', {
+    'Garden.tao': `
+      design GardenDesign { colors { ink #111 } styles { Text [ink ink] } }
+      app Garden { view Main Design GardenDesign }
+      view Main() { render Text("Before") [size 18] }
+    `,
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    session.registerPreview({ previewInstanceId: 'preview-size-promotion' })
+    const original = await session.readFile('Garden.tao')
+    const selected = 'render Text("Before") [size 18]'
+    const start = original.content.indexOf(selected)
+    const renderId = `${FS.resolvePath(original.path, session.projectRoot)}:${start}:${start + selected.length}`
+    const envelope = {
+      action: {
+        entry: ['size', 18],
+        kind: 'set-style-entry',
+        landing: { kind: 'size-token', tokenName: 'titleSize' },
+        renderId,
+      },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'size-promotion', phase: 'single' },
+      identity: {
+        ...session.identity(),
+        occurrence: { nodeKind: 'render', renderOwner: 'Main' },
+        path: original.path,
+        previewInstanceId: 'preview-size-promotion',
+        sourceVersion: original.sourceVersion,
+      },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'size-promotion-apply',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    } as const
+    const applied = await session.applySourceAction(envelope)
+    Expect(applied.content).toContain('sizes {\n      titleSize 18.px\n   }')
+    Expect(applied.content).toContain('Text("Before") [size titleSize]')
+    const undone = await session.undoSourceAction({
+      channel: studioProtocolChannel,
+      checkpointId: 'size-promotion',
+      identity: { ...envelope.identity, sourceVersion: applied.sourceVersion },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'size-promotion-undo',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action-undo',
+    })
+    Expect(undone.content).toBe(original.content)
   })
 })
 
@@ -336,11 +440,132 @@ Test('Studio routes a canonical source-action envelope idempotently through sour
       Expect(compileCount).toBe(1)
       Expect(events.some(event => event.type === 'file-changed')).toBe(true)
       Expect(events.filter(event => event.type === 'compile-state')).toHaveLength(3)
+      session.registerPreview({ previewInstanceId: 'preview-2' })
+      await Expect(session.applySourceAction(envelope)).rejects.toMatchObject({ code: 'stale-preview' })
+      Expect(compileCount).toBe(1)
     } finally {
       unsubscribe()
     }
   }, () => {
     compileCount += 1
+  })
+})
+
+Test('Studio binds render edits to their compiler-owned occurrence identity', async () => {
+  await withStudioProject(async session => {
+    session.registerPreview({ previewInstanceId: 'preview-occurrence' })
+    const file = await session.readFile('Garden.tao')
+    const selected = 'Text("Before")'
+    const start = file.content.indexOf(selected)
+    const renderId = `${FS.resolvePath(file.path, session.projectRoot)}:${start}:${start + selected.length}`
+    const envelope = {
+      action: { entry: ['width', 'max', 720], kind: 'set-layout-entry', renderId },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'occurrence-checkpoint', phase: 'single' },
+      identity: {
+        ...session.identity(),
+        occurrence: { nodeKind: 'render', renderOwner: 'MainView' },
+        path: file.path,
+        previewInstanceId: 'preview-occurrence',
+        sourceVersion: file.sourceVersion,
+      },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'occurrence-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    } as const
+
+    const proposal = await session.proposeSourceAction(envelope)
+    Expect(proposal.content).toContain('Text("Before") [width max 720]')
+
+    await Expect(session.proposeSourceAction({
+      ...envelope,
+      identity: {
+        ...envelope.identity,
+        occurrence: { ...envelope.identity.occurrence, renderOwner: 'Card' },
+      },
+      requestId: 'wrong-owner',
+    })).rejects.toMatchObject({ code: 'render-owner-mismatch' })
+    await Expect(session.proposeSourceAction({
+      ...envelope,
+      identity: { ...envelope.identity, occurrence: { nodeKind: 'view', renderOwner: 'MainView' } },
+      requestId: 'wrong-kind',
+    })).rejects.toMatchObject({ code: 'node-kind-mismatch' })
+    await Expect(session.proposeSourceAction({
+      ...envelope,
+      identity: { ...envelope.identity, occurrence: undefined },
+      requestId: 'missing-occurrence',
+    })).rejects.toThrow('requires render occurrence identity')
+
+    const applied = await session.applySourceAction(envelope)
+    Expect(applied.content).toBe(proposal.content)
+  })
+})
+
+Test('Studio revalidates source-action proposals and undo against the exact current source', async () => {
+  await withStudioProject(async (session, paths) => {
+    session.registerPreview({ previewInstanceId: 'preview-revalidation' })
+    const original = await session.readFile('Garden.tao')
+    const envelope = {
+      action: { component: 'Text', kind: 'insert-component' },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'revalidation-checkpoint', phase: 'single' },
+      identity: {
+        ...session.identity(),
+        path: original.path,
+        previewInstanceId: 'preview-revalidation',
+        sourceVersion: original.sourceVersion,
+      },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'revalidation-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    } as const
+
+    await session.proposeSourceAction(envelope)
+    await FS.writeText(paths['Garden.tao'], original.content.replace('Before', 'Changed before apply'))
+    await Expect(session.applySourceAction(envelope)).rejects.toMatchObject({ code: 'stale-source' })
+
+    await FS.writeText(paths['Garden.tao'], original.content)
+    const current = await session.readFile('Garden.tao')
+    const applied = await session.applySourceAction({
+      ...envelope,
+      identity: { ...envelope.identity, sourceVersion: current.sourceVersion },
+      requestId: 'revalidation-applied',
+    })
+    await FS.writeText(paths['Garden.tao'], applied.content.replace('Before', 'Changed before undo'))
+    const incompatible = await session.readFile('Garden.tao')
+    await Expect(session.undoSourceAction({
+      channel: studioProtocolChannel,
+      checkpointId: envelope.checkpoint.id,
+      identity: { ...envelope.identity, sourceVersion: incompatible.sourceVersion },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'revalidation-undo',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action-undo',
+    })).rejects.toMatchObject({ code: 'stale-source' })
+  })
+})
+
+Test('Studio rejects malformed occurrence identity before source-action preparation', async () => {
+  await withStudioProject(async session => {
+    const file = await session.readFile('Garden.tao')
+    await Expect(session.applySourceAction({
+      action: { component: 'Text', kind: 'insert-component' },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'malformed-occurrence', phase: 'single' },
+      identity: {
+        ...session.identity(),
+        occurrence: { nodeKind: '' },
+        path: file.path,
+        previewInstanceId: 'malformed-preview',
+        sourceVersion: file.sourceVersion,
+      },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'malformed-occurrence-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    })).rejects.toThrow('Expected a valid Tao Studio source-action v2 envelope')
   })
 })
 
@@ -404,8 +629,7 @@ Test('Studio resolves imported design provenance and disables cross-file design 
 
 Test('Studio promotes matrix arguments into the Tao-authored scenario through the source-action bus', async () => {
   await withStudioProject(async session => {
-    session.registerPreview({ previewInstanceId: 'scenario-preview' })
-    const file = await session.readFile('Garden.tao')
+    const cell = await registerScenarioCell(session, 'scenario-preview')
     const applied = await session.applySourceAction({
       action: {
         arguments: {
@@ -419,10 +643,11 @@ Test('Studio promotes matrix arguments into the Tao-authored scenario through th
       channel: studioProtocolChannel,
       checkpoint: { id: 'scenario-arguments', phase: 'single' },
       identity: {
-        ...session.identity(),
-        path: file.path,
+        ...cell.identity,
+        path: cell.file.path,
         previewInstanceId: 'scenario-preview',
-        sourceVersion: file.sourceVersion,
+        scenarioId: cell.scenarioId,
+        sourceVersion: cell.file.sourceVersion,
       },
       protocolVersion: studioProtocolVersion,
       requestId: 'scenario-arguments-request',
@@ -432,6 +657,87 @@ Test('Studio promotes matrix arguments into the Tao-authored scenario through th
 
     Expect(applied.content).toContain('render (Owner: Lead, Title: "Saved from controls")')
     Expect(applied.checkpoint.status).toBe('committed')
+  })
+})
+
+Test('Studio rejects a scenario action that names a different scenario than its cell identity', async () => {
+  await withStudioProject(async session => {
+    const cell = await registerScenarioCell(session, 'scenario-mismatch-preview')
+    await Expect(session.proposeSourceAction({
+      action: {
+        arguments: { Title: 'Wrong target' },
+        kind: 'set-scenario-arguments',
+        scenarioGroupName: 'states',
+        scenarioName: 'other',
+      },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'scenario-mismatch', phase: 'single' },
+      identity: {
+        ...cell.identity,
+        path: cell.file.path,
+        previewInstanceId: 'scenario-mismatch-preview',
+        scenarioId: cell.scenarioId,
+        sourceVersion: cell.file.sourceVersion,
+      },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'scenario-mismatch-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    })).rejects.toMatchObject({ code: 'scenario-action-mismatch' })
+  })
+})
+
+Test('Studio checkpoints survive a refreshed preview for the same scenario cell', async () => {
+  await withStudioProject(async session => {
+    const registered = await registerScenarioCell(session, 'cell-checkpoint-before')
+    const baseIdentity = {
+      ...registered.identity,
+      path: registered.file.path,
+      previewInstanceId: 'cell-checkpoint-before',
+      scenarioId: registered.scenarioId,
+      sourceVersion: registered.file.sourceVersion,
+    }
+    const begun = await session.applySourceAction({
+      action: { component: 'Text', kind: 'insert-component' },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'cell-checkpoint', phase: 'begin' },
+      identity: baseIdentity,
+      protocolVersion: studioProtocolVersion,
+      requestId: 'cell-checkpoint-begin',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    })
+    session.registerCellPreview({
+      ...registered.identity,
+      previewInstanceId: 'cell-checkpoint-after',
+    })
+    const refreshedIdentity = {
+      ...baseIdentity,
+      previewInstanceId: 'cell-checkpoint-after',
+      sourceVersion: begun.sourceVersion,
+    }
+    const committed = await session.applySourceAction({
+      action: { component: 'Number', kind: 'insert-component' },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'cell-checkpoint', phase: 'commit' },
+      identity: refreshedIdentity,
+      protocolVersion: studioProtocolVersion,
+      requestId: 'cell-checkpoint-commit',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    })
+    const undone = await session.undoSourceAction({
+      channel: studioProtocolChannel,
+      checkpointId: 'cell-checkpoint',
+      identity: { ...refreshedIdentity, sourceVersion: committed.sourceVersion },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'cell-checkpoint-undo',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action-undo',
+    })
+
+    Expect(committed.content).toContain('Number(0)')
+    Expect(undone.content).toBe(registered.file.content)
   })
 })
 
@@ -552,7 +858,7 @@ Test('Studio groups a visual gesture into one checkpoint and undoes its exact cu
       requestId: 'stale-preview-request',
       sourceActionVersion: studioSourceActionVersion,
       type: 'source-action',
-    })).rejects.toThrow('stale preview instance')
+    })).rejects.toMatchObject({ code: 'stale-preview' })
     const first = await session.applySourceAction({
       action: { component: 'Text', kind: 'insert-component' },
       channel: studioProtocolChannel,
@@ -563,11 +869,17 @@ Test('Studio groups a visual gesture into one checkpoint and undoes its exact cu
       sourceActionVersion: studioSourceActionVersion,
       type: 'source-action',
     })
+    session.registerPreview({ previewInstanceId: 'preview-gesture-refreshed' })
     const committed = await session.applySourceAction({
       action: { component: 'Number', kind: 'insert-component' },
       channel: studioProtocolChannel,
       checkpoint: { id: 'gesture-1', phase: 'commit' },
-      identity: { ...identity, sourceVersion: first.sourceVersion },
+      identity: {
+        ...identity,
+        path: FS.resolvePath(original.path, session.projectRoot),
+        previewInstanceId: 'preview-gesture-refreshed',
+        sourceVersion: first.sourceVersion,
+      },
       protocolVersion: studioProtocolVersion,
       requestId: 'gesture-request-2',
       sourceActionVersion: studioSourceActionVersion,
@@ -576,7 +888,7 @@ Test('Studio groups a visual gesture into one checkpoint and undoes its exact cu
     await Expect(session.undoSourceAction({
       channel: studioProtocolChannel,
       checkpointId: 'gesture-1',
-      identity,
+      identity: { ...identity, previewInstanceId: 'preview-gesture-refreshed' },
       protocolVersion: studioProtocolVersion,
       requestId: 'stale-version-undo',
       sourceActionVersion: studioSourceActionVersion,
@@ -585,7 +897,12 @@ Test('Studio groups a visual gesture into one checkpoint and undoes its exact cu
     const undone = await session.undoSourceAction({
       channel: studioProtocolChannel,
       checkpointId: 'gesture-1',
-      identity: { ...identity, sourceVersion: committed.sourceVersion },
+      identity: {
+        ...identity,
+        path: FS.resolvePath(original.path, session.projectRoot),
+        previewInstanceId: 'preview-gesture-refreshed',
+        sourceVersion: committed.sourceVersion,
+      },
       protocolVersion: studioProtocolVersion,
       requestId: 'gesture-undo-1',
       sourceActionVersion: studioSourceActionVersion,
@@ -681,14 +998,19 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
       cellRevision: 0,
       environment: {
         network: { latencyMs: 0, outcome: 'normal' as const },
-        scheme: { requested: 'light' as const, status: 'inert' as const },
+        scheme: {
+          capability: 'reactive-browser' as const,
+          requested: 'system' as const,
+          resolved: 'light' as const,
+          source: 'system' as const,
+        },
         viewport: { height: 844, presetId: 'phone', width: 390 },
       },
       scenarioId: 'Garden.phone',
       stateLayers: [],
     }
     const manifest = {
-      capabilities: { captureDomains: ['data'], scheme: 'inert' as const },
+      capabilities: { captureDomains: ['data'], scheme: 'reactive-browser' as const },
       cells: [cell],
       compileRevision: compiled.compileRevision,
       fixtures: [{
@@ -729,6 +1051,28 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     session.setMatrixManifest(manifest)
     const identity = StudioPreviewManifest.cellIdentity(manifest, cell)
     const registered = session.registerCellPreview({ ...identity, previewInstanceId: 'cell-preview-1' })
+    const file = await session.readFile('Garden.tao')
+    const cellSourceAction = {
+      action: { component: 'Text', kind: 'insert-component' },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'cell-action', phase: 'single' },
+      identity: {
+        ...registered.identity,
+        path: file.path,
+        previewInstanceId: 'cell-preview-1',
+        scenarioId: cell.scenarioId,
+        sourceVersion: file.sourceVersion,
+      },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'cell-action-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    } as const
+    await Expect(session.proposeSourceAction({
+      ...cellSourceAction,
+      identity: { ...cellSourceAction.identity, scenarioId: 'Garden.stale' },
+    })).rejects.toMatchObject({ code: 'stale-scenario' })
+    Expect((await session.proposeSourceAction(cellSourceAction)).content).toContain('Text("New text")')
     const applied = {
       appliedRevision: compiled.compileRevision,
       channel: studioProtocolChannel,
@@ -786,7 +1130,11 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     Expect(refreshed.cell.environment.network.latencyMs).toBe(250)
     Expect(refreshed.replay).toBe(undefined)
     Expect(events.some(event => event.type === 'preview-manifest-changed')).toBe(true)
-    Expect(handshake.capabilities.matrix).toEqual({ concurrentCells: true, scheme: 'inert', version: 2 })
+    Expect(handshake.capabilities.matrix).toEqual({
+      concurrentCells: true,
+      scheme: 'reactive-browser-fixed-light-native',
+      version: 2,
+    })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/preview/cell/reconfigure' })
     Expect(handshake.endpoints).toContainEqual({ method: 'GET', path: '/api/ai/availability' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/ai/fixture' })
@@ -846,4 +1194,70 @@ async function withStudioProject(
       await use(session, paths, root)
     },
   )
+}
+
+async function registerScenarioCell(session: StudioProjectSession, previewInstanceId: string) {
+  const compiled = await session.compileInitial()
+  const file = await session.readFile('Garden.tao')
+  const scenarioId = 'Card.states.lead'
+  const cell = {
+    args: {},
+    cellId: 'cell:card:lead',
+    cellRevision: 0,
+    environment: {
+      network: { latencyMs: 0, outcome: 'normal' as const },
+      scheme: {
+        capability: 'reactive-browser' as const,
+        requested: 'system' as const,
+        resolved: 'light' as const,
+        source: 'system' as const,
+      },
+      viewport: { height: 844, presetId: 'phone', width: 390 },
+    },
+    scenarioId,
+    stateLayers: [],
+  }
+  const manifest = {
+    capabilities: { captureDomains: ['data'], scheme: 'reactive-browser' as const },
+    cells: [cell],
+    compileRevision: compiled.compileRevision,
+    fixtures: [{
+      fixtureId: 'fixture:Cards',
+      label: 'Cards',
+      plan: { accounts: [], creates: [] },
+      source: { kind: 'tao' as const, path: 'Garden.tao', range: { end: 10, start: 0 } },
+    }],
+    generationDeclarations: [],
+    manifestRevision: `manifest:${previewInstanceId}`,
+    parametersBySubject: { 'view:Card': [] },
+    project: {
+      appName: session.appName,
+      entryPath: 'Garden.tao',
+      root: session.projectRoot,
+    },
+    scenarios: [{
+      args: {},
+      fixtureId: 'fixture:Cards',
+      group: 'states',
+      label: 'lead',
+      prepare: [],
+      scenarioId,
+      source: { kind: 'tao' as const, path: 'Garden.tao', range: { end: file.content.length, start: 0 } },
+      stateLayers: [],
+      subjectId: 'view:Card',
+    }],
+    sourceVersions: { 'Garden.tao': file.sourceVersion },
+    states: [],
+    subjects: [{
+      kind: 'view' as const,
+      source: { kind: 'tao' as const, path: 'Garden.tao', range: { end: file.content.length, start: 0 } },
+      subjectId: 'view:Card',
+      viewName: 'Card',
+    }],
+    version: 2 as const,
+  }
+  session.setMatrixManifest(manifest)
+  const identity = StudioPreviewManifest.cellIdentity(manifest, cell)
+  session.registerCellPreview({ ...identity, previewInstanceId })
+  return { cell, file, identity, manifest, scenarioId }
 }

@@ -14,12 +14,12 @@ import {
   type StudioJsonObject,
   type StudioJsonValue,
   type StudioPreviewRuntimeUpdateMessage,
-  type StudioPreviewSourceIdentity,
   StudioProtocol,
   studioProtocolChannel,
   studioProtocolVersion,
   type StudioRuntimeCaptureArtifact,
   type StudioSourceActionEnvelope,
+  type StudioSourceActionIdentity,
 } from '../StudioProtocol'
 import {
   StudioApiClient,
@@ -29,6 +29,12 @@ import {
   type StudioHandshake,
 } from './StudioApiClient'
 import { absoluteSourcePath, projectRelativePath, StudioSourceNavigation } from './StudioEditor'
+import {
+  type StudioScenarioControlModel,
+  StudioScenarioControls,
+  type StudioScenarioDraft,
+  type StudioScenarioResult,
+} from './StudioScenarioControls'
 
 export type StudioMatrixCell<Item> = {
   id: string
@@ -57,7 +63,7 @@ export const StudioMatrixLayout = {
     }
     const groups = new Map<string, { cellIds: string[]; id: string; label: string }>()
     for (const scenario of manifest.scenarios) {
-      const id = `${encodeURIComponent(scenario.source.path)}:${encodeURIComponent(scenario.group)}`
+      const id = StudioScenarioControls.groupId(scenario.source.path, scenario.group)
       const group = groups.get(id) ?? { cellIds: [], id, label: scenario.group }
       group.cellIds.push(...(cellsByScenario.get(scenario.scenarioId) ?? []).map(cell => cell.cellId))
       groups.set(id, group)
@@ -205,15 +211,17 @@ function reconcileElementChildren(parent: HTMLElement, next: readonly HTMLElemen
 
 export type StudioPreviewConnection = {
   activate?: () => void
+  applySourceAction?: (envelope: StudioSourceActionEnvelope) => Promise<void>
   appliedRevision?: number
   capture?: {
-    button: HTMLButtonElement
     fixtureName: string
-    identity: StudioPreviewSourceIdentity
+    identity: StudioSourceActionIdentity
+    reject: (error: Error) => void
     requestId: string
-    status: HTMLElement
+    resolve: (result: 'cancelled' | 'saved') => void
     timeout: ReturnType<typeof setTimeout>
   }
+  captureFixture?: (fixtureName: string) => Promise<'cancelled' | 'saved'>
   generation?: { phase: 'generating' | 'saving'; requestId: string }
   generationNotice?: string
   cell?: StudioPreviewCell
@@ -225,6 +233,7 @@ export type StudioPreviewConnection = {
   origin: string
   previewInstanceId: string
   reconfigureEnvironment?: (environment: StudioCellEnvironment) => Promise<void>
+  reconfigureArguments?: (args: StudioJsonObject) => Promise<void>
   refresh?: Promise<void>
   revisionTimeout?: ReturnType<typeof setTimeout>
   replayRuntimeCapture?: (capture: StudioRuntimeCaptureArtifact) => Promise<void>
@@ -236,6 +245,7 @@ export type StudioPreviewConnection = {
   }
   runtimeFailure?: StudioRuntimeCaptureArtifact
   runtimeLogs?: readonly StudioRuntimeLog[]
+  scenarioModel?: StudioScenarioControlModel
   scenarioControls?: HTMLFormElement
   scenarioLabel?: string
   changed?: () => void
@@ -255,6 +265,7 @@ export function disconnectPreviews(
     }
     if (preview.capture !== undefined) {
       clearTimeout(preview.capture.timeout)
+      preview.capture.reject(new Error(reason))
       preview.capture = undefined
     }
     if (preview.runtimeCaptureRequest !== undefined) {
@@ -563,6 +574,15 @@ function renderCellPreview(
   frame.style.width = `${Math.max(320, cell.environment.viewport.width)}px`
   const scenario = manifest.scenarios.find(candidate => candidate.scenarioId === cell.scenarioId)
   const subjectParameters = manifest.parametersBySubject[scenario?.subjectId ?? ''] ?? []
+  const modeled = StudioScenarioControls.fromManifest({
+    cell,
+    cellIdentity: connection.cellIdentity,
+    failureReplay: connection.runtimeFailure,
+    manifest,
+    previewInstanceId: connection.previewInstanceId,
+  })
+  const scenarioModel = modeled.ok ? modeled.value : undefined
+  connection.scenarioModel = scenarioModel
   const label = document.createElement('header')
   label.className = 'studio-preview-cell-label'
   label.textContent = scenario?.label ?? cell.scenarioId
@@ -592,7 +612,7 @@ function renderCellPreview(
   promote.className = 'studio-preview-cell-promote'
   promote.textContent = 'Save to scenario'
   promote.type = 'button'
-  promote.disabled = scenario === undefined || subjectParameters.length === 0
+  promote.disabled = scenarioModel === undefined || subjectParameters.length === 0
   const fixtureName = document.createElement('input')
   fixtureName.className = 'studio-preview-fixture-name'
   fixtureName.placeholder = 'CapturedState'
@@ -602,7 +622,7 @@ function renderCellPreview(
   capture.className = 'studio-preview-cell-capture'
   capture.textContent = 'Capture fixture'
   capture.type = 'button'
-  capture.disabled = scenario === undefined
+  capture.disabled = scenarioModel === undefined
   const generate = document.createElement('button')
   generate.className = 'studio-preview-cell-generate'
   generate.textContent = 'Checking AI…'
@@ -685,6 +705,10 @@ function renderCellPreview(
     await remount({ environment })
   }
 
+  connection.reconfigureArguments = async args => {
+    await remount({ args })
+  }
+
   connection.replayRuntimeCapture = async rawCapture => {
     const currentEnvironment = connection.cell?.environment ?? cell.environment
     const configured = studioReplayConfiguration(rawCapture, currentEnvironment)
@@ -697,11 +721,14 @@ function renderCellPreview(
 
   loadReplay.addEventListener('click', () => replayFile.click())
   const replayText = async (text: string): Promise<void> => {
-    const capture = StudioProtocol.parseRuntimeCapture(JSON.parse(text))
-    if (capture === undefined) {
-      throw new Error('This is not a supported Tao runtime capture.')
+    if (scenarioModel === undefined) {
+      throw new Error('Studio scenario identity is unavailable.')
     }
-    await connection.replayRuntimeCapture?.(capture)
+    const replay = StudioScenarioControls.replay(scenarioModel, JSON.parse(text))
+    if (!replay.ok) {
+      throw new Error(replay.issues.join(' '))
+    }
+    await connection.replayRuntimeCapture?.(replay.value)
   }
   pasteReplay.addEventListener('click', () => {
     pasteReplay.disabled = true
@@ -714,14 +741,19 @@ function renderCellPreview(
     })
   })
   replayFailure.addEventListener('click', () => {
-    const failure = connection.runtimeFailure
-    if (failure === undefined) {
+    if (scenarioModel === undefined) {
+      return
+    }
+    const replay = StudioScenarioControls.replay(scenarioModel)
+    if (!replay.ok) {
+      status.dataset['state'] = 'error'
+      status.textContent = replay.issues.join(' ')
       return
     }
     replayFailure.disabled = true
     status.dataset['state'] = 'busy'
     status.textContent = 'Restoring captured state…'
-    void connection.replayRuntimeCapture?.(failure).catch(error => {
+    void connection.replayRuntimeCapture?.(replay.value).catch(error => {
       replayFailure.disabled = false
       status.dataset['state'] = 'error'
       status.textContent = error instanceof Error ? error.message : String(error)
@@ -752,12 +784,21 @@ function renderCellPreview(
     status.textContent = 'Remounting…'
     void (async () => {
       try {
+        const draft = readScenarioDraft(
+          scenarioModel,
+          argumentControls.read,
+          networkControls.read,
+          viewportControls.read,
+        )
+        if (!draft.ok) {
+          throw new Error(draft.issues.join(' '))
+        }
         await remount({
-          args: argumentControls.read(),
+          args: draft.value.arguments,
           environment: {
-            network: networkControls.read(),
+            network: draft.value.network,
             scheme: cell.environment.scheme,
-            viewport: viewportControls.read(),
+            viewport: draft.value.viewport,
           },
         })
       } catch (error) {
@@ -768,13 +809,30 @@ function renderCellPreview(
     })()
   })
   promote.addEventListener('click', () => {
-    if (scenario === undefined || connection.cellIdentity === undefined) {
+    if (scenarioModel === undefined) {
+      return
+    }
+    const draft = readScenarioDraft(
+      scenarioModel,
+      argumentControls.read,
+      networkControls.read,
+      viewportControls.read,
+    )
+    if (!draft.ok) {
+      status.dataset['state'] = 'error'
+      status.textContent = draft.issues.join(' ')
+      return
+    }
+    const action = StudioScenarioControls.saveArgumentsAction(scenarioModel, draft.value.arguments, crypto.randomUUID())
+    if (!action.ok) {
+      status.dataset['state'] = 'error'
+      status.textContent = action.issues.join(' ')
       return
     }
     promote.disabled = true
     status.dataset['state'] = 'busy'
     status.textContent = 'Saving Tao scenario…'
-    void promoteScenarioArguments(connection, manifest, scenario, argumentControls.read()).then(
+    void applyConnectionSourceAction(connection, action.value).then(
       () => {
         status.dataset['state'] = 'busy'
         status.textContent = 'Saved; waiting for the compiled manifest…'
@@ -839,7 +897,7 @@ function renderCellPreview(
       }
       connection.generation = { phase: 'saving', requestId }
       status.textContent = 'Saving generated state as Tao source…'
-      await StudioApiClient.sourceAction(envelope)
+      await applyConnectionSourceAction(connection, envelope)
       if (connection.generation?.requestId === requestId) {
         connection.generation = undefined
         status.dataset['state'] = 'busy'
@@ -855,54 +913,55 @@ function renderCellPreview(
       status.textContent = error instanceof Error ? error.message : String(error)
     })
   })
-  capture.addEventListener('click', () => {
-    if (scenario === undefined || connection.cellIdentity === undefined) {
-      return
-    }
-    const name = fixtureName.value.trim()
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
-      status.dataset['state'] = 'error'
-      status.textContent = 'Fixture name must be a Tao identifier.'
-      return
-    }
-    const sourceVersion = manifest.sourceVersions[scenario.source.path]
-    const sourcePath = projectRelativePath(manifest.project.root, scenario.source.path)
-    const target = connection.iframe.contentWindow
-    if (sourceVersion === undefined || sourcePath === undefined || target === null) {
-      status.dataset['state'] = 'error'
-      status.textContent = 'Fixture capture source identity is unavailable.'
-      return
-    }
-    const requestId = crypto.randomUUID()
-    const identity: StudioPreviewSourceIdentity = {
-      ...connection.cellIdentity,
-      path: sourcePath,
-      previewInstanceId: connection.previewInstanceId,
-      sourceVersion,
-    }
-    const timeout = setTimeout(() => {
-      if (connection.capture?.requestId !== requestId) {
+  connection.captureFixture = fixtureName =>
+    new Promise((resolve, reject) => {
+      if (scenarioModel === undefined) {
+        reject(new Error('Studio scenario identity is unavailable.'))
         return
       }
-      connection.capture = undefined
-      capture.disabled = false
-      status.dataset['state'] = 'error'
-      status.textContent = 'Fixture capture timed out; retry after the preview is ready.'
-    }, 10_000)
-    connection.capture = { button: capture, fixtureName: name, identity, requestId, status, timeout }
+      const target = connection.iframe.contentWindow
+      const requestId = crypto.randomUUID()
+      const request = StudioScenarioControls.fixtureCapture(scenarioModel, fixtureName.trim(), requestId)
+      if (!request.ok || target === null) {
+        reject(new Error(request.ok ? 'The active preview is not connected.' : request.issues.join(' ')))
+        return
+      }
+      if (connection.capture !== undefined) {
+        clearTimeout(connection.capture.timeout)
+        connection.capture.reject(new Error('A newer fixture capture replaced this request.'))
+      }
+      const timeout = setTimeout(() => {
+        if (connection.capture?.requestId !== requestId) {
+          return
+        }
+        connection.capture = undefined
+        reject(new Error('Fixture capture timed out; retry after the preview is ready.'))
+      }, 10_000)
+      connection.capture = {
+        fixtureName: request.value.fixtureName,
+        identity: request.value.identity,
+        reject,
+        requestId,
+        resolve,
+        timeout,
+      }
+      target.postMessage(request.value.request, connection.origin)
+    })
+  capture.addEventListener('click', () => {
     capture.disabled = true
     status.dataset['state'] = 'busy'
     status.textContent = 'Capturing isolated provider state…'
-    target.postMessage({
-      channel: studioProtocolChannel,
-      identity: {
-        ...connection.cellIdentity,
-        previewInstanceId: connection.previewInstanceId,
-      },
-      protocolVersion: studioProtocolVersion,
-      requestId,
-      type: 'capture-fixture',
-    }, connection.origin)
+    void connection.captureFixture?.(fixtureName.value).then(result => {
+      capture.disabled = false
+      status.dataset['state'] = 'idle'
+      status.textContent = result === 'saved'
+        ? 'Saved; waiting for the compiled manifest…'
+        : 'Captured fixture was not saved.'
+    }, error => {
+      capture.disabled = false
+      status.dataset['state'] = 'error'
+      status.textContent = error instanceof Error ? error.message : String(error)
+    })
   })
 
   frame.tabIndex = 0
@@ -917,6 +976,17 @@ function renderCellPreview(
   }
   frame.replaceChildren(label, viewport)
   connection.changed?.()
+}
+
+async function applyConnectionSourceAction(
+  connection: StudioPreviewConnection,
+  envelope: StudioSourceActionEnvelope,
+): Promise<void> {
+  if (connection.applySourceAction !== undefined) {
+    await connection.applySourceAction(envelope)
+    return
+  }
+  await StudioApiClient.sourceAction(envelope)
 }
 
 async function configureGenerationAvailability(button: HTMLButtonElement): Promise<void> {
@@ -938,7 +1008,7 @@ function fixtureSourceIdentity(
   connection: StudioPreviewConnection,
   manifest: StudioPreviewManifestV2,
   scenario: StudioPreviewManifestV2['scenarios'][number],
-): StudioPreviewSourceIdentity | undefined {
+): StudioSourceActionIdentity | undefined {
   const sourceVersion = manifest.sourceVersions[scenario.source.path]
   const path = projectRelativePath(manifest.project.root, scenario.source.path)
   return connection.cellIdentity === undefined || sourceVersion === undefined || path === undefined
@@ -947,46 +1017,29 @@ function fixtureSourceIdentity(
       ...connection.cellIdentity,
       path,
       previewInstanceId: connection.previewInstanceId,
+      scenarioId: scenario.scenarioId,
       sourceVersion,
     }
 }
 
-async function promoteScenarioArguments(
-  connection: StudioPreviewConnection,
-  manifest: StudioPreviewManifestV2,
-  scenario: StudioPreviewManifestV2['scenarios'][number],
-  args: StudioJsonObject,
-): Promise<void> {
-  const identity = connection.cellIdentity
-  if (identity === undefined) {
-    throw new Error('Studio cell identity is unavailable.')
+function readScenarioDraft(
+  model: StudioScenarioControlModel | undefined,
+  readArguments: () => StudioJsonObject,
+  readNetwork: () => StudioCellEnvironment['network'],
+  readViewport: () => StudioCellEnvironment['viewport'],
+): StudioScenarioResult<StudioScenarioDraft> {
+  if (model === undefined) {
+    return { issues: ['Studio scenario identity is unavailable.'], ok: false }
   }
-  const sourceVersion = manifest.sourceVersions[scenario.source.path]
-  const sourcePath = projectRelativePath(manifest.project.root, scenario.source.path)
-  if (sourceVersion === undefined || sourcePath === undefined) {
-    throw new Error('Studio scenario source version is unavailable.')
+  try {
+    return StudioScenarioControls.validateDraft(model, {
+      arguments: readArguments(),
+      network: readNetwork(),
+      viewport: readViewport(),
+    })
+  } catch (error) {
+    return { issues: [error instanceof Error ? error.message : String(error)], ok: false }
   }
-  const requestId = crypto.randomUUID()
-  await StudioApiClient.sourceAction({
-    action: {
-      arguments: args,
-      kind: 'set-scenario-arguments',
-      scenarioGroupName: scenario.group,
-      scenarioName: scenario.label,
-    },
-    channel: studioProtocolChannel,
-    checkpoint: { id: `scenario-arguments:${requestId}`, phase: 'single' },
-    identity: {
-      ...identity,
-      path: sourcePath,
-      previewInstanceId: connection.previewInstanceId,
-      sourceVersion,
-    },
-    protocolVersion: studioProtocolVersion,
-    requestId,
-    sourceActionVersion: 1,
-    type: 'source-action',
-  })
 }
 
 function renderArgumentControls(
@@ -1191,8 +1244,8 @@ function renderSchemeControls(environment: StudioCellEnvironment): HTMLElement {
   const group = controlGroup('Scheme')
   const select = document.createElement('select')
   select.disabled = true
-  select.title = 'Scheme is intentionally inert until reactive Scheme support exists.'
-  for (const value of ['light', 'dark'] as const) {
+  select.title = 'Scenario appearance is authored in Tao; Studio shows the runtime resolution here.'
+  for (const value of ['system', 'light', 'dark'] as const) {
     const option = document.createElement('option')
     option.value = value
     option.textContent = value[0]!.toUpperCase() + value.slice(1)
@@ -1201,7 +1254,9 @@ function renderSchemeControls(environment: StudioCellEnvironment): HTMLElement {
   }
   group.fields.append(
     labelControl('Requested', select),
-    controlNote('Inert — runtime Scheme support is not available yet.'),
+    controlNote(
+      `${environment.scheme.resolved} · ${environment.scheme.source} · ${environment.scheme.capability}`,
+    ),
   )
   return group.element
 }
@@ -1261,7 +1316,7 @@ function requiredFiniteNumber(input: HTMLInputElement, label: string): number {
 
 function networkLabel(environment: StudioCellEnvironment): string {
   const latency = environment.network.latencyMs === 0 ? '' : ` +${environment.network.latencyMs}ms`
-  return `${environment.network.outcome}${latency} · Scheme ${environment.scheme.status}`
+  return `${environment.network.outcome}${latency} · Scheme ${environment.scheme.resolved}`
 }
 
 function observePreviewVisibility(frame: HTMLElement, connection: StudioPreviewConnection): void {
@@ -1360,11 +1415,22 @@ export function studioReplayConfiguration(
   currentEnvironment: StudioCellEnvironment,
 ): { environment: StudioCellEnvironment; replay: StudioRuntimeCaptureArtifact } {
   const capturedEnvironment = runtimeCaptureEnvironment(capture)
+  const capturedScheme = runtimeCaptureScheme(capture)
   const hasEnvironmentDomain = capture.domains.some(domain => domain.domain === 'environment')
   return {
-    environment: capturedEnvironment ?? currentEnvironment,
+    environment: {
+      ...(capturedEnvironment ?? currentEnvironment),
+      scheme: capturedScheme ?? capturedEnvironment?.scheme ?? currentEnvironment.scheme,
+    },
     replay: hasEnvironmentDomain ? capture : runtimeCaptureWithEnvironment(capture, currentEnvironment),
   }
+}
+
+function runtimeCaptureScheme(
+  capture: StudioRuntimeCaptureArtifact,
+): StudioCellEnvironment['scheme'] | undefined {
+  const value = capture.domains.find(domain => domain.domain === 'scheme' && domain.version === 1)?.value
+  return isStudioSchemeEnvironment(value) ? value : undefined
 }
 
 function runtimeCaptureEnvironment(capture: StudioRuntimeCaptureArtifact): StudioCellEnvironment | undefined {
@@ -1385,8 +1451,7 @@ function isStudioCellEnvironment(value: unknown): value is StudioCellEnvironment
     && Number(network['latencyMs']) >= 0
     && (outcome === 'error' || outcome === 'normal' || outcome === 'offline')
     && (outcome === 'error' ? isRecord(error) && typeof error['message'] === 'string' : error === undefined)
-    && (scheme['requested'] === 'dark' || scheme['requested'] === 'light')
-    && scheme['status'] === 'inert'
+    && isStudioSchemeEnvironment(scheme)
     && typeof viewport['width'] === 'number'
     && Number.isFinite(viewport['width'])
     && viewport['width'] > 0
@@ -1394,6 +1459,25 @@ function isStudioCellEnvironment(value: unknown): value is StudioCellEnvironment
     && Number.isFinite(viewport['height'])
     && viewport['height'] > 0
     && (viewport['presetId'] === undefined || typeof viewport['presetId'] === 'string')
+}
+
+function isStudioSchemeEnvironment(value: unknown): value is StudioCellEnvironment['scheme'] {
+  if (!isRecord(value)) {
+    return false
+  }
+  const capability = value['capability']
+  const requested = value['requested']
+  const resolved = value['resolved']
+  const source = value['source']
+  return (requested === 'dark' || requested === 'light' || requested === 'system')
+    && (resolved === 'dark' || resolved === 'light')
+    && (source === 'native-fixed' || source === 'preference' || source === 'scenario' || source === 'system')
+    && (capability === 'fixed-light-native' || capability === 'reactive-browser')
+    && !(source === 'system' && requested !== 'system')
+    && !(source === 'preference' && requested === 'system')
+    && !(source === 'scenario' && requested === 'system')
+    && !(source === 'native-fixed' && capability !== 'fixed-light-native')
+    && !(capability === 'fixed-light-native' && (resolved !== 'light' || source !== 'native-fixed'))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1500,6 +1584,16 @@ export async function handlePreviewMessage(
     actions.changed?.()
     return
   }
+  if (message.type === 'preview-scheme-changed') {
+    if (preview.cell !== undefined) {
+      preview.cell = {
+        ...preview.cell,
+        environment: { ...preview.cell.environment, scheme: message.scheme },
+      }
+      actions.changed?.()
+    }
+    return
+  }
   if (message.type === 'preview-runtime-captured' || message.type === 'preview-runtime-capture-failed') {
     const request = preview.runtimeCaptureRequest
     if (request === undefined || request.requestId !== message.requestId) {
@@ -1542,7 +1636,13 @@ export async function handlePreviewMessage(
   }
   if (message.type === 'source-action') {
     actions.activate?.()
-    await actions.applySourceAction(message)
+    await actions.applySourceAction({
+      ...message,
+      identity: {
+        ...message.identity,
+        ...(preview.cell === undefined ? {} : { scenarioId: preview.cell.scenarioId }),
+      },
+    })
     return
   }
   if (message.type === 'preview-runtime-failure') {
@@ -1568,9 +1668,7 @@ export async function handlePreviewMessage(
     clearTimeout(capture.timeout)
     preview.capture = undefined
     if (message.type === 'preview-fixture-capture-failed') {
-      capture.button.disabled = false
-      capture.status.dataset['state'] = 'error'
-      capture.status.textContent = message.error
+      capture.reject(new Error(message.error))
       return
     }
     const envelope = StudioInspector.singleAction({
@@ -1583,26 +1681,23 @@ export async function handlePreviewMessage(
       identity: capture.identity,
       requestId: capture.requestId,
     })
-    capture.status.textContent = 'Validating canonical Tao source…'
     let proposal: Awaited<ReturnType<typeof StudioApiClient.sourceActionProposal>>
     try {
       proposal = await StudioApiClient.sourceActionProposal(envelope)
     } catch (error) {
-      capture.button.disabled = false
-      capture.status.dataset['state'] = 'error'
-      capture.status.textContent = error instanceof Error ? error.message : String(error)
+      capture.reject(error instanceof Error ? error : new Error(String(error)))
       return
     }
     if (!window.confirm(`Save this captured Tao fixture?\n\n${proposal.diff}`)) {
-      capture.button.disabled = false
-      capture.status.dataset['state'] = 'idle'
-      capture.status.textContent = 'Captured fixture was not saved.'
+      capture.resolve('cancelled')
       return
     }
-    capture.status.textContent = 'Saving captured state as Tao source…'
-    await actions.applySourceAction(envelope)
-    capture.status.dataset['state'] = 'busy'
-    capture.status.textContent = 'Saved; waiting for the compiled manifest…'
+    try {
+      await actions.applySourceAction(envelope)
+      capture.resolve('saved')
+    } catch (error) {
+      capture.reject(error instanceof Error ? error : new Error(String(error)))
+    }
     return
   }
   if (message.type !== 'preview-select-source') {
@@ -1618,7 +1713,13 @@ export async function handlePreviewMessage(
   if (opened === undefined) {
     return
   }
-  actions.inspect(StudioInspector.selection(message))
+  actions.inspect(StudioInspector.selection({
+    ...message,
+    identity: {
+      ...message.identity,
+      ...(preview.cell === undefined ? {} : { scenarioId: preview.cell.scenarioId }),
+    },
+  }))
 }
 
 export function requestRuntimeCapture(
@@ -1720,7 +1821,7 @@ function fixtureProposalSource(name: string, plan: StudioFixturePlan): string {
 
 function fixtureProposalSourceAction(options: {
   fixtureName: string
-  identity: StudioPreviewSourceIdentity
+  identity: StudioSourceActionIdentity
   origin?: 'captured' | 'generated'
   plan: StudioFixturePlan
   requestId: string
@@ -1769,14 +1870,17 @@ export function currentSourceIdentity(
   handshake: StudioHandshake,
   preview: StudioPreviewConnection | undefined,
   file: StudioDraftFile | undefined,
-): StudioPreviewSourceIdentity | undefined {
-  return preview === undefined || file === undefined
+): StudioSourceActionIdentity | undefined {
+  return preview === undefined
+      || file === undefined
+      || preview.cellIdentity !== undefined && preview.cell === undefined
     ? undefined
     : {
       ...handshake.identity,
       ...(preview.cellIdentity ?? {}),
       path: absoluteSourcePath(handshake.identity.project, file.path),
       previewInstanceId: preview.previewInstanceId,
+      ...(preview.cell === undefined ? {} : { scenarioId: preview.cell.scenarioId }),
       sourceVersion: file.sourceVersion,
     }
 }

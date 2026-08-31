@@ -24,6 +24,20 @@ Describe('Tao formatter WordFlower apps', () => {
 
 Describe('Tao formatter declaration parameters and functions', () => {
   Test(
+    'formats configured bound-view arguments like ordinary invocations',
+    formats(
+      `app Demo{Name "Demo" Navigator StackNav{Initial Root(Expanded:Expanded,Toggle:Toggle)}}`,
+      `
+        app Demo {
+           Name "Demo"
+           Navigator StackNav {
+              Initial Root(Expanded: Expanded, Toggle: Toggle)
+        }  }
+      `,
+    ),
+  )
+
+  Test(
     'formats mandatory parameter lists, block returns, and early returns',
     formats(
       `public function GoalFraction ( Count number )returns number{if Count==0{return 0}\nreturn Count/10}\nview Main ( ){action Save ( ){ }render Empty()}`,
@@ -760,6 +774,33 @@ Describe('Tao formatter types and constructors', () => {
 
         view Profile(Person) {
            render Text(Person.Job.Title)
+        }
+      `,
+    ),
+  )
+})
+
+Describe('Tao formatter structured design', () => {
+  Test(
+    'formats typed blocks and nested color families independently',
+    formats(
+      `design Theme{colors{ember #d9622b{20 #f4d7c8,60 #b34e1f}canvas #fff}sizes{sm 8.px,md sm+4.px}styles{card[background ember.20,radius md]}}`,
+      `
+        design Theme {
+           colors {
+              ember #d9622b {
+                 20 #f4d7c8,
+                 60 #b34e1f
+              }
+              canvas #fff
+           }
+           sizes {
+              sm 8.px,
+              md sm + 4.px
+           }
+           styles {
+              card [background ember.20, radius md]
+           }
         }
       `,
     ),

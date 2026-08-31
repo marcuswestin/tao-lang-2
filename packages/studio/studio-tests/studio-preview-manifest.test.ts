@@ -15,7 +15,12 @@ Describe('Studio preview manifest', () => {
     Expect(defined.cells.map(cell => cell.cellId)).toEqual(['card-phone', 'app-desktop'])
     Expect(defined.cells[0]?.environment).toEqual({
       network: { latencyMs: 120, outcome: 'normal' },
-      scheme: { requested: 'light', status: 'inert' },
+      scheme: {
+        capability: 'reactive-browser' as const,
+        requested: 'system' as const,
+        resolved: 'light' as const,
+        source: 'system' as const,
+      },
       viewport: { height: 844, presetId: 'phone', width: 390 },
     })
     Expect(StudioPreviewManifest.cellIdentity(defined, defined.cells[0]!)).toEqual({
@@ -28,7 +33,7 @@ Describe('Studio preview manifest', () => {
     })
   })
 
-  Test('rejects invalid typed args, non-Tao scenario authority, and active Scheme claims', () => {
+  Test('rejects invalid typed args, non-Tao scenario authority, and invalid Scheme resolutions', () => {
     const invalidArgs = fixture()
     invalidArgs.cells[0]!.args = { title: 42 }
     Expect(() => StudioPreviewManifest.define(invalidArgs)).toThrow('does not match text')
@@ -37,9 +42,14 @@ Describe('Studio preview manifest', () => {
     ;(sidecar.scenarios[0]!.source as { kind: string }).kind = 'artifact'
     Expect(() => StudioPreviewManifest.define(sidecar)).toThrow('must be Tao source')
 
-    const activeScheme = fixture()
-    ;(activeScheme.cells[0]!.environment.scheme as { status: string }).status = 'active'
-    Expect(() => StudioPreviewManifest.define(activeScheme)).toThrow('Scheme is not active')
+    const invalidScheme = fixture()
+    invalidScheme.cells[0]!.environment.scheme = {
+      capability: 'fixed-light-native',
+      requested: 'dark',
+      resolved: 'dark',
+      source: 'native-fixed',
+    }
+    Expect(() => StudioPreviewManifest.define(invalidScheme)).toThrow('valid request, resolution, source')
 
     const missingGroup = fixture()
     ;(missingGroup.scenarios[0] as { group: string }).group = ''
@@ -64,7 +74,7 @@ Describe('Studio preview manifest', () => {
 function fixture(): StudioPreviewManifestV2 & { cells: Array<StudioPreviewManifestV2['cells'][number]> } {
   const source = { kind: 'tao' as const, path: '/project/Scenarios.tao', range: { end: 20, start: 0 } }
   return {
-    capabilities: { captureDomains: ['data', 'scene'], scheme: 'inert' },
+    capabilities: { captureDomains: ['data', 'scene'], scheme: 'reactive-browser' },
     cells: [
       {
         args: { title: 'Hello' },
@@ -72,7 +82,12 @@ function fixture(): StudioPreviewManifestV2 & { cells: Array<StudioPreviewManife
         cellRevision: 0,
         environment: {
           network: { latencyMs: 120, outcome: 'normal' },
-          scheme: { requested: 'light', status: 'inert' },
+          scheme: {
+            capability: 'reactive-browser' as const,
+            requested: 'system' as const,
+            resolved: 'light' as const,
+            source: 'system' as const,
+          },
           viewport: { height: 844, presetId: 'phone', width: 390 },
         },
         scenarioId: 'card-default',
@@ -84,7 +99,12 @@ function fixture(): StudioPreviewManifestV2 & { cells: Array<StudioPreviewManife
         cellRevision: 2,
         environment: {
           network: { latencyMs: 0, outcome: 'offline' },
-          scheme: { requested: 'dark', status: 'inert' },
+          scheme: {
+            capability: 'reactive-browser' as const,
+            requested: 'dark' as const,
+            resolved: 'dark' as const,
+            source: 'scenario' as const,
+          },
           viewport: { height: 800, presetId: 'desktop', width: 1280 },
         },
         scenarioId: 'app-default',

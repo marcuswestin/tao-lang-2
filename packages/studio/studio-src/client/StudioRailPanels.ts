@@ -9,7 +9,7 @@ export type StudioScreenItem = Readonly<{
   start: number
 }>
 
-export type StudioSearchDocument = Readonly<{ content: string; path: string }>
+export type StudioSearchDocument = Readonly<{ content: string; path: string; sourceVersion?: string }>
 
 export type StudioSearchResult = Readonly<{
   detail: string
@@ -18,6 +18,7 @@ export type StudioSearchResult = Readonly<{
   label: string
   path: string
   range?: StudioCompileDiagnostic['range']
+  sourceVersion?: string
   start?: number
 }>
 
@@ -37,6 +38,7 @@ export const StudioRailPanels = {
     documents: readonly StudioSearchDocument[],
     diagnostics: readonly StudioCompileDiagnostic[],
     query: string,
+    sourceVersions: Readonly<Record<string, string>> = {},
   ): readonly StudioSearchResult[] {
     const needle = query.trim().toLocaleLowerCase()
     if (needle === '') {
@@ -51,6 +53,9 @@ export const StudioRailPanels = {
           label: `Problem · ${fileLabel(diagnostic.filePath)}`,
           path: diagnostic.filePath,
           ...(diagnostic.range === undefined ? {} : { range: diagnostic.range }),
+          ...(sourceVersions[diagnostic.filePath] === undefined
+            ? {}
+            : { sourceVersion: sourceVersions[diagnostic.filePath] }),
         })
       }
     }
@@ -66,6 +71,7 @@ export const StudioRailPanels = {
           kind: 'text',
           label: `${fileLabel(document.path)}:${lineNumber(document.content, start)}`,
           path: document.path,
+          ...(document.sourceVersion === undefined ? {} : { sourceVersion: document.sourceVersion }),
           start,
         })
         start = lower.indexOf(needle, start + Math.max(1, needle.length))

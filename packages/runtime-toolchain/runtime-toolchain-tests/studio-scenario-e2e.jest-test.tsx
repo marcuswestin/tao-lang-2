@@ -80,9 +80,8 @@ Describe('Tao Studio scenario runtime', () => {
             environment: {
               network: { mode: 'online' },
               scheme: {
-                capability: 'inert',
-                reason: 'Reactive Scheme is not implemented yet.',
                 requested: 'light',
+                source: 'scenario',
               },
               version: 1,
             },
@@ -213,9 +212,8 @@ Describe('Tao Studio scenario runtime', () => {
               environment: {
                 network: { mode: 'online' },
                 scheme: {
-                  capability: 'inert',
-                  reason: 'Reactive Scheme is not implemented yet.',
                   requested: 'light',
+                  source: 'scenario',
                 },
                 version: 1,
               },

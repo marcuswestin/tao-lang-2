@@ -1,6 +1,7 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { AliasesValidator } from '../validator-src/validators/aliases-validator'
 import { AppValidator } from '../validator-src/validators/app-validator'
+import { navigationValidationMessages } from '../validator-src/validators/navigation-validator'
 import { StateValidator } from '../validator-src/validators/StateValidator'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
 import {
@@ -17,6 +18,41 @@ import {
 } from './test-validate'
 
 Describe('validator: apps and views', () => {
+  Test('accepts a bound configured root with app-owned persisted state and update action', async () => {
+    const result = await testValidateCode(`
+      use StackNav from @tao/nav
+      app Workspace {
+        Name "Workspace"
+        state Expanded is list of text = [] (persist)
+        action ChangeExpanded(Value list of text) { set Expanded = Value }
+        Navigator StackNav {
+          Initial Root(Expanded: Expanded, ChangeExpanded: ChangeExpanded)
+        }
+      }
+      view Root(Expanded list of text, ChangeExpanded action(list of text)) {
+        Title "Root"
+        render Empty()
+      }
+      ${stubView('Empty')}
+    `)
+    Expect(validationErrorMessages(result)).toEqual([])
+  })
+
+  Test('validates configured root view arguments with ordinary invocation rules', async () => {
+    const result = await testValidateCodeWithErrors(`
+      use StackNav from @tao/nav
+      app Workspace {
+        Name "Workspace"
+        Navigator StackNav { Initial Root() }
+      }
+      view Root(Value text) { Title "Root" render Empty() }
+      ${stubView('Empty')}
+    `)
+    Expect(validationErrorMessages(result)).toContain(
+      navigationValidationMessages.missingArgument('Root', 'Value'),
+    )
+  })
+
   Test(
     'allows direct recursive view references without new syntax',
     accepts(`

@@ -54,21 +54,28 @@ export type StudioLayoutAlignment = 'baseline' | 'bottom' | 'center' | 'left' | 
 export type StudioLayoutContentTerm = StudioLayoutAlignment | 'spread' | 'spread-balanced' | 'spread-inset' | 'stretch'
 export type StudioLayoutSpacingSide = 'bottom' | 'horizontal' | 'left' | 'right' | 'top' | 'vertical'
 export type StudioLayoutTermValue = string | number
+export type StudioLayoutSizeValue = string | number
 export type StudioLayoutEntry =
   | readonly ['aligned', StudioLayoutAlignment]
   | readonly ['centered' | 'compress' | 'fill' | 'hug' | 'rigid']
-  | readonly ['claim' | 'gap', number]
+  | readonly ['claim', number]
+  | readonly ['gap', StudioLayoutSizeValue]
   | readonly ['content', StudioLayoutContentTerm]
   | readonly [
     'content',
     StudioLayoutContentTerm,
     StudioLayoutContentTerm,
   ]
-  | readonly ['height', 'fill' | number]
-  | readonly ['margin' | 'pad', number]
-  | readonly ['margin' | 'pad', StudioLayoutSpacingSide, number, ...(StudioLayoutSpacingSide | number)[]]
-  | readonly ['width', 'fill' | number]
-  | readonly ['width', 'max', number]
+  | readonly ['height', 'fill' | StudioLayoutSizeValue]
+  | readonly ['margin' | 'pad', StudioLayoutSizeValue]
+  | readonly [
+    'margin' | 'pad',
+    StudioLayoutSpacingSide,
+    StudioLayoutSizeValue,
+    ...(StudioLayoutSpacingSide | StudioLayoutSizeValue)[],
+  ]
+  | readonly ['width', 'fill' | StudioLayoutSizeValue]
+  | readonly ['width', 'max', StudioLayoutSizeValue]
 
 /** StudioSetLayoutEntryPatchRequest sets one layout entry on a rendered Tao node. */
 export type StudioSetLayoutEntryPatchRequest = {
@@ -83,6 +90,7 @@ export type StudioStyleLandingScope =
   | { kind: 'element-inline' }
   | { bundleName: string; kind: 'style-bundle'; mode: 'edit' | 'fork'; forkName?: string }
   | { elementName: string; kind: 'element-default' }
+  | { kind: 'size-token'; tokenName: string }
   | { kind: 'token'; tokenName: string }
 
 /** StudioSetStyleEntryPatchRequest keeps the landing scope explicit across the source-action bus. */
@@ -119,6 +127,29 @@ export type StudioRenderInspection = {
 
 export type StudioWorkspaceDesignContext = {
   files?: readonly AST.TaoFile[]
+  occurrence?: StudioSourceOccurrencePrecondition
+}
+
+/** StudioSourceOccurrencePrecondition binds a revision-scoped render locator to compiler-owned identity. */
+export type StudioSourceOccurrencePrecondition = {
+  nodeKind: string
+  renderOwner?: string
+}
+
+/** StudioSourceOccurrenceConflictError reports an exact render-identity mismatch before mutation. */
+export class StudioSourceOccurrenceConflictError extends Errors.UserInputError {
+  constructor(
+    readonly code: 'node-kind-mismatch' | 'render-owner-mismatch',
+    readonly renderId: string,
+    readonly expected: string | undefined,
+    readonly actual: string | undefined,
+  ) {
+    super(
+      code === 'node-kind-mismatch'
+        ? `Studio render node kind changed before the edit was applied: ${renderId}`
+        : `Studio render owner changed before the edit was applied: ${renderId}`,
+    )
+  }
 }
 
 /** StudioWrapRenderPatchRequest wraps one rendered Tao node in a Studio-owned container. */
@@ -137,6 +168,7 @@ export type StudioScenarioArgumentValue =
 
 /** StudioSetScenarioArgumentsPatchRequest promotes ephemeral controls into Tao source truth. */
 export type StudioSetScenarioArgumentsPatchRequest = {
+  appearance?: 'dark' | 'light'
   arguments: Readonly<Record<string, StudioScenarioArgumentValue>>
   kind: 'set-scenario-arguments'
   scenarioGroupName: string
@@ -231,6 +263,7 @@ async function applyPatchContent(
   request: StudioSourcePatchRequest,
   context: StudioWorkspaceDesignContext,
 ): Promise<string> {
+  validateOccurrencePrecondition(document, request, context.occurrence)
   return await Switch.kind(request, {
     'insert-captured-fixture': async action => await insertCapturedFixture(document, action),
     'insert-component': async action => await insertComponent(document, action.component, action),
@@ -240,6 +273,52 @@ async function applyPatchContent(
     'set-scenario-arguments': async action => await setScenarioArguments(document, action),
     'set-style-entry': async action => await setStyleEntry(document, action, context),
     'wrap-render': async action => await wrapRender(document, action),
+  })
+}
+
+function validateOccurrencePrecondition(
+  document: AST.Document,
+  request: StudioSourcePatchRequest,
+  precondition: StudioSourceOccurrencePrecondition | undefined,
+): void {
+  if (precondition === undefined) {
+    return
+  }
+  const targetId = occurrenceTargetRenderId(request)
+  if (targetId === undefined) {
+    throw new Errors.UserInputError(`Studio source action does not target a render occurrence: ${request.kind}`)
+  }
+  const render = requireRenderById(document.parseResult.value, targetId)
+  const actualNodeKind = 'render'
+  if (precondition.nodeKind !== actualNodeKind) {
+    throw new StudioSourceOccurrenceConflictError(
+      'node-kind-mismatch',
+      targetId,
+      precondition.nodeKind,
+      actualNodeKind,
+    )
+  }
+  const actualOwner = AST.findOwningView(render)?.name
+  if (precondition.renderOwner !== actualOwner) {
+    throw new StudioSourceOccurrenceConflictError(
+      'render-owner-mismatch',
+      targetId,
+      precondition.renderOwner,
+      actualOwner,
+    )
+  }
+}
+
+function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | undefined {
+  return Switch.kind(request, {
+    'insert-captured-fixture': () => undefined,
+    'insert-component': action => action.beforeId ?? action.afterId,
+    'insert-project-view': action => action.beforeId ?? action.afterId,
+    'move-render': action => action.draggedId,
+    'set-layout-entry': action => action.renderId,
+    'set-scenario-arguments': () => undefined,
+    'set-style-entry': action => action.renderId,
+    'wrap-render': action => action.renderId,
   })
 }
 
@@ -305,6 +384,7 @@ async function setScenarioArguments(
   const scenario = scenarios[0]!
   const subject = AST.scenarioSubjectDeclaration(scenario)
   const ownRender = scenario.block.entries.find(AST.isScenarioRenderClause)
+  const ownAppearance = scenario.block.entries.find(AST.isScenarioAppearanceClause)
   if (!AST.isViewDeclaration(subject) || scenario.block.$cstNode === undefined) {
     throw new Errors.UserInputError(
       `Studio can only promote arguments into a focused render scenario: ${request.scenarioGroupName} / ${request.scenarioName}`,
@@ -315,17 +395,36 @@ async function setScenarioArguments(
     .join(', ')
   const source = document.textDocument.getText()
   const renderSource = scenarioRenderSource(scenario, subject, argumentsSource)
-  const content = ownRender?.$cstNode
-    ? applySourceEdits(source, [{
+  const edits: SourceEdit[] = []
+  const additions: string[] = []
+  if (ownRender?.$cstNode) {
+    edits.push({
       end: ownRender.$cstNode.end,
       replacement: renderSource,
       start: ownRender.$cstNode.offset,
-    }])
-    : applySourceEdits(source, [{
+    })
+  } else {
+    additions.push(renderSource)
+  }
+  if (request.appearance !== undefined) {
+    if (ownAppearance?.$cstNode) {
+      edits.push({
+        end: ownAppearance.$cstNode.end,
+        replacement: `appearance ${request.appearance}`,
+        start: ownAppearance.$cstNode.offset,
+      })
+    } else {
+      additions.push(`appearance ${request.appearance}`)
+    }
+  }
+  if (additions.length > 0) {
+    edits.push({
       end: scenario.block.$cstNode.end - 1,
-      replacement: `\n${renderSource}\n`,
+      replacement: `\n${additions.join('\n')}\n`,
       start: scenario.block.$cstNode.end - 1,
-    }])
+    })
+  }
+  const content = applySourceEdits(source, edits)
   return await Formatter.formatCode(content)
 }
 
@@ -486,8 +585,7 @@ function styleProvenance(
   entry: StudioStyleEntry,
 ): StudioStyleProvenance {
   const bundleName = entry.length === 1 && typeof entry[0] === 'string' ? entry[0] : undefined
-  const bundles = (design?.members ?? []).filter(AST.isDesignBundle)
-    .filter(bundle => bundle.name === bundleName)
+  const bundles = design === undefined ? [] : designSpecMembers(design).filter(bundle => bundle.name === bundleName)
   if (bundleName === undefined || bundles.length !== 1) {
     return { blastRadius: 1, chain: [formatLayoutValues(entry)], landing: { kind: 'element-inline' } }
   }
@@ -518,6 +616,20 @@ function styleProvenance(
   }
 }
 
+type DesignSpecMember = AST.DesignBundle | AST.DesignStyleEntry | AST.DesignTextEntry
+
+function designSpecMembers(design: AST.DesignDeclaration): DesignSpecMember[] {
+  const result: DesignSpecMember[] = []
+  for (const member of design.block.members) {
+    if (AST.isDesignBundle(member)) {
+      result.push(member)
+    } else if (AST.isDesignStylesBlock(member) || AST.isDesignTextBlock(member)) {
+      result.push(...member.entries)
+    }
+  }
+  return result
+}
+
 /** setStyleEntry lands an exploration in an explicit, parser-owned current-grammar design scope. */
 async function setStyleEntry(
   document: AST.Document,
@@ -535,11 +647,13 @@ async function setStyleEntry(
     return await Formatter.formatCode(setRenderLayoutEntrySource(document.textDocument.getText(), render, entry))
   }
   const design = requireEditableSelectedDesign(document, files)
+  if (request.landing.kind === 'size-token') {
+    return await setSizeToken(document, design, render, request.entry, request.landing.tokenName)
+  }
   if (request.landing.kind === 'style-bundle' && request.landing.mode === 'edit') {
     const bundleName = request.landing.bundleName
     requireIdentifier(bundleName, 'style bundle')
-    const bundles = design.members.filter(AST.isDesignBundle)
-      .filter(bundle => bundle.name === bundleName)
+    const bundles = designSpecMembers(design).filter(bundle => bundle.name === bundleName)
     if (bundles.length !== 1) {
       throw new Errors.UserInputError(`Studio style bundle is not uniquely declared in this source file: ${bundleName}`)
     }
@@ -601,13 +715,13 @@ async function forkStyleBundle(
   entry: string,
 ): Promise<string> {
   requireIdentifier(landing.bundleName, 'style bundle')
-  const bundles = design.members.filter(AST.isDesignBundle).filter(bundle => bundle.name === landing.bundleName)
+  const bundles = designSpecMembers(design).filter(bundle => bundle.name === landing.bundleName)
   if (bundles.length !== 1) {
     throw new Errors.UserInputError(
       `Studio style bundle is not uniquely declared in this source file: ${landing.bundleName}`,
     )
   }
-  const names = new Set(design.members.map(member => member.name))
+  const names = designValueNames(design)
   const forkName = landing.forkName === undefined
     ? uniqueDesignMemberName(`${landing.bundleName}Variant`, names)
     : landing.forkName
@@ -618,8 +732,10 @@ async function forkStyleBundle(
   const source = document.textDocument.getText()
   const base = bundles[0]!
   const entries = base.spec.entries.map(candidate => candidate.$cstNode!.text)
-  const head = layoutEntryHead(entry)
-  const existingIndex = base.spec.entries.findLastIndex(candidate => ASTUtils.layoutEntryValues(candidate)[0] === head)
+  const slot = layoutEntrySlot(entry.split(/\s+/))
+  const existingIndex = base.spec.entries.findLastIndex(candidate =>
+    layoutEntrySlot(ASTUtils.layoutEntryValues(candidate)) === slot
+  )
   if (existingIndex === -1) {
     entries.push(entry)
   } else {
@@ -633,10 +749,10 @@ async function forkStyleBundle(
     throw new Errors.UserInputError(`Selected render no longer applies style bundle ${landing.bundleName}.`)
   }
   const inlineExploration = render.layoutClause?.entries.findLast(candidate =>
-    candidate !== bundleReference && ASTUtils.layoutEntryValues(candidate)[0] === head
+    candidate !== bundleReference && layoutEntrySlot(ASTUtils.layoutEntryValues(candidate)) === slot
   )
   const content = applySourceEdits(source, [
-    designMemberInsertionEdit(source, design, `${forkName} [${entries.join(', ')}]`),
+    designSpecInsertionEdit(source, design, base, `${forkName} [${entries.join(', ')}]`),
     {
       end: bundleReference.$cstNode.end,
       replacement: forkName,
@@ -661,12 +777,12 @@ async function setElementDefault(
     throw new Errors.UserInputError(`Selected render is not the standard Tao element ${elementName}.`)
   }
   const source = document.textDocument.getText()
-  const defaults = design.members.filter(AST.isDesignBundle).filter(bundle => bundle.name === elementName)
+  const defaults = designSpecMembers(design).filter(bundle => bundle.name === elementName)
   if (defaults.length > 1) {
     throw new Errors.UserInputError(`Studio element default is not uniquely declared: ${elementName}`)
   }
   const designEdit = defaults[0] === undefined
-    ? designMemberInsertionEdit(source, design, `${elementName} [${entry}]`)
+    ? preferredStyleInsertionEdit(source, design, `${elementName} [${entry}]`)
     : setLayoutClauseEntryEdit(source, defaults[0].spec, entry)
   const exploration = requireRenderEntryByHead(render, layoutEntryHead(entry))
   const content = applySourceEdits(source, [designEdit, removeLayoutClauseEntryEdit(source, render, exploration)])
@@ -683,10 +799,37 @@ async function setColorToken(
   requireIdentifier(tokenName, 'color token')
   const [head, value, ...rest] = values
   if (!colorEntryHeads.has(head) || typeof value !== 'string' || !cssHexColor.test(value) || rest.length > 0) {
-    throw new Errors.UserInputError('Current Tao design tokens can only promote raw bg, border, or fg colors.')
+    throw new Errors.UserInputError(
+      'Current Tao design tokens can only promote raw background, bg, border, fg, or ink colors.',
+    )
   }
   const source = document.textDocument.getText()
-  const tokens = design.members.filter(AST.isDesignToken).filter(token => token.name === tokenName)
+  const colorBlocks = design.block.members.filter(AST.isDesignColorsBlock)
+  if (colorBlocks.length > 0 || designUsesStructuredSurface(design)) {
+    const entries = colorBlocks.flatMap(block => block.entries).filter(candidate => candidate.name === tokenName)
+    if (entries.length > 1) {
+      throw new Errors.UserInputError(`Studio color token is not uniquely declared: ${tokenName}`)
+    }
+    const tokenEdit = entries[0]?.$cstNode === undefined
+      ? colorBlocks[0] === undefined
+        ? designMemberInsertionEdit(source, design, `colors { ${tokenName} ${value} }`)
+        : typedBlockEntryInsertionEdit(source, colorBlocks[0], `${tokenName} ${value}`)
+      : {
+        end: entries[0].$cstNode.end,
+        replacement: `${tokenName} ${value}`,
+        start: entries[0].$cstNode.offset,
+      }
+    const exploration = requireRenderEntryByHead(render, head)
+    return await Formatter.formatCode(applySourceEdits(source, [
+      tokenEdit,
+      {
+        end: exploration.$cstNode!.end,
+        replacement: `${head} ${tokenName}`,
+        start: exploration.$cstNode!.offset,
+      },
+    ]))
+  }
+  const tokens = design.block.members.filter(AST.isDesignToken).filter(token => token.name === tokenName)
   if (tokens.length > 1) {
     throw new Errors.UserInputError(`Studio color token is not uniquely declared: ${tokenName}`)
   }
@@ -709,8 +852,59 @@ async function setColorToken(
   return await Formatter.formatCode(content)
 }
 
+const sizeTokenHeads = new Set(['gap', 'height', 'line', 'margin', 'pad', 'radius', 'size', 'width'])
+
+async function setSizeToken(
+  document: AST.Document,
+  design: AST.DesignDeclaration,
+  render: AST.Render,
+  values: StudioStyleEntry,
+  tokenName: string,
+): Promise<string> {
+  requireIdentifier(tokenName, 'size token')
+  const [head, ...terms] = values
+  const numberIndices = terms.flatMap((term, index) => typeof term === 'number' ? [index] : [])
+  if (!sizeTokenHeads.has(head) || numberIndices.length !== 1 || Number(terms[numberIndices[0]!]) <= 0) {
+    throw new Errors.UserInputError(
+      'Studio size promotion requires one positive numeric typography, spacing, radius, width, or height value.',
+    )
+  }
+  const numericIndex = numberIndices[0]!
+  const numericValue = terms[numericIndex] as number
+  const source = document.textDocument.getText()
+  const sizeBlocks = design.block.members.filter(AST.isDesignSizesBlock)
+  const sizes = sizeBlocks.flatMap(block => block.entries).filter(candidate => candidate.name === tokenName)
+  const conflicts = designValueNames(design)
+  if (sizes.length > 1 || (sizes.length === 0 && conflicts.has(tokenName))) {
+    throw new Errors.UserInputError(`Studio size token is not uniquely available: ${tokenName}`)
+  }
+  const sizeEdit = sizes[0]?.$cstNode === undefined
+    ? sizeBlocks[0] === undefined
+      ? designMemberInsertionEdit(source, design, `sizes { ${tokenName} ${numericValue}.px }`)
+      : typedBlockEntryInsertionEdit(source, sizeBlocks[0], `${tokenName} ${numericValue}.px`)
+    : {
+      end: sizes[0].$cstNode.end,
+      replacement: `${tokenName} ${numericValue}.px`,
+      start: sizes[0].$cstNode.offset,
+    }
+  const exploration = requireRenderEntryByHead(render, head)
+  const replacementTerms = [...terms]
+  replacementTerms[numericIndex] = tokenName
+  return await Formatter.formatCode(applySourceEdits(source, [
+    sizeEdit,
+    {
+      end: exploration.$cstNode!.end,
+      replacement: [head, ...replacementTerms].map(formatLayoutTermValue).join(' '),
+      start: exploration.$cstNode!.offset,
+    },
+  ]))
+}
+
 function requireRenderEntryByHead(render: AST.Render, head: StudioLayoutTermValue): AST.LayoutEntry {
-  const entry = render.layoutClause?.entries.findLast(candidate => ASTUtils.layoutEntryValues(candidate)[0] === head)
+  const slot = layoutEntrySlot([head])
+  const entry = render.layoutClause?.entries.findLast(candidate =>
+    layoutEntrySlot(ASTUtils.layoutEntryValues(candidate)) === slot
+  )
   if (entry?.$cstNode === undefined) {
     throw new Errors.UserInputError(`Selected render no longer has inline design exploration '${head}'.`)
   }
@@ -728,6 +922,72 @@ function uniqueDesignMemberName(base: string, names: ReadonlySet<string>): strin
   return `${base}${suffix}`
 }
 
+function designUsesStructuredSurface(design: AST.DesignDeclaration): boolean {
+  return design.block.members.some(member =>
+    AST.isDesignColorsBlock(member)
+    || AST.isDesignSizesBlock(member)
+    || AST.isDesignTextBlock(member)
+    || AST.isDesignScreensBlock(member)
+    || AST.isDesignStylesBlock(member)
+  )
+}
+
+function designValueNames(design: AST.DesignDeclaration): Set<string> {
+  const names = new Set<string>()
+  for (const member of design.block.members) {
+    if (AST.isDesignToken(member) || AST.isDesignBundle(member)) {
+      names.add(member.name)
+    } else if (AST.isDesignColorsBlock(member)) {
+      for (const entry of member.entries) {
+        names.add(entry.name)
+        for (const family of entry.family?.members ?? []) {
+          names.add(`${entry.name}.${family.name}`)
+        }
+      }
+    } else if (AST.isDesignSizesBlock(member) || AST.isDesignTextBlock(member) || AST.isDesignStylesBlock(member)) {
+      for (const entry of member.entries) {
+        names.add(entry.name)
+      }
+    }
+  }
+  return names
+}
+
+function designSpecInsertionEdit(
+  source: string,
+  design: AST.DesignDeclaration,
+  base: DesignSpecMember,
+  entry: string,
+): SourceEdit {
+  if (AST.isDesignStyleEntry(base) && AST.isDesignStylesBlock(base.$container)) {
+    return typedBlockEntryInsertionEdit(source, base.$container, entry)
+  }
+  if (AST.isDesignTextEntry(base) && AST.isDesignTextBlock(base.$container)) {
+    return typedBlockEntryInsertionEdit(source, base.$container, entry)
+  }
+  return designMemberInsertionEdit(source, design, entry)
+}
+
+function preferredStyleInsertionEdit(source: string, design: AST.DesignDeclaration, entry: string): SourceEdit {
+  const blocks = design.block.members.filter(AST.isDesignStylesBlock)
+  if (blocks[0] !== undefined) {
+    return typedBlockEntryInsertionEdit(source, blocks[0], entry)
+  }
+  return designUsesStructuredSurface(design)
+    ? designMemberInsertionEdit(source, design, `styles { ${entry} }`)
+    : designMemberInsertionEdit(source, design, entry)
+}
+
+function typedBlockEntryInsertionEdit(source: string, block: AST.Node, entry: string): SourceEdit {
+  const cstNode = block.$cstNode
+  if (cstNode === undefined) {
+    throw new Errors.UserInputError('Cannot edit a structured design block without source coordinates.')
+  }
+  const closeBrace = source.lastIndexOf('}', cstNode.end - 1)
+  const insertionOffset = closeBrace === -1 ? cstNode.end : closeBrace
+  return { end: insertionOffset, replacement: `\n${entry}\n`, start: insertionOffset }
+}
+
 function designMemberInsertionEdit(source: string, design: AST.DesignDeclaration, member: string): SourceEdit {
   const cstNode = design.$cstNode
   if (cstNode === undefined) {
@@ -739,8 +999,10 @@ function designMemberInsertionEdit(source: string, design: AST.DesignDeclaration
 }
 
 function setLayoutClauseEntryEdit(source: string, layoutClause: AST.LayoutClause, entry: string): SourceEdit {
-  const head = layoutEntryHead(entry)
-  const existingEntry = layoutClause.entries.findLast(candidate => ASTUtils.layoutEntryValues(candidate)[0] === head)
+  const slot = layoutEntrySlot(entry.split(/\s+/))
+  const existingEntry = layoutClause.entries.findLast(candidate =>
+    layoutEntrySlot(ASTUtils.layoutEntryValues(candidate)) === slot
+  )
   if (existingEntry?.$cstNode !== undefined) {
     return {
       end: existingEntry.$cstNode.end,
@@ -774,7 +1036,7 @@ function removeLayoutClauseEntryEdit(source: string, render: AST.Render, entry: 
   return { end: entries[index + 1]!.$cstNode!.offset, replacement: '', start: entry.$cstNode!.offset }
 }
 
-const colorEntryHeads = new Set(['bg', 'border', 'fg'])
+const colorEntryHeads = new Set<string>(ASTUtils.designColorHeads)
 const cssHexColor = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
 
 /** wrapRender wraps a rendered node in a Studio-owned Stack() container. */
@@ -976,9 +1238,26 @@ function setRenderLayoutEntrySource(source: string, render: AST.Render, entry: s
 }
 
 function setLayoutClauseEntrySource(source: string, layoutClause: AST.LayoutClause, entry: string): string {
-  const head = layoutEntryHead(entry)
-  const existingEntry = layoutClause.entries.findLast(candidate => ASTUtils.layoutEntryValues(candidate)[0] === head)
+  const slot = layoutEntrySlot(entry.split(/\s+/))
+  const existingIndex = layoutClause.entries.findLastIndex(candidate =>
+    layoutEntrySlot(ASTUtils.layoutEntryValues(candidate)) === slot
+  )
+  const existingEntry = layoutClause.entries[existingIndex]
   if (existingEntry !== undefined) {
+    if (existingIndex < layoutClause.entries.length - 1) {
+      const nextEntry = layoutClause.entries[existingIndex + 1]!
+      const closeBracket = source.lastIndexOf(']', layoutClause.$cstNode!.end - 1)
+      const insertionOffset = closeBracket === -1 ? layoutClause.$cstNode!.end : closeBracket
+      return applySourceEdits(source, [{
+        end: nextEntry.$cstNode!.offset,
+        replacement: '',
+        start: existingEntry.$cstNode!.offset,
+      }, {
+        end: insertionOffset,
+        replacement: `, ${entry}`,
+        start: insertionOffset,
+      }])
+    }
     return applySourceEdits(source, [{
       end: existingEntry.$cstNode!.end,
       replacement: entry,
@@ -992,6 +1271,16 @@ function setLayoutClauseEntrySource(source: string, layoutClause: AST.LayoutClau
     replacement: layoutClause.entries.length === 0 ? entry : `, ${entry}`,
     start: insertionOffset,
   }])
+}
+
+function layoutEntrySlot(values: readonly StudioLayoutTermValue[]): string {
+  const head = String(values[0])
+  if ((ASTUtils.designVisualHeads as readonly string[]).includes(head)) {
+    return `visual:${ASTUtils.canonicalDesignVisualHead(head)}`
+  }
+  // LayoutValidator currently grants the independent maximum slot only to `width max`.
+  // Extend this alongside that validator when another dimension gains a maximum constraint.
+  return head === 'width' && values[1] === 'max' ? 'width:max' : head
 }
 
 function formatStyleEntry(entry: StudioStyleEntry): string {
@@ -1027,6 +1316,7 @@ const studioLayoutHeads = new Set([
   'rigid',
   'width',
 ])
+const studioVisualHeads = new Set<string>(ASTUtils.designVisualHeads)
 
 function isStudioLayoutEntry(entry: readonly StudioLayoutTermValue[]): boolean {
   return typeof entry[0] === 'string' && studioLayoutHeads.has(entry[0])
@@ -1036,8 +1326,9 @@ function isInlineDesignExploration(entry: readonly StudioLayoutTermValue[]): boo
   if (isStudioLayoutEntry(entry)) {
     return true
   }
-  return entry.length === 2 && (typeof entry[1] === 'number'
-    || (typeof entry[1] === 'string' && entry[1].startsWith('#')))
+  return typeof entry[0] === 'string' && studioVisualHeads.has(entry[0]) && entry.length === 2
+    && (typeof entry[1] === 'number'
+      || (typeof entry[1] === 'string' && entry[1].startsWith('#')))
 }
 
 function renderLayoutInsertionOffset(render: AST.Render): number {
@@ -1092,8 +1383,12 @@ function requireSupportedLayoutEntry(values: StudioLayoutEntry): StudioLayoutEnt
     }
     return values
   }
-  if (head === 'claim' || head === 'gap') {
+  if (head === 'claim') {
     requirePositiveLayoutNumber(values, 1, 2)
+    return values
+  }
+  if (head === 'gap') {
+    requirePositiveLayoutSize(values, 1, 2)
     return values
   }
   if (head === 'aligned') {
@@ -1174,11 +1469,11 @@ function requireDimensionLayoutEntry(values: readonly StudioLayoutTermValue[], h
     return
   }
   if (values.length === 2) {
-    requirePositiveLayoutNumber(values, 1, 2)
+    requirePositiveLayoutSize(values, 1, 2)
     return
   }
   if (head === 'width' && values.length === 3 && values[1] === 'max') {
-    requirePositiveLayoutNumber(values, 2, 3)
+    requirePositiveLayoutSize(values, 2, 3)
     return
   }
   throw invalidLayoutEntry(values)
@@ -1186,7 +1481,7 @@ function requireDimensionLayoutEntry(values: readonly StudioLayoutTermValue[], h
 
 function requireSpacingLayoutEntry(values: readonly StudioLayoutTermValue[]): void {
   if (values.length === 2) {
-    requirePositiveLayoutNumber(values, 1, 2)
+    requirePositiveLayoutSize(values, 1, 2)
     return
   }
   if (values.length < 3 || values.length > 9 || values.length % 2 === 0) {
@@ -1198,7 +1493,7 @@ function requireSpacingLayoutEntry(values: readonly StudioLayoutTermValue[]): vo
     if (typeof side !== 'string' || !spacingSides.has(side as StudioLayoutSpacingSide)) {
       throw invalidLayoutEntry(values)
     }
-    requirePositiveLayoutNumber(values, index + 1, values.length)
+    requirePositiveLayoutSize(values, index + 1, values.length)
     for (const physicalSide of spacingPhysicalSides(side as StudioLayoutSpacingSide)) {
       if (physicalSides.has(physicalSide)) {
         throw invalidLayoutEntry(values)
@@ -1232,6 +1527,26 @@ function requirePositiveLayoutNumber(
   }
 }
 
+function requirePositiveLayoutSize(
+  values: readonly StudioLayoutTermValue[],
+  index: number,
+  expectedLength: number,
+): void {
+  const value = values[index]
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    throw new Errors.UserInputError('Layout number must be finite.')
+  }
+  if (values.length !== expectedLength || !isPositiveLayoutSize(value)) {
+    throw invalidLayoutEntry(values)
+  }
+}
+
+function isPositiveLayoutSize(value: StudioLayoutTermValue | undefined): boolean {
+  return typeof value === 'number'
+    ? Number.isFinite(value) && value > 0
+    : typeof value === 'string' && designValuePath.test(value)
+}
+
 function invalidLayoutEntry(values: unknown): Errors.UserInputError {
   return new Errors.UserInputError(`Invalid Studio layout entry: ${formatLayoutValues(values)}`)
 }
@@ -1263,7 +1578,7 @@ function formatLayoutTermValue(value: StudioLayoutTermValue): string {
     }
     return String(value)
   }
-  if (/^[A-Za-z_]\w*(?:-[A-Za-z_]\w*)*$/.test(value)) {
+  if (/^[A-Za-z_]\w*(?:-[A-Za-z_]\w*)*$/.test(value) || designValuePath.test(value)) {
     return value
   }
   if (cssHexColor.test(value)) {
@@ -1271,6 +1586,8 @@ function formatLayoutTermValue(value: StudioLayoutTermValue): string {
   }
   throw new Errors.UserInputError(`Invalid layout word: ${value}`)
 }
+
+const designValuePath = /^[A-Za-z_]\w*(?:\.(?:[A-Za-z_]\w*|\d+))*$/
 
 function renderIdFor(render: AST.Render): string {
   const document = AST.getDocument(render)

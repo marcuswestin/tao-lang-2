@@ -16,15 +16,15 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // bind the view's declared parameters, and every scenario has exactly one effective app or view subject.
 // Runtime lowering begins with deterministic fixture data plus viewport, appearance, locale,
 // direction, and the explicitly spelled online/offline network pins. The clock value spelling remains
-// deferred rather than guessed. Scheme remains a visibly inert Studio protocol seam.
+// deferred rather than guessed. Scheme resolves reactively through the runtime and mounted design.
 //
 // SURFACES AND DECLARATIONS. This tranche gives WordFlower the UI primitives, adaptive layout,
-// declaration model, and minimal design system used by the code in this directory.
+// declaration model, and the absorbed design catalog plus Studio Slice 6 structured subset used here.
 //
 // The contract is now a DIRECTORY. Every mapped source and test file here is part of it:
 //
 //   WordFlower       this entry file — project, apps, navigation, datasources, variants, shell
-//   Design           the minimal design system — implemented last, see that file
+//   Design           the design catalog and structured forcing subset — implemented last, see that file
 //   @ui/             the workspace, document, and focus-session areas
 //   @nav/            the navigation values and the deterministic harness navigator
 //   @data/           the data catalog

@@ -135,6 +135,39 @@ Describe('Studio protocol v1', () => {
     })).toBe(undefined)
   })
 
+  Test('accepts only complete runtime Scheme resolutions', () => {
+    const message = {
+      channel: studioProtocolChannel,
+      identity,
+      protocolVersion: studioProtocolVersion,
+      scheme: {
+        capability: 'reactive-browser',
+        requested: 'system',
+        resolved: 'dark',
+        source: 'system',
+      },
+      type: 'preview-scheme-changed',
+    }
+
+    Expect(StudioProtocol.parseMessage(message)).toMatchObject({
+      scheme: message.scheme,
+      type: 'preview-scheme-changed',
+    })
+    Expect(StudioProtocol.parseMessage({
+      ...message,
+      scheme: { ...message.scheme, resolved: 'sepia' },
+    })).toBe(undefined)
+    Expect(StudioProtocol.parseMessage({
+      ...message,
+      scheme: {
+        capability: 'fixed-light-native',
+        requested: 'dark',
+        resolved: 'dark',
+        source: 'native-fixed',
+      },
+    })).toBe(undefined)
+  })
+
   Test('validates captured fixture replies at the untrusted preview boundary', () => {
     const message = {
       channel: studioProtocolChannel,
@@ -259,7 +292,10 @@ Describe('Studio protocol v1', () => {
       },
       channel: studioProtocolChannel,
       checkpoint: { id: 'layout-drag-3', phase: 'commit' },
-      identity,
+      identity: {
+        ...identity,
+        occurrence: { nodeKind: 'render', renderOwner: 'Garden' },
+      },
       protocolVersion: studioProtocolVersion,
       requestId: 'request-9',
       sourceActionVersion: studioSourceActionVersion,
@@ -269,7 +305,7 @@ Describe('Studio protocol v1', () => {
     Expect(StudioProtocol.parseSourceActionEnvelope(envelope)).toEqual(envelope)
     Expect(StudioProtocol.parseSourceActionEnvelope({
       ...envelope,
-      sourceActionVersion: 2,
+      sourceActionVersion: 1,
     })).toBe(undefined)
     Expect(StudioProtocol.parseSourceActionEnvelope({
       ...envelope,
@@ -278,6 +314,18 @@ Describe('Studio protocol v1', () => {
     Expect(StudioProtocol.parseSourceActionEnvelope({
       ...envelope,
       checkpoint: { id: 'layout-drag-3', phase: 'later' },
+    })).toBe(undefined)
+    Expect(StudioProtocol.parseSourceActionEnvelope({
+      ...envelope,
+      identity: { ...envelope.identity, occurrence: { nodeKind: '', renderOwner: 'Garden' } },
+    })).toBe(undefined)
+    Expect(StudioProtocol.parseSourceActionEnvelope({
+      ...envelope,
+      identity: { ...envelope.identity, occurrence: { nodeKind: 'render', renderOwner: 42 } },
+    })).toBe(undefined)
+    Expect(StudioProtocol.parseSourceActionEnvelope({
+      ...envelope,
+      identity: { ...envelope.identity, scenarioId: '' },
     })).toBe(undefined)
 
     const undo = {

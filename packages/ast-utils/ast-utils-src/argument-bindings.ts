@@ -63,6 +63,7 @@ export function resolveArgumentBindings(
     | AST.CommandDeclaration
     | AST.FunctionCallExpression
     | AST.ContextualPresentStatement
+    | AST.ViewBinding
     | AST.AskStatement,
 ): ArgumentBindingResult {
   const parameters = AST.parametersOf(declaration)

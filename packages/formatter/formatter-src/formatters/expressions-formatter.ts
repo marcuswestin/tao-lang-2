@@ -61,6 +61,13 @@ export default {
   /** ConfigurationReference is one linked configured/app value name. */
   ConfigurationReference() {},
 
+  /** ViewBinding keeps a configured view's invocation arguments attached to its declaration name. */
+  ViewBinding(f) {
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
+  },
+
   /** ConfigurationKeyValue is one `@key` configuration scalar. */
   ConfigurationKeyValue() {},
 

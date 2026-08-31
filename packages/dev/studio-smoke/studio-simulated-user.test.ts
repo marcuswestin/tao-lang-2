@@ -19,6 +19,12 @@ view MainView() {
     Text("Third")
   }
 }
+fixture Empty { }
+scenarios MainView "states" {
+  fixture Empty
+  device phone
+  scenario "default" { render MainView() }
+}
 `
 
 Test('simulated user exercises the browser editor or the native Electrobun shell', async () => {
@@ -63,7 +69,8 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(result.passed).toBe(true)
       Expect(Object.values(result.capabilities).every(capability => capability.passed)).toBe(true)
     } else {
-      browser = await StudioCdp.launchChrome()
+      browser = await StudioCdp.launchChrome({ artifactRoot: artifactParent })
+      await browser.setViewport(1_440, 900)
       await browser.goto(projectUrl)
       await browser.waitFor(
         `(() => {
@@ -82,23 +89,139 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('Text(\"First\")')", {
         timeoutMs: 30_000,
       })
+      await browser.waitFor(
+        `document.querySelector('.studio-preview-group-label')?.textContent === 'states'`,
+        { timeoutMs: 30_000 },
+      )
+      await browser.waitFor(
+        `document.querySelector('[data-studio-tao-scenario="true"] .studio-scenario-inspector-label')?.textContent === 'default'`,
+        { timeoutMs: 30_000 },
+      )
+      await browser.captureScreenshot('studio-wide-desktop')
+      await browser.setViewport(1_024, 768)
+      await browser.waitFor(
+        "document.querySelector('.studio-shell')?.getBoundingClientRect().width === window.innerWidth",
+      )
+      await browser.captureScreenshot('studio-narrow-desktop')
+      await browser.setViewport(1_440, 900)
+
+      const initialPaneSizes = await browser.evaluate<{ left: number; preview: number }>(`(() => ({
+        left: Number(document.querySelector('[data-divider="left"]')?.getAttribute('aria-valuenow')),
+        preview: Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')),
+      }))()`)
+      await browser.dragBy('[data-divider="left"]', { x: 48, y: 0 })
+      await browser.waitFor(
+        `Number(document.querySelector('[data-divider="left"]')?.getAttribute('aria-valuenow')) === ${
+          initialPaneSizes.left + 48
+        }`,
+      )
+      // The preview is the right-hand pane, so moving its left divider left increases its width.
+      await browser.dragBy('[data-divider="preview"]', { x: -40, y: 0 })
+      await browser.waitFor(
+        `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) === ${
+          initialPaneSizes.preview + 40
+        }`,
+      )
+      await browser.captureScreenshot('studio-resized-workbench')
+
+      await browser.pressShortcut('k')
+      await browser.waitFor(
+        `document.querySelector('.studio-command-overlay')?.hidden === false
+          && document.activeElement === document.querySelector('.studio-command-overlay input')`,
+      )
+      await browser.insertText('show compile')
+      await browser.waitFor(
+        `document.querySelector('.studio-command-result strong')?.textContent === 'Show Compile'`,
+      )
+      await browser.click('.studio-command-result')
+      await browser.waitFor(
+        `document.querySelector('[data-drawer-tab="Compile"]')?.getAttribute('aria-current') === 'true'`,
+      )
+      await browser.waitFor(
+        `document.querySelector('.studio-drawer-content')?.textContent?.includes('Compile:') === true`,
+      )
+      Expect(await browser.evaluate<boolean>(`document.querySelector('[data-studio-tao-drawer]') === null`)).toBe(true)
 
       const typedSource = initialSource.replace('Text("First")', 'Text("First typed")')
       await browser.click('.cm-content')
       await browser.pressShortcut('a')
       await browser.insertText(typedSource)
+      await browser.waitFor(
+        `document.querySelector('.cm-content')?.textContent.includes('Text("First typed")')`,
+      )
+      Expect(await FS.readText(sourcePath)).toBe(initialSource)
+      await browser.pressShortcut('s')
+      await waitForSource(sourcePath, source => source === typedSource)
+
+      await browser.click('[data-panel="components"]')
+      await browser.waitFor(
+        `document.querySelector('[data-tao-studio-component="Text"]') instanceof HTMLButtonElement`,
+      )
+      await browser.drag('[data-tao-studio-component="Text"]', '.cm-content', { steps: 12 })
+      await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('New text')")
+      await browser.pressShortcut('z')
+      await browser.waitFor("!document.querySelector('.cm-content')?.textContent.includes('New text')")
+      Expect(await FS.readText(sourcePath)).toBe(typedSource)
+
+      await browser.clickInFrame(preview.url, '#select-first')
+      await browser.waitFor(
+        `document.querySelector('[data-studio-tao-inspector-context="Layout"] .studio-inspector-summary')
+          && document.querySelector('[data-studio-tao-inspector-context="Layout"] .studio-inspector-field input:not(:disabled)')`,
+      )
+      await browser.evaluate(`(() => {
+        const root = document.querySelector('[data-studio-tao-inspector-context="Layout"]')
+        const mode = root?.querySelector('[data-inspector-field="Width mode"] select')
+        const value = root?.querySelector('[data-inspector-field="Width value"] input')
+        if (!(mode instanceof HTMLSelectElement) || !(value instanceof HTMLInputElement)) {
+          throw new Error('Studio Width inspector control is missing.')
+        }
+        mode.value = 'fixed'
+        mode.dispatchEvent(new Event('change', { bubbles: true }))
+        value.value = '240'
+        value.dispatchEvent(new Event('input', { bubbles: true }))
+        value.dispatchEvent(new Event('change', { bubbles: true }))
+        const apply = [...(root?.querySelectorAll('button') ?? [])]
+          .find(candidate => candidate.textContent === 'Apply width')
+        if (!(apply instanceof HTMLButtonElement)) {
+          throw new Error('Studio Apply width action is missing.')
+        }
+        apply.click()
+        return true
+      })()`)
+      await waitForSource(sourcePath, source => source.includes('Text("First typed") [width 240]'))
+      await browser.waitFor(
+        `document.querySelector('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')?.disabled === false`,
+      )
+      await browser.click('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')
+      await waitForSource(sourcePath, source => source === typedSource)
+
+      await browser.clickInFrame(preview.url, '#select-first')
+      await browser.waitFor(
+        `document.querySelector('[data-studio-tao-inspector-context="Layout"] .studio-inspector-summary') !== null`,
+      )
+      await browser.drag(
+        '[data-tao-studio-component="Text"]',
+        '.studio-preview-group-label',
+        { steps: 12 },
+      )
+      await waitForSource(sourcePath, source => source.includes('Text("New text")'))
+      await browser.waitFor(
+        `document.querySelector('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')?.disabled === false`,
+      )
+      await browser.click('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')
       await waitForSource(sourcePath, source => source === typedSource)
 
       await browser.clickInFrame(preview.url, '#move-third')
       await waitForSource(sourcePath, source => ordered(source, ['First typed', 'Third', 'Second']))
-      await browser.waitFor("document.querySelector('[data-tao-studio-undo]')?.disabled === false")
-      await browser.click('[data-tao-studio-undo]')
+      await browser.waitFor("document.querySelector('[data-tao-studio-undo] button')?.disabled === false")
+      await browser.click('[data-tao-studio-undo] button')
       await waitForSource(sourcePath, source => source === typedSource)
+      await browser.captureScreenshot('studio-completed-interactions')
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
-
+      Expect(browser.browserFailures()).toEqual([])
       // A blank or broken Studio usually reports itself only in the browser console, so the run
       // fails on any page error and keeps the evidence beside the run's other artifacts.
-      await browser.captureScreenshot(FS.resolvePath('screenshots/simulated-user.png', artifactParent))
+      await browser.captureScreenshot('simulated-user')
       const consoleErrors = browser.consoleErrors()
       await FS.writeJson(FS.resolvePath('logs/browser-console.json', artifactParent), consoleErrors)
       Expect(consoleErrors.map(entry => entry.text)).toEqual([])
@@ -137,6 +260,7 @@ function smokePort(name: string, fallback: number): number {
 function previewHtml(): string {
   return `<!doctype html>
 <html><body>
+  <button id="select-first">Select First</button>
   <button id="move-third">Move Third between First and Second</button>
   <output id="state">ready</output>
   <script>
@@ -150,13 +274,13 @@ function previewHtml(): string {
     const studioBase = sessionId === undefined
       ? parentOrigin
       : parentOrigin + '/sessions/' + encodeURIComponent(sessionId)
-    const renderId = (path, content, label) => {
+    const renderRange = (path, content, label) => {
       const source = 'Text("' + label + '")'
       const start = content.indexOf(source)
       if (start < 0) throw new Error('Missing render: ' + label)
-      return path + ':' + start + ':' + (start + source.length)
+      return { end: start + source.length, id: path + ':' + start + ':' + (start + source.length), start }
     }
-    document.querySelector('#move-third').addEventListener('click', async () => {
+    const context = async () => {
       const protocol = await fetch(studioBase + '/api/protocol').then(response => response.json())
       const file = await fetch(studioBase + '/api/file?path=' + encodeURIComponent(protocol.entryPath))
         .then(response => response.json())
@@ -164,22 +288,51 @@ function previewHtml(): string {
         ? protocol.identity.project.slice(0, -1)
         : protocol.identity.project
       const path = project + '/' + file.path
-      const firstLabel = file.content.includes('First typed') ? 'First typed' : 'First'
-      parent.postMessage({
-        action: {
-          afterId: renderId(path, file.content, firstLabel),
-          beforeId: renderId(path, file.content, 'Second'),
-          draggedId: renderId(path, file.content, 'Third'),
-          kind: 'move-render',
-        },
-        channel: ${JSON.stringify(studioProtocolChannel)},
-        checkpoint: { id: 'smoke-move', phase: 'single' },
+      const runtime = query.get('taoStudioCell') === '1'
+        ? await fetch(studioBase + '/api/preview/cell/bootstrap?previewInstanceId=' + encodeURIComponent(previewInstanceId))
+          .then(response => response.json())
+        : undefined
+      return {
+        file,
         identity: {
           ...protocol.identity,
+          ...(runtime?.identity ?? {}),
+          occurrence: { nodeKind: 'render', renderOwner: 'MainView' },
           path,
           previewInstanceId,
           sourceVersion: file.sourceVersion,
         },
+        path,
+      }
+    }
+    document.querySelector('#select-first').addEventListener('click', async () => {
+      const current = await context()
+      const firstLabel = current.file.content.includes('First typed') ? 'First typed' : 'First'
+      const range = renderRange(current.path, current.file.content, firstLabel)
+      parent.postMessage({
+        channel: ${JSON.stringify(studioProtocolChannel)},
+        identity: current.identity,
+        protocolVersion: ${studioProtocolVersion},
+        range: { end: range.end, start: range.start },
+        type: 'preview-select-source',
+      }, parentOrigin)
+      document.querySelector('#state').textContent = 'selection sent'
+    })
+    document.querySelector('#move-third').addEventListener('click', async () => {
+      const current = await context()
+      const file = current.file
+      const path = current.path
+      const firstLabel = file.content.includes('First typed') ? 'First typed' : 'First'
+      parent.postMessage({
+        action: {
+          afterId: renderRange(path, file.content, firstLabel).id,
+          beforeId: renderRange(path, file.content, 'Second').id,
+          draggedId: renderRange(path, file.content, 'Third').id,
+          kind: 'move-render',
+        },
+        channel: ${JSON.stringify(studioProtocolChannel)},
+        checkpoint: { id: 'smoke-move', phase: 'single' },
+        identity: current.identity,
         protocolVersion: ${studioProtocolVersion},
         requestId: 'smoke-move-request',
         sourceActionVersion: ${studioSourceActionVersion},

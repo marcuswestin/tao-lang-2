@@ -95,6 +95,55 @@ Describe('canonical navigation identity', () => {
     Expect(renderContained(firstApp.resolvePresentable(identity.canonical).render({}))).toBe('first')
     Expect(renderContained(secondApp.resolvePresentable(identity.canonical).render({}))).toBe('second')
   })
+
+  Test('keeps bound configuration arguments live and localizes the underlying view without losing them', () => {
+    let firstValue = 'one'
+    const identity = TR.Navigation.Identity([
+      'tao.declaration',
+      1,
+      'bound-view',
+      '@workspace',
+      'App',
+      'view',
+      'Root',
+    ])
+    const root = TR.Navigation.View({
+      identity,
+      name: 'Root',
+      render: arguments_ => `first:${arguments_['Value']?.evaluate().jsValue}`,
+    })
+    const bound = TR.Navigation.BindView(root, { Value: TR.Alias(() => TR.Value(firstValue)) })
+    const firstDeclaration = TR.Navigation.Declaration('First bound stack', TR.NavKind.Stack())
+    const firstApp = TR.Navigation.App({
+      auxiliaries: () => ({}),
+      name: 'First bound',
+      navigator: () => TR.Navigation.Configure(firstDeclaration, { Initial: bound }),
+    })
+    let secondValue = 'two'
+    const secondRoot = TR.Navigation.View({
+      identity,
+      name: 'Root',
+      render: arguments_ => `second:${arguments_['Value']?.evaluate().jsValue}`,
+    })
+    const secondDeclaration = TR.Navigation.Declaration('Second bound stack', TR.NavKind.Stack())
+    const secondApp = TR.Navigation.App({
+      auxiliaries: () => ({}),
+      name: 'Second bound',
+      navigator: () =>
+        TR.Navigation.Configure(secondDeclaration, {
+          Initial: TR.Navigation.BindView(secondRoot, { Value: TR.Alias(() => TR.Value(secondValue)) }),
+        }),
+    })
+
+    const firstLocalized = firstApp.navigator.descriptor.config['initial'] as TR.Presentable
+    const secondLocalized = secondApp.navigator.descriptor.config['initial'] as TR.Presentable
+    Expect(renderContained(firstLocalized.render({}))).toBe('first:one')
+    Expect(renderContained(secondLocalized.render({}))).toBe('second:two')
+    firstValue = 'updated'
+    secondValue = 'also-updated'
+    Expect(renderContained(firstLocalized.render({}))).toBe('first:updated')
+    Expect(renderContained(secondLocalized.render({}))).toBe('second:also-updated')
+  })
 })
 
 function renderContained(node: unknown): unknown {

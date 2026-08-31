@@ -261,6 +261,11 @@ export const NavigationControls = {
     return resolvePresentable(identity.canonical)
   },
 
+  /** BindView captures live arguments on a view descriptor used by configured navigation. */
+  BindView(presentable: TaoPresentable, arguments_: TaoNavigationArguments): TaoPresentable {
+    return presentable.bind(arguments_)
+  },
+
   /** Command binds one intent invocation and its live chrome metadata to the declaring view occurrence. */
   Command(definition: TaoCommandDefinition): RuntimeNavigationCommand {
     return new RuntimeNavigationCommand(definition)

@@ -7,7 +7,14 @@ import type {
   StudioSessionEvent,
 } from './StudioProjectSession'
 
-export type StudioServerEntityName = 'Checkpoints' | 'Files' | 'Scenarios' | 'Screens' | 'Views'
+export type StudioServerEntityName =
+  | 'Checkpoints'
+  | 'DesignTokens'
+  | 'Files'
+  | 'Problems'
+  | 'Scenarios'
+  | 'Screens'
+  | 'Views'
 
 export type StudioServerDiagnosticRow = {
   Id: string
@@ -25,6 +32,34 @@ export type StudioServerFileRow = {
   ParentPath: string
   Path: string
   Version: string
+}
+
+/** One authored token reported by the parser-backed Studio design inspector. */
+export type StudioServerDesignTokenRow = {
+  DesignName: string
+  Entries?: readonly string[]
+  End: number
+  Id: string
+  Kind: 'bundle' | 'color' | 'default' | 'screen' | 'size' | 'style' | 'text' | 'token'
+  Name: string
+  SourcePath: string
+  Start: number
+  SourceVersion: string
+  Value: string
+}
+
+/** A project diagnostic with source identity only where the compiler or draft owns it. */
+export type StudioServerProblemRow = {
+  EndCharacter?: number
+  EndLine?: number
+  Id: string
+  Message: string
+  ProjectFile: boolean
+  Source: 'compile' | 'draft'
+  SourcePath?: string
+  SourceVersion?: string
+  StartCharacter?: number
+  StartLine?: number
 }
 
 export type StudioServerScreenRow = {
@@ -59,7 +94,9 @@ export type StudioServerCheckpointRow = {
 
 export type StudioServerEntityRow =
   | StudioServerCheckpointRow
+  | StudioServerDesignTokenRow
   | StudioServerFileRow
+  | StudioServerProblemRow
   | StudioServerScenarioRow
   | StudioServerScreenRow
   | StudioServerViewRow
@@ -86,6 +123,7 @@ export type StudioServerInvalidation = {
  * current full-snapshot provider protocol can mark individual fill queries stale.
  */
 export class StudioServerDatasource {
+  readonly #designTokens = new Map<string, { rows: readonly StudioServerDesignTokenRow[]; sourceVersion: string }>()
   readonly #listeners = new Set<(invalidation: StudioServerInvalidation) => void>()
   readonly #session: StudioProjectSession
   readonly #unsubscribe: () => void
@@ -119,6 +157,12 @@ export class StudioServerDatasource {
     if (entity === 'Files') {
       return await fileRows(this.#session)
     }
+    if (entity === 'Problems') {
+      return await problemRows(this.#session)
+    }
+    if (entity === 'DesignTokens') {
+      return await this.#designTokenRows()
+    }
     if (entity === 'Checkpoints') {
       return checkpointRows(this.#session.checkpoints())
     }
@@ -133,6 +177,60 @@ export class StudioServerDatasource {
       return viewRows(manifest)
     }
     return scenarioRows(manifest)
+  }
+
+  async #designTokenRows(): Promise<StudioServerDesignTokenRow[]> {
+    const files = await this.#session.files()
+    const currentPaths = new Set(files.map(file => file.path))
+    await Promise.all(files.map(async file => {
+      const cached = this.#designTokens.get(file.path)
+      if (cached?.sourceVersion === file.sourceVersion) {
+        return
+      }
+      const values = await this.#session.inspectDesign({ path: file.path, sourceVersion: file.sourceVersion })
+      const nameOccurrences = new Map<string, number>()
+      const rows = values.flatMap((value): StudioServerDesignTokenRow[] => {
+        const identity = `${value.kind}:${value.name}`
+        const occurrence = nameOccurrences.get(identity) ?? 0
+        nameOccurrences.set(identity, occurrence + 1)
+        const suffix = occurrence === 0 ? '' : `:${occurrence}`
+        if (value.kind === 'token') {
+          return [{
+            DesignName: value.designName,
+            End: value.end,
+            Id: `${file.path}#design-token:${value.name}${suffix}`,
+            Kind: value.kind,
+            Name: value.name,
+            SourcePath: file.path,
+            Start: value.start,
+            SourceVersion: file.sourceVersion,
+            Value: value.value,
+          }]
+        }
+        return [{
+          DesignName: value.designName,
+          ...('entries' in value ? { Entries: value.entries } : {}),
+          End: value.end,
+          Id: `${file.path}#design-${value.kind}:${value.name}${suffix}`,
+          Kind: value.kind,
+          Name: value.name,
+          SourcePath: file.path,
+          Start: value.start,
+          SourceVersion: file.sourceVersion,
+          Value: 'value' in value ? value.value : value.entries.join(', '),
+        }]
+      })
+      this.#designTokens.set(file.path, { rows, sourceVersion: file.sourceVersion })
+    }))
+    for (const path of this.#designTokens.keys()) {
+      if (!currentPaths.has(path)) {
+        this.#designTokens.delete(path)
+      }
+    }
+    return [...this.#designTokens.values()].flatMap(entry => entry.rows).sort((left, right) =>
+      left.SourcePath.localeCompare(right.SourcePath) || left.Name.localeCompare(right.Name)
+      || left.Id.localeCompare(right.Id)
+    )
   }
 
   #invalidateFor(event: StudioSessionEvent): void {
@@ -151,14 +249,57 @@ export class StudioServerDatasource {
 /** Maps the session event stream to the query families a StudioServer mirror must refresh. */
 export function studioServerEntitiesForEvent(event: StudioSessionEvent): readonly StudioServerEntityName[] {
   return event.type === 'file-changed' || event.type === 'files-changed'
-    ? ['Files']
+    ? ['Files', 'DesignTokens', 'Problems']
     : event.type === 'compile-state'
-    ? ['Files']
+    ? ['Files', 'Problems']
     : event.type === 'preview-manifest-changed'
     ? ['Scenarios', 'Screens', 'Views']
     : event.type === 'checkpoint-changed'
     ? ['Checkpoints']
     : []
+}
+
+async function problemRows(session: StudioProjectSession): Promise<StudioServerProblemRow[]> {
+  const files = await session.files()
+  const fileByPath = new Map(files.map(file => [file.path, file]))
+  const compile = session.compileSnapshot()
+  const compiled = compile.diagnostics.map((diagnostic, index): StudioServerProblemRow => {
+    const projectPath = diagnostic.filePath === undefined
+      ? undefined
+      : relativeProjectPath(session.projectRoot, diagnostic.filePath)
+    const file = projectPath === undefined ? undefined : fileByPath.get(projectPath)
+    return {
+      Id: `$compile:${compile.compileRevision}:${index}`,
+      Message: diagnostic.message,
+      ProjectFile: file !== undefined,
+      Source: 'compile',
+      ...(diagnostic.filePath === undefined
+        ? {}
+        : { SourcePath: projectPath ?? diagnostic.filePath }),
+      ...(file === undefined ? {} : { SourceVersion: file.sourceVersion }),
+      ...(diagnostic.range === undefined
+        ? {}
+        : {
+          EndCharacter: diagnostic.range.end.character,
+          EndLine: diagnostic.range.end.line,
+          StartCharacter: diagnostic.range.start.character,
+          StartLine: diagnostic.range.start.line,
+        }),
+    }
+  })
+  const drafts = files.flatMap(file =>
+    session.fileDraftState(file.path).diagnostics.map(
+      (message, index): StudioServerProblemRow => ({
+        Id: `${file.path}#draft:${index}`,
+        Message: message,
+        ProjectFile: true,
+        Source: 'draft',
+        SourcePath: file.path,
+        // The current disk source version does not identify an unsaved draft, so it is intentionally omitted.
+      }),
+    )
+  )
+  return [...compiled, ...drafts]
 }
 
 async function fileRows(session: StudioProjectSession): Promise<StudioServerFileRow[]> {

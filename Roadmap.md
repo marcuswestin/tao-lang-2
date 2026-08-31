@@ -38,7 +38,8 @@ neither blocks a tranche.
 
 ## The Tao Revolution program
 
-The language target is fully decided (`Docs/Roadmap/Tao Revolution/Decisions.md`); the steps below are
+The language target is decided except for explicitly open or deferred questions recorded below and in
+active workstream ledgers (`Docs/Roadmap/Tao Revolution/Decisions.md`); the steps below are
 `Process.md`'s sequence as open work, in order. The dialect tranche is absorbed (`1 - Current` and
 `2 - Next` are byte-identical, both `Tranche status: absorbed`), so everything written anywhere is
 now written once, in the final dialect. Each step lands per the tranche definition of done: behavior
@@ -64,6 +65,24 @@ tests written in Tao, green in Current, for every construct introduced.
     capabilities — InstantDB, remote authorization semantics, richer data test controls, snapshots,
     SplitNav/windows, semantic design recipes, concurrency policy — are now scoped by
     `Coverage.md`'s tier column.
+- [ ] Decide the runtime action-transaction contract
+  - Deferred by Ro on 2026-08-31. Settle whether root actions serialize, nested `do` calls join one
+    transaction, state/data use private read-your-writes overlays, commits apply deltas to the latest
+    snapshot through prepare/publish phases, and publish failures restore already-published resources.
+  - Keep external effects explicitly non-rollbackable and do not treat the implemented Studio runtime
+    behavior as a settled distributed-atomicity or automatic-retry language contract.
+- [ ] Decide the semantic failure capture and replay contract
+  - Deferred by Ro on 2026-08-31. Settle the versioned artifact and domain-registry contract, domain
+    compatibility and restore timing, credential and opaque-state exclusions, Studio cell-environment
+    participation, and validation of loaded or pasted artifacts.
+  - Automatic render-failure containment and guarded recovery are adopted independently. Do not treat the
+    implemented `action-history`, `data`, `navigation`, `persisted-state`, or Studio replay behavior as an
+    adopted language contract until this decision is resumed.
+- [ ] Decide fixture-through-action result and handle semantics
+  - Deferred by Ro on 2026-08-31. Keep `through` setup fail-closed until result multiplicity, fixture-handle
+    identity, transaction and rollback behavior, capture/replay, and test-harness seeding are settled.
+  - Successful captured-fixture source writing is not evidence that the current runner can execute that
+    setup path; do not infer the language contract from Studio's transient capture workflow.
 
 ## Toward v1
 
@@ -137,8 +156,8 @@ Product and codebase backlog, unordered.
   - The versioned cell matrix, viewport/network contract, provider overlay, exact data snapshot codec,
     fixture/scenario metadata, generated-host provider wiring, and captured-fixture save exist.
     Remaining: review the exact server-produced capture diff, load captured state in tests, and finish browser
-    proof of observable delay, offline, failure, and cross-cell isolation. Viewport/network controls
-    exist, and Scheme is visibly inert until reactive design resolution exists.
+    proof of observable delay, offline, failure, and cross-cell isolation. Viewport/network controls and
+    reactive per-cell Scheme resolution exist; the remaining proof is the external browser interaction gate.
 - [ ] Improve the imports and exports structure. Decide whether namespaces are used commonly, and whether types and values can be exported together from one default export.
 - [ ] Review all tests: remove unnecessary surfaces and overlaps, favor e2e coverage of the underlying packages, and justify each remaining test.
 - [ ] Finish project-root ownership across tooling
@@ -156,10 +175,12 @@ Product and codebase backlog, unordered.
     render Foo()                  // red, padded
     render Foo() [pad 0, bg none] // caller clears the declared default
     ```
-- [ ] Spike: implement the declared concurrency policy (`runs single`, `runs latest`) from
-      `Decisions.md` §8 — grammar, validator, compiler, runtime `.Running` state, cancellation.
-      Deliberately separate from the AI-in-apps work, which consumes it (`generate … runs latest`)
-      but must not decide it. Context: `Docs/Roadmap/AI in Tao apps.md`.
+- [ ] Complete the declared concurrency policy from `Decisions.md` §8
+  - Foreign `runs latest` is implemented and adopted: it finishes the running call and retains only the
+    newest waiting call. Remaining work includes `runs single`, policy keying, the `.Running` surface, and
+    any separately decided cancellation contract.
+  - Keep this separate from the AI-in-apps work, which consumes concurrency policy but does not decide it.
+    Context: `Docs/Roadmap/AI in Tao apps.md`.
 - [ ] Change the argument order of `ValidationContext.error` and its siblings.
 - [ ] Clean up the TR package: inter-dependencies, structure, and a slow pass simplifying each file.
 - [ ] Remove magical strings.

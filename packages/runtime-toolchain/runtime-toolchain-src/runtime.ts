@@ -351,6 +351,7 @@ function studioCellRuntime(runtime: any, manifest: any) {
   const fixture = manifest.fixtures.find((candidate: any) => candidate.id === scenario.fixtureId)
   if (fixture === undefined) throw new Error('Tao Studio fixture bootstrap is stale.')
   const dataState = runtime.resolvedState?.snapshot?.domains?.data?.value
+  const replayScheme = runtime.replay?.domains?.find((domain: any) => domain?.domain === 'scheme')?.value
   const network = runtime.cell.environment.network
   return {
     replay: runtime.replay,
@@ -363,9 +364,13 @@ function studioCellRuntime(runtime: any, manifest: any) {
           : {}),
       },
       scheme: {
-        capability: 'inert',
-        reason: 'Reactive Scheme is not implemented yet.',
-        requested: runtime.cell.environment.scheme.requested,
+        requested: scenario.environment?.appearance ?? runtime.cell.environment.scheme.requested,
+        ...(replayScheme === undefined ? {} : { replay: replayScheme }),
+        source: scenario.environment?.appearance !== undefined
+          ? 'scenario'
+          : runtime.cell.environment.scheme.requested === 'system'
+          ? 'system'
+          : 'preference',
       },
       version: 1,
     },

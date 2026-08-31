@@ -125,6 +125,7 @@ export default {
  */
 export function collapseClosingBraces(text: string): string {
   const lines = text.split('\n')
+  const designLines = linesInsideDesign(lines)
   const result: string[] = []
   let index = 0
   let inBlockComment = false
@@ -154,7 +155,7 @@ export function collapseClosingBraces(text: string): string {
       runEnd++
     }
     if (runEnd > index) {
-      if (isTestClosingBraceRun(lines, index)) {
+      if (designLines[index] || isTestClosingBraceRun(lines, index)) {
         result.push(lines[index]!)
         index++
         continue
@@ -169,6 +170,29 @@ export function collapseClosingBraces(text: string): string {
     index++
   }
   return result.join('\n')
+}
+
+/** Structured design blocks retain one owned closing brace per line so nested typed blocks stay unambiguous. */
+function linesInsideDesign(lines: readonly string[]): readonly boolean[] {
+  const result: boolean[] = []
+  let depth = 0
+  for (const line of lines) {
+    const source = line.replace(/\/\/.*$/, '')
+    if (depth === 0 && /^\s*design\s+[A-Za-z_]\w*\s*\{/.test(source)) {
+      depth = braceDelta(source)
+      result.push(true)
+      continue
+    }
+    result.push(depth > 0)
+    if (depth > 0) {
+      depth += braceDelta(source)
+    }
+  }
+  return result
+}
+
+function braceDelta(line: string): number {
+  return [...line].reduce((depth, character) => depth + (character === '{' ? 1 : character === '}' ? -1 : 0), 0)
 }
 
 function isClosingDelimiterLine(line: string): boolean {

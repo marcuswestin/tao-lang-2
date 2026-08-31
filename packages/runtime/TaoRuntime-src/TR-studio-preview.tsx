@@ -2,11 +2,14 @@ import React from 'react'
 import { captureArguments, onRuntimeFailure } from './TR-error-containment'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { captureRuntime, restoreRuntimeCapture, type TaoRuntimeCaptureArtifact } from './TR-runtime-capture'
+import type { TaoSchemeSnapshot } from './TR-scheme'
 import { StudioEnvironmentControls, type TaoStudioFixturePlan } from './TR-studio-environment'
+import { TaoStudioProtocolVersions } from './TR-studio-protocol'
 import type { TaoStudioIdentity } from './TR-TaoProps'
 
-const studioProtocolChannel = 'tao-studio'
-const studioProtocolVersion = 1
+const studioProtocolChannel = TaoStudioProtocolVersions.channel
+const studioProtocolVersion = TaoStudioProtocolVersions.protocolVersion
+const studioSourceActionVersion = TaoStudioProtocolVersions.sourceActionVersion
 const studioRenderSelector = '[data-tao-studio]'
 
 /** StudioPreviewConfig is the explicit trusted context for one generated preview instance. */
@@ -231,11 +234,32 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
 /** PreviewBridge activates Studio messaging only when a generated preview supplies trusted configuration. */
 function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
   const captureFixture = StudioEnvironmentControls.useCapture()
+  const scheme = StudioEnvironmentControls.useScheme()
   React.useEffect(() => mountStudioPreviewBridge(props.config, undefined, captureFixture), [
     captureFixture,
     props.config,
   ])
+  React.useEffect(() => publishStudioScheme(props.config, scheme), [props.config, scheme])
   return React.createElement(React.Fragment, null, props.children)
+}
+
+/** Publishes the runtime-resolved cell Scheme without coupling Studio to CSS or host inference. */
+export function publishStudioScheme(
+  config: StudioPreviewConfig,
+  scheme: TaoSchemeSnapshot,
+  suppliedHost?: StudioPreviewHost,
+): void {
+  const host = suppliedHost ?? browserPreviewHost()
+  if (host === undefined || !validPreviewConfig(config)) {
+    return
+  }
+  host.parent.postMessage({
+    channel: studioProtocolChannel,
+    identity: previewIdentity(config),
+    protocolVersion: studioProtocolVersion,
+    scheme,
+    type: 'preview-scheme-changed',
+  }, config.parentOrigin)
 }
 
 /** mountStudioPreviewBridge mounts one imperative browser bridge and returns its complete cleanup. */
@@ -715,6 +739,7 @@ function postSourceMessage(
     channel: studioProtocolChannel,
     identity: {
       ...previewIdentity(config),
+      occurrence: sourceActionOccurrence(occurrence),
       path: occurrence.sourcePath,
       sourceVersion,
     },
@@ -751,14 +776,25 @@ function postMoveRenderAction(
     checkpoint: { id: requestId, phase: 'single' },
     identity: {
       ...previewIdentity(config),
+      occurrence: sourceActionOccurrence(dragged),
       path: dragged.sourcePath,
       sourceVersion,
     },
     protocolVersion: studioProtocolVersion,
     requestId,
-    sourceActionVersion: 1,
+    sourceActionVersion: studioSourceActionVersion,
     type: 'source-action',
   }, config.parentOrigin)
+}
+
+function sourceActionOccurrence(identity: TaoStudioIdentity): {
+  nodeKind: TaoStudioIdentity['kind']
+  renderOwner?: string
+} {
+  return {
+    nodeKind: identity.kind,
+    ...(identity.ownerName ? { renderOwner: identity.ownerName } : {}),
+  }
 }
 
 function previewIdentity(config: StudioPreviewConfig): {

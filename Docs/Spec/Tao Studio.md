@@ -33,6 +33,11 @@ and may end in `for Account`. Fixture fields and arguments currently accept text
 `now`, and fixture references. Lists and arbitrary Tao expressions are not fixture values in this
 slice.
 
+The `through` syntax, validation, and manifest plan are implemented, but fixture-through-action result
+and handle semantics are explicitly deferred. The runtime and fixture generator therefore fail closed
+rather than inferring result multiplicity, later-row references, transaction or rollback behavior,
+capture/replay, or test-harness seeding.
+
 The validator requires unique fixture names per file, unique handles per fixture, known entity
 fields, all required create fields, assignable values, and valid action arguments. Accounts are
 identity handles, not a promise of a particular authentication provider.
@@ -82,7 +87,8 @@ scenarios StoryRow "states" {
 The subject may instead be written inside each entry, so groups without a declaration subject can
 contain independently targeted scenarios. Entry names must be unique within a group. A group with one
 entry is the singleton form; the former dotted singular spelling such as `scenario StoryRow.leading`
-is not accepted.
+is retired without an alias. These group, inheritance, and `(group, entry)` language-identity semantics
+are adopted; compiler and Studio identity additionally include the source path.
 
 `run` and `render` are mutually exclusive. A declaration subject supplies the omitted name, as in
 `scenarios StoryRow` plus `render (...)` or `scenarios HNReader` with no explicit `run` clause. Focused
@@ -147,7 +153,8 @@ changes update the retained URL while a cell is suspended. The generated Studio 
 host, creates fixture rows in declaration order, applies ordered `prepare` updates after datasource
 binding, resolves fixture handles into view arguments, and mounts the focused `render` subject. The real
 WordFlower `states / novel` scenario generates and typechecks through this path. Fixture setup through an
-action remains unsupported and fails explicitly rather than silently bypassing that action.
+action remains unsupported and fails explicitly rather than silently bypassing that action. Completing
+that execution path remains deferred until its result/handle and test-harness semantics are adopted.
 
 ## State
 
@@ -170,16 +177,21 @@ endpoint; the server validates the current project/source/cell identity, applies
 writing or reserving a checkpoint, and returns the pending content, edits, version, and compact diff shown to
 the user. Relations become fixture-handle references; missing or cyclic relations, non-scalar fields, and
 conflicting snapshots are rejected. Loading an accepted captured fixture through the Tao test harness is
-still open, and the current generated manifest consequently publishes no separate named state entries.
+explicitly deferred with the fixture-through-action semantics, and the current generated manifest
+consequently publishes no separate named state entries.
 
-Unexpected runtime failures use a second, versioned capture artifact. Its explicitly registered runtime
-domains are `action-history`, `data`, `navigation`, and `persisted-state`; Studio adds the active cell's
-environment. Item, screen/presentation, and app boundaries publish that artifact after a diagnostic render
+Automatic render-failure containment and guarded recovery at loop-item, screen/presentation, and app
+boundaries are adopted. The versioned semantic capture artifact and restore behavior described here are
+implemented Studio/runtime behavior, but their adoption as a generalized Tao capture/replay contract is
+explicitly deferred. The artifact's registered runtime domains are `action-history`, `data`, `navigation`,
+`persisted-state`, and cell-local `scheme`; Studio also adds the active cell's environment. Item, screen/presentation, and app
+boundaries publish that artifact after a diagnostic render
 pass. Studio activates the failing cell, displays its bounded failure and compiler-owned source range,
 accepts a capture from a JSON file or clipboard, and remounts one cell with the restored semantic domains.
-This is implemented capture/replay, but it does not serialize arbitrary React hooks, timers, native
-controls, process state, credentials, or other unregistered stores. It also does not yet convert the
-failure artifact into durable authored fixture-plus-scenario source.
+This implementation does not serialize arbitrary React hooks, timers, native controls, process state,
+credentials, or other unregistered stores. Promotion of a failure artifact into durable authored
+fixture-plus-scenario source is explicitly deferred with the generalized contract, including its naming
+and conflict semantics.
 
 ## Per-cell environment
 
@@ -187,7 +199,8 @@ The preview-manifest environment has three parts:
 
 - `viewport`: positive width and height plus an optional preset name;
 - `network`: non-negative latency and normal, offline, or explicit-error outcome;
-- `scheme`: requested light or dark appearance with status exactly `inert`.
+- `scheme`: requested System, Light, or Dark appearance plus resolved Light/Dark, resolution source, and
+  the reactive-browser or fixed-Light-native capability.
 
 The runtime provider overlay isolates seeded load/persist snapshots from the configured durable
 provider. It never calls that provider's durable `load` or `persist`; it delegates only remote `fill`,
@@ -201,26 +214,33 @@ spelling. The generated host installs the provider overlay through the ordinary 
 binding, so cell-local seed, persistence, latency, offline, and injected-fill behavior use the same
 `TR.Data` path as the app rather than a parallel store.
 
-Scheme is deliberately not simulated. The current design runtime has no reactive `Scheme`/
-appearance resolution, so the protocol accepts only an explicitly inert capability, runtime
-validation refuses an active claim, and Studio presents the requested value in a disabled control
-with a visible explanation. It does not recolor a preview by browser-only CSS and imply native
-behavior.
+Scheme is resolved by the ordinary Tao runtime, never by Studio CSS. A scenario pin wins over the
+Appearance preference, whose System value follows the browser environment. The resolved value flows
+through mounted design conditions independently per preview cell. Runtime capture records requested,
+resolved, source, and capability; replay freezes that record, and authored scenario save writes the
+resolved Light or Dark pin. Native hosts without reactive appearance report `fixed-light-native` and
+resolve to Light rather than implying unsupported parity.
 
 ## Editing, identity, and trust
 
 Studio uses the shared Langium language server for editing and a separate versioned Studio protocol
-for compile state, previews, selection, inspector data, and source actions. The compiler records render
-owner and node kind, but the current window/source-action identity binds project, app, preview instance,
-source version, and source range; wiring owner/kind as enforced preconditions remains open. Source
-ranges are revision-bound locators, not durable IDs.
+for compile state, previews, selection, inspector data, and source actions. Source-action protocol v2
+binds project, app, preview instance, source version, revision-bound source range, compiler-emitted node
+kind, and owning view. The current mutation surface targets only render nodes, so `render` is the only
+real node-kind value; that field and its mismatch check are forward-compatibility scaffolding for a future
+multi-kind source-action surface. A matrix-cell edit additionally binds the exact cell revisions and authored
+scenario. The server resolves the range in current parsed source and rejects fabricated node-kind, render-owner,
+source-version, preview, cell, or scenario mismatches with structured conflict codes before writing.
+Source ranges remain revision-bound locators, not durable IDs.
 
 The preview bridge accepts messages only from the registered parent source and exact origin. In the
 current loopback-only browser transport that parent origin is supplied in the iframe URL, so this is a
 local isolation check rather than authenticated pairing and must not be exposed on a LAN. The Mac
 project session also validates the request Host, source versions, and action preconditions before
-writing. Visual insertion, reorder/move, supported layout changes, wrapping, and undo all go through
-typed source actions; previews do not write source or persist visual state themselves.
+writing. Proposal and apply use the same canonical preparation path, with apply revalidating current
+source. Undo accepts only the latest committed checkpoint, its retained source-action identity, and its
+exact post-edit source version. Visual insertion, reorder/move, supported layout changes, wrapping, and
+undo all go through typed source actions; previews do not write source or persist visual state themselves.
 
 Files are a versioned StudioServer resource. The browser tree groups real `.tao` paths recursively and
 shows dirty dots and diagnostic counts. Create, rename, and delete use dedicated HTTP endpoints, serialize
@@ -243,8 +263,35 @@ foreign component for CodeMirror 6: it accepts Tao-owned content and selection, 
 actions, and can attach the existing JSON-over-WebSocket LSP transport. Studio mounts this foreign view in
 the production editor slot. The legacy workbench editor remains as the hidden controller for file lifecycle,
 draft synchronization, tabs, diagnostics, and source actions while a typed ProductHost protocol mirrors its
-versioned ephemeral buffer and selection into Tao. The exact named-slot declaration spelling and `Slots`
-record shape remain proposed wording rather than an adopted Tao Revolution decision.
+versioned ephemeral buffer and selection into Tao. The adopted named-slot declaration spelling is
+`accepts content slots @name from ./Sidecar.tsx`; the sidecar receives one `Slots` record keyed by those
+declared names.
+
+## Action failures, scheduling, and containment
+
+A native action declares an expected failure with `fail Case "sentence"`; its failure cases are inferred
+from its own failure sites. A foreign action has no Tao body and instead declares
+`fails Case "sentence" ... from ./Sidecar.ts` on its declaration head. These failure contracts are adopted.
+An expected failure aborts the complete joined call, discards its private writes, and skips the remaining
+caller statements. Provider failures cross as structured cases, unknown cases do not borrow another case's
+copy, and injected code gains no durable authority.
+
+Foreign `runs latest` is also adopted. One action value has at most one running invocation and one waiting
+invocation. A newer call replaces the waiting call's arguments; the replaced call resolves as skipped
+without entering the action transaction, crossing the external boundary, or reporting a failure. The
+running call is not cancelled, and a native action may not declare `runs latest`.
+
+Automatic render-failure containment has no Tao author syntax. It isolates loop items, treats screens and
+presented views as screen boundaries, and places an overlay boundary at the app host. Repeated failure of
+the same subtree and state escalates from item to screen to app. Guarded recovery offers retry only before
+an external effect, restarts without clearing data, and permits reset only with provider authority,
+confirmation, and a recoverable backup. This containment and recovery contract is adopted.
+
+Those adopted contracts do not adopt the broader runtime action-transaction or generalized semantic
+capture/replay models. The repository's current root serialization, nested joins, private overlays,
+prepare/publish, rollback, detached ownership, and retry metadata remain implemented runtime behavior, not
+authoritative language semantics. Their contract is explicitly deferred, as are the generalized capture
+artifact and authored failure-capture promotion described above.
 
 ## Product workbench and design
 
@@ -265,11 +312,26 @@ stdlib catalog plus compiler-manifest project views; drag to canvas emits positi
 and drag to editor inserts formatted snippets with required-parameter placeholders selected for editing.
 
 Layout inspection uses parser-owned current clauses. Style inspection carries landing provenance and
-blast radius for inline entries and local/imported bundles. `set-style-entry` can edit or fork a local
-bundle, update an element landing, or promote supported raw colors to a token or element default; shared
-edits require an edit-versus-fork choice. Development validation reports raw inline design exploration as
-a warning. Release compilation promotes only that diagnostic to an error, and native packaging preflights
-the executable Tao client under that release policy.
+blast radius for inline entries and local/imported bundles. The structured design surface supports color
+tokens and numeric families, Scheme-conditional colors, named px/rem sizes with one folded addition,
+text styles, Screen thresholds, named styles, and capitalized element defaults. `set-style-entry` can edit
+or fork a local bundle, update an element landing, or promote supported raw colors and sizes to a token or
+element default. The decided `background` and `ink` spellings compile through the compatible runtime
+`bg`/`fg` ABI, and Studio validates supported color paths, named or numeric sizes, symbolic or numeric
+weights, line height, spacing, and radius before dispatch; shared edits require an edit-versus-fork choice.
+Development validation reports raw inline design exploration as a warning. Release compilation promotes
+only that diagnostic to an error, and native packaging preflights the executable Tao client under that
+release policy.
+
+This is an explicit executable subset of Revolution §13. Parameterized palette functions and calls,
+reactive Screen-class selection at use sites, pressed/focused/hovered interaction-state execution, the
+`rules {}` policy engine, and raw typed typography dimensions remain deferred language work. Named size
+references work; the legacy numeric style surface remains compatible.
+
+The Inspector Data context reports the selected view/element and active cell, revision, and scenario.
+`StudioRenderInspection` does not yet publish an argument/binding graph, so the context states that binding
+metadata is unavailable instead of manufacturing it. The runtime likewise publishes no general action
+inventory; Actions exposes the supported Wrap in Stack source action and does not invent runtime invocation.
 
 Problems provides project diagnostics with click-to-source, and Compile shows live status and revisions.
 Data requests a trusted runtime capture from the active preview, renders its datasource/entity rows, polls
@@ -284,24 +346,37 @@ relocated Node plus native-library closure rather than relying on the developer 
 
 `packages/studio/studio-src/TaoStudioClient.tao` is an executable, canonical, release-valid Tao app. Its
 named ProductHost slots render the real StudioServer file hierarchy through recursive Tao `FileTree` and
-Studio-local `Disclosure` views, mount the `@tao/code-editor` foreign view, and compose the inspector's
-live file/scenario/viewport/render context. Create, rename, and confirmed delete call the real foreign
-actions. The ProductHost editor routes changes through the same workbench draft controller and LSP
-transport, preserving versioned writes without putting file contents into the entity model.
+Studio-local `Disclosure` views, mount the stdlib Components and manifest-derived project View/Screen
+inventories, expose parser-owned DesignTokens, mount the `@tao/code-editor` foreign view, and compose the
+inspector's live Layout/Style/Data/Actions and scenario-environment contexts. Create, rename, confirmed
+delete, palette insertion, screen opening, inspector actions, and undo call the trusted workbench
+controller. Style changes use server-canonical proposal/review/apply; stale active-cell environment edits
+are rejected by cell identity and revision. The editor preserves versioned writes without putting file
+contents into the entity model.
 
 The server event stream now publishes explicit entity-family invalidations. The Tao provider consumes
-them through the existing full-snapshot subscription seam and replaces a complete validated mirror, so
-renames and deletions cannot leave rows stranded by fill-only upserts. `ServerOrigin` can name an explicit
-HTTP session base for a native host; an empty value preserves same-origin browser/session routing.
+them through the existing full-snapshot subscription seam, ignores duplicate revisions, treats a lower
+revision as a new server-side datasource generation, and
+replaces a complete validated mirror while retaining the prior snapshot on refresh failure. Its schema-
+selected fills include Files, Screens, Views, Scenarios, Checkpoints, and parser-owned DesignTokens.
+Problems and the other controller-owned drawer states cross the ProductHost as bounded, validated,
+revisioned payloads; Tao owns their panel structure, iteration, empty/error branches, and actions rather
+than presenting them as queried StudioServer entities.
+`ServerOrigin` can name an explicit HTTP session
+base for a native host; an empty value preserves same-origin browser/session routing.
 
-This remains a strangler slice rather than a second product shell. Tao owns the production Files tree,
-editor foreign-view slot, and a typed inspector context view; TypeScript still owns the toolbar, rail,
-scenario canvas and controls, detailed inspector controls, drawer, editor/file controller, and native window
-chrome. The ProductHost protocol publishes revisioned active-file content and selection, selected-render
-identity, and active-cell environment as transient typed view parameters. They are browser-local UI state,
-not StudioServer entities or durable project authority. Folder expansion remains view-local because
-persisted view-instance keying is explicitly deferred. The action sidecars still use same-origin session
-routing, so a separately hosted cross-origin Tao surface would need corresponding write-origin injection.
+This remains a strangler slice rather than a second product shell. Tao structurally renders Files,
+Components, project Views, Screens, DesignTokens, Search, every drawer panel, detailed
+scenario/environment controls, and the Layout/Style/Data/Actions inspector contexts; it owns their
+queries, iteration, drafts, branching, and ordinary actions. The editor is a typed foreign view.
+TypeScript retains primitive numeric/file leaves where Tao has no equivalent, typed serialization and
+trusted controller boundaries, toolbar/rail destinations, preview iframe lifecycle, workbench and file
+controllers, and native window chrome. The ProductHost protocol
+publishes revisioned active-file, selected-render, active-cell,
+and parsed inspector state as transient view parameters. They are browser-local UI state, not StudioServer
+entities or durable project authority. Recursive folder expansion is derived from one top-level persisted
+collapsed-path set passed through a bound root view; view-instance persistence is not supported. The action sidecars still use same-origin session routing, so a
+separately hosted cross-origin Tao surface would need corresponding write-origin injection.
 
 ## Current boundary
 
@@ -312,14 +387,15 @@ the release steps. This section states what Studio implements.
 The local web Studio shell, editor/LSP connection, stable Expo preview publication, bidirectional
 source/render selection, visual source actions, review checkpoint/undo, file CRUD, live Data tables,
 failure capture/replay, Electrobun project and packaged-service scaffold, compiler manifest, matrix
-identity, typed per-cell argument/viewport/network controls, a visibly inert Scheme control, focused
+identity, Tao-owned typed per-cell argument/viewport/network controls, reactive Scheme state, focused
 fixture/view execution, per-cell provider/environment wiring, and state-domain libraries exist. The
 generated real WordFlower Studio host typechecks as one integration proof.
 
 The browser client is split into API/event, editor, matrix, shell, visual-editing, file-tree, and
 product-panel modules behind a thin compatibility entry point. Its live preview path renders grouped
 scenario rows and keyed cells, reconciles them across new manifests, and suspends offscreen iframe realms.
-The complete multi-group browser smoke and remaining product-panel interaction passes are still pending.
+The complete host-browser execution pass remains pending; its wide/narrow viewport, pane-resize,
+pointer-drag, screenshot, console, and exception operations are deterministic and contract-tested.
 
 `./dev studio` and `./dev studio-native` both start the multi-project session server. Every opened project
 owns its own Expo server, generated preview runtime, preview session, file watcher, and initial compile;
@@ -361,14 +437,15 @@ asks for a Tao fixture name, captures only the isolated provider state, shows th
 source, and writes only after confirmation. The following remain open before the scenario matrix is a
 complete user feature:
 
-- define the fixture-through-action result/handle contract, then execute those plans;
-- load accepted captured state through the test harness;
+- keep fixture-through-action execution fail-closed while its result/handle contract remains deferred;
+- load accepted captured state through the test harness after those semantics are adopted;
+- resume generalized semantic capture/replay and authored failure-capture promotion only after their
+  explicitly deferred artifact, restoration, naming, and conflict contracts are adopted;
 - complete the remaining wide-screen inspector smoke and real Electrobun interaction passes; live file
   CRUD, independent retained cell state across two recompiles, drawer data/log/compile surfaces, and the
   WordFlower Tao test run have browser evidence;
-- continue replacing detailed inspector/scenario controls with Tao views while keeping server-canonical
-  source-action proposals and same-origin browser/native routes; a future cross-origin host will require
-  explicit origin injection.
+- preserve server-canonical source-action proposals and same-origin browser/native routes; a future
+  cross-origin host will require explicit origin injection.
 
 Scenarios declared in imported files and authored `run App at Destination(...)` subjects are rejected during
 Studio compilation with actionable messages. This satisfies the current mount-or-reject and execute-or-reject

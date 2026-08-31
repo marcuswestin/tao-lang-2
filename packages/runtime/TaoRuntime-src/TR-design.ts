@@ -1,17 +1,55 @@
 import { LayoutControls, type TaoLayout, type TaoLayoutEntry, type TaoResolvedLayoutStyle } from './TR-layout'
+import type { TaoScheme } from './TR-scheme'
 import RuntimeSwitch from './TR-switch'
 
 export type TaoDesignSpecTerm = number | string
 export type TaoDesignSpecEntry = readonly [string, ...TaoDesignSpecTerm[]]
 
+export type TaoDesignSource = Readonly<{
+  end?: number
+  kind: 'element-default' | 'inline' | 'legacy-style' | 'style' | 'text-style'
+  member?: string
+  path?: string
+  start?: number
+}>
+
 /** TaoDesignSpec preserves authored bundle and direct-clause order until a mounted app resolves it. */
 export type TaoDesignSpec = Readonly<{
   entries: readonly TaoDesignSpecEntry[]
+  source?: TaoDesignSource
 }>
+
+export type TaoDesignColorValue =
+  | TaoDesignColorAtom
+  | Readonly<{
+    environment: 'Scheme'
+    expected: TaoScheme
+    kind: 'conditional'
+    negative: TaoDesignColorAtom
+    positive: TaoDesignColorAtom
+  }>
+
+export type TaoDesignColorAtom = Readonly<{ kind: 'reference'; path: string }> | string
+
+export type TaoDesignSizeAtom = Readonly<
+  | { kind: 'dimension'; unit: 'px' | 'rem'; value: number }
+  | { kind: 'reference'; path: string }
+>
+
+export type TaoDesignSizeValue = Readonly<{
+  left: TaoDesignSizeAtom
+  right?: TaoDesignSizeAtom
+}>
+
+export type TaoDesignScreen = Readonly<{ below?: number; name: string }>
 
 export type TaoDesignDefinition = Readonly<{
   bundles: Readonly<Record<string, TaoDesignSpec>>
+  colors?: Readonly<Record<string, TaoDesignColorValue>>
   name: string
+  screens?: readonly TaoDesignScreen[]
+  sizes?: Readonly<Record<string, TaoDesignSizeValue>>
+  sources?: Readonly<Record<string, TaoDesignSource>>
   tokens: Readonly<Record<string, string>>
 }>
 
@@ -20,10 +58,20 @@ export type TaoDesign =
   & TaoDesignDefinition
   & Readonly<{
     evaluate(): TaoDesign
+    readonly colors: Readonly<Record<string, TaoDesignColorValue>>
+    readonly screens: readonly TaoDesignScreen[]
+    readonly sizes: Readonly<Record<string, TaoDesignSizeValue>>
   }>
+
+export type TaoDesignProvenance = Readonly<{
+  chain: readonly TaoDesignSource[]
+  entry: TaoDesignSpecEntry
+  property: string
+}>
 
 export type TaoResolvedDesignSpec = Readonly<{
   layout?: TaoLayout
+  provenance?: readonly TaoDesignProvenance[]
   style?: TaoResolvedLayoutStyle
 }>
 
@@ -53,8 +101,15 @@ export const DesignControls = {
     return new RuntimeDesign(definition)
   },
 
-  Spec(entries: readonly TaoDesignSpecEntry[]): TaoDesignSpec {
-    return Object.freeze({ entries: Object.freeze([...entries]) })
+  Spec(entries: readonly TaoDesignSpecEntry[], source?: TaoDesignSource): TaoDesignSpec {
+    return Object.freeze({
+      entries: Object.freeze([...entries]),
+      ...(source === undefined ? {} : { source: Object.freeze({ ...source }) }),
+    })
+  },
+
+  Source(spec: TaoDesignSpec, source: TaoDesignSource): TaoDesignSpec {
+    return DesignControls.Spec(spec.entries, source)
   },
 
   resolve,
@@ -62,12 +117,23 @@ export const DesignControls = {
 
 class RuntimeDesign implements TaoDesign {
   readonly bundles: Readonly<Record<string, TaoDesignSpec>>
+  readonly colors: Readonly<Record<string, TaoDesignColorValue>>
   readonly name: string
+  readonly screens: readonly TaoDesignScreen[]
+  readonly sizes: Readonly<Record<string, TaoDesignSizeValue>>
   readonly tokens: Readonly<Record<string, string>>
 
   constructor(definition: TaoDesignDefinition) {
-    this.bundles = Object.freeze({ ...definition.bundles })
+    this.bundles = Object.freeze(Object.fromEntries(
+      Object.entries(definition.bundles).map(([name, spec]) => [
+        name,
+        definition.sources?.[name] === undefined ? spec : DesignControls.Source(spec, definition.sources[name]!),
+      ]),
+    ))
+    this.colors = Object.freeze({ ...definition.tokens, ...definition.colors })
     this.name = definition.name
+    this.screens = Object.freeze([...(definition.screens ?? [])])
+    this.sizes = Object.freeze({ ...definition.sizes })
     this.tokens = Object.freeze({ ...definition.tokens })
     Object.freeze(this)
   }
@@ -81,30 +147,36 @@ function resolve(
   design: TaoDesign | undefined,
   spec: TaoDesignSpec | undefined,
   elementDefault?: string,
+  scheme: TaoScheme = 'light',
 ): TaoResolvedDesignSpec {
   const defaultSpec = elementDefault === undefined || design?.bundles[elementDefault] === undefined
     ? undefined
-    : DesignControls.Spec([[elementDefault]])
+    : DesignControls.Spec([[elementDefault]], { kind: 'element-default', member: elementDefault })
   if (defaultSpec === undefined && (!spec || spec.entries.length === 0)) {
     return {}
   }
 
   const layoutEntries: TaoLayoutEntry[] = []
   const style: TaoResolvedLayoutStyle = {}
-  const effectiveSpec = DesignControls.Spec([
-    ...(defaultSpec?.entries ?? []),
-    ...(spec?.entries ?? []),
-  ])
-  for (const entry of expandEntries(design, effectiveSpec, [])) {
-    const head = entry[0]
-    if (layoutHeads.has(head as TaoLayoutEntry[0])) {
-      layoutEntries.push(entry as TaoLayoutEntry)
+  const provenance: TaoDesignProvenance[] = []
+  for (const effectiveSpec of [defaultSpec, spec]) {
+    if (effectiveSpec === undefined) {
       continue
     }
-    if (!isVisualEntry(entry)) {
-      throw new Error(`Unknown design clause '${entry.join(' ')}'.`)
+    for (const expanded of expandEntries(design, effectiveSpec, [], scheme, [])) {
+      const entry = resolveSizeTerms(design, expanded.entry)
+      const head = entry[0]
+      if (layoutHeads.has(head as TaoLayoutEntry[0])) {
+        layoutEntries.push(entry as TaoLayoutEntry)
+        provenance.push({ chain: expanded.chain, entry, property: head })
+        continue
+      }
+      if (!isVisualEntry(entry)) {
+        throw new Error(`Unknown design clause '${entry.join(' ')}'.`)
+      }
+      applyVisualEntry(style, design, entry, scheme)
+      provenance.push({ chain: expanded.chain, entry, property: visualProperty(head) })
     }
-    applyVisualEntry(style, design, entry)
   }
 
   const layout = layoutEntries.length > 0 ? LayoutControls.create(layoutEntries) : undefined
@@ -112,6 +184,9 @@ function resolve(
 
   return {
     ...(layout ? { layout } : {}),
+    ...(provenance.some(item => item.chain.some(source => source.path !== undefined))
+      ? { provenance: Object.freeze(provenance) }
+      : {}),
     ...(Object.keys(style).length > 0 ? { style } : {}),
   }
 }
@@ -129,11 +204,18 @@ function* expandEntries(
   design: TaoDesign | undefined,
   spec: TaoDesignSpec,
   bundlePath: readonly string[],
-): Generator<TaoDesignSpecEntry> {
-  for (const entry of spec.entries) {
+  scheme: TaoScheme,
+  sourceChain: readonly TaoDesignSource[],
+): Generator<{ chain: readonly TaoDesignSource[]; entry: TaoDesignSpecEntry }> {
+  const chain = spec.source === undefined ? sourceChain : [...sourceChain, spec.source]
+  for (const authoredEntry of spec.entries) {
+    const entry = activeSchemeEntry(authoredEntry, scheme)
+    if (entry === undefined) {
+      continue
+    }
     const head = entry[0]
     if (layoutHeads.has(head as TaoLayoutEntry[0]) || isVisualHead(head)) {
-      yield entry
+      yield { chain, entry }
       continue
     }
     if (entry.length !== 1) {
@@ -149,26 +231,47 @@ function* expandEntries(
     if (bundlePath.includes(head)) {
       throw new Error(`Design '${design.name}' has a bundle cycle: ${[...bundlePath, head].join(' -> ')}.`)
     }
-    yield* expandEntries(design, bundle, [...bundlePath, head])
+    yield* expandEntries(design, bundle, [...bundlePath, head], scheme, chain)
   }
+}
+
+function activeSchemeEntry(entry: TaoDesignSpecEntry, scheme: TaoScheme): TaoDesignSpecEntry | undefined {
+  const condition = entry.indexOf('when')
+  if (condition === -1) {
+    return entry
+  }
+  const suffix = entry.slice(condition)
+  if (
+    condition === 0
+    || suffix.length !== 4
+    || suffix[0] !== 'when'
+    || suffix[1] !== 'Scheme'
+    || suffix[2] !== 'is'
+    || (suffix[3] !== 'Dark' && suffix[3] !== 'Light')
+  ) {
+    throw new Error(`Unsupported design condition '${entry.join(' ')}'.`)
+  }
+  const required = suffix[3] === 'Dark' ? 'dark' : 'light'
+  return required === scheme ? entry.slice(0, condition) as unknown as TaoDesignSpecEntry : undefined
 }
 
 function applyVisualEntry(
   style: TaoResolvedLayoutStyle,
   design: TaoDesign | undefined,
   entry: TaoDesignSpecEntry & readonly [TaoDesignVisualHead, ...TaoDesignSpecTerm[]],
+  scheme: TaoScheme,
 ): void {
   const head = entry[0]
   RuntimeSwitch<TaoDesignVisualHead, void>(head, {
     bg: () => {
-      style['backgroundColor'] = resolveColorToken(design, entry)
+      style['backgroundColor'] = resolveColorToken(design, entry, scheme)
     },
     border: () => {
-      style['borderColor'] = resolveColorToken(design, entry)
+      style['borderColor'] = resolveColorToken(design, entry, scheme)
       style['borderWidth'] = 1
     },
     fg: () => {
-      style['color'] = resolveColorToken(design, entry)
+      style['color'] = resolveColorToken(design, entry, scheme)
     },
     line: () => {
       style['lineHeight'] = numericVisualValue(entry)
@@ -180,7 +283,7 @@ function applyVisualEntry(
       style['fontSize'] = numericVisualValue(entry)
     },
     weight: () => {
-      style['fontWeight'] = String(numericVisualValue(entry))
+      style['fontWeight'] = String(fontWeightValue(entry))
     },
   })
 }
@@ -195,7 +298,7 @@ function isVisualEntry(
   return isVisualHead(entry[0])
 }
 
-function resolveColorToken(design: TaoDesign | undefined, entry: TaoDesignSpecEntry): string {
+function resolveColorToken(design: TaoDesign | undefined, entry: TaoDesignSpecEntry, scheme: TaoScheme): string {
   const tokenName = entry.length === 2 && typeof entry[1] === 'string' ? entry[1] : undefined
   if (!tokenName) {
     throw new Error(`Design clause '${entry[0]}' expects one color token.`)
@@ -206,11 +309,81 @@ function resolveColorToken(design: TaoDesign | undefined, entry: TaoDesignSpecEn
   if (!design) {
     throw new Error(`Design token '${tokenName}' requires a mounted app design.`)
   }
-  const color = design.tokens[tokenName]
+  const color = resolveColor(design, tokenName, scheme, [])
   if (!color) {
     throw new Error(`Design '${design.name}' has no token '${tokenName}'.`)
   }
   return color
+}
+
+function resolveColor(
+  design: TaoDesign,
+  path: string,
+  scheme: TaoScheme,
+  resolving: readonly string[],
+): string | undefined {
+  if (resolving.includes(path)) {
+    throw new Error(`Design '${design.name}' has a color cycle: ${[...resolving, path].join(' -> ')}.`)
+  }
+  const value = design.colors[path]
+  if (typeof value === 'string') {
+    return value.startsWith('#') ? value : resolveColor(design, value, scheme, [...resolving, path])
+  }
+  if (value === undefined) {
+    return undefined
+  }
+  if (value.kind === 'reference') {
+    return resolveColor(design, value.path, scheme, [...resolving, path])
+  }
+  const atom = value.expected === scheme ? value.positive : value.negative
+  return typeof atom === 'string'
+    ? atom
+    : resolveColor(design, atom.path, scheme, [...resolving, path])
+}
+
+function resolveSizeTerms(design: TaoDesign | undefined, entry: TaoDesignSpecEntry): TaoDesignSpecEntry {
+  if (design === undefined) {
+    return entry
+  }
+  const head = entry[0]
+  const sizeIndexes = head === 'gap' || head === 'line' || head === 'radius' || head === 'size'
+    ? [1]
+    : head === 'pad' || head === 'margin'
+    ? (entry.length === 2 ? [1] : entry.map((_, index) => index).filter(index => index >= 2 && index % 2 === 0))
+    : head === 'width' || head === 'height'
+    ? (entry[1] === 'max' ? [2] : [1])
+    : []
+  return entry.map((term, index) => {
+    if (!sizeIndexes.includes(index) || typeof term !== 'string' || term === 'fill') {
+      return term
+    }
+    // Multi-app validation deliberately defers private design lookup to the mounted occurrence.
+    // Resolve every named term here so a design missing that size fails instead of leaking a
+    // string into the numeric layout engine.
+    return resolveSize(design, term, [])
+  }) as unknown as TaoDesignSpecEntry
+}
+
+function resolveSize(design: TaoDesign, path: string, resolving: readonly string[]): number {
+  if (resolving.includes(path)) {
+    throw new Error(`Design '${design.name}' has a size cycle: ${[...resolving, path].join(' -> ')}.`)
+  }
+  const value = design.sizes[path]
+  if (value === undefined) {
+    throw new Error(`Design '${design.name}' has no size '${path}'.`)
+  }
+  return sizeAtom(design, value.left, [...resolving, path])
+    + (value.right === undefined ? 0 : sizeAtom(design, value.right, [...resolving, path]))
+}
+
+function sizeAtom(design: TaoDesign, atom: TaoDesignSizeAtom, resolving: readonly string[]): number {
+  return atom.kind === 'reference'
+    ? resolveSize(design, atom.path, resolving)
+    : atom.value * (atom.unit === 'rem' ? 16 : 1)
+}
+
+function visualProperty(head: string): string {
+  return ({ bg: 'background', border: 'border', fg: 'foreground' } as Record<string, string>)[head] ?? head
 }
 
 function numericVisualValue(entry: TaoDesignSpecEntry): number {
@@ -218,4 +391,11 @@ function numericVisualValue(entry: TaoDesignSpecEntry): number {
     throw new Error(`Design clause '${entry[0]}' expects one number.`)
   }
   return entry[1]
+}
+
+function fontWeightValue(entry: TaoDesignSpecEntry): number {
+  const symbolic = entry.length === 2 && typeof entry[1] === 'string'
+    ? ({ bold: 700, medium: 500, regular: 400, semibold: 600 } as Record<string, number>)[entry[1]]
+    : undefined
+  return symbolic ?? numericVisualValue(entry)
 }

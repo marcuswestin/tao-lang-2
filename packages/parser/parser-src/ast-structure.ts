@@ -158,6 +158,7 @@ type ArgumentListOwner =
   | AST.CommandDeclaration
   | AST.FunctionCallExpression
   | AST.ContextualPresentStatement
+  | AST.ViewBinding
   | AST.AskStatement
 type BlockStatementFor<OwnerT extends AST.BlockStatementOwner> = OwnerT extends
   AST.ActionDeclaration | AST.ActionExpression ? AST.ActionStatement

@@ -110,6 +110,7 @@ export const ExpressionsCompiler = {
       PropertyConfigurationPatch: value =>
         Assert.never(value as never, 'property-position with is compiled against its owning property'),
       StringLiteral: Compile.Expression,
+      ViewBinding: compileViewBinding,
     })
   },
 
@@ -496,6 +497,16 @@ function compileConfigurationReference(value: AST.ConfigurationReference): Compi
     return gen`${gen.scopeName(target)}`
   }
   return Assert.never(target as never, 'validated configuration reference targets a configurable declaration')
+}
+
+function compileViewBinding(binding: AST.ViewBinding): Compiled {
+  const view = resolveRef(binding.view)
+  const resolved = ASTUtils.resolveArgumentBindings(view, binding)
+  Assert(resolved.diagnostics.length === 0, 'validated bound view has no binding diagnostics')
+  return gen`TR.Navigation.BindView(
+    ${Compile.ViewValue(view)},
+    { ${gen.list(resolved.pairs, Compile.BoundViewArgument)} },
+  )`
 }
 
 function compileConfigurationObject(block: AST.ConfigurationBlock): Compiled {

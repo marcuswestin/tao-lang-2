@@ -28,13 +28,13 @@ Describe('parser: minimal design declarations', () => {
 
     const design = parsed.entry.ast.statements.find(AST.isDesignDeclaration)
     Expect(design?.visibility).toBe('workspace')
-    Expect(design?.members.filter(AST.isDesignToken).map(token => token.value)).toEqual([
+    Expect(design?.block.members.filter(AST.isDesignToken).map(token => token.value)).toEqual([
       '#abc',
       '#abcd',
       '#121826',
       '#121826cc',
     ])
-    Expect(design?.members.filter(AST.isDesignBundle).map(bundle => bundle.name)).toEqual([
+    Expect(design?.block.members.filter(AST.isDesignBundle).map(bundle => bundle.name)).toEqual([
       'screen',
       'constrained',
     ])
@@ -83,5 +83,30 @@ Describe('parser: minimal design declarations', () => {
       .map(ASTUtils.layoutEntryValues)
     Expect(entries).toContainEqual(['fg', '#c00'])
     Expect(entries).toContainEqual(['bg', '#fff'])
+  })
+
+  Test('preserves representable decided visual and spacing terms as typed layout AST values', async () => {
+    const parsed = await testParseCode(`
+      design Theme {
+        canvas #fff
+        ink #111
+        lineColor #ddd
+        card [background canvas, ink ink, border lineColor, radius 12, pad 16, gap 8]
+        body [size 16, weight 600, line 22]
+      }
+    `)
+
+    const bundles = [...AST.streamAllContents(parsed.entry.ast).filter(AST.isDesignBundle)]
+    Expect(bundles.map(bundle => [bundle.name, bundle.spec.entries.map(ASTUtils.layoutEntryValues)])).toEqual([
+      ['card', [
+        ['background', 'canvas'],
+        ['ink', 'ink'],
+        ['border', 'lineColor'],
+        ['radius', 12],
+        ['pad', 16],
+        ['gap', 8],
+      ]],
+      ['body', [['size', 16], ['weight', 600], ['line', 22]]],
+    ])
   })
 })

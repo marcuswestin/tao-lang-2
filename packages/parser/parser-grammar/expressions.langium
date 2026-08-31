@@ -164,7 +164,13 @@ ConfigurationEntry:
 
 ConfigurationValue:
     PropertyConfigurationPatch | ConfigurationConstructor | ConfigurationKeyValue
-    | ListLiteral | StringLiteral | NumberLiteral | BooleanLiteral | ConfigurationReference;
+    | ListLiteral | StringLiteral | NumberLiteral | BooleanLiteral | ViewBinding | ConfigurationReference;
+
+// A parameterized view remains a first-class presentation descriptor in configuration position.
+// Its arguments are captured as live bindings when the owning nav is configured; this is distinct
+// from a function call, which produces an ordinary expression value.
+ViewBinding:
+    view=[ViewDeclaration:ID] '(' argumentList=ArgumentList? ')';
 
 NonIdentifierConstructorEntryValue infers Expression:
     TypedConstructor | ListLiteral | InterpolatedString | StringLiteral | NumberLiteral | BooleanLiteral | NoneLiteral;

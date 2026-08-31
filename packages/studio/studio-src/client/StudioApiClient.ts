@@ -144,7 +144,11 @@ export type StudioSessionTransition = Readonly<{
 export class StudioApiError extends Error {
   override readonly name = 'StudioApiError'
 
-  constructor(message: string, readonly status: number) {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly details?: Readonly<Record<string, unknown>>,
+  ) {
     super(message)
   }
 }
@@ -251,10 +255,17 @@ async function rootRequest<Result>(path: string, body: unknown): Promise<Result>
 }
 
 async function response<Result>(value: Response): Promise<Result> {
-  const body = await value.json() as Result | { error?: string }
+  const body = await value.json() as Result | { details?: unknown; error?: string }
   if (!value.ok) {
     const message = typeof body === 'object' && body !== null && 'error' in body ? body.error : undefined
-    throw new StudioApiError(message ?? `Tao Studio request failed (${value.status}).`, value.status)
+    const details = typeof body === 'object'
+        && body !== null
+        && 'details' in body
+        && typeof body.details === 'object'
+        && body.details !== null
+      ? body.details as Readonly<Record<string, unknown>>
+      : undefined
+    throw new StudioApiError(message ?? `Tao Studio request failed (${value.status}).`, value.status, details)
   }
   return body as Result
 }

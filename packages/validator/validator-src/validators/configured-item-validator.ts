@@ -374,6 +374,9 @@ function validateConfiguredEntryLiteral(
 }
 
 function configurationValueType(value: AST.ConfigurationValue): ASTUtils.TaoType {
+  if (AST.isViewBinding(value)) {
+    return { kind: 'primitive', primitive: 'view' }
+  }
   if (AST.isConfigurationReference(value)) {
     const target = value.target.ref
     return AST.isValueDeclaration(target)

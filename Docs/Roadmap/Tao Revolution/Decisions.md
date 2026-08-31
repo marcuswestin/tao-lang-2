@@ -968,13 +968,20 @@ app Skillet {
 
 ### Concurrency
 
-- **Concurrency is declared, not coded** — a single-flight policy and a supersede-latest policy, each
-  keyable to a specific row so locks scope correctly:
+- **Concurrency is declared, not coded** — a single-flight policy and a latest-pending policy. Both
+  policies can be keyed to a specific row so independent values do not share a lock or queue:
 
 ```swift
-action Save() runs single { … }        // a second call is refused while one is already in flight
-action Search(Query text) runs latest { … }   // a new call cancels the one in flight (§15's signal)
+action Save() runs single { … }                              // refuse a second in-flight call
+action Search(Query text) runs latest from ./Search.ts       // retain only the latest waiting call
 ```
+
+- **`runs latest` is a foreign-action scheduling contract.** One action value has at most one running
+  invocation and one waiting invocation. A newer call replaces the waiting call's arguments; the replaced
+  call resolves as skipped without entering an action transaction, crossing the external boundary, or
+  reporting a failure. The running call is not cancelled. When it settles, the newest waiting call starts
+  with the direct or joined ownership mode captured at that call's own site. A native action using
+  `runs latest` is invalid.
 
 - **An action exposes a live in-flight boolean for busy states**:
 
@@ -1795,7 +1802,8 @@ Text(Recipe.Duration)   // a duration value; the edge renders "35 min" or "35 mi
 
 - A typed contract is declared in Tao and implemented in a `.ts` sidecar. The compiler checks the
   join in both directions from an emitted type.
-- **`from` is an ordinary expression operator, not a binding clause.**
+- **For values and type slots, `from` is an ordinary expression operator.** Foreign view and action
+  declarations use the declaration-head boundary described below.
 
 ```
 <expression> from <path>
@@ -1822,101 +1830,84 @@ type Local is datasource with {
   than one imported name.
 - **`from` already means provenance** in `use X from @pkg` — the same word doing the same job. The
   path is written bare rather than quoted, and there is no inline `ts` fence.
-- **In an action, this is a statement in the body**, not a clause on the declaration. The body is an
-  ordinary body, and delegating to TypeScript is one thing an expression in it can do:
-
-```swift
-// Recipe.tao
-type Foo is number
-type Bar is list of text
-
-action FetchRecipe(Link text) returns { Foo, Bar } {
-   fails NotARecipe "That page doesn't look like a recipe."
-   fails Unreachable "That page couldn't be reached."
-   progress
-   return FetchRecipe(Link) from ./FetchRecipe.ts
-}
-```
-
-Because the expression names the function it calls, the TypeScript export need not share the Tao
-name.
-
 - **This retires `implement inject provider|nav "./Local.ts"` and the inline fence.** Nothing
-  replaces them: an expression is enough, so neither `implement` nor a kind word nor a marker
-  keyword survives in these positions.
+  replaces them: neither `implement` nor a kind word nor a marker keyword survives in these positions.
 - **The compiler emits a bridge metadata module beside the Tao source** (`Recipe.tao.ts`), which is
   what makes the join checkable from the TypeScript side.
 
-### Declared failures
+### Foreign views
 
-- **A sidecar has no way to fail except through a case declared in Tao.** `fails <Case> "<sentence>"`
-  is a line in the action's body, next to the rule it describes — the same shape and the same reason
-  as `refuse when … "<sentence>"` in a transaction body (§5, §14). The sentence is source copy and is
-  extracted for translation like any other.
-- **English never crosses into TypeScript.** The sidecar picks a case; it cannot author a message.
-  This is what makes the boundary translatable, and it is why a bare `reject("some text")` is not
-  available.
-- **A declared case surfaces by name, and anything else surfaces as `error`.** A site may handle
-  cases individually and let the rest fall through:
+A view may declare a named TypeScript implementation in its head:
 
 ```swift
-when do FetchRecipe(Link) {
-   Unreachable -> present Notice(Problem) as toast   // offer a retry
-   rejected    -> present Notice(Problem) as toast   // any other declared case
-   error       -> …                                  // a thrown exception, not a declared failure
+view CodeEditor(Content text, Change action(text)) accepts content slots @toolbar from ./CodeEditor.tsx
+```
+
+- The sidecar provides the named export matching the view declaration.
+- Tao owns the public parameter, response, caller-content, and named-slot contract. Evaluated values
+  cross as plain JavaScript values; action parameters cross as invokable action values.
+- The component receives `Layout`, `Tag`, one `Slots` record keyed by the declared `@slot` names, and
+  `children` only when the head declares `accepts content`.
+- The component owns its native root, honors Layout and Tag, and renders every accepted content channel
+  exactly once. `responds T` remains available on the foreign view head.
+- `render inject` remains the occurrence-level native implementation form; a foreign view declaration
+  does not replace it.
+- The compiler follows transitive relative static imports, dynamic imports, and re-exports for TypeScript,
+  TSX, JavaScript, JSX, and JSON sidecar files. Installed packages remain external.
+
+### Action failures
+
+A native action declares a failure where it detects it, and its failure contract is inferred:
+
+```swift
+type SaveFailure is one of Offline, Rejected
+
+action Save() {
+   fail Offline "Could not save this draft."
 }
 ```
 
-- **`progress` is opt-in**; declaring it changes the emitted TypeScript type and exposes a `0..1`
-  value the UI binds like any other (`Progress(Value: FetchRecipe.Progress)`).
-- **Cancellation is never declared**, because it can never be false: every sidecar receives a
-  `signal`, which fires when `runs latest` supersedes the call, when the owning presentation is dismissed,
-  and on an explicit `cancel FetchRecipe`.
+- `fail Case "sentence"` aborts the complete joined action call, discards its private writes, and skips
+  the remaining statements in every caller block.
+- A native action's cases are inferred from its own `fail` statements. The same case may appear at
+  multiple detection sites with different sentences.
 
-### The two authoring modes
+A foreign action has no Tao body and declares its failure cases on the declaration head:
 
-Both are fully typed. Bridge mode is the ergonomic default — the implementation returns plain
-JavaScript values and the bridge carries the types, with `fail` generated from the declared cases so
-a renamed case breaks the build:
-
-```ts
-// FetchRecipe.ts — bridge mode
-import bridge from './Recipe.tao.ts'
-
-export const FetchRecipe = bridge.implement.FetchRecipe(async ({ Link }, { fail, progress, signal }) => {
-  progress(0.05)
-  const response = await fetch(Link, { signal }).catch(() => null)
-  if (!response?.ok) {
-    return fail.Unreachable()
-  }
-
-  const recipe = readJsonLdRecipe(await response.text())
-  if (!recipe) {
-    return fail.NotARecipe()
-  }
-
-  return { Foo: 1, Bar: ['123', 'abc'] }
-})
+```swift
+action Publish(Value text)
+   fails Offline "Publishing is unavailable."
+   fails Rejected "Publishing was rejected."
+   from ./Api.ts
 ```
 
-Generic mode is plain TypeScript against `@tao/bridge`, for code that would rather state Tao's types
-explicitly than import generated metadata. The declared failure cases travel as a union:
+- `fails Case "sentence"` is available only on a foreign action. The sidecar provides the named export
+  matching the action declaration.
+- Crossing the boundary is an inline external effect. It is not reordered, deferred, or rolled back.
+- A provider failure selects a declared case and may carry a server-authored sentence. An unknown case
+  stays unknown and never borrows copy from another declaration.
+- Failure messages use, in order: the provider/server sentence; the matching foreign declaration or
+  native `fail` sentence; then `Couldn't finish '<action name>.' Nothing was changed.`.
+- Injected code holds no authority. Validation and durable authority stay in Tao; failures cross as
+  structured outcomes rather than arbitrary thrown application values.
 
-```ts
-// FetchRecipe.ts — generic mode
-import tao from '@tao/bridge'
+The broader runtime action-transaction model remains explicitly deferred in `Roadmap.md`; these failure
+contracts do not settle distributed atomicity, automatic retry, or rollback of external effects.
 
-export type ReturnT = tao.item<{ Foo: tao.number; Bar: tao.list<tao.text> }>
-export type FailT = 'NotARecipe' | 'Unreachable'
+### Unexpected render failure containment
 
-export const FetchRecipe = tao.action<{ Link: tao.text }, ReturnT, FailT>(function(args, { fail }) {
-  return tao.item({ Foo: tao.number(1), Bar: tao.list([tao.text('123'), tao.text('abc')]) })
-})
-```
-
-- **Injected code holds no authority.** Validation and durable authority stay in Tao, and Tao commits
-  the result.
-- **Failures return as structured outcomes rather than throwing.**
+- **Containment is automatic and has no Tao author syntax.** Every loop item is isolated from its siblings,
+  every screen or presented view is a screen boundary, and every app host has an overlay boundary. Healthy
+  children render directly rather than through a permanently visible diagnostic surface.
+- After a crash, the boundary reruns the same subtree through a diagnostic pass using compiler-owned
+  declaration and source metadata plus bounded, structurally redacted arguments. The same failure against
+  the same state escalates from item to screen to app; at app level it becomes a stopper rather than a
+  retry loop.
+- Recovery offers **Try again** only when no external effect occurred since the boundary began. **Restart
+  app** remounts without clearing data. **Reset app data** appears only when every participating provider
+  grants reset, requires a second confirmation, and creates a recoverable backup before destructive calls.
+- This adopts containment and recovery only. The generalized semantic capture/replay artifact remains
+  explicitly deferred in `Roadmap.md`.
 
 ---
 
@@ -2041,12 +2032,15 @@ action FetchRecipe returns { Foo: 1, Bar: ["123", "abc"] }
   `project { languages }`:
 
 ```swift
-scenario SharedRecipe.pseudolocale {
+scenarios SharedRecipe "localization" {
    fixture RiverKitchen
    run Skillet at SharedRecipeLink(Shared)
    device phone
-   locale pseudolocale
-   direction rightToLeft
+
+   scenario "pseudolocale" {
+      locale pseudolocale
+      direction rightToLeft
+   }
 }
 ```
 
@@ -2054,13 +2048,25 @@ scenario SharedRecipe.pseudolocale {
   scale, contrast, motion, network, clock, locale — for screenshots and review:
 
 ```swift
-scenario Recipe.tablet {
+scenarios Recipe "devices" {
    fixture HomeKitchen
    run Skillet at RecipeLink(Shakshuka)
-   device laptop 1440 x 900
-   appearance dark
+
+   scenario "tablet" {
+      device laptop 1440 x 900
+      appearance dark
+   }
 }
 ```
+
+- **Scenarios are string-named groups containing string-named entries.**
+  `scenarios [Subject] "group" { … }` has an optional app or view subject and a required group name;
+  every nested `scenario "entry" { … }` has a required entry name.
+- **Group clauses are inherited defaults.** An entry clause of the same kind replaces the group clause
+  wholesale, including the mutually exclusive `run`/`render` subject clause. After inheritance, every
+  entry has exactly one fixture, device, and subject; a declaration subject supplies an omitted subject.
+- Entry names are unique within a group. Language identity is `(group, entry)`; compiler and Studio
+  identity also include source path. The former dotted singular spelling is retired without an alias.
 
 - **A scenario subject is either an app run or one focused view render.** `run Skillet` exercises the
   app, optionally at a destination; `render RecipeRow(Recipe: Shakshuka)` mounts one parameterized

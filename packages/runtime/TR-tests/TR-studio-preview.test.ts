@@ -1,6 +1,7 @@
 import { Describe, Expect, Test } from '@shared/test'
 import {
   mountStudioPreviewBridge,
+  publishStudioScheme,
   type StudioPreviewConfig,
   type StudioPreviewElement,
   type StudioPreviewHost,
@@ -31,6 +32,29 @@ const config: StudioPreviewConfig = {
 }
 
 Describe('Studio preview runtime bridge', () => {
+  Test('publishes the runtime-resolved Scheme with complete provenance', () => {
+    const fake = previewHost([])
+    publishStudioScheme(config, {
+      capability: 'reactive-browser',
+      requested: 'system',
+      resolved: 'dark',
+      source: 'system',
+    }, fake.host)
+
+    Expect(fake.messages).toContainEqual({
+      message: Expect['objectContaining']({
+        scheme: {
+          capability: 'reactive-browser',
+          requested: 'system',
+          resolved: 'dark',
+          source: 'system',
+        },
+        type: 'preview-scheme-changed',
+      }),
+      targetOrigin: config.parentOrigin,
+    })
+  })
+
   Test('separates normal app interaction from selecting and visual editing', () => {
     const render = renderElement('/project/Main.tao', 12, 28, { height: 30, left: 20, top: 10, width: 80 })
     const fake = previewHost([render])
@@ -140,6 +164,7 @@ Describe('Studio preview runtime bridge', () => {
         channel: 'tao-studio',
         identity: {
           appName: 'Demo',
+          occurrence: { nodeKind: 'render', renderOwner: 'MainView' },
           path: '/project/Main.tao',
           previewInstanceId: 'preview-1',
           project: '/project',
@@ -158,6 +183,7 @@ Describe('Studio preview runtime bridge', () => {
       channel: 'tao-studio',
       identity: {
         appName: 'Demo',
+        occurrence: { nodeKind: 'render', renderOwner: 'MainView' },
         path: '/project/Main.tao',
         previewInstanceId: 'preview-1',
         project: '/project',
@@ -264,13 +290,14 @@ Describe('Studio preview runtime bridge', () => {
         checkpoint: { phase: 'single' },
         identity: {
           appName: 'Demo',
+          occurrence: { nodeKind: 'render', renderOwner: 'MainView' },
           path: '/project/Main.tao',
           previewInstanceId: 'preview-1',
           project: '/project',
           sourceVersion: 'version-1',
         },
         protocolVersion: 1,
-        sourceActionVersion: 1,
+        sourceActionVersion: 2,
         type: 'source-action',
       },
       targetOrigin: 'http://127.0.0.1:5500',
@@ -355,7 +382,7 @@ function renderElement(
   end: number,
   rect: { height: number; left: number; top: number; width: number },
 ): StudioPreviewElement {
-  const identity = JSON.stringify({ end, kind: 'render', sourcePath, start })
+  const identity = JSON.stringify({ end, kind: 'render', ownerName: 'MainView', sourcePath, start })
   const element: StudioPreviewElement = {
     closest: () => element,
     getAttribute: name => name === 'data-tao-studio' ? identity : null,

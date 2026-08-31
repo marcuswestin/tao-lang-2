@@ -51,6 +51,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'view' && AST.isContextualPresentStatement(context.container)) {
       return this.createPresentedViewScope(context.container)
     }
+    if (context.property === 'view' && AST.isViewBinding(context.container)) {
+      return this.createDeclarationScope(context.container, AST.isViewDeclaration)
+    }
     if (context.property === 'view' && AST.isAskStatement(context.container)) {
       return this.createAskedViewScope(context.container)
     }
@@ -143,6 +146,16 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     )
     scope = this.createScopeForNodes(this.importedCaseSetCases(reference), scope)
 
+    const app = owningAppDeclaration(reference)
+    if (app?.block) {
+      scope = this.createScopeForNodes(
+        app.block.statements.filter(statement =>
+          AST.isStateDeclaration(statement) || AST.isActionDeclaration(statement)
+        ),
+        scope,
+      )
+    }
+
     const owningView = AST.findOwningView(reference)
     if (owningView) {
       scope = this.createScopeForParameters(owningView, scope, reference)
@@ -222,7 +235,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     scope = this.createScopeForNodes(this.importedDeclarations(node, configurable), scope)
     const app = owningAppDeclaration(node)
     if (app?.block) {
-      scope = this.createScopeForNodes(app.block.statements.filter(AST.isStateDeclaration), scope)
+      scope = this.createScopeForNodes(
+        app.block.statements.filter(statement =>
+          AST.isStateDeclaration(statement) || AST.isActionDeclaration(statement)
+        ),
+        scope,
+      )
     }
     return scope
   }
@@ -261,6 +279,11 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
   private createStateScope(statement: AST.SetStatement | AST.ToggleStatement): Langium.Scope {
     let scope = this.createScopeForNodes([])
+
+    const app = owningAppDeclaration(statement)
+    if (app?.block) {
+      scope = this.createScopeForNodes(app.block.statements.filter(AST.isStateDeclaration), scope)
+    }
 
     for (const block of AST.ancestorBlocks(statement).reverse()) {
       scope = this.createScopeForNodes(statesOwnedByBlock(block), scope)

@@ -16,7 +16,10 @@ export type Evaluable = {
 export class RuntimePresentable {
   readonly kind = 'view'
 
-  constructor(readonly definition: TaoPresentableDefinition) {}
+  constructor(
+    readonly definition: TaoPresentableDefinition,
+    readonly boundArguments?: TaoNavigationArguments,
+  ) {}
 
   get name(): string {
     return this.definition.name
@@ -26,15 +29,23 @@ export class RuntimePresentable {
     return this
   }
 
+  /** bind returns a descriptor with live arguments without registering a second view identity. */
+  bind(arguments_: TaoNavigationArguments): RuntimePresentable {
+    return new RuntimePresentable(this.definition, arguments_)
+  }
+
   render(
     arguments_: TaoNavigationArguments,
     taoProps?: TaoProps,
     host?: RuntimeHostReadChannel,
   ): React.ReactNode {
+    const effectiveArguments = this.boundArguments
+      ? { ...this.boundArguments, ...arguments_ }
+      : arguments_
     let capturedArguments: ReturnType<typeof captureArguments> | undefined
     const diagnosticsArguments = () =>
       capturedArguments ??= captureArguments(Object.fromEntries(
-        Object.entries(arguments_).map(([name, value]) => [
+        Object.entries(effectiveArguments).map(([name, value]) => [
           name,
           value.evaluate().jsValue,
         ]),
@@ -53,7 +64,12 @@ export class RuntimePresentable {
         }),
         stateKey: () => JSON.stringify([taoProps?.navigation?.snapshot(), diagnosticsArguments()]),
       },
-      React.createElement(PresentableContent, { arguments_, definition: this.definition, host, taoProps }),
+      React.createElement(PresentableContent, {
+        arguments_: effectiveArguments,
+        definition: this.definition,
+        host,
+        taoProps,
+      }),
     )
   }
 }

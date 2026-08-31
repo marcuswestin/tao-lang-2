@@ -123,6 +123,7 @@ export {
 export {
   type StudioServerCheckpointRow,
   StudioServerDatasource,
+  type StudioServerDesignTokenRow,
   type StudioServerDiagnosticRow,
   type StudioServerEntityName,
   type StudioServerEntityRow,
@@ -130,6 +131,7 @@ export {
   type StudioServerFillRequest,
   type StudioServerFillResult,
   type StudioServerInvalidation,
+  type StudioServerProblemRow,
   type StudioServerScenarioRow,
   type StudioServerScreenRow,
   type StudioServerViewRow,

@@ -2,6 +2,7 @@ import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
 import { resolveDataWriteBindings } from './data-write-bindings'
 import { standardDesignElementName } from './design'
+import { canonicalDesignVisualHead, designColorHeads, designVisualHeads } from './design-visuals'
 import { guardBranches } from './guards'
 import { injectionArgumentName } from './injections'
 import {
@@ -22,6 +23,9 @@ export { Packages, Type, Units }
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
   guardBranches,
+  canonicalDesignVisualHead,
+  designColorHeads,
+  designVisualHeads,
   injectionArgumentName,
   layoutEntryValues,
   layoutTermValue,

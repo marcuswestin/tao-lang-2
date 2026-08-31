@@ -95,6 +95,14 @@ import {
   type TaoRuntimeFailureFrame,
   type TaoRuntimeJson,
 } from './TR-runtime-capture'
+import {
+  SchemeControls,
+  type TaoAppearance,
+  type TaoScheme,
+  type TaoSchemeCapability,
+  type TaoSchemeSnapshot,
+  type TaoSchemeSource,
+} from './TR-scheme'
 import { SelectableRow } from './TR-selectable-row'
 import { createShareSheet, type TaoShareSheet } from './TR-share'
 import {
@@ -650,7 +658,10 @@ class TR {
   /** Http is the adapter-authoring surface for Http datasources: `TR.Http.adapter`, `TR.Http.on`. */
   static readonly Http = HttpAdapterControls
 
-  /** Design exposes declaration-local flat tokens, named bundles, and combined spec resolution. */
+  /** Scheme exposes the resolved appearance environment used by conditional design entries. */
+  static readonly Scheme = SchemeControls
+
+  /** Design exposes declaration-local tokens, named bundles, conditions, and combined spec resolution. */
   static readonly Design = DesignControls
 
   /** Layout exposes deterministic runtime lowering for Tao layout clauses. */
@@ -912,6 +923,16 @@ namespace TR {
   export type RuntimeFailure = TaoRuntimeFailure
   export type RuntimeFailureFrame = TaoRuntimeFailureFrame
   export type RuntimeJson = TaoRuntimeJson
+  /** Appearance is a Scheme request; System follows the live host only where the capability is reactive. */
+  export type Appearance = TaoAppearance
+  /** Scheme is the resolved Light or Dark value consumed by Tao design conditions. */
+  export type Scheme = TaoScheme
+  /** SchemeCapability reports whether the current host is reactive or intentionally fixed Light. */
+  export type SchemeCapability = TaoSchemeCapability
+  /** SchemeSource records which precedence layer resolved the captured frame. */
+  export type SchemeSource = TaoSchemeSource
+  /** SchemeSnapshot is the replay-safe requested/resolved/source/capability record. */
+  export type SchemeSnapshot = TaoSchemeSnapshot
   /** DeclarationIdentity is the stable owner-relative identity used by persisted runtime domains. */
   export type DeclarationIdentity = TaoDeclarationIdentity
   /** EnumCaseIdentity is the opaque runtime token owned by one enum declaration and case. */
@@ -953,7 +974,7 @@ namespace TR {
   export type TaoStudioIdentity = TRTaoProps.TaoStudioIdentity
   /** StudioPreviewConfig identifies and secures one generated Studio preview bridge. */
   export type StudioPreviewConfig = import('./TR-studio-preview').StudioPreviewConfig
-  /** StudioEnvironment is one isolated preview cell's versioned provider and inert-Scheme configuration. */
+  /** StudioEnvironment is one isolated preview cell's versioned provider and Scheme configuration. */
   export type StudioEnvironment = TaoStudioEnvironment
   /** StudioStateSeed carries exact full-snapshot provider envelopes into one isolated preview cell. */
   export type StudioStateSeed = TaoStudioStateSeed

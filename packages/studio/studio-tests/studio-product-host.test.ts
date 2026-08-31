@@ -2,14 +2,51 @@ import type TR from '@runtime/TR'
 import { FS } from '@shared'
 import { Expect, Test } from '@shared/test'
 import React from 'react'
+import { studioPaletteComponents } from '../studio-src/StudioInspector'
 import {
   FileCreateBar,
   FilesPanelSurface,
   productHostStyle,
+  StudioInspectorAction,
+  StudioInspectorActionIds,
+  StudioInspectorDataLines,
+  StudioInspectorLayoutAction,
+  StudioInspectorLayoutActionValid,
+  StudioInspectorLayoutDrafts,
+  StudioInspectorStyleAction,
+  StudioInspectorStyleActionValid,
+  StudioInspectorStyleDrafts,
+  StudioInspectorStyleFieldOptions,
+  StudioInspectorStyleNotes,
+  StudioInspectorStylePromotionAction,
+  StudioInspectorStylePromotionIds,
+  StudioInspectorStylePromotionLabel,
+  StudioInspectorUpdateDraft,
+  studioNumericDraft,
+  StudioPaletteRow,
+  StudioScenarioArgumentDrafts,
+  StudioScenarioArgumentIds,
+  studioScenarioArguments,
+  StudioScenarioArgumentsPayload,
+  StudioScenarioArgumentsValid,
+  StudioScenarioCapturedLayers,
+  StudioScenarioUpdateArgumentDraft,
   TreeFileRow,
   type TreeFileRowProps,
   TreeFolder,
 } from '../studio-src/TaoStudioProductHost'
+
+Test('Tao Studio keeps invalid numeric drafts out of typed environment actions', () => {
+  Expect(studioNumericDraft('', { minimum: 1 })).toEqual({ valid: false })
+  Expect(studioNumericDraft('NaN', { minimum: 1 })).toEqual({ valid: false })
+  Expect(studioNumericDraft('0', { minimum: 1 })).toEqual({ valid: false })
+  Expect(studioNumericDraft('99.5', { integer: true, maximum: 599, minimum: 100 })).toEqual({ valid: false })
+  Expect(studioNumericDraft('600', { integer: true, maximum: 599, minimum: 100 })).toEqual({ valid: false })
+  Expect(studioNumericDraft('503', { integer: true, maximum: 599, minimum: 100 })).toEqual({
+    valid: true,
+    value: 503,
+  })
+})
 
 Test('Tao Studio product host retains viewport ownership over generated Tao layout', () => {
   Expect(productHostStyle({ height: 36, position: 'relative', width: 120 })).toMatchObject({
@@ -32,20 +69,57 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).toContain('Navigator SlotNav')
   Expect(source).not.toContain('StackNav')
   Expect(source).not.toContain('Title "Tao Studio"')
-  Expect(source).not.toContain('FormButton')
-  Expect(source).not.toContain('TextInput')
+  Expect(source).not.toContain('FormButton(')
+  Expect(source).toContain('use Button, Col, Picker, Text, TextInput from @tao/ui')
+  Expect(source).toContain('view StudioScenarioEnvironment(')
+  Expect(source).not.toContain('view StudioScenarioEnvironmentControls(')
+  Expect(source).toContain('state Drafts = StudioScenarioArgumentDrafts(State)')
+  Expect(source).toContain('loop StudioScenarioArgumentIds(State) / ParameterId')
+  Expect(source).toContain('Appearance: ResolvedAppearance')
+  Expect(source).not.toContain('StudioInspectorContextSurface(')
+  Expect(source).toContain('view StudioInspectorLayout(')
+  Expect(source).toContain('view StudioInspectorStyle(')
+  Expect(source).toContain('view StudioInspectorData(')
+  Expect(source).toContain('view StudioInspectorActions(')
+  Expect(source).toContain('view StudioDrawerPanel(Tab text, Compile StudioCompilePanel')
+  Expect(source).toContain('view StudioCompilePanelView(')
+  Expect(source).toContain('view StudioProblemsPanelView(')
+  Expect(source).toContain('view StudioDataPanelView(')
+  Expect(source).toContain('view StudioTestsPanelView(')
+  Expect(source).toContain('view StudioLogsPanelView(')
+  Expect(source).toContain('view StudioSearchPanel(Rows list of StudioSearchPanelRow)')
+  Expect(source).toContain('do Dispatch(Command.Name, Command.Payload)')
+  Expect(source).not.toContain('StudioDrawerPanelSurface')
+  Expect(source).not.toContain('StudioSearchPanelSurface')
   Expect(source).toContain('ServerOrigin text is ""')
   Expect(source).toContain('action SyncDraft(Path text, SourceVersion text, Content text) runs latest')
   Expect(source).toContain('@editor StudioEditorSurface()')
   Expect(source).toContain('@inspector StudioContextPanel(')
   Expect(source).toContain('view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text')
   Expect(source).toContain('FilePath: ActiveFilePath')
-  Expect(source).toContain('accepts content slots @files, @editor, @inspector')
+  Expect(source).toContain(
+    'accepts content slots @files, @components, @projectViews, @screens, @tokens, @search, @drawer, @scenario, @editor, @inspector',
+  )
+  Expect(source).toContain('@scenario StudioScenarioPanel(State: "null", ResolvedAppearance: "light")')
+  Expect(source).toContain('view StudioScenarioPanel(State text, ResolvedAppearance text)')
   Expect(source).toContain('query Files as Children')
-  Expect(source).toContain('FileTree(File.Path)')
+  Expect(source).toContain('FileTree(FolderPath: File.Path')
   Expect(source).toContain('do CreateFile(NewPath)')
   Expect(source).toContain('do RenameFile(Path: File.Path, SourceVersion: File.Version, TargetPath: RenamePath)')
   Expect(source).toContain('do DeleteFile(Path: File.Path, SourceVersion: File.Version)')
+})
+
+Test('Tao Studio ProductHost injects structured panel values without section-level render adapters', async () => {
+  const source = await FS.readText(FS.resolvePath('../studio-src/TaoStudioProductHost.tsx', import.meta.dir))
+
+  Expect(source).toContain('StudioTaoPanelProjection.project(hostState.panels)')
+  Expect(source).toContain('Compile: TR.Value(panelValues.Drawer.Compile)')
+  Expect(source).toContain('Rows: TR.Value(panelValues.Search.Rows)')
+  Expect(source).not.toContain('export function StudioDrawerPanelSurface')
+  Expect(source).not.toContain('export function StudioSearchPanelSurface')
+  Expect(source).not.toContain('renderDrawerContent(element')
+  Expect(source).not.toContain('renderSearchResults(')
+  Expect(source).not.toContain('JSON.stringify(hostState.panels')
 })
 
 Test('Tao Studio foreign file views render compact tree rows with contextual editing controls', () => {
@@ -84,6 +158,239 @@ Test('Tao Studio foreign file views render compact tree rows with contextual edi
   Expect(elementWith(deleting, 'role', 'alert')).toBeDefined()
   Expect(textContent(deleting)).toContain('Delete Roadmap.tao?')
 })
+
+Test('Tao-owned component rows preserve canonical drag snippets at the native boundary', () => {
+  let transfer: Readonly<{ type: string; value: string }> | undefined
+  const row = StudioPaletteRow({
+    Detail: 'Element',
+    Insert: noArgAction(),
+    Kind: 'component',
+    Label: 'Button',
+    Name: 'Button',
+  })
+
+  const onDragStart = property(row, 'onDragStart') as (event: {
+    dataTransfer: { setData(type: string, value: string): void }
+  }) => void
+  onDragStart({
+    dataTransfer: {
+      setData(type, value) {
+        transfer = { type, value }
+      },
+    },
+  })
+
+  Expect(property(row, 'draggable')).toBe(true)
+  Expect(transfer?.type).toBe('application/x-tao-studio-palette')
+  Expect(JSON.parse(transfer?.value ?? '{}')).toMatchObject({
+    component: 'Button',
+    kind: 'component',
+    snippet: {
+      placeholders: [{ end: 19, start: 7 }],
+      text: 'Button("New button") {\n   on press -> { }\n}',
+    },
+  })
+})
+
+Test('Tao-owned component inventory stays aligned with the canonical Studio palette', async () => {
+  const source = await FS.readText(FS.resolvePath('../studio-src/TaoStudioClient.tao', import.meta.dir))
+  const taoComponents = [...source.matchAll(/ComponentPaletteItem\(Name: "([^"]+)"/g)].map(match => match[1])
+
+  Expect(taoComponents).toEqual(studioPaletteComponents.map(component => component.component))
+})
+
+Test('Tao-owned scenario drafts retain invalid values locally and emit typed arguments only when complete', () => {
+  const model = {
+    parameters: [
+      { label: 'Count', parameterId: 'Count', required: true, type: { kind: 'number', minimum: 1 } },
+      { label: 'Mode', parameterId: 'Mode', required: true, type: { kind: 'choice', values: ['grid', 'list'] } },
+      { label: 'Options', parameterId: 'Options', required: false, type: { kind: 'json' } },
+    ],
+  } as const
+
+  Expect(studioScenarioArguments(model, { Count: 'nope', Mode: '"grid"', Options: '{' })).toMatchObject({
+    ok: false,
+    issues: ['Count must be a finite number.', 'Options must be valid JSON.'],
+  })
+  Expect(studioScenarioArguments(model, { Count: '3', Mode: '"grid"', Options: '{"dense":true}' })).toEqual({
+    ok: true,
+    value: { Count: 3, Mode: 'grid', Options: { dense: true } },
+  })
+})
+
+Test('Tao scenario helpers preserve cell identity and author only resolved appearance', () => {
+  const state = JSON.stringify({
+    arguments: { Count: 2 },
+    capturedLayers: ['fixture-home', 'state-expanded'],
+    cell: { compileRevision: 7, id: 'cell:states:phone', manifestRevision: 'manifest-7', revision: 3 },
+    entry: { id: 'scenario-card', label: 'Card', subjectId: 'view:Card' },
+    group: { id: 'group:states', label: 'states', sourcePath: 'Scenarios.tao' },
+    parameters: [{ label: 'Count', parameterId: 'Count', required: true, type: { kind: 'number', minimum: 1 } }],
+    version: 1,
+  })
+  const drafts = StudioScenarioArgumentDrafts(state)
+  const invalid = StudioScenarioUpdateArgumentDraft(drafts, 'Count', 'not-a-number')
+
+  Expect(StudioScenarioArgumentIds(state)).toEqual(['Count'])
+  Expect(StudioScenarioCapturedLayers(state)).toEqual(['fixture-home', 'state-expanded'])
+  Expect(StudioScenarioArgumentsValid(state, invalid)).toBe(false)
+  Expect(JSON.parse(StudioScenarioArgumentsPayload(state, drafts, 'dark'))).toEqual({
+    appearance: 'dark',
+    arguments: { Count: 2 },
+    cellId: 'cell:states:phone',
+    cellRevision: 3,
+  })
+  Expect(() => StudioScenarioArgumentsPayload(state, drafts, 'system')).toThrow(
+    'resolved light or dark scenario appearance',
+  )
+})
+
+Test('Tao-owned inspector layout drafts retain invalid text and emit only current typed actions', () => {
+  const inspection = inspectorInspection()
+  const selection = inspectorSelection()
+  const initial = StudioInspectorLayoutDrafts(inspection)
+  const invalid = StudioInspectorUpdateDraft(initial, 'gap', '')
+  const valid = StudioInspectorUpdateDraft(initial, 'gap', '24')
+  const named = StudioInspectorUpdateDraft(initial, 'gap', 'spacing.compact')
+
+  Expect(JSON.parse(initial)).toMatchObject({
+    alignment: 'left',
+    content: 'spread stretch',
+    gap: '8',
+    'height-mode': 'fill',
+    padding: 'horizontal 12 vertical 6',
+    'width-mode': 'fixed',
+    'width-value': '320',
+  })
+  Expect(StudioInspectorLayoutActionValid('source-1', inspection, selection, invalid, false, 'gap')).toBe(false)
+  Expect(StudioInspectorLayoutActionValid('source-1', inspection, selection, valid, false, 'gap')).toBe(true)
+  Expect(StudioInspectorLayoutActionValid('source-1', inspection, selection, named, false, 'gap')).toBe(true)
+  Expect(StudioInspectorLayoutActionValid('source-2', inspection, selection, valid, false, 'gap')).toBe(false)
+  Expect(JSON.parse(StudioInspectorLayoutAction(inspection, selection, valid, 'gap'))).toEqual({
+    entry: ['gap', 24],
+    kind: 'set-layout-entry',
+    renderId: '/workspace/Garden.tao:20:42',
+  })
+  Expect(JSON.parse(StudioInspectorLayoutAction(inspection, selection, named, 'gap'))).toEqual({
+    entry: ['gap', 'spacing.compact'],
+    kind: 'set-layout-entry',
+    renderId: '/workspace/Garden.tao:20:42',
+  })
+  Expect(JSON.parse(StudioInspectorLayoutAction(inspection, selection, initial, 'wrap-stack'))).toEqual({
+    kind: 'wrap-render',
+    renderId: '/workspace/Garden.tao:20:42',
+    wrapper: 'Stack',
+  })
+})
+
+Test('Tao-owned inspector style exposes provenance, edit-versus-fork, blast radius, and promotions', () => {
+  const inspection = inspectorInspection()
+  const selection = inspectorSelection()
+  const drafts = StudioInspectorUpdateDraft(StudioInspectorStyleDrafts(inspection), 'value', '#0f0')
+  const landings = StudioInspectorStyleFieldOptions(inspection, 'landing')
+  const promotions = StudioInspectorStylePromotionIds(inspection)
+
+  Expect(landings).toContain('Edit style card · affects 3')
+  Expect(landings).toContain('Fork style card · selected render only')
+  Expect(landings).toContain('Promote to Text default')
+  Expect(landings).toContain('Promote to color token backgroundColor')
+  Expect(StudioInspectorStyleActionValid('source-1', inspection, selection, drafts, false)).toBe(true)
+  Expect(JSON.parse(StudioInspectorStyleAction(inspection, selection, drafts))).toMatchObject({
+    entry: ['background', '#0f0'],
+    kind: 'set-style-entry',
+    landing: { bundleName: 'card', kind: 'style-bundle' },
+  })
+  Expect(StudioInspectorStyleNotes(inspection)[0]).toContain('affects 3 renders · editable')
+  Expect(promotions.length).toBeGreaterThan(0)
+  Expect(StudioInspectorStylePromotionLabel(inspection, promotions[0]!)).toContain('Promote background #c00')
+  Expect(JSON.parse(StudioInspectorStylePromotionAction(inspection, selection, promotions[0]!))).toMatchObject({
+    entry: ['background', '#c00'],
+    kind: 'set-style-entry',
+  })
+  const sizePromotion = promotions.find(promotion =>
+    StudioInspectorStylePromotionLabel(inspection, promotion).includes('size token')
+  )
+  Expect(sizePromotion).toBeDefined()
+  Expect(JSON.parse(StudioInspectorStylePromotionAction(inspection, selection, sizePromotion!))).toMatchObject({
+    entry: ['gap', 8],
+    landing: { kind: 'size-token', tokenName: 'gapSize' },
+  })
+
+  const imported = JSON.stringify({
+    ...JSON.parse(inspection),
+    design: { editable: false, name: 'Shared', ownerPath: '/workspace/Theme.tao', reason: 'Imported design.' },
+    styleProvenance: [{
+      blastRadius: 9,
+      chain: ['background #c00', 'card'],
+      editable: false,
+      landing: { bundleName: 'card', kind: 'style-bundle' },
+      ownerPath: '/workspace/Theme.tao',
+      reason: 'Imported design values are read-only.',
+    }],
+  })
+  Expect(StudioInspectorStyleFieldOptions(imported, 'landing')).toEqual(['Element inline · selected render only'])
+  Expect(StudioInspectorStyleNotes(imported).join('\n')).toContain('unavailable')
+  Expect(StudioInspectorStyleNotes(imported).join('\n')).toContain('Imported design values are read-only.')
+})
+
+Test('Tao-owned inspector Data and Actions expose only the published active selection context', () => {
+  const inspection = inspectorInspection()
+  const selection = inspectorSelection()
+  const lines = StudioInspectorDataLines(inspection, selection, 'cell-phone', 4, 'scenario-card')
+
+  Expect(lines).toContain('Selected view: Main')
+  Expect(lines).toContain('Selected element: Text')
+  Expect(lines).toContain('Binding metadata: not published for this render.')
+  Expect(lines).toContain('Datasource context: cell cell-phone revision 4.')
+  Expect(lines).toContain('Entity tables remain in the Data drawer.')
+  Expect(StudioInspectorActionIds(inspection, selection)).toEqual(['wrap-stack'])
+  Expect(JSON.parse(StudioInspectorAction(selection, 'wrap-stack'))).toEqual({
+    kind: 'wrap-render',
+    renderId: '/workspace/Garden.tao:20:42',
+    wrapper: 'Stack',
+  })
+})
+
+function inspectorSelection(): string {
+  return JSON.stringify({
+    identity: {
+      appName: 'Garden',
+      occurrence: { nodeKind: 'render', renderOwner: 'Main' },
+      path: '/workspace/Garden.tao',
+      previewInstanceId: 'preview-1',
+      project: '/workspace',
+      sourceVersion: 'source-1',
+    },
+    range: { end: 42, start: 20 },
+    renderId: '/workspace/Garden.tao:20:42',
+  })
+}
+
+function inspectorInspection(): string {
+  return JSON.stringify({
+    design: { editable: true, name: 'Theme', ownerPath: '/workspace/Garden.tao' },
+    elementName: 'Text',
+    explorations: [['background', '#c00'], ['gap', 8]],
+    layoutEntries: [
+      ['gap', 8],
+      ['pad', 'horizontal', 12, 'vertical', 6],
+      ['width', 320],
+      ['height', 'fill'],
+      ['claim', 2],
+      ['compress'],
+      ['aligned', 'left'],
+      ['content', 'spread', 'stretch'],
+    ],
+    renderId: '/workspace/Garden.tao:20:42',
+    styleEntries: [['background', 'canvas']],
+    styleProvenance: [{
+      blastRadius: 3,
+      chain: ['background #c00', 'background canvas'],
+      landing: { bundleName: 'card', kind: 'style-bundle' },
+      ownerPath: '/workspace/Garden.tao',
+    }],
+  })
+}
 
 function fileRowProps(overrides: Partial<TreeFileRowProps>): TreeFileRowProps {
   const action = noArgAction()

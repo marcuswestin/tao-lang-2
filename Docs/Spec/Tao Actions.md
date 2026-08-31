@@ -107,6 +107,9 @@ before the destructive provider calls begin.
 
 ## Runtime capture and Studio replay
 
+The behavior below is the current implemented runtime contract. Its adoption as generalized Tao language
+semantics is explicitly deferred in `Roadmap.md`; automatic failure containment is adopted independently.
+
 A runtime capture is a versioned JSON artifact assembled only from explicitly registered semantic domains.
 The built-in domains are:
 
@@ -148,10 +151,10 @@ bounded report history only; it does not change app state or data.
 ## Current boundary
 
 The complete semantic capture/replay and automatic render-containment path above is implemented and
-contract-tested. It deliberately does not serialize arbitrary React hooks, timers, native controls,
-process state, authentication stores, or any domain that has not opted into the registry. Studio replay
-remounts one preview cell; it does not automatically write the capture back as Tao fixture and scenario
-source.
+contract-tested. Containment is adopted; the generalized capture/replay semantics remain deferred. The
+implementation deliberately does not serialize arbitrary React hooks, timers, native controls, process
+state, authentication stores, or any domain that has not opted into the registry. Studio replay remounts
+one preview cell; it does not automatically write the capture back as Tao fixture and scenario source.
 
 Action-failure reports still carry name-only call frames rather than compiler source ranges. Render-failure
 frames carry the source range supplied by their automatic boundary. `retryEligible` is reported, and render

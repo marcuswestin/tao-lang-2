@@ -33,7 +33,10 @@ export const studioServerForeignActionContract = {
     failures: { Conflict: fileConflictSentence },
   },
   SyncDraft: { endpoint: '/api/file/draft', runs: 'latest' },
-  UndoSourceAction: { endpoint: '/api/source-action/undo' },
+  UndoSourceAction: {
+    endpoint: '/api/source-action/undo',
+    failures: { Conflict: fileConflictSentence },
+  },
 } as const
 
 export class StudioForeignActionFailure extends Error {
@@ -43,6 +46,7 @@ export class StudioForeignActionFailure extends Error {
     readonly caseName: 'Conflict' | 'Server',
     message: string,
     readonly status?: number,
+    readonly details?: Readonly<Record<string, unknown>>,
   ) {
     super(message)
   }
@@ -100,7 +104,11 @@ export class StudioServerForeignActions {
   }
 
   async undoSourceAction<Result>(request: StudioSourceActionUndoEnvelope): Promise<Result> {
-    return await this.#post(studioServerForeignActionContract.UndoSourceAction.endpoint, request)
+    return await this.#post(
+      studioServerForeignActionContract.UndoSourceAction.endpoint,
+      request,
+      studioServerForeignActionContract.UndoSourceAction.failures.Conflict,
+    )
   }
 
   async #post<Result>(endpoint: string, request: unknown, conflictSentence?: string): Promise<Result> {
@@ -109,18 +117,23 @@ export class StudioServerForeignActions {
       headers: { 'content-type': 'application/json' },
       method: 'POST',
     })
-    const body = await response.json() as Result | { error?: string }
+    const body = await response.json() as Result | {
+      details?: Readonly<Record<string, unknown>>
+      error?: string
+    }
     if (response.ok) {
       return body as Result
     }
     if (conflictSentence !== undefined && response.status === 409) {
-      throw new StudioForeignActionFailure('Conflict', conflictSentence, response.status)
+      const details = typeof body === 'object' && body !== null && 'details' in body ? body.details : undefined
+      throw new StudioForeignActionFailure('Conflict', conflictSentence, response.status, details)
     }
     const message = typeof body === 'object' && body !== null && 'error' in body ? body.error : undefined
     throw new StudioForeignActionFailure(
       'Server',
       message ?? `Studio action failed (${response.status}).`,
       response.status,
+      typeof body === 'object' && body !== null && 'details' in body ? body.details : undefined,
     )
   }
 }

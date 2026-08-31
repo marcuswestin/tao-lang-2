@@ -170,14 +170,19 @@ Describe('Studio fixture generation', () => {
 function manifest(): StudioPreviewManifestV2 {
   const source = { kind: 'tao' as const, path: '/project/Scenarios.tao', range: { end: 100, start: 0 } }
   return {
-    capabilities: { captureDomains: ['data'], scheme: 'inert' },
+    capabilities: { captureDomains: ['data'], scheme: 'reactive-browser' },
     cells: [{
       args: {},
       cellId: 'Workspace.focused#cell',
       cellRevision: 0,
       environment: {
         network: { latencyMs: 0, outcome: 'normal' },
-        scheme: { requested: 'light', status: 'inert' },
+        scheme: {
+          capability: 'reactive-browser' as const,
+          requested: 'system' as const,
+          resolved: 'light' as const,
+          source: 'system' as const,
+        },
         viewport: { height: 844, width: 390 },
       },
       scenarioId: 'Workspace.focused',

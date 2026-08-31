@@ -1,15 +1,21 @@
 import React from 'react'
 import type { TaoDataConnection, TaoDataProvider, TaoDataSchema, TaoFillOps, TaoFillRequest } from './TR-data'
+import {
+  SchemeControls,
+  type TaoSchemeRequest,
+  type TaoSchemeResolutionEnvironment,
+  type TaoSchemeSnapshot,
+} from './TR-scheme'
 import { Clock } from './TR-units'
 
 export const studioEnvironmentVersion = 1 as const
 export const studioStateSeedVersion = 1 as const
 
-/** TaoStudioSchemeConfig is an explicit no-op until reactive Scheme and Appearance exist. */
+/** TaoStudioSchemeConfig carries the winning request source into one isolated runtime cell. */
 export type TaoStudioSchemeConfig = Readonly<{
-  capability: 'inert'
-  reason: string
+  replay?: TaoSchemeSnapshot
   requested: 'dark' | 'light' | 'system'
+  source?: 'preference' | 'scenario' | 'system'
 }>
 
 /** TaoStudioFillFailure injects one declared failure at the configured matching fill occurrence. */
@@ -152,7 +158,12 @@ export const StudioEnvironmentControls = {
         schemas.add(schema)
       },
     }), [cell, overlaySet, overlays, schemas])
-    return React.createElement(StudioHostContext.Provider, { value }, children)
+    const scheme = schemeRequest(cell.environment.scheme)
+    return React.createElement(
+      SchemeControls.Provider,
+      scheme,
+      React.createElement(StudioHostContext.Provider, { value }, children),
+    )
   },
 
   /** useProvider selects the current cell overlay while leaving production apps untouched. */
@@ -169,6 +180,11 @@ export const StudioEnvironmentControls = {
   /** useCapture exposes the current cell's provider-data-to-fixture proposal. */
   useCapture(): (() => Promise<TaoStudioFixturePlan>) | undefined {
     return React.useContext(StudioHostContext)?.captureFixture
+  },
+
+  /** useScheme exposes the resolved cell-local environment value and honest platform capability. */
+  useScheme(): TaoSchemeSnapshot {
+    return SchemeControls.use()
   },
 
   /** useFixture applies fixture creates and ordered prepare updates after datasource binding. */
@@ -236,12 +252,25 @@ export const StudioEnvironmentControls = {
     })
   },
 
-  /** Scheme is deliberately an identity no-op while the capability is declared inert. */
-  Scheme(config: TaoStudioSchemeConfig): TaoStudioSchemeConfig {
+  /** Scheme resolves a Studio request through the same browser/native semantics as mounted design. */
+  Scheme(
+    config: TaoStudioSchemeConfig,
+    environment: TaoSchemeResolutionEnvironment,
+  ): TaoSchemeSnapshot {
     validateScheme(config)
-    return config
+    return SchemeControls.resolve(schemeRequest(config), environment)
   },
 } as const
+
+function schemeRequest(config: TaoStudioSchemeConfig): TaoSchemeRequest {
+  if (config.replay !== undefined) {
+    return { replay: config.replay }
+  }
+  if (config.source === 'scenario' || (config.source === undefined && config.requested !== 'system')) {
+    return { scenario: config.requested as 'dark' | 'light' }
+  }
+  return { appearance: config.requested }
+}
 
 function resolveObject(
   fields: Readonly<Record<string, TaoStudioFixtureValue>>,
@@ -503,11 +532,14 @@ function validateEnvironment(environment: TaoStudioEnvironment): void {
 
 function validateScheme(config: TaoStudioSchemeConfig): void {
   if (
-    config.capability !== 'inert'
-    || config.reason.trim().length === 0
-    || !['dark', 'light', 'system'].includes(config.requested)
+    !['dark', 'light', 'system'].includes(config.requested)
+    || (config.source !== undefined && !['preference', 'scenario', 'system'].includes(config.source))
+    || (config.source === 'scenario' && config.requested === 'system')
   ) {
-    throw new Error('Tao Studio Scheme must remain explicitly inert with a visible reason.')
+    throw new Error('Tao Studio Scheme requires a valid requested appearance and request source.')
+  }
+  if (config.replay !== undefined) {
+    SchemeControls.resolve({ replay: config.replay }, { platform: 'web', system: 'light' })
   }
 }
 

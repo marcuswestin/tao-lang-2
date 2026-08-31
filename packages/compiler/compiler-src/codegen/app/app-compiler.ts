@@ -72,9 +72,14 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
   const persistedStates = AST.isAppDeclaration(root) && root.block
     ? root.block.statements.filter(AST.isStateDeclaration)
     : []
+  const appActions = AST.isAppDeclaration(root) && root.block
+    ? root.block.statements.filter(AST.isActionDeclaration)
+    : []
   const declaredPersistedStates = root === app ? persistedStates : []
+  const declaredAppActions = root === app ? appActions : []
   return gen`
     ${gen.list(declaredPersistedStates, Compile.StateDeclaration)}
+    ${gen.list(declaredAppActions, Compile.ActionDeclaration)}
     const ${gen.Name(definition)} = TR.Navigation.App({
       declaration: ${rootDeclaration},
       name: ${name ? gen`${compileAppProperty(name, 'Name')}.evaluate().jsValue as string` : gen.jsLiteral(app.name)},

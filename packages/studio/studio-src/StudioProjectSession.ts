@@ -6,6 +6,7 @@ import SourceActions, {
   type StudioLayoutEntry,
   type StudioRenderInspection,
   type StudioScenarioArgumentValue,
+  StudioSourceOccurrenceConflictError,
   type StudioSourcePatchRequest,
   type StudioStyleEntry,
   type StudioStyleLandingScope,
@@ -37,6 +38,7 @@ import {
   studioProtocolChannel,
   studioProtocolVersion,
   type StudioSourceActionEnvelope,
+  type StudioSourceActionIdentity,
   type StudioSourceActionUndoEnvelope,
   studioSourceActionVersion,
 } from './StudioProtocol'
@@ -133,8 +135,25 @@ export type StudioInspectRenderRequest = {
 }
 
 export type StudioDesignValue =
-  | { kind: 'bundle'; name: string; entries: readonly string[] }
-  | { kind: 'token'; name: string; value: string }
+  & Readonly<{ designName: string; end: number; start: number }>
+  & (
+    | { entries: readonly string[]; kind: 'bundle'; name: string }
+    | { kind: 'color'; name: string; value: string }
+    | { entries: readonly string[]; kind: 'default'; name: string }
+    | { kind: 'screen'; name: string; value: string }
+    | { kind: 'size'; name: string; value: string }
+    | { entries: readonly string[]; kind: 'style'; name: string }
+    | { entries: readonly string[]; kind: 'text'; name: string }
+    | { kind: 'token'; name: string; value: string }
+  )
+
+function studioDesignSource(node: AST.Node): { end: number; start: number } {
+  const cst = node.$cstNode
+  if (cst === undefined) {
+    throw new Errors.UserInputError('Cannot inspect a structured design value without source coordinates.')
+  }
+  return { end: cst.end, start: cst.offset }
+}
 
 export type StudioPreviewRegistration = {
   previewInstanceId: string
@@ -197,7 +216,7 @@ export type StudioSessionHandshake = {
     }
     matrix: {
       concurrentCells: true
-      scheme: 'inert'
+      scheme: 'reactive-browser-fixed-light-native'
       version: 2
     }
   }
@@ -263,9 +282,22 @@ type SourceActionCheckpoint = {
   beforeContent: string
   beforeSourceVersion: string
   id: string
+  identity: SourceActionCheckpointIdentity
   path: string
-  previewInstanceId: string
   status: 'committed' | 'open' | 'undone'
+}
+
+type SourceActionCheckpointIdentity = Pick<StudioSourceActionIdentity, 'appName' | 'path' | 'project'> & {
+  cellId?: string
+  occurrence?: StudioSourceActionIdentity['occurrence']
+  scenarioId?: string
+}
+
+type PreparedSourceAction = {
+  current: StudioProjectFileContent
+  envelope: StudioSourceActionEnvelope
+  patch: Awaited<ReturnType<typeof SourceActions.applyStudioPatch>>
+  path: string
 }
 
 type SourceActionUndoCacheEntry = {
@@ -487,7 +519,7 @@ export class StudioProjectSession {
         },
         matrix: {
           concurrentCells: true,
-          scheme: 'inert',
+          scheme: 'reactive-browser-fixed-light-native',
           version: 2,
         },
       },
@@ -645,7 +677,7 @@ export class StudioProjectSession {
     return this.#mutate(async () => {
       const envelope = StudioProtocol.parseSourceActionEnvelope(input)
       if (envelope === undefined) {
-        throw new Errors.UserInputError('Expected a valid Tao Studio source-action v1 envelope.')
+        throw new Errors.UserInputError('Expected a valid Tao Studio source-action v2 envelope.')
       }
       requireSessionIdentity(envelope, this.identity())
       this.#acceptPreviewIdentity(envelope)
@@ -659,17 +691,8 @@ export class StudioProjectSession {
         return cached.result
       }
 
-      const current = await this.readFile(envelope.identity.path)
-      requireSourceVersion(current, envelope.identity.sourceVersion)
+      const { current, patch, path } = await this.#prepareSourceAction(envelope)
       const checkpoint = this.#prepareSourceActionCheckpoint(envelope, current)
-      const path = await this.#resolveTaoFile(current.path)
-      const parsed = await this.#workspace.parse(path)
-      if (Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser')) {
-        throw new Errors.UserInputError(`Cannot apply a Studio source action until ${current.path} parses.`)
-      }
-      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, sourcePatchRequest(envelope), {
-        files: parsed.files.map(file => file.ast),
-      })
       await FS.writeText(path, patch.content)
       const compile = await this.#coordinator.noteStudioWrite({
         path,
@@ -716,20 +739,10 @@ export class StudioProjectSession {
     return this.#mutate(async () => {
       const envelope = StudioProtocol.parseSourceActionEnvelope(input)
       if (envelope === undefined) {
-        throw new Errors.UserInputError('Expected a valid Tao Studio source-action v1 envelope.')
+        throw new Errors.UserInputError('Expected a valid Tao Studio source-action v2 envelope.')
       }
       requireSessionIdentity(envelope, this.identity())
-      this.#acceptPreviewIdentity(envelope)
-      const current = await this.readFile(envelope.identity.path)
-      requireSourceVersion(current, envelope.identity.sourceVersion)
-      const path = await this.#resolveTaoFile(current.path)
-      const parsed = await this.#workspace.parse(path)
-      if (Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser')) {
-        throw new Errors.UserInputError(`Cannot propose a Studio source action until ${current.path} parses.`)
-      }
-      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, sourcePatchRequest(envelope), {
-        files: parsed.files.map(file => file.ast),
-      })
+      const { current, patch } = await this.#prepareSourceAction(envelope)
       return {
         content: patch.content,
         diff: sourceActionProposalDiff(current.path, current.content, patch.content),
@@ -740,6 +753,37 @@ export class StudioProjectSession {
         sourceVersion: current.sourceVersion,
       }
     })
+  }
+
+  async #prepareSourceAction(envelope: StudioSourceActionEnvelope): Promise<PreparedSourceAction> {
+    this.#acceptPreviewIdentity(envelope)
+    const current = await this.readFile(envelope.identity.path)
+    requireSourceVersion(current, envelope.identity.sourceVersion)
+    const path = await this.#resolveTaoFile(current.path)
+    const parsed = await this.#workspace.parse(path)
+    if (Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser')) {
+      throw new Errors.UserInputError(`Cannot apply a Studio source action until ${current.path} parses.`)
+    }
+    const request = sourcePatchRequest(envelope)
+    requireSourceActionPreconditions(envelope, request)
+    this.#requireScenarioActionIdentity(envelope, request)
+    try {
+      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, request, {
+        files: parsed.files.map(file => file.ast),
+        ...(envelope.identity.occurrence === undefined ? {} : { occurrence: envelope.identity.occurrence }),
+      })
+      return { current, envelope, patch, path }
+    } catch (error) {
+      if (error instanceof StudioSourceOccurrenceConflictError) {
+        throw new StudioSourceActionConflictError(error.code, error.message, {
+          actual: error.actual,
+          expected: error.expected,
+          path: current.path,
+          renderId: error.renderId,
+        })
+      }
+      throw error
+    }
   }
 
   inspectRender(request: StudioInspectRenderRequest): Promise<StudioRenderInspection> {
@@ -770,15 +814,82 @@ export class StudioProjectSession {
       }
       const values: StudioDesignValue[] = []
       for (const design of parsed.entry.ast.statements.filter(AST.isDesignDeclaration)) {
-        for (const member of design.members) {
+        for (const member of design.block.members) {
           if (AST.isDesignToken(member)) {
-            values.push({ kind: 'token', name: member.name, value: member.value })
+            values.push({
+              designName: design.name,
+              ...studioDesignSource(member),
+              kind: 'token',
+              name: member.name,
+              value: member.value,
+            })
           } else if (AST.isDesignBundle(member)) {
             values.push({
+              designName: design.name,
+              ...studioDesignSource(member),
               entries: member.spec.entries.flatMap(entry => entry.$cstNode?.text ?? []),
               kind: 'bundle',
               name: member.name,
             })
+          } else if (AST.isDesignColorsBlock(member)) {
+            for (const entry of member.entries) {
+              values.push({
+                designName: design.name,
+                ...studioDesignSource(entry),
+                kind: 'color',
+                name: entry.name,
+                value: entry.value.$cstNode?.text ?? '',
+              })
+              for (const family of entry.family?.members ?? []) {
+                values.push({
+                  designName: design.name,
+                  ...studioDesignSource(family),
+                  kind: 'color',
+                  name: `${entry.name}.${family.name}`,
+                  value: family.value.$cstNode?.text ?? '',
+                })
+              }
+            }
+          } else if (AST.isDesignSizesBlock(member)) {
+            for (const entry of member.entries) {
+              values.push({
+                designName: design.name,
+                ...studioDesignSource(entry),
+                kind: 'size',
+                name: entry.name,
+                value: entry.value.$cstNode?.text ?? '',
+              })
+            }
+          } else if (AST.isDesignTextBlock(member)) {
+            for (const entry of member.entries) {
+              values.push({
+                designName: design.name,
+                ...studioDesignSource(entry),
+                entries: entry.spec.entries.flatMap(candidate => candidate.$cstNode?.text ?? []),
+                kind: 'text',
+                name: entry.name,
+              })
+            }
+          } else if (AST.isDesignScreensBlock(member)) {
+            for (const entry of member.entries) {
+              values.push({
+                designName: design.name,
+                ...studioDesignSource(entry),
+                kind: 'screen',
+                name: entry.name,
+                value: entry.threshold === undefined ? 'otherwise' : `below ${entry.threshold.$cstNode?.text ?? ''}`,
+              })
+            }
+          } else if (AST.isDesignStylesBlock(member)) {
+            for (const entry of member.entries) {
+              values.push({
+                designName: design.name,
+                ...studioDesignSource(entry),
+                entries: entry.spec.entries.flatMap(candidate => candidate.$cstNode?.text ?? []),
+                kind: /^[A-Z]/.test(entry.name) ? 'default' : 'style',
+                name: entry.name,
+              })
+            }
           }
         }
       }
@@ -790,7 +901,7 @@ export class StudioProjectSession {
     return this.#mutate(async () => {
       const envelope = StudioProtocol.parseSourceActionUndoEnvelope(input)
       if (envelope === undefined) {
-        throw new Errors.UserInputError('Expected a valid Tao Studio source-action undo v1 envelope.')
+        throw new Errors.UserInputError('Expected a valid Tao Studio source-action undo v2 envelope.')
       }
       requireSessionIdentity(envelope, this.identity())
       this.#acceptPreviewIdentity(envelope)
@@ -818,9 +929,13 @@ export class StudioProjectSession {
       const current = await this.readFile(envelope.identity.path)
       if (
         checkpoint.path !== current.path
-        || checkpoint.previewInstanceId !== envelope.identity.previewInstanceId
+        || !sameCheckpointIdentity(checkpoint.identity, sourceActionCheckpointIdentity(envelope.identity, current.path))
       ) {
-        throw new Errors.UserInputError('Studio source-action undo targets a different source or preview instance.')
+        throw new StudioSourceActionConflictError(
+          'checkpoint-identity-mismatch',
+          'Studio source-action undo targets different source-action identity.',
+          { checkpointId: checkpoint.id, path: current.path },
+        )
       }
       requireSourceVersion(current, envelope.identity.sourceVersion)
       requireSourceVersion(current, checkpoint.afterSourceVersion)
@@ -965,7 +1080,7 @@ export class StudioProjectSession {
       ) {
         throw new Errors.UserInputError('Studio source action has an incomplete cell identity.')
       }
-      this.#requireMatrix().assertCurrentInstance({
+      const runtime = this.#requireMatrix().assertCurrentInstance({
         appName: identity.appName,
         cellId: identity.cellId,
         cellRevision: identity.cellRevision,
@@ -974,7 +1089,21 @@ export class StudioProjectSession {
         previewInstanceId: identity.previewInstanceId,
         project: identity.project,
       })
+      if (identity.scenarioId === undefined || identity.scenarioId !== runtime.cell.scenarioId) {
+        throw new StudioSourceActionConflictError(
+          'stale-scenario',
+          'Studio source action targets a scenario that is no longer active in this cell.',
+          {
+            actual: runtime.cell.scenarioId,
+            expected: identity.scenarioId,
+            path: identity.path,
+          },
+        )
+      }
       return
+    }
+    if (identity.scenarioId !== undefined) {
+      throw new Errors.UserInputError('Studio source action has scenario identity without cell identity.')
     }
     const active = this.#coordinator.snapshot().previewInstanceId
     if (active === undefined) {
@@ -982,7 +1111,15 @@ export class StudioProjectSession {
       return
     }
     if (active !== envelope.identity.previewInstanceId) {
-      throw new Errors.UserInputError('Studio source action came from a stale preview instance.')
+      throw new StudioSourceActionConflictError(
+        'stale-preview',
+        'Studio source action came from a stale preview instance.',
+        {
+          actual: active,
+          expected: envelope.identity.previewInstanceId,
+          path: identity.path,
+        },
+      )
     }
   }
 
@@ -1007,8 +1144,8 @@ export class StudioProjectSession {
         beforeContent: current.content,
         beforeSourceVersion: current.sourceVersion,
         id,
+        identity: sourceActionCheckpointIdentity(envelope.identity, current.path),
         path: current.path,
-        previewInstanceId: envelope.identity.previewInstanceId,
         status: phase === 'single' ? 'committed' : 'open',
       }
     }
@@ -1017,11 +1154,47 @@ export class StudioProjectSession {
       || existing.status !== 'open'
       || this.#openCheckpointId !== id
       || existing.path !== current.path
-      || existing.previewInstanceId !== envelope.identity.previewInstanceId
+      || !sameCheckpointIdentity(existing.identity, sourceActionCheckpointIdentity(envelope.identity, current.path))
     ) {
-      throw new Errors.UserInputError(`Studio source-action checkpoint is not open: ${id}`)
+      throw new StudioSourceActionConflictError(
+        'checkpoint-identity-mismatch',
+        `Studio source-action checkpoint identity changed while it was open: ${id}`,
+        { checkpointId: id, path: current.path },
+      )
     }
     return existing
+  }
+
+  #requireScenarioActionIdentity(
+    envelope: StudioSourceActionEnvelope,
+    request: StudioSourcePatchRequest,
+  ): void {
+    if (request.kind !== 'set-scenario-arguments') {
+      return
+    }
+    if (envelope.identity.cellId === undefined || envelope.identity.scenarioId === undefined) {
+      throw new Errors.UserInputError('Studio scenario source actions require cell and scenario identity.')
+    }
+    const scenario = this.#requireMatrix().publishedManifest().scenarios
+      .find(candidate => candidate.scenarioId === envelope.identity.scenarioId)
+    if (scenario === undefined) {
+      throw new StudioSourceActionConflictError(
+        'stale-scenario',
+        'Studio source action targets a scenario that is no longer in the active manifest.',
+        { expected: envelope.identity.scenarioId, path: envelope.identity.path },
+      )
+    }
+    if (scenario.group !== request.scenarioGroupName || scenario.label !== request.scenarioName) {
+      throw new StudioSourceActionConflictError(
+        'scenario-action-mismatch',
+        'Studio scenario source action does not match its authenticated scenario identity.',
+        {
+          actual: `${request.scenarioGroupName}/${request.scenarioName}`,
+          expected: `${scenario.group}/${scenario.label}`,
+          path: envelope.identity.path,
+        },
+      )
+    }
   }
 
   #commitAbandonedCheckpoint(id: string): void {
@@ -1197,6 +1370,30 @@ function requireSourceVersion(file: StudioProjectFile, expected: string): void {
   }
 }
 
+function sourceActionCheckpointIdentity(
+  identity: StudioSourceActionIdentity,
+  normalizedPath: string,
+): SourceActionCheckpointIdentity {
+  return {
+    appName: identity.appName,
+    ...(identity.cellId === undefined ? {} : { cellId: identity.cellId }),
+    ...(identity.occurrence === undefined ? {} : { occurrence: identity.occurrence }),
+    path: normalizedPath,
+    project: identity.project,
+    ...(identity.scenarioId === undefined ? {} : { scenarioId: identity.scenarioId }),
+  }
+}
+
+function sameCheckpointIdentity(left: SourceActionCheckpointIdentity, right: SourceActionCheckpointIdentity): boolean {
+  return left.appName === right.appName
+    && left.cellId === right.cellId
+    && left.path === right.path
+    && left.project === right.project
+    && left.scenarioId === right.scenarioId
+    && left.occurrence?.nodeKind === right.occurrence?.nodeKind
+    && left.occurrence?.renderOwner === right.occurrence?.renderOwner
+}
+
 function requireSessionIdentity(
   envelope: StudioSourceActionEnvelope | StudioSourceActionUndoEnvelope,
   expected: StudioProjectIdentity,
@@ -1280,12 +1477,14 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
   }
   if (
     action.kind === 'set-scenario-arguments'
+    && (action['appearance'] === undefined || action['appearance'] === 'dark' || action['appearance'] === 'light')
     && typeof action['scenarioGroupName'] === 'string'
     && typeof action['scenarioName'] === 'string'
     && isRecord(action['arguments'])
     && Object.values(action['arguments']).every(isStudioScenarioArgumentValue)
   ) {
     return {
+      ...(action['appearance'] === undefined ? {} : { appearance: action['appearance'] }),
       arguments: action['arguments'] as Readonly<Record<string, StudioScenarioArgumentValue>>,
       kind: action.kind,
       scenarioGroupName: action['scenarioGroupName'],
@@ -1293,6 +1492,24 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
     }
   }
   throw new Errors.UserInputError(`Unsupported or invalid Studio source action: ${action.kind}`)
+}
+
+function requireSourceActionPreconditions(
+  envelope: StudioSourceActionEnvelope,
+  request: StudioSourcePatchRequest,
+): void {
+  const occurrenceRequired = request.kind === 'move-render'
+    || request.kind === 'set-layout-entry'
+    || request.kind === 'set-style-entry'
+    || request.kind === 'wrap-render'
+    || (request.kind === 'insert-component' || request.kind === 'insert-project-view')
+      && (request.beforeId !== undefined || request.afterId !== undefined)
+  if (occurrenceRequired && envelope.identity.occurrence === undefined) {
+    throw new Errors.UserInputError(`Studio source action requires render occurrence identity: ${request.kind}`)
+  }
+  if (!occurrenceRequired && envelope.identity.occurrence !== undefined) {
+    throw new Errors.UserInputError(`Studio source action cannot carry render occurrence identity: ${request.kind}`)
+  }
 }
 
 function isStudioStyleLandingScope(value: unknown): value is StudioStyleLandingScope {
@@ -1310,7 +1527,7 @@ function isStudioStyleLandingScope(value: unknown): value is StudioStyleLandingS
   if (value['kind'] === 'element-default') {
     return typeof value['elementName'] === 'string'
   }
-  return value['kind'] === 'token' && typeof value['tokenName'] === 'string'
+  return (value['kind'] === 'token' || value['kind'] === 'size-token') && typeof value['tokenName'] === 'string'
 }
 
 function isCapturedFixturePlan(value: unknown): value is StudioInsertCapturedFixturePatchRequest['plan'] {
@@ -1494,8 +1711,38 @@ const studioComponentKinds = new Set<StudioComponentKind>([
   'WrappingRow',
 ])
 
+export type StudioSourceActionConflictCode =
+  | 'checkpoint-identity-mismatch'
+  | 'node-kind-mismatch'
+  | 'render-owner-mismatch'
+  | 'scenario-action-mismatch'
+  | 'stale-preview'
+  | 'stale-scenario'
+  | 'stale-source'
+
+export type StudioSourceActionConflictDetails = {
+  actual?: string
+  checkpointId?: string
+  expected?: string
+  path?: string
+  renderId?: string
+}
+
+/** StudioSourceActionConflictError carries stable, UI-safe conflict details across the Studio server boundary. */
+export class StudioSourceActionConflictError extends Error {
+  override readonly name: string = 'StudioSourceActionConflictError'
+
+  constructor(
+    readonly code: StudioSourceActionConflictCode,
+    message: string,
+    readonly details: StudioSourceActionConflictDetails,
+  ) {
+    super(message)
+  }
+}
+
 /** StudioSourceConflictError reports optimistic source-version mismatches as HTTP 409 at the server boundary. */
-export class StudioSourceConflictError extends Error {
+export class StudioSourceConflictError extends StudioSourceActionConflictError {
   override readonly name = 'StudioSourceConflictError'
 
   constructor(
@@ -1503,6 +1750,10 @@ export class StudioSourceConflictError extends Error {
     readonly expectedSourceVersion: string,
     readonly actualSourceVersion: string,
   ) {
-    super(`Studio source changed before the edit was applied: ${path}`)
+    super('stale-source', `Studio source changed before the edit was applied: ${path}`, {
+      actual: actualSourceVersion,
+      expected: expectedSourceVersion,
+      path,
+    })
   }
 }

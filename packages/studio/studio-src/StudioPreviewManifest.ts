@@ -61,8 +61,10 @@ export type StudioNetworkSimulation = {
 }
 
 export type StudioSchemeEnvironment = {
-  requested: 'dark' | 'light'
-  status: 'inert'
+  capability: 'fixed-light-native' | 'reactive-browser'
+  requested: 'dark' | 'light' | 'system'
+  resolved: 'dark' | 'light'
+  source: 'native-fixed' | 'preference' | 'scenario' | 'system'
 }
 
 export type StudioCellEnvironment = {
@@ -83,7 +85,7 @@ export type StudioPreviewCell = {
 export type StudioPreviewManifestV2 = {
   capabilities: {
     captureDomains: readonly string[]
-    scheme: 'inert'
+    scheme: 'reactive-browser'
   }
   cells: readonly StudioPreviewCell[]
   compileRevision: number
@@ -129,8 +131,8 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
   requireText(input.project.appName, 'Studio project app name')
   requireText(input.project.entryPath, 'Studio project entry path')
   requireText(input.project.root, 'Studio project root')
-  if (input.capabilities.scheme !== 'inert') {
-    throw new Errors.UserInputError('Studio Scheme must remain visibly inert until its runtime seam exists.')
+  if (input.capabilities.scheme !== 'reactive-browser') {
+    throw new Errors.UserInputError('Studio browser previews require the reactive Scheme capability.')
   }
   const subjects = uniqueBy(input.subjects, subject => subject.subjectId, 'Studio subject')
   for (const subject of subjects.values()) {
@@ -283,8 +285,22 @@ function validateEnvironment(environment: StudioCellEnvironment): void {
   if (environment.network.outcome !== 'error' && environment.network.error !== undefined) {
     throw new Errors.UserInputError('Studio network errors are only valid for error simulation.')
   }
-  if (environment.scheme.status !== 'inert') {
-    throw new Errors.UserInputError('Studio Scheme is not active in this runtime.')
+  validateScheme(environment.scheme)
+}
+
+function validateScheme(scheme: StudioSchemeEnvironment): void {
+  if (
+    !['dark', 'light', 'system'].includes(scheme.requested)
+    || !['dark', 'light'].includes(scheme.resolved)
+    || !['fixed-light-native', 'reactive-browser'].includes(scheme.capability)
+    || !['native-fixed', 'preference', 'scenario', 'system'].includes(scheme.source)
+    || (scheme.source === 'system' && scheme.requested !== 'system')
+    || (scheme.source === 'preference' && scheme.requested === 'system')
+    || (scheme.source === 'scenario' && scheme.requested === 'system')
+    || (scheme.source === 'native-fixed' && scheme.capability !== 'fixed-light-native')
+    || (scheme.capability === 'fixed-light-native' && (scheme.resolved !== 'light' || scheme.source !== 'native-fixed'))
+  ) {
+    throw new Errors.UserInputError('Studio Scheme must record a valid request, resolution, source, and capability.')
   }
 }
 

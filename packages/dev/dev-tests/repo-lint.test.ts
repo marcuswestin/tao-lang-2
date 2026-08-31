@@ -65,38 +65,48 @@ Describe('repo lint contracts', () => {
     ))).toEqual([])
   })
 
-  Test('allows Current and Next content to diverge independently of status', () => {
+  Test('rejects absorbed Current and Next content divergence', () => {
     Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
       [file('WordFlower.tao-next', `${absorbed}\nview Main { render New() }`)],
-    ))).toEqual([])
+    ))).toEqual(['Next is absorbed but WordFlower.tao differs from Current.'])
   })
 
-  Test('allows the Current and Next mapped file sets to diverge', () => {
+  Test('rejects absorbed Current and Next mapped file-set divergence', () => {
     Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', `${absorbed}\nview Main { }`)],
       [
         file('WordFlower.tao-next', `${absorbed}\nview Main { }`),
         file('Shared.tao-next', 'let Shared = 1'),
       ],
-    ))).toEqual([])
+    ))).toEqual(['Next is absorbed but Shared.tao is missing from Current.'])
   })
 
-  Test('ignores mapped whitespace differences', () => {
+  Test('rejects an absorbed Current file missing from mapped Next', () => {
+    Expect(wordFlowerDirectoryIssues(directory(
+      [
+        file('WordFlower.tao', `${absorbed}\nview Main { }`),
+        file('Documents.tao', 'view Documents { }'),
+      ],
+      [file('WordFlower.tao-next', `${absorbed}\nview Main { }`)],
+    ))).toEqual(['Next is absorbed but Documents.tao is missing from its mapped files.'])
+  })
+
+  Test('rejects absorbed mapped whitespace differences', () => {
     Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', `${absorbed}\nview Main { }\n`)],
       [file('WordFlower.tao-next', `${absorbed}\nview Main { } \n`)],
-    ))).toEqual([])
+    ))).toEqual(['Next is absorbed but WordFlower.tao differs from Current.'])
   })
 
-  Test('ignores mapped byte differences', () => {
+  Test('rejects absorbed mapped byte differences', () => {
     Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', absorbed, Buffer.from([...Buffer.from(absorbed), 0x80]))],
       [file('WordFlower.tao-next', absorbed, Buffer.from([...Buffer.from(absorbed), 0x81]))],
-    ))).toEqual([])
+    ))).toEqual(['Next is absorbed but WordFlower.tao differs from Current.'])
   })
 
-  Test('ignores hidden file divergence in repository lint', async () => {
+  Test('rejects hidden file divergence in an absorbed repository tranche', async () => {
     const root = await FS.mkTmpDir(FS.resolvePath('tao-repo-lint-', FS.tmpdir()))
     try {
       await FS.writeText(
@@ -118,7 +128,9 @@ Describe('repo lint contracts', () => {
       await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
       await FS.mkdir(FS.resolvePath('packages', root))
 
-      Expect(await repoLintIssues(root)).toEqual([])
+      Expect(await repoLintIssues(root)).toEqual([
+        'Apps/WordFlower/2 - Next is absorbed but .contract.bin differs from Apps/WordFlower/1 - Current.',
+      ])
     } finally {
       await FS.remove(root)
     }

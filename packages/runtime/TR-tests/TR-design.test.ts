@@ -66,6 +66,126 @@ Describe('TR design runtime', () => {
     })
   })
 
+  Test('applies exact Scheme conditions after bundle expansion without simulating browser CSS', () => {
+    const design = DesignControls.Declaration({
+      name: 'Adaptive',
+      tokens: { dark: '#111', light: '#fff' },
+      bundles: {
+        surface: DesignControls.Spec([
+          ['bg', 'light'],
+          ['bg', 'dark', 'when', 'Scheme', 'is', 'Dark'],
+        ]),
+      },
+    })
+    const spec = DesignControls.Spec([['surface']])
+
+    Expect(DesignControls.resolve(design, spec, undefined, 'light').style).toEqual({
+      backgroundColor: '#fff',
+    })
+    Expect(DesignControls.resolve(design, spec, undefined, 'dark').style).toEqual({
+      backgroundColor: '#111',
+    })
+    Expect(() =>
+      DesignControls.resolve(
+        design,
+        DesignControls.Spec([['bg', 'dark', 'when', 'Viewport', 'is', 'Dark']]),
+        undefined,
+        'dark',
+      )
+    ).toThrow("Unsupported design condition 'bg dark when Viewport is Dark'.")
+  })
+
+  Test('resolves typed colors, families, sizes, defaults, and source-chain provenance', () => {
+    const design = DesignControls.Declaration({
+      bundles: {
+        Text: DesignControls.Spec([['fg', 'canvas']]),
+        card: DesignControls.Spec([['bg', 'ember.20'], ['radius', 'md'], ['pad', 'md']]),
+      },
+      sources: {
+        Text: {
+          end: 90,
+          kind: 'style',
+          member: 'Text',
+          path: '/Theme.tao',
+          start: 70,
+        },
+        card: { end: 140, kind: 'style', member: 'card', path: '/Theme.tao', start: 100 },
+      },
+      colors: {
+        canvas: {
+          environment: 'Scheme',
+          expected: 'dark',
+          kind: 'conditional',
+          negative: '#fff',
+          positive: { kind: 'reference', path: 'ember.20' },
+        },
+        'ember.20': '#f4d7c8',
+      },
+      name: 'Structured',
+      screens: [{ below: 500, name: 'narrow' }, { name: 'wide' }],
+      sizes: {
+        md: {
+          left: { kind: 'reference', path: 'sm' },
+          right: { kind: 'dimension', unit: 'px', value: 4 },
+        },
+        sm: { left: { kind: 'dimension', unit: 'px', value: 8 } },
+      },
+      tokens: {},
+    })
+
+    const occurrence = { end: 230, kind: 'inline' as const, path: '/Main.tao', start: 220 }
+    Expect(
+      DesignControls.resolve(
+        design,
+        DesignControls.Source(DesignControls.Spec([['card']]), occurrence),
+        'Text',
+        'dark',
+      ),
+    ).toEqual({
+      layout: { entries: [['pad', 12]] },
+      provenance: [
+        {
+          chain: [
+            { kind: 'element-default', member: 'Text' },
+            { end: 90, kind: 'style', member: 'Text', path: '/Theme.tao', start: 70 },
+          ],
+          entry: ['fg', 'canvas'],
+          property: 'foreground',
+        },
+        {
+          chain: [occurrence, { end: 140, kind: 'style', member: 'card', path: '/Theme.tao', start: 100 }],
+          entry: ['bg', 'ember.20'],
+          property: 'background',
+        },
+        {
+          chain: [occurrence, { end: 140, kind: 'style', member: 'card', path: '/Theme.tao', start: 100 }],
+          entry: ['radius', 12],
+          property: 'radius',
+        },
+        {
+          chain: [occurrence, { end: 140, kind: 'style', member: 'card', path: '/Theme.tao', start: 100 }],
+          entry: ['pad', 12],
+          property: 'pad',
+        },
+      ],
+      style: { backgroundColor: '#f4d7c8', borderRadius: 12, color: '#f4d7c8' },
+    })
+    Expect(design.screens).toEqual([{ below: 500, name: 'narrow' }, { name: 'wide' }])
+  })
+
+  Test('fails a mounted layout occurrence whose selected design has no named size', () => {
+    const design = DesignControls.Declaration({
+      bundles: {},
+      name: 'Sparse',
+      sizes: {},
+      tokens: {},
+    })
+
+    Expect(() => DesignControls.resolve(design, DesignControls.Spec([['gap', 'missing']]))).toThrow(
+      "Design 'Sparse' has no size 'missing'.",
+    )
+  })
+
   Test('resolves nested layout clauses and direct overrides as one left-to-right list', () => {
     const design = DesignControls.Declaration({
       name: 'Composable',

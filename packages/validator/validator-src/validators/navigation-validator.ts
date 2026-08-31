@@ -54,6 +54,7 @@ export const navigationValidationMessages = {
 /** navigationValidationChecks validates configured navigation and presentation calls. */
 export const navigationValidationChecks = {
   [AST.ContextualPresentStatement.$type]: validateContextualPresentation,
+  [AST.ViewBinding.$type]: validateViewBinding,
   [AST.ConfigurationEntry.$type]: validateStackInitialTitle,
   [AST.DismissStatement.$type]: (dismiss, ctx) => {
     if (!AST.findOwningView(dismiss)) {
@@ -87,6 +88,17 @@ export const navigationValidationChecks = {
     void replace.app?.ref
   },
 } satisfies NodeValidationChecks
+
+function validateViewBinding(binding: AST.ViewBinding, ctx: ValidationContext): void {
+  const view = binding.view.ref
+  if (!view) {
+    return
+  }
+  const resolved = ASTUtils.resolveArgumentBindings(view, binding)
+  for (const diagnostic of resolved.diagnostics) {
+    reportBindingDiagnostic(view, diagnostic, binding, ctx)
+  }
+}
 
 type EffectiveNavigatorConfiguration = {
   declaration: AST.ConfigurableDeclaration
@@ -309,6 +321,12 @@ function validateStackInitialTitle(entry: AST.ConfigurationEntry, ctx: Validatio
   if (!value) {
     return
   }
+  if (AST.isViewBinding(value)) {
+    if (value.view.ref) {
+      reportMissingHostTitle(value.view.ref, entry, ctx)
+    }
+    return
+  }
   if (AST.isConfigurationReference(value)) {
     validateReferencedStackDestinationTitle(value.target.ref, entry, ctx)
     return
@@ -516,10 +534,18 @@ function stackReachability(files: readonly AST.TaoFile[]): StackReachability {
 }
 
 function stackInitialDestination(entry: AST.ConfigurationEntry): AST.ViewDeclaration | undefined {
-  if (entry.name !== 'Initial' || !entry.value || !AST.isConfigurationReference(entry.value)) {
+  if (entry.name !== 'Initial' || !entry.value) {
     return undefined
   }
-  return stackInitialHost(entry) ? referencedViewDeclaration(entry.value.target.ref) : undefined
+  if (!stackInitialHost(entry)) {
+    return undefined
+  }
+  if (AST.isViewBinding(entry.value)) {
+    return entry.value.view.ref ? canonicalView(entry.value.view.ref) : undefined
+  }
+  return AST.isConfigurationReference(entry.value)
+    ? referencedViewDeclaration(entry.value.target.ref)
+    : undefined
 }
 
 function referencedViewDeclaration(
@@ -693,7 +719,7 @@ function negativeNumberLiteral(expression: AST.Expression): boolean {
 function reportBindingDiagnostic(
   view: AST.ViewDeclaration,
   diagnostic: ASTUtils.ArgumentBindingDiagnostic,
-  presentation: AST.ContextualPresentStatement,
+  presentation: AST.ContextualPresentStatement | AST.ViewBinding,
   ctx: ValidationContext,
 ): void {
   Switch.kind(diagnostic, {

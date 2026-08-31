@@ -4,6 +4,42 @@ import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode, testParseSyntax } from './test-parse'
 
 Describe('parser: core language syntax', () => {
+  Test('links live app state and actions into a bound configured root view', async () => {
+    const result = await testParseCode(`
+      public type StackNav is nav with {
+        Initial view
+        nav StackNavImpl from ./StackNavImpl.ts
+      }
+      app BoundApp {
+        Name "Bound"
+        state Expanded is list of text = [] (persist)
+        action ChangeExpanded(Value list of text) { set Expanded = Value }
+        Navigator StackNav {
+          Initial Root(Expanded: Expanded, ChangeExpanded: ChangeExpanded)
+        }
+      }
+      view Root(Expanded list of text, ChangeExpanded action(list of text)) {
+        Title "Root"
+        render Empty()
+      }
+      view Empty() { render Empty() }
+    `)
+
+    Expect(result.diagnostics).toEqual([])
+    const binding = result.entry.ast.statements
+      .flatMap(statement => AST.streamAllContents(statement))
+      .find(AST.isViewBinding)
+    Expect.Is(binding, AST.isViewBinding)
+    Expect(binding.view.ref?.name).toBe('Root')
+    const [stateArgument, actionArgument] = binding.argumentList?.arguments ?? []
+    Expect.Is(stateArgument?.value, AST.isValueReference)
+    Expect.Is(actionArgument?.value, AST.isValueReference)
+    Expect.Is(stateArgument.value.target.ref, AST.isStateDeclaration)
+    Expect.Is(actionArgument.value.target.ref, AST.isActionDeclaration)
+    Expect(stateArgument.value.target.ref.name).toBe('Expanded')
+    Expect(actionArgument.value.target.ref.name).toBe('ChangeExpanded')
+  })
+
   Test('parses namespace imports and pass-through view aliases', async () => {
     // The namespace targets are unresolved in a standalone parse; only the syntax is under test.
     const result = await testParseSyntax(`

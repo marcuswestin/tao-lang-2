@@ -2,19 +2,30 @@
 // the live StudioServer datasource. The compiled root owns the Files and editor workbench slots;
 // the host publishes versioned browser-local selection state into the external editor boundary.
 use SlotNav from @tao/nav
-use Col, Text from @tao/ui
+use Button, Col, Picker, Text, TextInput from @tao/ui
 
 // File contents remain editor buffers and never appear in Files or any related entity.
 app TaoStudioFiles {
    Name "Tao Studio Files"
+   state CollapsedFolders is list of text = [] (persist)
+   action ToggleFolder(FolderPath text) {
+      set CollapsedFolders = StudioToggleFolder(CollapsedFolders, FolderPath)
+   }
    Design StudioDesign
    Navigator SlotNav {
-      Initial StudioRoot
+      Initial StudioRoot(CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)
    }
    Datasource StudioServer { }
 }
 
-design StudioDesign { }
+design StudioDesign {
+   sizes {
+      controlGap 4.px
+   }
+   styles {
+      designTokenRow [gap controlGap]
+   }
+}
 
 type StudioServer is datasource with {
    ServerOrigin text is ""
@@ -76,13 +87,28 @@ data Checkpoints / Checkpoint {
    Status text
 }
 
+workspace
+data DesignTokens / DesignToken {
+   StableId text (unique)
+   DesignName text
+   Kind text
+   Name text
+   SourcePath text
+   SourceVersion text
+   Start number
+   End number
+   Value text
+
+   order by SourcePath
+}
+
 type StudioActionFailure is one of Conflict
 
 action SyncDraft(Path text, SourceVersion text, Content text) runs latest from ./TaoStudioServerActions.ts
 
 action ApplySourceAction(Envelope text) fails Conflict "This file changed under this edit." from ./TaoStudioServerActions.ts
 
-action UndoSourceAction(Envelope text) from ./TaoStudioServerActions.ts
+action UndoSourceAction(Envelope text) fails Conflict "This file changed under this edit." from ./TaoStudioServerActions.ts
 
 action CreateFile(Path text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
 
@@ -92,9 +118,29 @@ action DeleteFile(Path text, SourceVersion text) fails Conflict "This file chang
 
 action OpenFile(Path text) from ./TaoStudioProductHost.tsx
 
-action ApplyActiveCellEnvironment(Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number) fails Conflict "This preview changed while its environment was being edited." from ./TaoStudioProductHost.tsx
+action InsertComponent(Name text) from ./TaoStudioProductHost.tsx
 
-view FilesPanel() {
+action InsertProjectView(Name text) from ./TaoStudioProductHost.tsx
+
+action OpenScreen(StableId text) from ./TaoStudioProductHost.tsx
+
+action ApplyInspectorAction(Action text, Proposed boolean) from ./TaoStudioProductHost.tsx
+
+action UndoInspectorAction() from ./TaoStudioProductHost.tsx
+
+action ProductPanelAction(Name text, Payload text) from ./TaoStudioProductHost.tsx
+
+action ApplyActiveCellEnvironment(CellId text, CellRevision number, Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number) fails Conflict "This preview changed while its environment was being edited." from ./TaoStudioProductHost.tsx
+
+function StudioFolderIsExpanded(CollapsedFolders list of text, FolderPath text) returns boolean {
+   return StudioFolderIsExpanded(CollapsedFolders, FolderPath) from ./StudioFolderExpansion.ts
+}
+
+function StudioToggleFolder(CollapsedFolders list of text, FolderPath text) returns list of text {
+   return StudioToggleFolder(CollapsedFolders, FolderPath) from ./StudioFolderExpansion.ts
+}
+
+view FilesPanel(CollapsedFolders list of text, ToggleFolder action(text)) {
    state NewPath = ""
    action Create() {
       do CreateFile(NewPath)
@@ -105,19 +151,19 @@ view FilesPanel() {
    }
    render FilesPanelSurface() {
       FileCreateBar(NewPath, ChangeNewPath, Create)
-      FileTree("")
+      FileTree(FolderPath: "", CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)
 }  }
 
 view FilesPanelSurface() accepts content from ./TaoStudioProductHost.tsx
 
 view FileCreateBar(Path text, Change action(text), Create action()) from ./TaoStudioProductHost.tsx
 
-// Disclosure stays Studio-local: Tao has no generic tree construct. Its expansion is view-local
-// because persisted view-instance keying is deliberately deferred by the current language.
-view Disclosure(Label text) {
-   state Expanded = true
+// Disclosure stays Studio-local: Tao has no generic tree construct. The app owns its device-local
+// collapsed-path set, so recursive occurrences have explicit stable identity without ambient state.
+view Disclosure(Label text, FolderPath text, CollapsedFolders list of text, ToggleFolder action(text)) {
+   let Expanded = StudioFolderIsExpanded(CollapsedFolders, FolderPath)
    action Toggle() {
-      toggle Expanded
+      do ToggleFolder(FolderPath)
    }
    render TreeFolder(Label, Expanded, Toggle) {
       when Expanded {
@@ -127,7 +173,7 @@ view Disclosure(Label text) {
 
 view TreeFolder(Label text, Expanded boolean, Toggle action()) accepts content from ./TaoStudioProductHost.tsx
 
-view FileTree(FolderPath text) {
+view FileTree(FolderPath text, CollapsedFolders list of text, ToggleFolder action(text)) {
    query Files as Children {
       where ParentPath == FolderPath
    }
@@ -138,8 +184,8 @@ view FileTree(FolderPath text) {
       }
       loop Children / File {
          when File.Folder {
-            true -> { Disclosure(File.Name) {
-               FileTree(File.Path)
+            true -> { Disclosure(Label: File.Name, FolderPath: File.Path, CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder) {
+               FileTree(FolderPath: File.Path, CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)
             } }
             otherwise -> { FileRow(File) }
 }  }  }  }
@@ -183,7 +229,103 @@ view TreeFileRow(Name text, Path text, Dirty boolean, DiagnosticCount number, Re
 
 view StudioEditorSurface() from ./TaoStudioProductHost.tsx
 
-view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, ActiveFileContent text, ActiveFileVersion text, SelectionAnchor number, SelectionHead number, SelectedRenderId text, SelectedRenderPath text, SelectedRenderVersion text, ActiveCellId text, CellRevision number, ActiveScenarioId text, ViewportPresetId text, ViewportWidth number, ViewportHeight number, NetworkOutcome text, NetworkLatencyMs number, NetworkErrorMessage text, NetworkErrorStatus number, SchemeRequested text, SchemeStatus text) {
+view StudioPanelSurface(Title text) accepts content from ./TaoStudioProductHost.tsx
+
+view StudioPaletteRow(Label text, Detail text, Kind text, Name text, Insert action()) from ./TaoStudioProductHost.tsx
+
+view StudioSourceRow(Label text, Detail text, Open action()) from ./TaoStudioProductHost.tsx
+
+view ComponentPaletteItem(Name text, Label text, Kind text) {
+   action Insert() {
+      do InsertComponent(Name)
+   }
+   render StudioPaletteRow(Label: Label, Detail: Kind, Kind: "component", Name: Name, Insert: Insert)
+}
+
+view ComponentsPanel() {
+   render StudioPanelSurface("Components") {
+      ComponentPaletteItem(Name: "Text", Label: "Text", Kind: "Element")
+      ComponentPaletteItem(Name: "TextFrame", Label: "TextFrame", Kind: "Element")
+      ComponentPaletteItem(Name: "TextMultiline", Label: "TextMultiline", Kind: "Element")
+      ComponentPaletteItem(Name: "Number", Label: "Number", Kind: "Element")
+      ComponentPaletteItem(Name: "Image", Label: "Image", Kind: "Element")
+      ComponentPaletteItem(Name: "Progress", Label: "Progress", Kind: "Element")
+      ComponentPaletteItem(Name: "Button", Label: "Button", Kind: "Element")
+      ComponentPaletteItem(Name: "FormButton", Label: "FormButton", Kind: "Element")
+      ComponentPaletteItem(Name: "Checkbox", Label: "Checkbox", Kind: "Element")
+      ComponentPaletteItem(Name: "Switch", Label: "Switch", Kind: "Element")
+      ComponentPaletteItem(Name: "Slider", Label: "Slider", Kind: "Element")
+      ComponentPaletteItem(Name: "Picker", Label: "Picker", Kind: "Element")
+      ComponentPaletteItem(Name: "SegmentedControl", Label: "SegmentedControl", Kind: "Element")
+      ComponentPaletteItem(Name: "DatePicker", Label: "DatePicker", Kind: "Element")
+      ComponentPaletteItem(Name: "TextInput", Label: "Text input", Kind: "Element")
+      ComponentPaletteItem(Name: "Spinner", Label: "Spinner", Kind: "Element")
+      ComponentPaletteItem(Name: "Box", Label: "Box", Kind: "Container")
+      ComponentPaletteItem(Name: "Stack", Label: "Stack", Kind: "Container")
+      ComponentPaletteItem(Name: "Col", Label: "Column", Kind: "Container")
+      ComponentPaletteItem(Name: "Row", Label: "Row", Kind: "Container")
+      ComponentPaletteItem(Name: "WrappingRow", Label: "Wrapping row", Kind: "Container")
+      ComponentPaletteItem(Name: "Panes", Label: "Panes", Kind: "Container")
+      ComponentPaletteItem(Name: "ScrollView", Label: "Scroll view", Kind: "Container")
+}  }
+
+view ProjectViewRow(View) {
+   action Insert() {
+      do InsertProjectView(View.Name)
+   }
+   render StudioPaletteRow(Label: View.Name, Detail: View.SourcePath, Kind: "project-view", Name: View.Name, Insert: Insert)
+}
+
+view ProjectViewsPanel() {
+   query Views as ProjectViews
+   render StudioPanelSurface("Project views") {
+      guard ProjectViews {
+         loading -> { Text("Loading compiled views…") }
+         error -> Message { Text(Message) }
+      }
+      loop ProjectViews / View {
+         ProjectViewRow(View)
+}  }  }
+
+view ScreenRow(Screen) {
+   action Open() {
+      do OpenScreen(Screen.StableId)
+   }
+   render StudioSourceRow(Label: Screen.Name, Detail: Screen.SourcePath, Open: Open)
+}
+
+view ScreensPanel() {
+   query Screens as ProjectScreens
+   render StudioPanelSurface("Screens") {
+      guard ProjectScreens {
+         loading -> { Text("Loading compiled screens…") }
+         error -> Message { Text(Message) }
+      }
+      loop ProjectScreens / Screen {
+         ScreenRow(Screen)
+}  }  }
+
+view DesignTokenRow(DesignToken) {
+   action Open() {
+      do OpenFile(DesignToken.SourcePath)
+   }
+   render Col() [designTokenRow] {
+      Text(DesignToken.Kind)
+      StudioSourceRow(Label: DesignToken.Name, Detail: DesignToken.Value, Open: Open)
+}  }
+
+view DesignTokensPanel() {
+   query DesignTokens as Tokens
+   render StudioPanelSurface("Design") {
+      guard Tokens {
+         loading -> { Text("Loading parser-owned design values…") }
+         error -> Message { Text(Message) }
+      }
+      loop Tokens / DesignToken {
+         DesignTokenRow(DesignToken)
+}  }  }
+
+view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, ActiveFileContent text, ActiveFileVersion text, SelectionAnchor number, SelectionHead number, SelectedRenderId text, SelectedRenderPath text, SelectedRenderVersion text, ActiveCellId text, CellRevision number, ActiveScenarioId text, ViewportPresetId text, ViewportWidth number, ViewportHeight number, NetworkOutcome text, NetworkLatencyMs number, NetworkErrorMessage text, NetworkErrorStatus number, SchemeRequested text, SchemeResolved text, SchemeSource text, SchemeCapability text, InspectorBusy boolean, InspectorCanUndo boolean, InspectorInspection text, InspectorSelection text) {
    state Preset = ViewportPresetId
    state Width = ViewportWidth
    state Height = ViewportHeight
@@ -191,8 +333,16 @@ view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, 
    state Latency = NetworkLatencyMs
    state ErrorMessage = NetworkErrorMessage
    state ErrorStatus = NetworkErrorStatus
+   state WidthValid = true
+   state HeightValid = true
+   state LatencyValid = true
+   state ErrorStatusValid = true
    action ChangePreset(Value text) {
       set Preset = Value
+      set Width = StudioViewportPresetWidth(Preset: Value, Fallback: Width)
+      set Height = StudioViewportPresetHeight(Preset: Value, Fallback: Height)
+      set WidthValid = true
+      set HeightValid = true
    }
    action ChangeWidth(Value number) {
       set Preset = "custom"
@@ -214,27 +364,817 @@ view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, 
    action ChangeErrorStatus(Value number) {
       set ErrorStatus = Value
    }
+   action ChangeWidthValid(Value boolean) {
+      set WidthValid = Value
+   }
+   action ChangeHeightValid(Value boolean) {
+      set HeightValid = Value
+   }
+   action ChangeLatencyValid(Value boolean) {
+      set LatencyValid = Value
+   }
+   action ChangeErrorStatusValid(Value boolean) {
+      set ErrorStatusValid = Value
+   }
    action ApplyEnvironment() {
-      do ApplyActiveCellEnvironment(Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus)
+      do ApplyActiveCellEnvironment(CellId: ActiveCellId, CellRevision: CellRevision, Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus)
+   }
+   action ApplyInspector(Action text, Proposed boolean) {
+      do ApplyInspectorAction(Action, Proposed)
+   }
+   action UndoInspector() {
+      do UndoInspectorAction()
    }
    render StudioContextPanelSurface() {
       StudioContextSummary(FilePath: ActiveFilePath, ScenarioId: ActiveScenarioId, CellId: ActiveCellId, RenderId: SelectedRenderId, ViewportWidth: ViewportWidth, ViewportHeight: ViewportHeight)
       when ActiveCellId {
          empty -> { }
-         otherwise -> { StudioScenarioEnvironmentControls(Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus, SchemeRequested: SchemeRequested, SchemeStatus: SchemeStatus, ChangePreset: ChangePreset, ChangeWidth: ChangeWidth, ChangeHeight: ChangeHeight, ChangeNetwork: ChangeNetwork, ChangeLatency: ChangeLatency, ChangeErrorMessage: ChangeErrorMessage, ChangeErrorStatus: ChangeErrorStatus, Apply: ApplyEnvironment) }
-}  }  }
+         otherwise -> { StudioScenarioEnvironment(Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus, WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, SchemeRequested: SchemeRequested, SchemeResolved: SchemeResolved, SchemeSource: SchemeSource, SchemeCapability: SchemeCapability, ChangePreset: ChangePreset, ChangeWidth: ChangeWidth, ChangeHeight: ChangeHeight, ChangeNetwork: ChangeNetwork, ChangeLatency: ChangeLatency, ChangeErrorMessage: ChangeErrorMessage, ChangeErrorStatus: ChangeErrorStatus, ChangeWidthValid: ChangeWidthValid, ChangeHeightValid: ChangeHeightValid, ChangeLatencyValid: ChangeLatencyValid, ChangeErrorStatusValid: ChangeErrorStatusValid, Apply: ApplyEnvironment) }
+      }
+      StudioInspectorSummary(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection)
+      StudioInspectorLayout(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, CanUndo: InspectorCanUndo, Apply: ApplyInspector, Undo: UndoInspector)
+      StudioInspectorStyle(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
+      StudioInspectorData(Inspection: InspectorInspection, Selection: InspectorSelection, ActiveCellId: ActiveCellId, ActiveCellRevision: CellRevision, ActiveScenarioId: ActiveScenarioId)
+      StudioInspectorActions(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
+}  }
 
 view StudioContextPanelSurface() accepts content from ./TaoStudioProductHost.tsx
 
 view StudioContextSummary(FilePath text, ScenarioId text, CellId text, RenderId text, ViewportWidth number, ViewportHeight number) from ./TaoStudioProductHost.tsx
 
-view StudioScenarioEnvironmentControls(Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number, SchemeRequested text, SchemeStatus text, ChangePreset action(text), ChangeWidth action(number), ChangeHeight action(number), ChangeNetwork action(text), ChangeLatency action(number), ChangeErrorMessage action(text), ChangeErrorStatus action(number), Apply action()) from ./TaoStudioProductHost.tsx
+function StudioViewportPresetWidth(Preset text, Fallback number) returns number {
+   return StudioViewportPresetWidth(Preset, Fallback) from ./TaoStudioProductHost.tsx
+}
 
-view StudioRoot() {
-   render ProductHostBoundary() {
-      @files FilesPanel()
-      @editor StudioEditorSurface()
-      @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", ActiveCellId: "", CellRevision: 0, ActiveScenarioId: "", ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "light", SchemeStatus: "inert")
+function StudioViewportPresetHeight(Preset text, Fallback number) returns number {
+   return StudioViewportPresetHeight(Preset, Fallback) from ./TaoStudioProductHost.tsx
+}
+
+function StudioEnvironmentValid(WidthValid boolean, HeightValid boolean, LatencyValid boolean, ErrorStatusValid boolean, Network text, ErrorMessage text) returns boolean {
+   return StudioEnvironmentValid(WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, Network: Network, ErrorMessage: ErrorMessage) from ./TaoStudioProductHost.tsx
+}
+
+function StudioNetworkShowsError(Network text) returns boolean {
+   return StudioNetworkShowsError(Network) from ./TaoStudioProductHost.tsx
+}
+
+view StudioScenarioEnvironment(Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number, WidthValid boolean, HeightValid boolean, LatencyValid boolean, ErrorStatusValid boolean, SchemeRequested text, SchemeResolved text, SchemeSource text, SchemeCapability text, ChangePreset action(text), ChangeWidth action(number), ChangeHeight action(number), ChangeNetwork action(text), ChangeLatency action(number), ChangeErrorMessage action(text), ChangeErrorStatus action(number), ChangeWidthValid action(boolean), ChangeHeightValid action(boolean), ChangeLatencyValid action(boolean), ChangeErrorStatusValid action(boolean), Apply action()) {
+   action SubmitErrorMessage() { }
+   render StudioScenarioControlGroup("Environment") {
+      Picker(Value: Preset, Change: ChangePreset, Options: ["phone", "tablet", "laptop", "custom"], Label: "Device")
+      StudioNumericInput(Label: "Width", Value: Width, Minimum: 1, Maximum: 0, Integer: false, Change: ChangeWidth, ChangeValid: ChangeWidthValid)
+      StudioNumericInput(Label: "Height", Value: Height, Minimum: 1, Maximum: 0, Integer: false, Change: ChangeHeight, ChangeValid: ChangeHeightValid)
+      Picker(Value: Network, Change: ChangeNetwork, Options: ["normal", "offline", "error"], Label: "Network")
+      StudioNumericInput(Label: "Latency ms", Value: Latency, Minimum: 0, Maximum: 0, Integer: false, Change: ChangeLatency, ChangeValid: ChangeLatencyValid)
+      when StudioNetworkShowsError(Network) {
+         true -> {
+            TextInput(Value: ErrorMessage, Change: ChangeErrorMessage, Submit: SubmitErrorMessage, Label: "Error")
+            StudioNumericInput(Label: "Status", Value: ErrorStatus, Minimum: 100, Maximum: 599, Integer: true, Change: ChangeErrorStatus, ChangeValid: ChangeErrorStatusValid)
+         }
+         otherwise -> { }
+      }
+      Text("Scheme requested: { SchemeRequested }")
+      Text("Scheme resolved: { SchemeResolved }")
+      Text("Scheme source: { SchemeSource }")
+      Text("Scheme capability: { SchemeCapability }")
+      Button("Apply & remount", Apply, Disabled: not StudioEnvironmentValid(WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, Network: Network, ErrorMessage: ErrorMessage))
 }  }
 
-view ProductHostBoundary() accepts content slots @files, @editor, @inspector from ./TaoStudioProductHost.tsx
+view StudioScenarioControlGroup(Title text) accepts content from ./TaoStudioProductHost.tsx
+
+view StudioNumericInput(Label text, Value number, Minimum number, Maximum number, Integer boolean, Change action(number), ChangeValid action(boolean)) from ./TaoStudioProductHost.tsx
+
+view StudioInspectorSection(Title text) accepts content from ./TaoStudioProductHost.tsx
+
+view StudioInspectorSummarySurface() accepts content from ./TaoStudioProductHost.tsx
+
+view StudioInspectorField(Label text) accepts content from ./TaoStudioProductHost.tsx
+
+view StudioInspectorUndoMarker() accepts content from ./TaoStudioProductHost.tsx
+
+view StudioInspectorSummary(CurrentSourceVersion text, Inspection text, Selection text) {
+   render StudioInspectorSummarySurface() {
+      loop StudioInspectorSummaryLines(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection) / Line {
+         Text(Line)
+}  }  }
+
+view StudioInspectorLayout(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, CanUndo boolean, Apply action(text, boolean), Undo action()) {
+   state Drafts = StudioInspectorLayoutDrafts(Inspection)
+   action ChangeDrafts(Value text) {
+      set Drafts = Value
+   }
+   render StudioInspectorSection("Layout") {
+      when StudioInspectorReady(Inspection: Inspection, Selection: Selection) {
+         false -> { Text(StudioInspectorStatus(Inspection: Inspection, Selection: Selection)) }
+         otherwise -> {
+            loop StudioInspectorLayoutFieldIds() / FieldId {
+               StudioInspectorLayoutField(Drafts: Drafts, FieldId: FieldId, ChangeDrafts: ChangeDrafts)
+            }
+            loop StudioInspectorLayoutActionIds() / ActionId {
+               StudioInspectorLayoutCommand(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId, Apply: Apply)
+            }
+            StudioInspectorUndoMarker() {
+               Button("Undo visual edit", Undo, Disabled: not StudioInspectorUndoAvailable(Busy: Busy, CanUndo: CanUndo))
+}  }  }  }  }
+
+view StudioInspectorLayoutField(Drafts text, FieldId text, ChangeDrafts action(text)) {
+   action Change(Value text) {
+      do ChangeDrafts(StudioInspectorUpdateDraft(Drafts: Drafts, FieldId: FieldId, Value: Value))
+   }
+   action Submit() { }
+   render StudioInspectorField(StudioInspectorLayoutFieldLabel(FieldId)) {
+      when StudioInspectorLayoutFieldUsesPicker(FieldId) {
+         true -> { Picker(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Options: StudioInspectorLayoutFieldOptions(FieldId), Label: StudioInspectorLayoutFieldLabel(FieldId)) }
+         otherwise -> { TextInput(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Submit: Submit, Label: StudioInspectorLayoutFieldLabel(FieldId)) }
+}  }  }
+
+view StudioInspectorLayoutCommand(CurrentSourceVersion text, Inspection text, Selection text, Drafts text, Busy boolean, ActionId text, Apply action(text, boolean)) {
+   action Invoke() {
+      do Apply(StudioInspectorLayoutAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts, ActionId: ActionId), false)
+   }
+   render Button(StudioInspectorLayoutActionLabel(ActionId), Invoke, Disabled: not StudioInspectorLayoutActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId))
+}
+
+view StudioInspectorStyle(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Apply action(text, boolean)) {
+   state Drafts = StudioInspectorStyleDrafts(Inspection)
+   action ChangeDrafts(Value text) {
+      set Drafts = Value
+   }
+   action ApplyStyle() {
+      do Apply(StudioInspectorStyleAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts), true)
+   }
+   render StudioInspectorSection("Style") {
+      when StudioInspectorReady(Inspection: Inspection, Selection: Selection) {
+         false -> { Text(StudioInspectorStatus(Inspection: Inspection, Selection: Selection)) }
+         otherwise -> {
+            loop StudioInspectorStyleFieldIds() / FieldId {
+               StudioInspectorStyleField(Inspection: Inspection, Drafts: Drafts, FieldId: FieldId, ChangeDrafts: ChangeDrafts)
+            }
+            Button("Apply style entry", ApplyStyle, Disabled: not StudioInspectorStyleActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy))
+            loop StudioInspectorStylePromotionIds(Inspection) / PromotionId {
+               StudioInspectorStylePromotion(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId, Apply: Apply)
+            }
+            loop StudioInspectorStyleNotes(Inspection) / Note {
+               Text(Note)
+}  }  }  }  }
+
+view StudioInspectorStyleField(Inspection text, Drafts text, FieldId text, ChangeDrafts action(text)) {
+   action Change(Value text) {
+      do ChangeDrafts(StudioInspectorUpdateDraft(Drafts: Drafts, FieldId: FieldId, Value: Value))
+   }
+   action Submit() { }
+   render StudioInspectorField(StudioInspectorStyleFieldLabel(FieldId)) {
+      when StudioInspectorStyleFieldUsesPicker(FieldId) {
+         true -> { Picker(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Options: StudioInspectorStyleFieldOptions(Inspection: Inspection, FieldId: FieldId), Label: StudioInspectorStyleFieldLabel(FieldId)) }
+         otherwise -> { TextInput(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Submit: Submit, Label: StudioInspectorStyleFieldLabel(FieldId)) }
+}  }  }
+
+view StudioInspectorStylePromotion(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, PromotionId text, Apply action(text, boolean)) {
+   action Promote() {
+      do Apply(StudioInspectorStylePromotionAction(Inspection: Inspection, Selection: Selection, PromotionId: PromotionId), true)
+   }
+   render Button(StudioInspectorStylePromotionLabel(Inspection: Inspection, PromotionId: PromotionId), Promote, Disabled: not StudioInspectorStylePromotionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId))
+}
+
+view StudioInspectorData(Inspection text, Selection text, ActiveCellId text, ActiveCellRevision number, ActiveScenarioId text) {
+   render StudioInspectorSection("Data") {
+      loop StudioInspectorDataLines(Inspection: Inspection, Selection: Selection, ActiveCellId: ActiveCellId, ActiveCellRevision: ActiveCellRevision, ActiveScenarioId: ActiveScenarioId) / Line {
+         Text(Line)
+}  }  }
+
+view StudioInspectorActions(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Apply action(text, boolean)) {
+   render StudioInspectorSection("Actions") {
+      when StudioInspectorReady(Inspection: Inspection, Selection: Selection) {
+         false -> { Text(StudioInspectorStatus(Inspection: Inspection, Selection: Selection)) }
+         otherwise -> { loop StudioInspectorActionIds(Inspection: Inspection, Selection: Selection) / ActionId {
+            StudioInspectorActionCommand(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, ActionId: ActionId, Apply: Apply)
+         } }
+}  }  }
+
+view StudioInspectorActionCommand(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, ActionId text, Apply action(text, boolean)) {
+   action Invoke() {
+      do Apply(StudioInspectorAction(Selection: Selection, ActionId: ActionId), false)
+   }
+   render Button(StudioInspectorActionLabel(ActionId), Invoke, Disabled: not StudioInspectorActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, ActionId: ActionId))
+}
+
+function StudioInspectorReady(Inspection text, Selection text) returns boolean {
+   return StudioInspectorReady(Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStatus(Inspection text, Selection text) returns text {
+   return StudioInspectorStatus(Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorSummaryLines(CurrentSourceVersion text, Inspection text, Selection text) returns list of text {
+   return StudioInspectorSummaryLines(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorUndoAvailable(Busy boolean, CanUndo boolean) returns boolean {
+   return StudioInspectorUndoAvailable(Busy: Busy, CanUndo: CanUndo) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutDrafts(Inspection text) returns text {
+   return StudioInspectorLayoutDrafts(Inspection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutFieldIds() returns list of text {
+   return StudioInspectorLayoutFieldIds() from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutFieldLabel(FieldId text) returns text {
+   return StudioInspectorLayoutFieldLabel(FieldId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutFieldUsesPicker(FieldId text) returns boolean {
+   return StudioInspectorLayoutFieldUsesPicker(FieldId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutFieldOptions(FieldId text) returns list of text {
+   return StudioInspectorLayoutFieldOptions(FieldId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorDraft(Drafts text, FieldId text) returns text {
+   return StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorUpdateDraft(Drafts text, FieldId text, Value text) returns text {
+   return StudioInspectorUpdateDraft(Drafts: Drafts, FieldId: FieldId, Value: Value) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutActionIds() returns list of text {
+   return StudioInspectorLayoutActionIds() from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutActionLabel(ActionId text) returns text {
+   return StudioInspectorLayoutActionLabel(ActionId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutActionValid(CurrentSourceVersion text, Inspection text, Selection text, Drafts text, Busy boolean, ActionId text) returns boolean {
+   return StudioInspectorLayoutActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorLayoutAction(Inspection text, Selection text, Drafts text, ActionId text) returns text {
+   return StudioInspectorLayoutAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts, ActionId: ActionId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleDrafts(Inspection text) returns text {
+   return StudioInspectorStyleDrafts(Inspection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleFieldIds() returns list of text {
+   return StudioInspectorStyleFieldIds() from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleFieldLabel(FieldId text) returns text {
+   return StudioInspectorStyleFieldLabel(FieldId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleFieldUsesPicker(FieldId text) returns boolean {
+   return StudioInspectorStyleFieldUsesPicker(FieldId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleFieldOptions(Inspection text, FieldId text) returns list of text {
+   return StudioInspectorStyleFieldOptions(Inspection: Inspection, FieldId: FieldId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleActionValid(CurrentSourceVersion text, Inspection text, Selection text, Drafts text, Busy boolean) returns boolean {
+   return StudioInspectorStyleActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleAction(Inspection text, Selection text, Drafts text) returns text {
+   return StudioInspectorStyleAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStylePromotionIds(Inspection text) returns list of text {
+   return StudioInspectorStylePromotionIds(Inspection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStylePromotionLabel(Inspection text, PromotionId text) returns text {
+   return StudioInspectorStylePromotionLabel(Inspection: Inspection, PromotionId: PromotionId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStylePromotionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, PromotionId text) returns boolean {
+   return StudioInspectorStylePromotionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStylePromotionAction(Inspection text, Selection text, PromotionId text) returns text {
+   return StudioInspectorStylePromotionAction(Inspection: Inspection, Selection: Selection, PromotionId: PromotionId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorStyleNotes(Inspection text) returns list of text {
+   return StudioInspectorStyleNotes(Inspection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorDataLines(Inspection text, Selection text, ActiveCellId text, ActiveCellRevision number, ActiveScenarioId text) returns list of text {
+   return StudioInspectorDataLines(Inspection: Inspection, Selection: Selection, ActiveCellId: ActiveCellId, ActiveCellRevision: ActiveCellRevision, ActiveScenarioId: ActiveScenarioId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorActionIds(Inspection text, Selection text) returns list of text {
+   return StudioInspectorActionIds(Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorActionLabel(ActionId text) returns text {
+   return StudioInspectorActionLabel(ActionId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorActionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, ActionId text) returns boolean {
+   return StudioInspectorActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, ActionId: ActionId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorAction(Selection text, ActionId text) returns text {
+   return StudioInspectorAction(Selection: Selection, ActionId: ActionId) from ./TaoStudioProductHost.tsx
+}
+
+type StudioPanelAction is {
+   Name text,
+   Payload text,
+}
+
+type StudioProblemPanelRow is {
+   Action StudioPanelAction,
+   Actionable boolean,
+   Column number,
+   Detail text,
+   HasPosition boolean,
+   Label text,
+   Line number,
+   Path text,
+   SourceVersion text,
+}
+
+type StudioCompilePanel is {
+   AppliedRevision number,
+   CompileRevision number,
+   DiagnosticCount number,
+   Diagnostics list of StudioProblemPanelRow,
+   Message text,
+   Status text,
+}
+
+type StudioProblemsPanel is {
+   Rows list of StudioProblemPanelRow,
+}
+
+type StudioDataPanelTable is {
+   Datasource text,
+   Entity text,
+   RetainedRowCount number,
+   Rows list of text,
+   TotalRowCount number,
+}
+
+type StudioDataPanel is {
+   CaptureAction StudioPanelAction,
+   Error text,
+   Loading boolean,
+   RefreshAction StudioPanelAction,
+   Source text,
+   Tables list of StudioDataPanelTable,
+}
+
+type StudioTestFailure is {
+   Action StudioPanelAction,
+   Column number,
+   Detail text,
+   HasPosition boolean,
+   Label text,
+   Line number,
+   Path text,
+}
+
+type StudioTestsPanel is {
+   Available boolean,
+   Error text,
+   Failures list of StudioTestFailure,
+   Output text,
+   Reason text,
+   RunAction StudioPanelAction,
+   Running boolean,
+   Summary text,
+   Watch boolean,
+   WatchAction StudioPanelAction,
+}
+
+type StudioLogPanelRow is {
+   Level text,
+   Message text,
+   Timestamp number,
+}
+
+type StudioLogsPanel is {
+   ClearAction StudioPanelAction,
+   RetainedCount number,
+   Rows list of StudioLogPanelRow,
+   Source text,
+   TotalCount number,
+}
+
+type StudioSearchPanelRow is {
+   Action StudioPanelAction,
+   Column number,
+   Detail text,
+   End number,
+   Kind text,
+   Label text,
+   Line number,
+   Path text,
+   SourceVersion text,
+   Start number,
+}
+
+let InitialPanelAction = StudioPanelAction {
+   Name: "refresh-data",
+   Payload: "null"
+}
+let InitialCompilePanel = StudioCompilePanel {
+   AppliedRevision: 0,
+   CompileRevision: 0,
+   DiagnosticCount: 0,
+   Diagnostics: [],
+   Message: "Waiting for the first compile.",
+   Status: "idle"
+}
+let InitialProblemsPanel = StudioProblemsPanel {
+   Rows: []
+}
+let InitialDataPanel = StudioDataPanel {
+   CaptureAction: StudioPanelAction {
+      Name: "capture-fixture",
+      Payload: "null"
+   },
+   Error: "",
+   Loading: false,
+   RefreshAction: InitialPanelAction,
+   Source: "",
+   Tables: []
+}
+let InitialTestsPanel = StudioTestsPanel {
+   Available: false,
+   Error: "",
+   Failures: [],
+   Output: "",
+   Reason: "Waiting for the test runner.",
+   RunAction: StudioPanelAction {
+      Name: "run-tests",
+      Payload: "null"
+   },
+   Running: false,
+   Summary: "",
+   Watch: false,
+   WatchAction: StudioPanelAction {
+      Name: "test-watch",
+      Payload: "true"
+}  }
+let InitialLogsPanel = StudioLogsPanel {
+   ClearAction: StudioPanelAction {
+      Name: "clear-logs",
+      Payload: "null"
+   },
+   RetainedCount: 0,
+   Rows: [],
+   Source: "",
+   TotalCount: 0
+}
+
+view StudioDrawerPanel(Tab text, Compile StudioCompilePanel, Problems StudioProblemsPanel, Data StudioDataPanel, Tests StudioTestsPanel, Logs StudioLogsPanel) {
+   action Dispatch(Name text, Payload text) {
+      do ProductPanelAction(Name: Name, Payload: Payload)
+   }
+   render Col() {
+      when StudioPanelSelected(Tab: Tab, Panel: "Compile") {
+         true -> { StudioCompilePanelView(Compile: Compile, Dispatch: Dispatch) }
+         otherwise -> { }
+      }
+      when StudioPanelSelected(Tab: Tab, Panel: "Problems") {
+         true -> { StudioProblemsPanelView(Problems: Problems, Dispatch: Dispatch) }
+         otherwise -> { }
+      }
+      when StudioPanelSelected(Tab: Tab, Panel: "Data") {
+         true -> { StudioDataPanelView(Data: Data, Dispatch: Dispatch) }
+         otherwise -> { }
+      }
+      when StudioPanelSelected(Tab: Tab, Panel: "Tests") {
+         true -> { StudioTestsPanelView(Tests: Tests, Dispatch: Dispatch) }
+         otherwise -> { }
+      }
+      when StudioPanelSelected(Tab: Tab, Panel: "Logs") {
+         true -> { StudioLogsPanelView(Logs: Logs, Dispatch: Dispatch) }
+         otherwise -> { }
+}  }  }
+
+view StudioPanelCommand(Label text, Command StudioPanelAction, Dispatch action(text, text), Disabled boolean) {
+   action Invoke() {
+      do Dispatch(Command.Name, Command.Payload)
+   }
+   render Button(Label, Invoke, Disabled: Disabled)
+}
+
+view StudioProblemRows(Rows list of StudioProblemPanelRow, Dispatch action(text, text)) {
+   render Col() {
+      when Rows {
+         empty -> { Text("No problems.") }
+         otherwise -> { loop Rows / Row {
+            when Row.Actionable {
+               true -> { StudioPanelCommand(Label: Row.Label, Command: Row.Action, Dispatch: Dispatch, Disabled: false) }
+               otherwise -> { Text(Row.Label) }
+            }
+            Text(Row.Detail)
+            when Row.Path {
+               empty -> { }
+               otherwise -> {
+                  Text("{ Row.Path } · source { Row.SourceVersion }")
+                  when Row.HasPosition {
+                     true -> { Text("Line { Row.Line + 1 }:{ Row.Column + 1 }") }
+                     otherwise -> { }
+            }  }  }
+         } }
+}  }  }
+
+view StudioCompilePanelView(Compile StudioCompilePanel, Dispatch action(text, text)) {
+   render Col() {
+      Text("Compile: { Compile.Status }")
+      Text(Compile.Message)
+      Text("Revision { Compile.CompileRevision } · applied { Compile.AppliedRevision } · { Compile.DiagnosticCount } diagnostics")
+      StudioProblemRows(Rows: Compile.Diagnostics, Dispatch: Dispatch)
+}  }
+
+view StudioProblemsPanelView(Problems StudioProblemsPanel, Dispatch action(text, text)) {
+   render StudioProblemRows(Rows: Problems.Rows, Dispatch: Dispatch)
+}
+
+view StudioDataPanelView(Data StudioDataPanel, Dispatch action(text, text)) {
+   render Col() {
+      StudioPanelCommand(Label: "Refresh data", Command: Data.RefreshAction, Dispatch: Dispatch, Disabled: Data.Loading)
+      StudioPanelCommand(Label: "Capture fixture", Command: Data.CaptureAction, Dispatch: Dispatch, Disabled: false)
+      when Data.Source {
+         empty -> { Text("Select a preview cell to inspect live data.") }
+         otherwise -> { Text("Active cell: { Data.Source }") }
+      }
+      when Data.Loading {
+         true -> { Text("Refreshing live app data…") }
+         otherwise -> { }
+      }
+      when Data.Error {
+         empty -> { }
+         otherwise -> { Text(Data.Error) }
+      }
+      when Data.Tables {
+         empty -> { Text("No captured entity tables.") }
+         otherwise -> { loop Data.Tables / Table {
+            StudioDataTableView(Table)
+         } }
+}  }  }
+
+view StudioDataTableView(Table StudioDataPanelTable) {
+   render Col() {
+      Text("{ Table.Datasource } / { Table.Entity }")
+      Text("{ Table.RetainedRowCount } of { Table.TotalRowCount } rows")
+      loop Table.Rows / Row {
+         Text(Row)
+}  }  }
+
+view StudioTestsPanelView(Tests StudioTestsPanel, Dispatch action(text, text)) {
+   render Col() {
+      StudioPanelCommand(Label: "Run tests", Command: Tests.RunAction, Dispatch: Dispatch, Disabled: not Tests.Available or Tests.Running)
+      when Tests.Watch {
+         true -> { StudioPanelCommand(Label: "Disable compile watch", Command: Tests.WatchAction, Dispatch: Dispatch, Disabled: false) }
+         otherwise -> { StudioPanelCommand(Label: "Enable compile watch", Command: Tests.WatchAction, Dispatch: Dispatch, Disabled: false) }
+      }
+      when Tests.Running {
+         true -> { Text("Running Tao tests…") }
+         otherwise -> { }
+      }
+      when Tests.Reason {
+         empty -> { }
+         otherwise -> { Text(Tests.Reason) }
+      }
+      when Tests.Error {
+         empty -> { }
+         otherwise -> { Text(Tests.Error) }
+      }
+      when Tests.Summary {
+         empty -> { }
+         otherwise -> { Text(Tests.Summary) }
+      }
+      loop Tests.Failures / Failure {
+         StudioPanelCommand(Label: Failure.Label, Command: Failure.Action, Dispatch: Dispatch, Disabled: false)
+         Text(Failure.Detail)
+         Text(Failure.Path)
+         when Failure.HasPosition {
+            true -> { Text("Line { Failure.Line }:{ Failure.Column }") }
+            otherwise -> { }
+      }  }
+      when Tests.Output {
+         empty -> { }
+         otherwise -> { Text(Tests.Output) }
+}  }  }
+
+view StudioLogsPanelView(Logs StudioLogsPanel, Dispatch action(text, text)) {
+   render Col() {
+      StudioPanelCommand(Label: "Clear logs", Command: Logs.ClearAction, Dispatch: Dispatch, Disabled: false)
+      when Logs.Source {
+         empty -> { Text("Select a preview cell to inspect console history.") }
+         otherwise -> { Text("Active cell: { Logs.Source }") }
+      }
+      Text("Showing { Logs.RetainedCount } of { Logs.TotalCount } messages")
+      when Logs.Rows {
+         empty -> { Text("No console messages from the active preview.") }
+         otherwise -> { loop Logs.Rows / Row {
+            Text("{ Row.Level } · { Row.Timestamp } · { Row.Message }")
+         } }
+}  }  }
+
+view StudioSearchPanel(Rows list of StudioSearchPanelRow) {
+   action Dispatch(Name text, Payload text) {
+      do ProductPanelAction(Name: Name, Payload: Payload)
+   }
+   render Col() {
+      when Rows {
+         empty -> { Text("No search results.") }
+         otherwise -> { loop Rows / Row {
+            StudioPanelCommand(Label: Row.Label, Command: Row.Action, Dispatch: Dispatch, Disabled: false)
+            Text("{ Row.Kind } · { Row.Detail }")
+            Text("{ Row.Path } · source { Row.SourceVersion }")
+         } }
+}  }  }
+
+function StudioPanelSelected(Tab text, Panel text) returns boolean {
+   return StudioPanelSelected(Tab: Tab, Panel: Panel) from ./TaoStudioProductHost.tsx
+}
+
+view StudioScenarioPanel(State text, ResolvedAppearance text) {
+   state Drafts = StudioScenarioArgumentDrafts(State)
+   state FixtureName = "CapturedState"
+   action Dispatch(Name text, Payload text) {
+      do ProductPanelAction(Name: Name, Payload: Payload)
+   }
+   action ChangeDrafts(Value text) {
+      set Drafts = Value
+   }
+   action ChangeFixtureName(Value text) {
+      set FixtureName = Value
+   }
+   action SubmitFixtureName() { }
+   action ApplyArguments() {
+      do Dispatch(Name: "scenario-apply-arguments", Payload: StudioScenarioArgumentsPayload(State: State, Drafts: Drafts, Appearance: ResolvedAppearance))
+   }
+   action SaveArguments() {
+      do Dispatch(Name: "scenario-save-arguments", Payload: StudioScenarioArgumentsPayload(State: State, Drafts: Drafts, Appearance: ResolvedAppearance))
+   }
+   action CaptureFixture() {
+      do Dispatch(Name: "scenario-capture-fixture", Payload: StudioScenarioFixturePayload(State: State, FixtureName: FixtureName))
+   }
+   action ReplayFailure() {
+      do Dispatch(Name: "scenario-replay-failure", Payload: StudioScenarioIdentityPayload(State))
+   }
+   action ReplayCapture(Capture text) {
+      do Dispatch(Name: "scenario-replay-capture", Payload: StudioScenarioReplayPayload(State: State, Capture: Capture))
+   }
+   render StudioScenarioPanelSurface(StudioScenarioAvailable(State)) {
+      when StudioScenarioAvailable(State) {
+         false -> { Text("Select a scenario preview cell to edit its arguments.") }
+         otherwise -> {
+            Text(StudioScenarioEntryLabel(State))
+            Text(StudioScenarioGroupLabel(State))
+            Text(StudioScenarioSubjectId(State))
+            Text(StudioScenarioCellIdentity(State))
+            StudioScenarioControlGroup("View arguments") {
+               when StudioScenarioArgumentIds(State) {
+                  empty -> { Text("This scenario has no view arguments.") }
+                  otherwise -> { loop StudioScenarioArgumentIds(State) / ParameterId {
+                     StudioScenarioArgument(State: State, Drafts: Drafts, ParameterId: ParameterId, ChangeDrafts: ChangeDrafts)
+                  } }
+               }
+               Text(StudioScenarioArgumentIssues(State: State, Drafts: Drafts))
+            }
+            StudioScenarioControlGroup("Captured state layers") {
+               when StudioScenarioCapturedLayers(State) {
+                  empty -> { Text("None") }
+                  otherwise -> { loop StudioScenarioCapturedLayers(State) / Layer {
+                     Text(Layer)
+                  } }
+            }  }
+            StudioScenarioControlGroup("Actions") {
+               Button("Apply & remount", ApplyArguments, Disabled: not StudioScenarioArgumentsValid(State: State, Drafts: Drafts))
+               Button("Save to scenario", SaveArguments, Disabled: not StudioScenarioArgumentsValid(State: State, Drafts: Drafts))
+               TextInput(Value: FixtureName, Change: ChangeFixtureName, Submit: SubmitFixtureName, Label: "Captured fixture name", Placeholder: "CapturedState")
+               Button("Capture fixture", CaptureFixture, Disabled: not StudioScenarioFixtureNameValid(FixtureName))
+               Button("Replay captured state", ReplayFailure, Disabled: not StudioScenarioFailureAvailable(State))
+               StudioFailureCaptureInput(Replay: ReplayCapture)
+}  }  }  }  }
+
+view StudioScenarioPanelSurface(Available boolean) accepts content from ./TaoStudioProductHost.tsx
+
+view StudioScenarioArgument(State text, Drafts text, ParameterId text, ChangeDrafts action(text)) {
+   action Change(Value text) {
+      do ChangeDrafts(StudioScenarioUpdateArgumentDraft(Drafts: Drafts, ParameterId: ParameterId, Value: Value))
+   }
+   action Submit() { }
+   render Col() {
+      when StudioScenarioArgumentUsesPicker(State: State, ParameterId: ParameterId) {
+         true -> { Picker(Value: StudioScenarioArgumentDraft(Drafts: Drafts, ParameterId: ParameterId), Change: Change, Options: StudioScenarioArgumentOptions(State: State, ParameterId: ParameterId), Label: StudioScenarioArgumentLabel(State: State, ParameterId: ParameterId)) }
+         otherwise -> { TextInput(Value: StudioScenarioArgumentDraft(Drafts: Drafts, ParameterId: ParameterId), Change: Change, Submit: Submit, Label: StudioScenarioArgumentLabel(State: State, ParameterId: ParameterId)) }
+}  }  }
+
+function StudioScenarioAvailable(State text) returns boolean {
+   return StudioScenarioAvailable(State) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioArgumentDrafts(State text) returns text {
+   return StudioScenarioArgumentDrafts(State) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioArgumentIds(State text) returns list of text {
+   return StudioScenarioArgumentIds(State) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioEntryLabel(State text) returns text {
+   return StudioScenarioEntryLabel(State) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioGroupLabel(State text) returns text {
+   return StudioScenarioGroupLabel(State) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioSubjectId(State text) returns text {
+   return StudioScenarioSubjectId(State) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioCellIdentity(State text) returns text {
+   return StudioScenarioCellIdentity(State) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioCapturedLayers(State text) returns list of text {
+   return StudioScenarioCapturedLayers(State) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioFailureAvailable(State text) returns boolean {
+   return StudioScenarioFailureAvailable(State) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioFixtureNameValid(FixtureName text) returns boolean {
+   return StudioScenarioFixtureNameValid(FixtureName) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioIdentityPayload(State text) returns text {
+   return StudioScenarioIdentityPayload(State) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioArgumentDraft(Drafts text, ParameterId text) returns text {
+   return StudioScenarioArgumentDraft(Drafts: Drafts, ParameterId: ParameterId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioArgumentUsesPicker(State text, ParameterId text) returns boolean {
+   return StudioScenarioArgumentUsesPicker(State: State, ParameterId: ParameterId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioArgumentLabel(State text, ParameterId text) returns text {
+   return StudioScenarioArgumentLabel(State: State, ParameterId: ParameterId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioArgumentOptions(State text, ParameterId text) returns list of text {
+   return StudioScenarioArgumentOptions(State: State, ParameterId: ParameterId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioUpdateArgumentDraft(Drafts text, ParameterId text, Value text) returns text {
+   return StudioScenarioUpdateArgumentDraft(Drafts: Drafts, ParameterId: ParameterId, Value: Value) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioArgumentsValid(State text, Drafts text) returns boolean {
+   return StudioScenarioArgumentsValid(State: State, Drafts: Drafts) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioArgumentIssues(State text, Drafts text) returns text {
+   return StudioScenarioArgumentIssues(State: State, Drafts: Drafts) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioArgumentsPayload(State text, Drafts text, Appearance text) returns text {
+   return StudioScenarioArgumentsPayload(State: State, Drafts: Drafts, Appearance: Appearance) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioFixturePayload(State text, FixtureName text) returns text {
+   return StudioScenarioFixturePayload(State: State, FixtureName: FixtureName) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioReplayPayload(State text, Capture text) returns text {
+   return StudioScenarioReplayPayload(State: State, Capture: Capture) from ./TaoStudioProductHost.tsx
+}
+
+view StudioFailureCaptureInput(Replay action(text)) from ./TaoStudioProductHost.tsx
+
+view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
+   render ProductHostBoundary() {
+      @files FilesPanel(CollapsedFolders: CollapsedFolders, ToggleFolder: ToggleFolder)
+      @components ComponentsPanel()
+      @projectViews ProjectViewsPanel()
+      @screens ScreensPanel()
+      @tokens DesignTokensPanel()
+      @search StudioSearchPanel([])
+      @drawer StudioDrawerPanel(Tab: "Problems", Compile: InitialCompilePanel, Problems: InitialProblemsPanel, Data: InitialDataPanel, Tests: InitialTestsPanel, Logs: InitialLogsPanel)
+      @scenario StudioScenarioPanel(State: "null", ResolvedAppearance: "light")
+      @editor StudioEditorSurface()
+      @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", ActiveCellId: "", CellRevision: 0, ActiveScenarioId: "", ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser", InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null")
+}  }
+
+view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @search, @drawer, @scenario, @editor, @inspector from ./TaoStudioProductHost.tsx

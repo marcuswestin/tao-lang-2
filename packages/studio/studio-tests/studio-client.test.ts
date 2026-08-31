@@ -1,13 +1,18 @@
 import { EditorState, type Transaction } from '@codemirror/state'
 import { type Command, type EditorView, keymap } from '@codemirror/view'
 import { Expect, Test } from '@shared/test'
+import type { StudioRenderInspection } from '@source-actions'
 import {
   StudioApiError,
   StudioApiEventStream,
   StudioApiRoutes,
   type StudioHandshake,
 } from '../studio-src/client/StudioApiClient'
-import { StudioDataFillCoordinator, StudioProjectContext } from '../studio-src/client/StudioApp'
+import {
+  parseScenarioPanelCommand,
+  StudioDataFillCoordinator,
+  StudioProjectContext,
+} from '../studio-src/client/StudioApp'
 import { StudioEditorTabs } from '../studio-src/client/StudioEditorTabs'
 import {
   StudioFileTreeController,
@@ -32,6 +37,8 @@ import {
 } from '../studio-src/client/StudioMatrixView'
 import {
   StudioCommandPalette,
+  StudioPanelBounds,
+  StudioPanelModels,
   StudioProductCapabilities,
 } from '../studio-src/client/StudioProductPanels'
 import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
@@ -56,20 +63,27 @@ import {
   type StudioDraftSyncResult,
 } from '../studio-src/StudioDraftSync'
 import { StudioInspector } from '../studio-src/StudioInspector'
+import { StudioPanelPayloads } from '../studio-src/StudioPanelPayloads'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 import {
   publishStudioProductHostState,
   registerStudioProductHostActions,
   rejectPendingStudioProductHostActions,
+  requestStudioProductHostApplyActiveCellEnvironment,
   requestStudioProductHostChangeActiveFile,
   requestStudioProductHostCreateFile,
   requestStudioProductHostOpenFile,
+  requestStudioProductHostPanelAction,
   requestStudioProductHostSelectActiveFile,
   studioProductHostState,
   subscribeStudioProductHostState,
   validStudioProductHostPath,
 } from '../studio-src/StudioProductHostProtocol'
-import { studioProtocolChannel, studioProtocolVersion } from '../studio-src/StudioProtocol'
+import {
+  studioProtocolChannel,
+  studioProtocolVersion,
+  studioSourceActionVersion,
+} from '../studio-src/StudioProtocol'
 import { StudioTestOutput } from '../studio-src/StudioTestRunner'
 
 Test('Studio browser assets produce a self-contained CodeMirror client and escape injected config', async () => {
@@ -102,6 +116,14 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('/api/tests/run')
   Expect(bundle).toContain('capture-runtime')
   Expect(bundle).toContain('No console messages from the active preview.')
+  Expect(bundle).toContain('Refresh data')
+  Expect(bundle).toContain('Capture fixture')
+  Expect(bundle).toContain('Run tests')
+  Expect(bundle).toContain('Enable compile watch')
+  Expect(bundle).toContain('Clear logs')
+  Expect(bundle).toContain('No search results.')
+  Expect(bundle).not.toContain('StudioDrawerPanelSurface')
+  Expect(bundle).not.toContain('StudioSearchPanelSurface')
   Expect(bundle).toContain('/api/design')
   Expect(moduleInputs.some(path => path.includes('/react@19.1.0/'))).toBe(true)
   Expect(moduleInputs.some(path => path.includes('/react@19.2.8/'))).toBe(false)
@@ -150,7 +172,8 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).not.toContain('window.location.reload')
   Expect(bundle).toContain('No editable arguments')
   Expect(bundle).toContain('Injected Studio network failure')
-  Expect(bundle).toContain('Inert — runtime Scheme support is not available yet.')
+  Expect(bundle).toContain('Scenario appearance is authored in Tao')
+  Expect(bundle).not.toContain('Scheme support is not available yet')
   Expect(bundle).toContain('taoStudioPreviewInstanceId')
   Expect(bundle).toContain('taoStudioSessionId')
   Expect(bundle).not.toContain('taoStudioArgs')
@@ -274,19 +297,39 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
   const unsubscribeState = subscribeStudioProductHostState(() => stateUpdates += 1)
   const earlyOpen = requestStudioProductHostOpenFile('Queued.tao')
   const unregister = registerStudioProductHostActions({
-    async applyActiveCellEnvironment() {},
+    async applyInspectorAction(action, proposed) {
+      calls.push(`inspector:${action.kind}:${proposed}`)
+    },
+    async applyActiveCellEnvironment(identity) {
+      calls.push(`environment:${identity.cellId}:${identity.cellRevision}`)
+      if (identity.cellId === 'stale') {
+        throw new StudioApiError('stale preview', 409, { code: 'stale-cell' })
+      }
+    },
     changeActiveFile(content) {
       calls.push(`change:${content}`)
     },
     async createFile(path) {
       calls.push(`create:${path}`)
-      throw new StudioApiError('server conflict', 409)
+      throw new StudioApiError('server conflict', 409, { code: 'stale-source', path })
     },
     async deleteFile(path, sourceVersion) {
       calls.push(`delete:${path}:${sourceVersion}`)
     },
+    insertComponent(component) {
+      calls.push(`component:${component}`)
+    },
+    insertProjectView(viewName) {
+      calls.push(`view:${viewName}`)
+    },
     async openFile(path) {
       calls.push(`open:${path}`)
+    },
+    async openScreen(subjectId) {
+      calls.push(`screen:${subjectId}`)
+    },
+    async productPanelAction(name, payload) {
+      calls.push(`panel:${name}:${payload}`)
     },
     async renameFile(path, sourceVersion, targetPath) {
       calls.push(`rename:${path}:${sourceVersion}:${targetPath}`)
@@ -294,17 +337,51 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
     selectActiveFile(anchor, head) {
       calls.push(`select:${anchor}:${head}`)
     },
+    async undoInspectorAction() {
+      calls.push('inspector:undo')
+    },
   })
   try {
     await earlyOpen
     await Expect(requestStudioProductHostCreateFile('Conflict.tao')).rejects.toMatchObject({
       caseName: 'Conflict',
+      details: { code: 'stale-source', path: 'Conflict.tao' },
       message: 'This file changed under this edit.',
     })
     Expect(calls).toEqual(['open:Queued.tao', 'create:Conflict.tao'])
     Expect(validStudioProductHostPath('Folder/File.tao')).toBe(true)
     Expect(validStudioProductHostPath('Folder\\File.tao')).toBe(false)
     await Expect(requestStudioProductHostOpenFile('../Outside.tao')).rejects.toThrow('project-relative Tao')
+    await requestStudioProductHostPanelAction('run-tests', 'null')
+    await Expect(requestStudioProductHostPanelAction('', 'null')).rejects.toThrow('panel')
+    await Expect(requestStudioProductHostPanelAction('run-tests', 'x'.repeat(1_000_001))).rejects.toThrow(
+      'at most one megabyte',
+    )
+    await requestStudioProductHostApplyActiveCellEnvironment(
+      { cellId: 'cell:1', cellRevision: 7 },
+      {
+        network: { latencyMs: 0, outcome: 'normal' },
+        viewport: { height: 844, presetId: 'phone', width: 390 },
+      },
+    )
+    await Expect(requestStudioProductHostApplyActiveCellEnvironment(
+      { cellId: '', cellRevision: 7 },
+      {
+        network: { latencyMs: 0, outcome: 'normal' },
+        viewport: { height: 844, presetId: 'phone', width: 390 },
+      },
+    )).rejects.toThrow('current cell identity and revision')
+    await Expect(requestStudioProductHostApplyActiveCellEnvironment(
+      { cellId: 'stale', cellRevision: 6 },
+      {
+        network: { latencyMs: 0, outcome: 'normal' },
+        viewport: { height: 844, presetId: 'phone', width: 390 },
+      },
+    )).rejects.toMatchObject({
+      caseName: 'Conflict',
+      details: { code: 'stale-cell' },
+      message: 'This preview changed while its environment was being edited.',
+    })
     const previousRevision = studioProductHostState().revision
     const state = publishStudioProductHostState({
       activeFile: {
@@ -322,7 +399,13 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
     Expect(stateUpdates).toBe(1)
     requestStudioProductHostChangeActiveFile('changed')
     requestStudioProductHostSelectActiveFile(2, 5)
-    Expect(calls.slice(-2)).toEqual(['change:changed', 'select:2:5'])
+    Expect(calls.slice(-5)).toEqual([
+      'panel:run-tests:null',
+      'environment:cell:1:7',
+      'environment:stale:6',
+      'change:changed',
+      'select:2:5',
+    ])
   } finally {
     unsubscribeState()
     unregister()
@@ -332,6 +415,111 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
   cancellation.name = 'AbortError'
   rejectPendingStudioProductHostActions(cancellation)
   await Expect(abandoned).rejects.toMatchObject({ name: 'AbortError' })
+})
+
+Test('Studio Tao scenario actions require exact typed cell-bound payloads', () => {
+  Expect(parseScenarioPanelCommand(
+    'scenario-save-arguments',
+    JSON.stringify({
+      appearance: 'dark',
+      arguments: { Count: 3 },
+      cellId: 'cell:states:default',
+      cellRevision: 8,
+    }),
+  )).toEqual({
+    appearance: 'dark',
+    arguments: { Count: 3 },
+    cellId: 'cell:states:default',
+    cellRevision: 8,
+    kind: 'scenario-save-arguments',
+  })
+  Expect(parseScenarioPanelCommand(
+    'scenario-replay-failure',
+    JSON.stringify({
+      cellId: 'cell:states:default',
+      cellRevision: 8,
+    }),
+  )).toEqual({
+    cellId: 'cell:states:default',
+    cellRevision: 8,
+    kind: 'scenario-replay-failure',
+  })
+  Expect(() => parseScenarioPanelCommand('scenario-save-arguments', '{}')).toThrow(
+    'active cell identity and revision',
+  )
+  Expect(() => parseScenarioPanelCommand('scenario-save-arguments', '{')).toThrow('valid object payload')
+  Expect(() =>
+    parseScenarioPanelCommand(
+      'scenario-save-arguments',
+      JSON.stringify({
+        appearance: 'system',
+        arguments: { Count: 3 },
+        cellId: 'cell:states:default',
+        cellRevision: 8,
+      }),
+    )
+  ).toThrow('resolved light or dark appearance')
+  Expect(() =>
+    parseScenarioPanelCommand(
+      'scenario-save-arguments',
+      JSON.stringify({ arguments: [], cellId: 'cell:states:default', cellRevision: 8 }),
+    )
+  ).toThrow('arguments require a JSON object')
+  Expect(() =>
+    parseScenarioPanelCommand(
+      'scenario-unknown',
+      JSON.stringify({
+        cellId: 'cell:states:default',
+        cellRevision: 8,
+      }),
+    )
+  ).toThrow('Unsupported Tao Studio scenario action')
+})
+
+Test('Studio validates every serialized ProductHost panel payload before navigation or mutation', () => {
+  Expect(StudioPanelPayloads.compileDiagnostic(JSON.stringify({
+    filePath: 'Garden.tao',
+    message: 'Broken',
+    range: { end: { character: 5, line: 2 }, start: { character: 1, line: 2 } },
+  }))).toMatchObject({ message: 'Broken' })
+  Expect(StudioPanelPayloads.testFailure(JSON.stringify({
+    filePath: 'Garden.test.tao',
+    line: 4,
+    message: 'Expected text',
+    name: 'journey',
+  }))).toMatchObject({ line: 4, name: 'journey' })
+  Expect(StudioPanelPayloads.searchResult(JSON.stringify({
+    detail: 'Text("Match")',
+    kind: 'text',
+    label: 'Garden.tao:3',
+    path: 'Garden.tao',
+    start: 12,
+  }))).toMatchObject({ kind: 'text', start: 12 })
+  Expect(StudioPanelPayloads.sourceAction(JSON.stringify({ kind: 'set-layout-entry' }))).toEqual({
+    kind: 'set-layout-entry',
+  })
+
+  for (
+    const parse of [
+      StudioPanelPayloads.compileDiagnostic,
+      StudioPanelPayloads.searchResult,
+      StudioPanelPayloads.sourceAction,
+      StudioPanelPayloads.testFailure,
+    ]
+  ) {
+    Expect(() => parse('{')).toThrow('valid structured payload')
+  }
+  Expect(() => StudioPanelPayloads.compileDiagnostic(JSON.stringify({ message: 42 }))).toThrow(
+    'valid structured payload',
+  )
+  Expect(() =>
+    StudioPanelPayloads.testFailure(JSON.stringify({
+      filePath: 'Garden.test.tao',
+      line: -1,
+      message: 'Broken',
+      name: 'journey',
+    }))
+  ).toThrow('valid structured payload')
 })
 
 Test('Studio preview teardown releases observers and pending capture work', () => {
@@ -364,6 +552,53 @@ Test('Studio preview teardown releases observers and pending capture work', () =
   Expect(preview.iframe.src).toBe('about:blank')
   Expect(preview.runtimeCaptureRequest).toBeUndefined()
   Expect(preview.visibilityObserver).toBeUndefined()
+})
+
+Test('Studio Tao fixture capture rejects its pending action when the active preview reports failure', async () => {
+  const previewWindow = {}
+  const preview = previewConnection('preview-capture', 'default', previewWindow)
+  let rejected = ''
+  preview.capture = {
+    fixtureName: 'CapturedState',
+    identity: {
+      appName: 'Garden',
+      path: 'Garden.tao',
+      previewInstanceId: preview.previewInstanceId,
+      project: '/workspace',
+      sourceVersion: 'source-1',
+    },
+    reject(error) {
+      rejected = error.message
+    },
+    requestId: 'capture-1',
+    resolve() {},
+    timeout: setTimeout(() => {}, 10_000),
+  }
+  await handlePreviewMessage(
+    {
+      data: {
+        channel: studioProtocolChannel,
+        error: 'Provider capture failed safely.',
+        identity: {
+          appName: 'Garden',
+          previewInstanceId: preview.previewInstanceId,
+          project: '/workspace',
+        },
+        protocolVersion: studioProtocolVersion,
+        requestId: 'capture-1',
+        type: 'preview-fixture-capture-failed',
+      },
+      origin: preview.origin,
+      source: previewWindow,
+    } as MessageEvent,
+    preview,
+    { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake,
+    async () => undefined,
+    { async applySourceAction() {}, inspect() {} },
+  )
+
+  Expect(rejected).toBe('Provider capture failed safely.')
+  Expect(preview.capture).toBeUndefined()
 })
 
 Test('Studio pane sizes load safe defaults and persist all divider dimensions', () => {
@@ -878,6 +1113,23 @@ Test('Studio command palette indexes files, views, grouped scenarios, commands, 
   Expect(StudioProductCapabilities.tokenWrites.available).toBe(true)
 })
 
+Test('Studio product panel models bound retained data, logs, and test output', () => {
+  const data = Array.from({ length: StudioPanelBounds.dataRowsPerTable + 1 }, (_, Id) => ({ Id }))
+  const logs = Array.from({ length: StudioPanelBounds.logs + 5 }, (_, timestamp) => ({
+    arguments: [timestamp],
+    level: 'log' as const,
+    timestamp,
+  }))
+  const output = `first:${'x'.repeat(StudioPanelBounds.testOutputCharacters)}:last`
+
+  Expect(StudioPanelModels.dataRows(data)).toHaveLength(StudioPanelBounds.dataRowsPerTable)
+  Expect(StudioPanelModels.logs(logs)).toHaveLength(StudioPanelBounds.logs)
+  Expect(StudioPanelModels.logs(logs)[0]?.timestamp).toBe(5)
+  Expect(StudioPanelModels.testOutput(output)).toStartWith('first:')
+  Expect(StudioPanelModels.testOutput(output)).toContain('characters omitted')
+  Expect(StudioPanelModels.testOutput(output)).toEndWith(':last')
+})
+
 Test('Studio Screens and Search rails derive navigable manifest and project matches', () => {
   const manifest = {
     subjects: [{
@@ -896,15 +1148,17 @@ Test('Studio Screens and Search rails derive navigable manifest and project matc
     start: 8,
   }])
   Expect(StudioRailPanels.search(
-    [{ content: 'view Card() {\n   Text("Novel")\n}', path: 'Card.tao' }],
+    [{ content: 'view Card() {\n   Text("Novel")\n}', path: 'Card.tao', sourceVersion: 'card-2' }],
     [{ filePath: '/workspace/Garden.tao', message: 'Novel warning' }],
     'novel',
+    { '/workspace/Garden.tao': 'garden-4' },
   )).toEqual([
     {
       detail: 'Novel warning',
       kind: 'diagnostic',
       label: 'Problem · Garden.tao',
       path: '/workspace/Garden.tao',
+      sourceVersion: 'garden-4',
     },
     {
       detail: 'Text("Novel")',
@@ -912,6 +1166,7 @@ Test('Studio Screens and Search rails derive navigable manifest and project matc
       kind: 'text',
       label: 'Card.tao:2',
       path: 'Card.tao',
+      sourceVersion: 'card-2',
       start: 23,
     },
   ])
@@ -946,6 +1201,7 @@ Test('Studio selection from a second scenario group makes that cell active for t
         channel: studioProtocolChannel,
         identity: {
           ...previews[1]!.cellIdentity,
+          occurrence: { nodeKind: 'render', renderOwner: 'Main' },
           path: '/workspace/Garden.tao',
           previewInstanceId: 'preview-second',
           sourceVersion: 'source-2',
@@ -976,7 +1232,12 @@ Test('Studio selection from a second scenario group makes that cell active for t
     },
   )
 
-  Expect(selected).toBeDefined()
+  Expect(selected).toMatchObject({
+    identity: {
+      occurrence: { nodeKind: 'render', renderOwner: 'Main' },
+      scenarioId: 'second',
+    },
+  })
   Expect(active.current()).toBe(previews[1])
   Expect(currentSourceIdentity(handshake, active.current(), {
     content: 'view Main() {}',
@@ -986,8 +1247,59 @@ Test('Studio selection from a second scenario group makes that cell active for t
     cellId: 'second',
     path: '/workspace/Garden.tao',
     previewInstanceId: 'preview-second',
+    scenarioId: 'second',
     sourceVersion: 'source-2',
   })
+  Expect(currentSourceIdentity(handshake, { ...active.current()!, cell: undefined }, {
+    content: 'view Main() {}',
+    path: 'Garden.tao',
+    sourceVersion: 'source-2',
+  })).toBeUndefined()
+})
+
+Test('Studio attaches the active cell scenario to preview-originated source actions', async () => {
+  const contentWindow = {}
+  const preview = previewConnection('preview-second', 'second', contentWindow)
+  const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
+  let applied: unknown
+
+  await handlePreviewMessage(
+    {
+      data: {
+        action: {
+          beforeId: '/workspace/Garden.tao:30:40',
+          draggedId: '/workspace/Garden.tao:10:20',
+          kind: 'move-render',
+        },
+        channel: studioProtocolChannel,
+        checkpoint: { id: 'move-1', phase: 'single' },
+        identity: {
+          ...preview.cellIdentity,
+          occurrence: { nodeKind: 'render', renderOwner: 'Main' },
+          path: '/workspace/Garden.tao',
+          previewInstanceId: preview.previewInstanceId,
+          sourceVersion: 'source-2',
+        },
+        protocolVersion: studioProtocolVersion,
+        requestId: 'move-request-1',
+        sourceActionVersion: studioSourceActionVersion,
+        type: 'source-action',
+      },
+      origin: preview.origin,
+      source: contentWindow,
+    } as MessageEvent,
+    preview,
+    handshake,
+    async () => undefined,
+    {
+      async applySourceAction(envelope) {
+        applied = envelope
+      },
+      inspect() {},
+    },
+  )
+
+  Expect(applied).toMatchObject({ identity: { scenarioId: 'second' } })
 })
 
 Test('Studio passive preview startup and console messages do not steal the active canvas cell', async () => {
@@ -1139,7 +1451,31 @@ Test('Studio runtime failures activate their cell and retain a replay with Studi
   }
   const configured = studioReplayConfiguration(devEnvironment, preview.cell.environment)
   Expect(configured.replay).toBe(devEnvironment)
-  Expect(configured.environment).toBe(preview.cell.environment)
+  Expect(configured.environment).toEqual(preview.cell.environment)
+
+  const capturedDark = {
+    ...capture,
+    domains: [
+      ...capture.domains,
+      {
+        domain: 'scheme',
+        value: {
+          capability: 'reactive-browser',
+          requested: 'system',
+          resolved: 'dark',
+          source: 'system',
+        },
+        version: 1,
+      },
+    ],
+  }
+  const darkReplay = studioReplayConfiguration(capturedDark, preview.cell.environment)
+  Expect(darkReplay.environment.scheme).toEqual({
+    capability: 'reactive-browser',
+    requested: 'system',
+    resolved: 'dark',
+    source: 'system',
+  })
 })
 
 Test('Studio editor Mod-/ binding toggles Tao line comments for selected lines', () => {
@@ -1199,6 +1535,7 @@ Test('Studio inspector derives canonical render identity, manifest views, and on
     channel: studioProtocolChannel,
     identity: {
       appName: 'Garden',
+      occurrence: { nodeKind: 'render', renderOwner: 'Main' },
       path: '/workspace/Garden.tao',
       previewInstanceId: 'preview-1',
       project: '/workspace',
@@ -1241,6 +1578,130 @@ Test('Studio inspector derives canonical render identity, manifest views, and on
   } as unknown as StudioPreviewManifestV2
   Expect(StudioInspector.projectViews(manifest).map(view => [view.viewName, view.snippet.text]))
     .toEqual([['Card', 'Card()'], ['Form', 'Form(Value: "text")']])
+})
+
+Test('Studio inspector models the complete parsed layout vocabulary without inventing defaults', () => {
+  const inspection = {
+    explorations: [],
+    layoutEntries: [
+      ['gap', 8],
+      ['pad', 'horizontal', 12, 'vertical', 6],
+      ['margin', 4],
+      ['width', 'max', 720],
+      ['height', 'fill'],
+      ['fill'],
+      ['claim', 2],
+      ['hug'],
+      ['compress'],
+      ['rigid'],
+      ['aligned', 'left'],
+      ['centered'],
+      ['content', 'spread-balanced', 'stretch'],
+    ],
+    renderId: '/workspace/Garden.tao:20:42',
+    styleEntries: [],
+    styleProvenance: [],
+  } as StudioRenderInspection
+
+  Expect(StudioInspector.layout(inspection)).toEqual({
+    alignment: { mode: 'centered' },
+    content: ['spread-balanced', 'stretch'],
+    gap: 8,
+    growth: { mode: 'hug' },
+    height: { mode: 'fill' },
+    margin: ['margin', 4],
+    padding: ['pad', 'horizontal', 12, 'vertical', 6],
+    shrink: 'rigid',
+    width: { mode: 'unset' },
+    widthCap: 720,
+  })
+  Expect(StudioInspector.layout({ ...inspection, layoutEntries: [] })).toEqual({
+    alignment: { mode: 'unset' },
+    gap: undefined,
+    growth: { mode: 'unset' },
+    height: { mode: 'unset' },
+    margin: undefined,
+    padding: undefined,
+    shrink: 'unset',
+    width: { mode: 'unset' },
+    widthCap: undefined,
+  })
+  Expect(StudioInspector.layout({
+    ...inspection,
+    layoutEntries: [
+      ['gap', 'spacing.compact'],
+      ['pad', 'horizontal', 'spacing.gutter', 'vertical', 'spacing.compact'],
+      ['height', 'surface.row'],
+      ['width', 'surface.card'],
+      ['width', 'max', 'surface.readable'],
+    ],
+  })).toMatchObject({
+    gap: 'spacing.compact',
+    height: { mode: 'fixed', value: 'surface.row' },
+    padding: ['pad', 'horizontal', 'spacing.gutter', 'vertical', 'spacing.compact'],
+    width: { mode: 'fixed', value: 'surface.card' },
+    widthCap: 'surface.readable',
+  })
+})
+
+Test('Studio inspector keeps invalid numeric, spacing, and content drafts out of source actions', () => {
+  Expect(StudioInspector.positiveNumberDraft('12.5')).toBe(12.5)
+  for (const invalid of ['', '0', '-1', 'NaN', 'Infinity']) {
+    Expect(StudioInspector.positiveNumberDraft(invalid)).toBeUndefined()
+  }
+  Expect(StudioInspector.layoutSizeDraft('spacing.compact')).toBe('spacing.compact')
+  Expect(StudioInspector.layoutSizeDraft('spacing..compact')).toBeUndefined()
+  Expect(StudioInspector.spacingEntryDraft('pad', '8')).toEqual(['pad', 8])
+  Expect(StudioInspector.spacingEntryDraft('pad', 'spacing.panel')).toEqual(['pad', 'spacing.panel'])
+  Expect(StudioInspector.spacingEntryDraft('margin', 'horizontal spacing.gutter top spacing.compact')).toEqual([
+    'margin',
+    'horizontal',
+    'spacing.gutter',
+    'top',
+    'spacing.compact',
+  ])
+  Expect(StudioInspector.spacingEntryDraft('margin', 'horizontal 8 top 4 bottom 6')).toEqual([
+    'margin',
+    'horizontal',
+    8,
+    'top',
+    4,
+    'bottom',
+    6,
+  ])
+  Expect(StudioInspector.spacingEntryDraft('pad', '')).toBeUndefined()
+  Expect(StudioInspector.spacingEntryDraft('pad', 'horizontal 8 left 4')).toBeUndefined()
+  Expect(StudioInspector.spacingEntryDraft('pad', 'top nope..bad')).toBeUndefined()
+  Expect(StudioInspector.contentEntry(['spread', 'stretch'])).toEqual(['content', 'spread', 'stretch'])
+  Expect(StudioInspector.contentEntry(['left', 'right'])).toBeUndefined()
+  Expect(StudioInspector.styleEntryDraft('background', '#f6f7f3')).toEqual(['background', '#f6f7f3'])
+  Expect(StudioInspector.styleEntryDraft('ink', 'ink')).toEqual(['ink', 'ink'])
+  Expect(StudioInspector.styleEntryDraft('background', 'ember.20')).toEqual(['background', 'ember.20'])
+  Expect(StudioInspector.styleEntryDraft('background', 'ember..20')).toBeUndefined()
+  Expect(StudioInspector.styleEntryDraft('size', '16')).toEqual(['size', 16])
+  Expect(StudioInspector.styleEntryDraft('size', 'md')).toEqual(['size', 'md'])
+  Expect(StudioInspector.styleEntryDraft('line', 'rhythm.body')).toEqual(['line', 'rhythm.body'])
+  Expect(StudioInspector.styleEntryDraft('weight', '600')).toEqual(['weight', 600])
+  Expect(StudioInspector.styleEntryDraft('weight', 'semibold')).toEqual(['weight', 'semibold'])
+  Expect(StudioInspector.styleEntryDraft('weight', '650')).toBeUndefined()
+  Expect(StudioInspector.styleEntryDraft('radius', '')).toBeUndefined()
+  Expect(StudioInspector.styleEntryDraft('unknown', '12')).toBeUndefined()
+
+  Expect(StudioInspector.layoutAction('render-1', ['claim', 2])).toEqual({
+    entry: ['claim', 2],
+    kind: 'set-layout-entry',
+    renderId: 'render-1',
+  })
+  Expect(StudioInspector.styleAction({
+    entry: ['fg', '#112233'],
+    landing: { bundleName: 'body', kind: 'style-bundle', mode: 'fork' },
+    renderId: 'render-1',
+  })).toEqual({
+    entry: ['fg', '#112233'],
+    kind: 'set-style-entry',
+    landing: { bundleName: 'body', kind: 'style-bundle', mode: 'fork' },
+    renderId: 'render-1',
+  })
 })
 
 Test('Studio editor insertion preserves indentation and selects the first required placeholder', () => {
@@ -1415,7 +1876,12 @@ function cell(cellId: string): StudioPreviewManifestV2['cells'][number] {
     cellRevision: 0,
     environment: {
       network: { latencyMs: 0, outcome: 'normal' },
-      scheme: { requested: 'light', status: 'inert' },
+      scheme: {
+        capability: 'reactive-browser' as const,
+        requested: 'system' as const,
+        resolved: 'light' as const,
+        source: 'system' as const,
+      },
       viewport: { height: 844, width: 390 },
     },
     scenarioId: cellId,

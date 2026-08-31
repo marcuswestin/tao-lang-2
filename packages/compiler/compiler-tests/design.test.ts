@@ -82,6 +82,130 @@ Describe('compiler: minimal design', () => {
     )
   })
 
+  Test('lowers decided background and ink terms through the compatible runtime ABI', async () => {
+    const compiled = await TestCompiler.compileCode(`
+      use StackNav from @tao/nav
+      workspace design Theme {
+        canvas #fff
+        ink #111
+        card [background canvas, ink ink, border ink, radius 12, pad 16, gap 8]
+        body [size 16, weight 600, line 22]
+      }
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      view Main() { Title "Main" render Surface() [card, body] }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `)
+
+    const code = compiled.code.replace(/\s+/g, ' ')
+    Expect(code).toContain(
+      '"card": TR.Design.Spec([["bg","canvas"],["fg","ink"],["border","ink"],["radius",12],["pad",16],["gap",8]])',
+    )
+    Expect(code).toContain('"body": TR.Design.Spec([["size",16],["weight",600],["line",22]])')
+  })
+
+  Test('preserves exact Scheme conditions while lowering their visual source heads', async () => {
+    const compiled = await TestCompiler.compileCode(`
+      use StackNav from @tao/nav
+      workspace design Theme {
+        canvas #fff
+        canvasDark #111
+        Surface [background canvas, background canvasDark when Scheme is Dark]
+      }
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      view Main() { Title "Main" render Surface() }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `)
+
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
+      '"Surface": TR.Design.Spec([["bg","canvas"],["bg","canvasDark","when","Scheme","is","Dark"]])',
+    )
+  })
+
+  Test('lowers structured typed design blocks, families, sizes, screens, and source provenance', async () => {
+    const compiled = await TestCompiler.compileCode(
+      `
+      use StackNav from @tao/nav
+      workspace design Theme {
+        colors {
+          cream #fff
+          ember #d9622b { 20 #f4d7c8 }
+          canvas when Scheme is Dark ember / not cream
+        }
+        sizes { sm 8.px, md sm + 4.px, readable 1.rem }
+        text { title [size readable, weight semibold, line md] }
+        screens { narrow below 500.px, wide }
+        styles {
+          card [background canvas, radius md, pad md, gap sm]
+          Text [ink canvas]
+        }
+      }
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      view Main() { Title "Main" render Surface() [card, title] }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `,
+      { studio: true },
+    )
+
+    const code = compiled.code.replace(/\s+/g, ' ')
+    Expect(code).toContain('"ember.20": "#f4d7c8"')
+    Expect(code).toContain('environment: "Scheme"')
+    Expect(code).toContain('"md": { left: { kind: "reference", path: "sm" }, right:')
+    Expect(code).toContain('screens: [ { name: "narrow", below: 500')
+    Expect(code).toContain('kind: "style"')
+    Expect(code).toContain('member: "card"')
+    Expect(code).toContain('kind: "inline"')
+  })
+
+  Test('does not rewrite a bare design member name as a visual alias', async () => {
+    const compiled = await TestCompiler.compileCode(`
+      use StackNav from @tao/nav
+      workspace design Theme { ink #111 }
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      view Main() { Title "Main" render Surface() }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `)
+
+    Expect(compiled.code).toContain('"ink": "#111"')
+  })
+
+  Test('release design checks accept promoted representable families and reject their inline raw values', async () => {
+    const inline = `
+      use StackNav from @tao/nav
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } }
+      view Main() { Title "Main" render Surface() [background #fff, size 16, radius 8, pad 12] }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `
+    await Expect(TestCompiler.compileCode(inline, { validationMode: 'release' })).rejects.toThrow(
+      'must be promoted to a token, style bundle, or element default for release',
+    )
+
+    await TestCompiler.compileCode(
+      `
+      use StackNav from @tao/nav
+      workspace design Theme { paper #fff Surface [background paper, size 16, radius 8, pad 12] }
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      view Main() { Title "Main" render Surface() }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `,
+      { validationMode: 'release' },
+    )
+
+    await TestCompiler.compileCode(
+      `
+      use StackNav from @tao/nav
+      workspace design Theme {
+        colors { paper #fff }
+        sizes { surfaceSize 16.px, surfaceRadius 8.px, surfacePad 12.px }
+        styles { Surface [background paper, size surfaceSize, radius surfaceRadius, pad surfacePad] }
+      }
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      view Main() { Title "Main" render Surface() }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `,
+      { validationMode: 'release' },
+    )
+  })
+
   Test('imports and exports a visible design as an ordinary runtime value', async () => {
     await withTaoFiles('tao-design-compiler-', {
       'Main.tao': `

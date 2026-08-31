@@ -1,6 +1,8 @@
-export const studioProtocolVersion = 1 as const
-export const studioProtocolChannel = 'tao-studio' as const
-export const studioSourceActionVersion = 1 as const
+import { TaoStudioProtocolVersions } from '@runtime/TR-studio-protocol'
+
+export const studioProtocolVersion = TaoStudioProtocolVersions.protocolVersion
+export const studioProtocolChannel = TaoStudioProtocolVersions.channel
+export const studioSourceActionVersion = TaoStudioProtocolVersions.sourceActionVersion
 
 export type StudioJsonObject = { readonly [key: string]: StudioJsonValue }
 
@@ -24,6 +26,12 @@ export type StudioSourceIdentity = {
   sourceVersion: string
 }
 
+/** StudioSourceOccurrenceIdentity is the compiler-owned semantic precondition for one source occurrence. */
+export type StudioSourceOccurrenceIdentity = {
+  nodeKind: string
+  renderOwner?: string
+}
+
 /** StudioPreviewIdentity distinguishes a replaced/reloaded preview from the prior iframe instance. */
 export type StudioPreviewIdentity = StudioProjectIdentity & {
   cellId?: string
@@ -34,7 +42,14 @@ export type StudioPreviewIdentity = StudioProjectIdentity & {
 }
 
 /** StudioPreviewSourceIdentity correlates a rendered node with the exact preview and source text that produced it. */
-export type StudioPreviewSourceIdentity = StudioPreviewIdentity & StudioSourceIdentity
+export type StudioPreviewSourceIdentity = StudioPreviewIdentity & StudioSourceIdentity & {
+  occurrence?: StudioSourceOccurrenceIdentity
+}
+
+/** StudioSourceActionIdentity adds action-only scenario identity without making source ranges durable IDs. */
+export type StudioSourceActionIdentity = StudioPreviewSourceIdentity & {
+  scenarioId?: string
+}
 
 export type StudioSourceRange = {
   end: number
@@ -60,7 +75,7 @@ export type StudioSourceActionEnvelope = {
   action: StudioCanonicalSourceAction
   channel: typeof studioProtocolChannel
   checkpoint: StudioSourceActionCheckpoint
-  identity: StudioPreviewSourceIdentity
+  identity: StudioSourceActionIdentity
   protocolVersion: typeof studioProtocolVersion
   requestId: string
   sourceActionVersion: typeof studioSourceActionVersion
@@ -71,7 +86,7 @@ export type StudioSourceActionEnvelope = {
 export type StudioSourceActionUndoEnvelope = {
   channel: typeof studioProtocolChannel
   checkpointId: string
-  identity: StudioPreviewSourceIdentity
+  identity: StudioSourceActionIdentity
   protocolVersion: typeof studioProtocolVersion
   requestId: string
   sourceActionVersion: typeof studioSourceActionVersion
@@ -213,6 +228,19 @@ export type StudioPreviewLogMessage = {
   type: 'preview-console'
 }
 
+export type StudioPreviewSchemeMessage = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  scheme: Readonly<{
+    capability: 'fixed-light-native' | 'reactive-browser'
+    requested: 'dark' | 'light' | 'system'
+    resolved: 'dark' | 'light'
+    source: 'native-fixed' | 'preference' | 'scenario' | 'system'
+  }>
+  type: 'preview-scheme-changed'
+}
+
 export type StudioWindowMessage =
   | StudioHighlightSourceMessage
   | StudioPreviewAppliedMessage
@@ -222,6 +250,7 @@ export type StudioWindowMessage =
   | StudioPreviewRuntimeCapturedMessage
   | StudioPreviewRuntimeCaptureFailedMessage
   | StudioPreviewRuntimeFailureMessage
+  | StudioPreviewSchemeMessage
   | StudioPreviewSourceMessage
   | StudioSourceActionEnvelope
   | StudioSourceActionUndoEnvelope
@@ -241,6 +270,7 @@ export type StudioMessageExpectation = StudioProjectIdentity & {
 /** StudioProtocol owns v1 DTO validation at every untrusted transport boundary. */
 export const StudioProtocol = {
   messageOrigin,
+  parseCanonicalSourceAction,
   parseMessage: parseMessageData,
   parseRuntimeCapture,
   parseSourceActionEnvelope,
@@ -317,6 +347,9 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
   if (value['type'] === 'preview-console') {
     return parsePreviewLog(value)
   }
+  if (value['type'] === 'preview-scheme-changed') {
+    return parsePreviewScheme(value)
+  }
   if (value['type'] === 'source-action') {
     return parseSourceActionEnvelope(value)
   }
@@ -324,6 +357,39 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
     return parseSourceActionUndoEnvelope(value)
   }
   return undefined
+}
+
+function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const scheme = value['scheme']
+  if (
+    identity === undefined
+    || !isObject(scheme)
+    || !['fixed-light-native', 'reactive-browser'].includes(String(scheme['capability']))
+    || !['dark', 'light', 'system'].includes(String(scheme['requested']))
+    || !['dark', 'light'].includes(String(scheme['resolved']))
+    || !['native-fixed', 'preference', 'scenario', 'system'].includes(String(scheme['source']))
+    || (scheme['source'] === 'system' && scheme['requested'] !== 'system')
+    || (scheme['source'] === 'preference' && scheme['requested'] === 'system')
+    || (scheme['source'] === 'scenario' && scheme['requested'] === 'system')
+    || (scheme['source'] === 'native-fixed' && scheme['capability'] !== 'fixed-light-native')
+    || (scheme['capability'] === 'fixed-light-native'
+      && (scheme['resolved'] !== 'light' || scheme['source'] !== 'native-fixed'))
+  ) {
+    return undefined
+  }
+  return {
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    scheme: {
+      capability: scheme['capability'] as StudioPreviewSchemeMessage['scheme']['capability'],
+      requested: scheme['requested'] as StudioPreviewSchemeMessage['scheme']['requested'],
+      resolved: scheme['resolved'] as StudioPreviewSchemeMessage['scheme']['resolved'],
+      source: scheme['source'] as StudioPreviewSchemeMessage['scheme']['source'],
+    },
+    type: 'preview-scheme-changed',
+  }
 }
 
 function parsePreviewRuntimeCaptured(value: StudioJsonObject): StudioPreviewRuntimeCapturedMessage | undefined {
@@ -654,7 +720,7 @@ function parseSourceActionEnvelope(value: unknown): StudioSourceActionEnvelope |
   ) {
     return undefined
   }
-  const identity = parsePreviewSourceIdentity(value['identity'])
+  const identity = parseSourceActionIdentity(value['identity'])
   const action = parseCanonicalSourceAction(value['action'])
   const checkpoint = parseSourceActionCheckpoint(value['checkpoint'])
   if (identity === undefined || action === undefined || checkpoint === undefined) {
@@ -684,7 +750,7 @@ function parseSourceActionUndoEnvelope(value: unknown): StudioSourceActionUndoEn
   ) {
     return undefined
   }
-  const identity = parsePreviewSourceIdentity(value['identity'])
+  const identity = parseSourceActionIdentity(value['identity'])
   if (identity === undefined) {
     return undefined
   }
@@ -761,19 +827,48 @@ function parsePreviewIdentity(value: unknown): StudioPreviewIdentity | undefined
 
 function parsePreviewSourceIdentity(value: unknown): StudioPreviewSourceIdentity | undefined {
   const preview = parsePreviewIdentity(value)
+  const rawOccurrence = isObject(value) ? value['occurrence'] : undefined
+  const occurrence = rawOccurrence === undefined ? undefined : parseSourceOccurrenceIdentity(rawOccurrence)
   if (
     preview === undefined
     || !isObject(value)
     || !nonEmptyString(value['path'])
     || !nonEmptyString(value['sourceVersion'])
+    || (rawOccurrence !== undefined && occurrence === undefined)
   ) {
     return undefined
   }
   return {
     ...preview,
+    ...(occurrence === undefined ? {} : { occurrence }),
     path: value['path'],
     sourceVersion: value['sourceVersion'],
   }
+}
+
+function parseSourceActionIdentity(value: unknown): StudioSourceActionIdentity | undefined {
+  const source = parsePreviewSourceIdentity(value)
+  if (source === undefined || !isObject(value)) {
+    return undefined
+  }
+  const scenarioId = value['scenarioId']
+  return scenarioId === undefined
+    ? source
+    : nonEmptyString(scenarioId)
+    ? { ...source, scenarioId }
+    : undefined
+}
+
+function parseSourceOccurrenceIdentity(value: unknown): StudioSourceOccurrenceIdentity | undefined {
+  if (!isObject(value) || !nonEmptyString(value['nodeKind'])) {
+    return undefined
+  }
+  const renderOwner = value['renderOwner']
+  return renderOwner === undefined
+    ? { nodeKind: value['nodeKind'] }
+    : nonEmptyString(renderOwner)
+    ? { nodeKind: value['nodeKind'], renderOwner }
+    : undefined
 }
 
 function parseSourceRange(value: unknown): StudioSourceRange | undefined {

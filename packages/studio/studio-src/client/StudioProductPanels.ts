@@ -5,8 +5,25 @@ import type { StudioCanonicalSourceAction } from '../StudioProtocol'
 import type { StudioTestFailure, StudioTestStatus } from '../StudioTestRunner'
 import type { StudioCompileDiagnostic, StudioCompileState, StudioFile } from './StudioApiClient'
 import type { StudioRuntimeDataTable, StudioRuntimeLog } from './StudioMatrixView'
+import {
+  type StudioDrawerTab,
+  type StudioPanelCellIdentity,
+  StudioPanelModels,
+} from './StudioPanelProjection'
 
-export type StudioDrawerTab = 'Compile' | 'Data' | 'Logs' | 'Problems' | 'Tests'
+export {
+  type StudioDrawerTab,
+  StudioPanelBounds,
+  type StudioPanelCellIdentity,
+  StudioPanelModels,
+} from './StudioPanelProjection'
+
+export type StudioDesignPanelValue =
+  & StudioDesignValue
+  & Readonly<{
+    sourcePath?: string
+    sourceVersion?: string
+  }>
 
 export const StudioProductCapabilities = {
   logs: {
@@ -141,6 +158,8 @@ export function renderDrawerContent(parent: HTMLElement, tab: StudioDrawerTab, o
   data: readonly StudioRuntimeDataTable[]
   dataError?: string
   dataLoading: boolean
+  dataSource?: StudioPanelCellIdentity
+  logSource?: StudioPanelCellIdentity
   logs: readonly StudioRuntimeLog[]
   onCaptureFixture: () => void
   onClearLogs: () => void
@@ -156,20 +175,20 @@ export function renderDrawerContent(parent: HTMLElement, tab: StudioDrawerTab, o
   if (tab === 'Problems') {
     renderProblems(parent, options.compile.diagnostics ?? [], options.onDiagnostic)
   } else if (tab === 'Compile') {
-    renderCompile(parent, options.compile)
+    renderCompile(parent, options.compile, options.onDiagnostic)
   } else if (tab === 'Data') {
     renderData(parent, options)
   } else if (tab === 'Tests') {
     renderTests(parent, options)
   } else {
-    renderLogs(parent, options.logs, options.onClearLogs)
+    renderLogs(parent, options.logs, options.onClearLogs, options.logSource)
   }
 }
 
 export function renderDesignValues(parent: HTMLElement, options: {
   busy: boolean
   currentSourceVersion?: string
-  design: readonly StudioDesignValue[]
+  design: readonly StudioDesignPanelValue[]
   onAction: (action: StudioCanonicalSourceAction) => void
   renderId?: string
   selectedSourceVersion?: string
@@ -196,6 +215,10 @@ export function renderDesignValues(parent: HTMLElement, options: {
       const value = document.createElement('code')
       value.textContent = `${token.name} ${token.value}`
       row.append(swatch, value)
+      const provenance = designProvenance(token)
+      if (provenance !== undefined) {
+        row.append(provenance)
+      }
       content.push(row)
     }
     content.push(note(StudioProductCapabilities.tokenWrites.reason))
@@ -205,7 +228,12 @@ export function renderDesignValues(parent: HTMLElement, options: {
     bundleHeading.textContent = 'Local bundles'
     content.push(bundleHeading)
     for (const bundle of bundles) {
-      content.push(bundleEditor(bundle, options))
+      const editor = bundleEditor(bundle, options)
+      const provenance = designProvenance(bundle)
+      if (provenance !== undefined) {
+        editor.append(provenance)
+      }
+      content.push(editor)
     }
   }
   if (tokens.length === 0 && bundles.length === 0) {
@@ -238,14 +266,19 @@ function renderProblems(
   }))
 }
 
-function renderCompile(parent: HTMLElement, compile: StudioCompileState): void {
+function renderCompile(
+  parent: HTMLElement,
+  compile: StudioCompileState,
+  open: (diagnostic: StudioCompileDiagnostic) => void,
+): void {
   const summary = document.createElement('dl')
   append(summary, 'Status', compile.status)
   append(summary, 'Compile revision', String(compile.compileRevision))
   append(summary, 'Applied revision', String(compile.appliedRevision))
   append(summary, 'Message', compile.message)
   append(summary, 'Diagnostics', String(compile.diagnostics?.length ?? 0))
-  parent.replaceChildren(summary)
+  const diagnostics = (compile.diagnostics ?? []).map(diagnostic => diagnosticButton(diagnostic, open))
+  parent.replaceChildren(summary, ...diagnostics)
 }
 
 function renderData(
@@ -263,6 +296,9 @@ function renderData(
   capture.type = 'button'
   capture.addEventListener('click', options.onCaptureFixture)
   toolbar.append(refresh, capture)
+  const source = options.dataSource === undefined
+    ? undefined
+    : note(`Active cell ${options.dataSource.cellId} · revision ${options.dataSource.cellRevision}`)
   const tables = options.data.flatMap(table => {
     const heading = document.createElement('h3')
     heading.textContent = `${table.datasource} · ${table.entity}`
@@ -279,7 +315,12 @@ function renderData(
     : tables.length === 0
     ? note('No live datasource rows.')
     : undefined
-  parent.replaceChildren(toolbar, ...(status === undefined ? [] : [status]), ...tables)
+  parent.replaceChildren(
+    toolbar,
+    ...(source === undefined ? [] : [source]),
+    ...(status === undefined ? [] : [status]),
+    ...tables,
+  )
 }
 
 function dataTable(rows: readonly Readonly<Record<string, unknown>>[]): HTMLElement {
@@ -288,7 +329,13 @@ function dataTable(rows: readonly Readonly<Record<string, unknown>>[]): HTMLElem
   }
   const table = document.createElement('table')
   table.className = 'studio-data-table'
-  const keys = [...new Set(rows.flatMap(row => Object.keys(row)))].toSorted()
+  const visibleRows = StudioPanelModels.dataRows(rows)
+  const keys = [...new Set(visibleRows.flatMap(row => Object.keys(row)))].toSorted()
+  if (rows.length > visibleRows.length) {
+    const caption = document.createElement('caption')
+    caption.textContent = `Showing ${visibleRows.length} of ${rows.length} rows.`
+    table.append(caption)
+  }
   const header = document.createElement('tr')
   header.append(...keys.map(key => {
     const th = document.createElement('th')
@@ -298,7 +345,7 @@ function dataTable(rows: readonly Readonly<Record<string, unknown>>[]): HTMLElem
   const head = document.createElement('thead')
   head.append(header)
   const body = document.createElement('tbody')
-  body.append(...rows.map(row => {
+  body.append(...visibleRows.map(row => {
     const tr = document.createElement('tr')
     tr.append(...keys.map(key => {
       const td = document.createElement('td')
@@ -312,7 +359,12 @@ function dataTable(rows: readonly Readonly<Record<string, unknown>>[]): HTMLElem
   return table
 }
 
-function renderLogs(parent: HTMLElement, logs: readonly StudioRuntimeLog[], clear: () => void): void {
+function renderLogs(
+  parent: HTMLElement,
+  logs: readonly StudioRuntimeLog[],
+  clear: () => void,
+  source?: StudioPanelCellIdentity,
+): void {
   const toolbar = document.createElement('div')
   toolbar.className = 'studio-drawer-toolbar'
   const button = document.createElement('button')
@@ -321,7 +373,8 @@ function renderLogs(parent: HTMLElement, logs: readonly StudioRuntimeLog[], clea
   button.disabled = logs.length === 0
   button.addEventListener('click', clear)
   toolbar.append(button)
-  const rows = logs.map(log => {
+  const visibleLogs = StudioPanelModels.logs(logs)
+  const rows = visibleLogs.map(log => {
     const row = document.createElement('div')
     row.className = 'studio-drawer-row'
     row.textContent = `${new Date(log.timestamp).toLocaleTimeString()} ${log.level.toUpperCase()} ${
@@ -331,6 +384,8 @@ function renderLogs(parent: HTMLElement, logs: readonly StudioRuntimeLog[], clea
   })
   parent.replaceChildren(
     toolbar,
+    ...(source === undefined ? [] : [note(`Active cell ${source.cellId} · revision ${source.cellRevision}`)]),
+    ...(logs.length > visibleLogs.length ? [note(`Showing the latest ${visibleLogs.length} console records.`)] : []),
     ...(rows.length === 0 ? [note('No console messages from the active preview.')] : rows),
   )
 }
@@ -358,13 +413,14 @@ function renderTests(parent: HTMLElement, options: Parameters<typeof renderDrawe
     )
     return
   }
-  if (options.testError !== undefined) {
-    parent.replaceChildren(toolbar, unavailable('Tests', options.testError))
-    return
-  }
   const result = options.testStatus?.lastRun
+  const error = options.testError === undefined ? undefined : unavailable('Tests', options.testError)
   if (result === undefined) {
-    parent.replaceChildren(toolbar, note('Run the project Tao tests, or enable Watch to rerun after compiles.'))
+    parent.replaceChildren(
+      toolbar,
+      ...(error === undefined ? [] : [error]),
+      note('Run the project Tao tests, or enable Watch to rerun after compiles.'),
+    )
     return
   }
   const summary = document.createElement('strong')
@@ -381,8 +437,34 @@ function renderTests(parent: HTMLElement, options: Parameters<typeof renderDrawe
   })
   const output = document.createElement('pre')
   output.className = 'studio-test-output'
-  output.textContent = result.output
-  parent.replaceChildren(toolbar, summary, ...failures, output)
+  output.textContent = StudioPanelModels.testOutput(result.output)
+  parent.replaceChildren(toolbar, ...(error === undefined ? [] : [error]), summary, ...failures, output)
+}
+
+function diagnosticButton(
+  diagnostic: StudioCompileDiagnostic,
+  open: (diagnostic: StudioCompileDiagnostic) => void,
+): HTMLButtonElement {
+  const button = document.createElement('button')
+  button.className = 'studio-drawer-row'
+  button.disabled = diagnostic.filePath === undefined
+  button.type = 'button'
+  const location = diagnostic.range === undefined ? '' : `:${diagnostic.range.start.line + 1}`
+  button.textContent = `${diagnostic.filePath ?? 'Project'}${location} — ${diagnostic.message}`
+  button.addEventListener('click', () => open(diagnostic))
+  return button
+}
+
+function designProvenance(value: StudioDesignPanelValue): HTMLElement | undefined {
+  if (value.sourcePath === undefined) {
+    return undefined
+  }
+  const provenance = document.createElement('small')
+  provenance.className = 'studio-design-provenance'
+  provenance.textContent = value.sourceVersion === undefined
+    ? value.sourcePath
+    : `${value.sourcePath} · ${value.sourceVersion}`
+  return provenance
 }
 
 function formatValue(value: unknown): string {
@@ -390,7 +472,7 @@ function formatValue(value: unknown): string {
 }
 
 function bundleEditor(
-  bundle: Extract<StudioDesignValue, { kind: 'bundle' }>,
+  bundle: Extract<StudioDesignPanelValue, { kind: 'bundle' }>,
   options: Parameters<typeof renderDesignValues>[1],
 ): HTMLElement {
   const form = document.createElement('section')

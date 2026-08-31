@@ -296,8 +296,10 @@ decided.
   only cells whose topology or explicit configuration requires it.
 - Split the browser client into a typed API/event client, editor lifecycle, matrix-cell view, and thin
   mount before expanding the UI further. Its lifecycle behavior must be directly unit-testable.
-- Wire emitted render owner/kind identity through the protocol or remove claims that they participate
-  in action preconditions; do not retain metadata that no receiver can enforce.
+- Closed by Tao Studio v2 Slice 1 on 2026-08-31: protocol/source-action v2 enforces the compiler-emitted
+  render owner. It also carries the currently single-valued `render` node kind as forward-compatible
+  occurrence scaffolding. Cell edits carry scenario identity, and undo retains the committed checkpoint
+  identity instead of adopting the active preview.
 - Make scenarios declared in imported files mountable by importing their subject bindings into the
   generated host, or reject them before publishing cells; never publish an unmountable blank cell.
 - Either execute `run App at Destination(...)` in the generated host or reject that subject until it

@@ -2,7 +2,10 @@ import { ScriptedGenerationProvider } from '@generation'
 import { Describe, Expect, Test } from '@shared/test'
 import { StudioFixtureGeneration } from '../studio-src/StudioFixtureGeneration'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
-import type { StudioProjectSession } from '../studio-src/StudioProjectSession'
+import {
+  type StudioProjectSession,
+  StudioSourceActionConflictError,
+} from '../studio-src/StudioProjectSession'
 import { StudioServerTesting } from '../studio-src/StudioServer'
 import { StudioSessionManager } from '../studio-src/StudioSessionManager'
 
@@ -137,12 +140,43 @@ Describe('Studio server request boundary', () => {
     Expect(await response.json()).toEqual(proposal)
     Expect(requests).toEqual([{ requestId: 'proposal-request', type: 'source-action' }])
   })
+
+  Test('returns stable structured source-action conflict details', async () => {
+    const url = new URL('http://127.0.0.1:5678/api/source-action')
+    const request = new Request(url, {
+      body: JSON.stringify({ requestId: 'conflict-request', type: 'source-action' }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+    const response = StudioServerTesting.errorResponse(
+      request,
+      url,
+      {},
+      new StudioSourceActionConflictError(
+        'render-owner-mismatch',
+        'Studio render owner changed.',
+        { actual: 'Card', expected: 'Main', path: 'Garden.tao', renderId: 'render-1' },
+      ),
+    )
+
+    Expect(response.status).toBe(409)
+    Expect(await response.json()).toEqual({
+      details: {
+        actual: 'Card',
+        code: 'render-owner-mismatch',
+        expected: 'Main',
+        path: 'Garden.tao',
+        renderId: 'render-1',
+      },
+      error: 'Studio render owner changed.',
+    })
+  })
 })
 
 function generationManifest(): StudioPreviewManifestV2 {
   const source = { kind: 'tao' as const, path: '/project/Scenarios.tao', range: { end: 100, start: 0 } }
   return {
-    capabilities: { captureDomains: ['data'], scheme: 'inert' },
+    capabilities: { captureDomains: ['data'], scheme: 'reactive-browser' },
     cells: [],
     compileRevision: 1,
     fixtures: [{

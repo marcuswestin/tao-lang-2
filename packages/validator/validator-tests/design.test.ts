@@ -37,6 +37,135 @@ Describe('validator: minimal design', () => {
     )),
   )
 
+  Test(
+    'accepts decided background and ink names alongside current visual and spacing families',
+    accepts(designApp(
+      `
+      workspace design Theme {
+        canvas #fff
+        ink #111
+        lineColor #ddd
+        card [background canvas, ink ink, border lineColor, radius 12, pad 16, gap 8]
+        body [size 16, weight 600, line 22]
+      }
+    `,
+      'render Surface() [card, body]',
+    )),
+  )
+
+  Test(
+    'accepts decided background and ink names directly on a rendered element',
+    accepts(designApp(
+      'workspace design Theme { canvas #fff ink #111 }',
+      'render Surface() [background canvas, ink ink]',
+    )),
+  )
+
+  Test(
+    'accepts exact Light and Dark Scheme conditions on visual entries',
+    accepts(designApp(
+      `
+      workspace design Theme {
+        canvas #fff
+        canvasDark #111
+        Surface [background canvas, background canvasDark when Scheme is Dark]
+      }
+    `,
+      'render Surface()',
+    )),
+  )
+
+  Test(
+    'accepts structured typed blocks, color families, folded sizes, screens, styles, and defaults',
+    accepts(designApp(
+      `
+      workspace design Theme {
+        colors {
+          cream #fff
+          ember #d9622b { 20 #f4d7c8, 60 #b34e1f }
+          canvas when Scheme is Dark ember.60 / not cream
+        }
+        sizes { sm 8.px, md sm + 4.px, readable 1.rem }
+        text { title [size readable, weight semibold, line md] }
+        screens { narrow below 500.px, medium below 1000.px, wide }
+        styles {
+          card [background canvas, radius md, pad md, gap sm]
+          Text [ink canvas]
+        }
+      }
+    `,
+      'render Surface() [card, title]',
+    )),
+  )
+
+  Test(
+    'resolves named design sizes in direct layout clauses',
+    accepts(designApp(
+      'workspace design Theme { sizes { sm 8.px, readable 1.rem } }',
+      'render Surface() [gap sm, pad sm, margin sm, width readable, height readable]',
+    )),
+  )
+
+  Test(
+    'rejects missing or unknown named layout sizes',
+    rejects(
+      `
+        app Legacy { view Main }
+        view Main() { render Surface() [gap sm] }
+        ${surfaceView}
+      `,
+      messages.missingMountedDesign('gap sm'),
+    ),
+  )
+
+  Test(
+    'rejects a named layout size absent from the selected design',
+    rejects(
+      designApp('workspace design Theme { sizes { sm 8.px } }', 'render Surface() [width absent]'),
+      "Design 'Theme' has no size 'absent'.",
+    ),
+  )
+
+  Test(
+    'rejects invalid structured conditions, units, and screen ordering',
+    rejects(
+      designApp(
+        `workspace design Theme {
+          colors { ink when Motion is Dark #fff / not #111 }
+          sizes { bad 2.seconds }
+          screens { wide, narrow below 400.px }
+          styles { card [ink ink] }
+        }`,
+        'render Surface() [card]',
+      ),
+      messages.invalidColorCondition,
+      messages.invalidSize('bad'),
+      messages.invalidScreen('wide'),
+    ),
+  )
+
+  Test(
+    'rejects malformed or unrelated visual conditions',
+    rejects(
+      designApp(
+        'workspace design Theme { canvas #fff Surface [background canvas when Viewport is Dark] }',
+        'render Surface()',
+      ),
+      messages.malformedVisual('background canvas when Viewport is Dark'),
+    ),
+  )
+
+  Test(
+    'rejects mixed source aliases that normalize to the same visual property',
+    rejects(
+      designApp(
+        'workspace design Theme { canvas #fff paper #eee card [bg canvas, background paper] }',
+        'render Surface() [card]',
+      ),
+      messages.duplicateVisualAlias('bg', 'background'),
+    ),
+  )
+
   for (const color of ['#12', '#12345', '#1234567', '#xyz']) {
     Test(
       `rejects malformed contextual color ${color}`,

@@ -32,7 +32,12 @@ Describe('Studio matrix session', () => {
       args: { title: 'Changed' },
       environment: {
         network: { error: { message: 'Injected failure', status: 503 }, latencyMs: 300, outcome: 'error' },
-        scheme: { requested: 'dark', status: 'inert' },
+        scheme: {
+          capability: 'reactive-browser' as const,
+          requested: 'dark' as const,
+          resolved: 'dark' as const,
+          source: 'scenario' as const,
+        },
         viewport: { height: 600, width: 600 },
       },
       stateLayers: ['loading'],
@@ -109,7 +114,12 @@ Describe('Studio matrix session', () => {
       args: { title: 'Preserved' },
       environment: {
         network: { latencyMs: 250, outcome: 'normal' },
-        scheme: { requested: 'dark', status: 'inert' },
+        scheme: {
+          capability: 'reactive-browser' as const,
+          requested: 'dark' as const,
+          resolved: 'dark' as const,
+          source: 'scenario' as const,
+        },
         viewport: { height: 600, width: 600 },
       },
       stateLayers: ['loading'],
@@ -141,7 +151,12 @@ Describe('Studio matrix session', () => {
       args: { title: 'No longer valid' },
       environment: {
         network: { latencyMs: 250, outcome: 'normal' },
-        scheme: { requested: 'dark', status: 'inert' },
+        scheme: {
+          capability: 'reactive-browser' as const,
+          requested: 'dark' as const,
+          resolved: 'dark' as const,
+          source: 'scenario' as const,
+        },
         viewport: { height: 600, width: 600 },
       },
       stateLayers: ['loading'],
@@ -185,11 +200,16 @@ function fixture(revisions: { compileRevision: number; manifestRevision: string 
   const source = { kind: 'tao' as const, path: '/project/Scenarios.tao', range: { end: 20, start: 0 } }
   const environment = {
     network: { latencyMs: 0, outcome: 'normal' as const },
-    scheme: { requested: 'light' as const, status: 'inert' as const },
+    scheme: {
+      capability: 'reactive-browser' as const,
+      requested: 'system' as const,
+      resolved: 'light' as const,
+      source: 'system' as const,
+    },
     viewport: { height: 844, width: 390 },
   }
   return {
-    capabilities: { captureDomains: ['data', 'scene'], scheme: 'inert' },
+    capabilities: { captureDomains: ['data', 'scene'], scheme: 'reactive-browser' },
     cells: [
       {
         args: { title: 'Hello' },
