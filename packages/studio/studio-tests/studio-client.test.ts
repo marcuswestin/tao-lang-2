@@ -32,6 +32,7 @@ import {
 import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
 import { StudioPaneSizes, studioShellMarkup, studioShellRailPanels } from '../studio-src/client/StudioShell'
 import {
+  isStudioSaveShortcut,
   StudioCodeEditor,
   StudioDiagnosticNavigation,
   StudioEditorInsertion,
@@ -102,10 +103,11 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('Refreshing live app data')
   Expect(bundle).toContain('Collapse inspector')
   Expect(bundle).toContain('Collapse bottom drawer')
-  Expect(bundle).toContain('tao-studio:pane-sizes:v3')
+  Expect(bundle).toContain('tao-studio:pane-sizes:v4')
   Expect(bundle).toContain('tao-studio:editor-tabs:v1')
   Expect(bundle).toContain('/switch')
-  Expect(bundle).toContain('Fix or revert invalid Tao drafts before switching app variants.')
+  Expect(bundle).toContain('Save or revert unsaved files before switching app variants.')
+  Expect(bundle).toContain('Unsaved changes — press ⌘S to save.')
   Expect(bundle).toContain('set-interaction-mode')
   Expect(bundle).toContain('Undo visual edit')
   Expect(bundle).toContain('/api/preview/cell/reconfigure')
@@ -148,7 +150,8 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(html).toContain('@media (max-width: 1400px)')
   Expect(html).toContain('@media (max-width: 760px)')
   Expect(html).toContain('grid-column: 4;')
-  Expect(html).toContain('grid-template-columns: 0 0 0 minmax(0, 1fr)')
+  Expect(html).toContain('grid-template-columns: 0 0 0 0 minmax(0, 1fr)')
+  Expect(html).toContain('--studio-preview-size')
   Expect(html).toContain('.tao-studio-product-host[data-layout-preset="code"]')
   Expect(html).not.toContain('#tao-studio-root[data-layout-preset=')
   Expect(html).toContain('rel="icon" href="data:image/svg+xml,')
@@ -313,7 +316,7 @@ Test('Studio preview teardown releases observers and pending capture work', () =
 })
 
 Test('Studio pane sizes load safe defaults and persist all divider dimensions', () => {
-  let stored: string | null = '{"left":312,"right":296,"bottom":205}'
+  let stored: string | null = '{"left":312,"right":296,"bottom":205,"preview":516}'
   const storage = {
     getItem: () => stored,
     setItem: (_key: string, value: string) => {
@@ -321,11 +324,11 @@ Test('Studio pane sizes load safe defaults and persist all divider dimensions', 
     },
   }
 
-  Expect(StudioPaneSizes.load(storage)).toEqual({ bottom: 205, left: 312, right: 296 })
-  StudioPaneSizes.save(storage, { bottom: 164, left: 244, right: 320 })
-  Expect(stored).toBe('{"bottom":164,"left":244,"right":320}')
+  Expect(StudioPaneSizes.load(storage)).toEqual({ bottom: 205, left: 312, preview: 516, right: 296 })
+  StudioPaneSizes.save(storage, { bottom: 164, left: 244, preview: 560, right: 320 })
+  Expect(stored).toBe('{"bottom":164,"left":244,"preview":560,"right":320}')
   stored = '{"left":"wide","right":null}'
-  Expect(StudioPaneSizes.load(storage)).toEqual({ bottom: 180, left: 360, right: 440 })
+  Expect(StudioPaneSizes.load(storage)).toEqual({ bottom: 180, left: 360, preview: 440, right: 440 })
 })
 
 Test('Embedded Studio keeps one Files portal target and every contextual rail panel', () => {
@@ -350,8 +353,11 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
   Expect(markup).toContain('data-drawer-tab="Problems"')
   Expect(markup).toContain('aria-label="Collapse inspector"')
   Expect(markup).toContain('aria-label="Collapse bottom drawer"')
+  Expect(markup).toContain('aria-label="Resize code and preview"')
   Expect(markup.indexOf('studio-inspector studio-pane-right')).toBeLessThan(markup.indexOf('studio-editor-pane'))
   Expect(markup.indexOf('studio-editor-pane')).toBeLessThan(markup.indexOf('studio-preview'))
+  Expect(markup.indexOf('studio-editor-pane')).toBeLessThan(markup.indexOf('studio-divider-preview'))
+  Expect(markup.indexOf('studio-divider-preview')).toBeLessThan(markup.indexOf('studio-preview'))
   Expect(markup).toContain('studio-shell studio-shell--embedded')
 })
 
@@ -1191,7 +1197,7 @@ Test('Studio editor insertion preserves indentation and selects the first requir
   Expect(transaction.selection).toEqual({ anchor: position + 12, head: position + 18 })
 })
 
-Test('Studio draft sync coalesces pending edits and advances the optimistic version serially', async () => {
+Test('Studio draft sync writes only explicit saves and advances the optimistic version serially', async () => {
   const firstWrite = deferred<StudioDraftSyncResult>()
   const writes: StudioDraftSyncRequest[] = []
   const sync = new StudioDraftSync({
@@ -1199,7 +1205,6 @@ Test('Studio draft sync coalesces pending edits and advances the optimistic vers
     path: 'Garden.tao',
     sourceVersion: 'source-1',
   }, {
-    delayMs: 60_000,
     async write(request) {
       writes.push(request)
       if (writes.length === 1) {
@@ -1211,12 +1216,15 @@ Test('Studio draft sync coalesces pending edits and advances the optimistic vers
 
   sync.update('draft-a')
   sync.update('draft-b')
-  const flushing = sync.flush()
+  await Promise.resolve()
+  Expect(writes).toHaveLength(0)
+  const firstSave = sync.save()
   await until(() => writes.length === 1)
   sync.update('draft-c')
   firstWrite.resolve(saved(writes[0]!, 'source-2'))
-  await flushing
-  await sync.flush()
+  await firstSave
+  Expect(writes).toHaveLength(1)
+  await sync.save()
 
   Expect(writes.map(write => write.content)).toEqual(['draft-b', 'draft-c'])
   Expect(writes.map(write => write.sourceVersion)).toEqual(['source-1', 'source-2'])
@@ -1230,7 +1238,6 @@ Test('Studio draft sync keeps the last saved version after an invalid draft', as
     path: 'Garden.tao',
     sourceVersion: 'source-1',
   }, {
-    delayMs: 60_000,
     onResult: result => results.push(result),
     async write(request) {
       writes.push(request)
@@ -1245,12 +1252,19 @@ Test('Studio draft sync keeps the last saved version after an invalid draft', as
   })
 
   sync.update('invalid')
-  Expect((await sync.flush())?.saved).toBe(false)
+  Expect((await sync.save())?.saved).toBe(false)
   sync.update('valid again')
-  Expect((await sync.flush())?.saved).toBe(true)
+  Expect((await sync.save())?.saved).toBe(true)
 
   Expect(writes.map(write => write.sourceVersion)).toEqual(['source-1', 'source-1'])
   Expect(results.map(result => result.saved)).toEqual([false, true])
+})
+
+Test('Studio recognizes command and control save without consuming modified shortcuts', () => {
+  Expect(isStudioSaveShortcut({ altKey: false, ctrlKey: false, key: 's', metaKey: true })).toBe(true)
+  Expect(isStudioSaveShortcut({ altKey: false, ctrlKey: true, key: 'S', metaKey: false })).toBe(true)
+  Expect(isStudioSaveShortcut({ altKey: true, ctrlKey: false, key: 's', metaKey: true })).toBe(false)
+  Expect(isStudioSaveShortcut({ altKey: false, ctrlKey: false, key: 's', metaKey: false })).toBe(false)
 })
 
 function saved(request: StudioDraftSyncRequest, sourceVersion: string): StudioDraftSyncResult {

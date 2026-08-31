@@ -15,6 +15,11 @@ export const StudioCodeEditor = {
   ] as Extension,
 } as const
 
+/** Identifies Studio's explicit save shortcut without consuming unrelated browser commands. */
+export function isStudioSaveShortcut(event: Pick<KeyboardEvent, 'altKey' | 'ctrlKey' | 'key' | 'metaKey'>): boolean {
+  return !event.altKey && (event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === 's'
+}
+
 /** Invalidates async file opens as soon as a newer navigation begins. */
 export class StudioOpenFileLifecycle {
   #revision = 0

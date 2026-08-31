@@ -1,6 +1,7 @@
 import { mountStudio } from './client/StudioApp'
 
 export {
+  isStudioSaveShortcut,
   StudioCodeEditor,
   StudioDiagnosticNavigation,
   StudioEditorInsertion,

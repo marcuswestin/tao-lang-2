@@ -32,10 +32,10 @@ export type StudioClientView = {
 
 export type StudioShellOptions = Readonly<{ embedded?: boolean }>
 
-type PaneName = 'bottom' | 'left' | 'right'
+type PaneName = 'bottom' | 'left' | 'preview' | 'right'
 
-const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 360, right: 440 }
-const paneStorageKey = 'tao-studio:pane-sizes:v3'
+const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 360, preview: 440, right: 440 }
+const paneStorageKey = 'tao-studio:pane-sizes:v4'
 
 export const studioShellRailPanels = [
   { icon: '🗂️', label: 'Files', panel: 'files' },
@@ -53,6 +53,7 @@ export const StudioPaneSizes = {
       return {
         bottom: validSize(parsed.bottom, paneDefaults.bottom),
         left: validSize(parsed.left, paneDefaults.left),
+        preview: validSize(parsed.preview, paneDefaults.preview),
         right: validSize(parsed.right, paneDefaults.right),
       }
     } catch {
@@ -126,6 +127,7 @@ export function studioShellMarkup(options: StudioShellOptions = {}): string {
               <nav class="studio-breadcrumbs" aria-label="Editor breadcrumbs"></nav>
               <section class="studio-editor" aria-label="Tao source editor"></section>
             </section>
+            <div class="studio-divider studio-divider-preview" data-divider="preview" role="separator" aria-label="Resize code and preview" aria-orientation="vertical"></div>
             <section class="studio-preview" aria-label="Preview canvas"></section>
           </section>
           <div class="studio-divider studio-divider-bottom" data-divider="bottom" role="separator" aria-orientation="horizontal"></div>
@@ -220,19 +222,23 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
   const lastExpanded = {
     bottom: sizes.bottom > 0 ? sizes.bottom : paneDefaults.bottom,
     left: sizes.left > 0 ? sizes.left : paneDefaults.left,
+    preview: sizes.preview > 0 ? sizes.preview : paneDefaults.preview,
     right: sizes.right > 0 ? sizes.right : paneDefaults.right,
   }
   const shell = requiredElement(root, '.studio-body')
   const center = requiredElement(root, '.studio-center')
   const left = requiredElement(root, '.studio-pane-left')
   const right = requiredElement(root, '.studio-pane-right')
+  const preview = requiredElement(root, '.studio-preview')
   const bottom = requiredElement(root, '.studio-drawer')
   const apply = (): void => {
     left.hidden = sizes.left === 0
     right.hidden = sizes.right === 0
+    preview.hidden = sizes.preview === 0
     bottom.hidden = sizes.bottom === 0
     shell.style.setProperty('--studio-left-size', `${sizes.left}px`)
     shell.style.setProperty('--studio-right-size', `${sizes.right}px`)
+    center.style.setProperty('--studio-preview-size', `${sizes.preview}px`)
     center.style.setProperty('--studio-bottom-size', `${sizes.bottom}px`)
     for (const divider of root.querySelectorAll<HTMLElement>('[data-divider]')) {
       const pane = divider.dataset['divider'] as PaneName
@@ -269,6 +275,8 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
       }
       const direction = pane === 'bottom'
         ? event.key === 'ArrowUp' ? 1 : event.key === 'ArrowDown' ? -1 : 0
+        : pane === 'preview'
+        ? event.key === 'ArrowLeft' ? 1 : event.key === 'ArrowRight' ? -1 : 0
         : event.key === 'ArrowRight'
         ? 1
         : event.key === 'ArrowLeft'
@@ -278,7 +286,7 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
         return
       }
       event.preventDefault()
-      const minimum = pane === 'bottom' ? 96 : 180
+      const minimum = pane === 'bottom' ? 96 : pane === 'preview' ? 280 : 180
       const base = sizes[pane] === 0 ? minimum : sizes[pane]
       setSize(pane, Math.max(minimum, base + direction * (event.shiftKey ? 40 : 12)))
     })
@@ -290,8 +298,11 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
       const move = (moveEvent: PointerEvent): void => {
         const delta = pane === 'bottom'
           ? start - moveEvent.clientY
+          : pane === 'preview'
+          ? start - moveEvent.clientX
           : moveEvent.clientX - start
-        sizes[pane] = Math.max(pane === 'bottom' ? 96 : 180, initial + delta)
+        const minimum = pane === 'bottom' ? 96 : pane === 'preview' ? 280 : 180
+        sizes[pane] = Math.max(minimum, initial + delta)
         apply()
       }
       const finish = (): void => {

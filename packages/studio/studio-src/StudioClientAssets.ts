@@ -8,6 +8,12 @@ export type StudioClientConfig = {
 
 export type StudioClientBundleMode = 'development' | 'release'
 
+/** StudioClientAssetProvider supplies one browser shell revision to the Studio HTTP server. */
+export type StudioClientAssetProvider = {
+  bundle: (options?: { validationMode?: StudioClientBundleMode }) => Promise<string>
+  html: (config: StudioClientConfig) => string
+}
+
 const clientBundles = new Map<StudioClientBundleMode, Promise<string>>()
 let prebuiltClientBundle: string | undefined
 const clientModuleInputs = new Map<StudioClientBundleMode, readonly string[]>()
@@ -309,16 +315,17 @@ button { color: inherit; font: inherit; }
 .studio-pane-header button:hover { background: #303531; }
 .studio-divider { background: #252826; position: relative; z-index: 2; }
 .studio-divider::after { content: ""; inset: -3px; position: absolute; }
-.studio-divider-left, .studio-divider-right { cursor: col-resize; }
+.studio-divider-left, .studio-divider-right, .studio-divider-preview { cursor: col-resize; }
 .studio-divider-bottom { cursor: row-resize; }
 .studio-center {
-  --studio-bottom-size: 180px; display: grid;
-  grid-template-columns: var(--studio-right-size) 5px minmax(360px, 1fr) minmax(300px, .72fr);
+  --studio-bottom-size: 180px; --studio-preview-size: 440px; display: grid;
+  grid-template-columns: var(--studio-right-size) 5px minmax(360px, 1fr) 5px minmax(280px, var(--studio-preview-size));
   grid-template-rows: minmax(240px, 1fr) 5px var(--studio-bottom-size); min-height: 0; min-width: 0;
 }
 .studio-workbench { display: contents; }
 .studio-editor-pane { grid-column: 3; grid-row: 1; }
-.studio-preview { grid-column: 4; grid-row: 1 / 4; }
+.studio-divider-preview { grid-column: 4; grid-row: 1 / 4; }
+.studio-preview { grid-column: 5; grid-row: 1 / 4; }
 .studio-inspector { grid-column: 1; grid-row: 1; }
 .studio-divider-right { grid-column: 2; grid-row: 1 / 4; }
 .studio-divider-bottom { grid-column: 1 / 4; grid-row: 2; }
@@ -352,17 +359,19 @@ button { color: inherit; font: inherit; }
 .studio-unavailable strong { color: #b9c0ba; }
 .studio-inspector { background: #1d201e; min-height: 0; overflow: auto; }
 .studio-inspector-content { padding: 8px 10px; }
-.tao-studio-product-host[data-layout-preset="code"] .studio-center { grid-template-columns: 0 0 minmax(420px, 1fr) 0; }
+.tao-studio-product-host[data-layout-preset="code"] .studio-center { grid-template-columns: 0 0 minmax(420px, 1fr) 0 0; }
 .tao-studio-product-host[data-layout-preset="code"] .studio-preview,
+.tao-studio-product-host[data-layout-preset="code"] .studio-divider-preview,
 .tao-studio-product-host[data-layout-preset="code"] .studio-inspector,
 .tao-studio-product-host[data-layout-preset="code"] .studio-divider-right { display: none; }
-.tao-studio-product-host[data-layout-preset="run"] .studio-center { grid-template-columns: 0 0 0 minmax(420px, 1fr); grid-template-rows: minmax(0, 1fr); }
+.tao-studio-product-host[data-layout-preset="run"] .studio-center { grid-template-columns: 0 0 0 0 minmax(420px, 1fr); grid-template-rows: minmax(0, 1fr); }
 .tao-studio-product-host[data-layout-preset="run"] .studio-editor-pane,
 .tao-studio-product-host[data-layout-preset="run"] .studio-inspector,
 .tao-studio-product-host[data-layout-preset="run"] .studio-divider-right,
+.tao-studio-product-host[data-layout-preset="run"] .studio-divider-preview,
 .tao-studio-product-host[data-layout-preset="run"] .studio-divider-bottom,
 .tao-studio-product-host[data-layout-preset="run"] .studio-drawer { display: none; }
-.tao-studio-product-host[data-layout-preset="run"] .studio-preview { grid-column: 1 / 5; grid-row: 1; }
+.tao-studio-product-host[data-layout-preset="run"] .studio-preview { grid-column: 1 / 6; grid-row: 1; }
 .studio-files { padding: 8px; }
 .studio-left-panel { min-height: 0; }
 [data-studio-files-surface="compact"] { padding: 2px 4px 10px; }
@@ -651,8 +660,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .studio-divider::after { inset: -4px; }
 
 .studio-center {
-  --studio-bottom-size: 188px; background: var(--studio-bg);
-  grid-template-columns: var(--studio-right-size) 4px minmax(380px, 1fr) minmax(300px, .66fr);
+  --studio-bottom-size: 188px; --studio-preview-size: 440px; background: var(--studio-bg);
+  grid-template-columns: var(--studio-right-size) 4px minmax(380px, 1fr) 4px minmax(280px, var(--studio-preview-size));
   grid-template-rows: minmax(240px, 1fr) 4px var(--studio-bottom-size);
 }
 .studio-workbench { display: contents; }
@@ -772,7 +781,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .studio-command-result:hover, .studio-command-result:focus { background: var(--studio-surface-hover); }
 .studio-command-result span { color: #737d8b; }
 @media (max-width: 1400px) {
-  .studio-center { --studio-right-size: 0px !important; grid-template-columns: 0 0 minmax(280px, 1fr) minmax(280px, 1fr); }
+  .studio-center {
+    --studio-right-size: 0px !important;
+    grid-template-columns: 0 0 minmax(280px, 1fr) 4px minmax(280px, var(--studio-preview-size));
+  }
   .studio-pane-right, .studio-divider-right { display: none; }
   .studio-reload { display: none; }
   .studio-toolbar { gap: 8px; }
@@ -789,16 +801,16 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   .studio-center {
     --studio-bottom-size: 0px !important;
     grid-column: 4;
-    grid-template-columns: 0 0 minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: 0 0 minmax(0, 1fr) 4px minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
   }
   .studio-divider-bottom, .studio-drawer { display: none; }
   .studio-editor-pane, .studio-preview { min-width: 0; }
   .tao-studio-product-host[data-layout-preset="code"] .studio-center {
-    grid-template-columns: 0 0 minmax(0, 1fr) 0;
+    grid-template-columns: 0 0 minmax(0, 1fr) 0 0;
   }
   .tao-studio-product-host[data-layout-preset="run"] .studio-center {
-    grid-template-columns: 0 0 0 minmax(0, 1fr);
+    grid-template-columns: 0 0 0 0 minmax(0, 1fr);
   }
 }
 `

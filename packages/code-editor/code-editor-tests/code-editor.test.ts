@@ -1,7 +1,12 @@
 import { EditorState } from '@codemirror/state'
 import { Expect, Test } from '@shared/test'
 import TR from 'tao-runtime/TR'
-import { codeEditorBaseExtensions, invokeEditorChange, webSocketTransport } from '../code-editor-src/CodeEditor'
+import {
+  codeEditorBaseExtensions,
+  CodeEditorHighlighting,
+  invokeEditorChange,
+  webSocketTransport,
+} from '../code-editor-src/CodeEditor'
 
 Test('@tao/code-editor installs CodeMirror editing and Tao line-comment language data', () => {
   const state = EditorState.create({ doc: 'view Main() { }', extensions: codeEditorBaseExtensions })
@@ -15,6 +20,17 @@ Test('@tao/code-editor invokes its Tao Change action with a runtime text value',
   await invokeEditorChange(change, 'updated Tao')
 
   Expect(received).toEqual(['updated Tao'])
+})
+
+Test('@tao/code-editor builds bounded syntax decorations from host tokens', () => {
+  const decorations = CodeEditorHighlighting.testing.buildDecorations([
+    { color: '#c792ea', from: 0, to: 4 },
+    { color: '#82aaff', from: 5, to: 9 },
+    { color: 'red; background: red', from: 10, to: 11 },
+    { color: '#ffffff', from: 12, to: 20 },
+  ], 13)
+
+  Expect(decorations.size).toBe(2)
 })
 
 Test('@tao/code-editor closes a failed startup socket before falling back', async () => {

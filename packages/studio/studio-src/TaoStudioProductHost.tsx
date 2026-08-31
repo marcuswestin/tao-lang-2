@@ -357,6 +357,10 @@ const studioViewportPresets: Readonly<Record<string, Readonly<{ height: number; 
   tablet: { height: 1_180, width: 820 },
 }
 
+async function highlightTaoSource(content: string) {
+  return (await StudioApiClient.highlight(content)).tokens
+}
+
 /** StudioEditorSurface is the Tao-mounted CodeEditor boundary over the host's revisioned active tab. */
 export function StudioEditorSurface(): React.ReactElement {
   const state = React.useSyncExternalStore(
@@ -407,6 +411,7 @@ export function StudioEditorSurface(): React.ReactElement {
       <CodeEditor
         Change={change}
         Content={file.content}
+        Highlight={highlightTaoSource}
         Layout={{ style: editorSurfaceStyle }}
         Lsp={lsp}
         Selection={{ anchor: file.selectionAnchor, head: file.selectionHead }}

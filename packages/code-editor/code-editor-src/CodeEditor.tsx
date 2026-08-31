@@ -1,6 +1,6 @@
 import { languageServerExtensions, LSPClient, type Transport } from '@codemirror/lsp-client'
-import { EditorState, type Extension, StateEffect } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
+import { EditorState, type Extension, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state'
+import { Decoration, type DecorationSet, EditorView } from '@codemirror/view'
 import { basicSetup } from 'codemirror'
 import React from 'react'
 import TR from 'tao-runtime/TR'
@@ -13,9 +13,16 @@ export type CodeEditorLsp = {
   transport: Transport | Promise<Transport>
 }
 
+export type CodeEditorHighlightToken = Readonly<{
+  color?: string
+  from: number
+  to: number
+}>
+
 export type CodeEditorProps = {
   Change: TR.ActionValue<[TR.Value<string>]>
   Content: string
+  Highlight?: (content: string) => Promise<readonly CodeEditorHighlightToken[]>
   Layout?: TR.TaoVisualLayout
   Lsp?: CodeEditorLsp
   Selection?: Readonly<{ anchor: number; head?: number }>
@@ -25,11 +32,42 @@ export type CodeEditorProps = {
   children?: React.ReactNode
 }
 
+const setCodeEditorHighlight = StateEffect.define<readonly CodeEditorHighlightToken[]>()
+const highlightColorPattern = /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/i
+
+const codeEditorHighlightField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none
+  },
+  provide: field => EditorView.decorations.from(field),
+  update(decorations, transaction) {
+    let next = decorations.map(transaction.changes)
+    for (const effect of transaction.effects) {
+      if (effect.is(setCodeEditorHighlight)) {
+        next = buildCodeEditorHighlightDecorations(effect.value, transaction.newDoc.length)
+      }
+    }
+    return next
+  },
+})
+
 /** CodeMirror's standard interaction surface and Tao's line-comment convention. */
 export const codeEditorBaseExtensions: readonly Extension[] = [
   basicSetup,
+  codeEditorHighlightField,
   EditorState.languageData.of(() => [{ commentTokens: { line: '//' } }]),
+  EditorView.theme({
+    '.cm-content': { caretColor: '#f8fafc' },
+    '.cm-cursor, .cm-dropCursor': {
+      borderLeftColor: '#f8fafc',
+      borderLeftWidth: '2px',
+    },
+  }, { dark: true }),
 ]
+
+export const CodeEditorHighlighting = {
+  testing: { buildDecorations: buildCodeEditorHighlightDecorations },
+} as const
 
 /** CodeEditor is the foreign-view implementation used by Studio's Tao-authored editor surface. */
 export function CodeEditor(props: CodeEditorProps): React.ReactElement {
@@ -49,7 +87,25 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
       return
     }
     let cancelled = false
+    let highlightRevision = 0
+    let highlightTimer: ReturnType<typeof setTimeout> | undefined
     let ownedClient: LSPClient | undefined
+    const scheduleHighlight = (view: EditorView, nextContent: string, delayMs = 60): void => {
+      const revision = ++highlightRevision
+      clearTimeout(highlightTimer)
+      if (props.Highlight === undefined) {
+        return
+      }
+      highlightTimer = setTimeout(() => {
+        void props.Highlight?.(nextContent).then(tokens => {
+          if (!cancelled && revision === highlightRevision && view.state.doc.toString() === nextContent) {
+            view.dispatch({ effects: setCodeEditorHighlight.of(tokens) })
+          }
+        }).catch(() => {
+          // Syntax highlighting is presentation-only; editing and LSP behavior remain available.
+        })
+      }, delayMs)
+    }
     const view = new EditorView({
       doc: content.current,
       extensions: [
@@ -57,6 +113,9 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
         EditorView.updateListener.of(update => {
           if (update.docChanged && !applyingExternalContent.current) {
             void invokeEditorChange(change.current, update.state.doc.toString())
+          }
+          if (update.docChanged) {
+            scheduleHighlight(update.view, update.state.doc.toString())
           }
           if (update.selectionSet) {
             selectionChange.current?.({
@@ -69,6 +128,7 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
       parent,
     })
     editor.current = view
+    scheduleHighlight(view, content.current, 0)
 
     const startLsp = async (): Promise<void> => {
       if (props.Lsp === undefined) {
@@ -107,13 +167,14 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
 
     return () => {
       cancelled = true
+      clearTimeout(highlightTimer)
       view.destroy()
       if (editor.current === view) {
         editor.current = undefined
       }
       ownedClient?.disconnect()
     }
-  }, [props.Lsp?.documentUri, props.Lsp?.languageId, props.Lsp?.rootUri, props.Lsp?.transport])
+  }, [props.Highlight, props.Lsp?.documentUri, props.Lsp?.languageId, props.Lsp?.rootUri, props.Lsp?.transport])
 
   React.useEffect(() => {
     const view = editor.current
@@ -157,6 +218,26 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
       </React.Fragment>)}
     </div>
   )
+}
+
+function buildCodeEditorHighlightDecorations(
+  tokens: readonly CodeEditorHighlightToken[],
+  documentLength = Number.POSITIVE_INFINITY,
+): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>()
+  const validTokens = tokens
+    .filter(token =>
+      token.from >= 0
+      && token.from < token.to
+      && token.to <= documentLength
+      && token.color !== undefined
+      && highlightColorPattern.test(token.color)
+    )
+    .sort((left, right) => left.from - right.from || left.to - right.to)
+  for (const token of validTokens) {
+    builder.add(token.from, token.to, Decoration.mark({ attributes: { style: `color: ${token.color}` } }))
+  }
+  return builder.finish()
 }
 
 /** invokeEditorChange preserves the Tao action boundary while exposing an ordinary editor string. */
