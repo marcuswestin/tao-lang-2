@@ -1,6 +1,6 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
 import { Errors } from '@shared'
-import { StudioClientAssets } from './StudioClientAssets'
+import { type StudioClientAssetProvider, StudioClientAssets } from './StudioClientAssets'
 import { StudioFixtureGeneration } from './StudioFixtureGeneration'
 import { StudioHighlight } from './StudioHighlight'
 import { StudioLsp, type StudioLspSession } from './StudioLsp'
@@ -28,6 +28,8 @@ import { StudioWelcome } from './StudioWelcome'
 
 export type StudioServerOptions = {
   allowedOrigins?: readonly string[]
+  clientAssets?: StudioClientAssetProvider
+  clientReloadRevision?: () => number
   compileOnStart?: boolean
   generationProvider?: GenerationProvider
   hostname?: string
@@ -83,6 +85,7 @@ async function startManagedStudioServer(
     options.generationProvider
       ?? new UnavailableGenerationProvider('Apple Foundation Models is not configured for this Studio server.'),
   )
+  const clientAssets = options.clientAssets ?? StudioClientAssets
 
   const eventClients = new Map<string, Set<StudioSocket>>()
   const dataSources = new Map<string, StudioServerDatasource>()
@@ -157,6 +160,13 @@ async function startManagedStudioServer(
         return response(request, url, requestOptions, null, 204)
       }
       try {
+        if (
+          request.method === 'GET'
+          && url.pathname === '/studio-dev/revision'
+          && options.clientReloadRevision !== undefined
+        ) {
+          return response(request, url, requestOptions, { revision: options.clientReloadRevision() })
+        }
         const managerResponse = await handleManagerRequest(
           manager,
           request,
@@ -170,7 +180,7 @@ async function startManagedStudioServer(
           return managerResponse
         }
         if (request.method === 'GET' && url.pathname === '/studio.js') {
-          return javascriptResponse(await StudioClientAssets.bundle())
+          return javascriptResponse(await clientAssets.bundle())
         }
         if (route === undefined) {
           return response(request, url, requestOptions, { error: 'Studio endpoint not found.' }, 404)
@@ -416,10 +426,10 @@ async function handleRequest(
   options: StudioServerOptions,
 ): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/') {
-    return htmlResponse(StudioClientAssets.html({ previewUrl: options.previewUrl }))
+    return htmlResponse(studioClientHtml(options))
   }
   if (request.method === 'GET' && url.pathname === '/studio.js') {
-    return javascriptResponse(await StudioClientAssets.bundle())
+    return javascriptResponse(await (options.clientAssets ?? StudioClientAssets).bundle())
   }
   if (request.method === 'GET' && url.pathname === '/api/protocol') {
     return response(request, url, options, await session.handshake())
@@ -754,8 +764,37 @@ export const StudioServerTesting = {
   previewOriginPath,
   requestAllowed,
   serverOrigin,
+  studioClientHtml,
   studioSessionRoute,
 } as const
+
+function studioClientHtml(options: StudioServerOptions): string {
+  const source = (options.clientAssets ?? StudioClientAssets).html({ previewUrl: options.previewUrl })
+  const revision = options.clientReloadRevision?.()
+  if (revision === undefined) {
+    return source
+  }
+  const reload = `<script>
+(() => {
+  let revision = ${JSON.stringify(revision)}
+  const poll = async () => {
+    try {
+      const response = await fetch('/studio-dev/revision', { cache: 'no-store' })
+      if (response.ok) {
+        const next = await response.json()
+        if (next.revision !== revision) {
+          window.location.reload()
+          return
+        }
+      }
+    } catch {}
+    window.setTimeout(poll, 250)
+  }
+  window.setTimeout(poll, 250)
+})()
+</script>`
+  return source.replace('</body>', `${reload}\n</body>`)
+}
 
 async function handleRequestForTesting(
   session: StudioProjectSession,

@@ -56,7 +56,9 @@ export {
 } from './StudioHighlight'
 
 export {
+  type StudioClientAssetProvider,
   StudioClientAssets,
+  type StudioClientBundleMode,
   type StudioClientConfig,
 } from './StudioClientAssets'
 

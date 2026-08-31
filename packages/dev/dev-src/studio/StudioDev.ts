@@ -17,6 +17,7 @@ import {
 } from '@studio'
 import betterOpen from 'better-opn'
 import { ExpoRunner } from '../expo-dev-loop/expo-runner/ExpoRunner'
+import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
 import { StudioNative } from './StudioNative'
 import type { StartedStudioNative } from './StudioNative'
 import { type CreatedStudioPreviewRuntime, StudioPreviewRuntime } from './StudioPreviewRuntime'
@@ -65,6 +66,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   let server: StartedStudioServer | undefined
   let foundationModels: AppleFoundationModelsService | undefined
   let manager: StudioSessionManager | undefined
+  let studioClientReload: StartedStudioClientDevReload | undefined
   const recentProjects = createRecentProjectStore(
     FS.resolvePath('recent-projects.json', options.userStateRoot ?? Repo.resolvePath('.artifacts/user/studio')),
   )
@@ -107,7 +109,10 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     })
     const initial = manager.add(initialResource)
     HCI.logProcessInfo('studio', `Project: ${initial.project}`)
+    studioClientReload = options.native ? undefined : await startStudioClientDevReload()
     server = await startStudioSessionServer(manager, {
+      clientAssets: studioClientReload?.clientAssets,
+      clientReloadRevision: studioClientReload?.revision,
       compileOnStart: false,
       generationProvider: foundationModels.provider,
       hostname: options.hostname,
@@ -145,6 +150,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     removeSigterm()
     await cleanupStudioDev([
       () => native?.stop(),
+      () => studioClientReload?.close(),
       () => server?.stop(),
       () => manager?.closeAll(),
       () => foundationModels?.stop(),

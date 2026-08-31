@@ -37,6 +37,27 @@ Describe('Studio server request boundary', () => {
     Expect(StudioServerTesting.serverOrigin('https:', 'localhost', 443)).toBe('https://localhost')
   })
 
+  Test('injects client revision polling only for development Studio servers', () => {
+    const clientAssets = {
+      async bundle() {
+        return 'client'
+      },
+      html() {
+        return '<html><body>Studio</body></html>'
+      },
+    }
+    const production = StudioServerTesting.studioClientHtml({ clientAssets })
+    const development = StudioServerTesting.studioClientHtml({
+      clientAssets,
+      clientReloadRevision: () => 7,
+    })
+
+    Expect(production).toBe('<html><body>Studio</body></html>')
+    Expect(development).toContain("fetch('/studio-dev/revision', { cache: 'no-store' })")
+    Expect(development).toContain('let revision = 7')
+    Expect(development).toContain('window.location.reload()')
+  })
+
   Test('serves injected availability and generated fixtures over the Studio HTTP surface', async () => {
     const manifest = generationManifest()
     const session = {

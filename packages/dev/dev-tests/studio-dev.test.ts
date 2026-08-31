@@ -2,6 +2,7 @@ import { FS, Repo, Time } from '@shared'
 import type { CLI, Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { StudioClientAssets } from '@studio'
+import { startStudioClientDevReload } from '../dev-src/studio/StudioClientDevReload'
 import { createRecentProjectStore, StudioDev } from '../dev-src/studio/StudioDev'
 import { StudioNative } from '../dev-src/studio/StudioNative'
 import { packagedExpoCommand } from '../dev-src/studio/StudioPackagedService'
@@ -332,6 +333,53 @@ Describe('Studio native wrapper foundation', () => {
 })
 
 Describe('Studio smoke resource isolation', () => {
+  Test('publishes only complete rebuilt Studio browser clients', async () => {
+    let changed: (() => Promise<void>) | undefined
+    let closed = 0
+    const errors: string[] = []
+    const reload = await startStudioClientDevReload({
+      async loadAssets(attempt) {
+        return {
+          async bundle() {
+            if (attempt === 2) {
+              throw new Error('client does not compile yet')
+            }
+            return `bundle-${attempt}`
+          },
+          html(config) {
+            return `html-${attempt}-${config.previewUrl}`
+          },
+        }
+      },
+      onError(error) {
+        errors.push(String(error))
+      },
+      async subscribe(listener) {
+        changed = listener
+        return async () => {
+          closed += 1
+        }
+      },
+    })
+
+    Expect(reload.revision()).toBe(0)
+    await changed!()
+    Expect(reload.revision()).toBe(1)
+    Expect(await reload.clientAssets.bundle()).toBe('bundle-1')
+    Expect(reload.clientAssets.html({ previewUrl: 'preview' })).toBe('html-1-preview')
+
+    await changed!()
+    Expect(errors).toEqual(['Error: client does not compile yet'])
+    Expect(reload.revision()).toBe(1)
+    Expect(await reload.clientAssets.bundle()).toBe('bundle-1')
+
+    await changed!()
+    Expect(reload.revision()).toBe(3)
+    Expect(await reload.clientAssets.bundle()).toBe('bundle-3')
+    await reload.close()
+    Expect(closed).toBe(1)
+  })
+
   Test('allocates every Studio preview server from an ephemeral port', () => {
     Expect(StudioDev.testing.preferredExpoPort()).toBe(0)
   })
