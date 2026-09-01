@@ -1,5 +1,5 @@
 import { AST } from '@parser'
-import { Text } from '@shared'
+import { Assert, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import SourceActions, {
   type StudioComponentKind,
@@ -1187,9 +1187,7 @@ function renderIdsByText(
 
 function requireRenderByText(document: AST.Document, text: string): AST.Render {
   const render = renderByText(document, text)
-  if (render === undefined) {
-    throw new Error(`Expected render containing text: ${text}`)
-  }
+  Assert.defined(render, `a render containing text: ${text}`)
   return render
 }
 
@@ -1205,9 +1203,7 @@ function requireRenderBySource(document: AST.Document, text: string): AST.Render
     .filter(AST.isRender)
     .filter(candidate => renderSource(document, candidate).includes(text))
     .toSorted((left, right) => sourceSpan(left) - sourceSpan(right))[0]
-  if (render === undefined) {
-    throw new Error(`Expected render containing source: ${text}`)
-  }
+  Assert.defined(render, `a render containing source: ${text}`)
   return render
 }
 

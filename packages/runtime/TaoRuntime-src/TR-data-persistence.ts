@@ -1,5 +1,7 @@
+import { RuntimeAssert } from './TR-assert'
 import type { TaoDataSchemaDefinition } from './TR-data'
 import { valueMatchesKind } from './TR-data-definition'
+import { UserInputError } from './TR-errors'
 
 export type StoredRow = Record<string, unknown> & { Id: string }
 export type StoredData = {
@@ -34,60 +36,73 @@ export function envelope(data: StoredData, definition: TaoDataSchemaDefinition):
 
 export function parseEnvelope(serialized: string, definition: TaoDataSchemaDefinition): StoredData {
   const value = JSON.parse(serialized) as unknown
-  if (!value || typeof value !== 'object') {
-    throw new Error('Persisted data is not an object envelope.')
-  }
+  RuntimeAssert.input(value && typeof value === 'object', 'Persisted data is not an object envelope.')
   const candidate = value as Partial<PersistedEnvelope>
-  if (candidate.formatVersion !== persistedFormatVersion) {
-    throw new Error(`Unsupported persisted data format '${String(candidate.formatVersion)}'.`)
-  }
+  RuntimeAssert.input(
+    candidate.formatVersion === persistedFormatVersion,
+    `Unsupported persisted data format '${String(candidate.formatVersion)}'.`,
+  )
   const schemaVersion = definition.schemaVersion ?? 1
-  if (candidate.schemaVersion !== schemaVersion) {
-    throw new Error(`Persisted schema version ${String(candidate.schemaVersion)} does not match ${schemaVersion}.`)
-  }
-  if (!Number.isSafeInteger(candidate.nextId) || (candidate.nextId ?? 0) < 1) {
-    throw new Error('Persisted data has an invalid nextId.')
-  }
+  RuntimeAssert.input(
+    candidate.schemaVersion === schemaVersion,
+    `Persisted schema version ${String(candidate.schemaVersion)} does not match ${schemaVersion}.`,
+  )
+  RuntimeAssert.input(
+    Number.isSafeInteger(candidate.nextId) && (candidate.nextId ?? 0) >= 1,
+    'Persisted data has an invalid nextId.',
+  )
   if (!candidate.rows || typeof candidate.rows !== 'object' || Array.isArray(candidate.rows)) {
-    throw new Error('Persisted data has invalid rows.')
+    throw new UserInputError('Persisted data has invalid rows.')
   }
   const entityNames = Object.keys(definition.entities)
-  if (!sameNames(Object.keys(candidate.rows), entityNames)) {
-    throw new Error('Persisted data entity collections do not match the current schema.')
-  }
+  RuntimeAssert.input(
+    sameNames(Object.keys(candidate.rows), entityNames),
+    'Persisted data entity collections do not match the current schema.',
+  )
   const rows: Record<string, StoredRow[]> = {}
   for (const entityName of entityNames) {
-    const entityRows = candidate.rows[entityName]
+    // Both locals carry an explicit type: TypeScript requires one for every `const` whose narrowing
+    // flows through an assertion call, and this loop ends in one.
+    const entityRows: unknown = candidate.rows[entityName]
     if (!Array.isArray(entityRows)) {
-      throw new Error(`Persisted entity '${entityName}' is not a row list.`)
+      throw new UserInputError(`Persisted entity '${entityName}' is not a row list.`, { entityName })
     }
-    rows[entityName] = entityRows.map(row => validatedStoredRow(entityName, row, definition))
-    const ids = rows[entityName].map(row => row.Id)
-    if (new Set(ids).size !== ids.length) {
-      throw new Error(`Persisted entity '${entityName}' contains duplicate Id values.`)
-    }
+    const validated: StoredRow[] = entityRows.map((row: unknown) => validatedStoredRow(entityName, row, definition))
+    rows[entityName] = validated
+    const ids: readonly string[] = validated.map(row => row.Id)
+    RuntimeAssert.input(
+      new Set(ids).size === ids.length,
+      `Persisted entity '${entityName}' contains duplicate Id values.`,
+      { entityName },
+    )
   }
   validatePersistedRelations(rows, definition)
   return { nextId: candidate.nextId!, rows }
 }
 
 function validatedStoredRow(entityName: string, value: unknown, definition: TaoDataSchemaDefinition): StoredRow {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`Persisted ${entityName} row is not an object.`)
-  }
+  RuntimeAssert.input(
+    value && typeof value === 'object' && !Array.isArray(value),
+    `Persisted ${entityName} row is not an object.`,
+    { entityName },
+  )
   const row = value as Record<string, unknown>
   if (typeof row['Id'] !== 'string') {
-    throw new Error(`Persisted ${entityName} row has no text Id.`)
+    throw new UserInputError(`Persisted ${entityName} row has no text Id.`, { entityName })
   }
   const entity = definition.entities[entityName]!
-  if (!sameNames(Object.keys(row), ['Id', ...Object.keys(entity.fields)])) {
-    throw new Error(`Persisted ${entityName} row fields do not match the current schema.`)
-  }
+  RuntimeAssert.input(
+    sameNames(Object.keys(row), ['Id', ...Object.keys(entity.fields)]),
+    `Persisted ${entityName} row fields do not match the current schema.`,
+    { entityName },
+  )
   for (const [name, field] of Object.entries(entity.fields)) {
     const value = row[name]
-    if (field.kind === 'relation' ? typeof value !== 'string' : !valueMatchesKind(value, field.kind)) {
-      throw new Error(`Persisted field '${entityName}.${name}' has an invalid ${field.kind} value.`)
-    }
+    RuntimeAssert.input(
+      field.kind === 'relation' ? typeof value === 'string' : valueMatchesKind(value, field.kind),
+      `Persisted field '${entityName}.${name}' has an invalid ${field.kind} value.`,
+      { entityName, fieldName: name },
+    )
   }
   return { ...row, Id: row['Id'] }
 }
@@ -100,9 +115,11 @@ function validatePersistedRelations(rows: Record<string, StoredRow[]>, definitio
       }
       const relatedIds = new Set((rows[field.relation ?? ''] ?? []).map(row => row.Id))
       for (const row of rows[entityName] ?? []) {
-        if (!relatedIds.has(row[name] as string)) {
-          throw new Error(`Persisted relationship '${entityName}.${name}' refers to missing ${field.relation}.`)
-        }
+        RuntimeAssert.input(
+          relatedIds.has(row[name] as string),
+          `Persisted relationship '${entityName}.${name}' refers to missing ${field.relation}.`,
+          { entityName, fieldName: name },
+        )
       }
     }
   }

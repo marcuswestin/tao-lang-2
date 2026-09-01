@@ -1,3 +1,4 @@
+import { Assert } from '@shared'
 import { DefaultTokenBuilder, type Grammar, type TokenBuilderOptions } from 'langium'
 
 const expressionMode = 'expression'
@@ -21,9 +22,7 @@ export class TaoTokenBuilder extends DefaultTokenBuilder {
     options?: TokenBuilderOptions,
   ): ReturnType<DefaultTokenBuilder['buildTokens']> {
     const built = super.buildTokens(grammar, options)
-    if (!Array.isArray(built)) {
-      throw new Error('Tao expects Langium default tokens before installing lexer modes.')
-    }
+    Assert(Array.isArray(built), 'Langium to build default tokens before Tao installs lexer modes')
     const tokens = built as MutableTokenType[]
     const byName = new Map(tokens.map(token => [token.name, token]))
     const interpolatedStart = requiredToken(byName, 'INTERPOLATED_STRING_START')
@@ -74,9 +73,7 @@ function withoutModeExternalAlternatives(
 
 function requiredToken(tokens: ReadonlyMap<string, MutableTokenType>, name: string): MutableTokenType {
   const token = tokens.get(name)
-  if (!token) {
-    throw new Error(`Tao lexer token '${name}' was not generated.`)
-  }
+  Assert.defined(token, `the generated Tao lexer to declare token '${name}'`)
   return token
 }
 

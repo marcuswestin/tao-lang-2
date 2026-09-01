@@ -1,9 +1,12 @@
 import React from 'react'
 import { existingTransactionResource, transactionResource } from './TR-action-transactions'
+import { RuntimeAssert } from './TR-assert'
 import type { TaoKeyValueStorage } from './TR-data'
-import { platformKeyValueStorage } from './TR-data-provider'
+import { memoryKeyValueStorage, platformKeyValueStorage } from './TR-data-provider'
+import { warnContainedFailure } from './TR-errors'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
+import { runtimeTestOverrideSlot } from './TR-test-override'
 
 type EvaluableValue<T> = Readonly<{ evaluate(): EvaluableValue<T>; jsValue: T }>
 
@@ -31,9 +34,34 @@ export type TaoWritableState<T> = Readonly<{
 }>
 
 const states = new Map<string, RuntimePersistedState<unknown>>()
+/**
+ * constructed holds every persisted state a generated module has ever declared, which `states`
+ * cannot: `states` is filled by `usePersistedState` and emptied on unmount, so between checks — and
+ * before the first mount of any check — it is empty. Only a registry filled by the constructor can
+ * reach a state that a previous check wrote and then unmounted.
+ *
+ * It costs a real app nothing. A validated `(persist)` state is declared directly inside an app, so
+ * the compiler emits its construction once at generated-module scope: the registry holds one entry
+ * per declaration, already alive for the life of the module that declared it, and grows only when a
+ * module is evaluated again — Fast Refresh, or a second compiled copy of one app under the harness.
+ */
+const constructed = new Set<ConstructedPersistedState>()
 const pendingRestore = new Map<string, unknown>()
 const enumCases = new Map<string, Map<string, PersistedEnumCaseIdentity>>()
 let storageOverride: TaoKeyValueStorage | undefined
+let testStorageRestore: (() => void) | undefined
+const storageSlot = runtimeTestOverrideSlot({
+  read: () => storageOverride,
+  write: next => {
+    storageOverride = next
+  },
+})
+
+/** ConstructedPersistedState is the view the check- and launch-boundary registry needs. */
+type ConstructedPersistedState = Readonly<{
+  resetToDeclaredDefault(): void
+  settleWrites(): Promise<void>
+}>
 
 type PersistedEnumCaseIdentity = Readonly<{ caseName: string; declaration: string; identity: symbol }>
 
@@ -67,9 +95,11 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
     type: TaoPersistedStateType,
   ) {
     this.#default = initial.evaluate().jsValue
-    if (!matchesPersistedType(this.#default, type)) {
-      throw new Error(`Persisted state '${name}' default does not match its generated runtime type.`)
-    }
+    RuntimeAssert(
+      matchesPersistedType(this.#default, type),
+      `persisted state '${name}' default matches its generated runtime type`,
+      { type },
+    )
     this.#value = this.#default
     this.#type = type
     this.key = `tao.persisted-state.v1:${identity.canonical}:${name}`
@@ -78,6 +108,7 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
     if (decoded.ok) {
       this.#value = decoded.value as T
     }
+    constructed.add(this)
   }
 
   defaultValue(): EvaluableValue<T> {
@@ -130,7 +161,7 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
       this.#loaded = true
     })().catch(error => {
       this.#loaded = true
-      warnPersistence(`Could not load persisted state '${this.key}'.`, error)
+      warnContainedFailure(`Could not load persisted state '${this.key}'.`, error)
     })
     return this.#loading
   }
@@ -146,10 +177,40 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
     }
   }
 
+  /** settleWrites waits until the device holds every value this launch queued. */
+  async settleWrites(): Promise<void> {
+    await this.#persistQueue
+  }
+
+  /**
+   * resetToDeclaredDefault returns this state to the value its declaration says a new device holds,
+   * and is the seam behind both boundaries. Unlike `reset` it writes nothing, which each boundary
+   * needs for its own reason: at a check boundary `beginPersistedStateTest` has already swapped in
+   * an empty store, so a write would only put the default back into a store about to be discarded;
+   * at a launch boundary the device is kept, and writing the default there would erase the very
+   * value the relaunched instance is supposed to read back.
+   *
+   * Forgetting the load memo is the point of both. A state declared at generated-module scope
+   * outlives every mount, so one that already loaded would hand the next check — or the next
+   * launch — that same resolved read and never look at the store again.
+   */
+  resetToDeclaredDefault(): void {
+    this.#dirtyBeforeLoad = false
+    this.#loaded = false
+    this.#loading = undefined
+    // A save still queued against the previous check's storage keeps its own reference to it and
+    // settles there. Dropping the chain stops the next check's saves from waiting on that promise.
+    // A launch boundary has already awaited the chain, so there is nothing of its own to drop.
+    this.#persistQueue = Promise.resolve()
+    this.#replace(this.#default)
+  }
+
   #commit(next: T): void {
-    if (!matchesPersistedType(next, this.#type)) {
-      throw new Error(`Persisted state '${this.key}' rejected a value that does not match its generated runtime type.`)
-    }
+    RuntimeAssert(
+      matchesPersistedType(next, this.#type),
+      `persisted state '${this.key}' only ever receives a value matching its generated runtime type`,
+      { type: this.#type },
+    )
     if (!this.#loaded) {
       this.#dirtyBeforeLoad = true
     }
@@ -163,7 +224,7 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
     const targetStorage = storage()
     this.#persistQueue = this.#persistQueue
       .then(() => targetStorage.setItem(this.key, encoded))
-      .catch(error => warnPersistence(`Could not save persisted state '${this.key}'.`, error))
+      .catch(error => warnContainedFailure(`Could not save persisted state '${this.key}'.`, error))
   }
 
   #replace(next: T): void {
@@ -187,16 +248,16 @@ function decodeEnvelope(
       || envelope.formatVersion !== 1
       || JSON.stringify(envelope.type) !== JSON.stringify(expectedType)
     ) {
-      warnPersistence('Ignored persisted state whose version or runtime type no longer matches.', undefined)
+      warnContainedFailure('Ignored persisted state whose version or runtime type no longer matches.', undefined)
       return { ok: false }
     }
     const decoded = decodePersistedValue(envelope.value, expectedType)
     if (!decoded.ok) {
-      warnPersistence('Ignored persisted state whose value no longer matches its runtime type.', undefined)
+      warnContainedFailure('Ignored persisted state whose value no longer matches its runtime type.', undefined)
     }
     return decoded
   } catch (error) {
-    warnPersistence('Ignored corrupt persisted state.', error)
+    warnContainedFailure('Ignored corrupt persisted state.', error)
     return { ok: false }
   }
 }
@@ -241,9 +302,9 @@ function matchesPersistedType(value: unknown, type: TaoPersistedStateType): bool
 
 function encodePersistedValue(value: unknown, type: TaoPersistedStateType): unknown {
   if (type.kind === 'enum') {
-    if (!matchesPersistedType(value, type)) {
-      throw new Error('Persisted enum value does not match its generated runtime type.')
-    }
+    RuntimeAssert(matchesPersistedType(value, type), 'persisted enum value matches its generated runtime type', {
+      type,
+    })
     return { caseName: (value as PersistedEnumCaseIdentity).caseName, declaration: type.declaration }
   }
   if (type.kind === 'list') {
@@ -253,9 +314,7 @@ function encodePersistedValue(value: unknown, type: TaoPersistedStateType): unkn
   }
   if (type.kind === 'union') {
     const member = type.members.find(candidate => matchesPersistedType(value, candidate))
-    if (member === undefined) {
-      throw new Error('Persisted union value does not match its generated runtime type.')
-    }
+    RuntimeAssert.defined(member, 'persisted union value matches one of its generated runtime type members', { type })
     return encodePersistedValue(value, member)
   }
   if (type.kind === 'item') {
@@ -342,13 +401,6 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return prototype === Object.prototype || prototype === null
 }
 
-function warnPersistence(message: string, error: unknown): void {
-  if (typeof process === 'undefined' || process.env.NODE_ENV === 'production') {
-    return
-  }
-  console.warn(message, error ?? '')
-}
-
 /** usePersistedState subscribes a mounted app and starts its default-first async load. */
 export function usePersistedState(state: RuntimePersistedState<unknown>): void {
   React.useSyncExternalStore(state.subscribe, state.snapshot, state.snapshot)
@@ -375,13 +427,51 @@ export function restorePersistedState(captured: Readonly<Record<string, unknown>
   }
 }
 
+/**
+ * beginPersistedStateTest gives one Tao check its own device. Every state a generated module has
+ * declared goes back to its declared default and forgets that it ever loaded, and the check runs
+ * over a private in-memory store, so a value an earlier check wrote is unreachable in both the
+ * values held in memory and the bytes on the device. A relaunch inside a check deliberately does
+ * not come through here: the same device is what a relaunch keeps.
+ */
+export function beginPersistedStateTest(): void {
+  endPersistedStateTest()
+  testStorageRestore = setPersistedStateStorageForTests(memoryKeyValueStorage())
+  pendingRestore.clear()
+  for (const state of constructed) {
+    state.resetToDeclaredDefault()
+  }
+}
+
+/**
+ * beginPersistedStateLaunch ends the running launch and prepares the next one on the same device,
+ * the way `beginNavigationRestorationLaunch` does for navigation. The values the launched instance
+ * held and the read each one memoized are dropped; the device is kept and never written, so the
+ * relaunched instance genuinely hydrates from the bytes this one left behind rather than from a
+ * module-scope value that outlived it. It settles the queued writes first, because the read the
+ * next instance performs is not ordered behind a write that is still in flight.
+ *
+ * A relaunch has no `fresh` here. `fresh` opts a launch out of restoring navigation, not out of the
+ * device: the width a person persisted is still theirs on the launch after it.
+ */
+export async function beginPersistedStateLaunch(): Promise<void> {
+  for (const state of constructed) {
+    await state.settleWrites()
+  }
+  for (const state of constructed) {
+    state.resetToDeclaredDefault()
+  }
+}
+
+/** endPersistedStateTest hands the device-local domain back to whatever storage surrounded the check. */
+export function endPersistedStateTest(): void {
+  testStorageRestore?.()
+  testStorageRestore = undefined
+}
+
 /** setPersistedStateStorageForTests replaces only this device-local state domain. */
 export function setPersistedStateStorageForTests(next: TaoKeyValueStorage | undefined): () => void {
-  const previous = storageOverride
-  storageOverride = next
-  return () => {
-    storageOverride = previous
-  }
+  return storageSlot.install(next)
 }
 
 function storage(): TaoKeyValueStorage {

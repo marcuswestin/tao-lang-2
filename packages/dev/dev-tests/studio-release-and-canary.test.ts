@@ -6,6 +6,7 @@ import {
   formatCanaryReport,
   MANUAL_CHECKS,
   REQUIRED_CAPABILITIES,
+  resolveCanaryTarget,
 } from '../dev-src/studio/StudioCanary'
 import {
   type ArtifactInventory,
@@ -207,5 +208,35 @@ Describe('Studio native canary', () => {
     Expect(MANUAL_CHECKS.some(check => check.includes('directory picker'))).toBe(true)
     Expect(MANUAL_CHECKS.some(check => check.includes('Command-W'))).toBe(true)
     Expect(MANUAL_CHECKS.some(check => check.includes('quits'))).toBe(true)
+  })
+
+  Test('selects HNReader when the default project is used, even if only --project was set', () => {
+    const repositoryRoot = '/repo'
+    const defaultRoot = FS.resolvePath('Apps/HNReader', repositoryRoot)
+
+    Expect(resolveCanaryTarget({}, repositoryRoot)).toEqual({
+      appName: 'HNReader',
+      projectRoot: defaultRoot,
+    })
+    Expect(resolveCanaryTarget({ projectRoot: 'Apps/HNReader' }, repositoryRoot)).toEqual({
+      appName: 'HNReader',
+      projectRoot: defaultRoot,
+    })
+    Expect(resolveCanaryTarget({ projectRoot: defaultRoot }, repositoryRoot)).toEqual({
+      appName: 'HNReader',
+      projectRoot: defaultRoot,
+    })
+  })
+
+  Test('does not invent an app name for a non-default multi-app project', () => {
+    const repositoryRoot = '/repo'
+    Expect(resolveCanaryTarget({ projectRoot: 'Apps/Other' }, repositoryRoot)).toEqual({
+      appName: undefined,
+      projectRoot: FS.resolvePath('Apps/Other', repositoryRoot),
+    })
+    Expect(resolveCanaryTarget({ appName: 'Chosen', projectRoot: 'Apps/Other' }, repositoryRoot)).toEqual({
+      appName: 'Chosen',
+      projectRoot: FS.resolvePath('Apps/Other', repositoryRoot),
+    })
   })
 })

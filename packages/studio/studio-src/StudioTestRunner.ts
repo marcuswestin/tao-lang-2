@@ -1,3 +1,5 @@
+import { Text } from '@shared'
+
 export type StudioTestFailure = {
   column?: number
   filePath: string
@@ -41,8 +43,9 @@ export const StudioTestOutput = {
     parseOutput?: string
     signal: string | null
   }): StudioTestRun {
-    const output = stripAnsi(input.output).trim()
-    const parseOutput = stripAnsi(input.parseOutput ?? input.output)
+    // ANSI CSI sequences are presentation-only and must never enter the Studio DOM.
+    const output = Text.stripAnsi(input.output).trim()
+    const parseOutput = Text.stripAnsi(input.parseOutput ?? input.output)
     const failures = parseFailures(parseOutput)
     const passed = summaryCount(parseOutput, 'Tests', 'passed')
     const failed = summaryCount(parseOutput, 'Tests', 'failed')
@@ -118,9 +121,4 @@ function summaryCount(output: string, category: string, status: string): number 
 
 function matches(value: string, pattern: RegExp): string[] {
   return [...value.matchAll(pattern)].map(match => match[1]!.trim())
-}
-
-function stripAnsi(value: string): string {
-  // ANSI CSI sequences are presentation-only and must never enter the Studio DOM.
-  return value.replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
 }

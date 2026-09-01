@@ -1,0 +1,4 @@
+project {
+   id "language-core"
+   name "Language Core"
+}

@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 
 type GenerationManifest = {
@@ -20,8 +20,27 @@ Describe('generation package boundary', () => {
     )
     for (const [path, source] of portableSources) {
       Expect(path).not.toContain('apple-foundation-models-service')
-      Expect(source).not.toMatch(/(?:from\s+|import\s*(?:\(\s*)?)['"](?:node:|@shared)/)
+      // `@shared/core` is the platform-free half of `@shared` — the error taxonomy, `Assert`,
+      // `Switch`, `Text`, `Time` — and it is what Metro resolves into an app bundle. The portable
+      // entry may reach it; the `@shared` root and its Node-backed wrappers stay out.
+      Expect(source).not.toMatch(/(?:from\s+|import\s*(?:\(\s*)?)['"](?:node:|@shared(?!\/core))/)
     }
+  })
+
+  Test('keeps @shared/core platform-free, which is what lets a bundle-bound entry reach it', async () => {
+    // The rule above narrowed from `@shared` to `@shared/core`, so "no Node reaches an app bundle"
+    // now rests entirely on that entry staying clean. Nothing asserted it until here: a `node:` import
+    // added to `core/Text.ts` would have satisfied both this package's boundary and Metro's alias.
+    const coreRoot = FS.resolvePath('packages/shared/shared-src/core', Repo.getRoot())
+    const offenders: string[] = []
+    for await (const path of FS.walk(coreRoot, { extensions: ['.ts'] })) {
+      const source = await FS.readText(path)
+      if (/(?:from\s+|import\s*(?:\(\s*)?)['"]node:/.test(source)) {
+        offenders.push(FS.relativePath(Repo.getRoot(), path))
+      }
+    }
+
+    Expect(offenders).toEqual([])
   })
 })
 

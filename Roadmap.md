@@ -11,8 +11,6 @@ app feature and Tao test proves each capability).
 
 ## Ro STACK
 
-- [x] Rename UI to Scene
-- [x] Upgrade all dependencies of e.g expo/react-native/expo-router/etc
 - [ ] Think about making Tao apps easily keyboard driven.
 - [ ] Deep links and navigation persistence
 - [ ] Enable Codex to interact with studio on its own for testing and development of it.
@@ -29,6 +27,8 @@ neither blocks a tranche.
     follow-ups, so nothing can be scanned for what to pick up next. Group entries by area and mark
     their rough size, keeping this file the single index of open work.
 - [ ] Rework the rest of the markdown set
+  - Part 6 of the simplification plan holds the per-page dispositions, the archive moves, and the
+    document-map rewrite. Not started.
   - Covers `Docs/Spec/` and the remaining `Docs/Roadmap/` folders: archive the landed declaration-model
     records, de-duplicate the design-system open questions and the project-ID contract into one
     home each, settle the descriptor-identity draft, and write down the draft-suffix convention plus
@@ -45,10 +45,6 @@ active workstream ledgers (`Docs/Roadmap/Tao Revolution/Decisions.md`); the step
 now written once, in the final dialect. Each step lands per the tranche definition of done: behavior
 tests written in Tao, green in Current, for every construct introduced.
 
-- [x] Cut and implement the dialect-migration tranche (Process step 1)
-  - Closed. `Docs/Roadmap/Archive/Dialect migration tranche/` holds the brief and prompt.
-- [x] Implement the focused writing tranche
-  - Closed. `Docs/Roadmap/Archive/Focused writing tranche/` holds the brief and prompt.
 - [ ] Rewrite `4 - Revolution` in the decided dialect (Process step 2)
   - WordFlower's Revolution tier re-expressed per `Decisions.md`, with the `Apps/Tao Future/` apps
     as sibling references.
@@ -91,11 +87,26 @@ tests written in Tao, green in Current, for every construct introduced.
     multi-project sessions and grouped scenario matrices, and establish the Tao-client strangler.
     Remaining integration and native-validation gates are tracked in the living ledger:
     `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md`. The v1 plan is retained only as a historical
-    ledger. `Docs/Spec/Tao Studio Development.md` owns how to run, inspect, and recover Studio.
+    ledger. `packages/studio/README.md` owns how to run, inspect, and recover Studio.
   - A native phone as a Studio canvas is feasible for an explicitly instrumented Expo development
     build, limited for internal preview builds, and rejected as an unrestricted production-code path.
     No native transport is implemented and a real-iPhone spike remains required. Exploration:
     `Docs/Roadmap/Tao Studio v1/Exploration - Native device as Studio canvas.md`.
+- [ ] Make `just full-verify` pass its simulated-user lane
+  - The lane was unreachable until the `_full-verify-studio` recipe was repaired, so its browser
+    assertions had never run once. Five defects behind them are fixed. The one left is that
+    `postEditorSelection` is driven from `client/StudioApp.ts` by the shell's own CodeMirror while
+    `.studio-editor` is also mounted by the Tao product host: the page holds two `.cm-editor`
+    instances and the shell's is a 0x0 orphan, so no selection identity reaches a preview and
+    editor-to-preview highlight sync is broken for real users, not only for the smoke. Closing it
+    means routing the shell's editor-driven behavior onto the Tao-rendered editor.
+  - Do not widen `previewOriginPath` to make the lane pass. The stub preview builds its identity by
+    fetching `/api/protocol` and `/api/file`, which that six-endpoint allowlist deliberately keeps
+    away from a preview origin; a real preview receives `path` and `sourceVersion` from Studio's own
+    `postEditorSelection` message and knows its source ranges from the bundle it runs. Rework the
+    stub onto that contract instead.
+  - Context: `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md` and the ownership rules in
+    `agents/skills/studio-hybrid-client/SKILL.md`.
 - [ ] Implement a drag-and-drop example app
   - Drag and drop stress-tests more UI assumptions at once than anything else: gesture ownership
     (loop vs cell vs scroll container), drag previews, declarable drop targets (including
@@ -152,14 +163,25 @@ tests written in Tao, green in Current, for every construct introduced.
 
 Product and codebase backlog, unordered.
 
-- [ ] Execute the repository simplification plan
-  - A full-repository audit produced per-area dispositions: dead code and API removals, a test
-    consolidation plan (Test Apps 17 → 10 and package-test cuts with named surviving proofs),
-    tooling and gate simplification, ranked convention sweeps, per-file documentation dispositions,
-    and the Ro decisions that gate the biggest wins. Plan:
-    `Docs/Roadmap/Repository simplification/Plan - Repository simplification.md`. It makes concrete
-    the test-review, TR-cleanup, markdown-rework, export-pattern, and magical-string items elsewhere
-    in this file; reconcile those entries as its slices land.
+- [ ] Finish the cleanups the simplification plan deliberately deferred
+  - The program itself is complete and recorded in
+    `Docs/Roadmap/Archive/Repository simplification/Plan - Repository simplification.md`. Each item
+    below was judged worth doing but not worth widening that plan's diff:
+    - **No disabled state on the entry file in Studio's file tree.** The old `protectedPath` option
+      went with the legacy DOM tree, where it only ever disabled buttons in a section that was never
+      displayed. The rule itself is enforced server-side and predates all of this —
+      `StudioProjectSession.ts:602` and `:625` reject renaming or deleting the active app entry file
+      on the only path a client can reach. What is missing is the affordance: the tree offers the
+      action and the server refuses it, instead of not offering it.
+    - **Roughly two dozen raw `Error`s handed to a promise rejection.** `repo-lint` now ratchets them
+      through `rejectedRawErrorIssues` per file rather than per count, so a new rejection inside an
+      already-listed file still passes; the ratchet stops the set of files growing, not the number of
+      sites. Most reach a Tao author exactly as a throw would, though three of the twelve are test
+      fixtures and do not. Heaviest in
+      `studio-src/client/StudioMatrixView.ts`.
+    - **66 already-typed `throw new Errors.*` guards across ten studio files** that would collapse to a
+      one-line `Assert.input` now that `Assert` narrows the expression it is given. Invisible to
+      repo-lint because they are already typed; purely a readability win.
 - [ ] Finish simulation mode in Tao Studio
   - The versioned cell matrix, viewport/network contract, provider overlay, exact data snapshot codec,
     fixture/scenario metadata, generated-host provider wiring, and captured-fixture save exist.
@@ -167,7 +189,13 @@ Product and codebase backlog, unordered.
     proof of observable delay, offline, failure, and cross-cell isolation. Viewport/network controls and
     reactive per-cell Scheme resolution exist; the remaining proof is the external browser interaction gate.
 - [ ] Improve the imports and exports structure. Decide whether namespaces are used commonly, and whether types and values can be exported together from one default export.
+  - Part 1 of the simplification plan removed the dead subpath exports and de-exported the
+    internal-only symbols; the export/rename sweep that answers the namespace question is Part 5.1
+    of that plan, which also records the answer in `packages/AGENTS.md`.
 - [ ] Review all tests: remove unnecessary surfaces and overlaps, favor e2e coverage of the underlying packages, and justify each remaining test.
+  - Partly done through the simplification plan: Test Apps went 17 folders to 11 with every
+    journey kept, and the jest-e2e migration rule is now in `packages/AGENTS.md`. The TR, studio,
+    pipeline, and dev/CLI passes in Parts 2.2 to 2.5 remain.
 - [ ] Finish project-root ownership across tooling
   - Studio now selects a folder owning exactly one project definition, scopes its workspace and package
     lookup to that root, and runs multiple projects as separate concurrent sessions. Remaining: have the
@@ -190,10 +218,25 @@ Product and codebase backlog, unordered.
   - Keep this separate from the AI-in-apps work, which consumes concurrency policy but does not decide it.
     Context: `Docs/Roadmap/AI in Tao apps.md`.
 - [ ] Change the argument order of `ValidationContext.error` and its siblings.
+  - Part 5.2 of the simplification plan: 462 call sites today, five of which are inline template
+    literals rather than factory-produced messages and need converting first.
+    Land it before or with that plan's validator rename slice.
 - [ ] Clean up the TR package: inter-dependencies, structure, and a slow pass simplifying each file.
+  - The dead-surface pass has landed (Part 1 of the simplification plan): the web-history module,
+    `TR.Alert`, `TR.IsEmpty`, the deprecated `TR.Enum` overload, and `setTestStatus` are gone. The
+    structural work is Part 3.2 of that plan; The `TR.Errors` disposition is decided and shipped: it is the
+    consolidated runtime error surface.
 - [ ] Remove magical strings.
+  - Part 3.1 of the simplification plan owns the cluster with real breakage potential: Studio's
+    route table, session-protocol DTOs, and guards. Not started.
 - [ ] Improve utility function usage, preferring grouped helpers over many free imports.
+  - Partly done through the simplification plan: `@shared/test` gained the deferred, waiter,
+    terminal, module-mock, and clock helpers, and the runtime gained memory data helpers. The
+    per-package adoption and the grouped-helpers pass in Part 5.7 remain.
 - [ ] Apply the named-const export pattern across the repo, then rename modules to match their main export in one coordinated sweep.
+  - Part 5.1 of the simplification plan, one commit per package, Note repo-lint's convention checks do **not**
+    cover export naming or the module-basename-to-export correspondence, so this sweep needs its own
+    check if it is to stay swept. Not started.
 - [ ] Rename `gen` helper properties to capitalized names, and stop `fmt` from breaking `gen\`…\`` onto the next line.
 - [ ] Add generic compiled test declarations.
 - [ ] Enable over-the-network dev app running for iOS devices
@@ -207,6 +250,7 @@ Product and codebase backlog, unordered.
 - Formatter: drop redundant `render` keywords once the language makes `render` optional in view bodies.
 - Compiler: add codegen tracing and source maps when needed.
 - Dev loop: watch resolved relative import roots outside the selected app folder.
+- Dev loop: run the `full-verify` Studio lanes through `./dev gates` with distinct `--worker` indices, so one summary reports every lane instead of stopping at the first failure. `StudioSmoke.resources()` already derives per-worker ports and artifact roots; the native and canary lanes may still need serialising because they contend on GUI resources rather than ports.
 
 ## Records
 
@@ -220,5 +264,6 @@ Product and codebase backlog, unordered.
 - `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..030 deferred-decision inventory.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
 - `Docs/Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.
+- `Docs/Roadmap/Archive/Repository simplification/` — the completed simplification program: dead-code and API removals with named surviving proofs, the typed error surface and its ratchets, Typir's retirement onto the structural `Type`, the Test App consolidation, and the tooling and gate simplification.
 - `Docs/Roadmap/Archive/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
 - `Docs/Roadmap/Archive/` — frozen records of completed work.

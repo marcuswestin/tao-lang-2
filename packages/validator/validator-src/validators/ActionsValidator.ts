@@ -1,9 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { FS, Switch } from '@shared'
-import type { ValidationProblemAcceptor } from 'typir'
 import type { NodeValidationChecks } from '../node-validation'
-import { type TaoSpecifics, type TaoTypirServices } from '../TypeSystemHelpers'
 import type { ValidationContext } from '../validation'
 import { AliasesValidator } from './aliases-validator'
 
@@ -66,7 +64,9 @@ export const ActionsValidator = {
     [AST.DoStatement.$type]: reportArity,
   } satisfies NodeValidationChecks,
   messages: actionValidationMessages,
-  registerTypeValidation,
+  typeChecks: {
+    [AST.DoStatement.$type]: reportDoStatementActionType,
+  } satisfies NodeValidationChecks,
   validateForeignFiles: validateForeignActionFiles,
 } as const
 
@@ -84,14 +84,6 @@ async function validateForeignActionFiles(file: AST.TaoFile, ctx: ValidationCont
       ctx.error(actionValidationMessages.foreignActionMissing(foreign.path), foreign)
     }
   }
-}
-
-function registerTypeValidation(typir: TaoTypirServices): void {
-  typir.validation.Collector.addValidationRulesForAstNodes({
-    DoStatement: (invocation, accept, services) => {
-      validateDoStatementTypes(invocation, accept, services as TaoTypirServices)
-    },
-  })
 }
 
 function validateDuplicateParameters(action: AST.ActionDeclaration, ctx: ValidationContext): void {
@@ -256,20 +248,13 @@ function validateDynamicActionInvocation(invocation: AST.DoStatement, ctx: Valid
   }
 }
 
-function validateDoStatementTypes(
-  invocation: AST.DoStatement,
-  accept: ValidationProblemAcceptor<TaoSpecifics>,
-  _services: TaoTypirServices,
-): void {
+/** reportDoStatementActionType requires `do` to invoke an action-typed expression. */
+function reportDoStatementActionType(invocation: AST.DoStatement, ctx: ValidationContext): void {
   const actionType = Type.ofExpression(invocation.action)
   if (actionType.kind === 'unresolved') {
     return
   }
   if (actionType.kind !== 'primitive' || actionType.primitive !== 'action') {
-    accept({
-      languageNode: invocation.action,
-      message: actionValidationMessages.doTypeMismatch(Type.displayName(actionType)),
-      severity: 'error',
-    })
+    ctx.error(actionValidationMessages.doTypeMismatch(Type.displayName(actionType)), invocation.action)
   }
 }

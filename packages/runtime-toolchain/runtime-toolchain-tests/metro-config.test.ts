@@ -1,4 +1,4 @@
-import { FS, Repo } from '@shared'
+import { Errors, FS, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 
 type MetroConfig = {
@@ -54,8 +54,8 @@ Describe('Expo Metro configuration', () => {
 
     const context: MetroResolutionContext = {
       originModulePath: Repo.resolvePath('packages/runtime-toolchain/index.ts'),
-      resolveRequest() {
-        throw new Error('aliases must not reach the default resolver')
+      resolveRequest(): MetroResolution {
+        return Errors.throwUnexpected('aliases must not reach the default resolver')
       },
     }
 
@@ -79,8 +79,8 @@ Describe('Expo Metro configuration', () => {
     }
     const missingContext: MetroResolutionContext = {
       originModulePath: Repo.resolvePath('packages/runtime/TaoRuntime-src/TR-native-hosts.ts'),
-      resolveRequest() {
-        throw new Error('package not installed')
+      resolveRequest(): MetroResolution {
+        return Errors.throwHostEnvironment('package not installed')
       },
     }
 

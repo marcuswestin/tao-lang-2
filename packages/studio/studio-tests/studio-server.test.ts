@@ -1,4 +1,5 @@
 import { ScriptedGenerationProvider } from '@generation'
+import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { StudioFixtureGeneration } from '../studio-src/StudioFixtureGeneration'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
@@ -215,21 +216,17 @@ function generationManifest(): StudioPreviewManifestV2 {
   }
 }
 
-Test('Studio multi-session routes isolate opaque window IDs while legacy roots keep one default session', () => {
-  Expect(StudioServerTesting.studioSessionRoute('/sessions/first_session/api/protocol', undefined)).toEqual({
+Test('Studio routes every session request through an opaque window ID and refuses unscoped paths', () => {
+  Expect(StudioServerTesting.studioSessionRoute('/sessions/first_session/api/protocol')).toEqual({
     pathname: '/api/protocol',
     sessionId: 'first_session',
   })
-  Expect(StudioServerTesting.studioSessionRoute('/sessions/second_session', undefined)).toEqual({
+  Expect(StudioServerTesting.studioSessionRoute('/sessions/second_session')).toEqual({
     pathname: '/',
     sessionId: 'second_session',
   })
-  Expect(StudioServerTesting.studioSessionRoute('/api/protocol', undefined)).toBe(undefined)
-  Expect(StudioServerTesting.studioSessionRoute('/api/protocol', 'legacy_session')).toEqual({
-    pathname: '/api/protocol',
-    sessionId: 'legacy_session',
-  })
-  Expect(StudioServerTesting.studioSessionRoute('/sessions/../api/protocol', undefined)).toBe(undefined)
+  Expect(StudioServerTesting.studioSessionRoute('/api/protocol')).toBe(undefined)
+  Expect(StudioServerTesting.studioSessionRoute('/sessions/../api/protocol')).toBe(undefined)
 })
 
 Test('Studio server authorization binds each managed preview origin to its own session', () => {
@@ -307,8 +304,8 @@ Test('Studio manager endpoints accept same-origin and native requests but no pre
   const sameOriginRequest = new Request(sessionsUrl, { headers: { origin: boundOrigin } })
   const nativeRequest = new Request(sessionsUrl)
 
-  Expect(StudioServerTesting.managerRequestPath(sessionsUrl.pathname, true)).toBe(true)
-  Expect(StudioServerTesting.managerRequestPath('/api/sessions/current_window/switch', true)).toBe(true)
+  Expect(StudioServerTesting.managerRequestPath(sessionsUrl.pathname)).toBe(true)
+  Expect(StudioServerTesting.managerRequestPath('/api/sessions/current_window/switch')).toBe(true)
   Expect(StudioServerTesting.requestAllowed(previewRequest, sessionsUrl, boundOrigin, [])).toBe(false)
   Expect(StudioServerTesting.requestAllowed(sameOriginRequest, sessionsUrl, boundOrigin, [])).toBe(true)
   Expect(StudioServerTesting.requestAllowed(nativeRequest, sessionsUrl, boundOrigin, [])).toBe(true)
@@ -371,7 +368,7 @@ Test('Studio event sockets close cleanly when their initial handshake cannot be 
     },
   }, {
     async handshake() {
-      throw new Error('File disappeared during handshake')
+      Errors.throwUnexpected('File disappeared during handshake')
     },
   })
 

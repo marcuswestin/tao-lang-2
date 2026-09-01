@@ -1,7 +1,7 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import type { TaoDataConnection, TaoDataSchemaDefinition } from '../TaoRuntime-src/TR-data'
-import { onUnownedFailure } from '../TaoRuntime-src/TR-errors'
+import { HostEnvironmentError, onUnownedFailure } from '../TaoRuntime-src/TR-errors'
 
 const noteDefinition: TaoDataSchemaDefinition = {
   name: 'AsyncNotes',
@@ -69,7 +69,7 @@ Describe('TR.Async', () => {
     const provider: TaoDataConnection = {
       load: () => undefined,
       save: async () => {
-        throw new Error('disk unavailable')
+        throw new HostEnvironmentError('disk unavailable')
       },
     }
     const schema = TR.Data.Schema(noteDefinition, provider)

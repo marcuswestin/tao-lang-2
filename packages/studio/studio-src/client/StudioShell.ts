@@ -1,3 +1,5 @@
+import { Assert } from '@shared/core'
+
 export type StudioClientConfig = {
   previewUrl?: string
 }
@@ -9,29 +11,21 @@ export type StudioClientView = {
   commandInput: HTMLInputElement
   commandOverlay: HTMLElement
   commandResults: HTMLElement
-  components: HTMLElement
-  designValues: HTMLElement
   drawerContent: HTMLElement
   drawerTabs: HTMLElement
   editor: HTMLElement
   editorTabs: HTMLElement
-  files: HTMLElement
   globalLoading: HTMLElement
   inspector: HTMLElement
   interactionMode: HTMLButtonElement
   preview: HTMLElement
   project: HTMLButtonElement
-  projectViews: HTMLElement
   rail: HTMLElement
   reload: HTMLButtonElement
-  screens: HTMLElement
   scenarioInspector: HTMLElement
   searchInput: HTMLInputElement
-  searchResults: HTMLElement
   status: HTMLElement
 }
-
-export type StudioShellOptions = Readonly<{ embedded?: boolean }>
 
 type PaneName = 'bottom' | 'left' | 'preview' | 'right'
 
@@ -68,10 +62,9 @@ export const StudioPaneSizes = {
   },
 } as const
 
-export function studioShellMarkup(options: StudioShellOptions = {}): string {
-  const embedded = options.embedded === true
+export function studioShellMarkup(): string {
   return `
-    <section class="studio-shell${embedded ? ' studio-shell--embedded' : ''}">
+    <section class="studio-shell">
       <header class="studio-toolbar">
         <div class="studio-toolbar-context">
           <span class="studio-window-controls" aria-hidden="true">
@@ -161,12 +154,8 @@ export function studioShellMarkup(options: StudioShellOptions = {}): string {
   `
 }
 
-export function createStudioShell(
-  root: HTMLElement,
-  config: StudioClientConfig,
-  options: StudioShellOptions = {},
-): StudioClientView {
-  root.innerHTML = studioShellMarkup(options)
+export function createStudioShell(root: HTMLElement, config: StudioClientConfig): StudioClientView {
+  root.innerHTML = studioShellMarkup()
   const preview = requiredElement(root, '.studio-preview')
   preview.innerHTML = config.previewUrl === undefined
     ? '<div class="studio-empty">Preview host is not connected.</div>'
@@ -181,25 +170,19 @@ export function createStudioShell(
     commandInput: requiredInput(root, '.studio-command-overlay input'),
     commandOverlay: requiredElement(root, '.studio-command-overlay'),
     commandResults: requiredElement(root, '.studio-command-results'),
-    components: requiredElement(root, '.studio-components'),
-    designValues: requiredElement(root, '.studio-design-values'),
     drawerContent: requiredElement(root, '.studio-drawer-content'),
     drawerTabs: requiredElement(root, '.studio-drawer-tabs'),
     editor: requiredElement(root, '.studio-editor'),
     editorTabs: requiredElement(root, '.studio-editor-tabs'),
-    files: requiredElement(root, '.studio-files'),
     globalLoading: requiredElement(root, '.studio-global-loading'),
     inspector: requiredElement(root, '.studio-inspector-content'),
     interactionMode: requiredButton(root, '.studio-interaction-mode'),
     preview,
     project: requiredButton(root, '.studio-project'),
-    projectViews: requiredElement(root, '.studio-project-views'),
     rail: requiredElement(root, '.studio-rail'),
     reload: requiredButton(root, '.studio-reload'),
-    screens: requiredElement(root, '.studio-screens'),
     scenarioInspector: requiredElement(root, '.studio-scenario-inspector-content'),
     searchInput: requiredInput(root, '.studio-search-input'),
-    searchResults: requiredElement(root, '.studio-search-results'),
     status: requiredElement(root, '.studio-status'),
   }
 }
@@ -368,32 +351,24 @@ function validSize(value: unknown, fallback: number): number {
 
 function requiredElement(parent: ParentNode, selector: string): HTMLElement {
   const element = parent.querySelector<HTMLElement>(selector)
-  if (element === null) {
-    throw new Error(`Tao Studio element is missing: ${selector}`)
-  }
+  Assert.defined(element, `the Tao Studio shell to render the element ${selector}`)
   return element
 }
 
 function requiredButton(parent: ParentNode, selector: string): HTMLButtonElement {
   const button = parent.querySelector<HTMLButtonElement>(selector)
-  if (button === null) {
-    throw new Error(`Tao Studio button is missing: ${selector}`)
-  }
+  Assert.defined(button, `the Tao Studio shell to render the button ${selector}`)
   return button
 }
 
 function requiredInput(parent: ParentNode, selector: string): HTMLInputElement {
   const input = parent.querySelector<HTMLInputElement>(selector)
-  if (input === null) {
-    throw new Error(`Tao Studio input is missing: ${selector}`)
-  }
+  Assert.defined(input, `the Tao Studio shell to render the input ${selector}`)
   return input
 }
 
 function requiredSelect(parent: ParentNode, selector: string): HTMLSelectElement {
   const select = parent.querySelector<HTMLSelectElement>(selector)
-  if (select === null) {
-    throw new Error(`Tao Studio select is missing: ${selector}`)
-  }
+  Assert.defined(select, `the Tao Studio shell to render the select ${selector}`)
   return select
 }

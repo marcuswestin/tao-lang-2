@@ -19,9 +19,27 @@ export type CodeEditorHighlightToken = Readonly<{
   to: number
 }>
 
+export type CodeEditorEditorDocument = { lineAt(position: number): { from: number; text: string } }
+
+/**
+ * Optional drag-and-drop insertion. `accepts` is checked against `dataTransfer.types` during
+ * dragover, where the payload itself is unreadable; `apply` runs on drop and returns the
+ * transaction to dispatch. Dispatching through the view is what keeps the insertion undoable.
+ */
+export type CodeEditorDrop = Readonly<{
+  accepts: readonly string[]
+  apply: (
+    transfer: DataTransfer,
+    context: Readonly<{ document: CodeEditorEditorDocument; position: number }>,
+  ) =>
+    | { changes: { from: number; insert: string; to: number }; selection?: { anchor: number; head: number } }
+    | undefined
+}>
+
 export type CodeEditorProps = {
   Change: TR.ActionValue<[TR.Value<string>]>
   Content: string
+  Drop?: CodeEditorDrop
   Highlight?: (content: string) => Promise<readonly CodeEditorHighlightToken[]>
   Layout?: TR.TaoVisualLayout
   Lsp?: CodeEditorLsp
@@ -76,10 +94,12 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
   const change = React.useRef(props.Change)
   const content = React.useRef(props.Content)
   const selectionChange = React.useRef(props.SelectionChange)
+  const drop = React.useRef(props.Drop)
   const applyingExternalContent = React.useRef(false)
   change.current = props.Change
   content.current = props.Content
   selectionChange.current = props.SelectionChange
+  drop.current = props.Drop
 
   React.useEffect(() => {
     const parent = mount.current
@@ -128,6 +148,28 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
       parent,
     })
     editor.current = view
+    const onDragOver = (event: DragEvent): void => {
+      const spec = drop.current
+      if (spec !== undefined && spec.accepts.some(type => event.dataTransfer?.types.includes(type) === true)) {
+        event.preventDefault()
+      }
+    }
+    const onDrop = (event: DragEvent): void => {
+      const spec = drop.current
+      if (spec === undefined || event.dataTransfer === null) {
+        return
+      }
+      const position = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head
+      const transaction = spec.apply(event.dataTransfer, { document: view.state.doc, position })
+      if (transaction === undefined) {
+        return
+      }
+      event.preventDefault()
+      view.dispatch(transaction)
+      view.focus()
+    }
+    view.dom.addEventListener('dragover', onDragOver)
+    view.dom.addEventListener('drop', onDrop)
     scheduleHighlight(view, content.current, 0)
 
     const startLsp = async (): Promise<void> => {

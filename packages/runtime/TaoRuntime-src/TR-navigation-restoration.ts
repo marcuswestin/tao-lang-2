@@ -1,7 +1,9 @@
+import { RuntimeAssert } from './TR-assert'
 import type { TaoKeyValueStorage } from './TR-data'
 import { entityHandle } from './TR-data-entity'
-import { platformKeyValueStorage } from './TR-data-provider'
+import { memoryKeyValueStorage, platformKeyValueStorage } from './TR-data-provider'
 import { restoreEntityReference, serializeEntityReference } from './TR-data-registry'
+import { errorMessage, UnexpectedBehaviorError, UserInputError } from './TR-errors'
 import type {
   TaoAppDeclaration,
   TaoAppDefinition,
@@ -17,6 +19,7 @@ import type {
   TaoPresentableSnapshot,
 } from './TR-navigation-restoration-state'
 import type { PresentableEntry } from './TR-navigation-state'
+import { runtimeTestOverrideSlot } from './TR-test-override'
 
 export type RestorationEnvelope = Readonly<{
   formatVersion: 1
@@ -52,15 +55,61 @@ export type NavigationRestorationDiagnostic = Readonly<{
 }>
 
 const diagnosticsListeners = new Set<(diagnostic: NavigationRestorationDiagnostic) => void>()
+/**
+ * controllers holds every restoration controller a generated module has declared. The compiler
+ * emits an app definition once at generated-module scope, so a controller outlives every mount,
+ * every launch, and every check; only a registry filled by the constructor can reach the one a
+ * previous launch left behind. It holds one entry per app declaration per module evaluation, each
+ * already alive for the life of the module that declared it, so a real app pays nothing for it.
+ */
+const controllers = new Set<NavigationRestorationController>()
 let storageOverride: TaoKeyValueStorage | undefined
-let restorationTestMode = false
+let testStorageRestore: (() => void) | undefined
+const storageSlot = runtimeTestOverrideSlot({
+  read: () => storageOverride,
+  write: next => {
+    storageOverride = next
+  },
+})
 
+/**
+ * beginNavigationRestorationTest gives one Tao check its own device. Restoration itself stays on —
+ * a check observes the policy its app declares, which is the whole point — but it reads and writes
+ * a private in-memory store, and every controller forgets the launch it was in the middle of. A
+ * position one check reached is therefore unreachable in the next, in both the memoized load and
+ * the bytes on the device. A relaunch inside a check deliberately does not come through here.
+ */
 export function beginNavigationRestorationTest(): void {
-  restorationTestMode = true
+  endNavigationRestorationTest()
+  testStorageRestore = setNavigationRestorationStorageForTests(memoryKeyValueStorage())
+  for (const controller of controllers) {
+    controller.resetForLaunch(false)
+  }
 }
 
+/** endNavigationRestorationTest hands navigation restoration back to the storage that surrounded the check. */
 export function endNavigationRestorationTest(): void {
-  restorationTestMode = false
+  testStorageRestore?.()
+  testStorageRestore = undefined
+}
+
+/**
+ * beginNavigationRestorationLaunch ends the running launch and prepares the next one on the same
+ * device. Everything the launched instance owned — the memoized load, the subscriptions it wrote
+ * through, the coalescing memo — is dropped, and the store is kept, so the next instance genuinely
+ * reads back what this one wrote. It settles the pending write first, because the read the next
+ * instance performs is not ordered behind a write that is still queued.
+ *
+ * `fresh` opts the next launch out of restoring, which is the launch a device that has never run
+ * this app gives.
+ */
+export async function beginNavigationRestorationLaunch(options: { fresh?: boolean } = {}): Promise<void> {
+  for (const controller of controllers) {
+    await controller.settleWrites()
+  }
+  for (const controller of controllers) {
+    controller.resetForLaunch(options.fresh === true)
+  }
 }
 
 /** subscribeNavigationRestorationDiagnostics is host/tooling-only; Tao applications cannot observe it. */
@@ -73,23 +122,50 @@ export function subscribeNavigationRestorationDiagnostics(
 
 /** setNavigationRestorationStorageForTests installs an isolated host store and returns a restore function. */
 export function setNavigationRestorationStorageForTests(storage: TaoKeyValueStorage | undefined): () => void {
-  const previous = storageOverride
-  storageOverride = storage
-  return () => {
-    storageOverride = previous
-  }
+  return storageSlot.install(storage)
 }
 
 /** NavigationRestorationController owns one app's load-once and coalesced reducer persistence lifecycle. */
 export class NavigationRestorationController {
   private attachCount = 0
+  private freshLaunch = false
   private lastSerialized: string | undefined
   private loadPromise: Promise<void> | undefined
   private persistQueue: Promise<void> = Promise.resolve()
   private scheduled = false
   private subscriptions: Array<() => void> = []
 
-  constructor(private readonly app: RestorableApp) {}
+  constructor(private readonly app: RestorableApp) {
+    controllers.add(this)
+  }
+
+  /**
+   * resetForLaunch returns this controller to the state a newly started process is in, without
+   * touching the device it reads and writes. Forgetting the memoized load is the point: an app
+   * definition lives at generated-module scope, so an instance that already loaded would hand the
+   * next launch that same resolved read and never look at the store again.
+   */
+  resetForLaunch(fresh: boolean): void {
+    this.unsubscribe()
+    this.attachCount = 0
+    this.freshLaunch = fresh
+    this.lastSerialized = undefined
+    this.loadPromise = undefined
+    this.scheduled = false
+    // A write still queued against the previous launch captured its storage when it was queued (see
+    // persistSnapshot) and settles there; dropping the chain stops the next launch's writes from
+    // waiting behind it.
+    this.persistQueue = Promise.resolve()
+  }
+
+  /** settleWrites persists the coalesced snapshot now and waits until the device holds it. */
+  async settleWrites(): Promise<void> {
+    if (this.scheduled) {
+      this.scheduled = false
+      this.persistSnapshot()
+    }
+    await this.persistQueue
+  }
 
   /** requiresInitialLoad reports whether the host must hide the initial tree while storage is read. */
   requiresInitialLoad(): boolean {
@@ -133,12 +209,21 @@ export class NavigationRestorationController {
   }
 
   private async load(): Promise<void> {
+    const fresh = this.freshLaunch
+    this.freshLaunch = false
     if (this.policy().mode === 'fresh') {
       return
     }
     const key = this.storageKey()
     if (!key) {
       this.report('NAV_RESTORE_UNSUPPORTED', 'The app declaration has no canonical identity; restoration is disabled.')
+      return
+    }
+    if (fresh) {
+      // A launch asked to start fresh reads nothing back, and then records where it opened. Leaving
+      // the previous instance's position on the device would let a later ordinary launch return to
+      // a screen this run never visited, which is the quiet divergence the step exists to remove.
+      this.scheduleSnapshot()
       return
     }
     try {
@@ -194,17 +279,33 @@ export class NavigationRestorationController {
       return
     }
     this.lastSerialized = serialized
+    // The device this snapshot is for is the one that was installed when it was taken, so it is
+    // captured here rather than resolved inside the queued callback. A queued write that resolved
+    // storage when it finally ran would land on whatever store the process had by then — the next
+    // check's private store, for a write a check left queued behind it.
+    const targetStorage = this.storage()
     this.persistQueue = this.persistQueue.then(async () => {
-      await this.storage().setItem(key, serialized)
+      await targetStorage.setItem(key, serialized)
     }).catch(error => {
+      // The device did not take this snapshot, so the memo must stop claiming it did. Otherwise the
+      // next identical snapshot — the ordinary case, since a failed write leaves navigation exactly
+      // where it was — is skipped as already persisted, and a later launch restores a stale
+      // position. Only this write's own memo is dropped: a newer snapshot queued while this one was
+      // in flight already owns it, and resurrecting this older value would skip that newer write.
+      if (this.lastSerialized === serialized) {
+        this.lastSerialized = undefined
+      }
       this.report('NAV_RESTORE_FALLBACK', `Could not persist navigation state: ${errorMessage(error)}`)
     })
   }
 
   private invalidateStoredSnapshot(key: string): void {
     this.lastSerialized = undefined
+    // Captured for the same reason the write above captures it: the stale entry being removed is on
+    // the device that was installed when it was found stale, not on whichever store is installed by
+    // the time the queue reaches this callback.
+    const storage = this.storage()
     this.persistQueue = this.persistQueue.then(async () => {
-      const storage = this.storage()
       if (storage.removeItem) {
         await storage.removeItem(key)
         return
@@ -240,9 +341,11 @@ export class NavigationRestorationController {
     const codec = this.codec()
     const auxiliaryNames = Object.keys(this.app.auxiliaries).sort()
     const restoredNames = Object.keys(envelope.payload.auxiliaries).sort()
-    if (JSON.stringify(auxiliaryNames) !== JSON.stringify(restoredNames)) {
-      throw new Error('Restored app auxiliaries do not match the live app.')
-    }
+    RuntimeAssert.input(
+      JSON.stringify(auxiliaryNames) === JSON.stringify(restoredNames),
+      'Restored app auxiliaries do not match the live app.',
+      { auxiliaryNames, restoredNames },
+    )
     // Validate and rebuild every lane as one transaction. A failure resets the whole app in load().
     requireRestorable(this.app.navigator).restoreNavigationSnapshot(envelope.payload.navigator, codec)
     for (const [key, navigation] of Object.entries(this.app.auxiliaries)) {
@@ -265,13 +368,9 @@ export class NavigationRestorationController {
   }
 
   private policy() {
-    if (restorationTestMode) {
-      return {
-        exclusions: [] as const,
-        mode: 'fresh' as const,
-        variant: this.app.definition.name,
-      }
-    }
+    // A check gets an isolated store rather than a pinned mode: `relaunch` claims to model a real
+    // relaunch, and a real relaunch restores, so a check has to observe the policy its own app
+    // declares — including an app that declares `Restore fresh` and therefore still starts fresh.
     return this.app.definition.restoration ?? {
       exclusions: [] as const,
       mode: 'automatic' as const,
@@ -348,7 +447,7 @@ function restorePresentable(
   presentable: TaoPresentable
 } {
   if (!snapshot || typeof snapshot !== 'object' || typeof snapshot.view !== 'string') {
-    throw new Error('Restored presentation entry is invalid.')
+    throw new UserInputError('Restored presentation entry is invalid.')
   }
   return {
     arguments: Object.fromEntries(
@@ -372,29 +471,23 @@ function snapshotValue(value: unknown, seen: Set<object>): TaoPersistedValue {
     return ['boolean', value]
   }
   if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      throw new Error('a non-finite number does not serialize')
-    }
+    RuntimeAssert.input(Number.isFinite(value), 'a non-finite number does not serialize')
     return ['number', Object.is(value, -0) ? 0 : value]
   }
   if (typeof value !== 'object') {
-    throw new Error(`${typeof value} does not serialize`)
+    throw new UserInputError(`${typeof value} does not serialize`)
   }
   const reference = entityHandle(value) ? serializeEntityReference(value) : undefined
   if (reference) {
     return ['entity', reference]
   }
-  if (seen.has(value)) {
-    throw new Error('cyclic values do not serialize')
-  }
+  RuntimeAssert.input(!seen.has(value), 'cyclic values do not serialize')
   seen.add(value)
   try {
     if (Array.isArray(value)) {
       return ['list', ...value.map(item => snapshotValue(item, seen))]
     }
-    if (Object.getPrototypeOf(value) !== Object.prototype) {
-      throw new Error('opaque runtime values do not serialize')
-    }
+    RuntimeAssert.input(Object.getPrototypeOf(value) === Object.prototype, 'opaque runtime values do not serialize')
     return [
       'item',
       ...Object.entries(value as Record<string, unknown>)
@@ -408,7 +501,7 @@ function snapshotValue(value: unknown, seen: Set<object>): TaoPersistedValue {
 
 function restoreValue(value: TaoPersistedValue): unknown {
   if (!Array.isArray(value)) {
-    throw new Error('Restored argument is not a tagged value.')
+    throw new UserInputError('Restored argument is not a tagged value.')
   }
   const [tag, ...payload] = value
   if (tag === 'none' && payload.length === 0) {
@@ -429,7 +522,7 @@ function restoreValue(value: TaoPersistedValue): unknown {
   if (tag === 'item') {
     return Object.fromEntries(payload.map(field => {
       if (!Array.isArray(field) || field.length !== 2 || typeof field[0] !== 'string') {
-        throw new Error('Restored item field is invalid.')
+        throw new UserInputError('Restored item field is invalid.')
       }
       return [field[0], restoreValue(field[1] as TaoPersistedValue)]
     }))
@@ -437,20 +530,22 @@ function restoreValue(value: TaoPersistedValue): unknown {
   if (tag === 'entity' && payload.length === 1 && payload[0] && typeof payload[0] === 'object') {
     return restoreEntityReference(payload[0] as any)
   }
-  throw new Error(`Unknown restored argument tag '${String(tag)}'.`)
+  throw new UserInputError(`Unknown restored argument tag '${String(tag)}'.`, { tag })
 }
 
 function parseEnvelope(serialized: string): RestorationEnvelope {
   const value = JSON.parse(serialized) as Partial<RestorationEnvelope>
   if (!value || typeof value !== 'object' || value.formatVersion !== 1) {
-    throw new Error(`Unsupported navigation restoration format '${String(value?.formatVersion)}'.`)
+    throw new UserInputError(`Unsupported navigation restoration format '${String(value?.formatVersion)}'.`)
   }
-  if (value.schemaVersion !== 1) {
-    throw new Error(`Navigation restoration schema ${String(value.schemaVersion)} does not match 1.`)
-  }
-  if (!value.payload || typeof value.payload !== 'object') {
-    throw new Error('Navigation restoration payload is invalid.')
-  }
+  RuntimeAssert.input(
+    value.schemaVersion === 1,
+    `Navigation restoration schema ${String(value.schemaVersion)} does not match 1.`,
+  )
+  RuntimeAssert.input(
+    value.payload && typeof value.payload === 'object',
+    'Navigation restoration payload is invalid.',
+  )
   return value as RestorationEnvelope
 }
 
@@ -460,11 +555,9 @@ function requireRestorable(navigation: TaoNavigationValue): RestorableNavigation
     typeof candidate.navigationRestorationSnapshot !== 'function'
     || typeof candidate.restoreNavigationSnapshot !== 'function'
   ) {
-    throw new Error(`Navigation kind '${navigation.name}' lacks restoration capability.`)
+    throw new UnexpectedBehaviorError(`Navigation kind '${navigation.name}' lacks restoration capability.`, {
+      details: { navigation: navigation.name },
+    })
   }
   return navigation as RestorableNavigation
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

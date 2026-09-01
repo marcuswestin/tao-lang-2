@@ -7,7 +7,7 @@ import type {
   TaoFillRequest,
 } from '../TaoRuntime-src/TR-data'
 import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
-import { onUnownedFailure } from '../TaoRuntime-src/TR-errors'
+import { HostEnvironmentError, onUnownedFailure } from '../TaoRuntime-src/TR-errors'
 import { Clock } from '../TaoRuntime-src/TR-units'
 
 const feedDefinition: TaoDataSchemaDefinition = {
@@ -140,7 +140,7 @@ Describe('TR.Data query fills', () => {
         await gate.promise
       }
       if (outcome === 'fail') {
-        throw new Error('Hacker News is unreachable')
+        throw new HostEnvironmentError('Hacker News is unreachable')
       }
       ops.upsert('Story', [{ HnId: 1, Title: 'First', Rank: 1 }])
     })
@@ -171,7 +171,7 @@ Describe('TR.Data query fills', () => {
 
   Test('surfaces a failed first fill as the query error with nothing to show', async () => {
     const connection = fillConnection(async () => {
-      throw new Error('Hacker News is unreachable')
+      throw new HostEnvironmentError('Hacker News is unreachable')
     })
     const schema = TR.Data.Schema(feedDefinition, connection)
     await schema.settle()
@@ -287,7 +287,7 @@ Describe('TR.Data query fills', () => {
         await gate.promise
       }
       if (outcome === 'fail') {
-        throw new Error('unreachable')
+        throw new HostEnvironmentError('unreachable')
       }
       ops.upsert('Story', [{ HnId: 1, Title: 'First', Rank: 1 }])
     })

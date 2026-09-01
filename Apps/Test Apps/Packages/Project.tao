@@ -1,0 +1,6 @@
+project {
+   id "packages"
+   name "Packages"
+   remote none
+   license MIT
+}

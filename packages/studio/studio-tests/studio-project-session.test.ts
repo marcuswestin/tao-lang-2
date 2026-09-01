@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { Errors, FS } from '@shared'
 import { Expect, Test, withTaoFiles } from '@shared/test'
 import { StudioPreviewManifest } from '../studio-src/StudioPreviewManifest'
 import {
@@ -38,7 +38,6 @@ Test('Studio project session resolves one current Tao app and serves contained v
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/inspect' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/source-action/propose' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/data/fill' })
-    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/design' })
     Expect(handshake.endpoints).toContainEqual({ method: 'WS', path: '/api/language/lsp' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/language/highlight' })
     Expect(handshake.endpoints).toContainEqual({ method: 'GET', path: '/api/tests/status' })
@@ -397,7 +396,7 @@ Test('Studio session listener failures do not interrupt compile completion or la
   await withStudioProject(async session => {
     const events: StudioSessionEvent[] = []
     session.subscribe(() => {
-      throw new Error('listener failed')
+      Errors.throwUnexpected('listener failed')
     })
     session.subscribe(event => events.push(event))
 
@@ -833,7 +832,7 @@ Test('Studio restores the original Tao source when a captured fixture fails comp
   }, () => {
     compileCount += 1
     if (compileCount === 1) {
-      throw new Error('Injected fixture compilation failure.')
+      Errors.throwUserInput('Injected fixture compilation failure.')
     }
   })
 })

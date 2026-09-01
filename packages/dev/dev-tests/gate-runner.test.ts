@@ -63,12 +63,12 @@ Describe('repository gate runner', () => {
 
   Test('reports a skipped gate as skipped, with why, and never as passed', async () => {
     const { summary } = await run(['_repo-lint'], {}, {
-      skipped: ['studio-smoke=slow lane; run just studio-smoke <file>'],
+      skipped: ['studio-smoke=slow lane; run just studio-smoke or just full-verify'],
     })
 
     const skipped = summary.gates.find(gate => gate.name === 'studio-smoke')
     Expect(skipped?.status).toBe('skipped')
-    Expect(skipped?.reason).toBe('slow lane; run just studio-smoke <file>')
+    Expect(skipped?.reason).toBe('slow lane; run just studio-smoke or just full-verify')
     Expect(summary.gates.filter(gate => gate.status === 'passed').map(gate => gate.name)).toEqual(['_repo-lint'])
     Expect(formatGateSummary(summary)).toContain('1 passed, 0 failed, 1 skipped')
   })

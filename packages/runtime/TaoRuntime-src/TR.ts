@@ -2,18 +2,15 @@ import React from 'react'
 import { Dev, DevControls, type TaoDevModeOptions } from './dev-runtime/TR-dev'
 import {
   actionFailureCaseName,
-  captureActionHistory,
   deferDetached,
   existingTransactionResource,
   markExternalEffect,
-  onActionFailure,
-  resetActionDiagnostics,
   runAction,
-  TaoActionFailure,
   type TaoDeclaredFailure,
   transactionResource,
 } from './TR-action-transactions'
 import { AppShell, AppSurfaceFrame } from './TR-app-shell'
+import { RuntimeAssert } from './TR-assert'
 import { createClipboard, type TaoPasteboard } from './TR-clipboard'
 import {
   DataControls,
@@ -49,7 +46,13 @@ import {
   recoveryBackup,
   TaoErrorBoundary,
 } from './TR-error-containment'
-import { TaoViewDepthError } from './TR-errors'
+import {
+  ErrorControls,
+  TaoActionFailure,
+  type TaoActionFailureReport,
+  TaoViewDepthError,
+  warnDesignDivergence,
+} from './TR-errors'
 import { createHaptic, type TaoHapticKinds, type TaoHaptics } from './TR-haptic'
 import { LayoutControls } from './TR-layout'
 import { NativeHosts } from './TR-native-hosts'
@@ -76,7 +79,10 @@ import {
 } from './TR-navigation'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import {
+  beginPersistedStateLaunch,
+  beginPersistedStateTest,
   capturePersistedState,
+  endPersistedStateTest,
   registerPersistedEnumCase,
   RuntimePersistedState,
   setPersistedStateStorageForTests,
@@ -124,7 +130,6 @@ import * as TRTaoProps from './TR-TaoProps'
 import { Clock, createTicker, makeUnitControls, type TaoTicker } from './TR-units'
 import * as TRViews from './TR-views'
 
-let ephemeralEnumDeclaration = 0
 const warnedUnhonoredLayouts = new Set<string>()
 
 /** TR exposes the generated-code runtime API used by generated apps. */
@@ -160,23 +165,12 @@ class TR {
   static Enum(
     declaration: TR.DeclarationIdentity,
     caseNames: readonly string[],
-  ): Readonly<Record<string, TR.Value<TR.EnumCaseIdentity>>>
-  /** @deprecated Generated code should supply its stable declaration identity. */
-  static Enum(caseNames: readonly string[]): Readonly<Record<string, TR.Value<TR.EnumCaseIdentity>>>
-  static Enum(
-    declarationOrCases: TR.DeclarationIdentity | readonly string[],
-    suppliedCases?: readonly string[],
   ): Readonly<Record<string, TR.Value<TR.EnumCaseIdentity>>> {
-    const declaration = Array.isArray(declarationOrCases)
-      ? `tao.enum.ephemeral:${++ephemeralEnumDeclaration}`
-      : (declarationOrCases as TR.DeclarationIdentity).canonical
-    const caseNames = Array.isArray(declarationOrCases) ? declarationOrCases : suppliedCases ?? []
-    const cases = Object.freeze(Object.fromEntries(caseNames.map(caseName => {
-      const value = Object.freeze({ caseName, declaration, identity: Symbol(caseName) })
+    return Object.freeze(Object.fromEntries(caseNames.map(caseName => {
+      const value = Object.freeze({ caseName, declaration: declaration.canonical, identity: Symbol(caseName) })
       registerPersistedEnumCase(value)
       return [caseName, new RuntimeValue(value)]
     })))
-    return cases
   }
 
   /** IsCase tests built-in subject states, declared boolean cases, and enum identity values. */
@@ -186,11 +180,6 @@ class TR {
       return new RuntimeValue(matchSubjectCase(value, expected).matched)
     }
     return new RuntimeValue(Object.is(value, expected.evaluate().jsValue))
-  }
-
-  /** IsEmpty matches empty text/lists and ready queries with no rows. */
-  static IsEmpty(subject: TR.Evaluable): TR.Value<boolean> {
-    return TR.IsCase(subject, 'empty')
   }
 
   /** If evaluates a validated boolean once and lazily runs its one-sided body when true. */
@@ -319,11 +308,12 @@ class TR {
           { length: requiredArguments },
           (_, index) => index,
         ).find(index => arguments_[index] === undefined)
-        if (missingRequired !== undefined) {
-          throw new Error(
-            `Foreign action '${name}' is missing required argument ${missingRequired + 1} of ${requiredArguments}.`,
-          )
-        }
+        RuntimeAssert.input(
+          missingRequired === undefined,
+          `Foreign action '${name}' is missing required argument ${(missingRequired ?? 0) + 1} of `
+            + `${requiredArguments}.`,
+          { action: name },
+        )
         markExternalEffect()
         try {
           await implementation(...arguments_.map(argument => argument?.evaluate().jsValue))
@@ -470,20 +460,24 @@ class TR {
    * WarnUnhonoredLayout reports, outside production, styling passed to a platform-native component
    * that renders the OS's own control and cannot honor layout clauses. The component still renders
    * — best-effort, never a failure — but silent divergence between the declared style and the
-   * screen would be worse than a named limitation.
+   * screen would be worse than a named limitation. `warnDesignDivergence` owns when such a notice
+   * reaches a reader; this keeps only the once-per-component dedupe and the sentence itself.
    */
   static WarnUnhonoredLayout(component: string, layout: unknown): void {
-    if (process.env.NODE_ENV === 'production') {
+    if (warnedUnhonoredLayouts.has(component)) {
       return
     }
-    const clauses = (layout as { layout?: Record<string, unknown> } | undefined)?.layout
-    const keys = clauses ? Object.keys(clauses) : []
-    if (keys.length === 0 || warnedUnhonoredLayouts.has(component)) {
+    // A layout is `{ entries }`, and each entry is a tuple whose head names the clause. Reading keys
+    // off the wrapper named the wrapper — every warning used to say `(entries)` instead of naming
+    // the clauses the reader actually wrote.
+    const entries = (layout as { layout?: { entries?: readonly (readonly unknown[])[] } } | undefined)?.layout?.entries
+    const clauses = [...new Set((entries ?? []).map(entry => String(entry[0])))]
+    if (clauses.length === 0) {
       return
     }
     warnedUnhonoredLayouts.add(component)
-    console.warn(
-      `Tao: the platform-native ${component} ignores styling clauses (${keys.join(', ')}). `
+    warnDesignDivergence(
+      `Tao: the platform-native ${component} ignores styling clauses (${clauses.join(', ')}). `
         + `Use the design's semantic surface, or alias a styled implementation instead.`,
     )
   }
@@ -524,15 +518,6 @@ class TR {
 
   /** Hosts resolves the optional platform components `@tao/ui/native` implementations reach for. */
   static Hosts = NativeHosts
-
-  /** Alert opens the platform's own alert dialog; `undefined` where the platform has none. */
-  static Alert(title: string, message: string, confirm: string, cancel?: string, onConfirm?: () => void): void {
-    const alert = (requireReactNativeRuntime() as { Alert?: { alert: (...args: any[]) => void } }).Alert
-    const buttons = cancel === undefined
-      ? [{ onPress: onConfirm, text: confirm }]
-      : [{ style: 'cancel', text: cancel }, { onPress: onConfirm, text: confirm }]
-    alert?.alert(title, message || undefined, buttons)
-  }
 
   /** Use binds an imported module declaration into a file scope as a lazy, live binding. */
   static Use(scope: TR.Scope, name: string, getValue: () => unknown): void {
@@ -629,12 +614,8 @@ class TR {
     State: StudioStateControls,
   } as const
 
-  /** Errors exposes contained action reports and bounded, redacted diagnostic history. */
-  static readonly Errors = {
-    capture: captureActionHistory,
-    onFailure: onActionFailure,
-    reset: resetActionDiagnostics,
-  } as const
+  /** Errors is the runtime's one error-handling surface, owned by `TR-errors.ts`. */
+  static readonly Errors = ErrorControls
 
   /** Capture is the explicit semantic replay boundary; it never scrapes arbitrary host objects. */
   static readonly Capture = {
@@ -648,7 +629,10 @@ class TR {
 
   /** Persisted exposes capture and test seams for the device-local app-state domain. */
   static readonly Persisted = {
+    beginLaunch: beginPersistedStateLaunch,
+    beginTest: beginPersistedStateTest,
     capture: capturePersistedState,
+    endTest: endPersistedStateTest,
     setStorageForTests: setPersistedStateStorageForTests,
   } as const
 
@@ -918,6 +902,8 @@ namespace TR {
   export type CompoundSetOperator = '+=' | '-=' | '*=' | '/='
   /** Evaluable declares runtime values that can collapse to their current value. */
   export type Evaluable = { evaluate(): any }
+  /** ActionFailureReport is the contained, redacted record published for one failed root action. */
+  export type ActionFailureReport = TaoActionFailureReport
   export type RuntimeCaptureArtifact = TaoRuntimeCaptureArtifact
   export type RuntimeCaptureDomainRegistration = TaoRuntimeCaptureDomainRegistration
   export type RuntimeFailure = TaoRuntimeFailure

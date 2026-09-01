@@ -1,8 +1,8 @@
-import { FS, Platform, Time } from '@shared'
+import { Errors, FS, Platform, Time } from '@shared'
 import { Expect, Test } from '@shared/test'
 import {
+  openStudioPreviewSession,
   startStudioSessionServer,
-  StudioProjectSession,
   studioProtocolChannel,
   studioProtocolVersion,
   StudioSessionManager,
@@ -11,7 +11,8 @@ import {
 import { StudioCdp } from '../dev-src/studio/StudioCdp'
 import { type StartedStudioNative, StudioNative } from '../dev-src/studio/StudioNative'
 
-const initialSource = `app Smoke { view MainView }
+const initialSource = `use Stack, Text from @tao/ui
+app Smoke { view MainView }
 view MainView() {
   render Stack() {
     Text("First")
@@ -37,18 +38,32 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
   let browser: StudioCdp | undefined
   let native: StartedStudioNative | undefined
   let preview: ReturnType<typeof startPreviewServer> | undefined
+  let previewSession: Awaited<ReturnType<typeof openStudioPreviewSession>> | undefined
   let studio: Awaited<ReturnType<typeof startStudioSessionServer>> | undefined
   let manager: StudioSessionManager | undefined
   try {
     await FS.writeText(sourcePath, initialSource)
+    // The real compile lane refuses a project without checked-in identity.
+    await FS.writeText(
+      FS.resolvePath('Project.tao', projectRoot),
+      'project { id "tao-studio-simulated-user-smoke" name "Simulated user smoke" }\n',
+    )
     preview = startPreviewServer(smokePort('TAO_STUDIO_SMOKE_PREVIEW_PORT', 42_001))
-    const session = await StudioProjectSession.open({
-      async compile(request) {
-        return { message: `Stub preview compiled revision ${request.compileRevision}.` }
-      },
+    // The scenario canvas and inspector only exist once a preview manifest is published, and only
+    // the real compile lane publishes one. A stubbed compile leaves `previewManifest()` undefined,
+    // so `scenarioRows()` returns nothing and no scenario UI can render.
+    const previewRuntimeRoot = FS.resolvePath('runtime', artifactParent)
+    await FS.remove(previewRuntimeRoot)
+    previewSession = await openStudioPreviewSession({
       entryPath: sourcePath,
+      previewRuntimeRoot,
       projectRoot,
     })
+    const session = previewSession.session
+    const initialCompile = await session.compileInitial()
+    if (initialCompile.status !== 'compiled') {
+      Errors.throwUnexpected(`The smoke fixture must compile for this lane to mean anything: ${initialCompile.message}`)
+    }
     manager = new StudioSessionManager()
     const current = manager.add({ previewUrl: preview.url, session })
     studio = await startStudioSessionServer(manager, {
@@ -168,6 +183,8 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector('[data-studio-tao-inspector-context="Layout"] .studio-inspector-summary')
           && document.querySelector('[data-studio-tao-inspector-context="Layout"] .studio-inspector-field input:not(:disabled)')`,
       )
+      // Raw `Error`: this string is evaluated by Chrome, so it runs in the page with no module
+      // system and no reach into Tao's error taxonomy.
       await browser.evaluate(`(() => {
         const root = document.querySelector('[data-studio-tao-inspector-context="Layout"]')
         const mode = root?.querySelector('[data-inspector-field="Width mode"] select')
@@ -231,6 +248,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     await native?.stop()
     studio?.stop()
     await manager?.closeAll()
+    await previewSession?.close()
     preview?.stop()
     await FS.remove(projectRoot)
   }
@@ -252,11 +270,15 @@ function startPreviewServer(port: number): { stop(): void; url: string } {
 function smokePort(name: string, fallback: number): number {
   const value = Number(Platform.runtimeProcess.env[name] ?? fallback)
   if (!Number.isInteger(value) || value <= 0 || value > 65_535) {
-    throw new Error(`${name} must be a valid TCP port.`)
+    Errors.throwUserInput(`${name} must be a valid TCP port.`)
   }
   return value
 }
 
+/**
+ * Raw `Error`: the throw below lives in the `<script>` of the fake preview page this helper serves.
+ * It is never bundled and has no import graph, so Tao's error taxonomy is unreachable from it.
+ */
 function previewHtml(): string {
   return `<!doctype html>
 <html><body>
@@ -354,7 +376,7 @@ async function waitForSource(path: string, predicate: (source: string) => boolea
     }
     await Time.sleep(100)
   }
-  throw new Error(`Timed out waiting for Studio source change. Last source:\n${source}`)
+  Errors.throwHostEnvironment(`Timed out waiting for Studio source change. Last source:\n${source}`)
 }
 
 function ordered(source: string, labels: readonly string[]): boolean {

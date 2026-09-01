@@ -162,5 +162,17 @@ containment can offer Try again, but the runtime does not automatically reinvoke
 serialization prevents a second root action from overlapping the active transaction; unrelated host
 callbacks still do not have separate async transaction context.
 
-`TR.Errors.capture` and `TR.Errors.reset` remain the narrow action-history compatibility surface. The full
-artifact is owned by `TR.Capture`; resetting action diagnostics does not reset runtime state.
+`TR.Errors` is the runtime's one error-handling surface. It publishes `capture` and `reset` for the bounded
+action-history diagnostics, `onFailure` for contained root action failures, and `onUnowned` and
+`reportUnowned` for failures no caller can observe. A single runtime module (`TR-errors`) owns that surface
+together with the error types Tao throws deliberately, the credential-key redaction policy, and the
+development-only warning used when a failure is contained rather than surfaced; the automatic render
+boundary reuses that same policy rather than repeating it. The full capture artifact stays owned by
+`TR.Capture`, and resetting action diagnostics does not reset runtime state.
+
+Centralization covers reporting, not every throw site. Invariant violations elsewhere in the runtime raise
+the runtime's own typed errors through `RuntimeAssert` and `TR.Errors` — `UnexpectedBehaviorError` for a
+state the compiler should have prevented, `UserInputError` for the program's own data or contract being
+wrong, `HostEnvironmentError` for a failing device or native module — so a reader can tell whose mistake an
+error reports. Locally handled failures, such as an unavailable native module or an unrestorable navigation
+snapshot, are still contained where they occur rather than surfacing as action failures.

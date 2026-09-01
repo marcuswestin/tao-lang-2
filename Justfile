@@ -48,11 +48,11 @@ studio-test:
     bun test packages/studio/studio-tests
 
 # Run an explicit slow Studio smoke file in an isolated lane
-studio-smoke test_file run_id="local":
+studio-smoke test_file="packages/dev/studio-smoke/studio-launch.test.ts" run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Run an explicit slow Studio shell smoke through Electrobun
-studio-smoke-native test_file run_id="local":
+studio-smoke-native test_file="packages/dev/studio-smoke/studio-simulated-user.test.ts" run_id="local":
     ./dev studio-smoke --native --run-id "{{ run_id }}" "{{ test_file }}"
 
 # Prove Studio compile/edit/undo against the real HNReader app
@@ -64,11 +64,11 @@ studio-canary project="Apps/HNReader" app="HNReader":
     ./dev studio-canary --project "{{ project }}" --app "{{ app }}"
 
 # Validate a built native Studio release without publishing anything
-studio-release-check payload_root artifacts_root *ARGS:
+studio-release-check payload_root=".artifacts/build/studio-native/service-stage/payload" artifacts_root=".artifacts/build/studio-native/project/artifacts" *ARGS:
     ./dev studio-release-check --payload-root "{{ payload_root }}" --artifacts-root "{{ artifacts_root }}" {{ ARGS }}
 
 # Build signed/notarized Tao Studio artifacts through Electrobun and Hutch
-studio-package release_base_url channel="stable" output_root=".artifacts/build/studio-native":
+studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL", "https://releases.example.com/tao-studio") channel="stable" output_root=".artifacts/build/studio-native":
     ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"
 
 # Install development dependencies
@@ -81,7 +81,7 @@ deps:
 test PATTERN="": _compile-word-flower-app
     just _test '{{ PATTERN }}'
 
-# Format code
+# Format code, without applying the other Tao source fixes
 fmt: _parser-gen
     dprint fmt --incremental=false
     ./tao fmt
@@ -95,10 +95,14 @@ fix: _parser-gen
 
 # Check and test all code
 check: _compile-word-flower-app
-    ./dev gates _ide-extension-build _repo-lint _dependency-check _tao-check _dprint-check _typecheck _test _runtime-pack-check --skipped "studio-smoke=slow lane; run just studio-smoke <file>"
+    ./dev gates _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _test _runtime-pack-check --skipped "studio-smoke=slow lane; run just studio-smoke or just full-verify"
 
-# Run lint only
+# Run the repository lint on its own
 lint: _repo-lint
+
+# Report exported symbols nothing imports; a report, not a gate
+dead-exports:
+    bun run packages/dev/dev-src/repository-tests/DeadExports.ts
 
 # Diagnose this checkout without changing it; pass --json for a structured report
 doctor *ARGS:
@@ -128,7 +132,7 @@ clean-scratch:
 
 # Clean run dependencies and build artifacts
 clean: clean-scratch
-    rm -rf .artifacts/build .artifacts/dev packages/runtime-toolchain/.expo packages/runtime-toolchain/_gen_tao-app
+    rm -rf .artifacts/build .artifacts/dev packages/runtime-toolchain/.expo packages/runtime-toolchain/_gen_tao-app packages/runtime-toolchain/_gen_tao-app-test
     find . -name node_modules -type d -prune -exec rm -rf {} +
 
 # Run clean + clean ALL artifacts
@@ -137,13 +141,24 @@ clean-all: clean
 
 # Prepare all code for commit
 verify: fix _compile-word-flower-app
-    ./dev gates _ide-extension-build _repo-lint _dependency-check _typecheck _test _runtime-pack-check --json .artifacts/logs/verify/summary.json --skipped "_tao-check=covered by check" "_dprint-check=fix formatted this tree with dprint and just --fmt" "studio-smoke=slow lane; run just studio-smoke <file>"
+    ./dev gates _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --json .artifacts/logs/verify/summary.json --skipped "_tao-check=fix ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=fix formatted this tree with dprint and just --fmt" "studio-smoke=slow lane; run just studio-smoke or just full-verify"
+
+# Ordinary verify plus doctor, dead-exports, and every slow Studio smoke/canary lane
+full-verify: verify doctor dead-exports _full-verify-studio
 
 # Private
 #########
 
+# Studio lanes verify skips; sequential so Metro and port lanes do not collide
+_full-verify-studio:
+    just studio-smoke packages/dev/studio-smoke/studio-launch.test.ts full-verify-launch
+    just studio-proof-real-app full-verify-real-app
+    just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts full-verify-simulated
+    just studio-smoke-native packages/dev/studio-smoke/studio-simulated-user.test.ts full-verify-native
+    just studio-canary
+
 _agent-config:
-    bun run scripts/generate-agent-config.ts
+    ./dev agent-config
 
 _dependency-health:
     cd packages/runtime-toolchain && "{{ DEVENV_NODE }}" -e 'require("expo/metro-config"); require("jest-expo/jest-preset")'
@@ -173,9 +188,6 @@ _dprint-check:
 
 _repo-lint:
     bun run packages/dev/dev-src/repository-tests/repo-lint.ts
-
-_dependency-check:
-    bun run packages/dev/dev-src/repository-tests/DependencyCompatibility.ts
 
 _typecheck:
     bunx tsc --build packages/*/tsconfig.json

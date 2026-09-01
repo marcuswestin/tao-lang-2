@@ -18,7 +18,6 @@ import {
 import { dataValidationChecks, validateDataFile } from './validators/data-validator'
 import { declarationSlotValidationChecks } from './validators/declaration-slots-validator'
 import { DesignValidator } from './validators/design-validator'
-import { ExpressionsValidator } from './validators/expressions-validator'
 import { FunctionalCoreValidator } from './validators/FunctionalCoreValidator'
 import { injectionValidationChecks } from './validators/injections-validator'
 import { InvocationsValidator } from './validators/invocations-validator'
@@ -72,6 +71,15 @@ const nodeValidationChecks = NodeValidation.compile(
   ] satisfies readonly NodeValidationChecks[],
 )
 
+// Type-inference checks run as their own pass after the structural checks, so a
+// file's inferred-type diagnostics stay grouped after its structural ones.
+const typeInferenceChecks = NodeValidation.compile(
+  [
+    ActionsValidator.typeChecks,
+    StateValidator.typeChecks,
+  ] satisfies readonly NodeValidationChecks[],
+)
+
 function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AST.Node[] {
   AppValidator.validate(file, ctx)
   validateProjectFile(file, ctx)
@@ -92,6 +100,10 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AS
   return nodes
 }
 
+function validateTypes(file: AST.TaoFile, nodes: readonly AST.Node[], ctx: ValidationContext): void {
+  NodeValidation.validate(nodes, file, ctx, typeInferenceChecks)
+}
+
 async function validateForeignImplementationFiles(file: AST.TaoFile, ctx: ValidationContext): Promise<void> {
   await ActionsValidator.validateForeignFiles(file, ctx)
   await ViewsValidator.validateForeignFiles(file, ctx)
@@ -103,7 +115,7 @@ export const Validate = {
   App: AppValidator.validate,
   ForeignImplementationFiles: validateForeignImplementationFiles,
   TaoFile: validateTaoFile,
-  TypirProblems: ExpressionsValidator.validateTypirProblems,
+  Types: validateTypes,
   UseStatements: validateUseStatements,
   VisibleDeclarations: validateVisibleDeclarations,
 } as const

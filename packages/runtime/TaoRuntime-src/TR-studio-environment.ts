@@ -1,5 +1,7 @@
 import React from 'react'
+import { RuntimeAssert } from './TR-assert'
 import type { TaoDataConnection, TaoDataProvider, TaoDataSchema, TaoFillOps, TaoFillRequest } from './TR-data'
+import { UserInputError } from './TR-errors'
 import {
   SchemeControls,
   type TaoSchemeRequest,
@@ -206,18 +208,20 @@ export const StudioEnvironmentControls = {
         resolved[account.name] = resolveObject(account.fields, resolved)
       }
       for (const create of host.cell.fixture.creates) {
-        if (create.through !== undefined) {
-          throw new Error(
-            `Tao Studio fixture '${create.name}' uses through-action setup that this runtime cannot execute yet.`,
-          )
-        }
+        RuntimeAssert.input(
+          create.through === undefined,
+          `Tao Studio fixture '${create.name}' uses through-action setup that this runtime cannot execute yet.`,
+          { fixture: create.name },
+        )
         resolved[create.name] = schema.create(create.entity, resolveObject(create.fields, resolved))
       }
       for (const update of host.cell.scenario.prepare) {
         const target = resolved[update.target]
-        if (target === undefined) {
-          throw new Error(`Tao Studio prepare target '${update.target}' was not created.`)
-        }
+        RuntimeAssert.input(
+          target !== undefined,
+          `Tao Studio prepare target '${update.target}' was not created.`,
+          { target: update.target },
+        )
         schema.update(target as never, resolveObject(update.fields, resolved))
       }
       setHandles(Object.freeze({ ...resolved }))
@@ -287,9 +291,11 @@ function resolveValue(value: TaoStudioFixtureValue, handles: Readonly<Record<str
     return Clock.now()
   }
   const resolved = handles[value.handle]
-  if (resolved === undefined) {
-    throw new Error(`Tao Studio fixture reference '${value.handle}' is not available yet.`)
-  }
+  RuntimeAssert.input(
+    resolved !== undefined,
+    `Tao Studio fixture reference '${value.handle}' is not available yet.`,
+    { handle: value.handle },
+  )
   return resolved
 }
 
@@ -342,9 +348,11 @@ export function capturedFixture(
   for (const overlay of overlays) {
     for (const [storageKey, snapshot] of Object.entries(overlay.capture().snapshots)) {
       const existing = snapshots[storageKey]
-      if (existing !== undefined && existing !== snapshot) {
-        throw new Error(`Tao Studio captured conflicting snapshots for storage key '${storageKey}'.`)
-      }
+      RuntimeAssert.input(
+        existing === undefined || existing === snapshot,
+        `Tao Studio captured conflicting snapshots for storage key '${storageKey}'.`,
+        { storageKey },
+      )
       snapshots[storageKey] = snapshot
     }
   }
@@ -352,23 +360,23 @@ export function capturedFixture(
   for (const serialized of Object.values(snapshots)) {
     const envelope = JSON.parse(serialized) as { rows?: Record<string, Array<Record<string, unknown>>> }
     if (envelope.rows === undefined || typeof envelope.rows !== 'object') {
-      throw new Error('Tao Studio cannot capture an invalid provider snapshot as a fixture.')
+      throw new UserInputError('Tao Studio cannot capture an invalid provider snapshot as a fixture.')
     }
     const entityNames = Object.keys(envelope.rows).toSorted().join('\0')
     const schema = schemas.find(candidate =>
       Object.keys(candidate.definition.entities).toSorted().join('\0') === entityNames
     )
     if (schema === undefined) {
-      throw new Error('Tao Studio cannot match a provider snapshot to its data schema.')
+      throw new UserInputError('Tao Studio cannot match a provider snapshot to its data schema.')
     }
     for (const [entity, entityRows] of Object.entries(envelope.rows)) {
       const definition = schema.definition.entities[entity]
       if (definition === undefined || !Array.isArray(entityRows)) {
-        throw new Error('Tao Studio captured an unknown entity.')
+        throw new UserInputError('Tao Studio captured an unknown entity.', { entity })
       }
       for (const row of entityRows) {
         if (typeof row['Id'] !== 'string') {
-          throw new Error('Tao Studio captured a row without an Id.')
+          throw new UserInputError('Tao Studio captured a row without an Id.', { entity })
         }
         rows.push({
           entity,
@@ -408,15 +416,16 @@ function fixtureFromRows(rows: readonly CapturedRow[]): TaoStudioFixturePlan {
     if (!pending.has(key)) {
       return
     }
-    if (visiting.has(key)) {
-      throw new Error('Tao Studio cannot capture cyclic row relations as an ordered fixture.')
-    }
+    RuntimeAssert.input(!visiting.has(key), 'Tao Studio cannot capture cyclic row relations as an ordered fixture.')
     visiting.add(key)
     const row = pending.get(key)!
     for (const [field, relatedEntity] of Object.entries(row.relationFields)) {
       const relatedId = row.fields[field]
       if (typeof relatedId !== 'string') {
-        throw new Error(`Tao Studio captured invalid relation '${row.entity}.${field}'.`)
+        throw new UserInputError(`Tao Studio captured invalid relation '${row.entity}.${field}'.`, {
+          entity: row.entity,
+          field,
+        })
       }
       emit(capturedRowKey(relatedEntity, relatedId))
     }
@@ -425,13 +434,17 @@ function fixtureFromRows(rows: readonly CapturedRow[]): TaoStudioFixturePlan {
         const relatedEntity = row.relationFields[field]
         if (relatedEntity !== undefined) {
           const handle = nameById.get(capturedRowKey(relatedEntity, String(raw)))
-          if (handle === undefined) {
-            throw new Error(`Tao Studio captured a missing relation '${row.entity}.${field}'.`)
-          }
+          RuntimeAssert.input(handle, `Tao Studio captured a missing relation '${row.entity}.${field}'.`, {
+            entity: row.entity,
+            field,
+          })
           return [field, { handle, kind: 'fixture-reference' as const }]
         }
         if (typeof raw !== 'boolean' && typeof raw !== 'number' && typeof raw !== 'string') {
-          throw new Error(`Tao Studio cannot capture non-scalar field '${row.entity}.${field}'.`)
+          throw new UserInputError(`Tao Studio cannot capture non-scalar field '${row.entity}.${field}'.`, {
+            entity: row.entity,
+            field,
+          })
         }
         return [field, raw]
       }),
@@ -503,30 +516,31 @@ function clockDelay(milliseconds: number): Promise<void> {
 }
 
 function validateEnvironment(environment: TaoStudioEnvironment): void {
-  if (environment.version !== studioEnvironmentVersion) {
-    throw new Error(`Unsupported Tao Studio environment version '${String(environment.version)}'.`)
-  }
+  RuntimeAssert.input(
+    environment.version === studioEnvironmentVersion,
+    `Unsupported Tao Studio environment version '${String(environment.version)}'.`,
+  )
   validateScheme(environment.scheme)
-  if (environment.network.mode !== 'offline' && environment.network.mode !== 'online') {
-    throw new Error(`Unsupported Tao Studio network mode '${String(environment.network.mode)}'.`)
-  }
+  RuntimeAssert.input(
+    environment.network.mode === 'offline' || environment.network.mode === 'online',
+    `Unsupported Tao Studio network mode '${String(environment.network.mode)}'.`,
+  )
   const latency = environment.network.latencyMs ?? 0
-  if (!Number.isSafeInteger(latency) || latency < 0) {
-    throw new Error('Tao Studio network latency must be a non-negative safe integer in milliseconds.')
-  }
+  RuntimeAssert.input(
+    Number.isSafeInteger(latency) && latency >= 0,
+    'Tao Studio network latency must be a non-negative safe integer in milliseconds.',
+  )
   for (const failure of environment.network.failures ?? []) {
-    if (failure.entity !== undefined && failure.entity.trim().length === 0) {
-      throw new Error('A Tao Studio declared fill failure entity cannot be empty.')
-    }
-    if (failure.message.trim().length === 0) {
-      throw new Error('A Tao Studio declared fill failure must have a message.')
-    }
-    if (
-      failure.occurrence !== undefined
-      && (!Number.isSafeInteger(failure.occurrence) || failure.occurrence < 1)
-    ) {
-      throw new Error('A Tao Studio declared fill failure occurrence must be a positive safe integer.')
-    }
+    RuntimeAssert.input(
+      failure.entity === undefined || failure.entity.trim().length > 0,
+      'A Tao Studio declared fill failure entity cannot be empty.',
+    )
+    RuntimeAssert.input(failure.message.trim().length > 0, 'A Tao Studio declared fill failure must have a message.')
+    RuntimeAssert.input(
+      failure.occurrence === undefined
+        || (Number.isSafeInteger(failure.occurrence) && failure.occurrence >= 1),
+      'A Tao Studio declared fill failure occurrence must be a positive safe integer.',
+    )
   }
 }
 
@@ -536,7 +550,7 @@ function validateScheme(config: TaoStudioSchemeConfig): void {
     || (config.source !== undefined && !['preference', 'scenario', 'system'].includes(config.source))
     || (config.source === 'scenario' && config.requested === 'system')
   ) {
-    throw new Error('Tao Studio Scheme requires a valid requested appearance and request source.')
+    throw new UserInputError('Tao Studio Scheme requires a valid requested appearance and request source.')
   }
   if (config.replay !== undefined) {
     SchemeControls.resolve({ replay: config.replay }, { platform: 'web', system: 'light' })
@@ -544,12 +558,14 @@ function validateScheme(config: TaoStudioSchemeConfig): void {
 }
 
 function validateSeed(seed: TaoStudioStateSeed): void {
-  if (seed.version !== studioStateSeedVersion) {
-    throw new Error(`Unsupported Tao Studio state seed version '${String(seed.version)}'.`)
-  }
+  RuntimeAssert.input(
+    seed.version === studioStateSeedVersion,
+    `Unsupported Tao Studio state seed version '${String(seed.version)}'.`,
+  )
   for (const [storageKey, snapshot] of Object.entries(seed.snapshots)) {
-    if (storageKey.trim().length === 0 || typeof snapshot !== 'string') {
-      throw new Error('Tao Studio state seeds require non-empty storage keys and string snapshots.')
-    }
+    RuntimeAssert.input(
+      storageKey.trim().length > 0 && typeof snapshot === 'string',
+      'Tao Studio state seeds require non-empty storage keys and string snapshots.',
+    )
   }
 }

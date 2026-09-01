@@ -1,8 +1,6 @@
 import { Packages } from '@ast-utils'
 import { AST, Parser, type ParseResult } from '@parser'
 import { type Diagnostic, Diagnostics } from '@shared'
-import { createTypirLangiumServices, initializeLangiumTypirServices } from 'typir-langium'
-import { type TaoSpecifics, TaoTypeSystem, type TaoTypirServices } from './type-system'
 import { Validate } from './Validate'
 import { Validation, type ValidationRunContext } from './validation'
 import { validateProjectWorkspace } from './validators/project-validator'
@@ -14,7 +12,7 @@ export type ValidationResult = Pick<ParseResult, 'entry' | 'files'> & {
   diagnostics: readonly Diagnostic[]
 }
 
-/** ValidatorSession reuses standalone parser and Typir services across independent source strings. */
+/** ValidatorSession reuses standalone parser services across independent source strings. */
 export type ValidatorSession = {
   validateCode(code: string): Promise<ValidationResult>
 }
@@ -22,14 +20,12 @@ export type ValidatorSession = {
 /** createContext creates validator invocation state. */
 function createContext(
   packagesContext: Packages.Context,
-  typir: TaoTypirServices,
   workspaceFiles: readonly AST.TaoFile[],
   entryFilePath: string,
 ): ValidationRunContext {
   return {
     entryFilePath,
     packagesContext,
-    typir,
     workspaceFiles,
   }
 }
@@ -49,13 +45,12 @@ async function validateParseResult(
   const ctx = Validation.createContext(validationDiagnostics.accept, {
     entryFilePath: context.entryFilePath,
     packagesContext: context.packagesContext,
-    typir: context.typir,
     workspaceFiles: context.workspaceFiles,
   })
   validateProjectWorkspace(ctx)
   for (const file of context.workspaceFiles) {
     const nodes = Validate.TaoFile(file, ctx)
-    Validate.TypirProblems(file, nodes, context.typir, ctx)
+    Validate.Types(file, nodes, ctx)
     await Validate.ForeignImplementationFiles(file, ctx)
   }
 
@@ -75,12 +70,6 @@ async function createSession(packagesContext?: Packages.Context): Promise<Valida
   const parserContext = Parser.createContext({
     packages: Packages.createResolver(sharedPackagesContext),
   })
-  const typir = createTypirLangiumServices<TaoSpecifics>(
-    parserContext.services.shared,
-    AST.reflection,
-    new TaoTypeSystem(),
-  )
-  initializeLangiumTypirServices(parserContext.services.language, typir)
 
   // Langium's document builder mutates the session document store. Serialize
   // callers so a batch can safely share the synthetic source URI.
@@ -93,7 +82,6 @@ async function createSession(packagesContext?: Packages.Context): Promise<Valida
           parseResult,
           createContext(
             sharedPackagesContext,
-            typir,
             parseResult.files.map(file => file.ast),
             parseResult.entry.path,
           ),

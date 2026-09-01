@@ -1,4 +1,5 @@
 import type TR from '@runtime/TR'
+import { Assert } from '@shared/core'
 
 type InstantSDK = typeof import('@instantdb/react-native')
 type InstantDatabase = ReturnType<InstantSDK['init']>
@@ -175,9 +176,10 @@ function instantSDK(): InstantSDK {
 
 function requiredConfigurationText(context: TR.DataProviderContext, name: string): string {
   const value = context.configuration[name]
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`InstantDB datasource configuration '${name}' expects non-empty text.`)
-  }
+  Assert.input(
+    typeof value === 'string' && value.trim().length > 0,
+    `InstantDB datasource configuration '${name}' expects non-empty text.`,
+  )
   return value.trim()
 }
 
@@ -186,9 +188,10 @@ function optionalConfigurationText(context: TR.DataProviderContext, name: string
   if (value === undefined) {
     return undefined
   }
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new Error(`InstantDB datasource configuration '${name}' expects non-empty text when provided.`)
-  }
+  Assert.input(
+    typeof value === 'string' && value.trim().length > 0,
+    `InstantDB datasource configuration '${name}' expects non-empty text when provided.`,
+  )
   return value.trim()
 }
 
@@ -199,9 +202,11 @@ function snapshotFromRow(
   if (row === undefined) {
     return undefined
   }
-  if (row.StorageKey !== storageKey) {
-    throw new Error('InstantDB datasource detected a deterministic snapshot key collision.')
-  }
+  Assert(
+    row.StorageKey === storageKey,
+    'no InstantDB deterministic snapshot key collision',
+    { rowStorageKey: row.StorageKey, storageKey },
+  )
   return row.Snapshot
 }
 

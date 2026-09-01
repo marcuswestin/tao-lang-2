@@ -12,6 +12,7 @@
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "latest",
+    "knip": "^6.34.0",
     "rulesync": "16.18.0",
     "typescript": "5.9.3"
   }

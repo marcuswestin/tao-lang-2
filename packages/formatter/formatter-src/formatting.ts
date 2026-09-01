@@ -279,7 +279,7 @@ function newLinesWithTabs(lines: number, tabs: number): Langium.FormattingAction
 }
 
 /** hasInteriorComments reports whether a node encloses a comment. */
-export function hasInteriorComments(node: AST.Node): boolean {
+function hasInteriorComments(node: AST.Node): boolean {
   const cst = node.$cstNode
   if (cst === undefined) {
     return false

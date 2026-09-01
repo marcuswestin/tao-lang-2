@@ -1,3 +1,4 @@
+import { Errors } from '@shared'
 import { Expect, Test } from '@shared/test'
 import { StudioScenarioControls } from '../studio-src/client/StudioScenarioControls'
 import type { StudioCellIdentity, StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
@@ -32,7 +33,7 @@ Test('Studio scenario controls serialize exact group, entry, cell, environment, 
   Expect(first.ok).toBe(true)
   Expect(second.ok).toBe(true)
   if (!first.ok || !second.ok) {
-    throw new Error('Expected scenario models.')
+    Errors.throwUnexpected('Expected scenario models.')
   }
   Expect(first.value).toMatchObject({
     arguments: { Count: 2, Mode: 'compact', Title: 'Novel' },
@@ -68,7 +69,7 @@ Test('Studio scenario draft validation rejects invalid typed values and environm
   Expect(valid).toMatchObject({ ok: true, value: { arguments: { Count: 4, Mode: 'wide', Title: 'Draft' } } })
   Expect(invalid.ok).toBe(false)
   if (invalid.ok) {
-    throw new Error('Expected invalid draft.')
+    Errors.throwUnexpected('Expected invalid draft.')
   }
   Expect(invalid.issues).toEqual([
     'Argument is not declared: Extra.',
@@ -147,7 +148,7 @@ function scenarioModel(failureReplay = undefined as ReturnType<typeof runtimeFai
     previewInstanceId: 'preview-8',
   })
   if (!modeled.ok) {
-    throw new Error(modeled.issues.join(' '))
+    Errors.throwUnexpected(modeled.issues.join(' '))
   }
   return modeled.value
 }

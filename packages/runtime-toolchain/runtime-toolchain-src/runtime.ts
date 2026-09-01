@@ -41,6 +41,13 @@ export type GeneratedApp = {
 const generationQueues = new Map<string, Promise<void>>()
 const previewPublications = new Map<string, StudioPreviewPublication>()
 
+/**
+ * previewInspectionLink is the stable path a human opens to read the generated graph. It points at
+ * the newest revision root instead of duplicating it, and stays out of every import: no generated
+ * module resolves through it, so Metro and the bundlers only ever see one copy of each module.
+ */
+const previewInspectionLink = 'current'
+
 /** generateApp generates the runtime app module from a Tao app file. */
 async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Promise<GeneratedApp> {
   const runtimePackageRoot = opts.runtimePackageRoot ?? defaultRuntimePackageRoot()
@@ -68,12 +75,16 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       generatedAppRoot,
       generatedFiles,
       preview === undefined ? undefined : 'TaoStudioActivePreview.ts',
-      previousPreview === undefined ? [] : [`revisions/revision-${previousPreview.revision}`],
+      preview === undefined ? [] : [
+        previewInspectionLink,
+        ...(previousPreview === undefined ? [] : [previewRevisionRoot(previousPreview.revision)]),
+      ],
     )
     if (preview === undefined) {
       previewPublications.delete(generatedAppRoot)
     } else {
       previewPublications.set(generatedAppRoot, preview)
+      await linkNewestPreviewRevision(generatedAppRoot, previewRevisionRoot(preview.revision))
     }
 
     const generatedAppCode = generatedFiles.find(file => file.relativePath === 'App.tsx')?.code
@@ -167,7 +178,7 @@ function filesWithStablePreviewRoot(
   files: Array<{ relativePath: string; code: string }>,
   preview: StudioPreviewPublication,
 ): Array<{ relativePath: string; code: string }> {
-  const revisionRoot = `revisions/revision-${preview.revision}`
+  const revisionRoot = previewRevisionRoot(preview.revision)
   return [
     {
       relativePath: 'App.tsx',
@@ -191,7 +202,6 @@ function filesWithStablePreviewRoot(
         })
       } as const\n\nexport default TaoStudioProject\n`,
     },
-    ...files.map(previewCompatibilityFile),
     ...files.map(file => previewRevisionFile(file, revisionRoot)),
     {
       relativePath: 'TaoStudioActivePreview.ts',
@@ -200,28 +210,48 @@ function filesWithStablePreviewRoot(
   ]
 }
 
+function previewRevisionRoot(revision: number): string {
+  return `revisions/revision-${revision}`
+}
+
+/** previewRevisionFile places one compiled module in its revision root, freeing App.tsx for the stable preview root. */
 function previewRevisionFile(
   file: { relativePath: string; code: string },
   revisionRoot: string,
 ): { relativePath: string; code: string } {
-  const transformed = previewCompatibilityFile(file)
-  return { ...transformed, relativePath: `${revisionRoot}/${transformed.relativePath}` }
-}
-
-/** Compatibility copies keep the current generated graph inspectable without joining the live Metro import chain. */
-function previewCompatibilityFile(
-  file: { relativePath: string; code: string },
-): { relativePath: string; code: string } {
   if (file.relativePath === 'App.tsx') {
-    return { ...file, relativePath: 'TaoApp.tsx' }
+    return { ...file, relativePath: `${revisionRoot}/TaoApp.tsx` }
   }
   const appImport = relativeModuleImport(file.relativePath, 'App.tsx')
   const taoAppImport = relativeModuleImport(file.relativePath, 'TaoApp.tsx')
   return {
-    ...file,
+    relativePath: `${revisionRoot}/${file.relativePath}`,
     code: file.code
       .replaceAll(`'${appImport}'`, `'${taoAppImport}'`)
       .replaceAll(`"${appImport}"`, `"${taoAppImport}"`),
+  }
+}
+
+/**
+ * linkNewestPreviewRevision repoints the stable inspection path at the revision root just published.
+ * A staged rename replaces the existing link in place, so an inspector never catches it missing, and
+ * a filesystem that refuses symlinks degrades to a one-line pointer file at the same path.
+ */
+async function linkNewestPreviewRevision(outputRoot: string, revisionRoot: string): Promise<void> {
+  const linkPath = FS.resolvePath(previewInspectionLink, outputRoot)
+  const stagedPath = `${linkPath}.next`
+  await FS.remove(stagedPath)
+  try {
+    await FS.symlink(FS.joinPath(revisionRoot), stagedPath)
+  } catch {
+    await FS.writeText(stagedPath, `${revisionRoot}\n`)
+  }
+  try {
+    await FS.move(stagedPath, linkPath)
+  } catch {
+    // Only a real directory left at the stable path blocks the rename; the generator owns that path.
+    await FS.remove(linkPath)
+    await FS.move(stagedPath, linkPath)
   }
 }
 
@@ -246,6 +276,14 @@ function relativeModuleImport(fromOutputPath: string, toOutputPath: string): str
   return relative.startsWith('.') ? relative : `./${relative}`
 }
 
+/**
+ * The three failures below are emitted text, not this module's code: they land in the generated
+ * app's `App.tsx` and run inside the Tao author's Expo bundle, whose only guaranteed Tao import is
+ * `@runtime/TR`. They reach the error taxonomy through `TR.Errors`, which is the whole vocabulary a
+ * compiled program can name. A rejected bootstrap response blames the Studio host serving it, while
+ * a manifest missing the scenario or fixture the accepted cell names is an invariant the publication
+ * revision check upstream should already have ruled out.
+ */
 function stablePreviewRootSource(): string {
   return `import React from 'react'
 import TR from '@runtime/TR'
@@ -270,7 +308,7 @@ export default function App() {
     const url = new URL(bootstrapPath, TaoStudioPreviewBootstrap.parentOrigin)
     url.searchParams.set('previewInstanceId', TaoStudioPreviewBootstrap.previewInstanceId)
     void fetch(url).then(async response => {
-      if (!response.ok) throw new Error('Tao Studio cell bootstrap was rejected (' + response.status + ').')
+      if (!response.ok) TR.Errors.failHost('Tao Studio cell bootstrap was rejected (' + response.status + ').')
       const nextCell = await response.json()
       if (!cancelled && runtimeMatchesPublication(nextCell, TaoStudioPublication)) setCell(nextCell)
     }).catch(error => {
@@ -347,9 +385,9 @@ function StudioPreviewContent({ cell, config }: any) {
 
 function studioCellRuntime(runtime: any, manifest: any) {
   const scenario = manifest.scenarios.find((candidate: any) => candidate.id === runtime.cell.scenarioId)
-  if (scenario === undefined) throw new Error('Tao Studio scenario bootstrap is stale.')
+  if (scenario === undefined) TR.Errors.failInvariant('Tao Studio scenario bootstrap is stale.')
   const fixture = manifest.fixtures.find((candidate: any) => candidate.id === scenario.fixtureId)
-  if (fixture === undefined) throw new Error('Tao Studio fixture bootstrap is stale.')
+  if (fixture === undefined) TR.Errors.failInvariant('Tao Studio fixture bootstrap is stale.')
   const dataState = runtime.resolvedState?.snapshot?.domains?.data?.value
   const replayScheme = runtime.replay?.domains?.find((domain: any) => domain?.domain === 'scheme')?.value
   const network = runtime.cell.environment.network

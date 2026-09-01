@@ -166,7 +166,7 @@ async function runSuitesInterleaved(pattern = '', options: TestRunOptions = {}):
     flushInterleavedOutput(outputState, state)
   }
   await writeSuiteLogs(states)
-  TestResultSummary.printResultSummary(states, Date.now() - startedAt)
+  TestResultSummary.printResultSummary(states, Date.now() - startedAt, { taoAppsSkipped: pattern.length > 0 })
   return TestResultSummary.suiteExitCode(states)
 }
 

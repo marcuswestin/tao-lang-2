@@ -20,8 +20,3 @@ export async function testFormatCode(source: string, expected: string): Promise<
 export function formats(source: string, expected: string): () => Promise<string> {
   return async () => await testFormatCode(source, expected)
 }
-
-/** formatsUnchanged returns a test callback that asserts source is already canonical. */
-export function formatsUnchanged(source: string): () => Promise<string> {
-  return async () => await testFormatCode(source, source)
-}

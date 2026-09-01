@@ -1,3 +1,5 @@
+import { RuntimeAssert } from './TR-assert'
+import { UserInputError } from './TR-errors'
 import { LayoutControls, type TaoLayout, type TaoLayoutEntry, type TaoResolvedLayoutStyle } from './TR-layout'
 import type { TaoScheme } from './TR-scheme'
 import RuntimeSwitch from './TR-switch'
@@ -172,7 +174,7 @@ function resolve(
         continue
       }
       if (!isVisualEntry(entry)) {
-        throw new Error(`Unknown design clause '${entry.join(' ')}'.`)
+        throw new UserInputError(`Unknown design clause '${entry.join(' ')}'.`, { entry })
       }
       applyVisualEntry(style, design, entry, scheme)
       provenance.push({ chain: expanded.chain, entry, property: visualProperty(head) })
@@ -195,9 +197,10 @@ function assertEffectiveLayoutCompatibility(layout: TaoLayout | undefined): void
   const entries = layout?.entries ?? []
   const growth = entries.findLast(entry => ['fill', 'claim', 'hug'].includes(entry[0]))
   const shrink = entries.findLast(entry => ['compress', 'rigid'].includes(entry[0]))
-  if (growth?.[0] === 'claim' && shrink?.[0] === 'rigid') {
-    throw new Error("Design entries 'claim' and 'rigid' cannot remain effective together.")
-  }
+  RuntimeAssert.input(
+    growth?.[0] !== 'claim' || shrink?.[0] !== 'rigid',
+    "Design entries 'claim' and 'rigid' cannot remain effective together.",
+  )
 }
 
 function* expandEntries(
@@ -218,18 +221,18 @@ function* expandEntries(
       yield { chain, entry }
       continue
     }
+    // Design resolution runs on every render, so the guards whose message joins an array stay behind
+    // an `if`: a `RuntimeAssert` call would build that message on every successful resolve.
     if (entry.length !== 1) {
-      throw new Error(`Unknown design clause '${entry.join(' ')}'.`)
+      throw new UserInputError(`Unknown design clause '${entry.join(' ')}'.`, { entry })
     }
-    if (!design) {
-      throw new Error(`Design bundle '${head}' requires a mounted app design.`)
-    }
+    RuntimeAssert.input(design, `Design bundle '${head}' requires a mounted app design.`, { bundle: head })
     const bundle = design.bundles[head]
-    if (!bundle) {
-      throw new Error(`Design '${design.name}' has no bundle '${head}'.`)
-    }
+    RuntimeAssert.input(bundle, `Design '${design.name}' has no bundle '${head}'.`, { design: design.name })
     if (bundlePath.includes(head)) {
-      throw new Error(`Design '${design.name}' has a bundle cycle: ${[...bundlePath, head].join(' -> ')}.`)
+      throw new UserInputError(`Design '${design.name}' has a bundle cycle: ${[...bundlePath, head].join(' -> ')}.`, {
+        design: design.name,
+      })
     }
     yield* expandEntries(design, bundle, [...bundlePath, head], scheme, chain)
   }
@@ -249,7 +252,7 @@ function activeSchemeEntry(entry: TaoDesignSpecEntry, scheme: TaoScheme): TaoDes
     || suffix[2] !== 'is'
     || (suffix[3] !== 'Dark' && suffix[3] !== 'Light')
   ) {
-    throw new Error(`Unsupported design condition '${entry.join(' ')}'.`)
+    throw new UserInputError(`Unsupported design condition '${entry.join(' ')}'.`, { entry })
   }
   const required = suffix[3] === 'Dark' ? 'dark' : 'light'
   return required === scheme ? entry.slice(0, condition) as unknown as TaoDesignSpecEntry : undefined
@@ -300,19 +303,13 @@ function isVisualEntry(
 
 function resolveColorToken(design: TaoDesign | undefined, entry: TaoDesignSpecEntry, scheme: TaoScheme): string {
   const tokenName = entry.length === 2 && typeof entry[1] === 'string' ? entry[1] : undefined
-  if (!tokenName) {
-    throw new Error(`Design clause '${entry[0]}' expects one color token.`)
-  }
+  RuntimeAssert.input(tokenName, `Design clause '${entry[0]}' expects one color token.`, { entry })
   if (tokenName.startsWith('#')) {
     return tokenName
   }
-  if (!design) {
-    throw new Error(`Design token '${tokenName}' requires a mounted app design.`)
-  }
+  RuntimeAssert.input(design, `Design token '${tokenName}' requires a mounted app design.`, { token: tokenName })
   const color = resolveColor(design, tokenName, scheme, [])
-  if (!color) {
-    throw new Error(`Design '${design.name}' has no token '${tokenName}'.`)
-  }
+  RuntimeAssert.input(color, `Design '${design.name}' has no token '${tokenName}'.`, { design: design.name })
   return color
 }
 
@@ -323,7 +320,9 @@ function resolveColor(
   resolving: readonly string[],
 ): string | undefined {
   if (resolving.includes(path)) {
-    throw new Error(`Design '${design.name}' has a color cycle: ${[...resolving, path].join(' -> ')}.`)
+    throw new UserInputError(`Design '${design.name}' has a color cycle: ${[...resolving, path].join(' -> ')}.`, {
+      design: design.name,
+    })
   }
   const value = design.colors[path]
   if (typeof value === 'string') {
@@ -366,12 +365,12 @@ function resolveSizeTerms(design: TaoDesign | undefined, entry: TaoDesignSpecEnt
 
 function resolveSize(design: TaoDesign, path: string, resolving: readonly string[]): number {
   if (resolving.includes(path)) {
-    throw new Error(`Design '${design.name}' has a size cycle: ${[...resolving, path].join(' -> ')}.`)
+    throw new UserInputError(`Design '${design.name}' has a size cycle: ${[...resolving, path].join(' -> ')}.`, {
+      design: design.name,
+    })
   }
   const value = design.sizes[path]
-  if (value === undefined) {
-    throw new Error(`Design '${design.name}' has no size '${path}'.`)
-  }
+  RuntimeAssert.input(value, `Design '${design.name}' has no size '${path}'.`, { design: design.name, size: path })
   return sizeAtom(design, value.left, [...resolving, path])
     + (value.right === undefined ? 0 : sizeAtom(design, value.right, [...resolving, path]))
 }
@@ -388,7 +387,7 @@ function visualProperty(head: string): string {
 
 function numericVisualValue(entry: TaoDesignSpecEntry): number {
   if (entry.length !== 2 || typeof entry[1] !== 'number') {
-    throw new Error(`Design clause '${entry[0]}' expects one number.`)
+    throw new UserInputError(`Design clause '${entry[0]}' expects one number.`, { entry })
   }
   return entry[1]
 }

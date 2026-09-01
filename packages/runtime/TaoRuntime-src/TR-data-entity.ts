@@ -1,3 +1,4 @@
+import { RuntimeAssert } from './TR-assert'
 import type { TaoDataSchema } from './TR-data'
 
 export type RuntimeEntityMetadata = {
@@ -42,9 +43,7 @@ export function entityHandle(value: unknown): RuntimeEntityHandle | undefined {
 
 export function metadataOf(handle: RuntimeEntityHandle): RuntimeEntityMetadata {
   const metadata = runtimeEntityMetadata.get(handle)
-  if (!metadata) {
-    throw new Error('Invalid Tao data entity handle.')
-  }
+  RuntimeAssert.defined(metadata, 'a Tao data entity handle carries its runtime metadata')
   return metadata
 }
 

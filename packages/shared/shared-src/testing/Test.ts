@@ -1,6 +1,7 @@
 import { Assert } from '../core/Assert'
 import * as Text from '../core/Text'
 import * as FS from '../FS'
+import { testOverrideSlot } from './TestOverride'
 
 /** AfterEach wraps the active test runner's afterEach hook. */
 export const AfterEach = createTestRunnerFunction('afterEach')
@@ -19,6 +20,16 @@ export const Jest: JestApi = {
   resetModules() {
     getTestRuntime().jest.resetModules()
   },
+}
+
+/**
+ * MockModule replaces a module specifier with a test double on the active test runner. The call is not
+ * hoisted above the importing module's own imports, so register the double first and reach for the module
+ * under test through a dynamic `await import(...)` afterwards. A specifier that resolves to nothing becomes
+ * a virtual module rather than an error, on both runners.
+ */
+export function MockModule(specifier: string, factory: () => unknown): void {
+  getTestRuntime().mockModule(specifier, factory)
 }
 
 /** Test wraps the active test runner's test case API. */
@@ -61,21 +72,22 @@ export async function withTaoFiles<const Files extends Record<string, string>>(
   }
 }
 
-/** setReactNativeDevModeForTest overrides the React Native `__DEV__` global and returns a restore function. */
+/**
+ * setReactNativeDevModeForTest overrides the React Native `__DEV__` global and returns a restore function.
+ * Overlapping overrides stack, so restoring in any order leaves the mode the newest live override chose.
+ */
 export function setReactNativeDevModeForTest(value: boolean): () => void {
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, '__DEV__')
-  Object.defineProperty(globalThis, '__DEV__', {
-    configurable: true,
-    value,
-    writable: true,
-  })
-  return () => {
-    if (descriptor) {
-      Object.defineProperty(globalThis, '__DEV__', descriptor)
-      return
-    }
-    delete (globalThis as { __DEV__?: unknown }).__DEV__
-  }
+  return reactNativeDevModeSlot.install({ configurable: true, value, writable: true })
+}
+
+/**
+ * setClockForTest pins `Date.now` to a fixed reading or a scripted clock and returns a restore function.
+ * Pass a function when a test advances time between steps, so each read observes the value set for that step.
+ * Overlapping pins stack, so restoring in any order leaves the clock the newest live pin chose, and the real
+ * clock comes back only once every pin has been restored.
+ */
+export function setClockForTest(now: number | (() => number)): () => void {
+  return clockSlot.install(typeof now === 'function' ? now : () => now)
 }
 
 /** setTestRuntime configures the active runner used by Tao test wrappers. */
@@ -106,6 +118,7 @@ export type TestRuntime = {
   describe: TestRunnerFunction
   expect: TestRunnerExpect
   jest: JestApi
+  mockModule: (specifier: string, factory: () => unknown) => void
   test: TestRunnerFunction
 }
 
@@ -116,6 +129,30 @@ type TestRunnerExpect = (<T = unknown>(value?: T, ...args: any[]) => any) & Reco
 type TestRunnerFunction = ((...args: any[]) => any) & Record<string, any>
 
 let testRuntime: TestRuntime | undefined
+
+const clockSlot = testOverrideSlot<() => number>({
+  read: () => Date.now,
+  write: next => {
+    Date.now = next
+  },
+})
+
+const reactNativeDevModeSlot = testOverrideSlot<PropertyDescriptor | undefined>({
+  // `getOwnPropertyDescriptor` hands back a fresh object every call, so identity would never match the
+  // descriptor this slot wrote; what a re-read has to agree on is the value the property now holds.
+  equals: (left, right) =>
+    left === right
+    || (left !== undefined && right !== undefined
+      && left.value === right.value && left.get === right.get && left.set === right.set),
+  read: () => Object.getOwnPropertyDescriptor(globalThis, '__DEV__'),
+  write: descriptor => {
+    if (descriptor === undefined) {
+      delete (globalThis as { __DEV__?: unknown }).__DEV__
+      return
+    }
+    Object.defineProperty(globalThis, '__DEV__', descriptor)
+  },
+})
 
 function ExpectIs<T>(value: unknown, guard: (value: unknown) => value is T): asserts value is T {
   Expect(guard(value)).toBe(true)
@@ -146,9 +183,7 @@ function copyFunctionProperties(
 }
 
 function getTestRuntime(): TestRuntime {
-  if (testRuntime === undefined) {
-    throw new Error('Test runtime has not been configured')
-  }
+  Assert.defined(testRuntime, 'the test runtime to be configured before a test helper runs')
 
   return testRuntime
 }

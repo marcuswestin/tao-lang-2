@@ -310,12 +310,12 @@ strongest claims available: the policy layer behaves identically on both sides o
   substrate decided here (per-entity rows) is the storage shape that program builds its change
   protocol on.
 - **Studio v2 error architecture**: the action-failure contract is now decided law (Decisions
-  §15, amended 2026-08-31) — a provider failure selects a declared case and *may carry a
-  server-authored sentence*, with the message ladder preferring the server sentence. Remote
+  §15, amended 2026-08-31) — a provider failure selects a declared case and _may carry a
+  server-authored sentence_, with the message ladder preferring the server sentence. Remote
   refusals land in that ladder; failure captures structurally exclude secret-bearing fields
   (already implemented on their side; `secret` gives it a type to key on). Separately, Ro
   deferred the runtime action-transaction contract (Roadmap, 2026-08-31): this program designs
-  `transaction … for Me`'s *authority and provider-commit* semantics and must not treat the
+  `transaction … for Me`'s _authority and provider-commit_ semantics and must not treat the
   implemented Studio action overlay as the settled durable-row transaction model.
 - **`tao ship`**: three shared surfaces, all flagged in its exploration — deploy credentials
   (`config`, not `secret`), rules/schema push as part of the deploy pipeline (drift between
@@ -390,7 +390,7 @@ provider contract: loads compose from namespace queries, saves decompose into pe
 `transact` ops by diffing against the last confirmed state. Server rules bite every row
 operation immediately; the diffing layer and a compiler-emitted schema push live inside the
 provider. This deliberately settles the provider roadmap's open question ("snapshot sync vs
-entity/change protocol") as *entity storage now, snapshot protocol for now* — the sync program
+entity/change protocol") as _entity storage now, snapshot protocol for now_ — the sync program
 later replaces the diffing with a real change protocol over the same storage shape. Rejected:
 waiting for an entity/change protocol first (inverts program order, pulls conflict semantics
 into scope), and client-only enforcement (fails the promise outright).

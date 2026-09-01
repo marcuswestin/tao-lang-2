@@ -5,6 +5,7 @@ import {
   type StudioPreviewConfig,
   type StudioPreviewHost,
 } from '@runtime/TR-studio-preview'
+import { Errors } from '@shared/core'
 import { fireEvent, render, waitFor } from '@testing-library/react-native'
 import { Text } from 'react-native'
 import { registerRuntimeE2ELifecycle, testCompileApps } from './test-compile-app'
@@ -39,7 +40,7 @@ describe('runtime failure containment and Studio capture', () => {
           TR.Value(['first', 'broken', 'third']),
           value => {
             if (value.jsValue === 'broken') {
-              throw new Error('Broken row')
+              Errors.throwUnexpected('Broken row')
             }
             return <Text>{value.jsValue}</Text>
           },
@@ -58,9 +59,7 @@ describe('runtime failure containment and Studio capture', () => {
   test('publishes a diagnostic capture to Studio and stops a deterministic retry loop', async () => {
     const posted: Array<{ message: any; targetOrigin: string }> = []
     const cleanup = mountStudioPreviewBridge(config, previewHost(posted))
-    const Failing = () => {
-      throw new Error('Always fails')
-    }
+    const Failing = (): never => Errors.throwUnexpected('Always fails')
     const screen = render(
       <TaoErrorBoundary
         boundaryId="app:containment"
@@ -101,7 +100,7 @@ describe('runtime failure containment and Studio capture', () => {
     let resets = 0
     const MaybeFailing = () => {
       if (shouldFail) {
-        throw new Error('Transient render')
+        Errors.throwUnexpected('Transient render')
       }
       return <Text>Recovered app</Text>
     }
@@ -142,7 +141,7 @@ describe('runtime failure containment and Studio capture', () => {
     })
     const MaybeFailing = () => {
       if (shouldFail) {
-        throw new Error('Resettable failure')
+        Errors.throwUnexpected('Resettable failure')
       }
       return <Text>Reset recovered</Text>
     }
@@ -172,14 +171,12 @@ describe('runtime failure containment and Studio capture', () => {
     const stopDomain = TR.Capture.register({ capture: () => Number.NaN, domain: 'broken-capture-test', version: 1 })
     const received: TR.RuntimeCaptureArtifact[] = []
     const stopThrowing = TR.Capture.onFailure(() => {
-      throw new Error('listener failed')
+      Errors.throwUnexpected('listener failed')
     })
     const stopReceiving = TR.Capture.onFailure(artifact => received.push(artifact))
     const warn = console.warn
     console.warn = () => {}
-    const Failing = () => {
-      throw new Error('Capture fallback')
-    }
+    const Failing = (): never => Errors.throwUnexpected('Capture fallback')
     try {
       render(
         <TaoErrorBoundary

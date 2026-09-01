@@ -1,4 +1,5 @@
 import type React from 'react'
+import { warnContainedFailure } from './TR-errors'
 import { requireReactNativeRuntime } from './TR-react-native'
 
 export type NativeNavigationModule = {
@@ -26,7 +27,7 @@ export function nativeNavigationModule(): NativeNavigationModule | undefined {
     try {
       cachedModule = require('react-native-screens') as NativeNavigationModule
     } catch (error) {
-      console.warn(`[tao] native navigation unavailable: ${String(error)}`)
+      warnContainedFailure('Native navigation surfaces are unavailable; using the basic host surfaces.', error)
       cachedModule = null
     }
   }

@@ -1,0 +1,40 @@
+use SplitNav from @tao/nav
+use Button, Col, Text from @tao/ui
+
+app ResizableSplitApp {
+   Name "Resizable Split"
+   state SidebarWidth is number = 280 (persist)
+   action WidenSidebar() {
+      set SidebarWidth = 360
+   }
+   Navigator SplitNav {
+      @sidebar {
+         Content Sidebar(Width: SidebarWidth, Widen: WidenSidebar)
+         Width SidebarWidth
+         Resizable true
+      }
+      @main {
+         Content Main
+         Width 640
+         Resizable true
+}  }  }
+
+// The sidebar shows the two kinds of state a relaunch tells apart: the app's device-local
+// `(persist)` width, which outlives the launch, and its own view-local note, which does not.
+view Sidebar(Width number, Widen action()) {
+   state Note = "unwritten"
+   render Col() {
+      Text("Persistent sidebar")
+      Text("Sidebar width { Width }")
+      Text("Sidebar note { Note }")
+      Button("Widen sidebar") {
+         on press Widen
+      }
+      Button("Write note") {
+         on press -> { set Note = "written" }
+}  }  }
+
+view Main() {
+   render Col() {
+      Text("Resizable workspace")
+}  }

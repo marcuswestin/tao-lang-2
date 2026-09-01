@@ -7,6 +7,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 ## Work
 
 - Create agent worktrees with Worktrunk so its blocking setup runs before the harness starts. In other linked worktrees, `./agent` reuses the primary checkout's pinned devenv profile; if it reports no profile, run `direnv allow` and `direnv exec . ./agent setup`.
+- `direnv exec .` works in an unsandboxed shell but fails in a sandboxed one: it re-resolves the devenv lock through `.devenv/bootstrap`, which needs the nix daemon socket the sandbox denies. It surfaces as `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'` or, misleadingly, `Failed to get attribute 'config.cachix.enable'`. In a sandboxed shell use the already-materialized profile instead — `export PATH="$PWD/.devenv/profile/bin:$PATH"` — and then call `bun`, `bunx`, `dprint`, `just`, and `node` directly.
 - Run ordinary shell commands directly. Use `./tao` for Tao CLI commands and `./agent <command>` for common repository workflows; run `./agent help` to discover them. Human developer commands are defined in `Justfile`.
 - Ask Ro when language design, roadmap priority, destructive work, or ambiguous product behavior cannot be derived safely. Resolve routine implementation choices from repository evidence.
 - Never mention Claude or any other agent identity in work products — not in file names, documents, code, comments, branch names, or commit messages (no AI `Co-Authored-By` trailers).
@@ -24,7 +25,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Research the open web without asking. Run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack without asking.
 - Bash commands run inside an OS-level sandbox: the worktree and named caches are writable, egress is limited to an allowlist. On a sandbox violation, retry the command unsandboxed rather than abandoning the task; never widen the policy to route around one.
 - Merge onto `main` only when Ro asks for it; the command no longer prompts, but the decision is still Ro's. Pushing always stops for Ro. Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service.
-- `.rulesync/permissions.jsonc` owns the shared permission rules. Never edit a generated harness file; the `agent-instructions` skill owns which generator produces what.
+- `.rulesync/permissions.jsonc` owns the shared permission rules and the sandbox policy; `.claude/settings.json` is generated from it. Never edit a generated harness file; change the source and regenerate with `just _agent-config`. The `agent-instructions` skill owns which generator produces what.
 
 ## Guidance
 

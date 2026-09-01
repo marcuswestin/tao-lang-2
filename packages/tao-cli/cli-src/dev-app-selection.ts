@@ -1,4 +1,4 @@
-import { Errors, HCI, Platform } from '@shared'
+import { Errors, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 import type { TaoDevApp, TaoDevProject } from './dev-app-discovery'
 
@@ -41,11 +41,11 @@ export async function selectTaoDevApp(
     )
   }
 
-  return await withRawChoiceInput(options.input, async readKey => {
+  return await HCI.withRawKeys(async readKey => {
     printChoices(projects, options)
     while (true) {
       const key = await readKey()
-      if (key === '\u0003') {
+      if (key === HCI.RawKey.interrupt) {
         return { kind: 'exit', exitCode: 130 }
       }
 
@@ -54,7 +54,7 @@ export async function selectTaoDevApp(
       if (app !== undefined) {
         return { kind: 'selected', app }
       }
-      if (key === '\u001b') {
+      if (key === HCI.RawKey.escape) {
         return { kind: 'cancel' }
       }
       if (key.toLowerCase() === 'q') {
@@ -63,7 +63,7 @@ export async function selectTaoDevApp(
       HCI.writeLine(`Choose an app with ${choiceKeySummary(apps.length)}, or Q to quit.`, options)
       printChoicePrompt(options)
     }
-  })
+  }, options)
 }
 
 /** keyForChoiceIndex labels choices 1-9 followed by A-Z, reserving Q for quit. */
@@ -129,54 +129,4 @@ function printChoices(
 
 function printChoicePrompt(options: Pick<TaoDevSelectionOptions, 'output'>): void {
   HCI.write(`${HCI.bold(HCI.white('Choose'))}: `, options)
-}
-
-async function withRawChoiceInput<Result>(
-  input: Readable = Platform.runtimeProcess.stdin,
-  run: (readKey: () => Promise<string>) => Promise<Result>,
-): Promise<Result> {
-  const rawMode = input === Platform.runtimeProcess.stdin
-    ? Platform.setStdinRawMode(true)
-    : setCustomInputRawMode(input, { enabled: true })
-  input.resume()
-  try {
-    return await run(() => readChoiceKey(input))
-  } finally {
-    if (rawMode) {
-      if (input === Platform.runtimeProcess.stdin) {
-        Platform.setStdinRawMode(false)
-      } else {
-        setCustomInputRawMode(input, { enabled: false })
-      }
-    }
-    // Pair the resume above: a still-flowing stdin keeps the process alive after the selector
-    // returns, so quitting would hang with the terminal back in echoing cooked mode.
-    input.pause()
-  }
-}
-
-async function readChoiceKey(input: Readable): Promise<string> {
-  return await new Promise<string>(resolve => {
-    const finish = (key: string) => {
-      input.off('data', onData)
-      input.off('end', onEnd)
-      resolve(key)
-    }
-    const onData = (chunk: Buffer | string) => {
-      const value = chunk.toString()
-      finish(value.startsWith('\u001b') ? '\u001b' : value[0] ?? '')
-    }
-    const onEnd = () => finish('\u0003')
-    input.on('data', onData)
-    input.on('end', onEnd)
-  })
-}
-
-function setCustomInputRawMode(input: Readable, { enabled }: { enabled: boolean }): boolean {
-  const rawInput = input as Readable & { isTTY?: boolean; setRawMode?: (rawMode: boolean) => void }
-  if (rawInput.isTTY !== true || rawInput.setRawMode === undefined) {
-    return false
-  }
-  rawInput.setRawMode(enabled)
-  return true
 }

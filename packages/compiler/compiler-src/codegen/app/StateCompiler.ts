@@ -1,6 +1,6 @@
 import { type ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Switch } from '@shared'
+import { Assert, Errors, Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { compileDeclarationIdentity } from './declaration-identity'
@@ -44,9 +44,10 @@ export const StateCompiler = {
 
 function owningAppDeclaration(state: AST.StateDeclaration): AST.AppDeclaration {
   const block = state.$container
-  if (!AST.isAppBlock(block) || !AST.isAppDeclaration(block.$container)) {
-    throw new Error(`Persisted state '${state.name}' is not owned by an app.`)
-  }
+  Assert(
+    AST.isAppBlock(block) && AST.isAppDeclaration(block.$container),
+    `validated persisted state '${state.name}' is declared directly inside an app`,
+  )
   return block.$container
 }
 
@@ -55,7 +56,7 @@ function compilePersistedType(type: ASTUtils.TaoType): Compiled {
     if (['boolean', 'duration', 'none', 'number', 'text', 'time'].includes(type.primitive)) {
       return gen`{ kind: "primitive", name: ${gen.jsLiteral(type.primitive)} }`
     }
-    throw new Error(`Persisted state cannot use runtime type '${Type.displayName(type)}'.`)
+    unsupportedPersistedType(type)
   }
   if (type.kind === 'list') {
     return gen`{ kind: "list"${type.element ? gen`, element: ${compilePersistedType(type.element)}` : gen``} }`
@@ -84,5 +85,15 @@ function compilePersistedType(type: ASTUtils.TaoType): Compiled {
   if (type.kind === 'union') {
     return gen`{ kind: "union", members: [${gen.join(type.members, compilePersistedType)}] }`
   }
-  throw new Error(`Persisted state cannot use runtime type '${Type.displayName(type)}'.`)
+  unsupportedPersistedType(type)
+}
+
+/**
+ * `StateValidator` already rejects a nonpersistable persisted state, so codegen reaching this type
+ * is a Tao bug rather than something the program's author can fix.
+ */
+function unsupportedPersistedType(type: ASTUtils.TaoType): never {
+  Errors.throwUnexpected(
+    `Expected: validated persisted state to use a persistable runtime type, not '${Type.displayName(type)}'`,
+  )
 }

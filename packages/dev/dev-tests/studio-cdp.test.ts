@@ -10,17 +10,31 @@ type CdpCall = {
   params: Record<string, unknown>
 }
 
+const FAKE_DRAG_DATA = {
+  dragOperationsMask: 1,
+  items: [{ data: '{"kind":"component"}', mimeType: 'application/x-tao-studio-palette' }],
+}
+
 class FakeCdpTransport implements StudioCdpTransport {
   readonly calls: CdpCall[] = []
   readonly evaluateResults: unknown[] = []
   screenshot = Buffer.from('screenshot bytes').toString('base64')
   private readonly listeners = new Map<string, Set<(params: unknown) => void>>()
+  private intercepting = false
 
   async send<Result = Record<string, never>>(
     method: string,
     params: Record<string, unknown> = {},
   ): Promise<Result> {
     this.calls.push({ method, params })
+    if (method === 'Input.setInterceptDrags' && params['enabled'] === true) {
+      this.intercepting = true
+    }
+    // Chrome answers an intercepted drag gesture with the payload the page's own dragstart built.
+    if (this.intercepting && method === 'Input.dispatchMouseEvent' && params['buttons'] === 1) {
+      this.intercepting = false
+      this.emit('Input.dragIntercepted', { data: FAKE_DRAG_DATA })
+    }
     if (method === 'Runtime.evaluate') {
       return { result: { value: this.evaluateResults.shift() } } as Result
     }
@@ -63,7 +77,10 @@ Describe('Studio browser CDP harness', () => {
     await Expect(browser.setViewport(390.5, 844)).rejects.toThrow('width must be a positive integer')
   })
 
-  Test('dispatches a pointer drag over deterministic interpolated coordinates', async () => {
+  // Chrome never synthesizes HTML5 drag-and-drop from mouse events, so a palette drag has to go
+  // through drag interception: press and move to make the page start the drag, then replay the
+  // intercepted payload into dragEnter/dragOver/drop over the target.
+  Test('dispatches an intercepted HTML5 drag over deterministic interpolated coordinates', async () => {
     const transport = new FakeCdpTransport()
     transport.evaluateResults.push({
       end: { x: 30, y: 60 },
@@ -90,10 +107,16 @@ Describe('Studio browser CDP harness', () => {
         method: 'Input.dispatchMouseEvent',
         params: { button: 'left', buttons: 1, type: 'mouseMoved', x: 30, y: 60 },
       },
-      {
-        method: 'Input.dispatchMouseEvent',
-        params: { button: 'left', buttons: 0, clickCount: 1, type: 'mouseReleased', x: 30, y: 60 },
-      },
+    ])
+    Expect(transport.calls.filter(call => call.method === 'Input.dispatchDragEvent')).toEqual(
+      ['dragEnter', 'dragOver', 'drop'].map(type => ({
+        method: 'Input.dispatchDragEvent',
+        params: { data: FAKE_DRAG_DATA, type, x: 30, y: 60 },
+      })),
+    )
+    Expect(transport.calls.filter(call => call.method === 'Input.setInterceptDrags')).toEqual([
+      { method: 'Input.setInterceptDrags', params: { enabled: true } },
+      { method: 'Input.setInterceptDrags', params: { enabled: false } },
     ])
     await Expect(browser.drag('#source', '#target', { steps: 0 })).rejects.toThrow(
       'drag steps must be a positive integer',

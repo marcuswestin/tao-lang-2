@@ -1,5 +1,5 @@
 import Formatter from '@formatter'
-import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Assert, Errors, FS, HCI, Platform, Repo } from '@shared'
 import Workspace from '@workspace'
 import { OutputText } from '../cli/OutputText'
 
@@ -34,9 +34,7 @@ export type LanguagePerformanceReport = {
 
 /** summarizeSamples reports stable center and tail latency for a non-empty sample. */
 export function summarizeSamples(samplesMs: readonly number[]): PerformanceSampleSummary {
-  if (samplesMs.length === 0) {
-    throw new Error('Performance samples must not be empty.')
-  }
+  Assert.input(samplesMs.length > 0, 'Performance samples must not be empty.')
 
   const sorted = [...samplesMs].sort((left, right) => left - right)
   const middle = Math.floor(sorted.length / 2)
@@ -189,15 +187,16 @@ async function measureCase(
 function definedSample(samples: readonly number[], index: number): number {
   const sample = samples[index]
   if (sample === undefined) {
-    throw new Error(`Performance sample ${index} does not exist.`)
+    Errors.throwUnexpected(`Performance sample ${index} does not exist.`)
   }
   return sample
 }
 
 function assertIterations(iterations: number): void {
-  if (!Number.isSafeInteger(iterations) || iterations < 1) {
-    throw new Error(`Performance iterations must be a positive integer; received ${iterations}.`)
-  }
+  Assert.input(
+    Number.isSafeInteger(iterations) && iterations >= 1,
+    `Performance iterations must be a positive integer; received ${iterations}.`,
+  )
 }
 
 function lineCount(source: string): number {

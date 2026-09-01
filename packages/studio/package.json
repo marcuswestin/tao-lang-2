@@ -4,10 +4,7 @@
   "type": "module",
   "module": "studio-src/studio.ts",
   "exports": {
-    ".": "./studio-src/studio.ts",
-    "./compile-coordinator": "./studio-src/StudioCompileCoordinator.ts",
-    "./lsp": "./studio-src/StudioLsp.ts",
-    "./protocol": "./studio-src/StudioProtocol.ts"
+    ".": "./studio-src/studio.ts"
   },
   "dependencies": {
     "@codemirror/lsp-client": "^6.2.5",

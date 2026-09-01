@@ -1,4 +1,4 @@
-import { CLI, FS, HCI, Platform, Repo } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { type StudioClientAssetProvider, StudioClientAssets } from '@studio'
 import { watch } from 'chokidar'
 
@@ -75,11 +75,11 @@ async function loadStudioClientAssets(attempt: number): Promise<StudioClientAsse
   })
   if (result.error !== undefined || result.exitCode !== 0) {
     const detail = result.stderr.trim() || result.error?.message || `exit code ${result.exitCode ?? 'unknown'}`
-    throw new Error(`Could not rebuild the Studio browser client. ${detail}`)
+    Errors.throwHostEnvironment(`Could not rebuild the Studio browser client. ${detail}`)
   }
   const snapshot = JSON.parse(result.stdout) as StudioClientAssetSnapshot
   if (typeof snapshot.bundle !== 'string' || typeof snapshot.html !== 'string') {
-    throw new Error('The Studio browser client rebuild returned an invalid asset snapshot.')
+    Errors.throwHostEnvironment('The Studio browser client rebuild returned an invalid asset snapshot.')
   }
   return studioClientAssetSnapshot(snapshot)
 }
@@ -94,7 +94,7 @@ const clientConfigMarker = JSON.stringify({ previewUrl: previewUrlMarker })
 
 function studioClientAssetSnapshot(snapshot: StudioClientAssetSnapshot): StudioClientAssetProvider {
   if (!snapshot.html.includes(clientConfigMarker)) {
-    throw new Error('The Studio browser client rebuild omitted its configuration marker.')
+    Errors.throwHostEnvironment('The Studio browser client rebuild omitted its configuration marker.')
   }
   return {
     async bundle() {

@@ -1,5 +1,5 @@
 import TR from '@runtime/TR'
-import { Assert, CLI, FS, Repo } from '@shared'
+import { Assert, CLI, Errors, FS, Repo } from '@shared'
 import { AfterAll, AfterEach, Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { cleanup, render, waitFor } from '@testing-library/react-native'
 import { type ComponentType, createElement } from 'react'
@@ -15,7 +15,7 @@ Describe('Tao Studio scenario runtime', () => {
   Test('shows a render failure inside the preview canvas', () => {
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
     function BrokenPreview(): never {
-      throw new Error('WorkspaceRow could not render.')
+      return Errors.throwUnexpected('WorkspaceRow could not render.')
     }
     try {
       const screen = render(
@@ -51,7 +51,8 @@ Describe('Tao Studio scenario runtime', () => {
       stderr: generation.stderr,
       stdout: generation.stdout,
     })
-    const generatedRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
+    // `current` is the stable link to the newest published revision root, which holds the compiled graph.
+    const generatedRoot = FS.resolvePath('_gen_tao-app/current', runtimePackageRoot)
     const manifest = require(FS.resolvePath('TaoStudioManifest.ts', generatedRoot)).default as {
       fixtures: Array<TaoStudioFixturePlan & { id: string }>
       scenarios: Array<{
@@ -179,7 +180,8 @@ Describe('Tao Studio scenario runtime', () => {
         stderr: generation.stderr,
         stdout: generation.stdout,
       })
-      const generatedRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
+      // `current` is the stable link to the newest published revision root, which holds the compiled graph.
+      const generatedRoot = FS.resolvePath('_gen_tao-app/current', runtimePackageRoot)
       const manifestModule = require(FS.resolvePath('TaoStudioManifest.ts', generatedRoot)) as {
         default: {
           fixtures: Array<TaoStudioFixturePlan & { id: string }>

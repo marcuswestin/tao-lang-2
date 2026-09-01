@@ -1,6 +1,6 @@
-import { CLI, FS, Repo, Switch } from '@shared'
+import { CLI, Errors, FS, Repo, Switch } from '@shared'
 import { RuntimeToolchainPaths } from '../../runtime-toolchain-paths'
-import { TestRunId } from '../test-run-id'
+import { TestRunRoot } from '../test-run-root'
 import { Protocol } from './Protocol'
 import type * as TestCompiler from './TestCompiler'
 
@@ -71,10 +71,7 @@ export class WorkerSession {
 
   /** compileTestPlan compiles one Tao test file into precompiled runtime suites. */
   async compileTestPlan(testFilePath: string, options: CompileTestPlanOptions = {}): Promise<TestCompiler.File> {
-    const runRoot = options.runRoot ?? FS.resolvePath(
-      `_gen_tao-app-test/tao-test-plan/${TestRunId.create()}`,
-      RuntimeToolchainPaths.packageRoot,
-    )
+    const runRoot = options.runRoot ?? await sharedTestPlanRunRoot()
     const output = await this.session.request({
       kind: 'testPlan',
       runRoot,
@@ -105,6 +102,13 @@ export class WorkerSession {
 }
 
 let sharedSession: WorkerSession | undefined
+// Every caller without a run root of its own shares this process's run root, so the harness
+// process is one prunable unit however many test plans it compiles.
+let sharedRunRoot: Promise<string> | undefined
+
+function sharedTestPlanRunRoot(): Promise<string> {
+  return sharedRunRoot ??= TestRunRoot.create('tao-test-plan')
+}
 
 function createSession(): WorkerSession {
   return new WorkerSession()
@@ -123,7 +127,7 @@ async function compileTestPlan(testFilePath: string): Promise<TestCompiler.File>
 
 function unexpectedOutput(requestDescription: string): (output: TestCompiler.Worker.Output) => never {
   return output => {
-    throw new Error(`Test compiler worker returned ${output.kind} for ${requestDescription}.`)
+    Errors.throwUnexpected(`Test compiler worker returned ${output.kind} for ${requestDescription}.`)
   }
 }
 
@@ -166,12 +170,12 @@ class Session {
 
   async request(input: TestCompiler.Worker.Input): Promise<TestCompiler.Worker.Output> {
     if (this.stopped) {
-      throw new Error('Test compiler worker session is stopped.')
+      Errors.throwUnexpected('Test compiler worker session is stopped.')
     }
     await this.start()
     const command = this.command
     if (command === undefined) {
-      throw new Error('Test compiler worker session did not start.')
+      Errors.throwUnexpected('Test compiler worker session did not start.')
     }
 
     const id = this.nextRequestId++
@@ -180,7 +184,7 @@ class Session {
     })
     if (!command.writeStdin(Protocol.requestLine({ id, input }))) {
       this.pending.delete(id)
-      throw new Error('Test compiler worker session stdin is closed.')
+      Errors.throwHostEnvironment('Test compiler worker session stdin is closed.')
     }
     return await output
   }
@@ -208,7 +212,7 @@ class Session {
     }
     const executable = await bunPath()
     if (this.stopped) {
-      throw new Error('Test compiler worker session is stopped.')
+      Errors.throwUnexpected('Test compiler worker session is stopped.')
     }
     if (this.command !== undefined) {
       return

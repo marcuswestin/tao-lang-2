@@ -80,6 +80,8 @@ async function create(options: StudioElectrobunOptions): Promise<StudioElectrobu
   await FS.writeText(mainPath, generated.main)
   const servicePath = FS.resolvePath('src/bun/service.js', root)
   if (options.serviceBundlePath === undefined) {
+    // Raw `Error`: this line is the placeholder module written into the generated Electrobun
+    // project, which installs only `@types/bun` and `ws` and cannot import Tao's error taxonomy.
     await FS.writeText(
       servicePath,
       "export async function startStudioPackagedService() { throw new Error('Packaged Studio service is unavailable.') }\n",
@@ -211,6 +213,12 @@ function hutchConfigSource(): string {
   `)
 }
 
+/**
+ * Raw `Error` throws below are emitted text, not this module's code: they become the Electrobun
+ * app's own `src/bun/index.ts`, a standalone project whose `package.json` declares only
+ * `@types/bun` and `ws` and whose tsconfig extends Hutch's devkit. It has no path to `@shared`, so
+ * Tao's error taxonomy is unreachable from the program these strings become.
+ */
 function mainSource(): string {
   return Text.stripIndent(`
     import Electrobun, {

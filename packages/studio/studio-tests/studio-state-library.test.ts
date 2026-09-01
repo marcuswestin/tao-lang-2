@@ -1,3 +1,4 @@
+import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   type StudioStateEntry,
@@ -39,7 +40,7 @@ Describe('Studio state library', () => {
     ], [])
     try {
       cyclic.resolve(['a'])
-      throw new Error('Expected a cycle diagnostic.')
+      Errors.throwUnexpected('Expected a cycle diagnostic.')
     } catch (error) {
       Expect(error).toBeInstanceOf(StudioStateResolutionError)
       Expect((error as StudioStateResolutionError).diagnostics[0]?.code).toBe('state-cycle')

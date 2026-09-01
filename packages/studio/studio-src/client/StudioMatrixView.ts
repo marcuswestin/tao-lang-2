@@ -1,3 +1,4 @@
+import { Assert, Errors } from '@shared/core'
 import { EditorView } from 'codemirror'
 import type { StudioDraftFile } from '../StudioDraftSync'
 import { StudioInspector, type StudioInspectorSelection } from '../StudioInspector'
@@ -136,7 +137,7 @@ export const StudioRetainedPreview = {
         }
       }
     }
-    throw new Error('Studio retained preview has no registration identity.')
+    Errors.throwUnexpected('Studio retained preview has no registration identity.')
   },
 } as const
 
@@ -382,23 +383,6 @@ export class StudioActivePreview {
   }
 }
 
-/** renderScenarioInspector mounts controls for only the active matrix cell in the inspector. */
-export function renderScenarioInspector(parent: HTMLElement, preview: StudioPreviewConnection | undefined): void {
-  const heading = document.createElement('h2')
-  heading.textContent = 'Scenario'
-  if (preview?.scenarioControls === undefined) {
-    const empty = document.createElement('p')
-    empty.className = 'studio-inspector-empty'
-    empty.textContent = 'Select a scenario preview cell to edit its arguments and environment.'
-    parent.replaceChildren(heading, empty)
-    return
-  }
-  const label = document.createElement('strong')
-  label.className = 'studio-scenario-inspector-label'
-  label.textContent = preview.scenarioLabel ?? preview.cell?.scenarioId ?? 'Active scenario'
-  parent.replaceChildren(heading, label, preview.scenarioControls)
-}
-
 type StudioInteractionMode = 'edit' | 'run'
 
 type StudioOpenFile = {
@@ -416,9 +400,7 @@ export async function connectPreviews(
     return []
   }
   const origin = StudioProtocol.messageOrigin(previewUrl)
-  if (origin === undefined) {
-    throw new Error('Tao Studio preview URL must be an absolute HTTP or HTTPS URL.')
-  }
+  Assert.input(origin, 'Tao Studio preview URL must be an absolute HTTP or HTTPS URL.')
   const manifest = handshake.previewManifest
   if (manifest !== undefined && manifest.cells.length > 0) {
     const connections = await Promise.all(manifest.cells.map(cell =>
@@ -685,9 +667,7 @@ function renderCellPreview(
       replay?: StudioRuntimeCaptureArtifact
     }>,
   ): Promise<void> => {
-    if (connection.cellIdentity === undefined) {
-      throw new Error('Studio cell identity is unavailable for remounting.')
-    }
+    Assert.input(connection.cellIdentity, 'Studio cell identity is unavailable for remounting.')
     const runtime = await StudioApiClient.reconfigureCell({
       ...connection.cellIdentity,
       ...configuration,
@@ -721,12 +701,10 @@ function renderCellPreview(
 
   loadReplay.addEventListener('click', () => replayFile.click())
   const replayText = async (text: string): Promise<void> => {
-    if (scenarioModel === undefined) {
-      throw new Error('Studio scenario identity is unavailable.')
-    }
+    Assert.input(scenarioModel, 'Studio scenario identity is unavailable.')
     const replay = StudioScenarioControls.replay(scenarioModel, JSON.parse(text))
     if (!replay.ok) {
-      throw new Error(replay.issues.join(' '))
+      Errors.throwUserInput(replay.issues.join(' '))
     }
     await connection.replayRuntimeCapture?.(replay.value)
   }
@@ -791,7 +769,7 @@ function renderCellPreview(
           viewportControls.read,
         )
         if (!draft.ok) {
-          throw new Error(draft.issues.join(' '))
+          Errors.throwUserInput(draft.issues.join(' '))
         }
         await remount({
           args: draft.value.arguments,
@@ -1308,9 +1286,7 @@ function dimensionInput(value: number, label: string): HTMLInputElement {
 
 function requiredFiniteNumber(input: HTMLInputElement, label: string): number {
   const value = input.valueAsNumber
-  if (!Number.isFinite(value)) {
-    throw new Error(`${label} must be a number.`)
-  }
+  Assert.input(Number.isFinite(value), `${label} must be a number.`)
   return value
 }
 
@@ -1533,18 +1509,12 @@ async function openRuntimeFailureSource(
   openFile: (path: string) => Promise<StudioOpenFile | undefined>,
 ): Promise<void> {
   const source = capture.failure?.frame.source
-  if (source === undefined) {
-    throw new Error('This runtime failure has no Tao source frame.')
-  }
+  Assert.input(source, 'This runtime failure has no Tao source frame.')
   const path = projectRelativePath(handshake.identity.project, source.path)
     ?? (handshake.files.some(file => file.path === source.path) ? source.path : undefined)
-  if (path === undefined) {
-    throw new Error('The failing source is outside this Studio project.')
-  }
+  Assert.input(path, 'The failing source is outside this Studio project.')
   const opened = await openFile(path)
-  if (opened === undefined) {
-    throw new Error(`Could not open ${path}.`)
-  }
+  Assert.input(opened, `Could not open ${path}.`)
   const end = Math.min(source.end, opened.editor.state.doc.length)
   const start = Math.min(source.start, end)
   opened.editor.dispatch({
@@ -1922,9 +1892,7 @@ export async function refreshCellPreviews(
   handshake: StudioHandshake,
 ): Promise<void> {
   const origin = StudioProtocol.messageOrigin(previewUrl)
-  if (origin === undefined) {
-    throw new Error('Tao Studio preview URL must be an absolute HTTP or HTTPS URL.')
-  }
+  Assert.input(origin, 'Tao Studio preview URL must be an absolute HTTP or HTTPS URL.')
   const previousByCell = new Map(
     previews.flatMap(preview => preview.cell === undefined ? [] : [[preview.cell.cellId, preview] as const]),
   )

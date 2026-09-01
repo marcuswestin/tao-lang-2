@@ -20,19 +20,46 @@ const taoTest = (name: string) => `
 
 /** withJestStub points the runtime test runner at an inert module for the duration of one test. */
 async function withJestStub(rootDir: string, run: () => Promise<void>): Promise<void> {
-  const envName = 'TAO_TEST_JEST_PATH'
-  const previousJestPath = Platform.runtimeProcess.env[envName]
-  Platform.runtimeProcess.env[envName] = FS.resolvePath('jest-stub.mjs', rootDir)
+  await withEnv('TAO_TEST_JEST_PATH', FS.resolvePath('jest-stub.mjs', rootDir), run)
+}
+
+/** withRuntimeRoot compiles one run's generated code under a throwaway runtime package root. */
+async function withRuntimeRoot(runtimeRoot: string, run: () => Promise<void>): Promise<void> {
+  await withEnv('TAO_TEST_RUNTIME_ROOT', runtimeRoot, run)
+}
+
+async function withEnv(name: string, value: string, run: () => Promise<void>): Promise<void> {
+  const previous = Platform.runtimeProcess.env[name]
+  Platform.runtimeProcess.env[name] = value
   try {
     await run()
   } finally {
-    if (previousJestPath === undefined) {
-      delete Platform.runtimeProcess.env[envName]
+    if (previous === undefined) {
+      delete Platform.runtimeProcess.env[name]
     } else {
-      Platform.runtimeProcess.env[envName] = previousJestPath
+      Platform.runtimeProcess.env[name] = previous
     }
   }
 }
+
+/** listRunRoots lists the generated `tao test` run roots left under one runtime package root. */
+async function listRunRoots(runtimeRoot: string): Promise<string[]> {
+  const categoryRoot = FS.resolvePath('_gen_tao-app-test/tao-test-command', runtimeRoot)
+  return await FS.isDirectory(categoryRoot) ? await FS.listDir(categoryRoot) : []
+}
+
+/** writeStaleRunRoot writes a run root whose id claims a run finished long before this one. */
+async function writeStaleRunRoot(runtimeRoot: string, ageHours: number): Promise<string> {
+  const name = `run-${Date.now() - ageHours * 60 * 60 * 1000}-${Math.random().toString(36).slice(2)}`
+  await FS.writeText(FS.resolvePath(`_gen_tao-app-test/tao-test-command/${name}/App.tsx`, runtimeRoot), '')
+  return name
+}
+
+const lifecycleFixture = {
+  'Project.tao': 'project { id "run-root-lifecycle-test" name "Run root lifecycle test" }',
+  'App.tao': taoApp('Lifecycle'),
+  'App.test.tao': taoTest('Lifecycle'),
+} as const
 
 Describe('tao test CLI', () => {
   Test('reports no discovered tests without failing', async () => {
@@ -81,6 +108,68 @@ Describe('tao test CLI', () => {
       Expect(output).not.toContain('Running Tao tests')
       Expect(output).not.toContain('runtime-toolchain-tests/tao-test-command.jest.tsx')
       Expect(output).not.toContain('Test Suites:')
+    })
+  })
+
+  Test('reports preflight validation errors at their source file path', async () => {
+    await withTaoFixture({
+      'Project.tao': 'project { id "preflight-validation-test" name "Preflight validation test" }',
+      'Broken.tao': 'app BrokenApp { }\n',
+      'Main.test.tao': `
+        use BrokenApp from ./
+        test "Smoke" {
+          test "renders" {
+            run BrokenApp
+            expect text "Hello"
+          }
+        }
+      `,
+    }, async (rootDir) => {
+      const result = await runTaoCliForTest(['test', rootDir])
+      const output = `${result.stdout}${result.stderr}`
+
+      Expect(result.exitCode).not.toBe(0)
+      Expect(output).toContain('Broken.tao: App BrokenApp must declare exactly one Name, found 0.')
+      Expect(output).toContain(
+        'Broken.tao: App BrokenApp must declare exactly one Navigator (or root view), found 0.',
+      )
+      Expect(output).not.toContain('Compiling apps')
+    })
+  })
+
+  Test('discards its generated run root and prunes stale roots after a passing suite', async () => {
+    await withTaoFixture({ ...lifecycleFixture, 'jest-stub.mjs': '' }, async rootDir => {
+      const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
+      const staleOlder = await writeStaleRunRoot(runtimeRoot, 9)
+      const staleNewest = await writeStaleRunRoot(runtimeRoot, 3)
+
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(runtimeRoot, async () => {
+          const result = await runTaoCliForTest(['test', rootDir])
+
+          Expect(result.exitCode).toBe(0)
+          Expect(await listRunRoots(runtimeRoot)).toEqual([staleNewest])
+          Expect(await listRunRoots(runtimeRoot)).not.toContain(staleOlder)
+        })
+      })
+    })
+  })
+
+  Test('keeps the generated run root of a failing suite for debugging', async () => {
+    await withTaoFixture({ ...lifecycleFixture, 'jest-stub.mjs': 'process.exit(1)\n' }, async rootDir => {
+      const runtimeRoot = FS.resolvePath('runtime-root', rootDir)
+
+      await withJestStub(rootDir, async () => {
+        await withRuntimeRoot(runtimeRoot, async () => {
+          const result = await runTaoCliForTest(['test', rootDir])
+
+          Expect(result.exitCode).toBe(1)
+          const runRoots = await listRunRoots(runtimeRoot)
+          Expect(runRoots.length).toBe(1)
+          const manifestPath = `_gen_tao-app-test/tao-test-command/${runRoots[0]}/manifest.json`
+          Expect(await FS.isFile(FS.resolvePath(manifestPath, runtimeRoot))).toBe(true)
+        })
+      })
     })
   })
 

@@ -1,4 +1,5 @@
 import TR from '@runtime/TR'
+import { Assert, Errors } from '@shared/core'
 import type {
   StudioLayoutContentTerm,
   StudioLayoutEntry,
@@ -6,12 +7,12 @@ import type {
   StudioStyleEntry,
   StudioStyleLandingScope,
 } from '@source-actions'
-import { CodeEditor, type CodeEditorLsp } from '@tao/code-editor'
+import { CodeEditor, type CodeEditorDrop, type CodeEditorLsp } from '@tao/code-editor'
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { StudioApiClient } from './client/StudioApiClient'
 import { mountStudio } from './client/StudioApp'
-import { fileUri } from './client/StudioEditor'
+import { fileUri, StudioEditorInsertion } from './client/StudioEditor'
 import {
   type StudioTaoDrawerPanelModel,
   StudioTaoPanelProjection,
@@ -143,7 +144,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
     let cleanup: (() => void) | undefined
     let unmounted = false
     const cancellation = new AbortController()
-    const mounting = mountStudio({ embedded: true, root, signal: cancellation.signal })
+    const mounting = mountStudio({ root, signal: cancellation.signal })
     const reportMountError = (error: unknown): void => {
       if (unmounted && error instanceof Error && error.name === 'AbortError') {
         return
@@ -152,7 +153,6 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       console.error('Could not mount the Tao Studio product host.', error)
       if (!unmounted) {
         const alert = document.createElement('p')
-        alert.className = 'studio-product-host-error'
         alert.role = 'alert'
         alert.textContent = error instanceof Error ? error.message : String(error)
         root.replaceChildren(alert)
@@ -351,6 +351,21 @@ export type StudioContextSummaryProps =
     ViewportWidth: number
   }>
 
+/**
+ * Presentation-only label for the scenario inspector. The stylesheet has carried
+ * `.studio-scenario-inspector-label` all along, but nothing emitted the class, so those rules were
+ * dead and the labels fell back to the react-native-web text defaults.
+ */
+export function StudioScenarioInspectorLabel(
+  props: TaoStudioHostVisualProps & Readonly<{ Label: string }>,
+): React.ReactElement {
+  return (
+    <span className="studio-scenario-inspector-label" data-testid={props.Tag} style={props.Layout?.style}>
+      {props.Label}
+    </span>
+  )
+}
+
 /** Compact presentation-only adapter; Tao owns the StudioContext query and supplied values. */
 export function StudioContextSummary(props: StudioContextSummaryProps): React.ReactElement {
   const scenario = compactIdentity(props.ScenarioId) || 'No active scenario'
@@ -519,6 +534,18 @@ export function StudioEditorSurface(): React.ReactElement {
       },
     }) as TR.ActionValue<[TR.Value<string>]>, [])
   const wrapper = React.useRef<HTMLDivElement>(null)
+  // The legacy shell wires palette drops onto its own CodeMirror, which is not the editor Tao
+  // renders, so a component dropped on the visible editor landed nowhere. Dispatching through the
+  // live view also keeps the insertion on CodeMirror's undo history.
+  const paletteDrop = React.useMemo<CodeEditorDrop>(() => ({
+    accepts: [studioPaletteMime],
+    apply(transfer, context) {
+      const item = StudioPaletteTransfer.parse(transfer.getData(studioPaletteMime))
+      return item === undefined
+        ? undefined
+        : StudioEditorInsertion.transaction(context.document, item.snippet, context.position)
+    },
+  }), [])
   React.useEffect(() => {
     const target = wrapper.current?.parentElement
     if (target === null || target === undefined) {
@@ -545,6 +572,7 @@ export function StudioEditorSurface(): React.ReactElement {
       <CodeEditor
         Change={change}
         Content={file.content}
+        Drop={paletteDrop}
         Highlight={highlightTaoSource}
         Layout={{ style: editorSurfaceStyle }}
         Lsp={lsp}
@@ -885,15 +913,13 @@ export function StudioInspectorLayoutAction(
   const parsedInspection = studioInspectorInspection(inspection)
   const selected = studioInspectorSelection(selection)
   if (parsedInspection === undefined || selected === undefined || parsedInspection.renderId !== selected.renderId) {
-    throw new Error('Select a parsed rendered element before editing its layout.')
+    Errors.throwUserInput('Select a parsed rendered element before editing its layout.')
   }
   if (actionId === 'wrap-stack') {
     return JSON.stringify({ kind: 'wrap-render', renderId: selected.renderId, wrapper: 'Stack' })
   }
   const entry = studioInspectorLayoutEntry(parsedInspection, studioInspectorDraftMap(drafts), actionId)
-  if (entry === undefined) {
-    throw new Error(`The ${StudioInspectorLayoutActionLabel(actionId)} draft is invalid.`)
-  }
+  Assert.input(entry, `The ${StudioInspectorLayoutActionLabel(actionId)} draft is invalid.`)
   return JSON.stringify(StudioInspector.layoutAction(selected.renderId, entry))
 }
 
@@ -991,7 +1017,7 @@ export function StudioInspectorStyleAction(inspection: string, selection: string
     || entry === undefined
     || landing === undefined
   ) {
-    throw new Error('The Studio style draft or landing is invalid.')
+    Errors.throwUserInput('The Studio style draft or landing is invalid.')
   }
   return JSON.stringify(StudioInspector.styleAction({ entry, landing, renderId: selected.renderId }))
 }
@@ -1034,7 +1060,7 @@ export function StudioInspectorStylePromotionAction(
   if (
     parsed === undefined || selected === undefined || parsed.renderId !== selected.renderId || promotion === undefined
   ) {
-    throw new Error('The Studio style promotion is no longer available.')
+    Errors.throwUserInput('The Studio style promotion is no longer available.')
   }
   return JSON.stringify(StudioInspector.styleAction({
     entry: promotion.entry,
@@ -1113,7 +1139,7 @@ export function StudioInspectorActionValid(
 export function StudioInspectorAction(selection: string, actionId: string): string {
   const selected = studioInspectorSelection(selection)
   if (selected === undefined || actionId !== 'wrap-stack') {
-    throw new Error('The selected element does not expose that Studio action.')
+    Errors.throwUserInput('The selected element does not expose that Studio action.')
   }
   return JSON.stringify({ kind: 'wrap-render', renderId: selected.renderId, wrapper: 'Stack' })
 }
@@ -1391,9 +1417,10 @@ export function StudioFailureCaptureInput(
             void file.text().then(text => {
               try {
                 const capture = JSON.parse(text) as unknown
-                if (capture === null || typeof capture !== 'object') {
-                  throw new Error('Failure capture must be a JSON object.')
-                }
+                Assert.input(
+                  capture !== null && typeof capture === 'object',
+                  'Failure capture must be a JSON object.',
+                )
                 setStatus('')
                 return props.Replay.invoke(TR.Value(text))
               } catch (error) {
@@ -1593,23 +1620,19 @@ export function StudioScenarioArgumentIssues(state: string, drafts: string): str
 
 export function StudioScenarioIdentityPayload(state: string): string {
   const model = studioScenarioModel(state)
-  if (model === undefined) {
-    throw new Error('The active Studio scenario is unavailable.')
-  }
+  Assert.input(model, 'The active Studio scenario is unavailable.')
   return JSON.stringify({ cellId: model.cell.id, cellRevision: model.cell.revision })
 }
 
 export function StudioScenarioArgumentsPayload(state: string, drafts: string, appearance: string): string {
   const model = studioScenarioModel(state)
-  if (model === undefined) {
-    throw new Error('The active Studio scenario is unavailable.')
-  }
+  Assert.input(model, 'The active Studio scenario is unavailable.')
   const checked = studioScenarioArguments(model, studioScenarioDraftMap(drafts))
   if (!checked.ok) {
-    throw new Error(checked.issues.join(' '))
+    Errors.throwUserInput(checked.issues.join(' '))
   }
   if (appearance !== 'dark' && appearance !== 'light') {
-    throw new Error('Studio can author only the resolved light or dark scenario appearance.')
+    Errors.throwUserInput('Studio can author only the resolved light or dark scenario appearance.')
   }
   return JSON.stringify({
     appearance,
@@ -1620,9 +1643,7 @@ export function StudioScenarioArgumentsPayload(state: string, drafts: string, ap
 }
 
 export function StudioScenarioFixturePayload(state: string, fixtureName: string): string {
-  if (!StudioScenarioFixtureNameValid(fixtureName)) {
-    throw new Error('Fixture name must be a Tao identifier.')
-  }
+  Assert.input(StudioScenarioFixtureNameValid(fixtureName), 'Fixture name must be a Tao identifier.')
   return JSON.stringify({ ...JSON.parse(StudioScenarioIdentityPayload(state)), fixtureName })
 }
 
@@ -1631,11 +1652,9 @@ export function StudioScenarioReplayPayload(state: string, capture: string): str
   try {
     parsed = JSON.parse(capture) as unknown
   } catch {
-    throw new Error('Failure capture must be valid JSON.')
+    Errors.throwUserInput('Failure capture must be valid JSON.')
   }
-  if (parsed === null || typeof parsed !== 'object') {
-    throw new Error('Failure capture must be a JSON object.')
-  }
+  Assert.input(parsed !== null && typeof parsed === 'object', 'Failure capture must be a JSON object.')
   return JSON.stringify({ ...JSON.parse(StudioScenarioIdentityPayload(state)), capture: parsed })
 }
 
@@ -2108,7 +2127,7 @@ export async function ApplyActiveCellEnvironment(
   errorStatus: number,
 ): Promise<void> {
   if (network !== 'error' && network !== 'normal' && network !== 'offline') {
-    throw new Error(`Unsupported Studio network outcome: ${network}`)
+    Errors.throwUserInput(`Unsupported Studio network outcome: ${network}`)
   }
   await requestStudioProductHostApplyActiveCellEnvironment({ cellId, cellRevision }, {
     network: {

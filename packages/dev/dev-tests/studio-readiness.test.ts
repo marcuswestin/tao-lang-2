@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { Errors, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   createStudioLifecycleLog,
@@ -38,7 +38,7 @@ Describe('Studio readiness', () => {
   Test('reports not ready rather than throwing when the page never answers', async () => {
     const ready = await waitForReadyUrl('http://127.0.0.1:42100/sessions/abc', {
       fetchUrl: async () => {
-        throw new Error('connection refused')
+        Errors.throwHostEnvironment('connection refused')
       },
       pollMs: 1,
       sleep: async () => {},
@@ -128,7 +128,7 @@ Describe('Studio lifecycle telemetry', () => {
           event: result === 'ok' ? 'client-reload-completed' : 'client-reload-failed',
         }),
         async () => {
-          throw new Error('reload rejected')
+          Errors.throwHostEnvironment('reload rejected')
         },
       ).catch(() => {})
       await log.close()

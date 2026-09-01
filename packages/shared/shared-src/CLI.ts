@@ -208,8 +208,8 @@ function startCommand(
   }
 }
 
-/** runSync runs a command synchronously and returns its captured completion result. */
-export function runSync(command: string, spec: CommandSyncSpec = {}): CommandResult {
+/** runSync runs a command synchronously; `mustRunSync` is the checked entry point callers reach for. */
+function runSync(command: string, spec: CommandSyncSpec = {}): CommandResult {
   const args = [...(spec.args ?? [])]
   const stdio = resolveCommandStdio(spec, {
     captureOutput: true,
@@ -336,15 +336,6 @@ export function mustRunSync(command: string, spec: CommandSyncSpec = {}): Comman
   return result
 }
 
-/** formatCommand formats a command for logs and error messages. */
-export function formatCommand(command: string, spec: Pick<CommandSpec, 'args'> = {}): string {
-  return [command, ...(spec.args ?? [])].map(formatCommandPart).join(' ')
-}
-
 function bufferToString(value: Buffer | string | null | undefined): string {
   return Buffer.isBuffer(value) ? value.toString('utf8') : value ?? ''
-}
-
-function formatCommandPart(value: string): string {
-  return /^[\w./:=@+-]+$/.test(value) ? value : JSON.stringify(value)
 }

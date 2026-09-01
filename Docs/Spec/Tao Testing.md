@@ -140,6 +140,8 @@ Executable steps run in source order:
 - `press toolbar command "Label"` invokes one enabled command in the focused host toolbar;
 - `back` dispatches the same root-safe app reducer as the visible Back affordance and platform
   hardware Back;
+- `relaunch`, and `relaunch fresh`, quit the running app and open it again on the same device,
+  described below;
 - `expect` and `expect missing` inspect the current rendered tree;
 - `expect navigation title "Title"` observes the focused host's user-visible title, and
   `expect toolbar command "Label" enabled|disabled` observes one focused toolbar control;
@@ -217,6 +219,84 @@ The clock owns every repeating and delayed callback in the runtime: `@tao/time`'
 expiry, and `now`. A held clock therefore makes a ticking display, a countdown, and a transient
 notice all deterministic, and releases at the end of the check.
 
+## What a relaunch keeps
+
+A check can restart the app it is driving:
+
+```tao
+run WordFlower
+press "Widen sidebar"
+relaunch
+expect text "Sidebar width 360"
+```
+
+`relaunch` is a person quitting the app and opening it again on the same device. The mounted
+instance is torn down and a new one launches in its place. The device is the same one, so
+everything the device owns is still there:
+
+- device-local `(persist)` app state keeps its current value, read back out of device storage the
+  way a newly started process reads it;
+- stored data keeps its rows;
+- the held clock keeps its current instant — a relaunch does not rewind time;
+- the stored navigation position is read back, under the app's own `Restore` policy, so the app
+  reopens where the person left it.
+
+Everything the launched instance owned is gone:
+
+- view-local `state` and every `let` derivation over it start again from their declarations;
+- in-flight asks and pending handlers are discarded, and so is the action each one suspended: an
+  action waiting on an `ask` does not resume when the app is quit, and an action still running in
+  the background finishes against nothing. Neither commits, and neither reports a failure — the app
+  a person quit has not failed;
+- every navigation lane is rebuilt from the app's declared configuration before restoration runs
+  over it, so nothing the previous instance held in memory carries across.
+
+A check therefore tells the two kinds of state apart: what a person would still find after
+reopening the app, and what they would not.
+
+Restoration is on across a relaunch because a real relaunch restores. An app that declares
+`Restore fresh` still starts fresh under a check, because that is its contract; what a check
+changes is where restoration reads and writes, not whether it happens.
+
+### Opening on the initial screen
+
+A journey that wants a cold launch — the one a device gives when it has never run the app — asks
+for it:
+
+```tao
+run WordFlower
+press "Open detail"
+relaunch fresh
+expect text "Home"
+```
+
+`relaunch fresh` opts that one launch out of restoring. It reads nothing back and opens on the
+app's initial screen, and it then records where it opened, so an ordinary `relaunch` after it
+returns to the initial screen rather than to a position the run before it left behind. `fresh` is
+per-step, not a mode: the next `relaunch` without it restores again.
+
+`fresh` opts out of restoring, not out of the device. Persisted state, stored rows, and the held
+clock survive `relaunch fresh` exactly as they survive `relaunch`.
+
+### Operands and placement
+
+`relaunch` takes `fresh` and nothing else, and must come after the check's `run`. It cannot appear
+inside a `select` block, because a relaunch replaces every row that selection resolves; the `fresh`
+modifier does not excuse that.
+
+A relaunch keeps the device; a new check does not get one. Before every check the runner replaces
+the device-local `(persist)` store, the navigation restoration store, and the datasource, and
+returns every declared persisted value to the default its declaration names. A width one check
+widens and a screen one check reached are therefore both gone when the next check in the same file
+launches the same app, and checks in a file never depend on the order they are written in.
+
+Encoding and decoding a navigation snapshot — argument serialization, schema-version fallback,
+variant keying, entity handles — stays with the runtime's restoration suite in
+`packages/runtime/TR-tests/`, and so does the launch-boundary lifecycle a `relaunch` step drives.
+The same split holds for persisted state: a relaunch really does read the device again, so a journey
+asserting a persisted value across one fails when the round trip through storage is broken, while
+the encoding and the storage keys themselves stay with the runtime's persisted-state suite.
+
 Before every check, the runner installs a fresh in-memory snapshot store and prevents the app's
 configured snapshot provider from replacing it, so no step reads or mutates durable data (a
 fill-capable provider still binds; see `Tao Data.md`). The shipped Memory declaration in
@@ -232,11 +312,11 @@ fault injection — which have not landed yet.
 
 The compiler emits structured IR containing suite/check names and source locations, the selected app
 name and source module, ordered action/assertion steps, selector descriptions, expectation groups,
-row scopes, and datasource status changes. The test compiler resolves that declaration to a unique
-generated module path. The runtime loads that module directly; it does not resolve apps through a
-process-global name table. Generated navigation targets also refer to the owning module's app
-declaration binding, so same-named apps remain isolated regardless of compilation or execution
-order. The compiler does not emit test-runner calls into app code.
+and row scopes. The test compiler resolves that declaration to a unique generated module path. The
+runtime loads that module directly; it does not resolve apps through a process-global name table.
+Generated navigation targets also refer to the owning module's app declaration binding, so
+same-named apps remain isolated regardless of compilation or execution order. The compiler does not
+emit test-runner calls into app code.
 
 The runtime adapter owns app launch, input events, selection, assertions, settling, reset, and error
 formatting. Failures identify the suite, check, step, and Tao source location. This boundary allows

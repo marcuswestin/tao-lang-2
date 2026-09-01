@@ -1,6 +1,12 @@
 import type { StudioSessionListing } from './StudioSessionManager'
 
-/** Server-rendered Welcome surface; native shells may replace it without changing session ownership. */
+/*
+ * Server-rendered Welcome surface; native shells may replace it without changing session ownership.
+ *
+ * The inline `<script>` below is plain browser JavaScript inside a template literal, not a module this
+ * package compiles or bundles: it has no import graph, so it cannot reach `Assert` or `Errors` and its
+ * one raw `Error` throw stays. `repo-lint` scans file text, so this file keeps its allowlist entry.
+ */
 export const StudioWelcome = {
   html(listing: StudioSessionListing): string {
     const current = listing.current.length === 0

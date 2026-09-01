@@ -25,9 +25,13 @@ spellings. The live contracts are `Apps/WordFlower/` and `Docs/Spec/`.
 - Cut and solidify the WordFlower tranche 4 contract in Next: the declaration/value model, Prelude hierarchy, required declaration parentheses, block-bodied functions, typed injection, optional item fields, `list of T`, nominal enums, `@tao/text`, new UI surfaces, adaptive panes, non-blocking `async { ... }`, named frame slots, and the first flat-token design slice.
 - Implement the WordFlower tranche 4 contract into Current, absorbing the complete Next directory slice by slice. Record: `Docs/Roadmap/Archive/Implement WordFlower tranche 4/`. InstantDB, remote authorization semantics, richer data test controls, snapshots, SplitNav/windows, semantic design recipes, and general concurrency policy remain in later tiers.
 - Add typed TS value injection expressions: `let X is T = inject T …` with Tao-side typing and generated TypeScript return checking, delivered by tranche 4.
+- Cut and implement the dialect-migration tranche (Process step 1). Record: `Docs/Roadmap/Archive/Dialect migration tranche/`.
+- Implement the focused writing tranche. Record: `Docs/Roadmap/Archive/Focused writing tranche/`.
 
 ## Delivered from Ro's stack
 
+- Retire the `ui` keyword — the unified-view tranche folded it into `view`. No `scene` construct was introduced, and none is intended; the original "rename UI to Scene" wording described a rename that did not happen.
+- Upgrade all dependencies of e.g. expo/react-native/expo-router/etc.
 - String interpolation syntax highlighting.
 - Reorganize agent context. Reports and plan: `Docs/Roadmap/Archive/Reorganize agent context/`.
 - Implement boolean operators — conventional precedence-aware expressions with `not`, `and`, `or`.

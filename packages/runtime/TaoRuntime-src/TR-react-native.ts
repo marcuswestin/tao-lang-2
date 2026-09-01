@@ -16,7 +16,6 @@ export type ReactNativeRuntime = {
   StatusBar?: any
   RefreshControl?: any
   FlatList?: any
-  Alert?: any
   Platform?: { OS: string }
   Pressable: React.ComponentType<any>
   ScrollView: React.ComponentType<any>

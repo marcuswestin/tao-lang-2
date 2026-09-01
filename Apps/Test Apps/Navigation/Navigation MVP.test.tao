@@ -1,0 +1,87 @@
+use NavigationMVPApp from ./
+
+test "Navigation MVP" {
+   test "presents a typed destination, preserves covered state, and returns through automatic back" {
+      run NavigationMVPApp
+      expect navigation title "Navigation MVP"
+      expect text "Navigation MVP"
+      expect text "Home visits: 0"
+      press #countVisit
+      expect text "Home visits: 1"
+      press #openDetail
+      expect navigation title "Typed workspace"
+      expect missing text "Navigation MVP"
+      expect text "Detail"
+      expect text "Typed workspace"
+      back
+      expect navigation title "Navigation MVP"
+      expect text "Navigation MVP"
+      expect text "Home visits: 1"
+      expect missing text "Detail"
+   }
+   // A relaunch is a real relaunch, so the new instance restores where the person was — including
+   // the typed argument the presented screen was opened with. `relaunch fresh` is the explicit
+   // opt-out, and is the only way a journey sees the launch a device that has never run the app
+   // gives. View-local state is the launched instance's either way and does not come back.
+   test "reopens the presented screen after a relaunch and the initial one after a fresh relaunch" {
+      run NavigationMVPApp
+      press #countVisit
+      press #openDetail
+      expect navigation title "Typed workspace"
+      relaunch
+      expect navigation title "Typed workspace"
+      expect text "Typed workspace"
+      back
+      expect text "Home visits: 0"
+      press #openDetail
+      relaunch fresh
+      expect navigation title "Navigation MVP"
+      expect text "Home visits: 0"
+      expect missing text "Detail"
+      // The fresh instance recorded where it opened, so the device now remembers the initial
+      // screen rather than the Detail the run before it left behind.
+      relaunch
+      expect navigation title "Navigation MVP"
+      expect missing text "Detail"
+      // Leave the app on a presented screen. The check below is what says that does not carry.
+      press #openDetail
+      expect navigation title "Typed workspace"
+   }
+   // Every check launches onto a device nobody has used, so the Detail the check above ended on is
+   // not there to restore. This check only proves that by following it: order it earlier and it
+   // proves nothing.
+   test "opens on the initial screen after an earlier check left the app on a presented one" {
+      run NavigationMVPApp
+      expect navigation title "Navigation MVP"
+      expect missing text "Detail"
+      relaunch
+      expect navigation title "Navigation MVP"
+      expect missing text "Detail"
+   }
+   // An `ask` is the one presentation that suspends the action that made it. These two checks are a
+   // pair: the first says the action really does open a screen once the dialogue answers, so the
+   // absence the second asserts is one this app is otherwise capable of producing.
+   test "presents the screen an asking action names once the dialogue answers" {
+      run NavigationMVPApp
+      press #confirmOpen
+      expect text "Open the detail?"
+      press #answerConfirm
+      expect navigation title "Answered workspace"
+      expect text "Answered workspace"
+   }
+   // Quitting the app ends the action that was waiting on the dialogue. It does not answer it and
+   // let the rest of that action run on: the screen it would have opened belongs to the launch the
+   // person quit, and the instance that opens next never shows it. `fresh` keeps the assertion
+   // about the abandoned action alone, because an ordinary relaunch rebuilds the stack from the
+   // device afterwards and would hide whatever the old action left on it.
+   test "drops an action left suspended on a dialogue when the app is quit and opened again" {
+      run NavigationMVPApp
+      press #confirmOpen
+      expect text "Open the detail?"
+      relaunch fresh
+      expect navigation title "Navigation MVP"
+      expect text "Navigation MVP"
+      expect missing text "Open the detail?"
+      expect missing text "Answered workspace"
+   }
+}

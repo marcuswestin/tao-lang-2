@@ -31,12 +31,21 @@ function generatedPreviewPath(runtimePackageRoot: string, relativePath: string):
   return FS.resolvePath(`_gen_tao-app/${relativePath}`, runtimePackageRoot)
 }
 
+function generatedPreviewRevisionRoot(runtimePackageRoot: string, revision: number): string {
+  return generatedPreviewPath(runtimePackageRoot, `revisions/revision-${revision}`)
+}
+
 function generatedPreviewRevisionPath(
   runtimePackageRoot: string,
   revision: number,
   relativePath: string,
 ): string {
   return generatedPreviewPath(runtimePackageRoot, `revisions/revision-${revision}/${relativePath}`)
+}
+
+/** generatedPreviewInspectionPath reads the generated graph through the stable newest-revision link. */
+function generatedPreviewInspectionPath(runtimePackageRoot: string, relativePath = ''): string {
+  return generatedPreviewPath(runtimePackageRoot, relativePath === '' ? 'current' : `current/${relativePath}`)
 }
 
 function previewOptions(
@@ -111,7 +120,7 @@ Describe('Tao runtime app generation', () => {
           runtimePackageRoot,
         })
         const stableRoot = await FS.readText(generated.outputPath)
-        const taoAppPath = generatedPreviewPath(runtimePackageRoot, 'TaoApp.tsx')
+        const inspectionLinkPath = generatedPreviewInspectionPath(runtimePackageRoot)
         const activePreviewPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioActivePreview.ts')
         const revisionPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioRevision.ts')
         const projectPath = generatedPreviewPath(runtimePackageRoot, 'TaoStudioProject.ts')
@@ -147,8 +156,15 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).toContain('return <TaoApp />')
         Expect(stableRoot).toContain('<TR.Studio.PreviewBridge config={config}>')
         Expect(stableRoot).toContain('</TR.Studio.PreviewBridge>')
-        Expect(await FS.readText(taoAppPath)).toContain('export default TaoApps["Preview"]')
         Expect(await FS.readText(generatedPreviewRevisionPath(runtimePackageRoot, 7, 'TaoApp.tsx'))).toContain(
+          'export default TaoApps["Preview"]',
+        )
+        // The generated graph is written once, under the revision root, and stays readable at a stable path.
+        Expect(await FS.exists(generatedPreviewPath(runtimePackageRoot, 'TaoApp.tsx'))).toBe(false)
+        Expect(await FS.realPath(inspectionLinkPath)).toBe(
+          await FS.realPath(generatedPreviewRevisionRoot(runtimePackageRoot, 7)),
+        )
+        Expect(await FS.readText(generatedPreviewInspectionPath(runtimePackageRoot, 'TaoApp.tsx'))).toContain(
           'export default TaoApps["Preview"]',
         )
         Expect(await FS.readText(activePreviewPath)).toContain("from './revisions/revision-7/TaoApp'")
@@ -182,6 +198,9 @@ Describe('Tao runtime app generation', () => {
         // The prior graph remains for one publication so Metro can finish applying the active-module update.
         Expect(await FS.exists(generatedPreviewRevisionPath(runtimePackageRoot, 7, 'TaoApp.tsx'))).toBe(true)
         Expect(await FS.exists(generatedPreviewRevisionPath(runtimePackageRoot, 8, 'TaoApp.tsx'))).toBe(true)
+        Expect(await FS.realPath(inspectionLinkPath)).toBe(
+          await FS.realPath(generatedPreviewRevisionRoot(runtimePackageRoot, 8)),
+        )
 
         const typecheck = await typecheckGeneratedApp(runtimePackageRoot)
         Assert(typecheck.exitCode === 0, 'generated Studio preview bridge type-checks', {
@@ -194,7 +213,7 @@ Describe('Tao runtime app generation', () => {
         Expect(standard.studioManifest).toBeUndefined()
         Expect(await FS.readText(standard.outputPath)).toBe(standard.code)
         Expect(standard.code).not.toContain("import TaoApp from './TaoApp'")
-        Expect(await FS.exists(taoAppPath)).toBe(false)
+        Expect(await FS.exists(inspectionLinkPath)).toBe(false)
         Expect(await FS.exists(activePreviewPath)).toBe(false)
         Expect(await FS.exists(projectPath)).toBe(false)
         Expect(await FS.exists(revisionPath)).toBe(false)
@@ -221,7 +240,7 @@ Describe('Tao runtime app generation', () => {
           runtimePackageRoot,
         })
 
-        const taoApp = await FS.readText(generatedPreviewPath(runtimePackageRoot, 'TaoApp.tsx'))
+        const taoApp = await FS.readText(generatedPreviewInspectionPath(runtimePackageRoot, 'TaoApp.tsx'))
         Expect(taoApp).toContain('"First": TaoApp_First')
         Expect(taoApp).toContain('"Second": TaoApp_Second')
         Expect(taoApp).toContain('export default TaoApps["Second"]')
@@ -242,7 +261,7 @@ Describe('Tao runtime app generation', () => {
     const scenario = generated.studioManifest?.scenarios.find(candidate =>
       candidate.group === 'states' && candidate.name === 'novel'
     )
-    const taoApp = await FS.readText(generatedPreviewPath(runtimePackageRoot, 'TaoApp.tsx'))
+    const taoApp = await FS.readText(generatedPreviewInspectionPath(runtimePackageRoot, 'TaoApp.tsx'))
     const stableRoot = await FS.readText(generated.outputPath)
     Expect(scenario?.subject.kind).toBe('view')
     Expect(taoApp).toContain('TR.Studio.Environment.useScenario()')
@@ -346,9 +365,8 @@ Describe('Tao runtime app generation', () => {
         Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'TaoStudioRevision.ts'))).toContain(
           '"compileRevision":3',
         )
-        Expect(await FS.readText(generatedPreviewPath(runtimePackageRoot, 'App.injection-1.tsx'))).toContain(
-          'Recovered',
-        )
+        Expect(await FS.readText(generatedPreviewInspectionPath(runtimePackageRoot, 'App.injection-1.tsx')))
+          .toContain('Recovered')
       },
     )
   })
@@ -429,13 +447,6 @@ Describe('Tao runtime app generation', () => {
         }
         for (
           const expected of [
-            'App.injection-1.tsx',
-            'App.tsx',
-            'TaoApp.tsx',
-            'TaoStudioActivePreview.ts',
-            'TaoStudioManifest.ts',
-            'TaoStudioProject.ts',
-            'TaoStudioRevision.ts',
             'revisions/revision-20/App.injection-1.tsx',
             'revisions/revision-20/TaoApp.tsx',
             'revisions/revision-20/TaoStudioManifest.ts',
@@ -446,6 +457,17 @@ Describe('Tao runtime app generation', () => {
         ) {
           Expect(generatedFiles).toContain(expected)
         }
+        // Each compiled module is written once, under its revision root; `current` links the newest one.
+        Expect(generatedFiles.filter(path => !path.startsWith('revisions/')).toSorted()).toEqual([
+          'App.tsx',
+          'TaoStudioActivePreview.ts',
+          'TaoStudioProject.ts',
+          'TaoStudioRevision.ts',
+          'current',
+        ])
+        Expect(await FS.realPath(generatedPreviewInspectionPath(runtimePackageRoot))).toBe(
+          await FS.realPath(generatedPreviewRevisionRoot(runtimePackageRoot, 21)),
+        )
         Expect(generatedFiles.filter(path => path.startsWith('revisions/revision-20/'))).toHaveLength(122)
         Expect(generatedFiles.filter(path => path.startsWith('revisions/revision-21/'))).toHaveLength(3)
       },
@@ -540,12 +562,13 @@ Describe('Tao runtime app generation', () => {
         `,
         'SidecarStack.ts': `
           import TR from '@runtime/TR'
+          import { RuntimeAssert } from '@runtime/TR-assert'
           import type { SidecarStackConfig } from './Constructs.tao'
 
           let factoryCalls = 0
           export function SidecarStack(): TR.NavKind<'stack', SidecarStackConfig> {
             factoryCalls++
-            if (factoryCalls !== 1) throw new Error('sidecar factory must be evaluated exactly once')
+            RuntimeAssert(factoryCalls === 1, 'the sidecar factory to be evaluated exactly once')
             return TR.NavKind.Stack()
           }
         `,
@@ -580,6 +603,7 @@ Describe('Tao runtime app generation', () => {
             typeRoots: [Repo.resolvePath('node_modules/@types')],
             types: ['bun', 'node'],
           },
+          exclude: [`${generatedRoot}/current`],
           include: [`${generatedRoot}/**/*.ts`, `${generatedRoot}/**/*.tsx`],
         })
         const typecheck = await CLI.run(Repo.resolvePath('node_modules/.bin/tsc'), {
@@ -669,7 +693,10 @@ async function generatedGraph(runtimePackageRoot: string): Promise<Record<string
   const outputRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
   const graph: Record<string, string> = {}
   for await (const path of FS.walk(outputRoot)) {
-    graph[FS.relativePath(outputRoot, path)] = await FS.readText(path)
+    // The newest-revision link is part of the published graph; record where it points, not its contents.
+    graph[FS.relativePath(outputRoot, path)] = await FS.isFile(path)
+      ? await FS.readText(path)
+      : `-> ${FS.relativePath(outputRoot, await FS.realPath(path))}`
   }
   return graph
 }
@@ -693,6 +720,8 @@ async function typecheckGeneratedApp(
       typeRoots: [Repo.resolvePath('node_modules/@types')],
       types: ['bun', 'node'],
     },
+    // The newest-revision link would type-check every generated module a second time.
+    exclude: [`${generatedRoot}/current`],
     include: [`${generatedRoot}/**/*.ts`, `${generatedRoot}/**/*.tsx`],
   })
   return await CLI.run(Repo.resolvePath('node_modules/.bin/tsc'), {

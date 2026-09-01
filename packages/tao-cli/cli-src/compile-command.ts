@@ -2,13 +2,12 @@ import Runtime from '@runtime-toolchain'
 import { Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
 
-/** CompileResult declares the compiled app's source and generated output paths. */
-export type CompileResult = {
+/** CompileCommandResult declares the compiled app's source and generated output paths. */
+type CompileCommandResult = {
   sourcePath: string
   outputPath: string
 }
 
-/** runCompile compiles the Tao app at `appPath` into the local runtime package. */
 type CompileCommandOptions = {
   appName?: string
   interactive?: boolean
@@ -17,10 +16,11 @@ type CompileCommandOptions = {
   runtimePackageRoot?: string
 }
 
+/** runCompile compiles the Tao app at `appPath` into the local runtime package. */
 export async function runCompile(
   appPath: string,
   options: CompileCommandOptions = {},
-): Promise<CompileResult> {
+): Promise<CompileCommandResult> {
   const sourcePath = FS.resolvePath(appPath)
   if (!await FS.isFile(sourcePath)) {
     Errors.throwUserInput(`No Tao app file found at ${sourcePath}`)

@@ -1,4 +1,5 @@
 import TR from '@runtime/TR'
+import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { InstantDBProvider } from '../@tao/data/providers/instantdb/InstantDB'
 import { LocalProvider } from '../@tao/data/providers/local/Local'
@@ -128,7 +129,7 @@ Describe('@tao/data providers', () => {
     let sdkLoads = 0
     const provider = InstantDBProvider(() => {
       sdkLoads += 1
-      throw new Error('SDK should not load')
+      Errors.throwUnexpected('SDK should not load')
     })
 
     Expect(() =>
@@ -222,7 +223,7 @@ function rejectingProvider(): TR.DataProvider {
     connect: () => ({
       load: () => undefined,
       save: () => {
-        throw new Error('deterministic rejection')
+        Errors.throwHostEnvironment('deterministic rejection')
       },
     }),
   }
@@ -249,7 +250,7 @@ function rejectingStorage(): ReturnType<typeof mapStorage> {
     getItem: async (_key: string) => null,
     removeItem: async (_key: string) => {},
     setItem: async (_key: string, _value: string) => {
-      throw new Error('storage unavailable')
+      Errors.throwHostEnvironment('storage unavailable')
     },
   }
 }

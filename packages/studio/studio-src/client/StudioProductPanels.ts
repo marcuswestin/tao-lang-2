@@ -1,15 +1,6 @@
 import { studioPaletteComponents, type StudioProjectViewPaletteItem } from '../StudioInspector'
 import type { StudioPreviewManifestV2 } from '../StudioPreviewManifest'
-import type { StudioDesignValue } from '../StudioProjectSession'
-import type { StudioCanonicalSourceAction } from '../StudioProtocol'
-import type { StudioTestFailure, StudioTestStatus } from '../StudioTestRunner'
-import type { StudioCompileDiagnostic, StudioCompileState, StudioFile } from './StudioApiClient'
-import type { StudioRuntimeDataTable, StudioRuntimeLog } from './StudioMatrixView'
-import {
-  type StudioDrawerTab,
-  type StudioPanelCellIdentity,
-  StudioPanelModels,
-} from './StudioPanelProjection'
+import type { StudioFile } from './StudioApiClient'
 
 export {
   type StudioDrawerTab,
@@ -17,28 +8,6 @@ export {
   type StudioPanelCellIdentity,
   StudioPanelModels,
 } from './StudioPanelProjection'
-
-export type StudioDesignPanelValue =
-  & StudioDesignValue
-  & Readonly<{
-    sourcePath?: string
-    sourceVersion?: string
-  }>
-
-export const StudioProductCapabilities = {
-  logs: {
-    available: true,
-    reason: 'Logs stream from the active preview cell and retain its latest 500 console records.',
-  },
-  tests: {
-    available: true,
-    reason: 'Tests run through the project-owned Tao runtime and watch completed Studio compiles.',
-  },
-  tokenWrites: {
-    available: true,
-    reason: 'Raw inline colors can be promoted to current-grammar color tokens from the selected render.',
-  },
-} as const
 
 export type StudioCommandTarget =
   | { kind: 'command'; command: 'compile' | 'data' | 'problems' | 'reload' | 'toggle-mode' }
@@ -60,9 +29,16 @@ export type StudioCommandItem = {
 export const StudioCommandPalette = {
   filter(items: readonly StudioCommandItem[], query: string): readonly StudioCommandItem[] {
     const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
-    return terms.length === 0
-      ? items
-      : items.filter(item => terms.every(term => item.search.includes(term)))
+    if (terms.length === 0) {
+      return items
+    }
+    const matched = items.filter(item => terms.every(term => item.search.includes(term)))
+    // A command named for what you typed outranks one that merely mentions those words in its
+    // description. `search` folds label and detail together, so without this "show compile" ranks
+    // "Show Problems" first on its "compile diagnostics" detail and buries "Show Compile".
+    const named = (item: StudioCommandItem): boolean =>
+      terms.every(term => item.label.toLocaleLowerCase().includes(term))
+    return [...matched.filter(named), ...matched.filter(item => !named(item))]
   },
   items(input: {
     files: readonly StudioFile[]
@@ -153,367 +129,11 @@ export function renderCommandResults(
   )
 }
 
-export function renderDrawerContent(parent: HTMLElement, tab: StudioDrawerTab, options: {
-  compile: StudioCompileState
-  data: readonly StudioRuntimeDataTable[]
-  dataError?: string
-  dataLoading: boolean
-  dataSource?: StudioPanelCellIdentity
-  logSource?: StudioPanelCellIdentity
-  logs: readonly StudioRuntimeLog[]
-  onCaptureFixture: () => void
-  onClearLogs: () => void
-  onDiagnostic: (diagnostic: StudioCompileDiagnostic) => void
-  onRefreshData: () => void
-  onRunTests: () => void
-  onTestFailure: (failure: StudioTestFailure) => void
-  onTestWatch: (watch: boolean) => void
-  testError?: string
-  testStatus?: StudioTestStatus
-  testWatch: boolean
-}): void {
-  if (tab === 'Problems') {
-    renderProblems(parent, options.compile.diagnostics ?? [], options.onDiagnostic)
-  } else if (tab === 'Compile') {
-    renderCompile(parent, options.compile, options.onDiagnostic)
-  } else if (tab === 'Data') {
-    renderData(parent, options)
-  } else if (tab === 'Tests') {
-    renderTests(parent, options)
-  } else {
-    renderLogs(parent, options.logs, options.onClearLogs, options.logSource)
-  }
-}
-
-export function renderDesignValues(parent: HTMLElement, options: {
-  busy: boolean
-  currentSourceVersion?: string
-  design: readonly StudioDesignPanelValue[]
-  onAction: (action: StudioCanonicalSourceAction) => void
-  renderId?: string
-  selectedSourceVersion?: string
-}): void {
-  const heading = document.createElement('h2')
-  heading.textContent = 'Design tokens'
-  const bundles = options.design.filter((value): value is Extract<StudioDesignValue, { kind: 'bundle' }> =>
-    value.kind === 'bundle'
-  )
-  const tokens = options.design.filter((value): value is Extract<StudioDesignValue, { kind: 'token' }> =>
-    value.kind === 'token'
-  )
-  const content: HTMLElement[] = [heading]
-  if (tokens.length > 0) {
-    const tokenHeading = document.createElement('h3')
-    tokenHeading.textContent = 'Color tokens'
-    content.push(tokenHeading)
-    for (const token of tokens) {
-      const row = document.createElement('div')
-      row.className = 'studio-design-value'
-      const swatch = document.createElement('span')
-      swatch.className = 'studio-design-swatch'
-      swatch.style.background = token.value
-      const value = document.createElement('code')
-      value.textContent = `${token.name} ${token.value}`
-      row.append(swatch, value)
-      const provenance = designProvenance(token)
-      if (provenance !== undefined) {
-        row.append(provenance)
-      }
-      content.push(row)
-    }
-    content.push(note(StudioProductCapabilities.tokenWrites.reason))
-  }
-  if (bundles.length > 0) {
-    const bundleHeading = document.createElement('h3')
-    bundleHeading.textContent = 'Local bundles'
-    content.push(bundleHeading)
-    for (const bundle of bundles) {
-      const editor = bundleEditor(bundle, options)
-      const provenance = designProvenance(bundle)
-      if (provenance !== undefined) {
-        editor.append(provenance)
-      }
-      content.push(editor)
-    }
-  }
-  if (tokens.length === 0 && bundles.length === 0) {
-    content.push(note('No design tokens or local bundles are declared in the active file.'))
-  }
-  if (options.renderId === undefined) {
-    content.push(note('Select a rendered element before applying a local bundle edit.'))
-  }
-  parent.replaceChildren(...content)
-}
-
-function renderProblems(
-  parent: HTMLElement,
-  diagnostics: readonly StudioCompileDiagnostic[],
-  open: (diagnostic: StudioCompileDiagnostic) => void,
-): void {
-  if (diagnostics.length === 0) {
-    parent.replaceChildren(note('No project diagnostics.'))
-    return
-  }
-  parent.replaceChildren(...diagnostics.map(diagnostic => {
-    const button = document.createElement('button')
-    button.className = 'studio-drawer-row'
-    button.disabled = diagnostic.filePath === undefined
-    button.type = 'button'
-    const location = diagnostic.range === undefined ? '' : `:${diagnostic.range.start.line + 1}`
-    button.textContent = `${diagnostic.filePath ?? 'Project'}${location} — ${diagnostic.message}`
-    button.addEventListener('click', () => open(diagnostic))
-    return button
-  }))
-}
-
-function renderCompile(
-  parent: HTMLElement,
-  compile: StudioCompileState,
-  open: (diagnostic: StudioCompileDiagnostic) => void,
-): void {
-  const summary = document.createElement('dl')
-  append(summary, 'Status', compile.status)
-  append(summary, 'Compile revision', String(compile.compileRevision))
-  append(summary, 'Applied revision', String(compile.appliedRevision))
-  append(summary, 'Message', compile.message)
-  append(summary, 'Diagnostics', String(compile.diagnostics?.length ?? 0))
-  const diagnostics = (compile.diagnostics ?? []).map(diagnostic => diagnosticButton(diagnostic, open))
-  parent.replaceChildren(summary, ...diagnostics)
-}
-
-function renderData(
-  parent: HTMLElement,
-  options: Parameters<typeof renderDrawerContent>[2],
-): void {
-  const toolbar = document.createElement('div')
-  toolbar.className = 'studio-drawer-toolbar'
-  const refresh = document.createElement('button')
-  refresh.textContent = 'Refresh'
-  refresh.type = 'button'
-  refresh.addEventListener('click', options.onRefreshData)
-  const capture = document.createElement('button')
-  capture.textContent = 'Capture fixture from active cell'
-  capture.type = 'button'
-  capture.addEventListener('click', options.onCaptureFixture)
-  toolbar.append(refresh, capture)
-  const source = options.dataSource === undefined
-    ? undefined
-    : note(`Active cell ${options.dataSource.cellId} · revision ${options.dataSource.cellRevision}`)
-  const tables = options.data.flatMap(table => {
-    const heading = document.createElement('h3')
-    heading.textContent = `${table.datasource} · ${table.entity}`
-    return [heading, dataTable(table.rows)]
-  })
-  const status = options.dataLoading
-    ? note(
-      options.data.length === 0
-        ? 'Capturing live app data from the active preview…'
-        : 'Refreshing live app data…',
-    )
-    : options.dataError !== undefined
-    ? unavailable('Data', options.dataError)
-    : tables.length === 0
-    ? note('No live datasource rows.')
-    : undefined
-  parent.replaceChildren(
-    toolbar,
-    ...(source === undefined ? [] : [source]),
-    ...(status === undefined ? [] : [status]),
-    ...tables,
-  )
-}
-
-function dataTable(rows: readonly Readonly<Record<string, unknown>>[]): HTMLElement {
-  if (rows.length === 0) {
-    return note('No rows.')
-  }
-  const table = document.createElement('table')
-  table.className = 'studio-data-table'
-  const visibleRows = StudioPanelModels.dataRows(rows)
-  const keys = [...new Set(visibleRows.flatMap(row => Object.keys(row)))].toSorted()
-  if (rows.length > visibleRows.length) {
-    const caption = document.createElement('caption')
-    caption.textContent = `Showing ${visibleRows.length} of ${rows.length} rows.`
-    table.append(caption)
-  }
-  const header = document.createElement('tr')
-  header.append(...keys.map(key => {
-    const th = document.createElement('th')
-    th.textContent = key
-    return th
-  }))
-  const head = document.createElement('thead')
-  head.append(header)
-  const body = document.createElement('tbody')
-  body.append(...visibleRows.map(row => {
-    const tr = document.createElement('tr')
-    tr.append(...keys.map(key => {
-      const td = document.createElement('td')
-      const value = (row as unknown as Record<string, unknown>)[key]
-      td.textContent = typeof value === 'object' ? JSON.stringify(value) : String(value ?? '')
-      return td
-    }))
-    return tr
-  }))
-  table.append(head, body)
-  return table
-}
-
-function renderLogs(
-  parent: HTMLElement,
-  logs: readonly StudioRuntimeLog[],
-  clear: () => void,
-  source?: StudioPanelCellIdentity,
-): void {
-  const toolbar = document.createElement('div')
-  toolbar.className = 'studio-drawer-toolbar'
-  const button = document.createElement('button')
-  button.type = 'button'
-  button.textContent = 'Clear'
-  button.disabled = logs.length === 0
-  button.addEventListener('click', clear)
-  toolbar.append(button)
-  const visibleLogs = StudioPanelModels.logs(logs)
-  const rows = visibleLogs.map(log => {
-    const row = document.createElement('div')
-    row.className = 'studio-drawer-row'
-    row.textContent = `${new Date(log.timestamp).toLocaleTimeString()} ${log.level.toUpperCase()} ${
-      log.arguments.map(formatValue).join(' ')
-    }`
-    return row
-  })
-  parent.replaceChildren(
-    toolbar,
-    ...(source === undefined ? [] : [note(`Active cell ${source.cellId} · revision ${source.cellRevision}`)]),
-    ...(logs.length > visibleLogs.length ? [note(`Showing the latest ${visibleLogs.length} console records.`)] : []),
-    ...(rows.length === 0 ? [note('No console messages from the active preview.')] : rows),
-  )
-}
-
-function renderTests(parent: HTMLElement, options: Parameters<typeof renderDrawerContent>[2]): void {
-  const toolbar = document.createElement('div')
-  toolbar.className = 'studio-drawer-toolbar'
-  const run = document.createElement('button')
-  run.type = 'button'
-  run.textContent = options.testStatus?.running === true ? 'Running…' : 'Run tests'
-  run.disabled = options.testStatus?.available !== true || options.testStatus.running
-  run.addEventListener('click', options.onRunTests)
-  const watchLabel = document.createElement('label')
-  const watch = document.createElement('input')
-  watch.type = 'checkbox'
-  watch.checked = options.testWatch
-  watch.disabled = options.testStatus?.available !== true
-  watch.addEventListener('change', () => options.onTestWatch(watch.checked))
-  watchLabel.append(watch, ' Watch')
-  toolbar.append(run, watchLabel)
-  if (options.testStatus?.available === false) {
-    parent.replaceChildren(
-      toolbar,
-      unavailable('Tests', options.testStatus.reason ?? 'The test runtime is unavailable.'),
-    )
-    return
-  }
-  const result = options.testStatus?.lastRun
-  const error = options.testError === undefined ? undefined : unavailable('Tests', options.testError)
-  if (result === undefined) {
-    parent.replaceChildren(
-      toolbar,
-      ...(error === undefined ? [] : [error]),
-      note('Run the project Tao tests, or enable Watch to rerun after compiles.'),
-    )
-    return
-  }
-  const summary = document.createElement('strong')
-  summary.textContent = result.status === 'no-tests'
-    ? 'No Tao tests found.'
-    : `${result.passed} passed · ${result.failed} failed · ${result.durationMs}ms`
-  const failures = result.failures.map(failure => {
-    const button = document.createElement('button')
-    button.className = 'studio-drawer-row'
-    button.type = 'button'
-    button.textContent = `${failure.name} — ${failure.filePath}${failure.line === undefined ? '' : `:${failure.line}`}`
-    button.addEventListener('click', () => options.onTestFailure(failure))
-    return button
-  })
-  const output = document.createElement('pre')
-  output.className = 'studio-test-output'
-  output.textContent = StudioPanelModels.testOutput(result.output)
-  parent.replaceChildren(toolbar, ...(error === undefined ? [] : [error]), summary, ...failures, output)
-}
-
-function diagnosticButton(
-  diagnostic: StudioCompileDiagnostic,
-  open: (diagnostic: StudioCompileDiagnostic) => void,
-): HTMLButtonElement {
-  const button = document.createElement('button')
-  button.className = 'studio-drawer-row'
-  button.disabled = diagnostic.filePath === undefined
-  button.type = 'button'
-  const location = diagnostic.range === undefined ? '' : `:${diagnostic.range.start.line + 1}`
-  button.textContent = `${diagnostic.filePath ?? 'Project'}${location} — ${diagnostic.message}`
-  button.addEventListener('click', () => open(diagnostic))
-  return button
-}
-
-function designProvenance(value: StudioDesignPanelValue): HTMLElement | undefined {
-  if (value.sourcePath === undefined) {
-    return undefined
-  }
-  const provenance = document.createElement('small')
-  provenance.className = 'studio-design-provenance'
-  provenance.textContent = value.sourceVersion === undefined
-    ? value.sourcePath
-    : `${value.sourcePath} · ${value.sourceVersion}`
-  return provenance
-}
-
-function formatValue(value: unknown): string {
-  return typeof value === 'string' ? value : JSON.stringify(value) ?? String(value)
-}
-
-function bundleEditor(
-  bundle: Extract<StudioDesignPanelValue, { kind: 'bundle' }>,
-  options: Parameters<typeof renderDesignValues>[1],
-): HTMLElement {
-  const form = document.createElement('section')
-  form.className = 'studio-design-bundle'
-  const heading = document.createElement('strong')
-  heading.textContent = bundle.name
-  const entry = document.createElement('select')
-  for (const authored of bundle.entries) {
-    const option = document.createElement('option')
-    option.textContent = authored
-    option.value = authored
-    entry.append(option)
-  }
-  const property = document.createElement('input')
-  const value = document.createElement('input')
-  const load = (): void => {
-    const [head = '', ...terms] = entry.value.trim().split(/\s+/)
-    property.value = head
-    value.value = terms.join(' ')
-  }
-  entry.addEventListener('change', load)
-  load()
-  const apply = document.createElement('button')
-  apply.disabled = options.busy
-    || options.renderId === undefined
-    || options.selectedSourceVersion !== options.currentSourceVersion
-  apply.textContent = 'Apply bundle entry'
-  apply.type = 'button'
-  apply.addEventListener('click', () => {
-    if (options.renderId === undefined || property.value.trim() === '') {
-      return
-    }
-    options.onAction({
-      entry: [property.value.trim(), ...terms(value.value)],
-      kind: 'set-style-entry',
-      landing: { bundleName: bundle.name, kind: 'style-bundle', mode: 'edit' },
-      renderId: options.renderId,
-    })
-  })
-  form.append(heading, entry, property, value, apply)
-  return form
+function note(text: string): HTMLElement {
+  const element = document.createElement('p')
+  element.className = 'studio-panel-note'
+  element.textContent = text
+  return element
 }
 
 function command(
@@ -532,35 +152,4 @@ function item(
   target: StudioCommandTarget,
 ): StudioCommandItem {
   return { category, detail, id, label, search: `${category} ${label} ${detail}`.toLocaleLowerCase(), target }
-}
-
-function terms(value: string): readonly (number | string)[] {
-  return value.trim().split(/\s+/).filter(Boolean).map(term => {
-    const number = Number(term)
-    return Number.isFinite(number) ? number : term
-  })
-}
-
-function unavailable(title: string, reason: string): HTMLElement {
-  const section = document.createElement('section')
-  section.className = 'studio-unavailable'
-  const heading = document.createElement('strong')
-  heading.textContent = `${title} unavailable`
-  section.append(heading, note(reason))
-  return section
-}
-
-function note(text: string): HTMLElement {
-  const element = document.createElement('p')
-  element.className = 'studio-panel-note'
-  element.textContent = text
-  return element
-}
-
-function append(parent: HTMLDListElement, label: string, value: string): void {
-  const dt = document.createElement('dt')
-  const dd = document.createElement('dd')
-  dt.textContent = label
-  dd.textContent = value
-  parent.append(dt, dd)
 }

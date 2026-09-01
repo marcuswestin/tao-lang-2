@@ -1,0 +1,39 @@
+use ResizableSplitApp from ./
+
+test "Resizable Split" {
+   test "renders every pane of a resizable split" {
+      run ResizableSplitApp
+
+      expect text "Persistent sidebar"
+      expect text "Resizable workspace"
+   }
+   // A relaunch keeps device-local `(persist)` state and drops everything the launched instance
+   // owned. Both halves are asserted: the width has to survive and the view-local note has to not.
+   test "keeps the persisted sidebar width across a relaunch and drops view state" {
+      run ResizableSplitApp
+
+      expect text "Sidebar width 280"
+      press "Widen sidebar"
+      press "Write note"
+      expect text "Sidebar width 360"
+      expect text "Sidebar note written"
+      relaunch
+      expect text "Sidebar width 360"
+      expect text "Sidebar note unwritten"
+      expect missing text "Sidebar note written"
+      // `fresh` opts one launch out of restoring navigation, not out of the device. The width the
+      // person persisted is still theirs; the note the launched instance owned is still not.
+      relaunch fresh
+      expect text "Sidebar width 360"
+      expect text "Sidebar note unwritten"
+   }
+   // Every check launches onto a device nobody has used, so the widening the check above persisted
+   // is gone. This check only proves that by following it: order it earlier and it proves nothing.
+   test "opens on the declared width after an earlier check persisted a wider one" {
+      run ResizableSplitApp
+
+      expect text "Sidebar width 280"
+      relaunch
+      expect text "Sidebar width 280"
+   }
+}

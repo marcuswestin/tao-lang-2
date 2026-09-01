@@ -22,7 +22,7 @@ import {
 } from './StudioServerDatasource'
 import {
   type StudioProjectOpenRequest,
-  StudioSessionManager,
+  type StudioSessionManager,
   type StudioSessionResource,
 } from './StudioSessionManager'
 import { StudioWelcome } from './StudioWelcome'
@@ -42,7 +42,6 @@ export type StartedStudioServer = {
   hostname: string
   manager: StudioSessionManager
   port: number
-  sessionId?: string
   stop: () => void
   url: string
 }
@@ -53,28 +52,10 @@ type StudioSocketData =
 
 type StudioSocket = Bun.ServerWebSocket<StudioSocketData>
 
-/** Compatibility entrypoint exposing one session at the historical root URLs. */
-export async function startStudioServer(
-  session: StudioProjectSession,
-  options: StudioServerOptions = {},
-): Promise<StartedStudioServer> {
-  const manager = new StudioSessionManager()
-  const opened = manager.add({ session })
-  return await startManagedStudioServer(manager, options, opened.sessionId)
-}
-
 /** Starts the multi-session server whose root is the Welcome surface. */
 export async function startStudioSessionServer(
   manager: StudioSessionManager,
   options: StudioServerOptions = {},
-): Promise<StartedStudioServer> {
-  return await startManagedStudioServer(manager, options)
-}
-
-async function startManagedStudioServer(
-  manager: StudioSessionManager,
-  options: StudioServerOptions,
-  defaultSessionId?: string,
 ): Promise<StartedStudioServer> {
   if (options.compileOnStart !== false) {
     await Promise.all(
@@ -148,8 +129,7 @@ async function startManagedStudioServer(
         bunServer.hostname ?? options.hostname ?? '127.0.0.1',
         bunServer.port ?? options.port ?? 0,
       )
-      const managerRoute = managerRequestPath(url.pathname, defaultSessionId === undefined)
-      const route = managerRoute ? undefined : studioSessionRoute(url.pathname, defaultSessionId)
+      const route = managerRequestPath(url.pathname) ? undefined : studioSessionRoute(url.pathname)
       const requestOptions = {
         ...options,
         allowedOrigins: route === undefined ? [] : authorization.allowedOrigins(route.sessionId, route.pathname),
@@ -173,7 +153,6 @@ async function startManagedStudioServer(
           request,
           url,
           requestOptions,
-          defaultSessionId === undefined,
           subscribeSession,
           closeSession,
         )
@@ -265,7 +244,6 @@ async function startManagedStudioServer(
     hostname,
     manager,
     port,
-    sessionId: defaultSessionId,
     stop() {
       unsubscribeManager()
       for (const unsubscribe of sessionSubscriptions.values()) {
@@ -338,11 +316,10 @@ async function handleManagerRequest(
   request: Request,
   url: URL,
   options: StudioServerOptions,
-  welcomeAtRoot: boolean,
   subscribeSession: (sessionId: string) => void,
   closeSession: (sessionId: string) => Promise<boolean>,
 ): Promise<Response | undefined> {
-  if (request.method === 'GET' && (url.pathname === '/welcome' || (welcomeAtRoot && url.pathname === '/'))) {
+  if (request.method === 'GET' && (url.pathname === '/welcome' || url.pathname === '/')) {
     return htmlResponse(StudioWelcome.html(manager.list()))
   }
   if (request.method === 'GET' && url.pathname === '/api/sessions') {
@@ -383,9 +360,9 @@ async function handleManagerRequest(
   return undefined
 }
 
-function managerRequestPath(pathname: string, welcomeAtRoot: boolean): boolean {
+function managerRequestPath(pathname: string): boolean {
   return pathname === '/welcome'
-    || (welcomeAtRoot && pathname === '/')
+    || pathname === '/'
     || pathname === '/api/sessions'
     || pathname === '/api/sessions/open'
     || pathname === '/api/sessions/close-all'
@@ -393,15 +370,9 @@ function managerRequestPath(pathname: string, welcomeAtRoot: boolean): boolean {
     || /^\/api\/sessions\/[A-Za-z0-9_-]{1,128}\/close$/.test(pathname)
 }
 
-function studioSessionRoute(
-  pathname: string,
-  defaultSessionId: string | undefined,
-): { pathname: string; sessionId: string } | undefined {
+function studioSessionRoute(pathname: string): { pathname: string; sessionId: string } | undefined {
   const matched = pathname.match(/^\/sessions\/([A-Za-z0-9_-]{1,128})(\/.*)?$/)
-  if (matched !== null) {
-    return { pathname: matched[2] ?? '/', sessionId: matched[1]! }
-  }
-  return defaultSessionId === undefined ? undefined : { pathname, sessionId: defaultSessionId }
+  return matched === null ? undefined : { pathname: matched[2] ?? '/', sessionId: matched[1]! }
 }
 
 function projectOpenRequest(value: unknown): StudioProjectOpenRequest {
@@ -458,9 +429,6 @@ async function handleRequest(
   }
   if (request.method === 'POST' && url.pathname === '/api/data/fill') {
     return response(request, url, options, await datasource.fill(dataFillRequest(await request.json())))
-  }
-  if (request.method === 'POST' && url.pathname === '/api/design') {
-    return response(request, url, options, await session.inspectDesign(designRequest(await request.json())))
   }
   if (request.method === 'POST' && url.pathname === '/api/language/highlight') {
     return response(request, url, options, await StudioHighlight.highlight(await request.json()))
@@ -524,13 +492,6 @@ function inspectRenderRequest(value: unknown): { path: string; renderId: string;
     throw new Errors.UserInputError('Expected a source path, version, and render id to inspect.')
   }
   return { path: value['path'], renderId: value['renderId'], sourceVersion: value['sourceVersion'] }
-}
-
-function designRequest(value: unknown): { path: string; sourceVersion: string } {
-  if (!isRecord(value) || typeof value['path'] !== 'string' || typeof value['sourceVersion'] !== 'string') {
-    throw new Errors.UserInputError('Expected a source path and version to inspect Studio design values.')
-  }
-  return { path: value['path'], sourceVersion: value['sourceVersion'] }
 }
 
 function dataFillRequest(value: unknown): StudioServerFillRequest {

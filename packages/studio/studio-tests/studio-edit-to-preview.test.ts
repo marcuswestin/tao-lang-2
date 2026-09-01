@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { Assert, Errors, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 import { openStudioPreviewSession, type StudioPreviewSession } from '../studio-src/StudioPreviewSession'
@@ -66,15 +66,13 @@ async function withCompiledSession(use: (harness: Harness) => Promise<void>): Pr
         })
         const compiled = await preview.session.compileInitial()
         if (compiled.status !== 'compiled') {
-          throw new Error(`The fixture must compile for this suite to mean anything: ${compiled.message}`)
+          Errors.throwUnexpected(`The fixture must compile for this suite to mean anything: ${compiled.message}`)
         }
         const session = preview.session
         await use({
           manifest: () => {
             const published = session.previewManifest()
-            if (published === undefined) {
-              throw new Error('The compiler published no preview manifest.')
-            }
+            Assert.defined(published, 'the compiler to publish a preview manifest')
             return published
           },
           session,

@@ -215,6 +215,45 @@ Describe('validator: apps and views', () => {
     Expect(validationErrorMessages(duplicate)).toContain(AppValidator.messages.appRootCount('MyApp', 2))
   })
 
+  Test(
+    'accepts a root view as the Navigator and Name sugar of one ordinary app',
+    accepts(`
+      app MyApp { view MainView }
+      ${stubView('MainView')}
+    `),
+  )
+
+  Test(
+    'accepts a root view beside the app configuration it does not supply',
+    accepts(`
+      design Theme { canvas #fff }
+      app MyApp {
+        Name "Root View App"
+        Design Theme
+        view MainView
+        Restore fresh
+      }
+      ${stubView('MainView')}
+    `),
+  )
+
+  Test(
+    'rejects a root view supplied beside an explicit Navigator',
+    rejects(
+      `
+      use StackNav from @tao/nav
+      app MyApp {
+        Name "Ambiguous"
+        Navigator StackNav { Initial MainView }
+        view MainView
+      }
+      view MainView() { Title "Main" render Empty() }
+      ${stubView('Empty')}
+    `,
+      AppValidator.messages.propertyDuplicate('MyApp', 'Navigator'),
+    ),
+  )
+
   Test('rejects unknown, duplicated, and mistyped supplied app slots', async () => {
     const result = await testValidateCodeWithErrors(`
       use StackNav from @tao/nav

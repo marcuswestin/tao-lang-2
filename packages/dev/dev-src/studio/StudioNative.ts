@@ -361,6 +361,10 @@ async function stageStudioPackagedServiceBundle(serviceBundlePath: string): Prom
  */
 function prebuiltStudioClientAssetsPlugin(): Bun.BunPlugin {
   const namespace = 'tao-studio-prebuilt-client-runtime'
+  // A module in a Bun plugin namespace has no importer directory, so `@shared/core` does not
+  // resolve inside it; its absolute source path does, and Bun inlines the module rather than the
+  // path, which keeps the repository root out of the payload.
+  const sharedCorePath = Repo.resolvePath('packages/shared/shared-src/core/shared-core.ts')
   return {
     name: namespace,
     setup(build) {
@@ -370,9 +374,11 @@ function prebuiltStudioClientAssetsPlugin(): Bun.BunPlugin {
           : undefined)
       build.onLoad({ filter: /.*/, namespace }, () => ({
         contents: `
+          import { Errors } from ${JSON.stringify(sharedCorePath)}
+
           export default {
             async generateApp() {
-              throw new Error('The packaged Tao Studio service requires its prebuilt browser bundle.')
+              Errors.throwHostEnvironment('The packaged Tao Studio service requires its prebuilt browser bundle.')
             },
           }
         `,

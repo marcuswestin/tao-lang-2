@@ -1,3 +1,5 @@
+import { Assert } from '@shared/core'
+
 export type StudioEditorTabSnapshot = Readonly<{
   activePath?: string
   paths: readonly string[]
@@ -55,9 +57,7 @@ export class StudioEditorTabs {
   }
 
   activate(path: string): StudioEditorTabSnapshot {
-    if (!this.#paths.includes(path)) {
-      throw new Error(`Studio editor tab is not open: ${path}`)
-    }
+    Assert.input(this.#paths.includes(path), `Studio editor tab is not open: ${path}`)
     this.#activePath = path
     return this.#save()
   }
@@ -75,9 +75,7 @@ export class StudioEditorTabs {
   }
 
   rename(previousPath: string, nextPath: string): StudioEditorTabSnapshot {
-    if (!validPath(nextPath)) {
-      throw new Error(`Studio editor tab path is not a valid Tao file: ${nextPath}`)
-    }
+    Assert.input(validPath(nextPath), `Studio editor tab path is not a valid Tao file: ${nextPath}`)
     const index = this.#paths.indexOf(previousPath)
     if (index < 0) {
       return this.snapshot()
@@ -106,9 +104,10 @@ export class StudioEditorTabs {
   }
 
   #requireAvailable(path: string): void {
-    if (!validPath(path) || !this.#available.has(path)) {
-      throw new Error(`Studio editor tab path is not an available Tao file: ${path}`)
-    }
+    Assert.input(
+      validPath(path) && this.#available.has(path),
+      `Studio editor tab path is not an available Tao file: ${path}`,
+    )
   }
 
   #save(): StudioEditorTabSnapshot {

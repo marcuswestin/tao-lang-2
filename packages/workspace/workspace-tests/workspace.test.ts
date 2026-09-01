@@ -146,6 +146,49 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
+  // The editor and `tao check` must agree. Langium registration once ran only the structural pass,
+  // so inferred-type diagnostics — invalid `do` targets, `set` type mismatches — were accepted in
+  // the editor and rejected on the command line.
+  Test('reports identical structural and inferred-type diagnostics through LSP and standalone validation', async () => {
+    await withTaoFiles(
+      'tao-workspace-lsp-parity-',
+      {
+        'Main.tao': `
+          app Demo { view MainView }
+          view MainView() {
+            state Count = 0
+            let Greeting = "Hello"
+            action Run() {
+              do Greeting()
+              set Count = "text"
+            }
+            action Run() { }
+            render Text("Ready")
+          }
+          view Text(Value text) {
+            render inject ${tsFence}
+              return null
+            ${fence}
+          }
+        `,
+      },
+      async (paths, rootDir) => {
+        const entryPath = paths['Main.tao']
+        const standalone = (await (await Workspace.open(rootDir)).validate(entryPath)).diagnostics
+          .filter(diagnostic => diagnostic.filePath === entryPath)
+          .map(diagnostic => diagnostic.message)
+
+        // Structural diagnostics precede inferred-type diagnostics for a file on both paths.
+        Expect(standalone).toEqual([
+          "Duplicate name 'Run'.",
+          'do expects an action, got text.',
+          "State 'Count' expects number, got text.",
+        ])
+        Expect(await lspDiagnosticMessages(rootDir, entryPath)).toEqual(standalone)
+      },
+    )
+  })
+
   Test('can compile test plans without rerunning semantic validation', async () => {
     await withTaoFiles(
       'tao-workspace-test-plan-skip-validation-',
@@ -189,6 +232,23 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 })
+
+/** lspDiagnosticMessages returns the Langium validation messages for one workspace file. */
+async function lspDiagnosticMessages(rootDir: string, entryPath: string): Promise<string[]> {
+  const workspace = await LSPWorkspace.open(rootDir)
+  const documents = workspace.services.shared.workspace.LangiumDocuments
+  const document = Array.from(documents.all).find(document => document.uri.path === entryPath)
+
+  Expect(document).toBeDefined()
+  await workspace.services.shared.workspace.DocumentBuilder.build([document!], {
+    eagerLinking: true,
+    validation: true,
+  })
+  // LSP 3.18 allows MarkupContent diagnostic messages; these assertions compare plain text.
+  return (document!.diagnostics ?? []).map(diagnostic =>
+    typeof diagnostic.message === 'string' ? diagnostic.message : diagnostic.message.value
+  )
+}
 
 function errorMessages(result: { diagnostics: readonly Diagnostic[] }): string[] {
   return Diagnostics.errorMessages(result.diagnostics)

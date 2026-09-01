@@ -23,6 +23,7 @@ export const testValidationMessages = {
   submitPlacement: 'Submit steps are only allowed inside test blocks.',
   expectationPlacement: 'Expectations are only allowed inside test blocks.',
   backPlacement: 'Back steps are only allowed inside test blocks.',
+  relaunchPlacement: 'Relaunch steps are only allowed inside test blocks.',
   advancePlacement: 'Advance steps are only allowed inside test blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
@@ -34,6 +35,7 @@ export const testValidationMessages = {
   runTarget: (name: string) => `Run target '${name}' must be an app.`,
   selectIndex: 'Tagged loop row selection uses a 1-based index greater than zero.',
   selectBlock: 'A select block may contain test steps but cannot start another app.',
+  relaunchInSelect: 'A select block cannot relaunch the app; a relaunch replaces every row the selection resolves.',
   navigationValueType: (actual: string) => `Navigation and toolbar test values expect text, got ${actual}.`,
   navigationValueLiteral: 'Navigation and toolbar test values must be text literals.',
   navigationVocabulary: (expected: string) => `Expected '${expected}' in this navigation test step.`,
@@ -46,6 +48,7 @@ const validateInputExpectationPlacement = validateStepPlacement(testValidationMe
 const validateSubmitPlacement = validateStepPlacement(testValidationMessages.submitPlacement)
 const validateExpectationPlacement = validateStepPlacement(testValidationMessages.expectationPlacement)
 const validateBackPlacement = validateStepPlacement(testValidationMessages.backPlacement)
+const validateRelaunchPlacement = validateStepPlacement(testValidationMessages.relaunchPlacement)
 const validateAdvancePlacement = validateStepPlacement(testValidationMessages.advancePlacement)
 
 /** testValidationChecks validates v0 Tao test declarations and steps. */
@@ -65,6 +68,7 @@ export const testValidationChecks = {
   [AST.TagSubmitStep.$type]: validateSubmitPlacement,
   [AST.SelectStep.$type]: validateSelect,
   [AST.BackTestStep.$type]: validateBackPlacement,
+  [AST.RelaunchStep.$type]: validateRelaunchPlacement,
   [AST.AdvanceStep.$type]: [validateAdvancePlacement, validateAdvanceDuration],
   [AST.ExpectCheckboxStateStep.$type]: validateExpectationPlacement,
   [AST.ExpectTextStep.$type]: [validateExpectationPlacement, validateSelector],
@@ -158,6 +162,7 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       TagSubmitStep: checkStepOrder,
       SelectStep: checkStepOrder,
       BackTestStep: checkStepOrder,
+      RelaunchStep: checkStepOrder,
     })
   }
 
@@ -180,6 +185,7 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       | AST.TagSubmitStep
       | AST.SelectStep
       | AST.BackTestStep
+      | AST.RelaunchStep
       | AST.AdvanceStep,
   ): void {
     if (!hasRun) {
@@ -225,6 +231,10 @@ function validateSelect(select: AST.SelectStep, ctx: ValidationContext): void {
     ctx.error(testValidationMessages.selectIndex, select)
   }
   for (const statement of select.block.statements) {
+    if (AST.isRelaunchStep(statement)) {
+      ctx.error(testValidationMessages.relaunchInSelect, statement)
+      continue
+    }
     if (!AST.isCheckStep(statement) || AST.isRunStep(statement)) {
       ctx.error(testValidationMessages.selectBlock, statement)
     }

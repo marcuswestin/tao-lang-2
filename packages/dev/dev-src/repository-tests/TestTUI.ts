@@ -70,7 +70,10 @@ async function runTestSuites(pattern = '', options: TestRunOptions = {}): Promis
   app.unmount()
 
   await TestRunner.writeSuiteLogs(states)
-  TestRunner.printResultSummary(states, Date.now() - startedAt, { includeFailureOutput: true })
+  TestRunner.printResultSummary(states, Date.now() - startedAt, {
+    includeFailureOutput: true,
+    taoAppsSkipped: pattern.length > 0,
+  })
   return TestRunner.suiteExitCode(states)
 }
 

@@ -1,11 +1,10 @@
-import { Platform, Repo } from '@shared'
+import { HCI, Platform, Repo } from '@shared'
 import { DevFileWatcher } from './DevFileWatcher'
 import { DevLoopTUI } from './DevLoopTUI'
 import { ExpoConfig } from './expo-runner/expo-config'
 import { ExpoRunner } from './expo-runner/ExpoRunner'
 import { handleCommandKey } from './keyboard-input/CommandKeys'
 import Commands from './keyboard-input/Commands'
-import { RawKeyInput } from './keyboard-input/RawKeyInput'
 import Run from './Run'
 
 /** DevAppSelection identifies the exact app declaration selected by the Tao CLI. */
@@ -27,7 +26,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
   const runtimeToolchainRoot = Repo.resolvePath(ExpoConfig.RUNTIME_TOOLCHAIN_PATH)
   const expoServer = ExpoRunner.createServer(runtimeToolchainRoot)
   const output = DevLoopTUI.startDevLoopOutput()
-  let keyInput: RawKeyInput | undefined
+  let keyInput: HCI.RawKeySession | undefined
   let watcher: DevFileWatcher | undefined
   let finished = false
   let cleanupStarted = false
@@ -53,6 +52,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     }
     cleanupStarted = true
     keyInput?.stop()
+    keyInput = undefined
     await stopServices()
   }
 
@@ -61,18 +61,6 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     watcher = undefined
     await expoServer.stop()
   }
-
-  keyInput = new RawKeyInput(key => {
-    void handleCommandKey(key, {
-      appPath,
-      appName,
-      finish: exitCode => finish({ kind: 'exit', exitCode }),
-      repoRoot,
-      restart: () => finish({ kind: 'restart' }),
-      selectApp: () => finish({ kind: 'select-app' }),
-      stopServices,
-    })
-  })
 
   const requestFinish = (exitCode: number) => {
     if (finished) {
@@ -98,7 +86,20 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     // Key input starts before the first compile so q and Ctrl-C work during startup, not only
     // once Metro is ready.
     Commands.printControls()
-    if (!keyInput.start()) {
+    keyInput = HCI.startRawKeys(key => {
+      void handleCommandKey(key, {
+        appPath,
+        appName,
+        finish: exitCode => finish({ kind: 'exit', exitCode }),
+        repoRoot,
+        restart: () => finish({ kind: 'restart' }),
+        selectApp: () => finish({ kind: 'select-app' }),
+        stopServices,
+      })
+    })
+    if (!keyInput.rawMode) {
+      keyInput.stop()
+      keyInput = undefined
       DevLoopTUI.logDevLoop('dev', 'No interactive TTY found; dev loop is running until the process is stopped.')
     }
     const initialCompileSucceeded = await Run.compileApp({

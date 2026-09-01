@@ -1,4 +1,5 @@
 import { AST } from '@parser'
+import { Assert } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 
@@ -173,7 +174,9 @@ Describe('compiler: Studio render occurrences', () => {
       Expect(compiled.code).toContain('TR.Studio.Environment.useScenario()')
       Expect(compiled.code).toContain('TR.Studio.Environment.useFixture(_Scope._TaoDataCatalog)')
       Expect(compiled.code).toContain(`${JSON.stringify(`${paths['Main.tao']}#OwnerCard`)}: _Scope.OwnerCard`)
-      Expect(compiled.code).toContain('React.createElement(_TaoStudioView, _TaoStudioArgs)')
+      Expect(compiled.code).toContain(
+        'React.createElement(_TaoStudioView, { ..._TaoStudioArgs, __tao: { app: _TaoAppDefinition_Preview } })',
+      )
 
       const production = await Workspace.compile(paths['Main.tao'])
       Expect(production.studioManifest).toBeUndefined()
@@ -304,17 +307,13 @@ function requireRender(
   guard: (render: AST.Render) => boolean,
 ): AST.Render {
   const render = renders.find(candidate => AST.findOwningView(candidate)?.name === ownerName && guard(candidate))
-  if (render === undefined) {
-    throw new Error(`Expected ${ownerName} render occurrence.`)
-  }
+  Assert.defined(render, `${ownerName} render occurrence`)
   return render
 }
 
 function studioOccurrence(render: AST.Render, sourcePath: string): string {
   const cstNode = render.$cstNode
-  if (cstNode === undefined) {
-    throw new Error('Expected render source coordinates.')
-  }
+  Assert.defined(cstNode, 'render source coordinates')
   return `studio: {
     sourcePath: ${JSON.stringify(sourcePath)},
     start: ${cstNode.offset},

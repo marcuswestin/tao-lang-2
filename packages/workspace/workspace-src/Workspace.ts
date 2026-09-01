@@ -69,11 +69,6 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     return this.project.root
   }
 
-  /** typir returns the Typir services owned by this Workspace. */
-  get typir(): WorkspaceServices['typir'] {
-    return this.project.services.typir
-  }
-
   /** parse parses an entry Tao file and all reachable Tao documents. */
   async parse(entryFile: string): Promise<ParseResult> {
     const entryPath = this.resolveEntryFile(entryFile)
@@ -113,7 +108,6 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   private validatorContext(parseResult: ParseResult): Validator.Context {
     return Validator.createContext(
       this.project.packagesContext,
-      this.project.services.typir,
       parseResult.files.map(file => file.ast),
       parseResult.entry.path,
     )

@@ -7,6 +7,8 @@ import {
   type SpawnSyncReturns,
 } from 'node:child_process'
 import { availableParallelism } from 'node:os'
+import type { Readable } from 'node:stream'
+import { throwUnexpected } from './core/Errors'
 
 export type ProcessEnv = NodeJS.ProcessEnv
 export type ProcessSignal = NodeJS.Signals
@@ -53,13 +55,16 @@ export function onProcessSignal(signal: ProcessSignal, listener: () => void): ()
   return () => process.off(signal, listener)
 }
 
-/** setStdinRawMode toggles raw stdin mode when the process has an interactive TTY. */
-export function setStdinRawMode(rawMode: boolean): boolean {
-  const stdin = process.stdin
-  if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') {
+/**
+ * setInputRawMode toggles raw mode on an input stream, reporting whether it applied. A stream that is
+ * not an interactive TTY has no raw mode to enter, so it reads as ordinary line-buffered input.
+ */
+export function setInputRawMode(input: Readable, rawMode: boolean): boolean {
+  const terminal = input as Readable & { isTTY?: boolean; setRawMode?: (rawMode: boolean) => void }
+  if (terminal.isTTY !== true || typeof terminal.setRawMode !== 'function') {
     return false
   }
-  stdin.setRawMode(rawMode)
+  terminal.setRawMode(rawMode)
   return true
 }
 
@@ -84,7 +89,7 @@ export const runtimeProcess = {
   },
   exit(exitCode?: number | string | null): never {
     process.exit(exitCode)
-    throw new Error(`process.exit(${exitCode ?? 0}) returned unexpectedly.`)
+    throwUnexpected(`process.exit(${exitCode ?? 0}) returned unexpectedly.`)
   },
   setExitCode(exitCode: number) {
     process.exitCode = exitCode

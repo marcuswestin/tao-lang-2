@@ -1,3 +1,5 @@
+import { RuntimeAssert } from './TR-assert'
+
 type BackTarget = {
   back(): boolean
 }
@@ -53,11 +55,12 @@ export function registerPresentable<PresentableT extends RegisteredPresentable>(
   }
   const registrations = presentablesByIdentity.get(identity.canonical) ?? []
   const existing = registrations.at(-1)?.presentable
-  if (existing && existing.definition.name !== presentable.definition.name) {
-    throw new Error(
-      `Canonical declaration identity collision between '${existing.definition.name}' and '${presentable.definition.name}'.`,
-    )
-  }
+  RuntimeAssert(
+    !existing || existing.definition.name === presentable.definition.name,
+    `no canonical declaration identity collision between '${existing?.definition.name}' and `
+      + `'${presentable.definition.name}'`,
+    { canonicalIdentity: identity.canonical },
+  )
   // Keep every module evaluation. An app resolves against the registry version visible when its
   // definition was created, so a later test bundle or Fast Refresh cannot lend it a foreign closure.
   registrations.push({ presentable, version: ++presentableVersion })
@@ -71,9 +74,9 @@ export function resolvePresentable<PresentableT extends RegisteredPresentable>(
 ): PresentableT {
   const registrations = presentablesByIdentity.get(canonicalIdentity)
   const registration = registrations?.findLast(candidate => candidate.version <= maximumVersion)
-  if (!registration) {
-    throw new Error(`No registered Tao view has canonical identity ${canonicalIdentity}.`)
-  }
+  RuntimeAssert.input(registration, `No registered Tao view has canonical identity ${canonicalIdentity}.`, {
+    canonicalIdentity,
+  })
   return registration.presentable as PresentableT
 }
 

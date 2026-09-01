@@ -1,4 +1,5 @@
 import React from 'react'
+import { RuntimeAssert } from './TR-assert'
 import type {
   TaoNavDescriptor,
   TaoNavigationArguments,
@@ -267,9 +268,9 @@ export abstract class RuntimeNavigationValue implements Subscription {
     exclusions: ReadonlySet<string>,
   ): TaoNavigationSnapshot {
     const descriptor = this.descriptor.canonicalDescriptor?.canonical
-    if (!descriptor) {
-      throw new Error(`Navigation kind '${this.name}' lacks canonical restoration identity.`)
-    }
+    RuntimeAssert.defined(descriptor, `navigation kind '${this.name}' has a canonical restoration identity`, {
+      navigation: this.name,
+    })
     const overlays = this.overlayEntries.flatMap(entry => {
       if (entry.response || (entry.sheet && exclusions.has('sheets'))) {
         return []
@@ -287,9 +288,11 @@ export abstract class RuntimeNavigationValue implements Subscription {
 
   restoreNavigationSnapshot(snapshot: TaoNavigationSnapshot, codec: TaoNavigationRestorationCodec): void {
     const descriptor = this.descriptor.canonicalDescriptor?.canonical
-    if (snapshot.kind !== this.kind || descriptor === undefined || snapshot.descriptor !== descriptor) {
-      throw new Error(`Restored navigation descriptor does not match live '${this.name}'.`)
-    }
+    RuntimeAssert.input(
+      snapshot.kind === this.kind && descriptor !== undefined && snapshot.descriptor === descriptor,
+      `Restored navigation descriptor does not match live '${this.name}'.`,
+      { navigation: this.name },
+    )
     this.overlayEntries = snapshot.overlays.map(entry => ({
       ...codec.restorePresentable(entry),
       host: new RuntimeHostReadChannel(),

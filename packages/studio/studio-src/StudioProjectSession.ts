@@ -1,5 +1,5 @@
 import { AST, Langium } from '@parser'
-import { Diagnostics, Errors, FS, Repo, TaoFiles } from '@shared'
+import { Assert, Diagnostics, Errors, FS, Repo, TaoFiles } from '@shared'
 import SourceActions, {
   type StudioComponentKind,
   type StudioInsertCapturedFixturePatchRequest,
@@ -149,9 +149,7 @@ export type StudioDesignValue =
 
 function studioDesignSource(node: AST.Node): { end: number; start: number } {
   const cst = node.$cstNode
-  if (cst === undefined) {
-    throw new Errors.UserInputError('Cannot inspect a structured design value without source coordinates.')
-  }
+  Assert.input(cst, 'Cannot inspect a structured design value without source coordinates.')
   return { end: cst.end, start: cst.offset }
 }
 
@@ -308,7 +306,6 @@ type SourceActionUndoCacheEntry = {
 const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
   { method: 'GET', path: '/api/protocol' },
   { method: 'POST', path: '/api/data/fill' },
-  { method: 'POST', path: '/api/design' },
   { method: 'GET', path: '/api/files' },
   { method: 'GET', path: '/api/file' },
   { method: 'POST', path: '/api/file/create' },
@@ -421,15 +418,13 @@ export class StudioProjectSession {
   }
 
   setPreviewInstance(previewInstanceId: string): void {
-    if (previewInstanceId.trim().length === 0) {
-      throw new Errors.UserInputError('Studio preview instance id cannot be empty.')
-    }
+    Assert.input(previewInstanceId.trim().length > 0, 'Studio preview instance id cannot be empty.')
     this.#coordinator.setPreviewInstance(previewInstanceId)
   }
 
   registerPreview(input: unknown): StudioCompileSnapshot {
     if (!isRecord(input) || typeof input['previewInstanceId'] !== 'string') {
-      throw new Errors.UserInputError('Expected a Studio preview instance id.')
+      Errors.throwUserInput('Expected a Studio preview instance id.')
     }
     this.setPreviewInstance(input['previewInstanceId'])
     return this.compileSnapshot()
@@ -437,9 +432,10 @@ export class StudioProjectSession {
 
   /** setMatrixManifest installs the compiler-derived scenario/cell contract for this compile revision. */
   setMatrixManifest(manifest: StudioPreviewManifestV2): void {
-    if (manifest.project.root !== this.projectRoot || manifest.project.appName !== this.appName) {
-      throw new Errors.UserInputError('Studio preview manifest does not match the open project and app.')
-    }
+    Assert.input(
+      manifest.project.root === this.projectRoot && manifest.project.appName === this.appName,
+      'Studio preview manifest does not match the open project and app.',
+    )
     this.#matrix = this.#matrix?.rebase(manifest) ?? new StudioMatrixSession(manifest)
     this.#emit({
       channel: studioProtocolChannel,
@@ -472,7 +468,7 @@ export class StudioProjectSession {
   acknowledgePreview(input: unknown): boolean {
     const message = StudioProtocol.parseMessage(input)
     if (message?.type !== 'preview-applied') {
-      throw new Errors.UserInputError('Expected a valid Tao Studio preview-applied message.')
+      Errors.throwUserInput('Expected a valid Tao Studio preview-applied message.')
     }
     if (message.identity.cellId !== undefined) {
       const identity = message.identity
@@ -483,7 +479,7 @@ export class StudioProjectSession {
         || identity.compileRevision === undefined
         || identity.manifestRevision === undefined
       ) {
-        throw new Errors.UserInputError('Expected a complete Studio cell preview identity.')
+        Errors.throwUserInput('Expected a complete Studio cell preview identity.')
       }
       this.#requireMatrix().assertCurrentInstance({
         appName: identity.appName,
@@ -536,9 +532,7 @@ export class StudioProjectSession {
   }
 
   #requireMatrix(): StudioMatrixSession {
-    if (this.#matrix === undefined) {
-      throw new Errors.UserInputError('Studio preview manifest is not available yet.')
-    }
+    Assert.input(this.#matrix, 'Studio preview manifest is not available yet.')
     return this.#matrix
   }
 
@@ -605,9 +599,7 @@ export class StudioProjectSession {
       requireSourceVersion(current, request.sourceVersion)
       this.#requireFileMutationAllowed(current.path)
       const path = await this.#resolveTaoFile(current.path)
-      if (await FS.realPath(path) === this.entryPath) {
-        throw new Errors.UserInputError('Studio cannot rename the active app entry file.')
-      }
+      Assert.input(await FS.realPath(path) !== this.entryPath, 'Studio cannot rename the active app entry file.')
       const targetPath = await this.#resolveNewTaoFile(request.targetPath)
       await FS.move(path, targetPath)
       const compile = await this.#coordinator.noteStudioFileMutation([
@@ -630,9 +622,7 @@ export class StudioProjectSession {
       requireSourceVersion(current, request.sourceVersion)
       this.#requireFileMutationAllowed(current.path)
       const path = await this.#resolveTaoFile(current.path)
-      if (await FS.realPath(path) === this.entryPath) {
-        throw new Errors.UserInputError('Studio cannot delete the active app entry file.')
-      }
+      Assert.input(await FS.realPath(path) !== this.entryPath, 'Studio cannot delete the active app entry file.')
       await FS.remove(path)
       const compile = await this.#coordinator.noteStudioFileMutation([{ path, writeId: request.writeId }])
       const deleted = this.#projectFile(current.path, current.sourceVersion)
@@ -676,18 +666,17 @@ export class StudioProjectSession {
   applySourceAction(input: unknown): Promise<StudioSourceActionResult> {
     return this.#mutate(async () => {
       const envelope = StudioProtocol.parseSourceActionEnvelope(input)
-      if (envelope === undefined) {
-        throw new Errors.UserInputError('Expected a valid Tao Studio source-action v2 envelope.')
-      }
+      Assert.input(envelope, 'Expected a valid Tao Studio source-action v2 envelope.')
       requireSessionIdentity(envelope, this.identity())
       this.#acceptPreviewIdentity(envelope)
 
       const fingerprint = JSON.stringify(envelope)
       const cached = this.#actionResults.get(envelope.requestId)
       if (cached !== undefined) {
-        if (cached.fingerprint !== fingerprint) {
-          throw new Errors.UserInputError(`Studio source-action request id was reused: ${envelope.requestId}`)
-        }
+        Assert.input(
+          cached.fingerprint === fingerprint,
+          `Studio source-action request id was reused: ${envelope.requestId}`,
+        )
         return cached.result
       }
 
@@ -711,7 +700,7 @@ export class StudioProjectSession {
         const rollbackMessage = rollback.status === 'compiled'
           ? 'The original Tao source was restored.'
           : `The original Tao source was restored, but its preview still failed to compile: ${rollback.message}`
-        throw new Errors.UserInputError(
+        Errors.throwUserInput(
           `Studio did not save the fixture because its Tao source failed to compile: ${compileMessage} ${rollbackMessage}`,
         )
       }
@@ -738,9 +727,7 @@ export class StudioProjectSession {
   proposeSourceAction(input: unknown): Promise<StudioSourceActionProposal> {
     return this.#mutate(async () => {
       const envelope = StudioProtocol.parseSourceActionEnvelope(input)
-      if (envelope === undefined) {
-        throw new Errors.UserInputError('Expected a valid Tao Studio source-action v2 envelope.')
-      }
+      Assert.input(envelope, 'Expected a valid Tao Studio source-action v2 envelope.')
       requireSessionIdentity(envelope, this.identity())
       const { current, patch } = await this.#prepareSourceAction(envelope)
       return {
@@ -761,9 +748,10 @@ export class StudioProjectSession {
     requireSourceVersion(current, envelope.identity.sourceVersion)
     const path = await this.#resolveTaoFile(current.path)
     const parsed = await this.#workspace.parse(path)
-    if (Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser')) {
-      throw new Errors.UserInputError(`Cannot apply a Studio source action until ${current.path} parses.`)
-    }
+    Assert.input(
+      !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+      `Cannot apply a Studio source action until ${current.path} parses.`,
+    )
     const request = sourcePatchRequest(envelope)
     requireSourceActionPreconditions(envelope, request)
     this.#requireScenarioActionIdentity(envelope, request)
@@ -792,9 +780,10 @@ export class StudioProjectSession {
       requireSourceVersion(current, request.sourceVersion)
       const path = await this.#resolveTaoFile(current.path)
       const parsed = await this.#workspace.parse(path)
-      if (Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser')) {
-        throw new Errors.UserInputError(`Cannot inspect a Studio render until ${current.path} parses.`)
-      }
+      Assert.input(
+        !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+        `Cannot inspect a Studio render until ${current.path} parses.`,
+      )
       return SourceActions.inspectStudioRender(parsed.entry.document, request.renderId, {
         files: parsed.files.map(file => file.ast),
       })
@@ -809,9 +798,10 @@ export class StudioProjectSession {
       requireSourceVersion(current, request.sourceVersion)
       const path = await this.#resolveTaoFile(current.path)
       const parsed = await this.#workspace.parse(path)
-      if (Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser')) {
-        throw new Errors.UserInputError(`Cannot inspect Studio design values until ${current.path} parses.`)
-      }
+      Assert.input(
+        !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+        `Cannot inspect Studio design values until ${current.path} parses.`,
+      )
       const values: StudioDesignValue[] = []
       for (const design of parsed.entry.ast.statements.filter(AST.isDesignDeclaration)) {
         for (const member of design.block.members) {
@@ -900,31 +890,32 @@ export class StudioProjectSession {
   undoSourceAction(input: unknown): Promise<StudioSourceActionUndoResult> {
     return this.#mutate(async () => {
       const envelope = StudioProtocol.parseSourceActionUndoEnvelope(input)
-      if (envelope === undefined) {
-        throw new Errors.UserInputError('Expected a valid Tao Studio source-action undo v2 envelope.')
-      }
+      Assert.input(envelope, 'Expected a valid Tao Studio source-action undo v2 envelope.')
       requireSessionIdentity(envelope, this.identity())
       this.#acceptPreviewIdentity(envelope)
 
       const fingerprint = JSON.stringify(envelope)
       const cached = this.#actionUndoResults.get(envelope.requestId)
       if (cached !== undefined) {
-        if (cached.fingerprint !== fingerprint) {
-          throw new Errors.UserInputError(`Studio source-action undo request id was reused: ${envelope.requestId}`)
-        }
+        Assert.input(
+          cached.fingerprint === fingerprint,
+          `Studio source-action undo request id was reused: ${envelope.requestId}`,
+        )
         return cached.result
       }
 
-      if (this.#openCheckpointId !== undefined) {
-        throw new Errors.UserInputError('Commit the active Studio source-action checkpoint before undoing.')
-      }
+      Assert.input(
+        this.#openCheckpointId === undefined,
+        'Commit the active Studio source-action checkpoint before undoing.',
+      )
       const latestCheckpointId = this.#checkpointOrder.at(-1)
-      if (latestCheckpointId !== envelope.checkpointId) {
-        throw new Errors.UserInputError('Studio can only undo the latest committed source-action checkpoint.')
-      }
+      Assert.input(
+        latestCheckpointId === envelope.checkpointId,
+        'Studio can only undo the latest committed source-action checkpoint.',
+      )
       const checkpoint = this.#actionCheckpoints.get(envelope.checkpointId)
       if (checkpoint === undefined || checkpoint.status !== 'committed') {
-        throw new Errors.UserInputError(`Studio source-action checkpoint is not undoable: ${envelope.checkpointId}`)
+        Errors.throwUserInput(`Studio source-action checkpoint is not undoable: ${envelope.checkpointId}`)
       }
       const current = await this.readFile(envelope.identity.path)
       if (
@@ -985,76 +976,76 @@ export class StudioProjectSession {
 
   async #resolveTaoWatchPath(path: string): Promise<string> {
     const resolved = FS.resolvePath(path, this.projectRoot)
-    if (FS.extname(resolved) !== '.tao') {
-      throw new Errors.UserInputError(`Studio path is not a Tao file in the project: ${path}`)
-    }
+    Assert.input(FS.extname(resolved) === '.tao', `Studio path is not a Tao file in the project: ${path}`)
     const missingParts = [FS.basename(resolved)]
     let ancestor = FS.dirname(resolved)
     while (!await FS.isDirectory(ancestor)) {
       const parent = FS.dirname(ancestor)
-      if (parent === ancestor) {
-        throw new Errors.UserInputError(`Studio path is not a Tao file in the project: ${path}`)
-      }
+      Assert.input(parent !== ancestor, `Studio path is not a Tao file in the project: ${path}`)
       missingParts.unshift(FS.basename(ancestor))
       ancestor = parent
     }
     const canonical = FS.resolvePath(missingParts.join('/'), await FS.realPath(ancestor))
-    if (!FS.pathIsWithin(canonical, this.projectRoot)) {
-      throw new Errors.UserInputError(`Studio path is not a Tao file in the project: ${path}`)
-    }
+    Assert.input(
+      FS.pathIsWithin(canonical, this.projectRoot),
+      `Studio path is not a Tao file in the project: ${path}`,
+    )
     if (await FS.isFile(canonical)) {
       const realPath = await FS.realPath(canonical)
-      if (!FS.pathIsWithin(realPath, this.projectRoot)) {
-        throw new Errors.UserInputError(`Studio path resolves outside the project: ${path}`)
-      }
+      Assert.input(
+        FS.pathIsWithin(realPath, this.projectRoot),
+        `Studio path resolves outside the project: ${path}`,
+      )
     }
     return canonical
   }
 
   async #resolveTaoFile(path: string): Promise<string> {
     const resolved = FS.resolvePath(path, this.projectRoot)
-    if (!FS.pathIsWithin(resolved, this.projectRoot) || FS.extname(resolved) !== '.tao' || !await FS.isFile(resolved)) {
-      throw new Errors.UserInputError(`Studio path is not a Tao file in the project: ${path}`)
-    }
+    Assert.input(
+      FS.pathIsWithin(resolved, this.projectRoot) && FS.extname(resolved) === '.tao' && await FS.isFile(resolved),
+      `Studio path is not a Tao file in the project: ${path}`,
+    )
     const realPath = await FS.realPath(resolved)
-    if (!FS.pathIsWithin(realPath, this.projectRoot)) {
-      throw new Errors.UserInputError(`Studio path resolves outside the project: ${path}`)
-    }
+    Assert.input(
+      FS.pathIsWithin(realPath, this.projectRoot),
+      `Studio path resolves outside the project: ${path}`,
+    )
     return resolved
   }
 
   async #resolveNewTaoFile(path: string): Promise<string> {
     const resolved = FS.resolvePath(path, this.projectRoot)
-    if (!FS.pathIsWithin(resolved, this.projectRoot) || FS.extname(resolved) !== '.tao') {
-      throw new Errors.UserInputError(`Studio path is not a Tao file in the project: ${path}`)
-    }
-    if (await FS.exists(resolved)) {
-      throw new Errors.UserInputError(`Studio file already exists: ${FS.relativePath(this.projectRoot, resolved)}`)
-    }
+    Assert.input(
+      FS.pathIsWithin(resolved, this.projectRoot) && FS.extname(resolved) === '.tao',
+      `Studio path is not a Tao file in the project: ${path}`,
+    )
+    Assert.input(
+      !await FS.exists(resolved),
+      `Studio file already exists: ${FS.relativePath(this.projectRoot, resolved)}`,
+    )
     const missingParts = [FS.basename(resolved)]
     let ancestor = FS.dirname(resolved)
     while (!await FS.isDirectory(ancestor)) {
-      if (await FS.exists(ancestor)) {
-        throw new Errors.UserInputError(`Studio file parent is not a folder: ${path}`)
-      }
+      Assert.input(!await FS.exists(ancestor), `Studio file parent is not a folder: ${path}`)
       const parent = FS.dirname(ancestor)
-      if (parent === ancestor) {
-        throw new Errors.UserInputError(`Studio path is not a Tao file in the project: ${path}`)
-      }
+      Assert.input(parent !== ancestor, `Studio path is not a Tao file in the project: ${path}`)
       missingParts.unshift(FS.basename(ancestor))
       ancestor = parent
     }
     const canonical = FS.resolvePath(missingParts.join('/'), await FS.realPath(ancestor))
-    if (!FS.pathIsWithin(canonical, this.projectRoot)) {
-      throw new Errors.UserInputError(`Studio path resolves outside the project: ${path}`)
-    }
+    Assert.input(
+      FS.pathIsWithin(canonical, this.projectRoot),
+      `Studio path resolves outside the project: ${path}`,
+    )
     return resolved
   }
 
   #requireFileMutationAllowed(path: string): void {
-    if (this.fileDraftState(path).dirty) {
-      throw new Errors.UserInputError(`Save or discard the unsaved Studio draft before changing ${path}.`)
-    }
+    Assert.input(
+      !this.fileDraftState(path).dirty,
+      `Save or discard the unsaved Studio draft before changing ${path}.`,
+    )
   }
 
   #projectFile(path: string, sourceVersion: string): StudioProjectFile {
@@ -1078,7 +1069,7 @@ export class StudioProjectSession {
         || identity.compileRevision === undefined
         || identity.manifestRevision === undefined
       ) {
-        throw new Errors.UserInputError('Studio source action has an incomplete cell identity.')
+        Errors.throwUserInput('Studio source action has an incomplete cell identity.')
       }
       const runtime = this.#requireMatrix().assertCurrentInstance({
         appName: identity.appName,
@@ -1102,9 +1093,10 @@ export class StudioProjectSession {
       }
       return
     }
-    if (identity.scenarioId !== undefined) {
-      throw new Errors.UserInputError('Studio source action has scenario identity without cell identity.')
-    }
+    Assert.input(
+      identity.scenarioId === undefined,
+      'Studio source action has scenario identity without cell identity.',
+    )
     const active = this.#coordinator.snapshot().previewInstanceId
     if (active === undefined) {
       this.#coordinator.setPreviewInstance(envelope.identity.previewInstanceId)
@@ -1133,12 +1125,11 @@ export class StudioProjectSession {
       if (this.#openCheckpointId !== undefined && this.#openCheckpointId !== id) {
         this.#commitAbandonedCheckpoint(this.#openCheckpointId)
       }
-      if (existing !== undefined) {
-        throw new Errors.UserInputError(`Studio source-action checkpoint id was reused: ${id}`)
-      }
-      if (this.#openCheckpointId !== undefined) {
-        throw new Errors.UserInputError(`Studio source-action checkpoint is still open: ${this.#openCheckpointId}`)
-      }
+      Assert.input(existing === undefined, `Studio source-action checkpoint id was reused: ${id}`)
+      Assert.input(
+        this.#openCheckpointId === undefined,
+        `Studio source-action checkpoint is still open: ${this.#openCheckpointId}`,
+      )
       return {
         afterSourceVersion: current.sourceVersion,
         beforeContent: current.content,
@@ -1172,9 +1163,10 @@ export class StudioProjectSession {
     if (request.kind !== 'set-scenario-arguments') {
       return
     }
-    if (envelope.identity.cellId === undefined || envelope.identity.scenarioId === undefined) {
-      throw new Errors.UserInputError('Studio scenario source actions require cell and scenario identity.')
-    }
+    Assert.input(
+      envelope.identity.cellId !== undefined && envelope.identity.scenarioId !== undefined,
+      'Studio scenario source actions require cell and scenario identity.',
+    )
     const scenario = this.#requireMatrix().publishedManifest().scenarios
       .find(candidate => candidate.scenarioId === envelope.identity.scenarioId)
     if (scenario === undefined) {
@@ -1298,9 +1290,7 @@ function trimMap<Key, Value>(map: Map<Key, Value>, limit: number): void {
 
 async function requireProjectRoot(input: string): Promise<string> {
   const resolved = FS.resolvePath(input)
-  if (!await FS.isDirectory(resolved)) {
-    throw new Errors.UserInputError(`Studio project folder does not exist: ${resolved}`)
-  }
+  Assert.input(await FS.isDirectory(resolved), `Studio project folder does not exist: ${resolved}`)
   return await FS.realPath(resolved)
 }
 
@@ -1336,31 +1326,29 @@ function resolveAppSelection(
   )
   if (matching.length === 0) {
     const available = apps.map(app => app.appName)
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       requestedAppName === undefined && requestedEntryPath === undefined
         ? `No Tao app declaration found under ${projectRoot}`
         : `No matching Tao app found. Available apps: ${available.join(', ') || 'none'}.`,
     )
   }
-  if (matching.length > 1) {
-    throw new Errors.UserInputError(
-      requestedAppName === undefined && requestedEntryPath === undefined
-        ? `Multiple Tao apps found: ${matching.map(app => app.appName).join(', ')}. Select an appName.`
-        : `Multiple matching Tao app declarations were found. Select an appName and entryPath.`,
-    )
-  }
+  Assert.input(
+    matching.length === 1,
+    requestedAppName === undefined && requestedEntryPath === undefined
+      ? `Multiple Tao apps found: ${matching.map(app => app.appName).join(', ')}. Select an appName.`
+      : `Multiple matching Tao app declarations were found. Select an appName and entryPath.`,
+  )
   return matching[0]!
 }
 
 async function resolveEntryPath(projectRoot: string, input: string): Promise<string> {
   const resolved = FS.resolvePath(input, projectRoot)
-  if (FS.extname(resolved) !== '.tao' || !await FS.isFile(resolved)) {
-    throw new Errors.UserInputError(`Studio entry is not a Tao file in the project: ${input}`)
-  }
+  Assert.input(
+    FS.extname(resolved) === '.tao' && await FS.isFile(resolved),
+    `Studio entry is not a Tao file in the project: ${input}`,
+  )
   const realPath = await FS.realPath(resolved)
-  if (!FS.pathIsWithin(realPath, projectRoot)) {
-    throw new Errors.UserInputError(`Studio entry resolves outside the project: ${input}`)
-  }
+  Assert.input(FS.pathIsWithin(realPath, projectRoot), `Studio entry resolves outside the project: ${input}`)
   return realPath
 }
 
@@ -1398,9 +1386,10 @@ function requireSessionIdentity(
   envelope: StudioSourceActionEnvelope | StudioSourceActionUndoEnvelope,
   expected: StudioProjectIdentity,
 ): void {
-  if (envelope.identity.project !== expected.project || envelope.identity.appName !== expected.appName) {
-    throw new Errors.UserInputError('Studio source action targets a different project or app.')
-  }
+  Assert.input(
+    envelope.identity.project === expected.project && envelope.identity.appName === expected.appName,
+    'Studio source action targets a different project or app.',
+  )
 }
 
 function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourcePatchRequest {
@@ -1491,7 +1480,7 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
       scenarioName: action['scenarioName'],
     }
   }
-  throw new Errors.UserInputError(`Unsupported or invalid Studio source action: ${action.kind}`)
+  Errors.throwUserInput(`Unsupported or invalid Studio source action: ${action.kind}`)
 }
 
 function requireSourceActionPreconditions(
@@ -1504,12 +1493,14 @@ function requireSourceActionPreconditions(
     || request.kind === 'wrap-render'
     || (request.kind === 'insert-component' || request.kind === 'insert-project-view')
       && (request.beforeId !== undefined || request.afterId !== undefined)
-  if (occurrenceRequired && envelope.identity.occurrence === undefined) {
-    throw new Errors.UserInputError(`Studio source action requires render occurrence identity: ${request.kind}`)
-  }
-  if (!occurrenceRequired && envelope.identity.occurrence !== undefined) {
-    throw new Errors.UserInputError(`Studio source action cannot carry render occurrence identity: ${request.kind}`)
-  }
+  Assert.input(
+    !occurrenceRequired || envelope.identity.occurrence !== undefined,
+    `Studio source action requires render occurrence identity: ${request.kind}`,
+  )
+  Assert.input(
+    occurrenceRequired || envelope.identity.occurrence === undefined,
+    `Studio source action cannot carry render occurrence identity: ${request.kind}`,
+  )
 }
 
 function isStudioStyleLandingScope(value: unknown): value is StudioStyleLandingScope {
@@ -1609,7 +1600,7 @@ function cellIdentity(value: unknown): StudioCellIdentity {
     || typeof value['manifestRevision'] !== 'string'
     || typeof value['project'] !== 'string'
   ) {
-    throw new Errors.UserInputError('Expected a complete Studio cell identity.')
+    Errors.throwUserInput('Expected a complete Studio cell identity.')
   }
   return {
     appName: value['appName'],
@@ -1624,7 +1615,7 @@ function cellIdentity(value: unknown): StudioCellIdentity {
 function cellInstanceIdentity(value: unknown): StudioCellInstanceIdentity {
   const identity = cellIdentity(value)
   if (!isRecord(value) || typeof value['previewInstanceId'] !== 'string') {
-    throw new Errors.UserInputError('Expected a Studio cell preview instance id.')
+    Errors.throwUserInput('Expected a Studio cell preview instance id.')
   }
   return { ...identity, previewInstanceId: value['previewInstanceId'] }
 }
@@ -1632,31 +1623,32 @@ function cellInstanceIdentity(value: unknown): StudioCellInstanceIdentity {
 function cellReconfigureRequest(value: unknown): StudioCellReconfigureRequest {
   const identity = cellIdentity(value)
   if (!isRecord(value)) {
-    throw new Errors.UserInputError('Expected a Studio cell reconfiguration.')
+    Errors.throwUserInput('Expected a Studio cell reconfiguration.')
   }
   const args = value['args']
   const environment = value['environment']
   const rawReplay = value['replay']
   const replay = rawReplay === undefined ? undefined : StudioProtocol.parseRuntimeCapture(rawReplay)
   const stateLayers = value['stateLayers']
-  if (args !== undefined && (!isRecord(args) || !isJsonValue(args))) {
-    throw new Errors.UserInputError('Studio cell arguments must be JSON data.')
-  }
-  if (environment !== undefined && !isRecord(environment)) {
-    throw new Errors.UserInputError('Studio cell environment must be an object.')
-  }
-  if (rawReplay !== undefined && replay === undefined) {
-    throw new Errors.UserInputError('Studio cell replay must be a valid runtime capture artifact.')
-  }
-  if (stateLayers !== undefined && (!Array.isArray(stateLayers) || !stateLayers.every(isString))) {
-    throw new Errors.UserInputError('Studio cell state layers must be names.')
-  }
+  Assert.input(
+    args === undefined || isRecord(args) && isJsonValue(args),
+    'Studio cell arguments must be JSON data.',
+  )
+  Assert.input(environment === undefined || isRecord(environment), 'Studio cell environment must be an object.')
+  Assert.input(
+    rawReplay === undefined || replay !== undefined,
+    'Studio cell replay must be a valid runtime capture artifact.',
+  )
+  Assert.input(
+    stateLayers === undefined || Array.isArray(stateLayers) && stateLayers.every(isString),
+    'Studio cell state layers must be names.',
+  )
   return {
     ...identity,
     ...(args === undefined ? {} : { args: args as StudioJsonObject }),
     ...(environment === undefined ? {} : { environment: environment as StudioCellEnvironment }),
     ...(replay === undefined ? {} : { replay }),
-    ...(stateLayers === undefined ? {} : { stateLayers }),
+    ...(stateLayers === undefined ? {} : { stateLayers: stateLayers as readonly string[] }),
   }
 }
 

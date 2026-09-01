@@ -1,4 +1,5 @@
 import React from 'react'
+import { errorMessage } from './TR-errors'
 import { requireReactNativeRuntime } from './TR-react-native'
 
 type DataLoadFailure = Readonly<{
@@ -165,8 +166,4 @@ function emit(): void {
   for (const listener of listeners) {
     listener()
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

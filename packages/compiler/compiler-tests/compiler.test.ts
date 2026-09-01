@@ -599,6 +599,105 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('"Content": TR.Navigation.ViewReference(TR.Navigation.Identity(')
   })
 
+  Test('compiles a root-view app through the one app definition path', async () => {
+    const compiled = await Compiler.compileCode(`
+      app MyApp { view MainView }
+      ${stubView('MainView')}
+    `)
+
+    Expect(compiled.code).toContain('const _TaoAppDefinition_MyApp = TR.Navigation.App({')
+    Expect(compiled.code).toContain('name: "MyApp"')
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
+      'TR.Navigation.Declaration( "MainView", TR.NavKind.Slot(), TR.Navigation.Identity(',
+    )
+    Expect(compiled.code).toContain('"Initial": TR.Navigation.ViewReference(TR.Navigation.Identity(')
+    Expect(compiled.code).toContain('<TR.Navigation.AppHost app={_TaoAppDefinition_MyApp} />')
+    Expect(compiled.code).toContain('_Scope.MyApp = _TaoAppDefinition_MyApp')
+  })
+
+  /**
+   * The synthesized navigator has to carry a canonical identity, or the runtime builds no restorable
+   * descriptor for it and a root-view app silently stops restoring where the person was. The tuples
+   * below are pinned literals rather than values rebuilt from the compiler: they key persisted
+   * navigation state on a real device, so any drift in a slot must fail here rather than orphan it.
+   */
+  Test('gives the synthesized root-view navigator an identity distinct from the app and the view', async () => {
+    const compiled = await Compiler.compileCode(`
+      app MyApp { view MainView }
+      ${stubView('MainView')}
+    `)
+    const normalized = compiled.code.replace(/\s+/g, ' ')
+
+    Expect(normalized).toContain(
+      'TR.Navigation.Declaration( "MainView", TR.NavKind.Slot(), TR.Navigation.Identity('
+        + '["tao.declaration",1,"tao-compiler-test","@workspace","source","app-root-view-nav","MyApp"]), )',
+    )
+    Expect(normalized).toContain(
+      'TR.Navigation.AppDeclaration("MyApp", TR.Navigation.Identity('
+        + '["tao.declaration",1,"tao-compiler-test","@workspace","source","app","MyApp"]))',
+    )
+    Expect(normalized).toContain(
+      '"Initial": TR.Navigation.ViewReference(TR.Navigation.Identity('
+        + '["tao.declaration",1,"tao-compiler-test","@workspace","source","view","MainView"]))',
+    )
+  })
+
+  // The identity is the app declaration's, so swapping which view the app opens leaves it where it
+  // is. Deriving it from the mounted view would move a person's stored position on a rename.
+  Test('keeps the synthesized navigator identity when the root view it mounts changes', async () => {
+    const mainView = await Compiler.compileCode(`
+      app MyApp { view MainView }
+      ${stubView('MainView')}
+    `)
+    const otherView = await Compiler.compileCode(`
+      app MyApp { view OtherView }
+      ${stubView('OtherView')}
+    `)
+    const navigatorIdentity =
+      '["tao.declaration",1,"tao-compiler-test","@workspace","source","app-root-view-nav","MyApp"]'
+
+    Expect(mainView.code).toContain(navigatorIdentity)
+    Expect(otherView.code).toContain(navigatorIdentity)
+    Expect(mainView.code).toContain('"view","MainView"]')
+    Expect(otherView.code).toContain('"view","OtherView"]')
+  })
+
+  // A derivation refines the same authored navigator, so it keeps the base's identity and separates
+  // its stored position by `variant` — the same split a derived app already gets for the app itself.
+  Test('shares one synthesized navigator identity between a root-view app and its derivation', async () => {
+    const compiled = await Compiler.compileCode(
+      `
+      app BaseApp { view MainView }
+      app PreviewApp = BaseApp with { Restore fresh }
+      ${stubView('MainView')}
+    `,
+      { appName: 'PreviewApp' },
+    )
+    const navigatorIdentity =
+      '["tao.declaration",1,"tao-compiler-test","@workspace","source","app-root-view-nav","BaseApp"]'
+
+    Expect(compiled.code.split(navigatorIdentity).length - 1).toBe(2)
+    Expect(compiled.code).toContain('variant: "BaseApp"')
+    Expect(compiled.code).toContain('variant: "PreviewApp"')
+  })
+
+  Test('compiles a root-view app that also supplies its own app configuration', async () => {
+    const compiled = await Compiler.compileCode(`
+      app MyApp {
+        Name "Root View App"
+        view MainView
+        Restore fresh
+      }
+      ${stubView('MainView')}
+    `)
+
+    Expect(compiled.code).toContain('name: TR.Value("Root View App").evaluate().jsValue as string')
+    Expect(compiled.code.replace(/\s+/g, ' ')).toContain(
+      'TR.Navigation.Declaration( "MainView", TR.NavKind.Slot(), TR.Navigation.Identity(',
+    )
+    Expect(compiled.code).toContain('mode: "fresh"')
+  })
+
   Test('compiles typed dynamic action arguments in source order', async () => {
     const compiled = await Compiler.compileCode(`
       app MyApp { view MainView }
@@ -786,6 +885,8 @@ Describe('compiler: language lowering', () => {
             expect toolbar command "Save" disabled
             press toolbar command "Save"
             back
+            relaunch
+            relaunch fresh
             expect missing text "Loading"
           }
         }
@@ -823,6 +924,7 @@ Describe('compiler: language lowering', () => {
             ...('title' in step ? { title: step.title } : {}),
             ...('label' in step ? { label: step.label } : {}),
             ...('enabled' in step ? { enabled: step.enabled } : {}),
+            ...('fresh' in step ? { fresh: step.fresh } : {}),
           })),
         ).toEqual([
           { kind: 'expect', selector: 'text', text: 'Hello' },
@@ -834,6 +936,8 @@ Describe('compiler: language lowering', () => {
           { enabled: false, kind: 'expectToolbarCommand', label: 'Save' },
           { kind: 'pressToolbarCommand', label: 'Save' },
           { kind: 'back' },
+          { fresh: false, kind: 'relaunch' },
+          { fresh: true, kind: 'relaunch' },
           { kind: 'expect', selector: 'text', text: 'Loading' },
         ])
         Expect(plan.suites[0]?.source.range).toBeDefined()

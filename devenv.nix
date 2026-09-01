@@ -24,7 +24,6 @@ in
     enable = true;
     package = nodePkg;
     bun.enable = true;
-    npm.enable = true;
   };
 
   android = {
@@ -44,14 +43,10 @@ in
     # GNU coreutils for `timeout`, which repository scripts and agents use to bound a run.
     pkgs.coreutils
     pkgs.dprint
-    pkgs.fd
     pkgs.git
     pkgs.just
-    pkgs.jq
-    pkgs.oxlint
     pkgs.ripgrep
     pkgs.watchman
-    pkgs.watchexec
   ];
 
   env.TAO_DEVENV = "1";

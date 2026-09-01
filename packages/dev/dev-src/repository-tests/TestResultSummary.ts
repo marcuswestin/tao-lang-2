@@ -23,6 +23,7 @@ type TotalTestSummary = {
 type ResultSummaryOptions = {
   includeFailureOutput?: boolean
   failureOutputLineLimit?: number
+  taoAppsSkipped?: boolean
 }
 
 const FAILURE_OUTPUT_LINE_LIMIT = 100
@@ -43,6 +44,12 @@ function printResultSummary(
   const failed = failedSuites(states)
   printSuiteSummaries(states, failed.length > 0)
   printTotalSummary(states, elapsedMs, failed.length > 0)
+
+  if (options.taoAppsSkipped === true) {
+    // A pattern selects tests by name and the Tao app suite has no name-level filter, so it is
+    // dropped from discovery entirely. Without this line a filtered run reads as full coverage.
+    Shared.HCI.writeLine('Note: the tao-apps suite was skipped; a test-name pattern cannot select Tao behavior tests.')
+  }
 
   if (failed.length === 0) {
     Shared.HCI.writeSuccess('test suites ok\n')

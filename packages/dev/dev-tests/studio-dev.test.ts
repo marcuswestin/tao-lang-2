@@ -1,4 +1,4 @@
-import { FS, Repo, Time } from '@shared'
+import { Errors, FS, Repo, Time } from '@shared'
 import type { CLI, Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { StudioClientAssets } from '@studio'
@@ -477,7 +477,7 @@ Describe('Studio smoke resource isolation', () => {
         return {
           async bundle() {
             if (attempt === 2) {
-              throw new Error('client does not compile yet')
+              Errors.throwHostEnvironment('client does not compile yet')
             }
             return `bundle-${attempt}`
           },
@@ -504,7 +504,7 @@ Describe('Studio smoke resource isolation', () => {
     Expect(reload.clientAssets.html({ previewUrl: 'preview' })).toBe('html-1-preview')
 
     await changed!()
-    Expect(errors).toEqual(['Error: client does not compile yet'])
+    Expect(errors).toEqual(['HostEnvironmentError: client does not compile yet'])
     Expect(reload.revision()).toBe(1)
     Expect(await reload.clientAssets.bundle()).toBe('bundle-1')
 
@@ -612,7 +612,7 @@ Describe('Studio smoke resource isolation', () => {
     await Expect(StudioDev.testing.cleanup([
       () => {
         cleaned.push('watcher')
-        throw new Error('watcher close failed')
+        Errors.throwHostEnvironment('watcher close failed')
       },
       () => {
         cleaned.push('metro')

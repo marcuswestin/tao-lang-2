@@ -1,5 +1,6 @@
 import { Switch as CoreSwitch } from '@shared/core'
-import { AfterEach, Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { AfterEach, Describe, Expect, fakeTerminal, mkTestDir, settle, Test, withCapturedOutput } from '@shared/test'
+import { PassThrough } from 'node:stream'
 import {
   Assert,
   CLI,
@@ -8,12 +9,10 @@ import {
   Errors,
   FS,
   HCI,
-  Log,
   Repo,
   Switch,
   Text,
 } from '../shared-src/shared'
-import { PassThrough, runtimeProcess, Writable } from './TestRuntime'
 
 const cleanupPaths: string[] = []
 
@@ -163,28 +162,18 @@ Describe('HCI', () => {
     Expect(stderr.outputText()).toContain('\u001b[31m')
   })
 
-  Test('colors process log message bodies by severity', () => {
-    const stdout = runtimeProcess.stdout
-    const stderr = runtimeProcess.stderr
-    const info = fakeTerminal('')
-    const errors = fakeTerminal('')
-    runtimeProcess.stdout = info.output as typeof runtimeProcess.stdout
-    runtimeProcess.stderr = errors.output as typeof runtimeProcess.stderr
-
-    try {
+  Test('colors process log message bodies by severity', async () => {
+    const logged = await withCapturedOutput(() => {
       HCI.logProcessInfo('dev', 'info body')
       HCI.logProcessWarn('dev', 'warn body')
       HCI.logProcessError('dev', 'error body')
+    })
 
-      Expect(stripAnsi(info.outputText())).toBe('[dev]: info body\n')
-      Expect(stripAnsi(errors.outputText())).toBe('[dev]: warn body\n[dev]: error body\n')
-      Expect(info.outputText()).toContain('\u001b[2minfo body\u001b[0m')
-      Expect(errors.outputText()).toContain('\u001b[33mwarn body\u001b[0m')
-      Expect(errors.outputText()).toContain('\u001b[31merror body\u001b[0m')
-    } finally {
-      runtimeProcess.stdout = stdout
-      runtimeProcess.stderr = stderr
-    }
+    Expect(stripAnsi(logged.stdout)).toBe('[dev]: info body\n')
+    Expect(stripAnsi(logged.stderr)).toBe('[dev]: warn body\n[dev]: error body\n')
+    Expect(logged.stdout).toContain('\u001b[2minfo body\u001b[0m')
+    Expect(logged.stderr).toContain('\u001b[33mwarn body\u001b[0m')
+    Expect(logged.stderr).toContain('\u001b[31merror body\u001b[0m')
   })
 
   Test('asks for text with validation', async () => {
@@ -224,6 +213,62 @@ Describe('HCI', () => {
     Expect(HCI.confirmChoiceSuffix(true)).toBe(' [Y/n]')
     Expect(HCI.confirmChoiceSuffix(undefined)).toBe(' [y/n]')
     Expect(stripAnsi(streams.outputText())).toContain(`Kill it?${HCI.confirmChoiceSuffix(false)}`)
+  })
+
+  Test('reads raw keys one at a time from any terminal stream, without waiting for Enter', async () => {
+    const terminal = fakeTerminal()
+    terminal.input.write('1a')
+    let rawModeWhileReading = false
+
+    const keys = await HCI.withRawKeys(async readKey => {
+      rawModeWhileReading = terminal.rawMode()
+      return [await readKey(), await readKey()]
+    }, terminal)
+
+    Expect(keys).toEqual(['1', 'a'])
+    Expect(rawModeWhileReading).toBe(true)
+    Expect(terminal.rawMode()).toBe(false)
+    // A still-flowing input keeps the process alive, so a finished session must release the stream.
+    Expect(terminal.input.isPaused()).toBe(true)
+  })
+
+  Test('reads an escape sequence as one Escape and a closed input as an interrupt', async () => {
+    const terminal = fakeTerminal()
+
+    const keys = await HCI.withRawKeys(async readKey => {
+      terminal.input.write(`${HCI.RawKey.escape}[A`)
+      const arrowKey = await readKey()
+      terminal.input.end()
+      return [arrowKey, await readKey()]
+    }, terminal)
+
+    Expect(keys).toEqual([HCI.RawKey.escape, HCI.RawKey.interrupt])
+  })
+
+  Test('reports every key of a chunk to a raw-key listener until the session is stopped', async () => {
+    const terminal = fakeTerminal()
+    const keys: string[] = []
+    const session = HCI.startRawKeys(key => keys.push(key), terminal)
+
+    terminal.input.write('qr')
+    await settle()
+    session.stop()
+    terminal.input.write('x')
+    await settle()
+
+    Expect(session.rawMode).toBe(true)
+    Expect(keys).toEqual(['q', 'r'])
+    Expect(terminal.rawMode()).toBe(false)
+    Expect(terminal.input.isPaused()).toBe(true)
+  })
+
+  Test('reports no raw mode for input that is not an interactive terminal', async () => {
+    const plainInput = new PassThrough()
+
+    const session = HCI.startRawKeys(() => undefined, { input: plainInput })
+    session.stop()
+
+    Expect(session.rawMode).toBe(false)
   })
 
   Test('uses defaults or rejects in non-interactive mode', async () => {
@@ -294,20 +339,18 @@ Describe('CLI', () => {
     }
 
     const result = await CLI.run('/bin/sh', commandSpec)
-    const syncResult = CLI.runSync('/bin/sh', commandSpec)
 
     Expect(result.exitCode).toBe(7)
-    Expect(syncResult.exitCode).toBe(7)
     await Expect(CLI.mustRun('/bin/sh', commandSpec)).rejects.toBeInstanceOf(Errors.CommandExecutionError)
     Expect(() => CLI.mustRunSync('/bin/sh', commandSpec)).toThrow(Errors.CommandExecutionError)
   })
 
-  Test('quotes command arguments for logs', () => {
-    Expect(CLI.formatCommand('tao', { args: ['run', 'Hello World.tao'] })).toBe('tao run "Hello World.tao"')
+  Test('captures output from a synchronous command', () => {
+    Expect(CLI.mustRunSync('/bin/sh', { args: ['-c', 'printf out'] }).stdout).toBe('out')
   })
 
   Test('streams output while preserving captured output', async () => {
-    const streamed = await withCapturedRuntimeOutput(() =>
+    const streamed = await withCapturedOutput(() =>
       CLI.run('/bin/sh', {
         args: ['-c', 'printf out; printf err >&2'],
         stdio: 'stream',
@@ -321,7 +364,7 @@ Describe('CLI', () => {
   })
 
   Test('streams prefixed output while preserving captured output', async () => {
-    const streamed = await withCapturedRuntimeOutput(() =>
+    const streamed = await withCapturedOutput(() =>
       CLI.run('/bin/sh', {
         args: ['-c', 'printf "out\\ntail"; printf "bad\\n" >&2'],
         prefixedOutput: { processName: 'test' },
@@ -437,37 +480,6 @@ Describe('Repo', () => {
   })
 })
 
-Describe('Log', () => {
-  Test('uses swappable transports', () => {
-    const calls: string[] = []
-
-    Log.setTransport({
-      debug: message => calls.push(`debug:${message}`),
-      info: message => calls.push(`info:${message}`),
-      warn: message => calls.push(`warn:${message}`),
-      error: (message, ...details) => calls.push(`error:${message}:${details.join(',')}`),
-      success: message => calls.push(`success:${message}`),
-      user: message => calls.push(`user:${message}`),
-    })
-    Log.debug('debug')
-    Log.info('hello')
-    Log.warn('heads up')
-    Log.error('failed', new Error('boom'))
-    Log.success('done')
-    Log.user('shown')
-    Log.setTransport({})
-
-    Expect(calls[0]).toBe('debug:debug')
-    Expect(calls[1]).toBe('info:hello')
-    Expect(calls[2]).toBe('warn:heads up')
-    Expect(calls[3]).toContain('error:failed:Error: boom')
-    Expect(calls[4]).toBe('success:done')
-    Expect(calls[5]).toBe('user:shown')
-    Expect('trace' in Log).toBe(false)
-    Expect('withTransport' in Log).toBe(false)
-  })
-})
-
 Describe('Errors, Assert, and Switch', () => {
   Test('formats Tao errors for users and logs', () => {
     const userError = new Errors.UserInputError('No file selected')
@@ -479,6 +491,31 @@ Describe('Errors, Assert, and Switch', () => {
     Expect(Errors.formatForLog(unexpected)).toContain('surprise')
   })
 
+  Test('quotes the command words a reader could not paste back', () => {
+    const commandError = new Errors.CommandExecutionError({
+      command: 'tao',
+      args: ['run', 'Hello World.tao'],
+      exitCode: 1,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    })
+
+    Expect(commandError.messageForUser).toBe('Command failed: tao run "Hello World.tao"')
+  })
+
+  Test('sorts a host or environment failure into its own category', () => {
+    const hostError = Errors.fromUnknown(
+      new Errors.HostEnvironmentError('The Tao Studio browser bundle is missing.', { cause: 'no bundle' }),
+    )
+
+    Expect(Errors.isTaoError(hostError)).toBe(true)
+    Expect(Errors.formatForUser(hostError)).toBe('The Tao Studio browser bundle is missing.')
+    Expect(Errors.formatForLog(hostError)).toContain('HostEnvironmentError')
+    Expect(() => Errors.throwHostEnvironment('knip produced no JSON report to read.'))
+      .toThrow(Errors.HostEnvironmentError)
+  })
+
   Test('asserts conditions and narrows values', () => {
     const value: string | undefined = 'tao'
 
@@ -487,6 +524,18 @@ Describe('Errors, Assert, and Switch', () => {
     Assert.is(value, isString, 'value is a string')
     Expect(value.toUpperCase()).toBe('TAO')
     Expect(() => Assert(false, 'truthy')).toThrow(Errors.UnexpectedBehaviorError)
+  })
+
+  Test('blames the author for a failed input assertion and keeps their sentence', () => {
+    const iterations: number | undefined = 4
+    const rejectEmptySamples = (): void => {
+      Assert.input(0, 'Performance samples must not be empty.')
+    }
+
+    Assert.input(iterations, 'Performance iterations must be a positive integer.')
+    Expect(iterations.toFixed(0)).toBe('4')
+    Expect(rejectEmptySamples).toThrow(Errors.UserInputError)
+    Expect(rejectEmptySamples).toThrow('Performance samples must not be empty.')
   })
 
   Test('switches exhaustively by value, type, kind, and property', () => {
@@ -593,50 +642,6 @@ async function tmpDir() {
 
 async function untrackedTmpDir() {
   return await mkTestDir('tao-shared-test-')
-}
-
-function fakeTerminal(inputText: string) {
-  const outputChunks: Buffer[] = []
-  const responses = inputText.match(/[^\n]*\n/g) ?? []
-  const input = new PassThrough()
-  const output = new Writable({
-    write(chunk, _encoding, callback) {
-      outputChunks.push(Buffer.from(chunk))
-      if (chunk.toString().endsWith(': ')) {
-        const response = responses.shift()
-        if (response !== undefined) {
-          input.write(response)
-        }
-      }
-      callback()
-    },
-  })
-
-  return {
-    input,
-    output,
-    interactive: true,
-    outputText: () => Buffer.concat(outputChunks).toString('utf8'),
-  }
-}
-
-async function withCapturedRuntimeOutput<T>(run: () => Promise<T>) {
-  const originalStdout = runtimeProcess.stdout
-  const originalStderr = runtimeProcess.stderr
-  const stdout = fakeTerminal('')
-  const stderr = fakeTerminal('')
-  runtimeProcess.stdout = stdout.output as typeof runtimeProcess.stdout
-  runtimeProcess.stderr = stderr.output as typeof runtimeProcess.stderr
-  try {
-    return {
-      result: await run(),
-      stderr: stderr.outputText(),
-      stdout: stdout.outputText(),
-    }
-  } finally {
-    runtimeProcess.stdout = originalStdout
-    runtimeProcess.stderr = originalStderr
-  }
 }
 
 const stripAnsi = Text.stripAnsi

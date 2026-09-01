@@ -1,4 +1,4 @@
-import { FS, Text } from '@shared'
+import { FS, HCI, Text } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { PassThrough } from 'node:stream'
 import { discoverTaoDevProjects, type TaoDevProject } from '../cli-src/dev-app-discovery'
@@ -114,6 +114,20 @@ Describe('Tao dev app discovery and selection', () => {
     Expect(keyForChoiceIndex(33)).toBe('Z')
     Expect(choiceIndexForKey('q')).toBeUndefined()
     Expect(await selectTaoDevApp(projects, { input, output })).toEqual({ kind: 'exit', exitCode: 0 })
+  })
+
+  Test('cancels on Escape and reports Ctrl-C as exit code 130', async () => {
+    const projects = projectFixture(3)
+    const escaped = terminalStream()
+    const interrupted = terminalStream()
+    // Typed rather than ended, so each result comes from the keypress itself and not from a closed stream.
+    escaped.write(HCI.RawKey.escape)
+    interrupted.write(HCI.RawKey.interrupt)
+
+    Expect(await selectTaoDevApp(projects, { input: escaped, output: terminalStream() }))
+      .toEqual({ kind: 'cancel' })
+    Expect(await selectTaoDevApp(projects, { input: interrupted, output: terminalStream() }))
+      .toEqual({ kind: 'exit', exitCode: 130 })
   })
 
   // The selector resumes stdin to read one key. Leaving it flowing keeps the event loop alive, so

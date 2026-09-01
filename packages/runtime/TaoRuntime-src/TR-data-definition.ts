@@ -1,15 +1,18 @@
+import { RuntimeAssert } from './TR-assert'
 import type { TaoDataField, TaoDataSchemaDefinition } from './TR-data'
 import RuntimeSwitch from './TR-switch'
 
 export function validateDefinition(definition: TaoDataSchemaDefinition): void {
-  if (!Number.isSafeInteger(definition.schemaVersion ?? 1) || (definition.schemaVersion ?? 1) < 1) {
-    throw new Error(`Data schema '${definition.name}' has an invalid schema version.`)
-  }
+  RuntimeAssert.input(
+    Number.isSafeInteger(definition.schemaVersion ?? 1) && (definition.schemaVersion ?? 1) >= 1,
+    `Data schema '${definition.name}' has an invalid schema version.`,
+    { schema: definition.name },
+  )
   for (const [entityName, entity] of Object.entries(definition.entities)) {
     for (const [fieldName, field] of Object.entries(entity.fields)) {
-      if (fieldName === 'Id') {
-        throw new Error(`Entity '${entityName}' cannot declare reserved field 'Id'.`)
-      }
+      RuntimeAssert.input(fieldName !== 'Id', `Entity '${entityName}' cannot declare reserved field 'Id'.`, {
+        entityName,
+      })
       const fieldPath = `${entityName}.${fieldName}`
       if (field.kind === 'relation') {
         validateRelationshipFieldDefinition(definition, fieldPath, field)
@@ -25,12 +28,16 @@ function validateRelationshipFieldDefinition(
   fieldPath: string,
   field: TaoDataField,
 ): void {
-  if (!field.relation || !definition.entities[field.relation]) {
-    throw new Error(`Relationship '${fieldPath}' has an unknown target '${field.relation ?? ''}'.`)
-  }
-  if (Object.prototype.hasOwnProperty.call(field, 'defaultValue') || field.defaultNow !== undefined) {
-    throw new Error(`Relationship '${fieldPath}' cannot declare a default value.`)
-  }
+  RuntimeAssert.input(
+    field.relation && definition.entities[field.relation],
+    `Relationship '${fieldPath}' has an unknown target '${field.relation ?? ''}'.`,
+    { fieldPath },
+  )
+  RuntimeAssert.input(
+    !Object.prototype.hasOwnProperty.call(field, 'defaultValue') && field.defaultNow === undefined,
+    `Relationship '${fieldPath}' cannot declare a default value.`,
+    { fieldPath },
+  )
 }
 
 function validatePrimitiveFieldDefinition(
@@ -38,28 +45,28 @@ function validatePrimitiveFieldDefinition(
   field: TaoDataField,
   kind: Exclude<TaoDataField['kind'], 'relation'>,
 ): void {
-  if (field.onDelete || field.relation) {
-    throw new Error(`Primitive field '${fieldPath}' cannot declare relationship metadata.`)
-  }
+  RuntimeAssert.input(
+    !field.onDelete && !field.relation,
+    `Primitive field '${fieldPath}' cannot declare relationship metadata.`,
+    { fieldPath },
+  )
   const hasLiteralDefault = Object.prototype.hasOwnProperty.call(field, 'defaultValue')
   if (field.defaultNow !== undefined) {
-    if (field.defaultNow !== true) {
-      throw new Error(`Field '${fieldPath}' has invalid now-default metadata.`)
-    }
-    if (hasLiteralDefault) {
-      throw new Error(`Field '${fieldPath}' cannot declare two defaults.`)
-    }
-    if (kind !== 'time') {
-      throw new Error(`Only time field '${fieldPath}' can default to now.`)
-    }
+    RuntimeAssert.input(field.defaultNow === true, `Field '${fieldPath}' has invalid now-default metadata.`, {
+      fieldPath,
+    })
+    RuntimeAssert.input(!hasLiteralDefault, `Field '${fieldPath}' cannot declare two defaults.`, { fieldPath })
+    RuntimeAssert.input(kind === 'time', `Only time field '${fieldPath}' can default to now.`, { fieldPath })
     return
   }
   if (!hasLiteralDefault) {
     return
   }
-  if (!valueMatchesKind(field.defaultValue, kind)) {
-    throw new Error(`Default for '${fieldPath}' does not match ${kind}.`)
-  }
+  RuntimeAssert.input(
+    valueMatchesKind(field.defaultValue, kind),
+    `Default for '${fieldPath}' does not match ${kind}.`,
+    { fieldPath },
+  )
 }
 
 export function valueMatchesKind(value: unknown, kind: Exclude<TaoDataField['kind'], 'relation'>): boolean {

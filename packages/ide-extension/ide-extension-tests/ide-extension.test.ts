@@ -57,7 +57,7 @@ Describe('Tao IDE extension smoke', () => {
     })
   })
 
-  Test('reports structural and Typir diagnostics through Langium services', async () => {
+  Test('reports structural and type diagnostics through Langium services', async () => {
     const diagnostics = await validateWithLanguageServerServices(`
       let Greeting = "Hello"
       app Demo {

@@ -1,5 +1,6 @@
 import React from 'react'
 import { Dev } from './dev-runtime/TR-dev'
+import { RuntimeAssert } from './TR-assert'
 import { LayoutControls, type TaoLayoutEntry, type TaoResolvedLayoutStyle } from './TR-layout'
 import { ParentDirectionContext } from './TR-parent-direction'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
@@ -115,9 +116,10 @@ export const Views = {
   },
 
   Image(props: TaoImageProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
-    if (props.decorative !== true && !props.label?.trim()) {
-      throw new Error('Informative Image requires a nonempty accessibility label.')
-    }
+    RuntimeAssert.input(
+      props.decorative === true || props.label?.trim(),
+      'Informative Image requires a nonempty accessibility label.',
+    )
     const accessibilityProps = props.decorative === true
       ? { accessible: false }
       : {

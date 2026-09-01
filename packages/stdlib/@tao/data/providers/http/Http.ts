@@ -1,4 +1,5 @@
 import type TR from '@runtime/TR'
+import { Assert, Errors } from '@shared/core'
 
 const NANOSECONDS_PER_MILLISECOND = 1e6
 
@@ -41,14 +42,14 @@ async function runAdapterFill(
   request: TR.DataFillRequest,
   ops: TR.DataFillOps,
 ): Promise<void> {
-  if (!adapter) {
-    throw new Error("An Http datasource requires an 'Adapter' declaring its supported query shapes.")
-  }
+  Assert.input(adapter, "An Http datasource requires an 'Adapter' declaring its supported query shapes.")
   const { descriptor } = request
   const shapes = adapter[descriptor.entity]
   const shape = shapes?.find(candidate => shapeMatches(candidate.matches, descriptor))
+  // Guarded rather than asserted: every fill runs through here, and this sentence walks the
+  // adapter's declared shapes to build itself, which `Assert.input` would do on the passing path too.
   if (!shape) {
-    throw new Error(
+    Errors.throwUserInput(
       `The Http adapter declares no query shape matching ${describeDescriptor(descriptor)}. `
         + (shapes?.length
           ? `Declared shapes for '${descriptor.entity}': ${shapes.map(s => describeMatch(s.matches)).join('; ')}.`

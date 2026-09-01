@@ -1,3 +1,4 @@
+import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import type { StudioProjectSession } from '../studio-src/StudioProjectSession'
 import { StudioSessionManager, type StudioSessionResource } from '../studio-src/StudioSessionManager'
@@ -105,7 +106,7 @@ Describe('Studio session manager', () => {
     })
     const current = manager.add({
       close: () => {
-        throw new Error('old close failed')
+        Errors.throwHostEnvironment('old close failed')
       },
       session: { appName: 'Wide', projectRoot: '/project' } as StudioProjectSession,
     })
@@ -130,7 +131,7 @@ Describe('Studio session manager', () => {
       close: async () => {
         attempts += 1
         if (attempts === 1) {
-          throw new Error('cleanup failed')
+          Errors.throwHostEnvironment('cleanup failed')
         }
       },
       session: { appName: 'Retry', projectRoot: '/projects/Retry' } as StudioProjectSession,
@@ -158,7 +159,7 @@ Describe('Studio session manager', () => {
       close: () => {
         attempts += 1
         if (attempts === 1) {
-          throw new Error('synchronous cleanup failed')
+          Errors.throwHostEnvironment('synchronous cleanup failed')
         }
       },
       session: { appName: 'Retry', projectRoot: '/projects/Retry' } as StudioProjectSession,
@@ -204,7 +205,7 @@ Describe('Studio session manager', () => {
       close: async () => {
         retryAttempts += 1
         if (retryAttempts === 1) {
-          throw new Error('retry closeAll')
+          Errors.throwHostEnvironment('retry closeAll')
         }
       },
       session: { appName: 'Retry all', projectRoot: '/projects/RetryAll' } as StudioProjectSession,

@@ -11,7 +11,7 @@ const appValidationMessages = {
   appPackage: (name: string) => `App ${name} cannot be declared inside a package.`,
   appBlock: (name: string) => `App ${name} contains a statement that is not app configuration.`,
   appRootCount: (name: string, count: number) =>
-    `App ${name} must declare exactly one Navigator (or transitional root view), found ${count}.`,
+    `App ${name} must declare exactly one Navigator (or root view), found ${count}.`,
   rootViewParameters: (appName: string, viewName: string) =>
     `App ${appName} root view ${viewName} must not declare parameters.`,
   nameCount: (name: string, count: number) => `App ${name} must declare exactly one Name, found ${count}.`,
@@ -68,13 +68,10 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
   const properties = statements.filter(AST.isAppProperty)
   const roots = statements.filter(AST.isAppView)
   const restoration = statements.filter(AST.isRestorationPolicy)
-  if (properties.length === 0 && roots.length > 0) {
-    validateLegacyApp(app, ctx)
-    return
-  }
   for (const statement of statements) {
     if (
       !AST.isAppProperty(statement)
+      && !AST.isAppView(statement)
       && !AST.isAppAuxiliaryNavigator(statement)
       && !AST.isRestorationPolicy(statement)
       && !AST.isStateDeclaration(statement)
@@ -83,17 +80,46 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
       ctx.error(appValidationMessages.appBlock(app.name), statement)
     }
   }
-  validateAppProperties(app.name, properties.map(suppliedSlotOfProperty), app, ctx, true)
+  const supplied = [...properties.map(suppliedSlotOfProperty), ...rootViewSlots(app, roots, properties, ctx)]
+  validateAppProperties(app.name, supplied, app, ctx, true)
   validateAppAuxiliaryNavigators(app, ctx)
   validateRestorationPolicies(app.name, restoration, ctx)
 }
 
-/** SuppliedSlot names one app slot supplied either as an app property or as a variant patch entry. */
+/** SuppliedSlot names one app slot supplied as an app property, a variant patch entry, or root-view sugar. */
 type SuppliedSlot = {
   readonly name: string
   readonly node: AST.Node
   readonly patched: boolean
+  /** sugar marks a slot the language supplies itself, so it carries no source value to type-check. */
+  readonly sugar?: boolean
   readonly value?: AST.Expression | AST.ConfigurationValue
+}
+
+// `app X { view Y }` is sugar: the root view supplies the Navigator slot with a generated slot
+// navigator, and the app's own name supplies Name, so one app shape reaches every later check.
+function rootViewSlots(
+  app: AST.AppDeclaration,
+  roots: readonly AST.AppView[],
+  properties: readonly AST.AppProperty[],
+  ctx: ValidationContext,
+): SuppliedSlot[] {
+  if (roots.length > 1) {
+    ctx.error(appValidationMessages.appRootCount(app.name, roots.length), app)
+  }
+  const root = roots[0]
+  if (!root) {
+    return []
+  }
+  if (root.view.ref && AST.parametersOf(root.view.ref).length > 0) {
+    ctx.error(appValidationMessages.rootViewParameters(app.name, root.view.ref.name), root)
+  }
+  // A spelled-out Name keeps its own value; the app's declaration name is only the sugar's default.
+  const named = properties.some(property => property.name === 'Name')
+  return [
+    ...named ? [] : [{ name: 'Name', node: root, patched: false, sugar: true }],
+    { name: 'Navigator', node: root, patched: false, sugar: true },
+  ]
 }
 
 function validateAppProperties(
@@ -116,6 +142,9 @@ function validateAppProperties(
       ctx.error(appValidationMessages.propertyDuplicate(appName, slot.name), slot.node)
     }
     seen.add(slot.name)
+    if (slot.sugar) {
+      continue
+    }
     if (!slot.value) {
       if (slot.patched && !requireComplete) {
         continue
@@ -236,23 +265,6 @@ function validateAppAuxiliaryNavigators(app: AST.AppDeclaration, ctx: Validation
     const actual = Type.ofExpression(auxiliary.value)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
       ctx.error(appValidationMessages.auxiliaryType(app.name, key, Type.displayName(actual)), auxiliary)
-    }
-  }
-}
-
-function validateLegacyApp(app: AST.AppDeclaration, ctx: ValidationContext): void {
-  for (const statement of AST.blockStatements(app)) {
-    if (!AST.isAppView(statement)) {
-      ctx.error(appValidationMessages.appBlock(app.name), statement)
-    }
-  }
-  const roots = AST.blockStatements(app).filter(AST.isAppView)
-  if (roots.length !== 1) {
-    ctx.error(appValidationMessages.appRootCount(app.name, roots.length), app)
-  }
-  for (const root of roots) {
-    if (root.view.ref && AST.parametersOf(root.view.ref).length > 0) {
-      ctx.error(appValidationMessages.rootViewParameters(app.name, root.view.ref.name), root)
     }
   }
 }

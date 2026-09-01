@@ -1,5 +1,6 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
+import { UnexpectedBehaviorError, UserInputError } from '../TaoRuntime-src/TR-errors'
 import {
   studioStateArtifactVersion,
   TaoStudioStateCodecRegistry,
@@ -38,7 +39,7 @@ Describe('Studio versioned state domains', () => {
         dataLayer('Empty state', { Notes: 'empty' }),
         dataLayer('Populated state', { Notes: 'populated' }),
       ])
-      throw new Error('Expected a state composition conflict.')
+      throw new UnexpectedBehaviorError('Expected a state composition conflict.')
     } catch (error) {
       Expect(error).toBeInstanceOf(TaoStudioStateConflictError)
       Expect(error).toMatchObject({
@@ -126,7 +127,7 @@ function numberCodec(domain: string): TaoStudioStateDomainCodec<number> {
     compose: (current, incoming) => current + incoming,
     decode(state) {
       if (typeof state !== 'number') {
-        throw new Error('Expected a number.')
+        throw new UserInputError('Expected a number.')
       }
       return state
     },

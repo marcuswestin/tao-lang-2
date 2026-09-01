@@ -1,5 +1,5 @@
-import { FS, Time } from '@shared'
-import { Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
+import { Errors, FS, Time } from '@shared'
+import { Expect, mkTestDir, Test, until, withTaoFiles } from '@shared/test'
 import { startStudioFileWatcher } from '../studio-src/StudioFileWatcher'
 import { openStudioPreviewSession } from '../studio-src/StudioPreviewSession'
 
@@ -36,7 +36,7 @@ Test(
           try {
             const compiled = await preview.session.compileInitial()
             if (compiled.status !== 'compiled') {
-              throw new Error(compiled.message)
+              Errors.throwUnexpected(compiled.message)
             }
             const generatedRoot = FS.resolvePath('_gen_tao-app', previewRuntimeRoot)
             const stableRoot = await FS.readText(FS.resolvePath('App.tsx', generatedRoot))
@@ -172,7 +172,7 @@ Test('Studio preview session scopes app scenarios to the selected variant and ke
         try {
           const compiled = await preview.session.compileInitial()
           if (compiled.status !== 'compiled') {
-            throw new Error(compiled.message)
+            Errors.throwUnexpected(compiled.message)
           }
           Expect(compiled.status).toBe('compiled')
           Expect(preview.session.previewManifest()?.scenarios.map(scenario => scenario.label))
@@ -278,11 +278,5 @@ Test('Studio file watching acknowledges its own write once and compiles later ex
 })
 
 async function waitFor(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (predicate()) {
-      return
-    }
-    await Time.sleep(10)
-  }
-  throw new Error('Timed out waiting for the Studio file watcher.')
+  await until(predicate, { description: 'the Studio file watcher' })
 }

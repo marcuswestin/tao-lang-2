@@ -98,6 +98,253 @@ export function duplicateDescribeTitleIssues(files: readonly SourceFile[]): stri
     .map(([title, paths]) => `Describe title "${title}" is duplicated across ${[...paths].sort().join(', ')}.`)
 }
 
+/*
+ * Package-source conventions. Each convention is near-perfectly held today, so each allowlist names
+ * the remaining exceptions and what closes them. An allowlisted file that is scanned and no longer
+ * breaks its convention is reported as stale so the exemption gets dropped with the work that fixed
+ * it; an allowlisted file that is not scanned at all stays silent.
+ */
+
+/** Studio kind dispatches that predate the shared `Switch` helper; convert them to close this list. */
+const NATIVE_SWITCH_ALLOWLIST = [
+  // Three `kind` dispatches in studio; the repository convention is the shared `Switch`.
+  'packages/studio/studio-src/StudioPreviewManifest.ts',
+  'packages/studio/studio-src/StudioProductHostProtocol.ts',
+  'packages/studio/studio-src/client/StudioScenarioControls.ts',
+]
+
+/**
+ * `Test-Bun.ts` is the sanctioned home for `bun:test`. The two runtime tests close with the shared
+ * `MockModule` helper planned in "Repository simplification" 2.6.
+ */
+const BUN_TEST_IMPORT_ALLOWLIST = [
+  'packages/shared/shared-src/testing/Test-Bun.ts',
+  // Both close with plan item 2.6, when they adopt `MockModule` and `reactNativeStubs`.
+  'packages/runtime/TR-tests/TR-selectable-loop.test.ts',
+  'packages/runtime/TR-tests/TR-views.test.ts',
+]
+
+/** Langium stays behind the parser package; every other package consumes `AST` from `@parser`. */
+const LANGIUM_PARSER_PREFIX = 'packages/parser/'
+
+/**
+ * Relative escapes into another package's source. Both close with the "Repository simplification"
+ * Part 5 deep-import cleanup, which promotes each target into a public package entry.
+ */
+const CROSS_PACKAGE_SOURCE_IMPORT_ALLOWLIST = [
+  'packages/dev/dev-src/studio/StudioPackagedTestCommand.ts',
+  'packages/runtime-toolchain/runtime-toolchain-tests/studio-scenario-e2e.jest-test.tsx',
+]
+
+/*
+ * Raw `Error` throws that predate Tao's error taxonomy. Unlike the other convention lists this one
+ * is a ratchet rather than a near-empty exception set: it names every file that still throws a raw
+ * `Error` today, and a package's entries go stale — and must be deleted — as that package is swept
+ * onto `Assert` and `Errors`. `packages/shared` is deliberately absent; it was swept first and must
+ * stay clean. `packages/runtime` imports nothing from `@shared` by design, so its entries are
+ * swept against `TR-assert.ts`, which mirrors the shared `Assert` the way `TR-switch.ts` already
+ * mirrors the shared `Switch`.
+ *
+ * An entry can also survive its package's sweep, and the surviving ones all name a file whose throw
+ * is emitted text rather than this repository's own program: a `<script>` body or a string evaluated
+ * in a browser page, where no Tao module is loaded at all. Generated app code is no longer such a
+ * case — it reaches the taxonomy through `TR.Errors`. Each surviving site states its reason where it
+ * is written, so read the file before deleting its entry.
+ */
+const RAW_THROW_ALLOWLIST = [
+  'packages/dev/dev-src/studio/StudioCdp.ts',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts',
+  'packages/studio/studio-src/StudioWelcome.ts',
+]
+
+/*
+ * The pattern and its message are written so this rule never matches its own source: the pattern
+ * spells the throw with escapes, and the message says "throws a raw `Error`" rather than quoting
+ * the construct it forbids.
+ */
+const RAW_THROW_DETAIL = 'throws a raw `Error`; use `Assert(...)` for invariants, `Assert.input(...)`'
+  + " or `Errors.throwUserInput(...)` for the author's mistakes, and `Errors.throwHostEnvironment(...)`"
+  + ' for host and environment failures.'
+
+/**
+ * A raw `Error` handed to a promise rejection reaches a reader exactly as a thrown one does, but the
+ * throw rule cannot see it. This is its own ratchet so the two lists stay legible: the entries here
+ * are the sites that predate the taxonomy, not an exemption for new ones.
+ */
+const REJECTED_RAW_ERROR_ALLOWLIST = [
+  'packages/code-editor/code-editor-src/CodeEditor.tsx',
+  'packages/dev/dev-src/studio/StudioCdp.ts',
+  'packages/dev/dev-src/studio/StudioTestProcessRunner.ts',
+  'packages/generation/generation-live/apple-foundation-models.live.ts',
+  'packages/generation/generation-src/apple-foundation-models-service.ts',
+  'packages/runtime-toolchain/runtime-toolchain-src/testing/test-compiler/Worker.ts',
+  'packages/runtime/TR-tests/TR-data.test.ts',
+  'packages/shared/shared-tests/test-helpers.test.ts',
+  'packages/stdlib/@tao/data/providers/instantdb/InstantDB.ts',
+  'packages/studio/studio-src/client/StudioApiClient.ts',
+  'packages/studio/studio-src/client/StudioMatrixView.ts',
+  'packages/studio/studio-tests/studio-client.test.ts',
+]
+
+const REJECTED_RAW_ERROR_DETAIL = 'rejects with a raw `Error`; reach for the same taxonomy a throw'
+  + ' would use, since a rejection reaches the reader the same way.'
+
+const NATIVE_SWITCH_PATTERN = /^[ \t]*switch[ \t]*\(/gm
+const RAW_THROW_PATTERN = /\bthrow\s+new\s+Error\s*\(/g
+const REJECTED_RAW_ERROR_PATTERN = /(?:reject|rejectPendingLoad|fail)\??\.?\(?\s*\(?\s*new\s+Error\s*\(/g
+const BUN_TEST_IMPORT_PATTERN = /\bfrom\s*['"]bun:test['"]/g
+const LANGIUM_IMPORT_PATTERN = /\bfrom\s*['"]langium(?:\/[^'"]*)?['"]/g
+const RELATIVE_IMPORT_PATTERN = /\bfrom\s*['"](\.{1,2}\/[^'"]*)['"]/g
+const PACKAGE_SOURCE_DIRECTORY_PATTERN = /(?:^|\/)[^/]*-src\//
+
+type ConventionMatch = {
+  detail: string
+  line: number
+  path: string
+}
+
+/** nativeSwitchIssues reports native `switch` statements outside the files still allowed one. */
+export function nativeSwitchIssues(
+  files: readonly SourceFile[],
+  allowlist: readonly string[] = NATIVE_SWITCH_ALLOWLIST,
+): string[] {
+  return conventionIssues(
+    files,
+    conventionMatches(
+      files,
+      NATIVE_SWITCH_PATTERN,
+      'uses a native `switch`; dispatch with `Switch` from `@shared` instead.',
+    ),
+    allowlist,
+    'no longer uses a native `switch`; drop its repo lint allowlist entry.',
+  )
+}
+
+/** bunTestImportIssues reports `bun:test` imports outside the files still allowed one. */
+export function bunTestImportIssues(
+  files: readonly SourceFile[],
+  allowlist: readonly string[] = BUN_TEST_IMPORT_ALLOWLIST,
+): string[] {
+  return conventionIssues(
+    files,
+    conventionMatches(files, BUN_TEST_IMPORT_PATTERN, 'imports `bun:test`; use `@shared/test` instead.'),
+    allowlist,
+    'no longer imports `bun:test`; drop its repo lint allowlist entry.',
+  )
+}
+
+/** rawThrowIssues reports raw `Error` throws outside the files still allowed one. */
+export function rawThrowIssues(
+  files: readonly SourceFile[],
+  allowlist: readonly string[] = RAW_THROW_ALLOWLIST,
+): string[] {
+  return conventionIssues(
+    files,
+    conventionMatches(files, RAW_THROW_PATTERN, RAW_THROW_DETAIL),
+    allowlist,
+    'no longer throws a raw `Error`; drop its repo lint allowlist entry.',
+  )
+}
+
+/** rejectedRawErrorIssues reports raw `Error`s handed to a promise rejection. */
+export function rejectedRawErrorIssues(
+  files: readonly SourceFile[],
+  allowlist: readonly string[] = REJECTED_RAW_ERROR_ALLOWLIST,
+): string[] {
+  return conventionIssues(
+    files,
+    conventionMatches(files, REJECTED_RAW_ERROR_PATTERN, REJECTED_RAW_ERROR_DETAIL),
+    allowlist,
+    'no longer rejects with a raw `Error`; drop its repo lint allowlist entry.',
+  )
+}
+
+/** langiumImportIssues reports Langium imports outside the parser package. */
+export function langiumImportIssues(files: readonly SourceFile[]): string[] {
+  return conventionMatches(
+    files.filter(file => !file.path.startsWith(LANGIUM_PARSER_PREFIX)),
+    LANGIUM_IMPORT_PATTERN,
+    `imports \`langium\` outside ${LANGIUM_PARSER_PREFIX}; use \`AST\` from \`@parser\` instead.`,
+  )
+    .map(issueLine)
+    .sort()
+}
+
+/** crossPackageSourceImportIssues reports relative imports that reach into another package's source. */
+export function crossPackageSourceImportIssues(
+  files: readonly SourceFile[],
+  allowlist: readonly string[] = CROSS_PACKAGE_SOURCE_IMPORT_ALLOWLIST,
+): string[] {
+  const matches = files.flatMap(file =>
+    [...file.source.matchAll(RELATIVE_IMPORT_PATTERN)].flatMap(match => {
+      const target = importTargetPath(file.path, match[1]!)
+      if (!crossesPackages(file.path, target) || !PACKAGE_SOURCE_DIRECTORY_PATTERN.test(target)) {
+        return []
+      }
+      return [{
+        detail: `imports \`${target}\` from another package; import that package's entry instead.`,
+        line: lineNumber(file.source, match.index),
+        path: file.path,
+      }]
+    })
+  )
+  return conventionIssues(
+    files,
+    matches,
+    allowlist,
+    "no longer imports another package's source; drop its repo lint allowlist entry.",
+  )
+}
+
+function conventionIssues(
+  files: readonly SourceFile[],
+  matches: readonly ConventionMatch[],
+  allowlist: readonly string[],
+  staleDetail: string,
+): string[] {
+  const allowed = new Set(allowlist)
+  const scanned = new Set(files.map(file => file.path))
+  const offending = new Set(matches.map(match => match.path))
+  return [
+    ...matches.filter(match => !allowed.has(match.path)).map(issueLine),
+    ...allowlist.filter(path => scanned.has(path) && !offending.has(path)).map(path => `${path} ${staleDetail}`),
+  ].sort()
+}
+
+function conventionMatches(files: readonly SourceFile[], pattern: RegExp, detail: string): ConventionMatch[] {
+  return files.flatMap(file =>
+    [...file.source.matchAll(pattern)].map(match => ({
+      detail,
+      line: lineNumber(file.source, match.index),
+      path: file.path,
+    }))
+  )
+}
+
+function issueLine(match: ConventionMatch): string {
+  return `${match.path}:${match.line} ${match.detail}`
+}
+
+function lineNumber(source: string, index: number | undefined): number {
+  return source.slice(0, index ?? 0).split('\n').length
+}
+
+function crossesPackages(fromPath: string, toPath: string): boolean {
+  const fromPackage = packageName(fromPath)
+  const toPackage = packageName(toPath)
+  return fromPackage !== undefined && toPackage !== undefined && fromPackage !== toPackage
+}
+
+function packageName(path: string): string | undefined {
+  const [root, name] = path.split('/')
+  return root === 'packages' ? name : undefined
+}
+
+function importTargetPath(fromPath: string, specifier: string): string {
+  return FS.slashPath(FS.joinPath(`${FS.dirname(fromPath)}/${specifier}`))
+}
+
 /** repoLintIssues checks repository-wide contracts that do not belong to package behavior suites. */
 export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[]> {
   const issues: string[] = []
@@ -114,18 +361,22 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   const missingEntries = missingTestAppReadmeEntries(appNames, await FS.readText(readmePath))
   issues.push(...missingEntries.map(name => `${readmePath} needs a \`## ${name}\` entry.`))
 
-  const testFiles: SourceFile[] = []
+  const packageFiles: SourceFile[] = []
   for await (
     const path of FS.walk(FS.resolvePath('packages', repoRoot), {
       excludeDirectory: name => name === 'node_modules' || name.startsWith('_gen_'),
-      extensions: ['.ts'],
+      extensions: ['.ts', '.tsx'],
     })
   ) {
-    if (path.endsWith('.test.ts')) {
-      testFiles.push({ path: FS.relativePath(repoRoot, path), source: await FS.readText(path) })
-    }
+    packageFiles.push({ path: FS.relativePath(repoRoot, path), source: await FS.readText(path) })
   }
-  issues.push(...duplicateDescribeTitleIssues(testFiles))
+  issues.push(...duplicateDescribeTitleIssues(packageFiles.filter(file => file.path.endsWith('.test.ts'))))
+  issues.push(...nativeSwitchIssues(packageFiles))
+  issues.push(...bunTestImportIssues(packageFiles))
+  issues.push(...rawThrowIssues(packageFiles))
+  issues.push(...rejectedRawErrorIssues(packageFiles))
+  issues.push(...langiumImportIssues(packageFiles))
+  issues.push(...crossPackageSourceImportIssues(packageFiles))
   return issues
 }
 

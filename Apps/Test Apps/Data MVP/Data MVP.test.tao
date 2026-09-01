@@ -21,6 +21,18 @@ test "Data MVP" {
       press #deleteTask
       expect text "No completed tasks"
    }
+   test "keeps stored rows across a relaunch" {
+      run DataMVPApp
+
+      expect text "No workspaces yet"
+      enter "Kept" into #workspaceName
+      press #addWorkspace
+      expect text "Kept"
+      relaunch
+      // A relaunch is the person quitting and reopening the app, so the rows they stored are still
+      // there. Only the launched instance's own state is dropped.
+      expect text "Kept"
+   }
    test "cascades relationship rows when a workspace is deleted" {
       run DataMVPApp
       enter "Work" into #workspaceName

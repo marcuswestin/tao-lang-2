@@ -120,7 +120,6 @@ Describe('validator: workspace structure', () => {
     const ctx = Validation.createContext(diagnostics.accept, {
       entryFilePath: uri.path,
       packagesContext,
-      typir: {} as any,
       workspaceFiles: [
         documentOne.parseResult.value!,
         documentTwo.parseResult.value!,
@@ -192,6 +191,37 @@ Describe('validator: workspace structure', () => {
     rejects(testCheck('order', 'back\nrun MyApp'), testValidationMessages.expectationBeforeRun),
   )
 
+  Test(
+    'rejects relaunch before run',
+    rejects(testCheck('relaunch order', 'relaunch\nrun MyApp'), testValidationMessages.expectationBeforeRun),
+  )
+
+  Test(
+    'accepts relaunch after run',
+    accepts(testCheck('relaunch', 'run MyApp\nrelaunch\nexpect text "Hello"')),
+  )
+
+  Test(
+    'accepts relaunch fresh after run',
+    accepts(testCheck('fresh relaunch', 'run MyApp\nrelaunch fresh\nexpect text "Hello"')),
+  )
+
+  Test(
+    'rejects relaunch inside a selected row, whose scope a relaunch replaces',
+    rejects(
+      testCheck('relaunch in select', 'run MyApp\nselect #rows[1] { relaunch }'),
+      testValidationMessages.relaunchInSelect,
+    ),
+  )
+
+  Test(
+    'rejects relaunch fresh inside a selected row, which the modifier does not excuse',
+    rejects(
+      testCheck('fresh relaunch in select', 'run MyApp\nselect #rows[1] { relaunch fresh }'),
+      testValidationMessages.relaunchInSelect,
+    ),
+  )
+
   for (
     const placementCase of [
       {
@@ -203,6 +233,16 @@ Describe('validator: workspace structure', () => {
         title: 'rejects presses at top level',
         source: 'press text "Add"',
         messages: [testValidationMessages.pressPlacement],
+      },
+      {
+        title: 'rejects relaunch at top level',
+        source: 'relaunch',
+        messages: [testValidationMessages.relaunchPlacement],
+      },
+      {
+        title: 'rejects relaunch fresh at top level',
+        source: 'relaunch fresh',
+        messages: [testValidationMessages.relaunchPlacement],
       },
       {
         title: 'rejects aliases in check blocks',

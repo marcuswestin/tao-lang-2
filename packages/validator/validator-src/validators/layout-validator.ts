@@ -38,7 +38,7 @@ type PadSide = (typeof padSideValues)[number]
 type PhysicalPadSide = 'bottom' | 'left' | 'right' | 'top'
 type ContentTermConflictKey = 'center' | 'cross-alignment' | 'horizontal' | 'main-distribution' | 'vertical'
 
-export type WeightedRigidClaim = {
+type WeightedRigidClaim = {
   readonly claim: AST.LayoutEntry
   readonly rigid: AST.LayoutEntry
 }

@@ -1,6 +1,5 @@
 import { Langium } from '@parser'
-import { Time } from '@shared'
-import { Expect, Test, withTaoFiles } from '@shared/test'
+import { Expect, Test, until, withTaoFiles } from '@shared/test'
 import { StudioLsp } from '../studio-src/StudioLsp'
 
 Test('Studio LSP transports initialize and formatting over raw WebSocket frames', async () => {
@@ -82,12 +81,5 @@ Test('Studio LSP transports initialize and formatting over raw WebSocket frames'
 })
 
 async function waitFor<T>(read: () => T | undefined): Promise<T> {
-  for (let attempt = 0; attempt < 500; attempt += 1) {
-    const value = read()
-    if (value !== undefined) {
-      return value
-    }
-    await Time.sleep(10)
-  }
-  throw new Error('Timed out waiting for Studio LSP response.')
+  return await until(read, { description: 'a Studio LSP response', timeoutMs: 5_000 }) as T
 }

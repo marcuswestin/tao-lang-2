@@ -17,7 +17,7 @@ TestDeclaration:
     (dependencies+=[Declaration:ID] (',' dependencies+=[Declaration:ID])*)?
     name=STRING? block=Block;
 
-type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep;
+type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep;
 
 RunStep:
     'run' app=[AppValueDeclaration:ID];
@@ -79,6 +79,15 @@ SelectStep:
 
 BackTestStep:
     {infer BackTestStep} 'back';
+
+// A relaunch is what a person does when they quit the app and open it again: the mounted instance is
+// torn down and a fresh one takes its place over the same device, so device-local `(persist)` state
+// and stored data outlive it while every ephemeral view state does not. The new instance restores
+// where the person was, exactly as a real relaunch does. `relaunch fresh` opts that one launch out
+// of restoring — the launch a device that has never run the app gives — and borrows the word from
+// the `Restore fresh` policy that names the same behavior.
+RelaunchStep:
+    {infer RelaunchStep} 'relaunch' fresh?='fresh'?;
 
 // Every check holds the clock still, so a journey over anything that ticks is deterministic.
 // `advance` moves it by a duration, firing every callback that falls due, in order.

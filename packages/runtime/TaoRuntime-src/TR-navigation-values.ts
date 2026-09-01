@@ -1,4 +1,6 @@
 import type React from 'react'
+import { RuntimeAssert } from './TR-assert'
+import { UserInputError } from './TR-errors'
 import type {
   TaoNavigationArguments,
   TaoNavigationPatch,
@@ -27,9 +29,10 @@ export function patchedPresentable<ValueT extends TaoPresentable | TaoNavigation
   if (patch === undefined) {
     return fallback
   }
-  if (!isPresentable(patch)) {
-    throw new Error(`Navigation ${navigationName} patch '${property}' expects ui or nav.`)
-  }
+  RuntimeAssert.input(isPresentable(patch), `Navigation ${navigationName} patch '${property}' expects ui or nav.`, {
+    navigationName,
+    property,
+  })
   return patch as ValueT
 }
 
@@ -38,12 +41,12 @@ export function patchedSelectionKey(
   navigationName: string,
 ): string {
   if (isPresentable(value) || !isEvaluable(value)) {
-    throw new Error(`SelectionNav ${navigationName} patch 'Initial' expects an @key.`)
+    throw new UserInputError(`SelectionNav ${navigationName} patch 'Initial' expects an @key.`, { navigationName })
   }
   const key = String(value.evaluate().jsValue)
-  if (!key.startsWith('@')) {
-    throw new Error(`SelectionNav ${navigationName} patch 'Initial' expects an @key.`)
-  }
+  RuntimeAssert.input(key.startsWith('@'), `SelectionNav ${navigationName} patch 'Initial' expects an @key.`, {
+    navigationName,
+  })
   return key.slice(1)
 }
 
@@ -57,7 +60,10 @@ export function patchedEvaluable(
     return fallback
   }
   if (isPresentable(patch) || !isEvaluable(patch)) {
-    throw new Error(`Navigation ${navigationName} patch '${property}' expects a scalar value.`)
+    throw new UserInputError(`Navigation ${navigationName} patch '${property}' expects a scalar value.`, {
+      navigationName,
+      property,
+    })
   }
   return patch
 }
@@ -73,9 +79,11 @@ export function assertPatchKeys(
   navigationName: string,
 ): void {
   for (const key of Object.keys(patch)) {
-    if (!allowed.includes(key)) {
-      throw new Error(`Navigation ${navigationName} has no configurable property '${key}'.`)
-    }
+    RuntimeAssert.input(
+      allowed.includes(key),
+      `Navigation ${navigationName} has no configurable property '${key}'.`,
+      { navigationName, property: key },
+    )
   }
 }
 

@@ -1,6 +1,7 @@
 import React from 'react'
 import { currentExternalEffectRevision } from './TR-action-transactions'
 import { DataControls } from './TR-data'
+import { isRedactedKey, warnContainedFailure } from './TR-errors'
 import type { RuntimeAppDefinition } from './TR-navigation-app'
 import { requireReactNativeRuntime } from './TR-react-native'
 import {
@@ -312,14 +313,14 @@ async function publishFailure(failure: TaoRuntimeFailure): Promise<void> {
     artifact = await captureRuntime(failure)
   } catch (error) {
     artifact = Object.freeze({ capturedAt: Date.now(), domains: Object.freeze([]), failure, version: 1 })
-    warnContainment('A runtime capture domain failed; publishing the minimal failure report.', error)
+    warnContainedFailure('A runtime capture domain failed; publishing the minimal failure report.', error)
   }
   lastFailureCapture = artifact
   for (const listener of failureListeners) {
     try {
       listener(artifact)
     } catch (error) {
-      warnContainment('A runtime failure listener threw while receiving a capture.', error)
+      warnContainedFailure('A runtime failure listener threw while receiving a capture.', error)
     }
   }
 }
@@ -392,7 +393,7 @@ function captureArgumentValue(
     const entries = Object.entries(value as Record<string, unknown>).slice(0, 100)
     return Object.fromEntries(
       entries.flatMap(([key, entry]) =>
-        /credential|password|secret|token|authorization/i.test(key)
+        isRedactedKey(key)
           ? []
           : [[key.slice(0, 256), captureArgumentValue(entry, ancestors, budget, depth + 1)]]
       ),
@@ -400,13 +401,6 @@ function captureArgumentValue(
   } finally {
     ancestors.delete(value)
   }
-}
-
-function warnContainment(message: string, error: unknown): void {
-  if (typeof process === 'undefined' || process.env.NODE_ENV === 'production') {
-    return
-  }
-  console.warn(message, error)
 }
 
 const styles = {

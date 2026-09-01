@@ -1,0 +1,67 @@
+use StackNav from @tao/nav
+use Button, Col, Number, Text from @tao/ui
+
+app StateActionMVP {
+   Name "State Action MVP"
+   Navigator StackNav {
+      Initial CounterView
+}  }
+
+view CounterButton(Title text, Press action()) {
+   render Button(Title) {
+      on press Press
+}  }
+
+view CounterView() {
+   Title "State Action MVP"
+   state Count = 0
+   let DisplayCount = Count
+   action SetZero() {
+      set Count = 0
+   }
+   action AddStep(Step number) {
+      set Count += Step
+   }
+   action AddFive() {
+      do AddStep(5)
+   }
+   action AddTwice() {
+      set Count += 1
+      do AddOne()
+   }
+   action AddOne() {
+      set Count += 1
+   }
+   action Decrement() {
+      set Count -= 1
+   }
+   action Double() {
+      set Count *= 2
+   }
+   action Halve() {
+      set Count /= 2
+   }
+   render Col() {
+      Text("State/action MVP")
+      Number(DisplayCount)
+      CounterButton("Add twice") {
+         on press AddTwice
+      }
+      CounterButton("Add five") {
+         on press AddFive
+      }
+      CounterButton("Decrement") {
+         on press Decrement
+      }
+      Button("Double") {
+         on press Double
+      }
+      Button("Halve") {
+         on press Halve
+      }
+      Button("Reset") {
+         on press SetZero
+      }
+      Button("Inline add one") {
+         on press -> { set Count += 1 }
+}  }  }

@@ -28,8 +28,21 @@ export function withDeclarationIdentityContext<ResultT>(
   }
 }
 
+export type DeclarationIdentityOptions = {
+  /**
+   * kind replaces the declaration-kind slot of the identity tuple. Sugar that synthesizes a runtime
+   * declaration the source never names uses it to sit beside the declaration it is derived from
+   * rather than on top of it. Every kind `declarationKind` produces is a single lowercase word or a
+   * grammar `$type`, so a hyphenated kind cannot collide with an authored declaration's identity.
+   */
+  kind?: string
+}
+
 /** compileDeclarationIdentity emits the canonical, owner-relative identity for one declaration. */
-export function compileDeclarationIdentity(declaration: AST.Declaration): Compiled {
+export function compileDeclarationIdentity(
+  declaration: AST.Declaration,
+  options: DeclarationIdentityOptions = {},
+): Compiled {
   const canonical = canonicalDeclaration(declaration)
   const context = activeContext
   Assert.defined(context, 'declaration identity context is active')
@@ -46,7 +59,7 @@ export function compileDeclarationIdentity(declaration: AST.Declaration): Compil
       project.id,
       packageId,
       modulePath,
-      declarationKind(canonical),
+      options.kind ?? declarationKind(canonical),
       canonical.name,
     ])
   })`

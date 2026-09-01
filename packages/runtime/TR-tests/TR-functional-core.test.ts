@@ -1,6 +1,10 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 
+function identity(name: string): TR.DeclarationIdentity {
+  return TR.Navigation.Identity(['tao.declaration', 1, 'tests', '@workspace', 'FunctionalCore', 'enum', name])
+}
+
 Describe('TR functional core', () => {
   Test('evaluates operators, interpolation, functions, subject cases, guards, and members', () => {
     Expect(TR.Binary(TR.Value(2), '+', TR.Value(3)).jsValue).toBe(5)
@@ -46,11 +50,11 @@ Describe('TR functional core', () => {
     Expect(TR.GuardAction(TR.Value(false), [['true', () => actions.push('unexpected')]])).toBe(false)
     Expect(TR.WhenCaseRender(TR.Value(false), [['true', () => 'first']], () => 'otherwise')).toBe('otherwise')
     Expect(TR.GuardRender(TR.Value(false), [['true', () => 'first']], () => 'remaining')).toBe('remaining')
-    Expect(TR.IsEmpty(TR.Value('')).jsValue).toBe(true)
-    Expect(TR.IsEmpty(TR.Value([])).jsValue).toBe(true)
+    Expect(TR.IsCase(TR.Value(''), 'empty').jsValue).toBe(true)
+    Expect(TR.IsCase(TR.Value([]), 'empty').jsValue).toBe(true)
 
-    const confirmResult = TR.Enum(['Confirmed', 'Cancelled'])
-    const otherResult = TR.Enum(['Confirmed'])
+    const confirmResult = TR.Enum(identity('ConfirmResult'), ['Confirmed', 'Cancelled'])
+    const otherResult = TR.Enum(identity('OtherResult'), ['Confirmed'])
     Expect(TR.IsCase(confirmResult['Confirmed']!, confirmResult['Confirmed']!).jsValue).toBe(true)
     Expect(TR.IsCase(confirmResult['Confirmed']!, otherResult['Confirmed']!).jsValue).toBe(false)
     Expect(TR.IsCase(TR.Value(false), TR.Value(false)).jsValue).toBe(true)
@@ -64,7 +68,7 @@ Describe('TR functional core', () => {
       Loading: { value: true, configurable: true },
       Error: { value: '', configurable: true },
     })
-    Expect(TR.IsEmpty(TR.Value(query)).jsValue).toBe(false)
+    Expect(TR.IsCase(TR.Value(query), 'empty').jsValue).toBe(false)
     Expect(TR.GuardAction(TR.Value(query), [['loading', () => actions.push('loading')]])).toBe(true)
     Expect(actions).toEqual(['second', 'loading'])
 
@@ -77,9 +81,9 @@ Describe('TR functional core', () => {
       message = payload.jsValue
     }]])).toBe(true)
     Expect(message).toBe('disk full')
-    Expect(TR.IsEmpty(TR.Value(query)).jsValue).toBe(false)
+    Expect(TR.IsCase(TR.Value(query), 'empty').jsValue).toBe(false)
 
     Object.defineProperty(query, 'Error', { value: '', configurable: true })
-    Expect(TR.IsEmpty(TR.Value(query)).jsValue).toBe(true)
+    Expect(TR.IsCase(TR.Value(query), 'empty').jsValue).toBe(true)
   })
 })

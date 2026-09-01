@@ -1,3 +1,4 @@
+import { RuntimeAssert } from './TR-assert'
 import type { TaoDataEntity, TaoDataField, TaoDataSchema, TaoQueryFilter } from './TR-data'
 import { valueMatchesKind } from './TR-data-definition'
 import { entityHandle } from './TR-data-entity'
@@ -34,9 +35,11 @@ export function rowValues(
       result[name] = storedFieldValue({ entityName, fieldName: name, field, value: values[name], schema })
       continue
     }
-    if (!Object.prototype.hasOwnProperty.call(field, 'defaultValue') && field.defaultNow !== true) {
-      throw new Error(`Create of '${entityName}' is missing required field '${name}'.`)
-    }
+    RuntimeAssert.input(
+      Object.prototype.hasOwnProperty.call(field, 'defaultValue') || field.defaultNow === true,
+      `Create of '${entityName}' is missing required field '${name}'.`,
+      { entityName, fieldName: name },
+    )
     const value = field.defaultNow === true ? Clock.now() : field.defaultValue
     result[name] = storedFieldValue({ entityName, fieldName: name, field, value, schema })
   }
@@ -62,9 +65,11 @@ export function partialRowValues(
 
 function assertKnownFields(entityName: string, entity: TaoDataEntity, values: Record<string, unknown>): void {
   for (const name of Object.keys(values)) {
-    if (name === 'Id' || !entity.fields[name]) {
-      throw new Error(`Entity '${entityName}' has no writable field '${name}'.`)
-    }
+    RuntimeAssert.input(
+      name !== 'Id' && entity.fields[name] !== undefined,
+      `Entity '${entityName}' has no writable field '${name}'.`,
+      { entityName, fieldName: name },
+    )
   }
 }
 
@@ -73,18 +78,22 @@ function storedFieldValue(
 ): unknown {
   if (field.kind === 'relation') {
     const handle = entityHandle(value)
-    if (!handle) {
-      throw new Error(`Relationship '${entityName}.${fieldName}' expects a live ${field.relation} entity handle.`)
-    }
+    RuntimeAssert.input(
+      handle,
+      `Relationship '${entityName}.${fieldName}' expects a live ${field.relation} entity handle.`,
+      { entityName, fieldName },
+    )
     return schema.relationId(
       handle,
       field.relation!,
       `Relationship '${entityName}.${fieldName}'`,
     )
   }
-  if (!valueMatchesKind(value, field.kind)) {
-    throw new Error(`Field '${entityName}.${fieldName}' expects ${field.kind}, got ${valueType(value)}.`)
-  }
+  RuntimeAssert.input(
+    valueMatchesKind(value, field.kind),
+    `Field '${entityName}.${fieldName}' expects ${field.kind}, got ${valueType(value)}.`,
+    { entityName, fieldName },
+  )
   return value
 }
 
@@ -95,17 +104,21 @@ export function queryFilterValue(
   schema: TaoDataSchema,
 ): unknown {
   const field = entity.fields[filter.field]
-  if (!field) {
-    throw new Error(`Entity '${entityName}' has no queryable field '${filter.field}'.`)
-  }
+  RuntimeAssert.input(
+    field,
+    `Entity '${entityName}' has no queryable field '${filter.field}'.`,
+    { entityName, fieldName: filter.field },
+  )
   const value = filter.value().evaluate().jsValue
   if (field.kind !== 'relation') {
     return value
   }
   const handle = entityHandle(value)
-  if (!handle) {
-    throw new Error(`Query filter '${entityName}.${filter.field}' expects a live ${field.relation} entity handle.`)
-  }
+  RuntimeAssert.input(
+    handle,
+    `Query filter '${entityName}.${filter.field}' expects a live ${field.relation} entity handle.`,
+    { entityName, fieldName: filter.field },
+  )
   return schema.relationId(
     handle,
     field.relation!,

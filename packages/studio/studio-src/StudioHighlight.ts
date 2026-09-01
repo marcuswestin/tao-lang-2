@@ -1,4 +1,4 @@
-import { Errors, FS, Repo } from '@shared'
+import { Assert, Errors, FS, Repo } from '@shared'
 import { createHighlighterCore } from '@shikijs/core'
 import { createJavaScriptRegexEngine } from '@shikijs/engine-javascript'
 import tsxLanguage from '@shikijs/langs/tsx'
@@ -101,9 +101,11 @@ async function createHighlighterWithShiki(): Promise<HighlighterCore> {
   const grammar = await FS.readJson<TaoTextMateGrammar>(Repo.resolvePath(
     'packages/ide-extension/ide-extension-syntaxes/_gen_syntaxes/tao-lang.tmLanguage.json',
   ))
-  if (grammar.scopeName !== 'source.tao-lang') {
-    throw new Error('The generated Tao TextMate grammar has an unexpected scope name.')
-  }
+  Assert(
+    grammar.scopeName === 'source.tao-lang',
+    'the generated Tao TextMate grammar to declare the source.tao-lang scope',
+    { scopeName: grammar.scopeName },
+  )
   return await createHighlighterCore({
     engine: createJavaScriptRegexEngine(),
     langs: [{

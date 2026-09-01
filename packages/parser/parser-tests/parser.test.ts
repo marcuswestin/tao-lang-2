@@ -358,6 +358,8 @@ Describe('parser: core language syntax', () => {
           expect missing text "Loading"
           expect input placeholder "Title" value "Draft"
           back
+          relaunch
+          relaunch fresh
         }
       }
     `)
@@ -368,7 +370,18 @@ Describe('parser: core language syntax', () => {
     const [check] = test.block.statements
     Expect.Is(check, AST.isTestDeclaration)
     Expect(check.name).toBe('renders text')
-    const [run, expectedText, pressText, enterText, submitInput, missingText, inputValue, back] = check.block.statements
+    const [
+      run,
+      expectedText,
+      pressText,
+      enterText,
+      submitInput,
+      missingText,
+      inputValue,
+      back,
+      relaunch,
+      freshRelaunch,
+    ] = check.block.statements
     Expect.Is(run, AST.isRunStep)
     Expect(run.app.ref?.name).toBe('MyApp')
     Expect.Is(expectedText, AST.isExpectTextStep)
@@ -394,6 +407,10 @@ Describe('parser: core language syntax', () => {
     Expect(inputValue.target).toBe('Title')
     Expect(inputValue.value).toBe('Draft')
     Expect.Is(back, AST.isBackTestStep)
+    Expect.Is(relaunch, AST.isRelaunchStep)
+    Expect(relaunch.fresh).toBe(false)
+    Expect.Is(freshRelaunch, AST.isRelaunchStep)
+    Expect(freshRelaunch.fresh).toBe(true)
   })
 
   Test(

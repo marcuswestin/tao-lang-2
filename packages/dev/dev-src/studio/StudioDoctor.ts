@@ -264,7 +264,7 @@ function releaseCheck(facts: StudioDoctorFacts): DoctorCheck {
       // Nothing here is configured for release, which is the ordinary state of a dev machine.
       detail: 'no signing identity or notarization credentials are configured',
       name: 'studio release',
-      remediation: 'Optional. Only ./dev package-studio-native needs them; see Docs/Spec/Tao Studio Development.md.',
+      remediation: 'Optional. Only ./dev package-studio-native needs them; see packages/studio/README.md.',
       status: 'warn',
     }
   }

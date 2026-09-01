@@ -1,3 +1,5 @@
+import { RuntimeAssert } from './TR-assert'
+import { UserInputError } from './TR-errors'
 import type {
   TaoAppDeclaration,
   TaoConfiguredNavigation,
@@ -92,11 +94,11 @@ export function resolveNavigationTarget(
   }
   const app = TaoPropsControls.appInChain(taoProps)
   const mounted = app?.resolve(target)
-  if (!mounted) {
-    throw new Error(
-      `Cannot resolve configured navigation '${target.declaration.name}': it is not mounted in the enclosing app.`,
-    )
-  }
+  RuntimeAssert.input(
+    mounted,
+    `Cannot resolve configured navigation '${target.declaration.name}': it is not mounted in the enclosing app.`,
+    { navigation: target.declaration.name },
+  )
   return mounted
 }
 
@@ -191,9 +193,11 @@ function normalizedHostSlots(configured: TaoConfiguredNavigation): Record<string
 }
 
 function configuredEvaluable(value: unknown, name: string, property: string): Evaluable {
-  if (isPresentable(value) || !value || typeof (value as Evaluable).evaluate !== 'function') {
-    throw new Error(`${name} configuration '${property}' expects a scalar Tao value.`)
-  }
+  RuntimeAssert.input(
+    !isPresentable(value) && value && typeof (value as Evaluable).evaluate === 'function',
+    `${name} configuration '${property}' expects a scalar Tao value.`,
+    { name, property },
+  )
   return value as Evaluable
 }
 
@@ -208,7 +212,7 @@ function configuredPresentable(
     ? mountConfiguredNavigation(value, registerMount, resolvePresentable)
     : value
   if (!isPresentable(mounted)) {
-    throw new Error(`${name} configuration '${property}' expects ui or nav.`)
+    throw new UserInputError(`${name} configuration '${property}' expects ui or nav.`, { name, property })
   }
   return mounted.kind === 'view' && resolvePresentable ? resolvePresentable(mounted) : mounted
 }
@@ -216,7 +220,7 @@ function configuredPresentable(
 function configuredKey(value: unknown, name: string, property: string): string {
   const key = configuredEvaluable(value, name, property).evaluate().jsValue
   if (typeof key !== 'string' || !key.startsWith('@')) {
-    throw new Error(`${name} configuration '${property}' expects an @key.`)
+    throw new UserInputError(`${name} configuration '${property}' expects an @key.`, { name, property })
   }
   return key.slice(1)
 }

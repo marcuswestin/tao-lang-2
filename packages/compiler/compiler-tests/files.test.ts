@@ -1,4 +1,4 @@
-import { Errors } from '@shared'
+import { Assert, Errors } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
 import Compiler, { type CompiledFile } from '../compiler-src/compiler'
@@ -462,23 +462,25 @@ Describe('compiler: files and packages', () => {
         "export { helper as missingHelper } from './Missing'",
       ].join('\n'),
     }, async paths => {
-      try {
-        await Workspace.compile(paths['Main.tao']!)
-        throw new Error('Expected the unresolved sidecar import to fail compilation.')
-      } catch (error) {
-        Expect(Errors.isTaoError(error)).toBe(true)
-        const diagnostics = (error as { details?: { diagnostics?: Array<Record<string, unknown>> } })
-          .details?.diagnostics ?? []
-        Expect(diagnostics).toEqual([Expect['objectContaining']({
-          filePath: paths['Api.ts'],
-          message: "Sidecar relative import './Missing' could not be resolved.",
-          severity: 'error',
-          source: 'compiler',
-          range: Expect['objectContaining']({
-            start: { line: 0, character: 23 },
-          }),
-        })])
-      }
+      // Captured outside a try/catch on purpose: a `try` block that throws its own "should have
+      // failed" error hands that error to its own `catch`, which would then assert against it.
+      const failure: unknown = await Workspace.compile(paths['Main.tao']!).then(
+        () => undefined,
+        (error: unknown) => error,
+      )
+      Assert.defined(failure, 'the unresolved sidecar import fails compilation')
+      Expect(Errors.isTaoError(failure)).toBe(true)
+      const diagnostics = (failure as { details?: { diagnostics?: Array<Record<string, unknown>> } })
+        .details?.diagnostics ?? []
+      Expect(diagnostics).toEqual([Expect['objectContaining']({
+        filePath: paths['Api.ts'],
+        message: "Sidecar relative import './Missing' could not be resolved.",
+        severity: 'error',
+        source: 'compiler',
+        range: Expect['objectContaining']({
+          start: { line: 0, character: 23 },
+        }),
+      })])
     })
   })
 

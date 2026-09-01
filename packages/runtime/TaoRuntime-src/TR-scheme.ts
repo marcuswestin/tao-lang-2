@@ -1,4 +1,5 @@
 import React from 'react'
+import { UserInputError } from './TR-errors'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 
@@ -154,7 +155,7 @@ function decodeSnapshot(value: TaoRuntimeJson): TaoSchemeSnapshot {
     || (record['resolved'] !== 'dark' && record['resolved'] !== 'light')
     || !['native-fixed', 'preference', 'scenario', 'system'].includes(String(record['source']))
   ) {
-    throw new Error('Tao Scheme capture must record requested, resolved, source, and capability.')
+    throw new UserInputError('Tao Scheme capture must record requested, resolved, source, and capability.')
   }
   const snapshot = record as TaoSchemeSnapshot
   validateSnapshot(snapshot)
@@ -174,6 +175,6 @@ function validateSnapshot(snapshot: TaoSchemeSnapshot): void {
     || (snapshot.capability === 'fixed-light-native'
       && (snapshot.resolved !== 'light' || snapshot.source !== 'native-fixed'))
   ) {
-    throw new Error('Tao Scheme snapshot is invalid.')
+    throw new UserInputError('Tao Scheme snapshot is invalid.', { snapshot })
   }
 }

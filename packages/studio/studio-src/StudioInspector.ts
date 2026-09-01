@@ -1,3 +1,4 @@
+import { Assert } from '@shared/core'
 import type {
   StudioLayoutAlignment,
   StudioLayoutContentTerm,
@@ -424,9 +425,7 @@ function editorSnippet(template: string): StudioEditorSnippet {
     }
     text += template.slice(index, start)
     const end = template.indexOf('»', start + 1)
-    if (end === -1) {
-      throw new Error('Studio editor snippet has an unclosed placeholder.')
-    }
+    Assert(end !== -1, 'every Studio editor snippet placeholder to be closed', { template })
     const placeholder = template.slice(start + 1, end)
     const range = { end: text.length + placeholder.length, start: text.length }
     text += placeholder

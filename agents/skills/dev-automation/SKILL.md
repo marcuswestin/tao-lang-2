@@ -10,6 +10,8 @@ description: >-
 - Keep Worktrunk's blocking `pre-start` hook routed through `direnv allow && direnv exec . just setup` so trust, dependencies, and generated agent adapters exist before a launched harness reads them.
 - Keep `./agent` able to reuse the primary checkout's pinned devenv profile in linked worktrees where sandboxing hides `.envrc`; never fall back to an unpinned host Node. `direnv allow && direnv exec . ./agent setup` remains the fallback when no shared profile exists.
 - Expose formatting, fixing, testing, checking, and final validation as thin `./agent` passthroughs to the matching Just recipes.
+- Treat `just --list` as the human menu. Compose recipes so one command runs all fixing and gates and separate recipes stay individually invocable, and name and describe them for someone discovering a workflow rather than recalling it.
+- Keep `./tao`, `Justfile`, and `./dev` distinct rather than collapsing them to one spelling: `./tao` is the published CLI and product surface for developers who prefer their own editor, the `Justfile` is the human menu of common tasks, and `./dev` holds what belongs in TypeScript rather than a recipe.
 - Keep the Justfile the definition point for which gates belong to `check` and `verify`; `./dev gates` owns running them and reporting the one verification summary. Its help states how to declare a lane's deliberately unrun gates.
 - Derive `./agent help` descriptions for passthrough commands from live `just help` output instead of duplicating recipe help.
 - Keep ordinary shell and Tao CLI commands outside `./agent`; run them directly or through `./tao`.
@@ -18,3 +20,6 @@ description: >-
 - Use `kebab-case` Just recipe names and `ALL_CAPS` Just variables when changing the human workflow surface.
 - Prefer self-contained command help and generated prompts over duplicating command recipes in skills.
 - Run `./agent test [pattern]` for the repository test workflow and `./agent verify` for final validation. Direct `bun test <files>` remains appropriate for a single test file.
+- `just` has no named-argument syntax. `just recipe run_id="local"` passes the literal string `run_id=local` as the recipe's _first positional_ parameter, so a composed recipe silently runs with the wrong arguments. Pass positionals in declaration order.
+- Chrome never synthesizes HTML5 drag-and-drop from `Input.dispatchMouseEvent`. Pointer-driven UI (dividers, resizers) works with mouse events; anything using `dragstart`/`drop` needs drag interception: `Input.setInterceptDrags`, then the payload from `Input.dragIntercepted`, replayed through `Input.dispatchDragEvent`. A mouse-only drag against a drop target fails silently.
+- `agents/skills/` is outside the agent sandbox's write allowlist. Editing a skill needs an unsandboxed shell; a sandboxed write fails with `PermissionError: Operation not permitted`.

@@ -1,6 +1,7 @@
 import { Describe, Expect, Test } from '@shared/test'
 import TR from '../TaoRuntime-src/TR'
-import type { TaoKeyValueStorage } from '../TaoRuntime-src/TR-data'
+import { memoryDataProvider, memoryKeyValueStorage } from '../TaoRuntime-src/TR-data-provider'
+import { UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
 import type { TaoNavigationArguments } from '../TaoRuntime-src/TR-navigation'
 import type { TaoDeclarationIdentityTuple } from '../TaoRuntime-src/TR-navigation-identity'
 import { RuntimeStackNav } from '../TaoRuntime-src/TR-navigation-mounts'
@@ -24,7 +25,7 @@ function identity(kind: string, name: string) {
 
 function runtimeApp(
   variant: string,
-  options: { mode?: 'automatic' | 'fresh' } = {},
+  options: { exclusions?: readonly ('menus' | 'sheets' | 'toasts')[]; mode?: 'automatic' | 'fresh' } = {},
 ) {
   const home = TR.Navigation.View({ identity: identity('view', 'Home'), name: 'Home', render: () => null })
   const detail = TR.Navigation.View({ identity: identity('view', 'Detail'), name: 'Detail', render: () => null })
@@ -35,7 +36,7 @@ function runtimeApp(
     name: 'RestoreApp',
     navigator: () => TR.Navigation.Configure(stack, { Initial: home }),
     restoration: {
-      exclusions: [],
+      exclusions: options.exclusions ?? [],
       mode: options.mode ?? 'automatic',
       variant,
     },
@@ -46,7 +47,7 @@ function runtimeApp(
 Describe('navigation restoration', () => {
   Test('round-trips stack entries and arguments through a relaunch', async () => {
     const values = new Map<string, string>()
-    const restoreStorage = setNavigationRestorationStorageForTests(mapStorage(values))
+    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
     try {
       const first = runtimeApp('main')
       const detach = await first.app.attachRestoration()
@@ -66,7 +67,7 @@ Describe('navigation restoration', () => {
   Test('falls back as one whole app on a schema-version mismatch and emits a tooling diagnostic', async () => {
     const values = new Map<string, string>()
     const diagnostics: NavigationRestorationDiagnostic[] = []
-    const restoreStorage = setNavigationRestorationStorageForTests(mapStorage(values))
+    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
     const unsubscribe = subscribeNavigationRestorationDiagnostics(diagnostic => diagnostics.push(diagnostic))
     try {
       const first = runtimeApp('main')
@@ -88,9 +89,53 @@ Describe('navigation restoration', () => {
     }
   })
 
+  Test('retries an identical snapshot the device refused rather than treating it as already stored', async () => {
+    const values = new Map<string, string>()
+    const attempts: string[] = []
+    const diagnostics: NavigationRestorationDiagnostic[] = []
+    const restoreStorage = setNavigationRestorationStorageForTests({
+      getItem: key => Promise.resolve(values.get(key) ?? null),
+      setItem: async (key, value) => {
+        attempts.push(value)
+        // One transient refusal, of the kind a full or briefly unavailable device gives.
+        if (attempts.length === 1) {
+          throw new UnexpectedBehaviorError('The device refused this write.')
+        }
+        values.set(key, value)
+      },
+    })
+    const unsubscribe = subscribeNavigationRestorationDiagnostics(diagnostic => diagnostics.push(diagnostic))
+    try {
+      const { app, detail } = runtimeApp('transient', { exclusions: ['sheets'] })
+      const detach = await app.attachRestoration()
+      app.present(app.navigator, detail, {})
+      await drainMicrotasks()
+      Expect(attempts).toHaveLength(1)
+      Expect(diagnostics.map(diagnostic => diagnostic.code)).toEqual(['NAV_RESTORE_FALLBACK'])
+      Expect([...values.values()]).toEqual([])
+
+      // An excluded sheet leaves the stored position exactly as it was, so the next snapshot is
+      // byte-identical to the one the device refused. It has to be written, not skipped.
+      app.presentOverlay(app.navigator, detail, {}, { sheet: true })
+      await drainMicrotasks()
+      Expect(attempts).toHaveLength(2)
+      Expect(attempts[1]).toBe(attempts[0])
+      detach()
+
+      // The device now really holds the position, so the next launch reads it back.
+      const relaunched = runtimeApp('transient', { exclusions: ['sheets'] })
+      const detachRelaunched = await relaunched.app.attachRestoration()
+      Expect((relaunched.app.navigator as RuntimeStackNav).depth).toBe(2)
+      detachRelaunched()
+    } finally {
+      unsubscribe()
+      restoreStorage()
+    }
+  })
+
   Test('keys snapshots by app variant so preview and production bindings remain isolated', async () => {
     const values = new Map<string, string>()
-    const restoreStorage = setNavigationRestorationStorageForTests(mapStorage(values))
+    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
     try {
       const production = runtimeApp('production')
       const detachProduction = await production.app.attachRestoration()
@@ -134,7 +179,7 @@ Describe('navigation restoration', () => {
 
   Test('skips a presentation whose action argument cannot serialize', async () => {
     const values = new Map<string, string>()
-    const restoreStorage = setNavigationRestorationStorageForTests(mapStorage(values))
+    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
     try {
       const first = runtimeApp('actions')
       const detach = await first.app.attachRestoration()
@@ -153,7 +198,7 @@ Describe('navigation restoration', () => {
 
   Test('restores an entity argument as a live missing handle instead of a stale row snapshot', async () => {
     const values = new Map<string, string>()
-    const restoreStorage = setNavigationRestorationStorageForTests(mapStorage(values))
+    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
     try {
       const providerDeclaration = TR.Data.Declaration(
         'EntityMemory',
@@ -228,28 +273,15 @@ Describe('navigation restoration', () => {
   })
 })
 
+// Restoration needs the optional reference capability the shared memory provider deliberately omits.
 function memoryProvider(): TR.DataProvider {
-  const snapshots = new Map<string, string>()
+  const snapshots = memoryDataProvider()
   return {
-    connect: ({ storageKey }) => ({
-      load: () => snapshots.get(storageKey),
+    connect: context => ({
+      ...snapshots.connect(context),
       referenceToken: reference => reference.id,
       resolveReference: reference => reference.token,
-      save: snapshot => {
-        snapshots.set(storageKey, snapshot)
-      },
     }),
-  }
-}
-
-function mapStorage(values: Map<string, string>): TaoKeyValueStorage {
-  return {
-    async getItem(key) {
-      return values.get(key) ?? null
-    },
-    async setItem(key, value) {
-      values.set(key, value)
-    },
   }
 }
 

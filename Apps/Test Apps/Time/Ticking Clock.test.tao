@@ -1,0 +1,39 @@
+use TickingClock from ./
+
+test "Ticking clock" {
+   test "derives a live reading from a ticker and stops and starts it" {
+      run TickingClock
+      expect {
+         text "Elapsed: 0:00"
+         text "Elapsed seconds: 0"
+         text "Running"
+      }
+      advance 1.s
+      expect {
+         text "Elapsed: 0:01"
+         text "Elapsed seconds: 1"
+      }
+      advance 59.s
+      expect text "Elapsed: 1:00"
+      press #pause
+      expect text "Paused"
+      advance 5.min
+      expect text "Elapsed: 1:00" // a stopped ticker freezes every reading derived from it
+      press #resume
+      expect text "Running"
+      advance 1.s
+      expect text "Elapsed: 6:01" // resuming reads the clock as it now stands
+   }
+   test "keeps the held clock across a relaunch" {
+      run TickingClock
+
+      expect text "Since first start: 0"
+      advance 30.s
+      expect text "Since first start: 30"
+      relaunch
+      // The launched instance's own `StartedAt` is gone, so elapsed restarts at zero — but the clock
+      // itself is the device's, and a relaunch does not rewind it.
+      expect text "Elapsed seconds: 0"
+      expect text "Since first start: 30"
+   }
+}

@@ -1,0 +1,125 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "include": [
+    "enumMembers",
+    "exports",
+    "nsExports",
+    "nsTypes",
+    "types"
+  ],
+  "ignore": [
+    "**/_gen_*/**"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "Apps/**/*.{ts,tsx}"
+      ],
+      "project": [
+        "Apps/**/*.{ts,tsx}"
+      ],
+      "includeEntryExports": true
+    },
+    "packages/*": {
+      "entry": [
+        "*-tests/**/*.{test,jest,live}.{ts,tsx}",
+        "*-tests/**/*-fixture.{ts,tsx}"
+      ],
+      "project": [
+        "*-src/**/*.{ts,tsx}",
+        "*-tests/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/dev": {
+      "entry": [
+        "dev-src/dev.ts",
+        "dev-src/agent-dev.ts",
+        "dev-src/cli/agent-help.ts",
+        "dev-src/performance/language-performance.ts",
+        "dev-src/repository-tests/*.ts",
+        "dev-src/studio/StudioClientSnapshotProcess.ts",
+        "dev-src/studio/StudioPackagedService.ts",
+        "dev-src/studio/StudioPackagedTestCommand.ts",
+        "dev-tests/**/*.test.{ts,tsx}",
+        "performance-checks/**/*.test.{ts,tsx}",
+        "studio-smoke/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "dev-src/**/*.{ts,tsx}",
+        "dev-tests/**/*.{ts,tsx}",
+        "performance-checks/**/*.{ts,tsx}",
+        "studio-smoke/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/generation": {
+      "entry": [
+        "generation-tests/**/*.test.{ts,tsx}",
+        "generation-live/**/*.live.{ts,tsx}"
+      ],
+      "project": [
+        "generation-src/**/*.{ts,tsx}",
+        "generation-tests/**/*.{ts,tsx}",
+        "generation-live/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/ide-extension": {
+      "entry": [
+        "esbuild.config.ts",
+        "ide-extension-src/extension/main.ts",
+        "ide-extension-src/language/main.ts",
+        "ide-extension-tests/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "esbuild.config.ts",
+        "ide-extension-src/**/*.{ts,tsx}",
+        "ide-extension-tests/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/runtime": {
+      "entry": [
+        "TR-tests/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "TaoRuntime-src/**/*.{ts,tsx}",
+        "TR-tests/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/runtime-toolchain": {
+      "entry": [
+        "runtime-toolchain-src/testing/compile-app.tsx",
+        "runtime-toolchain-src/testing/render-app.tsx",
+        "runtime-toolchain-src/testing/tao-test-plan.tsx",
+        "runtime-toolchain-src/testing/test-runner.tsx",
+        "runtime-toolchain-src/testing/test-compiler/WorkerProcess.ts",
+        "runtime-toolchain-src/testing/device-module-mocks/*.setup.ts",
+        "runtime-toolchain-tests/**/*.{test,jest}.{ts,tsx}"
+      ],
+      "project": [
+        "runtime-toolchain-src/**/*.{ts,tsx}",
+        "runtime-toolchain-tests/**/*.{ts,tsx}"
+      ]
+    },
+    "packages/stdlib": {
+      "entry": [
+        "@tao/**/*.{ts,tsx}",
+        "stdlib-tests/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "@tao/**/*.{ts,tsx}",
+        "stdlib-src/**/*.{ts,tsx}",
+        "stdlib-tests/**/*.{ts,tsx}"
+      ],
+      "includeEntryExports": true
+    },
+    "packages/studio": {
+      "entry": [
+        "studio-src/TaoStudioBrowser.tsx",
+        "studio-tests/**/*.test.{ts,tsx}"
+      ],
+      "project": [
+        "studio-src/**/*.{ts,tsx}",
+        "studio-tests/**/*.{ts,tsx}"
+      ]
+    }
+  }
+}

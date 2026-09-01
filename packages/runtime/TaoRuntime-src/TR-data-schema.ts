@@ -1,4 +1,5 @@
 import { existingTransactionResource, transactionResource } from './TR-action-transactions'
+import { RuntimeAssert } from './TR-assert'
 import type {
   TaoConfiguredDatasource,
   TaoDataConnection,
@@ -38,7 +39,13 @@ import {
   queryFilterValue,
   rowValues,
 } from './TR-data-values'
-import { reportUnownedFailure } from './TR-errors'
+import {
+  errorMessage,
+  HostEnvironmentError,
+  reportUnownedFailure,
+  UnexpectedBehaviorError,
+  UserInputError,
+} from './TR-errors'
 import RuntimeSwitch from './TR-switch'
 import { Clock } from './TR-units'
 
@@ -128,9 +135,11 @@ export class RuntimeDataSchema {
   }
 
   async resetFromRecovery(): Promise<void> {
-    if (!this.connection.reset) {
-      throw new Error(`Datasource '${this.name}' does not support reset.`)
-    }
+    RuntimeAssert.defined(
+      this.connection.reset,
+      `datasource '${this.name}' exposes the provider reset its recovery offer promised`,
+      { datasource: this.name },
+    )
     await this.connection.reset()
     this.configure(this.connection, this.providerBinding)
     await this.settle()
@@ -170,7 +179,9 @@ export class RuntimeDataSchema {
     const metadata = this.requireOwnedHandle(handle)
     const token = this.connection.referenceToken?.({ entity: metadata.entity, id: metadata.id, schema: this.name })
     if (token === undefined) {
-      throw new Error(`Datasource provider for '${this.name}' does not support restoration references.`)
+      throw new UserInputError(`Datasource provider for '${this.name}' does not support restoration references.`, {
+        datasource: this.name,
+      })
     }
     return {
       entity: metadata.entity,
@@ -191,7 +202,9 @@ export class RuntimeDataSchema {
       token: reference.token,
     })
     if (id === undefined) {
-      throw new Error(`Datasource provider for '${this.name}' cannot resolve restoration references.`)
+      throw new UserInputError(`Datasource provider for '${this.name}' cannot resolve restoration references.`, {
+        datasource: this.name,
+      })
     }
     return this.handle(reference.entity, id)
   }
@@ -209,7 +222,8 @@ export class RuntimeDataSchema {
     this.configure(connection, providerBinding)
     await this.settle()
     if (this.connection === connection && this.status === 'error') {
-      throw new Error(this.error)
+      // `this.error` is the provider's own load or save failure sentence, already user-facing.
+      throw new HostEnvironmentError(this.error, { details: { datasource: this.name } })
     }
   }
 
@@ -522,16 +536,18 @@ export class RuntimeDataSchema {
     this.requireReady('fill')
     const entity = this.requireEntity(entityName)
     const uniqueField = Object.entries(entity.fields).find(([, field]) => field.unique)?.[0]
-    if (!uniqueField) {
-      throw new Error(`Fill upsert into '${entityName}' requires a field marked (unique).`)
-    }
+    RuntimeAssert.input(uniqueField, `Fill upsert into '${entityName}' requires a field marked (unique).`, {
+      entityName,
+    })
     const next = [...(this.data.rows[entityName] ?? [])]
     for (const raw of rows) {
       const resolved = this.resolveFillRow(entityName, entity, raw)
-      const uniqueValue = resolved[uniqueField]
-      if (uniqueValue === undefined) {
-        throw new Error(`Fill upsert into '${entityName}' is missing unique field '${uniqueField}'.`)
-      }
+      const uniqueValue: unknown = resolved[uniqueField]
+      RuntimeAssert.input(
+        uniqueValue !== undefined,
+        `Fill upsert into '${entityName}' is missing unique field '${uniqueField}'.`,
+        { entityName },
+      )
       const index = next.findIndex(row => Object.is(row[uniqueField], uniqueValue))
       if (index >= 0) {
         next[index] = { ...next[index], ...resolved, Id: next[index]!.Id }
@@ -552,22 +568,25 @@ export class RuntimeDataSchema {
     for (const [name, value] of Object.entries(raw)) {
       const field = entity.fields[name]
       if (name === 'Id' || !field) {
-        throw new Error(`Entity '${entityName}' has no fillable field '${name}'.`)
+        throw new UserInputError(`Entity '${entityName}' has no fillable field '${name}'.`, {
+          entityName,
+          fieldName: name,
+        })
       }
       if (field.kind !== 'relation') {
-        if (!valueMatchesKind(value, field.kind)) {
-          throw new Error(
-            `Fill field '${entityName}.${name}' expects ${field.kind}, got ${value === null ? 'null' : typeof value}.`,
-          )
-        }
+        RuntimeAssert.input(
+          valueMatchesKind(value, field.kind),
+          `Fill field '${entityName}.${name}' expects ${field.kind}, got ${value === null ? 'null' : typeof value}.`,
+          { entityName, fieldName: name },
+        )
         resolved[name] = value
         continue
       }
-      if (typeof value !== 'object' || value === null) {
-        throw new Error(
-          `Fill relation '${entityName}.${name}' expects an object naming the ${field.relation} unique field.`,
-        )
-      }
+      RuntimeAssert.input(
+        typeof value === 'object' && value !== null,
+        `Fill relation '${entityName}.${name}' expects an object naming the ${field.relation} unique field.`,
+        { entityName, fieldName: name },
+      )
       resolved[name] = this.resolveFillRelation(entityName, name, field.relation!, value as Record<string, unknown>)
     }
     return resolved
@@ -582,18 +601,19 @@ export class RuntimeDataSchema {
     const target = this.requireEntity(targetEntity)
     const uniqueField = Object.entries(target.fields).find(([, field]) => field.unique)?.[0]
     if (!uniqueField || reference[uniqueField] === undefined) {
-      throw new Error(
-        `Fill relation '${entityName}.${fieldName}' must name ${targetEntity}'s unique field.`,
-      )
+      throw new UserInputError(`Fill relation '${entityName}.${fieldName}' must name ${targetEntity}'s unique field.`, {
+        entityName,
+        fieldName,
+      })
     }
     const expected = reference[uniqueField]
     const row = (this.data.rows[targetEntity] ?? []).find(candidate => Object.is(candidate[uniqueField], expected))
-    if (!row) {
-      throw new Error(
-        `Fill relation '${entityName}.${fieldName}' references no stored ${targetEntity} with `
-          + `${uniqueField} '${String(expected)}'. Upsert the ${targetEntity} rows first in the same fill.`,
-      )
-    }
+    RuntimeAssert.input(
+      row,
+      `Fill relation '${entityName}.${fieldName}' references no stored ${targetEntity} with `
+        + `${uniqueField} '${String(expected)}'. Upsert the ${targetEntity} rows first in the same fill.`,
+      { entityName, fieldName },
+    )
     return row.Id
   }
 
@@ -613,7 +633,10 @@ export class RuntimeDataSchema {
       } else if (Object.prototype.hasOwnProperty.call(field, 'defaultValue')) {
         row[name] = field.defaultValue
       } else {
-        throw new Error(`Fill upsert into '${entityName}' is missing required field '${name}'.`)
+        throw new UserInputError(`Fill upsert into '${entityName}' is missing required field '${name}'.`, {
+          entityName,
+          fieldName: name,
+        })
       }
     }
     return row
@@ -643,9 +666,9 @@ export class RuntimeDataSchema {
     const metadata = this.requireOwnedHandle(handle)
     const entity = this.requireEntity(metadata.entity)
     const existing = this.storedRow(metadata.entity, metadata.id)
-    if (!existing) {
-      throw new Error(`Cannot update deleted ${metadata.entity} '${metadata.id}'.`)
-    }
+    RuntimeAssert.input(existing, `Cannot update deleted ${metadata.entity} '${metadata.id}'.`, {
+      entity: metadata.entity,
+    })
     const fields = partialRowValues(metadata.entity, entity, values, this)
     this.data = {
       nextId: this.data.nextId,
@@ -663,9 +686,11 @@ export class RuntimeDataSchema {
     this.ensureActionOverlay()
     this.requireReady('delete')
     const metadata = this.requireOwnedHandle(handle)
-    if (!this.storedRow(metadata.entity, metadata.id)) {
-      throw new Error(`Cannot delete missing ${metadata.entity} '${metadata.id}'.`)
-    }
+    RuntimeAssert.input(
+      this.storedRow(metadata.entity, metadata.id),
+      `Cannot delete missing ${metadata.entity} '${metadata.id}'.`,
+      { entity: metadata.entity },
+    )
     const targets = new Map<string, DeleteTarget>()
     this.collectDeleteTargets(metadata.entity, metadata.id, targets)
     const rows = Object.fromEntries(
@@ -705,19 +730,23 @@ export class RuntimeDataSchema {
 
   relationId(handle: RuntimeEntityHandle, expectedEntity: string, context: string): string {
     const candidate = metadataOf(handle)
-    if (candidate.schema !== this) {
-      throw new Error(
-        `${context} expects ${expectedEntity} from data schema '${this.name}', but received ${candidate.entity} `
-          + `'${candidate.id}' from a different data schema instance named '${candidate.schema.name}'.`,
-      )
-    }
+    RuntimeAssert.input(
+      candidate.schema === this,
+      `${context} expects ${expectedEntity} from data schema '${this.name}', but received ${candidate.entity} `
+        + `'${candidate.id}' from a different data schema instance named '${candidate.schema.name}'.`,
+      { context },
+    )
     const metadata = this.requireOwnedHandle(handle)
-    if (metadata.entity !== expectedEntity) {
-      throw new Error(`${context} expects ${expectedEntity}, got ${metadata.entity}.`)
-    }
-    if (!this.storedRow(metadata.entity, metadata.id)) {
-      throw new Error(`${context} refers to missing ${expectedEntity} '${metadata.id}'.`)
-    }
+    RuntimeAssert.input(
+      metadata.entity === expectedEntity,
+      `${context} expects ${expectedEntity}, got ${metadata.entity}.`,
+      { context },
+    )
+    RuntimeAssert.input(
+      this.storedRow(metadata.entity, metadata.id),
+      `${context} refers to missing ${expectedEntity} '${metadata.id}'.`,
+      { context },
+    )
     return metadata.id
   }
 
@@ -772,11 +801,11 @@ export class RuntimeDataSchema {
         if (referringRows.length === 0) {
           continue
         }
-        if ((field.onDelete ?? 'restrict') !== 'cascade') {
-          throw new Error(
-            `Cannot delete ${entity} '${id}' because ${relatedEntityName}.${fieldName} still refers to it.`,
-          )
-        }
+        RuntimeAssert.input(
+          (field.onDelete ?? 'restrict') === 'cascade',
+          `Cannot delete ${entity} '${id}' because ${relatedEntityName}.${fieldName} still refers to it.`,
+          { entity },
+        )
         for (const row of referringRows) {
           this.collectDeleteTargets(relatedEntityName, row.Id, targets)
         }
@@ -833,9 +862,7 @@ export class RuntimeDataSchema {
         working: cloneStoredData(this.committedData),
       }),
       overlay => {
-        if (!overlay.prepared) {
-          throw new Error('Action data transaction committed without preparing its deltas.')
-        }
+        RuntimeAssert.defined(overlay.prepared, 'an action data transaction prepares its deltas before committing')
         overlay.previous = this.committedData
         this.committedData = overlay.prepared
         this.commit()
@@ -998,20 +1025,25 @@ export class RuntimeDataSchema {
 
   private requireEntity(entity: string): TaoDataEntity {
     const definition = this.definition.entities[entity]
-    if (!definition) {
-      throw new Error(`Data schema '${this.name}' has no entity '${entity}'.`)
-    }
+    RuntimeAssert.input(definition, `Data schema '${this.name}' has no entity '${entity}'.`, {
+      entity,
+      schema: this.name,
+    })
     return definition
   }
 
   private requireOwnedHandle(handle: RuntimeEntityHandle): RuntimeEntityMetadata {
     const metadata = metadataOf(handle)
-    if (metadata.schema !== this) {
-      throw new Error(`Entity handle '${metadata.id}' belongs to a different data schema.`)
-    }
-    if (metadata.generation !== this.generation) {
-      throw new Error(`Entity handle '${metadata.id}' belongs to an inactive provider generation.`)
-    }
+    RuntimeAssert.input(
+      metadata.schema === this,
+      `Entity handle '${metadata.id}' belongs to a different data schema.`,
+      { schema: this.name },
+    )
+    RuntimeAssert.input(
+      metadata.generation === this.generation,
+      `Entity handle '${metadata.id}' belongs to an inactive provider generation.`,
+      { schema: this.name },
+    )
     return metadata
   }
 
@@ -1024,7 +1056,10 @@ export class RuntimeDataSchema {
     if (this.status === 'error' && this.errorRecoverable) {
       return
     }
-    throw new Error(`Cannot ${operation} data while the provider is ${this.status}.`)
+    throw new UserInputError(`Cannot ${operation} data while the provider is ${this.status}.`, {
+      operation,
+      status: this.status,
+    })
   }
 
   private validatedStorageKey(
@@ -1033,7 +1068,9 @@ export class RuntimeDataSchema {
   ): string {
     const configured = configuration['StorageKey']
     if (configured !== undefined && typeof configured !== 'string') {
-      throw new Error(`Datasource ${declarationName} configuration 'StorageKey' expects text.`)
+      throw new UserInputError(`Datasource ${declarationName} configuration 'StorageKey' expects text.`, {
+        datasource: declarationName,
+      })
     }
     return configured ?? this.definition.name
   }
@@ -1045,7 +1082,10 @@ export class RuntimeDataSchema {
       if (canonical) {
         return canonical
       }
-      throw new Error(`Datasource declaration '${binding.declaration.name}' has no canonical identity.`)
+      throw new UnexpectedBehaviorError(
+        `Datasource declaration '${binding.declaration.name}' has no canonical identity.`,
+        { details: { datasource: binding.declaration.name } },
+      )
     }
     return String(binding ?? 'unbound')
   }
@@ -1091,9 +1131,11 @@ function applyStoredDataDelta(base: StoredData, working: StoredData, current: St
         continue
       }
       const currentRow = currentRows.get(id)
-      if (!currentRow) {
-        throw new Error(`Cannot commit action update because ${entity} '${id}' was deleted concurrently.`)
-      }
+      RuntimeAssert.input(
+        currentRow,
+        `Cannot commit action update because ${entity} '${id}' was deleted concurrently.`,
+        { entity },
+      )
       for (const [field, value] of Object.entries(workingRow)) {
         if (!Object.is(value, baseRow[field])) {
           currentRow[field] = value
@@ -1105,9 +1147,11 @@ function applyStoredDataDelta(base: StoredData, working: StoredData, current: St
       if (baseRows.has(id)) {
         continue
       }
-      if (currentRows.has(id)) {
-        throw new Error(`Cannot commit action create because ${entity} '${id}' now exists.`)
-      }
+      RuntimeAssert.input(
+        !currentRows.has(id),
+        `Cannot commit action create because ${entity} '${id}' now exists.`,
+        { entity },
+      )
       currentRows.set(id, { ...workingRow })
     }
     rows[entity] = [...currentRows.values()]
@@ -1129,8 +1173,4 @@ function brokenConnection(error: unknown): TaoDataConnection {
 
 function isPromise<T>(value: T | Promise<T>): value is Promise<T> {
   return !!value && typeof (value as Promise<T>).then === 'function'
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

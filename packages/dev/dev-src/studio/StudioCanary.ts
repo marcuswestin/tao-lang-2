@@ -28,6 +28,33 @@ export const MANUAL_CHECKS = [
   'Close the final window and confirm Tao Studio quits.',
 ] as const
 
+const DEFAULT_CANARY_PROJECT = { appName: 'HNReader', projectRoot: 'Apps/HNReader' }
+
+export type CanaryTargetOptions = {
+  appName?: string
+  projectRoot?: string
+}
+
+/**
+ * Resolves the project and app the canary opens. The default HNReader project always selects
+ * `HNReader`, including when `--project Apps/HNReader` is passed without `--app` — that project
+ * also ships `HNReaderStub`, so leaving the app unset is not deterministic.
+ */
+export function resolveCanaryTarget(
+  options: CanaryTargetOptions,
+  repositoryRoot: string,
+): { appName?: string; projectRoot: string } {
+  const defaultProjectRoot = FS.resolvePath(DEFAULT_CANARY_PROJECT.projectRoot, repositoryRoot)
+  const projectRoot = options.projectRoot === undefined
+    ? defaultProjectRoot
+    : FS.resolvePath(options.projectRoot, repositoryRoot)
+  const onDefaultProject = FS.slashPath(projectRoot) === FS.slashPath(defaultProjectRoot)
+  return {
+    appName: options.appName ?? (onDefaultProject ? DEFAULT_CANARY_PROJECT.appName : undefined),
+    projectRoot,
+  }
+}
+
 export type CanaryStatus = 'blocked' | 'failed' | 'passed'
 
 /** CanaryReport is the versioned result one canary run produces. */

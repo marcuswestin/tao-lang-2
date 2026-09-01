@@ -1,17 +1,17 @@
 import * as AST from './parserASTExport'
 
-export type PackageDeclarationResolveRequest = {
+type PackageDeclarationResolveRequest = {
   fromFilePath: string
   workspaceFiles: readonly AST.TaoFile[]
 }
 
 /** PackageFileResolveRequest declares import lookup state for reachable files. */
-export type PackageFileResolveRequest = {
+type PackageFileResolveRequest = {
   fromFilePath: string
 }
 
 /** ImportingStatement is any statement that names an import path to resolve against packages. */
-export type ImportingStatement = AST.UseStatement | AST.UsePackageStatement
+type ImportingStatement = AST.UseStatement | AST.UsePackageStatement
 
 /** PackageResolver resolves declarations and files reachable through Tao use statements. */
 export type PackageResolver = {

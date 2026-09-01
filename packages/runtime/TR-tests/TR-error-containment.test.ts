@@ -3,6 +3,7 @@ import {
   TaoErrorBoundary,
   type TaoErrorBoundaryProps,
 } from '@runtime/TR-error-containment'
+import { warnContainedFailure, warnDesignDivergence } from '@runtime/TR-errors'
 import { Describe, Expect, Test } from '@shared/test'
 
 function boundary(props: TaoErrorBoundaryProps): TaoErrorBoundary {
@@ -52,5 +53,55 @@ Describe('Tao error containment diagnostics', () => {
       console.warn = warn
       stop()
     }
+  })
+})
+
+Describe('Tao contained-failure warnings', () => {
+  Test('reports a swallowed failure outside production only', () => {
+    const calls: unknown[][] = []
+    const warn = console.warn
+    const environment = process.env.NODE_ENV
+    console.warn = (...args: unknown[]) => calls.push(args)
+    try {
+      process.env.NODE_ENV = 'development'
+      warnContainedFailure('Native navigation surfaces are unavailable.', new Error('no binary'))
+      process.env.NODE_ENV = 'production'
+      warnContainedFailure('Native navigation surfaces are unavailable.', new Error('no binary'))
+    } finally {
+      console.warn = warn
+      if (environment === undefined) {
+        delete process.env.NODE_ENV
+      } else {
+        process.env.NODE_ENV = environment
+      }
+    }
+
+    Expect(calls).toHaveLength(1)
+    Expect(calls[0]?.[0]).toBe('Native navigation surfaces are unavailable.')
+    Expect((calls[0]?.[1] as Error).message).toBe('no binary')
+  })
+})
+
+Describe('Tao design-divergence warnings', () => {
+  Test('reports an unhonorable declaration outside production only, and without an error', () => {
+    const calls: unknown[][] = []
+    const warn = console.warn
+    const environment = process.env.NODE_ENV
+    console.warn = (...args: unknown[]) => calls.push(args)
+    try {
+      process.env.NODE_ENV = 'development'
+      warnDesignDivergence('Tao: the platform-native Switch ignores styling clauses.')
+      process.env.NODE_ENV = 'production'
+      warnDesignDivergence('Tao: the platform-native Switch ignores styling clauses.')
+    } finally {
+      console.warn = warn
+      if (environment === undefined) {
+        delete process.env.NODE_ENV
+      } else {
+        process.env.NODE_ENV = environment
+      }
+    }
+
+    Expect(calls).toEqual([['Tao: the platform-native Switch ignores styling clauses.']])
   })
 })

@@ -538,7 +538,7 @@ function isUnresolvedType(type: TaoType): type is Extract<TaoType, { kind: 'unre
 }
 
 /** unitFamilyOfPrimitive returns the unit family a primitive type names, if it is one. */
-export function unitFamilyOfPrimitive(primitive: string): UnitFamily | undefined {
+function unitFamilyOfPrimitive(primitive: string): UnitFamily | undefined {
   return Units.isFamily(primitive) ? primitive : undefined
 }
 

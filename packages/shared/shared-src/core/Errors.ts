@@ -1,3 +1,19 @@
+/*
+ * Tao sorts every non-assertion failure into one of three categories, because each one has a
+ * different reader and a different recovery:
+ *
+ * 1. `UnexpectedBehaviorError` — an invariant Tao itself, or a layer upstream of this one, should
+ *    have guaranteed. It is a Tao bug, never the author's; the reader is a Tao developer. `Assert`
+ *    raises this category, so a guard belongs in `Assert` rather than here.
+ * 2. `UserInputError` — the author's own data or contract is wrong, and they can fix it. The reader
+ *    is the person writing the Tao program, and the message must tell them what to change.
+ *    `Assert.input` raises this category from a guard.
+ * 3. `HostEnvironmentError` — the machine, toolchain, or an external process failed: a missing
+ *    native module, an absent build artifact, a helper that would not start.
+ *    `CommandExecutionError` is this category's subprocess specialization and carries the full
+ *    command result.
+ */
+
 /** ProcessSignal declares a platform process signal value without depending on Node types. */
 export type ProcessSignal = string
 
@@ -5,6 +21,7 @@ export type ProcessSignal = string
 export type TaoError =
   | UserInputError
   | UnexpectedBehaviorError
+  | HostEnvironmentError
   | CommandExecutionError
 
 /** ErrorDetails declares structured context attached to Tao errors. */
@@ -55,6 +72,15 @@ export class UnexpectedBehaviorError extends BaseTaoError {
   }
 }
 
+/** HostEnvironmentError reports a failure of the machine, toolchain, or an external process. */
+export class HostEnvironmentError extends BaseTaoError {
+  override readonly name = 'HostEnvironmentError'
+
+  constructor(messageForUser: string, opts: { cause?: unknown; details?: ErrorDetails } = {}) {
+    super('HostEnvironmentError', messageForUser, opts)
+  }
+}
+
 /** CommandExecutionError reports a failed child process invocation. */
 export class CommandExecutionError extends BaseTaoError {
   override readonly name = 'CommandExecutionError'
@@ -79,6 +105,7 @@ export class CommandExecutionError extends BaseTaoError {
 export function isTaoError(error: unknown): error is TaoError {
   return error instanceof UserInputError
     || error instanceof UnexpectedBehaviorError
+    || error instanceof HostEnvironmentError
     || error instanceof CommandExecutionError
 }
 
@@ -98,6 +125,14 @@ export function throwUserInput(messageForUser: string, details?: ErrorDetails): 
 /** throwUnexpected throws an internal Tao error. */
 export function throwUnexpected(messageForUser: string, opts?: { cause?: unknown; details?: ErrorDetails }): never {
   throw new UnexpectedBehaviorError(messageForUser, opts)
+}
+
+/** throwHostEnvironment throws a Tao error blaming the machine, toolchain, or an external process. */
+export function throwHostEnvironment(
+  messageForUser: string,
+  opts?: { cause?: unknown; details?: ErrorDetails },
+): never {
+  throw new HostEnvironmentError(messageForUser, opts)
 }
 
 /** formatForUser renders an error message suitable for terminal users. */
@@ -136,5 +171,10 @@ function safeJson(value: unknown): string {
 }
 
 function formatCommandForError(command: string, args: readonly string[]): string {
-  return [command, ...args].join(' ')
+  return [command, ...args].map(formatCommandPart).join(' ')
+}
+
+/** formatCommandPart quotes a command word that a reader could not paste back as written. */
+function formatCommandPart(value: string): string {
+  return /^[\w./:=@+-]+$/.test(value) ? value : JSON.stringify(value)
 }

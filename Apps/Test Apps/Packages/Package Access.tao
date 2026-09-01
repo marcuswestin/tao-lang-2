@@ -1,0 +1,8 @@
+use MainView from @cards/screens
+use StackNav from @tao/nav
+
+app PackageAccess {
+   Name "Package Access"
+   Navigator StackNav {
+      Initial MainView
+}  }

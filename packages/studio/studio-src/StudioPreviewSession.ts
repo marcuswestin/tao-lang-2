@@ -1,5 +1,5 @@
 import Runtime from '@runtime-toolchain'
-import { Errors, FS } from '@shared'
+import { Assert, Errors, FS } from '@shared'
 import type {
   StudioParameterSchema,
   StudioPreviewManifestV2,
@@ -27,9 +27,7 @@ export async function openStudioPreviewSession(
   session = await StudioProjectSession.open({
     ...options,
     async compile(request) {
-      if (session === undefined) {
-        throw new Error('Tao Studio project session is not ready to compile.')
-      }
+      Assert.defined(session, 'the Tao Studio project session to exist before its first compile')
       const files = await session.files()
       const generated = await Runtime.generateApp(session.entryPath, {
         appName: request.appName,
@@ -63,9 +61,8 @@ export function matrixManifest(
 ): StudioPreviewManifestV2 {
   const compiler = generated.studioManifest
   const publication = generated.preview
-  if (compiler === undefined || publication === undefined) {
-    throw new Error('Tao Studio matrix manifests require a preview compilation.')
-  }
+  Assert.defined(compiler, 'a Studio manifest on the compilation behind a Tao Studio matrix manifest')
+  Assert.defined(publication, 'a preview publication on the compilation behind a Tao Studio matrix manifest')
   const previewScenarios = compiler.scenarios.filter(scenario =>
     scenario.subject.kind !== 'app' || scenario.subject.appName === session.appName
   )
@@ -208,9 +205,7 @@ function taoSource(source: { end: number; path: string; start: number }): Studio
 }
 
 function jsonObject(value: unknown): StudioJsonObject {
-  if (!isJsonObject(value)) {
-    throw new Error('Compiler emitted non-JSON Studio metadata.')
-  }
+  Assert.is(value, isJsonObject, 'the compiler to emit JSON Studio metadata')
   return value
 }
 

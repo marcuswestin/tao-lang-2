@@ -1,6 +1,6 @@
 import { FS, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { findTaoTestFiles, validateTaoTestFiles } from '../cli-src/test-command'
+import { findTaoTestFiles } from '../cli-src/test-command'
 import { withTaoFixture } from './test-cli-files'
 
 Describe('tao test', () => {
@@ -64,37 +64,6 @@ Describe('tao test', () => {
       const found = await findTaoTestFiles(explicitPath)
 
       Expect(found).toEqual([explicitPath])
-    })
-  })
-
-  Test('reports preflight validation errors at their source file path', async () => {
-    await withTaoFixture({
-      'Project.tao': 'project { id "tao-cli-test" name "Tao CLI test" }',
-      'Main.test.tao': Text.stripIndent(`
-        use BrokenApp from ./
-
-        test "Smoke" {
-           test "renders" {
-              run BrokenApp
-              expect text "Hello"
-           }
-        }
-      `),
-      'Broken.tao': 'app BrokenApp { }\n',
-    }, async (rootDir) => {
-      const testPath = FS.resolvePath('Main.test.tao', rootDir)
-      const brokenPath = FS.resolvePath('Broken.tao', rootDir)
-      const validationErrors = await validateTaoTestFiles([testPath])
-
-      Expect(validationErrors).toEqual([
-        {
-          path: brokenPath,
-          messages: [
-            'App BrokenApp must declare exactly one Name, found 0.',
-            'App BrokenApp must declare exactly one Navigator (or transitional root view), found 0.',
-          ],
-        },
-      ])
     })
   })
 })

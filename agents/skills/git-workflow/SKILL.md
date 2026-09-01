@@ -41,6 +41,12 @@ only safe after confirming nothing uncommitted was there.
 Ordinary commits follow `commit-all-chunks`: a concise summary, then one bullet per line with no blank
 lines between bullets.
 
+`git merge --squash` stages its result without writing `MERGE_HEAD`, so **`git merge --abort` does not
+undo it** — it reports there is nothing to abort. Undo a staged squash with `git reset --hard HEAD`, then
+`rm -f .git/SQUASH_MSG`. Check `git status` first: a hard reset also discards every unstaged edit in that
+checkout. If the staged tree holds work that exists nowhere else, capture it first —
+`git commit-tree $(git write-tree) -p HEAD -m backup` and keep the SHA in a ref.
+
 Squash commits additionally preserve Git's squash appendix, which is how every squash commit on `main`
 is written:
 

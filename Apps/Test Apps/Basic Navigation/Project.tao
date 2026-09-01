@@ -1,4 +1,0 @@
-project {
-   id "tao-test-basic-navigation"
-   name "Basic Navigation"
-}

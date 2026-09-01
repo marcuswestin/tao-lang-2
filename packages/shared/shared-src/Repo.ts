@@ -1,4 +1,5 @@
 import * as CLI from './CLI'
+import { throwHostEnvironment } from './core/Errors'
 import * as FS from './FS'
 import { runtimeProcess } from './Platform'
 
@@ -36,7 +37,7 @@ export function getRoot(cwd = runtimeProcess.cwd()): string {
 
   const root = result.stdout.trim()
   if (root.length === 0) {
-    throw new Error(`Git worktree root not found for ${cwd}`)
+    throwHostEnvironment(`Git worktree root not found for ${cwd}`)
   }
   rootByCwd.set(resolvedCwd, root)
   return root

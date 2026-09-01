@@ -1,0 +1,4 @@
+project {
+   id "navigation"
+   name "Navigation"
+}

@@ -5,6 +5,7 @@
  */
 
 import { type TaoActionValue } from './TR-action-values'
+import { UserInputError } from './TR-errors'
 import { createReactiveSource, markReactiveValue, type TaoReactiveValue } from './TR-reactive'
 
 const NANOSECONDS_PER_MILLISECOND = 1e6
@@ -122,7 +123,9 @@ class RuntimeClock {
    */
   advance(milliseconds: number): void {
     if (this.virtualNowMs === undefined) {
-      throw new Error('The Tao clock can only be advanced while a test holds it.')
+      // A guard cannot stand in here: the narrowing this `undefined` check produces is what the
+      // rest of the method arithmetic depends on.
+      throw new UserInputError('The Tao clock can only be advanced while a test holds it.')
     }
     const target = this.virtualNowMs + milliseconds
     for (;;) {

@@ -2,6 +2,7 @@ import type TRType from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import { mock } from 'bun:test'
 import React from 'react'
+import { UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
 
 const reactNativeRuntime = {
   ActivityIndicator: 'ActivityIndicator',
@@ -108,7 +109,7 @@ Describe('TR.Views explicit visual props', () => {
         return design
       },
       navigator: () => {
-        throw new Error('design resolution must not mount navigation')
+        throw new UnexpectedBehaviorError('design resolution must not mount navigation')
       },
     })
 
@@ -380,7 +381,7 @@ Describe('TR.Views checkbox', () => {
       disabled: true,
       label: 'Final',
       onChange: () => {
-        throw new Error('disabled checkbox changed')
+        throw new UnexpectedBehaviorError('disabled checkbox changed')
       },
       value: false,
     }))
@@ -491,7 +492,7 @@ function styledApp(name: string, surface: string): ReturnType<typeof TR.Navigati
     auxiliaries: () => ({}),
     design: () => design,
     navigator: () => {
-      throw new Error('design resolution must not mount navigation')
+      throw new UnexpectedBehaviorError('design resolution must not mount navigation')
     },
   })
 }
@@ -507,7 +508,7 @@ function styledElementApp(
     auxiliaries: () => ({}),
     design: () => design,
     navigator: () => {
-      throw new Error('design resolution must not mount navigation')
+      throw new UnexpectedBehaviorError('design resolution must not mount navigation')
     },
   })
 }

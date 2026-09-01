@@ -215,6 +215,8 @@ export class StudioCdp {
   async drag(fromSelector: string, toSelector: string, options: { steps?: number } = {}): Promise<void> {
     const steps = options.steps ?? 8
     requirePositiveInteger(steps, 'Studio browser drag steps')
+    // Raw `Error`: this string is evaluated by Chrome through `Runtime.evaluate`, so it runs in the
+    // page with no module system and no reach into Tao's error taxonomy.
     const points = await this.evaluate<{ end: Point; start: Point }>(`(() => {
       const center = (selector, label) => {
         const element = document.querySelector(selector)
@@ -227,7 +229,7 @@ export class StudioCdp {
         end: center(${JSON.stringify(toSelector)}, 'drag target'),
       }
     })()`)
-    await this.dispatchDrag(points.start, points.end, steps)
+    await this.dispatchHtml5Drag(points.start, points.end, steps)
   }
 
   async dragBy(selector: string, delta: Point, options: { steps?: number } = {}): Promise<void> {
@@ -237,6 +239,60 @@ export class StudioCdp {
     requireFiniteNumber(delta.y, 'Studio browser vertical drag delta')
     const start = await this.elementCenter(selector, 'drag source')
     await this.dispatchDrag(start, { x: start.x + delta.x, y: start.y + delta.y }, steps)
+  }
+
+  /**
+   * Chrome never synthesizes HTML5 drag-and-drop from plain mouse events, so `dispatchDrag` can
+   * move a pointer-driven divider but can never fire `dragstart`/`drop`. Real DnD needs drag
+   * interception: the page's own `dragstart` builds the payload, Chrome hands it back through
+   * `Input.dragIntercepted` instead of dropping it, and that payload is then replayed into
+   * dragEnter/dragOver/drop over the target.
+   */
+  private async dispatchHtml5Drag(start: Point, end: Point, steps: number): Promise<void> {
+    await this.client.send('Input.setInterceptDrags', { enabled: true })
+    try {
+      // Subscribe before the gesture: Chrome reports the interception while the moves are still
+      // being dispatched, and the whole gesture must land before the drop replays it.
+      const intercepted = new Promise<Record<string, unknown>>((resolve, reject) => {
+        const timer = setTimeout(() => {
+          unsubscribe()
+          reject(new Error('The page never started an HTML5 drag for this source element.'))
+        }, 10_000)
+        const unsubscribe = this.client.subscribe('Input.dragIntercepted', params => {
+          clearTimeout(timer)
+          unsubscribe()
+          resolve((params as { data: Record<string, unknown> }).data)
+        })
+      })
+      await this.beginDrag(start, end, steps)
+      const data = await intercepted
+      for (const type of ['dragEnter', 'dragOver', 'drop'] as const) {
+        await this.client.send('Input.dispatchDragEvent', { data, type, ...end })
+      }
+    } finally {
+      await this.client.send('Input.setInterceptDrags', { enabled: false })
+    }
+  }
+
+  /** Presses at the source and moves far enough that Chrome recognises the gesture as a drag. */
+  private async beginDrag(start: Point, end: Point, steps: number): Promise<void> {
+    await this.client.send('Input.dispatchMouseEvent', { button: 'none', buttons: 0, type: 'mouseMoved', ...start })
+    await this.client.send('Input.dispatchMouseEvent', {
+      button: 'left',
+      buttons: 1,
+      clickCount: 1,
+      type: 'mousePressed',
+      ...start,
+    })
+    for (let step = 1; step <= steps; step += 1) {
+      await this.client.send('Input.dispatchMouseEvent', {
+        button: 'left',
+        buttons: 1,
+        type: 'mouseMoved',
+        x: start.x + (end.x - start.x) * step / steps,
+        y: start.y + (end.y - start.y) * step / steps,
+      })
+    }
   }
 
   private async dispatchDrag(start: Point, end: Point, steps: number): Promise<void> {
@@ -316,6 +372,8 @@ export class StudioCdp {
   }
 
   async clickInFrame(urlPrefix: string, selector: string): Promise<void> {
+    // Raw `Error`: this string is evaluated by Chrome through `Runtime.evaluate`, so it runs in the
+    // page with no module system and no reach into Tao's error taxonomy.
     await this.evaluateInFrame(
       urlPrefix,
       `(() => {
@@ -349,7 +407,7 @@ export class StudioCdp {
     const tree = await this.client.send<{ frameTree: FrameTree }>('Page.getFrameTree')
     const frameId = findFrameId(tree.frameTree, urlPrefix)
     if (frameId === undefined) {
-      throw new Error(`Studio preview frame is missing: ${urlPrefix}`)
+      Errors.throwHostEnvironment(`Studio preview frame is missing: ${urlPrefix}`)
     }
     const world = await this.client.send<{ executionContextId: number }>('Page.createIsolatedWorld', {
       frameId,
@@ -373,7 +431,7 @@ export class StudioCdp {
       }
       await Time.sleep(100)
     }
-    throw new Error(`Timed out waiting for browser expression: ${expression}; last=${String(last)}`)
+    Errors.throwHostEnvironment(`Timed out waiting for browser expression: ${expression}; last=${String(last)}`)
   }
 
   private async evaluateInContext<Result>(expression: string, contextId?: number): Promise<Result> {
@@ -387,12 +445,14 @@ export class StudioCdp {
       returnByValue: true,
     })
     if (response.exceptionDetails !== undefined) {
-      throw new Error(`Browser evaluation failed: ${JSON.stringify(response.exceptionDetails)}`)
+      Errors.throwHostEnvironment(`Browser evaluation failed: ${JSON.stringify(response.exceptionDetails)}`)
     }
     return response.result.value as Result
   }
 
   private async elementCenter(selector: string, label: string): Promise<Point> {
+    // Raw `Error`: this string is evaluated by Chrome through `Runtime.evaluate`, so it runs in the
+    // page with no module system and no reach into Tao's error taxonomy.
     return await this.evaluate<Point>(`(() => {
       const selector = ${JSON.stringify(selector)}
       const element = document.querySelector(selector)
@@ -639,7 +699,7 @@ async function waitForActivePort(
     }
     if (command.exitCode !== null || command.signalCode !== null || command.error !== undefined) {
       const diagnostic = startupOutput.join('').trim().slice(-4_000)
-      throw new Error(
+      Errors.throwHostEnvironment(
         `Chrome exited before exposing DevTools (exit ${command.exitCode ?? 'none'}, signal ${
           command.signalCode ?? 'none'
         })${command.error === undefined ? '' : `: ${command.error.message}`}${
@@ -649,7 +709,7 @@ async function waitForActivePort(
     }
     await Time.sleep(100)
   }
-  throw new Error('Timed out waiting for Chrome DevToolsActivePort.')
+  Errors.throwHostEnvironment('Timed out waiting for Chrome DevToolsActivePort.')
 }
 
 async function waitForTarget(baseUrl: string, urlPrefix?: string): Promise<ChromeTarget> {
@@ -673,12 +733,12 @@ async function waitForTarget(baseUrl: string, urlPrefix?: string): Promise<Chrom
     }
     await Time.sleep(100)
   }
-  throw new Error(`Timed out waiting for a browser target at ${baseUrl}.`)
+  Errors.throwHostEnvironment(`Timed out waiting for a browser target at ${baseUrl}.`)
 }
 
 function requireWebSocketUrl(target: ChromeTarget): string {
   if (target.webSocketDebuggerUrl === undefined) {
-    throw new Error('Browser target has no DevTools WebSocket URL.')
+    Errors.throwHostEnvironment('Browser target has no DevTools WebSocket URL.')
   }
   return target.webSocketDebuggerUrl
 }

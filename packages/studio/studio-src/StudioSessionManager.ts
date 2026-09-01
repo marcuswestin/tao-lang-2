@@ -1,4 +1,4 @@
-import { Errors } from '@shared'
+import { Assert, Errors } from '@shared'
 import type { StudioProjectSession } from './StudioProjectSession'
 import type { StudioTestRunner } from './StudioTestRunner'
 
@@ -172,14 +172,12 @@ export class StudioSessionManager {
   #newSessionId(): string {
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const sessionId = this.#createSessionId()
-      if (!validSessionId(sessionId)) {
-        throw new Error('Studio session ID factories must return a non-empty opaque identifier.')
-      }
+      Assert(validSessionId(sessionId), 'a Studio session ID factory to return a non-empty opaque identifier')
       if (!this.#current.has(sessionId)) {
         return sessionId
       }
     }
-    throw new Error('Could not allocate a unique Studio session ID.')
+    Errors.throwUnexpected('Could not allocate a unique Studio session ID.')
   }
 
   #remember(managed: ManagedSession): void {

@@ -442,6 +442,8 @@ view StudioScenarioEnvironment(Preset text, Width number, Height number, Network
 
 view StudioScenarioControlGroup(Title text) accepts content from ./TaoStudioProductHost.tsx
 
+view StudioScenarioInspectorLabel(Label text) from ./TaoStudioProductHost.tsx
+
 view StudioNumericInput(Label text, Value number, Minimum number, Maximum number, Integer boolean, Change action(number), ChangeValid action(boolean)) from ./TaoStudioProductHost.tsx
 
 view StudioInspectorSection(Title text) accepts content from ./TaoStudioProductHost.tsx
@@ -1035,10 +1037,10 @@ view StudioScenarioPanel(State text, ResolvedAppearance text) {
       when StudioScenarioAvailable(State) {
          false -> { Text("Select a scenario preview cell to edit its arguments.") }
          otherwise -> {
-            Text(StudioScenarioEntryLabel(State))
-            Text(StudioScenarioGroupLabel(State))
-            Text(StudioScenarioSubjectId(State))
-            Text(StudioScenarioCellIdentity(State))
+            StudioScenarioInspectorLabel(Label: StudioScenarioEntryLabel(State))
+            StudioScenarioInspectorLabel(Label: StudioScenarioGroupLabel(State))
+            StudioScenarioInspectorLabel(Label: StudioScenarioSubjectId(State))
+            StudioScenarioInspectorLabel(Label: StudioScenarioCellIdentity(State))
             StudioScenarioControlGroup("View arguments") {
                when StudioScenarioArgumentIds(State) {
                   empty -> { Text("This scenario has no view arguments.") }

@@ -1,5 +1,7 @@
 import React from 'react'
 import { AppSurfaceFrame } from './TR-app-shell'
+import { RuntimeAssert } from './TR-assert'
+import { UserInputError } from './TR-errors'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type {
   TaoNavDescriptor,
@@ -113,7 +115,7 @@ export class RuntimeSplitNav extends RuntimeNavigationValue {
     codec: TaoNavigationRestorationCodec,
   ): void {
     if (snapshot.kind !== 'split') {
-      throw new Error(`Restored content is not a split for '${this.name}'.`)
+      throw new UserInputError(`Restored content is not a split for '${this.name}'.`, { navigation: this.name })
     }
     for (const [key, restored] of Object.entries(snapshot.items)) {
       const content = this.descriptor.config.items[key]?.content
@@ -204,7 +206,7 @@ function SplitNavSurface(props: { navigation: RuntimeSplitNav; taoProps?: TaoPro
 function numericWidth(width: SplitWidthBinding): number {
   const value = width.evaluate().jsValue
   if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
-    throw new Error('SplitNav Width must be a finite non-negative number.')
+    throw new UserInputError('SplitNav Width must be a finite non-negative number.', { value })
   }
   return value
 }
@@ -293,7 +295,7 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
     codec: TaoNavigationRestorationCodec,
   ): void {
     if (snapshot.kind !== 'stack') {
-      throw new Error(`Restored content is not a stack for '${this.name}'.`)
+      throw new UserInputError(`Restored content is not a stack for '${this.name}'.`, { navigation: this.name })
     }
     this.entries = [
       this.initialEntry(),
@@ -458,7 +460,7 @@ export class RuntimeSlotNav extends RuntimeNavigationValue {
     codec: TaoNavigationRestorationCodec,
   ): void {
     if (snapshot.kind !== 'slot') {
-      throw new Error(`Restored content is not a slot for '${this.name}'.`)
+      throw new UserInputError(`Restored content is not a slot for '${this.name}'.`, { navigation: this.name })
     }
     this.presented = snapshot.presented
       ? { ...codec.restorePresentable(snapshot.presented), instanceId: this.nextEntryId++ }
@@ -466,7 +468,9 @@ export class RuntimeSlotNav extends RuntimeNavigationValue {
     const initial = this.descriptor.config.initial
     if (snapshot.initialNavigation) {
       if (!isNavigation(initial) || !hasRestorationCapability(initial)) {
-        throw new Error(`Restored slot '${this.name}' requires an unrestorable nested navigator.`)
+        throw new UserInputError(`Restored slot '${this.name}' requires an unrestorable nested navigator.`, {
+          navigation: this.name,
+        })
       }
       initial.restoreNavigationSnapshot(snapshot.initialNavigation, codec)
     }
@@ -510,9 +514,11 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     super()
     const definition = descriptor.config
     this.name = descriptor.declaration.name
-    if (!definition.items[definition.initial]) {
-      throw new Error(`SelectionNav ${this.name} has no initial item '@${definition.initial}'.`)
-    }
+    RuntimeAssert.input(
+      definition.items[definition.initial],
+      `SelectionNav ${this.name} has no initial item '@${definition.initial}'.`,
+      { navigation: this.name },
+    )
     this.activeKey = definition.initial
     this.items = Object.entries(definition.items).map(([key, item]) => ({
       definition: item,
@@ -638,13 +644,17 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     codec: TaoNavigationRestorationCodec,
   ): void {
     if (snapshot.kind !== 'selection' || !this.item(snapshot.activeKey)) {
-      throw new Error(`Restored content is not a valid selection for '${this.name}'.`)
+      throw new UserInputError(`Restored content is not a valid selection for '${this.name}'.`, {
+        navigation: this.name,
+      })
     }
     this.activeKey = snapshot.activeKey
     for (const item of this.items) {
       const restored = snapshot.items[item.key]
       if (!restored) {
-        throw new Error(`Restored selection '${this.name}' has no '@${item.key}' item.`)
+        throw new UserInputError(`Restored selection '${this.name}' has no '@${item.key}' item.`, {
+          navigation: this.name,
+        })
       }
       item.entries = [
         this.initialEntry(item.definition.content),
@@ -656,7 +666,12 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
       const content = item.definition.content
       if (restored.navigation) {
         if (!isNavigation(content) || !hasRestorationCapability(content)) {
-          throw new Error(`Restored selection '${this.name}@${item.key}' requires an unrestorable navigator.`)
+          throw new UserInputError(
+            `Restored selection '${this.name}@${item.key}' requires an unrestorable navigator.`,
+            {
+              navigation: this.name,
+            },
+          )
         }
         content.restoreNavigationSnapshot(restored.navigation, codec)
       }

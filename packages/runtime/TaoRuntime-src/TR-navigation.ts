@@ -1,7 +1,8 @@
 import type React from 'react'
-import { deferTransactionCommit } from './TR-action-transactions'
+import { beginActionLaunch, deferTransactionCommit, suspendAcrossLaunch } from './TR-action-transactions'
+import { RuntimeAssert } from './TR-assert'
 import type { TaoDesign } from './TR-design'
-import { UnexpectedBehaviorError } from './TR-errors'
+import { UnexpectedBehaviorError, UserInputError } from './TR-errors'
 import { ownerOfNavigation, RuntimeAppDefinition } from './TR-navigation-app'
 import { NavigationAppHost } from './TR-navigation-app-host'
 import {
@@ -41,6 +42,7 @@ import {
   resolvePresentable,
 } from './TR-navigation-registry'
 import {
+  beginNavigationRestorationLaunch,
   beginNavigationRestorationTest,
   endNavigationRestorationTest,
 } from './TR-navigation-restoration'
@@ -300,9 +302,11 @@ export const NavigationControls = {
     arguments_: TaoNavigationArguments,
   ): void {
     const navigation = resolveNavigationTarget(taoProps, target)
-    if (!navigation) {
-      throw new Error(`Cannot present ${presentable.name}: no enclosing or explicit navigation target.`)
-    }
+    RuntimeAssert.input(
+      navigation,
+      `Cannot present ${presentable.name}: no enclosing or explicit navigation target.`,
+      { presentable: presentable.name },
+    )
     const app = resolveNavigationApp(taoProps, navigation)
     app ? app.present(navigation, presentable, arguments_) : navigation.present(presentable, arguments_)
   },
@@ -316,10 +320,12 @@ export const NavigationControls = {
     options: { sheet?: boolean } = {},
   ): void {
     const navigation = resolveNavigationTarget(taoProps, target)
-    if (!navigation) {
-      const mode = options.sheet ? 'sheet' : 'overlay'
-      throw new Error(`Cannot present ${presentable.name} as ${mode}: no enclosing or explicit navigation target.`)
-    }
+    const mode = options.sheet ? 'sheet' : 'overlay'
+    RuntimeAssert.input(
+      navigation,
+      `Cannot present ${presentable.name} as ${mode}: no enclosing or explicit navigation target.`,
+      { presentable: presentable.name },
+    )
     const app = resolveNavigationApp(taoProps, navigation)
     app
       ? app.presentOverlay(navigation, presentable, arguments_, options)
@@ -334,16 +340,21 @@ export const NavigationControls = {
     options: TaoToastPresentationOptions,
   ): void {
     const app = TaoPropsControls.appInChain(taoProps)
-    if (!app) {
-      throw new Error(`Cannot present ${presentable.name} as toast: no enclosing app.`)
-    }
-    const key = options.key.evaluate().jsValue
-    const duration = options.duration.evaluate().jsValue
+    RuntimeAssert.input(app, `Cannot present ${presentable.name} as toast: no enclosing app.`, {
+      presentable: presentable.name,
+    })
+    const key: unknown = options.key.evaluate().jsValue
+    const duration: unknown = options.duration.evaluate().jsValue
     if (typeof key !== 'string') {
-      throw new Error(`Cannot present ${presentable.name} as toast: Key must evaluate to text.`)
+      throw new UserInputError(`Cannot present ${presentable.name} as toast: Key must evaluate to text.`, {
+        presentable: presentable.name,
+      })
     }
     if (typeof duration !== 'number' || !Number.isFinite(duration) || duration < 0) {
-      throw new Error(`Cannot present ${presentable.name} as toast: Duration must be a finite non-negative duration.`)
+      throw new UserInputError(
+        `Cannot present ${presentable.name} as toast: Duration must be a finite non-negative duration.`,
+        { presentable: presentable.name },
+      )
     }
     app.presentToast(key, duration, presentable, arguments_)
   },
@@ -355,28 +366,25 @@ export const NavigationControls = {
     arguments_: TaoNavigationArguments,
   ): Promise<Evaluable> {
     const navigation = TaoPropsControls.navigationInChain(taoProps)
-    if (!navigation) {
-      throw new Error(`Cannot ask ${view.name}: no enclosing navigation target.`)
-    }
+    RuntimeAssert.input(navigation, `Cannot ask ${view.name}: no enclosing navigation target.`, { view: view.name })
     const app = resolveNavigationApp(taoProps, navigation)
-    return app ? app.ask(navigation, view, arguments_) : navigation.ask(view, arguments_)
+    // A launch boundary settles every pending response so nothing stays suspended. That answer
+    // belongs to the launch that asked, so a boundary crossed in between parks this action instead
+    // of running the rest of its body against the instance that replaced its own.
+    return suspendAcrossLaunch(app ? app.ask(navigation, view, arguments_) : navigation.ask(view, arguments_))
   },
 
   /** Respond settles only the asked occurrence inherited by the responding render tree. */
   Respond(taoProps: TaoProps | undefined, value?: Evaluable): void {
     const response = TaoPropsControls.responseInChain(taoProps)
-    if (!response) {
-      throw new Error('Cannot respond: no enclosing ask occurrence.')
-    }
+    RuntimeAssert.input(response, 'Cannot respond: no enclosing ask occurrence.')
     deferTransactionCommit(() => response.respond(value))
   },
 
   /** Dismiss delegates to the nearest enclosing navigation container. */
   Dismiss(taoProps: TaoProps | undefined): void {
     const navigation = TaoPropsControls.navigationInChain(taoProps)
-    if (!navigation) {
-      throw new Error('Cannot dismiss: no enclosing navigation target.')
-    }
+    RuntimeAssert.input(navigation, 'Cannot dismiss: no enclosing navigation target.')
     const app = resolveNavigationApp(taoProps, navigation)
     app ? app.dismiss(navigation) : navigation.dismiss()
   },
@@ -420,18 +428,20 @@ export const NavigationControls = {
   /** Activate reveals one keyed item on the matching enclosing app occurrence. */
   Activate(taoProps: TaoProps | undefined, target: RuntimeAppDefinition | undefined, key: string): void {
     const app = resolveStrictAppTarget(taoProps, target, 'activate')
-    if (!app.activate(key)) {
-      throw new Error(`App ${app.definition.name} has no selection item '@${key}'.`)
-    }
+    RuntimeAssert.input(app.activate(key), `App ${app.definition.name} has no selection item '@${key}'.`, {
+      app: app.definition.name,
+      key,
+    })
   },
 
   /** Target resolves a keyed auxiliary on the matching enclosing app occurrence. */
   Target(taoProps: TaoProps | undefined, targetApp: RuntimeAppDefinition, key: string): TaoNavigationValue {
     const app = resolveStrictAppTarget(taoProps, targetApp, 'target')
     const target = app.auxiliaries[key]
-    if (!target) {
-      throw new Error(`App ${app.definition.name} has no auxiliary navigator '@${key}'.`)
-    }
+    RuntimeAssert.input(target, `App ${app.definition.name} has no auxiliary navigator '@${key}'.`, {
+      app: app.definition.name,
+      key,
+    })
     return target
   },
 
@@ -439,13 +449,33 @@ export const NavigationControls = {
     return backNavigation(target)
   },
 
-  /** beginTest resets cached generated navigation and apps before each Tao behavior check. */
-  beginTest(options: { freshRestoration?: boolean } = {}): void {
+  /**
+   * beginTest is the check boundary: it hands the next check a device nobody has used. Cached
+   * generated navigation and apps go back to their declared configuration and restoration moves to
+   * an isolated store, so no position and no stored snapshot survives from the check before.
+   */
+  beginTest(): void {
     // Checks run the deterministic JS surfaces; a native tab bar has no host under the harness.
     disableNativeNavigationSurfaces()
-    if (options.freshRestoration) {
-      beginNavigationRestorationTest()
-    }
+    // The previous check's roots go before its occurrences do, so the pending responses the reset
+    // below settles cannot carry a suspended action into the check that is starting.
+    beginActionLaunch()
+    beginNavigationRestorationTest()
+    resetNavigationRuntime()
+  },
+
+  /**
+   * beginLaunch is the launch boundary: it ends the running launch and prepares the next one on the
+   * same device. Everything the launched instance owned goes, the store stays, so the relaunched
+   * instance reads back what this one wrote. `fresh` opts that launch out of restoring.
+   */
+  async beginLaunch(options: { fresh?: boolean } = {}): Promise<void> {
+    disableNativeNavigationSurfaces()
+    // First, before anything this boundary awaits: an action root of the ending launch can resume
+    // during those awaits, and from here on it abandons its transaction rather than committing it
+    // into the launch that replaces this one.
+    beginActionLaunch()
+    await beginNavigationRestorationLaunch(options)
     resetNavigationRuntime()
   },
 

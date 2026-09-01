@@ -1,4 +1,5 @@
 import React from 'react'
+import { RuntimeAssert } from './TR-assert'
 import { entityHandle, metadataOf } from './TR-data-entity'
 import { testDataConnection, UnboundConnection } from './TR-data-provider'
 import {
@@ -6,14 +7,12 @@ import {
   bindConfiguredDataSchema,
   canResetAllDataSchemas,
   captureDataSchemas,
-  type DataStatus,
   endTest as endDataTest,
   isDataTestMode,
   registerDataSchema,
   resetAllDataSchemas,
   restoreDataSchemas,
   revision as dataRevision,
-  setTestStatus as setDataTestStatus,
   settleAllDataSchemas,
   subscribeAll as subscribeToAllData,
 } from './TR-data-registry'
@@ -349,17 +348,13 @@ export const DataControls = {
 
   Update(row: Evaluable, fields: Record<string, Evaluable>): void {
     const handle = entityHandle(row.evaluate().jsValue)
-    if (!handle) {
-      throw new Error('Data update expects an entity handle.')
-    }
+    RuntimeAssert.input(handle, 'Data update expects an entity handle.')
     metadataOf(handle).schema.update(handle, evaluatedFields(fields))
   },
 
   Delete(row: Evaluable): void {
     const handle = entityHandle(row.evaluate().jsValue)
-    if (!handle) {
-      throw new Error('Data delete expects an entity handle.')
-    }
+    RuntimeAssert.input(handle, 'Data delete expects an entity handle.')
     metadataOf(handle).schema.delete(handle)
   },
 
@@ -409,11 +404,6 @@ export const DataControls = {
   /** endTest restores normal schema creation after a Tao check. */
   endTest(): void {
     endDataTest()
-  },
-
-  /** setTestStatus drives deterministic query loading and provider-error behavior in Tao tests. */
-  setTestStatus(status: DataStatus, message = ''): void {
-    setDataTestStatus(status, message)
   },
 
   Capture(): TaoDataCapture {
@@ -467,18 +457,17 @@ function canonicalDatasourceValue(value: unknown, ancestors: Set<object>): unkno
   if ('evaluate' in value && typeof value.evaluate === 'function') {
     return canonicalDatasourceValue(value.evaluate().jsValue, ancestors)
   }
-  if (ancestors.has(value)) {
-    throw new Error('Datasource configuration is cyclic.')
-  }
+  RuntimeAssert.input(!ancestors.has(value), 'Datasource configuration is cyclic.')
   ancestors.add(value)
   try {
     if (Array.isArray(value)) {
       return value.map(item => canonicalDatasourceValue(item, ancestors))
     }
     const prototype = Object.getPrototypeOf(value)
-    if (prototype !== Object.prototype && prototype !== null) {
-      throw new Error('Datasource configuration contains an opaque host value.')
-    }
+    RuntimeAssert.input(
+      prototype === Object.prototype || prototype === null,
+      'Datasource configuration contains an opaque host value.',
+    )
     return Object.fromEntries(
       Object.entries(value).map(([key, item]) => [
         key,

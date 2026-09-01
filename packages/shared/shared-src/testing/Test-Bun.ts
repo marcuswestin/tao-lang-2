@@ -1,4 +1,5 @@
-import { afterAll, afterEach, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test'
+import { throwHostEnvironment } from '../core/Errors'
 import { type JestApi, setTestRuntime } from './Test'
 
 export { app, fence, stubContainer, stubView, tsFence } from './TaoFixtures'
@@ -9,10 +10,16 @@ export {
   Expect,
   Jest,
   mkTestDir,
+  MockModule,
+  setClockForTest,
   setReactNativeDevModeForTest,
   Test,
   withTaoFiles,
 } from './Test'
+export { Deferred, settle, until, type UntilOptions } from './TestAsync'
+export { type TestOverrideSlot, testOverrideSlot } from './TestOverride'
+export { reactNativeStubs } from './TestReactNative'
+export { type CapturedOutput, type FakeTerminal, fakeTerminal, withCapturedOutput } from './TestTerminal'
 
 setTestRuntime({
   afterAll,
@@ -24,6 +31,9 @@ setTestRuntime({
       getJest().resetModules()
     },
   },
+  mockModule(specifier, factory) {
+    mock.module(specifier, factory)
+  },
   test,
 })
 
@@ -31,7 +41,7 @@ function getJest(): JestApi {
   const value = (globalThis as unknown as { jest?: JestApi }).jest
 
   if (value === undefined) {
-    throw new Error(`Test runtime global 'jest' is not available`)
+    throwHostEnvironment(`Test runtime global 'jest' is not available`)
   }
 
   return value

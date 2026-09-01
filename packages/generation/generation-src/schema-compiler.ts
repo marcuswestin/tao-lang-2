@@ -1,3 +1,4 @@
+import { Assert } from '@shared/core'
 import type {
   CompiledGenerationSchema,
   CompileGenerationOptions,
@@ -104,12 +105,14 @@ function compileField(
   }
 
   const declaration = declarations.get(field.type.entity)
-  if (!declaration) {
-    throw new Error(`Generation relation ${field.name} targets unknown entity ${field.type.entity}.`)
-  }
-  if (declaration.kind !== 'entity') {
-    throw new Error(`Generation relation ${field.name} must target an entity, not ${declaration.name}.`)
-  }
+  Assert.defined(
+    declaration,
+    `the declaration catalog to name entity ${field.type.entity}, the target of relation ${field.name}`,
+  )
+  Assert(
+    declaration.kind === 'entity',
+    `relation ${field.name} to target an entity, not ${declaration.name}`,
+  )
   const target = compileEntity(declaration, relations, declarations)
   return field.type.inverse
     ? { ...metadata, type: 'array', items: target }

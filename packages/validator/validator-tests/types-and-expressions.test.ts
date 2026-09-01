@@ -3,7 +3,6 @@ import { AST } from '@parser'
 import { Diagnostics, FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
-import { ExpressionsValidator } from '../validator-src/validators/expressions-validator'
 import { FunctionalCoreValidator } from '../validator-src/validators/FunctionalCoreValidator'
 import { InvocationsValidator } from '../validator-src/validators/invocations-validator'
 import { typeValidationMessages } from '../validator-src/validators/types-validator'
@@ -18,29 +17,28 @@ import {
   withValidationParse,
 } from './test-validate'
 
-const inferExpressionType = ExpressionsValidator.inferExpressionType
 const invocationValidationMessages = InvocationsValidator.messages
 
 Describe('validator: types and expressions', () => {
-  Test('exposes Typir services for primitive expression inference', async () => {
+  Test('infers primitive expression types', async () => {
     await withValidationParse(
       app('', 'let Greeting = "Hello" let Count = 3'),
-      ({ result, workspace }) => {
+      ({ result }) => {
         const aliases = result.entry.ast.statements.filter(AST.isAliasDeclaration)
 
-        Expect(inferExpressionType(aliases[0]!.value, workspace.typir)).toBe('text')
-        Expect(inferExpressionType(aliases[1]!.value, workspace.typir)).toBe('number')
+        Expect(expressionTypeName(aliases[0]!.value)).toBe('text')
+        Expect(expressionTypeName(aliases[1]!.value)).toBe('number')
       },
     )
   })
 
-  Test('infers action and stateful expression types', async () => {
+  Test('infers action and state-backed expression types', async () => {
     await withValidationParse(
       app(
         'state Count = 3 let DisplayCount = Count render Text("hi")',
         `let SaveAction = action { } ${stubView('Text', 'Value text')}`,
       ),
-      ({ result, workspace }) => {
+      ({ result }) => {
         const actionAlias = result.entry.ast.statements.find(statement =>
           AST.isAliasDeclaration(statement) && statement.name === 'SaveAction'
         )
@@ -54,14 +52,14 @@ Describe('validator: types and expressions', () => {
         })
         Expect.Is(displayAlias, AST.isAliasDeclaration)
 
-        Expect(inferExpressionType(actionAlias.value, workspace.typir)).toBe('action')
-        Expect(inferExpressionType(displayAlias.value, workspace.typir)).toBe('stateful number')
+        Expect(expressionTypeName(actionAlias.value)).toBe('action()')
+        Expect(expressionTypeName(displayAlias.value)).toBe('number')
       },
     )
   })
 
-  Test('keeps Typir nominal names distinct across files', async () => {
-    await withTaoFiles('tao-validator-typir-names-', {
+  Test('keeps nominal type identities distinct across files', async () => {
+    await withTaoFiles('tao-validator-nominal-names-', {
       'Entry.tao': `
         use OtherPerson from ./Other.tao
         app MyApp { view MainView }
@@ -78,6 +76,7 @@ Describe('validator: types and expressions', () => {
     }, async paths => {
       const workspace = await Workspace.open(FS.dirname(paths['Entry.tao']))
       const result = await workspace.validate(paths['Entry.tao'])
+
       const entryAlias = result.entry.ast.statements.find(
         statement => AST.isAliasDeclaration(statement) && statement.name === 'LocalPerson',
       )
@@ -88,17 +87,14 @@ Describe('validator: types and expressions', () => {
       Expect.Is(entryAlias, AST.isAliasDeclaration)
       Expect.Is(otherAlias, AST.isAliasDeclaration)
 
-      const entryType = inferExpressionType(entryAlias.value, workspace.typir)
-      const otherType = inferExpressionType(otherAlias.value, workspace.typir)
       const entryStaticType = Type.identityKey(Type.ofExpression(entryAlias.value))
       const otherStaticType = Type.identityKey(Type.ofExpression(otherAlias.value))
 
-      Expect(entryType).toContain('/Entry.tao#Person')
-      Expect(otherType).toContain('/Other.tao#Person')
-      Expect(entryType).not.toBe(otherType)
       Expect(entryStaticType).toContain('/Entry.tao#Person')
       Expect(otherStaticType).toContain('/Other.tao#Person')
       Expect(entryStaticType).not.toBe(otherStaticType)
+      Expect(expressionTypeName(entryAlias.value)).toBe('Person')
+      Expect(expressionTypeName(otherAlias.value)).toBe('Person')
     })
   })
 
@@ -512,6 +508,10 @@ Describe('validator: types and expressions', () => {
     Test(`rejects ${name}`, rejects(source, message))
   }
 })
+
+function expressionTypeName(expression: AST.Expression): string {
+  return Type.displayName(Type.ofExpression(expression))
+}
 
 function typeApp(declarations: string, mainBody = '', fixtures = ''): string {
   return app(mainBody, `${declarations} ${fixtures}`)

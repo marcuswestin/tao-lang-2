@@ -1,4 +1,4 @@
-import { Expect, Test, withTaoFiles } from '@shared/test'
+import { Expect, Test, until, withTaoFiles } from '@shared/test'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 import { StudioProjectSession } from '../studio-src/StudioProjectSession'
 import {
@@ -479,13 +479,7 @@ async function withSession(
 }
 
 async function eventually(predicate: () => boolean): Promise<void> {
-  for (let turn = 0; turn < 50; turn += 1) {
-    if (predicate()) {
-      return
-    }
-    await new Promise(resolve => setTimeout(resolve, 0))
-  }
-  throw new Error('Timed out waiting for provider refresh.')
+  await until(predicate, { description: 'a Studio provider refresh', intervalMs: 0 })
 }
 
 function manifest(session: StudioProjectSession): StudioPreviewManifestV2 {

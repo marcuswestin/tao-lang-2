@@ -6,8 +6,10 @@ import type {
   TaoDataProvider,
   TaoDataProviderContext,
   TaoDataSchemaDefinition,
+  TaoKeyValueStorage,
 } from '../TaoRuntime-src/TR-data'
-import { testDataConnection } from '../TaoRuntime-src/TR-data-provider'
+import { memoryDataProvider, memoryKeyValueStorage, testDataConnection } from '../TaoRuntime-src/TR-data-provider'
+import { HostEnvironmentError, UserInputError } from '../TaoRuntime-src/TR-errors'
 
 const noteDefinition: TaoDataSchemaDefinition = {
   name: 'RuntimeNotes',
@@ -26,9 +28,9 @@ const noteDefinition: TaoDataSchemaDefinition = {
 
 Describe('TR.Data provider foundation', () => {
   Test('configures and patches declaration-owned providers without losing identity', async () => {
-    const provider = memoryProvider()
+    const provider = memoryDataProvider()
     const declaration = TR.Data.Declaration('Memory', provider)
-    const sameNamedDeclaration = TR.Data.Declaration('Memory', memoryProvider())
+    const sameNamedDeclaration = TR.Data.Declaration('Memory', memoryDataProvider())
     const base = TR.Data.Configure(declaration, { StorageKey: TR.Value('base-notes') })
     const configured = TR.Data.Patch(base, { StorageKey: TR.Value('patched-notes') })
 
@@ -58,21 +60,21 @@ Describe('TR.Data provider foundation', () => {
       connect: () => ({
         load: () => undefined,
         save: () => {
-          throw new Error('deterministic rejection')
+          throw new HostEnvironmentError('deterministic rejection')
         },
       }),
     })
 
-    await TR.testProvider(memoryProvider, rejectingProvider)
+    await TR.testProvider(memoryDataProvider, rejectingProvider)
   })
 
   Test('ports Local through conformance with a deterministic storage boundary', async () => {
     const values = new Map<string, string>()
-    const storage = mapStorage(values)
+    const storage = memoryKeyValueStorage(values)
     const rejectingStorage = {
       getItem: async (_key: string): Promise<string | null> => null,
       setItem: async (_key: string, _value: string): Promise<void> => {
-        throw new Error('storage unavailable')
+        throw new HostEnvironmentError('storage unavailable')
       },
     }
 
@@ -83,7 +85,7 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('isolates in-memory envelopes by storage key', async () => {
-    const provider = memoryProvider()
+    const provider = memoryDataProvider()
     const first = providerConnection(provider, 'first-schema')
     const second = providerConnection(provider, 'second-schema')
 
@@ -115,7 +117,7 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('binds one declared Memory provider and preserves the store across repeated app renders', () => {
-    const declaration = TR.Data.Declaration('Memory', memoryProvider())
+    const declaration = TR.Data.Declaration('Memory', memoryDataProvider())
     const configured = TR.Data.Configure(declaration, {})
     const schema = TR.Data.Schema(noteDefinition)
     TR.Data.BindConfigured(schema, configured)
@@ -130,7 +132,7 @@ Describe('TR.Data provider foundation', () => {
 
   Test('keeps the fresh test Memory provider when app binding runs during a check', () => {
     const local = TR.Data.Configure(
-      TR.Data.Declaration('Local', localProvider(mapStorage(new Map()))),
+      TR.Data.Declaration('Local', localProvider(memoryKeyValueStorage(new Map()))),
       { StorageKey: TR.Value('test-isolation') },
     )
     const schema = TR.Data.Schema(noteDefinition, memoryConnection())
@@ -313,7 +315,7 @@ Describe('TR.Data provider foundation', () => {
 
   Test('persists the versioned id counter and reloads without identifier collisions', async () => {
     const values = new Map<string, string>()
-    const storage = mapStorage(values)
+    const storage = memoryKeyValueStorage(values)
     const provider = providerConnection(localProvider(storage, 'persisted-id-test'), noteDefinition.name)
     const first = TR.Data.Schema(noteDefinition, provider)
     await TR.Data.Settle(first)
@@ -370,7 +372,7 @@ Describe('TR.Data provider foundation', () => {
       save: value => {
         saveCount += 1
         if (saveCount === 1) {
-          throw new Error('temporary outage')
+          throw new HostEnvironmentError('temporary outage')
         }
         durable = value
       },
@@ -725,7 +727,7 @@ Describe('TR.Data save and sync reconciliation', () => {
       save: value => {
         lastAttempted = value
         if (rejectSaves) {
-          throw new Error('network blip')
+          throw new HostEnvironmentError('network blip')
         }
         lastSaved = value
       },
@@ -767,7 +769,7 @@ Describe('TR.Data save and sync reconciliation', () => {
       load: () => undefined,
       save: value => {
         if (rejectSaves) {
-          throw new Error('temporary outage')
+          throw new HostEnvironmentError('temporary outage')
         }
         lastSaved = value
       },
@@ -921,7 +923,7 @@ Describe('TR.Data save and sync reconciliation', () => {
   Test('routes a provider that throws on connect into data error state instead of the render', async () => {
     const throwingProvider: TaoDataProvider = {
       connect: () => {
-        throw new Error('AppId expects non-empty text.')
+        throw new UserInputError('AppId expects non-empty text.')
       },
     }
     const declaration = TR.Data.Declaration('Broken', throwingProvider)
@@ -934,7 +936,7 @@ Describe('TR.Data save and sync reconciliation', () => {
     Expect(rows.Error).toContain('AppId expects non-empty text.')
 
     // A corrected configuration rebinds and recovers without a remount.
-    const working = TR.Data.Declaration('Working', memoryProvider())
+    const working = TR.Data.Declaration('Working', memoryDataProvider())
     TR.Data.BindConfigured(schema, TR.Data.Configure(working, {}))
     await TR.Data.Settle(schema)
     Expect((schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }).Error).toBe('')
@@ -968,12 +970,7 @@ Describe('TR.Data save and sync reconciliation', () => {
 Describe('TR.Data', () => {
   Test('persists local rows and applies strict update, relationship cascade, and rehydration', async () => {
     const values = new Map<string, string>()
-    const storage = {
-      getItem: async (key: string) => values.get(key) ?? null,
-      setItem: async (key: string, value: string) => {
-        values.set(key, value)
-      },
-    }
+    const storage = memoryKeyValueStorage(values)
     const definition = {
       name: 'RuntimeDataTest',
       entities: {
@@ -1040,12 +1037,7 @@ Describe('TR.Data', () => {
           },
         }),
       ]])
-      const storage = {
-        getItem: async (key: string) => values.get(key) ?? null,
-        setItem: async (key: string, value: string) => {
-          values.set(key, value)
-        },
-      }
+      const storage = memoryKeyValueStorage(values)
       const definition = {
         name: 'Data',
         schemaVersion: 1,
@@ -1100,43 +1092,12 @@ function relationshipDefinition(name: string): TaoDataSchemaDefinition {
   }
 }
 
-function mapStorage(values: Map<string, string>): {
-  getItem(key: string): Promise<string | null>
-  setItem(key: string, value: string): Promise<void>
-} {
-  return {
-    getItem: async key => values.get(key) ?? null,
-    setItem: async (key, value) => {
-      values.set(key, value)
-    },
-  }
-}
-
-function memoryProvider(initial?: string): TaoDataProvider {
-  const stored = new Map<string, string>()
-  let initialStorageKey: string | undefined
-  return {
-    connect: ({ storageKey }) => ({
-      load: () => {
-        if (initial !== undefined && initialStorageKey === undefined) {
-          initialStorageKey = storageKey
-          stored.set(storageKey, initial)
-        }
-        return stored.get(storageKey)
-      },
-      save: value => {
-        stored.set(storageKey, value)
-      },
-    }),
-  }
-}
-
 function memoryConnection(initial?: string): TaoDataConnection {
   return testDataConnection(initial)
 }
 
 function localProvider(
-  storage: ReturnType<typeof mapStorage>,
+  storage: TaoKeyValueStorage,
   keyPrefix = 'tao-data',
 ): TaoDataProvider {
   return {

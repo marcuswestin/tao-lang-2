@@ -1,4 +1,5 @@
 import { type TaoActionFactory, type TaoActionValue, type TaoEvaluable } from './TR-action-values'
+import { HostEnvironmentError } from './TR-errors'
 
 type NativeModules = {
   required<T>(capability: string, moduleName: 'react-native'): T
@@ -30,7 +31,9 @@ export function createShareSheet(
       const module = native.required<ReactNativeShareModule>('Share', 'react-native')
       const share = module.Share
       if (!share) {
-        throw new Error('Tao Share is unavailable because native module "react-native" does not expose Share.')
+        throw new HostEnvironmentError(
+          'Tao Share is unavailable because native module "react-native" does not expose Share.',
+        )
       }
       await share.share({ message: message.evaluate().jsValue })
     }),

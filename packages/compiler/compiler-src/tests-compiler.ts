@@ -88,6 +88,18 @@ type TaoTestBackStep = {
   source: TaoTestSourceLocation
 }
 
+/**
+ * TaoTestRelaunchStep replaces the mounted app with a new instance on the same device: device-local
+ * persisted state, stored data, and the held clock outlive it, and the new instance restores where
+ * the person was; every ephemeral view state does not. `fresh` opts that one launch out of
+ * restoring, so it opens on the app's initial screen.
+ */
+type TaoTestRelaunchStep = {
+  fresh: boolean
+  kind: 'relaunch'
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestAdvanceStep moves the held clock forward by a duration in milliseconds. */
 type TaoTestAdvanceStep = {
   kind: 'advance'
@@ -136,6 +148,7 @@ type TaoTestStep =
   | TaoTestPressStep
   | TaoTestToolbarCommandExpectation
   | TaoTestToolbarCommandPress
+  | TaoTestRelaunchStep
   | TaoTestSelectStep
   | TaoTestSubmitStep
 
@@ -224,6 +237,7 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
   return Switch.type(step, {
     AdvanceStep: compileAdvanceStep,
     BackTestStep: compileBackTestStep,
+    RelaunchStep: compileRelaunchStep,
     EnterTextStep: compileEnterTextStep,
     ExpectCheckboxStateStep: step => ({
       checked: step.state === 'checked',
@@ -284,14 +298,16 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
 }
 
 function literalText(expression: AST.Expression): string {
-  if (!AST.isStringLiteral(expression)) {
-    throw new Error('Validated navigation chrome test step must use literal text.')
-  }
+  Assert.is(expression, AST.isStringLiteral, 'validated navigation chrome test step uses literal text')
   return expression.value
 }
 
 function compileBackTestStep(step: AST.BackTestStep): TaoTestBackStep {
   return { kind: 'back', source: sourceLocation(step) }
+}
+
+function compileRelaunchStep(step: AST.RelaunchStep): TaoTestRelaunchStep {
+  return { fresh: step.fresh, kind: 'relaunch', source: sourceLocation(step) }
 }
 
 function compileAdvanceStep(step: AST.AdvanceStep): TaoTestAdvanceStep {

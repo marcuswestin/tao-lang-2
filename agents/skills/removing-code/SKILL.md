@@ -1,0 +1,19 @@
+---
+name: removing-code
+description: >-
+  Delete or retire anything in Tao: dead exports, unused recipes or modules, legacy branches, generated artifacts, or a surface an audit called unreferenced. Covers proving reachability, stale references, and lifecycle for generated trees.
+---
+
+# Removing Code
+
+- Prove reachability before deleting; never infer it from a finding. Write the argument down, delete in layers, and keep the package typechecking and its tests passing after each layer so the compiler surfaces the next one.
+- Zero code references does not mean dead for a human-facing surface. A `Justfile` recipe, a CLI command, and a documented workflow are discovered by a person reading `just --list` or `--help`, so judge them by whether a human would want them.
+- Re-verify every "zero references" and every `file:line` claim against the current tree before acting. Findings drift; where a plan and the tree disagree, the tree wins — fix the plan line and continue.
+- An unused export is usually a de-export, not a deletion. Keep the code, drop the `export`, and check no consumer in the same package needs it.
+- `just dead-exports` reports candidates; it is a report, not a verdict. Raw Knip cannot see symbols bound from `.tao` sources, reached through a namespace facade, or republished by an import-type query — the repository's wrapper reconstructs all three, which is most of what it exists for. Its real limits are that it counts test-only usage as usage, so it cannot judge a symbol only its own tests reach, and that a surviving finding is usually a de-export rather than a deletion.
+- Sweep for stale references in the same change: docs, spec pages, generated-config entry lists, lint allowlists, and skills. A deleted bundle entrypoint or allowlisted file left behind breaks an unrelated gate later.
+- Every generated tree needs a deleter. Give run roots a lifecycle that discards on success, keeps the newest failure to debug against, prunes on startup, and leaves roots a concurrent run may own; add the path to `just clean` in the same change.
+- Do not leave a file a generator does not expect inside its output directory, and exclude generated symlinks from `tsconfig` includes, which follow them.
+- Stamp expensive generation on the content of its inputs rather than regenerating per gate process.
+- A configuration copy nothing generates will drift. Prefer generating it; otherwise add a parity check that fails when the source and the copy disagree.
+- Prefer a ratchet to a flag day when a convention has many existing violations: gate the rule with a per-file allowlist, and report an allowlist entry that no longer violates so exemptions cannot outlive their reason.

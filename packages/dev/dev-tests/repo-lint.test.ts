@@ -1,8 +1,14 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
+  bunTestImportIssues,
+  crossPackageSourceImportIssues,
   duplicateDescribeTitleIssues,
+  langiumImportIssues,
   missingTestAppReadmeEntries,
+  nativeSwitchIssues,
+  rawThrowIssues,
+  rejectedRawErrorIssues,
   repoLintIssues,
   wordFlowerDirectoryIssues,
 } from '../dev-src/repository-tests/repo-lint'
@@ -11,6 +17,26 @@ const absorbed = '// Tranche status: absorbed'
 const open = '// Tranche status: open'
 
 Describe('repo lint contracts', () => {
+  Test('reports a raw Error handed to a promise rejection', () => {
+    const source = `function run(reject: (e: unknown) => void) {\n  reject(${'new Error'}('nope'))\n}`
+    Expect(rejectedRawErrorIssues(
+      [{ path: 'packages/studio/studio-src/StudioNew.ts', source }],
+      [],
+    )).toEqual([
+      'packages/studio/studio-src/StudioNew.ts:2 rejects with a raw `Error`; reach for the same taxonomy'
+      + ' a throw would use, since a rejection reaches the reader the same way.',
+    ])
+  })
+
+  Test('reports a rejection allowlist entry that no longer rejects raw', () => {
+    Expect(rejectedRawErrorIssues(
+      [{ path: 'packages/studio/studio-src/Clean.ts', source: 'export const clean = 1\n' }],
+      ['packages/studio/studio-src/Clean.ts'],
+    )).toEqual([
+      'packages/studio/studio-src/Clean.ts no longer rejects with a raw `Error`; drop its repo lint allowlist entry.',
+    ])
+  })
+
   Test('accepts absorbed byte-identical mapped WordFlower directories', () => {
     Expect(wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', `${absorbed}\nview Main { }`), file('nested/Feature.test.tao', 'test "Feature" { }')],
@@ -191,6 +217,131 @@ Describe('repo lint contracts', () => {
     }])).toEqual([])
   })
 })
+
+Describe('repo lint conventions', () => {
+  Test('reports a native switch outside the allowlist', () => {
+    Expect(nativeSwitchIssues(
+      [{ path: 'packages/studio/studio-src/Dispatch.ts', source: 'function run() {\n  switch (kind) {\n  }\n}' }],
+      ['packages/studio/studio-src/Allowed.ts'],
+    )).toEqual([
+      'packages/studio/studio-src/Dispatch.ts:2 uses a native `switch`; dispatch with `Switch` from `@shared` instead.',
+    ])
+  })
+
+  Test('accepts a native switch in an allowlisted file', () => {
+    Expect(nativeSwitchIssues(
+      [{ path: 'packages/studio/studio-src/Dispatch.ts', source: 'function run() {\n  switch (kind) {\n  }\n}' }],
+      ['packages/studio/studio-src/Dispatch.ts'],
+    )).toEqual([])
+  })
+
+  Test('reports an allowlisted file that no longer uses a native switch', () => {
+    Expect(nativeSwitchIssues(
+      [{ path: 'packages/studio/studio-src/Dispatch.ts', source: 'const run = Switch.kind(action, {})' }],
+      ['packages/studio/studio-src/Dispatch.ts'],
+    )).toEqual([
+      'packages/studio/studio-src/Dispatch.ts no longer uses a native `switch`; drop its repo lint allowlist entry.',
+    ])
+  })
+
+  Test('reports a bun:test import outside the allowlist', () => {
+    Expect(bunTestImportIssues(
+      [{ path: 'packages/runtime/TR-tests/TR-new.test.ts', source: importFrom('bun:test') }],
+      ['packages/shared/shared-src/testing/Test-Bun.ts'],
+    )).toEqual([
+      'packages/runtime/TR-tests/TR-new.test.ts:1 imports `bun:test`; use `@shared/test` instead.',
+    ])
+  })
+
+  Test('accepts a bun:test import in an allowlisted file', () => {
+    Expect(bunTestImportIssues(
+      [{ path: 'packages/shared/shared-src/testing/Test-Bun.ts', source: importFrom('bun:test') }],
+      ['packages/shared/shared-src/testing/Test-Bun.ts'],
+    )).toEqual([])
+  })
+
+  Test('reports a raw Error throw outside the allowlist', () => {
+    Expect(rawThrowIssues(
+      [{ path: 'packages/studio/studio-src/StudioNew.ts', source: `function run() {\n  ${rawThrow('nope')}\n}` }],
+      ['packages/studio/studio-src/Allowed.ts'],
+    )).toEqual([
+      'packages/studio/studio-src/StudioNew.ts:2 throws a raw `Error`; use `Assert(...)` for invariants,'
+      + " `Assert.input(...)` or `Errors.throwUserInput(...)` for the author's mistakes,"
+      + ' and `Errors.throwHostEnvironment(...)` for host and environment failures.',
+    ])
+  })
+
+  Test('accepts a raw Error throw in an allowlisted file', () => {
+    Expect(rawThrowIssues(
+      [{ path: 'packages/runtime/TaoRuntime-src/TR-data.ts', source: rawThrow('runtime invariant') }],
+      ['packages/runtime/TaoRuntime-src/TR-data.ts'],
+    )).toEqual([])
+  })
+
+  Test('reports an allowlisted file that no longer throws a raw Error', () => {
+    Expect(rawThrowIssues(
+      [{ path: 'packages/studio/studio-src/StudioSwept.ts', source: "Errors.throwUserInput('Pick a Tao file.')" }],
+      ['packages/studio/studio-src/StudioSwept.ts'],
+    )).toEqual([
+      'packages/studio/studio-src/StudioSwept.ts no longer throws a raw `Error`;'
+      + ' drop its repo lint allowlist entry.',
+    ])
+  })
+
+  Test('reports a langium import outside the parser package', () => {
+    Expect(langiumImportIssues([
+      { path: 'packages/validator/validator-src/Rules.ts', source: importFrom('langium/lsp') },
+    ])).toEqual([
+      'packages/validator/validator-src/Rules.ts:1 imports `langium` outside packages/parser/; use `AST` from `@parser` instead.',
+    ])
+  })
+
+  Test('accepts a langium import inside the parser package', () => {
+    Expect(langiumImportIssues([
+      { path: 'packages/parser/parser-src/langium-exports.ts', source: importFrom('langium') },
+    ])).toEqual([])
+  })
+
+  Test('reports a relative import that reaches into another package source', () => {
+    Expect(crossPackageSourceImportIssues(
+      [{
+        path: 'packages/dev/dev-src/studio/Packaged.ts',
+        source: importFrom('../../../tao-cli/cli-src/test-command'),
+      }],
+      [],
+    )).toEqual([
+      'packages/dev/dev-src/studio/Packaged.ts:1 imports `packages/tao-cli/cli-src/test-command` from another package;'
+      + " import that package's entry instead.",
+    ])
+  })
+
+  Test('accepts a relative import inside one package', () => {
+    Expect(crossPackageSourceImportIssues(
+      [{ path: 'packages/dev/dev-src/studio/Packaged.ts', source: importFrom('../repository-tests/repo-lint') }],
+      [],
+    )).toEqual([])
+  })
+
+  Test('reports an allowlisted file that no longer imports another package source', () => {
+    Expect(crossPackageSourceImportIssues(
+      [{ path: 'packages/dev/dev-src/studio/Packaged.ts', source: importFrom('@tao-cli') }],
+      ['packages/dev/dev-src/studio/Packaged.ts'],
+    )).toEqual([
+      "packages/dev/dev-src/studio/Packaged.ts no longer imports another package's source;"
+      + ' drop its repo lint allowlist entry.',
+    ])
+  })
+})
+
+/** importFrom builds an import line at call time so this file never matches the rules it exercises. */
+function importFrom(specifier: string): string {
+  return `import { thing } from '${specifier}'`
+}
+
+/** rawThrow builds a raw `Error` throw at call time so this file never matches the rule it exercises. */
+function rawThrow(message: string): string {
+  return `${['throw', 'new', 'Error'].join(' ')}('${message}')`
+}
 
 function directory(currentFiles: readonly TestFile[], nextFiles: readonly TestFile[]) {
   return {

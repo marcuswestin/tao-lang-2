@@ -1,4 +1,5 @@
 import { Describe, Expect, Test } from '@shared/test'
+import { HostEnvironmentError } from '../TaoRuntime-src/TR-errors'
 import { createNativeModules } from '../TaoRuntime-src/TR-native-modules'
 import { createReactiveSource, isReactiveValue } from '../TaoRuntime-src/TR-reactive'
 import { Clock, createTicker } from '../TaoRuntime-src/TR-units'
@@ -30,7 +31,7 @@ Describe('TR native module kernel', () => {
       'expo-clipboard': () => ({}),
       'expo-haptics': () => {
         hapticsLoads += 1
-        throw new Error('expo-haptics is unavailable in this test')
+        throw new HostEnvironmentError('expo-haptics is unavailable in this test')
       },
       'react-native': () => ({}),
     })
@@ -58,7 +59,7 @@ Describe('TR native module kernel', () => {
       'expo-clipboard': () => ({}),
       'expo-haptics': () => {
         hapticsLoads += 1
-        throw new Error('expo-haptics is unavailable in this test')
+        throw new HostEnvironmentError('expo-haptics is unavailable in this test')
       },
       'react-native': () => ({}),
     })

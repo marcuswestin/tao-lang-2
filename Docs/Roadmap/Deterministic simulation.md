@@ -90,8 +90,9 @@ More is in place than the roadmap's "regressed" row suggests. As implemented tod
   per-entity/per-occurrence schedule is TypeScript-only; the scenario spelling stops at
   `network online | offline`, and Studio's UI lowering drops error status/code and cannot address
   entities. The decided fault injection (`datasource fails after create Membership "…"`) is
-  _write-side_ and nothing built covers writes at all. `TR.Data.setTestStatus` survives as an
-  orphaned API with zero callers.
+  _write-side_ and nothing built covers writes at all. `TR.Data.setTestStatus`, the last runtime
+  hook a status-driving step could have reached, has been removed as an orphaned API with zero
+  callers, so nothing on this surface is reachable today.
 - **Two time systems.** `TR.Clock` and `jest.useFakeTimers()` coexist uncoordinated; two
   navigation tests use the latter.
 

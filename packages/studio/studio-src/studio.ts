@@ -146,7 +146,6 @@ export {
 
 export {
   type StartedStudioServer,
-  startStudioServer,
   startStudioSessionServer,
   type StudioServerOptions,
 } from './StudioServer'

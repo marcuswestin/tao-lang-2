@@ -1,13 +1,28 @@
 import TR from '@runtime/TR'
 import { navigationCommandTestId, navigationTitleTestId } from '@runtime/TR-navigation-basic-stack'
-import { Switch } from '@shared/core'
+import { Errors, Switch } from '@shared/core'
 import { act, fireEvent, within } from '@testing-library/react-native'
 import { renderCompiledApp } from './render-app'
 import type { RuntimeApp } from './RuntimeApp'
 import type * as TestCompiler from './test-compiler/TestCompiler'
 
+/** TaoCheckFailure reports a failed Tao check under a product name rather than a taxonomy one. */
+class TaoCheckFailure extends Error {
+  override readonly name = 'Tao'
+}
+
 type TestInstance = ReturnType<RuntimeApp.Screen['getByTestId']>
 type ScopeResolver = () => TestInstance | undefined
+
+/**
+ * RunningApp is the app instance a check is currently driving. It is a holder rather than a value
+ * because `relaunch` replaces the mounted instance mid-check, and every later step — and the
+ * unmount that ends the check — must reach the instance that is live now.
+ */
+type RunningApp = {
+  readonly modulePath: string
+  screen: RuntimeApp.Screen
+}
 
 /** runTestFile runs one precompiled Tao test file through the Expo render harness. */
 export async function runTestFile(file: TestCompiler.File): Promise<void> {
@@ -19,41 +34,46 @@ export async function runTestFile(file: TestCompiler.File): Promise<void> {
 }
 
 async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<void> {
-  let screen: RuntimeApp.Screen | undefined
+  let app: RunningApp | undefined
   try {
     TR.Data.beginTest()
-    TR.Navigation.beginTest({ freshRestoration: true })
+    // Every check gets a device nobody has used. Persisted state is declared at generated-module
+    // scope and therefore outlives both the mount and the check, so without this a width one check
+    // widens is still widened when the next check launches the same app.
+    TR.Persisted.beginTest()
+    // The same boundary for navigation: restoration keeps working, over a store nobody has written.
+    TR.Navigation.beginTest()
     // Every check starts from the same instant and moves only when the journey says so.
     TR.Clock.beginTest()
-    screen = renderCompiledApp({ testAppPath: check.app.modulePath })
-    await act(async () => {
-      // The host reads navigation restoration before exposing the initial semantic tree.
-      await Promise.resolve()
-      await Promise.resolve()
-      await new Promise<void>(resolve => queueMicrotask(resolve))
-    })
+    app = { modulePath: check.app.modulePath, screen: await launchApp(check.app.modulePath) }
     await settleData()
     for (const step of check.steps) {
-      await runStep(screen, step)
+      await runStep(app, step)
       await settleData()
     }
   } catch (error) {
-    throw new Error(
+    // Jest heads the report with `${name}: ${message}`, and this is the most-read error in the
+    // product, so the name must not be internal vocabulary: `UserInputError:` would sit atop every
+    // failing journey. The message keeps `Tao check failed:` because that substring is the contract
+    // both Studio runners and this package's own tests match on.
+    throw new TaoCheckFailure(
       `Tao check failed: ${suiteName} > ${check.name}\n${formatSource(check.source)}\n${formatError(error)}`,
     )
   } finally {
-    screen?.unmount()
+    app?.screen.unmount()
     TR.Clock.endTest()
     TR.Navigation.endTest()
+    TR.Persisted.endTest()
     TR.Data.endTest()
   }
 }
 
 async function runStep(
-  screen: RuntimeApp.Screen,
+  app: RunningApp,
   step: TestCompiler.Step,
   resolveScope: ScopeResolver = () => undefined,
 ): Promise<void> {
+  const screen = app.screen
   await Switch.kind<TestCompiler.Step, void | Promise<void>>(step, {
     advance: advance => advanceStep(advance),
     back: back => backStep(back),
@@ -66,9 +86,51 @@ async function runStep(
     expectToolbarCommand: expectation => assertToolbarCommand(screen, expectation),
     press: press => pressStep(screen, press, resolveScope()),
     pressToolbarCommand: press => pressToolbarCommandStep(screen, press),
-    select: select => selectStep(screen, select, resolveScope),
+    relaunch: relaunch => relaunchStep(app, relaunch),
+    select: select => selectStep(app, select, resolveScope),
     submit: submit => submitStep(screen, submit, resolveScope()),
   })
+}
+
+/** launchApp mounts one generated app module and waits out the host's own launch reads. */
+async function launchApp(modulePath: string): Promise<RuntimeApp.Screen> {
+  const screen = renderCompiledApp({ testAppPath: modulePath })
+  await act(async () => {
+    // The host reads navigation restoration before exposing the initial semantic tree.
+    await Promise.resolve()
+    await Promise.resolve()
+    await new Promise<void>(resolve => queueMicrotask(resolve))
+  })
+  return screen
+}
+
+/**
+ * relaunch is a person quitting the app and opening it again on the same device. The mounted
+ * instance is torn down and a new one launches in its place over the same device-local storage,
+ * the same stored data, and the same held clock — a relaunch does not rewind time or wipe a device.
+ * Everything the running instance owned is gone: view-local state, `let` derivations, and in-flight
+ * asks. The new instance then restores its navigation from the device, which is what a real
+ * relaunch does; `relaunch fresh` opts that one launch out and opens on the initial screen.
+ */
+async function relaunchStep(app: RunningApp, step: Extract<TestCompiler.Step, { kind: 'relaunch' }>): Promise<void> {
+  app.screen.unmount()
+  // beginLaunch is the launch boundary: every navigation value and app occurrence returns to its
+  // declared configuration, every action root the ending launch started abandons its transaction
+  // rather than committing into the launch that replaces it, and the restoration controller forgets
+  // the launch it was in, while the store it reads and writes stays exactly as the previous
+  // instance left it.
+  await TR.Navigation.beginLaunch({ fresh: step.fresh })
+  // The same boundary for device-local `(persist)` state, and for the same reason: a generated
+  // module declares it once, so the value and the resolved read outlive the instance that owned
+  // them. Dropping both is what makes the next instance hydrate from the device rather than
+  // inherit memory, which is the only way this step can tell a working round trip from a broken
+  // one. The device itself is untouched.
+  //
+  // There is deliberately no `beginTest()` for either domain here, and none for `TR.Data` or
+  // `TR.Clock`. Those are the device, and a relaunch keeps the device: only the check boundary
+  // hands the next journey a device nobody has used.
+  await TR.Persisted.beginLaunch()
+  app.screen = await launchApp(app.modulePath)
 }
 
 function assertNavigationTitle(
@@ -77,7 +139,7 @@ function assertNavigationTitle(
 ): void {
   const title = screen.queryByTestId(navigationTitleTestId)
   if (!title || title.props.children !== step.title) {
-    throw new Error(
+    Errors.throwUserInput(
       `${formatStep(step)} expected ${JSON.stringify(step.title)}, got ${JSON.stringify(title?.props.children)}.\n${
         formatSource(step.source)
       }`,
@@ -91,7 +153,7 @@ function assertToolbarCommand(
 ): void {
   const commands = screen.queryAllByTestId(navigationCommandTestId(step.label))
   if (commands.length !== 1) {
-    throw new Error(
+    Errors.throwUserInput(
       `${formatStep(step)} expected exactly one visible toolbar command, got ${commands.length}.\n${
         formatSource(step.source)
       }`,
@@ -100,7 +162,7 @@ function assertToolbarCommand(
   const command = commands[0]!
   const disabled = command.props.accessibilityState?.disabled === true
   if (disabled === step.enabled) {
-    throw new Error(`${formatStep(step)} observed the opposite enabled state.\n${formatSource(step.source)}`)
+    Errors.throwUserInput(`${formatStep(step)} observed the opposite enabled state.\n${formatSource(step.source)}`)
   }
 }
 
@@ -110,7 +172,7 @@ async function pressToolbarCommandStep(
 ): Promise<void> {
   const commands = screen.queryAllByTestId(navigationCommandTestId(step.label))
   if (commands.length !== 1) {
-    throw new Error(
+    Errors.throwUserInput(
       `${formatStep(step)} expected exactly one visible toolbar command, got ${commands.length}.\n${
         formatSource(step.source)
       }`,
@@ -118,7 +180,7 @@ async function pressToolbarCommandStep(
   }
   const command = commands[0]!
   if (command.props.accessibilityState?.disabled === true) {
-    throw new Error(`${formatStep(step)} cannot press a disabled toolbar command.\n${formatSource(step.source)}`)
+    Errors.throwUserInput(`${formatStep(step)} cannot press a disabled toolbar command.\n${formatSource(step.source)}`)
   }
   await dispatchInteraction(() => fireEvent.press(command))
 }
@@ -202,12 +264,12 @@ function assertExpectation(
 ): void {
   const matches = querySelector(screen, expectation.selector, expectation.text, scope)
   if (!expectation.missing && matches.length === 0) {
-    throw new Error(
+    Errors.throwUserInput(
       `${formatStep(expectation)} expected rendered text but found none.\n${formatSource(expectation.source)}`,
     )
   }
   if (expectation.missing && matches.length > 0) {
-    throw new Error(
+    Errors.throwUserInput(
       `${formatStep(expectation)} expected no rendered text but found ${matches.length} ${
         matches.length === 1 ? 'match' : 'matches'
       }.\n${formatSource(expectation.source)}`,
@@ -223,7 +285,7 @@ function assertInputValue(
   const match = requireSingleMatch(screen, expectation, { target: expectation.target, description: 'input', scope })
   const input = requireValueInput(match, expectation)
   if (input.props.value !== expectation.value) {
-    throw new Error(
+    Errors.throwUserInput(
       `${formatStep(expectation)} expected input value ${JSON.stringify(expectation.value)}, got ${
         JSON.stringify(input.props.value)
       }.\n${formatSource(expectation.source)}`,
@@ -238,7 +300,7 @@ function assertCheckboxState(
 ): void {
   const matches = querySelector(screen, 'tag', expectation.tag, scope).filter(isAccessibleCheckbox)
   if (matches.length !== 1) {
-    throw new Error(
+    Errors.throwUserInput(
       `${formatStep(expectation)} expected one accessible checkbox but found ${matches.length}.\n${
         formatSource(expectation.source)
       }`,
@@ -246,7 +308,7 @@ function assertCheckboxState(
   }
   const checked = matches[0]!.props.accessibilityState.checked as boolean
   if (checked !== expectation.checked) {
-    throw new Error(
+    Errors.throwUserInput(
       `${formatStep(expectation)} expected ${expectation.checked ? 'checked' : 'unchecked'} but was ${
         checked ? 'checked' : 'unchecked'
       }.\n${formatSource(expectation.source)}`,
@@ -271,7 +333,7 @@ function assertExpectationGroup(
   for (const expectation of step.expectations) {
     if (expectation.kind === 'inputValue') {
       if (!scope) {
-        throw new Error(`${formatStep(step)} input value expectations require a #tag scope.`)
+        Errors.throwUserInput(`${formatStep(step)} input value expectations require a #tag scope.`)
       }
       const input = requireValueInput(scope, step)
       if (input.props.value !== expectation.value) {
@@ -290,18 +352,18 @@ function assertExpectationGroup(
     }
   }
   if (failures.length > 0) {
-    throw new Error(`${formatStep(step)} failed:\n- ${failures.join('\n- ')}\n${formatSource(step.source)}`)
+    Errors.throwUserInput(`${formatStep(step)} failed:\n- ${failures.join('\n- ')}\n${formatSource(step.source)}`)
   }
 }
 
 async function selectStep(
-  screen: RuntimeApp.Screen,
+  app: RunningApp,
   step: Extract<TestCompiler.Step, { kind: 'select' }>,
   resolveParentScope: ScopeResolver,
 ): Promise<void> {
   for (const nested of step.steps) {
     // Resolve the row again for each operation because a prior operation may rerender or remove it.
-    await runStep(screen, nested, () => selectedRow(screen, step, resolveParentScope()))
+    await runStep(app, nested, () => selectedRow(app.screen, step, resolveParentScope()))
   }
 }
 
@@ -313,7 +375,7 @@ function selectedRow(
   const matches = querySelector(screen, 'tag', step.tag, parentScope)
   const row = matches[step.index - 1]
   if (!row) {
-    throw new Error(
+    Errors.throwUserInput(
       `${formatStep(step)} expected row ${step.index} but found ${matches.length} tagged rows.\n${
         formatSource(step.source)
       }`,
@@ -341,6 +403,7 @@ function formatStep(step: TestCompiler.Step): string {
       `expect toolbar command "${expectation.label}" ${expectation.enabled ? 'enabled' : 'disabled'}`,
     press: press => `press ${press.selector} "${press.text}"`,
     pressToolbarCommand: press => `press toolbar command "${press.label}"`,
+    relaunch: relaunch => relaunch.fresh ? 'relaunch fresh' : 'relaunch',
     select: select => `select #${select.tag}[${select.index}] { … }`,
     submit: submit => `submit ${submit.selector} "${submit.target}"`,
   })
@@ -359,7 +422,7 @@ function requireSingleMatch(
 ): TestInstance {
   const matches = querySelector(screen, step.selector, target, scope)
   if (matches.length !== 1) {
-    throw new Error(
+    Errors.throwUserInput(
       `${formatStep(step)} expected one ${description} but found ${matches.length} matches.\n${
         formatSource(step.source)
       }`,
@@ -396,7 +459,7 @@ function querySelector(
   if (selector === 'placeholder') {
     return queries.queryAllByPlaceholderText(target)
   }
-  throw new Error(`Unsupported test selector '${selector}'.`)
+  Errors.throwUserInput(`Unsupported test selector '${selector}'.`)
 }
 
 function escapeRegExp(value: string): string {
@@ -411,7 +474,7 @@ function requireSingleTag(
 ): TestInstance {
   const matches = querySelector(screen, 'tag', tag, scope)
   if (matches.length !== 1) {
-    throw new Error(`${formatStep(step)} expected one #${tag} scope but found ${matches.length}.`)
+    Errors.throwUserInput(`${formatStep(step)} expected one #${tag} scope but found ${matches.length}.`)
   }
   return matches[0]!
 }
@@ -429,7 +492,7 @@ function requireInteractiveNode(
     candidate.findAll((node: TestInstance) => node !== candidate && typeof node.props[prop] === 'function').length === 0
   )
   if (matches.length !== 1) {
-    throw new Error(`${formatStep(step)} expected one interactive native target but found ${matches.length}.`)
+    Errors.throwUserInput(`${formatStep(step)} expected one interactive native target but found ${matches.length}.`)
   }
   return matches[0]!
 }
@@ -448,7 +511,7 @@ function requireValueInput(root: TestInstance, step: TestCompiler.Step): TestIns
     ).length === 0
   )
   if (matches.length !== 1) {
-    throw new Error(`${formatStep(step)} expected one input value target but found ${matches.length}.`)
+    Errors.throwUserInput(`${formatStep(step)} expected one input value target but found ${matches.length}.`)
   }
   return matches[0]!
 }

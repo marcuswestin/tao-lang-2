@@ -1,3 +1,4 @@
+import { Errors } from '@shared/core'
 import type {
   DeepPartial,
   GenerationAvailability,
@@ -167,7 +168,7 @@ async function* responseEvents(
         buffer += decoder.decode()
       }
       if (byteLength(buffer) > MAX_EVENT_LINE_BYTES) {
-        throw new Error(`Foundation Models helper event exceeded ${MAX_EVENT_LINE_BYTES} bytes.`)
+        Errors.throwHostEnvironment(`Foundation Models helper event exceeded ${MAX_EVENT_LINE_BYTES} bytes.`)
       }
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
@@ -192,7 +193,7 @@ async function* responseEvents(
 function parseEvent(line: string): FoundationModelsEvent {
   const value = JSON.parse(line) as unknown
   if (!isObject(value) || typeof value['type'] !== 'string') {
-    throw new Error('Foundation Models helper returned an invalid event.')
+    Errors.throwHostEnvironment('Foundation Models helper returned an invalid event.')
   }
   if ((value['type'] === 'partial' || value['type'] === 'success') && value['value'] !== undefined) {
     return { type: value['type'], value: value['value'] as JsonValue }
@@ -203,7 +204,7 @@ function parseEvent(line: string): FoundationModelsEvent {
       ? { type: 'failure', code, message: value['message'] }
       : { type: 'failure', message: value['message'] }
   }
-  throw new Error('Foundation Models helper returned an invalid event.')
+  Errors.throwHostEnvironment('Foundation Models helper returned an invalid event.')
 }
 
 function parseAvailability(value: unknown): GenerationAvailability {

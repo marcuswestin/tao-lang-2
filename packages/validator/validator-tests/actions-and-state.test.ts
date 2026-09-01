@@ -74,6 +74,16 @@ Describe('validator: actions and state', () => {
         'let Save = SharedAction',
         'action SharedAction() { }',
       ],
+      [
+        'allows compound mutation of a number state',
+        'state Count = 0\naction Bump() { set Count += 1 }',
+        '',
+      ],
+      [
+        'allows compound mutation of a state declared as number',
+        'state Count is number = 0\naction Bump() { set Count += 1 }',
+        '',
+      ],
     ] as const
   ) {
     Test(title, accepts(actionApp(body, extra)))
@@ -170,12 +180,34 @@ Describe('validator: actions and state', () => {
       {
         title: 'rejects compound mutation of non-number state',
         body: 'state Name = "Ro"\naction BadCompound() { set Name += "!" }',
-        messages: [StateValidator.messages.compoundStateType('Name', '+=', 'stateful text')],
+        messages: [StateValidator.messages.compoundStateType('Name', '+=', 'text')],
+      },
+      {
+        title: 'checks set values against the declared state type rather than its initial value',
+        body: 'state Value is Mixed = "start"\naction BadSet() { set Value = false }',
+        extra: 'type Mixed is text | number',
+        messages: [StateValidator.messages.setTypeMismatch('Value', 'text | number', 'boolean')],
+      },
+      {
+        title: 'names a refined set value by its Tao type',
+        body: 'state Count = 0\naction BadSet() { set Count = Label "many" }',
+        extra: 'type Label is text',
+        messages: [StateValidator.messages.setTypeMismatch('Count', 'number', 'Label')],
+      },
+      {
+        title: 'names a declared list state by its element type',
+        body: 'state Items is list of text = []\naction BadSet() { set Items = "one" }',
+        messages: [StateValidator.messages.setTypeMismatch('Items', 'list of text', 'text')],
       },
       {
         title: 'rejects action-valued state',
         body: 'state Click = action { }',
         messages: [StateValidator.messages.stateActionType('Click')],
+      },
+      {
+        title: 'rejects do on a non-action value',
+        body: 'let Greeting = "hi"\naction Run() { do Greeting() }',
+        messages: [ActionsValidator.messages.doTypeMismatch('text')],
       },
       {
         title: 'rejects set targets declared later in the same view',
@@ -206,6 +238,25 @@ Describe('validator: actions and state', () => {
   ) {
     Test(title, rejects(actionApp(body, extra), ...messages))
   }
+
+  Test('reports only the operator error when a compound mutation also has a mismatched value', async () => {
+    const result = await testValidateCodeWithErrors(
+      actionApp('state Name = "Ro"\naction BadCompound() { set Name += 1 }'),
+    )
+    Expect(validationErrorMessages(result)).toEqual([
+      StateValidator.messages.compoundStateType('Name', '+=', 'text'),
+    ])
+  })
+
+  Test('reports inferred-type diagnostics after structural diagnostics for a file', async () => {
+    const result = await testValidateCodeWithErrors(
+      actionApp('let Greeting = "hi"\naction Run() { do Greeting() }\naction Run() { }'),
+    )
+    Expect(validationErrorMessages(result)).toEqual([
+      AliasesValidator.messages.duplicateName('Run'),
+      ActionsValidator.messages.doTypeMismatch('text'),
+    ])
+  })
 
   Test('does not classify unresolved named do targets as dynamic actions', async () => {
     const result = await testValidateCodeWithErrors(actionApp('action CallMissing() { do Missing(1) }'))

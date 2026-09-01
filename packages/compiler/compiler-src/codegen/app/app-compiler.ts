@@ -5,7 +5,8 @@ import { type CodegenOptions, type Compiled, gen, resolveRef } from '../codegen-
 import { Compile } from '../Compile'
 import { compileDeclarationIdentity } from './declaration-identity'
 
-type AppPropertySource = AST.Expression | AST.ConfigurationValue
+// A root `view` statement supplies the app's Navigator as sugar, so the source has one app shape.
+type AppPropertySource = AST.Expression | AST.ConfigurationValue | AST.AppView
 
 type EffectiveAppProperty = {
   patches: AST.ConfigurationBlock[]
@@ -15,9 +16,9 @@ type EffectiveAppProperty = {
 type EffectiveAppConfiguration = Map<string, EffectiveAppProperty>
 
 export default {
-  /** App compiles legacy root-view apps and complete primitive-headed app values. */
+  /** App compiles complete primitive-headed app values, including the root-view Navigator sugar. */
   App(app: AST.AppDeclaration, options: CodegenOptions = {}): Compiled {
-    return isLegacyViewApp(app) ? compileLegacyViewApp(app, options) : compileAppValue(app, options)
+    return compileAppValue(app, options)
   },
 
   /** AppValue compiles an inferred `let` whose value family is app. */
@@ -41,16 +42,6 @@ export default {
   /** AppProperty is compiled as part of its owning app definition. */
   AppProperty(): Compiled {
     return gen.noop()
-  },
-
-  /** AppView compiles an app view statement into the generated app root return. */
-  AppView(appView: AST.AppView): Compiled {
-    const view = resolveRef(appView.view)
-    return gen`
-      return <TR.AppShell>
-        <${gen.scopeName(view)} />
-      </TR.AppShell>
-    `
   },
 } as const
 
@@ -125,7 +116,14 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
   `
 }
 
-function compileStudioSubject(options: CodegenOptions, appDefinition?: { name: string }): Compiled {
+/**
+ * The emitted view lookup fails through `TR.Errors.failInvariant`: this is generated app code, not
+ * compiler code, so the only Tao module in scope is `TR` from `@runtime/TR`, and `TR.Errors` is
+ * where the runtime publishes its error taxonomy to a compiled program. A call through that property
+ * chain returns `never` without narrowing afterwards, so the guard reads as `??` rather than an
+ * `if`, which keeps the view a defined `React.ElementType` for the `createElement` below.
+ */
+function compileStudioSubject(options: CodegenOptions, appDefinition: { name: string }): Compiled {
   if (!options.studio) {
     return gen.noop()
   }
@@ -140,7 +138,7 @@ function compileStudioSubject(options: CodegenOptions, appDefinition?: { name: s
         ${gen.list(views, item => gen`${gen.jsLiteral(item.id)}: ${gen.scopeName(item.view)},`)}
       }
       const _TaoStudioView = _TaoStudioViews[_TaoStudioScenario.subjectId]
-      if (_TaoStudioView === undefined) throw new Error('Tao Studio focused view is not available in the selected app scope.')
+        ?? TR.Errors.failInvariant('Tao Studio focused view is not available in the selected app scope.')
       if (!_TaoStudioFixture.ready) return null
       const _TaoStudioArgs = Object.fromEntries(
         Object.entries(_TaoStudioScenario.arguments ?? {}).map(([name, value]) => [
@@ -148,11 +146,9 @@ function compileStudioSubject(options: CodegenOptions, appDefinition?: { name: s
           TR.Studio.Environment.Argument(value, _TaoStudioFixture.handles),
         ]),
       )
-      return <TR.AppShell>{React.createElement(_TaoStudioView, ${
-    appDefinition === undefined
-      ? '_TaoStudioArgs'
-      : gen`{ ..._TaoStudioArgs, __tao: { app: ${gen.Name(appDefinition)} } }`
-  })}</TR.AppShell>
+      return <TR.AppShell>{React.createElement(_TaoStudioView, { ..._TaoStudioArgs, __tao: { app: ${
+    gen.Name(appDefinition)
+  } } })}</TR.AppShell>
     }
   `
 }
@@ -224,20 +220,6 @@ function restorationPolicy(
   }
 }
 
-function compileLegacyViewApp(app: AST.AppDeclaration, options: CodegenOptions = {}): Compiled {
-  const roots = AST.blockStatements(app).filter(AST.isAppView)
-  return gen`
-    function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
-      ${compileStudioSubject(options)}
-      ${gen.list(roots, Compile.AppView)}
-    }
-  `
-}
-
-function isLegacyViewApp(app: AST.AppDeclaration): boolean {
-  return app.block !== undefined && AST.blockStatements(app).some(AST.isAppView)
-}
-
 function effectiveAppConfiguration(
   declaration: AST.AppValueDeclaration,
   seen: Set<AST.AppValueDeclaration> = new Set(),
@@ -246,6 +228,10 @@ function effectiveAppConfiguration(
   seen.add(declaration)
   if (AST.isAppDeclaration(declaration) && declaration.block) {
     const configuration: EffectiveAppConfiguration = new Map()
+    const rootView = AST.blockStatements(declaration).find(AST.isAppView)
+    if (rootView) {
+      configuration.set('Navigator', { patches: [], value: rootView })
+    }
     for (const property of AST.blockStatements(declaration).filter(AST.isAppProperty)) {
       if (property.patch) {
         applyAppPropertyPatch(configuration, property.name, property.patch.block)
@@ -367,7 +353,49 @@ function compileAppProperty(
 }
 
 function compileAppPropertySource(value: AppPropertySource): Compiled {
+  if (AST.isAppView(value)) {
+    return compileRootViewNavigator(value)
+  }
   return AST.isExpression(value) ? Compile.Expression(value) : Compile.ConfigurationValue(value)
+}
+
+/**
+ * `app X { view Y }` is sugar for mounting Y in a slot navigator. The navigator is generated inline
+ * from the runtime's own slot implementation so it owns no Tao name a declaration could collide with.
+ *
+ * It still carries a canonical identity, because a synthesized navigator is a real navigator on a
+ * real device: without one the runtime emits no restorable descriptor and every launch silently
+ * gives up on restoring where the person was.
+ *
+ * That identity is derived from the `app` declaration that writes the sugar, under the reserved kind
+ * `app-root-view-nav`:
+ *
+ * - It is stable. The app declaration is the sugar's authored owner — exactly one root view
+ *   statement per app block — and its project, package, module path, and name are already the inputs
+ *   to the app's own identity, which keys the restoration storage this descriptor is stored under.
+ *   The navigator therefore depends on no file layout the stored state does not already depend on,
+ *   and the two can never drift apart under a move or a rename.
+ * - Deriving it from the mounted view instead would move the identity whenever the app switched
+ *   which view it opens, or the view was renamed or moved — incidental changes that must not be
+ *   allowed to orphan a person's saved position under a name the app never claimed.
+ * - It cannot collide. `declarationKind` only ever yields a single lowercase word (`view`, `app`,
+ *   `nav`, `datasource`, `configuration`) or a PascalCase grammar `$type`, so a hyphenated kind is
+ *   unreachable from any authored declaration. It is distinct from the app's own `app` identity, from
+ *   the view identity used for `ViewReference` on the next line, and from a `nav Name` declared
+ *   beside the app in the same module.
+ */
+function compileRootViewNavigator(appView: AST.AppView): Compiled {
+  const view = resolveRef(appView.view)
+  const app = appView.$container.$container
+  Assert.is(app, AST.isAppDeclaration, 'a root view statement is declared by an app block')
+  return gen`TR.Navigation.Configure(
+    TR.Navigation.Declaration(
+      ${gen.jsLiteral(view.name)},
+      TR.NavKind.Slot(),
+      ${compileDeclarationIdentity(app, { kind: 'app-root-view-nav' })},
+    ),
+    { "Initial": TR.Navigation.ViewReference(${compileDeclarationIdentity(view)}) },
+  )`
 }
 
 function rootAuxiliaryNavigators(root: AST.AppValueDeclaration): AST.AppAuxiliaryNavigator[] {

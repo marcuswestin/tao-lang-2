@@ -93,7 +93,7 @@ Describe('Expo dev-loop command helpers', () => {
         await Time.sleep(10)
       }
       if (descendantPid === undefined) {
-        throw new Error('The fake Expo launcher did not start its descendant process.')
+        Errors.throwHostEnvironment('The fake Expo launcher did not start its descendant process.')
       }
 
       await server.stop()

@@ -1,4 +1,0 @@
-project {
-   id "state-action-mvp"
-   name "State Action MVP"
-}

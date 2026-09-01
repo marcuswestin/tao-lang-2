@@ -46,6 +46,7 @@ async function run(options: StudioSmokeOptions): Promise<number> {
   if (options.files.length === 0) {
     throw new Errors.UserInputError('Studio smoke requires at least one explicit test file.')
   }
+  await requireGeneratedParser()
   const allocation = resources(options)
   await FS.mkdir(allocation.artifactRoot)
   const result = await CLI.run('bun', {
@@ -61,6 +62,21 @@ async function run(options: StudioSmokeOptions): Promise<number> {
     stdio: 'inherit',
   })
   return result.error === undefined ? result.exitCode ?? 1 : 1
+}
+
+/**
+ * Without the generated parser every lane dies on `Cannot find module './_gen_tao-parser/module'`,
+ * which names a path that was never checked in and gives no hint that generation is the fix. A fresh
+ * worktree, or one checked out at an older commit, hits this before any Studio code runs.
+ */
+async function requireGeneratedParser(): Promise<void> {
+  const generated = Repo.resolvePath('packages/parser/parser-src/_gen_tao-parser')
+  if (!await FS.exists(generated)) {
+    throw new Errors.HostEnvironmentError(
+      'The generated Tao parser is missing, so no smoke lane can start. Run `just fix` (or '
+        + '`bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts`) in this worktree first.',
+    )
+  }
 }
 
 function nonNegativeIndex(value: number, label: string, maximum: number): number {

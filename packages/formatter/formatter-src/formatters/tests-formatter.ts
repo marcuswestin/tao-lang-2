@@ -110,6 +110,11 @@ export default {
   /** BackTestStep has no operands. */
   BackTestStep() {},
 
+  /** RelaunchStep spaces its optional `fresh` modifier, and formats as bare `relaunch` without one. */
+  RelaunchStep(f) {
+    f.oneSpaceBeforeProperty('fresh')
+  },
+
   /** AdvanceStep spaces its duration after the keyword. */
   AdvanceStep(f) {
     f.oneSpaceAfter('advance')

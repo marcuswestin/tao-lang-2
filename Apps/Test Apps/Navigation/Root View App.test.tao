@@ -1,0 +1,43 @@
+use RootViewApp from ./
+
+test "Root View App" {
+   // An app written as `app X { view Y }` is a real app on a real device, so the navigator Tao
+   // synthesizes for it has to carry the same stable restoration identity a written `nav` does.
+   // Without one every launch would silently give up on restoring, which is exactly what this
+   // journey would see: reopen on the root view rather than on the screen the person left.
+   test "reopens the presented screen after a relaunch and returns to the root view" {
+      run RootViewApp
+
+      expect text "Root home"
+      expect text "Home visits: 0"
+      press #rootCountVisit
+      expect text "Home visits: 1"
+      press #rootOpenDetail
+      expect text "Root detail"
+      expect text "Typed root detail"
+      expect missing text "Root home"
+      relaunch
+      expect text "Root detail"
+      expect text "Typed root detail"
+      expect missing text "Root home"
+      back
+      expect text "Root home"
+      // View-local state belonged to the launch that was quit, so the counter starts over.
+      expect text "Home visits: 0"
+      expect missing text "Root detail"
+   }
+   // `relaunch fresh` is the launch a device that has never run this app gives, and it records
+   // where it opened. The ordinary relaunch after it therefore returns to the root view rather
+   // than to the detail the run before it left behind.
+   test "opens on the root view after a fresh relaunch and stores that position" {
+      run RootViewApp
+      press #rootOpenDetail
+      expect text "Typed root detail"
+      relaunch fresh
+      expect text "Root home"
+      expect missing text "Root detail"
+      relaunch
+      expect text "Root home"
+      expect missing text "Root detail"
+   }
+}

@@ -1,3 +1,4 @@
+import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   generateValidated,
@@ -171,7 +172,7 @@ Describe('scripted generation and validate gate', () => {
       inputs: [],
       guide: 'Generate.',
       accept: () => {
-        throw new Error('Storage unavailable.')
+        Errors.throwHostEnvironment('Storage unavailable.')
       },
     }).final
 

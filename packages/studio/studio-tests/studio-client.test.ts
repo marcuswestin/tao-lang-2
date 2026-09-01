@@ -1,6 +1,7 @@
 import { EditorState, type Transaction } from '@codemirror/state'
 import { type Command, type EditorView, keymap } from '@codemirror/view'
-import { Expect, Test } from '@shared/test'
+import { Errors } from '@shared'
+import { Expect, Test, until } from '@shared/test'
 import type { StudioRenderInspection } from '@source-actions'
 import {
   StudioApiError,
@@ -13,6 +14,13 @@ import {
   StudioDataFillCoordinator,
   StudioProjectContext,
 } from '../studio-src/client/StudioApp'
+import {
+  isStudioSaveShortcut,
+  StudioCodeEditor,
+  StudioDiagnosticNavigation,
+  StudioEditorInsertion,
+  StudioOpenFileLifecycle,
+} from '../studio-src/client/StudioEditor'
 import { StudioEditorTabs } from '../studio-src/client/StudioEditorTabs'
 import {
   StudioFileTreeController,
@@ -39,7 +47,6 @@ import {
   StudioCommandPalette,
   StudioPanelBounds,
   StudioPanelModels,
-  StudioProductCapabilities,
 } from '../studio-src/client/StudioProductPanels'
 import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
 import {
@@ -48,14 +55,6 @@ import {
   studioShellMarkup,
   studioShellRailPanels,
 } from '../studio-src/client/StudioShell'
-import { studioInspectorContexts } from '../studio-src/client/StudioVisualEditing'
-import {
-  isStudioSaveShortcut,
-  StudioCodeEditor,
-  StudioDiagnosticNavigation,
-  StudioEditorInsertion,
-  StudioOpenFileLifecycle,
-} from '../studio-src/StudioClient'
 import { StudioClientAssets } from '../studio-src/StudioClientAssets'
 import {
   StudioDraftSync,
@@ -124,7 +123,6 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('No search results.')
   Expect(bundle).not.toContain('StudioDrawerPanelSurface')
   Expect(bundle).not.toContain('StudioSearchPanelSurface')
-  Expect(bundle).toContain('/api/design')
   Expect(moduleInputs.some(path => path.includes('/react@19.1.0/'))).toBe(true)
   Expect(moduleInputs.some(path => path.includes('/react@19.2.8/'))).toBe(false)
   Expect(bundle).toContain('Reload preview')
@@ -154,7 +152,8 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).not.toContain('Scenario details')
   Expect(bundle).toContain('Select a scenario preview cell')
   Expect(bundle).toContain('Search project')
-  Expect(bundle).toContain('No manifest screens are available yet.')
+  Expect(bundle).toContain('Loading compiled screens…')
+  Expect(bundle).not.toContain('No manifest screens are available yet.')
   Expect(bundle).toContain('Save to scenario')
   Expect(bundle).toContain('Generate fixture')
   Expect(bundle).toContain('Generating a realistic fixture')
@@ -199,17 +198,20 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(html).toContain('\\u003c/script>')
 })
 
-Test('Studio client bundle cache retries Tao compilation after serving a development fallback', async () => {
-  const cache = new Map()
+Test('Studio client bundle cache surfaces a failed Tao compilation and retries the next request', async () => {
+  const cache = new Map<'development' | 'release', Promise<string>>()
   let builds = 0
   const build = async () => {
     builds += 1
-    return builds === 1
-      ? { cacheable: false, source: 'direct fallback' }
-      : { cacheable: true, source: 'Tao client' }
+    if (builds === 1) {
+      Errors.throwHostEnvironment('Could not compile the Tao Studio browser client.')
+    }
+    return 'Tao client'
   }
 
-  Expect(await StudioClientAssets.testing.cachedBundle(cache, 'development', build)).toBe('direct fallback')
+  await Expect(StudioClientAssets.testing.cachedBundle(cache, 'development', build)).rejects.toThrow(
+    'Could not compile the Tao Studio browser client.',
+  )
   Expect(await StudioClientAssets.testing.cachedBundle(cache, 'development', build)).toBe('Tao client')
   Expect(await StudioClientAssets.testing.cachedBundle(cache, 'development', build)).toBe('Tao client')
   Expect(builds).toBe(2)
@@ -288,7 +290,6 @@ Test('Studio browser assets bundle one CodeMirror view singleton', async () => {
   Expect(inputs.some(path => path.endsWith('/TaoStudioProductHost.files/TaoStudioProductHost.tsx'))).toBe(true)
   Expect(inputs.some(path => path.endsWith('/TaoStudioProductHost.files/client/StudioApp.ts'))).toBe(true)
   Expect(inputs.some(path => path.endsWith('/TaoStudioProductHost.files/client/StudioFileTree.ts'))).toBe(true)
-  Expect(inputs.some(path => path.endsWith('/studio-src/StudioClient.ts'))).toBe(false)
 })
 
 Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and preserves Conflict failures', async () => {
@@ -619,7 +620,7 @@ Test('Studio pane sizes load safe defaults and persist all divider dimensions', 
 })
 
 Test('Embedded Studio keeps one Files portal target and every contextual rail panel', () => {
-  const markup = studioShellMarkup({ embedded: true })
+  const markup = studioShellMarkup()
   Expect(studioShellRailPanels.map(item => item.panel)).toEqual([
     'files',
     'components',
@@ -636,7 +637,6 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
   Expect(markup).toContain('studio-toolbar-mode')
   Expect(markup).toContain('studio-toolbar-actions')
   Expect(markup).toContain('studio-window-controls')
-  Expect(studioInspectorContexts).toEqual(['Layout', 'Style', 'Data', 'Actions'])
   Expect(markup).toContain('aria-label="Environment and scenario"')
   Expect(markup).toContain('aria-label="Layout, style, data, and actions"')
   Expect(markup).toContain('studio-scenario-inspector-content')
@@ -649,7 +649,6 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
   Expect(markup.indexOf('studio-editor-pane')).toBeLessThan(markup.indexOf('studio-preview'))
   Expect(markup.indexOf('studio-editor-pane')).toBeLessThan(markup.indexOf('studio-divider-preview'))
   Expect(markup.indexOf('studio-divider-preview')).toBeLessThan(markup.indexOf('studio-preview'))
-  Expect(markup).toContain('studio-shell studio-shell--embedded')
 })
 
 Test('Studio toolbar keeps project and app context compact', () => {
@@ -809,11 +808,15 @@ Test('Studio Tao test output becomes structured results with navigable failures'
   }])
 })
 
-Test('Studio API routes stay legacy-compatible and bind project windows to one opaque session', () => {
-  Expect(StudioApiRoutes.sessionPath('/', '/api/protocol')).toBe('/api/protocol')
+Test('Studio API routes bind every project window to one opaque session', () => {
   Expect(StudioApiRoutes.sessionPath('/sessions/window_one', '/api/protocol'))
     .toBe('/sessions/window_one/api/protocol')
-  Expect(StudioApiRoutes.sessionPath('/sessions/../project', '/api/protocol')).toBe('/api/protocol')
+  Expect(() => StudioApiRoutes.sessionPath('/', '/api/protocol')).toThrow(
+    'Studio requests require a managed session window.',
+  )
+  Expect(() => StudioApiRoutes.sessionPath('/sessions/../project', '/api/protocol')).toThrow(
+    'Studio requests require a managed session window.',
+  )
   Expect(StudioApiRoutes.transitionUrl(
     { previewUrl: 'http://127.0.0.1:8082', url: '/sessions/window_two' },
     new URL('http://127.0.0.1:4276/sessions/window_one'),
@@ -908,23 +911,8 @@ Test('Studio retained previews preserve independent cell revisions and safely fa
   Expect(failedAttempts).toEqual([3])
 })
 
-Test('Studio file tree groups real paths while preserving dirty and diagnostic metadata', () => {
-  const nodes = StudioFileTreeModel.build([
-    { diagnosticCount: 2, dirty: true, path: 'Features/Card.tao', sourceVersion: 'card-1' },
-    { diagnosticCount: 0, dirty: false, path: 'Garden.tao', sourceVersion: 'garden-1' },
-    { diagnosticCount: 1, dirty: false, path: 'Features/Nested/Detail.tao', sourceVersion: 'detail-1' },
-  ])
-
-  Expect(nodes[0]).toMatchObject({ kind: 'folder', name: 'Features' })
-  Expect(nodes[1]).toMatchObject({ kind: 'file', name: 'Garden.tao' })
-  const features = nodes[0] as Extract<(typeof nodes)[number], { kind: 'folder' }>
-  Expect(features.children[0]).toMatchObject({ kind: 'folder', name: 'Nested' })
-  Expect(features.children[1]).toMatchObject({
-    file: { diagnosticCount: 2, dirty: true, path: 'Features/Card.tao' },
-    kind: 'file',
-  })
-  Expect(StudioFileTreeModel.deletePrompt('Features/Card.tao'))
-    .toBe('Delete Features/Card.tao? This cannot be undone.')
+Test('Studio file tree rejects paths that leave the project or are not Tao sources', () => {
+  Expect(StudioFileTreeModel.validatePath(' Features/Card.tao ')).toBe('Features/Card.tao')
   Expect(() => StudioFileTreeModel.validatePath('../Outside.tao')).toThrow('project-relative .tao')
   Expect(() => StudioFileTreeModel.validatePath('Notes.txt')).toThrow('project-relative .tao')
 })
@@ -973,9 +961,7 @@ Test(
       onDeleted(result) {
         callbacks.push(`deleted:${result.deleted.path}`)
       },
-      onError() {},
       onFiles: next => published.push(next.map(file => file.path)),
-      onOpen() {},
       onRenamed(result) {
         callbacks.push(`renamed:${result.previousPath}->${result.file.path}`)
       },
@@ -1104,13 +1090,12 @@ Test('Studio command palette indexes files, views, grouped scenarios, commands, 
     ]),
   )
   Expect(StudioCommandPalette.filter(items, 'states novel').map(item => item.id)).toEqual(['scenario:novel'])
+  // "Show Problems" also matches "compile" through its "compile diagnostics" detail, and is
+  // declared first, so without label-priority ranking it buries the command actually named.
+  Expect(StudioCommandPalette.filter(items, 'show compile').map(item => item.id)[0]).toBe('command:compile')
   Expect(StudioCommandPalette.filter(items, 'insert card').map(item => item.id)).toContain(
     'insert-view:/workspace/Card.tao:Card',
   )
-  Expect(StudioProductCapabilities.tests.available).toBe(true)
-  Expect(StudioProductCapabilities.logs.available).toBe(true)
-  Expect(StudioProductCapabilities.logs.reason).toContain('active preview cell')
-  Expect(StudioProductCapabilities.tokenWrites.available).toBe(true)
 })
 
 Test('Studio product panel models bound retained data, logs, and test output', () => {
@@ -1488,7 +1473,7 @@ Test('Studio editor Mod-/ binding toggles Tao line comments for selected lines',
   const commentBinding = state.facet(keymap).flat()
     .find(binding => binding.key === 'Mod-/' && binding.run !== undefined)
   if (commentBinding?.run === undefined) {
-    throw new Error('CodeMirror basic setup did not install the Mod-/ comment binding.')
+    Errors.throwUnexpected('CodeMirror basic setup did not install the Mod-/ comment binding.')
   }
 
   state = runEditorCommand(state, commentBinding.run)
@@ -1738,7 +1723,7 @@ Test('Studio draft sync writes only explicit saves and advances the optimistic v
   await Promise.resolve()
   Expect(writes).toHaveLength(0)
   const firstSave = sync.save()
-  await until(() => writes.length === 1)
+  await until(() => writes.length === 1, { description: 'the queued Studio draft write', intervalMs: 0 })
   sync.update('draft-c')
   firstWrite.resolve(saved(writes[0]!, 'source-2'))
   await firstSave
@@ -1798,7 +1783,7 @@ Test('Studio draft sync restores a rejected save without overwriting newer edito
 
   sync.update('first draft')
   const firstSave = sync.save()
-  await until(() => writes.length === 1)
+  await until(() => writes.length === 1, { description: 'the queued Studio draft write', intervalMs: 0 })
   sync.update('newer draft')
   firstWrite.reject(new Error('Connection closed.'))
   await Expect(firstSave).rejects.toThrow('Connection closed.')
@@ -1830,16 +1815,6 @@ function deferred<T>(): { promise: Promise<T>; reject: (reason?: unknown) => voi
     resolve = promiseResolve
   })
   return { promise, reject, resolve }
-}
-
-async function until(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (predicate()) {
-      return
-    }
-    await Promise.resolve()
-  }
-  throw new Error('Timed out waiting for draft synchronization.')
 }
 
 function runEditorCommand(state: EditorState, command: Command): EditorState {

@@ -1,3 +1,4 @@
+import { errorMessage, HostEnvironmentError } from './TR-errors'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
 
 /** The native modules used by Tao's curated device capabilities. */
@@ -54,15 +55,16 @@ export function createNativeModules(loaders: NativeModuleLoaders): TaoNativeModu
       const result = loadNativeModule(moduleName)
       if (result.kind === 'unavailable') {
         if (result.cause !== undefined) {
-          throw new Error(
+          throw new HostEnvironmentError(
             `Tao's ${capability} capability could not load native module '${moduleName}': `
               + `${errorMessage(result.cause)}. Check native linking and dependency compatibility.`,
-            { cause: result.cause },
+            { cause: result.cause, details: { capability, moduleName } },
           )
         }
-        throw new Error(
+        throw new HostEnvironmentError(
           `Tao's ${capability} capability requires the native module '${moduleName}', `
             + 'but it is unavailable. Install the module and run on a supported native platform.',
+          { details: { capability, moduleName } },
         )
       }
       return result.value as T
@@ -72,10 +74,6 @@ export function createNativeModules(loaders: NativeModuleLoaders): TaoNativeModu
 
 function isEmptyModule(value: unknown): boolean {
   return typeof value === 'object' && value !== null && Object.keys(value).length === 0
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 // Metro resolves require calls statically, so each supported module must remain a literal here.

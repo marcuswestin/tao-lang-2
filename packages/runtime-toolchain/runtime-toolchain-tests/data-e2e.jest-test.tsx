@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals'
 import TR from '@runtime/TR'
+import { Errors } from '@shared/core'
 import { Describe, Expect, Test } from '@shared/test'
 import { act, fireEventAsync, render, waitFor } from '@testing-library/react-native'
 import { createElement, type ReactElement, useState } from 'react'
@@ -144,7 +145,7 @@ Describe('Expo runtime', () => {
       load: () => {
         if (firstLoad) {
           firstLoad = false
-          throw new Error('storage unavailable')
+          Errors.throwHostEnvironment('storage unavailable')
         }
         return stored
       },

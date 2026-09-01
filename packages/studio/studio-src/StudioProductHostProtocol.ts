@@ -1,3 +1,4 @@
+import { Assert, Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import { StudioApiError } from './client/StudioApiClient'
 import type { StudioProductHostPanels } from './client/StudioPanelProjection'
@@ -114,9 +115,7 @@ let activeState: StudioProductHostState = Object.freeze({ revision: 0 })
 
 /** Installs the workbench controller behind the Tao-owned Files panel and drains early requests. */
 export function registerStudioProductHostActions(actions: StudioProductHostActions): () => void {
-  if (activeActions !== undefined) {
-    throw new Error('Tao Studio product host actions are already registered.')
-  }
+  Assert(activeActions === undefined, 'the Tao Studio product host actions to be registered only once')
   activeActions = actions
   for (const pending of pendingRequests.splice(0)) {
     void execute(actions, pending.action).then(pending.resolve, pending.reject)
@@ -165,22 +164,17 @@ export function subscribeStudioProductHostState(listener: () => void): () => voi
 
 /** Sends a Tao-mounted editor change through the existing tab/draft controller. */
 export function requestStudioProductHostChangeActiveFile(content: string): void {
-  if (typeof content !== 'string') {
-    throw new Error('Tao Studio editor changes require text content.')
-  }
-  if (activeActions === undefined) {
-    throw new Error('Tao Studio editor is not ready yet.')
-  }
+  Assert.input(typeof content === 'string', 'Tao Studio editor changes require text content.')
+  Assert.defined(activeActions, 'the Tao Studio editor to be ready before it forwards a change')
   activeActions.changeActiveFile(content)
 }
 
 export function requestStudioProductHostSelectActiveFile(anchor: number, head: number): void {
-  if (!Number.isInteger(anchor) || !Number.isInteger(head) || anchor < 0 || head < 0) {
-    throw new Error('Tao Studio editor selection offsets must be non-negative integers.')
-  }
-  if (activeActions === undefined) {
-    throw new Error('Tao Studio editor is not ready yet.')
-  }
+  Assert.input(
+    Number.isInteger(anchor) && Number.isInteger(head) && anchor >= 0 && head >= 0,
+    'Tao Studio editor selection offsets must be non-negative integers.',
+  )
+  Assert.defined(activeActions, 'the Tao Studio editor to be ready before it forwards a selection')
   activeActions.selectActiveFile(anchor, head)
 }
 
@@ -240,9 +234,7 @@ export async function requestStudioProductHostUndoInspectorAction(): Promise<voi
 
 export async function requestStudioProductHostPanelAction(name: string, payload: string): Promise<void> {
   assertNonEmptyProductHostIdentity(name, 'panel')
-  if (payload.length > 1_000_000) {
-    throw new Error('Tao Studio panel action payloads must be at most one megabyte.')
-  }
+  Assert.input(payload.length <= 1_000_000, 'Tao Studio panel action payloads must be at most one megabyte.')
   await request({ kind: 'product-panel-action', name, payload })
 }
 
@@ -327,15 +319,17 @@ async function execute(actions: StudioProductHostActions, action: StudioProductH
 }
 
 function assertNonEmptyProductHostIdentity(value: string, label: string): void {
-  if (value.trim() === '' || value.length > 1_024) {
-    throw new Error(`Tao Studio ${label} actions require a stable identity.`)
-  }
+  Assert.input(
+    value.trim() !== '' && value.length <= 1_024,
+    `Tao Studio ${label} actions require a stable identity.`,
+  )
 }
 
 function assertStudioProductHostCellIdentity(identity: StudioProductHostCellIdentity): void {
-  if (identity.cellId.trim() === '' || !Number.isInteger(identity.cellRevision) || identity.cellRevision < 0) {
-    throw new Error('Tao Studio scenario actions require a current cell identity and revision.')
-  }
+  Assert.input(
+    identity.cellId.trim() !== '' && Number.isInteger(identity.cellRevision) && identity.cellRevision >= 0,
+    'Tao Studio scenario actions require a current cell identity and revision.',
+  )
 }
 
 function assertStudioProductHostEnvironment(environment: StudioProductHostEnvironment): void {
@@ -350,7 +344,7 @@ function assertStudioProductHostEnvironment(environment: StudioProductHostEnviro
     || network.latencyMs < 0
     || !['error', 'normal', 'offline'].includes(network.outcome)
   ) {
-    throw new Error('Tao Studio requires a valid viewport and network environment.')
+    Errors.throwUserInput('Tao Studio requires a valid viewport and network environment.')
   }
   if (
     network.outcome === 'error'
@@ -362,7 +356,7 @@ function assertStudioProductHostEnvironment(environment: StudioProductHostEnviro
       || network.error.status > 599
     )
   ) {
-    throw new Error('Tao Studio error-mode networks require a message and HTTP status from 100 through 599.')
+    Errors.throwUserInput('Tao Studio error-mode networks require a message and HTTP status from 100 through 599.')
   }
 }
 
@@ -371,13 +365,12 @@ function freezeOptional<ValueT extends object>(value: ValueT | undefined): Reado
 }
 
 function assertStudioProductHostPath(path: string): void {
-  if (!validStudioProductHostPath(path)) {
-    throw new Error('Tao Studio accepts only project-relative Tao file paths.')
-  }
+  Assert.input(validStudioProductHostPath(path), 'Tao Studio accepts only project-relative Tao file paths.')
 }
 
 function assertSourceVersion(sourceVersion: string): void {
-  if (sourceVersion.length === 0 || sourceVersion.length > 1_024) {
-    throw new Error('Tao Studio file actions require a source version.')
-  }
+  Assert.input(
+    sourceVersion.length > 0 && sourceVersion.length <= 1_024,
+    'Tao Studio file actions require a source version.',
+  )
 }

@@ -1,12 +1,13 @@
+import { RuntimeAssert } from './TR-assert'
 import type { TaoConfiguredDatasource, TaoDataSchema } from './TR-data'
 import { entityHandle, metadataOf, type TaoEntityReferenceSnapshot } from './TR-data-entity'
 import { testDataConnection } from './TR-data-provider'
+import { UserInputError } from './TR-errors'
 
 export type DataStatus = 'error' | 'loading' | 'ready' | 'unauthorized'
 
 let testMode = false
 const schemas = new Set<TaoDataSchema>()
-const activeTestSchemas = new Set<TaoDataSchema>()
 const globalListeners = new Set<() => void>()
 let globalRevision = 0
 let lastResetBackup: TaoDataCapture | undefined
@@ -35,7 +36,9 @@ export function restoreEntityReference(reference: TaoEntityReferenceSnapshot): u
       return handle
     }
   }
-  throw new Error(`No active datasource matches restored entity schema '${reference.schema}'.`)
+  throw new UserInputError(`No active datasource matches restored entity schema '${reference.schema}'.`, {
+    schema: reference.schema,
+  })
 }
 
 export function bindConfiguredDataSchema(
@@ -43,7 +46,6 @@ export function bindConfiguredDataSchema(
   source: TaoConfiguredDatasource,
 ): void {
   if (testMode) {
-    activeTestSchemas.add(schema)
     // Configuration mistakes must fail the behavior test that mounts them, not the first
     // production mount, so the runtime-owned validation runs here even though the provider is
     // never connected under test.
@@ -98,9 +100,7 @@ export function canResetAllDataSchemas(): boolean {
 
 /** resetAllDataSchemas captures every schema before the first destructive provider call. */
 export async function resetAllDataSchemas(): Promise<TaoDataCapture> {
-  if (!canResetAllDataSchemas()) {
-    throw new Error('Not every active datasource supports reset.')
-  }
+  RuntimeAssert(canResetAllDataSchemas(), 'every active datasource supports reset before a recovery reset runs')
   const backup = captureDataSchemas()
   lastResetBackup = backup
   try {
@@ -136,7 +136,6 @@ export function revision(): number {
 
 export function beginTest(): void {
   testMode = true
-  activeTestSchemas.clear()
   for (const schema of schemas) {
     schema.configure(testDataConnection(), 'test')
   }
@@ -144,16 +143,6 @@ export function beginTest(): void {
 
 export function endTest(): void {
   testMode = false
-  activeTestSchemas.clear()
-}
-
-export function setTestStatus(status: DataStatus, message = ''): void {
-  if (activeTestSchemas.size === 0) {
-    throw new Error('A `data` step requires the running app to declare a Datasource.')
-  }
-  for (const schema of activeTestSchemas) {
-    schema.setStatus(status, message)
-  }
 }
 
 export function emitDataChange(localListeners: Iterable<() => void>): void {

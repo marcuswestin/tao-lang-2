@@ -301,7 +301,7 @@ the first frame beyond that cap fails into the ordinary containment path. App-le
 in action overlays and runtime capture, loads asynchronously over its declared default, and serializes
 writes. `SplitNav` can mark a pane `Resizable true`; it owns the drag affordance, writes a bindable width,
 resets that width to its declaration default on a portable double-tap, and keeps an unbound resize
-ephemeral. The executable Resizable Split test app exercises the combined syntax and render path; focused
+ephemeral. The Navigation test app's Resizable Split journey exercises the combined syntax and render path; focused
 runtime tests cover persistence edge cases, the depth cap, and resize gestures.
 
 The browser client implements the target frame: project toolbar, Design/Code/Run presets, command palette,
@@ -380,7 +380,7 @@ separately hosted cross-origin Tao surface would need corresponding write-origin
 
 ## Current boundary
 
-`Tao Studio Development.md` owns the operational contract around Studio: launch modes and their
+`packages/studio/README.md` owns the operational guide around Studio: launch modes and their
 options, ports, artifact roots, launch manifests, `doctor`, the smoke lanes, the native canary, and
 the release steps. This section states what Studio implements.
 

@@ -1,4 +1,4 @@
-import { CLI, FS, Repo, Time } from '@shared'
+import { CLI, Errors, FS, Repo, Time } from '@shared'
 import { Expect, Test } from '@shared/test'
 import { randomUUID } from 'node:crypto'
 import { createConnection } from 'node:net'
@@ -10,7 +10,7 @@ import {
 } from '../generation-src/generation'
 
 if (process.env['TAO_LIVE_APPLE_AI'] !== '1') {
-  throw new Error('Set TAO_LIVE_APPLE_AI=1 to run live Apple Foundation Models checks.')
+  Errors.throwUserInput('Set TAO_LIVE_APPLE_AI=1 to run live Apple Foundation Models checks.')
 }
 
 const workspace: EntityGenerationDeclaration = {
@@ -61,7 +61,7 @@ Test(
       const result = await run.final
 
       if (result.status === 'failure') {
-        throw new Error(`Live Apple generation failed (${result.code}): ${result.message}`)
+        Errors.throwHostEnvironment(`Live Apple generation failed (${result.code}): ${result.message}`)
       }
       Expect(result.status).toBe('success')
       Expect(partials.length).toBeGreaterThan(0)
@@ -120,7 +120,7 @@ Test(
       const port = await Promise.race([
         ready,
         Time.sleep(15_000).then(() => {
-          throw new Error(`Helper did not become ready. stdout=${stdout} stderr=${stderr}`)
+          Errors.throwHostEnvironment(`Helper did not become ready. stdout=${stdout} stderr=${stderr}`)
         }),
       ])
       const listeners = await CLI.run('/usr/sbin/lsof', {

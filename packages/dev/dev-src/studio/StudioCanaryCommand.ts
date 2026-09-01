@@ -2,6 +2,7 @@ import { Errors, FS, HCI, Repo } from '@shared'
 import {
   canaryExitCode,
   evaluateCanary,
+  resolveCanaryTarget,
   survivingOwnedPids,
   writeCanaryReport,
 } from './StudioCanary'
@@ -28,8 +29,6 @@ export type CanaryOptions = {
   projectRoot?: string
 }
 
-const DEFAULT_CANARY_PROJECT = { appName: 'HNReader', projectRoot: 'Apps/HNReader' }
-
 /**
  * Runs the native shell against a deterministic project and reports what it proved. A host that
  * cannot run an AppKit application at all is reported as blocked, which is neither a pass nor a
@@ -49,10 +48,7 @@ async function runStudioCanary(options: CanaryOptions = {}): Promise<number> {
     return canaryExitCode(report)
   }
 
-  const projectRoot = options.projectRoot
-    ?? FS.resolvePath(DEFAULT_CANARY_PROJECT.projectRoot, repositoryRoot)
-  const appName = options.appName
-    ?? (options.projectRoot === undefined ? DEFAULT_CANARY_PROJECT.appName : undefined)
+  const { appName, projectRoot } = resolveCanaryTarget(options, repositoryRoot)
   const before = new Set((await readLaunches(repositoryRoot)).map(launch => launch.manifest.launchId))
   const exitCode = await runStudioDev({
     appName,

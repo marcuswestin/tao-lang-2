@@ -1,4 +1,0 @@
-project {
-   id "ticking-clock"
-   name "Ticking Clock"
-}

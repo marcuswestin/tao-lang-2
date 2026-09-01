@@ -1,15 +1,13 @@
-import { Packages } from '@ast-utils'
-import { AST, Langium } from '@parser'
+import type { Packages } from '@ast-utils'
+import type { AST, Langium } from '@parser'
 import type { Diagnostic } from '@shared'
 import { validatorDiagnostic } from './diagnostics'
-import type { TaoTypirServices } from './TypeSystemHelpers'
 
 /** ValidationRunContext declares shared validation invocation state. */
 export interface ValidationRunContext {
   readonly packagesContext: Packages.Context
   readonly entryFilePath: string
   readonly workspaceFiles: readonly AST.TaoFile[]
-  readonly typir: TaoTypirServices
 }
 
 /** ValidationContext carries validation run state and diagnostic reporting. */

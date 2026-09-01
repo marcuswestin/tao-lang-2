@@ -1,4 +1,5 @@
-import { Errors, HCI, Platform, Switch } from '@shared'
+import { Errors, HCI, Platform, Repo, Switch } from '@shared'
+import { AgentConfigGenerator } from './agent-config/AgentConfigGenerator'
 import { runWithCommands } from './cli/run-with-commands'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { ExpoRunner } from './expo-dev-loop/expo-runner/ExpoRunner'
@@ -69,6 +70,18 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('agent-config')
+    .description('Generate harness agent adapters and permission config from .rulesync.')
+    .action(async () => {
+      try {
+        await AgentConfigGenerator.generate({ root: Repo.resolvePath() })
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('studio')
     .description('Launch Tao Studio against a project folder.')
     .argument('[project]', 'Tao project folder.', '.')
@@ -99,15 +112,18 @@ await runWithCommands(commands => {
     .option('--app <name>', 'App declaration within the selected project.')
     .option('--artifact-root <path>', 'Where the canary writes its artifacts.')
     .option('--hutch <path>', 'Explicit Hutch executable path.')
-    .action(async (options: { artifactRoot?: string; hutch?: string; project?: string } = {}) => {
-      Platform.runtimeProcess.exit(
-        await StudioCanaryCommand.canary({
-          artifactRoot: options.artifactRoot,
-          hutchPath: options.hutch,
-          projectRoot: options.project,
-        }),
-      )
-    })
+    .action(
+      async (options: { app?: string; artifactRoot?: string; hutch?: string; project?: string } = {}) => {
+        Platform.runtimeProcess.exit(
+          await StudioCanaryCommand.canary({
+            appName: options.app,
+            artifactRoot: options.artifactRoot,
+            hutchPath: options.hutch,
+            projectRoot: options.project,
+          }),
+        )
+      },
+    )
 
   commands
     .command('studio-release-check')

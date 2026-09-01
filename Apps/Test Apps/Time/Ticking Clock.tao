@@ -1,0 +1,42 @@
+use StackNav from @tao/nav
+use Interval from @tao/time
+use Col, FormButton, Text from @tao/ui
+
+app TickingClock {
+   Name "Ticking Clock"
+   // Device-local, so it survives a relaunch. A view-local `now` cannot witness the clock across
+   // one: the launched instance re-reads it and every elapsed reading starts at zero again.
+   state FirstStartedAt is time = now (persist)
+   Navigator StackNav {
+      Initial ClockView(FirstStart: FirstStartedAt)
+}  }
+
+// A ticker is held like any other view-local value. `Elapsed` is an ordinary derivation over it, so
+// it recomputes on every tick rather than being evaluated once.
+view ClockView(FirstStart time) {
+   Title "Ticking Clock"
+   state Tick = Interval(1.s)
+   state StartedAt = now
+   let Elapsed = Tick.Value - StartedAt
+   let SinceFirstStart = Tick.Value - FirstStart
+   action Pause() {
+      do Tick.Stop()
+   }
+   action Resume() {
+      do Tick.Start()
+   }
+   render Col() [gap 6] {
+      Text("Elapsed: { Elapsed.Clock }")
+      Text("Elapsed seconds: { Elapsed.s }")
+      Text("Since first start: { SinceFirstStart.s }")
+      Text(when Tick.Running "Running" / not "Paused")
+
+      #pause
+      FormButton("Pause") {
+         on press Pause
+      }
+
+      #resume
+      FormButton("Resume") {
+         on press Resume
+}  }  }

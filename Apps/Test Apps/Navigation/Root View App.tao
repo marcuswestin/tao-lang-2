@@ -1,0 +1,34 @@
+use Button, Col, Text from @tao/ui
+
+// `app X { view Y }` is the whole app: Tao synthesizes the navigator that mounts Y, so the source
+// never names one. The synthesized navigator is a slot, which owns no chrome of its own — a journey
+// over this app asserts the content on screen, never a navigation title.
+app RootViewApp {
+   Name "Root View App"
+   view RootHome
+}
+
+view RootHome() {
+   state Visits = 0
+   action CountVisit() {
+      set Visits += 1
+   }
+   render Col() [gap 8, pad 16] {
+      Text("Root home")
+      Text("Home visits: { Visits }")
+
+      #rootCountVisit
+      Button("Count visit") {
+         on press CountVisit
+      }
+
+      #rootOpenDetail
+      Button("Open detail") {
+         on press -> { present RootDetail(Label: "Typed root detail") }
+}  }  }
+
+view RootDetail(Label text) {
+   render Col() [gap 8, pad 16] {
+      Text("Root detail")
+      Text(Label)
+}  }

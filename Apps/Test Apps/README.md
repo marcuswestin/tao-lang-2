@@ -2,22 +2,27 @@
 
 Test apps are valid, positive, executable examples of **implemented** Tao behavior. Diagnostics, invalid sources, and parser/compiler edge cases belong in package unit tests instead.
 
-Each app lives in its own folder with its Tao source and behavior test:
+Each entry below owns one folder of Tao sources and behavior tests:
 
 ```text
-Apps/Test Apps/<App Name>/
-  <App Name>.tao
-  <App Name>.test.tao
+Apps/Test Apps/<Entry Name>/
+  <Subject>.tao
+  <Subject>.test.tao
 ```
 
-This file is the contract for each app's scope. When a change would expand an app beyond its entry below, update the entry first. Product behavior belongs in `Apps/WordFlower/`, never here.
+A folder may hold several `app` declarations and several subject pairs. Every check names the app it
+drives with `run <AppName>`, so journeys over one language surface share a folder without sharing an
+app, and each subject keeps its own source and test file.
+
+This file is the contract for each entry's scope. When a change would expand an entry beyond its
+scope below, update the entry first. Product behavior belongs in `Apps/WordFlower/`, never here.
 
 ## Tranche 4 reconciliation
 
 The entries below describe the executable apps today. Tranche 4 expanded the positive examples
 without erasing compatible coverage:
 
-- Functional Core covers parenthesized block-bodied functions, explicit `return`, and non-blocking
+- Language Core covers parenthesized block-bodied functions, explicit `return`, and non-blocking
   `async { ... }`; WordFlower and package tests additionally prove inferred return types.
 - Layout and App Shell covers `width max`, `Panes`, and `ScrollView`. WordFlower and package tests
   own `@@content` placement, optional single-fill named slots, named design bundles, and
@@ -31,53 +36,80 @@ without erasing compatible coverage:
   `let Name is Type = Value`, primitive app/nav/datasource value heads, and the settled `with`
   construction-versus-value-derivation rules.
 - Forms and Interaction covers `expect checkbox <selector> checked|unchecked`.
-- Component Aliases covers `use package` namespace imports and pass-through view aliases
+- Packages covers `use package` namespace imports and pass-through view aliases
   (`public view Badge = widgets.Badge`), the mechanism `@tao/ui` uses to publish implementations.
 - Native Components covers `@tao/ui`'s published components — Button, Switch, Slider, Picker,
   SegmentedControl, DatePicker, Spinner — resolving to their platform-native implementations,
   exercised through the behavior every implementation must share.
-- Sheet Presentation covers `present X as sheet`, the platform-hosted modal presentation.
-- Unit Values covers the `duration` family end to end: construction, reading back, long aliases,
-  dimensional arithmetic, and `.Clock`. WordFlower's focused writing session owns units in a product
-  feature, and package tests own the diagnostics.
-- Ticking Clock covers `@tao/time`: a held ticker, live derivation over it, `Stop`/`Start`/`Running`,
-  and the `advance` step that drives the clock a check holds.
+- Navigation covers `present X as sheet`, the platform-hosted modal presentation.
+- Time covers the `duration` family end to end — construction, reading back, long aliases,
+  dimensional arithmetic, and `.Clock` — and `@tao/time`: a held ticker, live derivation over it,
+  `Stop`/`Start`/`Running`, and the `advance` step that drives the clock a check holds. WordFlower's
+  focused writing session owns units in a product feature, and package tests own the diagnostics.
 - Device Kit covers the first `@tao/device` contracts: semantic Haptic playback, reactive Clipboard
   reads and writes, and opening the system Share sheet through deterministic native-module fakes.
 - All `view`, `action`, and `function` declarations use a parenthesized parameter list,
   including `()`.
-- Every `StackNav` destination fills its own `Title`. Navigation MVP keeps the bare `@tao/nav`
-  native-default import, while Basic Navigation proves that explicit `@tao/nav/basic` renders the
-  same title and toolbar command contract deterministically.
+- Every `StackNav` destination fills its own `Title`. Navigation's native-stack app keeps the bare
+  `@tao/nav` native-default import, while its basic-kit app proves that explicit `@tao/nav/basic`
+  renders the same title and toolbar command contract deterministically.
 
-## Navigation MVP
+## Navigation
 
-Exercise app-mounted navigation: presentation, covered-entry state preservation, and back behavior.
+Exercise the navigation layer: the native stack, the portable basic kit, platform sheet and overlay
+presentation, the split surface, and the root-view app form. Five `app` declarations share the
+folder, one per source file, and each check picks its app with `run`.
 
-**Belongs here:** an `app` with `Name` and a configured `Navigator StackNav { Initial <view> }`; presented `view` declarations with typed parameters; `present Detail(Name: "…")` with required parentheses; a covered entry that stays mounted and hidden and restores its state when revealed; the accessible Back control, native back, and the test `back` step through the same reducer.
+**Belongs here:**
 
-**Does not belong here:** selection, split, overlays, toasts, windows, restoration, routes, or transition policy; target-resolution and argument diagnostics; WordFlower product behavior.
+- _Native stack_ (`Navigation MVP.tao`): an `app` with `Name` and a configured
+  `Navigator StackNav { Initial <view> }` taken from the bare, native-default `@tao/nav` root;
+  presented `view` declarations with typed parameters; `present Detail(Name: "…")` with required
+  parentheses; a covered entry that stays mounted and hidden and restores its state when revealed;
+  the accessible Back control, native back, and the test `back` step through the same reducer; the
+  test `relaunch` step reopening the presented screen with the typed argument it was opened with,
+  `relaunch fresh` opening on the initial screen instead, and the check boundary that keeps a
+  position one check reached out of the next; `ask` with a `responds` dialogue, both answered and
+  left suspended when the app is quit, where the action that was waiting never resumes into the
+  launch that replaces it.
+- _Basic kit_ (`Basic Navigation.tao`): `StackNav` from `@tao/nav/basic`, with the same required
+  `Title` and optional `Toolbar` slots as native StackNav; intent-title label defaulting; host
+  command invocation; deterministic basic chrome assertions.
+- _Sheets and overlays_ (`Sheet Presentation.tao`): `present X as sheet`, the platform's own modal
+  presentation; `present X as overlay` from inside one; dismissing from inside with `dismiss`;
+  dismissing with Back; a covered sheet hiding and restoring when its cover dismisses — a sheet
+  behaving as an overlay does for every navigation operation.
+- _Split_ (`Resizable Split.tao`): `SplitNav` with keyed `Content`, numeric `Width`, and
+  `Resizable`; an app-level `state Name is number = default (persist)` read by a pane and
+  changed by an app-level action — the journey observes the value, not the resulting geometry; simultaneous pane rendering; the test `relaunch` step,
+  which replaces the mounted app with a new launch so the persisted width outlives it and the
+  sidebar's view-local state does not, including across `relaunch fresh`, which opts a launch out
+  of restoring navigation and not out of the device.
+- _Root view_ (`Root View App.tao`): the `app X { view Y }` form, whose navigator Tao synthesizes
+  rather than the source naming one; `present` and `back` through that synthesized navigator; the
+  test `relaunch` step reopening the presented screen it left, and `relaunch fresh` opening on the
+  root view and recording that as the stored position.
 
-## Resizable Split
+**Does not belong here:** selection, toasts, windows, routes, or transition policy; split,
+target-resolution, and argument diagnostics; native adapter appearance or transitions; the platform
+chrome a sheet is hosted in, which is not assertable from a journey; arbitrary row/column resizing,
+multi-window layout, collapse policy, or product-specific workbench behavior; WordFlower product
+behavior.
 
-Exercise the portable SplitNav surface and its app-owned persisted width binding.
+The split journey never drags a divider: the Tao test language has no `resize` step, and resize
+interaction is the adapter's. `relaunch` proves that device-local `(persist)` state outlives the
+launched instance while ephemeral view state does not; encoding and decoding that state through
+device storage stays with the runtime's persisted-state suite in `packages/runtime/TR-tests/`,
+because a relaunch reads that same store again rather than rebuilding it. Reading it again is what
+gives the journey its teeth: break the storage key and the split journey fails. The same split holds
+for navigation: the Navigation MVP journey proves where a relaunch reopens and what an abandoned
+action does not do to the launch after it, while snapshot encoding and the launch-boundary lifecycle
+stay with the runtime's restoration and relaunch suites in the same directory.
 
-**Belongs here:** `SplitNav` with keyed `Content`, numeric `Width`, and `Resizable`; an app-level
-`state Name is number = default (persist)` bound directly as one pane's width; simultaneous pane rendering.
-
-**Does not belong here:** split diagnostics, arbitrary row/column resizing, multi-window layout,
-collapse policy, or product-specific workbench behavior.
-
-## Basic Navigation
-
-Exercise the portable navigation kit explicitly, independently of the native-default package root.
-
-**Belongs here:** `StackNav` from `@tao/nav/basic`; the same required `Title` and optional `Toolbar`
-slots as native StackNav; intent-title label defaulting; host command invocation; deterministic basic
-chrome assertions.
-
-**Does not belong here:** native adapter appearance or transitions; other navigation families;
-diagnostics; product behavior.
+The root-view journey asserts content and never a navigation title: the navigator the `view` form
+synthesizes is a slot, which renders no chrome of its own. It is the only journey over that app
+shape, so it is what says a synthesized navigator restores at all — the same relaunch a written
+`nav` gets, rather than a launch that quietly gives up and reopens on the root view.
 
 ## Forms and Interaction MVP
 
@@ -91,17 +123,28 @@ Exercise controlled text input, event configuration, and form feedback.
 
 Exercise the provider-neutral data catalog and an app-configured isolated Memory datasource.
 
-**Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with `on delete cascade`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, and the deterministic `data loading|error|ready` test steps.
+**Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, and stored rows surviving a `relaunch`. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step.
 
 **Does not belong here:** remote providers, credentials, auth, permissions, sync, pagination, or aggregation; navigation or WordFlower product behavior; schema, query, and write diagnostics.
 
-## Functional Core MVP
+## Language Core
 
-Exercise the executable functional core: expressions, pure functions, and control flow.
+Exercise the executable language core: expressions, pure functions, control flow, view-local state,
+and actions. Two `app` declarations share the folder — `FunctionalCoreMVP` in
+`Functional Core MVP.tao` and `StateActionMVP` in `State Action MVP.tao` — and each behavior test
+picks its app with `run`.
 
-**Belongs here:** boolean, absence, arithmetic, comparison, and boolean-logic expressions; parenthesized block-bodied `function` declarations with explicit `return`; interpolated strings; exhaustive `when Subject { … otherwise -> … }` in value and render positions; block-scoped `guard` in actions and renders; `loop Plural / Singular` in render blocks; `toggle`; non-blocking `async { ... }`; reactive branch changes driven by Tao state and actions.
+**Belongs here:** boolean, absence, arithmetic, comparison, and boolean-logic expressions;
+parenthesized block-bodied `function` declarations with explicit `return`; interpolated strings;
+exhaustive `when Subject { … otherwise -> … }` in value and render positions; block-scoped `guard`
+in actions and renders; `loop Plural / Singular` in render blocks; `toggle`; non-blocking
+`async { ... }`; `state` declarations; named actions with parameters; `action()`-typed view
+parameters; inline `on press -> { }` handlers and named action references; `set`, compound `set`,
+and `do`; state-derived immutable bindings; reactive branch changes driven by Tao state and actions.
 
-**Does not belong here:** control-flow or expression diagnostics; input events, data, or navigation; collection transforms beyond the shipped list members and iteration.
+**Does not belong here:** control-flow, expression, placement, or type diagnostics; input, submit,
+and non-press events, which belong to Forms and Interaction MVP; data, navigation, or custom types;
+collection transforms beyond the shipped list members and iteration.
 
 ## Layout and App Shell
 
@@ -111,13 +154,26 @@ Exercise bracketed layout clauses and the default app-shell baseline.
 
 **Does not belong here:** visual style clauses; `@@content`, named render slots, or render elision; state, actions, forms, data, navigation, or richer scrolling behavior.
 
-## Package Access
+## Packages
 
-Exercise local workspace package resolution and project metadata.
+Exercise local workspace package resolution, project metadata, and the namespace-import and alias
+mechanism component kits publish through. Two `app` declarations share the folder — `PackageAccess`
+in `Package Access.tao` and `ComponentAliases` in `Component Aliases.tao` — over one fixture set of
+local packages in `Packages/`: `@cards` and `@copy` for resolution, `@widgets` as the stand-in
+implementation package an alias republishes.
 
-**Belongs here:** `project { name … remote none license … }` metadata; `use … from @package/subfolder` for package folders nested in the project; bare `use Foo` for `package` declarations across sibling files, sibling folders, and child folders in the same `@package`; `workspace`-visible declarations imported across indexed local packages; runtime rendering for package-imported views and bindings.
+**Belongs here:** `project { name … remote none license … }` metadata; `use … from @package/subfolder`
+for package folders nested in the project; bare `use Foo` for `package` declarations across sibling
+files, sibling folders, and child folders in the same `@package`; `workspace`-visible declarations
+imported across indexed local packages; runtime rendering for package-imported views and bindings;
+`use package @pkg [as name]` with a derived namespace name and an `as` rename; `public view Name =
+ns.Member` publishing a package member under the file's own name; a same-named alias proving the
+namespace avoids shadowing; call sites binding through the alias to the target's parameters.
 
-**Does not belong here:** resolution, duplicate-package, or visibility diagnostics; external projects, `requires`, install/update/publish, remotes, or lockfiles; import aliases.
+**Does not belong here:** resolution, duplicate-package, and visibility diagnostics;
+namespace-import diagnostics — duplicate namespaces, unresolvable packages, non-view targets — which
+are package tests; external projects, `requires`, install/update/publish, remotes, or lockfiles; the
+stdlib's own native components, which `@tao/ui` and its conformance suite own.
 
 ## Runtime Stdlib Tests
 
@@ -127,29 +183,30 @@ Exercise runtime-backed `@tao/ui` imports and the first stdlib primitives.
 
 **Does not belong here:** type-system cases owned by Type System Tests; import-visibility errors; design and styling behavior; stateful interaction beyond the no-op binding.
 
-## State Action MVP
+## Time
 
-Exercise view-local state, actions, and reactive rerendering.
+Exercise the time surface: unit values (Decisions §2) through the one family the language registers,
+and the ticking clock (Decisions §9) with the deterministic clock a check holds. Two `app`
+declarations share the folder, one per source file — `UnitValues` in `Unit Values.tao` and
+`TickingClock` in `Ticking Clock.tao` — and each keeps its own behavior test. `TickingClock` also
+holds an app-level `time` state `(persist)`, which is what lets a journey witness that the held clock
+survives a `relaunch`: a view-local `now` cannot, because the launched instance re-reads it.
 
-**Belongs here:** `state` declarations; named actions with parameters; `action()` -typed view parameters; inline `on press -> { }` handlers and named action references; `set`, compound `set`, and `do`; state-derived immutable bindings.
+**Belongs here:**
 
-**Does not belong here:** placement or type diagnostics; input, submit, and non-press events, which belong to Forms and Interaction MVP; control flow, data, navigation, or custom types.
+- _Unit values_ (`Unit Values.tao`): `.unit` on a number and on a unit value; canonical units and
+  their long singular and plural aliases; equality after normalization; dimensional arithmetic —
+  duration ± duration, duration × number, duration ÷ duration; the `.Clock` reading and its
+  boundaries at an hour and at zero.
+- _Ticking clock_ (`Ticking Clock.tao`): `Interval(Every)` held as view-local state; `Tick.Value` as
+  a live reading; `let` derivations that recompute per tick; `do Tick.Stop()` and `do Tick.Start()`;
+  `Tick.Running`; `advance <duration>` moving the clock and firing due ticks in order; the compact
+  `when Subject Yes / not No` form.
 
-## Unit Values
-
-Exercise unit values (Decisions §2) through the one family the language registers.
-
-**Belongs here:** `.unit` on a number and on a unit value; canonical units and their long singular and plural aliases; equality after normalization; dimensional arithmetic — duration ± duration, duration × number, duration ÷ duration; the `.Clock` reading and its boundaries at an hour and at zero.
-
-**Does not belong here:** the ticking clock and live derivation, which WordFlower's focused writing session owns; unit diagnostics, which are package tests; families beyond `duration`, which are not registered until a feature forces one.
-
-## Ticking Clock
-
-Exercise the ticking clock (Decisions §9) and the deterministic clock a check holds.
-
-**Belongs here:** `Interval(Every)` held as view-local state; `Tick.Value` as a live reading; `let` derivations that recompute per tick; `do Tick.Stop()` and `do Tick.Start()`; `Tick.Running`; `advance <duration>` moving the clock and firing due ticks in order; the compact `when Subject Yes / not No` form.
-
-**Does not belong here:** unit construction and conversion, which Unit Values owns; the product shape of a writing session, which WordFlower owns; toast expiry, which WordFlower's documents journey proves.
+**Does not belong here:** unit diagnostics, which are package tests; families beyond `duration`,
+which are not registered until a feature forces one; the product shape of a writing session and its
+live units, which WordFlower's focused writing session owns; toast expiry, which WordFlower's
+documents journey proves.
 
 ## Device Kit
 
@@ -162,29 +219,13 @@ deterministic native-module substitutes owned by the runtime test harness.
 **Does not belong here:** Location, permissions, declared failures, `when do` outcomes, raw
 Vibration, vendor enums or result objects, or app-authored native bindings.
 
-## Component Aliases
-
-Exercise namespace imports and pass-through view aliases, the mechanism behind component kits.
-
-**Belongs here:** `use package @pkg [as name]`; a derived namespace name and an `as` rename; `public view Name = ns.Member` publishing a package member under the file's own name; a same-named alias proving the namespace avoids shadowing; call sites binding through the alias to the target's parameters.
-
-**Does not belong here:** namespace-import diagnostics (duplicate namespaces, unresolvable packages, non-view targets), which are package tests; the stdlib's own native components, which `@tao/ui` and its conformance suite own.
-
 ## Native Components
 
 Exercise `@tao/ui`'s published components against their platform-native implementations.
 
 **Belongs here:** importing from bare `@tao/ui` and getting the native set; pressing a native button by its title; a disabled native button; a switch, slider, picker, segmented control, and date picker reporting their values through actions; the portable rendering each falls back to where its platform host is absent; behavior that must hold identically whichever implementation is bound.
 
-**Does not belong here:** the alias mechanism itself, which Component Aliases owns; per-implementation appearance, which is not assertable from a journey; navigation surfaces, which the nav layer owns.
-
-## Sheet Presentation
-
-Exercise `present X as sheet`, the platform's own modal presentation.
-
-**Belongs here:** presenting a view as a sheet; dismissing one from inside with `dismiss`; dismissing one with Back; a sheet behaving as an overlay does for every navigation operation.
-
-**Does not belong here:** overlays and toasts, which WordFlower and the navigation tests own; the platform chrome a sheet is hosted in, which is not assertable from a journey.
+**Does not belong here:** the alias mechanism itself, which Packages owns; per-implementation appearance, which is not assertable from a journey; navigation surfaces, which the nav layer owns.
 
 ## Type System Tests
 

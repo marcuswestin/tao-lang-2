@@ -6,6 +6,10 @@
     "runtime-toolchain-tests/**/*",
     "_gen_tao-app/**/*"
   ],
+  "exclude": [
+    "**/node_modules/**/*",
+    "_gen_tao-app/current"
+  ],
   "compilerOptions": {
     "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,

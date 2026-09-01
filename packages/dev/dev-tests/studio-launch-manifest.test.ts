@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { Errors, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   isManifest,
@@ -507,7 +507,7 @@ Describe('Studio lifecycle commands', () => {
         probes: probes({ processes: { 100: alive(100, 'bun') } }),
         repositoryRoot: root,
         signal: async () => {
-          throw new Error('must not signal an unusable manifest')
+          Errors.throwUnexpected('must not signal an unusable manifest')
         },
       })
 

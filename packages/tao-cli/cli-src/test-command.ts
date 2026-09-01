@@ -7,6 +7,7 @@ import { findTaoFiles } from './tao-files'
 /** CompiledTaoTests declares the files and generated manifest for one Tao test run. */
 type CompiledTaoTests = {
   manifestPath?: string
+  runRoot?: string
   runtimeRoot?: string
   testPaths: readonly string[]
 }
@@ -33,10 +34,14 @@ export async function runTestCommand(path: string): Promise<void> {
       HCI.write(commandResult.stderr)
     }
     if (!commandResult || commandResult.error || commandResult.exitCode !== 0) {
+      // A failed run's generated code is the debugging artifact, so its run root stays on disk.
       if (commandResult?.error) {
         HCI.writeErrorLine(Errors.formatForUser(commandResult.error))
       }
       Platform.runtimeProcess.exit(1)
+    }
+    if (compiled.runRoot !== undefined) {
+      await RuntimeTesting.TestRunRoot.discard(compiled.runRoot, { runtimePackageRoot: compiled.runtimeRoot })
     }
     HCI.logProcessInfo('test', 'Tao tests finished')
   } catch (error) {
@@ -74,11 +79,7 @@ async function validateAndCompileTaoTests(testPaths: readonly string[]): Promise
 
     HCI.logProcessInfo('test', 'Compiling apps')
     const runtimeRoot = testRuntimeRoot()
-    const runRoot = FS.resolvePath(
-      `_gen_tao-app-test/tao-test-command/${RuntimeTesting.TestRunId.create()}`,
-      runtimeRoot,
-    )
-    await FS.mkdir(runRoot)
+    const runRoot = await RuntimeTesting.TestRunRoot.create('tao-test-command', { runtimePackageRoot: runtimeRoot })
     const filesByPath = await mapTestFilesOnWorkers(
       groups,
       workers,
@@ -88,7 +89,7 @@ async function validateAndCompileTaoTests(testPaths: readonly string[]): Promise
     await FS.writeJson(manifestPath, {
       files: testPaths.map(testPath => filesByPath.get(testPath)!),
     })
-    return { manifestPath, runtimeRoot, testPaths }
+    return { manifestPath, runRoot, runtimeRoot, testPaths }
   } finally {
     await Promise.all(workers.map(worker => worker.stop()))
   }
@@ -105,11 +106,7 @@ async function validateAndCompileTaoTestsInProcess(testPaths: readonly string[])
   }
   HCI.logProcessInfo('test', 'Compiling apps')
   const runtimeRoot = testRuntimeRoot()
-  const runRoot = FS.resolvePath(
-    `_gen_tao-app-test/tao-test-command/${RuntimeTesting.TestRunId.create()}`,
-    runtimeRoot,
-  )
-  await FS.mkdir(runRoot)
+  const runRoot = await RuntimeTesting.TestRunRoot.create('tao-test-command', { runtimePackageRoot: runtimeRoot })
   const context: RuntimeTesting.TestCompiler.Context = { appModulePaths: new Map(), runRoot }
   const files = []
   for (const testPath of testPaths) {
@@ -122,7 +119,7 @@ async function validateAndCompileTaoTestsInProcess(testPaths: readonly string[])
   }
   const manifestPath = FS.resolvePath('manifest.json', runRoot)
   await FS.writeJson(manifestPath, { files })
-  return { manifestPath, runtimeRoot, testPaths }
+  return { manifestPath, runRoot, runtimeRoot, testPaths }
 }
 
 async function mapTestFilesOnWorkers<ResultT>(
@@ -185,17 +182,6 @@ async function testJestPath(runtimeRoot: string): Promise<string> {
     : FS.resolvePath('../../node_modules/jest/bin/jest.js', runtimeRoot)
 }
 
-/** validateTaoTestFiles validates Tao test files before starting the runtime harness. */
-export async function validateTaoTestFiles(testPaths: readonly string[]): Promise<TaoTestValidationError[]> {
-  const errorsByPath = new Map<string, TaoTestValidationError[]>()
-  await forEachDirectoryGroup(testPaths, async (_directory, group) => {
-    for (const testPath of group) {
-      errorsByPath.set(testPath, await RuntimeTesting.TestCompiler.validateTestFile(testPath))
-    }
-  })
-  return testPaths.flatMap(testPath => errorsByPath.get(testPath) ?? [])
-}
-
 /** findTaoTestFiles finds `.tao` files with Tao test declarations at or under `path`. */
 export async function findTaoTestFiles(path: string): Promise<string[]> {
   // One parser context serves the whole discovery pass; sharing it also serializes the
@@ -208,15 +194,6 @@ export async function findTaoTestFiles(path: string): Promise<string[]> {
     }
   }
   return declared.sort()
-}
-
-async function forEachDirectoryGroup(
-  paths: readonly string[],
-  runGroup: (directory: string, group: readonly string[]) => Promise<void>,
-): Promise<void> {
-  await Promise.all(
-    [...groupPathsByDirectory(paths)].map(([directory, group]) => runGroup(directory, group)),
-  )
 }
 
 function groupPathsByDirectory(paths: readonly string[]): Map<string, string[]> {

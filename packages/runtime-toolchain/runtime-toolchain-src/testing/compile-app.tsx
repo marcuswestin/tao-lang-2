@@ -1,15 +1,15 @@
 import { FS } from '@shared'
 import { act } from '@testing-library/react-native'
-import { RuntimeToolchainPaths } from '../runtime-toolchain-paths'
 import { renderCompiledApp } from './render-app'
 import type { RuntimeApp } from './RuntimeApp'
 import { TestCompiler } from './test-compiler/TestCompiler'
-import { TestRunId } from './test-run-id'
+import { TestRunRoot } from './test-run-root'
 
 export type { CompiledRuntimeApp, RuntimeScreen } from './RuntimeApp'
 
 let renderId = 0
-const testRunRootName = TestRunId.create()
+// Every render in this harness process shares one run root, so the run is one prunable unit.
+let testRunRoot: Promise<string> | undefined
 
 /** compileAndRenderApp compiles a selected Tao app path, renders it, and returns the test screen. */
 export async function compileAndRenderApp(
@@ -30,7 +30,7 @@ async function compileAppForTest(
   appPath: string,
   options: { appName?: string },
 ): Promise<RuntimeApp.Compiled> {
-  const runtimePackageRoot = RuntimeToolchainPaths.packageRoot
-  const testAppRoot = FS.resolvePath(`_gen_tao-app-test/${testRunRootName}-${++renderId}`, runtimePackageRoot)
+  const runRoot = await (testRunRoot ??= TestRunRoot.create('compile-app'))
+  const testAppRoot = FS.resolvePath(`app-${++renderId}`, runRoot)
   return await TestCompiler.Worker.compileApp(appPath, { appName: options.appName, runtimePackageRoot: testAppRoot })
 }

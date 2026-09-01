@@ -1,4 +1,0 @@
-project {
-   id "functional-core-mvp"
-   name "Functional Core MVP"
-}

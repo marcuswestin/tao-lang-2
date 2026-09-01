@@ -1,3 +1,4 @@
+import { Assert } from '@shared/core'
 import type { StudioPreviewAppliedMessage, StudioProjectIdentity } from './StudioProtocol'
 
 export type StudioCompileDiagnostic = {
@@ -176,9 +177,7 @@ export class StudioCompileCoordinator {
 
   /** setPreviewInstance starts a fresh applied-revision stream after iframe replacement/reload. */
   setPreviewInstance(previewInstanceId: string): void {
-    if (previewInstanceId.trim().length === 0) {
-      throw new Error('Studio previewInstanceId must not be empty.')
-    }
+    Assert.input(previewInstanceId.trim().length > 0, 'Studio previewInstanceId must not be empty.')
     if (previewInstanceId === this.#previewInstanceId) {
       return
     }

@@ -1,3 +1,4 @@
+import { Assert } from '@shared'
 import { Langium } from './langium-exports'
 import * as AST from './parserASTExport'
 
@@ -15,7 +16,7 @@ export function declarationNamespace(declaration: AST.Declaration): DeclarationN
 }
 
 /** primitiveDeclaration finds one parsed intrinsic primitive in the loaded workspace. */
-export function primitiveDeclaration(
+function primitiveDeclaration(
   files: readonly AST.TaoFile[],
   name: AST.PrimitiveType,
 ): AST.PrimitiveDeclaration | undefined {
@@ -134,14 +135,6 @@ export function configurableTypeAliasResolution(
   return AST.isTypeDeclaration(current)
     ? { kind: 'target', target: current }
     : { kind: 'invalid', target: current }
-}
-
-/** configurableTypeAliasTarget resolves a transparent package-member type alias, guarding cycles. */
-export function configurableTypeAliasTarget(
-  declaration: AST.TypeDeclaration,
-): AST.TypeDeclaration | undefined {
-  const resolution = configurableTypeAliasResolution(declaration)
-  return resolution.kind === 'target' ? resolution.target : undefined
 }
 
 /** resolvedImportedDeclarations returns every requested declaration, preserving type/value namespace peers. */
@@ -400,7 +393,7 @@ export function attachedTag(node: AST.Render | AST.ForStatement): AST.TagStateme
 }
 
 /** slotFillRootTag returns a leading tag that configures the visual root filling one frame slot. */
-export function slotFillRootTag(render: AST.Render): AST.TagStatement | undefined {
+function slotFillRootTag(render: AST.Render): AST.TagStatement | undefined {
   const use = render.$container
   const block = render.block
   if (!AST.isRenderSlotUse(use) || use.render !== render || !block) {
@@ -644,36 +637,6 @@ function baseTypeDeclarationOf(declaration: AST.TypeDeclaration): AST.TypeDeclar
   return visibleTypeDeclaration(base, base.root)
 }
 
-/** AppVariantDeclaration is an alias whose initializer patches an app declaration identity. */
-export type AppVariantDeclaration = AST.AliasDeclaration & { value: AST.RefinementExpression }
-
-/** isAppVariantDeclaration identifies an immutable `App with { ... }` value declaration. */
-export function isAppVariantDeclaration(node: AST.Node): node is AppVariantDeclaration {
-  return AST.isAliasDeclaration(node)
-    && AST.isRefinementExpression(node.value)
-    && configuredPrimitiveOfValueDeclaration(node.value.target.ref) === 'app'
-}
-
-/** appDeclarationOf resolves an app or chained app variant to its original declaration identity. */
-export function appDeclarationOf(
-  node: AST.AppValueDeclaration | undefined,
-  seen: Set<AST.AliasDeclaration> = new Set(),
-): AST.AppDeclaration | undefined {
-  if (AST.isAppDeclaration(node)) {
-    return node
-  }
-  if (!AST.isAliasDeclaration(node) || seen.has(node) || !AST.isRefinementExpression(node.value)) {
-    return undefined
-  }
-  seen.add(node)
-  const base = node.value.target.ref
-  return AST.isAppDeclaration(base)
-    ? base
-    : AST.isAliasDeclaration(base) && isConcreteAppValueDeclaration(base)
-    ? appDeclarationOf(base, seen)
-    : undefined
-}
-
 /** isConcreteAppValueDeclaration identifies every declaration whose inferred value family is app. */
 export function isConcreteAppValueDeclaration(
   node: AST.Node | undefined,
@@ -683,7 +646,7 @@ export function isConcreteAppValueDeclaration(
 }
 
 /** configuredPrimitiveOfValueDeclaration returns a value head's preserved primitive family. */
-export function configuredPrimitiveOfValueDeclaration(
+function configuredPrimitiveOfValueDeclaration(
   declaration: AST.RefinementBaseDeclaration | undefined,
   seen: Set<AST.AliasDeclaration> = new Set(),
 ): AST.ConfigurationPrimitive | undefined {
@@ -901,16 +864,12 @@ export function blockStatementOf<StatementT extends AST.OwnedBlockStatement, Val
   const statements = blockStatements(owner) as StatementT[]
   if (typeof selector === 'number') {
     const statement = statements[selector]
-    if (!statement) {
-      throw new Error(`Expected block statement at index ${selector}.`)
-    }
+    Assert.defined(statement, `block statement at index ${selector}`)
     return statement
   }
   if ('find' in selector) {
     const statement = statements.find(selector.find)
-    if (!statement) {
-      throw new Error('Expected matching block statement.')
-    }
+    Assert.defined(statement, 'a matching block statement')
     return statement
   }
   if ('filter' in selector) {

@@ -65,7 +65,7 @@ remains on the implementation-ready Studio path.
 Focused parser, scoping, validator, formatter, compiler, source-action, Studio, code-editor, runtime,
 runtime-toolchain, and developer-automation suites cover the rows above. Release-mode Tao generation and
 browser bundling cover the executable Tao root, Files portal, and host bridge; native staging requires that
-release bundle rather than the development fallback. The packaged service has also been bundled and
+release bundle, which is now the only client path in either mode. The packaged service has also been bundled and
 installed from the frozen repository lock in isolated test payloads. The final repository-wide
 `./agent verify` gate passed all 20 suites and all 1,726 tests after review remediation and the
 design-surface, Tao scenario-control, ProductHost-panel, and extended browser-harness increments.
@@ -82,8 +82,8 @@ which is neither a pass nor a repository failure. It names the directory picker,
 quit-on-last-window as manual every run, because no in-process probe can drive them.
 `./dev studio-release-check` validates a built release's standalone payload, packaged runtime inventory,
 HTTPS update manifest, and differential updates, and reports deep signing, notarization, and disk-image
-validity as unverified when Apple's tools are absent rather than as passed. `Docs/Spec/Tao Studio
-Development.md` carries the operator steps for the external gates.
+validity as unverified when Apple's tools are absent rather than as passed.
+`packages/studio/README.md` carries the operator steps for the external gates.
 
 ## Next integration gates
 
@@ -99,6 +99,29 @@ Development.md` carries the operator steps for the external gates.
 4. When Ro resumes the explicit deferrals, define fixture-through-action result/handle semantics and the
    semantic capture/replay contract before finishing authored failure-capture promotion. Do not infer these
    contracts from the current runtime implementation.
+
+## Simulated-user lane: editor ownership and the preview origin boundary
+
+`studio-simulated-user.test.ts` had never been run by any recipe before `full-verify` was repaired, so its
+browser assertions were unverified from the day they were written. Working through them surfaced two
+findings that outlive the test.
+
+**One container, two editors.** `.studio-editor` is mounted twice: the Tao product host portals a
+`CodeEditor` into it, and the imperative shell builds its own CodeMirror there (`parent: view.editor` in
+`client/StudioApp.ts`). The page therefore holds two `.cm-editor` instances — the visible React one and a
+0x0 orphan — and any behavior the shell attaches to _its_ editor never reaches the editor a person uses.
+The component-palette drop was one case, now fixed by moving drop handling into `CodeEditor` so the
+insertion also joins CodeMirror's undo history. `postEditorSelection` is the case still open: it is driven
+from `StudioApp.ts` by the shell's editor, so Studio never posts `path` and `sourceVersion` into the
+preview as the selection moves, and editor-to-preview highlight sync does not reach a real preview.
+Closing it means routing the shell's editor-driven behavior onto the Tao-rendered editor.
+
+**Do not widen `previewOriginPath` to make the lane pass.** The smoke's stub preview builds its identity by
+fetching `/api/protocol` and `/api/file`. Neither is in `previewOriginPath`, the six-endpoint allowlist
+deciding which routes answer a preview origin, so the fetch fails and the stub never posts its selection.
+A real preview cannot call them either: it receives `path` and `sourceVersion` from Studio's own
+`postEditorSelection` message, and knows its source ranges from the bundle it runs. The stub must be
+reworked onto that contract; relaxing the allowlist would trade a deliberate boundary for a green test.
 
 The implemented contract is maintained in [Tao Studio](../../Spec/Tao%20Studio.md). The historical v1
 ledger remains in [Plan - Tao Studio v1](../Tao%20Studio%20v1/Plan%20-%20Tao%20Studio%20v1.md).

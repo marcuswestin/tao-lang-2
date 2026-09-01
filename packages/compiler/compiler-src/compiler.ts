@@ -122,7 +122,7 @@ function createContext(packagesContext: Packages.Context, sourceRoot: string): C
 
 /**
  * createSession creates caller-owned standalone services for batch compilation.
- * The package, parser, and Typir state lives for as long as the returned session
+ * The package, parser, and type state lives for as long as the returned session
  * is referenced; source text alone does not invalidate it.
  */
 async function createSession(): Promise<CompilerSession> {

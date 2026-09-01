@@ -160,30 +160,23 @@ export async function UndoSourceAction(envelope: string): Promise<void> {
   await taoStudioActions.undoSourceAction(parseEnvelope<StudioSourceActionUndoEnvelope>(envelope, 'source action undo'))
 }
 
-export async function CreateFile(path: string): Promise<void> {
-  await taoStudioActions.createFile({ path, writeId: writeId('create') })
-}
-
-export async function RenameFile(path: string, sourceVersion: string, targetPath: string): Promise<void> {
-  await taoStudioActions.renameFile({ path, sourceVersion, targetPath, writeId: writeId('rename') })
-}
-
-export async function DeleteFile(path: string, sourceVersion: string): Promise<void> {
-  await taoStudioActions.deleteFile({ path, sourceVersion, writeId: writeId('delete') })
-}
-
 function writeId(kind: string): string {
   return `tao-studio-${kind}-${nextTaoStudioWriteId++}`
 }
 
 function parseEnvelope<ValueT>(encoded: string, name: string): ValueT {
-  try {
-    const value = JSON.parse(encoded)
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-      throw new Error('not an object')
-    }
-    return value as ValueT
-  } catch {
+  const value = parsedJsonObject(encoded)
+  if (value === undefined) {
     throw new StudioForeignActionFailure('Server', `Invalid ${name} envelope.`)
+  }
+  return value as ValueT
+}
+
+function parsedJsonObject(encoded: string): object | undefined {
+  try {
+    const value: unknown = JSON.parse(encoded)
+    return typeof value === 'object' && value !== null && !Array.isArray(value) ? value : undefined
+  } catch {
+    return undefined
   }
 }

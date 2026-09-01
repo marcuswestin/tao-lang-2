@@ -1,4 +1,5 @@
 import type TR from '@runtime/TR'
+import { Assert, Errors } from '@shared/core'
 
 const serverEntity = {
   Checkpoint: 'Checkpoints',
@@ -49,16 +50,14 @@ export function StudioServerProvider(options: StudioServerProviderOptions = {}):
     connect: context => {
       const configuredOrigin = context.configuration['ServerOrigin']
       if (typeof configuredOrigin !== 'string') {
-        throw new Error("StudioServer configuration 'ServerOrigin' expects text.")
+        Errors.throwUserInput("StudioServer configuration 'ServerOrigin' expects text.")
       }
       let snapshot: string | undefined
       return {
         async fill(fillRequest, ops) {
           const entity = fillRequest.descriptor.entity as StudioEntity
           const remote = serverEntity[entity]
-          if (remote === undefined) {
-            throw new Error(`StudioServer has no entity '${fillRequest.descriptor.entity}'.`)
-          }
+          Assert.input(remote, `StudioServer has no entity '${fillRequest.descriptor.entity}'.`)
           const result = await post<StudioFillResult>(request, endpoint(configuredOrigin, '/api/data/fill'), {
             entity: remote,
             where: scalarWhere(fillRequest.descriptor.where),
@@ -163,9 +162,7 @@ async function completeSnapshot(
     }
     const typed = entity as StudioEntity
     const source = remoteRows[typed]
-    if (source === undefined) {
-      throw new Error(`StudioServer snapshot cannot populate entity '${entity}'.`)
-    }
+    Assert.defined(source, `a StudioServer snapshot row set for entity '${entity}'`)
     rows[entity] = source.map(row => ({ Id: storedId(entity, row['Id']), ...taoRow(typed, row) }))
   }
   return JSON.stringify({
@@ -177,10 +174,12 @@ async function completeSnapshot(
 }
 
 function storedId(entity: string, id: unknown): string {
-  if (typeof id !== 'string') {
-    throw new Error(`StudioServer ${entity} row has no stable text Id.`)
-  }
+  Assert.is(id, isString, `a stable text Id on every StudioServer ${entity} row`)
   return `${entity}:${id}`
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string'
 }
 
 function scalarWhere(
@@ -201,7 +200,7 @@ async function post<Result>(request: StudioFetch, path: string, body: unknown): 
   const value = await response.json() as Result | { error?: string }
   if (!response.ok) {
     const message = typeof value === 'object' && value !== null && 'error' in value ? value.error : undefined
-    throw new Error(message ?? `Studio datasource failed (${response.status}).`)
+    Errors.throwHostEnvironment(message ?? `Studio datasource failed (${response.status}).`)
   }
   return value as Result
 }

@@ -1,3 +1,6 @@
+import { RuntimeAssert } from './TR-assert'
+import { UserInputError } from './TR-errors'
+
 export type TaoDeclarationIdentityTuple = readonly [
   'tao.declaration',
   1,
@@ -29,14 +32,14 @@ type CanonicalizableDeclaration = {
 
 /** declarationIdentity validates and freezes the persisted, owner-relative declaration tuple. */
 export function declarationIdentity(tuple: TaoDeclarationIdentityTuple): TaoDeclarationIdentity {
-  if (
-    tuple.length !== 7
-    || tuple[0] !== 'tao.declaration'
-    || tuple[1] !== 1
-    || tuple.slice(2).some(part => typeof part !== 'string' || part.length === 0)
-  ) {
-    throw new Error('Invalid Tao declaration identity tuple.')
-  }
+  RuntimeAssert(
+    tuple.length === 7
+      && tuple[0] === 'tao.declaration'
+      && tuple[1] === 1
+      && tuple.slice(2).every(part => typeof part === 'string' && part.length > 0),
+    'a valid Tao declaration identity tuple',
+    { tuple },
+  )
   const frozenTuple = Object.freeze([...tuple]) as unknown as TaoDeclarationIdentityTuple
   const canonical = JSON.stringify(frozenTuple)
   return Object.freeze({ canonical, hash: fnv1a(canonical), tuple: frozenTuple })
@@ -74,17 +77,13 @@ function canonicalValue(value: unknown, seen: Set<object>): CanonicalValue {
     return Object.freeze(['boolean', value])
   }
   if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      throw new Error('A restorable descriptor cannot contain a non-finite number.')
-    }
+    RuntimeAssert.input(Number.isFinite(value), 'A restorable descriptor cannot contain a non-finite number.')
     return Object.freeze(['number', Object.is(value, -0) ? '0' : String(value)])
   }
   if (typeof value !== 'object') {
-    throw new Error(`A restorable descriptor cannot contain ${typeof value}.`)
+    throw new UserInputError(`A restorable descriptor cannot contain ${typeof value}.`)
   }
-  if (seen.has(value)) {
-    throw new Error('A restorable descriptor cannot contain a cycle.')
-  }
+  RuntimeAssert.input(!seen.has(value), 'A restorable descriptor cannot contain a cycle.')
 
   const evaluable = value as { evaluate?: () => { jsValue: unknown } }
   if (typeof evaluable.evaluate === 'function') {
@@ -110,9 +109,10 @@ function canonicalValue(value: unknown, seen: Set<object>): CanonicalValue {
     if (Array.isArray(value)) {
       return Object.freeze(['list', ...value.map(item => canonicalValue(item, seen))])
     }
-    if (Object.getPrototypeOf(value) !== Object.prototype) {
-      throw new Error('A restorable descriptor cannot contain an opaque host object.')
-    }
+    RuntimeAssert.input(
+      Object.getPrototypeOf(value) === Object.prototype,
+      'A restorable descriptor cannot contain an opaque host object.',
+    )
     const fields = Object.entries(value as Record<string, unknown>)
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([name, item]) => Object.freeze([name, canonicalValue(item, seen)] as const))

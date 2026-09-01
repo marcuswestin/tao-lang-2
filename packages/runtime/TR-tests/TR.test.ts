@@ -7,6 +7,15 @@ function layoutEntries(layout: TaoLayout | undefined): readonly TaoLayoutEntry[]
   return layout?.entries ?? []
 }
 
+function thrownBy(action: () => unknown): (Error & { details?: unknown }) | undefined {
+  try {
+    action()
+    return undefined
+  } catch (error) {
+    return error as Error & { details?: unknown }
+  }
+}
+
 Describe('TR.Value', () => {
   Test('wraps JavaScript values as evaluable Tao runtime values', () => {
     const value: TR.Value<string> = TR.Value('Hello')
@@ -439,6 +448,36 @@ Describe('TR.Layout', () => {
   })
 })
 
+Describe('TR.WarnUnhonoredLayout', () => {
+  Test('names an unhonorable declaration once per component, and never in production', () => {
+    const calls: unknown[][] = []
+    const warn = console.warn
+    const environment = process.env.NODE_ENV
+    console.warn = (...args: unknown[]) => calls.push(args)
+    try {
+      process.env.NODE_ENV = 'development'
+      TR.WarnUnhonoredLayout('TestSwitch', { layout: TR.Layout.create([['pad', 8], ['gap', 4]]) })
+      TR.WarnUnhonoredLayout('TestSwitch', { layout: TR.Layout.create([['gap', 4]]) })
+      TR.WarnUnhonoredLayout('TestSlider', { style: { backgroundColor: 'red' } })
+      process.env.NODE_ENV = 'production'
+      TR.WarnUnhonoredLayout('TestPicker', { layout: TR.Layout.create([['pad', 8]]) })
+    } finally {
+      console.warn = warn
+      if (environment === undefined) {
+        delete process.env.NODE_ENV
+      } else {
+        process.env.NODE_ENV = environment
+      }
+    }
+
+    // The clause names the author wrote, not the shape of the object carrying them.
+    Expect(calls).toEqual([[
+      'Tao: the platform-native TestSwitch ignores styling clauses (pad, gap). '
+      + `Use the design's semantic surface, or alias a styled implementation instead.`,
+    ]])
+  })
+})
+
 Describe('TR.TaoProps', () => {
   Test('packages local props with optional caller props without resolving them', () => {
     const callerProps = {
@@ -538,5 +577,26 @@ Describe('TR.Dev', () => {
       restoreDevGlobal()
       TR.setDevMode({ enabled: false })
     }
+  })
+})
+
+Describe('TR.Errors', () => {
+  Test('publishes the three throwing categories a compiled program can name', () => {
+    const invariant = thrownBy(() =>
+      TR.Errors.failInvariant('Tao Studio focused view is not available in the selected app scope.', {
+        subjectId: 'Main.tao#Card',
+      })
+    )
+    Expect(invariant?.name).toBe('UnexpectedBehaviorError')
+    Expect(invariant?.message).toBe('Tao Studio focused view is not available in the selected app scope.')
+    Expect(invariant?.details).toEqual({ subjectId: 'Main.tao#Card' })
+
+    const input = thrownBy(() => TR.Errors.failInput('Give the workspace a name before saving it.'))
+    Expect(input?.name).toBe('UserInputError')
+    Expect(input?.message).toBe('Give the workspace a name before saving it.')
+
+    const host = thrownBy(() => TR.Errors.failHost('Tao Studio cell bootstrap was rejected (503).'))
+    Expect(host?.name).toBe('HostEnvironmentError')
+    Expect(host?.message).toBe('Tao Studio cell bootstrap was rejected (503).')
   })
 })

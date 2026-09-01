@@ -1,4 +1,5 @@
 import type React from 'react'
+import { RuntimeAssert } from './TR-assert'
 import type {
   TaoNavDeclaration,
   TaoNavDescriptor,
@@ -179,8 +180,7 @@ export const NavKindControls = {
   }),
 } as const
 
+/** assertNavKind names the nav-kind-contract category on top of the shared guard API. */
 export function assertNavKind(condition: unknown, message: string): asserts condition {
-  if (!condition) {
-    throw new Error(`NavKind conformance failed: ${message}`)
-  }
+  RuntimeAssert.input(condition, `NavKind conformance failed: ${message}`)
 }

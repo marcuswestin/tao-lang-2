@@ -1,4 +1,4 @@
-import { CLI, FS, Repo, Time } from '@shared'
+import { CLI, Errors, FS, Repo, Time } from '@shared'
 import { randomUUID } from 'node:crypto'
 import { AppleFoundationModelsProvider } from './apple-foundation-models-provider'
 import type { GenerationProvider } from './generation-contract'
@@ -104,7 +104,7 @@ export async function startAppleFoundationModelsService(): Promise<AppleFoundati
     const port = await Promise.race([
       readiness,
       Time.sleep(START_TIMEOUT_MS).then(() => {
-        throw new Error(`Foundation Models helper did not start within ${START_TIMEOUT_MS}ms. ${stderr}`)
+        Errors.throwHostEnvironment(`Foundation Models helper did not start within ${START_TIMEOUT_MS}ms. ${stderr}`)
       }),
     ])
     return {

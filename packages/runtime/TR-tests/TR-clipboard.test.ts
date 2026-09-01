@@ -1,5 +1,6 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { createClipboard } from '../TaoRuntime-src/TR-clipboard'
+import { HostEnvironmentError } from '../TaoRuntime-src/TR-errors'
 import { createNativeModules } from '../TaoRuntime-src/TR-native-modules'
 
 type ActionValue<Args extends any[] = any[]> = { invoke(...args: Args): void | Promise<void> }
@@ -41,7 +42,7 @@ Describe('TR Clipboard', () => {
   Test('reports the capability and missing module when Copy cannot load its native backing', async () => {
     const missingNative = createNativeModules({
       'expo-clipboard': () => {
-        throw new Error('clipboard test module is not linked')
+        throw new HostEnvironmentError('clipboard test module is not linked')
       },
       'expo-haptics': () => ({}),
       'react-native': () => ({ Platform: { OS: 'ios' } }),

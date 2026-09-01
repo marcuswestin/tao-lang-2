@@ -11,5 +11,8 @@ Implement language features as vertical slices. Use the same focused feature nam
 ## TypeScript And Tests
 
 - Use shared wrappers such as `CLI`, `FS`, `HCI`, `Platform`, and `@shared/test` instead of direct platform or test-runner APIs. Loader-constrained config files are the narrow exception.
+- Search `@shared` for an existing helper before adding one, and put a helper two packages need in `@shared` rather than in both. Small duplicates accumulate silently; where a copy must exist because `packages/runtime` imports nothing from `@shared`, name the shared original it mirrors and keep the two in step.
 - Keep each module's public surface focused on one main concept. Export helpers only for real cross-file or package boundaries.
 - Prefer behavior tests.
+- A jest end-to-end test in `runtime-toolchain` earns its place only when it needs a native or module override, asserts generated-code shape, or exercises the harness itself. New behavior coverage lands in Tao as a `.test.tao` journey; existing jest suites migrate opportunistically when touched. Do not schedule a wholesale rewrite.
+- `just dead-exports` reports exports nothing imports. It is a report, not a gate: findings still need judgment, and it counts test-only usage as usage.

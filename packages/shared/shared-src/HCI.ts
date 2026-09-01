@@ -1,7 +1,7 @@
 import { createInterface as createNodeReadlineInterface } from 'node:readline/promises'
 import type { Readable, Writable } from 'node:stream'
 import { UserInputError } from './core/Errors'
-import { runtimeProcess } from './Platform'
+import { runtimeProcess, setInputRawMode } from './Platform'
 
 type TerminalStreams = {
   input?: Readable
@@ -40,6 +40,25 @@ export type ChoicePromptOptions<ValueT extends string> = TerminalStreams & {
   choices: readonly Choice<ValueT>[]
   defaultValue?: ValueT
 }
+
+/** RawKeyOptions declares the stream a raw-key session reads keypresses from. */
+export type RawKeyOptions = {
+  input?: Readable
+}
+
+/** RawKeySession is an open raw-key session; stopping it restores the terminal and releases the input. */
+export type RawKeySession = {
+  /** Whether the input entered raw mode. False means it is not an interactive TTY, so keys arrive by line. */
+  rawMode: boolean
+  /** stop ends the session, restores the terminal, and releases the input stream. */
+  stop: () => void
+}
+
+/** RawKey names the control keys a raw-key session reports as a single keypress. */
+export const RawKey = {
+  escape: '\u001b',
+  interrupt: '\u0003',
+} as const
 
 const PROCESS_COLORS: Record<string, ProcessColor> = {
   clean: red,
@@ -201,6 +220,88 @@ export async function askChoice<ValueT extends string>(options: ChoicePromptOpti
       writeOutput(options, 'Choose one of the listed options.\n')
     }
   })
+}
+
+/**
+ * startRawKeys reads a terminal one keypress at a time — no Enter — until the returned session is
+ * stopped, and calls `onKey` with each key. An escape sequence arrives as a single `RawKey.escape`
+ * rather than its control bytes, and input that ends reads as `RawKey.interrupt`, because a terminal
+ * that goes away cannot deliver the key its reader is waiting for.
+ */
+export function startRawKeys(onKey: (key: string) => void, options: RawKeyOptions = {}): RawKeySession {
+  const input = options.input ?? runtimeProcess.stdin
+  const rawMode = setInputRawMode(input, true)
+  const onData = (chunk: Buffer | string) => {
+    for (const key of readKeys(chunk)) {
+      onKey(key)
+    }
+  }
+  const onEnd = () => onKey(RawKey.interrupt)
+  let stopped = false
+
+  input.on('data', onData)
+  input.on('end', onEnd)
+  input.resume()
+
+  return {
+    rawMode,
+    stop() {
+      if (stopped) {
+        return
+      }
+      stopped = true
+      input.off('data', onData)
+      input.off('end', onEnd)
+      if (rawMode) {
+        setInputRawMode(input, false)
+      }
+      // Pair the resume above: a still-flowing input keeps the process alive after the session ends,
+      // so the command would hang with the terminal already back in echoing cooked mode.
+      input.pause()
+    },
+  }
+}
+
+/**
+ * withRawKeys runs `run` with a reader for one keypress at a time, then restores the terminal. Keys
+ * typed between reads are queued rather than dropped, so a fast typist loses no keypress.
+ */
+export async function withRawKeys<ResultT>(
+  run: (readKey: () => Promise<string>) => Promise<ResultT>,
+  options: RawKeyOptions = {},
+): Promise<ResultT> {
+  const typed: string[] = []
+  const waiting: ((key: string) => void)[] = []
+  const session = startRawKeys(key => {
+    const deliver = waiting.shift()
+    if (deliver === undefined) {
+      typed.push(key)
+      return
+    }
+    deliver(key)
+  }, options)
+
+  try {
+    return await run(async () =>
+      await new Promise<string>(resolve => {
+        const key = typed.shift()
+        if (key === undefined) {
+          waiting.push(resolve)
+          return
+        }
+        resolve(key)
+      })
+    )
+  } finally {
+    session.stop()
+  }
+}
+
+function readKeys(chunk: Buffer | string): string[] {
+  const value = chunk.toString()
+  // A terminal sends an arrow or function key as one escape-prefixed chunk; report the whole
+  // sequence as a single Escape so a caller reads one keypress instead of its control bytes.
+  return value.startsWith(RawKey.escape) ? [RawKey.escape] : [...value]
 }
 
 async function withReadline<T>(

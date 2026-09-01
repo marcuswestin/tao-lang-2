@@ -346,7 +346,7 @@ Describe('Tao formatter tests', () => {
   Test(
     'formats v0 Tao test declarations',
     formats(
-      `use WordFlower from ./\ntest   "WordFlower"{test "renders"{run   WordFlower\nexpect   text "Hello"\npress   "Add"\nexpect input   placeholder "Title" value   "Draft"\nback\nexpect missing   label "Loading"}}`,
+      `use WordFlower from ./\ntest   "WordFlower"{test "renders"{run   WordFlower\nexpect   text "Hello"\npress   "Add"\nexpect input   placeholder "Title" value   "Draft"\nback\n   relaunch\nrelaunch    fresh\nexpect missing   label "Loading"}}`,
       `
         use WordFlower from ./
 
@@ -358,6 +358,8 @@ Describe('Tao formatter tests', () => {
               press "Add"
               expect input placeholder "Title" value "Draft"
               back
+              relaunch
+              relaunch fresh
               expect missing label "Loading"
            }
         }

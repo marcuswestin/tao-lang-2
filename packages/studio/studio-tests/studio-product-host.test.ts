@@ -1,5 +1,5 @@
 import type TR from '@runtime/TR'
-import { FS } from '@shared'
+import { Assert, FS } from '@shared'
 import { Expect, Test } from '@shared/test'
 import React from 'react'
 import { studioPaletteComponents } from '../studio-src/StudioInspector'
@@ -117,8 +117,6 @@ Test('Tao Studio ProductHost injects structured panel values without section-lev
   Expect(source).toContain('Rows: TR.Value(panelValues.Search.Rows)')
   Expect(source).not.toContain('export function StudioDrawerPanelSurface')
   Expect(source).not.toContain('export function StudioSearchPanelSurface')
-  Expect(source).not.toContain('renderDrawerContent(element')
-  Expect(source).not.toContain('renderSearchResults(')
   Expect(source).not.toContain('JSON.stringify(hostState.panels')
 })
 
@@ -436,9 +434,7 @@ function elements(node: React.ReactNode): HostElement[] {
 
 function elementWith(root: React.ReactElement, name: string, value: unknown): HostElement {
   const found = elements(root).find(element => property(element, name) === value)
-  if (found === undefined) {
-    throw new Error(`Expected Studio product-host element with ${name}=${String(value)}.`)
-  }
+  Assert.defined(found, `a Studio product-host element with ${name}=${String(value)}`)
   return found
 }
 

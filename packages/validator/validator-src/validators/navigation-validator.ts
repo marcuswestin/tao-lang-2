@@ -581,7 +581,7 @@ function reportMissingHostTitle(
 }
 
 /** isStackNavDeclaration follows transparent aliases and nominal ancestry to the stdlib family. */
-export function isStackNavDeclaration(
+function isStackNavDeclaration(
   declaration: AST.ConfigurableDeclaration,
   seen: Set<AST.TypeDeclaration> = new Set(),
 ): boolean {

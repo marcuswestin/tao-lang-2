@@ -1,4 +1,5 @@
 import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client'
+import { Assert, Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import { EditorView } from 'codemirror'
 import { type StudioDraftFile, StudioDraftSync, type StudioDraftSyncResult } from '../StudioDraftSync'
@@ -13,7 +14,6 @@ import {
   publishStudioProductHostState,
   registerStudioProductHostActions,
 } from '../StudioProductHostProtocol'
-import type { StudioDesignValue } from '../StudioProjectSession'
 import {
   type StudioCanonicalSourceAction,
   type StudioJsonObject,
@@ -52,7 +52,6 @@ import {
   handlePreviewMessage,
   postEditorSelection,
   refreshCellPreviews,
-  renderScenarioInspector,
   requestRuntimeCapture,
   StudioActivePreview,
   StudioRuntimeData,
@@ -61,15 +60,11 @@ import {
 import { StudioPanelProjection } from './StudioPanelProjection'
 import {
   renderCommandResults,
-  renderDesignValues,
-  renderDrawerContent,
   type StudioCommandItem,
   StudioCommandPalette,
   type StudioDrawerTab,
 } from './StudioProductPanels'
 import {
-  renderScreens,
-  renderSearchResults,
   StudioRailPanels,
   type StudioScreenItem,
   type StudioSearchResult,
@@ -81,9 +76,6 @@ import {
   type StudioClientConfig,
 } from './StudioShell'
 import {
-  renderComponentPalette,
-  renderInspectorAccordions,
-  renderProjectViews,
   showSourceActionError,
   sourceActionLabel,
   studioPaletteMime,
@@ -137,16 +129,16 @@ export class StudioDataFillCoordinator {
   }
 }
 
-export type StudioMountOptions = Readonly<{ embedded?: boolean; root?: HTMLElement; signal?: AbortSignal }>
+export type StudioMountOptions = Readonly<{ root?: HTMLElement; signal?: AbortSignal }>
 
 export async function mountStudio(options: StudioMountOptions = {}): Promise<() => void> {
   const root = options.root ?? document.querySelector<HTMLElement>('#tao-studio-root')
   if (root === null) {
-    throw new Error('Tao Studio root is missing.')
+    Errors.throwUnexpected('Tao Studio root is missing.')
   }
 
   const config = window.TaoStudioConfig ?? {}
-  const view = createStudioShell(root, config, { embedded: options.embedded })
+  const view = createStudioShell(root, config)
   const partialOpenTabs = new Map<string, StudioOpenEditorTab>()
   let partialPreviews: Awaited<ReturnType<typeof connectPreviews>> = []
   let partialLanguageClient: LSPClient | undefined
@@ -182,8 +174,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let dataLoading = false
     let dataResult: readonly StudioRuntimeDataTable[] = []
     let dataTimer: ReturnType<typeof setInterval> | undefined
-    let designRequestRevision = 0
-    let designValues: readonly StudioDesignValue[] = []
     let drawerTab: StudioDrawerTab = 'Problems'
     let highlightRequestRevision = 0
     let highlightTimer: ReturnType<typeof setTimeout> | undefined
@@ -403,30 +393,11 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       activeFile = tab.file
       activePath = path
       editor = tab.editor
-      designValues = []
-      fileTree?.render()
       showOpenFile(view, path)
       renderEditorTabs()
-      if (options.embedded !== true) {
-        renderProjectViews(view.projectViews, previewManifest, insertProjectView)
-      }
       scheduleHighlight(tab.editor, tab.editor.state.doc.toString(), 0)
       renderInspector()
       publishProductHostState()
-      const designRevision = ++designRequestRevision
-      void StudioApiClient.design({ path: tab.file.path, sourceVersion: tab.file.sourceVersion }).then(values => {
-        if (designRevision === designRequestRevision && activeFile?.sourceVersion === tab.file.sourceVersion) {
-          designValues = values
-          renderDesignEditor()
-        }
-      }).catch(error => {
-        if (designRevision === designRequestRevision) {
-          designValues = []
-          view.status.dataset['state'] = 'error'
-          view.status.textContent = error instanceof Error ? error.message : String(error)
-          renderDesignEditor()
-        }
-      })
     }
 
     function renderEditorTabs(): void {
@@ -485,7 +456,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           activateEditorTab(snapshot.activePath)
         } else {
           view.breadcrumbs.replaceChildren()
-          fileTree?.render()
           renderInspector()
           publishProductHostState()
         }
@@ -674,7 +644,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       const query = view.searchInput.value
       if (query.trim() === '') {
         searchResults = []
-        renderSearchPanel()
+        publishProductHostState()
         return
       }
       let documents: Array<{ content: string; path: string; sourceVersion?: string }>
@@ -706,15 +676,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           [absoluteSourcePath(handshake.identity.project, file.path), file.sourceVersion],
         ])),
       )
-      renderSearchPanel()
-    }
-
-    function renderSearchPanel(): void {
-      if (options.embedded === true) {
-        publishProductHostState()
-        return
-      }
-      renderSearchResults(view.searchResults, searchResults, result => void openSearchResult(result))
+      publishProductHostState()
     }
 
     async function cachedSearchDocument(file: StudioFile): Promise<string> {
@@ -750,97 +712,17 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       }, delayMs)
     }
 
+    // The Tao product host portals React trees into `.studio-scenario-inspector-content`,
+    // `.studio-inspector-tao-context`, and `.studio-drawer-content`. Emptying those containers here
+    // detached React's own children behind its back, so React's next portal update called
+    // removeChild on a node that was no longer a child and the boundary tore the client down. The
+    // shell never fills these containers, so publishing state is the whole job.
     function renderInspector(): void {
-      if (options.embedded === true) {
-        view.scenarioInspector.replaceChildren()
-        view.inspector.replaceChildren()
-        publishProductHostState()
-        return
-      }
-      const scenarioPanel = document.createElement('section')
-      scenarioPanel.className = 'studio-scenario-inspector'
-      renderScenarioInspector(scenarioPanel, activePreview.current())
-      view.scenarioInspector.replaceChildren(scenarioPanel)
-      renderInspectorAccordions(view.inspector, {
-        busy: sourceActionBusy,
-        canUndo: undoCheckpoints.at(-1)?.path === activePath,
-        currentSourceVersion: activeFile?.sourceVersion,
-        inspection,
-        onAction: action => {
-          if (inspected !== undefined) {
-            void submitLocalAction(action, inspected.identity)
-          }
-        },
-        onStyleAction: action => {
-          if (inspected !== undefined) {
-            void submitProposedLocalAction(action, inspected.identity)
-          }
-        },
-        onUndo: () => void undoLatestSourceAction(),
-        selection: inspected,
-      })
-      renderDesignEditor()
-    }
-
-    function renderDesignEditor(): void {
-      if (options.embedded === true) {
-        return
-      }
-      renderDesignValues(view.designValues, {
-        busy: sourceActionBusy,
-        currentSourceVersion: activeFile?.sourceVersion,
-        design: designValues,
-        onAction: action => {
-          if (inspected !== undefined) {
-            void submitLocalAction(action, inspected.identity)
-          }
-        },
-        renderId: inspected?.renderId,
-        selectedSourceVersion: inspected?.identity.sourceVersion,
-      })
+      publishProductHostState()
     }
 
     function renderDrawer(): void {
-      const activeCell = activePreview.current()?.cell
-      if (options.embedded === true) {
-        view.drawerContent.replaceChildren()
-        publishProductHostState()
-        return
-      }
-      renderDrawerContent(view.drawerContent, drawerTab, {
-        compile: compileState,
-        data: dataResult,
-        dataError,
-        dataLoading,
-        dataSource: activeCell === undefined
-          ? undefined
-          : { cellId: activeCell.cellId, cellRevision: activeCell.cellRevision },
-        logSource: activeCell === undefined
-          ? undefined
-          : { cellId: activeCell.cellId, cellRevision: activeCell.cellRevision },
-        logs: activePreview.current()?.runtimeLogs ?? [],
-        onCaptureFixture: focusCaptureFixture,
-        onClearLogs() {
-          const preview = activePreview.current()
-          if (preview !== undefined) {
-            preview.runtimeLogs = []
-          }
-          renderDrawer()
-        },
-        onDiagnostic: diagnostic => void openCompileDiagnostic(diagnostic),
-        onRefreshData: () => void loadData(),
-        onRunTests: () => void runTests(),
-        onTestFailure: failure => void openTestFailure(failure),
-        onTestWatch(watch) {
-          testWatch = watch
-          if (watch) {
-            void runTests()
-          }
-        },
-        testError,
-        testStatus,
-        testWatch,
-      })
+      publishProductHostState()
     }
 
     function selectDrawer(tab: StudioDrawerTab): void {
@@ -868,9 +750,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       renderDrawer()
       try {
         const preview = activePreview.current()
-        if (preview === undefined) {
-          throw new Error('Select a connected preview cell to inspect live app data.')
-        }
+        Assert.input(preview, 'Select a connected preview cell to inspect live app data.')
         const capture = await requestRuntimeCapture(preview, handshake)
         if (isLatest() && preview === activePreview.current()) {
           dataResult = StudioRuntimeData.tables(capture)
@@ -1266,12 +1146,11 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
 
     const wirePreview = (preview: (typeof previews)[number]): void => {
       preview.applySourceAction = async envelope => {
-        if (sourceActionBusy) {
-          throw new Error('Wait for the current Studio source action to finish.')
-        }
-        if (!requireVisualEditDraftSaved()) {
-          throw new Error('Save the active draft before changing Tao source through Studio.')
-        }
+        Assert.input(!sourceActionBusy, 'Wait for the current Studio source action to finish.')
+        Assert.input(
+          requireVisualEditDraftSaved(),
+          'Save the active draft before changing Tao source through Studio.',
+        )
         await applySourceAction(envelope)
       }
       preview.changed = () => {
@@ -1296,15 +1175,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       }
     })
     activePreview.reconcile(wirePreview)
-    if (options.embedded !== true) {
-      renderScreens(view.screens, previewManifest, item => void openScreen(item))
-    }
-    renderSearchPanel()
+    publishProductHostState()
     view.searchInput.addEventListener('input', () => scheduleSearch())
-
-    if (options.embedded !== true) {
-      renderComponentPalette(view.components, insertComponent)
-    }
     view.preview.addEventListener('dragover', event => {
       if (event.dataTransfer?.types.includes(studioPaletteMime)) {
         event.preventDefault()
@@ -1339,8 +1211,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     })
     selectDrawer('Problems')
 
-    fileTree = mountStudioFileTree(view.files, {
-      activePath: () => activePath,
+    fileTree = mountStudioFileTree({
       files: projectFiles,
       onCreated: async result => {
         await openFile(StudioFileTreeTransitions.afterCreate(result))
@@ -1354,9 +1225,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           await openFile(nextPath)
         }
       },
-      onError: error => showSourceActionError(view.status, error),
       onFiles: publishProjectFiles,
-      onOpen: file => void openFile(file.path),
       onRenamed: async result => {
         const previousActivePath = preparedActiveMutationPath
         const wasOpen = preparedOpenMutationPath === result.previousPath
@@ -1371,8 +1240,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         }
       },
       prepareMutation: prepareFileMutation,
-      protectedPath: handshake.entryPath,
-      renderDom: options.embedded !== true,
     })
     configureProjectAndAppPickers()
     const restoredTabs = editorTabs.snapshot()
@@ -1431,10 +1298,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       },
       onManifest(manifest) {
         previewManifest = manifest
-        if (options.embedded !== true) {
-          renderProjectViews(view.projectViews, manifest, insertProjectView)
-          renderScreens(view.screens, manifest, item => void openScreen(item))
-        }
         if (config.previewUrl !== undefined) {
           void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
             activePreview.reconcile(wirePreview)
@@ -1589,9 +1452,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     window.addEventListener('beforeunload', beforeUnloadListener)
     const unregisterProductHost = registerStudioProductHostActions({
       async applyInspectorAction(action, proposed) {
-        if (inspected === undefined) {
-          throw new Error('Select a rendered element before editing its source.')
-        }
+        Assert.input(inspected, 'Select a rendered element before editing its source.')
         if (proposed) {
           await submitProposedLocalAction(action, inspected.identity)
         } else {
@@ -1601,7 +1462,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       async applyActiveCellEnvironment(identity, environment) {
         const preview = activePreview.current()
         if (preview?.cell === undefined || preview.reconfigureEnvironment === undefined) {
-          throw new Error('Select a Studio scenario cell before changing its environment.')
+          Errors.throwUserInput('Select a Studio scenario cell before changing its environment.')
         }
         if (preview.cell.cellId !== identity.cellId || preview.cell.cellRevision !== identity.cellRevision) {
           throw new StudioApiError('The selected Studio preview changed while its environment was being edited.', 409, {
@@ -1632,31 +1493,26 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       },
       insertComponent(componentName) {
         const component = studioPaletteComponents.find(candidate => candidate.component === componentName)
-        if (component === undefined) {
-          throw new Error(`Tao Studio does not expose the component ${componentName}.`)
-        }
+        Assert.input(component, `Tao Studio does not expose the component ${componentName}.`)
         insertComponent(component)
       },
       insertProjectView(viewName) {
         const projectView = StudioInspector.projectViews(previewManifest).find(candidate =>
           candidate.viewName === viewName
         )
-        if (projectView === undefined) {
-          throw new Error(`Tao Studio project view is no longer available: ${viewName}`)
-        }
+        Assert.input(projectView, `Tao Studio project view is no longer available: ${viewName}`)
         insertProjectView(projectView)
       },
       async openFile(path) {
-        if (!projectFiles.some(file => file.path === path)) {
-          throw new Error(`Tao Studio file is no longer available: ${path}`)
-        }
+        Assert.input(
+          projectFiles.some(file => file.path === path),
+          `Tao Studio file is no longer available: ${path}`,
+        )
         await openFile(path)
       },
       async openScreen(subjectId) {
         const screen = StudioRailPanels.screens(previewManifest).find(candidate => candidate.id === subjectId)
-        if (screen === undefined) {
-          throw new Error(`Tao Studio screen is no longer available: ${subjectId}`)
-        }
+        Assert.input(screen, `Tao Studio screen is no longer available: ${subjectId}`)
         await openScreen(screen)
       },
       async productPanelAction(name, payload) {
@@ -1681,11 +1537,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           if (command.kind === 'scenario-apply-arguments') {
             const checked = StudioScenarioControls.validateArguments(model, command.arguments)
             if (!checked.ok) {
-              throw new Error(checked.issues.join(' '))
+              Errors.throwUserInput(checked.issues.join(' '))
             }
-            if (preview.reconfigureArguments === undefined) {
-              throw new Error('The active scenario cannot currently remount arguments.')
-            }
+            Assert.input(
+              preview.reconfigureArguments,
+              'The active scenario cannot currently remount arguments.',
+            )
             await preview.reconfigureArguments(checked.value)
             return
           }
@@ -1697,7 +1554,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
               command.appearance,
             )
             if (!action.ok) {
-              throw new Error(action.issues.join(' '))
+              Errors.throwUserInput(action.issues.join(' '))
             }
             if (sourceActionBusy || !requireVisualEditDraftSaved()) {
               return
@@ -1706,9 +1563,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             return
           }
           if (command.kind === 'scenario-capture-fixture') {
-            if (preview.captureFixture === undefined) {
-              throw new Error('The active scenario cannot currently capture a fixture.')
-            }
+            Assert.input(preview.captureFixture, 'The active scenario cannot currently capture a fixture.')
             await preview.captureFixture(command.fixtureName)
             return
           }
@@ -1717,11 +1572,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             command.kind === 'scenario-replay-failure' ? undefined : command.capture,
           )
           if (!replay.ok) {
-            throw new Error(replay.issues.join(' '))
+            Errors.throwUserInput(replay.issues.join(' '))
           }
-          if (preview.replayRuntimeCapture === undefined) {
-            throw new Error('The active scenario cannot currently replay captured state.')
-          }
+          Assert.input(
+            preview.replayRuntimeCapture,
+            'The active scenario cannot currently replay captured state.',
+          )
           await preview.replayRuntimeCapture(replay.value)
           return
         }
@@ -1756,7 +1612,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         if (name === 'test-watch') {
           const watch = JSON.parse(payload) as unknown
           if (typeof watch !== 'boolean') {
-            throw new Error('Tao Studio test-watch actions require a boolean payload.')
+            Errors.throwUserInput('Tao Studio test-watch actions require a boolean payload.')
           }
           testWatch = watch
           renderDrawer()
@@ -1769,7 +1625,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           await openSearchResult(StudioPanelPayloads.searchResult(payload))
           return
         }
-        throw new Error(`Unsupported Tao Studio panel action: ${name}`)
+        Errors.throwUserInput(`Unsupported Tao Studio panel action: ${name}`)
       },
       async renameFile(path, sourceVersion, targetPath) {
         await fileTree!.rename(path, sourceVersion, targetPath)
@@ -1991,11 +1847,12 @@ export function parseScenarioPanelCommand(name: string, payload: string): Studio
   try {
     value = JSON.parse(payload) as unknown
   } catch {
-    throw new Error('Tao Studio scenario actions require a valid object payload.')
+    Errors.throwUserInput('Tao Studio scenario actions require a valid object payload.')
   }
-  if (value === null || typeof value !== 'object') {
-    throw new Error('Tao Studio scenario actions require an object payload.')
-  }
+  Assert.input(
+    value !== null && typeof value === 'object',
+    'Tao Studio scenario actions require an object payload.',
+  )
   const input = value as Record<string, unknown>
   if (
     typeof input['cellId'] !== 'string'
@@ -2003,16 +1860,16 @@ export function parseScenarioPanelCommand(name: string, payload: string): Studio
     || !Number.isInteger(input['cellRevision'])
     || (input['cellRevision'] as number) < 0
   ) {
-    throw new Error('Tao Studio scenario actions require the active cell identity and revision.')
+    Errors.throwUserInput('Tao Studio scenario actions require the active cell identity and revision.')
   }
   const identity = { cellId: input['cellId'], cellRevision: input['cellRevision'] as number }
   if (name === 'scenario-apply-arguments' || name === 'scenario-save-arguments') {
     if (!studioJsonObject(input['arguments'])) {
-      throw new Error('Tao Studio scenario arguments require a JSON object payload.')
+      Errors.throwUserInput('Tao Studio scenario arguments require a JSON object payload.')
     }
     const appearance = input['appearance']
     if (name === 'scenario-save-arguments' && appearance !== 'dark' && appearance !== 'light') {
-      throw new Error('Tao Studio scenario saves require a resolved light or dark appearance.')
+      Errors.throwUserInput('Tao Studio scenario saves require a resolved light or dark appearance.')
     }
     return {
       ...identity,
@@ -2023,7 +1880,7 @@ export function parseScenarioPanelCommand(name: string, payload: string): Studio
   }
   if (name === 'scenario-capture-fixture') {
     if (typeof input['fixtureName'] !== 'string') {
-      throw new Error('Tao Studio fixture capture requires a fixture name.')
+      Errors.throwUserInput('Tao Studio fixture capture requires a fixture name.')
     }
     return { ...identity, fixtureName: input['fixtureName'], kind: name }
   }
@@ -2033,7 +1890,7 @@ export function parseScenarioPanelCommand(name: string, payload: string): Studio
   if (name === 'scenario-replay-capture') {
     return { ...identity, capture: input['capture'], kind: name }
   }
-  throw new Error(`Unsupported Tao Studio scenario action: ${name}`)
+  Errors.throwUserInput(`Unsupported Tao Studio scenario action: ${name}`)
 }
 
 function studioJsonObject(value: unknown): value is StudioJsonObject {

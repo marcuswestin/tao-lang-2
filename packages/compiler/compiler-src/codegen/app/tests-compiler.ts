@@ -17,6 +17,11 @@ export default {
     return gen.noop()
   },
 
+  /** RelaunchStep compiles to no generated app output. */
+  RelaunchStep(_relaunch: AST.RelaunchStep): Compiled {
+    return gen.noop()
+  },
+
   /** AdvanceStep compiles only into test-plan IR. */
   AdvanceStep(_advance: AST.AdvanceStep): Compiled {
     return gen.noop()

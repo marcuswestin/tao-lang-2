@@ -84,61 +84,6 @@ export const StudioRailPanels = {
   },
 } as const
 
-export function renderScreens(
-  parent: HTMLElement,
-  manifest: StudioPreviewManifestV2 | undefined,
-  open: (item: StudioScreenItem) => void,
-): void {
-  const heading = document.createElement('h2')
-  heading.textContent = 'Screens'
-  const items = StudioRailPanels.screens(manifest)
-  const content = items.map(item => {
-    const button = document.createElement('button')
-    button.className = 'studio-screen-item'
-    button.type = 'button'
-    button.dataset['studioScreen'] = item.id
-    button.textContent = item.label
-    button.title = `${item.kind} · ${item.path}`
-    button.addEventListener('click', () => open(item))
-    return button
-  })
-  if (content.length === 0) {
-    const empty = document.createElement('p')
-    empty.className = 'studio-palette-empty'
-    empty.textContent = 'No manifest screens are available yet.'
-    parent.replaceChildren(heading, empty)
-  } else {
-    parent.replaceChildren(heading, ...content)
-  }
-}
-
-export function renderSearchResults(
-  parent: HTMLElement,
-  results: readonly StudioSearchResult[],
-  open: (result: StudioSearchResult) => void,
-): void {
-  if (results.length === 0) {
-    const empty = document.createElement('p')
-    empty.className = 'studio-palette-empty'
-    empty.textContent = 'No project text or diagnostics match.'
-    parent.replaceChildren(empty)
-    return
-  }
-  parent.replaceChildren(...results.map(result => {
-    const button = document.createElement('button')
-    button.className = 'studio-search-result'
-    button.type = 'button'
-    button.setAttribute('role', 'option')
-    const label = document.createElement('strong')
-    label.textContent = result.label
-    const detail = document.createElement('span')
-    detail.textContent = result.detail
-    button.append(label, detail)
-    button.addEventListener('click', () => open(result))
-    return button
-  }))
-}
-
 function fileLabel(path: string): string {
   return path.split('/').at(-1) ?? path
 }

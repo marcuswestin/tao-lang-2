@@ -1,4 +1,5 @@
 import type { Transport } from '@codemirror/lsp-client'
+import { Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import type { StudioDraftFile, StudioDraftSyncRequest, StudioDraftSyncResult } from '../StudioDraftSync'
 import type { StudioLanguageHighlight } from '../StudioHighlight'
@@ -9,7 +10,6 @@ import type {
   StudioCreateFileResult,
   StudioDeleteFileRequest,
   StudioDeleteFileResult,
-  StudioDesignValue,
   StudioRenameFileRequest,
   StudioRenameFileResult,
 } from '../StudioProjectSession'
@@ -113,9 +113,13 @@ export const StudioApiRoutes = {
   currentSessionId(locationPath: string): string | undefined {
     return locationPath.match(/^\/sessions\/([A-Za-z0-9_-]{1,128})(?:\/|$)/)?.[1]
   },
+  /** Every Studio page is served under its own window ID, so an unscoped location is never routable. */
   sessionPath(locationPath: string, endpoint: string): string {
     const sessionId = this.currentSessionId(locationPath)
-    return sessionId === undefined ? endpoint : `/sessions/${sessionId}${endpoint}`
+    if (sessionId === undefined) {
+      Errors.throwUnexpected('Studio requests require a managed session window.')
+    }
+    return `/sessions/${sessionId}${endpoint}`
   },
   transitionUrl(
     transition: Pick<StudioSessionTransition, 'previewUrl' | 'url'>,
@@ -123,7 +127,7 @@ export const StudioApiRoutes = {
   ): string {
     const target = new URL(transition.url, current.origin)
     if (target.origin !== current.origin || !/^\/sessions\/[A-Za-z0-9_-]{1,128}$/.test(target.pathname)) {
-      throw new Error('Studio returned an invalid managed session URL.')
+      Errors.throwUnexpected('Studio returned an invalid managed session URL.')
     }
     if (current.searchParams.get('native-window') === 'project') {
       target.searchParams.set('native-window', 'project')
@@ -178,8 +182,6 @@ export const StudioApiClient = {
   connectEvents,
   createFile: async (body: StudioCreateFileRequest): Promise<StudioCreateFileResult> =>
     await request('/api/file/create', body),
-  design: async (body: { path: string; sourceVersion: string }): Promise<readonly StudioDesignValue[]> =>
-    await request('/api/design', body),
   draft: async (body: StudioDraftSyncRequest): Promise<StudioDraftSyncResult> => await request('/api/file/draft', body),
   deleteFile: async (body: StudioDeleteFileRequest): Promise<StudioDeleteFileResult> =>
     await request('/api/file/delete', body),
@@ -206,7 +208,7 @@ export const StudioApiClient = {
   closeCurrentSession: async (): Promise<void> => {
     const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
     if (sessionId === undefined) {
-      throw new Error('Project selection requires a managed Studio session.')
+      Errors.throwUnexpected('Project selection requires a managed Studio session.')
     }
     await rootRequest(`/api/sessions/${encodeURIComponent(sessionId)}/close`, {})
   },
@@ -219,7 +221,7 @@ export const StudioApiClient = {
   ): Promise<StudioSessionTransition> => {
     const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
     if (sessionId === undefined) {
-      throw new Error('App switching requires a managed Studio session.')
+      Errors.throwUnexpected('App switching requires a managed Studio session.')
     }
     return await rootRequest(`/api/sessions/${encodeURIComponent(sessionId)}/switch`, body)
   },

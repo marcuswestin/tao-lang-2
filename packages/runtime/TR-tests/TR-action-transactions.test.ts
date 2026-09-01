@@ -6,7 +6,7 @@ import type {
   TaoDataConnectionObserver,
   TaoDataSchemaDefinition,
 } from '../TaoRuntime-src/TR-data'
-import { onUnownedFailure } from '../TaoRuntime-src/TR-errors'
+import { onUnownedFailure, UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
 
 const definition: TaoDataSchemaDefinition = {
   name: 'TransactionalNotes',
@@ -16,6 +16,10 @@ const definition: TaoDataSchemaDefinition = {
       fields: { Title: { kind: 'text' } },
     },
   },
+}
+
+function identity(name: string): TR.DeclarationIdentity {
+  return TR.Navigation.Identity(['tao.declaration', 1, 'tests', '@workspace', 'Transactions', 'enum', name])
 }
 
 function recordingSchema(): { saved: string[]; schema: ReturnType<typeof TR.Data.Schema> } {
@@ -109,7 +113,7 @@ Describe('Tao action transactions', () => {
 
   Test('rolls back a nested failure and skips the remaining caller block', async () => {
     const { saved, schema } = recordingSchema()
-    const Failure = TR.Enum(['Rejected'])
+    const Failure = TR.Enum(identity('NestedFailure'), ['Rejected'])
     const reached: string[] = []
     const reports: unknown[] = []
     const stop = TR.Errors.onFailure(report => reports.push(report))
@@ -251,7 +255,7 @@ Describe('Tao action transactions', () => {
         () => 'after',
         value => {
           secondPublished = value
-          throw new Error('second publish failed')
+          throw new UnexpectedBehaviorError('second publish failed')
         },
         undefined,
         () => {
@@ -275,7 +279,7 @@ Describe('Tao action transactions', () => {
     try {
       const action = TR.Action(() => {
         deferTransactionCommit(() => {
-          throw new Error('response publication failed')
+          throw new UnexpectedBehaviorError('response publication failed')
         })
         deferTransactionCommit(() => completed.push('later effect'))
       }, { name: 'PostCommitEffects' })
@@ -289,7 +293,7 @@ Describe('Tao action transactions', () => {
   })
 
   Test('uses the failure-message ladder and disables retry after a foreign effect', async () => {
-    const Failure = TR.Enum(['Offline'])
+    const Failure = TR.Enum(identity('ForeignFailure'), ['Offline'])
     const reports: any[] = []
     const stop = TR.Errors.onFailure(report => reports.push(report))
     const action = TR.ForeignAction(
@@ -375,7 +379,7 @@ Describe('Tao action transactions', () => {
     try {
       for (let index = 0; index < 55; index += 1) {
         TR.Action(() => {
-          throw new Error(`failure ${index}`)
+          throw new UnexpectedBehaviorError(`failure ${index}`)
         }, { name: `Failure${index}` }).jsValue.invoke()
       }
       const history = TR.Errors.capture()
@@ -432,7 +436,7 @@ Describe('Tao action transactions', () => {
   })
 
   Test('keeps the newest invocation out of an older detached transaction and reports its failure', async () => {
-    const Failure = TR.Enum(['Conflict'])
+    const Failure = TR.Enum(identity('DetachedFailure'), ['Conflict'])
     const calls: string[] = []
     const reports: any[] = []
     let releaseA!: () => void

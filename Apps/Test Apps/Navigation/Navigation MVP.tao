@@ -1,0 +1,65 @@
+use StackNav from @tao/nav
+use Col, FormButton, Text from @tao/ui
+
+app NavigationMVPApp {
+   Name "Navigation MVP"
+   Navigator StackNav {
+      Initial Home
+}  }
+
+// A one-case enum is all a dialogue's answer needs: `ConfirmResult` is the nominal type, `Confirmed`
+// is its one value, and a dismissed responder answers none rather than a second case.
+type ConfirmResult is one of Confirmed
+
+workspace
+view Home() {
+   Title "Navigation MVP"
+   state Visits = 0
+   action CountVisit() {
+      set Visits += 1
+   }
+   action OpenDetail() {
+      present Detail(Name: "Typed workspace")
+   }
+   // `ask` suspends this action until the dialogue answers. What it does afterwards belongs to the
+   // launch that asked: quitting the app ends the action rather than handing its presentation to
+   // the instance that opens next.
+   action ConfirmThenOpen() {
+      let Result = ask ConfirmOpen()
+      present Detail(Name: "Answered workspace")
+   }
+   render Col() [gap 10, pad 16] {
+      Text("Navigation MVP")
+      Text("Home visits: { Visits }")
+
+      #countVisit
+      FormButton("Count visit") {
+         on press CountVisit
+      }
+
+      #openDetail
+      FormButton("Open detail") {
+         on press OpenDetail
+      }
+
+      #confirmOpen
+      FormButton("Confirm and open detail") {
+         on press ConfirmThenOpen
+}  }  }
+
+view ConfirmOpen() responds ConfirmResult {
+   render Col() [gap 10, pad 16] {
+      Text("Open the detail?")
+
+      #answerConfirm
+      FormButton("Open") {
+         on press -> { respond Confirmed }
+}  }  }
+
+workspace
+view Detail(Name text) {
+   Title Name
+   render Col() [gap 10, pad 16] {
+      Text("Detail")
+      Text(Name)
+}  }

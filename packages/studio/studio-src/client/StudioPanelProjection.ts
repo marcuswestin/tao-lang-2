@@ -1,3 +1,4 @@
+import { Assert } from '@shared/core'
 import { StudioPanelPayloads } from '../StudioPanelPayloads'
 import type { StudioJsonObject, StudioJsonValue } from '../StudioProtocol'
 import type { StudioTestFailure, StudioTestStatus } from '../StudioTestRunner'
@@ -547,9 +548,7 @@ function optionalCellIdentity(identity: StudioPanelCellIdentity | undefined): St
   if (identity === undefined) {
     return undefined
   }
-  if (identity.cellId.trim() === '') {
-    throw new Error('Studio panel source cell identity must not be empty.')
-  }
+  Assert.input(identity.cellId.trim() !== '', 'Studio panel source cell identity must not be empty.')
   return Object.freeze({
     cellId: identity.cellId,
     cellRevision: nonNegativeInteger(identity.cellRevision, 'panel source cell revision'),
@@ -557,16 +556,12 @@ function optionalCellIdentity(identity: StudioPanelCellIdentity | undefined): St
 }
 
 function nonNegativeInteger(value: number, label: string): number {
-  if (!Number.isInteger(value) || value < 0) {
-    throw new Error(`Studio ${label} must be a non-negative integer.`)
-  }
+  Assert.input(Number.isInteger(value) && value >= 0, `Studio ${label} must be a non-negative integer.`)
   return value
 }
 
 function finiteNumber(value: number, label: string): number {
-  if (!Number.isFinite(value)) {
-    throw new Error(`Studio ${label} must be finite.`)
-  }
+  Assert.input(Number.isFinite(value), `Studio ${label} must be finite.`)
   return value
 }
 

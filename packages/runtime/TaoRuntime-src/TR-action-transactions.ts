@@ -1,19 +1,8 @@
-import { reportUnownedFailure } from './TR-errors'
-import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
+import { recordActionFailureFrames, reportActionFailure, reportUnownedFailure } from './TR-errors'
 
 export type TaoDeclaredFailure = Readonly<{
   case: { evaluate(): { jsValue: unknown } }
   sentence: string
-}>
-
-export type TaoActionFailureReport = Readonly<{
-  action: string
-  arguments: readonly unknown[]
-  case: string
-  message: string
-  retryEligible: boolean
-  frames: readonly string[]
-  timestamp: number
 }>
 
 type TransactionResource<ValueT> = {
@@ -23,10 +12,17 @@ type TransactionResource<ValueT> = {
   value: ValueT
 }
 
+/**
+ * launchGeneration numbers the launch every action root belongs to. It is declared above the
+ * transaction because each transaction stamps itself with the launch it started in.
+ */
+let launchGeneration = 0
+
 class ActionTransaction {
   readonly afterCommit: Array<() => void> = []
   readonly detached: Array<() => PromiseLike<unknown>> = []
   readonly frames: string[] = []
+  readonly launch = launchGeneration
   readonly resources = new Map<object, TransactionResource<any>>()
   externalEffects = false
   committed = false
@@ -75,26 +71,46 @@ class ActionTransaction {
   }
 }
 
-/** TaoActionFailure is the deliberate, typed control-flow signal produced by `fail`. */
-export class TaoActionFailure extends Error {
-  override readonly name = 'TaoActionFailure'
-
-  constructor(
-    readonly caseName: string,
-    readonly declaredSentence: string,
-    readonly providerSentence?: string,
-  ) {
-    super(providerSentence || declaredSentence || 'The action failed.')
-  }
-}
-
 let activeTransaction: ActionTransaction | undefined
 let rootQueue: Promise<void> = Promise.resolve()
 let queuedRoots = 0
 let externalEffectRevision = 0
-const failureListeners = new Set<(failure: TaoActionFailureReport) => void>()
-const actionHistory: TaoActionFailureReport[] = []
-const failureFrames = new WeakMap<object, readonly string[]>()
+
+/**
+ * beginActionLaunch ends the launch every running action root belongs to. A root the ending launch
+ * started can still be suspended — on an `ask`, or on any other await — and the instance it was
+ * running against is gone, so it must not publish into the instance that replaces it. Such a root
+ * abandons its transaction instead of committing it, and reports nothing: an app that no longer
+ * exists has not failed, so a diagnostic here would name a problem nobody can act on.
+ *
+ * The serialization queue goes with the launch too. It ordered that launch's roots, and a root the
+ * boundary parks forever would otherwise hold every root of the next launch behind it.
+ *
+ * The active transaction is deliberately left standing. A suspended root still owns it, and a body
+ * that resumes after this boundary has to keep writing into the overlay that is about to be dropped;
+ * clearing the pointer would send those writes straight to the published store instead.
+ */
+export function beginActionLaunch(): void {
+  launchGeneration += 1
+  rootQueue = Promise.resolve()
+  queuedRoots = 0
+}
+
+/**
+ * suspendAcrossLaunch parks an action continuation whose launch ended rather than resuming it. It
+ * is the `ask` half of the boundary: the navigation reset a launch performs settles every pending
+ * response, and a body resumed by that would go on presenting, dismissing, and asking against the
+ * instance that replaced its own. Parking is what the process this action was running in does.
+ */
+export function suspendAcrossLaunch<ValueT>(pending: Promise<ValueT>): Promise<ValueT> {
+  const launch = launchGeneration
+  return pending.then(value => launch === launchGeneration ? value : new Promise<ValueT>(() => {}))
+}
+
+/** abandonedByLaunch reports that a root outlived the launch that started it. */
+function abandonedByLaunch(transaction: ActionTransaction): boolean {
+  return transaction.launch !== launchGeneration
+}
 
 /** runAction serializes roots and lets nested `do` calls join the caller's active transaction. */
 export function runAction(
@@ -147,19 +163,26 @@ export function runAction(
     return result
   }
   queuedRoots += 1
-  rootQueue = Promise.resolve(result).then(
-    () => {
+  // A launch that ends mid-root zeroes the count, so only a root of the current launch releases a
+  // slot; without the guard a root of the ended launch would settle later and drive it negative.
+  const release = (launch: number) => () => {
+    if (launch === launchGeneration) {
       queuedRoots -= 1
-    },
-    () => {
-      queuedRoots -= 1
-    },
-  )
+    }
+  }
+  rootQueue = Promise.resolve(result).then(release(launchGeneration), release(launchGeneration))
   return result
 }
 
 function finishRootSuccess(transaction: ActionTransaction): void {
   activeTransaction = undefined
+  if (abandonedByLaunch(transaction)) {
+    // Every resource this root touched is still private to the transaction, so dropping it without
+    // committing is the rollback. Publishing here would write the ended launch's work into the one
+    // that replaced it — a persisted value, a row, a state — after the person quit the app.
+    transaction.rollback()
+    return
+  }
   transaction.commit()
 }
 
@@ -171,7 +194,10 @@ function finishRootFailure(
 ): void {
   activeTransaction = undefined
   transaction.rollback()
-  publishFailure(actionFailureReport(error, transaction, name, arguments_), name === 'async' ? error : undefined)
+  if (abandonedByLaunch(transaction)) {
+    return
+  }
+  reportActionFailure(error, transaction, name, arguments_, name === 'async' ? error : undefined)
 }
 
 function finishRoot(transaction: ActionTransaction, suspendedTransaction?: ActionTransaction): void {
@@ -187,6 +213,10 @@ function finishRoot(transaction: ActionTransaction, suspendedTransaction?: Actio
         reportUnownedFailure(error)
       }
     }
+  }
+  if (abandonedByLaunch(transaction)) {
+    // An `async` body the ended launch queued belongs to that launch as much as its caller does.
+    return
   }
   for (const detached of transaction.detached) {
     void enqueueDetached(detached)
@@ -207,24 +237,18 @@ function runJoinedAction(
       return Promise.resolve(result).then(
         () => undefined,
         error => {
-          recordFailureFrames(error, transaction)
+          recordActionFailureFrames(error, transaction.frames)
           throw error
         },
       ).finally(() => transaction.frames.pop())
     }
   } catch (error) {
-    recordFailureFrames(error, transaction)
+    recordActionFailureFrames(error, transaction.frames)
     throw error
   } finally {
     if (!pending) {
       transaction.frames.pop()
     }
-  }
-}
-
-function recordFailureFrames(error: unknown, transaction: ActionTransaction): void {
-  if (typeof error === 'object' && error !== null && !failureFrames.has(error)) {
-    failureFrames.set(error, [...transaction.frames])
   }
 }
 
@@ -250,9 +274,18 @@ export function transactionResource<ValueT>(
   return activeTransaction?.resource(key, create, commit, prepare, rollbackCommit)
 }
 
-/** existingTransactionResource reads an overlay without creating one. */
+/**
+ * existingTransactionResource reads an overlay without creating one. An overlay left behind by a
+ * root the launch boundary abandoned is a write sink and nothing more: a write still lands in it so
+ * that it is discarded rather than published, but no read comes back through it. The instance that
+ * replaced the ended launch has to see what the device holds, not the value an action of the app the
+ * person quit was still holding.
+ */
 export function existingTransactionResource<ValueT>(key: object): ValueT | undefined {
-  return activeTransaction?.existing<ValueT>(key)
+  if (!activeTransaction || abandonedByLaunch(activeTransaction)) {
+    return undefined
+  }
+  return activeTransaction.existing<ValueT>(key)
 }
 
 /** deferDetached starts an `async` body after its caller commits or rolls back. */
@@ -302,95 +335,3 @@ export function actionFailureCaseName(value: { evaluate(): { jsValue: unknown } 
   }
   return 'Failure'
 }
-
-/** onActionFailure observes contained root action failures. */
-export function onActionFailure(listener: (failure: TaoActionFailureReport) => void): () => void {
-  failureListeners.add(listener)
-  return () => failureListeners.delete(listener)
-}
-
-/** captureActionHistory returns the bounded, structurally redacted diagnostic action log. */
-export function captureActionHistory(): readonly TaoActionFailureReport[] {
-  return actionHistory.map(entry => ({ ...entry, arguments: [...entry.arguments], frames: [...entry.frames] }))
-}
-
-/** resetActionDiagnostics clears retained diagnostic history without changing app state. */
-export function resetActionDiagnostics(): void {
-  actionHistory.length = 0
-}
-
-function restoreActionHistory(value: unknown): void {
-  actionHistory.length = 0
-  if (!Array.isArray(value)) {
-    return
-  }
-  actionHistory.push(...value.slice(-50) as TaoActionFailureReport[])
-}
-
-function actionFailureReport(
-  error: unknown,
-  transaction: ActionTransaction,
-  action: string,
-  arguments_: readonly unknown[],
-): TaoActionFailureReport {
-  const failure = error instanceof TaoActionFailure
-    ? error
-    : new TaoActionFailure('Unexpected', '', error instanceof Error ? error.message : '')
-  return Object.freeze({
-    action,
-    arguments: sanitize(arguments_) as readonly unknown[],
-    case: failure.caseName,
-    frames: typeof error === 'object' && error !== null
-      ? [...(failureFrames.get(error) ?? transaction.frames)]
-      : [...transaction.frames],
-    message: failure.providerSentence
-      || failure.declaredSentence
-      || `Couldn't finish '${action}.' Nothing was changed.`,
-    retryEligible: !transaction.externalEffects,
-    timestamp: Date.now(),
-  })
-}
-
-function publishFailure(failure: TaoActionFailureReport, unownedError?: unknown): void {
-  actionHistory.push(failure)
-  if (actionHistory.length > 50) {
-    actionHistory.splice(0, actionHistory.length - 50)
-  }
-  for (const listener of failureListeners) {
-    listener(failure)
-  }
-  if (failureListeners.size === 0) {
-    reportUnownedFailure(unownedError ?? new TaoActionFailure(failure.case, failure.message))
-  }
-}
-
-function sanitize(value: unknown, seen = new WeakSet<object>()): unknown {
-  if (value === null || typeof value === 'boolean' || typeof value === 'number' || typeof value === 'string') {
-    return value
-  }
-  if (typeof value !== 'object') {
-    return undefined
-  }
-  if (seen.has(value)) {
-    return '[circular]'
-  }
-  seen.add(value)
-  if (Array.isArray(value)) {
-    return value.map(item => sanitize(item, seen))
-  }
-  const result: Record<string, unknown> = {}
-  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (/credential|password|secret|token|authorization/i.test(key)) {
-      continue
-    }
-    result[key] = sanitize(entry, seen)
-  }
-  return result
-}
-
-registerRuntimeCaptureDomain({
-  capture: () => captureActionHistory() as TaoRuntimeJson,
-  domain: 'action-history',
-  restore: restoreActionHistory,
-  version: 1,
-})

@@ -1,5 +1,5 @@
 import { Errors } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, until } from '@shared/test'
 import {
   StudioCompileCoordinator,
   type StudioCompileRequest,
@@ -31,7 +31,7 @@ Describe('Studio compile coordinator', () => {
     })
 
     const initial = coordinator.requestInitialCompile()
-    await until(() => gates.length === 1)
+    await until(() => gates.length === 1, { description: 'the first gated compile', intervalMs: 0 })
     const firstWatch = coordinator.noteWatchChanges([{ path: 'A.tao', sourceVersion: 'a1' }])
     const secondWatch = coordinator.noteWatchChanges([
       { path: 'A.tao', sourceVersion: 'a2' },
@@ -39,7 +39,7 @@ Describe('Studio compile coordinator', () => {
     ])
     gates[0]!.resolve()
     await initial
-    await until(() => gates.length === 2)
+    await until(() => gates.length === 2, { description: 'the second gated compile', intervalMs: 0 })
 
     Expect(maximumActive).toBe(1)
     Expect(requests).toHaveLength(2)
@@ -76,7 +76,7 @@ Describe('Studio compile coordinator', () => {
       { path: 'Garden.tao', sourceVersion: 'source-2' },
       { path: 'Garden.tao', sourceVersion: 'source-2' },
     ])
-    await until(() => requests.length === 1)
+    await until(() => requests.length === 1, { description: 'the first compile request', intervalMs: 0 })
     gate.resolve()
     const [completion, watchResult] = await Promise.all([write, watch])
 
@@ -187,14 +187,14 @@ Describe('Studio compile coordinator', () => {
         requests.push(request)
         if (request.compileRevision === 1) {
           await gate.promise
-          throw new Error('Tao source is not valid yet.')
+          Errors.throwUserInput('Tao source is not valid yet.')
         }
       },
       project: '/workspace/garden',
     })
 
     const first = coordinator.requestInitialCompile()
-    await until(() => requests.length === 1)
+    await until(() => requests.length === 1, { description: 'the first compile request', intervalMs: 0 })
     const second = coordinator.noteWatchChanges([{ path: 'Garden.tao', sourceVersion: 'fixed' }])
     gate.resolve()
 
@@ -244,7 +244,7 @@ Describe('Studio compile coordinator', () => {
       onState(state) {
         if (failObserver && state.status === 'compiling') {
           failObserver = false
-          throw new Error('observer failed')
+          Errors.throwUnexpected('observer failed')
         }
       },
       project: '/workspace/garden',
@@ -282,14 +282,4 @@ function deferred<T>(): {
     resolve = promiseResolve
   })
   return { promise, reject, resolve }
-}
-
-async function until(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (predicate()) {
-      return
-    }
-    await Promise.resolve()
-  }
-  throw new Error('Timed out waiting for Studio coordinator state.')
 }

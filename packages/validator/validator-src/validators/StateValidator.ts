@@ -1,9 +1,7 @@
 import { type ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import type { ValidationProblemAcceptor } from 'typir'
 import { DeclarationOrder } from '../DeclarationOrder'
 import type { NodeValidationChecks } from '../node-validation'
-import { type TaoSpecifics, type TaoTypirServices, TypeSystemHelpers } from '../TypeSystemHelpers'
 import type { ValidationContext } from '../validation'
 
 const stateValidationMessages = {
@@ -32,7 +30,10 @@ export const StateValidator = {
     [AST.ToggleStatement.$type]: [reportStateMutationTargetReferenceOrder, reportToggleTarget],
   } satisfies NodeValidationChecks,
   messages: stateValidationMessages,
-  registerTypeValidation,
+  typeChecks: {
+    [AST.SetStatement.$type]: reportSetStatementTypes,
+    [AST.StateDeclaration.$type]: reportStateDeclarationTypes,
+  } satisfies NodeValidationChecks,
 }
 
 function reportStatePlacement(state: AST.StateDeclaration, ctx: ValidationContext): void {
@@ -106,17 +107,6 @@ function reportToggleTarget(toggle: AST.ToggleStatement, ctx: ValidationContext)
   }
 }
 
-function registerTypeValidation(typir: TaoTypirServices): void {
-  typir.validation.Collector.addValidationRulesForAstNodes({
-    SetStatement: (setStatement, accept, services) => {
-      validateSetStatementTypes(setStatement, accept, services as TaoTypirServices)
-    },
-    StateDeclaration: (state, accept, services) => {
-      validateStateDeclarationTypes(state, accept, services as TaoTypirServices)
-    },
-  })
-}
-
 function reportStateReferenceOrder(state: AST.StateDeclaration, ctx: ValidationContext): void {
   for (const reference of DeclarationOrder.valueReferences(state.value)) {
     const target = reference.target.ref
@@ -161,114 +151,65 @@ function isInvalidStateMutationTargetReferenceOrder(
     && DeclarationOrder.isUsedBeforeDeclaration(target, mutation)
 }
 
-function validateSetStatementTypes(
-  setStatement: AST.SetStatement,
-  accept: ValidationProblemAcceptor<TaoSpecifics>,
-  services: TaoTypirServices,
-): void {
+/** reportSetStatementTypes requires `set` values to match the target state's type. */
+function reportSetStatementTypes(setStatement: AST.SetStatement, ctx: ValidationContext): void {
   const state = setStatement.target.ref
   if (!state) {
     return
   }
 
-  const stateType = TypeSystemHelpers.safeInferType(services, state)
-  const underlying = TypeSystemHelpers.underlyingPrimitiveName(stateType)
-  if (!underlying) {
-    validateSemanticSetStatementTypes(setStatement, state, accept)
-    return
-  }
-
-  if (setStatement.operator !== '=' && underlying !== 'number') {
-    accept({
-      languageNode: setStatement,
-      message: stateValidationMessages.compoundStateType(
-        state.name,
-        setStatement.operator,
-        stateType?.getName() ?? 'unknown',
-      ),
-      severity: 'error',
-    })
-  }
-
-  const expected = TypeSystemHelpers.taoPrimitiveType(underlying, services)
-  services.validation.Constraints.ensureNodeIsAssignable(setStatement.value, expected, accept, actual => ({
-    languageNode: setStatement.value,
-    message: stateValidationMessages.setTypeMismatch(state.name, underlying, actual.name),
-  }))
-}
-
-function validateSemanticSetStatementTypes(
-  setStatement: AST.SetStatement,
-  state: AST.StateDeclaration,
-  accept: ValidationProblemAcceptor<TaoSpecifics>,
-): void {
-  const expected = Type.ofExpression(state.value)
+  const expected = Type.ofValueDeclaration(state)
   const actual = Type.ofExpression(setStatement.value)
   if (expected.kind === 'unresolved' || actual.kind === 'unresolved') {
     return
   }
 
-  if (setStatement.operator !== '=') {
-    accept({
-      languageNode: setStatement,
-      message: stateValidationMessages.compoundStateType(state.name, setStatement.operator, Type.displayName(expected)),
-      severity: 'error',
-    })
+  // A compound operator reads the state as a number, so the operator itself is the whole error and
+  // the assignment check below would only restate it.
+  if (setStatement.operator !== '=' && !isPlainNumberType(expected)) {
+    ctx.error(
+      stateValidationMessages.compoundStateType(state.name, setStatement.operator, Type.displayName(expected)),
+      setStatement,
+    )
     return
   }
 
   if (!Type.isAssignable(actual, expected)) {
-    accept({
-      languageNode: setStatement.value,
-      message: stateValidationMessages.setTypeMismatch(
+    ctx.error(
+      stateValidationMessages.setTypeMismatch(
         state.name,
         Type.displayName(expected),
         Type.displayName(actual),
       ),
-      severity: 'error',
-    })
+      setStatement.value,
+    )
   }
 }
 
-function validateStateDeclarationTypes(
-  state: AST.StateDeclaration,
-  accept: ValidationProblemAcceptor<TaoSpecifics>,
-  services: TaoTypirServices,
-): void {
+/** isPlainNumberType returns whether a type is `number` itself rather than a refinement of it. */
+function isPlainNumberType(type: ASTUtils.TaoType): boolean {
+  return type.kind === 'primitive' && type.nominal === undefined && type.primitive === 'number'
+}
+
+/** reportStateDeclarationTypes checks a state's declared type and rejects stored actions. */
+function reportStateDeclarationTypes(state: AST.StateDeclaration, ctx: ValidationContext): void {
   if (state.type) {
     const expected = Type.ofReference(state.type)
     const actual = Type.ofExpression(state.value)
     if (expected.kind !== 'unresolved' && actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
-      accept({
-        languageNode: state.value,
-        message: stateValidationMessages.initialTypeMismatch(
+      ctx.error(
+        stateValidationMessages.initialTypeMismatch(
           state.name,
           Type.displayName(expected),
           Type.displayName(actual),
         ),
-        severity: 'error',
-      })
+        state.value,
+      )
       return
     }
   }
-  const semanticType = Type.ofExpression(state.value)
-  if (semanticType.kind === 'primitive' && semanticType.primitive === 'action') {
-    accept({
-      languageNode: state.value,
-      message: stateValidationMessages.stateActionType(state.name),
-      severity: 'error',
-    })
-    return
+  const valueType = Type.ofExpression(state.value)
+  if (valueType.kind === 'primitive' && valueType.primitive === 'action') {
+    ctx.error(stateValidationMessages.stateActionType(state.name), state.value)
   }
-
-  const valueType = TypeSystemHelpers.safeInferType(services, state.value)
-  if (TypeSystemHelpers.underlyingPrimitiveName(valueType) !== 'action') {
-    return
-  }
-
-  accept({
-    languageNode: state.value,
-    message: stateValidationMessages.stateActionType(state.name),
-    severity: 'error',
-  })
 }

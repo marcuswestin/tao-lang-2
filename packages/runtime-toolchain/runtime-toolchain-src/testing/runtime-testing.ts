@@ -2,6 +2,7 @@ import type { RuntimeApp } from './RuntimeApp'
 import { TestCompiler as CoreTestCompiler } from './test-compiler/TestCompiler'
 import type * as TestCompilerTypes from './test-compiler/TestCompiler'
 import { TestRunId } from './test-run-id'
+import { TestRunRoot } from './test-run-root'
 
 const COMPILE_APP_MODULE_PATH = './compile-app'
 const TEST_RUNNER_MODULE_PATH = './test-runner'
@@ -39,6 +40,7 @@ export const RuntimeTesting = {
   TEST_MANIFEST_ENV,
   TestCompiler: CoreTestCompiler,
   TestRunId,
+  TestRunRoot,
 }
 
 export namespace RuntimeTesting {

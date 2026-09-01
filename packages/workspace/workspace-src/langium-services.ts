@@ -2,13 +2,10 @@ import { Packages } from '@ast-utils'
 import { AST, Langium, Parser, type ParserServices } from '@parser'
 import Validator from '@validator'
 import { registerTaoValidationChecks } from '@validator/langium-validation'
-import { type TaoSpecifics, TaoTypeSystem, type TaoTypirServices } from '@validator/type-system'
-import { createTypirLangiumServices, initializeLangiumTypirServices } from 'typir-langium'
 
-/** WorkspaceServices declares Langium and Typir services for non-LSP workspace operations. */
+/** WorkspaceServices declares Langium services for non-LSP workspace operations. */
 export type WorkspaceServices = ParserServices & {
   packages: ReturnType<typeof Packages.createResolver>
-  typir: TaoTypirServices
 }
 
 /** WorkspaceLspServices declares Workspace services with Langium LSP support. */
@@ -23,28 +20,21 @@ export type WorkspaceLspContributions = {
   lspCodeActionProvider?: () => Langium.CodeActionProvider
 }
 
-/** createWorkspaceServices creates parser, validator, and Typir services for one package context. */
+/** createWorkspaceServices creates parser and validator services for one package context. */
 export function createWorkspaceServices(packagesContext: Packages.Context): WorkspaceServices {
   const packages = Packages.createResolver(packagesContext)
   const parserContext = Parser.createContext({
     packages,
   })
-  const typir = createTypirLangiumServices<TaoSpecifics>(
-    parserContext.services.shared,
-    AST.reflection,
-    new TaoTypeSystem(),
-  )
 
   registerTaoValidationChecks(
     parserContext.services.language,
-    validationContextFor(parserContext.services, packagesContext, typir),
+    validationContextFor(parserContext.services, packagesContext),
   )
-  initializeLangiumTypirServices(parserContext.services.language, typir)
 
   return {
     ...parserContext.services,
     packages,
-    typir,
   }
 }
 
@@ -60,24 +50,17 @@ export function createWorkspaceLspServices(
     langiumContext: context,
     ...contributions,
   })
-  const typir = createTypirLangiumServices<TaoSpecifics>(
-    parserContext.services.shared,
-    AST.reflection,
-    new TaoTypeSystem(),
-  )
   registerTaoValidationChecks(
     parserContext.services.language,
-    validationContextFor(parserContext.services, packagesContext, typir),
+    validationContextFor(parserContext.services, packagesContext),
   )
-  initializeLangiumTypirServices(parserContext.services.language, typir)
 
-  return { ...parserContext.services, packages, typir }
+  return { ...parserContext.services, packages }
 }
 
 function validationContextFor(
   services: { shared: Langium.LangiumSharedCoreServices },
   packagesContext: Packages.Context,
-  typir: TaoTypirServices,
 ): (file: AST.TaoFile) => Validator.Context {
   return (file) => {
     const workspaceFiles = Array.from(services.shared.workspace.LangiumDocuments.all)
@@ -85,7 +68,6 @@ function validationContextFor(
       .filter(AST.isTaoFile)
     return Validator.createContext(
       packagesContext,
-      typir,
       workspaceFiles,
       AST.getDocument(file).uri.path,
     )
