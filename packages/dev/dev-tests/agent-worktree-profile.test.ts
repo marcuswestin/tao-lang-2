@@ -377,34 +377,43 @@ Describe('agent worktree profile bootstrap', () => {
     )
   })
 
-  Test('bootstraps dependencies before full verification uses generated tooling', async () => {
+  Test('bootstraps dependencies before full verification runs its graph', async () => {
     const commands = await justCommands('full-verify')
 
+    // The graph generates the parser inside `./dev gates`, so the ordering visible to a dry run is
+    // the install first and the one gates invocation that names `_parser-gen` after it.
     const install = commands.indexOf('bun install --frozen-lockfile')
-    const parserGeneration = commands.indexOf('ParserGenerate.ts')
+    const graph = commands.indexOf('./dev gates')
     Expect(install).toBeGreaterThanOrEqual(0)
-    Expect(parserGeneration).toBeGreaterThan(install)
+    Expect(graph).toBeGreaterThan(install)
+    Expect(commands.slice(graph)).toContain('_parser-gen')
   })
 
-  Test('runs every unquarantined Studio lane and reports the browser quarantine', async () => {
-    const commands = await justCommands('_full-verify-studio')
+  Test('runs every unquarantined Studio lane in the one graph and reports the browser quarantine', async () => {
+    const commands = await justCommands('full-verify')
 
     Expect(commands).toContain(
-      './dev gates _studio-verify-launch _studio-verify-real-app _studio-verify-native '
-        + '_studio-verify-canary',
+      '_full-verify-smoke-launch _full-verify-real-app _full-verify-native _full-verify-canary',
     )
-    Expect(commands).toContain('--jobs 1')
-    Expect(commands).toContain('--json .artifacts/logs/verify/studio-summary.json')
+    Expect(commands).toContain('--lane full-verify')
+    Expect(commands).not.toContain('--jobs 1')
     Expect(commands).toContain(
-      '--skipped "_studio-verify-simulated=temporarily quarantined; '
-        + 'run just _studio-verify-simulated while debugging the browser journey"',
+      '"_full-verify-simulated=temporarily quarantined; '
+        + 'run just _full-verify-simulated while debugging the browser journey"',
     )
     Expect(commands).not.toContain('manual-check')
-    Expect(await justCommands('_studio-verify-launch')).toContain('studio-launch.test.ts')
-    Expect(await justCommands('_studio-verify-real-app')).toContain('studio-proof-real-app full-verify-real-app')
-    Expect(await justCommands('_studio-verify-simulated')).toContain('studio-simulated-user.test.ts')
-    Expect(await justCommands('_studio-verify-native')).toContain('studio-smoke-native')
-    Expect(await justCommands('_studio-verify-canary')).toContain('just studio-canary')
+    // Each lane owns a worker index so StudioSmoke.resources() keeps their ports and roots apart.
+    Expect(await justCommands('_full-verify-smoke-launch')).toContain(
+      '--worker 0 packages/dev/studio-smoke/studio-launch.test.ts',
+    )
+    Expect(await justCommands('_full-verify-real-app')).toContain(
+      '--worker 1 packages/dev/studio-smoke/studio-real-app.test.ts',
+    )
+    Expect(await justCommands('_full-verify-simulated')).toContain(
+      '--worker 2 packages/dev/studio-smoke/studio-simulated-user.test.ts',
+    )
+    Expect(await justCommands('_full-verify-native')).toContain('--native --run-id full-verify-native --worker 3')
+    Expect(await justCommands('_full-verify-canary')).toContain('./dev studio-canary')
     Expect(await justCommands('studio-manual-checks')).toContain('./dev studio-manual-checks')
   })
 

@@ -1,9 +1,13 @@
 import * as Shared from '@shared'
-import { OutputText } from '../cli/OutputText'
+import { RunArtifacts } from './RunArtifacts'
+import { buildSummary } from './RunSummary'
+import { RunTimings } from './RunTimings'
 import { TestResultSummary } from './TestResultSummary'
+import { type WorkEvent, WorkGraph, type WorkNode, type WorkState } from './WorkGraph'
+import { type OutputMode, WorkReporter } from './WorkReporter'
 
 /** SuiteStatus declares the lifecycle state of one test suite process. */
-export type SuiteStatus = 'failed' | 'passed' | 'pending' | 'running'
+export type SuiteStatus = WorkState['status']
 
 /** TestSuite declares one executable test suite. */
 type TestSuite = {
@@ -14,19 +18,7 @@ type TestSuite = {
 }
 
 /** SuiteState tracks one test suite's process output and status. */
-export type SuiteState = TestSuite & {
-  elapsedMs: number
-  exitCode?: number | null
-  fullOutput: string
-  lines: string[]
-  logPath?: string
-  startedAt?: number
-  status: SuiteStatus
-}
-
-type SuiteCommandResult = Shared.CLI.CommandCloseResult & {
-  error?: Error
-}
+export type SuiteState = WorkState
 
 type RunSuiteProcessesOptions = {
   jobs?: number
@@ -39,9 +31,12 @@ type RunSuiteProcessesOptions = {
 /** TestRunOptions configures one dev test runner invocation. */
 export type TestRunOptions = {
   jobs?: number
+  outputMode?: OutputMode
 }
 
-const OUTPUT_LINE_LIMIT = 6
+const LANE = 'dev-test'
+/** How much of a failing suite's output a quiet run repeats; the whole of it is in the log file. */
+const QUIET_FAILURE_OUTPUT_LINES = 40
 const BUN_SUITE_ARGS = new Map<string, readonly string[]>([
   ['compiler', ['--concurrent']],
   ['dev', ['--concurrent']],
@@ -52,7 +47,7 @@ const BUN_SUITE_ARGS = new Map<string, readonly string[]>([
   ['runtime-toolchain', ['--timeout=60000']],
   ['validator', ['--concurrent']],
 ])
-/** SuiteScheduling weights one suite for the shared worker-slot scheduler. */
+/** SuiteScheduling weights one suite for the shared work graph. */
 type SuiteScheduling = {
   /** Higher-priority suites start earlier. Default 0. */
   priority?: number
@@ -65,10 +60,16 @@ const SUITE_SCHEDULING = new Map<string, SuiteScheduling>([
   // tao-apps dominates the wall time of a full run; its validate+compile phase is one
   // single-threaded process, so it gets the earliest start and a wide slot reservation.
   // tao-apps fans out into compiler worker processes plus a Jest run of its own.
-  ['tao-apps', { priority: 5, cost: 12 }],
-  ['runtime-jest', { priority: 4, cost: 4 }],
+  //
+  // The three widest reservations fit together inside the budget an outer graph hands this runner
+  // (`_test`'s `cost`, which is `cpuCount - 6`), not just inside a whole machine. A reservation
+  // that alone fills that budget makes the widest suite exclusive and the rest of the run queues
+  // behind it: measured on 18 CPUs, `--jobs 12` against the old 12/4/3 weights took 41.6s where
+  // `--jobs 18` took 22.6s; at 8/3/2 the same `--jobs 12` run takes 21.5s and `--jobs 18` 22.9s.
+  ['tao-apps', { priority: 5, cost: 8 }],
+  ['runtime-jest', { priority: 4, cost: 3 }],
   // runtime-toolchain spawns tsc typecheck children per test.
-  ['runtime-toolchain', { priority: 3, cost: 3 }],
+  ['runtime-toolchain', { priority: 3, cost: 2 }],
   ['source-actions', { priority: 3 }],
   ['tao-cli', { priority: 2 }],
 ])
@@ -97,50 +98,53 @@ async function discoverTestSuites(pattern = ''): Promise<TestSuite[]> {
   return suites
 }
 
-function createSuiteState(suite: TestSuite): SuiteState {
+/** suiteNode turns one discovered suite into a work-graph node with its scheduling weights. */
+function suiteNode(suite: TestSuite): WorkNode {
+  const scheduling = SUITE_SCHEDULING.get(suite.name)
   return {
-    ...suite,
-    elapsedMs: 0,
-    fullOutput: '',
-    lines: [],
-    status: 'pending',
+    cost: scheduling?.cost,
+    name: suite.name,
+    priority: scheduling?.priority,
+    run: { args: suite.args, command: suite.command, cwd: suite.cwd },
   }
 }
 
-async function runSuiteProcesses(
-  states: SuiteState[],
-  options: RunSuiteProcessesOptions,
-): Promise<void> {
-  const queue = [...states].sort((left, right) => suitePriority(right) - suitePriority(left))
-  const capacity = Math.max(1, maxSuiteJobs(options.jobs))
-  const running = new Set<Promise<void>>()
-  let availableSlots = capacity
-  let nextSuite = 0
-
-  while (nextSuite < queue.length || running.size > 0) {
-    // Start suites in priority order while slots remain; a suite whose cost does not fit waits
-    // for running suites to release slots rather than letting cheaper suites jump the queue.
-    while (nextSuite < queue.length) {
-      const state = queue[nextSuite]!
-      const cost = Math.min(suiteCost(state), capacity)
-      if (cost > availableSlots && running.size > 0) {
-        break
-      }
-      nextSuite += 1
-      availableSlots -= cost
-      const run: Promise<void> = runSuite(state, options).finally(() => {
-        availableSlots += cost
-        running.delete(run)
-      })
-      running.add(run)
-    }
-    if (running.size > 0) {
-      await Promise.race(running)
-    }
-  }
+function createSuiteState(suite: TestSuite): SuiteState {
+  return WorkGraph.createState(suiteNode(suite))
 }
 
-async function runSuitesInterleaved(pattern = '', options: TestRunOptions = {}): Promise<number> {
+/**
+ * runSuiteProcesses schedules suites through the work graph. Suites are nodes with no dependencies,
+ * so ordering is the graph's priority-then-critical-path policy over `SUITE_SCHEDULING`'s seeds.
+ */
+async function runSuiteProcesses(states: SuiteState[], options: RunSuiteProcessesOptions): Promise<void> {
+  await WorkGraph.run(states, {
+    jobs: options.jobs,
+    onEvent: event => reportToCallbacks(event, options),
+  })
+}
+
+function reportToCallbacks(event: WorkEvent, options: RunSuiteProcessesOptions): void {
+  Shared.Switch.kind<WorkEvent, void>(event, {
+    complete: ({ state }) => {
+      options.onComplete?.(state)
+      options.onChange()
+    },
+    done: () => {},
+    output: ({ output, state }) => {
+      options.onOutput?.(state, output)
+      options.onChange()
+    },
+    planned: () => {},
+    start: ({ state }) => {
+      options.onStart?.(state)
+      options.onChange()
+    },
+  })
+}
+
+/** runTests discovers, runs, reports, and records one `./dev test` invocation. */
+async function runTests(pattern = '', options: TestRunOptions = {}): Promise<number> {
   const startedAt = Date.now()
   const suites = await discoverTestSuites(pattern)
   if (suites.length === 0) {
@@ -148,37 +152,43 @@ async function runSuitesInterleaved(pattern = '', options: TestRunOptions = {}):
     return 0
   }
 
+  const mode = options.outputMode ?? WorkReporter.resolveMode()
   const states = suites.map(createSuiteState)
-  const outputState: InterleavedOutputState = { pending: new Map() }
-  Shared.HCI.writeLine(`Running ${states.length} test suites...`)
-  await runSuiteProcesses(states, {
+  const location = RunArtifacts.locate({ lane: LANE })
+  await RunArtifacts.assignLogPaths(states, location)
+  const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
+  const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
+  const reporter = WorkReporter.create({ lane: LANE, logRoot: location.logRoot, mode })
+
+  const result = await WorkGraph.run(states, {
+    expectedMs,
     jobs: options.jobs,
-    onChange: () => {},
-    onComplete: state => {
-      flushInterleavedOutput(outputState, state)
-      Shared.HCI.logProcessInfo(state.name, `${state.status} in ${OutputText.formatElapsed(state.elapsedMs)}`)
-    },
-    onOutput: (state, output) => writeInterleavedOutput(outputState, state, output),
-    onStart: state => Shared.HCI.logProcessInfo(state.name, 'started'),
+    onEvent: event => reporter.handle(event),
   })
+  await reporter.finish()
 
-  for (const state of states) {
-    flushInterleavedOutput(outputState, state)
-  }
-  await writeSuiteLogs(states)
-  TestResultSummary.printResultSummary(states, Date.now() - startedAt, { taoAppsSkipped: pattern.length > 0 })
-  return TestResultSummary.suiteExitCode(states)
-}
-
-async function writeSuiteLogs(states: readonly SuiteState[]): Promise<void> {
-  const logRoot = Shared.Repo.resolvePath(
-    `.artifacts/logs/dev-test/${new Date().toISOString().replaceAll(/[:.]/g, '-')}`,
-  )
-  await Shared.FS.mkdir(logRoot)
-  await Promise.all(states.map(async state => {
-    state.logPath = Shared.FS.resolvePath(`${state.name}.log`, logRoot)
-    await Shared.FS.writeText(state.logPath, state.fullOutput)
-  }))
+  const elapsedMs = Date.now() - startedAt
+  const summaryPath = await RunArtifacts.finishRun({
+    location,
+    states,
+    summary: buildSummary({
+      elapsedMs,
+      expectedMs,
+      interrupted: result.interrupted,
+      lane: LANE,
+      logRoot: location.logRoot,
+      states,
+    }),
+  })
+  TestResultSummary.printResultSummary(states, elapsedMs, {
+    // A dashboard scrolled the failure away; a quiet run never showed it. Both need it repeated,
+    // and an agent reading a pipe needs it short enough to act on.
+    includeFailureOutput: mode !== 'lines',
+    failureOutputLineLimit: mode === 'quiet' ? QUIET_FAILURE_OUTPUT_LINES : undefined,
+    taoAppsSkipped: pattern.length > 0,
+  })
+  Shared.HCI.writeLine(`Summary: ${Shared.FS.displayPath(summaryPath)}`)
+  return WorkGraph.exitCodeFor(result)
 }
 
 function packageSuites(packageName: string, testFiles: string[], pattern: string): TestSuite[] {
@@ -266,134 +276,10 @@ function isPackageTestFile(packageRoot: string, path: string): boolean {
     && rest.length === 0
 }
 
-function maxSuiteJobs(requestedJobs: number | undefined): number {
-  if (requestedJobs !== undefined) {
-    return requestedJobs
-  }
-  const envJobs = Number(Shared.Platform.runtimeProcess.env['TAO_DEV_TEST_JOBS'] ?? '')
-  if (Number.isInteger(envJobs) && envJobs > 0) {
-    return envJobs
-  }
-  return Shared.Platform.cpuCount()
-}
-
-function suitePriority(state: SuiteState): number {
-  return SUITE_SCHEDULING.get(state.name)?.priority ?? 0
-}
-
-function suiteCost(state: SuiteState): number {
-  return SUITE_SCHEDULING.get(state.name)?.cost ?? 1
-}
-
-async function runSuite(state: SuiteState, options: RunSuiteProcessesOptions): Promise<void> {
-  state.status = 'running'
-  state.startedAt = Date.now()
-  options.onStart?.(state)
-  options.onChange()
-
-  let command: Shared.CLI.StartedCommand | undefined
-  try {
-    command = Shared.CLI.start(state.command, {
-      args: state.args,
-      cwd: state.cwd,
-      onOutput: (_stream, chunk) => {
-        const output = String(chunk)
-        appendOutput(state, output)
-        options.onOutput?.(state, output)
-        options.onChange()
-      },
-      stdio: 'pipe',
-    })
-
-    const result = await waitForSuiteCommand(command)
-    state.elapsedMs = elapsedMs(state)
-    state.exitCode = result.error === undefined ? result.exitCode : null
-    state.status = result.error === undefined && result.exitCode === 0 ? 'passed' : 'failed'
-    if (result.error !== undefined) {
-      appendOutput(state, errorMessage(result.error))
-    }
-  } catch (error) {
-    state.elapsedMs = elapsedMs(state)
-    state.exitCode = null
-    state.status = 'failed'
-    appendOutput(state, errorMessage(error))
-  } finally {
-    command?.dispose()
-  }
-  options.onComplete?.(state)
-  options.onChange()
-}
-
-async function waitForSuiteCommand(command: Shared.CLI.StartedCommand): Promise<SuiteCommandResult> {
-  return await new Promise(resolve => {
-    let settled = false
-    const finish = (result: SuiteCommandResult) => {
-      if (settled) {
-        return
-      }
-      settled = true
-      resolve(result)
-    }
-    command.onceError(error => {
-      finish({ error, exitCode: null, signal: null })
-    })
-    command.waitForClose().then(result => {
-      finish({ ...result, error: command.error })
-      return result
-    })
-  })
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
-}
-
-function appendOutput(state: SuiteState, output: string): void {
-  state.fullOutput += output
-  state.lines = OutputText.sanitize(state.fullOutput)
-    .split('\n')
-    .filter(line => line.length > 0)
-    .slice(-OUTPUT_LINE_LIMIT)
-}
-
-function elapsedMs(state: SuiteState): number {
-  return state.startedAt === undefined ? 0 : Date.now() - state.startedAt
-}
-
-type InterleavedOutputState = {
-  pending: Map<string, string>
-}
-
-function writeInterleavedOutput(outputState: InterleavedOutputState, state: SuiteState, output: string): void {
-  const buffer = { pending: outputState.pending.get(state.name) ?? '' }
-  OutputText.appendCompleteLines(buffer, output, line => {
-    if (line.length > 0) {
-      Shared.HCI.logProcessOutput(state.name, line)
-    }
-  })
-  outputState.pending.set(state.name, buffer.pending)
-}
-
-function flushInterleavedOutput(outputState: InterleavedOutputState, state: SuiteState): void {
-  const buffer = { pending: outputState.pending.get(state.name) ?? '' }
-  if (buffer.pending.length === 0) {
-    return
-  }
-  OutputText.flushPendingLine(buffer, line => Shared.HCI.logProcessOutput(state.name, line))
-  outputState.pending.delete(state.name)
-}
-
-/** TestRunner owns package test discovery, sharding, process execution, and logs. */
+/** TestRunner owns package test discovery, scheduling seeds, and the `./dev test` lane. */
 export const TestRunner = {
-  OUTPUT_LINE_LIMIT,
-  FAILURE_OUTPUT_LINE_LIMIT: TestResultSummary.FAILURE_OUTPUT_LINE_LIMIT,
   createSuiteState,
   discoverTestSuites,
-  displayPath: TestResultSummary.displayPath,
-  failedSuites: TestResultSummary.failedSuites,
-  printResultSummary: TestResultSummary.printResultSummary,
   runSuiteProcesses,
-  runSuitesInterleaved,
-  suiteExitCode: TestResultSummary.suiteExitCode,
-  writeSuiteLogs,
+  runTests,
 }

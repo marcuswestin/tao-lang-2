@@ -97,9 +97,10 @@ fix: _parser-gen
     ./tao fix
     just --fmt
 
-# Check and test all code
-check: _compile-word-flower-app
-    ./dev gates _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _test _runtime-pack-check --skipped "studio-smoke=slow lane; run just studio-smoke or just full-verify"
+# Check and test all code. `_parser-gen` runs first because `./dev` itself imports the generated
+# parser, so a fresh checkout cannot start the graph that would otherwise generate it.
+check: _parser-gen
+    ./dev gates _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _test _runtime-pack-check --lane check --skipped "studio-smoke=slow lane; run just studio-smoke or just full-verify"
 
 # Run the repository lint on its own
 lint: _repo-lint
@@ -113,7 +114,7 @@ doctor *ARGS:
     ./dev doctor {{ ARGS }}
 
 # Benchmark cold and steady-state language-service performance
-bench iterations="10": _bench-check
+bench iterations="10":
     bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
 
 # Compile a Tao app path relative to the invocation directory into the local runtime host
@@ -143,34 +144,39 @@ clean: clean-scratch
 clean-all: clean
     rm -rf .artifacts packages/runtime-toolchain/ios packages/runtime-toolchain/android
 
-# Prepare all code for commit
-verify: fix _compile-word-flower-app
-    ./dev gates _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --json .artifacts/logs/verify/summary.json --skipped "_tao-check=fix ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=fix formatted this tree with dprint and just --fmt" "studio-smoke=slow lane; run just studio-smoke or just full-verify"
+# Prepare all code for commit; `_parser-gen` first for the same reason as `check`
+verify: _parser-gen
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --lane verify --json .artifacts/logs/verify/summary.json --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree" "studio-smoke=slow lane; run just studio-smoke or just full-verify"
 
-# Bootstrap dependencies, then run ordinary verify, doctor, dead exports, and every unquarantined Studio lane
-full-verify: deps verify doctor dead-exports _full-verify-studio
+# Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every unquarantined Studio lane
+full-verify: deps _parser-gen
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _full-verify-smoke-launch _full-verify-real-app _full-verify-native _full-verify-canary --lane full-verify --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree" "_full-verify-simulated=temporarily quarantined; run just _full-verify-simulated while debugging the browser journey"
 
 # Private
 #########
 
-# Run every unquarantined Studio lane and report them together; one worker prevents Metro and port collisions
-_full-verify-studio:
-    ./dev gates _studio-verify-launch _studio-verify-real-app _studio-verify-native _studio-verify-canary --jobs 1 --json .artifacts/logs/verify/studio-summary.json --skipped "_studio-verify-simulated=temporarily quarantined; run just _studio-verify-simulated while debugging the browser journey"
+# The full-verify Studio lanes. One recipe per lane, each on its own worker index so
+# StudioSmoke.resources() hands it ports and an artifact root no other lane touches. The
+# simulated lane stays runnable on its own while it is quarantined from the graph.
 
-_studio-verify-launch:
-    just studio-smoke packages/dev/studio-smoke/studio-launch.test.ts full-verify-launch
+_full-verify-smoke-launch:
+    ./dev studio-smoke --run-id full-verify-launch --worker 0 packages/dev/studio-smoke/studio-launch.test.ts
 
-_studio-verify-real-app:
-    just studio-proof-real-app full-verify-real-app
+_full-verify-real-app:
+    ./dev studio-smoke --run-id full-verify-real-app --worker 1 packages/dev/studio-smoke/studio-real-app.test.ts
 
-_studio-verify-simulated:
-    just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts full-verify-simulated
+_full-verify-simulated:
+    ./dev studio-smoke --run-id full-verify-simulated --worker 2 packages/dev/studio-smoke/studio-simulated-user.test.ts
 
-_studio-verify-native:
-    just studio-smoke-native packages/dev/studio-smoke/studio-simulated-user.test.ts full-verify-native
+_full-verify-native:
+    ./dev studio-smoke --native --run-id full-verify-native --worker 3 packages/dev/studio-smoke/studio-simulated-user.test.ts
 
-_studio-verify-canary:
-    just studio-canary
+_full-verify-canary:
+    ./dev studio-canary --project Apps/HNReader --app HNReader
+
+# The doctor's own versioned report, so the node's log is the artifact
+_doctor-json:
+    ./dev doctor --json
 
 _agent-config:
     ./dev agent-config
@@ -178,8 +184,15 @@ _agent-config:
 _dependency-health:
     cd packages/runtime-toolchain && "{{ DEVENV_NODE }}" -e 'require("expo/metro-config"); require("jest-expo/jest-preset")'
 
-_bench-check:
-    bun test packages/dev/performance-checks/language-performance.test.ts
+# The three fix steps, each over its own file class, as the verify graph runs them
+_fix-dprint:
+    dprint fmt --incremental=false
+
+_fix-tao: _parser-gen
+    ./tao fix
+
+_fix-just-fmt:
+    just --fmt
 
 _runtime-pack-check:
     bun run packages/dev/dev-src/repository-tests/runtime-package-pack.ts

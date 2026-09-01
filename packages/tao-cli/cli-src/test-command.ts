@@ -3,6 +3,7 @@ import { RuntimeToolchainPaths } from '@runtime-toolchain'
 import { RuntimeTesting } from '@runtime-toolchain/testing/runtime-testing'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import { findTaoFiles } from './tao-files'
+import { TestOutput, type TestOutputMode } from './test-output'
 
 /** CompiledTaoTests declares the files and generated manifest for one Tao test run. */
 type CompiledTaoTests = {
@@ -12,11 +13,28 @@ type CompiledTaoTests = {
   testPaths: readonly string[]
 }
 
+/** TestCommandOptions configures one `tao test` run. */
+export type TestCommandOptions = {
+  output?: TestOutputMode
+}
+
+/** CompletedTestRun records one finished test runner process and everything it wrote. */
+type CompletedTestRun = {
+  output: string
+  result?: CLI.CommandResult
+}
+
 /** TaoTestValidationError declares validation errors found before the runtime test harness starts. */
 type TaoTestValidationError = RuntimeTesting.TestCompiler.ValidationError
 
-/** runTestCommand runs the user-facing `tao test` command for one path. */
-export async function runTestCommand(path: string): Promise<void> {
+/**
+ * runTestCommand runs the user-facing `tao test` command for one path. `options.output` selects how
+ * the test runner's own output is reported; a caller that does not choose gets the streamed lines,
+ * because an embedding host — Tao Studio's packaged runner — reads the whole stream. The CLI
+ * resolves the mode from `--output` and the terminal before calling here.
+ */
+export async function runTestCommand(path: string, options: TestCommandOptions = {}): Promise<void> {
+  const mode = options.output ?? 'lines'
   try {
     const root = FS.resolvePath(path)
     HCI.logProcessInfo('test', `Finding Tao tests under ${FS.displayPath(root)}`)
@@ -28,15 +46,15 @@ export async function runTestCommand(path: string): Promise<void> {
     HCI.logProcessInfo('test', `Found ${testPaths.length} Tao test ${testPaths.length === 1 ? 'file' : 'files'}`)
     const compiled = await validateAndCompileTaoTests(testPaths)
     HCI.logProcessInfo('test', 'Running Tao tests')
-    const commandResult = await runCompiledTaoTests(compiled, { stdio: 'pipe' })
-    if (commandResult !== undefined) {
-      HCI.write(commandResult.stdout)
-      HCI.write(commandResult.stderr)
-    }
-    if (!commandResult || commandResult.error || commandResult.exitCode !== 0) {
-      // A failed run's generated code is the debugging artifact, so its run root stays on disk.
-      if (commandResult?.error) {
-        HCI.writeErrorLine(Errors.formatForUser(commandResult.error))
+    const run = await runCompiledTaoTests(compiled, mode)
+    const failed = run.result === undefined || run.result.error !== undefined || run.result.exitCode !== 0
+    // The log lives in the run root, which a failing run keeps as its debugging artifact alongside
+    // the generated code, and which a passing run discards below.
+    const logPath = await writeTestOutputLog(compiled, run.output)
+    TestOutput.reportFinishedRun({ failed, logPath, mode, output: run.output })
+    if (failed) {
+      if (run.result?.error) {
+        HCI.writeErrorLine(Errors.formatForUser(run.result.error))
       }
       Platform.runtimeProcess.exit(1)
     }
@@ -143,32 +161,69 @@ function createTestWorkers(groupCount: number): CompilerWorkerSession[] {
 }
 
 function maxTestWorkers(): number {
-  const envJobs = Number(Platform.runtimeProcess.env['TAO_TEST_JOBS'] ?? '')
-  if (Number.isInteger(envJobs) && envJobs > 0) {
-    return envJobs
-  }
-  return Platform.cpuCount()
+  return taoTestJobs() ?? Platform.cpuCount()
 }
 
-/** runCompiledTaoTests runs the Jest harness for one already-compiled Tao test manifest. */
-async function runCompiledTaoTests(
-  compiled: CompiledTaoTests,
-  options: { stdio?: CLI.CommandStdio } = {},
-): Promise<CLI.CommandResult | undefined> {
+/*
+ * The `TAO_TEST_*` environment contract, read here and below. Every key is optional; an unset key
+ * leaves this command resolving the value itself.
+ *
+ * - `TAO_TEST_JOBS`: worker budget for one run, set by an outer scheduler that reserved that width
+ *   for `tao test`. It bounds both the compiler worker pool and the test runner child's own
+ *   `--maxWorkers`, so the reservation bounds the whole command rather than one half of it.
+ * - `TAO_TEST_IN_PROCESS`: `true` validates and compiles in this process instead of worker
+ *   processes, for the packaged runner that ships without a worker entrypoint.
+ * - `TAO_TEST_JEST_PATH`: the test runner entrypoint to execute instead of the resolved one.
+ * - `TAO_TEST_NODE_PATH`: the Node executable that runs it instead of the pinned repository Node.
+ * - `TAO_TEST_RUNTIME_ROOT`: the runtime-toolchain package root one run compiles into.
+ * - `TAO_TEST_RUNTIME_MANIFEST`: set by this command for its child; `RuntimeTesting` owns the name.
+ */
+function taoTestJobs(): number | undefined {
+  const envJobs = Number(Platform.runtimeProcess.env['TAO_TEST_JOBS'] ?? '')
+  return Number.isInteger(envJobs) && envJobs > 0 ? envJobs : undefined
+}
+
+/**
+ * runCompiledTaoTests runs the Jest harness for one already-compiled Tao test manifest, forwarding
+ * its output as it arrives and returning the whole of it in the order the runner produced it.
+ */
+async function runCompiledTaoTests(compiled: CompiledTaoTests, mode: TestOutputMode): Promise<CompletedTestRun> {
   if (compiled.manifestPath === undefined || compiled.runtimeRoot === undefined) {
-    return undefined
+    return { output: '' }
   }
-  return await CLI.run(await testNodePath(), {
+  const writer = TestOutput.createWriter(mode)
+  const chunks: Buffer[] = []
+  const jobs = taoTestJobs()
+  const result = await CLI.run(await testNodePath(), {
     args: [
       await testJestPath(compiled.runtimeRoot),
       '--config',
       'jest.tao-test.config.cjs',
       '--no-watchman',
+      // An outer scheduler reserves a fixed width for this whole command, so the Jest child is held
+      // to the same budget as the compiler worker pool rather than sizing itself to the machine.
+      ...(jobs === undefined ? [] : [`--maxWorkers=${jobs}`]),
     ],
     cwd: compiled.runtimeRoot,
     env: { [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath },
-    stdio: options.stdio,
+    onOutput: (_stream, chunk) => {
+      chunks.push(chunk)
+      writer?.write(chunk)
+    },
+    stdio: 'pipe',
   })
+  writer?.flush()
+  return { output: Buffer.concat(chunks).toString('utf8'), result }
+}
+
+/** writeTestOutputLog keeps one run's whole test output beside the code that run generated. */
+async function writeTestOutputLog(compiled: CompiledTaoTests, output: string): Promise<string | undefined> {
+  if (compiled.runRoot === undefined || output.length === 0) {
+    return undefined
+  }
+  const logPath = FS.resolvePath(TestOutput.LOG_FILE_NAME, compiled.runRoot)
+  await FS.writeText(logPath, output)
+  return logPath
 }
 
 async function testJestPath(runtimeRoot: string): Promise<string> {

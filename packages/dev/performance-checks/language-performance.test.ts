@@ -22,14 +22,15 @@ Describe('language performance reporting', () => {
 
   Test('runs the benchmark only from `bench`, never alongside a check or verify gate', async () => {
     // A benchmark that shares a machine with the other gates measures contention, not the
-    // language service, so `check` and `verify` must not reach it however they are structured.
-    const benchCommands = await justCommands('bench')
-    Expect(benchCommands).toContain('language-performance.test.ts')
-    Expect(benchCommands).toContain('language-performance.ts')
+    // language service, so no verification lane may reach it however it is structured. The
+    // regression guard these checks provide runs in every test lane instead, as the
+    // `performance-checks` suite the test runner discovers (`test-runner.test.ts`).
+    Expect(await justCommands('bench')).toContain('language-performance.ts')
 
-    for (const lane of ['check', 'verify']) {
-      Expect(await justCommands(lane)).not.toContain('_bench-check')
-      Expect(await justCommands(lane)).not.toContain('performance-checks')
+    for (const lane of ['check', 'verify', 'full-verify']) {
+      const laneCommands = await justCommands(lane)
+      Expect(laneCommands).not.toContain('bench')
+      Expect(laneCommands).not.toContain('language-performance')
     }
   })
 

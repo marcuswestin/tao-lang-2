@@ -101,6 +101,9 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
           isStopping: () => requestedStop,
           preferredExpoPort: preferredExpoPort(),
           stop,
+          // Studio scrapes the whole stream for failures and PASS/FAIL lines; a piped `tao test`
+          // would otherwise select its quiet mode and truncate that stream to a failure tail.
+          testCommandArgs: projectRoot => ['test', projectRoot, '--output', 'lines'],
           testCommandPath: Repo.resolvePath('tao'),
         }),
     )

@@ -1,6 +1,7 @@
 import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
-import { classifyFailure, formatGateSummary, gateExitCode, runGates } from '../dev-src/repository-tests/GateRunner'
+import { runGates } from '../dev-src/repository-tests/GateRunner'
+import { classifyFailure, formatGateSummary, gateExitCode } from '../dev-src/repository-tests/RunSummary'
 
 type GateScript = Record<string, { exitCode: number; output: string }>
 
@@ -32,7 +33,8 @@ Describe('repository gate runner', () => {
     const { summary } = await run(['_repo-lint', '_typecheck'], {})
 
     Expect(summary.status).toBe('passed')
-    Expect(summary.version).toBe(1)
+    Expect(summary.version).toBe(2)
+    Expect(summary.lane).toBe('verify')
     Expect(summary.gates.map(gate => gate.name)).toEqual(['_repo-lint', '_typecheck'])
     Expect(summary.gates.every(gate => gate.status === 'passed')).toBe(true)
     Expect(summary.gates.every(gate => gate.logPath !== undefined)).toBe(true)
@@ -101,8 +103,51 @@ Describe('repository gate runner', () => {
       })
 
       const written = await FS.readJson<{ status: string; version: number }>(FS.resolvePath('summary.json', root))
-      Expect(written.version).toBe(1)
+      Expect(written.version).toBe(2)
       Expect(written.status).toBe('passed')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('leaves every run the same trail: per-gate logs, a summary, and a latest link', async () => {
+    const root = await mkTestDir('tao-gate-runner-artifacts-')
+    try {
+      const summary = await runGates({
+        gates: ['_repo-lint'],
+        lane: 'check',
+        repositoryRoot: root,
+        runGate: async () => ({ exitCode: 0, output: 'lint ok\n' }),
+      })
+
+      Expect(FS.relativePath(root, summary.logRoot).startsWith('.artifacts/logs/check/')).toBe(true)
+      Expect(await FS.readText(FS.resolvePath('repo-lint.log', summary.logRoot))).toBe('lint ok\n')
+      const written = await FS.readJson<{ lane: string }>(FS.resolvePath('summary.json', summary.logRoot))
+      Expect(written.lane).toBe('check')
+      const latest = FS.resolvePath('.artifacts/logs/check/latest', root)
+      Expect(await FS.realPath(latest)).toBe(await FS.realPath(summary.logRoot))
+      Expect(await FS.readText(FS.resolvePath('repo-lint.log', latest))).toBe('lint ok\n')
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('records every gate duration in the timings store the next run plans from', async () => {
+    const root = await mkTestDir('tao-gate-runner-timings-')
+    try {
+      await runGates({
+        gates: ['_repo-lint'],
+        repositoryRoot: root,
+        runGate: async () => ({ exitCode: 0, output: '' }),
+      })
+
+      const store = await FS.readJson<{ nodes: Record<string, { samples: number }> }>(
+        FS.resolvePath('.artifacts/timings/durations.json', root),
+      )
+      Expect(store.nodes['_repo-lint']?.samples).toBe(1)
+      const history = await FS.readText(FS.resolvePath('.artifacts/timings/history.jsonl', root))
+      Expect(history.trim().split('\n').length).toBe(1)
+      Expect(history).toContain('"lane":"verify"')
     } finally {
       await FS.remove(root)
     }

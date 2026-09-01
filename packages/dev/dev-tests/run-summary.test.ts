@@ -1,0 +1,83 @@
+import { Describe, Expect, Test } from '@shared/test'
+import { buildSummary, formatGateSummary, gateExitCode } from '../dev-src/repository-tests/RunSummary'
+import { WorkGraph, type WorkNode, type WorkState } from '../dev-src/repository-tests/WorkGraph'
+
+function finishedState(node: Partial<WorkNode> & { name: string }, outcome: Partial<WorkState> = {}): WorkState {
+  return {
+    ...WorkGraph.createState({ run: { args: [], command: 'true' }, ...node }),
+    elapsedMs: 1_000,
+    exitCode: 0,
+    status: 'passed',
+    ...outcome,
+  }
+}
+
+Describe('versioned run summary', () => {
+  Test('records the lane and each node graph fact a later consumer schedules from', () => {
+    const summary = buildSummary({
+      elapsedMs: 4_200,
+      expectedMs: name => (name === 'studio-canary' ? 30_000 : undefined),
+      lane: 'full-verify',
+      logRoot: '/repo/.artifacts/logs/full-verify/stamp',
+      states: [
+        finishedState({ name: 'studio-smoke-native', needs: ['_compile'], resources: ['gui'] }),
+        finishedState({ name: 'studio-canary', resources: ['gui'] }),
+      ],
+    })
+
+    Expect(summary.version).toBe(2)
+    Expect(summary.lane).toBe('full-verify')
+    Expect(summary.gates[0]?.needs).toEqual(['_compile'])
+    Expect(summary.gates[0]?.resources).toEqual(['gui'])
+    Expect(summary.gates[0]?.expectedMs).toBeUndefined()
+    Expect(summary.gates[1]?.expectedMs).toBe(30_000)
+  })
+
+  Test('a node skipped by a failed dependency reports why, and never as passed', () => {
+    const summary = buildSummary({
+      elapsedMs: 900,
+      lane: 'verify',
+      logRoot: '/repo/logs',
+      states: [
+        finishedState({ name: '_compile' }, { exitCode: 1, fullOutput: 'compile blew up', status: 'failed' }),
+        finishedState({ name: '_test', needs: ['_compile'] }, {
+          elapsedMs: 0,
+          exitCode: undefined,
+          reason: 'dependency failed: _compile',
+          status: 'skipped',
+        }),
+      ],
+    })
+
+    Expect(summary.gates.map(gate => gate.status)).toEqual(['failed', 'skipped'])
+    Expect(summary.gates[1]?.reason).toBe('dependency failed: _compile')
+    Expect(summary.firstFailure?.name).toBe('_compile')
+    Expect(formatGateSummary(summary)).toContain('- _test: skipped — dependency failed: _compile')
+    Expect(gateExitCode(summary)).toBe(1)
+  })
+
+  Test('an interrupted run fails even when nothing it managed to run failed', () => {
+    const summary = buildSummary({
+      elapsedMs: 500,
+      interrupted: true,
+      lane: 'verify',
+      logRoot: '/repo/logs',
+      states: [finishedState({ name: '_repo-lint' })],
+    })
+
+    Expect(summary.status).toBe('failed')
+    Expect(gateExitCode(summary)).toBe(1)
+  })
+
+  Test('the rollup names both artifact paths an agent reads afterwards', () => {
+    const summary = buildSummary({
+      elapsedMs: 500,
+      lane: 'verify',
+      logRoot: '/repo/.artifacts/logs/verify/stamp',
+      states: [finishedState({ name: '_repo-lint' })],
+    })
+
+    Expect(formatGateSummary(summary)).toContain('logs/verify/stamp')
+    Expect(formatGateSummary(summary)).toContain('logs/verify/stamp/summary.json')
+  })
+})

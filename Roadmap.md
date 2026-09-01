@@ -93,7 +93,7 @@ tests written in Tao, green in Current, for every construct introduced.
     No native transport is implemented and a real-iPhone spike remains required. Exploration:
     `Docs/Roadmap/Tao Studio v1/Exploration - Native device as Studio canvas.md`.
 - [ ] Make `just full-verify` pass its simulated-user lane
-  - The lane was unreachable until the `_full-verify-studio` recipe was repaired, so its browser
+  - The lane was unreachable until the old `_full-verify-studio` recipe was repaired, so its browser
     assertions had never run once. Five defects behind them are fixed. The one left is that
     `postEditorSelection` is driven from `client/StudioApp.ts` by the shell's own CodeMirror while
     `.studio-editor` is also mounted by the Tao product host: the page holds two `.cm-editor`
@@ -105,6 +105,9 @@ tests written in Tao, green in Current, for every construct introduced.
     away from a preview origin; a real preview receives `path` and `sourceVersion` from Studio's own
     `postEditorSelection` message and knows its source ranges from the bundle it runs. Rework the
     stub onto that contract instead.
+  - The lane is quarantined from the `full-verify` graph with a stated reason (its palette-to-preview
+    drop stalls before source mutation); `just _full-verify-simulated` runs it directly on its own
+    worker while it is being repaired, and re-adding it to the graph is one Justfile membership edit.
   - Context: `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md` and the ownership rules in
     `agents/skills/studio-hybrid-client/SKILL.md`.
 - [ ] Implement a drag-and-drop example app
@@ -118,7 +121,10 @@ tests written in Tao, green in Current, for every construct introduced.
     up front — findings feed back through the tranche process. Context:
     `Docs/Roadmap/Tao Revolution/Decisions.md` (§9 collections, §8 intents).
 - [ ] Harden `tao test`
-  - Filters, watch and CI output, richer failure reporting, and broader runtime coverage. Test Apps already assert behavior in Tao.
+  - Filters, watch, richer failure reporting, and broader runtime coverage. Test Apps already assert behavior in Tao.
+  - The output half landed with the verification-orchestration plan: the Jest child streams live,
+    `--output lines|quiet` defaults by terminal, a quiet run keeps the full output in
+    `test-output.log` inside the run root, and `TAO_TEST_JOBS` bounds the whole command.
 - [ ] Add the Tao design system MVP
   - Deterministic design declarations, tokens, semantic tokens, component recipes, source-level application, runtime lowering, and first diagnostics. Plan: `Docs/Roadmap/Add Tao design system MVP/`.
 - [ ] Add `tao create` project scaffold
@@ -250,7 +256,6 @@ Product and codebase backlog, unordered.
 - Formatter: drop redundant `render` keywords once the language makes `render` optional in view bodies.
 - Compiler: add codegen tracing and source maps when needed.
 - Dev loop: watch resolved relative import roots outside the selected app folder.
-- Dev loop: run the `full-verify` Studio lanes through `./dev gates` with distinct `--worker` indices, so one summary reports every lane instead of stopping at the first failure. `StudioSmoke.resources()` already derives per-worker ports and artifact roots; the native and canary lanes may still need serialising because they contend on GUI resources rather than ports.
 
 ## Records
 
@@ -264,6 +269,10 @@ Product and codebase backlog, unordered.
 - `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..030 deferred-decision inventory.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
 - `Docs/Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.
+- `Docs/Roadmap/Archive/Verification orchestration/` — the completed verification-orchestration program: one
+  dependency-aware, duration-informed scheduler for every test and verification lane, the live dashboard
+  for humans on `check`/`verify`/`full-verify`, the file-backed quiet output contract for agents, and
+  `full-verify`'s Studio lanes parallelized on per-worker resources.
 - `Docs/Roadmap/Archive/Repository simplification/` — the completed simplification program: dead-code and API removals with named surviving proofs, the typed error surface and its ratchets, Typir's retirement onto the structural `Type`, the Test App consolidation, and the tooling and gate simplification.
 - `Docs/Roadmap/Archive/Code cleanup spike/Report.md` — the completed cleanup spike and R1–R13 rulebook.
 - `Docs/Roadmap/Archive/` — frozen records of completed work.

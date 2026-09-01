@@ -85,6 +85,14 @@ export function isInteractive(options: TerminalStreams = {}): boolean {
   return hasTruthyIsTTY(input) && hasTruthyIsTTY(output)
 }
 
+/**
+ * isOutputTerminal reports whether output goes to a terminal rather than a pipe or a file. Use it to
+ * choose what to render; use `isInteractive` when the code also needs to read the user's answer.
+ */
+export function isOutputTerminal(options: OutputOptions = {}): boolean {
+  return hasTruthyIsTTY(options.output ?? runtimeProcess.stdout)
+}
+
 /** write writes human-readable output to stdout or the provided output stream. */
 export function write(message: string | Uint8Array, options: OutputOptions = {}): void {
   ;(options.output ?? runtimeProcess.stdout).write(message)

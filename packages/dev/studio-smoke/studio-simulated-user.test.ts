@@ -38,8 +38,8 @@ Test('simulated preview stays within the preview-origin API boundary', () => {
   Expect(html).not.toContain('/api/file?')
 })
 
-// The browser branch is temporarily quarantined from `_full-verify-studio`; keep this test and the
-// `_studio-verify-simulated` recipe intact so the end-to-end journey remains directly reproducible.
+// The browser branch is temporarily quarantined from the `full-verify` graph; keep this test and the
+// `_full-verify-simulated` recipe intact so the end-to-end journey remains directly reproducible.
 // The native branch below validates the unattended Electrobun capability probe; it does not repeat
 // the browser editor journey.
 Test('simulated user exercises the browser editor or the native Electrobun shell', async () => {

@@ -84,7 +84,9 @@ answers is recorded `failed` and stops, rather than idling in a state that reads
 | `.artifacts/dev/`                                             | Expo logs and the generated preview runtime          |
 | `.artifacts/tests/studio-smoke/<runId>/`                      | One smoke run's isolated lane                        |
 | `.artifacts/tests/studio-canary/`                             | The native canary's report                           |
-| `.artifacts/logs/verify/<timestamp>/`                         | One `check` or `verify` run's per-gate logs          |
+| `.artifacts/logs/<lane>/<timestamp>/`                         | One lane run's per-node logs plus `summary.json`     |
+| `.artifacts/logs/<lane>/latest`                               | Symlink to that lane's newest run                    |
+| `.artifacts/timings/`                                         | Measured node durations the scheduler orders by      |
 | `.artifacts/tmp/`                                             | Bootstrap scratch; reclaim with `just clean-scratch` |
 
 ## Launch manifests
@@ -205,14 +207,34 @@ stays fast.
 
 ## Verification
 
-`./agent check` and `./agent verify` run their gates in parallel and end with one summary: every
-gate with its status and elapsed time, the warnings gates printed, the log directory, and the first
-actionable failure with its output. Gates a lane deliberately does not run are reported as skipped
-with the reason, never as passed. A failure is classified as environment setup, optional tooling, a
-sandbox restriction, or a repository defect. `verify` also writes
+`./agent check` and `./agent verify` run their gates as one dependency-aware graph and end with one
+summary: every gate with its status and elapsed time, the warnings gates printed, the log
+directory, and the first actionable failure with its output. Gates a lane deliberately does not run
+are reported as skipped with the reason, never as passed. A failure is classified as environment
+setup, optional tooling, a sandbox restriction, or a repository defect. On a terminal the run
+renders a live dashboard; in a pipe — an agent harness, a log capture — it prints one line per
+finished node instead of streaming gate output, and `--output tui|lines|quiet` or `TAO_OUTPUT_MODE`
+overrides the choice. Every lane writes `.artifacts/logs/<lane>/<timestamp>/<node>.log` plus
+`summary.json` and refreshes the lane's `latest` symlink; `verify` also writes the stable copy at
 `.artifacts/logs/verify/summary.json`.
 
-The Justfile decides which gates belong to which lane; `./dev gates` runs them and reports.
+`just full-verify` bootstraps dependencies and then runs the same graph grown to everything: the
+verify membership plus the doctor (whose node log is the versioned `--json` report),
+`dead-exports`, the launch and real-app browser smoke lanes in parallel on worker indices 0 and 1
+(`StudioSmoke.resources()` gives each its own ports and artifact root), and the native shell
+(worker 3) and canary serialized on a `gui` resource so they never overlap each other while the
+browser lanes run beside them. The simulated-user browser lane is quarantined from the graph with
+its reason in the rollup while its palette-to-preview drop is repaired; `just _full-verify-simulated`
+runs it directly on worker 2. A failing lane no longer hides the lanes after it — every lane
+appears in the one rollup with its own log. `just studio-smoke`, `just studio-smoke-native`,
+`just studio-proof-real-app`, and `just studio-canary` remain the standalone entry points, and the
+smoke lanes need an unsandboxed shell (Chrome cannot create its socket and Crashpad directories
+under the agent sandbox). Checks that need a person live in `just studio-manual-checks` and are
+never part of any lane.
+
+The Justfile decides which gates belong to which lane; `./dev gates` runs them and reports, and
+`GateCatalog.ts` in `packages/dev` holds each gate's scheduling shape (dependencies, width,
+resources, timeouts).
 
 ## Native canary
 

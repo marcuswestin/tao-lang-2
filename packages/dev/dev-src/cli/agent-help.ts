@@ -47,5 +47,8 @@ Examples:
   ./agent test
   ./agent test "formats imports"
   ./agent verify
+
+Every lane writes .artifacts/logs/<lane>/latest/ — one <node>.log per gate plus summary.json.
+On a failure, read summary.json first: it names the first failing gate and its log.
 `
 }

@@ -207,6 +207,15 @@ export async function symlink(targetPath: string, linkPath: string): Promise<voi
   await nodeFs.symlink(targetPath, linkPath)
 }
 
+/**
+ * replaceSymlink points a symlink at `targetPath`, replacing whatever the link path held. Removing
+ * a symlink never follows it, so an existing link is unlinked rather than its target deleted.
+ */
+export async function replaceSymlink(targetPath: string, linkPath: string): Promise<void> {
+  await remove(linkPath)
+  await symlink(targetPath, linkPath)
+}
+
 /** listDir lists direct child names for a directory, sorted for platform-independent order. */
 export async function listDir(inputPath: string): Promise<string[]> {
   return (await nodeFs.readdir(inputPath)).sort()

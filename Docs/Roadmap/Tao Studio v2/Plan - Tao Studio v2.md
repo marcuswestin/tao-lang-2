@@ -90,7 +90,7 @@ validity as unverified when Apple's tools are absent rather than as passed.
 
 1. Run `just studio-manual-checks` for the native project picker and real window lifecycle; then supply
    signing and notarization credentials to validate the DMG and differential update.
-2. Repair and re-enable `_studio-verify-simulated`. It is temporarily quarantined from `full-verify` because
+2. Repair and re-enable `_full-verify-simulated`. It is temporarily quarantined from `full-verify` because
    the palette-to-preview drop does not yet produce its source action. The direct recipe remains runnable.
    Restore the width-mode/apply-240/undo journey when this lane returns; focused inspector tests retain the
    typed width-action contract meanwhile.
@@ -117,7 +117,7 @@ reloads, saves, and selection changes. The load-time send assumes a synchronousl
 listener; the later activation/save/selection paths republish for receivers that mount after load.
 
 The full simulated-browser journey is not closed: its preview palette drop currently stalls before source
-mutation, so `_full-verify-studio` records that lane as quarantined instead of reporting it as passed. The
+mutation, so the `full-verify` graph records that lane as quarantined instead of reporting it as passed. The
 native capability probe does not substitute for editor, selection, source-action, or undo coverage.
 
 **Do not widen `previewOriginPath` to make the lane pass.** The smoke's stub preview previously built its

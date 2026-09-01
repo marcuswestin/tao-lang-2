@@ -1,11 +1,12 @@
-import { Errors, HCI, Platform, Repo, Switch } from '@shared'
+import { Errors, HCI, Platform, Repo } from '@shared'
 import { AgentConfigGenerator } from './agent-config/AgentConfigGenerator'
 import { runWithCommands } from './cli/run-with-commands'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { ExpoRunner } from './expo-dev-loop/expo-runner/ExpoRunner'
-import { formatGateSummary, gateExitCode, runGates } from './repository-tests/GateRunner'
+import { runGates } from './repository-tests/GateRunner'
+import { formatGateSummary, gateExitCode } from './repository-tests/RunSummary'
 import { TestRunner } from './repository-tests/TestRunner'
-import { TestTUI } from './repository-tests/TestTUI'
+import { WorkReporter } from './repository-tests/WorkReporter'
 import { StudioCanaryCommand } from './studio/StudioCanaryCommand'
 import { runStudioDev } from './studio/StudioDev'
 import { StudioLifecycleCommand } from './studio/StudioLifecycleCommand'
@@ -13,12 +14,21 @@ import { StudioManualChecks } from './studio/StudioManualChecks'
 import { StudioNative } from './studio/StudioNative'
 import { StudioSmoke } from './studio/StudioSmoke'
 
-type TestOutputMode = 'lines' | 'tui'
-
 type TestCommandOptions = {
   jobs?: string
   output?: string
 }
+
+type GatesCommandOptions = {
+  jobs?: string
+  json?: string
+  lane?: string
+  output?: string
+  skipped?: string[]
+}
+
+/** Help shared by every command that runs a work graph, so the modes are described once. */
+const OUTPUT_OPTION_HELP = 'Output mode: tui, lines, or quiet. Defaults to tui on a terminal and quiet in a pipe.'
 
 /** Repository development CLI behind `./dev`: package tests and low-level Expo device preparation. */
 await runWithCommands(commands => {
@@ -28,14 +38,14 @@ await runWithCommands(commands => {
     .command('test')
     .description('Run package tests in parallel.')
     .argument('[pattern]', 'Optional test name pattern.')
-    .option('--output <mode>', 'Output mode: tui or lines.', 'tui')
+    .option('--output <mode>', OUTPUT_OPTION_HELP)
     .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
     .action(async (pattern = '', options: TestCommandOptions = {}) => {
       try {
         Platform.runtimeProcess.exit(
-          await runTests(pattern, {
+          await TestRunner.runTests(pattern, {
             jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
-            outputMode: parseTestOutputMode(options.output ?? 'tui'),
+            outputMode: WorkReporter.resolveMode({ requested: options.output }),
           }),
         )
       } catch (error) {
@@ -50,12 +60,16 @@ await runWithCommands(commands => {
     .argument('<gates...>', 'Just recipe names to run as gates.')
     .option('--jobs <count>', 'Maximum number of gates to run at once.')
     .option('--json <path>', 'Also write the summary as a JSON artifact at this path.')
+    .option('--lane <name>', 'Artifact lane the run writes its logs and summary under.', 'verify')
+    .option('--output <mode>', OUTPUT_OPTION_HELP)
     .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
-    .action(async (gates: string[], options: { jobs?: string; json?: string; skipped?: string[] } = {}) => {
+    .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       const summary = await runGates({
         gates,
         jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
         jsonPath: options.json,
+        lane: options.lane,
+        outputMode: WorkReporter.resolveMode({ requested: options.output }),
         skipped: options.skipped,
       })
       HCI.writeLine(formatGateSummary(summary))
@@ -315,23 +329,6 @@ await runWithCommands(commands => {
       await ExpoRunner.startExpo()
     })
 })
-
-async function runTests(
-  pattern: string,
-  options: { jobs?: number; outputMode: TestOutputMode },
-): Promise<number> {
-  return await Switch<TestOutputMode, Promise<number>>(options.outputMode, {
-    lines: () => TestRunner.runSuitesInterleaved(pattern, { jobs: options.jobs }),
-    tui: () => TestTUI.runTestSuites(pattern, { jobs: options.jobs }),
-  })
-}
-
-function parseTestOutputMode(value: string): TestOutputMode {
-  if (value === 'lines' || value === 'tui') {
-    return value
-  }
-  Errors.throwUserInput(`Unknown test output mode '${value}'. Use 'tui' or 'lines'.`)
-}
 
 function parseOptionalPositiveInteger(value: string | undefined, label: string): number | undefined {
   if (value === undefined) {
