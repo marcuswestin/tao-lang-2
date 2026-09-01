@@ -309,9 +309,14 @@ strongest claims available: the policy layer behaves identically on both sides o
   rejection as a local refusal. Presence visibility inherits sharing semantics. The provider
   substrate decided here (per-entity rows) is the storage shape that program builds its change
   protocol on.
-- **Studio v2 error architecture**: remote refusals land in the implemented failure ladder —
-  provider selects a declared case + sentence; failure captures structurally exclude
-  secret-bearing fields (already implemented on their side; `secret` gives it a type to key on).
+- **Studio v2 error architecture**: the action-failure contract is now decided law (Decisions
+  §15, amended 2026-08-31) — a provider failure selects a declared case and *may carry a
+  server-authored sentence*, with the message ladder preferring the server sentence. Remote
+  refusals land in that ladder; failure captures structurally exclude secret-bearing fields
+  (already implemented on their side; `secret` gives it a type to key on). Separately, Ro
+  deferred the runtime action-transaction contract (Roadmap, 2026-08-31): this program designs
+  `transaction … for Me`'s *authority and provider-commit* semantics and must not treat the
+  implemented Studio action overlay as the settled durable-row transaction model.
 - **`tao ship`**: three shared surfaces, all flagged in its exploration — deploy credentials
   (`config`, not `secret`), rules/schema push as part of the deploy pipeline (drift between
   deployed rules and released clients is a joint versioning question), and any admin lane for
@@ -337,7 +342,11 @@ strongest claims available: the policy layer behaves identically on both sides o
    backends over one typed rule IR? Where does `can …` get its data when the audience path
    crosses rows the caller cannot read?
 5. Refusal mapping: is matching on the provider's failing-rule report robust enough, or should
-   emitted rules carry stable identifiers the runtime resolves without string-matching?
+   emitted rules carry stable identifiers the runtime resolves without string-matching? And how
+   does a lowered-rule rejection sit in the decided message ladder — InstantDB's
+   `permission-denied` text is diagnostic English, not copy, so the runtime should resolve it to
+   the declared Tao sentence rather than surfacing it through the "server-authored sentence"
+   rung (which presupposes a server deliberately speaking the ladder).
 6. What exactly does `delete Me` clear — the decided trio (Name, Email, Photo) plus all
    app-declared extension fields? Do preferences survive redaction? Where does the admin lane
    for the `$users` record live?
@@ -353,6 +362,11 @@ strongest claims available: the policy layer behaves identically on both sides o
 10. The demo apps' pre-consolidation deltas (`public publish`, household-projection invites
     that lose the used-vs-mistyped distinction) — consolidated in Process step 3, but slice
     tests written now should use the decided forms.
+11. Fixture seeding: Ro deferred fixture-through-action semantics (Roadmap, 2026-08-31 —
+    `through` setup stays fail-closed), yet the decided fixture sketch seeds via
+    `create Household { … } through StartKitchen(Ro)`. Do this program's fixtures seed rows
+    directly with harness authority (satisfying invariants whole, per §16's "full authority"),
+    or does the proof app force the deferred decision?
 
 ## Deferred (running list — liked or acknowledged, not in this program's slices)
 
@@ -369,4 +383,14 @@ strongest claims available: the policy layer behaves identically on both sides o
 
 ## Direction settled
 
-_(Accumulates from dialogue with Ro; dated entries, one ruling each. Nothing recorded yet.)_
+### 2026-08-31 — Enforcement substrate: per-entity persistence under the snapshot contract
+
+The InstantDB provider moves to per-entity storage while keeping the runtime's whole-snapshot
+provider contract: loads compose from namespace queries, saves decompose into per-row
+`transact` ops by diffing against the last confirmed state. Server rules bite every row
+operation immediately; the diffing layer and a compiler-emitted schema push live inside the
+provider. This deliberately settles the provider roadmap's open question ("snapshot sync vs
+entity/change protocol") as *entity storage now, snapshot protocol for now* — the sync program
+later replaces the diffing with a real change protocol over the same storage shape. Rejected:
+waiting for an entity/change protocol first (inverts program order, pulls conflict semantics
+into scope), and client-only enforcement (fails the promise outright).
