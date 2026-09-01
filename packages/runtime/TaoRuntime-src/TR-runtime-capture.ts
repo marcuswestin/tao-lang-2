@@ -1,5 +1,9 @@
 import { RuntimeAssert } from './TR-assert'
-import { UnexpectedBehaviorError } from './TR-errors'
+import {
+  captureActionHistory,
+  restoreActionHistory,
+  UnexpectedBehaviorError,
+} from './TR-errors'
 
 export type TaoRuntimeJson = boolean | null | number | string | readonly TaoRuntimeJson[] | {
   readonly [key: string]: TaoRuntimeJson
@@ -40,6 +44,13 @@ export type TaoRuntimeCaptureDomainRegistration = Readonly<{
 
 const domains = new Map<string, TaoRuntimeCaptureDomainRegistration>()
 let pendingReplay: TaoRuntimeCaptureArtifact | undefined
+
+registerRuntimeCaptureDomain({
+  capture: () => captureActionHistory() as TaoRuntimeJson,
+  domain: 'action-history',
+  restore: restoreActionHistory,
+  version: 1,
+})
 
 /** Registration is explicit: unregistered auth and credential stores cannot enter a capture. */
 export function registerRuntimeCaptureDomain(registration: TaoRuntimeCaptureDomainRegistration): () => void {

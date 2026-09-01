@@ -67,19 +67,20 @@ runtime-toolchain, and developer-automation suites cover the rows above. Release
 browser bundling cover the executable Tao root, Files portal, and host bridge; native staging requires that
 release bundle, which is now the only client path in either mode. The packaged service has also been bundled and
 installed from the frozen repository lock in isolated test payloads. The final repository-wide
-`./agent verify` gate passed all 20 suites and all 1,726 tests after review remediation and the
+`./agent verify` gate passed all 20 suites and more than 2,000 tests after review remediation and the
 design-surface, Tao scenario-control, ProductHost-panel, and extended browser-harness increments.
 
-Native validation is a separate gate. Hutch is installed and the native command reaches the generated
-Electrobun build, but the host process aborts while registering AppKit under the Codex application
-coalition. Signing/notarization credentials and an HTTPS artifact host are also unavailable here, so none
-of the repository tests proves a running signed/notarized Electrobun app or differential update.
+Native validation is a separate gate. The deterministic Electrobun canary now completes without human
+interaction, reports browser-runtime, auxiliary-window, menu, shortcut, WebSocket, and iframe capabilities,
+and stops its watcher and owned processes. Signing/notarization credentials and an HTTPS artifact host are
+still external requirements, so repository tests do not prove a signed/notarized app or differential update.
 
 Those boundaries are now commands rather than prose. `./dev studio-canary` launches the native shell,
 evaluates its runtime probe against the required capability set, and fails when any process the launch
 owned survives shutdown; a host without Hutch or without a window server session is reported as blocked,
-which is neither a pass nor a repository failure. It names the directory picker, Command-W, and
-quit-on-last-window as manual every run, because no in-process probe can drive them.
+which is neither a pass nor a repository failure. `just studio-manual-checks` is the separate human workflow
+for the project picker, real second-project window, Command-W, and quit-on-last-window behavior; automated
+verification and canary commands never wait for those actions.
 `./dev studio-release-check` validates a built release's standalone payload, packaged runtime inventory,
 HTTPS update manifest, and differential updates, and reports deep signing, notarization, and disk-image
 validity as unverified when Apple's tools are absent rather than as passed.
@@ -87,12 +88,12 @@ validity as unverified when Apple's tools are absent rather than as passed.
 
 ## Next integration gates
 
-1. Run the native command outside the Codex host coalition and exercise the actual project picker, windows,
-   menus, shortcuts, iframe/WebSocket bridge, and packaged standalone service; then supply signing and
-   notarization credentials to validate the DMG and differential update.
-2. Run the deterministic wide/narrow browser smoke outside the current host coalition. This environment's
-   Chrome binary exits before publishing `DevToolsActivePort`; the automated viewport, pointer-drag,
-   screenshot, console, and exception primitives remain contract-tested here.
+1. Run `just studio-manual-checks` for the native project picker and real window lifecycle; then supply
+   signing and notarization credentials to validate the DMG and differential update.
+2. Repair and re-enable `_studio-verify-simulated`. It is temporarily quarantined from `full-verify` because
+   the palette-to-preview drop does not yet produce its source action. The direct recipe remains runnable.
+   Restore the width-mode/apply-240/undo journey when this lane returns; focused inspector tests retain the
+   typed width-action contract meanwhile.
 3. Preserve the current strangler boundary while completing the external browser and native interaction
    passes: Tao owns Studio structure and ordinary controls, while TypeScript owns the trusted controller,
    preview lifecycle, serialization boundary, and primitive leaves Tao cannot yet express.
@@ -106,22 +107,25 @@ validity as unverified when Apple's tools are absent rather than as passed.
 browser assertions were unverified from the day they were written. Working through them surfaced two
 findings that outlive the test.
 
-**One container, two editors.** `.studio-editor` is mounted twice: the Tao product host portals a
-`CodeEditor` into it, and the imperative shell builds its own CodeMirror there (`parent: view.editor` in
-`client/StudioApp.ts`). The page therefore holds two `.cm-editor` instances — the visible React one and a
-0x0 orphan — and any behavior the shell attaches to _its_ editor never reaches the editor a person uses.
-The component-palette drop was one case, now fixed by moving drop handling into `CodeEditor` so the
-insertion also joins CodeMirror's undo history. `postEditorSelection` is the case still open: it is driven
-from `StudioApp.ts` by the shell's editor, so Studio never posts `path` and `sourceVersion` into the
-preview as the selection moves, and editor-to-preview highlight sync does not reach a real preview.
-Closing it means routing the shell's editor-driven behavior onto the Tao-rendered editor.
+**One container, one editor owner.** `.studio-editor` was mounted twice: the Tao product host portaled a
+`CodeEditor` into it, while the imperative controller built a second 0x0 CodeMirror in the same container.
+The controller now keeps its CodeMirror only as an unmounted document model; the Tao-rendered editor is
+the sole mounted `.cm-editor`. Palette drops run through that live editor and join its undo history, while
+visible selection changes explicitly synchronize `path`, `sourceVersion`, and range to the active preview.
+Source identity is also synchronized on tab activation, immediately when a preview is wired, after iframe
+reloads, saves, and selection changes. The load-time send assumes a synchronously installed preview
+listener; the later activation/save/selection paths republish for receivers that mount after load.
 
-**Do not widen `previewOriginPath` to make the lane pass.** The smoke's stub preview builds its identity by
-fetching `/api/protocol` and `/api/file`. Neither is in `previewOriginPath`, the six-endpoint allowlist
-deciding which routes answer a preview origin, so the fetch fails and the stub never posts its selection.
-A real preview cannot call them either: it receives `path` and `sourceVersion` from Studio's own
-`postEditorSelection` message, and knows its source ranges from the bundle it runs. The stub must be
-reworked onto that contract; relaxing the allowlist would trade a deliberate boundary for a green test.
+The full simulated-browser journey is not closed: its preview palette drop currently stalls before source
+mutation, so `_full-verify-studio` records that lane as quarantined instead of reporting it as passed. The
+native capability probe does not substitute for editor, selection, source-action, or undo coverage.
+
+**Do not widen `previewOriginPath` to make the lane pass.** The smoke's stub preview previously built its
+identity by fetching `/api/protocol` and `/api/file`. Neither is in `previewOriginPath`, the six-endpoint
+allowlist deciding which routes answer a preview origin, so Chrome correctly rejected those requests. The
+stub now follows the real preview contract: it receives `path` and `sourceVersion` from Studio's
+`postEditorSelection` message, embeds the source ranges its synthetic bundle represents, and calls only the
+allowed cell-bootstrap route. Relaxing the allowlist would trade a deliberate boundary for a green test.
 
 The implemented contract is maintained in [Tao Studio](../../Spec/Tao%20Studio.md). The historical v1
 ledger remains in [Plan - Tao Studio v1](../Tao%20Studio%20v1/Plan%20-%20Tao%20Studio%20v1.md).

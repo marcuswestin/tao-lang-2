@@ -4,10 +4,11 @@ import {
   canaryExitCode,
   evaluateCanary,
   formatCanaryReport,
-  MANUAL_CHECKS,
   REQUIRED_CAPABILITIES,
   resolveCanaryTarget,
 } from '../dev-src/studio/StudioCanary'
+import { StudioCanaryCommand } from '../dev-src/studio/StudioCanaryCommand'
+import { STUDIO_MANUAL_CHECKS, StudioManualChecks } from '../dev-src/studio/StudioManualChecks'
 import {
   type ArtifactInventory,
   type ExternalGateResults,
@@ -153,16 +154,65 @@ Describe('Studio release validation', () => {
 Describe('Studio native canary', () => {
   const passingProbe = {
     capabilities: Object.fromEntries(REQUIRED_CAPABILITIES.map(name => [name, { passed: true }])),
-    manualChecks: [],
     passed: true,
   }
+
+  Test('runs its automatic native probe hidden so completion never waits for a person', () => {
+    Expect(StudioCanaryCommand.testing.canaryStudioDevOptions({
+      appName: 'HNReader',
+      artifactRoot: '/tmp/canary',
+      hutchPath: '/tmp/hutch',
+      projectRoot: '/repo/Apps/HNReader',
+    })).toMatchObject({
+      browser: true,
+      native: true,
+      nativeProbe: true,
+      nativeShowWindow: false,
+    })
+  })
+
+  Test('removes a prior native probe result before starting a new canary', async () => {
+    const artifactRoot = await mkTestDir('tao-studio-canary-probe-')
+    const stalePath = FS.resolvePath('electrobun/artifacts/runtime-result.json', artifactRoot)
+    await FS.writeJson(stalePath, { capabilities: { websocket: { passed: true } }, passed: true })
+
+    Expect(await StudioCanaryCommand.testing.freshProbeResultPath(artifactRoot)).toBe(stalePath)
+    Expect(await FS.exists(stalePath)).toBe(false)
+  })
+
+  Test('does not mistake the finalized in-process canary owner for a shutdown survivor', () => {
+    const currentPid = 4242
+
+    Expect(StudioCanaryCommand.testing.canarySurvivingPids(
+      { ownerPid: currentPid, state: 'stopped' },
+      [currentPid, 5252],
+      currentPid,
+    )).toEqual([5252])
+  })
+
+  Test('still reports owners that have not finalized or belong to another process', () => {
+    const currentPid = 4242
+
+    Expect(StudioCanaryCommand.testing.canarySurvivingPids(
+      { ownerPid: currentPid, state: 'ready' },
+      [currentPid],
+      currentPid,
+    )).toEqual([currentPid])
+    Expect(StudioCanaryCommand.testing.canarySurvivingPids(
+      { ownerPid: 5252, state: 'stopped' },
+      [5252],
+      currentPid,
+    )).toEqual([5252])
+  })
 
   Test('passes when every capability reported, nothing survived, and the launch exited cleanly', () => {
     const report = evaluateCanary({ exitCode: 0, probe: passingProbe, survivingPids: [] })
 
     Expect(report.status).toBe('passed')
+    Expect(report.version).toBe(2)
     Expect(report.missingCapabilities).toEqual([])
-    Expect(report.manualChecks).toEqual([...MANUAL_CHECKS])
+    Expect(report).not.toHaveProperty('manualChecks')
+    Expect(formatCanaryReport(report)).not.toContain('check by hand')
     Expect(canaryExitCode(report)).toBe(0)
   })
 
@@ -186,7 +236,6 @@ Describe('Studio native canary', () => {
     const report = evaluateCanary({
       probe: {
         capabilities: { 'multi-window': { passed: true } },
-        manualChecks: [],
         passed: true,
       },
     })
@@ -202,12 +251,6 @@ Describe('Studio native canary', () => {
     Expect(report.status).toBe('blocked')
     Expect(canaryExitCode(report)).toBe(1)
     Expect(formatCanaryReport(report)).toContain('BLOCKED   Hutch is not installed')
-  })
-
-  Test('names the checks no in-process probe can drive', () => {
-    Expect(MANUAL_CHECKS.some(check => check.includes('directory picker'))).toBe(true)
-    Expect(MANUAL_CHECKS.some(check => check.includes('Command-W'))).toBe(true)
-    Expect(MANUAL_CHECKS.some(check => check.includes('quits'))).toBe(true)
   })
 
   Test('selects HNReader when the default project is used, even if only --project was set', () => {
@@ -237,6 +280,68 @@ Describe('Studio native canary', () => {
     Expect(resolveCanaryTarget({ appName: 'Chosen', projectRoot: 'Apps/Other' }, repositoryRoot)).toEqual({
       appName: 'Chosen',
       projectRoot: FS.resolvePath('Apps/Other', repositoryRoot),
+    })
+  })
+})
+
+Describe('Studio native manual checks', () => {
+  Test('launches a visible non-probe workflow and records every human result separately', async () => {
+    const artifactRoot = await mkTestDir('tao-studio-manual-checks-')
+    const launches: unknown[] = []
+    const prompts: string[] = []
+    const output: string[] = []
+    const exitCode = await StudioManualChecks.run({ artifactRoot }, {
+      askConfirm: async options => {
+        prompts.push(options.message)
+        return true
+      },
+      isInteractive: () => true,
+      runStudio: async options => {
+        launches.push(options)
+        return 0
+      },
+      writeLine: line => output.push(line),
+    })
+
+    Expect(exitCode).toBe(0)
+    Expect(launches).toHaveLength(1)
+    Expect(launches[0]).toMatchObject({ browser: true, native: true })
+    Expect(launches[0]).not.toHaveProperty('nativeProbe')
+    Expect(prompts).toEqual(STUDIO_MANUAL_CHECKS.map(check => `Passed: ${check}`))
+    Expect(output.join('\n')).toContain('Tao Studio will open for these manual checks:')
+    Expect(await FS.readJson(FS.resolvePath('manual-checks.json', artifactRoot))).toMatchObject({
+      status: 'passed',
+      version: 1,
+    })
+  })
+
+  Test('refuses to enter a human workflow from a non-interactive gate', async () => {
+    let launches = 0
+    await Expect(StudioManualChecks.run({}, {
+      askConfirm: async () => true,
+      isInteractive: () => false,
+      runStudio: async () => {
+        launches += 1
+        return 0
+      },
+      writeLine() {},
+    })).rejects.toThrow('require an interactive terminal')
+    Expect(launches).toBe(0)
+  })
+
+  Test('fails its separate report when a person rejects a manual result', async () => {
+    const artifactRoot = await mkTestDir('tao-studio-manual-failure-')
+    const exitCode = await StudioManualChecks.run({ artifactRoot }, {
+      askConfirm: async options => !options.message.includes('Command-W'),
+      isInteractive: () => true,
+      runStudio: async () => 0,
+      writeLine() {},
+    })
+
+    Expect(exitCode).toBe(1)
+    Expect(await FS.readJson(FS.resolvePath('manual-checks.json', artifactRoot))).toMatchObject({
+      checks: [{ status: 'passed' }, { status: 'failed' }, { status: 'passed' }],
+      status: 'failed',
     })
   })
 })

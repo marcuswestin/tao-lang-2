@@ -1,3 +1,5 @@
+import type { StudioCompileCompletion } from './StudioCompileCoordinator'
+
 export type StudioDraftFile = {
   content: string
   path: string
@@ -9,6 +11,7 @@ export type StudioDraftSyncRequest = StudioDraftFile & {
 }
 
 export type StudioDraftSyncResult = {
+  compile?: StudioCompileCompletion
   diagnostics: readonly string[]
   file: StudioDraftFile
   saved: boolean

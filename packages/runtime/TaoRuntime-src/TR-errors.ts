@@ -1,5 +1,3 @@
-import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
-
 /**
  * TR-errors owns every runtime error concern that is not React render containment: the error
  * vocabulary Tao throws, the unowned-failure escape hatch, the bounded redacted action-failure
@@ -288,17 +286,11 @@ function sanitize(value: unknown, seen = new WeakSet<object>()): unknown {
   return result
 }
 
-function restoreActionHistory(value: unknown): void {
+/** restoreActionHistory replaces retained diagnostics from a validated runtime-capture domain. */
+export function restoreActionHistory(value: unknown): void {
   actionHistory.length = 0
   if (!Array.isArray(value)) {
     return
   }
   actionHistory.push(...value.slice(-50) as TaoActionFailureReport[])
 }
-
-registerRuntimeCaptureDomain({
-  capture: () => captureActionHistory() as TaoRuntimeJson,
-  domain: 'action-history',
-  restore: restoreActionHistory,
-  version: 1,
-})

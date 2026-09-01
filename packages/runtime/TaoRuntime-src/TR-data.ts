@@ -25,6 +25,7 @@ import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-
 import { StudioEnvironmentControls } from './TR-studio-environment'
 
 export { testProvider } from './TR-data-provider'
+export { configurationValuesEqual, evaluatedDatasourceConfiguration } from './TR-data-schema'
 
 type DataPrimitive = 'boolean' | 'number' | 'text' | 'time'
 type RelationDeleteBehavior = 'cascade' | 'restrict'
@@ -207,60 +208,6 @@ function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoConf
       declaration === source.declaration ? source : DataControls.Configure(declaration, { ...source.config }),
     )
   }, [schema, declaration, source.config])
-}
-
-/** evaluatedDatasourceConfiguration collapses runtime Tao values before crossing the provider boundary. */
-export function evaluatedDatasourceConfiguration(
-  source: TaoConfiguredDatasource,
-): Readonly<Record<string, unknown>> {
-  return Object.freeze(Object.fromEntries(
-    Object.entries(source.config).map(([name, value]) => [name, evaluatedConfigurationValue(value)]),
-  ))
-}
-
-/**
- * configurationValuesEqual compares evaluated configuration values so equivalent values
- * reconstructed during React renders do not rebind. Plain values compare structurally; anything
- * else — an adapter object's fill functions, for instance — compares by identity, so swapping a
- * variant's adapter rebinds even when the shapes serialize alike.
- */
-export function configurationValuesEqual(left: unknown, right: unknown): boolean {
-  if (Object.is(left, right)) {
-    return true
-  }
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
-      && left.every((value, index) => configurationValuesEqual(value, right[index]))
-  }
-  if (isRecord(left) && isRecord(right)) {
-    const names = Object.keys(left)
-    return names.length === Object.keys(right).length
-      && names.every(name => name in right && configurationValuesEqual(left[name], right[name]))
-  }
-  return false
-}
-
-function evaluatedConfigurationValue(value: unknown): unknown {
-  if (isEvaluable(value)) {
-    return evaluatedConfigurationValue(value.evaluate().jsValue)
-  }
-  if (Array.isArray(value)) {
-    return value.map(evaluatedConfigurationValue)
-  }
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([name, nested]) => [name, evaluatedConfigurationValue(nested)]),
-    )
-  }
-  return value
-}
-
-function isEvaluable(value: unknown): value is Evaluable {
-  return isRecord(value) && 'evaluate' in value && typeof value['evaluate'] === 'function'
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** DataControls is the provider-neutral generated-code API for Tao schemas, queries, and writes. */

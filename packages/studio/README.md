@@ -221,14 +221,22 @@ just studio-canary
 ```
 
 Launches native Studio against a deterministic project, evaluates its runtime probe against the
-required capability set (multi-window, native menu, global shortcut, WebSocket, Metro iframe), and
-fails when any process the launch owned is still running afterwards. A host without Hutch, or
-without a window server session, is reported as **blocked** — neither a pass nor a repository
-failure.
+required capability set (browser runtime, auxiliary-window coexistence, native menu, global
+shortcut, WebSocket, Metro iframe), and fails when any process the launch owned is still running
+afterwards. The auxiliary-window check creates a hidden probe window; opening a second real Studio
+project remains a human check. A host without Hutch, or without a window server session, is reported
+as **blocked** — neither a pass nor a repository failure.
 
-Three checks no in-process probe can drive are reported as manual every run:
+Checks that require a person are deliberately excluded from `test`, `verify`, `full-verify`, and the
+canary. Run their separate interactive workflow with:
 
-- Choose **File > Open Project…** and confirm the native directory picker opens.
+```bash
+just studio-manual-checks
+```
+
+It opens visible native Studio and records these results in a separate report:
+
+- Choose **File > Open Project…**, select a Tao project, and confirm a second project window opens.
 - Press **Command-W** and confirm exactly one window closes.
 - Close the final window and confirm Tao Studio quits.
 

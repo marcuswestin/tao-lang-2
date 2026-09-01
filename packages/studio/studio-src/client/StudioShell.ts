@@ -13,7 +13,6 @@ export type StudioClientView = {
   commandResults: HTMLElement
   drawerContent: HTMLElement
   drawerTabs: HTMLElement
-  editor: HTMLElement
   editorTabs: HTMLElement
   globalLoading: HTMLElement
   inspector: HTMLElement
@@ -172,7 +171,6 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
     commandResults: requiredElement(root, '.studio-command-results'),
     drawerContent: requiredElement(root, '.studio-drawer-content'),
     drawerTabs: requiredElement(root, '.studio-drawer-tabs'),
-    editor: requiredElement(root, '.studio-editor'),
     editorTabs: requiredElement(root, '.studio-editor-tabs'),
     globalLoading: requiredElement(root, '.studio-global-loading'),
     inspector: requiredElement(root, '.studio-inspector-content'),

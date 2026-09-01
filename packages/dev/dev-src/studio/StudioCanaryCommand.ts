@@ -1,4 +1,4 @@
-import { Errors, FS, HCI, Repo } from '@shared'
+import { Errors, FS, HCI, Platform, Repo } from '@shared'
 import {
   canaryExitCode,
   evaluateCanary,
@@ -6,9 +6,9 @@ import {
   survivingOwnedPids,
   writeCanaryReport,
 } from './StudioCanary'
-import { runStudioDev } from './StudioDev'
+import { runStudioDev, type StudioDevOptions } from './StudioDev'
 import { readStudioDoctorFacts } from './StudioDoctor'
-import { readLaunches } from './StudioLaunchManifest'
+import { readLaunches, type StudioLaunchManifest } from './StudioLaunchManifest'
 import type { StudioNativeProbeResult } from './StudioNative'
 import {
   formatReleaseValidation,
@@ -49,23 +49,18 @@ async function runStudioCanary(options: CanaryOptions = {}): Promise<number> {
   }
 
   const { appName, projectRoot } = resolveCanaryTarget(options, repositoryRoot)
+  const probePath = await freshProbeResultPath(artifactRoot)
   const before = new Set((await readLaunches(repositoryRoot)).map(launch => launch.manifest.launchId))
-  const exitCode = await runStudioDev({
+  const exitCode = await runStudioDev(canaryStudioDevOptions({
     appName,
-    // The runtime probe reports on a project window, so the canary must ask for one. `--no-browser`
-    // means "Welcome only" for the native shell, which would leave the probe nothing to report on.
-    browser: true,
-    native: true,
-    nativeArtifactRoot: FS.resolvePath('electrobun', artifactRoot),
-    nativeHutchPath: options.hutchPath,
-    nativeProbe: true,
+    artifactRoot,
+    hutchPath: options.hutchPath,
     projectRoot,
-  })
-  const launchId = (await readLaunches(repositoryRoot))
-    .map(launch => launch.manifest.launchId)
-    .find(id => !before.has(id))
+  }))
+  const launch = (await readLaunches(repositoryRoot))
+    .find(candidate => !before.has(candidate.manifest.launchId))
   // The native shell writes its probe result beside its generated Electrobun project.
-  const probe = await readProbeResult(FS.resolvePath('electrobun/artifacts/runtime-result.json', artifactRoot))
+  const probe = await readProbeResult(probePath)
   const report = evaluateCanary({
     // A native shell that never reported means it never got far enough to run the probe. The
     // usual cause is the window server refusing AppKit registration, which aborts the runtime.
@@ -75,10 +70,59 @@ async function runStudioCanary(options: CanaryOptions = {}): Promise<number> {
       : undefined,
     exitCode,
     probe,
-    survivingPids: launchId === undefined ? [] : await survivingOwnedPids(launchId, repositoryRoot),
+    survivingPids: launch === undefined
+      ? []
+      : canarySurvivingPids(
+        launch.manifest,
+        await survivingOwnedPids(launch.manifest.launchId, repositoryRoot),
+      ),
   })
   await writeCanaryReport(report, artifactRoot)
   return canaryExitCode(report)
+}
+
+/**
+ * A canary runs Studio in-process, so its finalized manifest retains the canary command itself as
+ * the `studio-server` process. The command has not exited yet while it writes its report, but it
+ * is not a shutdown survivor: `runStudioDev` has already stopped every resource and finalized the
+ * launch. Ignore only that current owner on a stopped launch; child processes and another
+ * process's owner remain real survivors.
+ */
+function canarySurvivingPids(
+  manifest: Pick<StudioLaunchManifest, 'ownerPid' | 'state'>,
+  ownedPids: readonly number[],
+  canaryPid = Platform.runtimeProcess.pid,
+): number[] {
+  if (manifest.state !== 'stopped' || manifest.ownerPid !== canaryPid) {
+    return [...ownedPids]
+  }
+  return ownedPids.filter(pid => pid !== canaryPid)
+}
+
+async function freshProbeResultPath(artifactRoot: string): Promise<string> {
+  const path = FS.resolvePath('electrobun/artifacts/runtime-result.json', artifactRoot)
+  await FS.remove(path)
+  return path
+}
+
+function canaryStudioDevOptions(options: {
+  appName: string | undefined
+  artifactRoot: string
+  hutchPath: string | undefined
+  projectRoot: string
+}): StudioDevOptions {
+  return {
+    appName: options.appName,
+    // The runtime probe reports on a project window, so the canary must ask for one. `--no-browser`
+    // means "Welcome only" for the native shell, which would leave the probe nothing to report on.
+    browser: true,
+    native: true,
+    nativeArtifactRoot: FS.resolvePath('electrobun', options.artifactRoot),
+    nativeHutchPath: options.hutchPath,
+    nativeProbe: true,
+    nativeShowWindow: false,
+    projectRoot: options.projectRoot,
+  }
 }
 
 async function readProbeResult(path: string): Promise<StudioNativeProbeResult | undefined> {
@@ -138,4 +182,5 @@ async function runStudioReleaseCheck(options: ReleaseCheckOptions): Promise<numb
 export const StudioCanaryCommand = {
   canary: runStudioCanary,
   releaseCheck: runStudioReleaseCheck,
+  testing: { canaryStudioDevOptions, canarySurvivingPids, freshProbeResultPath },
 }

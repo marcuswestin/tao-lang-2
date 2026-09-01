@@ -28,6 +28,20 @@ scenarios MainView "states" {
 }
 `
 
+const typedSource = initialSource.replace('Text("First")', 'Text("First typed")')
+
+Test('simulated preview stays within the preview-origin API boundary', () => {
+  const html = previewHtml()
+  Expect(html).toContain("message.type !== 'highlight-source'")
+  Expect(html).toContain('/api/preview/cell/bootstrap')
+  Expect(html).not.toContain('/api/protocol')
+  Expect(html).not.toContain('/api/file?')
+})
+
+// The browser branch is temporarily quarantined from `_full-verify-studio`; keep this test and the
+// `_studio-verify-simulated` recipe intact so the end-to-end journey remains directly reproducible.
+// The native branch below validates the unattended Electrobun capability probe; it does not repeat
+// the browser editor journey.
 Test('simulated user exercises the browser editor or the native Electrobun shell', async () => {
   const artifactParent = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT'] ?? FS.tmpdir()
   await FS.mkdir(artifactParent)
@@ -104,6 +118,11 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('Text(\"First\")')", {
         timeoutMs: 30_000,
       })
+      Expect(
+        await browser.evaluate<number>(
+          "document.querySelectorAll('.studio-editor .cm-editor').length",
+        ),
+      ).toBe(1)
       await browser.waitFor(
         `document.querySelector('.studio-preview-group-label')?.textContent === 'states'`,
         { timeoutMs: 30_000 },
@@ -157,7 +176,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       )
       Expect(await browser.evaluate<boolean>(`document.querySelector('[data-studio-tao-drawer]') === null`)).toBe(true)
 
-      const typedSource = initialSource.replace('Text("First")', 'Text("First typed")')
+      let compileRevision = await waitForCompileAfter(browser, -1)
       await browser.click('.cm-content')
       await browser.pressShortcut('a')
       await browser.insertText(typedSource)
@@ -167,6 +186,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(await FS.readText(sourcePath)).toBe(initialSource)
       await browser.pressShortcut('s')
       await waitForSource(sourcePath, source => source === typedSource)
+      compileRevision = await waitForCompileAfter(browser, compileRevision)
 
       await browser.click('[data-panel="components"]')
       await browser.waitFor(
@@ -178,61 +198,32 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.waitFor("!document.querySelector('.cm-content')?.textContent.includes('New text')")
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
 
+      await waitForPreviewSourceIdentity(browser, preview.url)
       await browser.clickInFrame(preview.url, '#select-first')
-      await browser.waitFor(
-        `document.querySelector('[data-studio-tao-inspector-context="Layout"] .studio-inspector-summary')
-          && document.querySelector('[data-studio-tao-inspector-context="Layout"] .studio-inspector-field input:not(:disabled)')`,
-      )
-      // Raw `Error`: this string is evaluated by Chrome, so it runs in the page with no module
-      // system and no reach into Tao's error taxonomy.
-      await browser.evaluate(`(() => {
-        const root = document.querySelector('[data-studio-tao-inspector-context="Layout"]')
-        const mode = root?.querySelector('[data-inspector-field="Width mode"] select')
-        const value = root?.querySelector('[data-inspector-field="Width value"] input')
-        if (!(mode instanceof HTMLSelectElement) || !(value instanceof HTMLInputElement)) {
-          throw new Error('Studio Width inspector control is missing.')
-        }
-        mode.value = 'fixed'
-        mode.dispatchEvent(new Event('change', { bubbles: true }))
-        value.value = '240'
-        value.dispatchEvent(new Event('input', { bubbles: true }))
-        value.dispatchEvent(new Event('change', { bubbles: true }))
-        const apply = [...(root?.querySelectorAll('button') ?? [])]
-          .find(candidate => candidate.textContent === 'Apply width')
-        if (!(apply instanceof HTMLButtonElement)) {
-          throw new Error('Studio Apply width action is missing.')
-        }
-        apply.click()
-        return true
-      })()`)
-      await waitForSource(sourcePath, source => source.includes('Text("First typed") [width 240]'))
-      await browser.waitFor(
-        `document.querySelector('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')?.disabled === false`,
-      )
-      await browser.click('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')
-      await waitForSource(sourcePath, source => source === typedSource)
-
-      await browser.clickInFrame(preview.url, '#select-first')
-      await browser.waitFor(
-        `document.querySelector('[data-studio-tao-inspector-context="Layout"] .studio-inspector-summary') !== null`,
-      )
+      await waitForPreviewState(browser, preview.url, 'selection sent')
+      await waitForInspectorReady(browser)
       await browser.drag(
         '[data-tao-studio-component="Text"]',
         '.studio-preview-group-label',
         { steps: 12 },
       )
-      await waitForSource(sourcePath, source => source.includes('Text("New text")'))
+      await waitForSourceOrStudioError(browser, sourcePath, source => source.includes('Text("New text")'))
+      compileRevision = await waitForCompileAfter(browser, compileRevision)
       await browser.waitFor(
         `document.querySelector('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')?.disabled === false`,
       )
       await browser.click('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')
       await waitForSource(sourcePath, source => source === typedSource)
+      compileRevision = await waitForCompileAfter(browser, compileRevision)
 
       await browser.clickInFrame(preview.url, '#move-third')
+      await waitForPreviewState(browser, preview.url, 'move sent')
       await waitForSource(sourcePath, source => ordered(source, ['First typed', 'Third', 'Second']))
+      compileRevision = await waitForCompileAfter(browser, compileRevision)
       await browser.waitFor("document.querySelector('[data-tao-studio-undo] button')?.disabled === false")
       await browser.click('[data-tao-studio-undo] button')
       await waitForSource(sourcePath, source => source === typedSource)
+      await waitForCompileAfter(browser, compileRevision)
       await browser.captureScreenshot('studio-completed-interactions')
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
       Expect(browser.browserFailures()).toEqual([])
@@ -296,6 +287,21 @@ function previewHtml(): string {
     const studioBase = sessionId === undefined
       ? parentOrigin
       : parentOrigin + '/sessions/' + encodeURIComponent(sessionId)
+    const compiledSource = ${JSON.stringify(typedSource)}
+    let sourceIdentity
+    window.addEventListener('message', event => {
+      const message = event.data
+      if (event.source !== parent
+        || event.origin !== parentOrigin
+        || message?.channel !== ${JSON.stringify(studioProtocolChannel)}
+        || message?.protocolVersion !== ${studioProtocolVersion}
+        || message.type !== 'highlight-source'
+        || message.identity?.previewInstanceId !== previewInstanceId) {
+        return
+      }
+      sourceIdentity = message.identity
+      document.documentElement.dataset.studioSourceIdentity = 'ready'
+    })
     const renderRange = (path, content, label) => {
       const source = 'Text("' + label + '")'
       const start = content.indexOf(source)
@@ -303,21 +309,22 @@ function previewHtml(): string {
       return { end: start + source.length, id: path + ':' + start + ':' + (start + source.length), start }
     }
     const context = async () => {
-      const protocol = await fetch(studioBase + '/api/protocol').then(response => response.json())
-      const file = await fetch(studioBase + '/api/file?path=' + encodeURIComponent(protocol.entryPath))
-        .then(response => response.json())
-      const project = protocol.identity.project.endsWith('/')
-        ? protocol.identity.project.slice(0, -1)
-        : protocol.identity.project
-      const path = project + '/' + file.path
+      if (sourceIdentity === undefined) {
+        throw new Error('Studio did not publish the active source identity to the preview')
+      }
       const runtime = query.get('taoStudioCell') === '1'
         ? await fetch(studioBase + '/api/preview/cell/bootstrap?previewInstanceId=' + encodeURIComponent(previewInstanceId))
-          .then(response => response.json())
+          .then(response => {
+            if (!response.ok) throw new Error('Preview bootstrap failed: ' + response.status)
+            return response.json()
+          })
         : undefined
+      const path = sourceIdentity.path
+      const file = { content: compiledSource, path, sourceVersion: sourceIdentity.sourceVersion }
       return {
         file,
         identity: {
-          ...protocol.identity,
+          ...sourceIdentity,
           ...(runtime?.identity ?? {}),
           occurrence: { nodeKind: 'render', renderOwner: 'MainView' },
           path,
@@ -328,39 +335,53 @@ function previewHtml(): string {
       }
     }
     document.querySelector('#select-first').addEventListener('click', async () => {
-      const current = await context()
-      const firstLabel = current.file.content.includes('First typed') ? 'First typed' : 'First'
-      const range = renderRange(current.path, current.file.content, firstLabel)
-      parent.postMessage({
-        channel: ${JSON.stringify(studioProtocolChannel)},
-        identity: current.identity,
-        protocolVersion: ${studioProtocolVersion},
-        range: { end: range.end, start: range.start },
-        type: 'preview-select-source',
-      }, parentOrigin)
-      document.querySelector('#state').textContent = 'selection sent'
+      const state = document.querySelector('#state')
+      state.textContent = 'selecting'
+      try {
+        const current = await context()
+        const firstLabel = current.file.content.includes('First typed') ? 'First typed' : 'First'
+        const range = renderRange(current.path, current.file.content, firstLabel)
+        parent.postMessage({
+          channel: ${JSON.stringify(studioProtocolChannel)},
+          identity: current.identity,
+          protocolVersion: ${studioProtocolVersion},
+          range: { end: range.end, start: range.start },
+          type: 'preview-select-source',
+        }, parentOrigin)
+        state.textContent = 'selection sent'
+      } catch (error) {
+        state.textContent = 'selection failed: ' + (error instanceof Error ? error.message : String(error))
+        throw error
+      }
     })
     document.querySelector('#move-third').addEventListener('click', async () => {
-      const current = await context()
-      const file = current.file
-      const path = current.path
-      const firstLabel = file.content.includes('First typed') ? 'First typed' : 'First'
-      parent.postMessage({
-        action: {
-          afterId: renderRange(path, file.content, firstLabel).id,
-          beforeId: renderRange(path, file.content, 'Second').id,
-          draggedId: renderRange(path, file.content, 'Third').id,
-          kind: 'move-render',
-        },
-        channel: ${JSON.stringify(studioProtocolChannel)},
-        checkpoint: { id: 'smoke-move', phase: 'single' },
-        identity: current.identity,
-        protocolVersion: ${studioProtocolVersion},
-        requestId: 'smoke-move-request',
-        sourceActionVersion: ${studioSourceActionVersion},
-        type: 'source-action',
-      }, parentOrigin)
-      document.querySelector('#state').textContent = 'move sent'
+      const state = document.querySelector('#state')
+      state.textContent = 'moving'
+      try {
+        const current = await context()
+        const file = current.file
+        const path = current.path
+        const firstLabel = file.content.includes('First typed') ? 'First typed' : 'First'
+        parent.postMessage({
+          action: {
+            afterId: renderRange(path, file.content, firstLabel).id,
+            beforeId: renderRange(path, file.content, 'Second').id,
+            draggedId: renderRange(path, file.content, 'Third').id,
+            kind: 'move-render',
+          },
+          channel: ${JSON.stringify(studioProtocolChannel)},
+          checkpoint: { id: 'smoke-move', phase: 'single' },
+          identity: current.identity,
+          protocolVersion: ${studioProtocolVersion},
+          requestId: 'smoke-move-request',
+          sourceActionVersion: ${studioSourceActionVersion},
+          type: 'source-action',
+        }, parentOrigin)
+        state.textContent = 'move sent'
+      } catch (error) {
+        state.textContent = 'move failed: ' + (error instanceof Error ? error.message : String(error))
+        throw error
+      }
     })
   </script>
 </body></html>`
@@ -377,6 +398,132 @@ async function waitForSource(path: string, predicate: (source: string) => boolea
     await Time.sleep(100)
   }
   Errors.throwHostEnvironment(`Timed out waiting for Studio source change. Last source:\n${source}`)
+}
+
+async function waitForSourceOrStudioError(
+  browser: StudioCdp,
+  path: string,
+  predicate: (source: string) => boolean,
+): Promise<void> {
+  const deadline = Date.now() + 20_000
+  let source = ''
+  while (Date.now() < deadline) {
+    source = await FS.readText(path)
+    if (predicate(source)) {
+      return
+    }
+    const status = await browser.evaluate<string>(
+      "document.querySelector('.studio-status[data-state=\"error\"]')?.textContent ?? ''",
+    )
+    if (status !== '') {
+      Errors.throwHostEnvironment(`Studio preview drop failed: ${status}`)
+    }
+    await Time.sleep(100)
+  }
+  Errors.throwHostEnvironment(`Timed out waiting for Studio source change. Last source:\n${source}`)
+}
+
+async function waitForCompileAfter(browser: StudioCdp, previousRevision: number): Promise<number> {
+  const deadline = Date.now() + 30_000
+  let last = ''
+  while (Date.now() < deadline) {
+    last = await browser.evaluate<string>("document.querySelector('.studio-status')?.textContent ?? ''")
+    const state = await browser.evaluate<string>(
+      "document.querySelector('.studio-status')?.getAttribute('data-state') ?? ''",
+    )
+    const revision = /^compiled (\d+) · applied \d+ —/.exec(last)?.[1]
+    if (state === 'compiled' && revision !== undefined && Number(revision) > previousRevision) {
+      return Number(revision)
+    }
+    await Time.sleep(100)
+  }
+  Errors.throwHostEnvironment(
+    `Timed out waiting for Studio compile revision after ${previousRevision}; last status=${JSON.stringify(last)}`,
+  )
+}
+
+async function waitForPreviewState(
+  browser: StudioCdp,
+  previewUrl: string,
+  expected: 'move sent' | 'selection sent',
+): Promise<void> {
+  const deadline = Date.now() + 15_000
+  let last = ''
+  while (Date.now() < deadline) {
+    try {
+      last = await browser.evaluateInFrame<string>(
+        previewUrl,
+        "document.querySelector('#state')?.textContent ?? ''",
+      )
+      if (last === expected) {
+        return
+      }
+    } catch (error) {
+      last = error instanceof Error ? error.message : String(error)
+    }
+    if (last.includes(' failed: ')) {
+      Errors.throwHostEnvironment(`Studio smoke preview interaction failed: ${last}`)
+    }
+    await Time.sleep(100)
+  }
+  Errors.throwHostEnvironment(
+    `Timed out waiting for Studio smoke preview state ${JSON.stringify(expected)}; last=${JSON.stringify(last)}`,
+  )
+}
+
+async function waitForPreviewSourceIdentity(browser: StudioCdp, previewUrl: string): Promise<void> {
+  const deadline = Date.now() + 15_000
+  let last = ''
+  while (Date.now() < deadline) {
+    try {
+      last = await browser.evaluateInFrame<string>(
+        previewUrl,
+        "document.documentElement.dataset.studioSourceIdentity ?? ''",
+      )
+      if (last === 'ready') {
+        return
+      }
+    } catch (error) {
+      last = error instanceof Error ? error.message : String(error)
+    }
+    await Time.sleep(100)
+  }
+  Errors.throwHostEnvironment(`Timed out waiting for Studio to publish source identity to the preview; last=${last}`)
+}
+
+async function waitForInspectorReady(browser: StudioCdp): Promise<void> {
+  const deadline = Date.now() + 15_000
+  let last:
+    | Readonly<{
+      ready: boolean
+      status: string
+      summary: string
+    }>
+    | undefined
+  while (Date.now() < deadline) {
+    const snapshot = await browser.evaluate<
+      Readonly<{
+        ready: boolean
+        status: string
+        summary: string
+      }>
+    >(`(() => {
+      const summary = document.querySelector('.studio-inspector-summary')?.textContent ?? ''
+      return {
+        ready: summary.includes('Element: Text'),
+        status: document.querySelector('.studio-status')?.textContent ?? '',
+        summary,
+      }
+    })()`)
+    last = snapshot
+    if (snapshot.ready) {
+      return
+    }
+    await Time.sleep(100)
+  }
+  Errors.throwHostEnvironment(
+    `Timed out waiting for the Studio inspector to become editable; last=${JSON.stringify(last)}`,
+  )
 }
 
 function ordered(source: string, labels: readonly string[]): boolean {

@@ -188,7 +188,7 @@ function TaoCheckbox({ props, runtimeProps }: {
     accessible: false,
     disabled,
     importantForAccessibility: 'no',
-    pointerEvents: 'none',
+    style: { pointerEvents: 'none' },
     value: props.value,
   })
   const label = createReactElement(

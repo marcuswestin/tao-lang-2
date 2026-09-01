@@ -9,6 +9,7 @@ import { TestTUI } from './repository-tests/TestTUI'
 import { StudioCanaryCommand } from './studio/StudioCanaryCommand'
 import { runStudioDev } from './studio/StudioDev'
 import { StudioLifecycleCommand } from './studio/StudioLifecycleCommand'
+import { StudioManualChecks } from './studio/StudioManualChecks'
 import { StudioNative } from './studio/StudioNative'
 import { StudioSmoke } from './studio/StudioSmoke'
 
@@ -122,6 +123,31 @@ await runWithCommands(commands => {
             projectRoot: options.project,
           }),
         )
+      },
+    )
+
+  commands
+    .command('studio-manual-checks')
+    .description('Run native Studio checks that require a person and record their results.')
+    .option('--project <path>', 'Tao project folder to open.')
+    .option('--app <name>', 'App declaration within the selected project.')
+    .option('--artifact-root <path>', 'Where the manual workflow writes its artifacts.')
+    .option('--hutch <path>', 'Explicit Hutch executable path.')
+    .action(
+      async (options: { app?: string; artifactRoot?: string; hutch?: string; project?: string } = {}) => {
+        try {
+          Platform.runtimeProcess.exit(
+            await StudioManualChecks.run({
+              appName: options.app,
+              artifactRoot: options.artifactRoot,
+              hutchPath: options.hutch,
+              projectRoot: options.project,
+            }),
+          )
+        } catch (error) {
+          HCI.writeErrorLine(Errors.formatForUser(error))
+          Platform.runtimeProcess.exit(1)
+        }
       },
     )
 

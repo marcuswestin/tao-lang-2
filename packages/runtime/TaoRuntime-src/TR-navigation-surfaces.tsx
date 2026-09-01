@@ -43,6 +43,7 @@ export const navigationHostStyle = { flex: 1, position: 'relative' } as const
 const overlayLayerStyle = {
   bottom: 0,
   left: 0,
+  pointerEvents: 'box-none',
   position: 'absolute',
   right: 0,
   top: 0,
@@ -172,20 +173,24 @@ export function NavigationSurface(props: {
           key: entry.instanceId,
         })
       }),
-      pointerEvents: 'box-none',
       style: overlayLayerStyle,
     })
     : null
   return React.createElement(
     runtime.View,
     {
-      pointerEvents: 'box-none',
-      style: [navigationHostStyle, mountedDesignStyle(props.taoProps, 'NavigationHost')],
+      style: [
+        navigationHostStyle,
+        mountedDesignStyle(props.taoProps, 'NavigationHost'),
+        pointerTransparentStyle,
+      ],
     },
     props.content,
     overlays,
   )
 }
+
+const pointerTransparentStyle = { pointerEvents: 'box-none' } as const
 
 function appInProps(props: TaoProps | undefined): TaoProps['app'] {
   return props?.app ?? appInProps(props?.callerProps)

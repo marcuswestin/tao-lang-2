@@ -250,6 +250,11 @@ Test('Tao-owned inspector layout drafts retain invalid text and emit only curren
   const invalid = StudioInspectorUpdateDraft(initial, 'gap', '')
   const valid = StudioInspectorUpdateDraft(initial, 'gap', '24')
   const named = StudioInspectorUpdateDraft(initial, 'gap', 'spacing.compact')
+  const fixedWidth = StudioInspectorUpdateDraft(
+    StudioInspectorUpdateDraft(initial, 'width-mode', 'fixed'),
+    'width-value',
+    '240',
+  )
 
   Expect(JSON.parse(initial)).toMatchObject({
     alignment: 'left',
@@ -263,6 +268,7 @@ Test('Tao-owned inspector layout drafts retain invalid text and emit only curren
   Expect(StudioInspectorLayoutActionValid('source-1', inspection, selection, invalid, false, 'gap')).toBe(false)
   Expect(StudioInspectorLayoutActionValid('source-1', inspection, selection, valid, false, 'gap')).toBe(true)
   Expect(StudioInspectorLayoutActionValid('source-1', inspection, selection, named, false, 'gap')).toBe(true)
+  Expect(StudioInspectorLayoutActionValid('source-1', inspection, selection, fixedWidth, false, 'width')).toBe(true)
   Expect(StudioInspectorLayoutActionValid('source-2', inspection, selection, valid, false, 'gap')).toBe(false)
   Expect(JSON.parse(StudioInspectorLayoutAction(inspection, selection, valid, 'gap'))).toEqual({
     entry: ['gap', 24],
@@ -271,6 +277,11 @@ Test('Tao-owned inspector layout drafts retain invalid text and emit only curren
   })
   Expect(JSON.parse(StudioInspectorLayoutAction(inspection, selection, named, 'gap'))).toEqual({
     entry: ['gap', 'spacing.compact'],
+    kind: 'set-layout-entry',
+    renderId: '/workspace/Garden.tao:20:42',
+  })
+  Expect(JSON.parse(StudioInspectorLayoutAction(inspection, selection, fixedWidth, 'width'))).toEqual({
+    entry: ['width', 240],
     kind: 'set-layout-entry',
     renderId: '/workspace/Garden.tao:20:42',
   })

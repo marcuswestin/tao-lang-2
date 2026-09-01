@@ -3,29 +3,19 @@ import { readLaunches, type StoredLaunch, systemOwnershipProbes, validateLaunch 
 import type { StudioNativeProbeResult } from './StudioNative'
 
 /**
- * The native canary answers one question: did a real native Studio come up, do what a person
- * needs it to do, and leave nothing behind? It runs outside agent host coalitions because an
- * AppKit application cannot register inside one.
- *
- * Two capabilities cannot be driven from inside the app — the native directory picker and the
- * quit-on-last-window behaviour, both of which are the window server's — so they are reported as
- * manual rather than silently counted as passing.
+ * The native canary answers one automatic question: did a real native Studio come up, prove its
+ * machine-observable capabilities, and leave nothing behind? Checks requiring a person belong to
+ * the separate Studio manual-check workflow.
  */
 
 /** Capabilities the runtime probe reports, and the canary requires. */
 export const REQUIRED_CAPABILITIES = [
+  'browser-runtime',
   'iframe',
   'multi-window',
   'native-menu',
   'shortcut',
   'websocket',
-] as const
-
-/** Checks a person must still make by hand, because no in-process probe can drive them. */
-export const MANUAL_CHECKS = [
-  'Choose File > Open Project… and confirm the native directory picker opens.',
-  'Press Command-W and confirm exactly one window closes.',
-  'Close the final window and confirm Tao Studio quits.',
 ] as const
 
 const DEFAULT_CANARY_PROJECT = { appName: 'HNReader', projectRoot: 'Apps/HNReader' }
@@ -65,13 +55,12 @@ export type CanaryReport = {
   exitCode?: number
   /** Why the canary could not run, when it could not. */
   blockedReason?: string
-  manualChecks: readonly string[]
   /** Capabilities the canary required that the probe never reported. */
   missingCapabilities: readonly string[]
   status: CanaryStatus
   /** Processes still running after shutdown that the launch claimed to own. */
   survivingPids: readonly number[]
-  version: 1
+  version: 2
 }
 
 /** evaluateCanary decides a run's outcome from the probe result and what survived shutdown. */
@@ -87,11 +76,10 @@ export function evaluateCanary(input: {
       blockedReason: input.blockedReason ?? 'the native runtime probe produced no result',
       capabilities: {},
       exitCode: input.exitCode,
-      manualChecks: [...MANUAL_CHECKS],
       missingCapabilities: [...REQUIRED_CAPABILITIES],
       status: 'blocked',
       survivingPids,
-      version: 1,
+      version: 2,
     }
   }
   const capabilities = input.probe.capabilities
@@ -104,13 +92,12 @@ export function evaluateCanary(input: {
   return {
     capabilities,
     exitCode: input.exitCode,
-    manualChecks: [...MANUAL_CHECKS],
     missingCapabilities,
     status: failed || missingCapabilities.length > 0 || survivingPids.length > 0 || exitedBadly
       ? 'failed'
       : 'passed',
     survivingPids,
-    version: 1,
+    version: 2,
   }
 }
 
@@ -143,10 +130,6 @@ export function formatCanaryReport(report: CanaryReport): string {
         ? 'PASS      exit: the launch exited cleanly'
         : `FAIL      exit: the launch exited ${report.exitCode}`,
     )
-  }
-  lines.push('', 'Still to check by hand:')
-  for (const check of report.manualChecks) {
-    lines.push(`- ${check}`)
   }
   return lines.join('\n')
 }

@@ -12,6 +12,7 @@ import {
 import {
   parseScenarioPanelCommand,
   StudioDataFillCoordinator,
+  StudioDraftStatus,
   StudioProjectContext,
 } from '../studio-src/client/StudioApp'
 import {
@@ -31,6 +32,7 @@ import {
   currentSourceIdentity,
   disconnectPreviews,
   handlePreviewMessage,
+  postEditorSelection,
   runtimeCaptureWithEnvironment,
   StudioActivePreview,
   StudioFixtureGenerationFeedback,
@@ -38,6 +40,7 @@ import {
   StudioMatrixLayout,
   type StudioPreviewConnection,
   StudioPreviewFrameUrl,
+  StudioPreviewSourceSync,
   StudioPreviewSuspension,
   studioReplayConfiguration,
   StudioRetainedPreview,
@@ -1375,6 +1378,58 @@ Test('Studio active preview rewires added cells and falls back when the active c
   Expect(changes).toBe(5)
 })
 
+Test('Studio source identity synchronizes immediately, after preview reloads, and stops on disconnect', () => {
+  const iframe = new EventTarget() as HTMLIFrameElement
+  const messages: Array<{ message: unknown; origin: string }> = []
+  Object.defineProperty(iframe, 'contentWindow', {
+    value: {
+      postMessage(message: unknown, origin: string) {
+        messages.push({ message, origin })
+      },
+    },
+  })
+  const preview = { ...previewConnection('preview-source', 'first', iframe.contentWindow!), iframe }
+  const content = 'view Main() { Text("Hello") }'
+  const editor = {
+    state: {
+      doc: { toString: () => content },
+      selection: { main: { from: 14, to: 27 } },
+    },
+  } as EditorView
+  const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
+  const synchronize = (): void =>
+    postEditorSelection(
+      preview,
+      handshake,
+      { content, path: 'Garden.tao', sourceVersion: 'source-2' },
+      editor,
+    )
+
+  StudioPreviewSourceSync.connect(preview, synchronize)
+  Expect(messages).toEqual([{
+    message: {
+      channel: studioProtocolChannel,
+      identity: {
+        appName: 'Garden',
+        path: '/workspace/Garden.tao',
+        previewInstanceId: 'preview-source',
+        project: '/workspace',
+        sourceVersion: 'source-2',
+      },
+      protocolVersion: studioProtocolVersion,
+      range: { end: 27, start: 14 },
+      type: 'highlight-source',
+    },
+    origin: 'http://127.0.0.1:56102',
+  }])
+  iframe.dispatchEvent(new Event('load'))
+  Expect(messages).toHaveLength(2)
+
+  disconnectPreviews([preview])
+  iframe.dispatchEvent(new Event('load'))
+  Expect(messages).toHaveLength(2)
+})
+
 Test('Studio runtime failures activate their cell and retain a replay with Studio environment state', async () => {
   const previewWindow = {}
   const preview = previewConnection('preview-failure', 'first', previewWindow)
@@ -1732,6 +1787,43 @@ Test('Studio draft sync writes only explicit saves and advances the optimistic v
 
   Expect(writes.map(write => write.content)).toEqual(['draft-b', 'draft-c'])
   Expect(writes.map(write => write.sourceVersion)).toEqual(['source-1', 'source-2'])
+})
+
+Test('Studio save responses preserve completed and newer compile status', () => {
+  const result: StudioDraftSyncResult = {
+    compile: {
+      causes: ['studio-write'],
+      changes: [{ path: 'Garden.tao' }],
+      compileRevision: 2,
+      diagnostics: [],
+      message: 'Compiled Garden revision 2.',
+      status: 'compiled',
+    },
+    diagnostics: [],
+    file: { content: 'after', path: 'Garden.tao', sourceVersion: 'source-2' },
+    saved: true,
+  }
+  const completed = StudioDraftStatus.completedCompile(result, {
+    appliedRevision: 1,
+    compileRevision: 2,
+    message: 'Compiling Garden revision 2.',
+    status: 'compiling',
+  })
+
+  Expect(completed).toEqual({
+    appliedRevision: 1,
+    compileRevision: 2,
+    diagnostics: [],
+    message: 'Compiled Garden revision 2.',
+    status: 'compiled',
+  })
+  const newer = {
+    appliedRevision: 2,
+    compileRevision: 3,
+    message: 'Compiling Garden revision 3.',
+    status: 'compiling' as const,
+  }
+  Expect(StudioDraftStatus.completedCompile(result, newer)).toBe(newer)
 })
 
 Test('Studio draft sync keeps the last saved version after an invalid draft', async () => {

@@ -54,6 +54,7 @@ import {
   refreshCellPreviews,
   requestRuntimeCapture,
   StudioActivePreview,
+  StudioPreviewSourceSync,
   StudioRuntimeData,
   type StudioRuntimeDataTable,
 } from './StudioMatrixView'
@@ -323,12 +324,15 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             current.dirty = true
           }
           renderEditorTabs()
-          showDraftResult(view.status, result)
+          showDraftResult(view.status, result, compileState, diagnostic => void openCompileDiagnostic(diagnostic))
         },
         write: StudioApiClient.draft,
       })
       let fileEditor!: EditorView
       let fileTab!: StudioOpenEditorTab
+      // This view is the controller's document/selection model. The Tao ProductHost owns the only
+      // editor mounted in `.studio-editor`; mounting this model there creates a second, invisible
+      // CodeMirror that steals focus, selection messages, and DOM behavior from the visible editor.
       fileEditor = new EditorView({
         doc: file.content,
         extensions: [
@@ -363,9 +367,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: '#252a26' },
           }, { dark: true }),
         ],
-        parent: view.editor,
       })
-      configurePaletteEditorDrop(fileEditor)
       fileTab = { dirty: false, draft: fileDraftSync, editor: fileEditor, file, stale: false }
       openTabs.get(path)?.editor.destroy()
       openTabs.set(path, fileTab)
@@ -387,15 +389,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       }
       highlightRequestRevision += 1
       clearTimeout(highlightTimer)
-      for (const candidate of openTabs.values()) {
-        candidate.editor.dom.hidden = candidate !== tab
-      }
       activeFile = tab.file
       activePath = path
       editor = tab.editor
       showOpenFile(view, path)
       renderEditorTabs()
       scheduleHighlight(tab.editor, tab.editor.state.doc.toString(), 0)
+      postEditorSelection(activePreview.current(), handshake, activeFile, tab.editor)
       renderInspector()
       publishProductHostState()
     }
@@ -854,24 +854,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       }
     }
 
-    function configurePaletteEditorDrop(target: EditorView): void {
-      target.dom.addEventListener('dragover', event => {
-        if (event.dataTransfer?.types.includes(studioPaletteMime)) {
-          event.preventDefault()
-        }
-      })
-      target.dom.addEventListener('drop', event => {
-        const item = StudioPaletteTransfer.parse(event.dataTransfer?.getData(studioPaletteMime) ?? '')
-        if (item === undefined) {
-          return
-        }
-        event.preventDefault()
-        const position = target.posAtCoords({ x: event.clientX, y: event.clientY }) ?? target.state.selection.main.head
-        insertEditorSnippet(target, item.snippet, position)
-        target.focus()
-      })
-    }
-
     function insertEditorSnippet(
       target: EditorView,
       snippet: Parameters<typeof StudioEditorInsertion.transaction>[1],
@@ -1145,6 +1127,11 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
 
     const wirePreview = (preview: (typeof previews)[number]): void => {
+      StudioPreviewSourceSync.connect(preview, () => {
+        if (preview === activePreview.current() && activeFile !== undefined && editor !== undefined) {
+          postEditorSelection(preview, handshake, activeFile, editor)
+        }
+      })
       preview.applySourceAction = async envelope => {
         Assert.input(!sourceActionBusy, 'Wait for the current Studio source action to finish.')
         Assert.input(
@@ -1167,6 +1154,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     activePreview.subscribe(() => {
       dataResult = []
+      const preview = activePreview.current()
+      if (preview !== undefined && activeFile !== undefined && editor !== undefined) {
+        postEditorSelection(preview, handshake, activeFile, editor)
+      }
       publishProductHostState()
       renderInspector()
       renderDrawer()
@@ -1185,10 +1176,22 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     view.preview.addEventListener('drop', event => {
       const item = StudioPaletteTransfer.parse(event.dataTransfer?.getData(studioPaletteMime) ?? '')
       const identity = currentSourceIdentity(handshake, activePreview.current(), activeFile)
-      if (item === undefined || identity === undefined || inspected === undefined) {
+      if (item === undefined) {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = 'Studio could not read the dropped palette item.'
         return
       }
       event.preventDefault()
+      if (identity === undefined) {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = 'Wait for the active preview before dropping a component.'
+        return
+      }
+      if (inspected === undefined) {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent = 'Select a rendered element before dropping a component into the preview.'
+        return
+      }
       const gap = { beforeId: inspected.renderId }
       void submitLocalAction(
         item.kind === 'component'
@@ -1639,6 +1642,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         if (editor.state.selection.main.anchor !== safeAnchor || editor.state.selection.main.head !== safeHead) {
           editor.dispatch({ selection: { anchor: safeAnchor, head: safeHead } })
         }
+        postEditorSelection(activePreview.current(), handshake, activeFile, editor)
       },
       async undoInspectorAction() {
         await undoLatestSourceAction()
@@ -1780,14 +1784,46 @@ function updateStatus(
   element.replaceChildren(button)
 }
 
-function showDraftResult(element: HTMLElement, result: StudioDraftSyncResult): void {
+function showDraftResult(
+  element: HTMLElement,
+  result: StudioDraftSyncResult,
+  currentCompile: StudioCompileState,
+  openDiagnostic?: (diagnostic: StudioCompileDiagnostic) => void,
+): void {
   if (result.saved) {
+    const completed = StudioDraftStatus.completedCompile(result, currentCompile)
+    if (completed !== undefined) {
+      updateStatus(element, completed, openDiagnostic)
+      return
+    }
     element.dataset['state'] = 'compiling'
     element.textContent = 'Saved; compiling preview…'
     return
   }
   element.dataset['state'] = 'error'
   element.textContent = result.diagnostics[0] ?? 'Draft is not valid Tao yet; preview kept the last good source.'
+}
+
+/** StudioDraftStatus prevents an older save response from obscuring a completed or newer compile event. */
+export const StudioDraftStatus = {
+  completedCompile(
+    result: StudioDraftSyncResult,
+    current: StudioCompileState,
+  ): StudioCompileState | undefined {
+    if (!result.saved || result.compile === undefined) {
+      return undefined
+    }
+    if (current.compileRevision > result.compile.compileRevision) {
+      return current
+    }
+    return {
+      appliedRevision: current.appliedRevision,
+      compileRevision: result.compile.compileRevision,
+      diagnostics: result.compile.diagnostics,
+      message: result.compile.message,
+      status: result.compile.status,
+    }
+  },
 }
 
 export const StudioProjectContext = {

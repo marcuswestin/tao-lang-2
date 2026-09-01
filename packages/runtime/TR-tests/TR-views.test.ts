@@ -20,6 +20,7 @@ const reactNativeRuntime = {
 mock.module('react-native', () => reactNativeRuntime)
 
 const { default: TR } = await import('@runtime/TR')
+const { NavigationSurface } = await import('../TaoRuntime-src/TR-navigation-surfaces')
 
 type RuntimeElement = React.ReactElement<Record<string, unknown>>
 
@@ -368,6 +369,8 @@ Describe('TR.Views checkbox', () => {
     Expect(checkbox!.props['accessible']).toBe(false)
     Expect(checkbox!.props['accessibilityRole']).toBe(undefined)
     Expect(checkbox!.props['accessibilityState']).toBe(undefined)
+    Expect(checkbox!.props['pointerEvents']).toBe(undefined)
+    Expect(flattenStyle(checkbox!.props['style'])['pointerEvents']).toBe('none')
     Expect(checkbox!.props['value']).toBe(true)
     Expect(label!.props['children']).toBe('Final')
 
@@ -454,6 +457,29 @@ Describe('TR.Views indicators', () => {
 
     Expect(progress.props['accessibilityValue']).toEqual({ max: 1, min: 0, now: 0 })
     Expect((fill.props['style'] as Record<string, unknown>)['width']).toBe('0%')
+  })
+})
+
+Describe('TR navigation pointer events', () => {
+  Test('keeps host and overlay surfaces pointer-transparent through native styles', () => {
+    const surface = NavigationSurface({
+      content: 'Content',
+      navigation: {} as Parameters<typeof NavigationSurface>[0]['navigation'],
+      overlays: [
+        {
+          arguments: {},
+          instanceId: 1,
+          presentable: { render: () => 'Overlay' },
+        } as unknown as Parameters<typeof NavigationSurface>[0]['overlays'][number],
+      ],
+    }) as RuntimeElement
+    const children = React.Children.toArray(surface.props['children'] as React.ReactNode)
+    const overlayLayer = children[1] as RuntimeElement
+
+    Expect(surface.props['pointerEvents']).toBe(undefined)
+    Expect(flattenStyle(surface.props['style'])['pointerEvents']).toBe('box-none')
+    Expect(overlayLayer.props['pointerEvents']).toBe(undefined)
+    Expect(flattenStyle(overlayLayer.props['style'])['pointerEvents']).toBe('box-none')
   })
 })
 

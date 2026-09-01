@@ -37,6 +37,7 @@ export type StudioDevOptions = {
   nativeArtifactRoot?: string
   nativeHutchPath?: string
   nativeProbe?: boolean
+  nativeShowWindow?: boolean
   port?: number
   projectRoot: string
   userStateRoot?: string
@@ -47,6 +48,7 @@ export const StudioDev = {
   testing: {
     addStopSignalHandlers,
     cleanup: cleanupStudioDev,
+    completeNativeProbe,
     createProjectOpeners,
     preferredExpoPort,
     withCleanup,
@@ -158,13 +160,24 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
         // `--no-browser` also means "no extra project window" for the native shell.
         projectUrl: options.browser === false ? undefined : sessionUrl,
         probe: options.nativeProbe,
+        showWindow: options.nativeShowWindow,
         studioUrl: server.url,
       })
       lifecycle.record({ component: 'native-shell', event: 'process-started' })
-      void native.waitForClose().then(exitCode => {
-        lifecycle?.record({ component: 'native-shell', event: 'process-exited' })
-        stop(exitCode)
-      })
+      const nativeCompletion = options.nativeProbe === true
+        ? completeNativeProbe(native)
+        : native.waitForClose()
+      void nativeCompletion.then(
+        exitCode => {
+          lifecycle?.record({ component: 'native-shell', event: 'process-exited' })
+          stop(exitCode)
+        },
+        error => {
+          lifecycle?.record({ component: 'native-shell', event: 'process-exited' })
+          HCI.logProcessError('studio-native', Errors.formatForLog(error))
+          stop(1)
+        },
+      )
     }
     if (!requestedStop) {
       // `ready` is a claim about the page, so it is only made once the page has answered. A
@@ -201,7 +214,12 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       await betterOpen(target)
     }
     if (!requestedStop) {
-      HCI.logProcessInfo('studio', 'Press Ctrl+C to stop Tao Studio.')
+      HCI.logProcessInfo(
+        'studio',
+        options.nativeProbe === true
+          ? 'Native probe running; Tao Studio will stop automatically.'
+          : 'Press Ctrl+C to stop Tao Studio.',
+      )
     }
     return await finished
   } catch (error) {
@@ -232,6 +250,30 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
         await lifecycle?.close()
       },
     ])
+  }
+}
+
+/** A probe result is terminal even though Hutch's development watcher intentionally stays alive. */
+async function completeNativeProbe(
+  native: Pick<StartedStudioNative, 'stop' | 'waitForProbe'>,
+  logStopError: (error: unknown) => void = error =>
+    HCI.logProcessError('studio-native', `Could not stop Hutch after the probe failed: ${Errors.formatForLog(error)}`),
+): Promise<number> {
+  let probeError: unknown
+  try {
+    return (await native.waitForProbe()).passed ? 0 : 1
+  } catch (error) {
+    probeError = error
+    throw error
+  } finally {
+    try {
+      await native.stop()
+    } catch (error) {
+      if (probeError === undefined) {
+        throw error
+      }
+      logStopError(error)
+    }
   }
 }
 

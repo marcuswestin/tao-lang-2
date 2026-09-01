@@ -54,6 +54,7 @@ export type StudioElectrobunSources = {
 export const StudioElectrobun = {
   create,
   sources,
+  testing: { browserProbeSource },
 } as const
 
 async function create(options: StudioElectrobunOptions): Promise<StudioElectrobunProject> {
@@ -213,6 +214,46 @@ function hutchConfigSource(): string {
   `)
 }
 
+const browserProbePreviewPlaceholder = '__TAO_STUDIO_PREVIEW_URL_JSON__'
+const browserProbeTemplate = [
+  '(() => {',
+  '  if (document.body === null || window.__taoStudioNativeProbeStarted === true) return',
+  '  if (typeof window.__electrobunSendToHost !== "function") return',
+  '  window.__taoStudioNativeProbeStarted = true',
+  '  const message = error => error instanceof Error ? error.message : String(error)',
+  '  const report = (capability, passed, detail) => window.__electrobunSendToHost({ capability, message: detail, passed, type: "tao-studio-probe" })',
+  '  report("browser-runtime", true)',
+  '  try {',
+  '    const url = new URL(window.location.href)',
+  '    url.protocol = url.protocol === "https:" ? "wss:" : "ws:"',
+  "    url.pathname = url.pathname.replace(/\\/?$/, '/events')",
+  '    url.search = ""',
+  '    url.hash = ""',
+  '    const socket = new WebSocket(url.href)',
+  '    let settled = false',
+  '    socket.addEventListener("open", () => { if (settled) return; settled = true; report("websocket", true); socket.close() }, { once: true })',
+  '    socket.addEventListener("error", () => { if (settled) return; settled = true; report("websocket", false, "WebSocket connection failed.") }, { once: true })',
+  '  } catch (error) {',
+  '    report("websocket", false, "WebSocket probe failed: " + message(error))',
+  '  }',
+  '  try {',
+  "    const iframe = document.createElement('iframe')",
+  '    iframe.hidden = true',
+  `    iframe.src = ${browserProbePreviewPlaceholder}`,
+  '    let settled = false',
+  '    iframe.addEventListener("load", () => { if (settled) return; settled = true; report("iframe", true); iframe.remove() }, { once: true })',
+  '    iframe.addEventListener("error", () => { if (settled) return; settled = true; report("iframe", false, "Metro iframe failed.") }, { once: true })',
+  '    document.body.append(iframe)',
+  '  } catch (error) {',
+  '    report("iframe", false, "Iframe probe failed: " + message(error))',
+  '  }',
+  '})()',
+].join('\n')
+
+function browserProbeSource(previewUrl: string): string {
+  return browserProbeTemplate.replace(browserProbePreviewPlaceholder, JSON.stringify(previewUrl))
+}
+
 /**
  * Raw `Error` throws below are emitted text, not this module's code: they become the Electrobun
  * app's own `src/bun/index.ts`, a standalone project whose `package.json` declares only
@@ -255,6 +296,8 @@ function mainSource(): string {
     const projectWindows = new Set<BrowserWindow>()
     const windowSessions = new Map<number, string>()
     let activeProjectWindow: BrowserWindow | undefined
+    let auxiliaryProbeWindow: BrowserWindow | undefined
+    let probeInjectionTimer: ReturnType<typeof setInterval> | undefined
     let quitAfterCleanup = false
     let quitting: Promise<void> | undefined
 
@@ -262,6 +305,7 @@ function mainSource(): string {
       kind: 'Welcome' | 'Project',
       target = kind === 'Welcome' ? studioUrl : initialProjectUrl,
       projectPreviewUrl = previewUrl,
+      forceHidden = false,
     ): BrowserWindow {
       if (target === undefined) throw new Error('A project URL is required for a project window.')
       const url = new URL(target)
@@ -269,7 +313,7 @@ function mainSource(): string {
       const window = new BrowserWindow({
         title: kind === 'Welcome' ? 'Tao Studio' : 'Tao Studio — Project',
         url: url.href,
-        hidden: !showWindows,
+        hidden: forceHidden || !showWindows,
         frame: { x: kind === 'Welcome' ? 120 : 180, y: kind === 'Welcome' ? 100 : 140, width: 1400, height: 900 },
       })
       window.webview.setNavigationRules([
@@ -450,6 +494,7 @@ function mainSource(): string {
       )
     }
 
+    let finished = false
     if (runProbe) {
       if (projectWindow === undefined) throw new Error('The runtime probe requires an initial project window.')
       runRuntimeProbe(projectWindow)
@@ -460,84 +505,95 @@ function mainSource(): string {
       const shortcut = GlobalShortcut.register('CommandOrControl+Shift+K', () => {
         dispatchNativeCommand(window, 'command-palette')
       })
+      auxiliaryProbeWindow = createStudioWindow('Welcome', studioUrl, undefined, true)
       results.set('multi-window', { passed: windows.size >= 2 })
       results.set('native-menu', { passed: true })
       results.set('shortcut', { passed: shortcut })
 
-      const reportServer = Bun.serve({
-        hostname: '127.0.0.1',
-        port: 0,
-        async fetch(request) {
-          if (request.method === 'POST') {
-            const report = await request.json() as { capability?: string; message?: string; passed?: boolean }
-            if (report.capability !== undefined && typeof report.passed === 'boolean') {
-              results.set(report.capability, { message: report.message, passed: report.passed })
-              void finishIfComplete(reportServer, results)
-            }
-          }
-          return new Response(null, {
-            status: 204,
-            headers: {
-              'access-control-allow-headers': 'content-type',
-              'access-control-allow-methods': 'POST, OPTIONS',
-              'access-control-allow-origin': studioUrl.origin,
-            },
-          })
-        },
+      // host-message is present at runtime but missing from Electrobun's BrowserView event-name
+      // union. The trusted preload bridge avoids a cross-origin HTTP callback from the Studio page.
+      window.webview.on('host-message' as 'dom-ready', event => {
+        const report = nativeProbeReport(event)
+        if (report !== undefined) {
+          results.set(report.capability, { message: report.message, passed: report.passed })
+          void finishIfComplete(results)
+        }
       })
 
-      window.webview.on('dom-ready', () => {
-        window.webview.executeJavascript(browserProbeSource(reportServer.port))
-      })
+      let probeInjectionError: string | undefined
+      const injectBrowserProbe = () => {
+        if (finished) return
+        try {
+          window.webview.executeJavascript(browserProbeSource())
+          probeInjectionError = undefined
+        } catch (error) {
+          // WKWebView creation can lag behind BrowserWindow. Keep retrying until the bounded probe
+          // timeout can report the last native injection failure as a normal capability result.
+          probeInjectionError = error instanceof Error ? error.message : String(error)
+        }
+      }
+      window.webview.on('dom-ready', injectBrowserProbe)
+      // Electrobun can create BrowserWindow before its WKWebView exists, and dom-ready can race
+      // probe installation. Retry an idempotent page probe until the page accepts it.
+      probeInjectionTimer = setInterval(injectBrowserProbe, 250)
+      injectBrowserProbe()
       setTimeout(() => {
+        if (!results.has('browser-runtime')) {
+          results.set('browser-runtime', {
+            message: probeInjectionError === undefined
+              ? 'The browser probe did not start or could not reach the native host bridge.'
+              : 'The browser probe could not be injected: ' + probeInjectionError,
+            passed: false,
+          })
+        }
         if (!results.has('websocket')) results.set('websocket', { message: 'Timed out.', passed: false })
         if (!results.has('iframe')) results.set('iframe', { message: 'Timed out.', passed: false })
-        void finishProbe(reportServer, results)
+        void finishProbe(results)
       }, 15_000)
     }
 
-    function browserProbeSource(reportPort: number): string {
-      const reportUrl = 'http://127.0.0.1:' + reportPort + '/result'
-      const source = [
-        '(() => {',
-        '  const report = (capability, passed, message) => fetch(' + JSON.stringify(reportUrl)
-          + ', { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ capability, passed, message }) })',
-        '  const websocketUrl = path => { const url = new URL(path, window.location.href); url.protocol = url.protocol === "https:" ? "wss:" : "ws:"; return url.href }',
-        "  const socket = new WebSocket(websocketUrl(window.location.pathname.replace(/\\/?$/, '/events')))",
-        '  socket.addEventListener("open", () => { report("websocket", true); socket.close() }, { once: true })',
-        '  socket.addEventListener("error", () => report("websocket", false, "WebSocket connection failed."), { once: true })',
-        "  const iframe = document.createElement('iframe')",
-        '  iframe.hidden = true',
-        '  iframe.src = ' + JSON.stringify(previewUrl?.href ?? ''),
-        '  iframe.addEventListener("load", () => { report("iframe", true); iframe.remove() }, { once: true })',
-        '  iframe.addEventListener("error", () => report("iframe", false, "Metro iframe failed."), { once: true })',
-        '  document.body.append(iframe)',
-        '})()',
-      ]
-      return source.join('\\n')
+    function nativeProbeReport(
+      event: unknown,
+    ): { capability: string; message?: string; passed: boolean } | undefined {
+      const value = (event as { data?: { detail?: unknown } }).data?.detail
+      if (typeof value !== 'object' || value === null) return undefined
+      const report = value as { capability?: unknown; message?: unknown; passed?: unknown; type?: unknown }
+      if (
+        report.type !== 'tao-studio-probe'
+        || !['browser-runtime', 'iframe', 'websocket'].includes(String(report.capability))
+        || typeof report.passed !== 'boolean'
+        || (report.message !== undefined && typeof report.message !== 'string')
+      ) return undefined
+      return { capability: report.capability, message: report.message, passed: report.passed }
+    }
+
+    function browserProbeSource(): string {
+      return ${JSON.stringify(browserProbeTemplate)}.replace(
+        ${JSON.stringify(browserProbePreviewPlaceholder)},
+        JSON.stringify(previewUrl?.href ?? ''),
+      )
     }
 
     async function finishIfComplete(
-      server: ReturnType<typeof Bun.serve>,
       results: Map<string, { message?: string; passed: boolean }>,
     ): Promise<void> {
-      if (results.has('websocket') && results.has('iframe')) {
-        await finishProbe(server, results)
+      if (results.has('browser-runtime') && results.has('websocket') && results.has('iframe')) {
+        await finishProbe(results)
       }
     }
 
-    let finished = false
     async function finishProbe(
-      server: ReturnType<typeof Bun.serve>,
       results: Map<string, { message?: string; passed: boolean }>,
     ): Promise<void> {
       if (finished) return
       finished = true
+      if (probeInjectionTimer !== undefined) clearInterval(probeInjectionTimer)
+      auxiliaryProbeWindow?.close()
+      auxiliaryProbeWindow = undefined
       GlobalShortcut.unregisterAll()
       const result = {
         passed: [...results.values()].every(entry => entry.passed),
         capabilities: Object.fromEntries(results),
-        manualChecks: ['Choose File > Open Project… and confirm the native directory picker opens.'],
       }
       console.log('TAO_STUDIO_ELECTROBUN_RESULT ' + JSON.stringify(result))
       if (resultPath !== undefined) {
@@ -549,7 +605,6 @@ function mainSource(): string {
           await import('node:fs/promises').then(fs => fs.rm(temporaryResultPath, { force: true }))
         }
       }
-      server.stop(true)
       if (!showWindows) {
         process.exitCode = result.passed ? 0 : 1
         Utils.quit()

@@ -377,6 +377,37 @@ Describe('agent worktree profile bootstrap', () => {
     )
   })
 
+  Test('bootstraps dependencies before full verification uses generated tooling', async () => {
+    const commands = await justCommands('full-verify')
+
+    const install = commands.indexOf('bun install --frozen-lockfile')
+    const parserGeneration = commands.indexOf('ParserGenerate.ts')
+    Expect(install).toBeGreaterThanOrEqual(0)
+    Expect(parserGeneration).toBeGreaterThan(install)
+  })
+
+  Test('runs every unquarantined Studio lane and reports the browser quarantine', async () => {
+    const commands = await justCommands('_full-verify-studio')
+
+    Expect(commands).toContain(
+      './dev gates _studio-verify-launch _studio-verify-real-app _studio-verify-native '
+        + '_studio-verify-canary',
+    )
+    Expect(commands).toContain('--jobs 1')
+    Expect(commands).toContain('--json .artifacts/logs/verify/studio-summary.json')
+    Expect(commands).toContain(
+      '--skipped "_studio-verify-simulated=temporarily quarantined; '
+        + 'run just _studio-verify-simulated while debugging the browser journey"',
+    )
+    Expect(commands).not.toContain('manual-check')
+    Expect(await justCommands('_studio-verify-launch')).toContain('studio-launch.test.ts')
+    Expect(await justCommands('_studio-verify-real-app')).toContain('studio-proof-real-app full-verify-real-app')
+    Expect(await justCommands('_studio-verify-simulated')).toContain('studio-simulated-user.test.ts')
+    Expect(await justCommands('_studio-verify-native')).toContain('studio-smoke-native')
+    Expect(await justCommands('_studio-verify-canary')).toContain('just studio-canary')
+    Expect(await justCommands('studio-manual-checks')).toContain('./dev studio-manual-checks')
+  })
+
   Test('exposes scratch reclamation as its own recipe and as part of cleaning', async () => {
     Expect(await justRecipeNames()).toContain('clean-scratch')
     Expect(await justCommands('clean-scratch')).toContain('tao_prune_bootstrap_scratch')

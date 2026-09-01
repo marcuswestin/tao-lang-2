@@ -340,7 +340,6 @@ Describe('Studio native wrapper foundation', () => {
     try {
       await FS.writeJson(resultPath, {
         capabilities: { iframe: { passed: true }, websocket: { message: 'connected', passed: true } },
-        manualChecks: ['Open the directory picker.'],
         passed: true,
       })
 
@@ -352,7 +351,6 @@ Describe('Studio native wrapper foundation', () => {
           iframe: { message: undefined, passed: true },
           websocket: { message: 'connected', passed: true },
         },
-        manualChecks: ['Open the directory picker.'],
         passed: true,
       })
     } finally {
@@ -517,6 +515,52 @@ Describe('Studio smoke resource isolation', () => {
 
   Test('allocates every Studio preview server from an ephemeral port', () => {
     Expect(StudioDev.testing.preferredExpoPort()).toBe(0)
+  })
+
+  Test('treats a native probe result as terminal and stops Hutch watch mode', async () => {
+    const events: string[] = []
+    const exitCode = await StudioDev.testing.completeNativeProbe({
+      async stop() {
+        events.push('stop')
+      },
+      async waitForProbe() {
+        events.push('probe')
+        return { capabilities: { websocket: { passed: false } }, passed: false }
+      },
+    })
+
+    Expect(exitCode).toBe(1)
+    Expect(events).toEqual(['probe', 'stop'])
+  })
+
+  Test('stops Hutch watch mode when the native probe cannot report', async () => {
+    const events: string[] = []
+    await Expect(StudioDev.testing.completeNativeProbe({
+      async stop() {
+        events.push('stop')
+      },
+      async waitForProbe() {
+        events.push('probe')
+        Errors.throwUnexpected('probe failed')
+      },
+    })).rejects.toThrow('probe failed')
+
+    Expect(events).toEqual(['probe', 'stop'])
+  })
+
+  Test('preserves a probe failure when stopping Hutch also fails', async () => {
+    const stopErrors: string[] = []
+    await Expect(StudioDev.testing.completeNativeProbe({
+      async stop() {
+        Errors.throwUnexpected('stop failed')
+      },
+      async waitForProbe() {
+        Errors.throwUnexpected('probe failed')
+      },
+    }, error => stopErrors.push(Errors.formatForLog(error)))).rejects.toThrow('probe failed')
+
+    Expect(stopErrors).toHaveLength(1)
+    Expect(stopErrors[0]).toContain('UnexpectedBehaviorError: stop failed')
   })
 
   Test('cleans up Studio resources when its terminal hangs up', () => {

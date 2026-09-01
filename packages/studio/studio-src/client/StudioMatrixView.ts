@@ -250,6 +250,7 @@ export type StudioPreviewConnection = {
   scenarioControls?: HTMLFormElement
   scenarioLabel?: string
   changed?: () => void
+  sourceSyncDisconnect?: () => void
   suspended?: boolean
   suspendedSource?: string
   visibilityObserver?: IntersectionObserver
@@ -276,9 +277,24 @@ export function disconnectPreviews(
     }
     preview.visibilityObserver?.disconnect()
     preview.visibilityObserver = undefined
+    preview.sourceSyncDisconnect?.()
+    preview.sourceSyncDisconnect = undefined
     preview.iframe.src = 'about:blank'
   }
 }
+
+/** StudioPreviewSourceSync keeps source identity available across an iframe's initial load and reloads. */
+export const StudioPreviewSourceSync = {
+  connect(preview: StudioPreviewConnection, synchronize: () => void): void {
+    preview.sourceSyncDisconnect?.()
+    const listener = (): void => synchronize()
+    preview.iframe.addEventListener('load', listener)
+    preview.sourceSyncDisconnect = () => preview.iframe.removeEventListener('load', listener)
+    // The load callback covers previews that install their message listener synchronously. Tab
+    // activation, saves, and selections republish identity for receivers that mount later.
+    synchronize()
+  },
+} as const
 
 export type StudioRuntimeLog = Readonly<{
   arguments: readonly StudioJsonValue[]

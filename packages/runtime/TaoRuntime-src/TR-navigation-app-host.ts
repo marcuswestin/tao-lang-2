@@ -80,13 +80,11 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
         ? React.createElement(runtime.View, {
           children: toasts,
           key: 'app-toasts',
-          pointerEvents: 'box-none',
           style: toastLayerStyle,
         })
         : null,
     ],
-    pointerEvents: 'box-none',
-    style: navigationHostStyle,
+    style: navigationAppHostStyle,
   })
 }
 
@@ -137,12 +135,18 @@ function usePlatformBack(target: RuntimeAppDefinition): void {
   }, [target])
 }
 
+const navigationAppHostStyle = {
+  ...navigationHostStyle,
+  pointerEvents: 'box-none',
+} as const
+
 const toastLayerStyle = {
   alignItems: 'center',
   bottom: 0,
   left: 0,
   paddingBottom: 24,
   paddingHorizontal: 16,
+  pointerEvents: 'box-none',
   position: 'absolute',
   right: 0,
   zIndex: 2,

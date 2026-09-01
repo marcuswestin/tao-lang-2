@@ -63,6 +63,10 @@ studio-proof-real-app run_id="local":
 studio-canary project="Apps/HNReader" app="HNReader":
     ./dev studio-canary --project "{{ project }}" --app "{{ app }}"
 
+# Run the native Studio checks that require a person; never part of test or verify
+studio-manual-checks project="Apps/HNReader" app="HNReader":
+    ./dev studio-manual-checks --project "{{ project }}" --app "{{ app }}"
+
 # Validate a built native Studio release without publishing anything
 studio-release-check payload_root=".artifacts/build/studio-native/service-stage/payload" artifacts_root=".artifacts/build/studio-native/project/artifacts" *ARGS:
     ./dev studio-release-check --payload-root "{{ payload_root }}" --artifacts-root "{{ artifacts_root }}" {{ ARGS }}
@@ -143,18 +147,29 @@ clean-all: clean
 verify: fix _compile-word-flower-app
     ./dev gates _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --json .artifacts/logs/verify/summary.json --skipped "_tao-check=fix ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=fix formatted this tree with dprint and just --fmt" "studio-smoke=slow lane; run just studio-smoke or just full-verify"
 
-# Ordinary verify plus doctor, dead-exports, and every slow Studio smoke/canary lane
-full-verify: verify doctor dead-exports _full-verify-studio
+# Bootstrap dependencies, then run ordinary verify, doctor, dead exports, and every unquarantined Studio lane
+full-verify: deps verify doctor dead-exports _full-verify-studio
 
 # Private
 #########
 
-# Studio lanes verify skips; sequential so Metro and port lanes do not collide
+# Run every unquarantined Studio lane and report them together; one worker prevents Metro and port collisions
 _full-verify-studio:
+    ./dev gates _studio-verify-launch _studio-verify-real-app _studio-verify-native _studio-verify-canary --jobs 1 --json .artifacts/logs/verify/studio-summary.json --skipped "_studio-verify-simulated=temporarily quarantined; run just _studio-verify-simulated while debugging the browser journey"
+
+_studio-verify-launch:
     just studio-smoke packages/dev/studio-smoke/studio-launch.test.ts full-verify-launch
+
+_studio-verify-real-app:
     just studio-proof-real-app full-verify-real-app
+
+_studio-verify-simulated:
     just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts full-verify-simulated
+
+_studio-verify-native:
     just studio-smoke-native packages/dev/studio-smoke/studio-simulated-user.test.ts full-verify-native
+
+_studio-verify-canary:
     just studio-canary
 
 _agent-config:

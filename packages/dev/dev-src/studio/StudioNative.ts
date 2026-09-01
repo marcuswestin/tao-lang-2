@@ -34,7 +34,6 @@ export type StudioNativeOptions = {
 
 export type StudioNativeProbeResult = {
   capabilities: Record<string, { message?: string; passed: boolean }>
-  manualChecks: readonly string[]
   passed: boolean
 }
 
@@ -850,7 +849,6 @@ async function waitForProbeResult(
 function probeResult(value: unknown): StudioNativeProbeResult {
   if (
     !isRecord(value) || typeof value['passed'] !== 'boolean' || !isRecord(value['capabilities'])
-    || !Array.isArray(value['manualChecks']) || !value['manualChecks'].every(item => typeof item === 'string')
   ) {
     throw new Errors.UnexpectedBehaviorError('Electrobun wrote an invalid runtime probe result.')
   }
@@ -864,7 +862,7 @@ function probeResult(value: unknown): StudioNativeProbeResult {
     }
     capabilities[name] = { message: result['message'], passed: result['passed'] }
   }
-  return { capabilities, manualChecks: value['manualChecks'], passed: value['passed'] }
+  return { capabilities, passed: value['passed'] }
 }
 
 function requiredHttpsUrl(value: string): URL {
