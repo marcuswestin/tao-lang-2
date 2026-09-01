@@ -44,7 +44,7 @@ const DIAGNOSTIC_PATTERN = /^\S+\.langium:\d+:\d+ - .+$/
 const STAMP_PATH = '.artifacts/parser-generate-stamp.json'
 
 /** The stamp layout. An older or unreadable stamp is treated as stale, never as an error. */
-const STAMP_VERSION = 1
+const STAMP_VERSION = 2
 
 /** Langium's configuration file, which is both an input to generation and the list of outputs. */
 const LANGIUM_CONFIG = 'langium-config.json'
@@ -53,6 +53,7 @@ const LANGIUM_CONFIG = 'langium-config.json'
 type ParserGenerateStamp = {
   inputs: string
   outputs: readonly string[]
+  outputsHash: string
   version: number
 }
 
@@ -154,6 +155,7 @@ export async function runParserGenerate(options: ParserGenerateOptions = {}): Pr
   await writeParserGenerateStamp(stampPath, {
     inputs,
     outputs: (await generatedFilePaths(parserRoot)).map(path => FS.relativePath(repositoryRoot, path)),
+    outputsHash: await parserGenerateOutputHash(parserRoot),
     version: STAMP_VERSION,
   })
   return 0
@@ -207,7 +209,23 @@ async function parserGenerateIsUpToDate(
       return false
     }
   }
+  // Existence is not enough. The generated tree is ignored by Git, so it does not move with a
+  // branch while the stamp beside it does: switching branches can leave output built from another
+  // branch's grammar, which the input hash alone would certify as current. Hashing what was
+  // actually written is what catches that.
+  if (await parserGenerateOutputHash(parserRoot) !== stamp.outputsHash) {
+    return false
+  }
   return stamp.outputs.length > 0
+}
+
+/** parserGenerateOutputHash hashes the generated files themselves, in a stable order. */
+export async function parserGenerateOutputHash(parserRoot: string): Promise<string> {
+  const entries: string[] = []
+  for (const path of await generatedFilePaths(parserRoot)) {
+    entries.push(`${FS.relativePath(parserRoot, path)}\n${hashContent(await FS.readFile(path))}`)
+  }
+  return hashContent(entries.join('\n'))
 }
 
 /** grammarInputPaths lists the configuration and grammar files, in a stable order. */
@@ -264,12 +282,18 @@ async function generatedFilePaths(parserRoot: string): Promise<string[]> {
 async function readParserGenerateStamp(stampPath: string): Promise<ParserGenerateStamp | undefined> {
   try {
     const value = await FS.readJson<Partial<ParserGenerateStamp>>(stampPath)
-    if (typeof value?.inputs !== 'string' || typeof value.version !== 'number' || !Array.isArray(value.outputs)) {
+    if (
+      typeof value?.inputs !== 'string'
+      || typeof value.version !== 'number'
+      || typeof value.outputsHash !== 'string'
+      || !Array.isArray(value.outputs)
+    ) {
       return undefined
     }
     return {
       inputs: value.inputs,
       outputs: value.outputs.filter(entry => typeof entry === 'string'),
+      outputsHash: value.outputsHash,
       version: value.version,
     }
   } catch {
