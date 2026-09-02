@@ -30,12 +30,11 @@ rather than a reference to a sibling slot.
 
 A command is declared at module level or in a view or scene body — the placement `action` already
 has, and for the same reason: a command written in a view body closes over that view's parameters,
-state, and actions.
+state, and actions. Its slots are its parameters, declared exactly as an action declares its own:
 
 ```tao
 package
-command Finish {
-   Document
+command Finish(Document) {
    Title "Finish document"
    Description "Moves a document out of drafts and into the archive."
    Summary "Finish { Document.Title }"
@@ -47,29 +46,31 @@ command Finish {
 }  }  }
 ```
 
-The body holds slot declarations, member fills, and exactly one `do` clause naming the action it
-runs. `Document` on its own is a slot taking its same-named type, exactly as `view CookScreen(Recipe)`
-already reads. Every other member carries a value, and a juxtaposed value never starts with a bare
-name — that is what keeps a slot on one line and a member fill on the next unambiguous. Write
-`Enabled: CanSave` when the value is a bare name; `Enabled Document.Final is Draft` and
-`Key primary + "n"` need no colon because neither is a bare name on its own. A name that is both a
-command member and a type is diagnosed and asks for the explicit `Name: value` form, and one command
-declares at most one slot of each type, so what the verb acts on is never ambiguous.
+`Document` in the parameter list is a slot taking its same-named type, exactly as
+`view CookScreen(Recipe)` reads, and `command Like(Track Song)` renames a typed slot the way any
+parameter list does. The body holds member fills and exactly one `do` clause naming the action it
+runs — an inline action, or a named action with its call parentheses. Because the slots are not in
+the body, juxtaposition means one thing there: a name followed by a value fills that member.
+`Enabled CanSave`, `Enabled Document.Final is Draft`, and `Key primary + "n"` are all ordinary
+values, and a name the command has no member for is diagnosed. Slots follow the ordinary parameter
+rules: a slot declared twice, or one that shadows a value the command can already see, is diagnosed
+at the parameter.
 
-Binding a command is derivation. `Save with { ... }` fills slots and may refine `Label`, `Icon`,
-`Key`, and `Enabled`; overriding `Title` is an error, because the title is what identifies the verb
-wherever it is listed. `do <command>` runs it, and `do <command> with { ... }` fills the slots it
-still needs at the invocation:
+A command is invoked exactly as an action is. `do Finish(Document)` binds its arguments to the
+command's slots by label or by type through the one mechanism an action `do` uses, and gets the
+same arity and type diagnostics — a missing argument, an unmatched one, or two of one type:
 
 ```tao
-on press -> { do Finish with { Document } }
+on press -> { do Finish(Document) }
 ```
 
-`do` with an unfilled slot is an error: nothing at the invocation would supply the value. A toolbar
-mention is the opposite case — it is unfilled on purpose, and the presenting scene supplies the slot
-from its own parameters, matched by type, when the command is invoked. A slot the scene cannot
-supply unambiguously is reported at the mention. An action `do` still carries its call parentheses;
-a bare name after `do` names a command.
+Binding a command is derivation. `Finish with { Document }` derives a command value with a slot
+filled, for surfaces and menus, and a binding may also refine `Label`, `Icon`, `Key`, and `Enabled`;
+overriding `Title` is an error, because the title is what identifies the verb wherever it is listed.
+A bound command invokes over the slots its binding left open, so `do` on it takes exactly the
+arguments its type still asks for. A toolbar mention is unfilled on purpose: the presenting scene
+supplies the slot from its own parameters, matched by type, when the command is invoked, and a slot
+the scene cannot supply unambiguously is reported at the mention.
 
 Every module emits a table of the commands it declares and registers it at load through
 `TR.Interaction.RegisterCommands`; a view-body command registers while its view is mounted. The

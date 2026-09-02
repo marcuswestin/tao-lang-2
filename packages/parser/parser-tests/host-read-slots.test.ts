@@ -12,7 +12,7 @@ Describe('parser: host-read slots and commands', () => {
       scene Home(Title text) {
         state Enabled = false
         Title Title
-        command SaveCommand {
+        command SaveCommand() {
           Label "Save"
           Enabled Enabled is not empty
           Icon when Enabled "checkmark" / not "circle"
@@ -46,8 +46,9 @@ Describe('parser: host-read slots and commands', () => {
     const command = AST.commandsOf(home)[0]
     Expect.Is(command, AST.isCommandDeclaration)
     Expect(command.name).toBe('SaveCommand')
-    Expect(AST.commandEntriesOf(command).map(entry => entry.name)).toEqual(['Label', 'Enabled', 'Icon'])
-    Expect.Is(AST.commandEntriesOf(command)[2]?.value, AST.isWhenExpression)
+    Expect(AST.parametersOf(command)).toEqual([])
+    Expect(AST.commandFillsOf(command).map(fill => fill.name)).toEqual(['Label', 'Enabled', 'Icon'])
+    Expect.Is(AST.commandFillsOf(command)[2]?.value, AST.isWhenExpression)
     Expect(AST.commandDoClauseOf(command)?.action).toBeDefined()
 
     const test = result.entry.ast.statements.find(AST.isTestDeclaration)
@@ -64,7 +65,7 @@ Describe('parser: host-read slots and commands', () => {
     const result = await testParseCode(`
       action Share(Value text) { }
       view Home() {
-        command Share {
+        command Share() {
           Title "Share"
           do Share("link")
         }
@@ -82,28 +83,32 @@ Describe('parser: host-read slots and commands', () => {
     Expect(target.target.ref).toBe(action)
   })
 
-  Test('reads a bare slot beside a member fill without either swallowing the other', async () => {
+  Test('parses a renamed typed slot in the parameter list beside the member fills', async () => {
     const result = await testParseCode(`
-      data Documents / Document {
+      data Songs / Song {
         Title text
-        Final yes / Draft no
+        Liked yes / Unliked no
       }
 
-      command Finish {
-        Document
-        Title "Finish document"
-        Enabled Document.Final is Draft
+      command Like(Track Song) {
+        Title "Like"
+        Enabled Track.Liked is Unliked
         do -> {
-          update Document { Final }
+          update Track { Liked }
         }
       }
     `)
 
     const command = result.entry.ast.statements.find(AST.isCommandDeclaration)
     Expect.Is(command, AST.isCommandDeclaration)
-    const entries = AST.commandEntriesOf(command)
-    Expect(entries.map(entry => entry.name)).toEqual(['Document', 'Title', 'Enabled'])
-    Expect(entries.map(entry => entry.value === undefined)).toEqual([true, false, false])
-    Expect(AST.commandSlotCandidatesOf(command).map(entry => entry.name)).toEqual(['Document'])
+    const slots = AST.parametersOf(command)
+    Expect(slots).toHaveLength(1)
+    const inlineType = slots[0]?.inlineType
+    Expect(inlineType?.name).toBe('Track')
+    const type = inlineType?.type
+    Expect.Is(type, AST.isNamedTypeReference)
+    Expect(type.root).toBe('Song')
+    Expect(AST.commandFillsOf(command).map(fill => fill.name)).toEqual(['Title', 'Enabled'])
+    Expect.Is(AST.commandDoClauseOf(command)?.action, AST.isActionExpression)
   })
 })

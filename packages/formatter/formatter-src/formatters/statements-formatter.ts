@@ -46,6 +46,11 @@ export default {
     f.oneSpaceBeforeProperty('defaultValue')
   },
 
+  /** ParameterTypeDeclaration separates a renamed parameter from the type it takes. */
+  ParameterTypeDeclaration(f) {
+    f.oneSpaceBeforeProperty('type')
+  },
+
   /** WhenRenderStatement puts each branch and its required fallback on an indented line. */
   WhenRenderStatement(f) {
     f.oneSpaceAfter('when')

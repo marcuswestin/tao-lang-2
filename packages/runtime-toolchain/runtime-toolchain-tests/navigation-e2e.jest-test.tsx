@@ -1450,7 +1450,7 @@ Describe('Expo runtime', () => {
 
         action Reload() { }
 
-        command Refresh {
+        command Refresh() {
            Title "Refresh"
            do Reload()
         }

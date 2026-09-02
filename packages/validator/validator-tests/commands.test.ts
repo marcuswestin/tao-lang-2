@@ -1,5 +1,6 @@
 import { Describe, stubView, Test } from '@shared/test'
 import { ActionsValidator } from '../validator-src/validators/ActionsValidator'
+import { AliasesValidator } from '../validator-src/validators/aliases-validator'
 import { commandValidationMessages } from '../validator-src/validators/commands-validator'
 import { declarationSlotValidationMessages } from '../validator-src/validators/declaration-slots-validator'
 import { accepts, rejects } from './test-validate'
@@ -13,16 +14,22 @@ const documents = `
   }
 `
 
+const songs = `
+  data Songs / Song {
+    Title text
+    Liked yes / Unliked no
+  }
+`
+
 Describe('validator: commands as configured values', () => {
   Test(
-    'accepts a module command with an entity slot, invoked with that slot filled',
+    'accepts a module command with an entity slot, invoked with that slot as its argument',
     accepts(`
       ${leaf}
       ${documents}
       use primary from @tao/keys
 
-      command Finish {
-        Document
+      command Finish(Document) {
         Title "Finish document"
         Description "Moves a document out of drafts and into the archive."
         Summary "Finish { Document.Title }"
@@ -36,7 +43,7 @@ Describe('validator: commands as configured values', () => {
 
       view DraftRow(Document) {
         action FinishRow() {
-          do Finish with { Document }
+          do Finish(Document)
         }
         render Leaf()
       }
@@ -44,22 +51,68 @@ Describe('validator: commands as configured values', () => {
   )
 
   Test(
-    'accepts a view-body command reading that view`s own state, and a bare key literal',
+    'accepts a renamed typed slot, read by the members and bound by type or by label when invoked',
+    accepts(`
+      ${leaf}
+      ${songs}
+      command Like(Track Song) {
+        Title "Like"
+        Summary "Like { Track.Title }"
+        Enabled Track.Liked is Unliked
+        do -> {
+          update Track { Liked }
+        }
+      }
+      view SongRow(Song) {
+        action LikeRow() {
+          do Like(Song)
+        }
+        action LikeRowByLabel() {
+          do Like(Track: Song)
+        }
+        render Leaf()
+      }
+    `),
+  )
+
+  Test(
+    'accepts a view-body command reading that view`s own state, with a bare name as a member value',
     accepts(`
       ${leaf}
       scene Home() {
         Title "Home"
         state Draft = ""
+        state CanSave = true
         action SaveDraft() {
           set Draft = ""
         }
-        command Save {
+        command Save() {
           Title "Save workspace"
           Key "s"
-          Enabled Draft is not empty
+          Enabled CanSave
           do SaveDraft()
         }
         Toolbar { Save }
+        render Leaf()
+      }
+    `),
+  )
+
+  Test(
+    'types a bound command over the slots the binding left open',
+    accepts(`
+      ${leaf}
+      ${documents}
+      action Run() { }
+      command Finish(Document) {
+        Title "Finish document"
+        do Run()
+      }
+      view Row(Document) {
+        let ToArchive = Finish with { Document }
+        action Archive() {
+          do ToArchive()
+        }
         render Leaf()
       }
     `),
@@ -71,10 +124,10 @@ Describe('validator: commands as configured values', () => {
       `
         ${leaf}
         action Run() { }
-        command Silent {
+        command Silent() {
           Title "Silent"
         }
-        command Twice {
+        command Twice() {
           Title "Twice"
           do Run()
           do Run()
@@ -91,7 +144,7 @@ Describe('validator: commands as configured values', () => {
       `
         ${leaf}
         action Run() { }
-        command Nameless {
+        command Nameless() {
           Icon "circle"
           do Run()
         }
@@ -101,93 +154,116 @@ Describe('validator: commands as configured values', () => {
   )
 
   Test(
-    'rejects two slots of one type, which would leave the verb ambiguous about what it acts on',
+    'rejects a command whose do names another command rather than an action',
+    rejects(
+      `
+        ${leaf}
+        action Run() { }
+        command Inner() {
+          Title "Inner"
+          do Run()
+        }
+        command Outer() {
+          Title "Outer"
+          do Inner()
+        }
+      `,
+      commandValidationMessages.doTarget('Outer'),
+    ),
+  )
+
+  Test(
+    'holds slots to the ordinary parameter rules: declared once, and shadowing nothing in view',
     rejects(
       `
         ${leaf}
         ${documents}
         action Run() { }
-        command Merge {
-          Document
-          Document
+        command Merge(Document, Document) {
           Title "Merge documents"
           do Run()
         }
-      `,
-      commandValidationMessages.duplicateSlotType('Document'),
-    ),
-  )
-
-  Test(
-    'asks for the explicit fill form when one name is both a command member and a type',
-    rejects(
-      `
-        ${leaf}
-        type Icon is text
-        action Run() { }
-        command Ambiguous {
-          Title "Ambiguous"
-          Icon
-          do Run()
+        scene Detail(Document) {
+          Title "Detail"
+          command Finish(Document) {
+            Title "Finish"
+            do Run()
+          }
+          render Leaf()
         }
       `,
-      commandValidationMessages.ambiguousMember('Icon'),
+      ActionsValidator.messages.duplicateParameter('Document', 'command'),
+      AliasesValidator.messages.duplicateName('Document'),
     ),
   )
 
   Test(
-    'rejects a member written without a value and a name that is neither member nor type',
+    'rejects a fill of a member the command does not have',
     rejects(
       `
         ${leaf}
         action Run() { }
-        command Bare {
+        command Bare() {
           Title "Bare"
-          Enabled
-          Mystery
+          Mystery "x"
           do Run()
         }
       `,
-      commandValidationMessages.memberValue('Enabled'),
       commandValidationMessages.member('Mystery', 'Title, Description, Summary, Label, Icon, Key, Enabled'),
     ),
   )
 
   Test(
-    'rejects an invocation that leaves a slot unfilled, and a binding naming nothing the command has',
+    'gives an invocation the arity and type diagnostics an action`s do has',
     rejects(
       `
         ${leaf}
         ${documents}
         action Run() { }
-        command Finish {
-          Document
+        command Finish(Document) {
           Title "Finish document"
           do Run()
         }
         view Row(Document) {
-          action Unfilled() { do Finish }
-          action Misnamed() { do Finish with { Paper: Document } }
+          let Verb = Finish
+          let ToArchive = Finish with { Document }
+          action Unfilled() { do Finish() }
+          action Twice() { do Finish(Document, Document) }
+          action Mislabeled() { do Finish(Paper: Document) }
+          action ThroughAlias() { do Verb() }
+          action Refilled() { do ToArchive(Document) }
           render Leaf()
         }
       `,
-      commandValidationMessages.unfilledSlot('Finish', 'Document'),
-      commandValidationMessages.unknownBinding('Finish', 'Paper'),
+      ActionsValidator.messages.missingArgument('Finish', 'Document'),
+      ActionsValidator.messages.duplicateArgumentType('Finish'),
+      ActionsValidator.messages.unknownNamedArgument('Finish', 'Paper'),
+      ActionsValidator.messages.dynamicActionArguments,
     ),
   )
 
   Test(
-    'rejects a binding that overrides Title, because the title is what identifies the verb',
+    'rejects a binding naming nothing the command has, and one that overrides Title',
     rejects(
       `
         ${leaf}
+        ${documents}
         action Run() { }
-        command Save {
+        command Finish(Document) {
+          Title "Finish document"
+          do Run()
+        }
+        command Save() {
           Title "Save"
           do Run()
         }
+        view Row(Document) {
+          let Misnamed = Finish with { Paper: Document }
+          render Leaf()
+        }
         let Renamed = Save with { Title "Store" }
       `,
+      commandValidationMessages.unknownBinding('Finish', 'Paper'),
       commandValidationMessages.titleOverride('Save'),
     ),
   )
@@ -198,17 +274,17 @@ Describe('validator: commands as configured values', () => {
       `
         ${leaf}
         action Run() { }
-        command Copy {
+        command Copy() {
           Title "Copy"
           Key "cmd+c"
           do Run()
         }
-        command Paste {
+        command Paste() {
           Title "Paste"
           Key "hyper+v"
           do Run()
         }
-        command Bare {
+        command Bare() {
           Title "Bare"
           Key "primary+"
           do Run()
@@ -221,25 +297,20 @@ Describe('validator: commands as configured values', () => {
   )
 
   Test(
-    'keeps a command out of an app body and requires a call for an action `do`',
+    'keeps a command out of an app body',
     rejects(
       `
         ${leaf}
         action Run() { }
         app Demo {
-          command Stray {
+          command Stray() {
             Title "Stray"
             do Run()
           }
           view Leaf
         }
-        view Home() {
-          action Bare() { do Run }
-          render Leaf()
-        }
       `,
       commandValidationMessages.placement,
-      ActionsValidator.messages.doActionCall,
     ),
   )
 
@@ -250,8 +321,7 @@ Describe('validator: commands as configured values', () => {
         ${leaf}
         ${documents}
         action Run() { }
-        command Finish {
-          Document
+        command Finish(Document) {
           Title "Finish document"
           do Run()
         }
@@ -271,8 +341,7 @@ Describe('validator: commands as configured values', () => {
       ${leaf}
       ${documents}
       action Run() { }
-      command Finish {
-        Document
+      command Finish(Document) {
         Title "Finish document"
         do Run()
       }

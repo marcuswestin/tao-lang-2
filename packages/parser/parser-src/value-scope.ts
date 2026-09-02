@@ -193,7 +193,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     // A command's own slots are the innermost values in its body: they are what its metadata reads
     // and what its `do` clause hands to the action it runs.
     if (owner) {
-      scope = this.createScopeForNodes(AST.commandSlotCandidatesOf(owner), scope)
+      scope = this.createScopeForParameters(owner, scope, reference)
     }
 
     return scope
@@ -695,16 +695,15 @@ function entityDataForValueDeclaration(
   declaration: AST.ValueDeclaration | undefined,
   context: AST.Node,
 ): AST.EntityDataDeclaration | undefined {
-  if (AST.isParameterDeclaration(declaration) && declaration.type?.members.length === 0) {
-    return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
-      entity.singularName === declaration.type?.root
-    )
-  }
-  // A command slot names its type the way a bare parameter does, so it reaches the same entity.
-  if (AST.isCommandEntry(declaration) && declaration.value === undefined) {
-    return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
-      entity.singularName === declaration.name
-    )
+  // A parameter reaches an entity whether it takes its same-named type (`Document`) or renames a
+  // typed one (`Track Song`): the entity is what the type names, not what the parameter is called.
+  if (AST.isParameterDeclaration(declaration)) {
+    const type = declaration.inlineType ? declaration.inlineType.type : declaration.type
+    if (AST.isNamedTypeReference(type) && type.members.length === 0) {
+      return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
+        entity.singularName === type.root
+      )
+    }
   }
   if (AST.isForStatement(declaration)) {
     return entityDataForCollection(declaration.collection, context)

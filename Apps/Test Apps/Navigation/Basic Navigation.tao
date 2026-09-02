@@ -14,7 +14,7 @@ scene BasicHome() {
    action ConfirmBasicNavigation() {
       set Confirmed = true
    }
-   command Confirm {
+   command Confirm() {
       Title "Confirm basic navigation"
       Icon "checkmark"
       do ConfirmBasicNavigation()

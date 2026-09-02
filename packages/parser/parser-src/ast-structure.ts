@@ -361,9 +361,9 @@ export function commandOwningView(command: AST.CommandDeclaration): AST.ViewDecl
     : undefined
 }
 
-/** commandEntriesOf returns the slot declarations and member fills written in one command body. */
-export function commandEntriesOf(command: AST.CommandDeclaration): AST.CommandEntry[] {
-  return command.block.members.filter(AST.isCommandEntry)
+/** commandFillsOf returns the member fills written in one command body, in source order. */
+export function commandFillsOf(command: AST.CommandDeclaration): AST.CommandFill[] {
+  return command.block.members.filter(AST.isCommandFill)
 }
 
 /** commandDoClausesOf returns every `do` clause written in one command body. */
@@ -376,13 +376,9 @@ export function commandDoClauseOf(command: AST.CommandDeclaration): AST.CommandD
   return commandDoClausesOf(command)[0]
 }
 
-/**
- * commandSlotCandidatesOf returns the entries whose shape declares a slot. It is deliberately
- * syntactic: whether the name reaches a type is a semantic question, and the scope this feeds must
- * not depend on an answer that would need this scope to produce it.
- */
-export function commandSlotCandidatesOf(command: AST.CommandDeclaration): AST.CommandEntry[] {
-  return commandEntriesOf(command).filter(entry => entry.value === undefined)
+/** configurationEntryName returns the member, slot or reference one configuration entry names. */
+export function configurationEntryName(entry: AST.ConfigurationEntry): string | undefined {
+  return entry.name ?? entry.label ?? entry.reference?.$refText
 }
 
 /** owningCommand returns the command declaration containing `node`, if any. */

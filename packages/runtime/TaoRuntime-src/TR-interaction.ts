@@ -48,11 +48,15 @@ export type TaoCommandMembers = Readonly<
  */
 export type TaoCommandSource = TaoCommandDefinition | (() => TaoCommandDefinition)
 
-/** RuntimeCommand keeps a command's declaration and the fills one binding of it supplied. */
+/**
+ * RuntimeCommand keeps a command's declaration and the fills one binding of it supplied. It invokes
+ * as an action does: `invoke` and `invokeJoined` take the values for the slots this binding left
+ * open, in slot order, which is how `do Finish(Document)` hands a command its arguments.
+ */
 export class RuntimeCommand {
   readonly jsValue: Readonly<{
-    invoke(): unknown
-    invokeJoined(): void | Promise<void>
+    invoke(...arguments_: Evaluable[]): unknown
+    invokeJoined(...arguments_: Evaluable[]): void | Promise<void>
   }>
 
   #resolved: TaoCommandDefinition | undefined
@@ -63,8 +67,8 @@ export class RuntimeCommand {
     private readonly overrides: TaoCommandMembers = {},
   ) {
     this.jsValue = Object.freeze({
-      invoke: () => this.run(false),
-      invokeJoined: () => this.run(true) as void | Promise<void>,
+      invoke: (...arguments_: Evaluable[]) => this.run(false, arguments_),
+      invokeJoined: (...arguments_: Evaluable[]) => this.run(true, arguments_) as void | Promise<void>,
     })
   }
 
@@ -112,7 +116,8 @@ export class RuntimeCommand {
       identity: this.name,
       key: textMember(this.member('Key')) ?? this.name,
       label,
-      invoke: this.jsValue.invoke,
+      // A surface runs the command as bound; whatever a host hands its press handler is not a slot.
+      invoke: () => this.run(false, []),
     })
   }
 
@@ -122,13 +127,33 @@ export class RuntimeCommand {
     return reading?.(this.fills)
   }
 
-  private run(joined: boolean): unknown {
+  private run(joined: boolean, arguments_: readonly Evaluable[]): unknown {
     const declaration = this.declaration()
-    const value = declaration.action(this.fills).evaluate().jsValue
-    const arguments_ = declaration.arguments?.(this.fills) ?? []
+    const fills = this.fillsWith(arguments_)
+    const value = declaration.action(fills).evaluate().jsValue
+    const actionArguments = declaration.arguments?.(fills) ?? []
     return joined && value.invokeJoined
-      ? value.invokeJoined(...arguments_)
-      : value.invoke(...arguments_)
+      ? value.invokeJoined(...actionArguments)
+      : value.invoke(...actionArguments)
+  }
+
+  /**
+   * Positional arguments settle the slots this binding left open, in slot order, so a command and
+   * a bound command each take exactly the arguments their type says they still need. A missing
+   * argument leaves its slot to the declaration's default.
+   */
+  private fillsWith(arguments_: readonly Evaluable[]): TaoCommandFills {
+    if (arguments_.length === 0) {
+      return this.fills
+    }
+    const fills: Record<string, Evaluable> = { ...this.fills }
+    this.unfilledSlots().forEach((slot, index) => {
+      const argument = arguments_[index]
+      if (argument !== undefined) {
+        fills[slot] = argument
+      }
+    })
+    return Object.freeze(fills)
   }
 }
 

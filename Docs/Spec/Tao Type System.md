@@ -99,7 +99,7 @@ scene Detail(Task) {
    action Save() {
       update Task { Title: Draft }
    }
-   command SaveTask {
+   command SaveTask() {
       Title "Save"
       Icon "checkmark"
       Enabled Draft is not empty

@@ -40,16 +40,20 @@ export const ActionsCompiler = {
   /**
    * CommandDeclaration compiles the discoverable verb. Every member and the invocation itself are
    * functions of the slots the declaration left open, so one declaration serves every binding of it.
+   * A slot is a parameter, so a defaulted one falls back exactly as an action parameter does.
    */
   CommandDeclaration(command: AST.CommandDeclaration): Compiled {
     const clause = AST.commandDoClauseOf(command)
     Assert.defined(clause, 'validated command names one do clause')
     const slots = ASTUtils.commandSlots(command)
-    const members = ASTUtils.commandMembers(command).filter(member => member.kind === 'fill')
-    const bindSlots = gen.list(
-      slots,
-      slot => gen`${gen.scopeName(slot.entry)} = _TaoFills[${gen.jsLiteral(slot.name)}]`,
-    )
+    const members = AST.commandFillsOf(command)
+    const bindSlots = gen.list(slots, slot => {
+      const fill = gen`_TaoFills[${gen.jsLiteral(slot.name)}]`
+      const defaultValue = slot.parameter.defaultValue
+      return defaultValue === undefined
+        ? gen`${gen.scopeName({ name: slot.name })} = ${fill}`
+        : gen`${gen.scopeName({ name: slot.name })} = ${fill} ?? ${Compile.Expression(defaultValue)}`
+    })
     const inFills = (body: Compiled) =>
       gen`_TaoFills => TR.BlockScope(_Scope, _Scope => {
         ${bindSlots}

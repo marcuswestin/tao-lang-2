@@ -85,11 +85,11 @@ it (`Docs/Roadmap/Focused writing tranche/`).
 
 [^9]: The interaction system tranche makes a command a standalone configured value: `Title`,
     `Description`, and `Summary` move off `primitive action` onto `primitive command`, a command is
-    declared at module level or in a view body, its slots are declared by juxtaposition, and
-    `do <command> with { ... }` fills them at the invocation. WordFlower's `Finish` is the
-    module-level command with a `Document` slot; `Save` is the view-body command reading its
-    scene's own state. Journeys prove the toolbar label, the reactive `Enabled`, and the write a
-    `do <command> with { ... }` performs. `shortcut` is carried and published but not dispatched:
+    declared at module level or in a view body, its slots are its parameters, and
+    `do <command>(...)` invokes it with arguments bound exactly as an action's are. WordFlower's
+    `Finish` is the module-level command with a `Document` slot; `Save` is the view-body command
+    reading its scene's own state. Journeys prove the toolbar label, the reactive `Enabled`, and the
+    write a `do Finish(Document)` performs. `shortcut` is carried and published but not dispatched:
     only the `primary` modifier is registered, and mention refinement, `Commands { ... }`, `hide`,
     entity command lists, and key dispatch remain at their stated later boundary.
 

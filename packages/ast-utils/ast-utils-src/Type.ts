@@ -191,6 +191,7 @@ export class Type {
     return Switch.typeMaybe<typeof declaration, TaoType>(declaration, {
       TypeDeclaration: declaration => Type.atMemberPath(Type.ofDefinition(declaration), value.members ?? []),
       ActionDeclaration: typeOfParameterizedDeclaration,
+      CommandDeclaration: typeOfParameterizedDeclaration,
       FunctionDeclaration: typeOfParameterizedDeclaration,
       ViewDeclaration: typeOfParameterizedDeclaration,
       undefined: unresolvedType,
@@ -358,24 +359,6 @@ export class Type {
     }
     const common = Type.commonType(present)
     return common && { kind: 'union', members: [common, primitiveType('none')] }
-  }
-
-  /**
-   * ofNamedTypeName resolves the type a bare name reaches in the type namespace. A command slot is
-   * written by juxtaposition and so names its type without a type reference node to resolve.
-   */
-  static ofNamedTypeName(node: AST.Node, name: string): TaoType {
-    const entity = Type.visibleDataEntities(node).find(candidate => candidate.singularName === name)
-    if (entity) {
-      return { kind: 'entity', entity }
-    }
-    const declaration = visibleTypeDeclaration(node, name)
-    return declaration ? new TypeResolutionContext().ofDefinition(declaration) : unresolvedType()
-  }
-
-  /** namedTypeExists reports whether a bare name reaches the type namespace at all. */
-  static namedTypeExists(node: AST.Node, name: string): boolean {
-    return !isUnresolvedType(Type.ofNamedTypeName(node, name))
   }
 
   /** entityOfReference resolves a top-level entity's singular type name. */
@@ -871,6 +854,9 @@ class TypeResolutionContext {
       PrimitiveConfigurationConstructor: value => primitiveType(value.primitive),
       RefinementExpression: reference => {
         const target = reference.target.ref
+        if (AST.isCommandDeclaration(target)) {
+          return this.ofCommandBinding(target, reference.patchBlock)
+        }
         return AST.isTypeDeclaration(target)
           ? this.ofDefinition(target)
           : AST.isValueDeclaration(target)
@@ -932,14 +918,6 @@ class TypeResolutionContext {
     return dimensionalResultType(left, expression.operator, right) ?? primitiveType('number')
   }
 
-  /**
-   * A command member is a slot only when it stands alone, and the type it binds is the one its own
-   * name reaches. Every other member is a fill and introduces no value of its own.
-   */
-  private commandEntryType(entry: AST.CommandEntry): TaoType {
-    return entry.value ? unresolvedType() : Type.ofNamedTypeName(entry, entry.name)
-  }
-
   private whenExpressionType(expression: AST.WhenExpression): TaoType {
     const outcomes = AST.whenExpressionOutcomes(expression)
     const types = outcomes.values.map(value => this.ofExpression(value))
@@ -966,7 +944,7 @@ class TypeResolutionContext {
   ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {
     return Switch.typeMaybe<AST.ValueDeclaration | undefined, TaoType>(declaration, {
       ActionDeclaration: declaration => this.ofAction(declaration),
-      CommandDeclaration: () => actionType([]),
+      CommandDeclaration: command => this.ofAction(command),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
       AppDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('app'),
       AskStatement: ask =>
@@ -984,15 +962,30 @@ class TypeResolutionContext {
       DesignDeclaration: () => primitiveType('design'),
       NavDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('nav'),
       StateDeclaration: state => this.stateDeclarationType(state),
-      CommandEntry: entry => this.commandEntryType(entry),
       ViewDeclaration: declaration => primitiveType(declaration.scene ? 'scene' : 'view'),
       undefined: unresolvedType,
     })
   }
 
-  ofAction(declaration: AST.ActionDeclaration): TaoType {
+  /** A command invokes exactly as an action does: its parameters are its slots. */
+  ofAction(declaration: AST.ActionDeclaration | AST.CommandDeclaration): TaoType {
+    return this.actionTypeOfParameters(AST.parametersOf(declaration))
+  }
+
+  /**
+   * A command bound with `with { ... }` still invokes as an action, but only over the slots the
+   * binding left open, so what a surface or a later `do` hands it is exactly what it still needs.
+   */
+  private ofCommandBinding(command: AST.CommandDeclaration, block: AST.ConfigurationBlock): TaoType {
+    const filled = new Set(block.entries.map(AST.configurationEntryName))
+    return this.actionTypeOfParameters(
+      AST.parametersOf(command).filter(parameter => !filled.has(Type.parameterName(parameter))),
+    )
+  }
+
+  private actionTypeOfParameters(parameters: readonly AST.ParameterDeclaration[]): TaoType {
     return actionType(
-      AST.parametersOf(declaration).map(parameter => ({
+      parameters.map(parameter => ({
         type: this.ofParameter(parameter),
         optional: parameter.defaultValue !== undefined,
       })),

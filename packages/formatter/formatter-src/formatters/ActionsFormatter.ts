@@ -44,22 +44,22 @@ export const ActionsFormatter = {
     f.oneSpaceBeforeProperty('sentence')
   },
 
-  /** CommandDeclaration separates the command keyword from the name its body follows. */
+  /** CommandDeclaration formats a command head as a view's: its parameter list hugs the name. */
   CommandDeclaration(f) {
     f.visibilityOnOwnLine()
     f.oneSpaceAfter('command')
+    f.noSpaceBefore('(')
     f.oneSpaceBeforeProperty('block')
   },
 
-  /** CommandBlock puts every slot, member and the do clause on one indented line each. */
+  /** CommandBlock puts every member fill and the do clause on one indented line each. */
   CommandBlock(f) {
     f.indentedBraceBlock(f.node.members)
     f.lineSeparatedList(f.node.members)
   },
 
-  /** CommandEntry separates a member name from the value or type that follows it. */
-  CommandEntry(f) {
-    f.noSpaceBefore(':')
+  /** CommandFill separates a member name from the value it binds. */
+  CommandFill(f) {
     f.oneSpaceBeforeProperty('value')
   },
 
@@ -119,7 +119,7 @@ export const ActionsFormatter = {
     f.oneSpaceAfter('if')
   },
 
-  /** DoStatement formats action invocation spacing and the `with` a command binding takes. */
+  /** DoStatement formats invocation spacing, for an action and a command alike. */
   DoStatement(f) {
     f.oneSpaceAfter('do')
     f.noSpaceBefore('(')

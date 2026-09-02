@@ -66,10 +66,15 @@ SetStatement:
 SetOperator returns string:
     '=' | '+=' | '-=' | '*=' | '/=';
 
-// `do` runs one verb. An action is invoked with its call parentheses; a command is invoked by name
-// and fills its remaining slots with `with { ... }`, which is the ordinary refinement form.
+// `do` runs one verb with its call parentheses. An action and a command are invoked the same way:
+// `do SaveWorkspace()` and `do Finish(Document)` bind their arguments by label or by type through
+// one mechanism, and a command's parameters are its slots.
 DoStatement:
-    'do' action=ActionTargetExpression (called?='(' argumentList=ArgumentList? ')')?;
+    'do' action=ActionTargetExpression '(' argumentList=ArgumentList? ')';
 
 ActionTargetExpression:
-    ActionExpression | RefinementExpression | MemberAccessExpression | ValueReference;
+    ActionExpression | NamedActionTarget;
+
+// A verb named at the invocation: a value by name, or a member reached through one.
+NamedActionTarget:
+    MemberAccessExpression | ValueReference;

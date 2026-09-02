@@ -279,9 +279,9 @@ Describe('Expo runtime', () => {
             state CanSave = false
             Title "Home"
             action SaveDocument() { }
-            command Save {
+            command Save() {
               Title "Save"
-              Enabled: CanSave
+              Enabled CanSave
               do SaveDocument()
             }
             Toolbar { Save }

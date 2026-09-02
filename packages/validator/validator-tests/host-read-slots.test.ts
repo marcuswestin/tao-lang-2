@@ -18,7 +18,7 @@ Describe('validator: host-read slots and commands', () => {
       scene Home(Name text) {
         Title Name
         action Save(Value text) { }
-        command SaveCommand {
+        command SaveCommand() {
           Title "Save"
           Label when Name is empty "Create" / not "Save"
           Icon "checkmark"
@@ -42,7 +42,7 @@ Describe('validator: host-read slots and commands', () => {
       }
       scene Home() {
         Title "Home"
-        command OpenCommand {
+        command OpenCommand() {
           Title "Open"
           Label "Open"
           do Open()
@@ -60,7 +60,7 @@ Describe('validator: host-read slots and commands', () => {
         ${leaf}
         action Save() { }
         app Demo {
-          command SaveCommand {
+          command SaveCommand() {
             Title "Save"
             do Save()
           }
@@ -81,7 +81,7 @@ Describe('validator: host-read slots and commands', () => {
           Title "duplicate"
           Unknown "value"
           action Save(Value text) { }
-          command SaveCommand {
+          command SaveCommand() {
             Title "Save"
             Icon false
             Mystery "x"
@@ -213,12 +213,11 @@ Describe('validator: host-read slots and commands', () => {
           Title text
         }
         action Run() { }
-        command NeedsDocument {
-          Document
+        command NeedsDocument(Document) {
           Title "Needs a document"
           do Run()
         }
-        command Ready {
+        command Ready() {
           Title "Ready"
           do Run()
         }

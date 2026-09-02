@@ -148,7 +148,7 @@ scene StoryScreen(Story) {
    action OpenStoryLink() {
       do OpenUrl(Story.Url)
    }
-   command Open {
+   command Open() {
       Title "Open story"
       Icon "safari"
       Enabled Story.Url is not empty

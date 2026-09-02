@@ -64,6 +64,32 @@ Describe('TR.Interaction', () => {
     Expect(seen).toEqual(['draft'])
   })
 
+  Test(
+    'takes the values for its open slots as positional arguments, which is how `do Finish(Document)` runs',
+    async () => {
+      const seen: string[] = []
+      const command = TR.Interaction.Command({
+        action: fills =>
+          TR.Action(() => {
+            seen.push(`${fills['Document']?.evaluate().jsValue}:${fills['Workspace']?.evaluate().jsValue}`)
+          }),
+        members: { Title: () => TR.Value('Move') },
+        name: 'Move',
+        slots: ['Document', 'Workspace'],
+      })
+
+      await TR.Do(command, TR.Value('draft'), TR.Value('home'))
+      const bound = TR.Interaction.Bind(command, { Document: TR.Value('bound') })
+      // A bound command takes exactly the slots its binding left open, in slot order.
+      bound.evaluate().jsValue.invoke(TR.Value('archive'))
+      // A surface runs the command as bound; nothing a host hands its press handler is a slot.
+      bound.read().invoke()
+
+      Expect(seen).toEqual(['draft:home', 'bound:archive', 'bound:undefined'])
+      Expect(command.unfilledSlots()).toEqual(['Document', 'Workspace'])
+    },
+  )
+
   Test('answers which commands act on an entity and which need nothing selected', () => {
     const catalog = new CommandCatalog()
     const table = (

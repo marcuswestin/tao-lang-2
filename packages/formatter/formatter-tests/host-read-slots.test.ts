@@ -11,7 +11,7 @@ Describe('formatter: host-read slots and commands', () => {
         action Save(){}
         scene Home(){
         Title   "Home"
-        command SaveCommand{Label when true "Save"/not "Wait" Enabled    true do Save()}
+        command SaveCommand (){Label when true "Save"/not "Wait" Enabled    true do Save()}
         Toolbar{SaveCommand,SaveCommand}
         render Text()
         }
@@ -32,7 +32,7 @@ Describe('formatter: host-read slots and commands', () => {
 
         scene Home() {
            Title "Home"
-           command SaveCommand {
+           command SaveCommand() {
               Label when true "Save" / not "Wait"
               Enabled true
               do Save()
@@ -52,11 +52,12 @@ Describe('formatter: host-read slots and commands', () => {
   )
 
   Test(
-    'keeps a module command`s slot, members and invocation one to a line',
+    'formats a command head as a view`s, and its members and invocation one to a line',
     formats(
       `
         data Documents / Document { Title text Final yes / Draft no }
-        package command Finish{Document Title "Finish document" Enabled Document.Final is Draft do -> { update Document { Final } }}
+        package command Finish( Document ){Title "Finish document" Enabled Document.Final is Draft do -> { update Document { Final } }}
+        command Archive(Paper   Document,Count number default 1){Title "Archive" do -> { update Paper { Final } }}
       `,
       `
         data Documents / Document {
@@ -65,11 +66,17 @@ Describe('formatter: host-read slots and commands', () => {
         }
 
         package
-        command Finish {
-           Document
+        command Finish(Document) {
            Title "Finish document"
            Enabled Document.Final is Draft
            do -> { update Document {
+              Final
+           } }
+        }
+
+        command Archive(Paper Document, Count number default 1) {
+           Title "Archive"
+           do -> { update Paper {
               Final
            } }
         }

@@ -332,4 +332,4 @@ RefinementExpression:
     target=[RefinementBaseDeclaration:ID] 'with' patchBlock=ConfigurationBlock;
 
 type RefinementBaseDeclaration = ValueDeclaration | TypeDeclaration;
-type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | CommandDeclaration | CommandEntry | EntityQueryDeclaration | ForStatement | CasePayload | ViewDeclaration | EntityDataField | CaseSetCase | AskStatement | DesignDeclaration;
+type ValueDeclaration = AppDeclaration | NavDeclaration | DatasourceDeclaration | AliasDeclaration | ParameterDeclaration | StateDeclaration | ActionDeclaration | CommandDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | ViewDeclaration | EntityDataField | CaseSetCase | AskStatement | DesignDeclaration;

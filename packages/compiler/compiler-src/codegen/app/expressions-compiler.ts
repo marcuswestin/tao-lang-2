@@ -317,7 +317,6 @@ export const ExpressionsCompiler = {
       AskStatement: ask => gen`${gen.scopeName(ask)}.evaluate()`,
       CasePayload: payload => gen`${gen.scopeName(payload)}.evaluate()`,
       CommandDeclaration: command => gen`${gen.scopeName(command)}.evaluate()`,
-      CommandEntry: entry => gen`${gen.scopeName(entry)}.evaluate()`,
       DesignDeclaration: design => gen`${gen.scopeName(design)}.evaluate()`,
       EntityDataField: () => gen`TR.Value(true)`,
       EntityQueryDeclaration: query => gen`${gen.scopeName(query)}.evaluate()`,
@@ -559,7 +558,7 @@ function compileKeyedItemObject(
 function compileCommandBinding(command: AST.CommandDeclaration, block: AST.ConfigurationBlock): Compiled {
   const slots = new Set(ASTUtils.commandSlots(command).map(slot => slot.name))
   const bindings = block.entries.flatMap(entry => {
-    const name = ASTUtils.commandBindingEntryName(entry)
+    const name = AST.configurationEntryName(entry)
     const expression = commandBindingExpression(entry)
     return name === undefined || expression === undefined ? [] : [{ expression, name }]
   })

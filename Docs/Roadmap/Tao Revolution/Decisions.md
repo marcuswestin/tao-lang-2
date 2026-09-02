@@ -956,13 +956,13 @@ plus the affordances a menu adds. Both halves change, and the word `intent` reti
   name a title (§9). `intent` retires as a word; where this document said "intent" it now says
   "command", and the metadata an intent carried is the command's.
 - **A command is a standalone configured value, not a reference plus affordances.** It is declared
-  at module level or in a view or scene body — the placement `action` already has — and its body
-  holds slot declarations, member fills, and exactly one `do` clause naming the action it runs:
+  at module level or in a view or scene body — the placement `action` already has — and it declares
+  its slots in a parameter list, exactly as an action does. Its body holds member fills and exactly
+  one `do` clause naming the action it runs:
 
 ```swift
 package
-command Finish {
-   Document                                          // a slot: a bare name takes its same-named type
+command Finish(Document) {                  // a slot is a parameter: a bare name takes its same-named type
    Title "Finish document"
    Summary "Finish { Document.Title }"
    Icon "checkmark.circle"
@@ -971,23 +971,26 @@ command Finish {
 }
 ```
 
-- **Slots replace closing over a view.** A command's parameters are its own, declared by
-  juxtaposition exactly as `view CookScreen(Recipe, Meal?)` reads (§2), which is what makes one verb
-  reusable everywhere the noun appears rather than an affordance belonging to one screen. A
-  view-body command still closes over that view's parameters, state, and actions.
-- **Slot and fill are told apart by namespace, not by punctuation.** A bare name that reaches the
-  type namespace declares a slot; every other member carries a value. A juxtaposed value never
-  starts with a bare name — that is what keeps `Document` on one line and `Title "Finish document"`
-  on the next unambiguous — so a value that is a bare name takes the explicit form
-  `Enabled: CanSave`. A name that is both a command member and a type is diagnosed and asks for that
-  same explicit form. Renaming a typed slot (`Track Document`) is deferred: no feature forces a
-  second slot of one type, and one command declares at most one slot of each type so that what it
-  acts on stays unambiguous.
-- **Binding is derivation, and invocation is `do`.** `Save with { … }` fills slots and refines
-  `Label`, `Icon`, `Key`, and `Enabled`; overriding `Title` is an error, because the title is what
-  identifies the verb wherever it is listed. `do Finish with { Document }` invokes; `do` with an
-  unfilled slot is an error. An action `do` keeps its call parentheses, so a bare name after `do`
-  names a command.
+- **Slots replace closing over a view.** A command's parameters are its own, declared exactly as
+  `view CookScreen(Recipe, Meal?)` reads (§2), which is what makes one verb reusable everywhere the
+  noun appears rather than an affordance belonging to one screen. A view-body command still closes
+  over that view's parameters, state, and actions.
+- **Juxtaposition means one thing in a command block: bind.** The slots live in the parameter list,
+  so the block never has to tell a slot from a fill by what a name reaches. `Enabled CanSave` is a
+  value, with no `:` escape hatch, and `command Like(Track Song)` renames a typed slot the way any
+  parameter list does — the `Track Document` deferral is closed. Two slots of one type are the
+  ordinary parameter case: legal to declare, bound by label at the invocation, and diagnosed there
+  when an unlabeled argument could mean either. (Revised from the first implementation, which
+  declared slots in the block by juxtaposition and had to legislate around both ambiguities;
+  `Docs/Roadmap/Keyboard driven apps/Open - Shell composition and member syntax.md` §2.)
+- **Invocation is `do` with arguments, and binding is derivation.** `do Finish(Document)` invokes a
+  command exactly as `do SaveWorkspace()` invokes an action: the arguments bind to the slots by
+  label or by type through the one binding mechanism, with the same arity and type diagnostics, and
+  every `do` carries its call parentheses. `Finish with { Document }` derives a command value with a
+  slot filled, for surfaces and menus; a binding may also refine `Label`, `Icon`, `Key`, and
+  `Enabled`, and overriding `Title` is an error, because the title is what identifies the verb
+  wherever it is listed. A bound command invokes over the slots its binding left open.
+  `do X with { … }` is retired as redundant.
 - **Three surfaces retire.** `Rail { … }` retires because a rail is ordinary shell layout (§10); `Palette
   all` retires because the palette is always present rather than opted into; and the in-view
   `menu Name { … }` block retires, because the per-view `Commands` slot is the ordering mechanism
@@ -1214,7 +1217,7 @@ file view NewRecipeSheet(Household) responds Recipe { … }   // answers with a 
 ```swift
 scene RecipeScreen(Recipe) {
    Title Recipe.Title
-   command Share { Title "Share recipe", Icon "square.and.arrow.up", do ShareRecipe(Recipe) }
+   command Share() { Title "Share recipe", Icon "square.and.arrow.up", do ShareRecipe(Recipe) }
    Toolbar { Share }
    render RecipePage(Recipe)
 }

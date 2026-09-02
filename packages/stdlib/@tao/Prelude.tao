@@ -24,10 +24,11 @@ primitive action
 primitive shortcut
 
 // A command is the discoverable verb: one action invocation, the words a person reads, and the
-// slots the invocation still needs. It is a configured value, so `Save with { ... }` derives one
-// and `do Save with { ... }` invokes it. `Title` is required because a verb nothing can name is
-// not discoverable; an unfilled `Label` reads as `Title`, written as empty text because a slot
-// default is a literal rather than a reference to a sibling slot.
+// slots the invocation still needs, declared as its parameters. It is a configured value, so
+// `Save with { ... }` derives one, and it invokes as an action does: `do Finish(Document)`. `Title`
+// is required because a verb nothing can name is not discoverable; an unfilled `Label` reads as
+// `Title`, written as empty text because a slot default is a literal rather than a reference to a
+// sibling slot.
 primitive command with {
    Title text,
    Description text is "",

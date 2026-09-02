@@ -7,7 +7,8 @@ import { AliasesValidator } from './aliases-validator'
 
 /** actionValidationMessages declares action validation diagnostics. */
 const actionValidationMessages = {
-  duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this action.`,
+  duplicateParameter: (name: string, owner: 'action' | 'command' = 'action') =>
+    `Parameter '${name}' is declared more than once in this ${owner}.`,
   missingArgument: (action: string, parameter: string) =>
     `Action ${action} is missing argument for parameter '${parameter}'.`,
   unmatchedArgument: (action: string) =>
@@ -35,7 +36,6 @@ const actionValidationMessages = {
     `Argument ${position} of action callback expects ${expected}, got ${actual}.`,
   dynamicActionNamedArgument: 'Action callback arguments are positional and cannot use a parameter name.',
   doTypeMismatch: (actual: string) => `do expects an action, got ${actual}.`,
-  doActionCall: 'do runs an action with its call parentheses; a bare name runs a command.',
   asyncPlacement: '`async` is allowed only inside an action block.',
   foreignActionPath: 'A foreign action implementation path must name a relative TypeScript or TSX module.',
   foreignActionMissing: (path: string) => `Foreign action implementation '${path}' does not exist.`,
@@ -46,8 +46,7 @@ const actionValidationMessages = {
 export const ActionsValidator = {
   checks: {
     [AST.ActionDeclaration.$type]: (action, ctx) => {
-      validateDuplicateParameters(action, ctx)
-      validateParameterNameConflicts(action, ctx)
+      validateParameters(action, ctx)
       if (action.runsLatest && !action.foreign) {
         ctx.error(actionValidationMessages.runsLatestNative, action)
       }
@@ -69,6 +68,8 @@ export const ActionsValidator = {
     [AST.DoStatement.$type]: reportDoStatementActionType,
   } satisfies NodeValidationChecks,
   validateForeignFiles: validateForeignActionFiles,
+  /** validateParameters is shared with commands, whose slots are parameters under the same rules. */
+  validateParameters,
 } as const
 
 async function validateForeignActionFiles(file: AST.TaoFile, ctx: ValidationContext): Promise<void> {
@@ -87,21 +88,29 @@ async function validateForeignActionFiles(file: AST.TaoFile, ctx: ValidationCont
   }
 }
 
-function validateDuplicateParameters(action: AST.ActionDeclaration, ctx: ValidationContext): void {
+type ParameterOwner = AST.ActionDeclaration | AST.CommandDeclaration
+
+function validateParameters(owner: ParameterOwner, ctx: ValidationContext): void {
+  validateDuplicateParameters(owner, ctx)
+  validateParameterNameConflicts(owner, ctx)
+}
+
+function validateDuplicateParameters(owner: ParameterOwner, ctx: ValidationContext): void {
   const seen = new Set<string>()
-  for (const parameter of AST.parametersOf(action)) {
+  const kind = AST.isCommandDeclaration(owner) ? 'command' : 'action'
+  for (const parameter of AST.parametersOf(owner)) {
     const name = Type.parameterName(parameter)
     if (seen.has(name)) {
-      ctx.error(actionValidationMessages.duplicateParameter(name), parameter)
+      ctx.error(actionValidationMessages.duplicateParameter(name, kind), parameter)
       continue
     }
     seen.add(name)
   }
 }
 
-function validateParameterNameConflicts(action: AST.ActionDeclaration, ctx: ValidationContext): void {
-  const visibleNames = visibleActionParameterConflictNames(action)
-  for (const parameter of AST.parametersOf(action)) {
+function validateParameterNameConflicts(owner: ParameterOwner, ctx: ValidationContext): void {
+  const visibleNames = visibleActionParameterConflictNames(owner)
+  for (const parameter of AST.parametersOf(owner)) {
     const name = Type.parameterName(parameter)
     if (visibleNames.has(name)) {
       ctx.error(AliasesValidator.messages.duplicateName(name), parameter)
@@ -109,7 +118,7 @@ function validateParameterNameConflicts(action: AST.ActionDeclaration, ctx: Vali
   }
 }
 
-function visibleActionParameterConflictNames(action: AST.ActionDeclaration): Set<string> {
+function visibleActionParameterConflictNames(action: ParameterOwner): Set<string> {
   const visibleNames = new Set<string>()
   const root = AST.findRoot(action)
   if (AST.isTaoFile(root)) {
@@ -132,14 +141,8 @@ function addDeclarationNames(visibleNames: Set<string>, declarations: readonly A
   }
 }
 
+/** A command is invoked as an action is, so `do Finish(Document)` gets the same diagnostics. */
 function reportArity(invocation: AST.DoStatement, ctx: ValidationContext): void {
-  if (ASTUtils.resolveCommandBinding(invocation.action)) {
-    return
-  }
-  if (!invocation.called) {
-    ctx.error(actionValidationMessages.doActionCall, invocation)
-    return
-  }
   const resolved = ASTUtils.resolveActionInvocation(invocation)
   if (!resolved.action) {
     validateDynamicActionInvocation(invocation, ctx)
@@ -151,9 +154,9 @@ function reportArity(invocation: AST.DoStatement, ctx: ValidationContext): void 
   }
 }
 
-/** reportActionBindingDiagnostic shares named, typed, and arity diagnostics with bound commands. */
+/** reportActionBindingDiagnostic shares named, typed, and arity diagnostics with command invocations. */
 export function reportActionBindingDiagnostic(
-  action: AST.ActionDeclaration,
+  action: AST.ActionDeclaration | AST.CommandDeclaration,
   diagnostic: ASTUtils.ArgumentBindingDiagnostic,
   invocation: AST.DoStatement | AST.CommandDoClause,
   ctx: ValidationContext,

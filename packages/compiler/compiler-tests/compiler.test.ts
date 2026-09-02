@@ -873,10 +873,10 @@ Describe('compiler: language lowering', () => {
         state CanSave = false
         Title CurrentTitle
         action SaveDocument() { }
-        command Save {
+        command Save() {
           Title "Save document"
           Icon "checkmark"
-          Enabled: CanSave
+          Enabled CanSave
           do SaveDocument()
         }
         Toolbar { Save }
@@ -915,14 +915,17 @@ Describe('compiler: language lowering', () => {
         Title text
         Final yes / Draft no
       }
-      command Finish {
-        Document
+      command Finish(Document) {
         Title "Finish document"
         Summary "Finish { Document.Title }"
         Enabled Document.Final is Draft
         do -> { update Document { Final } }
       }
       view Home() { render Empty() }
+      view Row(Document) {
+        action Archive() { do Finish(Document) }
+        render Empty()
+      }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)
 
@@ -934,13 +937,14 @@ Describe('compiler: language lowering', () => {
     )
     Expect(code).toContain('TR.Interaction.RegisterCommands({ module: "@workspace/source", commands: [')
     Expect(code).toContain('name: "Document", type: "Document", entity: true,')
+    Expect(code).toContain('TR.Do(_Scope.Finish.evaluate(), _Scope.Document.evaluate())')
   })
 
   Test('resolves a command action lazily when the action is declared later in its view', async () => {
     const compiled = await Compiler.compileCode(`
       app HostApp { view Home }
       scene Home() {
-        command Send {
+        command Send() {
           Title "Send"
           do Deliver()
         }
@@ -968,7 +972,7 @@ Describe('compiler: language lowering', () => {
         Toolbar { Save }
       }
       action SaveDocument() { }
-      command Save {
+      command Save() {
         Title "Save document"
         do SaveDocument()
       }
@@ -999,11 +1003,11 @@ Describe('compiler: language lowering', () => {
         Toolbar { Save }
       }
       action Run() { }
-      command Keep {
+      command Keep() {
         Title "Keep"
         do Run()
       }
-      command Save {
+      command Save() {
         Title "Save"
         do Run()
       }

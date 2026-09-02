@@ -58,7 +58,7 @@ export type ResolvedRenderInvocation = {
 /** ResolvedActionInvocation declares the semantic shape of an action invocation. */
 export type ResolvedActionInvocation = {
   invocation: AST.DoStatement
-  action?: AST.ActionDeclaration
+  action?: AST.ActionDeclaration | AST.CommandDeclaration
   pairs: ActionInvocationPair[]
   diagnostics: ArgumentBindingDiagnostic[]
 }
@@ -73,7 +73,7 @@ export type ResolvedFunctionInvocation = {
 
 /** ResolvedActionTarget declares how an expression resolves as an action target. */
 export type ResolvedActionTarget =
-  | { kind: 'named'; action: AST.ActionDeclaration }
+  | { kind: 'named'; action: AST.ActionDeclaration | AST.CommandDeclaration }
   | { kind: 'dynamic' }
   | { kind: 'unresolved' }
 
@@ -327,7 +327,9 @@ function resolveActionTargetReference(
   if (!target) {
     return UnresolvedActionTarget
   }
-  if (AST.isActionDeclaration(target)) {
+  // A command is invoked exactly as an action is: `do Finish(Document)` binds its arguments to the
+  // command's parameters — its slots — through the one binding mechanism.
+  if (AST.isActionDeclaration(target) || AST.isCommandDeclaration(target)) {
     return { kind: 'named', action: target }
   }
   if (AST.isAliasDeclaration(target)) {

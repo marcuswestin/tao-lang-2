@@ -2,7 +2,7 @@ import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
-import { reportActionBindingDiagnostic } from './ActionsValidator'
+import { ActionsValidator, reportActionBindingDiagnostic } from './ActionsValidator'
 
 /**
  * The one registered shortcut modifier. `primary` is the platform's own chord key, which is the
@@ -20,17 +20,11 @@ export const commandValidationMessages = {
   duplicateDo: (name: string) => `Command '${name}' names more than one 'do' clause.`,
   doTarget: (name: string) => `Command '${name}' must run an action.`,
   member: (name: string, expected: string) => `Command has no member named '${name}'; expected ${expected}.`,
-  memberValue: (name: string) => `Command member '${name}' needs a value.`,
   duplicateMember: (name: string) => `Command member '${name}' is filled more than once.`,
   memberType: (name: string, expected: string, actual: string) =>
     `Command member '${name}' expects ${expected}, got ${actual}.`,
   missingTitle: (name: string) => `Command '${name}' must fill Title.`,
-  ambiguousMember: (name: string) =>
-    `'${name}' names both a command member and a type; write '${name}: <value>' to fill the member.`,
-  duplicateSlotType: (typeName: string) =>
-    `Command declares more than one slot of type '${typeName}'; one command acts on one of each.`,
   titleOverride: (name: string) => `Command '${name}' may not override Title.`,
-  unfilledSlot: (name: string, slot: string) => `Command '${name}' still needs a value for slot '${slot}'.`,
   unknownBinding: (name: string, slot: string) => `Command '${name}' has no slot or member named '${slot}'.`,
   shortcutKey: 'A shortcut needs one key after its modifiers.',
   shortcutModifier: (modifier: string) =>
@@ -38,31 +32,13 @@ export const commandValidationMessages = {
   shortcutPlatformModifier: (modifier: string) => `A shortcut names 'primary', never the platform key '${modifier}'.`,
 } as const
 
+/**
+ * A command's invocation, `do Finish(Document)`, is not checked here: it is an action invocation
+ * whose parameters are the command's slots, and `ActionsValidator` reports its arity and types.
+ */
 export const commandValidationChecks = {
   [AST.CommandDeclaration.$type]: validateCommand,
-  [AST.DoStatement.$type]: validateCommandInvocation,
 } satisfies NodeValidationChecks
-
-/**
- * `do <command>` runs a verb rather than a procedure, so what it needs is not arguments but the
- * values for the slots the command still has open.
- */
-function validateCommandInvocation(invocation: AST.DoStatement, ctx: ValidationContext): void {
-  const binding = ASTUtils.resolveCommandBinding(invocation.action)
-  if (!binding) {
-    return
-  }
-  const bound = new Set(
-    (binding.block?.entries ?? [])
-      .map(entry => ASTUtils.commandBindingEntryName(entry))
-      .filter((name): name is string => name !== undefined),
-  )
-  for (const slot of ASTUtils.commandSlots(binding.command)) {
-    if (!bound.has(slot.name)) {
-      ctx.error(commandValidationMessages.unfilledSlot(binding.command.name, slot.name), invocation)
-    }
-  }
-}
 
 /**
  * Binding a command is derivation: it fills the slots the declaration left open and may refine the
@@ -78,7 +54,7 @@ export function validateCommandBinding(
   const slots = new Map(ASTUtils.commandSlots(command).map(slot => [slot.name, slot]))
   const seen = new Set<string>()
   for (const entry of block.entries) {
-    const name = ASTUtils.commandBindingEntryName(entry)
+    const name = AST.configurationEntryName(entry)
     if (name === undefined) {
       continue
     }
@@ -138,6 +114,9 @@ function validateCommand(command: AST.CommandDeclaration, ctx: ValidationContext
   if (!commandIsWellPlaced(command)) {
     ctx.error(commandValidationMessages.placement, command)
   }
+  // Slots are parameters, so the ordinary parameter rules cover them: a name declared twice, or one
+  // that shadows a value the command can already see.
+  ActionsValidator.validateParameters(command, ctx)
   validateDoClauses(command, ctx)
   validateMembers(command, ctx)
 }
@@ -164,6 +143,12 @@ function validateDoClauses(command: AST.CommandDeclaration, ctx: ValidationConte
   }
   const target = ASTUtils.resolveActionTarget(clause.action)
   if (target.kind === 'named') {
+    // A command runs an action, never another verb: a verb behind a verb would be two names for
+    // one thing, and the catalog would list both.
+    if (AST.isCommandDeclaration(target.action)) {
+      ctx.error(commandValidationMessages.doTarget(command.name), clause.action)
+      return
+    }
     const resolved = ASTUtils.resolveArgumentBindings(target.action, clause)
     for (const diagnostic of resolved.diagnostics) {
       reportActionBindingDiagnostic(target.action, diagnostic, clause, ctx)
@@ -180,41 +165,19 @@ function validateDoClauses(command: AST.CommandDeclaration, ctx: ValidationConte
 
 function validateMembers(command: AST.CommandDeclaration, ctx: ValidationContext): void {
   const contract = commandMemberContract(ctx)
-  const memberNames = new Set(contract.map(property => property.name))
-  const expected = [...memberNames].join(', ')
+  const expected = contract.map(property => property.name).join(', ')
   const filled = new Set<string>()
-  const slotTypes = new Set<string>()
-  for (const member of ASTUtils.commandMembers(command)) {
-    if (member.kind === 'valueless') {
-      ctx.error(
-        memberNames.has(member.name)
-          ? commandValidationMessages.memberValue(member.name)
-          : commandValidationMessages.member(member.name, expected),
-        member.entry,
-      )
-      continue
-    }
-    if (member.kind === 'slot') {
-      if (memberNames.has(member.name)) {
-        ctx.error(commandValidationMessages.ambiguousMember(member.name), member.entry)
-        continue
-      }
-      if (slotTypes.has(member.typeName)) {
-        ctx.error(commandValidationMessages.duplicateSlotType(member.typeName), member.entry)
-      }
-      slotTypes.add(member.typeName)
-      continue
-    }
-    const property = contract.find(candidate => candidate.name === member.name)
+  for (const fill of AST.commandFillsOf(command)) {
+    const property = contract.find(candidate => candidate.name === fill.name)
     if (!property) {
-      ctx.error(commandValidationMessages.member(member.name, expected), member.entry)
+      ctx.error(commandValidationMessages.member(fill.name, expected), fill)
       continue
     }
-    if (filled.has(member.name)) {
-      ctx.error(commandValidationMessages.duplicateMember(member.name), member.entry)
+    if (filled.has(fill.name)) {
+      ctx.error(commandValidationMessages.duplicateMember(fill.name), fill)
     }
-    filled.add(member.name)
-    reportMemberValue(member.name, property, member.value, ctx)
+    filled.add(fill.name)
+    reportMemberValue(fill.name, property, fill.value, ctx)
   }
   if (!filled.has('Title')) {
     ctx.error(commandValidationMessages.missingTitle(command.name), command)
