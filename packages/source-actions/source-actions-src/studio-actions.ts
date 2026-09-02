@@ -701,7 +701,9 @@ async function setDesignEntry(document: AST.Document, request: StudioSetDesignEn
     )
   }
   const entry = formatDesignEntry(request.entry)
-  return await Formatter.formatCode(setLayoutClauseEntrySource(document.textDocument.getText(), members[0]!.spec, entry))
+  return await Formatter.formatCode(
+    setLayoutClauseEntrySource(document.textDocument.getText(), members[0]!.spec, entry),
+  )
 }
 
 function selectedDesign(files: readonly AST.TaoFile[]): AST.DesignDeclaration | undefined {

@@ -1,6 +1,7 @@
 import { Assert, Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import { EditorView } from 'codemirror'
+import { mountStudioAgentPocPanel } from '../agent-poc/StudioAgentPocPanel'
 import type { StudioCompileCompletion } from '../StudioCompileCoordinator'
 import { type StudioDraftFile, StudioDraftSync, type StudioDraftSyncResult } from '../StudioDraftSync'
 import {
@@ -39,7 +40,6 @@ import {
   StudioEditorInsertion,
   StudioOpenFileLifecycle,
 } from './StudioEditor'
-import { mountStudioAgentPocPanel } from '../agent-poc/StudioAgentPocPanel'
 import { StudioEditorTabs } from './StudioEditorTabs'
 import { mountStudioFileTree, StudioFileTreeTransitions } from './StudioFileTree'
 import {
@@ -524,7 +524,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       activeScenario: () => activePreview.current()?.cell?.scenarioId,
       identityFor: file => currentSourceIdentity(handshake, activePreview.current(), { content: '', ...file }),
       openFile: async path => {
-        const known = projectFiles.find(file => file.path === path || file.path === `/${path}` || file.path.endsWith(`/${path}`))
+        const known = projectFiles.find(file =>
+          file.path === path || file.path === `/${path}` || file.path.endsWith(`/${path}`)
+        )
         await openFile(known?.path ?? path, true)
       },
       selection: () => inspected,

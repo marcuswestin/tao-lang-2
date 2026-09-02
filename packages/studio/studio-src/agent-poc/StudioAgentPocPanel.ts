@@ -1,9 +1,9 @@
 // Semantic agent proof of concept: a fixed overlay panel in the Studio page. Deliberately plain DOM,
 // inline styles, and no Tao/React portal involvement; it exists to make the flow observable.
-import { StudioInspector } from '../StudioInspector'
-import type { StudioCanonicalSourceAction, StudioSourceActionIdentity } from '../StudioProtocol'
-import type { StudioInspectorSelection } from '../StudioInspector'
 import { StudioApiClient } from '../client/StudioApiClient'
+import { StudioInspector } from '../StudioInspector'
+import type { StudioInspectorSelection } from '../StudioInspector'
+import type { StudioCanonicalSourceAction, StudioSourceActionIdentity } from '../StudioProtocol'
 
 type Json = Record<string, unknown>
 type Finding = { kind: 'fact' | 'inference' | 'suggestion'; text: string; evidence: string[] }
@@ -37,7 +37,8 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
   const panel = document.createElement('section')
   panel.className = 'studio-agent-poc'
   panel.setAttribute('aria-label', 'Semantic agent proof of concept')
-  panel.style.cssText = 'position:fixed;right:12px;bottom:12px;width:460px;max-height:70vh;overflow:auto;background:#151a17;color:#e8ede9;border:1px solid #3a4a3f;border-radius:10px;padding:10px 12px;font:12px/1.45 ui-monospace,Menlo,monospace;z-index:9000;box-shadow:0 8px 24px rgba(0,0,0,.4)'
+  panel.style.cssText =
+    'position:fixed;right:12px;bottom:12px;width:460px;max-height:70vh;overflow:auto;background:#151a17;color:#e8ede9;border:1px solid #3a4a3f;border-radius:10px;padding:10px 12px;font:12px/1.45 ui-monospace,Menlo,monospace;z-index:9000;box-shadow:0 8px 24px rgba(0,0,0,.4)'
   panel.innerHTML = `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
       <strong style="flex:1">Local agent (PoC)</strong>
@@ -60,7 +61,9 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
     toggle.textContent = body.hidden ? '+' : '–'
   })
 
-  let lastCheckpoint: { id: string; identity: StudioSourceActionIdentity; path: string; afterVersion: string } | undefined
+  let lastCheckpoint:
+    | { id: string; identity: StudioSourceActionIdentity; path: string; afterVersion: string }
+    | undefined
 
   reviewButton.addEventListener('click', () => void review())
 
@@ -77,7 +80,9 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
         viewName: viewInput.value.trim(),
       })
       status.textContent = result.status === 'ok'
-        ? `Reviewed ${result.viewName} in ${((Date.now() - started) / 1000).toFixed(1)}s · model ${(result.elapsedMs / 1000).toFixed(1)}s · ${result.toolCalls.length} tool calls · prompt ${result.promptChars} chars + tool results ${result.toolResultChars} chars`
+        ? `Reviewed ${result.viewName} in ${((Date.now() - started) / 1000).toFixed(1)}s · model ${
+          (result.elapsedMs / 1000).toFixed(1)
+        }s · ${result.toolCalls.length} tool calls · prompt ${result.promptChars} chars + tool results ${result.toolResultChars} chars`
         : `Model failure: ${result.message ?? 'unknown'}`
       renderResult(result)
     } catch (error) {
@@ -90,7 +95,8 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
   function renderResult(result: ReviewResult): void {
     const section = (title: string) => {
       const heading = document.createElement('div')
-      heading.style.cssText = 'margin:8px 0 3px;color:#9fb3a5;text-transform:uppercase;font-size:10px;letter-spacing:.06em'
+      heading.style.cssText =
+        'margin:8px 0 3px;color:#9fb3a5;text-transform:uppercase;font-size:10px;letter-spacing:.06em'
       heading.textContent = title
       body.append(heading)
     }
@@ -98,7 +104,8 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
     const packet = document.createElement('details')
     packet.innerHTML = `<summary>${JSON.stringify(result.packet).length} chars</summary>`
     const pre = document.createElement('pre')
-    pre.style.cssText = 'white-space:pre-wrap;max-height:160px;overflow:auto;background:#0f1411;padding:6px;border-radius:6px'
+    pre.style.cssText =
+      'white-space:pre-wrap;max-height:160px;overflow:auto;background:#0f1411;padding:6px;border-radius:6px'
     pre.textContent = JSON.stringify(result.packet, null, 1)
     packet.append(pre)
     body.append(packet)
@@ -106,9 +113,12 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
     section('Model tool calls (progressive inquiry)')
     for (const call of result.toolCalls) {
       const details = document.createElement('details')
-      details.innerHTML = `<summary>${call.name}(${JSON.stringify(call.arguments)}) → ${call.resultChars} chars</summary>`
+      details.innerHTML = `<summary>${call.name}(${
+        JSON.stringify(call.arguments)
+      }) → ${call.resultChars} chars</summary>`
       const out = document.createElement('pre')
-      out.style.cssText = 'white-space:pre-wrap;max-height:160px;overflow:auto;background:#0f1411;padding:6px;border-radius:6px'
+      out.style.cssText =
+        'white-space:pre-wrap;max-height:160px;overflow:auto;background:#0f1411;padding:6px;border-radius:6px'
       out.textContent = call.result
       details.append(out)
       body.append(details)
@@ -122,7 +132,8 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
       const analysis = document.createElement('details')
       analysis.innerHTML = `<summary>${result.analysis.length} chars</summary>`
       const text = document.createElement('div')
-      text.style.cssText = 'white-space:pre-wrap;background:#0f1411;padding:6px;border-radius:6px;max-height:160px;overflow:auto'
+      text.style.cssText =
+        'white-space:pre-wrap;background:#0f1411;padding:6px;border-radius:6px;max-height:160px;overflow:auto'
       text.textContent = result.analysis
       analysis.append(text)
       body.append(analysis)
@@ -134,9 +145,14 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
     const findings = result.value?.findings ?? []
     for (const finding of findings) {
       const row = document.createElement('div')
-      row.style.cssText = 'margin:3px 0;padding:5px 7px;border-radius:6px;background:#0f1411;border-left:3px solid ' + ({ fact: '#6fb38a', inference: '#d9b45c', suggestion: '#7aa6d9' }[finding.kind] ?? '#888')
+      row.style.cssText = 'margin:3px 0;padding:5px 7px;border-radius:6px;background:#0f1411;border-left:3px solid '
+        + ({ fact: '#6fb38a', inference: '#d9b45c', suggestion: '#7aa6d9' }[finding.kind] ?? '#888')
       const label = document.createElement('strong')
-      label.textContent = finding.kind === 'fact' ? 'Model restating Tao fact' : finding.kind === 'inference' ? 'Model inference' : 'Model suggestion'
+      label.textContent = finding.kind === 'fact'
+        ? 'Model restating Tao fact'
+        : finding.kind === 'inference'
+        ? 'Model inference'
+        : 'Model suggestion'
       row.append(label, document.createTextNode(' — ' + finding.text))
       for (const evidence of finding.evidence) {
         row.append(document.createTextNode(' '), evidenceLink(evidence, result))
@@ -153,10 +169,21 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
       body.append(line('none'))
       return
     }
-    const request = { designName: result.designName, entry: [change.key, Number(change.value)], kind: 'set-design-entry', memberName: change.bundle }
+    const request = {
+      designName: result.designName,
+      entry: [change.key, Number(change.value)],
+      kind: 'set-design-entry',
+      memberName: change.bundle,
+    }
     body.append(line(JSON.stringify(request)))
     if (result.normalization !== undefined) {
-      body.append(line(`Tao operand check: ${result.normalization.note}${result.normalization.usedByThisView === false ? ' (not used by this view)' : ''}`))
+      body.append(
+        line(
+          `Tao operand check: ${result.normalization.note}${
+            result.normalization.usedByThisView === false ? ' (not used by this view)' : ''
+          }`,
+        ),
+      )
       if (result.normalization.resolved === undefined) {
         body.append(line(`Bundles this view uses: ${result.normalization.viewStyles.join(', ')}`))
         return
@@ -203,7 +230,8 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
       const proposal = await StudioApiClient.sourceActionProposal(envelope)
       box.replaceChildren()
       const pre = document.createElement('pre')
-      pre.style.cssText = 'white-space:pre-wrap;background:#0f1411;padding:6px;border-radius:6px;max-height:200px;overflow:auto'
+      pre.style.cssText =
+        'white-space:pre-wrap;background:#0f1411;padding:6px;border-radius:6px;max-height:200px;overflow:auto'
       pre.textContent = proposal.diff
       box.append(line(`Tao proposal for ${proposal.path} (ordinary source, formatted):`), pre)
       const apply = document.createElement('button')
@@ -216,12 +244,21 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
     }
   }
 
-  async function applyChange(envelope: unknown, identity: StudioSourceActionIdentity, path: string, box: HTMLElement): Promise<void> {
+  async function applyChange(
+    envelope: unknown,
+    identity: StudioSourceActionIdentity,
+    path: string,
+    box: HTMLElement,
+  ): Promise<void> {
     box.append(line('Applying…'))
     try {
       const applied = await StudioApiClient.sourceAction(envelope)
       lastCheckpoint = { afterVersion: applied.sourceVersion, id: applied.checkpoint.id, identity, path }
-      box.append(line(`Applied. Compile: ${applied.compile.status} (${applied.compile.message}). Checkpoint ${applied.checkpoint.id}.`))
+      box.append(
+        line(
+          `Applied. Compile: ${applied.compile.status} (${applied.compile.message}). Checkpoint ${applied.checkpoint.id}.`,
+        ),
+      )
       await hooks.openFile(applied.path)
       const undo = document.createElement('button')
       undo.type = 'button'
@@ -243,7 +280,11 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
         identity: { ...lastCheckpoint.identity, sourceVersion: lastCheckpoint.afterVersion },
         requestId: `undo:${crypto.randomUUID()}`,
       }))
-      box.append(line(`Undone. Compile: ${result.compile.status} (${result.compile.message}). Source version ${result.sourceVersion}.`))
+      box.append(
+        line(
+          `Undone. Compile: ${result.compile.status} (${result.compile.message}). Source version ${result.sourceVersion}.`,
+        ),
+      )
       await hooks.openFile(result.path)
       lastCheckpoint = undefined
     } catch (error) {
@@ -265,7 +306,9 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
         return
       }
       const packet = result.packet
-      const known = typeof packet['source'] === 'string' && evidence === packet['id'] ? /^src:(.+):(\d+)-(\d+)$/.exec(packet['source'] as string) : null
+      const known = typeof packet['source'] === 'string' && evidence === packet['id']
+        ? /^src:(.+):(\d+)-(\d+)$/.exec(packet['source'] as string)
+        : null
       if (known !== null) {
         void hooks.openFile(known[1]!, Number(known[2]))
         return

@@ -1,6 +1,6 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
-import { AgentPoc } from './agent-poc/AgentPocServer'
 import { CLI, Errors, Repo } from '@shared'
+import { AgentPoc } from './agent-poc/AgentPocServer'
 import { type StudioClientAssetProvider, StudioClientAssets } from './StudioClientAssets'
 import { StudioFixtureGeneration } from './StudioFixtureGeneration'
 import { StudioHighlight } from './StudioHighlight'
@@ -465,7 +465,16 @@ async function handleRequest(
     return response(request, url, options, await session.undoSourceAction(await request.json()))
   }
   if (url.pathname.startsWith('/api/agent-poc/')) {
-    return response(request, url, options, await AgentPoc.handle(session, url.pathname.slice('/api/agent-poc/'.length), await request.json()))
+    return response(
+      request,
+      url,
+      options,
+      await AgentPoc.handle(
+        session,
+        url.pathname.slice('/api/agent-poc/'.length),
+        (await request.json()) as Record<string, unknown>,
+      ),
+    )
   }
   if (request.method === 'GET' && url.pathname === '/api/ai/availability') {
     return response(request, url, options, await fixtureGeneration.availability())

@@ -1,7 +1,7 @@
 // Semantic agent proof of concept: drives the on-device Swift helper with the snapshot as its tools.
 // Throwaway orchestration; nothing here is a provider abstraction or an agent runtime.
-import { CLI, FS, Repo } from '@shared'
-import { type SemanticSnapshot, fieldStory, inspect, overview, resolveTarget, trace } from './SemanticSnapshot'
+import { CLI, Errors, FS, Repo } from '@shared'
+import { fieldStory, inspect, overview, resolveTarget, type SemanticSnapshot, trace } from './SemanticSnapshot'
 
 const HELPER_SOURCE = 'packages/studio/studio-src/agent-poc/AgentHelper.swift'
 const HELPER_BINARY = '.artifacts/build/agent-poc/agent-helper'
@@ -47,7 +47,7 @@ export async function ensureHelper(): Promise<string> {
       args: ['swiftc', '-parse-as-library', '-O', '-module-cache-path', moduleCache, source, '-o', binary],
     })
     if (compiled.exitCode !== 0) {
-      throw new Error(`Agent helper did not compile: ${compiled.stderr.trim() || compiled.stdout.trim()}`)
+      Errors.throwHostEnvironment(`Agent helper did not compile: ${compiled.stderr.trim() || compiled.stdout.trim()}`)
     }
   }
   return binary
@@ -96,13 +96,15 @@ export async function runAgentJob(job: AgentJob): Promise<AgentRunResult> {
       }
     },
   })
-  child.writeStdin(JSON.stringify({
-    instructions: job.instructions,
-    maxToolCalls: job.maxToolCalls ?? 4,
-    outputSchema: job.outputSchema,
-    prompt: job.prompt,
-    tools: job.tools.map(tool => ({ description: tool.description, name: tool.name, schema: tool.schema })),
-  }) + '\n')
+  child.writeStdin(
+    JSON.stringify({
+      instructions: job.instructions,
+      maxToolCalls: job.maxToolCalls ?? 4,
+      outputSchema: job.outputSchema,
+      prompt: job.prompt,
+      tools: job.tools.map(tool => ({ description: tool.description, name: tool.name, schema: tool.schema })),
+    }) + '\n',
+  )
   async function handleLine(line: string): Promise<void> {
     let message: Json
     try {
@@ -128,7 +130,11 @@ export async function runAgentJob(job: AgentJob): Promise<AgentRunResult> {
     } else if (message['type'] === 'note') {
       notes.push(String(message['text']))
     } else if (message['type'] === 'failure') {
-      finish({ message: String(message['message']), status: 'failure', transcript: (message['transcript'] as unknown[]) ?? [] })
+      finish({
+        message: String(message['message']),
+        status: 'failure',
+        transcript: (message['transcript'] as unknown[]) ?? [],
+      })
     }
   }
   child.onceClose((code, signal) => {
@@ -145,7 +151,10 @@ async function logRun(job: AgentJob, result: AgentRunResult): Promise<void> {
   const dir = Repo.resolvePath(RUN_LOG_DIR)
   await FS.mkdir(dir)
   const file = FS.resolvePath(`${new Date().toISOString().replace(/[:.]/g, '-')}.json`, dir)
-  await FS.writeText(file, JSON.stringify({ job: { instructions: job.instructions, prompt: job.prompt, tools: job.tools }, result }, null, 2))
+  await FS.writeText(
+    file,
+    JSON.stringify({ job: { instructions: job.instructions, prompt: job.prompt, tools: job.tools }, result }, null, 2),
+  )
 }
 
 // ---- The review journey --------------------------------------------------------------------------
@@ -171,9 +180,16 @@ export const semanticTools = (snapshot: SemanticSnapshot): { tools: AgentToolSpe
       schema: { properties: {}, type: 'object' },
     },
     {
-      description: 'Semantic facts about one declaration by id or name (view, entity, field like Document.Final, action, design bundle, scenario).',
+      description:
+        'Semantic facts about one declaration by id or name (view, entity, field like Document.Final, action, design bundle, scenario).',
       name: 'inspect',
-      schema: { properties: { target: { description: 'Id such as view:DocumentEditor or name such as Document.Final', type: 'string' } }, required: ['target'], type: 'object' },
+      schema: {
+        properties: {
+          target: { description: 'Id such as view:DocumentEditor or name such as Document.Final', type: 'string' },
+        },
+        required: ['target'],
+        type: 'object',
+      },
     },
     {
       description: 'Follow one relationship from a declaration: reads, writes, renders, styled-by, covers, invokes.',
@@ -196,9 +212,17 @@ export const reviewOutputSchema: Json = {
       description: 'Up to three observations about the reviewed view.',
       items: {
         properties: {
-          kind: { description: 'fact = restates tool output; inference = your deduction; suggestion = a recommendation', enum: ['fact', 'inference', 'suggestion'], type: 'string' },
+          kind: {
+            description: 'fact = restates tool output; inference = your deduction; suggestion = a recommendation',
+            enum: ['fact', 'inference', 'suggestion'],
+            type: 'string',
+          },
           text: { description: 'One sentence', type: 'string' },
-          evidence: { description: 'Ids copied verbatim from tool output (view:, bundle:, field:, action:, src: handles)', items: { type: 'string' }, type: 'array' },
+          evidence: {
+            description: 'Ids copied verbatim from tool output (view:, bundle:, field:, action:, src: handles)',
+            items: { type: 'string' },
+            type: 'array',
+          },
         },
         required: ['kind', 'text', 'evidence'],
         type: 'object',
@@ -210,8 +234,15 @@ export const reviewOutputSchema: Json = {
       description: 'One typed design change to propose, or operation none.',
       properties: {
         operation: { enum: ['set-design-entry', 'none'], type: 'string' },
-        bundle: { description: 'A design bundle name used by this view, copied from stylesUsed, e.g. body', type: 'string' },
-        key: { description: 'Entry head to set', enum: ['size', 'line', 'weight', 'pad', 'gap', 'radius'], type: 'string' },
+        bundle: {
+          description: 'A design bundle name used by this view, copied from stylesUsed, e.g. body',
+          type: 'string',
+        },
+        key: {
+          description: 'Entry head to set',
+          enum: ['size', 'line', 'weight', 'pad', 'gap', 'radius'],
+          type: 'string',
+        },
         value: { description: 'A whole number as text, e.g. 18', type: 'string' },
         rationale: { description: 'One sentence', type: 'string' },
       },
@@ -225,15 +256,26 @@ export const reviewOutputSchema: Json = {
 
 export type ReviewRequest = { viewName: string; renderId?: string; scenario?: string; focus?: string }
 
-export async function reviewView(snapshot: SemanticSnapshot, request: ReviewRequest): Promise<AgentRunResult & { packet: Json }> {
+export async function reviewView(
+  snapshot: SemanticSnapshot,
+  request: ReviewRequest,
+): Promise<AgentRunResult & { packet: Json }> {
   const view = resolveTarget(snapshot, request.viewName)
-  const packet: Json = view === undefined ? { error: `Unknown view ${request.viewName}` } : inspect(snapshot, view.id, 1600)
+  const packet: Json = view === undefined
+    ? { error: `Unknown view ${request.viewName}` }
+    : inspect(snapshot, view.id, 1600)
   if (request.renderId !== undefined) {
     const render = snapshot.nodes.get(request.renderId)
     if (render !== undefined) {
-      packet['selectedRender'] = { id: render.id, target: render.detail?.['target'], layout: render.detail?.['layout'], tag: render.detail?.['tag'] }
-      packet['selectedRenderStyles'] = snapshot.edges.filter(e => e.from === render.id && e.rel === 'styled-by').map(e =>
-        `${e.to} [${((snapshot.nodes.get(e.to)?.detail as Json)['entries'] as string[]).join(', ')}] (${e.origin})`
+      packet['selectedRender'] = {
+        id: render.id,
+        target: render.detail?.['target'],
+        layout: render.detail?.['layout'],
+        tag: render.detail?.['tag'],
+      }
+      packet['selectedRenderStyles'] = snapshot.edges.filter(e => e.from === render.id && e.rel === 'styled-by').map(
+        e =>
+          `${e.to} [${((snapshot.nodes.get(e.to)?.detail as Json)['entries'] as string[]).join(', ')}] (${e.origin})`,
       )
     }
   }
@@ -268,7 +310,11 @@ export async function askQuestion(
   const outputSchema: Json = {
     properties: {
       answer: { description: 'The answer in at most three sentences', type: 'string' },
-      facts: { description: 'Evidence ids or file:offset handles supporting the answer', items: { type: 'string' }, type: 'array' },
+      facts: {
+        description: 'Evidence ids or file:offset handles supporting the answer',
+        items: { type: 'string' },
+        type: 'array',
+      },
       confidence: { enum: ['high', 'medium', 'low'], type: 'string' },
     },
     required: ['answer', 'facts', 'confidence'],
@@ -278,7 +324,8 @@ export async function askQuestion(
     const { call, tools } = semanticTools(snapshot)
     return await runAgentJob({
       call,
-      instructions: 'Answer questions about a Tao app using the tools. Start with overview, then inspect or trace the declarations the question names. Cite the evidence ids the tools return. Say when the tools do not support the question.',
+      instructions:
+        'Answer questions about a Tao app using the tools. Start with overview, then inspect or trace the declarations the question names. Cite the evidence ids the tools return. Say when the tools do not support the question.',
       outputSchema,
       prompt: question,
       tools,
@@ -307,13 +354,22 @@ export async function askQuestion(
       }
       return 'unknown tool'
     },
-    instructions: 'Answer questions about a Tao app by listing, searching, and reading its source files. Cite file:line handles.',
+    instructions:
+      'Answer questions about a Tao app by listing, searching, and reading its source files. Cite file:line handles.',
     outputSchema,
     prompt: question,
     tools: [
       { description: 'List the project source files.', name: 'list_files', schema: { properties: {}, type: 'object' } },
-      { description: 'Search all source files for a text fragment.', name: 'search', schema: { properties: { text: { type: 'string' } }, required: ['text'], type: 'object' } },
-      { description: 'Read one source file (first 6000 characters).', name: 'read_file', schema: { properties: { path: { type: 'string' } }, required: ['path'], type: 'object' } },
+      {
+        description: 'Search all source files for a text fragment.',
+        name: 'search',
+        schema: { properties: { text: { type: 'string' } }, required: ['text'], type: 'object' },
+      },
+      {
+        description: 'Read one source file (first 6000 characters).',
+        name: 'read_file',
+        schema: { properties: { path: { type: 'string' } }, required: ['path'], type: 'object' },
+      },
     ],
   })
 }
