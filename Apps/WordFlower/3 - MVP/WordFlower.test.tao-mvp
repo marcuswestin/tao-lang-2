@@ -90,10 +90,11 @@ test "WordFlower full target" {
          press #openDocument
       }
       press #startFocus
-      // The bar lives in the shell frame's bottom slot, so the countdown belongs to the app rather
-      // than to the editor that started it.
+      // The bar lives in the shell, not in the editor that started the session, so the countdown
+      // belongs to the app. Asserting on the bar's own static label rather than on the session it
+      // shows is what separates an unmounted bar from one that is present but rendering nothing.
       expect text "25:00"
-      expect label "Focus session"
+      expect text "Focus session"
       advance 1.s
       expect text "24:59"
       press #pauseFocus
@@ -102,10 +103,10 @@ test "WordFlower full target" {
       press #resumeFocus
       advance 1.min
       expect text "23:59" // resumed: the paused minutes were not lost
-      // Stopping deletes the row, so the slot's content is `none` again and the slot itself is gone.
+      // Stopping deletes the row, so the shell's condition is empty again and the bar goes with it.
       press #stopFocus
       expect missing text "23:59"
-      expect missing label "Focus session"
+      expect missing text "Focus session"
    }
 
    test "preserves workspace and document CRUD through lifecycle states" {

@@ -1,5 +1,5 @@
 use InstantDB from @tao/data/providers/instantdb
-use DynamicSelectionNav, FrameNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav from @tao/nav
+use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav from @tao/nav
 use CountWords, Join from @tao/text
 use Interval from @tao/time
 use Checkbox, Col, FormButton, Image, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput from @tao/ui
@@ -18,7 +18,7 @@ use Checkbox, Col, FormButton, Image, Panes, Progress, Row, ScrollView, Spinner,
 //   publish, presence) enters MVP via collaborative workspaces or waits for the app expansion.
 //
 // The focused writing session landed in Current with the interaction system tranche: a device-local
-// row that the shell frame reads, rather than state inside one view. The session below is that same
+// row that the shell reads, rather than state inside one view. The session below is that same
 // feature sized for the full MVP surface — its length comes from a stored preference rather than a
 // fixed pair of buttons.
 //
@@ -29,8 +29,7 @@ use Checkbox, Col, FormButton, Image, Panes, Progress, Row, ScrollView, Spinner,
 // - Remote providers can report `unauthorized` for an entity handle. `data <status>` is retired
 //   (Decisions §16); the states it drove are reached through the world controls — network, sync,
 //   and datasource fault injection — which have not landed yet.
-// - The universal app shell applies safe-area and keyboard insets without a source-level opt-in, and
-//   a frame's edge slots own the insets along the edges they occupy.
+// - The universal app shell applies safe-area and keyboard insets without a source-level opt-in.
 // - Property-function syntax must settle type-level addition and override plus the identity,
 //   equality, capture, and anonymous-expression consequences of per-value behavior.
 // - Design grows beyond flat tokens and clause bundles into recipes, variants, states, rules, and
@@ -98,26 +97,24 @@ nav WordFlowerNavigator = SelectionNav {
    }
 }
 
-// The shell: fixed chrome edges around the navigated centre. Edge slots hold views or navs and never
-// take Back — the frame routes it to `@center`. `Size` is the one perpendicular dimension and is
-// omitted here, so each slot is content-derived. A slot whose `Content` is `none` reserves no space,
-// so the focus bar appears with the session and the content grows back when the session ends; that
-// presence is a property of the data, never of layout measurement.
-nav WordFlowerShell = FrameNav {
-   @center {
-      Content WordFlowerNavigator
-   }
-   @bottom {
-      Label "Focus session"
-      Content when CurrentSession {
-         empty -> none
-         otherwise -> FocusBar
+// The shell: the navigator and the focus bar, laid out as ordinary content. A nav renders like any
+// other view — `nav is scene is view` — so persistent chrome around navigated content is a `Col`,
+// not a navigation kind. The navigator arrives as a parameter, which is how one shell serves every
+// preview variant. The bar is conditional on the data, so it appears with the session and the
+// content grows back when the session ends; the navigator never is, because its history lives on
+// its mount and a branch that unmounted it would drop where the person was.
+scene WordFlowerShell(Navigator nav) {
+   render Col() [fill] {
+      Navigator() [fill]
+      when CurrentSession {
+         empty -> { }
+         otherwise -> { FocusBar() }
       }
    }
 }
 
-// The preview variant swaps the tab surface inside the shell rather than replacing the shell, so a
-// preview still gets the focus bar along its bottom edge.
+// The preview variant hands the shell a differently configured navigator, so a preview still gets
+// the focus bar.
 nav WordFlowerDrawerNavigator = WordFlowerNavigator with {
    Display "drawer"
 }
@@ -130,7 +127,8 @@ datasource WordFlowerStageStore = WordFlowerStore with {
    AppId "wordflower-stage"
 }
 
-// An app mounts navs, it does not render content directly. `Navigator` is the primary nav.
+// The app is rooted in a view: the shell, which lays the navigator and the focus bar out as ordinary
+// content. Tao mounts a navigator around a view root, so nothing here names one.
 // Every nav owns an absolute overlay lane above its content, so no app declares an overlay host;
 // overlays stack while covered entries stay mounted but hidden, and Back/dismiss use the app reducer.
 // Toasts are app-level, transient, replace the same key rather than stacking, and neither consume
@@ -142,21 +140,17 @@ datasource WordFlowerStageStore = WordFlowerStore with {
 app WordFlower {
    Name "WordFlower"
    Design WordFlowerDesign
-   Navigator WordFlowerShell
+   view WordFlowerShell(WordFlowerNavigator)
 
    Datasource WordFlowerStore
 }
 
-// `with` copies public properties into a configured variant. A property-position `with` merge-copies
-// the original property without repeating it; WordFlower and WordFlowerShell are unchanged. The
-// variant patches the shell's centre instead of replacing the shell, so it keeps the focus bar.
+// `with` copies public properties into a configured variant; WordFlower and WordFlowerShell are
+// unchanged. The variant rebinds the root with the same shell and a different navigator in it, so it
+// keeps the focus bar.
 app WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
-   Navigator with {
-      @center {
-         Content WordFlowerDrawerNavigator
-      }
-   }
+   view WordFlowerShell(WordFlowerDrawerNavigator) // the same shell, a different navigator in it
 }
 
 app WordFlowerStage = WordFlower with {
@@ -233,7 +227,7 @@ data Paragraphs / Paragraph {
 // entry beside `index` and `order by`: this entity lives in the device store whatever datasource the
 // app configures, so the remote and staged variants never sync it. Holding the session as data
 // rather than as view state is what lets it survive navigation and relaunch, and lets the shell
-// frame read it.
+// read it.
 data FocusSessions / FocusSession {
    EndsAt time // absolute, so a running session survives relaunch correctly
    PausedAt time (default now) // read only while paused; resuming re-anchors EndsAt from it
@@ -243,8 +237,9 @@ data FocusSessions / FocusSession {
 }
 
 // A module-level query is an app-lifetime reactive read of the store, and a value like any other.
-// The shell frame's bottom slot asks it whether a session exists, which a view-scoped query could
-// not answer: a nav is configuration, so there is no view between the frame and the store.
+// The shell, the starter, and the bar all read this one. The frame that forced the form is gone — a
+// shell that is a view could hold its own query — and it stays only because retiring it is a
+// separate decision.
 query FocusSessions as CurrentSession {
    limit 1
 }
@@ -406,10 +401,10 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
          Name: WorkspaceNameDraft
       }
    }
-   // A command is a configured value: slots by juxtaposition, metadata members, and exactly one
-   // `do`. This one is declared in the scene because it reads that scene's own state, exactly as an
-   // `action` may.
-   command Save {
+   // A command is a configured value: its slots are parameters, and its block holds metadata members
+   // and exactly one `do`. This one is declared in the scene because it reads that scene's own state,
+   // exactly as an `action` may.
+   command Save() {
       Title "Save workspace"
       Icon "checkmark"
       Enabled WorkspaceNameDraft is not empty
@@ -772,7 +767,7 @@ view DocumentSnapshot(Snapshot Document.Snapshot) {
 
 // A focused writing session: pick a length, write until the clock runs out, pause and resume, or
 // stop early. The session is a row in the device-local store rather than state in one view, which is
-// what lets the editor start it and the shell frame count it down.
+// what lets the editor start it and the shell count it down.
 //
 // Starting is an editor affordance — you choose a length where you are about to write — so this view
 // creates the row and nothing else. The length comes from the person's preference rather than a
@@ -792,8 +787,8 @@ file view FocusStarter() {
          otherwise -> { Text("A session is running") [body] }
 }  }  }
 
-// The focus bar: the running session, wherever you are. It sits in the shell frame's bottom slot and
-// reads the session from the store rather than from a parent view, which is what lets it stay
+// The focus bar: the running session, wherever you are. The shell lays it out beside the navigator,
+// and it reads the session from the store rather than from a parent view, which is what lets it stay
 // visible while the writing happens several navigation levels deeper. The clock is a library value
 // and `Left` is an ordinary derivation that recomputes as it ticks. `EndsAt` is absolute, so a
 // running session survives relaunch; pausing freezes the reading by recording when it stopped, and
@@ -801,6 +796,7 @@ file view FocusStarter() {
 file view FocusBar() {
    state Tick = Interval(1.s)
    render Row() [gap 6, panel] {
+      Text("Focus session") [body]
       loop CurrentSession / FocusSession {
          let Left = when FocusSession.Paused {
             true -> FocusSession.EndsAt - FocusSession.PausedAt
