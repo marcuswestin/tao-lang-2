@@ -329,20 +329,21 @@ function nearestRender(node: AST.Node): AST.Node | undefined {
 
 type Json = Record<string, unknown>
 
-export function overview(snapshot: SemanticSnapshot, budget = 1800): Json {
+export function overview(snapshot: SemanticSnapshot, budget = 3000): Json {
   const nodes = [...snapshot.nodes.values()]
   const result = {
     app: snapshot.appName,
     design: snapshot.edges.find(e => e.from === `app:${snapshot.appName}` && e.rel === 'uses-design')?.to,
     diagnostics: snapshot.diagnostics.filter(d => d.severity === 'error' || d.severity === 'warning').length,
     entities: nodes.filter(n => n.kind === 'entity').map(n => `${n.name}/${String((n.detail as Json)['singular'])}: ${((n.detail as Json)['fields'] as { name: string }[]).map(f => f.name).join(', ')}`),
+    // Compact one-line lists survive the budget; a truncated list once hid `body` and most views from the model.
     views: nodes.filter(n => n.kind === 'view').map(n =>
-      `${n.id} (${n.path}; renders ${snapshot.edges.filter(e => e.from === n.id && e.rel === 'renders').length}, actions ${
+      `${n.name}(renders ${snapshot.edges.filter(e => e.from === n.id && e.rel === 'renders').length}, actions ${
         ((n.detail as Json)['actions'] as string[]).length
       }, scenarios ${snapshot.edges.filter(e => e.to === n.id && e.rel === 'covers').length})`
-    ),
-    bundles: nodes.filter(n => n.kind === 'bundle' && (n.detail as Json)['design'] === selectedDesignName(snapshot)).map(n => n.name),
-    hint: 'Call inspect(id) for one view, entity, field, action, bundle, or scenario. Call trace(id, relationship) to follow reads/writes/renders/styled-by/covers/invokes.',
+    ).join('; '),
+    bundles: nodes.filter(n => n.kind === 'bundle' && (n.detail as Json)['design'] === selectedDesignName(snapshot)).map(n => n.name).join(', '),
+    hint: 'Call inspect(name) with the exact view, entity, field (Document.Final), action, or bundle name. Call trace(name, relationship) to follow reads/writes/renders/styled-by/covers/invokes.',
   }
   return truncate(result, budget)
 }
