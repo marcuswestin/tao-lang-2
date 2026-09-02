@@ -59,6 +59,11 @@ controls this experiment only. “PoC convenience” is freely replaceable even 
 | SAI-D012 | PoC convenience    | The implementer chooses the forcing app, supported graph subset, tool schemas, transport, UI, and demonstration change.           | Hard-code the smallest useful slice and document what was hard-coded.                                                              |
 | SAI-D013 | PoC convenience    | The PoC may expose three to five broad agent tools instead of a complete fine-grained API.                                        | Prefer a small usable loop over designing the final tool catalog.                                                                  |
 | SAI-D014 | Direction to prove | Source is a detail that the model requests only when semantic facts are insufficient.                                             | Record every raw-source fallback and why it was needed.                                                                            |
+| SAI-D015 | PoC convenience    | The forcing app is WordFlower `1 - Current`, the journey is "review the selected render and apply one design change", and the write is a new `set-design-entry` source action. | The existing `set-style-entry` bundle edit requires the render and the design to share a file; WordFlower keeps its design in `Design.tao`, so a design-scoped action that needs no render occurrence was added instead. |
+| SAI-D016 | PoC convenience    | The semantic snapshot is rebuilt from the linked Langium AST on every request, in `packages/studio/studio-src/agent-poc/SemanticSnapshot.ts`, with no caching, identity scheme, or manifest reuse. | Every node and edge carries `origin: compiler` (resolved cross-reference or declaration structure) or `origin: poc-derived` (a documented name-matching heuristic) plus a `src:<path>:<start>-<end>` evidence handle. |
+| SAI-D017 | PoC convenience    | The on-device model runs through a separate throwaway Swift helper (`AgentHelper.swift`) that takes JSON-schema tools over NDJSON stdio, rather than the shipped `tao-foundation-models-server`, which has no tool calling. | Tool calls are bridged back to the Studio server process; the helper caps tool calls, suppresses exact repeats, runs a guided turn first, and converts with a schema-only turn if the model drifts into prose. |
+| SAI-D018 | PoC convenience    | The Studio surface is a fixed overlay panel mounted from `StudioApp.ts`, driven by the existing `/api/source-action/propose`, `/api/source-action`, and `/api/source-action/undo` seams. | No Tao/React portal work and no new checkpoint machinery; proposal, apply, compile, preview refresh, and undo are the existing ones. |
+| SAI-D019 | PoC convenience    | Tao normalizes the model's `bundle` operand against the app design's real members before proposing, and the panel shows that Tao, not the model, resolved it. | The model once wrote the design name where a bundle name belonged; without normalization the typed request would have failed to lower. |
 
 Record new decisions here as the PoC proceeds. Do not silently promote an implementation choice into a
 product decision. If the experiment changes direction, retain the superseded entry and mark it superseded
@@ -140,7 +145,14 @@ effort, not this experiment, owns durable answers.
 - **SAI-Q031:** How should prompts, tool schemas, and results be versioned and re-evaluated as Apple's system
   model changes?
 - **SAI-Q032:** Which failures belong to model capability, deficient Tao semantics, a poor query protocol,
-  or the provisional implementation?
+  or the provisional implementation? *Partial evidence (2026-09-02):* the observed failures split cleanly; see
+  "What failed" below.
+- **SAI-Q037:** The on-device model's whole context is 4,096 tokens. Which semantic projections are worth
+  those tokens, and should Tao budget per turn rather than per tool result?
+- **SAI-Q038:** When the model names a wrong but similar declaration (`schemeBody` for `body`), should Tao
+  answer the literal request, refuse with candidates, or resolve against the question's own text?
+- **SAI-Q039:** Should a semantic change request carry the model's rationale as a first-class operand so Tao
+  can check the operand against it, as the PoC's normalization step did?
 
 ### Protocol and ecosystem
 
@@ -387,49 +399,166 @@ The following minimum boundaries remain because violating them would weaken rath
 
 ## Findings ledger
 
-Fill this section during and immediately after the PoC. Keep observed evidence separate from interpretation.
+Observed evidence is stated first in each subsection; interpretation is marked as such.
 
 ### Demonstration record
 
-- **Date:** pending
-- **Branch/revision:** pending
-- **Forcing app and journey:** pending
-- **Model/OS/Xcode:** pending
-- **Semantic subset:** pending
-- **Structured change demonstrated:** pending
-- **Outcome:** pending
+- **Date:** 2026-09-02
+- **Branch/revision:** `poc/semantic-agent-implementation`, based on `poc/semantic-agent-poc` (b8b44e0c); the
+  implementation commits follow it.
+- **Forcing app and journey:** WordFlower `Apps/WordFlower/1 - Current`, app `WordFlower`. Journey: select
+  the `WorkspaceRow` "Novel" render in the Studio preview, click **Review** in the PoC overlay, read the
+  packet, tool calls, findings, and typed change, ask Tao for a proposal, apply, observe the recompiled
+  preview, undo.
+- **Model/OS/Xcode:** Apple Foundation Models `SystemLanguageModel.default` (availability `available`),
+  macOS 26.5.2 (25F84), Xcode 26.6 (17F113), Swift 6.3.3. No network model exists in the code path; the
+  helper imports only `FoundationModels` and `Foundation`.
+- **Semantic subset:** nodes: app, view, stdlib element, entity, field, action, state, query, render, design,
+  bundle (bundle / `styles` entry / `text` entry), token (flat, `colors`, `sizes`), scenario, fixture.
+  Edges: `renders`, `styled-by`, `writes`, `reads`, `invokes`, `covers`, `uses-design`, `declares`,
+  `queries`. Queries: `overview`, `inspect(target)`, `trace(target, relationship)`, plus a fixed
+  `field(target)` story used for the benchmark.
+- **Structured change demonstrated:** `{"kind":"set-design-entry","designName":"WordFlowerDesign","memberName":"card","entry":["pad",18]}`
+  lowered by Tao to a formatted `Design.tao` edit:
+  `card [gap 10, pad 16, radius 14, bg surface, border line]` → `card [gap 10, radius 14, bg surface, border line, pad 18]`.
+- **Outcome:** all ten required proofs were exercised in one Studio session. Review took 6.1–7.3 s wall
+  clock with 2 tool calls; apply compiled preview revision 2; undo restored the exact starting source
+  (`git diff` on `Design.tao` empty) and compiled revision 3.
+
+How to run it:
+
+```
+just studio "Apps/WordFlower/1 - Current" --app WordFlower --port 4820
+```
+
+Open the advertised session URL, click a render in the preview, then **Review** in the bottom-right
+"Local agent (PoC)" panel. Every run is logged under `.artifacts/agent-poc/runs/`. The same queries are
+available without Studio: `bun packages/studio/studio-src/agent-poc/snapshot-cli.ts <projectRoot> <entry.tao> <App> [overview|inspect <t>|trace <t> <rel>|field <t>|dump]`.
+Benchmark questions run through `POST <session>/api/agent-poc/ask` with `{question, mode: "semantic" | "source"}`.
 
 ### What worked
 
-- Pending.
+- **Semantic overview without source.** The packet for the selected view was 2,062 characters; the model
+  never received a source file in the review journey. The overview of the whole app is 2,347 characters
+  (26 views, 3 entities, 47 bundle names, diagnostics count).
+- **Progressive inquiry.** In the successful runs the model called `inspect(view:WorkspaceRow)` and then
+  `trace(view:WorkspaceRow, reads)` or `trace(..., renders)`; in the first run it also inspected the
+  `sectionTitle` bundle to see its blast radius. The three benchmark answers used 1–3 tool calls each.
+- **Cross-cutting answer.** "What can change `Document.Final`, and where is its value presented?" was
+  answered correctly from edges alone: written by `action:DocumentEditor.SetFinished`, read by
+  `view:DocumentEditor`, with `src:` evidence for both. The raw-source baseline found the checkbox line
+  but not the writer and answered "Document.Final is Final".
+- **Evidence.** Facts are lines like `view:WorkspaceRow -> element:Col [compiler] src:@ui/Workspaces.tao:10882-11281`.
+  The panel turns any `src:` or `render:` handle into a link that opens the file in the editor.
+- **Fact versus inference.** Every edge carries `compiler` or `poc-derived`; the panel labels each model
+  finding as "restating Tao fact", "inference", or "suggestion". The two are visibly different sources.
+- **Typed change → ordinary source → preview → undo.** The model's request was a four-field object, not a
+  diff. Tao resolved the design and member, produced a formatted proposal shown as a unified diff, applied
+  it through the existing source-action bus with a checkpoint, compiled, refreshed the preview, and undid it.
+- **Local execution.** The helper reported `availability: available` and ran `LanguageModelSession` in
+  process. Model latency for one review was 6.0–7.2 s; the first attempt with a broken stdin was 2.4 s per
+  probe turn.
 
 ### What failed or required raw source
 
-- Pending.
+Observed:
+
+- **Guided generation drifts after tool calls.** A single `respond(schema:)` turn that also called tools
+  ended in prose twice (`decodingFailure: Failed to convert text into GeneratedContent`). A schema-only
+  conversion turn in the same session recovered one case; a guided-first-then-convert order is what ships.
+- **The model loops on tool calls when results are errors.** With stdin accidentally closed, the model
+  called `inspect(view:WorkspaceRow)` 55–68 times until the 4,096-token window overflowed. The helper now
+  caps calls (3 for review, 4 for questions) and suppresses exact repeats.
+- **Operand confusion.** The model once wrote `memberName: "WordFlowerDesign"` (the design) where a bundle
+  was required, while its rationale said `sectionTitle`. Tao's normalization step resolved it. It also
+  inspected `schemeBody` when asked about `body`, twice, and concluded body affects no views (wrong).
+- **Mislabelled findings.** In the third run the model labelled the opinion "padding on the card is too
+  large" as a fact. Labels are model output, not Tao output; only the `origin` on edges is trustworthy.
+- **Scenario coverage answer was 25/26.** Asked which views have no scenarios, the model listed every view
+  including `WorkspaceRow`, which the overview marked `scenarios 1`.
+- **Raw-source fallbacks:** none in the semantic path. The model was never given a source tool in that
+  mode and never asked for one. The `source` baseline mode is a separate run.
+
+Interpretation: the guided-generation drift, the repeat loop, and the name confusions are model-capability
+or protocol issues (SAI-Q028, SAI-Q032, SAI-Q038), not missing Tao semantics. The one Tao-side gap that hurt
+was list truncation in `overview`, fixed by emitting one-line lists.
 
 ### Context and performance observations
 
-- Pending.
+| Question / task                                           | Mode     | Tool calls | Prompt chars | Tool result chars | Model ms | Result                                  |
+| --------------------------------------------------------- | -------- | ---------- | ------------ | ----------------- | -------- | --------------------------------------- |
+| Review `WorkspaceRow` (run 2)                             | semantic | 2          | 2,739        | 2,264             | 7,200    | correct facts, valid `card pad 18`      |
+| Review `WorkspaceRow` (run 3)                             | semantic | 2          | 2,739        | 1,839             | 6,000    | one mislabelled fact, valid `card pad 10` |
+| What can change `Document.Final`, where presented?        | semantic | 3          | 282          | 3,061             | 4,381    | correct, evidenced                      |
+| same                                                      | source   | 3          | 174          | 174               | 2,010    | wrong (no writer found)                 |
+| Which views does bundle `body` affect, how many renders?  | semantic | 3          | 293          | 3,861             | 3,357    | wrong (inspected `schemeBody`)          |
+| same                                                      | source   | 2          | 185          | 206               | 2,871    | wrong (hallucinated from comments)      |
+| Which views have no scenarios?                            | semantic | 1          | 258          | 2,347             | 5,172    | 25 of 26 correct                        |
+| same                                                      | source   | 2          | 150          | 295               | 1,529    | wrong                                   |
+
+Observed: the whole context available to the model is 4,096 tokens, so the semantic path spends roughly
+600–1,100 tokens of tool results per question and the review packet is about 700 tokens. The source
+baseline is faster and smaller only because the model gave up after two or three shallow searches; it never
+read a whole file (a full `Documents.tao` is 5,730 characters, over a third of the window on its own).
+
+Interpretation: on a 4k window the semantic path is the only one that can answer cross-declaration
+questions at all; the comparison is less "fewer tokens" than "an answer exists". Correctness is bounded by
+the model's ability to copy exact names.
 
 ### Missing Tao semantics or tooling
 
-- Pending.
+- **Typed reads.** Field reads and `update` writes are `poc-derived`: the PoC guesses the entity from a
+  parameter's declared type name or a query's collection name. The validator's type information is not
+  exposed to consumers; a production graph needs the resolved entity per member access.
+- **Style landing by name.** `styled-by` edges are name matches against the app-selected design, the same
+  rule the Studio inspector applies. Design members are not scoped values, so the parser cannot resolve
+  them; the language decision on whether they should be is SAI-Q007 territory.
+- **No reverse reference index.** Every "who uses X" answer is a full walk of all files per request.
+- **No render-occurrence identity across edits.** Render ids are `path:start:end`; the undo demonstration
+  worked only because the design edit does not touch the selected render's file.
+- **No scenario environment in the graph.** Scenario clauses are copied as source text lines; the manifest's
+  resolved environment was not joined.
+- **No diagnostics beyond linker/validator.** Compile diagnostics from the Studio coordinator are not in the
+  packet.
+- **Entry ordering.** `setLayoutClauseEntrySource` moves an edited entry to the end of the clause
+  (`pad 18` after `border line`); a production lowering should edit in place.
 
 ### PoC shortcuts that must not become architecture accidentally
 
-- Pending.
+- `agentPocParse()` on `StudioProjectSession` re-parses the whole app per request.
+- `AgentHelper.swift` duplicates the shipped helper's dynamic-schema code and adds a stdio protocol with
+  no authentication; it is compiled to `.artifacts/build/agent-poc/` by mtime.
+- Tool call budget, dedupe, and the guided-then-convert order are hard-coded in Swift.
+- `normalizeChange` in `AgentPocServer.ts` reads the model's rationale text to repair its operand.
+- `set-design-entry` exists only to avoid the same-file constraint of `set-style-entry`; the two overlap.
+- The panel keeps its own last-checkpoint state and bypasses `StudioApp`'s undo stack.
+- `.claude/launch.json` gained a `studio-wordflower` entry on port 4820 for the demonstration.
+- The `ask` endpoint reads every project file into memory to serve the source baseline.
 
 ### Decisions added, changed, or superseded
 
-- Pending; reference decision IDs above.
+- Added SAI-D015 through SAI-D019 (all PoC convenience). No direction-to-prove entry changed.
+- SAI-D007 (compact context beats source search) is supported only in the narrow sense above; the 4k window
+  dominates.
+- SAI-D014 (source only when facts are insufficient) held: no raw-source fallback occurred.
 
 ### Questions answered or newly discovered
 
-- Pending; reference question IDs above.
+- SAI-Q028: guided generation is reliable in a schema-only turn; unreliable when the same turn calls tools.
+  Dynamic `DynamicGenerationSchema` from JSON Schema worked for both tools and output.
+- SAI-Q029: budgets that fit are roughly 700 tokens for a packet, 300–700 per tool result, 2–3 calls.
+- SAI-Q032: see "What failed"; the split is recorded per failure.
+- New: SAI-Q037, SAI-Q038, SAI-Q039.
 
 ### Recommendation for the production design phase
 
-- Pending.
+Proceed to the design phase. The information flow and the change flow are both possible, and the change
+flow reused Studio's existing proposal, checkpoint, compile, and undo seams unchanged. Design work should
+start from three constraints this experiment made concrete: a 4k-token model budget per interaction, exact
+declaration names as the model's weakest skill (so queries should tolerate or correct near-misses and Tao
+should validate every operand against facts before lowering), and typed reads/writes in the compiler so the
+`poc-derived` edges become compiler facts. Free-form tool calling should stay, but with a Tao-owned budget
+and repeat suppression rather than model discipline.
 
 ## Exit condition and handoff
 
