@@ -389,18 +389,16 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands.slice(graph)).toContain('_parser-gen')
   })
 
-  Test('runs every unquarantined Studio lane in the one graph and reports the browser quarantine', async () => {
+  Test('runs every automated Studio lane in the one graph without a browser quarantine', async () => {
     const commands = await justCommands('full-verify')
 
     Expect(commands).toContain(
-      '_full-verify-smoke-launch _full-verify-real-app _full-verify-native _full-verify-canary',
+      '_full-verify-smoke-launch _full-verify-real-app _full-verify-simulated '
+        + '_full-verify-native _full-verify-canary',
     )
     Expect(commands).toContain('--lane full-verify')
     Expect(commands).not.toContain('--jobs 1')
-    Expect(commands).toContain(
-      '"_full-verify-simulated=temporarily quarantined; '
-        + 'run just _full-verify-simulated while debugging the browser journey"',
-    )
+    Expect(commands).not.toContain('_full-verify-simulated=temporarily quarantined')
     Expect(commands).not.toContain('manual-check')
     // Each lane owns a worker index so StudioSmoke.resources() keeps their ports and roots apart.
     Expect(await justCommands('_full-verify-smoke-launch')).toContain(

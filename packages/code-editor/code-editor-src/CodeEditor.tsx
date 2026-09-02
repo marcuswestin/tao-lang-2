@@ -10,6 +10,7 @@ export type CodeEditorLsp = {
   documentUri: string
   languageId?: string
   rootUri: string
+  sanitizeHTML?: (html: string) => string
   transport: Transport | Promise<Transport>
 }
 
@@ -165,7 +166,10 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
         return
       }
       event.preventDefault()
-      view.dispatch(transaction)
+      // A drop is one user-visible edit even when it lands immediately after typing. Without a
+      // distinct user event, CodeMirror can merge both changes into one history group and a single
+      // undo silently discards already-saved typing along with the dropped component.
+      view.dispatch({ ...transaction, userEvent: 'input.drop' })
       view.focus()
     }
     view.dom.addEventListener('dragover', onDragOver)
@@ -180,6 +184,7 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
         const client = new LSPClient({
           extensions: languageServerExtensions(),
           rootUri: props.Lsp.rootUri,
+          ...(props.Lsp.sanitizeHTML === undefined ? {} : { sanitizeHTML: props.Lsp.sanitizeHTML }),
           timeout: 10_000,
         })
         ownedClient = client
@@ -216,7 +221,14 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
       }
       ownedClient?.disconnect()
     }
-  }, [props.Highlight, props.Lsp?.documentUri, props.Lsp?.languageId, props.Lsp?.rootUri, props.Lsp?.transport])
+  }, [
+    props.Highlight,
+    props.Lsp?.documentUri,
+    props.Lsp?.languageId,
+    props.Lsp?.rootUri,
+    props.Lsp?.sanitizeHTML,
+    props.Lsp?.transport,
+  ])
 
   React.useEffect(() => {
     const view = editor.current

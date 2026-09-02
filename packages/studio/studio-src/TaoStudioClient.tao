@@ -474,10 +474,10 @@ view StudioInspectorLayout(CurrentSourceVersion text, Inspection text, Selection
             }
             loop StudioInspectorLayoutActionIds() / ActionId {
                StudioInspectorLayoutCommand(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId, Apply: Apply)
-            }
-            StudioInspectorUndoMarker() {
-               Button("Undo visual edit", Undo, Disabled: not StudioInspectorUndoAvailable(Busy: Busy, CanUndo: CanUndo))
-}  }  }  }  }
+      }  }  }
+      StudioInspectorUndoMarker() {
+         Button("Undo visual edit", Undo, Disabled: not StudioInspectorUndoAvailable(Busy: Busy, CanUndo: CanUndo))
+}  }  }
 
 view StudioInspectorLayoutField(Drafts text, FieldId text, ChangeDrafts action(text)) {
    action Change(Value text) {

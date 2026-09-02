@@ -195,6 +195,15 @@ export class StudioCdp {
   }
 
   async click(selector: string): Promise<void> {
+    // Raw `Error`: this string is evaluated by Chrome through `Runtime.evaluate`, so it runs in the
+    // page with no module system and no reach into Tao's error taxonomy.
+    await this.evaluate(`(() => {
+      const selector = ${JSON.stringify(selector)}
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) throw new Error('Missing clickable element: ' + selector)
+      element.scrollIntoView({ block: 'center', inline: 'center' })
+      return true
+    })()`)
     const point = await this.elementCenter(selector, 'clickable')
     await this.client.send('Input.dispatchMouseEvent', {
       button: 'left',

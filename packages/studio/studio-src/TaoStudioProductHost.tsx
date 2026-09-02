@@ -12,7 +12,7 @@ import React from 'react'
 import { createPortal } from 'react-dom'
 import { StudioApiClient } from './client/StudioApiClient'
 import { mountStudio } from './client/StudioApp'
-import { fileUri, StudioEditorInsertion } from './client/StudioEditor'
+import { fileUri, sanitizeLspHtml, StudioEditorInsertion } from './client/StudioEditor'
 import {
   type StudioTaoDrawerPanelModel,
   StudioTaoPanelProjection,
@@ -1683,6 +1683,7 @@ function useStudioEditorLsp(path: string | undefined, projectRoot: string | unde
             documentUri: fileUri(projectRoot, path),
             languageId: 'tao',
             rootUri: fileUri(projectRoot),
+            sanitizeHTML: sanitizeLspHtml,
             transport,
           },
           path,

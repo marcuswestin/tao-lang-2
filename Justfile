@@ -148,16 +148,15 @@ clean-all: clean
 verify: _parser-gen
     ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --lane verify --json .artifacts/logs/verify/summary.json --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree" "studio-smoke=slow lane; run just studio-smoke or just full-verify"
 
-# Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every unquarantined Studio lane
+# Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every automated Studio lane
 full-verify: deps _parser-gen
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _full-verify-smoke-launch _full-verify-real-app _full-verify-native _full-verify-canary --lane full-verify --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree" "_full-verify-simulated=temporarily quarantined; run just _full-verify-simulated while debugging the browser journey"
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _full-verify-smoke-launch _full-verify-real-app _full-verify-simulated _full-verify-native _full-verify-canary --lane full-verify --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree"
 
 # Private
 #########
 
 # The full-verify Studio lanes. One recipe per lane, each on its own worker index so
-# StudioSmoke.resources() hands it ports and an artifact root no other lane touches. The
-# simulated lane stays runnable on its own while it is quarantined from the graph.
+# StudioSmoke.resources() hands it ports and an artifact root no other lane touches.
 
 _full-verify-smoke-launch:
     ./dev studio-smoke --run-id full-verify-launch --worker 0 packages/dev/studio-smoke/studio-launch.test.ts

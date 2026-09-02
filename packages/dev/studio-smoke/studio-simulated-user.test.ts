@@ -38,10 +38,8 @@ Test('simulated preview stays within the preview-origin API boundary', () => {
   Expect(html).not.toContain('/api/file?')
 })
 
-// The browser branch is temporarily quarantined from the `full-verify` graph; keep this test and the
-// `_full-verify-simulated` recipe intact so the end-to-end journey remains directly reproducible.
-// The native branch below validates the unattended Electrobun capability probe; it does not repeat
-// the browser editor journey.
+// The browser branch is the full editor/preview journey in the `full-verify` graph. The native branch
+// validates the unattended Electrobun capability probe; it does not repeat the browser journey.
 Test('simulated user exercises the browser editor or the native Electrobun shell', async () => {
   const artifactParent = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT'] ?? FS.tmpdir()
   await FS.mkdir(artifactParent)
@@ -187,6 +185,8 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.pressShortcut('s')
       await waitForSource(sourcePath, source => source === typedSource)
       compileRevision = await waitForCompileAfter(browser, compileRevision)
+      Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
+        .toContain('Text("First typed")')
 
       await browser.click('[data-panel="components"]')
       await browser.waitFor(
@@ -196,11 +196,12 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.waitFor("document.querySelector('.cm-content')?.textContent.includes('New text')")
       await browser.pressShortcut('z')
       await browser.waitFor("!document.querySelector('.cm-content')?.textContent.includes('New text')")
+      Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
+        .toContain('Text("First typed")')
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
 
       await waitForPreviewSourceIdentity(browser, preview.url)
-      await browser.clickInFrame(preview.url, '#select-first')
-      await waitForPreviewState(browser, preview.url, 'selection sent')
+      await clickPreviewAndWaitForState(browser, preview.url, '#select-first', 'selection sent')
       await waitForInspectorReady(browser)
       await browser.drag(
         '[data-tao-studio-component="Text"]',
@@ -213,12 +214,17 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')?.disabled === false`,
       )
       await browser.click('[data-studio-tao-inspector-context="Layout"] [data-tao-studio-undo] button')
-      await waitForSource(sourcePath, source => source === typedSource)
+      await waitForSourceOrStudioError(browser, sourcePath, source => source === typedSource)
       compileRevision = await waitForCompileAfter(browser, compileRevision)
 
-      await browser.clickInFrame(preview.url, '#move-third')
-      await waitForPreviewState(browser, preview.url, 'move sent')
-      await waitForSource(sourcePath, source => ordered(source, ['First typed', 'Third', 'Second']))
+      await waitForPreviewSourceIdentity(browser, preview.url)
+      await clickPreviewUntilSource(
+        browser,
+        preview.url,
+        '#move-third',
+        sourcePath,
+        source => ordered(source, ['First typed', 'Third', 'Second']),
+      )
       compileRevision = await waitForCompileAfter(browser, compileRevision)
       await browser.waitFor("document.querySelector('[data-tao-studio-undo] button')?.disabled === false")
       await browser.click('[data-tao-studio-undo] button')
@@ -407,20 +413,24 @@ async function waitForSourceOrStudioError(
 ): Promise<void> {
   const deadline = Date.now() + 20_000
   let source = ''
+  let status: Readonly<{ state: string; text: string }> = { state: '', text: '' }
   while (Date.now() < deadline) {
     source = await FS.readText(path)
     if (predicate(source)) {
       return
     }
-    const status = await browser.evaluate<string>(
-      "document.querySelector('.studio-status[data-state=\"error\"]')?.textContent ?? ''",
-    )
-    if (status !== '') {
-      Errors.throwHostEnvironment(`Studio preview drop failed: ${status}`)
+    status = await browser.evaluate<Readonly<{ state: string; text: string }>>(`(() => {
+      const element = document.querySelector('.studio-status')
+      return { state: element?.getAttribute('data-state') ?? '', text: element?.textContent ?? '' }
+    })()`)
+    if (status.state === 'error') {
+      Errors.throwHostEnvironment(`Studio preview drop failed: ${status.text}`)
     }
     await Time.sleep(100)
   }
-  Errors.throwHostEnvironment(`Timed out waiting for Studio source change. Last source:\n${source}`)
+  Errors.throwHostEnvironment(
+    `Timed out waiting for Studio source change. Last status=${JSON.stringify(status)}; last source:\n${source}`,
+  )
 }
 
 async function waitForCompileAfter(browser: StudioCdp, previousRevision: number): Promise<number> {
@@ -442,32 +452,73 @@ async function waitForCompileAfter(browser: StudioCdp, previousRevision: number)
   )
 }
 
-async function waitForPreviewState(
+async function clickPreviewAndWaitForState(
   browser: StudioCdp,
   previewUrl: string,
+  selector: '#move-third' | '#select-first',
   expected: 'move sent' | 'selection sent',
 ): Promise<void> {
   const deadline = Date.now() + 15_000
   let last = ''
   while (Date.now() < deadline) {
     try {
-      last = await browser.evaluateInFrame<string>(
-        previewUrl,
-        "document.querySelector('#state')?.textContent ?? ''",
-      )
-      if (last === expected) {
-        return
+      await browser.clickInFrame(previewUrl, selector)
+      const attemptDeadline = Math.min(deadline, Date.now() + 1_000)
+      while (Date.now() < attemptDeadline) {
+        last = await browser.evaluateInFrame<string>(
+          previewUrl,
+          "document.querySelector('#state')?.textContent ?? ''",
+        )
+        if (last === expected) {
+          return
+        }
+        await Time.sleep(100)
       }
     } catch (error) {
       last = error instanceof Error ? error.message : String(error)
     }
-    if (last.includes(' failed: ')) {
-      Errors.throwHostEnvironment(`Studio smoke preview interaction failed: ${last}`)
-    }
-    await Time.sleep(100)
   }
   Errors.throwHostEnvironment(
     `Timed out waiting for Studio smoke preview state ${JSON.stringify(expected)}; last=${JSON.stringify(last)}`,
+  )
+}
+
+async function clickPreviewUntilSource(
+  browser: StudioCdp,
+  previewUrl: string,
+  selector: '#move-third',
+  sourcePath: string,
+  predicate: (source: string) => boolean,
+): Promise<void> {
+  const deadline = Date.now() + 15_000
+  let lastSource = ''
+  let lastStatus = ''
+  while (Date.now() < deadline) {
+    try {
+      await browser.clickInFrame(previewUrl, selector)
+    } catch (error) {
+      lastStatus = error instanceof Error ? error.message : String(error)
+    }
+    const attemptDeadline = Math.min(deadline, Date.now() + 5_000)
+    while (Date.now() < attemptDeadline) {
+      lastSource = await FS.readText(sourcePath)
+      if (predicate(lastSource)) {
+        return
+      }
+      const status = await browser.evaluate<Readonly<{ state: string; text: string }>>(`(() => {
+        const element = document.querySelector('.studio-status')
+        return { state: element?.getAttribute('data-state') ?? '', text: element?.textContent ?? '' }
+      })()`)
+      lastStatus = status.text
+      if (status.state === 'error') {
+        Errors.throwHostEnvironment(`Studio preview interaction failed: ${status.text}`)
+      }
+      await Time.sleep(100)
+    }
+  }
+  Errors.throwHostEnvironment(
+    `Timed out applying the Studio preview interaction; last status=${JSON.stringify(lastStatus)}; `
+      + `last source:\n${lastSource}`,
   )
 }
 

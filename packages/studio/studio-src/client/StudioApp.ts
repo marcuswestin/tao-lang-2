@@ -1,7 +1,7 @@
-import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client'
 import { Assert, Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import { EditorView } from 'codemirror'
+import type { StudioCompileCompletion } from '../StudioCompileCoordinator'
 import { type StudioDraftFile, StudioDraftSync, type StudioDraftSyncResult } from '../StudioDraftSync'
 import {
   StudioInspector,
@@ -29,14 +29,11 @@ import {
   type StudioCompileDiagnostic,
   type StudioCompileState,
   type StudioFile,
-  type StudioLspTransport,
 } from './StudioApiClient'
 import {
   absoluteSourcePath,
-  fileUri,
   isStudioSaveShortcut,
   projectRelativePath,
-  sanitizeLspHtml,
   StudioCodeEditor,
   StudioDiagnosticNavigation,
   StudioEditorInsertion,
@@ -142,8 +139,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
   const view = createStudioShell(root, config)
   const partialOpenTabs = new Map<string, StudioOpenEditorTab>()
   let partialPreviews: Awaited<ReturnType<typeof connectPreviews>> = []
-  let partialLanguageClient: LSPClient | undefined
-  let partialTransport: StudioLspTransport | undefined
   try {
     throwIfMountAborted(options.signal)
     const handshake = await StudioApiClient.handshake(options.signal)
@@ -155,19 +150,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     throwIfMountAborted(options.signal)
     const activePreview = new StudioActivePreview(previews)
     configureInteractionMode(view.interactionMode, previews, handshake)
-
-    const transport = await StudioApiClient.lspTransport(options.signal)
-    partialTransport = transport
-    throwIfMountAborted(options.signal)
-    const languageClient = new LSPClient({
-      extensions: languageServerExtensions(),
-      rootUri: fileUri(handshake.identity.project),
-      sanitizeHTML: sanitizeLspHtml,
-      timeout: 10_000,
-    }).connect(transport)
-    partialLanguageClient = languageClient
-    await languageClient.initializing
-    throwIfMountAborted(options.signal)
 
     let editor: EditorView | undefined
     let compileState = handshake.compile
@@ -338,7 +320,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         extensions: [
           StudioCodeEditor.extension,
           StudioTextMateLanguage.extension,
-          languageClient.plugin(fileUri(handshake.identity.project, path), 'tao'),
           EditorView.updateListener.of(update => {
             if (update.docChanged) {
               const content = update.state.doc.toString()
@@ -884,9 +865,14 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       }
     }
 
-    async function applySourceAction(envelope: StudioSourceActionEnvelope): Promise<void> {
-      sourceActionBusy = true
+    function setSourceActionBusy(busy: boolean): void {
+      sourceActionBusy = busy
+      publishProductHostState()
       renderInspector()
+    }
+
+    async function applySourceAction(envelope: StudioSourceActionEnvelope): Promise<void> {
+      setSourceActionBusy(true)
       view.status.dataset['state'] = 'compiling'
       view.status.textContent = `Applying ${sourceActionLabel(envelope.action)}…`
       try {
@@ -898,12 +884,15 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         inspection = undefined
         publishProductHostState()
         await openFile(result.path, true)
-        view.status.textContent = 'Source action applied; compiling preview…'
+        updateStatus(
+          view.status,
+          StudioCompileStatus.completed(result.compile, compileState),
+          diagnostic => void openCompileDiagnostic(diagnostic),
+        )
       } catch (error) {
         showSourceActionError(view.status, error)
       } finally {
-        sourceActionBusy = false
-        renderInspector()
+        setSourceActionBusy(false)
       }
     }
 
@@ -935,8 +924,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         return
       }
       const envelope = localActionEnvelope(action, identity)
-      sourceActionBusy = true
-      renderInspector()
+      setSourceActionBusy(true)
       view.status.dataset['state'] = 'compiling'
       view.status.textContent = 'Preparing a canonical source proposal…'
       try {
@@ -950,8 +938,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         showSourceActionError(view.status, error)
         return
       } finally {
-        sourceActionBusy = false
-        renderInspector()
+        setSourceActionBusy(false)
       }
       await applySourceAction(envelope)
     }
@@ -1009,8 +996,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         ...currentIdentity,
         ...(checkpoint.identity.occurrence === undefined ? {} : { occurrence: checkpoint.identity.occurrence }),
       }
-      sourceActionBusy = true
-      renderInspector()
+      setSourceActionBusy(true)
+      view.status.dataset['state'] = 'compiling'
+      view.status.textContent = 'Undoing visual source edit…'
       try {
         const result = await StudioApiClient.undoSourceAction(StudioInspector.undo({
           checkpointId: checkpoint.id,
@@ -1022,12 +1010,15 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         inspection = undefined
         publishProductHostState()
         await openFile(result.path, true)
-        view.status.textContent = 'Visual source edit undone; compiling preview…'
+        updateStatus(
+          view.status,
+          StudioCompileStatus.completed(result.compile, compileState),
+          diagnostic => void openCompileDiagnostic(diagnostic),
+        )
       } catch (error) {
         showSourceActionError(view.status, error)
       } finally {
-        sourceActionBusy = false
-        renderInspector()
+        setSourceActionBusy(false)
       }
     }
 
@@ -1671,8 +1662,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         tab.editor.destroy()
       }
       disconnectPreviews(previews)
-      languageClient.disconnect()
-      transport.close()
     }
     return cleanup
   } catch (error) {
@@ -1680,8 +1669,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       tab.editor.destroy()
     }
     disconnectPreviews(partialPreviews)
-    partialLanguageClient?.disconnect()
-    partialTransport?.close()
     if (!isAbortError(error)) {
       view.status.dataset['state'] = 'error'
       view.status.textContent = error instanceof Error ? error.message : String(error)
@@ -1813,15 +1800,25 @@ export const StudioDraftStatus = {
     if (!result.saved || result.compile === undefined) {
       return undefined
     }
-    if (current.compileRevision > result.compile.compileRevision) {
+    return StudioCompileStatus.completed(result.compile, current)
+  },
+}
+
+/** Keeps a completed request from overwriting an equal or newer event-stream compile state. */
+const StudioCompileStatus = {
+  completed(
+    completion: StudioCompileCompletion,
+    current: StudioCompileState,
+  ): StudioCompileState {
+    if (current.compileRevision > completion.compileRevision) {
       return current
     }
     return {
       appliedRevision: current.appliedRevision,
-      compileRevision: result.compile.compileRevision,
-      diagnostics: result.compile.diagnostics,
-      message: result.compile.message,
-      status: result.compile.status,
+      compileRevision: completion.compileRevision,
+      diagnostics: completion.diagnostics,
+      message: completion.message,
+      status: completion.status,
     }
   },
 }

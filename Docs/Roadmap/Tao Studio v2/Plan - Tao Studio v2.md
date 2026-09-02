@@ -90,14 +90,10 @@ validity as unverified when Apple's tools are absent rather than as passed.
 
 1. Run `just studio-manual-checks` for the native project picker and real window lifecycle; then supply
    signing and notarization credentials to validate the DMG and differential update.
-2. Repair and re-enable `_full-verify-simulated`. It is temporarily quarantined from `full-verify` because
-   the palette-to-preview drop does not yet produce its source action. The direct recipe remains runnable.
-   Restore the width-mode/apply-240/undo journey when this lane returns; focused inspector tests retain the
-   typed width-action contract meanwhile.
-3. Preserve the current strangler boundary while completing the external browser and native interaction
+2. Preserve the current strangler boundary while completing the external browser and native interaction
    passes: Tao owns Studio structure and ordinary controls, while TypeScript owns the trusted controller,
    preview lifecycle, serialization boundary, and primitive leaves Tao cannot yet express.
-4. When Ro resumes the explicit deferrals, define fixture-through-action result/handle semantics and the
+3. When Ro resumes the explicit deferrals, define fixture-through-action result/handle semantics and the
    semantic capture/replay contract before finishing authored failure-capture promotion. Do not infer these
    contracts from the current runtime implementation.
 
@@ -116,9 +112,12 @@ Source identity is also synchronized on tab activation, immediately when a previ
 reloads, saves, and selection changes. The load-time send assumes a synchronously installed preview
 listener; the later activation/save/selection paths republish for receivers that mount after load.
 
-The full simulated-browser journey is not closed: its preview palette drop currently stalls before source
-mutation, so the `full-verify` graph records that lane as quarantined instead of reporting it as passed. The
-native capability probe does not substitute for editor, selection, source-action, or undo coverage.
+The full simulated-browser journey now runs in the `full-verify` graph. It proves typed editor save, isolated
+palette-drop undo, preview insertion and undo, preview-origin move and undo, responsive layout, and a clean
+browser console. Visual actions report their completed compile revision even when the event stream wins the
+race, Undo remains available after the edited selection is cleared, replacement preview frames receive a
+fresh source identity before interacting, and only the visible editor owns an LSP view. The native capability
+probe remains complementary rather than a substitute for this editor and source-action coverage.
 
 **Do not widen `previewOriginPath` to make the lane pass.** The smoke's stub preview previously built its
 identity by fetching `/api/protocol` and `/api/file`. Neither is in `previewOriginPath`, the six-endpoint

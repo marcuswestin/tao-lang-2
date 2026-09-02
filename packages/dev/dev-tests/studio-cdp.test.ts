@@ -77,6 +77,27 @@ Describe('Studio browser CDP harness', () => {
     await Expect(browser.setViewport(390.5, 844)).rejects.toThrow('width must be a positive integer')
   })
 
+  Test('scrolls a clickable control into view before dispatching its pointer event', async () => {
+    const transport = new FakeCdpTransport()
+    transport.evaluateResults.push(true, { x: 200, y: 300 })
+    const browser = StudioCdp.testing.create(transport)
+
+    await browser.click('[data-action="undo"]')
+
+    const evaluations = transport.calls.filter(call => call.method === 'Runtime.evaluate')
+    Expect(evaluations[0]?.params['expression']).toContain("scrollIntoView({ block: 'center', inline: 'center' })")
+    Expect(transport.calls.filter(call => call.method === 'Input.dispatchMouseEvent')).toEqual([
+      {
+        method: 'Input.dispatchMouseEvent',
+        params: { button: 'left', buttons: 1, clickCount: 1, type: 'mousePressed', x: 200, y: 300 },
+      },
+      {
+        method: 'Input.dispatchMouseEvent',
+        params: { button: 'left', buttons: 0, clickCount: 1, type: 'mouseReleased', x: 200, y: 300 },
+      },
+    ])
+  })
+
   // Chrome never synthesizes HTML5 drag-and-drop from mouse events, so a palette drag has to go
   // through drag interception: press and move to make the page start the drag, then replay the
   // intercepted payload into dragEnter/dragOver/drop over the target.

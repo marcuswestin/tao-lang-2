@@ -1,6 +1,7 @@
 import type { Transport } from '@codemirror/lsp-client'
 import { Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
+import type { StudioCompileCompletion } from '../StudioCompileCoordinator'
 import type { StudioDraftFile, StudioDraftSyncRequest, StudioDraftSyncResult } from '../StudioDraftSync'
 import type { StudioLanguageHighlight } from '../StudioHighlight'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../StudioPreviewManifest'
@@ -77,6 +78,7 @@ export type StudioGeneratedFixtureResult =
 
 export type StudioSourceActionResult = {
   checkpoint: { id: string; status: 'committed' | 'open' }
+  compile: StudioCompileCompletion
   content: string
   path: string
   sourceVersion: string
@@ -94,6 +96,7 @@ export type StudioSourceActionProposal = {
 
 export type StudioSourceActionUndoResult = {
   checkpoint: { id: string; status: 'undone' }
+  compile: StudioCompileCompletion
   content: string
   path: string
   sourceVersion: string
