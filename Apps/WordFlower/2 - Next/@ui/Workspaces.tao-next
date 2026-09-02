@@ -120,7 +120,7 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
    // A command is the discoverable verb and the action is the private procedure behind it, so the
    // name a person reads lives on the command. This one is declared in the scene because it reads
    // and resets that scene's own state, exactly as an `action` may.
-   command Save {
+   command Save() {
       Title "Save workspace"
       Icon "checkmark"
       Enabled WorkspaceNameDraft is not empty
@@ -299,9 +299,7 @@ view DraftRow(Document) {
          // `do <command> with { ... }` fills the command's slot at the invocation, so the row and
          // any other surface that offers Finish run one declared verb rather than two copies of
          // the write.
-         on press -> { do Finish with {
-            Document
-         } }
+         on press -> { do Finish(Document) }
       }
 
       #delete

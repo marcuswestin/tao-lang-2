@@ -1,11 +1,11 @@
 use Workspaces from @data
-use WordFlowerDrawerNavigator, WordFlowerShell, WordFlowerTabsNavigator from @nav
+use WordFlowerDrawerNavigator, WordFlowerNavigator, WordFlowerTabsNavigator from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
 use WorkspaceRow from @ui
 use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
-// Tranche status: absorbed
+// Tranche status: open
 //
 // STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
 // shared by Tao tests, review tooling, and Studio. `fixture` owns reusable data/identity setup;
@@ -327,6 +327,35 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // - `Toolbar` is `list of command` and moves to `scene` with `Title`. Every module publishes a
 //   catalog of its commands, which is what makes "every command whose slots this target can fill"
 //   answerable at all -- the verb universe the later tranches read
+//
+// THE INTERACTION SYSTEM, PART ONE, REVISED: THE SHELL IS A VIEW, AND A COMMAND HAS PARAMETERS. Two
+// decisions the first part implemented are reversed after review (`Docs/Roadmap/Keyboard driven
+// apps/Open - Shell composition and member syntax.md`). Both make the language smaller.
+//
+// This tranche decides:
+// - A render site may name a nav. `nav is scene is view`, and the grammar now agrees: everything
+//   that renders a view renders a nav, so a shell is ordinary layout -- a `Col` holding the
+//   navigator and a bar -- and `FrameNav` retires with nothing replacing it. A rendered nav still
+//   owns its occurrences, Back, restoration, and chrome; only where it sits in the tree changes
+// - Three invariants keep a rendered nav honest, all diagnosed at the render site: a nav renders at
+//   most once, never inside a loop, and never inside a conditional branch -- its history lives on its
+//   mount, so a branch that unmounts it would silently drop where the person was
+// - The app root is a view with arguments: `view WordFlowerShell(WordFlowerNavigator)`. A view-typed
+//   or nav-typed parameter renders like any other view, which is how one shell serves every preview
+//   variant without three copies of the bar
+// - The `@name` sigil belongs to named render slots -- content a caller passes into a view that lays
+//   it out and owns the interaction. A frame's edges were never that, which is the other reason the
+//   frame goes
+// - A command declares its slots in a parameter list, exactly as an action does:
+//   `command Finish(Document) { ... }`. The block then holds only member fills and one `do`, so
+//   juxtaposition means one thing inside it -- bind -- and the two ambiguities the first part had
+//   to legislate around dissolve: `command Like(Track Song)` renames a typed slot, and
+//   `Enabled CanSave` is a value again with no `:` escape hatch
+// - `do Finish(Document)` invokes a command, mirroring `do SaveWorkspace()`; `Finish with { Document }`
+//   derives a command value with a slot filled, for surfaces and menus. `do X with { }` retires as
+//   redundant
+// - A module-level `query` stays. It lost the feature that forced it -- a shell that is a view holds
+//   its own query -- and is kept only because retiring it is a separate decision; it is flagged
 project {
    id "wordflower"
    name "WordFlower"
@@ -334,31 +363,28 @@ project {
    license MIT
 }
 
-// An app mounts navs, it does not render content directly. Overlay and toast hosting are universal
-// capabilities, so no app declares them.
+// The app is rooted in a view: the shell, which lays the navigator and the focus bar out as ordinary
+// content. Tao mounts a navigator around a view root, so nothing here names one. Overlay and toast
+// hosting are universal capabilities, so no app declares them.
 app WordFlower {
    Name "WordFlower"
    Design WordFlowerDesign
-   Navigator WordFlowerShell
+   view WordFlowerShell(WordFlowerNavigator)
    Datasource DeviceStore // offline-first: the device owns the writing; sync is a variant
 }
 
 app WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
-   Navigator with { // patches the shell's center instead of replacing the shell
-      @center {
-         Content WordFlowerDrawerNavigator
-}  }  }
+   view WordFlowerShell(WordFlowerDrawerNavigator) // the same shell, a different navigator in it
+}
 
 // The explicit dark preview mounts a complete dark design and keeps the portable tab surface on
 // every target, so the preview does not depend on the host operating system's current appearance.
 app WordFlowerDark = WordFlower with {
    Name "WordFlower - Dark"
    Design WordFlowerDarkDesign
-   Navigator with {
-      @center {
-         Content WordFlowerTabsNavigator
-}  }  }
+   view WordFlowerShell(WordFlowerTabsNavigator)
+}
 
 app WordFlowerInstantDB = WordFlower with {
    Name "WordFlower - InstantDB"

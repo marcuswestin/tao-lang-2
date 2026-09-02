@@ -179,11 +179,10 @@ view ConfirmCloseDialogue(Document) responds ConfirmResult {
 }  }  }  }
 
 // A module-level command: its slot is a noun, so it is a verb for every document anywhere in the
-// app rather than an affordance belonging to one screen. `Document` alone declares the slot and
-// takes its same-named type, the way a parameter list already reads.
+// app rather than an affordance belonging to one screen. Slots are parameters, declared exactly as
+// an action declares its own, so the block holds only what a person reads and the one `do`.
 package
-command Finish {
-   Document
+command Finish(Document) {
    Title "Finish document"
    Description "Moves a document out of drafts and into the archive."
    Summary "Finish { Document.Title }"
