@@ -182,6 +182,11 @@ Product and codebase backlog, unordered.
     - **66 already-typed `throw new Errors.*` guards across ten studio files** that would collapse to a
       one-line `Assert.input` now that `Assert` narrows the expression it is given. Invisible to
       repo-lint because they are already typed; purely a readability win.
+- [ ] Build the Tao debugger
+  - Breakpoint-style stepping through action statements in Studio, a paused-transaction inspector
+    that shows the overlay's pending writes beside committed values, an action journal of every
+    root, and an intent console; later failure/data breakpoints, test-journey stepping, and time
+    travel over the journal. Plan and decisions queue: `Docs/Roadmap/Tao debugger.md`.
 - [ ] Finish simulation mode in Tao Studio
   - The versioned cell matrix, viewport/network contract, provider overlay, exact data snapshot codec,
     fixture/scenario metadata, generated-host provider wiring, and captured-fixture save exist.
@@ -257,6 +262,7 @@ Product and codebase backlog, unordered.
 - `Apps/WordFlower/README.md` — the implementation process and the four app tiers.
 - `Docs/Roadmap/AI in Tao apps.md` — AI-in-apps exploration with recorded direction: the `generate` surface, platform-provided models first, the `Sees` prompt boundary, scripted-model testing, and the implementation sequence.
 - `Docs/Roadmap/Authority.md` — authority exploration with open dialogue: lowering the decided access/publish/secrets model into the provider's own rule language, remote authorization semantics for `through` grants, the remote-refusal contract, redaction, and the two-account proof app over InstantDB.
+- `Docs/Roadmap/Tao debugger.md` — debugger exploration with open dialogue: what a debugger over the action transaction can offer, instrumented codegen and the statement gate, pause semantics, the Studio protocol and drawer, and the phased sequence from journal to time travel.
 - `Docs/Roadmap/Deterministic simulation.md` — deterministic whole-app simulation exploration: the determinism boundary, the scripted-world harness over the Studio cell pipeline, schema-derived property testing, journal-based replay and time-travel, and design rules across cells.
 - `Docs/Roadmap/Device capabilities.md` — device-capabilities exploration for the RN/Expo bridge item: the config-through-one-engine recommendation, permission case sets, outcome delivery into `when do`, scripted capability drivers, and the proving sequence.
 - `Docs/Roadmap/Tao ship.md` — ship exploration with open dialogue: the derived publish pipeline (build/sign/submit/OTA), variants as environments, the derived hosted runtime, the schema-migration option space, deploy configuration, error reports and analytics in production, and the commercial shape.
