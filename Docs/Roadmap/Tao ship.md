@@ -20,10 +20,12 @@ binary. The assessment, the App Store rules it rests on, and the design rules it
 
 The same day settled the first slice's decisions, recorded with their reasoning in that plan:
 
-- **The verb is `tao ship`.** Plain `tao ship <App>` builds and submits to the app stores,
-  automating as much as possible; `tao ship <App> --beta` delivers to the project's invited
-  members through the companion app. `tao publish` stays the package registry's verb, and the
-  `tao publish --app` and `tao build` placeholders are retired.
+- **The verb is `tao ship`.** Plain `tao ship` builds locally, uploads, and submits to App Store
+  review, automating as much as possible; `tao ship --beta` sends the same build to TestFlight
+  with named recipients. The companion app's delivery lane gets its own flag when that app
+  exists. `tao publish` stays the package registry's verb, and the `tao publish --app` and
+  `tao build` placeholders are retired. Builds are local, through Xcode and the App Store
+  Connect API key; EAS is a later option, not a requirement.
 - **Identifier facts are accepted project metadata** in the `ship` section of the project's one
   committed `.tao-project/lock.jsonc`, written by `tao ship`, never hand-edited, following the old
   design lock's contract (identity, input hash, accepted or suggested status, provenance). Later

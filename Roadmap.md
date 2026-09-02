@@ -128,16 +128,17 @@ tests written in Tao, green in Current, for every construct introduced.
 - [ ] Add the Tao design system MVP
   - Deterministic design declarations, tokens, semantic tokens, component recipes, source-level application, runtime lowering, and first diagnostics. Plan: `Docs/Roadmap/Add Tao design system MVP/`.
 - [ ] Implement `tao ship`
-  - Decisions settled 2026-09-02; slice 1 is ready for an implementation prompt. `tao ship <App>`
-    builds and submits to the stores over the developer's own EAS and Apple accounts from a derived
-    Expo host, with the accepted identifiers in `.tao-project/lock.jsonc`; slice 2 adds
-    `--update` for compiled-bundle updates; `--beta` waits for the companion app. Plan and research:
-    `Docs/Roadmap/Tao ship/`.
+  - Decisions settled 2026-09-02; slice 1 is ready for an implementation prompt. `tao ship` bumps
+    the project version, builds locally through Xcode from a derived Expo host, uploads with the
+    App Store Connect API key, and submits to App Store review; `--beta` sends the build to
+    TestFlight with named recipients; the accepted identifiers live in `.tao-project/lock.jsonc`.
+    Slice 2 adds `--update` for compiled-bundle updates and chooses its update server. Plan and
+    research: `Docs/Roadmap/Tao ship/`.
 - [ ] Build the Tao Studio companion app
   - Decided 2026-09-02. A Tao-published phone app for an improved development experience, paired
     with Tao Studio, and for pre-release testing and feedback by members a developer invites to
-    their project on the Tao Lang servers, each with an account there. `tao ship <App> --beta`
-    delivers through it; plain `tao ship` is the store motion. Sequences after the derived Expo
+    their project on the Tao Lang servers, each with an account there. A `tao ship` flag of its
+    own delivers through it once it exists; plain `tao ship` and `--beta` are the store motions. Sequences after the derived Expo
     host and the compiled-bundle update lane of `tao ship`. Design rules: project membership
     as the only access model, no public sharing surface, compiled bundles only, the Studio
     native-device canvas as first customer, rare shell releases. Context and rules:

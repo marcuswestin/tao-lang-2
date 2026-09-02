@@ -9,17 +9,16 @@ it touches grammar it proposes and defers to `../Tao Revolution/Decisions.md`.
 **Direction settled, 2026-09-02.** Two spellings, ruled by Ro:
 
 ```bash
-tao ship <App>          # build and submit to the app stores, automating as much as possible
-tao ship <App> --beta   # deliver to the project's invited members through the Tao Studio companion app
+tao ship            # build locally, upload, and submit to App Store review, automating as much as possible
+tao ship --beta     # the same build to TestFlight, with the recipients who should receive it
 ```
 
-Plain `tao ship` is the store motion: iOS through App Store Connect, where TestFlight is the
-store's own pre-release stage, and Android through Google Play. `--beta` is the companion app's
-motion: the compiled bundle reaches the members a developer invited to the project on the Tao
-Lang servers, with no store, no Apple account, and no native build in the path. The sections
-below were written before that ruling; where they say TestFlight is "the beta channel", read it
-as the store's pre-release stage, and where they describe an Expo Go bridge, that lane is
-superseded by `--beta` and not built.
+Over the day the ruling was refined three times; _Command surface_ below is the authoritative
+form. Plain `tao ship` is the App Store motion. `--beta` is TestFlight, with recipients. The
+companion app's delivery lane gets its own flag when that app exists. Android and Expo
+publishing are out of scope. The sections below were written before these rulings; where they
+say TestFlight is "the beta channel", read it as `--beta`, and where they assume EAS cloud
+builds, read _Build lane_ below.
 
 ## The outcome
 
@@ -115,82 +114,219 @@ that lane, and every mechanism is one a later Tao-managed front can reuse unchan
 
 ### Command surface
 
-`tao ship` is the working verb, matching the exploration; decision 1 below asks Ro to ratify it
-against the `tao publish --app` placeholder and the `tao build --profile` recipes in
-`Apps/WordFlower/3 - MVP/Justfile`. One positional argument, an app declaration name, resolved the
-way `tao compile --app` and `tao dev --app` resolve one today.
+**Settled by Ro on 2026-09-02**, in three refinements, superseding the earlier sketch:
 
 ```bash
-tao ship <App> [path]            # build and submit to the stores: iOS via App Store Connect, Android via Google Play (slice 1)
-tao ship <App> --beta            # compiled bundle to the project's invited members through the companion app (after the app exists)
-tao ship <App> --update          # compiled-bundle update to installed store builds (slice 2)
-tao ship <App> --invite <email>  # add a TestFlight tester (slice 3)
-tao ship <App> --local           # same pipeline on this Mac through eas build --local (slice 4)
+tao ship [path] [--app NAME] [--patch | --minor | --major] [--yes] [--ignore-git] [--dry-run]   # App Store
+tao ship [path] ... --beta[=a@example.com,b@example.com]                                        # TestFlight
 ```
 
-Flags stay few on purpose: beta, update, invite, local. Profiles, channels, credentials, and
-identifiers are derived or remembered, never passed. Ro's ruling of 2026-09-02 settled the two
-spellings at the top of this document; the plain command targets both stores, so the earlier
-`--android` flag is gone and slice 1 covers Android as the Play internal track when a Play
-account is configured, falling back to the APK link when none is.
+- **Project discovery.** `path` defaults to the current directory; `tao ship` climbs from there
+  until it finds the Tao project root.
+- **App selection.** `--app NAME` names the app declaration. Without it, the project's new
+  `DefaultApp` field selects the app. Without either, the command prints every candidate app and
+  asks the developer to choose.
+- **Version.** The project declaration carries the project's semver, the version under
+  development, and Apple sees it as the marketing version. A version is _consumed_ once a build
+  of it has been submitted for App Store review. `tao ship` bumps only when it is about to build
+  a consumed version: `--patch` by default, `--minor` or `--major` on request, or any of the
+  three to force a bump of an unconsumed version. A `--beta` build of an unconsumed version
+  never bumps, and neither does the first store submission of one, which is what makes a tested
+  beta and the store release the same version. Every build gets a distinct build number, a UTC
+  timestamp `yyyyMMddHHmm`, which Apple requires to increase within a version and which needs no
+  counter. The bump is written into source, the lock is updated, and when the project is inside
+  a git repository the command commits the bump and tags it `v<semver>`; a beta build is not
+  tagged, but every build embeds the commit hash and a dirty flag in its bundle so a tester's
+  report maps back to source. Before touching anything the command checks that the repository
+  is clean; a dirty tree is a precursor to fix, unless `--ignore-git` says to proceed regardless.
+- **Ship what was tested.** When the current version already has a processed TestFlight build
+  whose embedded commit is the working tree's commit, plain `tao ship` submits that build for
+  review instead of building again; the action list says so.
+- **After the upload.** Apple processes a build for minutes before it can join a TestFlight
+  group or a review submission. The command waits with progress by default, `--no-wait` returns
+  at once, and every step is recorded in the lock so a rerun resumes where it stopped rather
+  than uploading twice. TestFlight's "What to Test" text is derived from the git log since the
+  previous build's commit, editable through `--notes`.
+- **Precursors, automated where possible.** Every step that needs the developer, such as the
+  Apple membership, the App Store Connect API key, the app record, or the dirty tree above, is
+  handled in order: automated when Apple's tooling allows, and otherwise the command states
+  exactly what to do, with the URL, and waits for a keypress once it is done. Nothing ships until
+  every precursor is satisfied. _What the developer provides_ below is that list.
+- **The action list and the gate.** With precursors done, the command prints the actions it will
+  take, in order: bump, commit and tag when in git, prebuild, archive, upload, and either the
+  App Store review submission or the TestFlight distribution. Unless `--yes` was passed, it asks
+  whether to proceed, Y/n. `--dry-run` stops after the list, so the whole command up to the gate
+  is exercised at no cost; implement it first and test against it.
+- **Plain `tao ship`** uploads the build to App Store Connect, creates or reuses the App Store
+  version for the bumped semver, attaches the build, and submits it for App Store review.
+- **`--beta`** uploads the same build and distributes it through TestFlight instead. Recipients
+  are email addresses: an address belonging to a member of the App Store Connect team joins the
+  project's internal group and receives the build with no review; any other address joins the
+  project's external group, which Apple reviews once per version before the first build reaches
+  it. Both groups are created on demand and remembered by id in the lock; recipients given once
+  are remembered on Apple's side, so a bare `--beta` re-ships to the groups as they stand. The
+  command prints who will be notified as part of the action list. Recipient addresses are not
+  written into the lock.
+- **Dropped:** Android until Ro reopens it, and Expo entirely, ruled on 2026-09-02: no Expo
+  publishing, no EAS build lane, no EAS Update. Publishing through Expo would reach only members
+  of an Expo organization, only inside the Expo Go shell, and only while Tao stays on the SDK the
+  App Store Expo Go carries, which Expo has been unable to move past since spring; TestFlight
+  with recipients covers the need. Slice 2's update server is therefore Tao's own, on the Tao
+  Lang servers the companion app needs anyway, speaking the open expo-updates protocol the
+  runtime client already implements.
 
-### Derived, remembered, prompted
+Flags stay few on purpose. Profiles, credentials, and identifiers are derived or remembered,
+never passed.
 
-| Fact                                  | Source                                                                                                                                                  |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Display name                          | the variant's `Name`, else the project `name`                                                                                                           |
-| Expo slug and EAS project link        | `project { id }` plus the variant name, e.g. `wordflower-instantdb`; the EAS project id is remembered after `eas init` links it                         |
-| Bundle identifier and Android package | a remembered reverse-DNS namespace plus the project id, plus the variant suffix — `com.acme.wordflower.instantdb` (decision 2)                          |
-| Version                               | remembered per project, prompted once with a default of `1.0.0`; build numbers auto-increment on EAS (`appVersionSource: remote`)                       |
-| Update channel and runtime version    | the variant name and the computed native fingerprint (slice 2)                                                                                          |
-| Icon and splash                       | a Tao default asset until an `Icon` slot exists (decision 4); variants that are not the primary app get a badged default                                |
-| Device families and orientation       | `project { targets }` once the grammar implements it; until then phone plus tablet                                                                      |
-| Usage strings                         | none in slice 1; the compiled module graph shows which capability sidecars are reachable, and the derivation waits on the permissions spelling decision |
-| Signing, provisioning, ASC API key    | EAS-managed credentials under the developer's Apple account; created on first run, never stored by Tao                                                  |
-| Expo login                            | `eas login` on first run or `EXPO_TOKEN`; EAS's own state, never stored by Tao                                                                          |
+### Build lane: local first
 
-The remembered facts are secret-free accepted project metadata and live in the project's
-`.tao-project/` folder as the `ship` section of the committed `lock.jsonc`, keyed by variant and
-written by `tao ship`, never by hand; _Precedent: accepted project metadata_ below gives the contract it
-follows. `tao ship` fills it on the first run from its prompts and reads it afterwards, so a
-fresh clone ships without prompting. The exploration's `config` resolution channel reads the
-same lock when that seam settles. The file never holds a credential; the Apple, Expo, and
-hosted-Instant secrets stay in the substrate's stores.
+Ro prefers building on the developer's own Mac, and the research supports it. A paid Apple
+Developer Program membership and an Expo account are different things: Apple owns signing, App
+Store Connect, and TestFlight; Expo's EAS is a separate cloud service for builds, submission,
+and updates, with its own account and quota. Nothing in slice 1 needs EAS.
+
+The local pipeline, all Apple-owned tooling, runs on the derived host:
+
+1. `expo prebuild` generates the Xcode project from the derived app configuration; it is the
+   Expo CLI from the repository's dependencies and needs no account.
+2. `xcodebuild archive` with `-allowProvisioningUpdates` and the App Store Connect API key
+   (`-authenticationKeyPath`, `-authenticationKeyID`, `-authenticationKeyIssuerID`) lets Xcode
+   register the bundle identifier and create or refresh the signing certificate and provisioning
+   profile itself, with no Apple ID sign-in and no two-factor prompt. Xcode 13 introduced the
+   flags; the key must be an Admin team key, since App Manager keys cannot reach Certificates,
+   Identifiers & Profiles.
+3. `xcodebuild -exportArchive` with an export options plist whose `method` is `app-store-connect`
+   and whose `destination` is `upload` signs the archive and uploads it to App Store Connect in
+   one step with the same key. Xcode 15 or later is required: Xcode 14 accepted the key for
+   signing only. Neither `altool`, rewritten and deprecated for uploads in Xcode 26, nor
+   Transporter is involved. The derived configuration sets `usesNonExemptEncryption: false`, so
+   the upload never stops at the export-compliance question.
+4. The App Store Connect API, called with the same key, does what Xcode does not: create the
+   App Store version and submit it for review, create the TestFlight groups, add testers, assign
+   the build, and invite people to the team. A small typed client over the handful of endpoints
+   is the plan; the community `asc` CLI (`brew install asc`, key-authenticated, actively
+   released) is the reference and fallback for the same calls. The one thing Apple's public API
+   refuses is creating the app record, in Apple's own words: "Don't use this API to create new
+   apps; instead, create new apps on the App Store Connect website." The tools that do it
+   drive Apple's private web session with an Apple ID and two-factor code, and break every time
+   Apple changes that flow, so the command dictates the New App form with its values and waits,
+   once per app.
+
+What EAS would have given, for the record: macOS builders for machines without Xcode and for
+agents; managed credential custody; a maintained pipeline that tracks Expo SDK versions; a
+submission service; and EAS Update as a server for compiled-bundle updates. It is not faster
+than a warm Apple-silicon Mac, and its free tier meters builds. Local builds are unlimited and
+offline from everything but Apple. Ro ruled Expo out entirely on 2026-09-02. The library that
+exists for this automation is fastlane, whose `match`, `gym`, `pilot`, and `deliver` cover the
+same four steps in Ruby over Apple's private session where the public API stops. Slice 1 uses
+the Apple tooling directly because the four steps are short and typed, and keeps fastlane as
+the documented fallback if a step proves brittle. Slice 2's update server is Tao's own, on the
+Tao Lang servers.
+
+### What the developer provides
+
+Researched on 2026-09-02 against Apple's documentation and the tooling that exists; sources are
+in `Research - Beta distribution lanes.md`. The table says what a local CLI can do unattended
+and where a human remains.
+
+| Prerequisite                          | Unattended?    | How                                                                                                          | Human step, and how often                                                                                             |
+| ------------------------------------- | -------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Developer Program membership          | No             | none exists; enrollment is a web or Apple Developer app flow with identity verification and payment          | once ever; yearly renewal unless auto-renew is on                                                                     |
+| Team ID                               | Yes            | `seedId` of any bundle identifier from `GET /v1/bundleIds`, or the `OU` of a signing certificate in Keychain | none; the tool derives it                                                                                             |
+| Membership still active               | Heuristic      | a provisioning endpoint answers 403 with an agreements error when the license has lapsed                     | none                                                                                                                  |
+| Program License Agreement accepted    | No             | Apple revises it a few times a year; keys cannot be created and provisioning calls fail until it is accepted | the Account Holder accepts it at developer.apple.com/account or appstoreconnect.apple.com/business, once per revision |
+| App Store Connect API key             | No             | no public endpoint creates team keys; nothing in fastlane does either                                        | once per team: an Admin generates and downloads it                                                                    |
+| Xcode installed                       | Partly         | `xcodes install --latest` or `mas install 497799835`                                                         | Apple ID with a two-factor code, or an App Store sign-in in the GUI, once per machine; `sudo`                         |
+| Xcode license, first launch, platform | Yes            | `sudo xcodebuild -license accept`, `sudo xcodebuild -runFirstLaunch`, `xcodebuild -downloadPlatform iOS`     | the `sudo` password unless sudoers allows it; once per Xcode version                                                  |
+| Bundle identifier                     | Yes            | `xcodebuild -allowProvisioningUpdates` with the key, or `POST /v1/bundleIds`                                 | none                                                                                                                  |
+| Signing certificate and profile       | Yes            | the same `xcodebuild` flags                                                                                  | none                                                                                                                  |
+| App record                            | No             | public API refuses; private-session tools are fragile                                                        | the New App form, once per app                                                                                        |
+| Archive and upload                    | Yes, Xcode 15+ | `xcodebuild -exportArchive` with `destination: upload` and the key                                           | none                                                                                                                  |
+| A person on the team                  | Yes, to send   | `POST /v1/userInvitations` with an Admin key                                                                 | the invitee clicks the activation link, once                                                                          |
+| TestFlight groups and testers         | Yes            | `POST /v1/betaGroups`, `POST /v1/betaTesters`, `POST /v1/betaAppReviewSubmissions` for external groups       | a tester accepts the TestFlight invitation, once; Apple's beta review wait for externals                              |
+| Export compliance                     | Yes            | `usesNonExemptEncryption: false` in the derived configuration                                                | none                                                                                                                  |
+
+So the developer provides three things, once per team, and one thing per app; `tao ship`
+derives, creates, or dictates everything else.
+
+1. **Apple Developer Program membership**, paid and active, at
+   https://developer.apple.com/account. The tool derives the Team ID itself once a bundle
+   identifier or certificate exists, which the first run creates.
+2. **An App Store Connect API team key with the Admin role**, created at
+   https://appstoreconnect.apple.com/access/integrations/api under Team Keys by an Admin or the
+   Account Holder. Admin is required: App Manager keys cannot reach Certificates, Identifiers &
+   Profiles, and only Admin keys can invite people to the team. Download the `.p8` once, note the
+   Key ID shown beside it and the Issuer ID shown above the table, and place the file at
+   `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`, where Apple's tools search by default.
+   The tool records only the Key ID and Issuer ID in the lock, never the key. The agent sandbox
+   can read the home directory except for `.ssh`, `.aws`, and `.config/gh`, so sandboxed runs
+   sign.
+3. **Xcode 15 or later**, with its license accepted and the iOS platform downloaded. The tool
+   checks and prints the exact commands when anything is missing; installing Xcode itself needs
+   an Apple ID or an App Store sign-in once per machine and `sudo`, which no tool removes.
+4. **The App Store Connect app record**, once per app, at https://appstoreconnect.apple.com/apps
+   with New App: platform iOS, the name, the bundle identifier the tool derived and printed, a
+   primary language, and any SKU. `tao ship` states this precursor with those values and waits
+   for a keypress.
+
+Two further items are automated by the tool rather than provided: the developer's own Apple ID
+on the App Store Connect team, which `tao ship` can invite through the API, though the
+developer still clicks the activation email; and the hosted InstantDB app for the
+WordFlowerInstantDB acceptance run. For that run Ro provided the app id
+`9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f` on 2026-09-02 and allows the implementer any action on
+it, including deleting its data. It is the id the repository already seeds into the local
+InstantDB stack, so the implementer first confirms it exists on the hosted service at
+https://www.instantdb.com/dash and otherwise creates a hosted app and records that id in the
+lock; a phone on TestFlight cannot reach `localhost:9020`. Not needed at all: an Expo account.
+
+Xcode cannot create the App Store Connect API key: keys exist only on the App Store Connect
+website, under Users and Access, Integrations, Team Keys, and an Admin makes them. Xcode's own
+Apple ID sign-in would cover signing and upload, since `xcodebuild -allowProvisioningUpdates`
+and the upload-on-export use Xcode's account session when no key is given, but the TestFlight
+groups, testers, and review submission are API calls that only a key authorizes, so the key is
+the one credential the tool needs.
 
 ### The run, step by step
 
-1. **Preflight.** A doctor-shaped check, pure and reported before anything mutates: `eas-cli`
-   resolvable, an Expo login, the app name resolves to one declaration, `project { id, name }`
-   present, the remembered facts complete, and for the InstantDB variant a non-localhost `ApiURI`.
-   Every miss is a `UserInputError` or `HostEnvironmentError` with the exact fix; in an
-   interactive terminal the missing remembered facts are prompted and written.
-2. **Release compile.** `Runtime.generateApp` with `validationMode: 'release'` and no Studio
+1. **Preflight.** A doctor-shaped check, pure and reported before anything mutates: Xcode 15 or
+   later with its license accepted and the iOS platform present, the App Store Connect API key
+   file at its conventional path with the Key ID and Issuer ID in the lock, the Program License
+   Agreement accepted (Apple's 403 `REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED`, and the "API Keys
+   cannot be created due to an invalid Program License Agreement" message seen on 2026-09-02, are
+   this precursor, named with the two URLs where the Account Holder accepts it), the app name
+   resolving to one declaration, `project { id, name, version }` present, the lock's accepted
+   identifiers complete, a clean git tree unless `--ignore-git`, and for the InstantDB variant a
+   non-localhost `ApiURI`. Every miss is a `UserInputError` or `HostEnvironmentError` with the
+   exact fix; in an interactive terminal the missing accepted identifiers are prompted and
+   written, and each dictated precursor waits for a keypress.
+2. **Version and git.** Decide whether the version is consumed and bump it per _Command surface_;
+   compute the timestamp build number; when in a git repository, commit the bump and tag
+   `v<semver>` for a store build. Nothing here runs before the action list and the gate; preflight
+   only reports what will happen.
+3. **Release compile.** `Runtime.generateApp` with `validationMode: 'release'` and no Studio
    preview, into the host's `_gen_tao-app/` as today, plus a generated `_gen_tao-app/ship.json`
-   carrying the derived configuration.
-3. **Derived host configuration.** The checked-in host gains an `app.config.js` that reads
-   `ship.json` when present and falls back to today's "Tao Runtime" values when absent, so `tao
-   dev` and every existing test see no change. `eas.json` is generated beside it with three
-   profiles: `preview` (internal distribution, APK on Android), `production` (store build,
-   auto-submit, remote version source), and later `development` (slice 4).
+   carrying the derived configuration: name, bundle identifier, version and build number,
+   `usesNonExemptEncryption: false`, the embedded commit hash and dirty flag, icon and splash. The
+   checked-in host gains an `app.config.js` that reads `ship.json` when present and falls back to
+   today's "Tao Runtime" values when absent, so `tao dev` and every existing test see no change.
 4. **Bundle proof.** `expo export` of the release bundle, then an assertion that no Studio module
    marker appears in it. This is the missing production-bundle assertion the exploration calls
-   for, and it runs before any minute of paid build time is spent.
-5. **Build and submit.** `eas build --platform ios --profile production --submit --non-interactive
-   --json` through the shared `CLI.run`, with output streamed in the dev loop's prefixed style.
-   The JSON result carries the build id, artifact URL, and submission state that the summary
-   prints. `--android` runs the `preview` profile without submission and prints the artifact URL
-   and a terminal QR code.
-6. **Summary.** The block shown under _The outcome_, plus the App Store Connect TestFlight URL.
+   for, and it runs before the archive.
+5. **Prebuild, archive, upload**, the local pipeline of _Build lane_, through the shared
+   `CLI.run` with output streamed in the dev loop's prefixed style: `expo prebuild --platform
+   ios` into the host, `xcodebuild archive` with automatic signing through the API key flags,
+   then `xcodebuild -exportArchive` with `method: app-store-connect` and `destination: upload`.
+   Every invocation's argument vector is a pure function of `ship.json` and the lock, so tests
+   assert it exactly.
+6. **After the upload**, through the App Store Connect client: wait for Apple's processing of
+   the build unless `--no-wait`; then for plain `tao ship` create or reuse the App Store version
+   for the semver, attach the build, and submit it for review; for `--beta` ensure the project's
+   internal and external groups, add the recipients to the right one by team membership, set
+   "What to Test", assign the build, and for the external group submit the beta app review when
+   this version has none. Each completed step is recorded in the lock so a rerun resumes.
+7. **Summary.**.** The block shown under _The outcome_, plus the App Store Connect TestFlight URL.
    The command exits non-zero on any failed stage with the substrate's own message quoted, never
    paraphrased.
-
-Two upload details decide whether step 5 works at all and are worth stating here so the slice
-does not rediscover them. EAS uploads the project through its git client by default, which skips
-ignored files, and `_gen_*` is ignored; the ship command runs EAS in no-VCS mode with a generated
-`.easignore` that excludes `node_modules`, `.artifacts`, Studio, and every package the host does
-not import. And the host resolves `@runtime/TR` and `@shared/core` through Metro aliases into
-sibling packages, so the upload root is the repository, the install is the root `bun install`,
-and the build runs from `packages/runtime-toolchain`; EAS detects Bun from `bun.lock`.
 
 ### Cost and time per round
 
@@ -212,39 +348,46 @@ InstantDB provider's _Live acceptance_ section. No slice needs a WordFlower tran
 grammar. The one spot that would — `project { targets }`, `version`, `Icon` — is deferred to
 decisions 2 and 4 and can be pulled into a tranche independently.
 
-### Slice 0 — retired
+### Slice 0 — now the `--expo` flag
 
-An Expo Go bridge was planned here for the zero-account case. Ro's ruling of 2026-09-02 gives
-that case to `tao ship --beta` through the companion app instead, so the bridge is not built.
-The account walkthrough it carried is preserved in `Research - Beta distribution lanes.md`.
+An Expo Go bridge was planned here for the zero-account case. Ro's rulings of 2026-09-02 first
+gave that case to `tao ship --beta` through the companion app, then kept the Expo lane as
+`tao ship --expo`; it lands with slice 2, whose update machinery it reuses. The account
+walkthrough for it is preserved in `Research - Beta distribution lanes.md`.
 
-### Slice 1 — `tao ship <App>` to TestFlight, and `--android` to an APK link
+### Slice 1 — `tao ship` to the App Store and `--beta` to TestFlight
 
-Scope: the command, preflight, remembered facts, derived host configuration, generated `eas.json`
-and `.easignore`, release compile, the bundle proof, the EAS wrapper, and the summary. The
-InstantDB variant ships against a hosted Instant app whose id is provided through the remembered
-facts rather than edited into source.
+Scope: the command as _Command surface_ settles it — project discovery, app selection through
+`--app`, `DefaultApp`, or a prompt, the semver bump with commit and tag, precursors with their
+automation and keypress waits, `--dry-run`, the action list and the Y/n gate — plus preflight,
+the lock, derived host configuration, release compile, the bundle proof, the local pipeline of
+_Build lane_, the App Store Connect client for review submission and TestFlight groups and
+testers, and the summary. No Android, no EAS, no `eas.json`. The InstantDB variant ships
+against a hosted Instant app whose id is provided through the lock rather than edited into
+source.
 
 Tests, in `packages/tao-cli/cli-tests/ship-command.test.ts` and the toolchain suite:
 
 - Derivation is pure and tested by table: declaration in, `ship.json` out, including the name and
   identifier rules for primary apps versus variants.
-- The EAS driver takes an injected command runner; tests assert the exact `eas` argument vectors
-  and parse recorded `--json` outputs for the summary, so no test touches the network.
+- The pipeline takes an injected command runner and an injected App Store Connect client; tests
+  assert the exact `expo prebuild` and `xcodebuild` argument vectors and export options, replay
+  recorded API responses for the review and TestFlight steps, and never touch the network.
 - The bundle proof runs as a slow lane beside the Studio smokes, exporting the WordFlower release
   bundle and asserting the Studio marker is absent; a deliberate preview compile is the positive
   control.
 - Preflight tests cover every miss and its message, interactive and non-interactive.
 
-Live acceptance: from a fresh clone, `tao ship WordFlowerInstantDB` installs on Ro's phone from
-TestFlight and documents sync through the hosted Instant app; `tao ship WordFlowerInstantDB
---android` yields a link a second phone installs. Act 1 of the exploration's driving use case.
+Live acceptance: from a fresh clone, `tao ship --app WordFlowerInstantDB` bumps, commits, tags,
+builds, and submits; the build installs on Ro's phone from TestFlight and documents sync through
+the hosted Instant app. Act 1 of the exploration's driving use case.
 
 ### Slice 2 — `--update`
 
 Scope: `expo-updates` in the host, `updates.url` and the fingerprint runtime-version policy in the
-derived configuration, a channel per variant baked into the `production` and `preview` profiles,
-`eas update --channel <variant>` with the release bundle, and rollback as `eas update:republish`.
+derived configuration, a channel per variant, publishing the release bundle to Tao's own update
+server on the Tao Lang servers, which speaks the open expo-updates protocol, and rollback as a
+republish of the previous bundle. Standing up that server is this slice's first task.
 The summary states whether the update is compatible with the installed builds: same fingerprint
 means it lands, a changed fingerprint means a new binary is required and the command says so
 instead of publishing an update nothing will load.
@@ -262,18 +405,13 @@ preflight rather than let the migration program's problem surface as a bricked b
 Scope: `--invite <email>` adds a tester to the variant's TestFlight group through the App Store
 Connect API with the key EAS already created; an external group with a public link and the
 one-time Beta App Review submission for testers outside the team; TestFlight feedback surfaced
-through `eas testflight:feedback` in a summary line. Android gains an optional Play internal
-testing track through `eas submit --platform android` for projects that have a Play account.
+through `eas testflight:feedback` in a summary line. Android stays out of scope.
 
 ### Slice 4 — one host for dev and ship
 
-Scope: a `development` profile with `expo-dev-client`, so the same derived host is the phone lane
-of `tao dev` once Tao leaves SDK 54 and the App Store Expo Go behind; `--local` through `eas build
---local` for developers who prefer their own Mac and no build quota; and the internal-distribution
-iOS lane with `eas device:create` for the rare tester who will not use TestFlight. This is also
-where an EAS Workflow file becomes an option: one `.eas/workflows/ship.yml` chaining fingerprint,
-conditional build, submit, and update, run by `eas workflow:run`, is the substrate's own version
-of this command and a candidate replacement for the driver once Workflows minutes are in budget.
+Scope: a development build of the same derived host with `expo-dev-client`, so the phone lane of
+`tao dev` no longer depends on the App Store Expo Go; it is the companion app's ancestor and
+converges with that program. The EAS lanes this slice once listed are dropped with Expo.
 
 ### Handoff
 

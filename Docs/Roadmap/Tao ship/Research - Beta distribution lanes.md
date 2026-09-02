@@ -202,7 +202,55 @@ on a number that has aged.
 - EAS Hosting: `expo export --platform web` then `eas deploy` for a preview URL.
   https://docs.expo.dev/eas/hosting/introduction/
 
+## Automating the Apple prerequisites from a local CLI
+
+Researched 2026-09-02 for the local build lane.
+
+- No public API creates the app record: the Apps resource says "Don't use this API to create
+  new apps; instead, create new apps on the App Store Connect website", and release notes
+  through 4.4.1 add none. fastlane `produce`, `asc web apps create`, and every other tool that
+  creates one drive Apple's private web session with an Apple ID and two-factor code, and have
+  broken repeatedly (fastlane issues 26368, 29435, 29909).
+  https://developer.apple.com/documentation/appstoreconnectapi/apps ;
+  https://github.com/fastlane/fastlane/issues/29909 ; https://docs.asccli.sh/commands/web
+- No public API creates a team API key; Apple documents only the web flow, and an Admin account
+  is required. Individual keys cannot use provisioning endpoints. Team keys carry user roles:
+  App Manager keys cannot reach Certificates, Identifiers & Profiles; Admin keys can, and can
+  invite users. https://developer.apple.com/documentation/appstoreconnectapi/creating-api-keys-for-app-store-connect-api
+- Team ID: `seedId` on bundle identifiers (`GET /v1/bundleIds`, `POST /v1/bundleIds`) is the
+  App ID prefix Apple creates from the Team ID; the `OU` of a signing certificate carries it
+  too. No membership or team endpoint exists; a lapsed license answers 403 with an agreements
+  error. https://developer.apple.com/documentation/appstoreconnectapi/bundleid/attributes-data.dictionary
+- `xcodebuild -allowProvisioningUpdates` with `-authenticationKeyPath`, `-authenticationKeyID`,
+  and `-authenticationKeyIssuerID` creates and updates profiles, app ids, and certificates for
+  automatically signed targets (Xcode 13 release notes). Key-based upload from `-exportArchive`
+  with `destination: upload` works from Xcode 15; Xcode 14 accepted the key for signing only.
+  Xcode 26 ships a rewritten `altool` whose `--upload-app` is deprecated for `--upload-package`.
+  https://developer.apple.com/documentation/xcode-release-notes/xcode-15-release-notes ;
+  https://github.com/fastlane/fastlane/issues/29698
+- Xcode installation: `xcodes` (XcodesOrg, v2.0.3 2026-07-08) needs an Apple ID and breaks on
+  unattended two-factor challenges (issue 326); `mas install 497799835` needs an App Store
+  sign-in in the GUI and root, and `mas signin` no longer works. License, first launch, and
+  platform downloads are `xcodebuild` commands, the first two under `sudo`. No Homebrew cask.
+  https://github.com/XcodesOrg/xcodes ; https://github.com/mas-cli/mas
+- Team membership and TestFlight are public API: `POST /v1/userInvitations` (Admin key; the
+  invitee activates by email within 3 days), `POST /v1/betaGroups` with `isInternalGroup`,
+  `POST /v1/betaTesters`, `POST /v1/betaAppReviewSubmissions` for external groups after beta
+  app localizations exist. Internal testers must be App Store Connect users.
+  https://developer.apple.com/documentation/appstoreconnectapi/userinvitationcreaterequest/data-data.dictionary/attributes-data.dictionary ;
+  https://developer.apple.com/documentation/appstoreconnectapi/betagroup/attributes-data.dictionary
+- Export compliance: `ITSAppUsesNonExemptEncryption` in Info.plist removes the per-upload
+  questionnaire; Expo sets it from `ios.config.usesNonExemptEncryption`.
+  https://developer.apple.com/documentation/bundleresources/information-property-list/itsappusesnonexemptencryption
+- Key-authenticated community CLIs: rorkai `asc` (v4.11.0 2026-08-29, `brew install asc`),
+  codemagic-cli-tools (v0.69.0 2026-07-15), fastlane 2.238.0 (2026-08-12). Apple ships no CLI.
+  `npx expo prebuild` needs no account. https://docs.asccli.sh/ ;
+  https://github.com/codemagic-ci-cd/cli-tools
+
 ## Not verified
+
+- Whether Apple documents `seedId` as the Team ID anywhere in the API reference itself.
+- The exact API error for a lapsed membership, as opposed to a lapsed agreement.
 
 - Why Expo Go's SDK 55 and later builds are waiting on Apple: no statement from either company.
 - Whether Expo Go's ownership check also gates a tunnelled development server; the changelog
