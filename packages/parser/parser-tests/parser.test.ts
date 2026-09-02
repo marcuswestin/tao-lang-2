@@ -466,7 +466,7 @@ Describe('parser: core language syntax', () => {
       Expect.Is(loop, AST.isForStatement)
       Expect(loop.name).toBe('Row')
       Expect(AST.attachedTag(loop)?.tag).toBe('#rows')
-      Expect(AST.testTagForRender(AST.taggedLoopRowRoot(loop)!)).toBe('rows')
+      Expect(AST.testTagForRender(AST.loopRowRoot(loop)!)).toBe('rows')
 
       const check = AST.streamAllContents(parseResult.entry.ast)
         .filter(AST.isTestDeclaration)

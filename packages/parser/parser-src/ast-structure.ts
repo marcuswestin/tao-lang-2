@@ -403,6 +403,14 @@ export function forBindingOwnedByBlock(block: AST.Block): AST.ForStatement | und
   return AST.isForStatement(block.$container) ? block.$container : undefined
 }
 
+/** The traits spelled as a plain word rather than a keyword, so each word stays usable as a name. */
+export const wordTraitNames: readonly string[] = ['title']
+
+/** traitIsTitle identifies the `(title)` trait: the one text field that names a row to a person. */
+export function traitIsTitle(trait: AST.Trait): boolean {
+  return trait.word === 'title'
+}
+
 /** loopSelectHandlers returns the direct row-selection handlers declared by one loop. */
 export function loopSelectHandlers(loop: AST.ForStatement): AST.LoopSelectHandler[] {
   return loop.block.statements.filter(AST.isLoopSelectHandler)
@@ -446,8 +454,12 @@ export function isSlotFillRootTag(tag: AST.TagStatement): boolean {
     && slotFillRootTag(block.$container) === tag
 }
 
-/** taggedLoopRowRoot returns the sole unconditional direct row-root render required by tagged loops. */
-export function taggedLoopRowRoot(loop: AST.ForStatement): AST.Render | undefined {
+/**
+ * loopRowRoot returns the sole unconditional direct render of a loop row: the one native root a
+ * tag or a row-level accessibility label can land on. A conditional, repeated, or multi-render row
+ * has none.
+ */
+export function loopRowRoot(loop: AST.ForStatement): AST.Render | undefined {
   const renderers = loop.block.statements.filter(statement =>
     AST.isRender(statement)
     || AST.isWhenRenderStatement(statement)
@@ -465,7 +477,7 @@ export function testTagForRender(render: AST.Render): string | undefined {
   const block = render.$container
   const loop = AST.isBlock(block) && AST.isForStatement(block.$container) ? block.$container : undefined
   const loopTag = loop ? attachedTag(loop) : undefined
-  const rowTag = loop && loopTag && taggedLoopRowRoot(loop) === render ? loopTag : undefined
+  const rowTag = loop && loopTag && loopRowRoot(loop) === render ? loopTag : undefined
   const tags = [rowTag, direct, slotFill]
     .filter((tag): tag is AST.TagStatement => tag !== undefined)
     .map(tag => tag.tag.slice(1))

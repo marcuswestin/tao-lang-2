@@ -31,6 +31,7 @@ test "WordFlower workspaces" {
       enter "Unsent workspace" into #workspaceName
       select #workspaces[1] { // `select` scopes steps to the tagged loop's 1-based row
          expect text "Home"
+         expect label "Home" // the row is named by `Text(Workspace.Name)`, its `(title)` field
          press #openWorkspace
       }
       expect navigation title "Home"
@@ -76,6 +77,8 @@ test "WordFlower workspaces" {
          text "No finished documents"
       }
       select #drafts[1] {
+         // The row's label is derived from `Text(Document.Title)`, the `(title)` field it renders.
+         expect label "Draft the intro"
          press #finish
       }
       expect {

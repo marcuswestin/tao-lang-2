@@ -52,6 +52,7 @@ export default {
       ${gen.textLines(viewRegistrations)}
 
       ${(opts.emitDataCatalog ?? dataEntities.length > 0) ? Compile.DataCatalog(dataEntities) : gen.noop()}
+      ${Compile.OutlineTable(taoFile)}
 
       ${gen.list(taoFile.statements, statement => Compile.Statement(statement, opts), { newLines: 2 })}
       ${

@@ -6,6 +6,7 @@ import { standardDesignElementName } from './design'
 import { canonicalDesignVisualHead, designColorHeads, designVisualHeads } from './design-visuals'
 import { guardBranches } from './guards'
 import { injectionArgumentName } from './injections'
+import { outlineControlDescriptor, outlineLoopDescriptor } from './interaction-outline'
 import {
   resolveActionInvocation,
   resolveActionTarget,
@@ -34,6 +35,8 @@ export const ASTUtils = {
   layoutEntryValues,
   layoutTermValue,
   literalDurationOf,
+  outlineControlDescriptor,
+  outlineLoopDescriptor,
   referencedNames,
   renderTargetIsNav,
   renderTargetName,
@@ -64,6 +67,9 @@ export namespace ASTUtils {
   export type ItemShape = import('./Type').ItemShape
   export type ImplicitChangeBinding = import('./invocations').ImplicitChangeBinding
   export type LayoutTermValue = import('./layouts').LayoutTermValue
+  export type OutlineControlDescriptor = import('./interaction-outline').OutlineControlDescriptor
+  export type OutlineLoopDescriptor = import('./interaction-outline').OutlineLoopDescriptor
+  export type OutlineTextPath = import('./interaction-outline').OutlineTextPath
   export type RenderEventBindingDiagnostic = import('./invocations').RenderEventBindingDiagnostic
   export type RenderEventBindingPair = import('./invocations').RenderEventBindingPair
   export type RenderInvocationPair = import('./argument-bindings').RenderInvocationPair

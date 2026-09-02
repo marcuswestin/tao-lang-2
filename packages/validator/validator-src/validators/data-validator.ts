@@ -43,6 +43,10 @@ export const dataValidationMessages = {
   uniqueFieldKind: (field: string) => `Only primitive data fields can declare 'unique', not '${field}'.`,
   duplicateUniqueField: (entity: string) =>
     `Entity '${entity}' declares more than one unique field; one field is the reconciliation key.`,
+  titleFieldKind: (field: string) => `Only text data fields can declare 'title', not '${field}'.`,
+  unknownTrait: (word: string) => `Unknown data field trait '${word}'.`,
+  duplicateTitleField: (entity: string) =>
+    `Entity '${entity}' declares more than one title field; one field names a row to a person.`,
   relationOrder: (name: string) => `Relationship field '${name}' cannot be used for ordering.`,
   relationComparison: (name: string, operator: string) =>
     `Relationship field '${name}' supports only == and !=, not '${operator}'.`,
@@ -101,6 +105,10 @@ function validateEntityDefinition(entity: AST.EntityDataDeclaration, ctx: Valida
   for (const extra of uniqueFields.slice(1)) {
     ctx.error(dataValidationMessages.duplicateUniqueField(entity.singularName), extra)
   }
+  const titleFields = fields.filter(field => (field.traits?.traits ?? []).some(AST.traitIsTitle))
+  for (const extra of titleFields.slice(1)) {
+    ctx.error(dataValidationMessages.duplicateTitleField(entity.singularName), extra)
+  }
   for (const field of fields) {
     validateEntityField(entity, field, ctx)
   }
@@ -141,6 +149,20 @@ function validateEntityField(
   if (!field.primitive) {
     for (const trait of uniques) {
       ctx.error(dataValidationMessages.uniqueFieldKind(field.name), trait)
+    }
+  }
+  for (const trait of traits) {
+    if (trait.word !== undefined && !AST.wordTraitNames.includes(trait.word)) {
+      ctx.error(dataValidationMessages.unknownTrait(trait.word), trait)
+    }
+  }
+  const titles = traits.filter(AST.traitIsTitle)
+  for (const duplicate of titles.slice(1)) {
+    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'title'), duplicate)
+  }
+  if (field.primitive !== 'text') {
+    for (const trait of titles) {
+      ctx.error(dataValidationMessages.titleFieldKind(field.name), trait)
     }
   }
   if (field.primitive || field.boolean) {

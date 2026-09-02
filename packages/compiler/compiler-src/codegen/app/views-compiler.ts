@@ -155,6 +155,7 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
   return gen`
     ${gen.scopeName(renderable)} = function ${gen.Name(renderable)}(_ViewProps: ${parameterList}) {
       TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(renderable.name)})
+      TR.Interaction.UseOccurrence(_ViewProps.__tao)
       return TR.BlockScope(_Scope, _Scope => {
         ${gen.list(AST.parametersOf(renderable), Compile.ViewParameterBinding)}
         ${gen.list(setupStatements, statement => Compile.Statement(statement, options))}
@@ -173,6 +174,7 @@ function compileForeignView(view: AST.ViewDeclaration): Compiled {
   return gen`
     ${gen.scopeName(view)} = function ${gen.Name(view)}(_ViewProps: ${parameterList}) {
       TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(view.name)})
+      TR.Interaction.UseOccurrence(_ViewProps.__tao)
       return TR.BlockScope(_Scope, _Scope => {
         ${gen.list(AST.parametersOf(view), Compile.ViewParameterBinding)}
         return <${gen.Name(implementation)}

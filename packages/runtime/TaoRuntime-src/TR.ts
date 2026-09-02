@@ -56,6 +56,14 @@ import {
 import { createHaptic, type TaoHapticKinds, type TaoHaptics } from './TR-haptic'
 import type { RuntimeCommand } from './TR-interaction'
 import { CommandCatalog, InteractionControls, type TaoCommandTable } from './TR-interaction-catalog'
+import {
+  OutlineScope,
+  type TaoOutlineLoopNode,
+  type TaoOutlineNode,
+  type TaoOutlineSnapshot,
+  useOutlineCollection,
+  useOutlineItem,
+} from './TR-interaction-outline'
 import { LayoutControls } from './TR-layout'
 import { NativeHosts } from './TR-native-hosts'
 import { NativeModules } from './TR-native-modules'
@@ -266,34 +274,39 @@ class TR {
     return fn.invoke(...args) as TR.Value<T>
   }
 
-  /** ForEach renders a stable fragment for each list value. */
+  /**
+   * ForEach renders a stable fragment for each list value. The frame is the loop's diagnostics
+   * frame, and it carries the loop's outline descriptor beside its source: the collection registers
+   * itself for as long as the loop renders, and every row registers as its item.
+   */
   static ForEach(
     collection: TR.Evaluable,
     render: (value: TR.Value<any>, index: number) => React.ReactNode,
     select?: (value: TR.Value<any>, index: number) => unknown,
-    frame?: Omit<TaoRuntimeFailureFrame, 'arguments' | 'boundary'>,
+    frame?: Omit<TaoRuntimeFailureFrame, 'arguments' | 'boundary'> & { interaction?: TaoOutlineLoopNode },
   ): React.ReactNode {
     const values = collection.evaluate().jsValue
     if (!Array.isArray(values)) {
       return null
     }
-    return values.map((value, index) => {
+    const { interaction: descriptor, ...diagnosticsFrame } = frame ?? {}
+    const items = values.map((value, index) => {
       const runtimeValue = new RuntimeValue(value)
+      const itemKey = stableListKey(value, index)
       let capturedArguments: TaoRuntimeJson | undefined
       const diagnosticsArguments = () => capturedArguments ??= captureArguments({ index, value })
       return React.createElement(
         TaoErrorBoundary,
         {
-          boundaryId: `item:${frame?.source?.path ?? 'unknown'}:${frame?.source?.start ?? 0}:${
-            String(stableListKey(value, index))
-          }`,
-          frame: () => ({ ...frame, arguments: diagnosticsArguments(), boundary: 'item' as const }),
-          key: stableListKey(value, index),
+          boundaryId: `item:${frame?.source?.path ?? 'unknown'}:${frame?.source?.start ?? 0}:${String(itemKey)}`,
+          frame: () => ({ ...diagnosticsFrame, arguments: diagnosticsArguments(), boundary: 'item' as const }),
+          key: itemKey,
           stateKey: () => JSON.stringify(diagnosticsArguments()),
         },
-        React.createElement(ForEachItem, { index, render, runtimeValue, select }),
+        React.createElement(ForEachItem, { descriptor, index, itemKey, render, runtimeValue, select }),
       )
     })
+    return React.createElement(ForEachCollection, { descriptor, items })
   }
 
   /** Action creates runtime Tao actions from generated callbacks. */
@@ -870,16 +883,37 @@ function stableListKey(value: unknown, index: number): string | number {
   return index
 }
 
+/** ForEachCollection registers the loop as one outline collection and hangs its rows under it. */
+function ForEachCollection(props: {
+  descriptor: TaoOutlineLoopNode | undefined
+  items: readonly React.ReactNode[]
+}): React.ReactNode {
+  const identity = useOutlineCollection(props.descriptor)
+  return React.createElement(OutlineScope, { identity }, props.items)
+}
+
+/**
+ * ForEachItem exists for every row, selectable or not, so registration hangs here: the row joins
+ * the outline as an item, and its derived label reaches the platform through the press surface of
+ * a selectable row or, for any other row with one root, through that root's Tao props.
+ */
 function ForEachItem(props: {
+  descriptor: TaoOutlineLoopNode | undefined
   index: number
+  itemKey: number | string
   render(value: TR.Value<any>, index: number): React.ReactNode
   runtimeValue: TR.Value<any>
   select?: (value: TR.Value<any>, index: number) => unknown
 }): React.ReactNode {
+  const outline = useOutlineItem(props.descriptor, props.runtimeValue, props.itemKey, props.index)
   const content = props.render(props.runtimeValue, props.index)
-  return props.select
-    ? React.createElement(SelectableRow, { onSelect: () => props.select!(props.runtimeValue, props.index) }, content)
+  const row = props.select
+    ? React.createElement(SelectableRow, {
+      ...(outline.label === undefined ? {} : { accessibilityLabel: outline.label }),
+      onSelect: () => props.select!(props.runtimeValue, props.index),
+    }, content)
     : content
+  return React.createElement(OutlineScope, { identity: outline.identity }, row)
 }
 
 namespace TR {
@@ -951,6 +985,10 @@ namespace TR {
   export type Scope = Record<string, any>
   /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
   export type TaoProps = TRTaoProps.TaoProps
+  /** OutlineNode is one mounted interaction outline node as a reader sees it. */
+  export type OutlineNode = TaoOutlineNode
+  /** OutlineSnapshot is the interaction outline as it is at one read. */
+  export type OutlineSnapshot = TaoOutlineSnapshot
   /** TaoStudioIdentity locates one concrete render occurrence in Tao source. */
   export type TaoStudioIdentity = TRTaoProps.TaoStudioIdentity
   /** StudioPreviewConfig identifies and secures one generated Studio preview bridge. */

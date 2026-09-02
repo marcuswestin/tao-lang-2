@@ -41,7 +41,12 @@ type GenJoinOptions = {
 }
 
 type AnyBlockStatement = AST.ActionStatement | AST.ProjectStatement | AST.Statement
-type JsLiteralValue = string | number | readonly JsLiteralValue[]
+type JsLiteralValue =
+  | boolean
+  | number
+  | string
+  | readonly JsLiteralValue[]
+  | { readonly [key: string]: JsLiteralValue | undefined }
 type GenBlock = {
   (
     owner: AST.ActionDeclaration | AST.ActionExpression,

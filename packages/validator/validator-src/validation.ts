@@ -14,6 +14,8 @@ export interface ValidationRunContext {
 export interface ValidationContext extends ValidationRunContext {
   error(message: string, node: AST.Node, opts?: DiagnosticOptions): void
   warning(message: string, node: AST.Node, opts?: DiagnosticOptions): void
+  /** hint names something the source could do better without being wrong: it never fails a check. */
+  hint(message: string, node: AST.Node, opts?: DiagnosticOptions): void
 }
 
 /** DiagnosticOptions declares optional diagnostic metadata such as quick-fix codes. */
@@ -39,6 +41,9 @@ function createContext(
     },
     warning(message: string, node: AST.Node, opts?: DiagnosticOptions) {
       accept('warning', message, { node, code: opts?.code })
+    },
+    hint(message: string, node: AST.Node, opts?: DiagnosticOptions) {
+      accept('hint', message, { node, code: opts?.code })
     },
   }
 }

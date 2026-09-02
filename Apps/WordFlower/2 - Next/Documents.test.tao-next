@@ -121,7 +121,12 @@ test "WordFlower documents" {
       expect {
          text "Paragraphs: 1"
          text "It began at sea."
-   }  }
+      }
+      select #paragraphs[1] {
+         // A paragraph has no `(title)` field, so the row is named by the first text it renders.
+         expect label "It began at sea."
+      }
+   }
    test "asks before closing" {
       run WordFlower
       enter "Home" into #workspaceName

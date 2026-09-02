@@ -1,5 +1,6 @@
 import type React from 'react'
 import { DesignControls, type TaoDesign, type TaoDesignSource, type TaoDesignSpec } from './TR-design'
+import type { TaoOutlineControlNode, TaoOutlineRowRoot } from './TR-interaction-outline'
 import {
   LayoutControls,
   LayoutRuntime,
@@ -19,6 +20,16 @@ export type TaoStudioIdentity = {
   ownerName?: string
   sourcePath: string
   start: number
+}
+
+/**
+ * TaoInteractionProps is the outline metadata one render site carries: the control the occurrence
+ * is, from its module's generated table, and the loop row whose sole root it renders. It is its own
+ * field, never `studio`, because Studio identity lowers a DOM marker that stays Studio-only.
+ */
+export type TaoInteractionProps = {
+  control?: TaoOutlineControlNode
+  row?: TaoOutlineRowRoot
 }
 
 /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
@@ -43,6 +54,8 @@ export type TaoProps = TaoLayoutProps & {
   designSource?: TaoDesignSource
   /** designDefault names the linked stdlib element bundle applied before render-site clauses. */
   designDefault?: string
+  /** interaction is private outline metadata lowered onto the concrete native root as its accessible name. */
+  interaction?: TaoInteractionProps
   /** testTag is private Tao metadata lowered to the existing concrete native root. */
   testTag?: string
   /** viewDepth counts generated Tao view frames without inspecting argument identity. */
@@ -78,16 +91,23 @@ export type TaoViewRuntimeProps = TaoProps & {
 type MergedTaoViewProps = {
   readonly children?: React.ReactNode
   readonly direction?: TaoLayoutDirection
+  readonly interaction: TaoInteractionProps | undefined
   readonly nativeProps: Record<string, unknown>
   readonly props: TaoResolvedLayoutProps | undefined
   readonly studio: TaoStudioIdentity | undefined
   readonly testTag: string | undefined
 }
 
+type PrivateVisualMetadata = {
+  interaction?: TaoInteractionProps
+  studio?: TaoStudioIdentity
+}
+
 // Injected visual implementations receive a deliberately layout-only value. Studio occurrence
-// identity follows that exact object through a private side table so standard-library wrappers do
-// not need a new language-visible ambient channel or access to the complete private __tao bag.
-const studioIdentityByVisualLayout = new WeakMap<object, TaoStudioIdentity>()
+// identity and outline metadata follow that exact object through a private side table so
+// standard-library wrappers do not need a new language-visible ambient channel or access to the
+// complete private __tao bag.
+const privateMetadataByVisualLayout = new WeakMap<object, PrivateVisualMetadata>()
 
 /** TaoPropsControls exposes runtime Tao props merging for generated views. */
 export const TaoPropsControls = {
@@ -185,8 +205,11 @@ function mergeViewProps(
       resolveDesignProps(explicitLayoutProps, design, scheme),
       ParentDirectionContext.propsForDirection(parentDirection),
     ),
+    interaction: interactionInChain(props.__tao)
+      ?? privateMetadataForVisualLayout(props.layout)?.interaction
+      ?? interactionInChain(taoRuntimeProps),
     studio: studioIdentityInChain(props.__tao)
-      ?? studioIdentityForVisualLayout(props.layout)
+      ?? privateMetadataForVisualLayout(props.layout)?.studio
       ?? studioIdentityInChain(taoRuntimeProps),
     testTag: props.tag ?? testTag ?? testTagInChain(taoRuntimeProps) ?? testTagInChain(props.__tao),
   }
@@ -240,16 +263,20 @@ function visualLayout(props: TaoProps | undefined): TaoVisualLayout | undefined 
     ParentDirectionContext.propsForDirection(ParentDirectionContext.use()),
   )
   const studio = studioIdentityInChain(props)
-  if (studio === undefined) {
+  const interaction = interactionInChain(props)
+  if (studio === undefined && interaction === undefined) {
     return resolved
   }
   const visualLayout = resolved ?? {}
-  studioIdentityByVisualLayout.set(visualLayout, studio)
+  privateMetadataByVisualLayout.set(visualLayout, {
+    ...(interaction === undefined ? {} : { interaction }),
+    ...(studio === undefined ? {} : { studio }),
+  })
   return visualLayout
 }
 
-function studioIdentityForVisualLayout(layout: TaoVisualLayout | undefined): TaoStudioIdentity | undefined {
-  return layout === undefined ? undefined : studioIdentityByVisualLayout.get(layout)
+function privateMetadataForVisualLayout(layout: TaoVisualLayout | undefined): PrivateVisualMetadata | undefined {
+  return layout === undefined ? undefined : privateMetadataByVisualLayout.get(layout)
 }
 
 /** Returns the nearest concrete occurrence tag without exposing any other Tao-owned metadata. */
@@ -257,16 +284,53 @@ function visualTag(props: TaoProps | undefined): string | undefined {
   return testTagInChain(props)
 }
 
-/** Lowers private Studio occurrence identity and the public test tag onto an injected native root. */
+/** Lowers private Studio identity, the row label, and the public test tag onto an injected native root. */
 function visualNativeProps(layout: TaoVisualLayout | undefined, tag?: string): Record<string, unknown> {
-  const nativeProps = nativePropsWithStudioIdentity({}, studioIdentityForVisualLayout(layout))
+  const metadata = privateMetadataForVisualLayout(layout)
+  const nativeProps = nativePropsWithRowLabel(
+    nativePropsWithStudioIdentity({}, metadata?.studio),
+    metadata?.interaction,
+  )
   return tag ? { ...nativeProps, testID: tag } : nativeProps
 }
 
 function nativePropsWithStyle(merged: MergedTaoViewProps): Record<string, unknown> {
   const nativeProps = LayoutRuntime.nativePropsWithStyle(merged.nativeProps, merged.props, merged.direction)
-  const nativePropsWithStudio = nativePropsWithStudioIdentity(nativeProps, merged.studio)
+  const nativePropsWithStudio = nativePropsWithRowLabel(
+    nativePropsWithStudioIdentity(nativeProps, merged.studio),
+    merged.interaction,
+  )
   return merged.testTag ? { ...nativePropsWithStudio, testID: merged.testTag } : nativePropsWithStudio
+}
+
+/**
+ * A loop row's derived label becomes the accessible name of the one native root that renders the
+ * row. The root is left non-focusable on purpose: making it one accessibility element would hide
+ * the controls inside the row, and a selectable row already carries its label on its press surface.
+ */
+function nativePropsWithRowLabel(
+  nativeProps: Record<string, unknown>,
+  interaction: TaoInteractionProps | undefined,
+): Record<string, unknown> {
+  const label = interaction?.row?.label
+  return label === undefined ? nativeProps : { ...nativeProps, accessibilityLabel: label }
+}
+
+/**
+ * Merges the outline metadata of a caller chain: the innermost control and the nearest row root,
+ * which one concrete root may carry at once when a row's sole render is itself a control.
+ */
+function interactionInChain(props: TaoProps | undefined): TaoInteractionProps | undefined {
+  if (!props) {
+    return undefined
+  }
+  const outer = interactionInChain(props.callerProps)
+  const control = props.interaction?.control ?? outer?.control
+  const row = props.interaction?.row ?? outer?.row
+  if (control === undefined && row === undefined) {
+    return undefined
+  }
+  return { ...(control === undefined ? {} : { control }), ...(row === undefined ? {} : { row }) }
 }
 
 function nativePropsWithStudioIdentity(

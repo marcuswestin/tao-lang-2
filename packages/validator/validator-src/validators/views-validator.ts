@@ -6,6 +6,9 @@ import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 /** viewValidationMessages declares structural diagnostics for Tao view bodies. */
+/** One phrasing of the one condition: a tag and a row label both need one native root to land on. */
+const loopRowRootWording = 'exactly one unconditional direct row-root render; wrap the row in one view or layout.'
+
 const viewValidationMessages = {
   duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this view.`,
   reservedParameter: (name: string) => `Parameter name '${name}' is reserved for generated view props.`,
@@ -40,8 +43,8 @@ const viewValidationMessages = {
   duplicateRenderSlotFill: (name: string) => `Render slot '${name}' is filled more than once at this call site.`,
   tagAttachment: 'A #tag must be followed immediately by a render or loop in the same block.',
   duplicateTag: (tag: string) => `Duplicate ${tag} in the same block; a tag must be unique within its lexical block.`,
-  taggedLoopRoot:
-    'A tagged loop must contain exactly one unconditional direct row-root render; wrap the row in one view or layout.',
+  taggedLoopRoot: `A tagged loop must contain ${loopRowRootWording}`,
+  loopRowLabel: `A loop row carries no accessibility label unless the loop contains ${loopRowRootWording}`,
 } as const
 
 const reservedParameterNames = new Set(['children', 'key', 'ref', '__tao', '__taoSlots'])
@@ -51,6 +54,7 @@ export const ViewsValidator = {
   checks: {
     [AST.ViewDeclaration.$type]: validateViewDeclaration,
     [AST.CallerContentStatement.$type]: validateCallerContentPlacement,
+    [AST.ForStatement.$type]: validateLoopRowLabel,
     [AST.LoopSelectHandler.$type]: validateLoopSelectHandler,
     [AST.RenderSlotDeclaration.$type]: validateRenderSlotDeclarationPlacement,
     [AST.RenderSlotUse.$type]: validateRenderSlotUse,
@@ -97,6 +101,24 @@ function validateLoopSelectHandler(handler: AST.LoopSelectHandler, ctx: Validati
   }
 }
 
+/**
+ * validateLoopRowLabel points out a row whose derived label has nowhere to land. A selectable row
+ * carries it on its press surface and a tagged loop already errors on the same condition, so the
+ * hint is for the untagged, non-selectable, multi-root row that renders a row-bound text or
+ * iterates a titled entity: it has a name a person would read, and the platform never hears it.
+ */
+function validateLoopRowLabel(loop: AST.ForStatement, ctx: ValidationContext): void {
+  if (AST.attachedTag(loop) || AST.loopSelectHandlers(loop).length > 0 || AST.loopRowRoot(loop)) {
+    return
+  }
+  const rowType = Type.ofValueDeclaration(loop)
+  const titled = rowType.kind === 'entity' && Type.dataEntityTitleField(rowType.entity) !== undefined
+  if (!titled && ASTUtils.outlineLoopDescriptor(loop).texts.length === 0) {
+    return
+  }
+  ctx.hint(viewValidationMessages.loopRowLabel, loop)
+}
+
 function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {
   const block = tag.$container
   if (!AST.isBlock(block)) {
@@ -118,7 +140,7 @@ function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {
     ctx.error(viewValidationMessages.tagAttachment, tag)
     return
   }
-  if (AST.isForStatement(target) && !AST.taggedLoopRowRoot(target)) {
+  if (AST.isForStatement(target) && !AST.loopRowRoot(target)) {
     ctx.error(viewValidationMessages.taggedLoopRoot, target)
   }
 }

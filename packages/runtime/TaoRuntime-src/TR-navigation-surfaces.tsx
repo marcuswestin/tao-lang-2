@@ -1,25 +1,55 @@
 import React from 'react'
+import {
+  occurrenceRegion,
+  OutlineRegionScope,
+  regionNativeProps,
+  type TaoOutlineRegion,
+} from './TR-interaction-regions'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type { TaoNavigationValue } from './TR-navigation'
 import { backNavigation } from './TR-navigation-registry'
-import type { OverlayEntry, ResponseOccurrenceState } from './TR-navigation-state'
+import type { OverlayEntry, PresentableEntry, ResponseOccurrenceState } from './TR-navigation-state'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 import { Views } from './TR-views'
 
-/** NavigationLevel hides covered stack entries without unmounting their local React state. */
+/**
+ * NavigationLevel hides covered stack entries without unmounting their local React state. A level
+ * that presents one occurrence is that occurrence's region: it registers with the outline and its
+ * native root is the named group the platform reads.
+ */
 export function NavigationLevel(props: {
   children?: React.ReactNode
   fill?: boolean
   hidden: boolean
+  region?: TaoOutlineRegion
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
-  return React.createElement(runtime.View, {
-    accessibilityElementsHidden: props.hidden,
-    children: props.children,
-    importantForAccessibility: props.hidden ? 'no-hide-descendants' : 'auto',
-    style: props.hidden ? hiddenNavigationLevelStyle : props.fill ? visibleOverlayLevelStyle : undefined,
-  })
+  return React.createElement(
+    OutlineRegionScope,
+    { region: props.region },
+    React.createElement(runtime.View, {
+      ...regionNativeProps(props.region),
+      accessibilityElementsHidden: props.hidden,
+      children: props.children,
+      importantForAccessibility: props.hidden ? 'no-hide-descendants' : 'auto',
+      style: props.hidden ? hiddenNavigationLevelStyle : props.fill ? visibleOverlayLevelStyle : undefined,
+    }),
+  ) as React.JSX.Element
+}
+
+/** presentedOccurrenceRegion names one presented entry by its live title, else by what was presented. */
+export function presentedOccurrenceRegion(
+  navigation: TaoNavigationValue,
+  entry: PresentableEntry,
+  presentation: 'ask' | 'content' | 'overlay' | 'sheet',
+): TaoOutlineRegion {
+  return occurrenceRegion(
+    navigation.name,
+    entry.instanceId,
+    presentation,
+    () => entry.host?.read().title ?? entry.presentable.name,
+  )
 }
 
 /** NavigationBackAffordance exposes the same root-safe reducer through an accessible control. */
@@ -171,6 +201,11 @@ export function NavigationSurface(props: {
           fill: true,
           hidden: index !== props.overlays.length - 1,
           key: entry.instanceId,
+          region: presentedOccurrenceRegion(
+            props.navigation,
+            entry,
+            entry.response ? 'ask' : entry.sheet ? 'sheet' : 'overlay',
+          ),
         })
       }),
       style: overlayLayerStyle,

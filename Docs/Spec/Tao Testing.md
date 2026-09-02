@@ -91,6 +91,11 @@ expect missing text "Loading…"
 expect input label "Workspace name" value "Home"
 ```
 
+A loop row's accessibility label is derived by the interaction outline (see _Accessible names and
+the interaction outline_ in `Tao Layout and UI.md`), so `expect label "Chapter one"` inside
+`select #drafts[1] { … }` asserts the name the platform reads for that row, and holds only because
+the label is derived from what the row renders.
+
 Actions and input-value assertions require exactly one match. Positive text/label/placeholder
 expectations require at least one; `missing` requires none. Text is exact and case-sensitive after
 trimming outer whitespace and collapsing internal whitespace.

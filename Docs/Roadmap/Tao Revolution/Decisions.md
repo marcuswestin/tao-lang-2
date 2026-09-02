@@ -363,10 +363,11 @@ data Groceries / Grocery {
 | `unique`                | —                    | a storage fact                                         |
 | `search`                | —                    | participates in the entity's multi-field text search   |
 | `device`                | —                    | a preference scoped to one device, so it does not sync |
+| `title`                 | —                    | the one text field that names a row to a person (§9)   |
 
 ```swift
 data Recipes / Recipe {
-   Title text (required "Name this recipe", unique, search)
+   Title text (required "Name this recipe", unique, search, title)
    Servings number (default 4)
    ChangedAt time (default now, touch on change)
    Ingredients (owned, ordered)
@@ -1439,6 +1440,19 @@ loop Recipes / Recipe {
 Image(Recipe.Photo, Description: Recipe.Title)   // a semantic label, not decoration
 ```
 
+- **A collection row's accessible name is derived, never declared** (amended by KEY-D2, D5). The
+  interaction outline names every `loop` row by one static ranking: the first unconditional `Text`
+  the row renders whose value is a member path on the row — preferring the entity's `(title)` field
+  when the row renders it, and following a bound parameter one level into a rendered row view —
+  then the `(title)` field read at runtime, then the entity and its handle. A function-wrapped or
+  interpolated value is opaque and passes to the next candidate. One computation names the row for
+  the platform, for the palette, and for a journey's `expect label`. A selectable row carries it on
+  its press surface; any other row carries it on its sole root; a row with several roots has
+  nowhere to put it, which the validator hints. The rest of the outline is derived the same way:
+  a `loop` is a collection and each row an item; a render binding `Press` or `Submit`, or a row
+  with `on select`, is an action control; a render binding `Value` with a change is an input
+  control; a presented occurrence, a selection item, and a split pane are regions.
+
 - **A map must name a non-map alternative** over the same rows. Location graphics are never the only
   way to use a feature:
 
@@ -1974,6 +1988,12 @@ type Local is datasource with {
   replaces them: neither `implement` nor a kind word nor a marker keyword survives in these positions.
 - **The compiler emits a bridge metadata module beside the Tao source** (`Recipe.tao.ts`), which is
   what makes the join checkable from the TypeScript side.
+- **The compiler emits each module's interaction outline table beside that bridge** (KEY-D2, T3):
+  one static descriptor per `loop` and per event-wired render — the node kind, the row's label
+  ranking, its provenance — which the module's loop frames and render sites reference and the
+  runtime registers at mount. The table is generated; the registry, the label evaluation, and the
+  accessibility projection are handwritten in `TR.Interaction`, and nothing generated is ever
+  attached to `TR`.
 
 ### Foreign views
 

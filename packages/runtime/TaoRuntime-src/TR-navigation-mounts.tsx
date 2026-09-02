@@ -2,6 +2,7 @@ import React from 'react'
 import { AppSurfaceFrame } from './TR-app-shell'
 import { RuntimeAssert } from './TR-assert'
 import { UserInputError } from './TR-errors'
+import { OutlineRegionScope, regionNativeProps, selectionItemRegion, splitPaneRegion } from './TR-interaction-regions'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type {
   TaoNavDescriptor,
@@ -24,7 +25,12 @@ import type {
   TaoNavigationRestorationCodec,
 } from './TR-navigation-restoration-state'
 import type { PresentableEntry } from './TR-navigation-state'
-import { navigationHostStyle, NavigationLevel, navigationProps } from './TR-navigation-surfaces'
+import {
+  navigationHostStyle,
+  NavigationLevel,
+  navigationProps,
+  presentedOccurrenceRegion,
+} from './TR-navigation-surfaces'
 import { RuntimeNavigationValue, takeRemovedBrowserHistoryId } from './TR-navigation-value'
 import {
   assertPatchKeys,
@@ -135,8 +141,14 @@ function SplitNavSurface(props: { navigation: RuntimeSplitNav; taoProps?: TaoPro
   const lastTap = React.useRef<Record<string, number>>({})
   const children: React.ReactNode[] = []
   items.forEach(([key, item], index) => {
+    const region = splitPaneRegion(props.navigation.name, key)
     children.push(React.createElement(runtime.View, {
-      children: renderPresentable(item.content, {}, navigationProps(props.taoProps, props.navigation)),
+      ...regionNativeProps(region),
+      children: React.createElement(
+        OutlineRegionScope,
+        { region },
+        renderPresentable(item.content, {}, navigationProps(props.taoProps, props.navigation)),
+      ),
       key,
       style: { flexBasis: widths[index], flexGrow: 0, flexShrink: 0 },
     }))
@@ -739,17 +751,22 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
           ],
         }),
         React.createElement(runtime.View, {
-          children: this.items.flatMap(item =>
-            item.entries.map((entry, index) =>
-              React.createElement(NavigationLevel, {
-                children: renderPresentable(
-                  entry.presentable,
-                  entry.arguments,
-                  this.entryTaoProps(item, taoProps),
-                ),
-                hidden: item.key !== this.activeKey || index !== item.entries.length - 1,
-                key: `${item.key}-${entry.instanceId}`,
-              })
+          children: this.items.map(item =>
+            React.createElement(
+              OutlineRegionScope,
+              { key: item.key, region: this.itemRegion(item) },
+              item.entries.map((entry, index) =>
+                React.createElement(NavigationLevel, {
+                  children: renderPresentable(
+                    entry.presentable,
+                    entry.arguments,
+                    this.entryTaoProps(item, taoProps),
+                  ),
+                  hidden: item.key !== this.activeKey || index !== item.entries.length - 1,
+                  key: `${item.key}-${entry.instanceId}`,
+                  region: presentedOccurrenceRegion(this, entry, 'content'),
+                })
+              ),
             )
           ),
           key: 'selection-content',
@@ -777,14 +794,24 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     return React.createElement(
       AppSurfaceFrame,
       { nativeInsets: true, taoProps: this.entryTaoProps(item, taoProps) },
-      item.entries.map((entry, index) =>
-        React.createElement(NavigationLevel, {
-          children: renderPresentable(entry.presentable, entry.arguments, this.entryTaoProps(item, taoProps)),
-          hidden: index !== item.entries.length - 1,
-          key: `${item.key}-${entry.instanceId}`,
-        })
+      React.createElement(
+        OutlineRegionScope,
+        { region: this.itemRegion(item) },
+        item.entries.map((entry, index) =>
+          React.createElement(NavigationLevel, {
+            children: renderPresentable(entry.presentable, entry.arguments, this.entryTaoProps(item, taoProps)),
+            hidden: index !== item.entries.length - 1,
+            key: `${item.key}-${entry.instanceId}`,
+            region: presentedOccurrenceRegion(this, entry, 'content'),
+          })
+        ),
       ),
     )
+  }
+
+  /** itemRegion is the region one keyed item is: its key, named by its `Label`. */
+  private itemRegion(item: SelectionItemState): ReturnType<typeof selectionItemRegion> {
+    return selectionItemRegion(this.name, item.key, () => String(item.definition.label.evaluate().jsValue))
   }
 
   private activeItem(): SelectionItemState {

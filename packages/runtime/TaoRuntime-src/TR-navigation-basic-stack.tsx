@@ -9,7 +9,7 @@ import {
 } from './TR-navigation-host-slots'
 import type { RuntimeStackNav } from './TR-navigation-mounts'
 import type { PresentableEntry } from './TR-navigation-state'
-import { NavigationLevel } from './TR-navigation-surfaces'
+import { NavigationLevel, presentedOccurrenceRegion } from './TR-navigation-surfaces'
 import { renderPresentable } from './TR-navigation-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
@@ -51,6 +51,7 @@ function BasicStackLevel(props: {
   return React.createElement(NavigationLevel, {
     fill: true,
     hidden: props.hidden,
+    region: presentedOccurrenceRegion(props.navigation, props.entry, 'content'),
     children: React.createElement(runtime.View, {
       children: [
         // `Header false` removes the bar, not the ability to leave: Back stays reachable through

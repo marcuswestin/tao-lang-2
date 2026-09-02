@@ -242,7 +242,7 @@ Describe('compiler: language lowering', () => {
         order by CreatedAt desc
       }
       data Documents / Document {
-        Title text
+        Title text (title)
         Final yes / Draft no
         Public yes / Private no (default Public)
         Workspace
@@ -299,6 +299,7 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('["Final"]: TR.Value(false)')
     Expect(compiled.code).toContain('TR.Data.Query')
     Expect(compiled.code).toContain('unique: true')
+    Expect(compiled.code).toContain('title: true')
     Expect(compiled.code).toContain('limit: 25')
     Expect(compiled.code).toContain('field: "Workspace"')
     Expect(compiled.code).toContain("operator: '=='")

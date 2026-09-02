@@ -484,6 +484,14 @@ export class Type {
     return entity.block.entries.filter(AST.isEntityDataField)
   }
 
+  /**
+   * dataEntityTitleField returns the one field an entity marks `(title)`: the text that names a row
+   * to a person, which the outline prefers as a row's label and reads when no rendered text is.
+   */
+  static dataEntityTitleField(entity: DataEntityDefinition): DataFieldDefinition | undefined {
+    return Type.dataFields(entity).find(field => (field.traits?.traits ?? []).some(AST.traitIsTitle))
+  }
+
   /** dataEntityIsLocalOnly returns whether an entity declares the device-local storage fact. */
   static dataEntityIsLocalOnly(entity: DataEntityDefinition): boolean {
     return entity.block.entries.some(AST.isDataLocalOnly)

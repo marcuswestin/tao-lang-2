@@ -236,6 +236,7 @@ function compileEntityDataField(
       kind: ${gen.jsLiteral(kind)},
       ${indexed ? 'indexed: true,' : ''}
       ${traits.some(trait => trait.unique) ? 'unique: true,' : ''}
+      ${traits.some(AST.traitIsTitle) ? 'title: true,' : ''}
       ${compileEntityFieldDefault(field, defaultModifier)}
     },`
   }

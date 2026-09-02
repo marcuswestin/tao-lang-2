@@ -8,6 +8,9 @@ test "hn reader" {
       expect text "Show HN: A Tao reader"
       expect text "42 points by tester · 2 comments"
       expect text "Why local-first sync wins"
+      // A selectable row is one accessible press surface, named by the first text bound to the
+      // story: the rank is an interpolation, so the title is what names it.
+      expect label "Show HN: A Tao reader"
    }
    test "opens a story and reads its flattened comment thread" {
       run HNReaderStub

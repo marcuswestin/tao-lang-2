@@ -570,6 +570,50 @@ Row() [content spread center, compress] {
 }
 ```
 
+### Accessible Names And The Interaction Outline
+
+The runtime keeps a derived, read-only model of the running app — the interaction outline — and
+accessibility is its first reader. Nothing declares an outline node; every one is derived from the
+ordinary structure of the app:
+
+- a `loop` is a **collection**, and each of its rows an **item** whose identity is the row's stable
+  key;
+- a render whose block binds `Press` or `Submit`, or a loop row with `on select`, is an **action
+  control**; a render that binds `Value:` with an explicit or automatic `Change` is an **input
+  control**;
+- a presented occurrence (a pushed scene or view, an overlay, a sheet, an asked view), a selection
+  item, and a split pane are **regions**. The non-nav content of a view that renders a nav is not
+  yet a region; the attention tranche decides what it needs to address.
+
+A row's label is derived by one static ranking, shared by accessibility and every later reader:
+the first unconditional `Text`, `TextFrame`, or `TextMultiline` in the row subtree whose `Value` is
+a member path on the row binder, preferring the entity's `(title)` field when the row renders it.
+Descent follows a bound parameter one level into a rendered row view (`WorkspaceRow(Workspace)`).
+A `when`, `if`, or `guard` branch, a nested loop, a function-wrapped value
+(`Text(DocumentLabel(Document.Title))`), and an interpolation (`Text("{ Story.Rank }.")`) are
+opaque and pass to the next candidate. When nothing ranks, the label is the `(title)` field read at
+runtime, then the row's own text, then the entity and its handle, then the binder and position.
+
+The label reaches the platform as an accessible name: a selectable row carries it on the press
+surface the runtime wraps around the row; any other row carries it on the row's sole unconditional
+root — the same native element that carries the loop's `#tag`, left non-focusable so the controls
+inside the row stay reachable. A row with several roots registers with no row-level label, and the
+validator hints that a row whose label has nowhere to land could be wrapped in one view or layout.
+Regions carry their name — a presented occurrence's live `Title`, a selection item's `Label`, a
+pane's key — as a named group. A journey asserts the derived name with `expect label "…"`, inside
+`select #rows[n] { … }` for a row whose root carries it.
+
+Existence is always registered, and the primary label is always evaluated, because the platform
+reads it synchronously when the row mounts. Everything else — the row's full text corpus and change
+notifications — is evaluated only while a reader is attached: `TR.Interaction.Outline` is read on
+demand and subscribed to with the same snapshot-and-subscribe shape as every other runtime channel,
+publishing a new revision only when what a reader would see has changed. Provenance rides two
+tiers, the entity and handle per item and the loop and entity per collection, and is never a test
+selector. The outline joins the check and launch boundaries beside the navigation reset and is
+captured as plain JSON under the `interaction` domain. The compiler emits each module's static
+descriptors as one table beside its bridge module; the runtime registers them at mount, and the
+Studio-only source identity that lowers a DOM marker stays exactly as gated as before.
+
 ### Things Still Being Designed
 
 This document is not a deterministic implementation spec. It is the intended shape of the language.

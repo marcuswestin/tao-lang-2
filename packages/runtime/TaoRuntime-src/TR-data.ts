@@ -42,6 +42,8 @@ export type TaoDataField = {
   kind: DataPrimitive | 'relation'
   onDelete?: RelationDeleteBehavior
   relation?: string
+  /** title marks the one text field that names a row to a person: a label of last resort. */
+  title?: boolean
   unique?: boolean
 }
 

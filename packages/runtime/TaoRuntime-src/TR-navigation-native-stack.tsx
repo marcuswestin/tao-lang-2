@@ -1,5 +1,6 @@
 import React from 'react'
 import { AppSurfaceFrame } from './TR-app-shell'
+import { OutlineRegionScope } from './TR-interaction-regions'
 import {
   BasicStackSurface,
   directToolbarCapacity,
@@ -13,6 +14,7 @@ import {
 import type { RuntimeStackNav } from './TR-navigation-mounts'
 import { nativeNavigationModule } from './TR-navigation-native-hosts'
 import type { PresentableEntry } from './TR-navigation-state'
+import { presentedOccurrenceRegion } from './TR-navigation-surfaces'
 import { renderPresentable } from './TR-navigation-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
@@ -69,9 +71,13 @@ function NativeStackItem(props: {
       // screen from activityState 2 to 1 during push, so every retained item stays active here.
       activityState: 2,
       children: React.createElement(
-        AppSurfaceFrame,
-        { nativeInsets: true, taoProps: props.taoProps },
-        renderPresentable(props.entry.presentable, props.entry.arguments, props.taoProps, props.entry.host),
+        OutlineRegionScope,
+        { region: presentedOccurrenceRegion(props.navigation, props.entry, 'content') },
+        React.createElement(
+          AppSurfaceFrame,
+          { nativeInsets: true, taoProps: props.taoProps },
+          renderPresentable(props.entry.presentable, props.entry.arguments, props.taoProps, props.entry.host),
+        ),
       ),
       headerConfig: {
         children: Right && observable && slots.toolbar.length > 0

@@ -721,6 +721,43 @@ Describe('validator: declaration contracts', () => {
   )
 
   Test(
+    'accepts title on a text field',
+    accepts('data Recipes / Recipe { Title text (title) Servings number }'),
+  )
+
+  Test(
+    'rejects title on a non-text field',
+    rejects(
+      'data Recipes / Recipe { Servings number (title) }',
+      dataValidationMessages.titleFieldKind('Servings'),
+    ),
+  )
+
+  Test(
+    'rejects duplicate title modifiers',
+    rejects(
+      'data Recipes / Recipe { Title text (title, title) }',
+      dataValidationMessages.duplicateModifier('Title', 'title'),
+    ),
+  )
+
+  Test(
+    'rejects a misspelled word trait',
+    rejects(
+      'data Recipes / Recipe { Title text (titel) }',
+      dataValidationMessages.unknownTrait('titel'),
+    ),
+  )
+
+  Test(
+    'rejects a second title field on one entity',
+    rejects(
+      'data Recipes / Recipe { Title text (title) Subtitle text (title) }',
+      dataValidationMessages.duplicateTitleField('Recipe'),
+    ),
+  )
+
+  Test(
     'accepts local only beside the other entity storage facts',
     accepts('data Sessions / Session { Label text index Label order by Label local only }'),
   )
