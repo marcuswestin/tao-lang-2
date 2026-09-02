@@ -216,36 +216,12 @@ Describe('TR.Navigation', () => {
     Expect(kind.back(first)).toBe(true)
   })
 
-  Test('normalizes bound command metadata without discarding icon or intent title', () => {
-    let invoked = 0
-    const action = TR.Action(() => {
-      invoked += 1
-    }, { title: () => TR.Value('Save document') })
-    const command = TR.Navigation.Command({
-      action,
-      arguments: [],
-      enabled: () => TR.Value(false),
-      icon: () => TR.Value('checkmark'),
-      intentTitle: () => TR.ActionTitle(action, []),
-      name: 'Save',
-    })
-
-    const hostCommand = command.read()
-    Expect(hostCommand.label).toBe('Save document')
-    Expect(hostCommand.icon).toBe('checkmark')
-    Expect(hostCommand.enabled).toBe(false)
-    command.evaluate().jsValue.invoke()
-    Expect(invoked).toBe(1)
-  })
-
   Test('refreshes visually stable command closures independently of duplicate shortcut keys', () => {
     const invoked: string[] = []
     const command = (name: string, value: string) =>
-      TR.Navigation.Command({
-        action: TR.Action(() => invoked.push(value)),
-        arguments: [],
-        key: () => TR.Value('command-k'),
-        label: () => TR.Value(name),
+      TR.Interaction.Command({
+        action: () => TR.Action(() => invoked.push(value)),
+        members: { Key: () => TR.Value('primary+k'), Label: () => TR.Value(name) },
         name,
       }).read()
     const channel = new RuntimeHostReadChannel()

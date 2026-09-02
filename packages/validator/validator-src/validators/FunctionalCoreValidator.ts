@@ -132,6 +132,10 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
   if (expression.operator === '+' && isPrimitive(left, 'text') && isPrimitive(right, 'text')) {
     return
   }
+  // A shortcut reads as its modifiers followed by one key, so `+` chains a modifier onto a key.
+  if (expression.operator === '+' && isPrimitive(left, 'shortcut') && isPrimitive(right, 'text')) {
+    return
+  }
   // A unit value on either side makes this dimensional analysis rather than plain arithmetic.
   if (Type.unitFamilyOf(left) || Type.unitFamilyOf(right) || isPrimitive(left, 'time') || isPrimitive(right, 'time')) {
     if (!Type.dimensionalResult(left, expression.operator, right)) {

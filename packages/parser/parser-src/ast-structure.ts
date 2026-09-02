@@ -148,7 +148,7 @@ export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AS
 type ArgumentListOwner =
   | AST.Render
   | AST.DoStatement
-  | AST.CommandDeclaration
+  | AST.CommandDoClause
   | AST.FunctionCallExpression
   | AST.ContextualPresentStatement
   | AST.ViewBinding
@@ -299,6 +299,7 @@ export function importableValueDeclarationsInFile(
   | AST.AliasDeclaration
   | AST.ActionDeclaration
   | AST.AppDeclaration
+  | AST.CommandDeclaration
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
@@ -357,6 +358,42 @@ export function commandOwningView(command: AST.CommandDeclaration): AST.ViewDecl
   return AST.isBlock(block) && AST.isViewDeclaration(block.$container) && block.$container.block === block
     ? block.$container
     : undefined
+}
+
+/** commandEntriesOf returns the slot declarations and member fills written in one command body. */
+export function commandEntriesOf(command: AST.CommandDeclaration): AST.CommandEntry[] {
+  return command.block.members.filter(AST.isCommandEntry)
+}
+
+/** commandDoClausesOf returns every `do` clause written in one command body. */
+export function commandDoClausesOf(command: AST.CommandDeclaration): AST.CommandDoClause[] {
+  return command.block.members.filter(AST.isCommandDoClause)
+}
+
+/** commandDoClauseOf returns the single invocation one validated command binds. */
+export function commandDoClauseOf(command: AST.CommandDeclaration): AST.CommandDoClause | undefined {
+  return commandDoClausesOf(command)[0]
+}
+
+/**
+ * commandSlotCandidatesOf returns the entries whose shape declares a slot. It is deliberately
+ * syntactic: whether the name reaches a type is a semantic question, and the scope this feeds must
+ * not depend on an answer that would need this scope to produce it.
+ */
+export function commandSlotCandidatesOf(command: AST.CommandDeclaration): AST.CommandEntry[] {
+  return commandEntriesOf(command).filter(entry => entry.value === undefined)
+}
+
+/** owningCommand returns the command declaration containing `node`, if any. */
+export function owningCommand(node: AST.Node): AST.CommandDeclaration | undefined {
+  let current: AST.Node | undefined = node
+  while (current) {
+    if (AST.isCommandDeclaration(current)) {
+      return current
+    }
+    current = current.$container
+  }
+  return undefined
 }
 
 /** askDeclarationsOwnedByActionBlock returns dialogue results introduced directly by one action block. */
@@ -446,6 +483,7 @@ export function isImportableValueDeclaration(
   | AST.AliasDeclaration
   | AST.ActionDeclaration
   | AST.AppDeclaration
+  | AST.CommandDeclaration
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
@@ -455,6 +493,8 @@ export function isImportableValueDeclaration(
   return AST.isAliasDeclaration(node)
     || AST.isActionDeclaration(node)
     || AST.isAppDeclaration(node)
+    // A module-level command is an ordinary named value: it is the verb other modules reach for.
+    || (AST.isCommandDeclaration(node) && AST.isTaoFile(node.$container))
     || AST.isNavDeclaration(node)
     || AST.isDatasourceDeclaration(node)
     || AST.isDesignDeclaration(node)

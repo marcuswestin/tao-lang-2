@@ -13,6 +13,8 @@ const expectedPrimitives = [
   'time',
   'duration',
   'action',
+  'shortcut',
+  'command',
   'design',
   'view',
   'scene',

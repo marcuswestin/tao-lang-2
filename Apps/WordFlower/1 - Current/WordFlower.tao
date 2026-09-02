@@ -236,7 +236,10 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   `Toolbar` remains optional. `SlotNav`, `SelectionNav`, `SplitNav`, and sheet, root, menu, and toast
 //   presentations read neither slot. Missing required fills are diagnosed at the placement, because
 //   the view itself remains valid in a host that does not require them
-// - An `action` or `transaction` is an intent when it supplies `Title`; no `intent` keyword exists.
+// - [Superseded by the interaction system tranche. `Title`, `Description`, and `Summary` moved off
+//   `primitive action` onto `primitive command`; a command became a standalone configured value with
+//   its own slots, and `intent` retired as a word. See Decisions §8.] An `action` or `transaction` is
+//   an intent when it supplies `Title`; no `intent` keyword exists.
 //   A `command` is a focused reference to an intent, never a second behavior body. It may supply
 //   `Label`, `Icon`, `Key`, and boolean `Enabled`; each takes an ordinary reactive expression and
 //   `Label` defaults to the intent's `Title`. A command

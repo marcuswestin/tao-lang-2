@@ -15,13 +15,27 @@ primitive time
 // A duration is a unit value of the `duration` family; `.unit` builds and reads it (Decisions §2).
 primitive duration
 
-// Named actions may publish defaulted host-readable intent metadata. A command binds one action
-// invocation into an action value; host surfaces consume those values without compiler-owned slot
-// vocabulary.
-primitive action with {
-   Title text is "",
+// An action is a private procedure. It names no title and no summary, because nothing lists an
+// action: a `command` is the discoverable verb, and it is what carries the words a person reads.
+primitive action
+
+// A shortcut is the key a command answers to. It is written as a modifier chain ending in one key
+// (`primary + "n"`), or as a bare key on its own ("s"). It is not a number and has no unit family.
+primitive shortcut
+
+// A command is the discoverable verb: one action invocation, the words a person reads, and the
+// slots the invocation still needs. It is a configured value, so `Save with { ... }` derives one
+// and `do Save with { ... }` invokes it. `Title` is required because a verb nothing can name is
+// not discoverable; an unfilled `Label` reads as `Title`, written as empty text because a slot
+// default is a literal rather than a reference to a sibling slot.
+primitive command with {
+   Title text,
    Description text is "",
    Summary text is "",
+   Label text is "",
+   Icon text is "",
+   Key shortcut is none,
+   Enabled boolean is true,
 }
 
 primitive design
@@ -33,11 +47,11 @@ primitive view
 // A scene is a view that is presented rather than composed, and the only declaration that may fill
 // the slots a host reads. Keeping them here rather than on `view` is what makes chrome nothing
 // reads unrepresentable: a declaration that is only ever composed cannot name a title. `Header` is
-// the opt out, for a scene that owns its whole surface. Toolbar is a list of bound zero-argument
-// action values (commands at the source level).
+// the opt out, for a scene that owns its whole surface. Toolbar lists the commands a host offers
+// on this scene's chrome.
 primitive scene is view with {
    Title text is "",
-   Toolbar list of action() is [],
+   Toolbar list of command is [],
    Header boolean is true,
 }
 

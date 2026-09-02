@@ -3,7 +3,7 @@ use WorkspaceNav from @nav
 use Join from @tao/text
 use Col, Image, Panes, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
-use DocumentScreen from ./
+use DocumentScreen, Finish from ./
 
 type PromptTitle is text
 
@@ -113,14 +113,18 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
       where is Final
    }
    action SaveWorkspace() {
-      Title "Save workspace"
       guard WorkspaceNameDraft empty
       update Workspace {
          Name: WorkspaceNameDraft
    }  }
-   command Save = SaveWorkspace() with {
+   // A command is the discoverable verb and the action is the private procedure behind it, so the
+   // name a person reads lives on the command. This one is declared in the scene because it reads
+   // and resets that scene's own state, exactly as an `action` may.
+   command Save {
+      Title "Save workspace"
       Icon "checkmark"
       Enabled WorkspaceNameDraft is not empty
+      do SaveWorkspace()
    }
    Toolbar { Save }
    action AddDocument() {
@@ -292,9 +296,12 @@ view DraftRow(Document) {
 
       #finish
       FormButton("Finish document") [buttonSecondary] {
-         on press -> { update Document {
-            Final
-         } } // boolean cases are written by name
+         // `do <command> with { ... }` fills the command's slot at the invocation, so the row and
+         // any other surface that offers Finish run one declared verb rather than two copies of
+         // the write.
+         on press -> { do Finish with {
+            Document
+         } }
       }
 
       #delete

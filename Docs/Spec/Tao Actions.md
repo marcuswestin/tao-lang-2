@@ -4,6 +4,86 @@ Actions are effectful values. A named action may update Tao state and data, invo
 `do`, stop deliberately with `fail`, or cross a typed TypeScript boundary. The runtime contains every
 root invocation in one serialized transaction.
 
+An action names nothing a person reads. It is a private procedure, and no surface lists one. The
+discoverable verb is a `command`.
+
+## Commands
+
+A command is a standalone configured value: one action invocation, the words a person reads, and the
+slots that invocation still needs.
+
+```tao
+primitive command with {
+   Title text,
+   Description text is "",
+   Summary text is "",
+   Label text is "",
+   Icon text is "",
+   Key shortcut is none,
+   Enabled boolean is true,
+}
+```
+
+`Title` is required, because a verb nothing can name is not discoverable. An unfilled `Label` reads
+as the command's `Title`; the default is written as empty text because a slot default is a literal
+rather than a reference to a sibling slot.
+
+A command is declared at module level or in a view or scene body — the placement `action` already
+has, and for the same reason: a command written in a view body closes over that view's parameters,
+state, and actions.
+
+```tao
+package
+command Finish {
+   Document
+   Title "Finish document"
+   Description "Moves a document out of drafts and into the archive."
+   Summary "Finish { Document.Title }"
+   Icon "checkmark.circle"
+   Enabled Document.Final is Draft
+   do -> {
+      update Document {
+         Final
+}  }  }
+```
+
+The body holds slot declarations, member fills, and exactly one `do` clause naming the action it
+runs. `Document` on its own is a slot taking its same-named type, exactly as `view CookScreen(Recipe)`
+already reads. Every other member carries a value, and a juxtaposed value never starts with a bare
+name — that is what keeps a slot on one line and a member fill on the next unambiguous. Write
+`Enabled: CanSave` when the value is a bare name; `Enabled Document.Final is Draft` and
+`Key primary + "n"` need no colon because neither is a bare name on its own. A name that is both a
+command member and a type is diagnosed and asks for the explicit `Name: value` form, and one command
+declares at most one slot of each type, so what the verb acts on is never ambiguous.
+
+Binding a command is derivation. `Save with { ... }` fills slots and may refine `Label`, `Icon`,
+`Key`, and `Enabled`; overriding `Title` is an error, because the title is what identifies the verb
+wherever it is listed. `do <command>` runs it, and `do <command> with { ... }` fills the slots it
+still needs at the invocation:
+
+```tao
+on press -> { do Finish with { Document } }
+```
+
+`do` with an unfilled slot is an error, and so is a toolbar mention of a command with one: nothing
+at the mention would supply the value. An action `do` still carries its call parentheses; a bare
+name after `do` names a command.
+
+Every module emits a table of the commands it declares and registers it at load through
+`TR.Interaction.RegisterCommands`; a view-body command registers while its view is mounted. The
+table records each command's identity, its slots and whether each names an entity, and the value to
+run, so a verb surface can ask which commands act on what a person has in front of them.
+
+## Shortcuts
+
+`shortcut` is the type of the key a command answers to. A bare string literal in `Key` position is a
+shortcut literal (`Key "s"`), and `primary + "n"` chains the one registered modifier onto a key.
+`primary` is a value in `@tao/keys`: the host maps it to whatever chord key the platform it runs on
+already uses, so one authored shortcut is correct on every one of them. Naming a platform key
+directly — `cmd`, `ctrl`, `meta` — is an error, and so is a modifier no tranche has registered.
+Dispatching keys to commands is not in this release; a `Key` is carried and published, not yet
+pressed.
+
 ## Failure contracts
 
 A native action reports an expected failure where it detects it:

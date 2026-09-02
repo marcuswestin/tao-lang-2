@@ -81,19 +81,6 @@ Describe('TR.Action', () => {
     Expect(completion).toBeUndefined()
   })
 
-  Test('preserves reactive intent metadata for one bound invocation', () => {
-    const action = TR.Action((_name: TR.Value<string>) => undefined, {
-      description: name => TR.Value(`Describe ${name.jsValue}`),
-      summary: name => TR.Value(`Summarize ${name.jsValue}`),
-      title: name => TR.Value(`Title ${name.jsValue}`),
-    })
-    const arguments_: [TR.Value<string>] = [TR.Value('draft')]
-
-    Expect(TR.ActionTitle(action, arguments_)?.evaluate().jsValue).toBe('Title draft')
-    Expect(TR.ActionDescription(action, arguments_)?.evaluate().jsValue).toBe('Describe draft')
-    Expect(TR.ActionSummary(action, arguments_)?.evaluate().jsValue).toBe('Summarize draft')
-  })
-
   Test('unwraps bridged action arguments and forwards asynchronous completion', async () => {
     const calls: string[] = []
     const action = TR.BridgedAction<[TR.Value<string>]>(async value => {

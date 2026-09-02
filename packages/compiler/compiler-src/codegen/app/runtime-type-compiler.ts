@@ -22,6 +22,8 @@ export function compileRuntimeType(type: ASTUtils.TaoType): Compiled {
         text: () => gen`TR.Value<string>`,
         time: () => gen`TR.Value<number>`,
         duration: () => gen`TR.Value<number>`,
+        shortcut: () => gen`TR.Value<string>`,
+        command: () => gen`TR.CommandValue`,
         design: () => gen`TR.Evaluable`,
         view: () => gen`TR.Presentable`,
         scene: () => gen`TR.Presentable`,

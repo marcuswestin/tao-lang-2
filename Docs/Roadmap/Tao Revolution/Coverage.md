@@ -24,7 +24,9 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Presence (§6)                                              | — (collaboration scope question)                            | Post-MVP | —                        |
 | Editing: write-through + drafts (§7)                       | WordFlower · title/body editing                             | MVP      | partially in Current     |
 | Draft conflict comparison (§7)                             | Wayfare · stop editing                                      | Post-MVP | —                        |
-| Intents, commands, surfaces (§8)                           | WordFlower · workspace save toolbar; HNReader · open story  | MVP      | partially in Current[^5] |
+| Commands as configured values (§8)                         | WordFlower · module-level Finish, workspace save toolbar    | MVP      | in Current[^9]           |
+| Shortcut values (§8)                                       | — (key dispatch is the T4 forcing feature)                  | MVP      | partially in Current[^9] |
+| Command surfaces: menus, rails, palettes (§8)              | WordFlower · command palette and menus                      | Post-MVP | —                        |
 | Assistant projection (§8)                                  | WordFlower · assistant block                                | Post-MVP | —                        |
 | Undo derivation (§8)                                       | WordFlower · document edits                                 | Post-MVP | —                        |
 | Conditionals, ternary, check/guard (§8)                    | WordFlower · everywhere; ternary: focused-writing mode      | MVP      | partially in Current[^2] |
@@ -79,6 +81,16 @@ it (`Docs/Roadmap/Focused writing tranche/`).
     semantic reducer; browser Back/Forward adds no Tao construct and is covered by focused runtime
     and rendered host tests against that reducer. Broader menus, rails, palettes, SplitNav, window
     orchestration, and links/routes remain at their stated later boundary.
+
+[^9]: The interaction system tranche makes a command a standalone configured value: `Title`,
+    `Description`, and `Summary` move off `primitive action` onto `primitive command`, a command is
+    declared at module level or in a view body, its slots are declared by juxtaposition, and
+    `do <command> with { ... }` fills them at the invocation. WordFlower's `Finish` is the
+    module-level command with a `Document` slot; `Save` is the view-body command reading its
+    scene's own state. Journeys prove the toolbar label, the reactive `Enabled`, and the write a
+    `do <command> with { ... }` performs. `shortcut` is carried and published but not dispatched:
+    only the `primary` modifier is registered, and mention refinement, `Commands { ... }`, `hide`,
+    entity command lists, and key dispatch remain at their stated later boundary.
 
 [^1]: The dialect migration tranche retired `data <status>` (Decisions §16) and with it the Data MVP
     check that drove a provider through `loading`, `error`, and `ready`. Nothing replaces it in this

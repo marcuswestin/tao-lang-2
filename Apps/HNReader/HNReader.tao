@@ -37,8 +37,9 @@ type StubSource is Http with {
    Adapter item is StubAdapter from ./StubAdapter.ts
 }
 
-// The generic sidecar boundary supplies an action value; the Tao intent below owns product title,
-// availability, and command placement while this bridge owns only the external-application edge.
+// The generic sidecar boundary supplies an action value; the Tao command below owns the product
+// title, availability, and toolbar placement while this bridge owns only the external-application
+// edge.
 let OpenUrl is action(text) = OpenUrl from ./OpenStoryLink.ts
 
 // Hacker News's warm paper and orange, tuned for reading: white story cards on the beige ground,
@@ -145,12 +146,13 @@ view StoryRow(Story) {
 scene StoryScreen(Story) {
    Title Story.Title
    action OpenStoryLink() {
-      Title "Open story"
       do OpenUrl(Story.Url)
    }
-   command Open = OpenStoryLink() with {
+   command Open {
+      Title "Open story"
       Icon "safari"
       Enabled Story.Url is not empty
+      do OpenStoryLink()
    }
    Toolbar { Open }
    query Thread from Story.Comments { }

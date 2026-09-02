@@ -78,6 +78,8 @@ Describe('validator: workspace structure', () => {
         'time',
         'duration',
         'action',
+        'shortcut',
+        'command',
         'design',
         'view',
         'scene',

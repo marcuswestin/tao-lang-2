@@ -22,6 +22,9 @@ test "WordFlower documents" {
          text "Goal: 10 paragraphs"
       }
       expect #editDocumentTitle input value "Draft the intro"
+      // The scene's `Toolbar { Finish }` mentions the command without filling its slot; the surface
+      // fills it from the presented scene's parameters by type when it is invoked.
+      expect toolbar command "Finish document" enabled
       expect checkbox #markFinal unchecked
       enter "" into #editDocumentTitle
       submit #editDocumentTitle
@@ -168,4 +171,25 @@ test "WordFlower documents" {
       expect {
          text "Document Document-2 no longer exists."
          missing text "Document: Chapter one"
-}  }  }
+   }  }
+   test "runs the document verb from the scene toolbar" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      expect toolbar command "Finish document" enabled
+      press toolbar command "Finish document"
+      // `Enabled Document.Final is Draft`, so the one declared verb reports itself unavailable once
+      // the document has left drafts -- the toolbar and the row's button share that judgement
+      // because they share the command.
+      expect toolbar command "Finish document" disabled
+      expect checkbox #markFinal checked
+   }
+}

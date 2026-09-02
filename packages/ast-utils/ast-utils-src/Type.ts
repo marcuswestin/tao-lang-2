@@ -13,6 +13,8 @@ export type TaoType =
       | 'time'
       | 'duration'
       | 'none'
+      | 'shortcut'
+      | 'command'
       | 'design'
       | 'view'
       | 'scene'
@@ -294,6 +296,11 @@ export class Type {
 
   /** isAssignable returns whether an actual value type can satisfy an expected parameter/property type. */
   static isAssignable(actual: TaoType, expected: TaoType): boolean {
+    // A bare key is written as text and read as the shortcut it names, the way a bare number in
+    // size position is read as a size. The reverse is not true: a shortcut is not text.
+    if (isPrimitiveNamed(expected, 'shortcut') && isPrimitiveNamed(actual, 'text')) {
+      return true
+    }
     if (expected.kind === 'union') {
       return expected.members.some(member => Type.isAssignable(actual, member))
     }
@@ -328,6 +335,24 @@ export class Type {
       }
       return commonTypeCandidateIsPreferred(candidate, best) ? candidate : best
     }, undefined)
+  }
+
+  /**
+   * ofNamedTypeName resolves the type a bare name reaches in the type namespace. A command slot is
+   * written by juxtaposition and so names its type without a type reference node to resolve.
+   */
+  static ofNamedTypeName(node: AST.Node, name: string): TaoType {
+    const entity = Type.visibleDataEntities(node).find(candidate => candidate.singularName === name)
+    if (entity) {
+      return { kind: 'entity', entity }
+    }
+    const declaration = visibleTypeDeclaration(node, name)
+    return declaration ? new TypeResolutionContext().ofDefinition(declaration) : unresolvedType()
+  }
+
+  /** namedTypeExists reports whether a bare name reaches the type namespace at all. */
+  static namedTypeExists(node: AST.Node, name: string): boolean {
+    return !isUnresolvedType(Type.ofNamedTypeName(node, name))
   }
 
   /** entityOfReference resolves a top-level entity's singular type name. */
@@ -874,11 +899,22 @@ class TypeResolutionContext {
       return primitiveType('boolean')
     }
     const left = this.ofExpression(expression.left)
+    if (expression.operator === '+' && left.kind === 'primitive' && left.primitive === 'shortcut') {
+      return primitiveType('shortcut')
+    }
     if (expression.operator === '+' && left.kind === 'primitive' && left.primitive === 'text') {
       return primitiveType('text')
     }
     const right = this.ofExpression(expression.right)
     return dimensionalResultType(left, expression.operator, right) ?? primitiveType('number')
+  }
+
+  /**
+   * A command member is a slot only when it stands alone, and the type it binds is the one its own
+   * name reaches. Every other member is a fill and introduces no value of its own.
+   */
+  private commandEntryType(entry: AST.CommandEntry): TaoType {
+    return entry.value ? unresolvedType() : Type.ofNamedTypeName(entry, entry.name)
   }
 
   private whenExpressionType(expression: AST.WhenExpression): TaoType {
@@ -925,6 +961,7 @@ class TypeResolutionContext {
       DesignDeclaration: () => primitiveType('design'),
       NavDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('nav'),
       StateDeclaration: state => this.stateDeclarationType(state),
+      CommandEntry: entry => this.commandEntryType(entry),
       ViewDeclaration: declaration => primitiveType(declaration.scene ? 'scene' : 'view'),
       undefined: unresolvedType,
     })
@@ -1144,6 +1181,8 @@ function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
     none: () => ({ kind: 'primitive', primitive: 'none' }),
     list: () => ({ kind: 'list' }),
     item: () => ({ kind: 'item' }),
+    shortcut: () => ({ kind: 'primitive', primitive: 'shortcut' }),
+    command: () => ({ kind: 'primitive', primitive: 'command' }),
     design: () => ({ kind: 'primitive', primitive: 'design' }),
     view: () => ({ kind: 'primitive', primitive: 'view' }),
     scene: () => ({ kind: 'primitive', primitive: 'scene' }),

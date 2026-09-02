@@ -311,6 +311,7 @@ export const ExpressionsCompiler = {
       AskStatement: ask => gen`${gen.scopeName(ask)}.evaluate()`,
       CasePayload: payload => gen`${gen.scopeName(payload)}.evaluate()`,
       CommandDeclaration: command => gen`${gen.scopeName(command)}.evaluate()`,
+      CommandEntry: entry => gen`${gen.scopeName(entry)}.evaluate()`,
       DesignDeclaration: design => gen`${gen.scopeName(design)}.evaluate()`,
       EntityDataField: () => gen`TR.Value(true)`,
       EntityQueryDeclaration: query => gen`${gen.scopeName(query)}.evaluate()`,
@@ -545,6 +546,45 @@ function compileKeyedItemObject(
   }`
 }
 
+/**
+ * Binding a command is derivation: the fills settle the slots the declaration left open, and any
+ * member written beside them refines the words a host shows for this one binding.
+ */
+function compileCommandBinding(command: AST.CommandDeclaration, block: AST.ConfigurationBlock): Compiled {
+  const slots = new Set(ASTUtils.commandSlots(command).map(slot => slot.name))
+  const bindings = block.entries.flatMap(entry => {
+    const name = ASTUtils.commandBindingEntryName(entry)
+    const expression = commandBindingExpression(entry)
+    return name === undefined || expression === undefined ? [] : [{ expression, name }]
+  })
+  const compileGroup = (members: typeof bindings) =>
+    gen`{ ${gen.list(members, member => gen`${gen.jsLiteral(member.name)}: ${member.expression},`)} }`
+  return gen`TR.Interaction.Bind(
+    ${gen.scopeName(command)},
+    ${compileGroup(bindings.filter(binding => slots.has(binding.name)))},
+    ${
+    compileGroup(
+      bindings.filter(binding => !slots.has(binding.name)).map(binding => ({
+        expression: gen`() => ${binding.expression}`,
+        name: binding.name,
+      })),
+    )
+  },
+  )`
+}
+
+function commandBindingExpression(entry: AST.ConfigurationEntry): Compiled | undefined {
+  if (entry.reference) {
+    return Compile.ValueDeclarationReference(resolveRef(entry.reference))
+  }
+  if (entry.expression) {
+    return Compile.Expression(entry.expression)
+  }
+  return entry.value && !AST.isPropertyConfigurationPatch(entry.value)
+    ? Compile.ConfigurationValue(entry.value)
+    : undefined
+}
+
 function compileConfigurationEntries(
   block: AST.ConfigurationBlock,
   keyedDefaults: readonly AST.ConfigurationProperty[],
@@ -555,20 +595,14 @@ function compileConfigurationEntries(
       return gen`${gen.jsLiteral(entry.key)}: ${compileKeyedItemObject(entry.block, keyedDefaults)},`
     }
     if (entry.name && entry.block) {
+      // A configured nav reads the same `Toolbar` slot a scene does, so it lists the same commands.
       const references = entry.block.entries.flatMap(referenceEntry => {
         const reference = referenceEntry.reference?.ref
-        return reference && AST.isActionDeclaration(reference)
-          ? [{ declaration: reference, name: referenceEntry.reference!.$refText }]
-          : []
+        return AST.isCommandDeclaration(reference) ? [reference] : []
       })
+      // A nav is configured where it is declared, which can be above the commands it lists.
       return gen`${gen.jsLiteral(entry.name)}: [${
-        gen.join(references, reference =>
-          gen`TR.Navigation.Command({
-          action: { evaluate: () => ${gen.scopeName(reference.declaration)}.evaluate() },
-          arguments: [],
-          intentTitle: () => TR.ActionTitle(${gen.scopeName(reference.declaration)}, []),
-          name: ${gen.jsLiteral(reference.name)},
-        })`)
+        gen.join(references, reference => gen`TR.Interaction.Deferred(() => ${gen.scopeName(reference)})`)
       }],`
     }
     Assert.defined(entry.name, 'validated configuration entry has a property name')
@@ -580,6 +614,9 @@ function compileConfigurationEntries(
 
 function compileConfiguredPatch(value: AST.RefinementExpression): Compiled {
   const base = resolveRef(value.target)
+  if (AST.isCommandDeclaration(base)) {
+    return compileCommandBinding(base, value.patchBlock)
+  }
   Assert.is(base, AST.isValueDeclaration, 'validated refinement target is a value')
   const compiledBase = Compile.ValueDeclarationReference(base)
   const patch = compileConfigurationPatchObject(

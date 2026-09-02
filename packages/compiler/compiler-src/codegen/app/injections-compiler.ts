@@ -102,6 +102,8 @@ function CompileTaoJsType(type: ASTUtils.TaoType): Compiled {
         text: () => gen`string`,
         time: () => gen`number`,
         duration: () => gen`number`,
+        shortcut: () => gen`string`,
+        command: () => gen`TR.CommandValue`,
         design: () => gen`any`,
         view: () => gen`import('react').ReactNode`,
         scene: () => gen`import('react').ReactNode`,

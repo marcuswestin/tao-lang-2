@@ -73,7 +73,7 @@ share the folder, one per source file, and each check picks its app with `run`.
   left suspended when the app is quit, where the action that was waiting never resumes into the
   launch that replaces it.
 - _Basic kit_ (`Basic Navigation.tao`): `StackNav` from `@tao/nav/basic`, with the same required
-  `Title` and optional `Toolbar` slots as native StackNav; intent-title label defaulting; host
+  `Title` and optional `Toolbar` slots as native StackNav; command-title label defaulting; host
   command invocation; deterministic basic chrome assertions.
 - _Sheets and overlays_ (`Sheet Presentation.tao`): `present X as sheet`, the platform's own modal
   presentation; `present X as overlay` from inside one; dismissing from inside with `dismiss`;

@@ -8,6 +8,7 @@ import {
   actionBlockRequiresAsync,
   actionInvocationRequiresAsync,
 } from './action-control-flow'
+import { compileDeclarationIdentity, declarationModuleName } from './declaration-identity'
 import { foreignActionBindingName } from './injection-plan'
 
 type ActionParameter = {
@@ -23,13 +24,6 @@ export const ActionsCompiler = {
     }
     const parameters = actionParameters(action)
     const asyncKeyword = actionBlockRequiresAsync(action.block) ? gen`async ` : gen``
-    const metadata = [
-      { property: 'title', fill: AST.declarationSlotFillNamed(action, 'Title') },
-      { property: 'description', fill: AST.declarationSlotFillNamed(action, 'Description') },
-      { property: 'summary', fill: AST.declarationSlotFillNamed(action, 'Summary') },
-    ].filter((entry): entry is { property: string; fill: AST.DeclarationSlotFill & { value: AST.Expression } } =>
-      entry.fill?.value !== undefined
-    )
     return gen`
       ${gen.scopeName(action)} = TR.Action(${asyncKeyword}(${gen.join(parameters, Compile.ActionRuntimeParameter)}) => {
         return TR.BlockScope(_Scope, ${asyncKeyword}_Scope => {
@@ -39,46 +33,75 @@ export const ActionsCompiler = {
       }, {
         name: ${gen.jsLiteral(action.name)},
         ${actionBlockContainsRespond(action.block) ? gen`interrupt: true,` : gen``}
-        ${
-      gen.list(metadata, entry =>
-        gen`${entry.property}: (${
-          gen.join(parameters, Compile.ActionRuntimeParameter)
-        }) => TR.BlockScope(_Scope, _Scope => {
-            ${gen.list(parameters, Compile.ActionParameterBinding)}
-            return ${Compile.Expression(entry.fill.value)}
-          }),`)
-    }
       })
     `
   },
 
-  /** CommandDeclaration binds an intent call and live occurrence metadata for host-owned chrome. */
+  /**
+   * CommandDeclaration compiles the discoverable verb. Every member and the invocation itself are
+   * functions of the slots the declaration left open, so one declaration serves every binding of it.
+   */
   CommandDeclaration(command: AST.CommandDeclaration): Compiled {
-    const action = resolveRef(command.action)
-    const resolved = ASTUtils.resolveArgumentBindings(action, command)
-    Assert(resolved.diagnostics.length === 0, 'validated command has no binding diagnostics')
-    const parameters = AST.parametersOf(action)
-    const argumentsByParameter = new Map(resolved.pairs.map(pair => [pair.parameter, pair.argument]))
-    const lastProvidedIndex = Math.max(...resolved.pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
-    const arguments_ = parameters.slice(0, lastProvidedIndex + 1).map(parameter => {
-      const argument = argumentsByParameter.get(parameter)
-      return argument ? Compile.Argument(argument) : gen`undefined`
-    })
-    const fill = (name: string) => command.metadata?.fills.find(candidate => candidate.name === name)?.value
-    const label = fill('Label')
-    const icon = fill('Icon')
-    const key = fill('Key')
-    const enabled = fill('Enabled')
-    return gen`${gen.scopeName(command)} = TR.Navigation.Command({
-      action: { evaluate: () => ${gen.scopeName(action)}.evaluate() },
-      arguments: [${gen.join(arguments_, argument => argument)}],
-      intentTitle: () => TR.ActionTitle(${gen.scopeName(action)}, [${gen.join(arguments_, argument => argument)}]),
+    const clause = AST.commandDoClauseOf(command)
+    Assert.defined(clause, 'validated command names one do clause')
+    const slots = ASTUtils.commandSlots(command)
+    const members = ASTUtils.commandMembers(command).filter(member => member.kind === 'fill')
+    const bindSlots = gen.list(
+      slots,
+      slot => gen`${gen.scopeName(slot.entry)} = _TaoFills[${gen.jsLiteral(slot.name)}]`,
+    )
+    const inFills = (body: Compiled) =>
+      gen`_TaoFills => TR.BlockScope(_Scope, _Scope => {
+        ${bindSlots}
+        return ${body}
+      })`
+    return gen`${gen.scopeName(command)} = TR.Interaction.Command({
       name: ${gen.jsLiteral(command.name)},
-      ${label ? gen`label: () => ${Compile.Expression(label)},` : gen.noop()}
-      ${icon ? gen`icon: () => ${Compile.Expression(icon)},` : gen.noop()}
-      ${key ? gen`key: () => ${Compile.Expression(key)},` : gen.noop()}
-      ${enabled ? gen`enabled: () => ${Compile.Expression(enabled)},` : gen.noop()}
+      slots: [${gen.join(slots, slot => gen.jsLiteral(slot.name))}],
+      action: ${inFills(Compile.Expression(clause.action))},
+      arguments: ${inFills(gen`[${gen.join(commandInvocationArguments(clause), argument => argument)}]`)},
+      members: {
+        ${
+      gen.list(
+        members,
+        member => gen`${gen.jsLiteral(member.name)}: ${inFills(Compile.Expression(member.value))},`,
+      )
+    }
+      },
     })`
+  },
+
+  /**
+   * CommandTable is what a module publishes about the verbs it owns: enough for a surface to ask
+   * which commands act on what a person has in front of them, and the value to run when one is
+   * chosen. The table is generated; registering it is handwritten runtime.
+   */
+  CommandTable(commands: readonly AST.CommandDeclaration[]): Compiled {
+    const owner = commands[0]
+    Assert.defined(owner, 'a command table is emitted only for a module that declares commands')
+    return gen`{
+      module: ${gen.jsLiteral(declarationModuleName(owner))},
+      commands: [
+        ${
+      gen.list(commands, command =>
+        gen`{
+          identity: ${compileDeclarationIdentity(command)}.canonical,
+          name: ${gen.jsLiteral(command.name)},
+          slots: [
+            ${
+          gen.list(ASTUtils.commandSlots(command), slot =>
+            gen`{
+              name: ${gen.jsLiteral(slot.name)},
+              type: ${gen.jsLiteral(slot.typeName)},
+              entity: ${slot.type.kind === 'entity' ? 'true' : 'false'},
+            },`)
+        }
+          ],
+          command: () => ${gen.scopeName(command)},
+        },`)
+    }
+      ],
+    }`
   },
 
   /** ActionExpression compiles an inline Tao action into a runtime action value. */
@@ -231,6 +254,29 @@ function actionRuntimeParameterName(index: number): Compiled {
   return gen.Name({ name: `_TaoActionArg${index}` })
 }
 
+/** commandInvocationArguments compiles the arguments a command's `do` clause hands its action. */
+function commandInvocationArguments(clause: AST.CommandDoClause): Compiled[] {
+  const target = ASTUtils.resolveActionTarget(clause.action)
+  if (target.kind !== 'named') {
+    return AST.argumentsOf(clause).map(Compile.Argument)
+  }
+  const resolved = ASTUtils.resolveArgumentBindings(target.action, clause)
+  Assert(resolved.diagnostics.length === 0, 'validated command has no binding diagnostics')
+  return positionalArguments(AST.parametersOf(target.action), resolved.pairs)
+}
+
+function positionalArguments(
+  parameters: readonly AST.ParameterDeclaration[],
+  pairs: readonly ASTUtils.ActionInvocationPair[],
+): Compiled[] {
+  const argumentsByParameter = new Map(pairs.map(pair => [pair.parameter, pair.argument]))
+  const lastProvidedIndex = Math.max(...pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
+  return parameters.slice(0, lastProvidedIndex + 1).map(parameter => {
+    const argument = argumentsByParameter.get(parameter)
+    return argument ? Compile.Argument(argument) : gen`undefined`
+  })
+}
+
 function actionInvocationArguments(invocation: AST.DoStatement): Compiled[] {
   const resolved = ASTUtils.resolveActionInvocation(invocation)
   if (!resolved.action) {
@@ -240,13 +286,7 @@ function actionInvocationArguments(invocation: AST.DoStatement): Compiled[] {
   }
   Assert.defined(resolved.action, 'validated action invocation targets a named action')
   Assert(resolved.diagnostics.length === 0, 'validated action invocation has no binding diagnostics')
-  const parameters = AST.parametersOf(resolved.action)
-  const argumentsByParameter = new Map(resolved.pairs.map(pair => [pair.parameter, pair.argument]))
-  const lastProvidedIndex = Math.max(...resolved.pairs.map(pair => parameters.indexOf(pair.parameter)), -1)
-  return parameters.slice(0, lastProvidedIndex + 1).map(parameter => {
-    const argument = argumentsByParameter.get(parameter)
-    return argument ? Compile.Argument(argument) : gen`undefined`
-  })
+  return positionalArguments(AST.parametersOf(resolved.action), resolved.pairs)
 }
 
 function compileForeignAction(action: AST.ActionDeclaration): Compiled {

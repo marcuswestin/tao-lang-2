@@ -1,16 +1,11 @@
 import React from 'react'
+import { RuntimeCommand } from './TR-interaction'
+import type { TaoCommandSnapshot } from './TR-interaction'
 import type { Evaluable } from './TR-navigation-presentables'
 import type { Subscription } from './TR-navigation-state'
 
-/** TaoNavigationCommand is one occurrence-scoped intent exposed by a directly presented view. */
-export type TaoNavigationCommand = Readonly<{
-  enabled: boolean
-  icon?: string
-  identity: string
-  key: string
-  label: string
-  invoke(): unknown
-}>
+/** TaoNavigationCommand is one command as the chrome around a presented scene reads it. */
+export type TaoNavigationCommand = TaoCommandSnapshot
 
 /** TaoHostSlotSnapshot is the normalized chrome state read by a navigation host. */
 export type TaoHostSlotSnapshot = Readonly<{
@@ -20,56 +15,11 @@ export type TaoHostSlotSnapshot = Readonly<{
   toolbar: readonly TaoNavigationCommand[]
 }>
 
-export type TaoCommandAction = {
-  evaluate(): { jsValue: { invoke(...arguments_: Evaluable[]): unknown } }
-}
-
-export type TaoCommandDefinition = {
-  action: TaoCommandAction
-  arguments: readonly Evaluable[]
-  enabled?: () => Evaluable | undefined
-  icon?: () => Evaluable | undefined
-  intentTitle?: () => Evaluable | undefined
-  key?: () => Evaluable | undefined
-  label?: () => Evaluable | undefined
-  name: string
-}
-
-export type TaoHostSlotValue = Evaluable | undefined | readonly RuntimeNavigationCommand[]
+export type TaoHostSlotValue = Evaluable | undefined | readonly RuntimeCommand[]
 export type TaoHostSlotValues = Readonly<Record<string, (() => TaoHostSlotValue) | undefined>>
 export type TaoNavHostSlotConfiguration = Readonly<
-  Record<string, Evaluable | readonly RuntimeNavigationCommand[]>
+  Record<string, Evaluable | readonly RuntimeCommand[]>
 >
-
-/** RuntimeNavigationCommand keeps bound arguments and reactive affordance metadata together. */
-export class RuntimeNavigationCommand {
-  readonly jsValue: Readonly<{ invoke(): unknown }>
-
-  constructor(private readonly definition: TaoCommandDefinition) {
-    this.jsValue = Object.freeze({
-      invoke: () => this.definition.action.evaluate().jsValue.invoke(...this.definition.arguments),
-    })
-  }
-
-  evaluate(): this {
-    return this
-  }
-
-  read(): TaoNavigationCommand {
-    const icon = textValue(this.definition.icon?.())
-    const label = textValue(this.definition.label?.())
-      ?? textValue(this.definition.intentTitle?.())
-      ?? this.definition.name
-    return Object.freeze({
-      enabled: booleanValue(this.definition.enabled?.(), true),
-      ...(icon ? { icon } : {}),
-      identity: this.definition.name,
-      key: textValue(this.definition.key?.()) ?? this.definition.name,
-      label,
-      invoke: this.jsValue.invoke,
-    })
-  }
-}
 
 /** RuntimeHostReadChannel belongs to one presented occurrence, never to its render descendants. */
 export class RuntimeHostReadChannel implements Subscription {

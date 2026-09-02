@@ -35,6 +35,7 @@ const actionValidationMessages = {
     `Argument ${position} of action callback expects ${expected}, got ${actual}.`,
   dynamicActionNamedArgument: 'Action callback arguments are positional and cannot use a parameter name.',
   doTypeMismatch: (actual: string) => `do expects an action, got ${actual}.`,
+  doActionCall: 'do runs an action with its call parentheses; a bare name runs a command.',
   asyncPlacement: '`async` is allowed only inside an action block.',
   foreignActionPath: 'A foreign action implementation path must name a relative TypeScript or TSX module.',
   foreignActionMissing: (path: string) => `Foreign action implementation '${path}' does not exist.`,
@@ -132,6 +133,13 @@ function addDeclarationNames(visibleNames: Set<string>, declarations: readonly A
 }
 
 function reportArity(invocation: AST.DoStatement, ctx: ValidationContext): void {
+  if (ASTUtils.resolveCommandBinding(invocation.action)) {
+    return
+  }
+  if (!invocation.called) {
+    ctx.error(actionValidationMessages.doActionCall, invocation)
+    return
+  }
   const resolved = ASTUtils.resolveActionInvocation(invocation)
   if (!resolved.action) {
     validateDynamicActionInvocation(invocation, ctx)
@@ -147,7 +155,7 @@ function reportArity(invocation: AST.DoStatement, ctx: ValidationContext): void 
 export function reportActionBindingDiagnostic(
   action: AST.ActionDeclaration,
   diagnostic: ASTUtils.ArgumentBindingDiagnostic,
-  invocation: AST.DoStatement | AST.CommandDeclaration,
+  invocation: AST.DoStatement | AST.CommandDoClause,
   ctx: ValidationContext,
 ): void {
   Switch.kind(diagnostic, {
@@ -248,13 +256,15 @@ function validateDynamicActionInvocation(invocation: AST.DoStatement, ctx: Valid
   }
 }
 
-/** reportDoStatementActionType requires `do` to invoke an action-typed expression. */
+/** reportDoStatementActionType requires `do` to invoke an action- or command-typed expression. */
 function reportDoStatementActionType(invocation: AST.DoStatement, ctx: ValidationContext): void {
   const actionType = Type.ofExpression(invocation.action)
   if (actionType.kind === 'unresolved') {
     return
   }
-  if (actionType.kind !== 'primitive' || actionType.primitive !== 'action') {
+  const runnable = actionType.kind === 'primitive'
+    && (actionType.primitive === 'action' || actionType.primitive === 'command')
+  if (!runnable) {
     ctx.error(actionValidationMessages.doTypeMismatch(Type.displayName(actionType)), invocation.action)
   }
 }

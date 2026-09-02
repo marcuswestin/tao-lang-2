@@ -54,6 +54,8 @@ import {
   warnDesignDivergence,
 } from './TR-errors'
 import { createHaptic, type TaoHapticKinds, type TaoHaptics } from './TR-haptic'
+import type { RuntimeCommand } from './TR-interaction'
+import { CommandCatalog, InteractionControls, type TaoCommandTable } from './TR-interaction-catalog'
 import { LayoutControls } from './TR-layout'
 import { NativeHosts } from './TR-native-hosts'
 import { NativeModules } from './TR-native-modules'
@@ -61,7 +63,6 @@ import {
   NavigationControls,
   NavKindControls,
   type RuntimeHostReadChannel,
-  type RuntimeNavigationCommand,
   type TaoNavDeclaration,
   type TaoNavDescriptor,
   type TaoNavHostSlot,
@@ -289,7 +290,7 @@ class TR {
   /** Action creates runtime Tao actions from generated callbacks. */
   static Action<Args extends any[]>(
     body: (...args: Args) => unknown,
-    metadata: RuntimeActionMetadata<Args> = {},
+    metadata: RuntimeActionMetadata = {},
   ): TR.Action<Args> {
     return new RuntimeAction(body, metadata)
   }
@@ -335,24 +336,6 @@ class TR {
     )
   }
 
-  /** ActionTitle evaluates an intent's reactive Title for one bound command invocation. */
-  static ActionTitle<Args extends any[]>(action: TR.Action<Args>, arguments_: Args): TR.Evaluable | undefined {
-    return runtimeActionMetadata.get(action)?.title?.(...arguments_)
-  }
-
-  /** ActionDescription evaluates an intent's explanatory metadata for one invocation. */
-  static ActionDescription<Args extends any[]>(
-    action: TR.Action<Args>,
-    arguments_: Args,
-  ): TR.Evaluable | undefined {
-    return runtimeActionMetadata.get(action)?.description?.(...arguments_)
-  }
-
-  /** ActionSummary evaluates an intent's parameter sentence for one invocation. */
-  static ActionSummary<Args extends any[]>(action: TR.Action<Args>, arguments_: Args): TR.Evaluable | undefined {
-    return runtimeActionMetadata.get(action)?.summary?.(...arguments_)
-  }
-
   /** BridgedAction adapts an explicitly action-typed TypeScript export at the ordinary from boundary. */
   static BridgedAction<Args extends TR.Evaluable[]>(
     implementation: (...arguments_: any[]) => unknown,
@@ -393,8 +376,14 @@ class TR {
     )
   }
 
-  /** Do invokes a Tao action value with already-compiled runtime arguments. */
-  static Do<Args extends any[]>(action: TR.Action<Args>, ...args: Args): void | Promise<void> {
+  /**
+   * Do runs one verb inside the caller's transaction: a Tao action with its compiled arguments, or
+   * a command value that already carries the slots it needs.
+   */
+  static Do<Args extends any[]>(
+    action: { evaluate(): { jsValue: { invokeJoined(...args: Args): void | Promise<void> } } },
+    ...args: Args
+  ): void | Promise<void> {
     return action.evaluate().jsValue.invokeJoined(...args)
   }
 
@@ -651,6 +640,9 @@ class TR {
   /** Layout exposes deterministic runtime lowering for Tao layout clauses. */
   static readonly Layout = LayoutControls
 
+  /** Interaction exposes command values and the catalog of the verbs a module publishes. */
+  static readonly Interaction = InteractionControls
+
   /** Navigation exposes deterministic stack history, presentation, and back behavior. */
   static readonly Navigation = NavigationControls
 
@@ -798,27 +790,21 @@ class LatestActionInvocations<Args extends any[]> {
   }
 }
 
-type RuntimeActionMetadata<Args extends any[] = any[]> = {
-  description?: (...args: Args) => TR.Evaluable
-  summary?: (...args: Args) => TR.Evaluable
-  title?: (...args: Args) => TR.Evaluable
+type RuntimeActionMetadata = {
   name?: string
   /** interrupt is compiler-owned and marks a response action that may settle its suspended ask. */
   interrupt?: boolean
 }
-
-const runtimeActionMetadata = new WeakMap<object, RuntimeActionMetadata>()
 
 class RuntimeAction<Args extends any[] = any[]> {
   readonly jsValue: RuntimeActionValue<Args>
 
   constructor(
     body: (...args: Args) => unknown,
-    metadata: RuntimeActionMetadata<Args> = {},
+    metadata: RuntimeActionMetadata = {},
     runs?: 'latest',
   ) {
     this.jsValue = new RuntimeActionValue(body, metadata.name ?? 'action', runs, metadata.interrupt)
-    runtimeActionMetadata.set(this, metadata)
   }
 
   evaluate(): RuntimeAction<Args> {
@@ -1045,8 +1031,14 @@ namespace TR {
   export type NavigationValue = TaoNavigationValue
   /** HostReadChannel is the occurrence-local direct-view chrome publication channel. */
   export type HostReadChannel = RuntimeHostReadChannel
-  /** NavigationCommand is one occurrence-bound toolbar intent. */
-  export type NavigationCommand = RuntimeNavigationCommand
+  /** Command is one declared verb, bound or still awaiting its slots. */
+  export type Command = RuntimeCommand
+  /** CommandValue is the generated-code type of a Tao value of primitive `command`. */
+  export type CommandValue = RuntimeCommand
+  /** CommandTable is one module's emitted command catalog entry set. */
+  export type CommandTable = TaoCommandTable
+  /** Catalog is the registry of every command the running app published. */
+  export type Catalog = CommandCatalog
   /** NavHostSlotConfiguration is the normalized host-read slot payload for a nav occurrence. */
   export type NavHostSlotConfiguration = TaoNavHostSlotConfiguration
   /** Presentable declares a first-class Tao ui descriptor. */

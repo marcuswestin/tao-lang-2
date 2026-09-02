@@ -23,7 +23,12 @@ Describe('parser: diagnostics', () => {
 
   Test('requires parentheses for explicit renders', rejectsParser('render Text "hello"'))
 
-  Test('requires parentheses for action invocations', rejectsParser('action Save() { } action Run() { do Save }'))
+  Test(
+    'parses a bare do target, which names a command rather than an action call',
+    parses('action Save() { } action Run() { do Save }', result => {
+      Expect(result.entry.ast.statements).toHaveLength(2)
+    }),
+  )
 
   Test(
     'parses nested declarations for later validator checks',

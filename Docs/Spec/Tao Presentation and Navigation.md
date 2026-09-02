@@ -8,11 +8,13 @@ toast, be presented into a nav, or be asked for a typed response. The implemente
 is:
 
 ```tao
-primitive view with {
+primitive view
+primitive scene is view with {
    Title text is ""
-   Toolbar list of action() is []
+   Toolbar list of command is []
+   Header boolean is true
 }
-primitive nav is view with { implement }
+primitive nav is scene with { implement }
 ```
 
 `nav` refines `view`, so a configured nav fills any view-typed configuration slot; it is not a
@@ -140,11 +142,12 @@ scene StoryScreen(Story) {
    Title Story.Title
 
    action OpenStoryLink() {
-      Title "Open story"
       do OpenURL(Story.Url)
    }
-   command Open = OpenStoryLink() with {
+   command Open {
+      Title "Open story"
       Icon "safari"
+      do OpenStoryLink()
    }
    Toolbar { Open }
 
@@ -168,11 +171,13 @@ it directly presents. It never searches descendants, so a wrapper that should ca
 its own slots and a child's title or toolbar cannot bubble through it. Presentation sites cannot
 override these fills.
 
-An action becomes an intent when it supplies `Title`. A view-scoped `command` binds an intent and
-may supply `Label`, `Icon`, `Key`, and boolean `Enabled`; its label defaults to the intent title. The
-members all take ordinary reactive expressions: `Enabled CanSave` is a boolean fill, while `when`
-always begins a value-producing expression. The binding closes over that view occurrence and is
-active while the nearest presentation of the view has focus. `Toolbar { ... }` lists commands in source order. Native hosts put them in trailing
+A `command` is the discoverable verb; the action behind it is a private procedure that names
+nothing. `Toolbar` is typed `list of command`, so a toolbar lists commands and only commands — an
+action has no title of its own to show. `Tao Actions.md` owns the command declaration itself. A
+command written in a view body closes over that view occurrence and is active while the nearest
+presentation of the view has focus; a module-level command is a verb for the whole app and must
+have every slot filled at the mention, which is why a toolbar lists only commands that need
+nothing more. `Toolbar { ... }` lists commands in source order, with optional commas. Native hosts put them in trailing
 platform chrome; basic and web hosts render equivalent styled controls. When space is insufficient,
 the current mobile/basic header policy keeps the first two controls direct and moves the trailing
 suffix into an accessible `More` affordance in the same order. A future wider host may expose more

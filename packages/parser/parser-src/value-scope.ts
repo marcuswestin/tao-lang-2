@@ -69,12 +69,8 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'function' && AST.isFunctionCallExpression(context.container)) {
       return this.createFunctionScope(context.container)
     }
-    if (context.property === 'action' && AST.isCommandDeclaration(context.container)) {
-      return this.createActionScope(context.container)
-    }
     if (context.property === 'references' && AST.isDeclarationSlotReferenceBlock(context.container)) {
-      const view = AST.findOwningView(context.container)
-      return this.createScopeForNodes(AST.isViewDeclaration(view) ? AST.commandsOf(view) : [])
+      return this.createCommandReferenceScope(context.container)
     }
     if (context.property === 'importedDeclarations' && AST.isUseStatement(context.container)) {
       return this.createUseImportScope(context.container)
@@ -139,7 +135,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createScopeForNodes([])
     }
 
-    let scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root))
+    // A command is not a value inside its own body: leaving its name out is what lets a command
+    // carry the same name as the action it runs, which is the natural spelling for a private
+    // procedure and the verb in front of it.
+    const owner = AST.owningCommand(reference)
+    const visible = (declaration: AST.Node) => declaration !== owner
+    let scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root).filter(visible))
     scope = this.createScopeForNodes(
       this.importedDeclarations(reference, AST.isImportableValueDeclaration),
       scope,
@@ -186,24 +187,24 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       if (forBinding) {
         scope = this.createScopeForNodes([forBinding], scope)
       }
-      scope = this.createScopeForNodes(AST.valueDeclarationsOwnedByBlock(carrier.block), scope)
+      scope = this.createScopeForNodes(AST.valueDeclarationsOwnedByBlock(carrier.block).filter(visible), scope)
+    }
+
+    // A command's own slots are the innermost values in its body: they are what its metadata reads
+    // and what its `do` clause hands to the action it runs.
+    if (owner) {
+      scope = this.createScopeForNodes(AST.commandSlotCandidatesOf(owner), scope)
     }
 
     return scope
   }
 
-  private createActionScope(reference: AST.CommandDeclaration): Langium.Scope {
-    const root = AST.findRoot(reference)
-    if (!AST.isTaoFile(root)) {
-      return this.createScopeForNodes([])
-    }
-
-    let scope = this.createScopeForNodes(root.statements.filter(AST.isActionDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(reference, AST.isActionDeclaration), scope)
-    for (const carrier of scopeCarriersContaining(reference).reverse()) {
-      if (carrier.kind === 'block') {
-        scope = this.createScopeForNodes(carrier.block.statements.filter(AST.isActionDeclaration), scope)
-      }
+  /** A toolbar lists commands: the declaring view's own, and every command the module can see. */
+  private createCommandReferenceScope(block: AST.DeclarationSlotReferenceBlock): Langium.Scope {
+    let scope = this.createScopeForNodes(AST.visibleFileDeclarations(block, AST.isCommandDeclaration))
+    const view = AST.findOwningView(block)
+    if (AST.isViewDeclaration(view)) {
+      scope = this.createScopeForNodes(AST.commandsOf(view), scope)
     }
     return scope
   }
@@ -673,6 +674,12 @@ function entityDataForValueDeclaration(
   if (AST.isParameterDeclaration(declaration) && declaration.type?.members.length === 0) {
     return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
       entity.singularName === declaration.type?.root
+    )
+  }
+  // A command slot names its type the way a bare parameter does, so it reaches the same entity.
+  if (AST.isCommandEntry(declaration) && declaration.value === undefined) {
+    return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
+      entity.singularName === declaration.name
     )
   }
   if (AST.isForStatement(declaration)) {

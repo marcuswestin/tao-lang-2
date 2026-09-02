@@ -1,4 +1,4 @@
-import { Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
@@ -11,8 +11,10 @@ export const declarationSlotValidationMessages = {
   commandBlock: (name: string) => `Supplied slot '${name}' expects a command reference block.`,
   type: (name: string, expected: string, actual: string) =>
     `Supplied slot '${name}' expects ${expected}, got ${actual}.`,
-  foreignCommand: (name: string) => `Toolbar command '${name}' must be declared directly in the same view.`,
+  foreignCommand: (name: string) => `Toolbar entry '${name}' must be a command.`,
   duplicateCommand: (name: string) => `Toolbar references command '${name}' more than once.`,
+  unfilledCommand: (name: string, slot: string, owner: string) =>
+    `Toolbar command '${name}' needs a value for slot '${slot}', and ${owner} has no single parameter of that type to supply it.`,
 } as const
 
 export const declarationSlotValidationChecks = {
@@ -20,9 +22,6 @@ export const declarationSlotValidationChecks = {
 } satisfies NodeValidationChecks
 
 function validateDeclarationSlotFill(fill: AST.DeclarationSlotFill, ctx: ValidationContext): void {
-  if (AST.isDeclarationSlotBlock(fill.$container)) {
-    return
-  }
   const owner = directDeclarationOwner(fill)
   if (!owner) {
     ctx.error(declarationSlotValidationMessages.placement, fill)
@@ -43,7 +42,7 @@ function validateDeclarationSlotFill(fill: AST.DeclarationSlotFill, ctx: Validat
   const expected = Type.ofProperty(property)
   const commandList = expected.kind === 'list'
     && expected.element?.kind === 'primitive'
-    && expected.element.primitive === 'action'
+    && expected.element.primitive === 'command'
   if (fill.block) {
     if (!commandList) {
       ctx.error(declarationSlotValidationMessages.scalar(fill.name), fill.block)
@@ -90,22 +89,35 @@ function directDeclarationOwner(
   return undefined
 }
 
+/**
+ * A toolbar lists commands. A mention is deliberately unfilled — it names the verb, and the surface
+ * supplies the noun from the scene it is already presenting, matched by type (KEY-D10). A slot the
+ * scene cannot supply unambiguously is the one a host could not offer, and is reported here.
+ */
 function validateCommandReferences(block: AST.DeclarationSlotReferenceBlock, ctx: ValidationContext): void {
-  const view = AST.findOwningView(block)
-  const localCommands = new Set(AST.isViewDeclaration(view) ? AST.commandsOf(view) : [])
   const seen = new Set<AST.CommandDeclaration>()
   const seenNames = new Set<string>()
   for (const reference of block.references) {
     const command = reference.ref
     const name = reference.$refText
-    if (command && !localCommands.has(command)) {
+    if (command && !AST.isCommandDeclaration(command)) {
       ctx.error(declarationSlotValidationMessages.foreignCommand(name), block)
+      continue
     }
     if ((command && seen.has(command)) || (!command && seenNames.has(name))) {
       ctx.error(declarationSlotValidationMessages.duplicateCommand(name), block)
     }
     if (command) {
       seen.add(command)
+      const owner = AST.findOwningView(block)
+      const unresolved = owner ? ASTUtils.mentionFills(command, owner).unresolved : ASTUtils.commandSlots(command)
+      const slot = unresolved[0]
+      if (slot) {
+        ctx.error(
+          declarationSlotValidationMessages.unfilledCommand(command.name, slot.name, owner?.name ?? 'the surface'),
+          block,
+        )
+      }
     }
     seenNames.add(name)
   }

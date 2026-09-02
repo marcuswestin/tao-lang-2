@@ -33,6 +33,8 @@ export const navigationValidationMessages = {
   presentationContext: 'Contextual presentation is allowed only inside a view declaration.',
   toastContext: 'Toast presentation is allowed only inside a view declaration.',
   toastTarget: 'Toast presentation is app-level and does not accept `in`.',
+  toastOptionName: (actual: string, expected: string) =>
+    `Toast presentation option '${actual}' is unknown; expected '${expected}'.`,
   toastKeyType: (actual: string) => `Toast Key expects text, got ${actual}.`,
   toastDurationType: (actual: string) => `Toast Duration expects duration, got ${actual}.`,
   toastDurationNegative: 'Toast Duration cannot be negative.',
@@ -725,6 +727,14 @@ function validatePresentationMode(
     ctx.error(navigationValidationMessages.toastTarget, presentation.target)
   }
   if (toast) {
+    // The option names are ordinary words, so their spelling is checked here rather than by the
+    // lexer. That is what keeps `Key` and `Duration` usable as member names elsewhere.
+    if (toast.keyName !== 'Key') {
+      ctx.error(navigationValidationMessages.toastOptionName(toast.keyName, 'Key'), toast)
+    }
+    if (toast.durationName !== 'Duration') {
+      ctx.error(navigationValidationMessages.toastOptionName(toast.durationName, 'Duration'), toast)
+    }
     const keyType = Type.ofExpression(toast.key)
     if (keyType.kind !== 'unresolved' && !Type.isAssignable(keyType, { kind: 'primitive', primitive: 'text' })) {
       ctx.error(navigationValidationMessages.toastKeyType(Type.displayName(keyType)), toast.key)

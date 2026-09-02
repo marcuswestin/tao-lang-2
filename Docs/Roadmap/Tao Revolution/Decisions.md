@@ -932,6 +932,71 @@ app Skillet {
 }
 ```
 
+**Amended by the interaction system tranche** (implemented; `Docs/Roadmap/Keyboard driven apps/`,
+KEY-D10). This section originally decided that an `action` _is_ an intent, made discoverable by
+filling `Title`, `Description`, and `Summary`, and that a `command` is a reference to such an intent
+plus the affordances a menu adds. Both halves change, and the word `intent` retires with them.
+
+- **The `command` is the discoverable verb, and the `action` behind it is a private procedure.**
+  `Title`, `Description`, and `Summary` move off `primitive action` onto `primitive command`. There
+  is no longer a way to make an action discoverable, because nothing lists an action: a declaration
+  that only ever runs cannot name itself, in the same way a view that is only ever composed cannot
+  name a title (§9). `intent` retires as a word; where this document said "intent" it now says
+  "command", and the metadata an intent carried is the command's.
+- **A command is a standalone configured value, not a reference plus affordances.** It is declared
+  at module level or in a view or scene body — the placement `action` already has — and its body
+  holds slot declarations, member fills, and exactly one `do` clause naming the action it runs:
+
+```swift
+package
+command Finish {
+   Document                                          // a slot: a bare name takes its same-named type
+   Title "Finish document"
+   Summary "Finish { Document.Title }"
+   Icon "checkmark.circle"
+   Enabled Document.Final is Draft
+   do -> { update Document { Final } }
+}
+```
+
+- **Slots replace closing over a view.** A command's parameters are its own, declared by
+  juxtaposition exactly as `view CookScreen(Recipe, Meal?)` reads (§2), which is what makes one verb
+  reusable everywhere the noun appears rather than an affordance belonging to one screen. A
+  view-body command still closes over that view's parameters, state, and actions.
+- **Slot and fill are told apart by namespace, not by punctuation.** A bare name that reaches the
+  type namespace declares a slot; every other member carries a value. A juxtaposed value never
+  starts with a bare name — that is what keeps `Document` on one line and `Title "Finish document"`
+  on the next unambiguous — so a value that is a bare name takes the explicit form
+  `Enabled: CanSave`. A name that is both a command member and a type is diagnosed and asks for that
+  same explicit form. Renaming a typed slot (`Track Document`) is deferred: no feature forces a
+  second slot of one type, and one command declares at most one slot of each type so that what it
+  acts on stays unambiguous.
+- **Binding is derivation, and invocation is `do`.** `Save with { … }` fills slots and refines
+  `Label`, `Icon`, `Key`, and `Enabled`; overriding `Title` is an error, because the title is what
+  identifies the verb wherever it is listed. `do Finish with { Document }` invokes; `do` with an
+  unfilled slot is an error. An action `do` keeps its call parentheses, so a bare name after `do`
+  names a command.
+- **A mention is unfilled on purpose, and the surface supplies the noun.** `Toolbar { Finish }` names
+  the verb; the slot is filled from the presenting scene's parameters, matched by type, at
+  invocation. That is what makes one declared verb usable from a row's button and from the scene's
+  own chrome without either restating what it acts on. A slot the scene cannot supply
+  unambiguously — no parameter of that type, or more than one — is an error at the mention, because
+  a surface cannot choose on the author's behalf.
+- **`Description` stays**, alongside `Summary`: the first explains the verb, the second names the
+  particular invocation.
+- **`shortcut` is a primitive value type.** `Key` is typed `shortcut`; a bare string literal in that
+  position is a shortcut literal, and `primary + "n"` chains a modifier onto a key. Only `primary`
+  is registered, and it lives in `@tao/keys` as an ordinary imported value rather than a keyword,
+  because `primary` is also an ordinary design and layout word. Naming a platform key is diagnosed.
+- **`Toolbar` is `list of command`**, so a toolbar lists commands and only commands; there is no
+  second toolbar vocabulary in which an action carries a title of its own.
+- **Every module publishes its commands.** A generated table of a module's commands — identity,
+  slots and whether each names an entity, and the value to run — is registered at load through the
+  handwritten `TR.Interaction.RegisterCommands`; a view-body command registers while its view is
+  mounted. That table is what a verb surface reads to ask which commands act on what a person has in
+  front of them. The surfaces themselves (`Commands { … }`, `hide`, entity command lists, key
+  dispatch) remain unimplemented.
+
 ### The AI surface
 
 - **`Assistant { … }` on the app is a closed projection of nouns, verbs, and searches** — the same

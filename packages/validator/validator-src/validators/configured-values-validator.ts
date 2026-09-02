@@ -2,6 +2,7 @@ import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
+import { validateCommandBinding } from './commands-validator'
 import { referencedConfigurationType } from './configuration-type'
 import { validateConfiguredItemConstruction, validateConfiguredItemPatch } from './configured-item-validator'
 
@@ -24,10 +25,9 @@ export const configuredValueValidationMessages = {
   constructorBlock: (name: string) => `${name} configuration requires a block.`,
   configurationBlock: (type: string, name: string) =>
     `${type} configuration '${name}' expects a value expression, not a reference block.`,
-  toolbarReference: 'Toolbar entries must reference actions.',
-  toolbarArguments: (name: string) => `Toolbar action '${name}' must be invokable without arguments.`,
-  toolbarTitle: (name: string) => `Action '${name}' must fill Title before it can appear in Toolbar.`,
-  duplicateToolbarReference: (name: string) => `Toolbar references action '${name}' more than once.`,
+  toolbarReference: 'Toolbar entries must reference commands.',
+  toolbarUnfilled: (name: string, slot: string) => `Toolbar command '${name}' still needs a value for slot '${slot}'.`,
+  duplicateToolbarReference: (name: string) => `Toolbar references command '${name}' more than once.`,
 } as const
 
 export const configuredValueValidationChecks = {
@@ -46,6 +46,10 @@ export const configuredValueValidationChecks = {
   [AST.RefinementExpression.$type]: (value, ctx) => {
     const patch = value
     const base = patch.target.ref
+    if (AST.isCommandDeclaration(base)) {
+      validateCommandBinding(base, patch.patchBlock, ctx)
+      return
+    }
     if (AST.isConcreteAppValueDeclaration(patch.$container)) {
       return
     }
@@ -239,8 +243,12 @@ function validateConfigurationEntries(
   }
 }
 
+/**
+ * A configured nav reads the same `Toolbar` slot a scene does, so it lists the same thing: commands.
+ * There is no second toolbar vocabulary — an action has no title of its own to show.
+ */
 function validateToolbarReferenceBlock(block: AST.ConfigurationBlock, ctx: ValidationContext): void {
-  const seen = new Set<AST.ActionDeclaration>()
+  const seen = new Set<AST.CommandDeclaration>()
   for (const entry of block.entries) {
     const reference = entry.reference?.ref
     if (!reference) {
@@ -249,7 +257,7 @@ function validateToolbarReferenceBlock(block: AST.ConfigurationBlock, ctx: Valid
       }
       continue
     }
-    if (!AST.isActionDeclaration(reference)) {
+    if (!AST.isCommandDeclaration(reference)) {
       ctx.error(configuredValueValidationMessages.toolbarReference, entry)
       continue
     }
@@ -257,11 +265,9 @@ function validateToolbarReferenceBlock(block: AST.ConfigurationBlock, ctx: Valid
       ctx.error(configuredValueValidationMessages.duplicateToolbarReference(reference.name), entry)
     }
     seen.add(reference)
-    if (AST.parametersOf(reference).some(parameter => parameter.defaultValue === undefined)) {
-      ctx.error(configuredValueValidationMessages.toolbarArguments(reference.name), entry)
-    }
-    if (!AST.declarationSlotFillNamed(reference, 'Title')) {
-      ctx.error(configuredValueValidationMessages.toolbarTitle(reference.name), entry)
+    const slot = ASTUtils.commandSlots(reference)[0]
+    if (slot) {
+      ctx.error(configuredValueValidationMessages.toolbarUnfilled(reference.name, slot.name), entry)
     }
   }
 }

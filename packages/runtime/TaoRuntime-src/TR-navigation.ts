@@ -15,9 +15,6 @@ import {
 } from './TR-navigation-configuration'
 import {
   type RuntimeHostReadChannel,
-  RuntimeNavigationCommand,
-  type TaoCommandAction,
-  type TaoCommandDefinition,
   type TaoHostSlotValues,
   type TaoNavHostSlotConfiguration,
   useHostSlots,
@@ -287,19 +284,6 @@ export const NavigationControls = {
     return presentable.bind(arguments_)
   },
 
-  /** Command binds one intent invocation and its live chrome metadata to the declaring view occurrence. */
-  Command(definition: TaoCommandDefinition): RuntimeNavigationCommand {
-    return new RuntimeNavigationCommand(definition)
-  },
-
-  /** CommandReference adapts one validated reference-block action without owning the slot vocabulary. */
-  CommandReference(name: string, resolveAction: () => TaoCommandAction): RuntimeNavigationCommand {
-    const lazyAction: TaoCommandAction = {
-      evaluate: () => resolveAction().evaluate(),
-    }
-    return new RuntimeNavigationCommand({ action: lazyAction, arguments: [], name })
-  },
-
   /** UseHostSlots publishes only the fills of the directly presented generated view. */
   UseHostSlots(host: RuntimeHostReadChannel | undefined, values: TaoHostSlotValues): void {
     useHostSlots(host, values)
@@ -512,7 +496,7 @@ function recordValue(value: unknown): Readonly<Record<string, unknown>> | undefi
 export type TaoPresentable = RuntimePresentable
 export type TaoNavigationValue = RuntimeNavigationValue
 export type TaoRuntimeApp = RuntimeAppDefinition
-export type { RuntimeHostReadChannel, RuntimeNavigationCommand, TaoNavHostSlotConfiguration }
+export type { RuntimeHostReadChannel, TaoNavHostSlotConfiguration }
 
 function resolveNavigationApp(
   taoProps: TaoProps | undefined,

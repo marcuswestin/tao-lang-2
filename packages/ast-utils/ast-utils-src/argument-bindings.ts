@@ -60,7 +60,7 @@ export function resolveArgumentBindings(
   invocation:
     | AST.Render
     | AST.DoStatement
-    | AST.CommandDeclaration
+    | AST.CommandDoClause
     | AST.FunctionCallExpression
     | AST.ContextualPresentStatement
     | AST.ViewBinding

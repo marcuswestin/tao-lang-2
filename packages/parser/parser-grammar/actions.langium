@@ -66,8 +66,10 @@ SetStatement:
 SetOperator returns string:
     '=' | '+=' | '-=' | '*=' | '/=';
 
+// `do` runs one verb. An action is invoked with its call parentheses; a command is invoked by name
+// and fills its remaining slots with `with { ... }`, which is the ordinary refinement form.
 DoStatement:
-    'do' action=ActionTargetExpression '(' argumentList=ArgumentList? ')';
+    'do' action=ActionTargetExpression (called?='(' argumentList=ArgumentList? ')')?;
 
 ActionTargetExpression:
-    ActionExpression | MemberAccessExpression | ValueReference;
+    ActionExpression | RefinementExpression | MemberAccessExpression | ValueReference;

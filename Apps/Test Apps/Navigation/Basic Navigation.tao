@@ -12,18 +12,19 @@ scene BasicHome() {
    state Confirmed = false
    let Confirmation = when Confirmed "yes" / not "no"
    action ConfirmBasicNavigation() {
-      Title "Confirm basic navigation"
       set Confirmed = true
    }
-   command Confirm = ConfirmBasicNavigation() with {
+   command Confirm {
+      Title "Confirm basic navigation"
       Icon "checkmark"
+      do ConfirmBasicNavigation()
    }
    Toolbar { Confirm }
    render Col() [gap 8] {
       Text("Basic navigation host")
       Text("Confirmed: { Confirmation }")
 
-      // The same intent stays available as in-content product UI; the host toolbar is additive.
+      // The same verb stays available as in-content product UI; the host toolbar is additive.
       FormButton("Confirm basic navigation") {
          on press ConfirmBasicNavigation
 }  }  }

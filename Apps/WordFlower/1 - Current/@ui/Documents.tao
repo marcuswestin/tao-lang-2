@@ -13,6 +13,7 @@ type ConfirmResult is one of Confirmed
 workspace
 scene DocumentScreen(Document) {
    Title Document.Title
+   Toolbar { Finish }
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }
@@ -176,6 +177,22 @@ view ConfirmCloseDialogue(Document) responds ConfirmResult {
          on press -> {
             respond // bare respond answers none
 }  }  }  }
+
+// A module-level command: its slot is a noun, so it is a verb for every document anywhere in the
+// app rather than an affordance belonging to one screen. `Document` alone declares the slot and
+// takes its same-named type, the way a parameter list already reads.
+package
+command Finish {
+   Document
+   Title "Finish document"
+   Description "Moves a document out of drafts and into the archive."
+   Summary "Finish { Document.Title }"
+   Icon "checkmark.circle"
+   Enabled Document.Final is Draft
+   do -> { update Document {
+      Final
+   } }
+}
 
 // A writing session's goal, used by the editor's progress indicator.
 let ParagraphGoal = 10

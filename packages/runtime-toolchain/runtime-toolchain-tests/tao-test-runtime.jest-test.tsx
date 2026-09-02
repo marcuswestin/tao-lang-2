@@ -278,8 +278,12 @@ Describe('Expo runtime', () => {
           scene Home() {
             state CanSave = false
             Title "Home"
-            action SaveDocument() { Title "Save" }
-            command Save = SaveDocument() with { Enabled CanSave }
+            action SaveDocument() { }
+            command Save {
+              Title "Save"
+              Enabled: CanSave
+              do SaveDocument()
+            }
             Toolbar { Save }
             render Text("Home")
           }

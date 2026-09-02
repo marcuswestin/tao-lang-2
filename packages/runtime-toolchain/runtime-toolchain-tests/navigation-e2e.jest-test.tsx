@@ -34,7 +34,7 @@ function configuredStack(name: string, initial: TR.Presentable): TR.NavigationVa
 function configuredBasicStack(
   name: string,
   initial: TR.Presentable | TR.NavigationValue,
-  slots: { Title?: TR.Evaluable; Toolbar?: readonly TR.NavigationCommand[] } = {},
+  slots: { Title?: TR.Evaluable; Toolbar?: readonly TR.Command[] } = {},
 ): TR.NavigationValue {
   return TR.Navigation.Mount(TR.Navigation.Configure(
     TR.Navigation.Declaration(name, TR.NavKind.Basic.Stack()),
@@ -47,13 +47,14 @@ function navigationCommand(definition: {
   icon?: string
   invoke(): unknown
   label: string
-}): ReturnType<typeof TR.Navigation.Command> {
-  return TR.Navigation.Command({
-    action: TR.Action(definition.invoke),
-    arguments: [],
-    enabled: () => TR.Value(definition.enabled ?? true),
-    ...(definition.icon ? { icon: () => TR.Value(definition.icon) } : {}),
-    label: () => TR.Value(definition.label),
+}): TR.Command {
+  return TR.Interaction.Command({
+    action: () => TR.Action(definition.invoke),
+    members: {
+      Enabled: () => TR.Value(definition.enabled ?? true),
+      ...(definition.icon ? { Icon: () => TR.Value(definition.icon) } : {}),
+      Label: () => TR.Value(definition.label),
+    },
     name: definition.label,
   })
 }
@@ -1447,7 +1448,12 @@ Describe('Expo runtime', () => {
           Toolbar { Refresh }
         }
 
-        action Refresh() { Title "Refresh" }
+        action Reload() { }
+
+        command Refresh {
+           Title "Refresh"
+           do Reload()
+        }
 
         app NestedSlotApp {
           Name "Nested slot"

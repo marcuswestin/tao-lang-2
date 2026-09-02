@@ -44,20 +44,31 @@ export const ActionsFormatter = {
     f.oneSpaceBeforeProperty('sentence')
   },
 
-  /** CommandDeclaration formats one bound intent and its optional affordance metadata. */
+  /** CommandDeclaration separates the command keyword from the name its body follows. */
   CommandDeclaration(f) {
+    f.visibilityOnOwnLine()
     f.oneSpaceAfter('command')
-    f.oneSpaceAround('=')
+    f.oneSpaceBeforeProperty('block')
+  },
+
+  /** CommandBlock puts every slot, member and the do clause on one indented line each. */
+  CommandBlock(f) {
+    f.indentedBraceBlock(f.node.members)
+    f.lineSeparatedList(f.node.members)
+  },
+
+  /** CommandEntry separates a member name from the value or type that follows it. */
+  CommandEntry(f) {
+    f.noSpaceBefore(':')
+    f.oneSpaceBeforeProperty('value')
+  },
+
+  /** CommandDoClause formats the one invocation a command binds. */
+  CommandDoClause(f) {
+    f.oneSpaceAfter('do')
     f.noSpaceBefore('(')
     f.noSpaceAfter('(')
     f.noSpaceBefore(')')
-    f.oneSpaceAround('with')
-  },
-
-  /** DeclarationSlotBlock formats command metadata as one member per line. */
-  DeclarationSlotBlock(f) {
-    f.indentedBraceBlock(f.node.fills)
-    f.lineSeparatedList(f.node.fills)
   },
 
   /** DeclarationSlotFill separates the slot name from its expression or reference block. */
@@ -67,6 +78,7 @@ export const ActionsFormatter = {
 
   /** DeclarationSlotReferenceBlock formats referenced commands as an indented list. */
   DeclarationSlotReferenceBlock(f) {
+    f.noSpaceBefore(',')
     f.oneSpaceBeforeProperty('references')
     f.oneSpaceBefore('}')
   },
@@ -107,7 +119,7 @@ export const ActionsFormatter = {
     f.oneSpaceAfter('if')
   },
 
-  /** DoStatement formats action invocation spacing. */
+  /** DoStatement formats action invocation spacing and the `with` a command binding takes. */
   DoStatement(f) {
     f.oneSpaceAfter('do')
     f.noSpaceBefore('(')

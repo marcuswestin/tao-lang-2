@@ -872,10 +872,12 @@ Describe('compiler: language lowering', () => {
         state CurrentTitle = "Home"
         state CanSave = false
         Title CurrentTitle
-        action SaveDocument() { Title "Save document" }
-        command Save = SaveDocument() with {
+        action SaveDocument() { }
+        command Save {
+          Title "Save document"
           Icon "checkmark"
-          Enabled CanSave
+          Enabled: CanSave
+          do SaveDocument()
         }
         Toolbar { Save }
         render Empty()
@@ -887,10 +889,18 @@ Describe('compiler: language lowering', () => {
     Expect(code).toContain('TR.Navigation.UseHostSlots(_ViewProps.__taoHost, {')
     Expect(code).toContain('"Title": () => _Scope.CurrentTitle.evaluate()')
     Expect(code).toContain('"Toolbar": () => [ _Scope.Save ]')
-    Expect(code).toContain('action: { evaluate: () => _Scope.SaveDocument.evaluate() }')
-    Expect(code).toContain('intentTitle: () => TR.ActionTitle(_Scope.SaveDocument, [])')
-    Expect(code).toContain('icon: () => TR.Value("checkmark")')
-    Expect(code).toContain('enabled: () => _Scope.CanSave.evaluate()')
+    Expect(code).toContain('_Scope.Save = TR.Interaction.Command({ name: "Save", slots: [],')
+    Expect(code).toContain(
+      'action: _TaoFills => TR.BlockScope(_Scope, _Scope => { return _Scope.SaveDocument.evaluate() })',
+    )
+    Expect(code).toContain(
+      '"Title": _TaoFills => TR.BlockScope(_Scope, _Scope => { return TR.Value("Save document") })',
+    )
+    Expect(code).toContain('"Icon": _TaoFills => TR.BlockScope(_Scope, _Scope => { return TR.Value("checkmark") })')
+    Expect(code).toContain(
+      '"Enabled": _TaoFills => TR.BlockScope(_Scope, _Scope => { return _Scope.CanSave.evaluate() })',
+    )
+    Expect(code).toContain('TR.Interaction.UseCommands({ module: "@workspace/source", commands: [')
     Expect(code).toContain('__taoHost={_NavigationHost}')
     const navRoot = compiled.files.find(file => file.sourcePath.endsWith('/@tao/nav/Navigation.tao'))?.code ?? ''
     Expect(navRoot).toContain('__tao_type_StackNav as __tao_package_native_StackNav')
@@ -898,32 +908,43 @@ Describe('compiler: language lowering', () => {
     Expect(navRoot).not.toContain('TR.Navigation.Declaration(')
   })
 
-  Test('compiles all action intent metadata as parameter-reactive closures', async () => {
+  Test('compiles a module command`s slot as the value every member and its invocation read', async () => {
     const compiled = await Compiler.compileCode(`
       app HostApp { view Home }
-      action Share(Name text) {
-        Title Name
-        Description "Share { Name }"
-        Summary Name
+      data Documents / Document {
+        Title text
+        Final yes / Draft no
+      }
+      command Finish {
+        Document
+        Title "Finish document"
+        Summary "Finish { Document.Title }"
+        Enabled Document.Final is Draft
+        do -> { update Document { Final } }
       }
       view Home() { render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)
 
     const code = compiled.code.replace(/\s+/g, ' ')
-    Expect(code).toContain('title: (_TaoActionArg0: TR.Value<string>) => TR.BlockScope')
-    Expect(code).toContain('description: (_TaoActionArg0: TR.Value<string>) => TR.BlockScope')
-    Expect(code).toContain('summary: (_TaoActionArg0: TR.Value<string>) => TR.BlockScope')
-    Expect(code.match(/_Scope.Name = _TaoActionArg0/g)).toHaveLength(4)
-    Expect(code).toContain('return TR.Interpolate([TR.Value("Share "), _Scope.Name.evaluate()])')
+    Expect(code).toContain('_Scope.Finish = TR.Interaction.Command({ name: "Finish", slots: ["Document"],')
+    Expect(code.match(/_Scope.Document = _TaoFills\["Document"\]/g)).toHaveLength(5)
+    Expect(code).toContain(
+      '"Summary": _TaoFills => TR.BlockScope(_Scope, _Scope => { _Scope.Document = _TaoFills["Document"]',
+    )
+    Expect(code).toContain('TR.Interaction.RegisterCommands({ module: "@workspace/source", commands: [')
+    Expect(code).toContain('name: "Document", type: "Document", entity: true,')
   })
 
   Test('resolves a command action lazily when the action is declared later in its view', async () => {
     const compiled = await Compiler.compileCode(`
       app HostApp { view Home }
       scene Home() {
-        command Send = Deliver()
-        action Deliver() { Title "Deliver" }
+        command Send {
+          Title "Send"
+          do Deliver()
+        }
+        action Deliver() { }
         Toolbar { Send }
         render Empty()
       }
@@ -931,13 +952,13 @@ Describe('compiler: language lowering', () => {
     `)
 
     const code = compiled.code.replace(/\s+/g, ' ')
-    Expect(code).toContain('action: { evaluate: () => _Scope.Deliver.evaluate() }')
-    Expect(code.indexOf('_Scope.Send = TR.Navigation.Command')).toBeLessThan(
+    Expect(code).toContain('action: _TaoFills => TR.BlockScope(_Scope, _Scope => { return _Scope.Deliver.evaluate() })')
+    Expect(code.indexOf('_Scope.Send = TR.Interaction.Command')).toBeLessThan(
       code.indexOf('_Scope.Deliver = TR.Action'),
     )
   })
 
-  Test('compiles configured nav toolbar actions once with lazy invocation and intent titles', async () => {
+  Test('compiles a configured nav toolbar as the same command values a scene lists', async () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
       app HostApp { Name "Host" Navigator Main }
@@ -946,7 +967,11 @@ Describe('compiler: language lowering', () => {
         Title "Main"
         Toolbar { Save }
       }
-      action Save() { Title "Save document" }
+      action SaveDocument() { }
+      command Save {
+        Title "Save document"
+        do SaveDocument()
+      }
       scene Home() {
         Title "Home"
         render Empty()
@@ -956,9 +981,8 @@ Describe('compiler: language lowering', () => {
 
     const code = compiled.code.replace(/\s+/g, ' ')
     Expect(code.match(/"Toolbar": \[/g)).toHaveLength(1)
-    Expect(code).toContain('action: { evaluate: () => _Scope.Save.evaluate() }')
-    Expect(code).toContain('intentTitle: () => TR.ActionTitle(_Scope.Save, [])')
-    Expect(code).not.toContain('TR.Navigation.CommandReference(')
+    Expect(code).toContain('"Toolbar": [TR.Interaction.Deferred(() => _Scope.Save)],')
+    Expect(code).not.toContain('TR.Navigation.Command(')
   })
 
   Test('patches configured nav host slots without discarding unpatched host values', async () => {
@@ -974,8 +998,15 @@ Describe('compiler: language lowering', () => {
         Title "Main"
         Toolbar { Save }
       }
-      action Keep() { Title "Keep" }
-      action Save() { Title "Save" }
+      action Run() { }
+      command Keep {
+        Title "Keep"
+        do Run()
+      }
+      command Save {
+        Title "Save"
+        do Run()
+      }
       scene Home() {
         Title "Home"
         render Empty()
@@ -986,7 +1017,7 @@ Describe('compiler: language lowering', () => {
     const code = compiled.code.replace(/\s+/g, ' ')
     Expect(code).toContain('TR.Navigation.Patch(_Scope.Base.evaluate(), { "__taoHostSlots": {')
     Expect(code.match(/_Scope.Base.evaluate\(\)/g)).toHaveLength(1)
-    Expect(code).toContain('intentTitle: () => TR.ActionTitle(_Scope.Save, [])')
+    Expect(code).toContain('"Toolbar": [TR.Interaction.Deferred(() => _Scope.Save)],')
   })
 
   Test('compiles v0 Tao test-plan IR', async () => {

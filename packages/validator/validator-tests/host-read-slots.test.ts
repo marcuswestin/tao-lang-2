@@ -7,19 +7,24 @@ import { testValidationMessages } from '../validator-src/validators/tests-valida
 import { accepts, acceptsFiles, rejects } from './test-validate'
 
 const leaf = stubView('Leaf')
+const commandMemberNames = 'Title, Description, Summary, Label, Icon, Key, Enabled'
 
 Describe('validator: host-read slots and commands', () => {
   Test(
     'accepts reactive Title, a bound command, and Toolbar references',
     accepts(`
       ${leaf}
+      use primary from @tao/keys
       scene Home(Name text) {
         Title Name
-        action Save(Value text) { Title "Save" }
-        command SaveCommand = Save(Name) with {
+        action Save(Value text) { }
+        command SaveCommand {
+          Title "Save"
           Label when Name is empty "Create" / not "Save"
           Icon "checkmark"
+          Key primary + "s"
           Enabled Name is empty
+          do Save(Name)
         }
         Toolbar { SaveCommand }
         render Leaf()
@@ -33,12 +38,15 @@ Describe('validator: host-read slots and commands', () => {
       ${leaf}
       let OpenUrl is action(text) = OpenUrl from ./OpenUrl.ts
       action Open() {
-        Title "Open"
         do OpenUrl("https://example.com")
       }
       scene Home() {
         Title "Home"
-        command OpenCommand = Open() with { Label "Open" }
+        command OpenCommand {
+          Title "Open"
+          Label "Open"
+          do Open()
+        }
         Toolbar { OpenCommand }
         render Leaf()
       }
@@ -50,9 +58,12 @@ Describe('validator: host-read slots and commands', () => {
     rejects(
       `
         ${leaf}
-        action Save() { Title "Save" }
+        action Save() { }
         app Demo {
-          command SaveCommand = Save()
+          command SaveCommand {
+            Title "Save"
+            do Save()
+          }
           view Leaf
         }
       `,
@@ -70,10 +81,12 @@ Describe('validator: host-read slots and commands', () => {
           Title "duplicate"
           Unknown "value"
           action Save(Value text) { }
-          command SaveCommand = Save() with {
+          command SaveCommand {
+            Title "Save"
             Icon false
             Mystery "x"
             Enabled "yes"
+            do Save()
           }
           Toolbar { SaveCommand SaveCommand }
           render Leaf()
@@ -82,10 +95,9 @@ Describe('validator: host-read slots and commands', () => {
       declarationSlotValidationMessages.type('Title', 'text', 'number'),
       declarationSlotValidationMessages.duplicate('scene', 'Title'),
       declarationSlotValidationMessages.unknown('scene', 'Unknown'),
-      commandValidationMessages.metadataType('Icon', 'text', 'boolean'),
-      commandValidationMessages.metadataType('Enabled', 'boolean', 'text'),
-      commandValidationMessages.metadata('Mystery'),
-      commandValidationMessages.intentTitle('Save'),
+      commandValidationMessages.memberType('Icon', 'text', 'boolean'),
+      commandValidationMessages.memberType('Enabled', 'boolean', 'text'),
+      commandValidationMessages.member('Mystery', commandMemberNames),
       declarationSlotValidationMessages.duplicateCommand('SaveCommand'),
       "Action Save is missing argument for parameter 'Value'.",
     ),
@@ -193,13 +205,23 @@ Describe('validator: host-read slots and commands', () => {
         ${leaf}
         nav Main = StackNav {
           Initial Home
-          Toolbar { Card, NeedsValue, Untitled, Ready, Ready }
+          Toolbar { Card, NeedsDocument, Ready, Ready }
           Title { Ready }
           Bogus { Ready }
         }
-        action NeedsValue(Value text) { Title "Needs value" }
-        action Untitled() { }
-        action Ready() { Title "Ready" }
+        data Documents / Document {
+          Title text
+        }
+        action Run() { }
+        command NeedsDocument {
+          Document
+          Title "Needs a document"
+          do Run()
+        }
+        command Ready {
+          Title "Ready"
+          do Run()
+        }
         scene Card() {
           Title "Card"
           render Leaf()
@@ -210,8 +232,7 @@ Describe('validator: host-read slots and commands', () => {
         }
       `,
       configuredValueValidationMessages.toolbarReference,
-      configuredValueValidationMessages.toolbarArguments('NeedsValue'),
-      configuredValueValidationMessages.toolbarTitle('Untitled'),
+      configuredValueValidationMessages.toolbarUnfilled('NeedsDocument', 'Document'),
       configuredValueValidationMessages.duplicateToolbarReference('Ready'),
       configuredValueValidationMessages.configurationBlock('StackNav', 'Title'),
       configuredValueValidationMessages.unknownConfiguration('StackNav', 'Bogus'),

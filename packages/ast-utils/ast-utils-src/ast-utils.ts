@@ -1,5 +1,6 @@
 import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
+import { commandBindingEntryName, commandMembers, commandSlots, mentionFills, resolveCommandBinding } from './commands'
 import { resolveDataWriteBindings } from './data-write-bindings'
 import { standardDesignElementName } from './design'
 import { canonicalDesignVisualHead, designColorHeads, designVisualHeads } from './design-visuals'
@@ -22,6 +23,11 @@ export { Packages, Type, Units }
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
+  commandBindingEntryName,
+  commandMembers,
+  commandSlots,
+  mentionFills,
+  resolveCommandBinding,
   guardBranches,
   canonicalDesignVisualHead,
   designColorHeads,
@@ -45,6 +51,9 @@ export const ASTUtils = {
 export namespace ASTUtils {
   export type ActionInvocationPair = import('./invocations').ActionInvocationPair
   export type ArgumentBindingDiagnostic = import('./argument-bindings').ArgumentBindingDiagnostic
+  export type CommandMember = import('./commands').CommandMember
+  export type CommandSlot = import('./commands').CommandSlot
+  export type CommandBinding = import('./commands').CommandBinding
   export type DataWriteBindingDiagnostic = import('./data-write-bindings').DataWriteBindingDiagnostic
   export type DataWriteBindingPair = import('./data-write-bindings').DataWriteBindingPair
   export type DataWriteBindingResult = import('./data-write-bindings').DataWriteBindingResult
