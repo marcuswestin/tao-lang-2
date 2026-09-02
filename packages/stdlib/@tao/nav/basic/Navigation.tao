@@ -37,3 +37,22 @@ type SplitNav is nav with {
 
    nav SplitNavKind from ./NavKinds.ts
 }
+
+// Fixed chrome edges around one navigated center. Horizontal bars win the corners: @top and
+// @bottom span the full width and @left/@right occupy the space between them. `left`/`right` are
+// the language's layout terms, so they reverse with the writing direction.
+//
+// One @key template declares every slot; the five allowed names are a validator rule. `Size` is the
+// one perpendicular dimension — height on @top/@bottom, width on @left/@right — and absent means
+// content-derived, which is why there is no meaningless Width on a bar. A slot whose `Content`
+// evaluates to none reserves no space and contributes no container.
+public
+type FrameNav is nav with {
+   @key {
+      Label text is ""
+      Content view is none
+      Size number is none
+   }
+
+   nav FrameNavKind from ./NavKinds.ts
+}

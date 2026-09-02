@@ -165,11 +165,11 @@ command remains visible but inert.
 
 The stdlib host-family contract fixes the current read and requirement sets:
 
-| Host placement                                                                | Reads              | Requires |
-| ----------------------------------------------------------------------------- | ------------------ | -------- |
-| every `StackNav` entry, including `Initial` and later pushes                  | `Title`, `Toolbar` | `Title`  |
-| reserved `present ... as window` contract, including its full-screen fallback | `Title`, `Toolbar` | `Title`  |
-| `SlotNav`, `SelectionNav`, `SplitNav`; root, sheet, menu, and toast           | neither            | neither  |
+| Host placement                                                                  | Reads              | Requires |
+| ------------------------------------------------------------------------------- | ------------------ | -------- |
+| every `StackNav` entry, including `Initial` and later pushes                    | `Title`, `Toolbar` | `Title`  |
+| reserved `present ... as window` contract, including its full-screen fallback   | `Title`, `Toolbar` | `Title`  |
+| `SlotNav`, `SelectionNav`, `SplitNav`, `FrameNav`; root, sheet, menu, and toast | neither            | neither  |
 
 `Toolbar` is optional wherever it is read. Selection item `Label` and `Icon` remain explicit item
 configuration, and split-pane configuration is not inferred from child content. Native and basic
@@ -248,6 +248,18 @@ The implemented declarations are:
   to false. A resizable pane renders a runtime-owned drag affordance; a writable state width receives
   drag updates and a portable double-tap resets it to its declared default. A non-writable width still
   resizes for the mounted occurrence but is forgotten on remount.
+- `FrameNav` surrounds one navigated center with fixed chrome edges. Its slots are `@top`,
+  `@bottom`, `@left`, `@right`, and `@center`, and each takes `Label` text, view-typed `Content`,
+  and a numeric `Size`; all three default, so a declared slot may supply none of them. Horizontal
+  bars win the corners: `@top` and `@bottom` span the full width and `@left`/`@right` occupy the
+  space between them. `left` and `right` are the language's own layout terms and reverse with the
+  writing direction. `Size` is the one perpendicular dimension — height on `@top`/`@bottom`, width
+  on `@left`/`@right` — and absence means content-derived; `@center` takes no `Size`, because it is
+  whatever the edges leave. A slot whose `Content` evaluates to `none` reserves no space and
+  contributes no container: the rule is semantic, never measured, and the slot's `Content` is read
+  on every render rather than captured when the frame is configured. `present` prefers `@center`,
+  Back routes to `@center`'s own navigator, and an edge slot never takes Back even while it holds a
+  navigator of its own. A frame's restorable state is each slot's nav state, edges included.
 
 The native `StackNav` maps those reducer-owned entries to the platform stack and header through the
 pinned `react-native-screens` host. A native dismissal or gesture reconciles exactly one Tao Back;

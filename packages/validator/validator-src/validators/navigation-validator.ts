@@ -49,13 +49,21 @@ export const navigationValidationMessages = {
     `View '${view}' must fill Title when used as a statically known StackNav destination.`,
   missingNavHostTitle: (nav: string) =>
     `Navigation '${nav}' must configure Title when used as a statically known StackNav destination.`,
+  unknownFrameSlot: (key: string) => `FrameNav has no slot '${key}'; its slots are ${frameNavSlotKeys.join(', ')}.`,
+  frameCenterSize: "FrameNav slot '@center' has no Size: it fills whatever space the edges leave.",
 } as const
+
+/** The frame's declared slots. One @key template declares their shape; these are their names. */
+const frameNavSlotKeys = ['@top', '@bottom', '@left', '@right', '@center'] as const
 
 /** navigationValidationChecks validates configured navigation and presentation calls. */
 export const navigationValidationChecks = {
   [AST.ContextualPresentStatement.$type]: validateContextualPresentation,
   [AST.ViewBinding.$type]: validateViewBinding,
-  [AST.ConfigurationEntry.$type]: validateStackInitialTitle,
+  [AST.ConfigurationEntry.$type]: (entry, ctx) => {
+    validateStackInitialTitle(entry, ctx)
+    validateFrameSlot(entry, ctx)
+  },
   [AST.DismissStatement.$type]: (dismiss, ctx) => {
     if (!AST.findOwningView(dismiss)) {
       ctx.error(navigationValidationMessages.dismissContext, dismiss)
@@ -342,6 +350,87 @@ function validateStackInitialTitle(entry: AST.ConfigurationEntry, ctx: Validatio
   ) {
     ctx.error(navigationValidationMessages.missingNavHostTitle(configuration.declaration.name), entry)
   }
+}
+
+/**
+ * validateFrameSlot enforces the frame's slot vocabulary.
+ *
+ * A type declares at most one `@key` contract, so the five slot names cannot be five declared
+ * members. The stdlib FrameNav declaration is recognized by name and path — the same recognition
+ * `isStackNavDeclaration` does — and the names it accepts are checked here instead.
+ */
+function validateFrameSlot(entry: AST.ConfigurationEntry, ctx: ValidationContext): void {
+  const key = entry.key
+  if (!key || !isFrameNavDeclaration(keyedConfigurationHost(entry))) {
+    return
+  }
+  if (!frameNavSlotKeys.some(slot => slot === key)) {
+    ctx.error(navigationValidationMessages.unknownFrameSlot(key), entry)
+    return
+  }
+  if (key !== '@center') {
+    return
+  }
+  for (const property of entry.block?.entries ?? []) {
+    if (property.name === 'Size') {
+      ctx.error(navigationValidationMessages.frameCenterSize, property)
+    }
+  }
+}
+
+/** keyedConfigurationHost resolves the configurable declaration one keyed item is configuring. */
+function keyedConfigurationHost(entry: AST.ConfigurationEntry): AST.ConfigurableDeclaration | undefined {
+  const block = entry.$container
+  const constructor = AST.isConfigurationBlock(block) ? block.$container : undefined
+  const declaration = AST.isConfigurationConstructor(constructor)
+    ? constructor.type.ref
+    : AST.isRefinementExpression(constructor)
+    ? configuredExpressionConfiguration(constructor)?.declaration
+    : AST.isInferredConfigurationConstructor(constructor)
+    ? inferredConfigurationHost(constructor)
+    : undefined
+  return AST.isTypeDeclaration(declaration) && AST.isConfigurableDeclaration(declaration) ? declaration : undefined
+}
+
+function inferredConfigurationHost(
+  constructor: AST.InferredConfigurationConstructor,
+): AST.ConfigurableDeclaration | undefined {
+  const owner = constructor.$container
+  const declaration = AST.isAliasDeclaration(owner) ? Type.visibleDeclaration(owner, owner.name) : undefined
+  return declaration && AST.isConfigurableDeclaration(declaration) ? declaration : undefined
+}
+
+/** isFrameNavDeclaration follows transparent aliases and nominal ancestry to the stdlib family. */
+function isFrameNavDeclaration(
+  declaration: AST.ConfigurableDeclaration | undefined,
+  seen: Set<AST.TypeDeclaration> = new Set(),
+): boolean {
+  if (!declaration || seen.has(declaration)) {
+    return false
+  }
+  seen.add(declaration)
+  if (AST.configurationPrimitiveOf(declaration) !== 'nav') {
+    return false
+  }
+  const path = AST.getDocument(declaration).uri.path
+  if (
+    declaration.name === 'FrameNav'
+    && (path.endsWith('/@tao/nav/native/Navigation.tao')
+      || path.endsWith('/@tao/nav/basic/Navigation.tao'))
+  ) {
+    return true
+  }
+  const aliasTarget = declaration.aliasTarget?.member.ref
+  if (AST.isTypeDeclaration(aliasTarget) && isFrameNavDeclaration(aliasTarget, seen)) {
+    return true
+  }
+  const type = declaration.type
+  const base = type && AST.isDerivedTypeExpression(type) ? type.base : type
+  if (!base || !AST.isNamedTypeReference(base) || base.members.length > 0) {
+    return false
+  }
+  const parent = Type.visibleDeclaration(declaration, base.root)
+  return parent && AST.isConfigurableDeclaration(parent) ? isFrameNavDeclaration(parent, seen) : false
 }
 
 function stackInitialHost(entry: AST.ConfigurationEntry): AST.ConfigurableDeclaration | undefined {

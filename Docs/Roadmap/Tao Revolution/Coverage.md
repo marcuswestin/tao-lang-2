@@ -37,6 +37,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Grid over loop, cell min (§9)                              | Skillet · recipe cards                                      | Post-MVP | —                        |
 | Pages over loop (§9)                                       | Skillet · cook mode steps                                   | Post-MVP | —                        |
 | Navigation: native/basic kits, links, split, windows (§10) | WordFlower · native stack + deterministic harness           | MVP      | partially in Current[^5] |
+| Frame nav kind, semantic empty slot (§10)                  | WordFlower · persistent focus bar; Test Apps · Frame Shell  | MVP      | in Current               |
 | Restoration policy (§10)                                   | WordFlower · relaunch                                       | MVP      | in Current               |
 | App composition, variants, providers (§11)                 | WordFlower · app root + test variants                       | MVP      | partially in Current     |
 | InstantDB datasource (§11)                                 | WordFlower · sync                                           | MVP      | experimental             |

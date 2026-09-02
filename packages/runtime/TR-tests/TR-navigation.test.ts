@@ -1,11 +1,15 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
+import { RuntimeAssert } from '../TaoRuntime-src/TR-assert'
+import { memoryKeyValueStorage } from '../TaoRuntime-src/TR-data-provider'
 import { UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
 import type {
   BrowserNavigationHistoryDriver,
   BrowserNavigationPosition,
 } from '../TaoRuntime-src/TR-navigation-browser-history'
 import { RuntimeHostReadChannel } from '../TaoRuntime-src/TR-navigation-host-slots'
+import type { TaoDeclarationIdentityTuple } from '../TaoRuntime-src/TR-navigation-identity'
+import { setNavigationRestorationStorageForTests } from '../TaoRuntime-src/TR-navigation-restoration'
 import { configuredStack } from './TR-navigation-test-fixtures'
 
 function browserHistoryHarness() {
@@ -182,10 +186,12 @@ Describe('TR.Navigation', () => {
     TR.testNavKind(TR.NavKind.Slot(), 'slot')
     TR.testNavKind(TR.NavKind.Selection(), 'selection')
     TR.testNavKind(TR.NavKind.Split(), 'split')
+    TR.testNavKind(TR.NavKind.Frame(), 'frame')
     TR.testNavKind(TR.NavKind.Basic.Stack(), 'stack')
     TR.testNavKind(TR.NavKind.Basic.Slot(), 'slot')
     TR.testNavKind(TR.NavKind.Basic.Selection(), 'selection')
     TR.testNavKind(TR.NavKind.Basic.Split(), 'split')
+    TR.testNavKind(TR.NavKind.Basic.Frame(), 'frame')
 
     const kind = TR.NavKind.Stack()
     const declaration = TR.NavKind.Declaration('ThirdPartyStack')
@@ -973,4 +979,113 @@ Describe('TR.Navigation', () => {
     Expect(namedNavigatorLoads).toBe(0)
     Expect(namedAuxiliaryLoads).toBe(0)
   })
+
+  // A frame's Content is read, never captured: absence is the empty-slot rule and it must survive
+  // being reversed. `canGoBack` is the observable that follows the center's live content.
+  Test('reads a frame slot Content on every read so an emptied slot comes back', () => {
+    const home = TR.Navigation.View({ name: 'Frame home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Frame detail', render: () => null })
+    const center = configuredStack('Frame center', home)
+    const sidebar = configuredStack('Frame sidebar', home)
+    const scalar = (jsValue: unknown) => ({ evaluate: () => ({ jsValue }) })
+    let occupied = true
+    const kind = TR.NavKind.Frame()
+    const frame = kind.mount(kind.configure(TR.NavKind.Declaration('Live frame'), {
+      items: {
+        bottom: { content: scalar(null), label: scalar('Status') },
+        center: { content: { evaluate: () => ({ jsValue: occupied ? center : null }) }, label: scalar('Content') },
+        left: { content: sidebar, label: scalar('Sidebar'), size: scalar(240) },
+      },
+    }))
+
+    // An edge holds a navigator of its own and still never lends the frame its Back.
+    sidebar.present(detail, {})
+    Expect(kind.canGoBack(frame)).toBe(false)
+
+    center.present(detail, {})
+    Expect(kind.canGoBack(frame)).toBe(true)
+    occupied = false
+    Expect(kind.canGoBack(frame)).toBe(false)
+    occupied = true
+    Expect(kind.canGoBack(frame)).toBe(true)
+    Expect(kind.back(frame)).toBe(true)
+    Expect(kind.canGoBack(frame)).toBe(false)
+    Expect(sidebar.canGoBack).toBe(true)
+  })
+
+  Test("restores every frame slot's own navigation across a launch boundary", async () => {
+    const values = new Map<string, string>()
+    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
+    try {
+      const first = frameRestorationApp('frame')
+      const detach = await first.app.attachRestoration()
+      frameSlotNavigation(first.app, 'center').present(first.detail, {})
+      frameSlotNavigation(first.app, 'left').present(first.detail, {})
+      await Promise.resolve()
+      await Promise.resolve()
+      await new Promise<void>(resolve => queueMicrotask(resolve))
+      detach()
+
+      const second = frameRestorationApp('frame')
+      const detachSecond = await second.app.attachRestoration()
+      Expect(frameSlotDepth(second.app, 'center')).toBe(2)
+      Expect(frameSlotDepth(second.app, 'left')).toBe(2)
+      detachSecond()
+    } finally {
+      restoreStorage()
+    }
+  })
 })
+
+/** frameRestorationApp builds the Tao-shaped frame configuration one app restores through. */
+function frameRestorationApp(variant: string) {
+  const identity = (kind: string, name: string) =>
+    TR.Navigation.Identity([
+      'tao.declaration',
+      1,
+      'frame-restoration-test',
+      '@workspace',
+      'App',
+      kind,
+      name,
+    ] as TaoDeclarationIdentityTuple)
+  const scalar = (jsValue: unknown) => ({ evaluate: () => ({ jsValue }) })
+  const home = TR.Navigation.View({ identity: identity('view', 'Home'), name: 'Home', render: () => null })
+  const detail = TR.Navigation.View({ identity: identity('view', 'Detail'), name: 'Detail', render: () => null })
+  const center = TR.Navigation.Declaration('CenterStack', TR.NavKind.Stack(), identity('nav', 'CenterStack'))
+  const sidebar = TR.Navigation.Declaration('SidebarStack', TR.NavKind.Stack(), identity('nav', 'SidebarStack'))
+  const frame = TR.Navigation.Declaration('Frame', TR.NavKind.Frame(), identity('nav', 'Frame'))
+  const app = TR.Navigation.App({
+    auxiliaries: () => ({}),
+    declaration: TR.Navigation.AppDeclaration('FrameApp', identity('app', 'FrameApp')),
+    name: 'FrameApp',
+    navigator: () =>
+      TR.Navigation.Configure(frame, {
+        '@center': { Content: TR.Navigation.Configure(center, { Initial: home }), Label: scalar('Content') },
+        '@left': {
+          Content: TR.Navigation.Configure(sidebar, { Initial: home }),
+          Label: scalar('Sidebar'),
+          Size: scalar(240),
+        },
+        // The unfilled slot the Tao default produces: a Content that evaluates to absence.
+        '@right': { Content: scalar(null), Label: scalar('Inspector'), Size: scalar(null) },
+      }),
+    restoration: { exclusions: [], mode: 'automatic', variant },
+  })
+  return { app, detail }
+}
+
+type FrameRestorationApp = ReturnType<typeof frameRestorationApp>['app']
+
+function frameSlotNavigation(app: FrameRestorationApp, key: string): TR.NavigationValue {
+  const items = (app.navigator.descriptor.config as {
+    items: Record<string, { content?: TR.NavigationValue }>
+  }).items
+  const content = items[key]?.content
+  RuntimeAssert.defined(content, `frame slot '@${key}' holds a navigator`, { key })
+  return content
+}
+
+function frameSlotDepth(app: FrameRestorationApp, key: string): number {
+  return (frameSlotNavigation(app, key) as TR.NavigationValue & { depth: number }).depth
+}

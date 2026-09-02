@@ -33,6 +33,11 @@ export type TaoNavigationContentSnapshot =
     items: Readonly<Record<string, Readonly<{ navigation?: TaoNavigationSnapshot }>>>
     kind: 'split'
   }>
+  // A frame's own state is each slot's nav state; the slots themselves are declared, never opened.
+  | Readonly<{
+    items: Readonly<Record<string, Readonly<{ navigation?: TaoNavigationSnapshot }>>>
+    kind: 'frame'
+  }>
 
 export type TaoNavigationSnapshot = Readonly<{
   content: TaoNavigationContentSnapshot

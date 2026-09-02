@@ -1,0 +1,130 @@
+use FrameNav, StackNav from @tao/nav
+use Button, Col, Text from @tao/ui
+
+app FrameShellApp {
+   Name "Frame Shell"
+   Navigator FullFrame
+}
+
+// The center is a stack: presentation and Back both belong to it. `@center` is what `present`
+// prefers and the only slot Back can reach.
+nav CenterStack = StackNav {
+   Initial CenterHome
+}
+
+// An edge is chrome, and chrome may still navigate inside itself. Giving the sidebar its own stack
+// is what lets a check watch Back leave an edge alone and watch an edge's own position come back
+// from a relaunch.
+nav SidebarStack = StackNav {
+   Initial SidebarHome
+}
+
+// Horizontal bars win the corners: `@top` and `@bottom` span the full width and `@left`/`@right`
+// take the space between them. `Size` is the one perpendicular dimension — height on the bars,
+// width on the sides — and `@center` has none, because it is whatever the edges leave.
+nav FullFrame = FrameNav {
+   @top {
+      Label "Toolbar"
+      Content TopBar
+      Size 44
+   }
+   @left {
+      Label "Sidebar"
+      Content SidebarStack
+      Size 240
+   }
+   @right {
+      Label "Inspector"
+      Content Inspector
+      Size 200
+   }
+   @bottom {
+      Label "Status"
+      Content StatusBar
+      Size 28
+   }
+   @center {
+      Content CenterStack
+}  }
+
+// The same frame with an empty `@left`. A slot whose `Content` is absent reserves no space and
+// contributes no container at all: the rule is semantic, never measured, so the slot is gone rather
+// than collapsed to zero.
+nav SlimFrame = FrameNav {
+   @top {
+      Label "Toolbar"
+      Content TopBar
+      Size 44
+   }
+   @left {
+      Label "Sidebar"
+   }
+   @right {
+      Label "Inspector"
+      Content Inspector
+      Size 200
+   }
+   @bottom {
+      Label "Status"
+      Content StatusBar
+      Size 28
+   }
+   @center {
+      Content CenterStack
+}  }
+
+view TopBar() {
+   render Col() [gap 8] {
+      Text("Frame toolbar")
+
+      #hideSidebar
+      Button("Hide sidebar") {
+         on press -> { replace SlimFrame in app }
+      }
+
+      #showSidebar
+      Button("Show sidebar") {
+         on press -> { replace FullFrame in app }
+}  }  }
+
+view StatusBar() {
+   render Col() {
+      Text("Frame status")
+}  }
+
+view Inspector() {
+   render Col() {
+      Text("Frame inspector")
+}  }
+
+view SidebarHome() {
+   Title "Sidebar"
+   render Col() [gap 8] {
+      Text("Sidebar home")
+
+      #openSidebarDetail
+      Button("Open sidebar detail") {
+         on press -> { present SidebarDetail() }
+}  }  }
+
+view SidebarDetail() {
+   Title "Sidebar detail"
+   render Col() {
+      Text("Sidebar pushed")
+}  }
+
+view CenterHome() {
+   Title "Center"
+   render Col() [gap 8] {
+      Text("Center home")
+
+      #openCenterDetail
+      Button("Open center detail") {
+         on press -> { present CenterDetail() }
+}  }  }
+
+view CenterDetail() {
+   Title "Center detail"
+   render Col() {
+      Text("Center pushed")
+}  }

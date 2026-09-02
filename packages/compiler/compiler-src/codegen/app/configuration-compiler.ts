@@ -134,6 +134,17 @@ function normalizedNavConfigurationType(declaration: AST.ConfigurableDeclaration
       }>>>
     }>`
   }
+  if (key !== undefined && hasFrameConfigurationShape(properties, key)) {
+    // A frame slot's Content stays an expression: absence is the semantic empty-slot rule, so the
+    // runtime reads it on every render rather than resolving one presentation when it configures.
+    return gen`export type ${gen.Name({ name: `${declaration.name}Config` })} = Readonly<{
+      readonly items: Readonly<Record<string, Readonly<{
+        readonly label: TR.Evaluable
+        readonly content?: TR.Presentable | TR.NavigationValue | TR.Evaluable
+        readonly size?: TR.Evaluable
+      }>>>
+    }>`
+  }
   if (key !== undefined && hasSelectionConfigurationShape(properties, key)) {
     return gen`export type ${gen.Name({ name: `${declaration.name}Config` })} = Readonly<{
       readonly hostSlots?: TR.NavHostSlotConfiguration
@@ -176,6 +187,20 @@ function hasSplitConfigurationShape(
     && content !== undefined && isPrimitive(Type.ofConfigurationProperty(content), 'view')
     && width !== undefined && isPrimitive(Type.ofConfigurationProperty(width), 'number')
     && resizable !== undefined && isPrimitive(Type.ofConfigurationProperty(resizable), 'boolean')
+}
+
+function hasFrameConfigurationShape(
+  properties: readonly AST.ConfigurationProperty[],
+  key: AST.ConfigurationKeyDeclaration,
+): boolean {
+  const label = key.block.properties.find(property => property.name === 'Label')
+  const content = key.block.properties.find(property => property.name === 'Content')
+  const size = key.block.properties.find(property => property.name === 'Size')
+  return properties.length === 0
+    && key.block.properties.length === 3
+    && label !== undefined && isPrimitive(Type.ofConfigurationProperty(label), 'text')
+    && content !== undefined && isPrimitive(Type.ofConfigurationProperty(content), 'view')
+    && size !== undefined && isPrimitive(Type.ofConfigurationProperty(size), 'number')
 }
 
 function hasSelectionConfigurationShape(

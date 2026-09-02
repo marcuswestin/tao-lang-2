@@ -4,6 +4,8 @@ import { RuntimeAssert } from './TR-assert'
 import { UserInputError } from './TR-errors'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type {
+  TaoFrameNavConfiguration,
+  TaoFrameNavItemDefinition,
   TaoNavDescriptor,
   TaoNavigationArguments,
   TaoNavigationPatch,
@@ -29,6 +31,7 @@ import { RuntimeNavigationValue, takeRemovedBrowserHistoryId } from './TR-naviga
 import {
   assertPatchKeys,
   isNavigation,
+  isPresentable,
   patchedEvaluable,
   patchedPresentable,
   patchedSelectionKey,
@@ -215,6 +218,212 @@ function runtimeNumber(jsValue: number): any {
   const result = { evaluate: () => result, jsValue }
   return result
 }
+
+/** The frame's center slot: the one slot that takes presentation and Back. */
+const frameCenterKey = 'center'
+
+/**
+ * RuntimeFrameNav renders fixed chrome edges around one navigated center.
+ *
+ * Horizontal bars win the corners: `@top` and `@bottom` span the full width and `@left`/`@right`
+ * occupy the space between them, so the layout is a column of [top, row of [left, center, right],
+ * bottom]. `left`/`right` are the language's own layout terms and reverse under RTL with the
+ * writing direction, exactly as every other Tao row does.
+ */
+export class RuntimeFrameNav extends RuntimeNavigationValue {
+  readonly kind = 'frame'
+  readonly name: string
+
+  constructor(readonly descriptor: TaoNavDescriptor<'frame', TaoFrameNavConfiguration>) {
+    super()
+    this.name = descriptor.declaration.name
+    for (const item of Object.values(descriptor.config.items)) {
+      const content = item.content
+      if (content && isPresentable(content) && isNavigation(content)) {
+        content.subscribe(() => this.emit())
+      }
+    }
+  }
+
+  /** present prefers the center: a frame's edges are chrome and never take a presentation. */
+  present(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
+    const center = this.centerNavigation()
+    center ? center.present(presentable, arguments_) : this.presentOverlay(presentable, arguments_)
+  }
+
+  patched(patch: TaoNavigationPatch): RuntimeNavigationValue {
+    assertPatchKeys(patch, [], this.name)
+    return this
+  }
+
+  protected canGoBackContent(): boolean {
+    return this.centerNavigation()?.canGoBack === true
+  }
+
+  protected override contentHistoryDepth(): number {
+    return this.centerNavigation()?.historyDepth() ?? 0
+  }
+
+  /** backContent routes to the center's own navigator; an edge slot never consumes Back. */
+  protected backContent(): boolean {
+    const center = this.centerNavigation()
+    if (!center) {
+      return false
+    }
+    const consumed = center.back()
+    if (consumed) {
+      this.adoptRemovedBrowserHistoryId(takeRemovedBrowserHistoryId(center))
+    }
+    return consumed
+  }
+
+  protected dismissContent(): boolean {
+    return this.backContent()
+  }
+
+  protected resetContent(): void {
+    for (const navigation of this.slotNavigations()) {
+      navigation.reset()
+    }
+  }
+
+  protected renderContent(taoProps?: TaoProps): React.ReactNode {
+    return React.createElement(FrameNavSurface, { navigation: this, taoProps })
+  }
+
+  protected snapshotRestorationContent(codec: TaoNavigationRestorationCodec): TaoNavigationContentSnapshot {
+    return {
+      items: Object.fromEntries(
+        Object.entries(this.descriptor.config.items).map(([key, item]) => {
+          const content = frameSlotNavigation(item)
+          return [
+            key,
+            content && hasRestorationCapability(content)
+              ? { navigation: content.navigationRestorationSnapshot(codec, codec.exclusions) }
+              : {},
+          ]
+        }),
+      ),
+      kind: 'frame',
+    }
+  }
+
+  protected restoreRestorationContent(
+    snapshot: TaoNavigationContentSnapshot,
+    codec: TaoNavigationRestorationCodec,
+  ): void {
+    if (snapshot.kind !== 'frame') {
+      throw new UserInputError(`Restored content is not a frame for '${this.name}'.`, { navigation: this.name })
+    }
+    for (const [key, restored] of Object.entries(snapshot.items)) {
+      const item = this.descriptor.config.items[key]
+      const content = item ? frameSlotNavigation(item) : undefined
+      if (restored.navigation && content && hasRestorationCapability(content)) {
+        content.restoreNavigationSnapshot(restored.navigation, codec)
+      }
+    }
+  }
+
+  private centerNavigation(): TaoNavigationValue | undefined {
+    const center = this.descriptor.config.items[frameCenterKey]
+    return center ? frameSlotNavigation(center) : undefined
+  }
+
+  private slotNavigations(): TaoNavigationValue[] {
+    return Object.values(this.descriptor.config.items).flatMap(item => {
+      const navigation = frameSlotNavigation(item)
+      return navigation ? [navigation] : []
+    })
+  }
+}
+
+function FrameNavSurface(props: { navigation: RuntimeFrameNav; taoProps?: TaoProps }): React.JSX.Element {
+  const runtime = requireReactNativeRuntime()
+  const items = props.navigation.descriptor.config.items
+  const taoProps = navigationProps(props.taoProps, props.navigation)
+  const slot = (key: string, style: Record<string, unknown>): React.ReactNode => {
+    const item = items[key]
+    // The empty-slot rule is semantic, never measured: a slot whose Content is absent renders no
+    // content AND no container, so it reserves no space in the frame's own layout.
+    const content = item ? frameSlotContent(item) : undefined
+    if (!item || !content) {
+      return undefined
+    }
+    const label = frameSlotLabel(item)
+    return React.createElement(runtime.View, {
+      ...(label ? { accessibilityLabel: label } : {}),
+      children: renderPresentable(content, {}, taoProps),
+      key,
+      style,
+    })
+  }
+  const middle = [
+    slot('left', frameEdgeStyle(items['left'])),
+    slot(frameCenterKey, frameCenterStyle),
+    slot('right', frameEdgeStyle(items['right'])),
+  ].filter(child => child !== undefined)
+  return React.createElement(runtime.View, {
+    children: [
+      slot('top', frameEdgeStyle(items['top'])),
+      middle.length === 0
+        ? undefined
+        : React.createElement(runtime.View, { children: middle, key: 'frame-middle', style: frameMiddleStyle }),
+      slot('bottom', frameEdgeStyle(items['bottom'])),
+    ].filter(child => child !== undefined),
+    style: frameHostStyle,
+  })
+}
+
+/** frameSlotContent reads one slot's live Content; absence is the semantic empty-slot rule. */
+function frameSlotContent(item: TaoFrameNavItemDefinition): TaoPresentable | TaoNavigationValue | undefined {
+  const content = item.content
+  if (content === undefined) {
+    return undefined
+  }
+  if (isPresentable(content)) {
+    return content
+  }
+  const evaluated: unknown = content.evaluate()
+  if (isPresentable(evaluated)) {
+    return evaluated
+  }
+  const jsValue: unknown = (evaluated as { jsValue?: unknown } | undefined)?.jsValue
+  return isPresentable(jsValue) ? jsValue : undefined
+}
+
+/** frameSlotNavigation is the nested navigator a slot owns, which is the slot's restorable state. */
+function frameSlotNavigation(item: TaoFrameNavItemDefinition): TaoNavigationValue | undefined {
+  const content = frameSlotContent(item)
+  return content && isNavigation(content) ? content : undefined
+}
+
+function frameSlotLabel(item: TaoFrameNavItemDefinition): string | undefined {
+  const label: unknown = item.label.evaluate().jsValue
+  return typeof label === 'string' && label.length > 0 ? label : undefined
+}
+
+/** frameSlotSize reads the one perpendicular dimension; absence means content-derived. */
+function frameSlotSize(item: TaoFrameNavItemDefinition | undefined): number | undefined {
+  const size: unknown = item?.size?.evaluate().jsValue
+  if (size === undefined || size === null) {
+    return undefined
+  }
+  if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) {
+    throw new UserInputError('FrameNav Size must be a finite non-negative number.', { value: size })
+  }
+  return size
+}
+
+function frameEdgeStyle(item: TaoFrameNavItemDefinition | undefined): Record<string, unknown> {
+  const size = frameSlotSize(item)
+  return size === undefined
+    ? { flexGrow: 0, flexShrink: 0 }
+    : { flexBasis: size, flexGrow: 0, flexShrink: 0 }
+}
+
+const frameHostStyle = { flex: 1, flexDirection: 'column' } as const
+const frameMiddleStyle = { flex: 1, flexDirection: 'row' } as const
+const frameCenterStyle = { flex: 1 } as const
 
 /** RuntimeStackNav owns an ordered presentation history and preserves covered entries. */
 export class RuntimeStackNav extends RuntimeNavigationValue {

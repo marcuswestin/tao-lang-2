@@ -83,6 +83,21 @@ export type TaoSplitNavItemDefinition = {
     }>
 }
 
+/**
+ * TaoFrameNavItemDefinition is one edge or center slot of a frame.
+ *
+ * `content` keeps the configured expression rather than a resolved presentation: a slot whose
+ * `Content` evaluates to absence reserves no space and contributes no container, and that rule is
+ * semantic, so it is read on every render instead of frozen when the frame is configured. A slot
+ * configured with a view or a nested nav resolves once, exactly as a split pane does.
+ */
+export type TaoFrameNavItemDefinition = {
+  content?: TaoPresentable | TaoNavigationValue | Evaluable
+  label: Evaluable
+  /** size is the one perpendicular dimension: height on `@top`/`@bottom`, width on `@left`/`@right`. */
+  size?: Evaluable
+}
+
 export type TaoAppDeclaration = Readonly<{
   canonicalIdentity?: TaoDeclarationIdentity
   identity: symbol
@@ -121,7 +136,7 @@ type TaoToastPresentationOptions = {
   key: Evaluable
 }
 
-export type TaoNavKindProfile = 'selection' | 'slot' | 'split' | 'stack'
+export type TaoNavKindProfile = 'frame' | 'selection' | 'slot' | 'split' | 'stack'
 export type TaoNavHostSlot = 'Title' | 'Toolbar'
 export type TaoNavHostSlotContract = Readonly<{
   reads: readonly TaoNavHostSlot[]
@@ -159,6 +174,10 @@ export type TaoSelectionNavConfiguration = Readonly<{
 
 export type TaoSplitNavConfiguration = Readonly<{
   items: Readonly<Record<string, Readonly<TaoSplitNavItemDefinition>>>
+}>
+
+export type TaoFrameNavConfiguration = Readonly<{
+  items: Readonly<Record<string, Readonly<TaoFrameNavItemDefinition>>>
 }>
 
 export type TaoNavDescriptor<
