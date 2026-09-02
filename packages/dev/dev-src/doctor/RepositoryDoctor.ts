@@ -4,6 +4,7 @@ import {
   dependencyCompatibilityIssues,
   readDependencyFacts,
 } from '../repository-tests/DependencyCompatibility'
+import { dependencyHealthError } from './DependencyHealth'
 
 /**
  * The repository half of `doctor`: everything a checkout needs before any Tao command can work.
@@ -266,7 +267,8 @@ function dependencyInstallationCheck(facts: DoctorFacts): DoctorCheck {
     return {
       detail: `the installed dependency graph is incomplete: ${facts.dependencyHealthError}`,
       name: 'dependencies',
-      remediation: 'Repair with: just clean-scratch && just deps',
+      remediation:
+        'Repair with: just deps, or from an unsandboxed shell when a package shipping .idea/ is the damaged one: rm -rf node_modules && bun install',
       status: 'fail',
     }
   }
@@ -409,7 +411,7 @@ export async function readDoctorFacts(repositoryRoot = Repo.getRoot()): Promise<
     branch,
     bunTempDir: await readBunTempDir(repositoryRoot),
     bunVersion,
-    dependencyHealthError: await readDependencyHealthError(repositoryRoot),
+    dependencyHealthError: await dependencyHealthError(repositoryRoot),
     dependencyIssues,
     devenvProfileNode: await presentPath(repositoryRoot, '.devenv/profile/bin/node'),
     direnvAllowed,
@@ -544,21 +546,6 @@ async function isWritable(path: string): Promise<boolean> {
   } finally {
     await FS.remove(probeRoot).catch(() => {})
   }
-}
-
-async function readDependencyHealthError(repositoryRoot: string): Promise<string | undefined> {
-  const node = FS.resolvePath('.devenv/profile/bin/node', repositoryRoot)
-  if (!await FS.isFile(node)) {
-    return undefined
-  }
-  const result = await CLI.run(node, {
-    args: ['-e', 'require("expo/metro-config"); require("jest-expo/jest-preset")'],
-    cwd: FS.resolvePath('packages/runtime-toolchain', repositoryRoot),
-  })
-  if (result.error === undefined && result.exitCode === 0) {
-    return undefined
-  }
-  return (result.stderr.trim().split('\n')[0] ?? result.error?.message ?? 'unknown failure').trim()
 }
 
 async function readPortOccupancy(port: typeof CONVENTIONAL_PORTS[number]): Promise<PortOccupancy> {

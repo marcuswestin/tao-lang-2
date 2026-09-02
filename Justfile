@@ -2,7 +2,6 @@ set quiet
 
 WORD_FLOWER_APP := justfile_directory() + "/Apps/WordFlower/1 - Current/WordFlower.tao"
 IDE_EXTENSION_VSIX := justfile_directory() + "/.artifacts/build/tao-ide-extension.vsix"
-DEVENV_NODE := justfile_directory() + "/.devenv/profile/bin/node"
 BUN_CACHE_DIR := justfile_directory() + "/.artifacts/cache/bun"
 BUN_TMP_DIR := justfile_directory() + "/.artifacts/tmp/bun"
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
@@ -76,10 +75,23 @@ studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL", "https://rele
     ./dev package-studio-native --release-base-url "{{ release_base_url }}" --channel "{{ channel }}" --output-root "{{ output_root }}"
 
 # Install development dependencies
+# Install dependencies, then repair a partial tree. Bun's own verification only checks that
+# package directories exist, so an install stopped partway through reports "no changes" forever;
+# `_dependency-health` loads what the entry commands load and is what notices. The repair
+# re-extracts from the shared cache first, and only falls back to a cold worktree-local cache
+# when the shared one is itself the fault — that fallback re-downloads every package.
+#
+# A repair fails loudly rather than reporting what the health probe alone can see. `--force`
+# deletes before it re-clones, and the few packages shipping `.idea/` or `.gitmodules` cannot be
+# deleted inside an agent sandbox, so a sandboxed repair can leave one of them uninstalled while
+# every probed module still loads. When that happens, or when one of those packages is itself the
+# damaged one, no sandboxed repair can reach it: run `rm -rf node_modules && bun install` from an
+# unsandboxed shell.
 deps:
-    mkdir -p "{{ BUN_CACHE_DIR }}" "{{ BUN_TMP_DIR }}"
+    mkdir -p "{{ BUN_TMP_DIR }}"
     TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile
-    if ! just _dependency-health; then TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"; just _dependency-health; fi
+    if ! just _dependency-health; then TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force; fi
+    if ! just _dependency-health; then mkdir -p "{{ BUN_CACHE_DIR }}"; TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"; just _dependency-health; fi
 
 # Run all tests, optionally filtered by test name
 test PATTERN="": _compile-word-flower-app
@@ -97,9 +109,8 @@ fix: _parser-gen
     ./tao fix
     just --fmt
 
-# Check and test all code. `_parser-gen` runs first because `./dev` itself imports the generated
-# parser, so a fresh checkout cannot start the graph that would otherwise generate it.
-check: _parser-gen
+# Check and test all code
+check:
     ./dev gates _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _tao-check _dprint-check _typecheck _test _runtime-pack-check --lane check --skipped "studio-smoke=slow lane; run just studio-smoke or just full-verify"
 
 # Run the repository lint on its own
@@ -144,12 +155,12 @@ clean: clean-scratch
 clean-all: clean
     rm -rf .artifacts packages/runtime-toolchain/ios packages/runtime-toolchain/android
 
-# Prepare all code for commit; `_parser-gen` first for the same reason as `check`
-verify: _parser-gen
+# Prepare all code for commit
+verify:
     ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --lane verify --json .artifacts/logs/verify/summary.json --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree" "studio-smoke=slow lane; run just studio-smoke or just full-verify"
 
 # Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every automated Studio lane
-full-verify: deps _parser-gen
+full-verify: deps
     ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _full-verify-smoke-launch _full-verify-real-app _full-verify-simulated _full-verify-native _full-verify-canary --lane full-verify --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree"
 
 # Private
@@ -181,7 +192,7 @@ _agent-config:
     ./dev agent-config
 
 _dependency-health:
-    cd packages/runtime-toolchain && "{{ DEVENV_NODE }}" -e 'require("expo/metro-config"); require("jest-expo/jest-preset")'
+    bun run packages/dev/dev-src/doctor/DependencyHealth.ts
 
 # The three fix steps, each over its own file class, as the verify graph runs them
 _fix-dprint:

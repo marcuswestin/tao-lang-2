@@ -220,11 +220,16 @@ Describe('agent worktree profile bootstrap', () => {
     }
   })
 
-  Test('uses copyfile installation only for linked worktrees', async () => {
+  Test('leaves Bun to choose its install backend in every checkout', async () => {
     const testRoot = await mkTestDir('tao-agent-install-')
     try {
       const fixture = await createProfileFixture(testRoot, true)
       const profile = FS.resolvePath('profile', testRoot)
+      // Naming a backend here breaks the sandboxed install: `--backend=copyfile` writes every
+      // packaged file through its own path, and npm packages ship `.idea/` files a sandbox
+      // protects. Bun's default cloning writes whole directories and is not caught by that.
+      const expected = ['install', '--cwd', fixture.worktree]
+
       const linkedResult = await runProfileScript(
         'tao_bun_install_args "$2"\nprint -rl -- "${reply[@]}"',
         fixture,
@@ -232,12 +237,7 @@ Describe('agent worktree profile bootstrap', () => {
       )
 
       Expect(linkedResult.exitCode).toBe(0)
-      Expect(linkedResult.stdout.trim().split('\n')).toEqual([
-        'install',
-        '--backend=copyfile',
-        '--cwd',
-        fixture.worktree,
-      ])
+      Expect(linkedResult.stdout.trim().split('\n')).toEqual(expected)
 
       fixture.env['TAO_TEST_GIT_DIR'] = fixture.gitDirAlias
       const primaryResult = await runProfileScript(
@@ -247,11 +247,7 @@ Describe('agent worktree profile bootstrap', () => {
       )
 
       Expect(primaryResult.exitCode).toBe(0)
-      Expect(primaryResult.stdout.trim().split('\n')).toEqual([
-        'install',
-        '--cwd',
-        fixture.worktree,
-      ])
+      Expect(primaryResult.stdout.trim().split('\n')).toEqual(expected)
     } finally {
       await FS.remove(testRoot)
     }
@@ -372,8 +368,9 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands).toContain(`${Repo.getRoot()}/.artifacts/cache/bun`)
     Expect(commands).toContain('bun install --frozen-lockfile')
     Expect(commands).toContain('--force')
+    // One probe module owns what "healthy" means, so the recipe and `./dev doctor` cannot drift.
     Expect(await justCommands('_dependency-health')).toContain(
-      'require("expo/metro-config"); require("jest-expo/jest-preset")',
+      'packages/dev/dev-src/doctor/DependencyHealth.ts',
     )
   })
 

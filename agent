@@ -34,10 +34,7 @@ enter_devenv_if_needed
 mkdir -p "$BUILD_DIR" "$AGENT_TEMP_DIR"
 BUN_TEMP_DIR="$(tao_bun_temp_dir "$AGENT_TEMP_DIR")"
 typeset -a BUN_INSTALL_ARGS
-if ! tao_bun_install_args "$SCRIPT_DIR"; then
-  echo "Unable to determine Tao's Bun installation mode from its Git worktree." >&2
-  exit 1
-fi
+tao_bun_install_args "$SCRIPT_DIR"
 BUN_INSTALL_ARGS=("${reply[@]}")
 
 function needs_install() {

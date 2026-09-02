@@ -9,7 +9,7 @@ import { CodexConfigGenerator } from './CodexConfigGenerator'
  */
 const targetFeatures = {
   codexcli: ['subagents'],
-  claudecode: ['subagents', 'permissions'],
+  claudecode: ['subagents', 'permissions', 'hooks'],
 } satisfies Record<string, Feature[]>
 
 const targets = Object.keys(targetFeatures) as ToolTarget[]

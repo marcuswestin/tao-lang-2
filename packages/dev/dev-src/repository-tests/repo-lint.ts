@@ -297,6 +297,40 @@ export function crossPackageSourceImportIssues(
   )
 }
 
+/*
+ * `./dev`'s lane commands must be able to start in a checkout that has never generated the parser,
+ * so the entry loads its Studio and Expo command modules with `await import(...)` inside each
+ * action. A static import pulls `@studio` — and through it `packages/parser/parser-src/_gen_tao-parser`
+ * — into `gates`, `test`, `doctor`, and `agent-config` at startup, so the very graph that generates
+ * the parser could never run; it also turns any top-level fault in Studio code into a failure of the
+ * gate runner itself rather than of one node.
+ */
+const DEV_ENTRY_PATH = 'packages/dev/dev-src/dev.ts'
+const DEV_LAZY_IMPORT_PREFIXES = ['./studio/', './expo-dev-loop/', '@studio']
+/** Matches a static `import` statement, wrapped or not, and never the `import(...)` call form. */
+const STATIC_IMPORT_PATTERN = /^import\b(?!\s*\()[^'"]*['"]([^'"]+)['"]/gm
+
+/** devLazyStudioImportIssues reports static Studio or Expo imports in the `./dev` entry. */
+export function devLazyStudioImportIssues(
+  files: readonly SourceFile[],
+  entryPath: string = DEV_ENTRY_PATH,
+): string[] {
+  return files
+    .filter(file => file.path === entryPath)
+    .flatMap(file =>
+      [...file.source.matchAll(STATIC_IMPORT_PATTERN)]
+        .filter(match => DEV_LAZY_IMPORT_PREFIXES.some(prefix => match[1]!.startsWith(prefix)))
+        .map(match => ({
+          detail: `statically imports \`${match[1]}\`; load it with \`await import(...)\` inside the command`
+            + ' action so the lane commands start in a checkout that has never generated the parser.',
+          line: lineNumber(file.source, match.index),
+          path: file.path,
+        }))
+    )
+    .map(issueLine)
+    .sort()
+}
+
 function conventionIssues(
   files: readonly SourceFile[],
   matches: readonly ConventionMatch[],
@@ -377,6 +411,7 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   issues.push(...rejectedRawErrorIssues(packageFiles))
   issues.push(...langiumImportIssues(packageFiles))
   issues.push(...crossPackageSourceImportIssues(packageFiles))
+  issues.push(...devLazyStudioImportIssues(packageFiles))
   return issues
 }
 

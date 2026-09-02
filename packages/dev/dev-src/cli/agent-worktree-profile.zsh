@@ -1,26 +1,15 @@
-# Report whether a checkout has a worktree-specific Git directory.
-function tao_is_linked_worktree() {
-  local worktree_dir="$1"
-  local git_dir
-  local common_git_dir
-  git_dir="$(git -C "$worktree_dir" rev-parse --absolute-git-dir 2>/dev/null)" || return 2
-  common_git_dir="$(git -C "$worktree_dir" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" || return 2
-
-  [[ "${git_dir:A}" != "${common_git_dir:A}" ]]
-}
-
-# Populate zsh's conventional reply array with Bun's checkout-specific install arguments.
+# Populate zsh's conventional reply array with Bun's install arguments for a checkout.
+#
+# The backend is deliberately left to Bun. A linked worktree is an ordinary directory, not a
+# filesystem boundary, so Bun's macOS default of `clonefile` installs there as it does in the
+# primary checkout. Naming `--backend=copyfile` instead makes the install unrunnable under an
+# agent sandbox: copyfile writes every packaged file through its own path, and several npm
+# packages ship `.idea/` and `.gitmodules` files, which a sandbox protects inside the working
+# directory and cannot be exempted from. Cloning writes whole directories in one operation and
+# is not caught by that protection.
 function tao_bun_install_args() {
   local worktree_dir="$1"
-  reply=(install)
-  if tao_is_linked_worktree "$worktree_dir"; then
-    # Clonefile installation is not supported across linked-worktree filesystem boundaries.
-    reply+=(--backend=copyfile)
-  else
-    local linked_status=$?
-    (( linked_status == 1 )) || return "$linked_status"
-  fi
-  reply+=(--cwd "$worktree_dir")
+  reply=(install --cwd "$worktree_dir")
 }
 
 # Run a command under a kernel-managed lock that is released with the owning subshell.

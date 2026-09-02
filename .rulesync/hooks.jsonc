@@ -1,0 +1,22 @@
+{
+  "$schema": "https://github.com/dyoshikawa/rulesync/releases/latest/download/hooks-schema.json",
+  // Canonical agent lifecycle hooks for this repository. `./agent setup` renders them into
+  // .claude/settings.json (via rulesync). Edit this file, never the generated one.
+  "hooks": {
+    // Worktrunk runs `just setup` from its blocking `pre-start` hook (.config/wt.toml), but a
+    // worktree the harness creates itself — `--worktree`, `isolation: "worktree"`, a background
+    // session — never passes through Worktrunk, so it starts with no node_modules and no
+    // generated agent adapters. An agent then meets a checkout where `bun test` and `tsc` fail
+    // for reasons that look like product breakage. This gives that path the same guarantee.
+    //
+    // `./agent setup` is the entrypoint rather than `just setup` because it activates the pinned
+    // devenv profile itself, which a fresh worktree has not done yet. It is idempotent and
+    // returns in well under a second once a checkout is bootstrapped, so it runs unconditionally.
+    "sessionStart": [
+      {
+        "type": "command",
+        "command": "\"$CLAUDE_PROJECT_DIR/agent\" setup > /dev/null",
+      },
+    ],
+  },
+}

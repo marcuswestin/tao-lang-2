@@ -3,6 +3,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import {
   bunTestImportIssues,
   crossPackageSourceImportIssues,
+  devLazyStudioImportIssues,
   duplicateDescribeTitleIssues,
   langiumImportIssues,
   missingTestAppReadmeEntries,
@@ -330,6 +331,38 @@ Describe('repo lint conventions', () => {
       "packages/dev/dev-src/studio/Packaged.ts no longer imports another package's source;"
       + ' drop its repo lint allowlist entry.',
     ])
+  })
+
+  Test('reports a static Studio import in the ./dev entry', () => {
+    const entry = 'packages/dev/dev-src/dev.ts'
+    Expect(devLazyStudioImportIssues(
+      [{ path: entry, source: `${importFrom('@shared')}\n${importFrom('./studio/StudioSmoke')}` }],
+      entry,
+    )).toEqual([
+      'packages/dev/dev-src/dev.ts:2 statically imports `./studio/StudioSmoke`; load it with'
+      + ' `await import(...)` inside the command action so the lane commands start in a checkout'
+      + ' that has never generated the parser.',
+    ])
+  })
+
+  Test('accepts the ./dev entry when Studio and Expo load lazily', () => {
+    const entry = 'packages/dev/dev-src/dev.ts'
+    Expect(devLazyStudioImportIssues(
+      [{
+        path: entry,
+        source: `${importFrom('./repository-tests/GateRunner')}\n`
+          + "  const { StudioSmoke } = await import('./studio/StudioSmoke')\n"
+          + "  const { ExpoRunner } = await import('./expo-dev-loop/expo-runner/ExpoRunner')\n",
+      }],
+      entry,
+    )).toEqual([])
+  })
+
+  Test('leaves Studio imports in every other file alone', () => {
+    Expect(devLazyStudioImportIssues(
+      [{ path: 'packages/dev/dev-src/studio/StudioDev.ts', source: importFrom('@studio') }],
+      'packages/dev/dev-src/dev.ts',
+    )).toEqual([])
   })
 })
 

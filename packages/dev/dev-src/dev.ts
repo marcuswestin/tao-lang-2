@@ -2,17 +2,18 @@ import { Errors, HCI, Platform, Repo } from '@shared'
 import { AgentConfigGenerator } from './agent-config/AgentConfigGenerator'
 import { runWithCommands } from './cli/run-with-commands'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
-import { ExpoRunner } from './expo-dev-loop/expo-runner/ExpoRunner'
 import { runGates } from './repository-tests/GateRunner'
 import { formatGateSummary, gateExitCode } from './repository-tests/RunSummary'
 import { TestRunner } from './repository-tests/TestRunner'
 import { WorkReporter } from './repository-tests/WorkReporter'
-import { StudioCanaryCommand } from './studio/StudioCanaryCommand'
-import { runStudioDev } from './studio/StudioDev'
-import { StudioLifecycleCommand } from './studio/StudioLifecycleCommand'
-import { StudioManualChecks } from './studio/StudioManualChecks'
-import { StudioNative } from './studio/StudioNative'
-import { StudioSmoke } from './studio/StudioSmoke'
+
+/*
+ * Studio and Expo command modules load lazily inside their actions. Studio reaches the generated
+ * parser through `@studio`, so a static import here would make `gates`, `test`, `doctor`, and
+ * `agent-config` unstartable in a checkout that has never generated it — before the graph that
+ * generates it can run — and would turn any top-level fault in Studio code into a failure of the
+ * gate runner itself. `devLazyStudioImportIssues` in `repository-tests/repo-lint.ts` enforces this.
+ */
 
 type TestCommandOptions = {
   jobs?: string
@@ -107,6 +108,7 @@ await runWithCommands(commands => {
     .option('--no-browser', 'Do not open Studio in a browser.')
     .option('--json', 'Print a machine-readable readiness payload once Studio answers.')
     .action(async (project, options) => {
+      const { runStudioDev } = await import('./studio/StudioDev')
       Platform.runtimeProcess.exit(
         await runStudioDev({
           appName: options.app,
@@ -129,6 +131,7 @@ await runWithCommands(commands => {
     .option('--hutch <path>', 'Explicit Hutch executable path.')
     .action(
       async (options: { app?: string; artifactRoot?: string; hutch?: string; project?: string } = {}) => {
+        const { StudioCanaryCommand } = await import('./studio/StudioCanaryCommand')
         Platform.runtimeProcess.exit(
           await StudioCanaryCommand.canary({
             appName: options.app,
@@ -150,6 +153,7 @@ await runWithCommands(commands => {
     .action(
       async (options: { app?: string; artifactRoot?: string; hutch?: string; project?: string } = {}) => {
         try {
+          const { StudioManualChecks } = await import('./studio/StudioManualChecks')
           Platform.runtimeProcess.exit(
             await StudioManualChecks.run({
               appName: options.app,
@@ -185,6 +189,7 @@ await runWithCommands(commands => {
           releaseBaseUrl?: string
         },
       ) => {
+        const { StudioCanaryCommand } = await import('./studio/StudioCanaryCommand')
         Platform.runtimeProcess.exit(
           await StudioCanaryCommand.releaseCheck({
             allowUnverified: options.allowUnverified === true,
@@ -203,6 +208,7 @@ await runWithCommands(commands => {
     .description('List recorded Tao Studio launches and whether each is still live.')
     .option('--json', 'Print a versioned structured listing.')
     .action(async (options: { json?: boolean } = {}) => {
+      const { StudioLifecycleCommand } = await import('./studio/StudioLifecycleCommand')
       Platform.runtimeProcess.exit(await StudioLifecycleCommand.ps({ json: options.json === true }))
     })
 
@@ -213,6 +219,7 @@ await runWithCommands(commands => {
     .option('--all', 'Stop every recorded launch.')
     .option('--json', 'Print a versioned structured report.')
     .action(async (options: { all?: boolean; json?: boolean; launch?: string } = {}) => {
+      const { StudioLifecycleCommand } = await import('./studio/StudioLifecycleCommand')
       Platform.runtimeProcess.exit(await StudioLifecycleCommand.stop(options))
     })
 
@@ -221,6 +228,7 @@ await runWithCommands(commands => {
     .description('Diagnose Tao Studio on top of the repository doctor, without changing anything.')
     .option('--json', 'Print a versioned structured report.')
     .action(async (options: { json?: boolean } = {}) => {
+      const { StudioLifecycleCommand } = await import('./studio/StudioLifecycleCommand')
       Platform.runtimeProcess.exit(await StudioLifecycleCommand.doctor({ json: options.json === true }))
     })
 
@@ -237,6 +245,7 @@ await runWithCommands(commands => {
     .option('--no-browser', 'Open the Welcome window only, with no extra project window.')
     .option('--json', 'Print a machine-readable readiness payload once Studio answers.')
     .action(async (project, options) => {
+      const { runStudioDev } = await import('./studio/StudioDev')
       Platform.runtimeProcess.exit(
         await runStudioDev({
           appName: options.app,
@@ -266,6 +275,7 @@ await runWithCommands(commands => {
     .option('--version <version>', 'Studio semantic version.', '0.0.1')
     .action(async options => {
       try {
+        const { StudioNative } = await import('./studio/StudioNative')
         const packaged = await StudioNative.packageApp({
           appName: options.appName,
           bundleIdentifier: options.bundleIdentifier,
@@ -297,6 +307,7 @@ await runWithCommands(commands => {
     .option('--worker <index>', 'Zero-based worker index.', '0')
     .option('--native', 'Run the shell smoke through Electrobun instead of Chrome.')
     .action(async (files, options) => {
+      const { StudioSmoke } = await import('./studio/StudioSmoke')
       Platform.runtimeProcess.exit(
         await StudioSmoke.run({
           files,
@@ -312,6 +323,7 @@ await runWithCommands(commands => {
     .command('android-emulator')
     .description('Ensure an Android emulator exists and is booted.')
     .action(async () => {
+      const { ExpoRunner } = await import('./expo-dev-loop/expo-runner/ExpoRunner')
       await ExpoRunner.ensureAndroidEmulator()
     })
 
@@ -319,6 +331,7 @@ await runWithCommands(commands => {
     .command('android-expo-go')
     .description('Ensure Expo Go is installed on the booted Android emulator.')
     .action(async () => {
+      const { ExpoRunner } = await import('./expo-dev-loop/expo-runner/ExpoRunner')
       await ExpoRunner.ensureAndroidExpoGo()
     })
 
@@ -326,6 +339,7 @@ await runWithCommands(commands => {
     .command('expo-android')
     .description('Start the Expo runtime and open it on the booted Android emulator.')
     .action(async () => {
+      const { ExpoRunner } = await import('./expo-dev-loop/expo-runner/ExpoRunner')
       await ExpoRunner.startExpo()
     })
 })

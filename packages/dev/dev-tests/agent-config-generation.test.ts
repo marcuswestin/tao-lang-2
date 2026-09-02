@@ -29,9 +29,11 @@ Describe('agent config generation', () => {
 
       Expect(calls.map(call => call.targets)).toEqual([['codexcli'], ['claudecode']])
       Expect(codexRoots).toEqual([root])
+      // Claude Code takes `hooks` so the session-start bootstrap in .rulesync/hooks.jsonc reaches
+      // .claude/settings.json; Codex CLI keeps a hand-written config and takes subagents only.
       Expect(calls.map(call => call.features)).toEqual([
         ['subagents'],
-        ['subagents', 'permissions'],
+        ['subagents', 'permissions', 'hooks'],
       ])
       Expect(skipped).toEqual([
         `Skipped codexcli agent config: ${FS.resolvePath('.codex/agents', root)} is not writable.`,
