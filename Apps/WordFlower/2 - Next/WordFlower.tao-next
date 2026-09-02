@@ -5,7 +5,7 @@ use Local from @tao/data/providers/local
 use WordFlowerShell, WorkspaceRow from @ui
 use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
-// Tranche status: absorbed
+// Tranche status: open
 //
 // STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
 // shared by Tao tests, review tooling, and Studio. `fixture` owns reusable data/identity setup;
@@ -356,6 +356,32 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   redundant
 // - A module-level `query` stays. It lost the feature that forced it -- a shell that is a view holds
 //   its own query -- and is kept only because retiring it is a separate decision; it is flagged
+//
+// THE INTERACTION SYSTEM, PART TWO: THE OUTLINE AND `(title)`. The runtime now keeps a derived,
+// read-only model of the running app -- regions, collections, their items, action controls, input
+// controls -- each with identity, a label, and provenance, and accessibility is its first reader
+// (`Design - Keyboard driven apps.md`, KEY-D2, D4, D5, D6; `Plan`, T3).
+//
+// Almost nothing here is declared. The one construct is a trait; everything else is derived from
+// the ordinary structure of the app, which is the whole point.
+//
+// This tranche decides:
+// - `(title)` is a data-field trait: the one field that names an entity to a person, for the
+//   palette, the OS, and the fallback row label. At most one per entity, and only on `text`
+// - An item's label is derived, one computation shared with accessibility: the first
+//   unconditional `Text` in the row whose value is a member path on the row -- preferring the
+//   `(title)` field when the row renders it -- then the `(title)` field read at runtime, then the
+//   entity's name and handle. A function-wrapped path is opaque and passes to the next candidate.
+//   A selectable row carries that label to the platform; a journey may `expect label` it
+// - Node kinds are derived from wiring, never marked: a `loop` is a collection and each row an
+//   item; a render binding `Press` or `Submit`, or a row with `on select`, is an action control;
+//   a render binding `Value` with `Change` is an input control. Regions are structural: selection
+//   items, split panes, and presented occurrences. The non-nav content of a view that renders a
+//   nav is not yet a region; the attention tranche decides what it needs to address
+// - Existence is always registered; the label is always on, because accessibility needs it
+//   synchronously; everything else evaluates only while a consumer is attached
+// - Provenance rides two tiers -- entity and handle per item, loop and entity per collection --
+//   and is never a test selector
 project {
    id "wordflower"
    name "WordFlower"

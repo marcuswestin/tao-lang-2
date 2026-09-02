@@ -1,7 +1,7 @@
 // The data catalog used by the app's Local datasource.
 workspace
 data Workspaces / Workspace { // the plural collection, then the singular entity it stores
-   Name text
+   Name text (title) // the one field that names a workspace to a person
    // Modifiers take values: `now` is a runtime default sampled separately for each create.
    CreatedAt time (default now)
    Pinned yes / no // without an explicit default, a yes/no field defaults to no
@@ -13,7 +13,7 @@ data Workspaces / Workspace { // the plural collection, then the singular entity
 
 workspace
 data Documents / Document {
-   Title text
+   Title text (title)
    Body text (default "")
    Final yes / Draft no // an optional no-case alias name
    Public yes / Private no (default Public) // an explicit default may select either case
@@ -49,8 +49,7 @@ data FocusSessions / FocusSession {
 }
 
 // A module-level query is an app-lifetime reactive read of the store, and a value like any other.
-// The shell frame's bottom slot asks it whether a session exists, which a view-scoped query could
-// not answer: a nav is configuration, so there is no view between the frame and the store.
+// The shell reads it to decide whether the focus bar is on screen.
 workspace
 query FocusSessions as CurrentSession {
    limit 1

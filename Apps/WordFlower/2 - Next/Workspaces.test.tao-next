@@ -76,6 +76,8 @@ test "WordFlower workspaces" {
          text "No finished documents"
       }
       select #drafts[1] {
+         // The row's label is derived from `Text(Document.Title)`, the `(title)` field it renders.
+         expect label "Chapter one"
          press #finish
       }
       expect {
