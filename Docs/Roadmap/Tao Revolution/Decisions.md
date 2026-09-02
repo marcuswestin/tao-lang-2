@@ -370,9 +370,9 @@ data Recipes / Recipe {
 }
 ```
 
-- **`index` and `order by` trail the field list as a group**, separated from it by a blank line.
-  Both state a storage fact about the _entity_ rather than about one field, so neither rides a
-  field's trait list — `index` names its field the same way `order by` already does:
+- **`index`, `order by`, and `local only` trail the field list as a group**, separated from it by a
+  blank line. Each states a storage fact about the _entity_ rather than about one field, so none
+  rides a field's trait list — `index` names its field the same way `order by` already does:
 
 ```swift
 data Workspaces / Workspace {
@@ -442,6 +442,12 @@ data Groceries / Grocery {
 }
 ```
 
+- **`local only` keeps an entity on the device** whatever datasource the app configures, so a synced
+  variant never syncs it (amended by KEY-D7). It is the narrow form of per-entity datasource
+  scoping, and it is what lets something like a writing session be data — surviving navigation and
+  relaunch — without becoming something to sync. A stored relation may not cross the boundary: the
+  two stores are separate, so a relation between them could not resolve, and it is diagnosed where
+  it is written.
 - **`unique`, `index`, `search`, and `order by` are declarative storage facts** stated on the entity,
   not preflight checks written in UI code:
 
@@ -766,6 +772,12 @@ query RecentRecipes from MyKitchen.Recipes {
 }
 ```
 
+- **A query may be declared at module level**, where it is an app-lifetime reactive read and an
+  ordinary value (amended by KEY-D7). A view-body query is scoped to that view's mount; a
+  module-level one outlives every mount, which is what lets configuration read the store at all — a
+  nav is a value, not a view, so nothing else sits between a navigator's slot and the row it needs
+  to ask about.
+
 - **Queries traverse relations** rather than requiring hand-written joins: `MyKitchen.Recipes` above
   crosses the `Household -> Recipe` relation with no join clause to write.
 - **Multi-field text search is declared on the entity and consumed by the query**:
@@ -976,6 +988,12 @@ command Finish {
   identifies the verb wherever it is listed. `do Finish with { Document }` invokes; `do` with an
   unfilled slot is an error. An action `do` keeps its call parentheses, so a bare name after `do`
   names a command.
+- **Three surfaces retire.** `Rail { … }` retires because a rail is a frame slot (§10); `Palette
+  all` retires because the palette is always present rather than opted into; and the in-view
+  `menu Name { … }` block retires, because the per-view `Commands` slot is the ordering mechanism
+  and a surface never needed a second way to list. `Toolbar` stays, `Menu` (the OS menu bar) stays,
+  and `present … as menu` stays. The example above still shows all three and is superseded by this
+  entry.
 - **A mention is unfilled on purpose, and the surface supplies the noun.** `Toolbar { Finish }` names
   the verb; the slot is filled from the presenting scene's parameters, matched by type, at
   invocation. That is what makes one declared verb usable from a row's button and from the scene's

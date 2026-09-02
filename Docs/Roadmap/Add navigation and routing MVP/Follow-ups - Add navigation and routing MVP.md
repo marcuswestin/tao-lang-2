@@ -77,9 +77,11 @@ become public URLs.
 
 The first restoration implementation stores a schema version and falls back on incompatible state. Custom application-authored migrations wait for real versioning pressure.
 
-### DEF-NAV-003: Multiple Scenes And Spatial Presentation
+### DEF-NAV-003: Multiple Windows And Spatial Presentation
 
-Scene addressing, scene-local roots, spatial/immersive presentation, widgets, and complications wait for additional runtime targets. Current target types reserve app/scene identity without exposing scene syntax.
+Window addressing, window-local roots, spatial/immersive presentation, widgets, and complications wait for additional runtime targets. Current target types reserve app/window identity without exposing that syntax.
+
+Reworded from "scenes" per KEY-D11: `scene` is now a declaration kind — a view that is presented rather than composed — so the word cannot also mean a window or a space.
 
 ### DEF-NAV-004: Advanced Window And Popover Geometry
 
