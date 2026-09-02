@@ -183,6 +183,7 @@ export const StudioApiEventStream = {
 
 /** Typed boundary around Studio's HTTP and WebSocket endpoints. */
 export const StudioApiClient = {
+  agentPoc: async <Result>(command: string, body: unknown): Promise<Result> => await request(`/api/agent-poc/${command}`, body),
   aiAvailability: async (): Promise<StudioAIAvailability> => await get('/api/ai/availability'),
   betaShip: async (): Promise<StudioBetaShipResult> => await request('/api/ship/beta', {}),
   captureFixture: async <Result>(body: unknown): Promise<Result> => await request('/api/source-action', body),

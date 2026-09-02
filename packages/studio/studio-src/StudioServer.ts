@@ -1,4 +1,5 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
+import { AgentPoc } from './agent-poc/AgentPocServer'
 import { CLI, Errors, Repo } from '@shared'
 import { type StudioClientAssetProvider, StudioClientAssets } from './StudioClientAssets'
 import { StudioFixtureGeneration } from './StudioFixtureGeneration'
@@ -462,6 +463,9 @@ async function handleRequest(
   }
   if (request.method === 'POST' && url.pathname === '/api/source-action/undo') {
     return response(request, url, options, await session.undoSourceAction(await request.json()))
+  }
+  if (url.pathname.startsWith('/api/agent-poc/')) {
+    return response(request, url, options, await AgentPoc.handle(session, url.pathname.slice('/api/agent-poc/'.length), await request.json()))
   }
   if (request.method === 'GET' && url.pathname === '/api/ai/availability') {
     return response(request, url, options, await fixtureGeneration.availability())

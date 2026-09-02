@@ -39,6 +39,7 @@ import {
   StudioEditorInsertion,
   StudioOpenFileLifecycle,
 } from './StudioEditor'
+import { mountStudioAgentPocPanel } from '../agent-poc/StudioAgentPocPanel'
 import { StudioEditorTabs } from './StudioEditorTabs'
 import { mountStudioFileTree, StudioFileTreeTransitions } from './StudioFileTree'
 import {
@@ -517,6 +518,17 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       })
     }
     view.betaShip.addEventListener('click', betaShipListener)
+
+    // Semantic agent proof of concept: a throwaway overlay; see packages/studio/studio-src/agent-poc.
+    mountStudioAgentPocPanel(root, {
+      activeScenario: () => activePreview.current()?.cell?.scenarioId,
+      identityFor: file => currentSourceIdentity(handshake, activePreview.current(), { content: '', ...file }),
+      openFile: async path => {
+        const known = projectFiles.find(file => file.path === path || file.path === `/${path}` || file.path.endsWith(`/${path}`))
+        await openFile(known?.path ?? path, true)
+      },
+      selection: () => inspected,
+    })
 
     async function selectProject(): Promise<void> {
       if (!requireAllTabsSaved('Save or revert unsaved files before choosing another project.')) {
