@@ -1,5 +1,5 @@
-use FrameNav, SelectionNav, SlotNav, StackNav from @tao/nav
 use CurrentSession from @data
+use FrameNav, SelectionNav, SlotNav, StackNav from @tao/nav
 use FocusBar, Settings, SignedOut, WorkspaceChooser, WorkspaceList from @ui
 
 // Every navigator the product mounts. The harness beside this file covers the declaration
@@ -62,3 +62,15 @@ nav WordFlowerShell = FrameNav {
          empty -> none
          otherwise -> FocusBar
 }  }  }
+
+// The preview variants swap the tab surface inside the shell rather than replacing the shell, so a
+// preview still gets the focus bar along its bottom edge.
+workspace
+nav WordFlowerDrawerNavigator = WordFlowerNavigator with {
+   Display "drawer"
+}
+
+workspace
+nav WordFlowerTabsNavigator = WordFlowerNavigator with {
+   Display "tabs"
+}

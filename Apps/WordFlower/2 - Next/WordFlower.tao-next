@@ -1,11 +1,11 @@
 use Workspaces from @data
-use WordFlowerNavigator, WordFlowerShell from @nav
+use WordFlowerDrawerNavigator, WordFlowerShell, WordFlowerTabsNavigator from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
 use WorkspaceRow from @ui
 use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
-// Tranche status: open
+// Tranche status: absorbed
 //
 // STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
 // shared by Tao tests, review tooling, and Studio. `fixture` owns reusable data/identity setup;
@@ -236,7 +236,10 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   `Toolbar` remains optional. `SlotNav`, `SelectionNav`, `SplitNav`, and sheet, root, menu, and toast
 //   presentations read neither slot. Missing required fills are diagnosed at the placement, because
 //   the view itself remains valid in a host that does not require them
-// - An `action` or `transaction` is an intent when it supplies `Title`; no `intent` keyword exists.
+// - [Superseded by the interaction system tranche. `Title`, `Description`, and `Summary` moved off
+//   `primitive action` onto `primitive command`; a command became a standalone configured value with
+//   its own slots, and `intent` retired as a word. See Decisions §8.] An `action` or `transaction` is
+//   an intent when it supplies `Title`; no `intent` keyword exists.
 //   A `command` is a focused reference to an intent, never a second behavior body. It may supply
 //   `Label`, `Icon`, `Key`, and boolean `Enabled`; each takes an ordinary reactive expression and
 //   `Label` defaults to the intent's `Title`. A command
@@ -332,8 +335,7 @@ project {
 }
 
 // An app mounts navs, it does not render content directly. Overlay and toast hosting are universal
-// capabilities, so no app declares them. The navigator is the shell frame, which holds the tabbed
-// navigator in its center and the focus bar along its bottom edge; the root is not special.
+// capabilities, so no app declares them.
 app WordFlower {
    Name "WordFlower"
    Design WordFlowerDesign
@@ -341,16 +343,12 @@ app WordFlower {
    Datasource DeviceStore // offline-first: the device owns the writing; sync is a variant
 }
 
-// A patch reaches into the navigator it derives from rather than replacing it. Now that the
-// navigator is the shell frame, the tab surface being previewed is the frame's center content, so
-// the patch names the path to it.
 app WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
-   Navigator with {
+   Navigator with { // patches the shell's center instead of replacing the shell
       @center {
-         Content WordFlowerNavigator with {
-            Display "drawer"
-}  }  }  }
+         Content WordFlowerDrawerNavigator
+}  }  }
 
 // The explicit dark preview mounts a complete dark design and keeps the portable tab surface on
 // every target, so the preview does not depend on the host operating system's current appearance.
@@ -359,9 +357,8 @@ app WordFlowerDark = WordFlower with {
    Design WordFlowerDarkDesign
    Navigator with {
       @center {
-         Content WordFlowerNavigator with {
-            Display "tabs"
-}  }  }  }
+         Content WordFlowerTabsNavigator
+}  }  }
 
 app WordFlowerInstantDB = WordFlower with {
    Name "WordFlower - InstantDB"

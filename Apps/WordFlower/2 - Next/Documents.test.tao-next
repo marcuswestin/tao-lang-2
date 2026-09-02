@@ -171,7 +171,7 @@ test "WordFlower documents" {
       expect {
          text "Document Document-2 no longer exists."
          missing text "Document: Chapter one"
-}  }
+   }  }
    test "runs the document verb from the scene toolbar" {
       run WordFlower
       enter "Home" into #workspaceName
@@ -191,4 +191,5 @@ test "WordFlower documents" {
       // because they share the command.
       expect toolbar command "Finish document" disabled
       expect checkbox #markFinal checked
-}  }
+   }
+}

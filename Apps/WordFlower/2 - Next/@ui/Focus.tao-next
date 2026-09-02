@@ -28,11 +28,9 @@ view FocusStarter() {
             #focusTwentyFive
             FormButton("Focus for 25 min") {
                on press -> { do Start(25.min) }
-            }
-         }
-         otherwise -> {
-            Text("A session is running") [caption]
-}  }  }  }
+         }  }
+         otherwise -> { Text("A session is running") [caption] }
+}  }  }
 
 // The focus bar: the running session, wherever you are. It sits in the shell frame's bottom slot
 // and reads the session from the store rather than from a parent view, which is what lets it stay
@@ -53,20 +51,19 @@ view FocusBar() {
             true -> {
                #resumeFocus
                FormButton("Resume") {
-                  on press -> {
-                     update FocusSession {
-                        EndsAt: now + (FocusSession.EndsAt - FocusSession.PausedAt)
-                        Running
-               }  }  }
-            }
+                  on press -> { update FocusSession {
+                     EndsAt: now + (FocusSession.EndsAt - FocusSession.PausedAt)
+                     Running
+                  } }
+            }  }
             otherwise -> {
                #pauseFocus
                FormButton("Pause") {
-                  on press -> {
-                     update FocusSession {
-                        PausedAt: now
-                        Paused
-         }  }  }  }  }
+                  on press -> { update FocusSession {
+                     PausedAt: now
+                     Paused
+                  } }
+         }  }  }
 
          #stopFocus
          FormButton("Stop") [buttonDanger] {

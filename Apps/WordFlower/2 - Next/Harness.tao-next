@@ -30,7 +30,7 @@ nav HarnessNavigator = SlotNav {
    Initial StackByNav
 }
 
-view HarnessHome() {
+scene HarnessHome() {
    Title "Navigation harness"
    render Col() {
       Text("Harness home marker")
@@ -41,7 +41,7 @@ view HarnessHome() {
          on press -> { present HarnessSlot() in HarnessNavigator }
 }  }  }
 
-view HarnessDetail() {
+scene HarnessDetail() {
    Title "Harness detail"
    render Col() {
       Text("Harness detail marker")

@@ -3,7 +3,7 @@ use WorkspaceNav from @nav
 use Join from @tao/text
 use Col, Image, Panes, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
-use DocumentScreen from ./
+use DocumentScreen, Finish from ./
 
 type PromptTitle is text
 
@@ -20,9 +20,8 @@ type WritingPrompt is {
    PromptSubtitle text? // an item field may be absent; reading it yields `none`
 }
 
-// The workspace area. A `scene` is a view that is presented rather than composed, and the only
-// declaration that may fill the slots a host reads. The rows and panels below stay `view`s: they
-// are only ever composed, so chrome on them would be dead.
+// The workspace area. Every renderable declaration is a `view`; whether one composes inline in a
+// render tree or enters the presentation tree is decided at each use site, never on the head.
 workspace
 scene WorkspaceList() {
    Title "WordFlower"
@@ -120,7 +119,7 @@ scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named
    }  }
    // A command is the discoverable verb and the action is the private procedure behind it, so the
    // name a person reads lives on the command. This one is declared in the scene because it reads
-   // and resets that scene's own state, exactly as an `action` may be.
+   // and resets that scene's own state, exactly as an `action` may.
    command Save {
       Title "Save workspace"
       Icon "checkmark"
@@ -298,8 +297,11 @@ view DraftRow(Document) {
       #finish
       FormButton("Finish document") [buttonSecondary] {
          // `do <command> with { ... }` fills the command's slot at the invocation, so the row and
-         // the document scene's toolbar run one declared verb rather than two copies of the write.
-         on press -> { do Finish with { Document } }
+         // any other surface that offers Finish run one declared verb rather than two copies of
+         // the write.
+         on press -> { do Finish with {
+            Document
+         } }
       }
 
       #delete

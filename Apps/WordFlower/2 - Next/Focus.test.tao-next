@@ -13,12 +13,14 @@ test "WordFlower focused writing" {
       select #drafts[1] {
          press #edit
       }
-      // Before a session exists the frame's bottom slot holds `none`, so it reserves no space and
-      // nothing it would contain is on screen.
+      // Before a session exists the frame's bottom slot holds `none`, so the slot itself is not
+      // there. Asserting on the slot's own label rather than on its contents is what separates a
+      // collapsed slot from one that is present but rendering nothing.
       expect text "Focused writing"
-      expect missing text "Stop"
+      expect missing label "Focus session"
       press #focusFive
       expect text "5:00"
+      expect label "Focus session"
       // The bar lives in the shell frame, not in the screen that started the session, so leaving
       // the editor does not take the timer with it.
       back
@@ -80,4 +82,5 @@ test "WordFlower focused writing" {
       expect text "23:30"
       advance 30.s
       expect text "23:00"
-}  }
+   }
+}

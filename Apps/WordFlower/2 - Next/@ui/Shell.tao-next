@@ -2,8 +2,7 @@ use SignedOutNav from @nav
 use Col, Row, Text, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 
-// The screens the app shell mounts directly. Both are pushed by a StackNav, which reads `Title`,
-// so both are scenes.
+// The screens the app shell mounts directly.
 workspace
 scene Settings() {
    Title "Settings"
