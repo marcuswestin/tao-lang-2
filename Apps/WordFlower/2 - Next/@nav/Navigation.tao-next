@@ -1,5 +1,6 @@
-use SelectionNav, SlotNav, StackNav from @tao/nav
-use Settings, SignedOut, WorkspaceChooser, WorkspaceList from @ui
+use FrameNav, SelectionNav, SlotNav, StackNav from @tao/nav
+use CurrentSession from @data
+use FocusBar, Settings, SignedOut, WorkspaceChooser, WorkspaceList from @ui
 
 // Every navigator the product mounts. The harness beside this file covers the declaration
 // spellings; these are the real ones.
@@ -45,3 +46,19 @@ nav WordFlowerNavigator = SelectionNav {
       Icon "gear"
       Content SettingsStack
 }  }
+
+// The shell: fixed chrome around the navigated content. Edge slots hold views or navs and never
+// take Back -- the frame routes it to `@center`. A slot whose `Content` is `none` reserves no
+// space, so the focus bar appears with the session and the content grows back when the session
+// ends; that presence is a property of the data, never of layout measurement.
+workspace
+nav WordFlowerShell = FrameNav {
+   @center {
+      Content WordFlowerNavigator
+   }
+   @bottom {
+      Label "Focus session"
+      Content when CurrentSession {
+         empty -> none
+         otherwise -> FocusBar
+}  }  }

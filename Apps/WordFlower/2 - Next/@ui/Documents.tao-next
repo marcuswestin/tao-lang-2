@@ -10,9 +10,11 @@ type ConfirmResult is one of Confirmed
 
 // The document area: an availability-guarded entry, the editor itself, and the close conversation.
 // The presented entry guards entity availability; the editor below assumes an available document.
+// Only the presented entry is a `scene`; the editor it composes is an ordinary view.
 workspace
-view DocumentScreen(Document) {
+scene DocumentScreen(Document) {
    Title Document.Title
+   Toolbar { Finish }
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }
@@ -107,7 +109,7 @@ view DocumentEditor(Document) {
             WordCountLabel(BodyDraft)
 
             #focusSession
-            FocusSession()
+            FocusStarter()
 
             #markFinal
             Checkbox(Value: Document.Final is Final, Label: "Final") {
@@ -176,6 +178,22 @@ view ConfirmCloseDialogue(Document) responds ConfirmResult {
          on press -> {
             respond // bare respond answers none
 }  }  }  }
+
+// A module-level command: its slot is a noun, so it is a verb for every document anywhere in the
+// app rather than an affordance belonging to one screen. `Document` alone declares the slot and
+// takes its same-named type, the way a parameter list already reads.
+folder
+command Finish {
+   Document
+   Title "Finish document"
+   Description "Moves a document out of drafts and into the archive."
+   Summary "Finish { Document.Title }"
+   Icon "checkmark.circle"
+   Enabled Document.Final is Draft
+   do -> {
+      update Document {
+         Final
+}  }  }
 
 // A writing session's goal, used by the editor's progress indicator.
 let ParagraphGoal = 10

@@ -20,10 +20,11 @@ type WritingPrompt is {
    PromptSubtitle text? // an item field may be absent; reading it yields `none`
 }
 
-// The workspace area. Every renderable declaration is a `view`; whether one composes inline in a
-// render tree or enters the presentation tree is decided at each use site, never on the head.
+// The workspace area. A `scene` is a view that is presented rather than composed, and the only
+// declaration that may fill the slots a host reads. The rows and panels below stay `view`s: they
+// are only ever composed, so chrome on them would be dead.
 workspace
-view WorkspaceList() {
+scene WorkspaceList() {
    Title "WordFlower"
    state WorkspaceName = ""
    query Workspaces { }
@@ -102,7 +103,7 @@ view WorkspaceNameNotice() {
          on press -> { dismiss }
 }  }  }
 
-view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named entity type
+scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named entity type
    Title Workspace.Name
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
@@ -113,14 +114,18 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
       where is Final
    }
    action SaveWorkspace() {
-      Title "Save workspace"
       guard WorkspaceNameDraft empty
       update Workspace {
          Name: WorkspaceNameDraft
    }  }
-   command Save = SaveWorkspace() with {
+   // A command is the discoverable verb and the action is the private procedure behind it, so the
+   // name a person reads lives on the command. This one is declared in the scene because it reads
+   // and resets that scene's own state, exactly as an `action` may be.
+   command Save {
+      Title "Save workspace"
       Icon "checkmark"
       Enabled WorkspaceNameDraft is not empty
+      do SaveWorkspace()
    }
    Toolbar { Save }
    action AddDocument() {
@@ -292,9 +297,9 @@ view DraftRow(Document) {
 
       #finish
       FormButton("Finish document") [buttonSecondary] {
-         on press -> { update Document {
-            Final
-         } } // boolean cases are written by name
+         // `do <command> with { ... }` fills the command's slot at the invocation, so the row and
+         // the document scene's toolbar run one declared verb rather than two copies of the write.
+         on press -> { do Finish with { Document } }
       }
 
       #delete

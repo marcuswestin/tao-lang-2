@@ -1,11 +1,11 @@
 use Workspaces from @data
-use WordFlowerNavigator from @nav
+use WordFlowerNavigator, WordFlowerShell from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
 use WorkspaceRow from @ui
 use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
-// Tranche status: absorbed
+// Tranche status: open
 //
 // STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
 // shared by Tao tests, review tooling, and Studio. `fixture` owns reusable data/identity setup;
@@ -264,6 +264,66 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   `expect navigation title "WordFlower"` asserts the directly presented title,
 //   `expect toolbar command "Save workspace" enabled|disabled` asserts a visible command state, and
 //   `press toolbar command "Save workspace"` invokes that command through the host surface
+//
+// THE INTERACTION SYSTEM, PART ONE: SCENES, THE FRAME, AND COMMANDS. This tranche lands the two
+// independent halves the interaction system rests on (`Docs/Roadmap/Keyboard driven apps/
+// Design - Keyboard driven apps.md`, KEY-D1-D14; `Plan - Keyboard driven apps.md`, T1 and T2).
+// They are one tranche because they migrate the same screens: T1 turns presented views into scenes
+// and T2 rewrites their commands, so each WordFlower file moves once.
+//
+// The forcing features are WordFlower's persistent focus bar and its workspace save command.
+//
+// This tranche decides:
+// - `scene is view`: the one home for host-facing chrome. `Title`, `Toolbar`, and `Header` are
+//   supplied slots on `scene` alone, so a `view` that is only ever composed cannot declare chrome
+//   that nothing reads. A scene is presented, never composed inline, diagnosed at the render site.
+//   A plain view may still be pushed or presented anywhere and shows Back-only header chrome; a
+//   scene pushed on a StackNav or presented `as window` must fill `Title`; sheets read `Title`.
+//   `nav is scene`
+// - `Header` is the explicit opt out of header chrome: `Header false` on a scene suppresses the
+//   header bar entirely, for a screen that owns its full surface. Back still works through the
+//   reducer, the gesture, and the hardware key -- only the bar is gone. A scene with a literal
+//   `Header false` may not fill `Title` or `Toolbar`, because that chrome would be dead, and it is
+//   exempt from the pushed-scene `Title` requirement
+// - The frame is a fifth nav kind: `FrameNav`, fixed chrome edges around a navigated center.
+//   Its slots are `@top`, `@bottom`, `@left`, `@right`, and `@center`, holding views or navs.
+//   `left` and `right` are the language's existing layout terms and reverse with the locale exactly
+//   as they do in a layout clause. Horizontal bars win the corners: `@top` and `@bottom` span the
+//   full width and `@left`/`@right` occupy the space between them. Each slot takes a `Label`, a
+//   `Content`, and an optional `Size` -- one dimension, because the edge already fixes the axis, so
+//   the meaningless one is unwritable. Absent `Size` means content-derived
+// - The empty-slot rule is semantic, never measured: a slot whose `Content` evaluates to `none`
+//   reserves no space. That makes the focus bar's presence a reactive property of the data rather
+//   than a layout accident. Bars never take Back; the frame routes Back to `@center`. SplitNav
+//   keeps its own job -- navigational peers that progress and fold -- and a frame edge is fixed
+//   chrome
+// - `local only` is an entity-level storage fact, a third trailing group entry beside `index` and
+//   `order by`: the entity lives in the device store whatever datasource the app configures, so a
+//   synced variant never syncs it. It is the narrow form of per-entity datasource scoping
+// - A `query` may be declared at module level: an app-lifetime reactive read of the store, and an
+//   ordinary value. A nav is configuration, so there is no view between the shell frame and the
+//   store; without this the frame could not ask whether a focus session is running
+// - `command` is a configured value, in the `app`/`nav`/`design` family, and the only discoverable
+//   verb. Its parameters are slots, its metadata members are `Title` (static), `Description`,
+//   `Summary`, `Label` (reactive, defaulting to `Title`), `Icon`, `Key`, and `Enabled`, and its
+//   behavior is exactly one `do` of a named or inline action. It is declared at module level or in
+//   a view body, the same rule as `action`, and a view-body command closes over that view
+// - `action` is private: it loses `Title`, `Description`, and `Summary`, and is never surfaced.
+//   "An action is an intent" is retired, and so is `command X = Action(args) with { ... }`
+// - Inside a command block, juxtaposition declares a slot and a name with a value fills a member --
+//   the same namespace rule Decisions section 2 already uses. `Document` alone is a slot taking its
+//   same-named type; `Track Document` is a named slot; `Title "Delete"` is a fill. A name in both
+//   the type and value namespaces asks for the explicit `Name: value` form
+// - `Value with { ... }` fills a command's slots and may override `Label`, `Icon`, `Key`, and
+//   `Enabled`, never `Title`; `do <command> with { ... }` invokes one, and `do` on an unfilled slot
+//   is a diagnostic
+// - `shortcut` is the value type of `Key`. `key` was taken -- it is the slot-key type in
+//   `SelectionNav { Initial key }`. `primary + "n"` is a shortcut, and a bare string in `Key`
+//   position is a shortcut literal. Only the platform-abstract `primary` modifier exists; naming a
+//   platform's own modifier is a diagnostic
+// - `Toolbar` is `list of command` and moves to `scene` with `Title`. Every module publishes a
+//   catalog of its commands, which is what makes "every command whose slots this target can fill"
+//   answerable at all -- the verb universe the later tranches read
 project {
    id "wordflower"
    name "WordFlower"
@@ -272,19 +332,25 @@ project {
 }
 
 // An app mounts navs, it does not render content directly. Overlay and toast hosting are universal
-// capabilities, so no app declares them.
+// capabilities, so no app declares them. The navigator is the shell frame, which holds the tabbed
+// navigator in its center and the focus bar along its bottom edge; the root is not special.
 app WordFlower {
    Name "WordFlower"
    Design WordFlowerDesign
-   Navigator WordFlowerNavigator
+   Navigator WordFlowerShell
    Datasource DeviceStore // offline-first: the device owns the writing; sync is a variant
 }
 
+// A patch reaches into the navigator it derives from rather than replacing it. Now that the
+// navigator is the shell frame, the tab surface being previewed is the frame's center content, so
+// the patch names the path to it.
 app WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
-   Navigator with { // patches the app's own navigator instead of replacing it
-      Display "drawer"
-}  }
+   Navigator with {
+      @center {
+         Content WordFlowerNavigator with {
+            Display "drawer"
+}  }  }  }
 
 // The explicit dark preview mounts a complete dark design and keeps the portable tab surface on
 // every target, so the preview does not depend on the host operating system's current appearance.
@@ -292,8 +358,10 @@ app WordFlowerDark = WordFlower with {
    Name "WordFlower - Dark"
    Design WordFlowerDarkDesign
    Navigator with {
-      Display "tabs"
-}  }
+      @center {
+         Content WordFlowerNavigator with {
+            Display "tabs"
+}  }  }  }
 
 app WordFlowerInstantDB = WordFlower with {
    Name "WordFlower - InstantDB"

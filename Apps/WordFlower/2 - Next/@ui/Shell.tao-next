@@ -2,9 +2,10 @@ use SignedOutNav from @nav
 use Col, Row, Text, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 
-// The screens the app shell mounts directly.
+// The screens the app shell mounts directly. Both are pushed by a StackNav, which reads `Title`,
+// so both are scenes.
 workspace
-view Settings() {
+scene Settings() {
    Title "Settings"
    render Scroller() [screen] {
       Col() [width max 720, centered, gap 20] {
@@ -24,7 +25,7 @@ view Settings() {
 }  }  }  }  }
 
 workspace
-view SignedOut() {
+scene SignedOut() {
    Title "Signed out"
    render Col() [screen, centered] {
       Text("Signed out") [title]
