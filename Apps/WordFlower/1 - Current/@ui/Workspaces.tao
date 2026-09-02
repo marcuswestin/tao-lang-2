@@ -23,7 +23,7 @@ type WritingPrompt is {
 // The workspace area. Every renderable declaration is a `view`; whether one composes inline in a
 // render tree or enters the presentation tree is decided at each use site, never on the head.
 workspace
-view WorkspaceList() {
+scene WorkspaceList() {
    Title "WordFlower"
    state WorkspaceName = ""
    query Workspaces { }
@@ -102,7 +102,7 @@ view WorkspaceNameNotice() {
          on press -> { dismiss }
 }  }  }
 
-view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named entity type
+scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named entity type
    Title Workspace.Name
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""

@@ -74,7 +74,7 @@ export default {
 
 function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
   f.visibilityOnOwnLine()
-  f.oneSpaceAfter('view')
+  f.oneSpaceAfter('view', 'scene')
   f.noSpaceBefore('(')
   f.oneSpaceBefore('responds')
   f.oneSpaceAfter('responds')

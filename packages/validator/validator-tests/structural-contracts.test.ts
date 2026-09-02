@@ -206,8 +206,8 @@ Describe('validator: declaration contracts', () => {
       let NavigationAlias = BaseNavigation
       let PatchedNavigation = NavigationAlias with { Initial Other }
       app Demo { Name "Demo" Navigator PatchedNavigation }
-      view Home() { Title "Home" render Empty() }
-      view Other() { Title "Other" render Empty() }
+      scene Home() { Title "Home" render Empty() }
+      scene Other() { Title "Other" render Empty() }
       ${stubView('Empty')}
     `),
   )
@@ -393,7 +393,7 @@ Describe('validator: declaration contracts', () => {
     accepts(`
       use StackNav from @tao/nav
       app ToastActions { Name "Toast actions" Navigator StackNav { Initial Home } }
-      view Home() {
+      scene Home() {
         Title "Home"
         action Callback() { }
         action Open() { present Notice(Callback) as toast (Key: "notice", Duration: 1.s) }
@@ -527,7 +527,7 @@ Describe('validator: declaration contracts', () => {
         @window SlotNav { Initial Detail }
       }
       let StrictVariant = StrictApp with { Name "Strict variant" }
-      view Home() {
+      scene Home() {
         Title "Home"
         action Activate() { present StrictVariant@workspace }
         action Open() { present Detail() in StrictVariant@window }

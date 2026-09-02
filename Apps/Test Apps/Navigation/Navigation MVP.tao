@@ -12,7 +12,7 @@ app NavigationMVPApp {
 type ConfirmResult is one of Confirmed
 
 workspace
-view Home() {
+scene Home() {
    Title "Navigation MVP"
    state Visits = 0
    action CountVisit() {
@@ -20,6 +20,16 @@ view Home() {
    }
    action OpenDetail() {
       present Detail(Name: "Typed workspace")
+   }
+   // A plain view is presentable too. A scene is the way to ADD chrome, not a requirement for
+   // being presented, so this destination declares none and the host gives it Back-only chrome.
+   action OpenChromeless() {
+      present Chromeless()
+   }
+   // A scene that owns its whole surface. `Header false` removes the bar; it does not remove the
+   // ability to leave, because Back belongs to the reducer rather than to the chrome.
+   action OpenFullBleed() {
+      present FullBleed()
    }
    // `ask` suspends this action until the dialogue answers. What it does afterwards belongs to the
    // launch that asked: quitting the app ends the action rather than handing its presentation to
@@ -35,6 +45,16 @@ view Home() {
       #countVisit
       FormButton("Count visit") {
          on press CountVisit
+      }
+
+      #openFullBleed
+      FormButton("Open full bleed") {
+         on press OpenFullBleed
+      }
+
+      #openChromeless
+      FormButton("Open chromeless") {
+         on press OpenChromeless
       }
 
       #openDetail
@@ -57,9 +77,24 @@ view ConfirmOpen() responds ConfirmResult {
 }  }  }
 
 workspace
-view Detail(Name text) {
+scene Detail(Name text) {
    Title Name
    render Col() [gap 10, pad 16] {
       Text("Detail")
       Text(Name)
+}  }
+
+// A pushed plain view: no Title, no Toolbar, nothing a host reads. It is legal, and Back still
+// works, because Back is the reducer's rather than the header's.
+view Chromeless() {
+   render Col() [gap 10, pad 16] {
+      Text("Chromeless detail")
+}  }
+
+// A headerless scene. It fills no `Title` or `Toolbar`, because with the bar gone that chrome would
+// be dead — which the validator says so directly rather than letting it be written and ignored.
+scene FullBleed() {
+   Header false
+   render Col() [gap 10, pad 16] {
+      Text("Full bleed detail")
 }  }

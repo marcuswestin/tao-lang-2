@@ -24,7 +24,7 @@ export function testNavKind(
   assertNavKind(Object.isFrozen(kind.hostSlots), 'Host-slot metadata must be immutable.')
   assertNavKind(Object.isFrozen(kind.hostSlots.reads), 'Host-slot read metadata must be immutable.')
   assertNavKind(Object.isFrozen(kind.hostSlots.requires), 'Host-slot requirement metadata must be immutable.')
-  const expectedReads = profile === 'stack' ? ['Title', 'Toolbar'] : []
+  const expectedReads = profile === 'stack' ? ['Header', 'Title', 'Toolbar'] : []
   const expectedRequires = profile === 'stack' ? ['Title'] : []
   assertNavKind(
     JSON.stringify(kind.hostSlots.reads) === JSON.stringify(expectedReads),

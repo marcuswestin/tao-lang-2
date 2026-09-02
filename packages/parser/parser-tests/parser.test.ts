@@ -18,7 +18,7 @@ Describe('parser: core language syntax', () => {
           Initial Root(Expanded: Expanded, ChangeExpanded: ChangeExpanded)
         }
       }
-      view Root(Expanded list of text, ChangeExpanded action(list of text)) {
+      scene Root(Expanded list of text, ChangeExpanded action(list of text)) {
         Title "Root"
         render Empty()
       }

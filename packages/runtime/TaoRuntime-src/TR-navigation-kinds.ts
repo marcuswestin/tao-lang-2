@@ -114,7 +114,7 @@ class RuntimeNavKind<ProfileT extends TaoNavKindProfile, ConfigurationT extends 
 }
 
 const stackHostSlots = Object.freeze({
-  reads: Object.freeze(['Title', 'Toolbar'] as const),
+  reads: Object.freeze(['Header', 'Title', 'Toolbar'] as const),
   requires: Object.freeze(['Title'] as const),
 })
 const noHostSlots = Object.freeze({

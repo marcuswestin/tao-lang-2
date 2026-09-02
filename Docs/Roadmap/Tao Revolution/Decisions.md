@@ -1099,7 +1099,8 @@ function FirstOwner(Household is Household) returns Account {
 - **One renderable declaration kind: `view`.** A screen, a reusable leaf, a content-accepting
   wrapper, and a modal that answers are all the same declaration. Nothing about a view's role is
   written on its head, because every distinction a kind could carry is either read off the body or
-  belongs to the call site:
+  belongs to the call site. (`scene` — amended below — is the single exception, and it is not a
+  second kind: `scene is view`, and it carries the one fact a body genuinely cannot state.)
 
 ```swift
 view RecipeScreen(Recipe) { … }                        // a link presents it (§10) — nothing marks that here
@@ -1120,20 +1121,34 @@ file view NewRecipeSheet(Household) responds Recipe { … }   // answers with a 
 - **One body grammar.** State, entity queries, actions, commands, aliases, tags, and render are
   legal in any view body — there is no statelessness ladder, so a stateful content-accepting
   wrapper (a collapsible section) is expressible.
-- **Host-facing self-description is supplied slots on `view`.** The prelude owns the vocabulary, not
-  the compiler, and begins with `Title` and `Toolbar`; `Icon`, `Badge`, detents, appearance, and
-  package-extensible host traits wait for forcing features. A fill is an ordinary capitalized member
-  in the body — no content-side keyword or declaration modifier is added — and its value is an
-  ordinary reactive expression over the view's parameters, state, and reads:
+- **Host-facing self-description is supplied slots on `scene`** (amended by KEY-D11; they began on
+  `view`). The prelude owns the vocabulary, not the compiler: `Title`, `Toolbar`, and `Header`;
+  `Icon`, `Badge`, detents, appearance, and package-extensible host traits wait for forcing
+  features. A fill is an ordinary capitalized member in the body — no content-side keyword or
+  declaration modifier is added — and its value is an ordinary reactive expression over the scene's
+  parameters, state, and reads:
 
 ```swift
-view RecipeScreen(Recipe) {
+scene RecipeScreen(Recipe) {
    Title Recipe.Title
-   command Share = ShareRecipe(Recipe) with { Icon "square.and.arrow.up" }
+   command Share { Title "Share recipe", Icon "square.and.arrow.up", do ShareRecipe(Recipe) }
    Toolbar { Share }
    render RecipePage(Recipe)
 }
 ```
+
+- **`scene is view`: a scene is presented, never composed.** That is the one fact a body cannot
+  state, and the only reason the kind exists. Because the chrome slots live on `scene` alone, a
+  declaration that is only ever composed _cannot_ declare a title nothing would read — dead chrome
+  becomes unrepresentable rather than merely discouraged. Composing a scene inline is diagnosed at
+  the render site. This reverses part of the unified-view decision above, for that stated reason.
+- **A plain view may still be presented.** A scene is the way to _add_ chrome, not a requirement for
+  presentation: a pushed plain view is legal and shows Back-only header chrome. `nav is scene`, so a
+  mounted navigator still supplies its own chrome.
+- **`Header false` is the explicit opt out**, for a scene that owns its whole surface. Back still
+  works through the reducer, the gesture, and the hardware key — only the bar is gone. A scene that
+  suppresses its header may not fill `Title` or `Toolbar`, by the same rule that put the slots on
+  `scene` in the first place, and is exempt from the pushed-scene `Title` requirement.
 
 - **A host reads only the directly presented view.** Host-facing slots never bubble from descendants;
   a wrapper that carries a title or toolbar fills its own slots from its own parameters. Because

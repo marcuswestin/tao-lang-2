@@ -187,7 +187,7 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        view Home() {
+        scene Home() {
           Title "Home"
           state Status = "Ready"
           action AskForConfirmation() {
@@ -275,7 +275,7 @@ Describe('Expo runtime', () => {
             Navigator StackNav { Initial Home }
           }
 
-          view Home() {
+          scene Home() {
             state CanSave = false
             Title "Home"
             action SaveDocument() { Title "Save" }
@@ -404,7 +404,7 @@ Describe('Expo runtime', () => {
           Datasource Memory { }
         }
 
-        view Main() {
+        scene Main() {
           Title "Main"
           state Draft = ""
           state Status = "Waiting"
@@ -501,7 +501,7 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        workspace view Home() {
+        workspace scene Home() {
           Title "Home"
           action Open() { present Detail() }
           render Stack(){
@@ -510,7 +510,7 @@ Describe('Expo runtime', () => {
           }
         }
 
-        workspace view Detail() {
+        workspace scene Detail() {
           Title "Detail"
           render Text("Detail")
         }

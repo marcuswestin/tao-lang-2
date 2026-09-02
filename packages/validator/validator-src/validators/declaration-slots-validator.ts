@@ -28,7 +28,7 @@ function validateDeclarationSlotFill(fill: AST.DeclarationSlotFill, ctx: Validat
     ctx.error(declarationSlotValidationMessages.placement, fill)
     return
   }
-  const kind = AST.isViewDeclaration(owner) ? 'view' : 'action'
+  const kind = AST.isViewDeclaration(owner) ? (owner.scene ? 'scene' : 'view') : 'action'
   const contract = AST.primitiveSlots(ctx.workspaceFiles, kind)
   const property = contract.find(candidate => candidate.name === fill.name)
   if (!property) {

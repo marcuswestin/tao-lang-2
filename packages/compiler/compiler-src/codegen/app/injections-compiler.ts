@@ -104,6 +104,7 @@ function CompileTaoJsType(type: ASTUtils.TaoType): Compiled {
         duration: () => gen`number`,
         design: () => gen`any`,
         view: () => gen`import('react').ReactNode`,
+        scene: () => gen`import('react').ReactNode`,
         nav: () => gen`TR.NavigationValue`,
         datasource: () => gen`any`,
         app: () => gen`any`,

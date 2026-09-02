@@ -11,7 +11,7 @@ type ConfirmResult is one of Confirmed
 // The document area: an availability-guarded entry, the editor itself, and the close conversation.
 // The presented entry guards entity availability; the editor below assumes an available document.
 workspace
-view DocumentScreen(Document) {
+scene DocumentScreen(Document) {
    Title Document.Title
    render Col() [fill] {
       guard Document {

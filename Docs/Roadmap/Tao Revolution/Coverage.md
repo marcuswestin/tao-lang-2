@@ -30,7 +30,8 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Conditionals, ternary, check/guard (§8)                    | WordFlower · everywhere; ternary: focused-writing mode      | MVP      | partially in Current[^2] |
 | Ticking clock — @tao/time (§9)                             | **WordFlower · focused-writing mode** (X-minute free write) | **MVP**  | in Current               |
 | Unified view kind, inferred capabilities (§9)              | WordFlower · everywhere; stateful wrapper: settings details | MVP      | in Current[^4]           |
-| Host-read Title/Toolbar slots (§9–§10)                     | WordFlower · reactive workspace title + save; HNReader      | MVP      | in Current[^5]           |
+| Scene, host-read chrome slots (§9–§10)                     | WordFlower · reactive workspace title + save; HNReader      | MVP      | in Current[^5]           |
+| Headerless scene, pushed plain view (§9–§10)               | Test Apps · Navigation MVP full-bleed and chromeless pushes | MVP      | in Current               |
 | Ephemeral non-serializable parameters (§9, §10)            | WordFlower · revert-save toast action                       | MVP      | in Current               |
 | Layout, render, clause lists (§9)                          | WordFlower · all screens                                    | MVP      | in Current               |
 | Conditional styling incl. states (§9)                      | WordFlower · editor chrome                                  | MVP      | pending                  |

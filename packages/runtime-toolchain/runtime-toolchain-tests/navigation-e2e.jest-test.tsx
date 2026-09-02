@@ -120,7 +120,7 @@ Describe('Expo runtime', () => {
           use Col, FormButton, Text from @tao/ui
           use NestedStack from ./
 
-          workspace view Home() {
+          workspace scene Home() {
             Title "Home"
             action Open() { present Detail() in NestedStack }
             render Col() {
@@ -129,7 +129,7 @@ Describe('Expo runtime', () => {
             }
           }
 
-          view Detail() { Title "Detail" render Text("Stable detail") }
+          scene Detail() { Title "Detail" render Text("Stable detail") }
         `,
       },
       screen => {
@@ -827,7 +827,7 @@ Describe('Expo runtime', () => {
 
         type ConfirmResult is one of Confirmed
 
-        view Home() { Title "Home" render Wrapper()[gap 9] }
+        scene Home() { Title "Home" render Wrapper()[gap 9] }
 
         view Wrapper() {
           render Col() {
@@ -980,7 +980,7 @@ Describe('Expo runtime', () => {
         @window SlotNav { Initial WindowRoot }
       }
 
-      workspace view Home() {
+      workspace scene Home() {
         Title "${label} home"
         action Open() {
           present Notice() in SharedGeneratedApp@window
@@ -1044,7 +1044,7 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        view Home() { Title "Home" render Editor() }
+        scene Home() { Title "Home" render Editor() }
 
         view Editor() {
           action Save() {
@@ -1224,6 +1224,7 @@ Describe('Expo runtime', () => {
     try {
       const host = new RuntimeHostReadChannel()
       host.publish({
+        header: true,
         title: 'Native title',
         toolbar: [navigationCommand({ invoke: () => undefined, label: 'Native command' }).read()],
       })

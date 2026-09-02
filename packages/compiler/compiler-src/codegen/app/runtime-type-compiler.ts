@@ -24,6 +24,7 @@ export function compileRuntimeType(type: ASTUtils.TaoType): Compiled {
         duration: () => gen`TR.Value<number>`,
         design: () => gen`TR.Evaluable`,
         view: () => gen`TR.Presentable`,
+        scene: () => gen`TR.Presentable`,
         nav: () => gen`TR.NavigationValue`,
         datasource: () => gen`TR.Evaluable`,
         app: () => gen`TR.Evaluable`,

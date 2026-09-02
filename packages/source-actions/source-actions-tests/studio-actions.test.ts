@@ -181,7 +181,7 @@ Describe('Studio source-action patch bus', () => {
          render Stack() { Text("First") }
       }
 
-      view Card(Title text) {
+      scene Card(Title text) {
          render Text(Title)
       }
     `)
@@ -1062,7 +1062,7 @@ Describe('Studio source-action patch bus', () => {
       data Accounts / Account { Name text }
       app Preview { view Main }
       view Main() { render Card(Title: "Main") }
-      view Card(Title text, Owner Account) { render Text(Title) }
+      scene Card(Title text, Owner Account) { render Text(Title) }
       fixture Cards { Lead = create Account { Name: "Ada" } }
       scenarios Card "states" {
          fixture Cards
@@ -1093,7 +1093,7 @@ Describe('Studio source-action patch bus', () => {
 
   Test('promotes strings as ordinary Tao literals with lossless escaping', async () => {
     const document = await parseDocument(`
-      view Card(Title text) { render Text(Title) }
+      scene Card(Title text) { render Text(Title) }
       fixture Cards { }
       scenarios Card "states" {
          fixture Cards
@@ -1120,7 +1120,7 @@ Describe('Studio source-action patch bus', () => {
   Test('creates an entry override when focused arguments were inherited from the group', async () => {
     const document = await parseDocument(`
       data Accounts / Account { Name text }
-      view Card(Title text, Owner Account) { render Text(Title) }
+      scene Card(Title text, Owner Account) { render Text(Title) }
       fixture Cards { Lead = create Account { Name: "Ada" } }
       scenarios Card "states" {
          fixture Cards

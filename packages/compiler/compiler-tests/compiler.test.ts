@@ -19,7 +19,7 @@ Describe('compiler: language lowering', () => {
           Initial Root(Expanded: Expanded, ChangeExpanded: ChangeExpanded)
         }
       }
-      view Root(Expanded list of text, ChangeExpanded action(list of text)) {
+      scene Root(Expanded list of text, ChangeExpanded action(list of text)) {
         Title "Root"
         render Empty()
       }
@@ -38,7 +38,7 @@ Describe('compiler: language lowering', () => {
       use Button, Text from @tao/ui
       app Actions { Name "Actions" Navigator StackNav { Initial Main } }
       type Answer is one of Confirmed
-      view Main() {
+      scene Main() {
         Title "Main"
         state Count = 0
         action Increment() { set Count += 1 }
@@ -84,7 +84,7 @@ Describe('compiler: language lowering', () => {
         state CurrentTheme is Theme = Light (persist)
         Navigator StackNav { Initial Main }
       }
-      view Main() { Title "Main" render Empty() }
+      scene Main() { Title "Main" render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)
 
@@ -165,7 +165,7 @@ Describe('compiler: language lowering', () => {
       let Product = ReusableApp {
         Navigator StackNav { Initial Home }
       }
-      view Home() { Title "Home" render Empty() }
+      scene Home() { Title "Home" render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)
 
@@ -198,7 +198,7 @@ Describe('compiler: language lowering', () => {
         Restore automatic { Exclude sheets, menus }
       }
       app Preview = Base with { Restore fresh }
-      view Home() { Title "Home" render Empty() }
+      scene Home() { Title "Home" render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `,
       { appName: 'Preview' },
@@ -259,7 +259,7 @@ Describe('compiler: language lowering', () => {
         Navigator StackNav { Initial Main }
         Datasource Local { StorageKey "WordFlowerData" }
       }
-      view Main() {
+      scene Main() {
         Title "Main"
         query Workspaces { limit 25 }
         action Add() { create Workspace { Name: "Home" } }
@@ -322,7 +322,7 @@ Describe('compiler: language lowering', () => {
       }
       workspace
       query FocusSessions as CurrentSession { limit 1 }
-      view Main() {
+      scene Main() {
         Title "Sessions"
         action Start() { create FocusSession { Label: "Focus" } }
         action Write() { create Note { Title: "Note" } }
@@ -414,7 +414,7 @@ Describe('compiler: language lowering', () => {
         Navigator StackNav { Initial Main }
         Datasource Memory { }
       }
-      view Main() {
+      scene Main() {
         Title "Notebook"
         query Notes { }
         render Text("{ Notes.Count }")
@@ -444,7 +444,7 @@ Describe('compiler: language lowering', () => {
           Name "Synced Notes"
           Datasource InstantDB { AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f" }
         }
-        view Main() {
+        scene Main() {
           Title "Notes"
           render Text("Ready")
         }
@@ -532,7 +532,7 @@ Describe('compiler: language lowering', () => {
         Navigator StackNav { Initial MainView }
         Datasource Memory { }
       }
-      view MainView() {
+      scene MainView() {
         Title "Main"
         action Add() { create __proto__ { __proto__: "safe" } }
         render Text("Ready")
@@ -559,14 +559,14 @@ Describe('compiler: language lowering', () => {
         @window SlotNav { Initial Detail }
       }
       let NavigationVariant = NavigationApp with { Name "Navigation Variant" }
-      view Home() {
+      scene Home() {
         Title "Home"
         action Open() { present Detail() in NavigationApp@window }
         action OpenOverlay() { present Detail() as overlay in NavigationApp@window }
         action Activate() { present NavigationApp@workspace }
         render Empty()
       }
-      view Detail() {
+      scene Detail() {
         Title "Detail"
         action Close() { dismiss }
         action Reset() { replace ResetNavigator in NavigationApp }
@@ -635,7 +635,7 @@ Describe('compiler: language lowering', () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
       app ToastApp { Name "Toast" Navigator StackNav { Initial Home } }
-      view Home() { Title "Home" render Editor() }
+      scene Home() { Title "Home" render Editor() }
       view Editor() {
         action Save() { present Saved() as toast (Key: "document-saved", Duration: 3.s) }
         render Empty()
@@ -663,12 +663,12 @@ Describe('compiler: language lowering', () => {
         @settings { Label "Settings" Content SettingsStack }
       }
       app SelectionApp { Name "Selection" Navigator MainNavigation }
-      view Home() {
+      scene Home() {
         Title "Home"
         action Activate() { present SelectionApp@settings }
         render Empty()
       }
-      view Settings() { Title "Settings" render Empty() }
+      scene Settings() { Title "Settings" render Empty() }
       view Empty() { render inject ${tsFence} return null ${fence} }
     `)
 
@@ -868,7 +868,7 @@ Describe('compiler: language lowering', () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
       app HostApp { Name "Host" Navigator StackNav { Initial Home } }
-      view Home() {
+      scene Home() {
         state CurrentTitle = "Home"
         state CanSave = false
         Title CurrentTitle
@@ -921,7 +921,7 @@ Describe('compiler: language lowering', () => {
   Test('resolves a command action lazily when the action is declared later in its view', async () => {
     const compiled = await Compiler.compileCode(`
       app HostApp { view Home }
-      view Home() {
+      scene Home() {
         command Send = Deliver()
         action Deliver() { Title "Deliver" }
         Toolbar { Send }
@@ -947,7 +947,7 @@ Describe('compiler: language lowering', () => {
         Toolbar { Save }
       }
       action Save() { Title "Save document" }
-      view Home() {
+      scene Home() {
         Title "Home"
         render Empty()
       }
@@ -976,7 +976,7 @@ Describe('compiler: language lowering', () => {
       }
       action Keep() { Title "Keep" }
       action Save() { Title "Save" }
-      view Home() {
+      scene Home() {
         Title "Home"
         render Empty()
       }

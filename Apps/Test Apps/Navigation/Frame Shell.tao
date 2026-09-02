@@ -97,7 +97,7 @@ view Inspector() {
       Text("Frame inspector")
 }  }
 
-view SidebarHome() {
+scene SidebarHome() {
    Title "Sidebar"
    render Col() [gap 8] {
       Text("Sidebar home")
@@ -107,13 +107,13 @@ view SidebarHome() {
          on press -> { present SidebarDetail() }
 }  }  }
 
-view SidebarDetail() {
+scene SidebarDetail() {
    Title "Sidebar detail"
    render Col() {
       Text("Sidebar pushed")
 }  }
 
-view CenterHome() {
+scene CenterHome() {
    Title "Center"
    render Col() [gap 8] {
       Text("Center home")
@@ -123,7 +123,7 @@ view CenterHome() {
          on press -> { present CenterDetail() }
 }  }  }
 
-view CenterDetail() {
+scene CenterDetail() {
    Title "Center detail"
    render Col() {
       Text("Center pushed")

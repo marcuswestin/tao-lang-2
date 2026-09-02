@@ -21,8 +21,13 @@ TagStatement:
 // caller content iff it places `@@content`, and offers named render slots iff it declares them.
 // A foreign view declares the same interface in its head because there is no Tao body to infer:
 // `view Native(Value text) accepts content slots @header from ./Native.tsx`.
+//
+// `scene` is the same declaration with one added fact a body cannot state: it is presented, never
+// composed. That is why it is a keyword here rather than a separate rule — a scene IS a view, as
+// the Prelude's `scene is view` says, so everything that accepts a view accepts a scene and only
+// the render site turns one away.
 ViewDeclaration:
-    visibility=DeclarationVisibility? 'view' name=ID
+    visibility=DeclarationVisibility? (scene?='scene' | 'view') name=ID
     (parameterList=ParameterList ('responds' response=[TypeDeclaration:ID])?
         (block=ViewBlock | foreign=ForeignViewImplementation)
         | '=' aliasTarget=PackageMemberReference);

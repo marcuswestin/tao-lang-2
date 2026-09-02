@@ -80,6 +80,7 @@ Describe('validator: workspace structure', () => {
         'action',
         'design',
         'view',
+        'scene',
         'nav',
         'datasource',
         'app',

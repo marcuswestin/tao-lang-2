@@ -9,7 +9,7 @@ app RuntimeStdlibTests {
 
 let LaunchCount = 3
 
-view MainView() {
+scene MainView() {
    Title "Runtime Stdlib Tests"
    action Ignore() { }
    render Stack() {

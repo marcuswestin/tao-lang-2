@@ -53,7 +53,9 @@ function BasicStackLevel(props: {
     hidden: props.hidden,
     children: React.createElement(runtime.View, {
       children: [
-        React.createElement(runtime.View, {
+        // `Header false` removes the bar, not the ability to leave: Back stays reachable through
+        // the reducer, the platform gesture, and the hardware key.
+        !slots.header ? null : React.createElement(runtime.View, {
           children: [
             observable && props.navigation.depth > 1
               ? React.cloneElement(

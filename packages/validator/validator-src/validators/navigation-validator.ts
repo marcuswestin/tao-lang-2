@@ -4,6 +4,7 @@ import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { configuredValueValidationMessages } from './configured-values-validator'
+import { sceneSuppressesHeader } from './views-validator'
 
 /** navigationValidationMessages declares configured navigation diagnostics. */
 export const navigationValidationMessages = {
@@ -46,7 +47,7 @@ export const navigationValidationMessages = {
   replaceNavigator: (actual: string) => `Replacement expects nav, got ${actual}.`,
   unknownAuxiliary: (app: string, key: string) => `App ${app} has no auxiliary navigator named '@${key}'.`,
   missingHostTitle: (view: string) =>
-    `View '${view}' must fill Title when used as a statically known StackNav destination.`,
+    `Scene '${view}' must fill Title when used as a statically known StackNav destination.`,
   missingNavHostTitle: (nav: string) =>
     `Navigation '${nav}' must configure Title when used as a statically known StackNav destination.`,
   unknownFrameSlot: (key: string) => `FrameNav has no slot '${key}'; its slots are ${frameNavSlotKeys.join(', ')}.`,
@@ -664,6 +665,12 @@ function reportMissingHostTitle(
   ctx: ValidationContext,
 ): void {
   const declaration = canonicalView(view)
+  // A plain view is legal here and shows Back-only header chrome: a scene is the way to ADD chrome,
+  // not a requirement for presentation. Only a scene, which can fill Title, is held to filling it —
+  // and not one that has suppressed its header, where a title would be chrome nothing reads.
+  if (!declaration.scene || sceneSuppressesHeader(declaration)) {
+    return
+  }
   if (!AST.declarationSlotFillNamed(declaration, 'Title')) {
     ctx.error(navigationValidationMessages.missingHostTitle(view.name), node)
   }

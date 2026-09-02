@@ -9,7 +9,7 @@ Describe('parser: host-read slots and commands', () => {
       public type StackNav = native.StackNav
 
       action Save(Value text) { Title "Save" }
-      view Home(Title text) {
+      scene Home(Title text) {
         state Enabled = false
         Title Title
         command SaveCommand = Save("draft") with {

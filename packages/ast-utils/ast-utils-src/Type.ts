@@ -15,6 +15,7 @@ export type TaoType =
       | 'none'
       | 'design'
       | 'view'
+      | 'scene'
       | 'nav'
       | 'datasource'
       | 'app'
@@ -708,10 +709,12 @@ function primitiveFamilyIsAssignable(actual: TaoType, expected: TaoType): boolea
   if (actual.primitive === expected.primitive) {
     return true
   }
-  // The primitive lattice mirrors the Prelude's `is` chain: `nav` refines `view`, and nothing else
-  // refines anything.
+  // The primitive lattice mirrors the Prelude's `is` chain: `nav` refines `scene` refines `view`,
+  // and nothing else refines anything. The walk below follows the whole chain, so a nav stays
+  // assignable to a view through scene.
   const parents: Partial<Record<Extract<TaoType, { kind: 'primitive' }>['primitive'], string>> = {
-    nav: 'view',
+    nav: 'scene',
+    scene: 'view',
   }
   let current: string | undefined = actual.primitive
   while (current) {
@@ -922,7 +925,7 @@ class TypeResolutionContext {
       DesignDeclaration: () => primitiveType('design'),
       NavDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('nav'),
       StateDeclaration: state => this.stateDeclarationType(state),
-      ViewDeclaration: () => primitiveType('view'),
+      ViewDeclaration: declaration => primitiveType(declaration.scene ? 'scene' : 'view'),
       undefined: unresolvedType,
     })
   }
@@ -1143,6 +1146,7 @@ function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
     item: () => ({ kind: 'item' }),
     design: () => ({ kind: 'primitive', primitive: 'design' }),
     view: () => ({ kind: 'primitive', primitive: 'view' }),
+    scene: () => ({ kind: 'primitive', primitive: 'scene' }),
     nav: () => ({ kind: 'primitive', primitive: 'nav' }),
     datasource: () => ({ kind: 'primitive', primitive: 'datasource' }),
     app: () => ({ kind: 'primitive', primitive: 'app' }),

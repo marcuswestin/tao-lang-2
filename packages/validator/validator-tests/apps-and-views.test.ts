@@ -29,7 +29,7 @@ Describe('validator: apps and views', () => {
           Initial Root(Expanded: Expanded, ChangeExpanded: ChangeExpanded)
         }
       }
-      view Root(Expanded list of text, ChangeExpanded action(list of text)) {
+      scene Root(Expanded list of text, ChangeExpanded action(list of text)) {
         Title "Root"
         render Empty()
       }
@@ -45,7 +45,7 @@ Describe('validator: apps and views', () => {
         Name "Workspace"
         Navigator StackNav { Initial Root() }
       }
-      view Root(Value text) { Title "Root" render Empty() }
+      scene Root(Value text) { Title "Root" render Empty() }
       ${stubView('Empty')}
     `)
     Expect(validationErrorMessages(result)).toContain(
@@ -85,7 +85,7 @@ Describe('validator: apps and views', () => {
         state CurrentTheme is Theme = Light (persist)
         Navigator StackNav { Initial Main }
       }
-      view Main() { Title "Main" render Empty() }
+      scene Main() { Title "Main" render Empty() }
       ${stubView('Empty')}
     `)
     Expect(validationErrorMessages(result)).toEqual([])
@@ -99,7 +99,7 @@ Describe('validator: apps and views', () => {
         state PaneWidth = 320
         Navigator StackNav { Initial Pane }
       }
-      view Pane() { Title "Pane" render Empty() }
+      scene Pane() { Title "Pane" render Empty() }
       ${stubView('Empty')}
     `)
     Expect(validationErrorMessages(result)).toEqual([
@@ -116,7 +116,7 @@ Describe('validator: apps and views', () => {
         state OnSave is action() = action { } (persist)
         Navigator StackNav { Initial Pane }
       }
-      view Pane() { Title "Pane" render Empty() }
+      scene Pane() { Title "Pane" render Empty() }
       ${stubView('Empty')}
     `)
     Expect(validationErrorMessages(result)).toContain(
@@ -167,7 +167,7 @@ Describe('validator: apps and views', () => {
           state Width is PaneWidth = PaneWidth 320 (persist)
           Navigator StackNav { Initial Pane }
         }
-        view Pane() { Title "Pane" render Empty() }
+        scene Pane() { Title "Pane" render Empty() }
         ${stubView('Empty')}
       `,
       'Types.tao': 'workspace type PaneWidth is number',
@@ -247,7 +247,7 @@ Describe('validator: apps and views', () => {
         Navigator StackNav { Initial MainView }
         view MainView
       }
-      view MainView() { Title "Main" render Empty() }
+      scene MainView() { Title "Main" render Empty() }
       ${stubView('Empty')}
     `,
       AppValidator.messages.propertyDuplicate('MyApp', 'Navigator'),
@@ -293,7 +293,7 @@ Describe('validator: apps and views', () => {
         Restore automatic { Exclude sheets, menus, toasts }
       }
       app Fresh = Base with { Restore fresh }
-      view MainView() { Title "Main" render Empty() }
+      scene MainView() { Title "Main" render Empty() }
       ${stubView('Empty')}
     `),
     )).toEqual([])
@@ -306,7 +306,7 @@ Describe('validator: apps and views', () => {
         Navigator StackNav { Initial MainView }
         Restore fresh { Exclude overlays, sheets, sheets }
       }
-      view MainView() { Title "Main" render Empty() }
+      scene MainView() { Title "Main" render Empty() }
       ${stubView('Empty')}
     `),
     )

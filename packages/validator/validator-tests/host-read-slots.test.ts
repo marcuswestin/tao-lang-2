@@ -13,7 +13,7 @@ Describe('validator: host-read slots and commands', () => {
     'accepts reactive Title, a bound command, and Toolbar references',
     accepts(`
       ${leaf}
-      view Home(Name text) {
+      scene Home(Name text) {
         Title Name
         action Save(Value text) { Title "Save" }
         command SaveCommand = Save(Name) with {
@@ -36,7 +36,7 @@ Describe('validator: host-read slots and commands', () => {
         Title "Open"
         do OpenUrl("https://example.com")
       }
-      view Home() {
+      scene Home() {
         Title "Home"
         command OpenCommand = Open() with { Label "Open" }
         Toolbar { OpenCommand }
@@ -65,7 +65,7 @@ Describe('validator: host-read slots and commands', () => {
     rejects(
       `
         ${leaf}
-        view Home() {
+        scene Home() {
           Title 1
           Title "duplicate"
           Unknown "value"
@@ -80,8 +80,8 @@ Describe('validator: host-read slots and commands', () => {
         }
       `,
       declarationSlotValidationMessages.type('Title', 'text', 'number'),
-      declarationSlotValidationMessages.duplicate('view', 'Title'),
-      declarationSlotValidationMessages.unknown('view', 'Unknown'),
+      declarationSlotValidationMessages.duplicate('scene', 'Title'),
+      declarationSlotValidationMessages.unknown('scene', 'Unknown'),
       commandValidationMessages.metadataType('Icon', 'text', 'boolean'),
       commandValidationMessages.metadataType('Enabled', 'boolean', 'text'),
       commandValidationMessages.metadata('Mystery'),
@@ -120,7 +120,7 @@ Describe('validator: host-read slots and commands', () => {
 
         nav Main = StackNav { Initial WorkspaceList }
 
-        view WorkspaceList() {
+        scene WorkspaceList() {
           Title "Workspaces"
           render WorkspaceRow()
         }
@@ -130,7 +130,7 @@ Describe('validator: host-read slots and commands', () => {
           render Leaf()
         }
 
-        view WorkspaceDetail() {
+        scene WorkspaceDetail() {
           render Leaf()
         }
       `,
@@ -148,7 +148,7 @@ Describe('validator: host-read slots and commands', () => {
           nav StackNavKind from ./CustomNav.ts
         }
         nav Main = StackNav { Initial Untitled }
-        view Untitled() { render Leaf() }
+        scene Untitled() { render Leaf() }
       `,
       'CustomNav.ts': 'export const StackNavKind = {}',
     }),
@@ -162,7 +162,7 @@ Describe('validator: host-read slots and commands', () => {
         ${leaf}
         type DerivedStack is StackNav with { }
         nav Main = DerivedStack { Initial Untitled }
-        view Untitled() { render Leaf() }
+        scene Untitled() { render Leaf() }
       `,
       navigationValidationMessages.missingHostTitle('Untitled'),
     ),
@@ -178,7 +178,7 @@ Describe('validator: host-read slots and commands', () => {
         Title "Main"
         Toolbar []
       }
-      view Home() {
+      scene Home() {
         Title "Home"
         render Leaf()
       }
@@ -200,11 +200,11 @@ Describe('validator: host-read slots and commands', () => {
         action NeedsValue(Value text) { Title "Needs value" }
         action Untitled() { }
         action Ready() { Title "Ready" }
-        view Card() {
+        scene Card() {
           Title "Card"
           render Leaf()
         }
-        view Home() {
+        scene Home() {
           Title "Home"
           render Leaf()
         }
@@ -226,7 +226,7 @@ Describe('validator: host-read slots and commands', () => {
         ${leaf}
         nav Child = StackNav { Initial ChildHome }
         nav Parent = StackNav { Initial Child }
-        view ChildHome() {
+        scene ChildHome() {
           Title "Child home"
           render Leaf()
         }
@@ -244,7 +244,7 @@ Describe('validator: host-read slots and commands', () => {
         nav Parent = StackNav {
           Initial SlotNav { Initial Home }
         }
-        view Home() {
+        scene Home() {
           Title "Home"
           render Leaf()
         }
@@ -266,7 +266,7 @@ Describe('validator: host-read slots and commands', () => {
       nav RefinedParent = StackNav {
         Initial Child
       }
-      view Home() {
+      scene Home() {
         Title "Home"
         render Leaf()
       }
@@ -297,21 +297,21 @@ Describe('validator: host-read slots and commands', () => {
           Navigator StackNav { Initial Home }
           @detail StackNav { Initial AuxiliaryRoot }
         }
-        view Home() {
+        scene Home() {
           Title "Home"
           action Open() { present ScreenA() in Demo@detail }
           render Leaf()
         }
-        view AuxiliaryRoot() {
+        scene AuxiliaryRoot() {
           Title "Auxiliary"
           render Leaf()
         }
-        view ScreenA() {
+        scene ScreenA() {
           Title "First"
           action Continue() { present ScreenB() }
           render Leaf()
         }
-        view ScreenB() {
+        scene ScreenB() {
           render Leaf()
         }
       `,
@@ -330,16 +330,16 @@ Describe('validator: host-read slots and commands', () => {
           Navigator StackNav { Initial Home }
           @detail StackNav { Initial AuxiliaryRoot }
         }
-        view Home() {
+        scene Home() {
           Title "Home"
           action Open() { present Modal() as ${mode} in Demo@detail }
           render Leaf()
         }
-        view AuxiliaryRoot() {
+        scene AuxiliaryRoot() {
           Title "Auxiliary"
           render Leaf()
         }
-        view Modal() { render Leaf() }
+        scene Modal() { render Leaf() }
       `),
     )
 
@@ -350,16 +350,16 @@ Describe('validator: host-read slots and commands', () => {
           use StackNav from @tao/nav
           ${leaf}
           nav Main = StackNav { Initial Home }
-          view Home() {
+          scene Home() {
             Title "Home"
             action Open() { present Modal() as ${mode} }
             render Leaf()
           }
-          view Modal() {
+          scene Modal() {
             action Continue() { present Untitled() }
             render Leaf()
           }
-          view Untitled() { render Leaf() }
+          scene Untitled() { render Leaf() }
         `,
         navigationValidationMessages.missingHostTitle('Untitled'),
       ),
@@ -374,11 +374,11 @@ Describe('validator: host-read slots and commands', () => {
         ${leaf}
         nav Base = StackNav { Initial Home }
         nav Patched = Base with { Initial Untitled }
-        view Home() {
+        scene Home() {
           Title "Home"
           render Leaf()
         }
-        view Untitled() { render Leaf() }
+        scene Untitled() { render Leaf() }
       `,
       navigationValidationMessages.missingHostTitle('Untitled'),
     ),
@@ -392,7 +392,7 @@ Describe('validator: host-read slots and commands', () => {
         ${leaf}
         let Destination is view = Untitled
         nav Main = StackNav { Initial Destination }
-        view Untitled() { render Leaf() }
+        scene Untitled() { render Leaf() }
       `,
       navigationValidationMessages.missingHostTitle('Untitled'),
     ),
@@ -408,16 +408,16 @@ function strictAuxiliaryPresentation(detailTitle: string): string {
       Navigator StackNav { Initial Home }
       @detail StackNav { Initial AuxiliaryRoot }
     }
-    view Home() {
+    scene Home() {
       Title "Home"
       action Open() { present Untitled() in Demo@detail }
       render Leaf()
     }
-    view AuxiliaryRoot() {
+    scene AuxiliaryRoot() {
       Title "Auxiliary"
       render Leaf()
     }
-    view Untitled() {
+    scene Untitled() {
       ${detailTitle}
       render Leaf()
     }

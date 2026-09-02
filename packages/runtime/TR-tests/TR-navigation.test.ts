@@ -249,10 +249,10 @@ Describe('TR.Navigation', () => {
         name,
       }).read()
     const channel = new RuntimeHostReadChannel()
-    channel.publish({ toolbar: [command('First', 'old-first'), command('Second', 'old-second')] })
+    channel.publish({ header: true, toolbar: [command('First', 'old-first'), command('Second', 'old-second')] })
     const stableSnapshot = channel.read()
 
-    channel.publish({ toolbar: [command('First', 'new-first'), command('Second', 'new-second')] })
+    channel.publish({ header: true, toolbar: [command('First', 'new-first'), command('Second', 'new-second')] })
     stableSnapshot.toolbar[0]?.invoke()
     stableSnapshot.toolbar[1]?.invoke()
     Expect(invoked).toEqual(['new-first', 'new-second'])

@@ -20,7 +20,7 @@ app LocalDataMemory = LocalData with {
    Datasource Memory { }
 }
 
-view Workbench() {
+scene Workbench() {
    Title "Workbench"
    state NoteDraft = ""
    state SessionDraft = ""
@@ -85,7 +85,7 @@ view Workbench() {
 // A second reader of the same module-level query. Nothing is passed in: the value is in scope here
 // exactly as it is on the workbench.
 workspace
-view SessionDetail() {
+scene SessionDetail() {
    Title "Session"
    render Col() [gap 10, pad 16] {
       when CurrentSession {

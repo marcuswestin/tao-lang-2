@@ -15,6 +15,7 @@ const expectedPrimitives = [
   'action',
   'design',
   'view',
+  'scene',
   'nav',
   'datasource',
   'app',

@@ -27,15 +27,22 @@ primitive action with {
 primitive design
 
 // One renderable primitive. Every declaration made with `view` has this type; what a view can do
-// is inferred from its body, and how it appears is chosen where it is presented. `nav` refines it,
-// so a mounted navigator goes wherever a view goes. Toolbar is a list of bound zero-argument action
-// values (commands at the source level).
-primitive view with {
+// is inferred from its body, and how it appears is chosen where it is presented.
+primitive view
+
+// A scene is a view that is presented rather than composed, and the only declaration that may fill
+// the slots a host reads. Keeping them here rather than on `view` is what makes chrome nothing
+// reads unrepresentable: a declaration that is only ever composed cannot name a title. `Header` is
+// the opt out, for a scene that owns its whole surface. Toolbar is a list of bound zero-argument
+// action values (commands at the source level).
+primitive scene is view with {
    Title text is "",
    Toolbar list of action() is [],
+   Header boolean is true,
 }
 
-primitive nav is view with {
+// A nav is a scene, so a mounted navigator goes wherever a view goes and supplies its own chrome.
+primitive nav is scene with {
    implement,
 }
 

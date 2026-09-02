@@ -222,7 +222,7 @@
       "match": "#[A-Za-z0-9_]+"
     },
     "declaration-name": {
-      "match": "\\b(action|app|data|datasource|design|function|let|nav|primitive|state|type|view)\\s+([A-Z][A-Za-z0-9_]*)",
+      "match": "\\b(action|app|data|datasource|design|function|let|nav|primitive|scene|state|type|view)\\s+([A-Z][A-Za-z0-9_]*)",
       "captures": {
         "1": {
           "name": "keyword.other.tao-lang"

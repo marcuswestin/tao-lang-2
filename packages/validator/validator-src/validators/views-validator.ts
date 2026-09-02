@@ -21,6 +21,9 @@ const viewValidationMessages = {
   loopSelectDuplicate: 'A loop may declare at most one `on select` handler.',
   loopSelectInline: '`on select` requires an inline action block.',
   renderTarget: '`render` must target a view or inject block.',
+  sceneComposed: (name: string) => `Scene '${name}' is presented, never composed. Present it, or declare it as a view.`,
+  headerlessChrome: (name: string, slot: string) =>
+    `Scene '${name}' fills Header false, so ${slot} would declare chrome nothing reads.`,
   renderInjectPlacement: '`render inject` must be the only statement in a view body.',
   foreignViewPath: 'A foreign view implementation path must name a relative TypeScript or TSX module.',
   foreignViewMissing: (path: string) => `Foreign view implementation '${path}' does not exist.`,
@@ -55,6 +58,29 @@ export const ViewsValidator = {
   } satisfies NodeValidationChecks,
   messages: viewValidationMessages,
   validateForeignFiles: validateForeignViewFiles,
+}
+
+/**
+ * sceneSuppressesHeader reports a scene that statically opts out of header chrome with
+ * `Header false`. Only the literal counts: the slot takes an ordinary reactive expression, and a
+ * value that varies at runtime cannot make a fill dead.
+ */
+export function sceneSuppressesHeader(declaration: AST.ViewDeclaration): boolean {
+  const fill = AST.declarationSlotFillNamed(declaration, 'Header')
+  return fill?.value !== undefined && AST.isBooleanLiteral(fill.value) && fill.value.value === 'false'
+}
+
+/** validateHeaderlessChrome keeps a headerless scene from filling slots its host will never read. */
+function validateHeaderlessChrome(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+  if (!sceneSuppressesHeader(view)) {
+    return
+  }
+  for (const slot of ['Title', 'Toolbar'] as const) {
+    const fill = AST.declarationSlotFillNamed(view, slot)
+    if (fill) {
+      ctx.error(viewValidationMessages.headerlessChrome(view.name, slot), fill)
+    }
+  }
 }
 
 function validateLoopSelectHandler(handler: AST.LoopSelectHandler, ctx: ValidationContext): void {
@@ -107,6 +133,7 @@ function validateViewDeclaration(view: AST.ViewDeclaration, ctx: ValidationConte
   validateCallerContentContract(view, ctx)
   validateRenderSlots(view, ctx)
   validateForeignView(view, ctx)
+  validateHeaderlessChrome(view, ctx)
 }
 
 function validateForeignView(view: AST.ViewDeclaration, ctx: ValidationContext): void {
@@ -278,6 +305,13 @@ function validateRender(
 ): void {
   if (AST.isRenderStatement(render) && render.view === undefined && render.injection === undefined) {
     ctx.error(viewValidationMessages.renderTarget, render)
+  }
+  // The one fact a scene carries that a body cannot state. Diagnosing it here, at the render site,
+  // is what makes chrome nothing reads unrepresentable: a declaration that fills `Title` can never
+  // end up composed inline where no host would read it.
+  const composed = render.view?.ref
+  if (composed?.scene) {
+    ctx.error(viewValidationMessages.sceneComposed(composed.name), render)
   }
   if (render.block) {
     validateRenderBlock(render.block, ctx)

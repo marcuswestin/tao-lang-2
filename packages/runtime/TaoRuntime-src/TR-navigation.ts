@@ -137,7 +137,7 @@ type TaoToastPresentationOptions = {
 }
 
 export type TaoNavKindProfile = 'frame' | 'selection' | 'slot' | 'split' | 'stack'
-export type TaoNavHostSlot = 'Title' | 'Toolbar'
+export type TaoNavHostSlot = 'Header' | 'Title' | 'Toolbar'
 export type TaoNavHostSlotContract = Readonly<{
   reads: readonly TaoNavHostSlot[]
   requires: readonly TaoNavHostSlot[]

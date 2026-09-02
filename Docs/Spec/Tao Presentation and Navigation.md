@@ -123,14 +123,20 @@ interactive terminal asks which app to use; a noninteractive process fails befor
 Expo startup and lists the available names. Filename, source order, and a global name registry never
 select an app.
 
-## Host-facing view slots
+## Scenes and host-facing slots
 
-`Title` and `Toolbar` are supplied slots declared by primitive `view` in the prelude. They are not
-compiler-owned metadata and do not make a second kind of view body statement. A declaration fills
-them with the same capitalized-member form used for other supplied slots:
+A `scene` is a view that is presented rather than composed. `scene is view`, so everything that
+accepts a view accepts a scene; the one thing a scene adds is a fact its body cannot state, and the
+render site enforces it — composing a scene inline is an error.
+
+`Title`, `Toolbar`, and `Header` are supplied slots declared by primitive `scene` in the prelude.
+They are not compiler-owned metadata and do not make a second kind of view body statement. Keeping
+them on `scene` rather than on `view` is what makes chrome nothing reads unrepresentable: a
+declaration that is only ever composed cannot name a title. A declaration fills them with the same
+capitalized-member form used for other supplied slots:
 
 ```tao
-view StoryScreen(Story) {
+scene StoryScreen(Story) {
    Title Story.Title
 
    action OpenStoryLink() {
@@ -145,6 +151,16 @@ view StoryScreen(Story) {
    render StoryPage(Story)
 }
 ```
+
+A plain view may still be presented. A scene is the way to add chrome, not a requirement for being
+presented: a plain view pushed on a `StackNav` is legal and shows Back-only header chrome. Only a
+scene is held to filling `Title` at such a placement, because only a scene can fill one.
+
+`Header false` is the explicit opt out, for a scene that owns its whole surface. It removes the bar,
+including the Back affordance drawn in it; it does not remove Back, which belongs to the reducer and
+stays reachable through the platform gesture and the hardware key. A scene that suppresses its
+header may not fill `Title` or `Toolbar` — that chrome would be dead — and is exempt from the
+pushed-scene `Title` requirement.
 
 The values are reactive in the presented occurrence. If `Story.Title`, a parameter, a query, or
 local state used by a fill changes, the mounted host updates its chrome. A host reads only the view

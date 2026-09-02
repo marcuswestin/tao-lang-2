@@ -29,7 +29,7 @@ data Tasks / Task {
    order by Title
 }
 
-view MainView() {
+scene MainView() {
    Title "Data MVP"
    state WorkspaceDraft = ""
    state TaskDraft = ""

@@ -9,7 +9,7 @@ Describe('formatter: host-read slots and commands', () => {
         use package @tao/nav/native as native
         public type StackNav=native.StackNav
         action Save(){Title "Save"}
-        view Home(){
+        scene Home(){
         Title   "Home"
         command SaveCommand=Save()with{Label when true "Save"/not "Wait" Enabled    true}
         Toolbar{SaveCommand  SaveCommand}
@@ -32,7 +32,7 @@ Describe('formatter: host-read slots and commands', () => {
            Title "Save"
         }
 
-        view Home() {
+        scene Home() {
            Title "Home"
            command SaveCommand = Save() with {
               Label when true "Save" / not "Wait"

@@ -18,7 +18,7 @@ function Doubled(Length duration) returns duration {
    return Length * 2
 }
 
-view MainView() {
+scene MainView() {
    Title "Unit Values"
    let Wait = 220.ms
    let Half = 30.seconds

@@ -84,11 +84,11 @@ NamedTypeReference:
 
 PrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'list' | 'action' | 'design'
-    | 'view' | 'nav' | 'datasource' | 'app';
+    | 'view' | 'scene' | 'nav' | 'datasource' | 'app';
 
 NonListPrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'action' | 'design'
-    | 'view' | 'nav' | 'datasource' | 'app';
+    | 'view' | 'scene' | 'nav' | 'datasource' | 'app';
 
 ConstructablePrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'item' | 'list';

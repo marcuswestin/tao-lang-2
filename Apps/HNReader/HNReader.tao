@@ -99,7 +99,7 @@ data Comments / Comment {
    order by Ordering
 }
 
-view FrontPage() {
+scene FrontPage() {
    Title "Hacker News"
    query Stories as TopStories {
       where Rank >= 1
@@ -142,7 +142,7 @@ view StoryRow(Story) {
          Text("{ Story.Score } points by { Story.Author } · { Story.CommentCount } comments") [meta]
 }  }  }
 
-view StoryScreen(Story) {
+scene StoryScreen(Story) {
    Title Story.Title
    action OpenStoryLink() {
       Title "Open story"

@@ -7,7 +7,7 @@ app BasicNavigation {
       Initial BasicHome
 }  }
 
-view BasicHome() {
+scene BasicHome() {
    Title "Basic navigation"
    state Confirmed = false
    let Confirmation = when Confirmed "yes" / not "no"
