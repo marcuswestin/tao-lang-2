@@ -175,9 +175,12 @@ A `command` is the discoverable verb; the action behind it is a private procedur
 nothing. `Toolbar` is typed `list of command`, so a toolbar lists commands and only commands — an
 action has no title of its own to show. `Tao Actions.md` owns the command declaration itself. A
 command written in a view body closes over that view occurrence and is active while the nearest
-presentation of the view has focus; a module-level command is a verb for the whole app and must
-have every slot filled at the mention, which is why a toolbar lists only commands that need
-nothing more. `Toolbar { ... }` lists commands in source order, with optional commas. Native hosts put them in trailing
+presentation of the view has focus; a module-level command is a verb for the whole app, and a
+mention of one is unfilled on purpose — the presenting scene supplies the slot from its own
+parameters, matched by type, when the command is invoked. That is what lets one declared verb serve
+a row's button and the scene's own chrome without either restating what it acts on. A slot the
+scene cannot supply unambiguously — no parameter of that type, or more than one — is reported at
+the mention, because a surface cannot choose on the author's behalf. `Toolbar { ... }` lists commands in source order, with optional commas. Native hosts put them in trailing
 platform chrome; basic and web hosts render equivalent styled controls. When space is insufficient,
 the current mobile/basic header policy keeps the first two controls direct and moves the trailing
 suffix into an accessible `More` affordance in the same order. A future wider host may expose more

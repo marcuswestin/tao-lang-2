@@ -90,17 +90,22 @@ test "WordFlower full target" {
          press #openDocument
       }
       press #startFocus
+      // The bar lives in the shell frame's bottom slot, so the countdown belongs to the app rather
+      // than to the editor that started it.
       expect text "25:00"
+      expect label "Focus session"
       advance 1.s
       expect text "24:59"
       press #pauseFocus
       advance 5.min
-      expect text "24:59" // paused: the tick is stopped, so the reading is frozen
+      expect text "24:59" // paused: the reading is anchored to the moment it stopped
       press #resumeFocus
       advance 1.min
-      expect text "23:59" // resumed: the paused time was not lost
+      expect text "23:59" // resumed: the paused minutes were not lost
+      // Stopping deletes the row, so the slot's content is `none` again and the slot itself is gone.
       press #stopFocus
       expect missing text "23:59"
+      expect missing label "Focus session"
    }
 
    test "preserves workspace and document CRUD through lifecycle states" {

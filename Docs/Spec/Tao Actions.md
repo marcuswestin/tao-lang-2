@@ -65,9 +65,11 @@ still needs at the invocation:
 on press -> { do Finish with { Document } }
 ```
 
-`do` with an unfilled slot is an error, and so is a toolbar mention of a command with one: nothing
-at the mention would supply the value. An action `do` still carries its call parentheses; a bare
-name after `do` names a command.
+`do` with an unfilled slot is an error: nothing at the invocation would supply the value. A toolbar
+mention is the opposite case — it is unfilled on purpose, and the presenting scene supplies the slot
+from its own parameters, matched by type, when the command is invoked. A slot the scene cannot
+supply unambiguously is reported at the mention. An action `do` still carries its call parentheses;
+a bare name after `do` names a command.
 
 Every module emits a table of the commands it declares and registers it at load through
 `TR.Interaction.RegisterCommands`; a view-body command registers while its view is mounted. The
