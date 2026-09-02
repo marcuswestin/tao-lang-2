@@ -44,7 +44,10 @@
       "git fetch *",
       "git ls-remote *",
       "git push *",
-      "git worktree *"
+      "git worktree *",
+      "git merge *",
+      "git reset --merge*",
+      "git reset --hard HEAD"
     ],
     "filesystem": {
       "allowWrite": [

@@ -75,6 +75,17 @@
         // Removing a worktree writes outside this checkout. It still prompts, which is
         // correct for a command that deletes directories.
         "git worktree *",
+        // A squash merge, and the reset that aborts one, write the primary checkout's working
+        // tree, which the sandbox denies from a linked worktree. `git merge *` is already allowed
+        // above without a prompt; excluding it is what lets that permission succeed instead of
+        // failing on "Operation not permitted". The reset exclusion is deliberately narrow — only
+        // the two abort shapes — so an unsandboxed `git reset --hard <ref>` never becomes possible
+        // by policy; other reset forms still prompt and still run sandboxed. Which branch lands on
+        // main, and when, is still Ro's decision: an agent merges because Ro asked, not on its own
+        // initiative.
+        "git merge *",
+        "git reset --merge*",
+        "git reset --hard HEAD",
       ],
       // The `read` deny rules above only bind the file tools. These bind sandboxed shell
       // commands, which would otherwise be able to cat the same files.

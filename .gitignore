@@ -6,6 +6,7 @@ node_modules
 .direnv
 .claude/settings.local.json
 .claude/agents/
+.claude/worktrees/
 .codex/agents/
 
 .android

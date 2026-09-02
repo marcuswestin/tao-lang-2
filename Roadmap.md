@@ -11,7 +11,6 @@ app feature and Tao test proves each capability).
 
 ## Ro STACK
 
-- [ ] Think about making Tao apps easily keyboard driven.
 - [ ] Deep links and navigation persistence
 - [ ] Enable Codex to interact with studio on its own for testing and development of it.
 - [ ] Instructions to keep track of all dev env/process issues along the way, and then list them when done implementing with suggested solutions.
@@ -82,6 +81,10 @@ tests written in Tao, green in Current, for every construct introduced.
 
 ## Toward v1
 
+- [ ] Implement the interaction system (keyboard-driven apps)
+  - Design decided 2026-09-02, KEY-D1–D14: `Docs/Roadmap/Keyboard driven apps/Design - Keyboard driven apps.md`.
+    The plan's tranches T1–T7 are ready for an implementation prompt:
+    `Docs/Roadmap/Keyboard driven apps/Plan - Keyboard driven apps.md`.
 - [ ] Complete Tao Studio v2
   - The Studio v2 foundations replace Electron with Electrobun, split the browser client, add
     multi-project sessions and grouped scenario matrices, and establish the Tao-client strangler.
@@ -283,7 +286,8 @@ Product and codebase backlog, unordered.
 - `Docs/Roadmap/Tao ship.md` — ship exploration with open dialogue: the derived publish pipeline (build/sign/submit/OTA), variants as environments, the derived hosted runtime, the schema-migration option space, deploy configuration, error reports and analytics in production, and the commercial shape.
 - `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` — the first ship slice as a plan: `tao ship <App>` to TestFlight and an Android APK link over the developer's own EAS and Apple accounts, then `--update`, testers, and one host for dev and ship; its rulings for Ro and the researched lane facts beside it.
 - `Docs/Roadmap/Multiplayer sync.md` — multiplayer-sync exploration with open dialogue: the typed change-set ledger, the granular-write provider family and its conformance contract, offline queue and late-refusal semantics, fieldwise-latest convergence, presence, and the slice sequence.
-- `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..030 deferred-decision inventory.
+- `Docs/Roadmap/Keyboard driven apps/` — the interaction system design (KEY-D1–D14: interaction outline, attention reducer, `scene`, the frame nav kind, commands as configured values, narrowing, surfaces, App Intents mapping) and its implementation plan.
+- `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..036 deferred-decision inventory.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
 - `Docs/Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.
 - `Docs/Roadmap/Archive/Verification orchestration/` — the completed verification-orchestration program: one
