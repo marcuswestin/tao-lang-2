@@ -14,8 +14,20 @@ import FoundationModels
 final class Stdio: @unchecked Sendable {
     private let lock = NSLock()
     private var nextId = 0
+    private var seen: [String: String] = [:]
+    var maxToolCalls = 4
     func exchange(name: String, arguments: String) -> String {
         lock.lock(); defer { lock.unlock() }
+        // The on-device model has a 4096-token window and happily repeats a call forever; budget and dedupe.
+        let key = name + ":" + arguments
+        if let previous = seen[key] {
+            emit(["type": "note", "text": "repeated tool call suppressed: \(key)"])
+            return "{\"note\":\"You already called this exact tool; its result is above. Do not call it again. Answer now.\",\"previous\":\(previous.prefix(200).debugDescription)}"
+        }
+        if seen.count >= maxToolCalls {
+            emit(["type": "note", "text": "tool budget exhausted at \(seen.count) calls"])
+            return "{\"note\":\"Tool budget exhausted. Answer now with the facts you already have.\"}"
+        }
         nextId += 1
         let id = nextId
         let argumentsJson = arguments.data(using: .utf8).flatMap { try? JSONSerialization.jsonObject(with: $0) } ?? [String: Any]()
@@ -24,7 +36,9 @@ final class Stdio: @unchecked Sendable {
             guard let data = line.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   object["type"] as? String == "tool_result", object["id"] as? Int == id else { continue }
-            return object["result"] as? String ?? ""
+            let result = object["result"] as? String ?? ""
+            seen[key] = result
+            return result
         }
         return "{\"error\":\"stdin closed\"}"
     }
@@ -106,13 +120,46 @@ func transcriptJson(_ transcript: Transcript) -> [[String: Any]] {
                             parameters: try! GenerationSchema(root: dynamicSchema(spec["schema"] ?? [:], name: spec["name"] as! String), dependencies: []),
                             stdio: stdio)
             }
+            stdio.maxToolCalls = job["maxToolCalls"] as? Int ?? 4
             let session = LanguageModelSession(model: model, tools: tools, instructions: job["instructions"] as? String ?? "")
             let prompt = job["prompt"] as? String ?? ""
             var value: Any = NSNull()
             if let outputSchema = job["outputSchema"] {
+                // Guided first; a tool-using guided turn sometimes drifts into prose, so a schema-only
+                // conversion turn in the same session recovers it. (A free-text first phase looped on
+                // tool calls until the 4096-token window overflowed.)
                 let schema = try GenerationSchema(root: dynamicSchema(outputSchema, name: "Output"), dependencies: [])
-                let response = try await session.respond(to: prompt, schema: schema, options: GenerationOptions(temperature: 0.2))
-                value = try JSONSerialization.jsonObject(with: response.content.jsonString.data(using: .utf8)!, options: [.fragmentsAllowed])
+                var structured: GeneratedContent?
+                do {
+                    let response = try await session.respond(to: prompt, schema: schema, options: GenerationOptions(temperature: 0.2))
+                    structured = response.content
+                } catch {
+                    stdio.emit(["type": "note", "text": "guided turn failed, converting: \(String(describing: error).prefix(300))"])
+                }
+                let analysis = session.transcript.compactMap { entry -> String? in
+                    if case .response(let r) = entry { return r.segments.map { "\($0)" }.joined() }
+                    return nil
+                }.last ?? ""
+                if structured == nil { stdio.emit(["type": "analysis", "text": analysis]) }
+                for attempt in 0..<2 where structured == nil {
+                    do {
+                        let response = try await session.respond(
+                            to: attempt == 0
+                                ? "Convert your review above into the structured result. Copy evidence ids exactly as the tools returned them."
+                                : "Output only the structured result. No prose.",
+                            schema: schema, options: GenerationOptions(temperature: 0.1))
+                        structured = response.content
+                        break
+                    } catch {
+                        stdio.emit(["type": "note", "text": "structured attempt \(attempt) failed: \(error)"])
+                    }
+                }
+                guard let content = structured else {
+                    stdio.emit(["type": "failure", "message": "structured conversion failed", "analysis": analysis,
+                                "transcript": transcriptJson(session.transcript), "elapsedMs": Int(Date().timeIntervalSince(start) * 1000)])
+                    return
+                }
+                value = try JSONSerialization.jsonObject(with: content.jsonString.data(using: .utf8)!, options: [.fragmentsAllowed])
             } else {
                 let response = try await session.respond(to: prompt, options: GenerationOptions(temperature: 0.2))
                 value = response.content

@@ -11,6 +11,8 @@ type Change = { operation: 'set-design-entry' | 'none'; bundle: string; key: str
 type ReviewResult = {
   status: 'ok' | 'failure'
   message?: string
+  analysis?: string
+  notes: string[]
   value?: { findings: Finding[]; change: Change }
   toolCalls: { name: string; arguments: Json; resultChars: number; result: string }[]
   transcript: { kind: string; text?: string; name?: string; calls?: { name: string; arguments: string }[] }[]
@@ -20,6 +22,7 @@ type ReviewResult = {
   packet: Json
   designName?: string
   designPath?: string
+  normalization?: { original: string; resolved?: string; note: string; usedByThisView?: boolean; viewStyles: string[] }
   viewName: string
 }
 
@@ -114,6 +117,19 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
       body.append(line('(none)'))
     }
 
+    if (result.analysis !== undefined) {
+      section('Model free-text analysis (phase 1, before structured conversion)')
+      const analysis = document.createElement('details')
+      analysis.innerHTML = `<summary>${result.analysis.length} chars</summary>`
+      const text = document.createElement('div')
+      text.style.cssText = 'white-space:pre-wrap;background:#0f1411;padding:6px;border-radius:6px;max-height:160px;overflow:auto'
+      text.textContent = result.analysis
+      analysis.append(text)
+      body.append(analysis)
+    }
+    for (const note of result.notes) {
+      body.append(line(`note: ${note}`))
+    }
     section('Findings')
     const findings = result.value?.findings ?? []
     for (const finding of findings) {
@@ -139,6 +155,13 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
     }
     const request = { designName: result.designName, entry: [change.key, Number(change.value)], kind: 'set-design-entry', memberName: change.bundle }
     body.append(line(JSON.stringify(request)))
+    if (result.normalization !== undefined) {
+      body.append(line(`Tao operand check: ${result.normalization.note}${result.normalization.usedByThisView === false ? ' (not used by this view)' : ''}`))
+      if (result.normalization.resolved === undefined) {
+        body.append(line(`Bundles this view uses: ${result.normalization.viewStyles.join(', ')}`))
+        return
+      }
+    }
     body.append(line(`Rationale (model): ${change.rationale}`))
     const propose = document.createElement('button')
     propose.type = 'button'
@@ -236,7 +259,7 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
     link.title = 'Open the source this evidence points at'
     link.addEventListener('click', event => {
       event.preventDefault()
-      const source = /^src:(.+):(\d+)-(\d+)$/.exec(evidence) ?? /^render:(.+):(\d+):(\d+)$/.exec(evidence)
+      const source = /src:([^\s:]+):(\d+)-(\d+)/.exec(evidence) ?? /render:([^\s:]+):(\d+):(\d+)/.exec(evidence)
       if (source !== null) {
         void hooks.openFile(source[1]!, Number(source[2]))
         return

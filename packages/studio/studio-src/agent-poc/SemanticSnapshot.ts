@@ -329,7 +329,7 @@ function nearestRender(node: AST.Node): AST.Node | undefined {
 
 type Json = Record<string, unknown>
 
-export function overview(snapshot: SemanticSnapshot, budget = 4000): Json {
+export function overview(snapshot: SemanticSnapshot, budget = 1800): Json {
   const nodes = [...snapshot.nodes.values()]
   const result = {
     app: snapshot.appName,
@@ -370,7 +370,7 @@ export function resolveTarget(snapshot: SemanticSnapshot, target: string): Snaps
   return [...snapshot.nodes.values()].find(node => node.name === target || node.name.endsWith(`.${target}`))
 }
 
-export function inspect(snapshot: SemanticSnapshot, target: string, budget = 3600): Json {
+export function inspect(snapshot: SemanticSnapshot, target: string, budget = 1500): Json {
   const node = resolveTarget(snapshot, target)
   if (node === undefined) {
     return { error: `Unknown target: ${target}`, hint: 'Use an id from overview() such as view:DocumentEditor or Document.Final.' }
@@ -421,7 +421,7 @@ export function inspect(snapshot: SemanticSnapshot, target: string, budget = 360
   return truncate(result, budget)
 }
 
-export function trace(snapshot: SemanticSnapshot, target: string, relationship: string, budget = 3600): Json {
+export function trace(snapshot: SemanticSnapshot, target: string, relationship: string, budget = 1500): Json {
   const node = resolveTarget(snapshot, target)
   if (node === undefined) {
     return { error: `Unknown target: ${target}` }
@@ -477,8 +477,8 @@ function truncate(value: Json, budget: number): Json {
   const trimmed: Json = { ...value }
   for (const key of Object.keys(trimmed)) {
     const entry = trimmed[key]
-    if (Array.isArray(entry) && entry.length > 10) {
-      trimmed[key] = [...entry.slice(0, 10), `… ${entry.length - 10} more (raise budget or narrow the query)`]
+    if (Array.isArray(entry) && entry.length > 6) {
+      trimmed[key] = [...entry.slice(0, 6), `… ${entry.length - 6} more`]
     }
     text = JSON.stringify(trimmed)
     if (text.length <= budget) {

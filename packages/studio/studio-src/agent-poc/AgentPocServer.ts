@@ -24,6 +24,34 @@ function renderIdToSnapshotId(session: StudioProjectSession, renderId: string | 
   return `render:${path}:${match[2]}:${match[3]}`
 }
 
+/**
+ * normalizeChange resolves the model's bundle operand against Tao facts: the bundle must be a member of the
+ * app's design; when the model wrote the design name or a prefixed id, the bundle named in its own text is used.
+ * The resolution is recorded so the panel can show it was Tao, not the model, that fixed the operand.
+ */
+function normalizeChange(snapshot: SemanticSnapshot, design: string, viewName: string, change: Json, findings: { text: string }[]): Json {
+  const original = String(change['bundle'] ?? '')
+  const members = [...snapshot.nodes.values()].filter(n => n.kind === 'bundle' && n.detail?.['design'] === design).map(n => n.name)
+  const viewStyles = [...new Set(snapshot.edges.filter(e => e.rel === 'styled-by' && String((snapshot.nodes.get(e.from)?.detail ?? {})['owner']) === viewName)
+    .map(e => snapshot.nodes.get(e.to)?.name ?? ''))]
+  const stripped = original.replace(/^bundle:/, '').replace(new RegExp(`^${design}\\.`), '')
+  let resolved: string | undefined = members.includes(stripped) ? stripped : undefined
+  let note = resolved === undefined ? '' : `bundle ${stripped} is a member of ${design}`
+  if (resolved === undefined) {
+    const text = [String(change['rationale'] ?? ''), ...findings.map(f => f.text)].join(' ')
+    const mentioned = viewStyles.find(name => text.includes(name)) ?? members.find(name => new RegExp(`\\b${name}\\b`).test(text))
+    if (mentioned !== undefined) {
+      resolved = mentioned
+      note = `model wrote "${original}", which is not a bundle; its own text names ${mentioned}`
+    }
+  }
+  if (resolved === undefined) {
+    return { original, resolved: undefined, note: `"${original}" is not a member of ${design} and no bundle is named in the model's text`, viewStyles }
+  }
+  change['bundle'] = resolved
+  return { original, resolved, note, usedByThisView: viewStyles.includes(resolved), viewStyles }
+}
+
 export const AgentPoc = {
   async handle(session: StudioProjectSession, command: string, body: Json): Promise<unknown> {
     const snapshot = await snapshotFor(session)
@@ -54,7 +82,11 @@ export const AgentPoc = {
         })
         const design = snapshot.edges.find(e => e.from === `app:${snapshot.appName}` && e.rel === 'uses-design')?.to.replace('design:', '')
         const designNode = design === undefined ? undefined : snapshot.nodes.get(`design:${design}`)
-        return { ...result, designName: design, designPath: designNode?.path, viewName }
+        const value = result.value as { change?: Json; findings?: { text: string }[] } | undefined
+        const normalization = value?.change === undefined || design === undefined
+          ? undefined
+          : normalizeChange(snapshot, design, viewName, value.change, value.findings ?? [])
+        return { ...result, designName: design, designPath: designNode?.path, normalization, viewName }
       }
       case 'ask': {
         const files = await Promise.all((await session.files()).map(async file => ({

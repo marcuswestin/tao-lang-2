@@ -17,12 +17,15 @@ export type AgentJob = {
   prompt: string
   tools: readonly AgentToolSpec[]
   outputSchema?: Json
+  maxToolCalls?: number
   call: (name: string, args: Json) => Promise<string>
 }
 export type AgentRunResult = {
   status: 'ok' | 'failure'
   value?: unknown
   message?: string
+  analysis?: string
+  notes: string[]
   toolCalls: AgentToolCall[]
   transcript: unknown[]
   elapsedMs: number
@@ -57,6 +60,8 @@ export async function runAgentJob(job: AgentJob): Promise<AgentRunResult> {
   let buffer = ''
   let done: ((result: AgentRunResult) => void) | undefined
   let stderr = ''
+  let analysis: string | undefined
+  const notes: string[] = []
   const finished = new Promise<AgentRunResult>(resolve => {
     done = resolve
   })
@@ -68,15 +73,14 @@ export async function runAgentJob(job: AgentJob): Promise<AgentRunResult> {
       toolCalls,
       toolResultChars: toolCalls.reduce((sum, call) => sum + call.resultChars, 0),
       transcript: [],
+      ...(analysis === undefined ? {} : { analysis }),
+      notes,
       ...partial,
     })
+  // stdin stays open for tool results, so the job line is written after start rather than passed as `stdin`
+  // (which the shared wrapper ends immediately).
   const child = CLI.start(binary, {
-    stdin: JSON.stringify({
-      instructions: job.instructions,
-      outputSchema: job.outputSchema,
-      prompt: job.prompt,
-      tools: job.tools.map(tool => ({ description: tool.description, name: tool.name, schema: tool.schema })),
-    }) + '\n',
+    stdio: ['pipe', 'pipe', 'pipe'],
     onOutput: (stream, chunk) => {
       if (stream === 'stderr') {
         stderr += String(chunk)
@@ -92,6 +96,13 @@ export async function runAgentJob(job: AgentJob): Promise<AgentRunResult> {
       }
     },
   })
+  child.writeStdin(JSON.stringify({
+    instructions: job.instructions,
+    maxToolCalls: job.maxToolCalls ?? 4,
+    outputSchema: job.outputSchema,
+    prompt: job.prompt,
+    tools: job.tools.map(tool => ({ description: tool.description, name: tool.name, schema: tool.schema })),
+  }) + '\n')
   async function handleLine(line: string): Promise<void> {
     let message: Json
     try {
@@ -112,8 +123,12 @@ export async function runAgentJob(job: AgentJob): Promise<AgentRunResult> {
       child.writeStdin(JSON.stringify({ id: message['id'], result, type: 'tool_result' }) + '\n')
     } else if (message['type'] === 'final') {
       finish({ status: 'ok', transcript: (message['transcript'] as unknown[]) ?? [], value: message['value'] })
+    } else if (message['type'] === 'analysis') {
+      analysis = String(message['text'])
+    } else if (message['type'] === 'note') {
+      notes.push(String(message['text']))
     } else if (message['type'] === 'failure') {
-      finish({ message: String(message['message']), status: 'failure', transcript: [] })
+      finish({ message: String(message['message']), status: 'failure', transcript: (message['transcript'] as unknown[]) ?? [] })
     }
   }
   child.onceClose((code, signal) => {
@@ -212,7 +227,7 @@ export type ReviewRequest = { viewName: string; renderId?: string; scenario?: st
 
 export async function reviewView(snapshot: SemanticSnapshot, request: ReviewRequest): Promise<AgentRunResult & { packet: Json }> {
   const view = resolveTarget(snapshot, request.viewName)
-  const packet: Json = view === undefined ? { error: `Unknown view ${request.viewName}` } : inspect(snapshot, view.id, 2600)
+  const packet: Json = view === undefined ? { error: `Unknown view ${request.viewName}` } : inspect(snapshot, view.id, 1600)
   if (request.renderId !== undefined) {
     const render = snapshot.nodes.get(request.renderId)
     if (render !== undefined) {
@@ -230,11 +245,12 @@ export async function reviewView(snapshot: SemanticSnapshot, request: ReviewRequ
     call,
     instructions: [
       'You are reviewing one screen of a Tao app. Tao supplies facts about the project; you interpret them.',
-      'The packet in the prompt already describes the selected view. Use inspect or trace to get one or two more facts you need, for example inspect a design bundle to see where else it is used, or trace a field to see what writes it.',
+      'The packet in the prompt already describes the selected view. You may call inspect or trace at most twice more, for example inspect a design bundle to see where else it is used. Never repeat a call. Then answer.',
       'Label each finding: fact when it restates tool output, inference when you deduce something, suggestion when you recommend. Every finding cites evidence ids copied verbatim from the packet or tool output.',
       'For the change, pick a bundle from stylesUsed and a numeric key it already has, or answer none.',
       request.focus === undefined ? '' : `Focus: ${request.focus}`,
     ].filter(Boolean).join(' '),
+    maxToolCalls: 3,
     outputSchema: reviewOutputSchema,
     prompt: `Review this view and propose at most one design change.\n\nPacket:\n${JSON.stringify(packet)}`,
     tools,
