@@ -1,4 +1,11 @@
 # One-time local install: brew install worktrunk && wt config shell install
-# Generate dependencies and harness adapters before Worktrunk launches an agent.
+#
+# Worktrunk's blocking pre-start hook runs the repository's one setup entry, `./agent setup`,
+# before it launches an agent in a new worktree. Every other harness reaches the same entry:
+# Claude Code and Codex from the SessionStart hook generated out of .rulesync/hooks.jsonc for
+# worktrees they create themselves, and Cursor from .cursor/worktrees.json. Change what setup
+# does in the Justfile `setup` recipe, and keep this command and those hooks in step.
+# `direnv exec` is what builds or trusts the devenv profile the first time; `./agent` itself
+# links a linked worktree to the primary checkout's profile when one exists.
 [pre-start]
-setup = "direnv allow && direnv exec . just setup"
+setup = "direnv allow && direnv exec . ./agent setup"

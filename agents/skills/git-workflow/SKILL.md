@@ -23,6 +23,7 @@ concurrently.
   linked worktrees, `./agent` reuses the primary checkout's pinned devenv profile; run
   `direnv allow && direnv exec . ./agent setup` only when the wrapper reports no shared profile.
 - Remove a worktree you created once its branch is merged or abandoned.
+- Run `git merge`, `git checkout <ref> -- <path>`, and anything else that replaces `.claude/settings.json`, a skill under `agents/skills/`, or another sandbox-protected path from an unsandboxed shell. Inside the sandbox the merge fails partway with `unable to unlink old`, records no merge state, and leaves the other branch's new files behind as untracked strays; remove those before retrying.
 
 ## Moving a branch ref
 

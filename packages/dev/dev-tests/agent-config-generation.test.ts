@@ -29,10 +29,10 @@ Describe('agent config generation', () => {
 
       Expect(calls.map(call => call.targets)).toEqual([['codexcli'], ['claudecode']])
       Expect(codexRoots).toEqual([root])
-      // Claude Code takes `hooks` so the session-start bootstrap in .rulesync/hooks.jsonc reaches
-      // .claude/settings.json; Codex CLI keeps a hand-written config and takes subagents only.
+      // Both harnesses take `hooks`, so the session-start bootstrap in .rulesync/hooks.jsonc reaches
+      // .claude/settings.json and .codex/hooks.json; Codex CLI's permissions stay hand-rendered.
       Expect(calls.map(call => call.features)).toEqual([
-        ['subagents'],
+        ['subagents', 'hooks'],
         ['subagents', 'permissions', 'hooks'],
       ])
       Expect(skipped).toEqual([

@@ -1,21 +1,29 @@
 {
   "$schema": "https://github.com/dyoshikawa/rulesync/releases/latest/download/hooks-schema.json",
-  // Canonical agent lifecycle hooks for this repository. `./agent setup` renders them into
-  // .claude/settings.json (via rulesync). Edit this file, never the generated one.
+  // Canonical agent lifecycle hooks for this repository, one source for two harnesses.
+  // `./agent setup` renders them through rulesync's hooks feature into .claude/settings.json and
+  // .codex/hooks.json. Edit this file, never the generated ones. Keep every command
+  // harness-neutral: a relative path, which rulesync prefixes with `$CLAUDE_PROJECT_DIR` for
+  // Claude Code and leaves as is for Codex, and no field one harness does not document.
   "hooks": {
-    // Worktrunk runs `just setup` from its blocking `pre-start` hook (.config/wt.toml), but a
-    // worktree the harness creates itself — `--worktree`, `isolation: "worktree"`, a background
-    // session — never passes through Worktrunk, so it starts with no node_modules and no
-    // generated agent adapters. An agent then meets a checkout where `bun test` and `tsc` fail
-    // for reasons that look like product breakage. This gives that path the same guarantee.
+    // Every harness reaches the repository's one setup entry, `./agent setup`, before an agent's
+    // first command. Worktrunk runs it from its blocking `pre-start` hook (.config/wt.toml) and
+    // Cursor from its worktree setup (.cursor/worktrees.json); a worktree Claude Code or Codex
+    // creates itself — `--worktree`, `isolation: "worktree"`, a background session — passes
+    // through neither, so it would start with no node_modules and no generated agent adapters,
+    // and an agent would meet a checkout where `bun test` and `tsc` fail for reasons that look
+    // like product breakage. This hook gives that path the same guarantee. Hooks run as ordinary
+    // processes outside the Bash sandbox, which matters for Claude Code: its sandbox denies the
+    // writes a dependency install needs under paths it protects.
     //
     // `./agent setup` is the entrypoint rather than `just setup` because it activates the pinned
     // devenv profile itself, which a fresh worktree has not done yet. It is idempotent and
     // returns in well under a second once a checkout is bootstrapped, so it runs unconditionally.
+    // Its stdout would enter the agent's context in both harnesses, hence the redirect.
     "sessionStart": [
       {
         "type": "command",
-        "command": "\"$CLAUDE_PROJECT_DIR/agent\" setup > /dev/null",
+        "command": "./agent setup > /dev/null",
       },
     ],
   },

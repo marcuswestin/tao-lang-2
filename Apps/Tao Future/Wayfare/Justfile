@@ -54,10 +54,10 @@ public-surface:
 words-check:
     {{ TAO }} words check .
 
-# Build for the stores, the web, and the desktop, from the same source.
-build PROFILE="production":
-    {{ TAO }} build . --app Wayfare --profile {{ PROFILE }} --target ios,android,web,macos
+# Build and submit to the stores, automating as much as possible. Docs/Roadmap/Tao ship/
+ship:
+    {{ TAO }} ship . --app Wayfare
 
-# Publish to the stores and the web.
-publish:
-    {{ TAO }} publish . --app Wayfare
+# Deliver a compiled build to the project's invited members through the Tao Studio companion app.
+ship-beta:
+    {{ TAO }} ship . --app Wayfare --beta

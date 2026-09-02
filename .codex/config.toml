@@ -5,6 +5,11 @@
 # rulesync's own Codex translator cannot express loopback binding, Unix sockets, or a
 # curated domain allowlist, so this profile is rendered by
 # packages/dev/dev-src/agent-config/CodexConfigGenerator.ts instead.
+#
+# The sibling .codex/hooks.json is generated from .rulesync/hooks.jsonc by the same setup and
+# runs `./agent setup` when a session starts, the one setup entry Worktrunk (.config/wt.toml),
+# Claude Code (.claude/settings.json hooks), and Cursor (.cursor/worktrees.json) reach too.
+# Codex trusts a repository hook once per content hash through its /hooks command.
 
 default_permissions = "tao-workspace"
 approval_policy = "on-request"
@@ -48,13 +53,23 @@ allow_local_binding = true
 # Allowlist-first: shell egress is limited to the hosts Tao's toolchain and research need.
 [permissions.tao-workspace.network.domains]
 "**.anthropic.com" = "allow"
+"**.appstoreconnect.apple.com" = "allow"
 "**.cachix.org" = "allow"
+"**.developer.apple.com" = "allow"
 "**.expo.dev" = "allow"
 "**.expo.io" = "allow"
 "**.github.com" = "allow"
 "**.githubusercontent.com" = "allow"
+"**.itunes.apple.com" = "allow"
 "**.nodejs.org" = "allow"
 "**.npmjs.org" = "allow"
 "**.openai.com" = "allow"
+"appleid.apple.com" = "allow"
 "cache.nixos.org" = "allow"
+"contentdelivery.apple.com" = "allow"
+"devimages-cdn.apple.com" = "allow"
 "exp.host" = "allow"
+"gsa.apple.com" = "allow"
+"idmsa.apple.com" = "allow"
+"swcdn.apple.com" = "allow"
+"swdist.apple.com" = "allow"

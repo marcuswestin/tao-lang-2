@@ -89,10 +89,10 @@ dev-web:
 ## Shipping
 ##########
 
-# [intended] Build a distributable app for an environment profile. Roadmap.md: production/staging runtime targets
-build-staging:
-    {{ TAO }} build "{{ APP }}" --profile staging
+# [intended] Build and submit the app to the stores, automating as much as possible. Docs/Roadmap/Tao ship/
+ship:
+    {{ TAO }} ship WordFlower
 
-# [intended] Build the release artifact for store submission and web deployment.
-build-production:
-    {{ TAO }} build "{{ APP }}" --profile production
+# [intended] Deliver a compiled build to the project's invited members through the Tao Studio companion app.
+ship-beta:
+    {{ TAO }} ship WordFlower --beta

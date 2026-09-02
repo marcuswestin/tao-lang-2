@@ -127,6 +127,21 @@ tests written in Tao, green in Current, for every construct introduced.
     `test-output.log` inside the run root, and `TAO_TEST_JOBS` bounds the whole command.
 - [ ] Add the Tao design system MVP
   - Deterministic design declarations, tokens, semantic tokens, component recipes, source-level application, runtime lowering, and first diagnostics. Plan: `Docs/Roadmap/Add Tao design system MVP/`.
+- [ ] Implement `tao ship`
+  - Decisions settled 2026-09-02; slice 1 is ready for an implementation prompt. `tao ship <App>`
+    builds and submits to the stores over the developer's own EAS and Apple accounts from a derived
+    Expo host, with the accepted identifiers in `.tao-project/lock.jsonc`; slice 2 adds
+    `--update` for compiled-bundle updates; `--beta` waits for the companion app. Plan and research:
+    `Docs/Roadmap/Tao ship/`.
+- [ ] Build the Tao Studio companion app
+  - Decided 2026-09-02. A Tao-published phone app for an improved development experience, paired
+    with Tao Studio, and for pre-release testing and feedback by members a developer invites to
+    their project on the Tao Lang servers, each with an account there. `tao ship <App> --beta`
+    delivers through it; plain `tao ship` is the store motion. Sequences after the derived Expo
+    host and the compiled-bundle update lane of `tao ship`. Design rules: project membership
+    as the only access model, no public sharing surface, compiled bundles only, the Studio
+    native-device canvas as first customer, rare shell releases. Context and rules:
+    `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`.
 - [ ] Add `tao create` project scaffold
   - New app folder, minimal Tao app, default package layout, docs, dev and test scripts, and an immediate open-and-run path.
 - [ ] Implement secrets
@@ -265,6 +280,7 @@ Product and codebase backlog, unordered.
 - `Docs/Roadmap/Deterministic simulation.md` — deterministic whole-app simulation exploration: the determinism boundary, the scripted-world harness over the Studio cell pipeline, schema-derived property testing, journal-based replay and time-travel, and design rules across cells.
 - `Docs/Roadmap/Device capabilities.md` — device-capabilities exploration for the RN/Expo bridge item: the config-through-one-engine recommendation, permission case sets, outcome delivery into `when do`, scripted capability drivers, and the proving sequence.
 - `Docs/Roadmap/Tao ship.md` — ship exploration with open dialogue: the derived publish pipeline (build/sign/submit/OTA), variants as environments, the derived hosted runtime, the schema-migration option space, deploy configuration, error reports and analytics in production, and the commercial shape.
+- `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` — the first ship slice as a plan: `tao ship <App>` to TestFlight and an Android APK link over the developer's own EAS and Apple accounts, then `--update`, testers, and one host for dev and ship; its rulings for Ro and the researched lane facts beside it.
 - `Docs/Roadmap/Multiplayer sync.md` — multiplayer-sync exploration with open dialogue: the typed change-set ledger, the granular-write provider family and its conformance contract, offline queue and late-refusal semantics, fieldwise-latest convergence, presence, and the slice sequence.
 - `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..030 deferred-decision inventory.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.

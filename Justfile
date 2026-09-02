@@ -12,6 +12,9 @@ LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --
 help:
     just --list
 
+# `just setup` is what every harness runs through `./agent setup`: Worktrunk's pre-start hook
+# (.config/wt.toml), the Claude Code and Codex SessionStart hooks (.rulesync/hooks.jsonc), and
+# Cursor's worktree setup (.cursor/worktrees.json). Changing what setup does changes them all.
 # Setup dependencies and generated agent adapters
 setup: deps _agent-config
 

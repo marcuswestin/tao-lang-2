@@ -8,7 +8,7 @@ import { CodexConfigGenerator } from './CodexConfigGenerator'
  * domain list, so generating them through it would replace a narrow policy with an open one.
  */
 const targetFeatures = {
-  codexcli: ['subagents'],
+  codexcli: ['subagents', 'hooks'],
   claudecode: ['subagents', 'permissions', 'hooks'],
 } satisfies Record<string, Feature[]>
 

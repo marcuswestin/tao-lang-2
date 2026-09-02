@@ -24,12 +24,6 @@ ForeignActionImplementation:
 ActionFailureDeclaration:
     'fails' case=[CaseSetCase:ID] sentence=STRING;
 
-// A command binds one intent invocation into a zero-argument, focus-scoped action value. Its
-// affordance members are declaration-slot fills so they share the same reactive expression shape.
-CommandDeclaration:
-    'command' name=ID '=' action=[ActionDeclaration:ID] '(' argumentList=ArgumentList? ')'
-    ('with' metadata=DeclarationSlotBlock)?;
-
 ActionExpression:
     ('action' | '->') block=ActionBlock;
 

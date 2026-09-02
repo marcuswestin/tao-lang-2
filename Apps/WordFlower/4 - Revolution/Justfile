@@ -3,7 +3,7 @@
 # This file is a specification artifact, exactly like `WordFlower.tao-revolution` beside it. It
 # states the commands Tao intends to offer after v1 ships. Nothing here executes yet.
 #
-# The MVP-release surface (create, check, fmt, fix, test, compile, dev, build) is specified in
+# The MVP-release surface (create, check, fmt, fix, test, compile, dev, ship) is specified in
 # `../3 - MVP/Justfile` and is not repeated here; this file adds to it.
 
 set quiet
@@ -38,10 +38,6 @@ update:
 # Publish this project and its public packages: bump, commit, tag, push. Spec/Tao Packages.md
 publish:
     {{ TAO }} publish
-
-# Publish the app itself to app stores and the web. Spec/Tao Packages.md
-publish-app:
-    {{ TAO }} publish --app
 
 # Install a published Tao app onto this device. Spec/Tao Packages.md
 install-app:

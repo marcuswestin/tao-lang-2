@@ -353,14 +353,19 @@ the declaration object across module boundaries and import traversal order.
   - The project repo must be clean to publish it
   - `tao publish` bumps the project version, commits it, creates a git version tag, and pushes everything
   - `tao publish` fetches the remote's version tags first, and refuses to publish a version that isn't greater than the highest published version
-- You can also publish an app to app stores and the web with `tao publish --app`
-  - And you install a published app to your device with `tao install --app <tao project>`
+- Shipping an app to the stores is a different motion with its own verb, `tao ship`, planned in
+  `Docs/Roadmap/Tao ship/`; `tao publish` distributes the project and its public API only
+  - You install a published app to your device with `tao install --app <tao project>`
 
 ## The `.tao-project` folder
 
 - The root project folder contains `.tao-project/`, with installed projects, lockfiles, and more
   - `.tao-project/installs/...`
   - `.tao-project/installs-lock.jsonc`
+  - `.tao-project/lock.jsonc` — the project's one Tao-written lock, sectioned per concern; `tao ship`
+    writes the `ship` section with the accepted store identifiers, versions, and channels it derives
+    per app variant, never by hand (decided 2026-09-02, `Docs/Roadmap/Tao ship/`). When the installs
+    lock below is implemented it becomes a section of this file rather than a separate one.
   - `.tao-project/cache/...`
 
 ## Dependency version locks

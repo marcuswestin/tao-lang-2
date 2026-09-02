@@ -4,6 +4,13 @@ Status: feasible design, not implemented. This report is the final architecture 
 for Tao Studio v1; it does not close the required real-device spike or authorize a production
 implementation.
 
+Direction settled 2026-09-02: the first mode below ships as the **Tao Studio companion app**, a
+Tao-published phone app for the development experience and for pre-release testing by members
+invited to a project on the Tao Lang servers; `tao ship <App> --beta` delivers through it. The
+decision, its App Store rules, and its design rules are in
+`Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`; the program is open work in
+`Roadmap.md`.
+
 ## Verdict
 
 1. **Expo development build on the LAN — adopt.** A Studio-instrumented development client can use

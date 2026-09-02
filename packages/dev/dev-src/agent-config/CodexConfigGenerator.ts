@@ -134,6 +134,11 @@ function header(): string[] {
     "# rulesync's own Codex translator cannot express loopback binding, Unix sockets, or a",
     '# curated domain allowlist, so this profile is rendered by',
     '# packages/dev/dev-src/agent-config/CodexConfigGenerator.ts instead.',
+    '#',
+    '# The sibling .codex/hooks.json is generated from .rulesync/hooks.jsonc by the same setup and',
+    '# runs `./agent setup` when a session starts, the one setup entry Worktrunk (.config/wt.toml),',
+    '# Claude Code (.claude/settings.json hooks), and Cursor (.cursor/worktrees.json) reach too.',
+    '# Codex trusts a repository hook once per content hash through its /hooks command.',
   ]
 }
 
@@ -174,7 +179,7 @@ function workspaceRules(read: Record<string, string>, action: string): string[] 
 }
 
 /** stripJsonc removes the comments and trailing commas JSONC allows and JSON.parse rejects. */
-function stripJsonc(source: string): string {
+export function stripJsonc(source: string): string {
   let output = ''
   let index = 0
   let inString = false

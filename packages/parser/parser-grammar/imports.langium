@@ -13,8 +13,3 @@ UseStatement:
 // keywords (`use package @tao/nav as navs`).
 UsePackageStatement:
     'use' 'package' importPath=USE_IMPORT_PATH ('as' name=ID)?;
-
-// `ns.Member` reaches one declaration of an imported package without bringing its name into the
-// file's own scope, so a re-export may share the member's name without shadowing it.
-PackageMemberReference:
-    namespace=[UsePackageStatement:ID] '.' member=[Declaration:ID];

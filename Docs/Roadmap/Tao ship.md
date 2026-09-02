@@ -6,6 +6,34 @@ the decisions the dialogue with Ro will settle. Rulings land in dated "Direction
 sections below. Nothing here is language law until it reaches `Tao Revolution/Decisions.md`,
 which wins wherever the two collide; amendments to it are proposed, never made here.
 
+The first slice is planned concretely in `Tao ship/Plan - Beta distribution in one command.md`,
+with the substrate facts it rests on in `Tao ship/Research - Beta distribution lanes.md`.
+
+## Direction settled — 2026-09-02
+
+Ro decided to create a **Tao Studio companion app**: a Tao-published phone app for an improved
+development experience, paired with Tao Studio, and for pre-release testing and feedback by
+members a developer invites to their project on the Tao Lang servers, each with an account
+there. It is the Expo Go model under Tao's control and the native-device Studio canvas in one
+binary. The assessment, the App Store rules it rests on, and the design rules it carries are in
+`Tao ship/Plan - Beta distribution in one command.md`; the program is open work in `Roadmap.md`.
+
+The same day settled the first slice's decisions, recorded with their reasoning in that plan:
+
+- **The verb is `tao ship`.** Plain `tao ship <App>` builds and submits to the app stores,
+  automating as much as possible; `tao ship <App> --beta` delivers to the project's invited
+  members through the companion app. `tao publish` stays the package registry's verb, and the
+  `tao publish --app` and `tao build` placeholders are retired.
+- **Identifier facts are accepted project metadata** in the `ship` section of the project's one
+  committed `.tao-project/lock.jsonc`, written by `tao ship`, never hand-edited, following the old
+  design lock's contract (identity, input hash, accepted or suggested status, provenance). Later
+  locks take sections of the same file. The bundle identifier rule is
+  `<namespace>.<project id>[.<variant>]`.
+- **A non-primary variant is its own bundle identifier and store record.**
+- **The icon is a Tao default asset with a badged variant default**; an `Icon` slot on `app` is a
+  separate grammar argument.
+- **No Expo Go bridge**; the companion app covers the zero-account case.
+
 ## Framing
 
 A Tao app today can be written and previewed but not shipped: the CLI ends at `compile`, the
@@ -523,8 +551,9 @@ settle.
 
 1. Substrate and custody (decision #1): EAS under BYO vs Tao-managed front, and the sequencing
    between them.
-2. The verb: `tao ship` vs `tao publish --app`; the fate of the Packages.md placeholder.
-3. Bundle-identifier derivation from `project id`; where the authored version lives.
+2. ~~The verb~~ — settled 2026-09-02: `tao ship`, with `--beta`; the placeholder is retired.
+3. ~~Bundle-identifier derivation; where the authored version lives~~ — settled 2026-09-02:
+   `<namespace>.<project id>[.<variant>]`, held with the version in `.tao-project/lock.jsonc`.
 4. Migration composite: ratify O1+O2+O4+O3-with-gate? What may the additive classifier accept
    without a declaration? `migrate` spelling and its ship-held-history check.
 5. Automation authority: what identity does a server-side scheduled `do` carry? (A §12 gap
@@ -535,7 +564,8 @@ settle.
    needed before usage-string derivation is implementable.
 8. Per-app vs Tao-wide end-user accounts (flagged to the authority seam).
 9. Listing-asset derivation (Studio-rendered screenshots, `Icon` slot) — v1 provided, later
-   derived?
+   derived? The icon half is settled 2026-09-02: a Tao default with a badged variant default now,
+   the `Icon` slot argued separately.
 10. Web delivery (the browser is a medium, not a target): where `tao ship` puts the web build,
     and whether it is slice-worthy before the stores are solid.
 

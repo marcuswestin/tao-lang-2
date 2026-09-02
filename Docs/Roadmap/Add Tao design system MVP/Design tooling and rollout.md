@@ -105,6 +105,8 @@ Lockfile rules:
 
 The lockfile is not part of the first deterministic MVP unless implementation discoveries make a small provenance record necessary.
 
+Decided 2026-09-02 for ship: the project has one Tao-written lock, `.tao-project/lock.jsonc`, sectioned per concern, and `tao ship` writes its `ship` section under the contract the old repository's `tao.design.lock` defined — identity, input hash, accepted or suggested status, provenance. When this workstream needs a lockfile it takes a `design` section of that file and reuses the entry shape (`Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`, _Precedent: accepted project metadata_).
+
 ## AI And Visual Iteration
 
 AI should edit constrained design objects:

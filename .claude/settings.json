@@ -79,7 +79,19 @@
         "cache.nixos.org",
         "*.cachix.org",
         "*.anthropic.com",
-        "*.openai.com"
+        "*.openai.com",
+        "developer.apple.com",
+        "*.developer.apple.com",
+        "appstoreconnect.apple.com",
+        "*.appstoreconnect.apple.com",
+        "idmsa.apple.com",
+        "appleid.apple.com",
+        "gsa.apple.com",
+        "contentdelivery.apple.com",
+        "*.itunes.apple.com",
+        "devimages-cdn.apple.com",
+        "swcdn.apple.com",
+        "swdist.apple.com"
       ]
     },
     "credentials": {
@@ -105,7 +117,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR/agent\" setup > /dev/null"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/agent setup > /dev/null"
           }
         ]
       }

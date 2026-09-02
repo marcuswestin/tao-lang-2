@@ -6,7 +6,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 ## Work
 
-- Every agent worktree bootstraps itself before you reach it: Worktrunk runs `just setup` from its blocking `pre-start` hook, and a worktree the harness creates instead runs `./agent setup` from the `sessionStart` hook in `.rulesync/hooks.jsonc`. In a linked worktree `./agent` reuses the primary checkout's pinned devenv profile; if it reports no profile, run `direnv allow` and `direnv exec . ./agent setup`.
+- `./agent setup` is the one setup entry: Worktrunk's blocking pre-start hook runs it before a launched harness starts, the Claude Code and Codex session-start hooks run it for worktrees those harnesses create, and Cursor's worktree setup runs it for its own. In a linked worktree `./agent` reuses the primary checkout's pinned devenv profile; if it reports no profile, run `direnv allow` and `direnv exec . ./agent setup`.
 - `direnv exec .` works in an unsandboxed shell but fails in a sandboxed one: it re-resolves the devenv lock through `.devenv/bootstrap`, which needs the nix daemon socket the sandbox denies. It surfaces as `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'` or, misleadingly, `Failed to get attribute 'config.cachix.enable'`. In a sandboxed shell use the already-materialized profile instead — `export PATH="$PWD/.devenv/profile/bin:$PATH"` — and then call `bun`, `bunx`, `dprint`, `just`, and `node` directly.
 - `EEXIST: failed to link package` from `bun install`, or a package the doctor reports as declared but not installed, means a sandboxed install cannot replace one of the few packages shipping `.idea/` or `.gitmodules`, which the sandbox protects and no setting exempts. Recover from an unsandboxed shell: `rm -rf node_modules && bun install --frozen-lockfile`.
 - Run ordinary shell commands directly. Use `./tao` for Tao CLI commands and `./agent <command>` for common repository workflows; run `./agent help` to discover them. Human developer commands are defined in `Justfile`.
@@ -26,7 +26,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Research the open web without asking. Run the repository's own workflow commands, local dev servers, simulators, and the local InstantDB stack without asking.
 - Bash commands run inside an OS-level sandbox: the worktree and named caches are writable, egress is limited to an allowlist. On a sandbox violation, retry the command unsandboxed rather than abandoning the task; never widen the policy to route around one.
 - Merge onto `main` only when Ro asks for it; the command no longer prompts, but the decision is still Ro's. Pushing always stops for Ro. Never read `.env` files, `~/.ssh`, `~/.aws`, or `~/.config/gh`, and never send repository contents to a third-party service.
-- `.rulesync/permissions.jsonc` owns the shared permission rules and the sandbox policy; `.claude/settings.json` is generated from it. Never edit a generated harness file; change the source and regenerate with `just _agent-config`. The `agent-instructions` skill owns which generator produces what.
+- `.rulesync/permissions.jsonc` owns the shared permission rules and the sandbox policy, and `.rulesync/hooks.jsonc` owns the agent hooks; `.claude/settings.json` is generated from both and `.codex/hooks.json` from the hooks. Never edit a generated harness file; change the source and regenerate with `just _agent-config`. The `agent-instructions` skill owns which generator produces what.
 
 ## Guidance
 

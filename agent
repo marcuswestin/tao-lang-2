@@ -139,6 +139,11 @@ function ensure_agent_build() {
   tao_run_with_lock "$BUILD_LOCK" 30 build_agent_if_needed
 }
 
+# Every `./agent` call bootstraps: dependencies, then the CLI build. `./agent setup` is the one
+# setup entry every harness reaches — Worktrunk's pre-start hook (.config/wt.toml), the Claude
+# Code and Codex session-start hooks (.rulesync/hooks.jsonc), and Cursor's worktree setup
+# (.cursor/worktrees.json) — and it continues into the Justfile `setup` recipe for the
+# frozen-lockfile install, its health check, and the generated harness adapters.
 tao_warn_on_detached_head "$SCRIPT_DIR"
 ensure_dev_deps
 ensure_agent_build
