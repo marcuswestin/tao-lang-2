@@ -293,8 +293,32 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return scope
   }
 
+  /**
+   * A render site names a view or a nav — `nav is scene is view` — and the owning view's own view-,
+   * scene-, or nav-typed parameters shadow both, the way any parameter shadows a declaration. That
+   * is what lets a shell render the navigator it was handed rather than one it names.
+   */
   private createViewScope(render: AST.Render): Langium.Scope {
-    return this.createDeclarationScope(render, AST.isViewDeclaration)
+    const root = AST.findRoot(render)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    const isRenderable = (node: AST.Node): node is AST.ViewDeclaration | AST.NavDeclaration =>
+      AST.isViewDeclaration(node) || AST.isNavDeclaration(node)
+    let scope = this.createScopeForNodes(root.statements.filter(isRenderable))
+    scope = this.createScopeForNodes(this.importedDeclarations(render, isRenderable), scope)
+    const owner = AST.findOwningView(render)
+    const parameters = owner ? AST.parametersOf(owner).filter(isRenderableParameter) : []
+    const firstParameter = parameters[0]
+    if (!firstParameter) {
+      return scope
+    }
+    const document = AST.getDocument(firstParameter)
+    const descriptions = parameters.flatMap(parameter => {
+      const name = parameterValueName(parameter)
+      return name ? [this.descriptions.createDescription(parameter, name, document)] : []
+    })
+    return this.createScope(descriptions, scope)
   }
 
   private createRenderSlotScope(use: AST.RenderSlotUse): Langium.Scope {
@@ -814,6 +838,14 @@ function parameterOwningDefault(node: AST.Node | undefined): AST.ParameterDeclar
     current = current.$container
   }
   return undefined
+}
+
+const renderableParameterFamilies: ReadonlySet<string> = new Set(['view', 'scene', 'nav'])
+
+/** isRenderableParameter reports a parameter whose declared type a render site may name. */
+function isRenderableParameter(parameter: AST.ParameterDeclaration): boolean {
+  const type = parameter.inlineType?.type
+  return AST.isPrimitiveTypeReference(type) && renderableParameterFamilies.has(type.primitive)
 }
 
 function parameterValueName(parameter: AST.ParameterDeclaration): string | undefined {

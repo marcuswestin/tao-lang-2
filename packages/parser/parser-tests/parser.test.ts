@@ -98,8 +98,8 @@ Describe('parser: core language syntax', () => {
     const [_localAlias, firstChild, secondChild] = AST.statementsOf(render.block)
     Expect.Is(firstChild, AST.isViewRender)
     Expect.Is(secondChild, AST.isViewRender)
-    Expect(firstChild.view.ref?.name).toBe('Text')
-    Expect(secondChild.view.ref?.name).toBe('Text')
+    Expect(firstChild.view.$refText).toBe('Text')
+    Expect(secondChild.view.$refText).toBe('Text')
   })
 
   Test('parses named and inline control events with a scoped change payload', async () => {

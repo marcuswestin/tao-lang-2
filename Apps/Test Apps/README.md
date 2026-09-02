@@ -57,8 +57,9 @@ without erasing compatible coverage:
 ## Navigation
 
 Exercise the navigation layer: the native stack, the portable basic kit, platform sheet and overlay
-presentation, the split surface, the frame shell, and the root-view app form. Six `app` declarations
-share the folder, one per source file, and each check picks its app with `run`.
+presentation, the split surface, the root-view app form, and the shell that renders a navigator as
+ordinary content. Eight `app` declarations share the folder, one or more per source file, and each
+check picks its app with `run`.
 
 **Belongs here:**
 
@@ -85,16 +86,17 @@ share the folder, one per source file, and each check picks its app with `run`.
   which replaces the mounted app with a new launch so the persisted width outlives it and the
   sidebar's view-local state does not, including across `relaunch fresh`, which opts a launch out
   of restoring navigation and not out of the device.
-- _Frame_ (`Frame Shell.tao`): `FrameNav` with all five slots — `@top`, `@bottom`, `@left`,
-  `@right`, `@center` — each carrying `Label`, view-typed `Content`, and a numeric `Size`; every
-  edge and the center rendering at once; a slot whose `Content` is absent contributing no container
-  and growing back when a `replace` restores it; `present` and Back belonging to `@center` while an
-  edge keeps whatever position its own stack reached; the test `relaunch` step reading back each
-  slot's nav state, edges included, and `relaunch fresh` opening every slot at its root.
 - _Root view_ (`Root View App.tao`): the `app X { view Y }` form, whose navigator Tao synthesizes
   rather than the source naming one; `present` and `back` through that synthesized navigator; the
   test `relaunch` step reopening the presented screen it left, and `relaunch fresh` opening on the
   root view and recording that as the stored position.
+- _Shell_ (`Shell.tao`): the app root as a view with arguments, `view Shell(CenterStack, "…")`, and
+  a variant that rebinds it with `with { view Shell(OtherStack, "…") }`; a nav-typed parameter
+  rendered inside a `Col` as ordinary content, `Navigator() [fill]`; `present` and Back reaching the
+  navigator the shell renders; the test `relaunch` step reading that navigator's position back and
+  `relaunch fresh` opening it at its root; a conditional sibling of the navigator mounting and
+  unmounting while the navigator's position is untouched; and `present @key` reaching a rendered
+  `SelectionNav` through the shell.
 
 **Does not belong here:** selection, toasts, windows, routes, or transition policy; split,
 target-resolution, and argument diagnostics; native adapter appearance or transitions; the platform
@@ -102,12 +104,13 @@ chrome a sheet is hosted in, which is not assertable from a journey; arbitrary r
 multi-window layout, collapse policy, or product-specific workbench behavior; WordFlower product
 behavior.
 
-The frame journey empties a slot by replacing the app's navigator with a second `FrameNav` whose
-`@left` supplies no `Content`, because a nav configuration reads app state but is not itself an
-app-body declaration: a slot's `Content` cannot name state the way `Resizable Split.tao`'s `Width`
-does. The runtime rule the journey stands on is stronger than the journey can drive — a slot's
-`Content` is read on every render, so absence is reversible without remounting — and the runtime's
-own suite in `packages/runtime/TR-tests/` proves that reactive read directly.
+The shell journeys assert on the label the root view was bound to and on the content of the
+navigator it renders, never on a navigation title: the synthesized root navigator is a slot and
+renders no chrome of its own. The label is what tells a variant's rebinding apart from the base
+app, and the status bar's own text is what tells an unmounted sibling from a mounted one that
+renders nothing. The runtime's own suite in `packages/runtime/TR-tests/` proves the mechanism the
+journeys stand on: a rendered navigator mounts once on the occurrence that hosts it, that host
+routes Back and activation to it, and it restores by its own identity when it attaches.
 
 The split journey never drags a divider: the Tao test language has no `resize` step, and resize
 interaction is the adapter's. `relaunch` proves that device-local `(persist)` state outlives the

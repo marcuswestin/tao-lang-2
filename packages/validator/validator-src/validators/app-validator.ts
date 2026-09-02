@@ -1,7 +1,8 @@
-import { Packages, Type } from '@ast-utils'
+import { ASTUtils, Packages, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
 import type { ValidationContext } from '../validation'
+import { reportPresentationBindingDiagnostic } from './navigation-validator'
 
 /** appValidationMessages declares structural diagnostics for Tao app placement and configuration. */
 const appValidationMessages = {
@@ -12,8 +13,7 @@ const appValidationMessages = {
   appBlock: (name: string) => `App ${name} contains a statement that is not app configuration.`,
   appRootCount: (name: string, count: number) =>
     `App ${name} must declare exactly one Navigator (or root view), found ${count}.`,
-  rootViewParameters: (appName: string, viewName: string) =>
-    `App ${appName} root view ${viewName} must not declare parameters.`,
+  rootViewPlacement: 'A root view is declared in an app block or in an app variant.',
   nameCount: (name: string, count: number) => `App ${name} must declare exactly one Name, found ${count}.`,
   auxiliaryType: (name: string, key: string, actual: string) => `App ${name}@${key} expects nav, got ${actual}.`,
   duplicateAuxiliary: (name: string, key: string) => `App ${name} declares auxiliary navigator @${key} more than once.`,
@@ -53,6 +53,23 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
     if (app.value && AST.isRefinementExpression(app.value)) {
       validateAppVariant(app, app.value, ctx)
     }
+  }
+  for (const root of [...AST.streamAllContents(file)].filter(AST.isAppView)) {
+    validateRootViewPlacement(root, ctx)
+  }
+}
+
+// A root view statement parses inside any configuration block, because a variant's patch is one;
+// only an app value has a root to rebind.
+function validateRootViewPlacement(root: AST.AppView, ctx: ValidationContext): void {
+  const entry = root.$container
+  if (!AST.isConfigurationEntry(entry)) {
+    return
+  }
+  const owner = entry.$container.$container
+  const type = AST.isExpression(owner) ? Type.ofExpression(owner) : { kind: 'unresolved' as const }
+  if (type.kind !== 'unresolved' && !Type.isAssignable(type, { kind: 'primitive', primitive: 'app' })) {
+    ctx.error(appValidationMessages.rootViewPlacement, root)
   }
 }
 
@@ -111,9 +128,7 @@ function rootViewSlots(
   if (!root) {
     return []
   }
-  if (root.view.ref && AST.parametersOf(root.view.ref).length > 0) {
-    ctx.error(appValidationMessages.rootViewParameters(app.name, root.view.ref.name), root)
-  }
+  validateRootViewArguments(root, ctx)
   // A spelled-out Name keeps its own value; the app's declaration name is only the sugar's default.
   const named = properties.some(property => property.name === 'Name')
   return [
@@ -195,6 +210,18 @@ function validateAppProperties(
   }
 }
 
+// The synthesized navigator presents the root view exactly as `Initial Shell(args)` would, so its
+// arguments bind by the ordinary presentation rules and carry the same diagnostics.
+function validateRootViewArguments(root: AST.AppView, ctx: ValidationContext): void {
+  const view = root.view.ref
+  if (!view) {
+    return
+  }
+  for (const diagnostic of ASTUtils.resolveArgumentBindings(view, root).diagnostics) {
+    reportPresentationBindingDiagnostic(view, diagnostic, root, ctx)
+  }
+}
+
 function suppliedSlotOfProperty(property: AST.AppProperty): SuppliedSlot {
   return { name: property.name, node: property, patched: property.patch !== undefined, value: property.value }
 }
@@ -207,6 +234,10 @@ function validateAppVariant(
   const supplied = refinement.patchBlock.entries.flatMap<SuppliedSlot>(entry => {
     if (entry.restoration) {
       return []
+    }
+    if (entry.rootView) {
+      validateRootViewArguments(entry.rootView, ctx)
+      return [{ name: 'Navigator', node: entry, patched: false, sugar: true }]
     }
     if (!entry.name) {
       ctx.error(appValidationMessages.variantProperty(variant.name, entry.key ?? ''), entry)

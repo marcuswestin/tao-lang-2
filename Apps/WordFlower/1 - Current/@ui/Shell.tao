@@ -1,6 +1,21 @@
+use CurrentSession from @data
 use SignedOutNav from @nav
 use Col, Row, Text, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
+
+// The shell: the navigator and the focus bar, laid out as ordinary content. A nav renders like any
+// other view -- `nav is scene is view` -- so persistent chrome around navigated content is a `Col`,
+// not a navigation kind. The navigator arrives as a parameter, which is how one shell serves every
+// preview variant. The bar is conditional on the data; the navigator never is, because its history
+// lives on its mount and a branch that unmounted it would drop where the person was.
+workspace
+scene WordFlowerShell(Navigator nav) {
+   render Col() [fill] {
+      Navigator() [fill]
+      when CurrentSession {
+         empty -> { }
+         otherwise -> { FocusBar() }
+}  }  }
 
 // The screens the app shell mounts directly.
 workspace

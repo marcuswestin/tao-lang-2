@@ -65,9 +65,11 @@ view Settings() {
 }
 ```
 
-`Name` is display text and `Navigator` is the primary configured nav. `Datasource` configures the
-app's provider; Local's storage identity is specified in `Tao Data.md`. App auxiliaries remain valid
-for genuine app-specific hosts such as windows. Overlays and toasts never require auxiliary hosts.
+`Name` is display text and `Navigator` is the primary configured nav; `view Shell(args)` supplies
+it as sugar, mounting a root view bound to its arguments in a synthesized slot navigator. `Datasource`
+configures the app's provider; Local's storage identity is specified in `Tao Data.md`. App
+auxiliaries remain valid for genuine app-specific hosts such as windows. Overlays and toasts never
+require auxiliary hosts.
 
 Every project has one checked-in opaque `id`. `tao create <id>` creates it and
 `tao project id <id> [path]` adds missing metadata; `--replace` deliberately makes a fork independent
@@ -189,11 +191,11 @@ command remains visible but inert.
 
 The stdlib host-family contract fixes the current read and requirement sets:
 
-| Host placement                                                                  | Reads              | Requires |
-| ------------------------------------------------------------------------------- | ------------------ | -------- |
-| every `StackNav` entry, including `Initial` and later pushes                    | `Title`, `Toolbar` | `Title`  |
-| reserved `present ... as window` contract, including its full-screen fallback   | `Title`, `Toolbar` | `Title`  |
-| `SlotNav`, `SelectionNav`, `SplitNav`, `FrameNav`; root, sheet, menu, and toast | neither            | neither  |
+| Host placement                                                                | Reads              | Requires |
+| ----------------------------------------------------------------------------- | ------------------ | -------- |
+| every `StackNav` entry, including `Initial` and later pushes                  | `Title`, `Toolbar` | `Title`  |
+| reserved `present ... as window` contract, including its full-screen fallback | `Title`, `Toolbar` | `Title`  |
+| `SlotNav`, `SelectionNav`, `SplitNav`; root, sheet, menu, and toast           | neither            | neither  |
 
 `Toolbar` is optional wherever it is read. Selection item `Label` and `Icon` remain explicit item
 configuration, and split-pane configuration is not inferred from child content. Native and basic
@@ -272,18 +274,64 @@ The implemented declarations are:
   to false. A resizable pane renders a runtime-owned drag affordance; a writable state width receives
   drag updates and a portable double-tap resets it to its declared default. A non-writable width still
   resizes for the mounted occurrence but is forgotten on remount.
-- `FrameNav` surrounds one navigated center with fixed chrome edges. Its slots are `@top`,
-  `@bottom`, `@left`, `@right`, and `@center`, and each takes `Label` text, view-typed `Content`,
-  and a numeric `Size`; all three default, so a declared slot may supply none of them. Horizontal
-  bars win the corners: `@top` and `@bottom` span the full width and `@left`/`@right` occupy the
-  space between them. `left` and `right` are the language's own layout terms and reverse with the
-  writing direction. `Size` is the one perpendicular dimension — height on `@top`/`@bottom`, width
-  on `@left`/`@right` — and absence means content-derived; `@center` takes no `Size`, because it is
-  whatever the edges leave. A slot whose `Content` evaluates to `none` reserves no space and
-  contributes no container: the rule is semantic, never measured, and the slot's `Content` is read
-  on every render rather than captured when the frame is configured. `present` prefers `@center`,
-  Back routes to `@center`'s own navigator, and an edge slot never takes Back even while it holds a
-  navigator of its own. A frame's restorable state is each slot's nav state, edges included.
+
+Persistent chrome around navigated content is not a navigation kind. A shell is a view that renders
+its navigator as ordinary content, which the next section describes.
+
+## Rendered navs and the root view
+
+`nav is scene is view`, and a render site may name a nav: a nav declaration, or a parameter of the
+owning view whose type is `view`, `scene`, or `nav`. A shell is therefore ordinary layout, and the
+app root is a view bound to its arguments, which is how one shell serves every configured navigator:
+
+```tao
+app WordFlower {
+   Name "WordFlower"
+   view WordFlowerShell(WordFlowerNavigator)
+}
+
+app WordFlowerDrawer = WordFlower with {
+   Name "WordFlower - Drawer Preview"
+   view WordFlowerShell(WordFlowerDrawerNavigator)
+}
+
+scene WordFlowerShell(Navigator nav) {
+   render Col() [fill] {
+      Navigator() [fill]
+      when CurrentSession {
+         empty -> { }
+         otherwise -> { FocusBar() }
+   }  }
+}
+```
+
+`view Shell(args)` binds the root view's parameters exactly as `Initial Shell(args)` binds a
+configured `Initial`, and carries the same argument diagnostics; the bare `view Shell` is the same
+reference with nothing to bind. Tao synthesizes the slot navigator that mounts the root view under a
+canonical identity derived from the app declaration, so a root-view app restores like any other. An
+app variant's patch may rebind the root with the same `view Shell(other)` entry; a root view
+statement anywhere else is a diagnostic.
+
+A nav or a parameter renders as the value it was bound to: the render site contributes its layout
+clauses and its test tag and passes no arguments, content, or events, all diagnosed at the site. A
+view-typed parameter renders as an ordinary occurrence of the view it was bound to. A nav renders
+as one mount held by the nearest enclosing navigation occurrence — for a shell, the synthesized
+root navigator — and that mount outlives the React tree that rendered it, so covering the shell and
+returning to it finds the navigator where it was. The host routes to what it holds: Back reaches a
+rendered nav after the host's own overlays and content history; `present @key` reaches a rendered
+`SelectionNav` through the host; and the host snapshots each rendered nav by that nav's own
+canonical descriptor and restores it when the view mounts it, since a view is the only thing that
+renders one. A nav rendered outside any navigation occurrence still mounts once per descriptor.
+
+Three invariants hold at the render site: a nav declaration renders **at most once** across the
+workspace and a nav-typed parameter at most once in its view; a nav renders **never inside a loop**;
+and **never inside a conditional branch**, because its history lives on its mount and a branch that
+unmounted it would silently drop where the person was. A view beside the navigator may be
+conditional; only the navigator is held to the rule. A scene composed inline remains a diagnostic —
+a nav is the one scene that supplies its own chrome, which is why a render site may name it.
+
+`replace <nav> in app` replaces the app's whole root, the shell view included, because the root is
+what the app mounts; the synthesized navigator and every nav its view rendered go with it.
 
 The native `StackNav` maps those reducer-owned entries to the platform stack and header through the
 pinned `react-native-screens` host. A native dismissal or gesture reconciles exactly one Tao Back;
@@ -467,6 +515,6 @@ resolve to no live journal entry, and are likewise inert. Forward across a reloa
 
 Whether a view is presented or composed inline is decided where it is used; presenting,
 dismissing, replacing, and selection activation are legal in any view body. A configured nav is
-mounted at an app root, as an app auxiliary, or as content of another nav; it is not an ordinary
-child view. Tags used by Tao tests attach metadata to concrete rendered roots and do not add
-navigation or layout nodes.
+mounted at an app root, as an app auxiliary, as content of another nav, or as a rendered child of a
+view under the rules above. Tags used by Tao tests attach metadata to concrete rendered roots and do
+not add navigation or layout nodes.

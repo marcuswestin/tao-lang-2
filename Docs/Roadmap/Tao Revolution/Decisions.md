@@ -988,7 +988,7 @@ command Finish {
   identifies the verb wherever it is listed. `do Finish with { Document }` invokes; `do` with an
   unfilled slot is an error. An action `do` keeps its call parentheses, so a bare name after `do`
   names a command.
-- **Three surfaces retire.** `Rail { … }` retires because a rail is a frame slot (§10); `Palette
+- **Three surfaces retire.** `Rail { … }` retires because a rail is ordinary shell layout (§10); `Palette
   all` retires because the palette is always present rather than opted into; and the in-view
   `menu Name { … }` block retires, because the per-view `Commands` slot is the ordering mechanism
   and a surface never needed a second way to list. `Toolbar` stays, `Menu` (the OS menu bar) stays,
@@ -1443,8 +1443,8 @@ Map(Places) alternative { loop Places / Place { PlaceRow(Place) } }
 
 ## 10. Navigation
 
-- **Five container kinds**: a back-stack, a replaceable detail pane, an adaptive selection container,
-  a multi-pane split, and a frame — `StackNav`, `SlotNav`, `TabNav`, `SplitNav`, `FrameNav`.
+- **Four container kinds**: a back-stack, a replaceable detail pane, an adaptive selection container,
+  and a multi-pane split — `StackNav`, `SlotNav`, `TabNav`, `SplitNav`.
 - **Navigators are keywordized bindings**: `nav WelcomeNav = StackNav { Initial WelcomeScreen() }`.
 - **The selection container is tabs when narrow and a sidebar when wide**, declared once, with no
   device name anywhere:
@@ -1474,36 +1474,40 @@ nav RecipeWorkspace = SplitNav {
   rather than `Priority` precisely because "priority 1" read both ways in the source designs; an
   _order_ is self-evident.
 
-- **The frame is fixed chrome around navigated content** (amended by KEY-D7). Its slots are the
-  edges and the middle — `@top`, `@bottom`, `@left`, `@right`, `@center` — each holding a view or a
-  nav:
+- **A render site may name a nav** (KEY-D7 as amended by the shell-composition review, 2026-09-02).
+  `nav is scene is view`, and the grammar agrees: everything that renders a view renders a nav, so
+  persistent chrome around navigated content is ordinary layout — a `Col` holding the navigator and
+  a bar — and no frame kind exists. The app root is a view with arguments, and a nav-typed
+  parameter renders like any other view, which is how one shell serves every preview variant:
 
 ```swift
-nav SkilletShell = FrameNav {
-   @center { Content SkilletNavigator }
-   @bottom { Label "Now cooking", Content when CurrentCook { empty -> none, otherwise -> CookBar } }
+app Skillet {
+   Name "Skillet"
+   view SkilletShell(SkilletNavigator)
+}
+
+scene SkilletShell(Navigator nav) {
+   render Col() [fill] {
+      Navigator() [fill]
+      when CurrentCook { empty -> { } otherwise -> { CookBar() } }
+   }
 }
 ```
 
-- **The division of labour with the split is the whole point.** `SplitNav` is navigational peers
-  that progress and fold; a frame edge is chrome that stays. A sidebar is a split pane if it
-  progresses and folds as a peer, and a frame edge if it stays put. Hybrids compose: a frame's
-  center may hold a split. The rail retires into a frame slot, and the shell root stops being
-  special — an app still mounts one nav.
-- **`left` and `right`, not leading and trailing.** They are the language's existing layout terms
-  and reverse with the locale exactly as they do in a layout clause.
-- **Horizontal bars win the corners**: `@top` and `@bottom` span the full width and `@left`/`@right`
-  take the space between them.
-- **A slot's `Size` is one dimension**, because the edge already fixes the axis — height on the
-  horizontal edges, width on the vertical ones, and nothing on `@center`. Absent means
-  content-derived. Declaring it as one member rather than a `Width`/`Height` pair makes the
-  meaningless one unwritable rather than merely diagnosed.
-- **The empty-slot rule is semantic, never measured**: a slot whose `Content` evaluates to `none`
-  reserves no space. It is the live root applied to a slot — reactive, deterministic, and
-  observable in a journey — so a bar's presence follows the data rather than a layout measurement.
-- **Bars never take Back**; the frame routes Back to `@center`, and an edge's own stack is never
-  reached by a Back the center cannot answer. A frame's restoration state is each slot's nav state,
-  edges included.
+- **A rendered nav still owns its occurrences, Back, restoration, and chrome**; only where it sits
+  in the tree changes. Three invariants keep it honest, all diagnosed at the render site: a nav
+  renders **at most once**, **never inside a loop**, and **never inside a conditional branch** — its
+  history lives on its mount, so a branch that unmounted it would silently drop where the person
+  was. The bar beside it may be conditional; only the navigator is held to the rule. A nav or a
+  parameter renders as the value it was bound to, so the render site passes it no arguments,
+  content, or events.
+- **The host routes to what it holds.** Back reaches a rendered nav through the presentation that
+  hosts it, after that presentation's own overlays and content history; `present @key` reaches a
+  rendered selection the same way; and a rendered nav restores by its own declaration identity when
+  it mounts. `replace … in app` replaces the whole root — the shell view included — because the
+  root is what the app mounts. The rail retires into ordinary shell layout, and the shell root
+  stops being special: an app mounts one nav, synthesized around its root view when the root is a
+  view.
 
 - **A live root.** The top-level experience follows workspace state as an ordinary reactive value:
   `Navigator when MyKitchen { loading -> …; none -> WelcomeNav; otherwise -> SkilletNavigator }`. No

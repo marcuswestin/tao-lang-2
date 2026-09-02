@@ -26,6 +26,7 @@ import {
   type TaoDeclarationIdentityTuple,
 } from './TR-navigation-identity'
 import { disableNativeNavigationSurfaces } from './TR-navigation-native-hosts'
+import { NavigationOccurrence } from './TR-navigation-occurrence'
 import {
   type Evaluable,
   RuntimePresentable,
@@ -80,21 +81,6 @@ export type TaoSplitNavItemDefinition = {
     }>
 }
 
-/**
- * TaoFrameNavItemDefinition is one edge or center slot of a frame.
- *
- * `content` keeps the configured expression rather than a resolved presentation: a slot whose
- * `Content` evaluates to absence reserves no space and contributes no container, and that rule is
- * semantic, so it is read on every render instead of frozen when the frame is configured. A slot
- * configured with a view or a nested nav resolves once, exactly as a split pane does.
- */
-export type TaoFrameNavItemDefinition = {
-  content?: TaoPresentable | TaoNavigationValue | Evaluable
-  label: Evaluable
-  /** size is the one perpendicular dimension: height on `@top`/`@bottom`, width on `@left`/`@right`. */
-  size?: Evaluable
-}
-
 export type TaoAppDeclaration = Readonly<{
   canonicalIdentity?: TaoDeclarationIdentity
   identity: symbol
@@ -133,7 +119,7 @@ type TaoToastPresentationOptions = {
   key: Evaluable
 }
 
-export type TaoNavKindProfile = 'frame' | 'selection' | 'slot' | 'split' | 'stack'
+export type TaoNavKindProfile = 'selection' | 'slot' | 'split' | 'stack'
 export type TaoNavHostSlot = 'Header' | 'Title' | 'Toolbar'
 export type TaoNavHostSlotContract = Readonly<{
   reads: readonly TaoNavHostSlot[]
@@ -171,10 +157,6 @@ export type TaoSelectionNavConfiguration = Readonly<{
 
 export type TaoSplitNavConfiguration = Readonly<{
   items: Readonly<Record<string, Readonly<TaoSplitNavItemDefinition>>>
-}>
-
-export type TaoFrameNavConfiguration = Readonly<{
-  items: Readonly<Record<string, Readonly<TaoFrameNavItemDefinition>>>
 }>
 
 export type TaoNavDescriptor<
@@ -234,11 +216,10 @@ export type TaoNavKind<
   reset(mount: TaoNavMount<ProfileT, ConfigurationT>): void
 }>
 
-/** NavigationControls is the deterministic generated-code API for Tao navigation. */
 /**
  * patchedKeyedItems merges a patch into each keyed item it names rather than replacing it, so
- * `Navigator with { @center { Content Other } }` reconfigures that one member and leaves the rest
- * of the slot — and every other slot — as declared. A delta narrows; it never reopens what it did
+ * `Navigator with { @detail { Content Other } }` reconfigures that one member and leaves the rest
+ * of the item — and every other item — as declared. A delta narrows; it never reopens what it did
  * not name.
  */
 function patchedKeyedItems(
@@ -259,6 +240,7 @@ function patchedKeyedItems(
   return merged
 }
 
+/** NavigationControls is the deterministic generated-code API for Tao navigation. */
 export const NavigationControls = {
   /** Identity constructs one validated canonical declaration identity from generated owner metadata. */
   Identity(tuple: TaoDeclarationIdentityTuple): TaoDeclarationIdentity {
@@ -320,6 +302,9 @@ export const NavigationControls = {
   },
 
   AppHost: NavigationAppHost,
+
+  /** Occurrence renders a nav or a view-typed value a render site named, hosting a nav's mount. */
+  Occurrence: NavigationOccurrence,
 
   /** PresentIn presents through an explicit nav or the nearest enclosing nav in Tao props. */
   PresentIn(

@@ -1,7 +1,6 @@
 import type React from 'react'
 import { RuntimeAssert } from './TR-assert'
 import type {
-  TaoFrameNavConfiguration,
   TaoNavDeclaration,
   TaoNavDescriptor,
   TaoNavHostSlotContract,
@@ -17,7 +16,6 @@ import type {
 } from './TR-navigation'
 import { createNavDeclaration, freezeNavConfiguration } from './TR-navigation-configuration'
 import {
-  RuntimeFrameNav,
   RuntimeSelectionNav,
   RuntimeSlotNav,
   RuntimeSplitNav,
@@ -171,25 +169,14 @@ const splitNavKind = Object.freeze(
     descriptor => new RuntimeSplitNav(descriptor),
   ),
 )
-// A frame reads no host slots: its chrome is the edge slots it declares, not a host header.
-const frameNavKind = Object.freeze(
-  new RuntimeNavKind<'frame', TaoFrameNavConfiguration>(
-    'frame',
-    noHostSlots,
-    descriptor => new RuntimeFrameNav(descriptor),
-  ),
-)
-
 /** NavKindControls publishes the built-in implementations used by Tao `implement inject`. */
 export const NavKindControls = {
   Declaration: createNavDeclaration,
-  Frame: (): TaoNavKind<'frame', TaoFrameNavConfiguration> => frameNavKind,
   Selection: (): TaoNavKind<'selection', TaoSelectionNavConfiguration> => nativeSelectionNavKind,
   Slot: (): TaoNavKind<'slot', TaoSlotNavConfiguration> => nativeSlotNavKind,
   Split: (): TaoNavKind<'split', TaoSplitNavConfiguration> => splitNavKind,
   Stack: (): TaoNavKind<'stack', TaoStackNavConfiguration> => nativeStackNavKind,
   Basic: Object.freeze({
-    Frame: (): TaoNavKind<'frame', TaoFrameNavConfiguration> => frameNavKind,
     Selection: (): TaoNavKind<'selection', TaoSelectionNavConfiguration> => basicSelectionNavKind,
     Slot: (): TaoNavKind<'slot', TaoSlotNavConfiguration> => basicSlotNavKind,
     Split: (): TaoNavKind<'split', TaoSplitNavConfiguration> => splitNavKind,

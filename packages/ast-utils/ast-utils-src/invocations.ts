@@ -77,10 +77,14 @@ export type ResolvedActionTarget =
   | { kind: 'dynamic' }
   | { kind: 'unresolved' }
 
-/** resolveRenderInvocation resolves a render target and type-based argument bindings. */
+/**
+ * resolveRenderInvocation resolves a render target and type-based argument bindings. Only a view
+ * declaration has parameters to bind; a nav or a parameter renders as the value it was bound to,
+ * and `resolveRenderTarget` is what classifies those.
+ */
 export function resolveRenderInvocation(render: AST.Render): ResolvedRenderInvocation {
   const view = render.view?.ref
-  if (!view) {
+  if (!view || !AST.isViewDeclaration(view)) {
     return {
       render,
       pairs: [],

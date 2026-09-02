@@ -263,6 +263,55 @@ export class RuntimeAppDefinition implements Subscription {
     return this.navigator.activate(key)
   }
 
+  /**
+   * hostNavigation mounts a navigator a view rendered inside `host`'s content and joins it to the
+   * lane `host` belongs to, so `present … in Nav` resolves it, Back reaches it through the lane's
+   * owner, and its selection changes keep the browser mirror honest. A host this app does not own
+   * — a view rendered outside any lane — still gets a registered mount.
+   */
+  hostNavigation(host: TaoNavigationValue, configured: TaoConfiguredNavigation): TaoNavigationValue {
+    const lane = this.navigationLanes.get(host)
+    const record = lane ? this.navigationLaneRecords.get(lane) : undefined
+    const mounts: TaoNavigationValue[] = []
+    const configuredMounts: Array<readonly [TaoConfiguredNavigation, TaoNavigationValue]> = []
+    const mount = mountConfiguredNavigation(
+      configured,
+      (nested, nestedMount) => {
+        mounts.push(nestedMount)
+        configuredMounts.push([nested, nestedMount])
+      },
+      presentable => this.localPresentable(presentable),
+    )
+    if (!lane || !record) {
+      return mount
+    }
+    record.mounts.push(...mounts)
+    record.configured.push(...configuredMounts)
+    if (!record.ownerDispose) {
+      // An inactive lane registers everything it holds when it is activated again.
+      return mount
+    }
+    for (const hosted of mounts) {
+      this.navigationLanes.set(hosted, lane)
+    }
+    for (const [nested, nestedMount] of configuredMounts) {
+      this.descriptorMounts.set(nested, nestedMount)
+    }
+    const disposeOwner = registerNavigationOwner(mounts, record.owner)
+    const previousOwnerDispose = record.ownerDispose
+    record.ownerDispose = () => {
+      disposeOwner()
+      previousOwnerDispose()
+    }
+    const disposeContexts = this.trackBrowserContexts(lane, mounts)
+    const previousContextDispose = record.contextDispose
+    record.contextDispose = () => {
+      disposeContexts()
+      previousContextDispose?.()
+    }
+    return mount
+  }
+
   /** resolve returns the mounted occurrence owned by this app for one descriptor identity. */
   resolve(configured: TaoConfiguredNavigation): TaoNavigationValue | undefined {
     // Force lazy app configuration before resolving a target nested in its root or auxiliaries.
@@ -546,12 +595,17 @@ export class RuntimeAppDefinition implements Subscription {
     )
   }
 
+  /**
+   * trackBrowserContexts observes the selection mounts among `mounts` on behalf of `lane`. It adds
+   * to whatever the lane already tracks, because a navigator a view renders joins its lane after
+   * the lane was activated.
+   */
   private trackBrowserContexts(lane: TaoNavigationValue, mounts: TaoNavigationValue[]): () => void {
     const selections = mounts.filter(mount => mount.kind === 'selection')
     if (selections.length === 0) {
       return () => {}
     }
-    const contexts = new Map<TaoNavigationValue, { id: number; key: string }>()
+    const contexts = this.browserContexts.get(lane) ?? new Map<TaoNavigationValue, { id: number; key: string }>()
     const disposers: Array<() => void> = []
     this.browserContexts.set(lane, contexts)
     for (const selection of selections) {
@@ -581,7 +635,12 @@ export class RuntimeAppDefinition implements Subscription {
       for (const dispose of disposers.toReversed()) {
         dispose()
       }
-      this.browserContexts.delete(lane)
+      for (const selection of selections) {
+        contexts.delete(selection)
+      }
+      if (contexts.size === 0 && this.browserContexts.get(lane) === contexts) {
+        this.browserContexts.delete(lane)
+      }
     }
   }
 

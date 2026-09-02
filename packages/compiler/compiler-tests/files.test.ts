@@ -197,10 +197,6 @@ Describe('compiler: files and packages', () => {
       'export function CustomNav() {',
       '  return TR.NavKind.Stack()',
       '}',
-      '',
-      'export function FrameNav() {',
-      '  return TR.NavKind.Frame()',
-      '}',
     ].join('\n')
     const providersCode = [
       "import type TR from '@runtime/TR'",
@@ -237,10 +233,6 @@ Describe('compiler: files and packages', () => {
             @key { Label text Content view }
             nav SelectionNav from ./NavKinds.ts
           }
-          public type SidecarFrame is nav with {
-            @key { Label text is "" Content view is none Size number is none }
-            nav FrameNav from ./NavKinds.ts
-          }
           public type SidecarCustom is nav with {
             Query text
             nav CustomNav from ./NavKinds.ts
@@ -274,9 +266,6 @@ Describe('compiler: files and packages', () => {
         Expect(sharedNavKinds).toHaveLength(1)
         for (
           const [declaration, exportName] of [['SidecarSlot', 'SlotNav'], ['SidecarSelection', 'SelectionNav'], [
-            'SidecarFrame',
-            'FrameNav',
-          ], [
             'SidecarCustom',
             'CustomNav',
           ]]
@@ -310,15 +299,6 @@ Describe('compiler: files and packages', () => {
             + 'readonly items: Readonly<Record<string, Readonly<{ '
             + 'readonly label: TR.Evaluable readonly icon?: TR.Evaluable '
             + 'readonly content: TR.Presentable | TR.NavigationValue }>>> }>',
-        )
-        // A frame slot's Content stays an expression, so the emitted contract admits absence
-        // instead of demanding one resolved presentation per slot.
-        Expect(declarationText).toContain(
-          'export type SidecarFrameConfig = Readonly<{ '
-            + 'readonly items: Readonly<Record<string, Readonly<{ '
-            + 'readonly label: TR.Evaluable '
-            + 'readonly content?: TR.Presentable | TR.NavigationValue | TR.Evaluable '
-            + 'readonly size?: TR.Evaluable }>>> }>',
         )
         Expect(declarationText).toContain(
           'export type SidecarCustomConfig = Readonly<Record<string, unknown>>',

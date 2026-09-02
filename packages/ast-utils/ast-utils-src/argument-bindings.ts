@@ -59,6 +59,7 @@ export function resolveArgumentBindings(
   declaration: AST.ParameterizedDeclaration,
   invocation:
     | AST.Render
+    | AST.AppView
     | AST.DoStatement
     | AST.CommandDoClause
     | AST.FunctionCallExpression

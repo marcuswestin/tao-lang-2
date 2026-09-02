@@ -4,7 +4,6 @@ import { RuntimeCommand } from './TR-interaction'
 import type {
   TaoAppDeclaration,
   TaoConfiguredNavigation,
-  TaoFrameNavItemDefinition,
   TaoImplementedNavDeclaration,
   TaoNavDeclaration,
   TaoNavigationInput,
@@ -144,35 +143,6 @@ function normalizeConfiguredNavigation(
     )
     return { items, name: configured.declaration.name }
   }
-  // The frame branch must precede the block below: that block is an unguarded fallthrough to the
-  // selection shape, so an unrecognized profile is normalized as a SelectionNav and throws on the
-  // Display it never configured.
-  if (configured.declaration.kind.profile === 'frame') {
-    const items = Object.fromEntries(
-      Object.entries(config)
-        .filter(([key, value]) => key.startsWith('@') && isPlainRecord(value))
-        .map(([sourceKey, value]) => {
-          const key = sourceKey.slice(1)
-          const item = value as Record<string, unknown>
-          const content = configuredFrameContent(
-            item['Content'],
-            configured.declaration.name,
-            `@${key}.Content`,
-            registerMount,
-            resolvePresentable,
-          )
-          const size = item['Size'] === undefined
-            ? undefined
-            : configuredEvaluable(item['Size'], configured.declaration.name, `@${key}.Size`)
-          return [key, {
-            ...(content ? { content } : {}),
-            label: configuredEvaluable(item['Label'], configured.declaration.name, `@${key}.Label`),
-            ...(size ? { size } : {}),
-          }]
-        }),
-    )
-    return { items, name: configured.declaration.name }
-  }
   const items = Object.fromEntries(
     Object.entries(config)
       .filter(([key, value]) => key.startsWith('@') && isPlainRecord(value))
@@ -247,36 +217,6 @@ function configuredPresentable(
   return mounted.kind === 'view' && resolvePresentable ? resolvePresentable(mounted) : mounted
 }
 
-/**
- * configuredFrameContent keeps a frame slot's Content as the configured expression.
- *
- * `configuredPresentable` above throws on absence, which is exactly the case a frame slot must
- * accept: `Content view is none` is the declared default, so an unfilled slot arrives as a Tao
- * value that evaluates to absence. The frame reads that value on every render, which makes the
- * empty-slot rule semantic and reactive rather than measured.
- */
-function configuredFrameContent(
-  value: unknown,
-  name: string,
-  property: string,
-  registerMount?: (configured: TaoConfiguredNavigation, mount: TaoNavigationValue) => void,
-  resolvePresentable?: (presentable: TaoPresentable) => TaoPresentable,
-): TaoPresentable | TaoNavigationValue | Evaluable | undefined {
-  if (value === undefined) {
-    return undefined
-  }
-  const mounted = isConfiguredNavigation(value)
-    ? mountConfiguredNavigation(value, registerMount, resolvePresentable)
-    : value
-  if (isPresentable(mounted)) {
-    return mounted.kind === 'view' && resolvePresentable ? resolvePresentable(mounted) : mounted
-  }
-  if (mounted && typeof (mounted as Evaluable).evaluate === 'function') {
-    return mounted as Evaluable
-  }
-  throw new UserInputError(`${name} configuration '${property}' expects ui, nav, or none.`, { name, property })
-}
-
 function configuredKey(value: unknown, name: string, property: string): string {
   const key = configuredEvaluable(value, name, property).evaluate().jsValue
   if (typeof key !== 'string' || !key.startsWith('@')) {
@@ -303,35 +243,4 @@ function freezePlainNavValue<ValueT>(value: ValueT): ValueT {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype
-}
-
-/** patchedFrameSlot normalizes one slot patch into the members a configured frame item carries. */
-export function patchedFrameSlot(
-  value: unknown,
-  navigationName: string,
-  slot: string,
-): Partial<TaoFrameNavItemDefinition> {
-  RuntimeAssert.input(
-    isPlainRecord(value),
-    `Navigation ${navigationName} slot '${slot}' expects a block of slot members.`,
-    { navigationName, slot },
-  )
-  const item = value as Record<string, unknown>
-  const content = item['Content'] === undefined
-    ? undefined
-    // A patched slot's nav still joins the reset set, exactly as a configured one does.
-    : configuredFrameContent(item['Content'], navigationName, `${slot}.Content`, (_configured, mount) => {
-      registerNavigation(mount)
-    })
-  const label = item['Label'] === undefined
-    ? undefined
-    : configuredEvaluable(item['Label'], navigationName, `${slot}.Label`)
-  const size = item['Size'] === undefined
-    ? undefined
-    : configuredEvaluable(item['Size'], navigationName, `${slot}.Size`)
-  return {
-    ...(content ? { content } : {}),
-    ...(label ? { label } : {}),
-    ...(size ? { size } : {}),
-  }
 }

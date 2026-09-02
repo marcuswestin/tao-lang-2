@@ -107,7 +107,7 @@ export const ExpressionsCompiler = {
       ConfigurationReference: compileConfigurationReference,
       ListLiteral: Compile.Expression,
       // A conditional or absent member compiles as the ordinary expression it is; the runtime reads
-      // it on every render, which is what makes an empty frame edge reactive.
+      // it on every render, which is what makes an absent member reactive.
       NoneLiteral: Compile.Expression,
       NumberLiteral: Compile.Expression,
       PropertyConfigurationPatch: value =>

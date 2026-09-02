@@ -147,6 +147,7 @@ export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AS
 
 type ArgumentListOwner =
   | AST.Render
+  | AST.AppView
   | AST.DoStatement
   | AST.CommandDoClause
   | AST.FunctionCallExpression
@@ -430,7 +431,7 @@ export function attachedTag(node: AST.Render | AST.ForStatement): AST.TagStateme
   return AST.isTagStatement(previous) ? previous : undefined
 }
 
-/** slotFillRootTag returns a leading tag that configures the visual root filling one frame slot. */
+/** slotFillRootTag returns a leading tag that configures the visual root filling one named render slot. */
 function slotFillRootTag(render: AST.Render): AST.TagStatement | undefined {
   const use = render.$container
   const block = render.block

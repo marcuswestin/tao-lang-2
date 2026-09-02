@@ -68,7 +68,7 @@ export function patchedEvaluable(
   return patch
 }
 
-function isEvaluable(value: unknown): value is Evaluable {
+export function isEvaluable(value: unknown): value is Evaluable {
   return typeof value === 'object' && value !== null && 'evaluate' in value
     && typeof value.evaluate === 'function'
 }

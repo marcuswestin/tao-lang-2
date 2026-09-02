@@ -4,8 +4,6 @@ import { RuntimeAssert } from './TR-assert'
 import { UserInputError } from './TR-errors'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type {
-  TaoFrameNavConfiguration,
-  TaoFrameNavItemDefinition,
   TaoNavDescriptor,
   TaoNavigationArguments,
   TaoNavigationPatch,
@@ -18,7 +16,6 @@ import type {
   TaoStackNavConfiguration,
 } from './TR-navigation'
 import { BasicStackSurface } from './TR-navigation-basic-stack'
-import { patchedFrameSlot } from './TR-navigation-configuration'
 import { RuntimeHostReadChannel } from './TR-navigation-host-slots'
 import { nativeStackAvailable, NativeStackSurface } from './TR-navigation-native-stack'
 import { nativeSelectionTabsAvailable, renderNativeSelectionTabs } from './TR-navigation-native-tabs'
@@ -32,7 +29,6 @@ import { RuntimeNavigationValue, takeRemovedBrowserHistoryId } from './TR-naviga
 import {
   assertPatchKeys,
   isNavigation,
-  isPresentable,
   patchedEvaluable,
   patchedPresentable,
   patchedSelectionKey,
@@ -220,248 +216,6 @@ function runtimeNumber(jsValue: number): any {
   return result
 }
 
-/** The frame's center slot: the one slot that takes presentation and Back. */
-const frameCenterKey = 'center'
-
-/** The frame's slots. One `@key` template declares their shape; these are their names. */
-const frameSlotKeys = ['top', 'bottom', 'left', 'right', 'center'] as const
-
-/**
- * RuntimeFrameNav renders fixed chrome edges around one navigated center.
- *
- * Horizontal bars win the corners: `@top` and `@bottom` span the full width and `@left`/`@right`
- * occupy the space between them, so the layout is a column of [top, row of [left, center, right],
- * bottom]. `left`/`right` are the language's own layout terms and reverse under RTL with the
- * writing direction, exactly as every other Tao row does.
- */
-export class RuntimeFrameNav extends RuntimeNavigationValue {
-  readonly kind = 'frame'
-  readonly name: string
-
-  constructor(readonly descriptor: TaoNavDescriptor<'frame', TaoFrameNavConfiguration>) {
-    super()
-    this.name = descriptor.declaration.name
-    for (const item of Object.values(descriptor.config.items)) {
-      const content = item.content
-      if (content && isPresentable(content) && isNavigation(content)) {
-        content.subscribe(() => this.emit())
-      }
-    }
-  }
-
-  /** present prefers the center: a frame's edges are chrome and never take a presentation. */
-  present(presentable: TaoPresentable, arguments_: TaoNavigationArguments): void {
-    const center = this.centerNavigation()
-    center ? center.present(presentable, arguments_) : this.presentOverlay(presentable, arguments_)
-  }
-
-  /**
-   * activate reaches a selection key through the frame. A frame is a container, not a destination:
-   * a tab key names an item in whatever navigator holds it, so the center is asked first and the
-   * edges after, since an edge may itself hold a selection.
-   */
-  override activate(key: string): boolean {
-    const center = this.centerNavigation()
-    if (center?.activate(key)) {
-      return true
-    }
-    return this.slotNavigations().some(navigation => navigation !== center && navigation.activate(key))
-  }
-
-  /**
-   * patched replaces one slot's members and leaves the rest of the frame alone, which is how an app
-   * variant reconfigures part of its shell — previewing a different tab surface in the center
-   * without restating the edges around it.
-   */
-  patched(patch: TaoNavigationPatch): RuntimeNavigationValue {
-    assertPatchKeys(patch, frameSlotKeys.map(key => `@${key}`), this.name)
-    const items = { ...this.descriptor.config.items }
-    for (const [patchKey, value] of Object.entries(patch)) {
-      const key = patchKey.slice(1)
-      const existing = items[key]
-      RuntimeAssert.input(
-        existing !== undefined,
-        `Navigation ${this.name} has no slot '${patchKey}' to patch.`,
-        { navigationName: this.name, slot: patchKey },
-      )
-      items[key] = { ...existing, ...patchedFrameSlot(value, this.name, patchKey) }
-    }
-    const descriptor = this.descriptor.kind.configure(this.descriptor.declaration, {
-      ...this.descriptor.config,
-      items,
-    })
-    return descriptor.kind.mount(descriptor) as RuntimeNavigationValue
-  }
-
-  protected canGoBackContent(): boolean {
-    return this.centerNavigation()?.canGoBack === true
-  }
-
-  protected override contentHistoryDepth(): number {
-    return this.centerNavigation()?.historyDepth() ?? 0
-  }
-
-  /** backContent routes to the center's own navigator; an edge slot never consumes Back. */
-  protected backContent(): boolean {
-    const center = this.centerNavigation()
-    if (!center) {
-      return false
-    }
-    const consumed = center.back()
-    if (consumed) {
-      this.adoptRemovedBrowserHistoryId(takeRemovedBrowserHistoryId(center))
-    }
-    return consumed
-  }
-
-  protected dismissContent(): boolean {
-    return this.backContent()
-  }
-
-  protected resetContent(): void {
-    for (const navigation of this.slotNavigations()) {
-      navigation.reset()
-    }
-  }
-
-  protected renderContent(taoProps?: TaoProps): React.ReactNode {
-    return React.createElement(FrameNavSurface, { navigation: this, taoProps })
-  }
-
-  protected snapshotRestorationContent(codec: TaoNavigationRestorationCodec): TaoNavigationContentSnapshot {
-    return {
-      items: Object.fromEntries(
-        Object.entries(this.descriptor.config.items).map(([key, item]) => {
-          const content = frameSlotNavigation(item)
-          return [
-            key,
-            content && hasRestorationCapability(content)
-              ? { navigation: content.navigationRestorationSnapshot(codec, codec.exclusions) }
-              : {},
-          ]
-        }),
-      ),
-      kind: 'frame',
-    }
-  }
-
-  protected restoreRestorationContent(
-    snapshot: TaoNavigationContentSnapshot,
-    codec: TaoNavigationRestorationCodec,
-  ): void {
-    if (snapshot.kind !== 'frame') {
-      throw new UserInputError(`Restored content is not a frame for '${this.name}'.`, { navigation: this.name })
-    }
-    for (const [key, restored] of Object.entries(snapshot.items)) {
-      const item = this.descriptor.config.items[key]
-      const content = item ? frameSlotNavigation(item) : undefined
-      if (restored.navigation && content && hasRestorationCapability(content)) {
-        content.restoreNavigationSnapshot(restored.navigation, codec)
-      }
-    }
-  }
-
-  private centerNavigation(): TaoNavigationValue | undefined {
-    const center = this.descriptor.config.items[frameCenterKey]
-    return center ? frameSlotNavigation(center) : undefined
-  }
-
-  private slotNavigations(): TaoNavigationValue[] {
-    return Object.values(this.descriptor.config.items).flatMap(item => {
-      const navigation = frameSlotNavigation(item)
-      return navigation ? [navigation] : []
-    })
-  }
-}
-
-function FrameNavSurface(props: { navigation: RuntimeFrameNav; taoProps?: TaoProps }): React.JSX.Element {
-  const runtime = requireReactNativeRuntime()
-  const items = props.navigation.descriptor.config.items
-  const taoProps = navigationProps(props.taoProps, props.navigation)
-  const slot = (key: string, style: Record<string, unknown>): React.ReactNode => {
-    const item = items[key]
-    // The empty-slot rule is semantic, never measured: a slot whose Content is absent renders no
-    // content AND no container, so it reserves no space in the frame's own layout.
-    const content = item ? frameSlotContent(item) : undefined
-    if (!item || !content) {
-      return undefined
-    }
-    const label = frameSlotLabel(item)
-    return React.createElement(runtime.View, {
-      ...(label ? { accessibilityLabel: label } : {}),
-      children: renderPresentable(content, {}, taoProps),
-      key,
-      style,
-    })
-  }
-  const middle = [
-    slot('left', frameEdgeStyle(items['left'])),
-    slot(frameCenterKey, frameCenterStyle),
-    slot('right', frameEdgeStyle(items['right'])),
-  ].filter(child => child !== undefined)
-  return React.createElement(runtime.View, {
-    children: [
-      slot('top', frameEdgeStyle(items['top'])),
-      middle.length === 0
-        ? undefined
-        : React.createElement(runtime.View, { children: middle, key: 'frame-middle', style: frameMiddleStyle }),
-      slot('bottom', frameEdgeStyle(items['bottom'])),
-    ].filter(child => child !== undefined),
-    style: frameHostStyle,
-  })
-}
-
-/** frameSlotContent reads one slot's live Content; absence is the semantic empty-slot rule. */
-function frameSlotContent(item: TaoFrameNavItemDefinition): TaoPresentable | TaoNavigationValue | undefined {
-  const content = item.content
-  if (content === undefined) {
-    return undefined
-  }
-  if (isPresentable(content)) {
-    return content
-  }
-  const evaluated: unknown = content.evaluate()
-  if (isPresentable(evaluated)) {
-    return evaluated
-  }
-  const jsValue: unknown = (evaluated as { jsValue?: unknown } | undefined)?.jsValue
-  return isPresentable(jsValue) ? jsValue : undefined
-}
-
-/** frameSlotNavigation is the nested navigator a slot owns, which is the slot's restorable state. */
-function frameSlotNavigation(item: TaoFrameNavItemDefinition): TaoNavigationValue | undefined {
-  const content = frameSlotContent(item)
-  return content && isNavigation(content) ? content : undefined
-}
-
-function frameSlotLabel(item: TaoFrameNavItemDefinition): string | undefined {
-  const label: unknown = item.label.evaluate().jsValue
-  return typeof label === 'string' && label.length > 0 ? label : undefined
-}
-
-/** frameSlotSize reads the one perpendicular dimension; absence means content-derived. */
-function frameSlotSize(item: TaoFrameNavItemDefinition | undefined): number | undefined {
-  const size: unknown = item?.size?.evaluate().jsValue
-  if (size === undefined || size === null) {
-    return undefined
-  }
-  if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) {
-    throw new UserInputError('FrameNav Size must be a finite non-negative number.', { value: size })
-  }
-  return size
-}
-
-function frameEdgeStyle(item: TaoFrameNavItemDefinition | undefined): Record<string, unknown> {
-  const size = frameSlotSize(item)
-  return size === undefined
-    ? { flexGrow: 0, flexShrink: 0 }
-    : { flexBasis: size, flexGrow: 0, flexShrink: 0 }
-}
-
-const frameHostStyle = { flex: 1, flexDirection: 'column' } as const
-const frameMiddleStyle = { flex: 1, flexDirection: 'row' } as const
-const frameCenterStyle = { flex: 1 } as const
-
 /** RuntimeStackNav owns an ordered presentation history and preserves covered entries. */
 export class RuntimeStackNav extends RuntimeNavigationValue {
   readonly kind = 'stack'
@@ -564,7 +318,7 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
   reconcileNativeDismissal(instanceId: number, count: number): void {
     // A native gesture belongs to the retained content stack. If Tao is currently presenting an
     // overlay or ask above it, that semantic layer must win Back precedence and the gesture is stale.
-    if (this.historyDepth() > this.contentHistoryDepth()) {
+    if (this.overlayDepth() > 0) {
       return
     }
     const dismissedIndex = this.entries.findIndex(entry => entry.instanceId === instanceId)
@@ -588,7 +342,7 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
   override ownsBackAffordance(): boolean {
     // Content chrome is defocused while an overlay or ask is active, so it cannot own the visible
     // affordance then. The app host supplies one until the overlay lane is empty again.
-    if (this.historyDepth() > this.contentHistoryDepth()) {
+    if (this.overlayDepth() > 0) {
       return false
     }
     return this.depth > 1 || this.initialNavigation()?.ownsBackAffordance() === true
@@ -780,7 +534,8 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
 
   override activate(key: string): boolean {
     if (!this.item(key)) {
-      return false
+      // Not one of this navigator's own keys: a navigator an item's view renders may still own it.
+      return super.activate(key)
     }
     if (key !== this.activeKey) {
       this.activeKey = key

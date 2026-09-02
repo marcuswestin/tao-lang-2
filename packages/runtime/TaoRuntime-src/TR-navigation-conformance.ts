@@ -1,5 +1,4 @@
 import type {
-  TaoFrameNavConfiguration,
   TaoNavKind,
   TaoNavKindProfile,
   TaoNavMount,
@@ -83,7 +82,6 @@ function conformanceConfiguration(
   | TaoSlotNavConfiguration
   | TaoSelectionNavConfiguration
   | TaoSplitNavConfiguration
-  | TaoFrameNavConfiguration
 {
   if (profile === 'selection') {
     return {
@@ -98,17 +96,6 @@ function conformanceConfiguration(
   if (profile === 'split') {
     const scalar = (jsValue: unknown) => ({ evaluate: () => ({ jsValue }) })
     return { items: { home: { content: home, resizable: scalar(false), width: scalar(320) } } }
-  }
-  if (profile === 'frame') {
-    const scalar = (jsValue: unknown) => ({ evaluate: () => ({ jsValue }) })
-    return {
-      items: {
-        // An absent Content is the empty-slot rule's own case, so conformance configures one.
-        bottom: { content: scalar(null), label: scalar('Status') },
-        center: { content: home, label: scalar('Content') },
-        top: { content: detail, label: scalar('Toolbar'), size: scalar(44) },
-      },
-    }
   }
   return {
     initial: home,
@@ -149,12 +136,6 @@ function testNavKindProfile(
       kind.present(mount, detail, {})
       assertNavKind(kind.back(mount), 'Split back must dismiss a presentation above its panes.')
       assertNavKind(!kind.canGoBack(mount), 'Split back must restore its pane roots.')
-    },
-    frame: () => {
-      assertNavKind(!kind.activate(mount, 'top'), 'Frame edges are chrome and are never activated.')
-      kind.present(mount, detail, {})
-      assertNavKind(kind.back(mount), 'Frame back must dismiss a presentation above its center.')
-      assertNavKind(!kind.canGoBack(mount), 'Frame back must restore its center root.')
     },
   })
 }

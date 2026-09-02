@@ -186,12 +186,10 @@ Describe('TR.Navigation', () => {
     TR.testNavKind(TR.NavKind.Slot(), 'slot')
     TR.testNavKind(TR.NavKind.Selection(), 'selection')
     TR.testNavKind(TR.NavKind.Split(), 'split')
-    TR.testNavKind(TR.NavKind.Frame(), 'frame')
     TR.testNavKind(TR.NavKind.Basic.Stack(), 'stack')
     TR.testNavKind(TR.NavKind.Basic.Slot(), 'slot')
     TR.testNavKind(TR.NavKind.Basic.Selection(), 'selection')
     TR.testNavKind(TR.NavKind.Basic.Split(), 'split')
-    TR.testNavKind(TR.NavKind.Basic.Frame(), 'frame')
 
     const kind = TR.NavKind.Stack()
     const declaration = TR.NavKind.Declaration('ThirdPartyStack')
@@ -956,56 +954,80 @@ Describe('TR.Navigation', () => {
     Expect(namedAuxiliaryLoads).toBe(0)
   })
 
-  // A frame's Content is read, never captured: absence is the empty-slot rule and it must survive
-  // being reversed. `canGoBack` is the observable that follows the center's live content.
-  Test('reads a frame slot Content on every read so an emptied slot comes back', () => {
-    const home = TR.Navigation.View({ name: 'Frame home', render: () => null })
-    const detail = TR.Navigation.View({ name: 'Frame detail', render: () => null })
-    const center = configuredStack('Frame center', home)
-    const sidebar = configuredStack('Frame sidebar', home)
-    const scalar = (jsValue: unknown) => ({ evaluate: () => ({ jsValue }) })
-    let occupied = true
-    const kind = TR.NavKind.Frame()
-    const frame = kind.mount(kind.configure(TR.NavKind.Declaration('Live frame'), {
-      items: {
-        bottom: { content: scalar(null), label: scalar('Status') },
-        center: { content: { evaluate: () => ({ jsValue: occupied ? center : null }) }, label: scalar('Content') },
-        left: { content: sidebar, label: scalar('Sidebar'), size: scalar(240) },
+  // A navigator a view renders mounts once on the occurrence that hosts it, and that mount is what
+  // Back and activation reach: the host's content is a view rather than a slot, so the navigator
+  // keeps its own history wherever the view puts it.
+  Test('hosts a rendered navigator once and routes Back and activation through it', () => {
+    const home = TR.Navigation.View({ name: 'Hosted home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Hosted detail', render: () => null })
+    const shell = TR.Navigation.View({ name: 'Shell', render: () => null })
+    const tabs = TR.Navigation.Configure(
+      TR.Navigation.Declaration('Hosted tabs', TR.NavKind.Selection()),
+      {
+        Display: { evaluate: () => ({ jsValue: 'tabs' }) },
+        Initial: { evaluate: () => ({ jsValue: '@home' }) },
+        '@home': {
+          Content: configuredStack('Hosted home stack', home),
+          Label: { evaluate: () => ({ jsValue: 'Home' }) },
+        },
+        '@settings': { Content: detail, Label: { evaluate: () => ({ jsValue: 'Settings' }) } },
       },
-    }))
+    )
+    const host = configuredSlot('Hosted shell', shell)
+    let created = 0
+    const create = () => {
+      created += 1
+      return TR.Navigation.Mount(tabs)
+    }
+    const mount = host.hostNavigation(tabs, create)
+    Expect(host.hostNavigation(tabs, create)).toBe(mount)
+    Expect(created).toBe(1)
 
-    // An edge holds a navigator of its own and still never lends the frame its Back.
-    sidebar.present(detail, {})
-    Expect(kind.canGoBack(frame)).toBe(false)
+    // Until a view renders the navigator it is not on screen, so the host does not reach it.
+    mount.present(detail, {})
+    Expect(host.canGoBack).toBe(false)
+    const detach = host.attachHostedNavigation(mount, true)
+    Expect(host.canGoBack).toBe(true)
+    Expect(host.back()).toBe(true)
+    Expect(host.canGoBack).toBe(false)
+    Expect(host.activate('settings')).toBe(true)
+    Expect(host.activate('missing')).toBe(false)
 
-    center.present(detail, {})
-    Expect(kind.canGoBack(frame)).toBe(true)
-    occupied = false
-    Expect(kind.canGoBack(frame)).toBe(false)
-    occupied = true
-    Expect(kind.canGoBack(frame)).toBe(true)
-    Expect(kind.back(frame)).toBe(true)
-    Expect(kind.canGoBack(frame)).toBe(false)
-    Expect(sidebar.canGoBack).toBe(true)
+    // The host's own content goes before the navigator inside it.
+    host.present(detail, {})
+    mount.present(detail, {})
+    Expect(host.back()).toBe(true)
+    Expect(mount.canGoBack).toBe(true)
+    Expect(host.back()).toBe(true)
+    Expect(mount.canGoBack).toBe(false)
+    detach()
+    mount.present(detail, {})
+    Expect(host.canGoBack).toBe(false)
   })
 
-  Test("restores every frame slot's own navigation across a launch boundary", async () => {
+  // The host snapshots a hosted navigator by that navigator's own descriptor identity and restores
+  // it when a view attaches it, because the app restores before its first render puts a view on
+  // screen and a view is the only thing that renders a hosted navigator.
+  Test('restores a hosted navigator by its own identity when it attaches after a launch boundary', async () => {
     const values = new Map<string, string>()
     const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
     try {
-      const first = frameRestorationApp('frame')
+      const first = hostedRestorationApp('hosted')
       const detach = await first.app.attachRestoration()
-      frameSlotNavigation(first.app, 'center').present(first.detail, {})
-      frameSlotNavigation(first.app, 'left').present(first.detail, {})
+      const mount = hostRenderedNavigator(first)
+      mount.present(first.detail, {})
+      mount.present(first.detail, {})
       await Promise.resolve()
       await Promise.resolve()
       await new Promise<void>(resolve => queueMicrotask(resolve))
       detach()
 
-      const second = frameRestorationApp('frame')
+      const second = hostedRestorationApp('hosted')
       const detachSecond = await second.app.attachRestoration()
-      Expect(frameSlotDepth(second.app, 'center')).toBe(2)
-      Expect(frameSlotDepth(second.app, 'left')).toBe(2)
+      const restored = hostRenderedNavigator(second)
+      Expect(stackDepth(restored)).toBe(3)
+      Expect(second.app.back()).toBe(true)
+      Expect(stackDepth(restored)).toBe(2)
       detachSecond()
     } finally {
       restoreStorage()
@@ -1013,55 +1035,44 @@ Describe('TR.Navigation', () => {
   })
 })
 
-/** frameRestorationApp builds the Tao-shaped frame configuration one app restores through. */
-function frameRestorationApp(variant: string) {
+/** hostedRestorationApp builds an app rooted in a view that renders one navigator inside it. */
+function hostedRestorationApp(variant: string) {
   const identity = (kind: string, name: string) =>
     TR.Navigation.Identity([
       'tao.declaration',
       1,
-      'frame-restoration-test',
+      'hosted-restoration-test',
       '@workspace',
       'App',
       kind,
       name,
     ] as TaoDeclarationIdentityTuple)
-  const scalar = (jsValue: unknown) => ({ evaluate: () => ({ jsValue }) })
   const home = TR.Navigation.View({ identity: identity('view', 'Home'), name: 'Home', render: () => null })
   const detail = TR.Navigation.View({ identity: identity('view', 'Detail'), name: 'Detail', render: () => null })
-  const center = TR.Navigation.Declaration('CenterStack', TR.NavKind.Stack(), identity('nav', 'CenterStack'))
-  const sidebar = TR.Navigation.Declaration('SidebarStack', TR.NavKind.Stack(), identity('nav', 'SidebarStack'))
-  const frame = TR.Navigation.Declaration('Frame', TR.NavKind.Frame(), identity('nav', 'Frame'))
+  const shell = TR.Navigation.View({ identity: identity('view', 'Shell'), name: 'Shell', render: () => null })
+  const root = TR.Navigation.Declaration('Root', TR.NavKind.Slot(), identity('app-root-view-nav', 'ShellApp'))
+  const rendered = TR.Navigation.Declaration('Rendered', TR.NavKind.Stack(), identity('nav', 'Rendered'))
   const app = TR.Navigation.App({
     auxiliaries: () => ({}),
-    declaration: TR.Navigation.AppDeclaration('FrameApp', identity('app', 'FrameApp')),
-    name: 'FrameApp',
-    navigator: () =>
-      TR.Navigation.Configure(frame, {
-        '@center': { Content: TR.Navigation.Configure(center, { Initial: home }), Label: scalar('Content') },
-        '@left': {
-          Content: TR.Navigation.Configure(sidebar, { Initial: home }),
-          Label: scalar('Sidebar'),
-          Size: scalar(240),
-        },
-        // The unfilled slot the Tao default produces: a Content that evaluates to absence.
-        '@right': { Content: scalar(null), Label: scalar('Inspector'), Size: scalar(null) },
-      }),
+    declaration: TR.Navigation.AppDeclaration('ShellApp', identity('app', 'ShellApp')),
+    name: 'ShellApp',
+    navigator: () => TR.Navigation.Configure(root, { Initial: shell }),
     restoration: { exclusions: [], mode: 'automatic', variant },
   })
-  return { app, detail }
+  return { app, detail, rendered: TR.Navigation.Configure(rendered, { Initial: home }) }
 }
 
-type FrameRestorationApp = ReturnType<typeof frameRestorationApp>['app']
+type HostedRestorationApp = ReturnType<typeof hostedRestorationApp>
 
-function frameSlotNavigation(app: FrameRestorationApp, key: string): TR.NavigationValue {
-  const items = (app.navigator.descriptor.config as {
-    items: Record<string, { content?: TR.NavigationValue }>
-  }).items
-  const content = items[key]?.content
-  RuntimeAssert.defined(content, `frame slot '@${key}' holds a navigator`, { key })
-  return content
+/** hostRenderedNavigator does what a render site does: host the navigator on the root and attach it. */
+function hostRenderedNavigator(fixture: HostedRestorationApp): TR.NavigationValue {
+  const host = fixture.app.navigator
+  const mount = host.hostNavigation(fixture.rendered, () => fixture.app.hostNavigation(host, fixture.rendered))
+  host.attachHostedNavigation(mount, true)
+  return mount
 }
 
-function frameSlotDepth(app: FrameRestorationApp, key: string): number {
-  return (frameSlotNavigation(app, key) as TR.NavigationValue & { depth: number }).depth
+function stackDepth(navigation: TR.NavigationValue): number {
+  RuntimeAssert.input(navigation.kind === 'stack', 'a hosted stack reports its depth')
+  return (navigation as TR.NavigationValue & { depth: number }).depth
 }

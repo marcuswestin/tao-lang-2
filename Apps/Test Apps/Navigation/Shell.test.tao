@@ -1,0 +1,66 @@
+use OtherShellApp, SelectionShellApp, ShellApp from ./
+
+test "Shell" {
+   // The navigator is rendered by the shell as ordinary content, and Back still reaches it: the app
+   // asks its root, and the root reaches the navigator its view renders.
+   test "pushes and pops inside a navigator the shell renders" {
+      run ShellApp
+
+      expect text "Primary shell"
+      expect text "Center home"
+      expect text "Shell status"
+      press "Open center detail"
+      expect text "Center pushed"
+      expect missing text "Center home"
+      back
+      expect text "Center home"
+      expect missing text "Center pushed"
+   }
+   // A rendered navigator restores by its own identity, so its position survives a relaunch, and
+   // `relaunch fresh` opens it at its root.
+   test "keeps the rendered navigator's position across a relaunch" {
+      run ShellApp
+      press "Open center detail"
+      expect text "Center pushed"
+      relaunch
+      expect text "Center pushed"
+      expect missing text "Center home"
+      relaunch fresh
+      expect text "Center home"
+      expect missing text "Center pushed"
+   }
+   // The bar beside the navigator is conditional; the navigator is not. Mounting and unmounting the
+   // bar leaves the navigator's position where it was.
+   test "mounts and unmounts a sibling while the navigator keeps its position" {
+      run ShellApp
+      press "Open center detail"
+      expect text "Center pushed"
+      press #hideStatus
+      expect missing text "Shell status"
+      expect text "Center pushed"
+      press #showStatus
+      expect text "Shell status"
+      expect text "Center pushed"
+   }
+   // Selection activation reaches a rendered SelectionNav through the shell.
+   test "activates a key on a rendered selection navigator" {
+      run SelectionShellApp
+
+      expect text "Selection shell"
+      expect text "First tab"
+      expect missing text "Second tab"
+      press #goSecond
+      expect text "Second tab"
+      expect missing text "First tab"
+   }
+   // The app root is a view with arguments, and a variant rebinds them: the same shell shows the
+   // label and the navigator the variant handed it.
+   test "renders the arguments a variant binds to the root view" {
+      run OtherShellApp
+
+      expect text "Other shell"
+      expect text "Other home"
+      expect missing text "Primary shell"
+      expect missing text "Center home"
+   }
+}

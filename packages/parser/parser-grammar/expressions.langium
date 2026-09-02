@@ -2,6 +2,7 @@ grammar TaoExpressions
 
 import "./aliases"
 import "./actions"
+import "./app"
 import "./blocks"
 import "./configuration"
 import "./types"
@@ -154,8 +155,11 @@ type ConstructorDeclaration = TypeDeclaration | ParameterizedDeclaration;
 ConfigurationBlock:
     '{' (entries+=ConfigurationEntry (','? entries+=ConfigurationEntry)*)? '}';
 
+// `view Shell(Other)` in an app variant's patch rebinds the root view the way a property entry rebinds
+// a slot; it is legal only where an app value is being configured, which the validator enforces.
 ConfigurationEntry:
     restoration=RestorationPolicy
+    | rootView=AppView
     | key=USE_IMPORT_PATH block=ConfigurationBlock
     | label=ID ':' expression=Expression
     | name=ID ('.' nameMembers+=ID)* (value=ConfigurationValue | block=ConfigurationBlock)

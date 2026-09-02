@@ -5,7 +5,7 @@ use FormButton from @tao/ui/basic
 
 // A focused writing session: pick a length, write until the clock runs out, pause and resume, or
 // stop early. The session is a row in the device-local store rather than state in one view, which
-// is what lets the editor start it and the shell frame count it down.
+// is what lets the editor start it and the shell count it down.
 //
 // Starting is an editor affordance -- you choose a length where you are about to write -- so this
 // view creates the row and nothing else.
@@ -32,12 +32,12 @@ view FocusStarter() {
          otherwise -> { Text("A session is running") [caption] }
 }  }  }
 
-// The focus bar: the running session, wherever you are. It sits in the shell frame's bottom slot
-// and reads the session from the store rather than from a parent view, which is what lets it stay
-// visible while the writing happens three navigation levels deeper. `EndsAt` is absolute, so a
+// The focus bar: the running session, wherever you are. The shell lays it out beside the navigator,
+// and it reads the session from the store rather than from a parent view, which is what lets it
+// stay visible while the writing happens three navigation levels deeper. `EndsAt` is absolute, so a
 // running session survives relaunch; pausing freezes the reading by recording when it stopped, and
 // resuming re-anchors the deadline to the remainder, so paused time is not lost.
-workspace
+folder
 view FocusBar() {
    state Tick = Interval(1.s)
    render Row() [subtlePanel, gap 12] {

@@ -16,6 +16,7 @@ import { resolveItemPropertyBindings } from './item-property-bindings'
 import { layoutEntryValues, layoutTermValue } from './layouts'
 import { Packages } from './Packages'
 import { referencedNames } from './references'
+import { renderTargetIsNav, renderTargetName, resolveRenderTarget } from './render-targets'
 import { Type } from './Type'
 import { literalDurationOf, Units } from './Units'
 
@@ -37,6 +38,8 @@ export const ASTUtils = {
   layoutTermValue,
   literalDurationOf,
   referencedNames,
+  renderTargetIsNav,
+  renderTargetName,
   resolveActionInvocation,
   resolveArgumentBindings,
   resolveActionTarget,
@@ -44,6 +47,7 @@ export const ASTUtils = {
   resolveFunctionInvocation,
   resolveItemPropertyBindings,
   resolveRenderInvocation,
+  resolveRenderTarget,
   rootAppValue,
   standardDesignElementName,
 } as const
@@ -68,6 +72,7 @@ export namespace ASTUtils {
   export type RenderEventBindingDiagnostic = import('./invocations').RenderEventBindingDiagnostic
   export type RenderEventBindingPair = import('./invocations').RenderEventBindingPair
   export type RenderInvocationPair = import('./argument-bindings').RenderInvocationPair
+  export type RenderTarget = import('./render-targets').RenderTarget
   export type ResolvedActionInvocation = import('./invocations').ResolvedActionInvocation
   export type ResolvedActionTarget = import('./invocations').ResolvedActionTarget
   export type ResolvedFunctionInvocation = import('./invocations').ResolvedFunctionInvocation

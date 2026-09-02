@@ -322,7 +322,7 @@ function validateConfiguredProperty(
   const actual = configurationValueType(value)
   // A member defaulted to `none` is optional, exactly as an optional field is, so a conditional
   // value that may be absent satisfies it. `Datasource datasource is none` in the Prelude is the
-  // same shape; a frame slot's `Content view is none` is what makes an empty edge expressible.
+  // same shape.
   const expected = configurationPropertyAcceptsAbsence(property)
     ? { kind: 'union' as const, members: [Type.ofConfigurationProperty(property), Type.ofNone()] }
     : Type.ofConfigurationProperty(property)

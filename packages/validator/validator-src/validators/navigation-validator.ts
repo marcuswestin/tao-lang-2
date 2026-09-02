@@ -52,21 +52,23 @@ export const navigationValidationMessages = {
     `Scene '${view}' must fill Title when used as a statically known StackNav destination.`,
   missingNavHostTitle: (nav: string) =>
     `Navigation '${nav}' must configure Title when used as a statically known StackNav destination.`,
-  unknownFrameSlot: (key: string) => `FrameNav has no slot '${key}'; its slots are ${frameNavSlotKeys.join(', ')}.`,
-  frameCenterSize: "FrameNav slot '@center' has no Size: it fills whatever space the edges leave.",
+  valueRenderArguments: (name: string) =>
+    `Render of ${name} takes no arguments: a nav or a parameter renders as the value it was bound to.`,
+  valueRenderContent: (name: string) =>
+    `Render of ${name} takes no caller content or events: a nav or a parameter renders as the value it was bound to.`,
+  navRenderedInLoop: (name: string) =>
+    `Navigation ${name} cannot render inside a loop: a nav's history lives on its one mount.`,
+  navRenderedConditionally: (name: string) =>
+    `Navigation ${name} cannot render inside a conditional branch: a branch that unmounted it would drop where the person was.`,
+  navRenderedTwice: (name: string) => `Navigation ${name} renders more than once; a nav renders at most once.`,
 } as const
-
-/** The frame's declared slots. One @key template declares their shape; these are their names. */
-const frameNavSlotKeys = ['@top', '@bottom', '@left', '@right', '@center'] as const
 
 /** navigationValidationChecks validates configured navigation and presentation calls. */
 export const navigationValidationChecks = {
   [AST.ContextualPresentStatement.$type]: validateContextualPresentation,
   [AST.ViewBinding.$type]: validateViewBinding,
-  [AST.ConfigurationEntry.$type]: (entry, ctx) => {
-    validateStackInitialTitle(entry, ctx)
-    validateFrameSlot(entry, ctx)
-  },
+  [AST.ConfigurationEntry.$type]: validateStackInitialTitle,
+  [AST.Render.$type]: validateRenderedValue,
   [AST.DismissStatement.$type]: (dismiss, ctx) => {
     if (!AST.findOwningView(dismiss)) {
       ctx.error(navigationValidationMessages.dismissContext, dismiss)
@@ -107,8 +109,85 @@ function validateViewBinding(binding: AST.ViewBinding, ctx: ValidationContext): 
   }
   const resolved = ASTUtils.resolveArgumentBindings(view, binding)
   for (const diagnostic of resolved.diagnostics) {
-    reportBindingDiagnostic(view, diagnostic, binding, ctx)
+    reportPresentationBindingDiagnostic(view, diagnostic, binding, ctx)
   }
+}
+
+/**
+ * validateRenderedValue holds a render site that names a nav or a parameter to the rules a rendered
+ * value needs. The value renders as it was bound, so the site passes nothing into it. A nav also
+ * keeps its history on its one mount, so it renders at most once, never in a loop, and never in a
+ * conditional branch — all diagnosed here, at the render site, because the declaration is not wrong.
+ */
+function validateRenderedValue(render: AST.Render, ctx: ValidationContext): void {
+  const target = ASTUtils.resolveRenderTarget(render)
+  if (!target || target.kind === 'view') {
+    return
+  }
+  const name = ASTUtils.renderTargetName(target)
+  if (AST.argumentsOf(render).length > 0) {
+    ctx.error(navigationValidationMessages.valueRenderArguments(name), render)
+  }
+  if (render.block && render.block.statements.length > 0) {
+    ctx.error(navigationValidationMessages.valueRenderContent(name), render)
+  }
+  if (!ASTUtils.renderTargetIsNav(target)) {
+    return
+  }
+  const placement = renderPlacement(render)
+  if (placement.loop) {
+    ctx.error(navigationValidationMessages.navRenderedInLoop(name), render)
+  }
+  if (placement.conditional) {
+    ctx.error(navigationValidationMessages.navRenderedConditionally(name), render)
+  }
+  if (navRenderSites(render, target, ctx).length > 1) {
+    ctx.error(navigationValidationMessages.navRenderedTwice(name), render)
+  }
+}
+
+/** renderPlacement reports the loops and conditional branches between a render site and its view. */
+function renderPlacement(render: AST.Render): { conditional: boolean; loop: boolean } {
+  const placement = { conditional: false, loop: false }
+  let current: AST.Node | undefined = render.$container
+  while (current && !AST.isViewDeclaration(current)) {
+    if (AST.isForStatement(current)) {
+      placement.loop = true
+    }
+    if (
+      AST.isWhenRenderBranch(current) || AST.isWhenRenderOtherwise(current) || AST.isIfRenderStatement(current)
+      || AST.isGuardRenderBranch(current)
+    ) {
+      placement.conditional = true
+    }
+    current = current.$container
+  }
+  return placement
+}
+
+/**
+ * navRenderSites lists every render site of one nav target. A nav declaration counts across the
+ * workspace, because two views rendering it would be two mounts of one history; a nav-typed
+ * parameter counts within the view that declares it.
+ */
+function navRenderSites(
+  render: AST.Render,
+  target: ASTUtils.RenderTarget,
+  ctx: ValidationContext,
+): AST.Render[] {
+  if (target.kind === 'nav') {
+    return ctx.workspaceFiles
+      .flatMap(file => [...AST.streamAllContents(file)])
+      .filter(AST.isRender)
+      .filter(candidate => candidate.view?.ref === target.declaration)
+  }
+  const owner = AST.findOwningView(render)
+  if (target.kind !== 'parameter' || !owner) {
+    return [render]
+  }
+  return [...AST.streamAllContents(owner)]
+    .filter(AST.isRender)
+    .filter(candidate => candidate.view?.ref === target.parameter)
 }
 
 type EffectiveNavigatorConfiguration = {
@@ -355,87 +434,6 @@ function validateStackInitialTitle(entry: AST.ConfigurationEntry, ctx: Validatio
   }
 }
 
-/**
- * validateFrameSlot enforces the frame's slot vocabulary.
- *
- * A type declares at most one `@key` contract, so the five slot names cannot be five declared
- * members. The stdlib FrameNav declaration is recognized by name and path — the same recognition
- * `isStackNavDeclaration` does — and the names it accepts are checked here instead.
- */
-function validateFrameSlot(entry: AST.ConfigurationEntry, ctx: ValidationContext): void {
-  const key = entry.key
-  if (!key || !isFrameNavDeclaration(keyedConfigurationHost(entry))) {
-    return
-  }
-  if (!frameNavSlotKeys.some(slot => slot === key)) {
-    ctx.error(navigationValidationMessages.unknownFrameSlot(key), entry)
-    return
-  }
-  if (key !== '@center') {
-    return
-  }
-  for (const property of entry.block?.entries ?? []) {
-    if (property.name === 'Size') {
-      ctx.error(navigationValidationMessages.frameCenterSize, property)
-    }
-  }
-}
-
-/** keyedConfigurationHost resolves the configurable declaration one keyed item is configuring. */
-function keyedConfigurationHost(entry: AST.ConfigurationEntry): AST.ConfigurableDeclaration | undefined {
-  const block = entry.$container
-  const constructor = AST.isConfigurationBlock(block) ? block.$container : undefined
-  const declaration = AST.isConfigurationConstructor(constructor)
-    ? constructor.type.ref
-    : AST.isRefinementExpression(constructor)
-    ? configuredExpressionConfiguration(constructor)?.declaration
-    : AST.isInferredConfigurationConstructor(constructor)
-    ? inferredConfigurationHost(constructor)
-    : undefined
-  return AST.isTypeDeclaration(declaration) && AST.isConfigurableDeclaration(declaration) ? declaration : undefined
-}
-
-function inferredConfigurationHost(
-  constructor: AST.InferredConfigurationConstructor,
-): AST.ConfigurableDeclaration | undefined {
-  const owner = constructor.$container
-  const declaration = AST.isAliasDeclaration(owner) ? Type.visibleDeclaration(owner, owner.name) : undefined
-  return declaration && AST.isConfigurableDeclaration(declaration) ? declaration : undefined
-}
-
-/** isFrameNavDeclaration follows transparent aliases and nominal ancestry to the stdlib family. */
-function isFrameNavDeclaration(
-  declaration: AST.ConfigurableDeclaration | undefined,
-  seen: Set<AST.TypeDeclaration> = new Set(),
-): boolean {
-  if (!declaration || seen.has(declaration)) {
-    return false
-  }
-  seen.add(declaration)
-  if (AST.configurationPrimitiveOf(declaration) !== 'nav') {
-    return false
-  }
-  const path = AST.getDocument(declaration).uri.path
-  if (
-    declaration.name === 'FrameNav'
-    && (path.endsWith('/@tao/nav/native/Navigation.tao')
-      || path.endsWith('/@tao/nav/basic/Navigation.tao'))
-  ) {
-    return true
-  }
-  const aliasTarget = declaration.aliasTarget?.member.ref
-  if (AST.isTypeDeclaration(aliasTarget) && isFrameNavDeclaration(aliasTarget, seen)) {
-    return true
-  }
-  const type = declaration.type
-  const base = type && AST.isDerivedTypeExpression(type) ? type.base : type
-  if (!base || !AST.isNamedTypeReference(base) || base.members.length > 0) {
-    return false
-  }
-  const parent = Type.visibleDeclaration(declaration, base.root)
-  return parent && AST.isConfigurableDeclaration(parent) ? isFrameNavDeclaration(parent, seen) : false
-}
-
 function stackInitialHost(entry: AST.ConfigurationEntry): AST.ConfigurableDeclaration | undefined {
   if (entry.name !== 'Initial' || !entry.value) {
     return undefined
@@ -595,7 +593,7 @@ function stackReachability(files: readonly AST.TaoFile[]): StackReachability {
       if (AST.isRender(node)) {
         const owner = AST.findOwningView(node)
         const rendered = node.view?.ref
-        if (owner && rendered && pushContexts.has(canonicalView(owner))) {
+        if (owner && AST.isViewDeclaration(rendered) && pushContexts.has(canonicalView(owner))) {
           const destination = canonicalView(rendered)
           if (!pushContexts.has(destination)) {
             pushContexts.add(destination)
@@ -760,7 +758,7 @@ function validatePresentationArguments(
   if (view) {
     const resolved = ASTUtils.resolveArgumentBindings(view, presentation)
     for (const diagnostic of resolved.diagnostics) {
-      reportBindingDiagnostic(view, diagnostic, presentation, ctx)
+      reportPresentationBindingDiagnostic(view, diagnostic, presentation, ctx)
     }
     if (presentation.mode?.kind !== 'toast') {
       for (const { argument, parameter } of resolved.pairs) {
@@ -822,10 +820,15 @@ function negativeNumberLiteral(expression: AST.Expression): boolean {
   return AST.isNumberLiteral(operand)
 }
 
-function reportBindingDiagnostic(
+/**
+ * reportPresentationBindingDiagnostic reports one argument-binding diagnostic against a presented
+ * view: a `present`, a configured `Initial` or `Content` binding, or the app root view, which the
+ * synthesized navigator presents exactly as `Initial` would.
+ */
+export function reportPresentationBindingDiagnostic(
   view: AST.ViewDeclaration,
   diagnostic: ASTUtils.ArgumentBindingDiagnostic,
-  presentation: AST.ContextualPresentStatement | AST.ViewBinding,
+  presentation: AST.Node,
   ctx: ValidationContext,
 ): void {
   Switch.kind(diagnostic, {

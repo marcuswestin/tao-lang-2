@@ -200,6 +200,49 @@ Describe('Tao formatter top-level statements', () => {
   )
 
   Test(
+    'keeps root view arguments attached to the view name in an app and in a variant',
+    formats(
+      `
+        use StackNav from @tao/nav
+        app ShellApp { view Shell ( Center , "Primary" ) }
+        app OtherShellApp = ShellApp with { Name "Other" view Shell( Other,"Other" ) }
+        nav Center = StackNav { Initial Home }
+        nav Other = StackNav { Initial Home }
+        scene Shell(Navigator nav, Label text) { render Navigator ( ) }
+        scene Home() { Title "Home" }
+      `,
+      `
+        use StackNav from @tao/nav
+
+        app ShellApp {
+           view Shell(Center, "Primary")
+        }
+
+        app OtherShellApp = ShellApp with {
+           Name "Other"
+           view Shell(Other, "Other")
+        }
+
+        nav Center = StackNav {
+           Initial Home
+        }
+
+        nav Other = StackNav {
+           Initial Home
+        }
+
+        scene Shell(Navigator nav, Label text) {
+           render Navigator()
+        }
+
+        scene Home() {
+           Title "Home"
+        }
+      `,
+    ),
+  )
+
+  Test(
     'separates declarations with one blank line and keeps let groups adjacent',
     formats(
       `

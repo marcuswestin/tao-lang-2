@@ -335,8 +335,21 @@ Describe('validator: apps and views', () => {
     Expect(diagnostic?.range?.start.line).toBeGreaterThan(0)
   })
 
+  // The synthesized navigator presents the root view exactly as `Initial MainView("…")` would, so
+  // its arguments bind by the ordinary presentation rules and carry the same diagnostics.
   Test(
-    'rejects app root view declarations with parameters',
+    'accepts a root view bound to its arguments',
+    accepts(`
+      app MyApp { view MainView("Bound") }
+      view MainView(Label text) {
+        render Text(Label)
+      }
+      ${stubView('Text', 'Value text')}
+    `),
+  )
+
+  Test(
+    'rejects a root view whose parameters are left unbound',
     rejects(
       `
       app MyApp { view MainView }
@@ -345,7 +358,7 @@ Describe('validator: apps and views', () => {
       }
       ${stubView('Text', 'Value text')}
     `,
-      AppValidator.messages.rootViewParameters('MyApp', 'MainView'),
+      navigationValidationMessages.missingArgument('MainView', 'Label'),
     ),
   )
 

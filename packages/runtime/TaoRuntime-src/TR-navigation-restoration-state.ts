@@ -33,15 +33,16 @@ export type TaoNavigationContentSnapshot =
     items: Readonly<Record<string, Readonly<{ navigation?: TaoNavigationSnapshot }>>>
     kind: 'split'
   }>
-  // A frame's own state is each slot's nav state; the slots themselves are declared, never opened.
-  | Readonly<{
-    items: Readonly<Record<string, Readonly<{ navigation?: TaoNavigationSnapshot }>>>
-    kind: 'frame'
-  }>
 
 export type TaoNavigationSnapshot = Readonly<{
   content: TaoNavigationContentSnapshot
   descriptor: string
+  /**
+   * hosted is the state of every navigator a view rendered inside this occurrence's content, keyed
+   * by that navigator's own canonical descriptor. A rendered nav restores by its own identity, not
+   * by a position in its host's content, because the host's content is a view rather than a slot.
+   */
+  hosted?: Readonly<Record<string, TaoNavigationSnapshot>>
   kind: string
   overlays: readonly TaoPresentableSnapshot[]
 }>

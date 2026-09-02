@@ -1,6 +1,5 @@
 use CurrentSession from @data
 use SignedOutNav from @nav
-use CurrentSession from @data
 use Col, Row, Text, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 

@@ -308,17 +308,18 @@ function validateRender(
   }
   // The one fact a scene carries that a body cannot state. Diagnosing it here, at the render site,
   // is what makes chrome nothing reads unrepresentable: a declaration that fills `Title` can never
-  // end up composed inline where no host would read it.
-  const composed = render.view?.ref
-  if (composed?.scene) {
-    ctx.error(viewValidationMessages.sceneComposed(composed.name), render)
+  // end up composed inline where no host would read it. A nav is a scene by the Prelude and is the
+  // one exception: it supplies its own chrome, so a render site may name it.
+  const target = render.view?.ref
+  if (AST.isViewDeclaration(target) && target.scene) {
+    ctx.error(viewValidationMessages.sceneComposed(target.name), render)
   }
   if (render.block) {
     validateRenderBlock(render.block, ctx)
-    const target = render.view?.ref
     // Content acceptance is inferred: a view accepts unnamed caller content iff its body places
-    // @@content. Slot fills carry their own placement rule and are excluded here.
-    if (target && !AST.viewPlacesCallerContent(target)) {
+    // @@content. Slot fills carry their own placement rule and are excluded here, and a nav or a
+    // parameter takes no content at all, which the navigation validator reports.
+    if (AST.isViewDeclaration(target) && !AST.viewPlacesCallerContent(target)) {
       for (const statement of render.block.statements) {
         if (
           !AST.isEventHandler(statement)
