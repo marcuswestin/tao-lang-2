@@ -1,21 +1,49 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { type Compiled, gen, resolveRef } from '../codegen-util'
+import { type Compiled, gen, LocalDataBindings, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+
+/**
+ * The stdlib Local declaration's own canonical identity, restated here because the compiler emits
+ * this datasource without the source ever naming it. It must stay equal to what compiling
+ * `packages/stdlib/@tao/data/providers/local/Local.tao` produces; `compiler.test.ts` pins that.
+ */
+const localDatasourceIdentity = [
+  'tao.declaration',
+  1,
+  'tao-stdlib',
+  '@tao/data',
+  'providers/local/Local',
+  'datasource',
+  'Local',
+] as const
 
 /** DataCompiler lowers Tao schemas, reactive queries, and strict row writes to TR.Data. */
 export const DataCompiler = {
-  /** DataCatalog compiles all top-level Plural / Singular declarations into one provider-neutral schema. */
+  /**
+   * DataCatalog compiles all top-level Plural / Singular declarations into provider-neutral
+   * schemas. `local only` entities are partitioned into their own catalog with its own connection
+   * and storage key, so the app's configured Datasource never carries them.
+   */
   DataCatalog(entities: readonly AST.EntityDataDeclaration[]): Compiled {
+    const local = entities.filter(Type.dataEntityIsLocalOnly)
+    const synced = entities.filter(entity => !Type.dataEntityIsLocalOnly(entity))
     return gen`
-      ${dataCatalogScope()} = TR.Data.Schema({
-        name: 'Data',
-        schemaVersion: 1,
-        entities: {
-          ${gen.list(entities, Compile.EntityDataDefinition)}
-        },
-      })
+      ${dataCatalogSchema(dataCatalogScope(), 'Data', synced)}
+      ${
+      local.length === 0 ? gen.noop() : gen`
+        ${dataCatalogSchema(localDataCatalogScope(), 'LocalData', local)}
+        ${gen.scopeName({ name: LocalDataBindings.datasource })} = TR.Data.Configure(
+          TR.Data.Declaration(
+            'Local',
+            ${gen.Name({ name: LocalDataBindings.provider })}(),
+            TR.Navigation.Identity(${gen.jsLiteral([...localDatasourceIdentity])}),
+          ),
+          {},
+        )
+      `
+    }
     `
   },
 
@@ -51,9 +79,12 @@ export const DataCompiler = {
     Assert.defined(entity, 'validated current query resolves an entity')
     const clauses = query.block?.clauses ?? []
     const sourceFilter = query.source ? compileRelationSourceFilter(query.source, entity) : undefined
+    // A module-level query has no mount to subscribe from, so it reads through the hookless
+    // app-lifetime form; the app host already re-renders every screen on a data revision.
+    const read = AST.isTaoFile(query.$container) ? 'ModuleQuery' : 'Query'
     return gen`
-      ${gen.scopeName(query)} = TR.Data.Query(
-        ${dataCatalogScope()},
+      ${gen.scopeName(query)} = TR.Data.${read}(
+        ${catalogScopeOf(entity)},
         {
           entity: ${gen.jsLiteral(Type.dataEntityName(entity))},
           filters: [
@@ -102,7 +133,7 @@ export const DataCompiler = {
     const bindings = ASTUtils.resolveDataWriteBindings(entity, create.block.fields, true)
     Assert(bindings.diagnostics.length === 0, 'validated create has no field-binding diagnostics')
     return gen`TR.Data.Create(
-      ${dataCatalogScope()},
+      ${catalogScopeOf(entity)},
       ${gen.jsLiteral(Type.dataEntityName(entity))},
       { ${gen.list(bindings.pairs, Compile.DataWriteField)} },
     )`
@@ -130,8 +161,33 @@ export const DataCompiler = {
   },
 } as const
 
+function dataCatalogSchema(
+  scope: Compiled,
+  name: 'Data' | 'LocalData',
+  entities: readonly AST.EntityDataDeclaration[],
+): Compiled {
+  return gen`
+    ${scope} = TR.Data.Schema({
+      name: '${name}',
+      schemaVersion: 1,
+      entities: {
+        ${gen.list(entities, Compile.EntityDataDefinition)}
+      },
+    })
+  `
+}
+
 function dataCatalogScope(): Compiled {
   return gen.scopeName({ name: '_TaoDataCatalog' })
+}
+
+function localDataCatalogScope(): Compiled {
+  return gen.scopeName({ name: LocalDataBindings.catalog })
+}
+
+/** catalogScopeOf routes one entity's reads and writes to the catalog that stores it. */
+function catalogScopeOf(entity: ASTUtils.DataEntityDefinition): Compiled {
+  return Type.dataEntityIsLocalOnly(entity) ? localDataCatalogScope() : dataCatalogScope()
 }
 
 function compileLimitClause(limit: AST.LimitClause | undefined): Compiled {

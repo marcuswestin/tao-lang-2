@@ -631,6 +631,31 @@ Describe('validator: declaration contracts', () => {
     ),
   )
 
+  // A module-level query is an app-lifetime read with no owning block, so the block-ordering rule
+  // that view-body queries obey does not apply to it and its name reaches every view in the file.
+  Test(
+    'accepts a query declared at file level and read from a view',
+    accepts(
+      `
+        data Workspaces / Workspace { Name text }
+        workspace
+        query Workspaces as Current { limit 1 }
+        ${app('render Col() { Text("{ Current.Count }") }', `${stubContainer('Col')}${stubView('Text', 'Value text')}`)}
+      `,
+    ),
+  )
+
+  Test(
+    'rejects a query nested inside a control-flow block',
+    rejects(
+      queryApp(
+        'when "on" { empty -> { Text("Off") } otherwise -> { query Workspaces { } Text("On") } }',
+        'data Workspaces / Workspace { Name text }',
+      ),
+      dataValidationMessages.currentQueryPlacement,
+    ),
+  )
+
   const dataFieldCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
     [
       'boolean cases that collide with field names',
@@ -692,6 +717,53 @@ Describe('validator: declaration contracts', () => {
     rejects(
       'data Parents / Parent { ExternalId number (unique) Slug text (unique) }',
       dataValidationMessages.duplicateUniqueField('Parent'),
+    ),
+  )
+
+  Test(
+    'accepts local only beside the other entity storage facts',
+    accepts('data Sessions / Session { Label text index Label order by Label local only }'),
+  )
+
+  Test(
+    'rejects a repeated local only storage fact',
+    rejects(
+      'data Sessions / Session { Label text local only local only }',
+      dataValidationMessages.duplicateLocalOnly('Session'),
+    ),
+  )
+
+  // The two storage facts partition the catalog into two stores, so a relation that spans them
+  // cannot resolve. Both directions are reported where the relation is written.
+  Test(
+    'rejects a stored relation from a local only entity to a synced one',
+    rejects(
+      `
+        data Parents / Parent { Name text }
+        data Sessions / Session { Parent local only }
+      `,
+      dataValidationMessages.crossStorageRelation('Session', 'Parent', 'Parent'),
+    ),
+  )
+
+  Test(
+    'rejects a stored relation from a synced entity to a local only one',
+    rejects(
+      `
+        data Sessions / Session { Label text local only }
+        data Notes / Note { Session }
+      `,
+      dataValidationMessages.crossStorageRelation('Note', 'Session', 'Session'),
+    ),
+  )
+
+  Test(
+    'accepts a relation between two local only entities',
+    accepts(
+      `
+        data Sessions / Session { Label text Marks (owned) local only }
+        data Marks / Mark { Session local only }
+      `,
     ),
   )
 

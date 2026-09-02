@@ -4,8 +4,24 @@ import { Assert } from '@shared'
 /** Compiled declares a structured generated source node. */
 export type Compiled = Langium.GeneratorNode
 
+/**
+ * The companion device-local data catalog's generated binding names. They live here rather than in
+ * `DataCompiler` because `compiler.ts` plans the imports, exports, and provider sidecar for them,
+ * and `DataCompiler` reaches `Compile`, which would make that a module cycle.
+ */
+export const LocalDataBindings = {
+  /** catalog is the emitted schema holding every `local only` entity. */
+  catalog: '_TaoLocalDataCatalog',
+  /** datasource is the compiler-emitted device-local datasource bound to that schema. */
+  datasource: '_TaoLocalDatasource',
+  /** provider is the stdlib Local provider imported as a sidecar by the catalog's owner module. */
+  provider: '__tao_local_datasource_provider__',
+} as const
+
 /** CodegenOptions carries explicit per-compilation generation modes through recursive emitters. */
 export type CodegenOptions = {
+  /** localDataCatalog is whether this project emits the companion catalog for `local only` entities. */
+  localDataCatalog?: boolean
   studioDataCatalog?: boolean
   studio?: boolean
   studioViews?: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>

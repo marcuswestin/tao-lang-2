@@ -1,10 +1,10 @@
 import { AST } from '@parser'
 import type { FormatHandlers } from '../formatting'
 
-// `index` and `order by` state storage facts about the whole entity, so they trail the field list
-// as one group with a blank line above it.
+// `index`, `order by`, and `local only` state storage facts about the whole entity, so they trail
+// the field list as one group with a blank line above it.
 function isStorageTail(entry: AST.Node): boolean {
-  return AST.isDataIndex(entry) || AST.isDataDefaultOrder(entry)
+  return AST.isDataIndex(entry) || AST.isDataDefaultOrder(entry) || AST.isDataLocalOnly(entry)
 }
 
 export default {
@@ -51,10 +51,15 @@ export default {
     f.oneSpaceAfter('order', 'by')
   },
 
+  DataLocalOnly(f) {
+    f.oneSpaceAfter('local')
+  },
+
   /** NowExpression is the bare runtime-applied `now` data-default sentinel. */
   NowExpression() {},
 
   EntityQueryDeclaration(f) {
+    f.visibilityOnOwnLine()
     f.oneSpaceAfter('query', 'as', 'from')
     f.oneSpaceBefore('as', 'from')
   },

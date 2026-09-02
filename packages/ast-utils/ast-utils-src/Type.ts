@@ -452,6 +452,11 @@ export class Type {
     return entity.block.entries.filter(AST.isEntityDataField)
   }
 
+  /** dataEntityIsLocalOnly returns whether an entity declares the device-local storage fact. */
+  static dataEntityIsLocalOnly(entity: DataEntityDefinition): boolean {
+    return entity.block.entries.some(AST.isDataLocalOnly)
+  }
+
   /** dataFieldRelationName returns the explicit relation target, or the field name when it is
    * the same as the entity it references. */
   static dataFieldRelationName(field: DataFieldDefinition): string {

@@ -26,12 +26,16 @@ export const dataValidationMessages = {
   duplicateBooleanCase: (entity: string, name: string) =>
     `Entity '${entity}' declares boolean case '${name}' more than once.`,
   queryPlacement: 'Queries must be declared directly inside view bodies.',
-  currentQueryPlacement: 'Queries must be unconditional statements in a view body or its root render block.',
+  currentQueryPlacement:
+    'Queries must be declared at file level, or as unconditional statements in a view body or its root render block.',
   queryAfterControl: 'Queries must be declared before the first guard, when, or loop in their block.',
   querySource: 'A query source must be a top-level plural or a plural relationship.',
   unknownCollection: (data: string, name: string) => `Data '${data}' has no collection named '${name}'.`,
   unknownEntity: (data: string, name: string) => `Data '${data}' has no entity named '${name}'.`,
   duplicateIndex: (name: string) => `Index '${name}' is declared more than once.`,
+  duplicateLocalOnly: (entity: string) => `Entity '${entity}' declares 'local only' more than once.`,
+  crossStorageRelation: (entity: string, field: string, relation: string) =>
+    `Relationship '${entity}.${field}' crosses the local-only storage boundary; '${entity}' and '${relation}' must both declare 'local only', or neither.`,
   unknownField: (entity: string, name: string) => `Entity '${entity}' has no field named '${name}'.`,
   duplicateOrder: 'A query may declare only one order clause.',
   duplicateLimit: 'A query may declare only one limit clause.',
@@ -89,6 +93,9 @@ function validateEntityDefinition(entity: AST.EntityDataDeclaration, ctx: Valida
   const orders = entity.block.entries.filter(AST.isDataDefaultOrder)
   for (const duplicate of orders.slice(1)) {
     ctx.error(dataValidationMessages.duplicateOrder, duplicate)
+  }
+  for (const duplicate of entity.block.entries.filter(AST.isDataLocalOnly).slice(1)) {
+    ctx.error(dataValidationMessages.duplicateLocalOnly(entity.singularName), duplicate)
   }
   const uniqueFields = fields.filter(field => (field.traits?.traits ?? []).some(trait => trait.unique))
   for (const extra of uniqueFields.slice(1)) {
@@ -157,6 +164,14 @@ function validateRelationshipDataField(
   const inverse = Type.dataFieldIsInverseRelation(field)
   if (!relation) {
     ctx.error(dataValidationMessages.unknownRelation(entity.singularName, relationName), field)
+  }
+  // The two storage facts partition the catalog into a synced store and a device-local one, and a
+  // relation resolves inside one store's rows. Say so here rather than as an unresolved relation.
+  if (relation && Type.dataEntityIsLocalOnly(entity) !== Type.dataEntityIsLocalOnly(relation)) {
+    ctx.error(
+      dataValidationMessages.crossStorageRelation(entity.singularName, field.name, relation.singularName),
+      field,
+    )
   }
   for (const modifier of defaults) {
     ctx.error(dataValidationMessages.relationDefault(field.name), modifier)
@@ -254,6 +269,11 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
 
 function validateEntityQueryPlacement(query: AST.EntityQueryDeclaration, ctx: ValidationContext): void {
   const block = query.$container
+  // A module-level query is a named, app-lifetime read of the store, so it has no owning block and
+  // no statement ordering to respect.
+  if (AST.isTaoFile(block)) {
+    return
+  }
   if (!AST.isBlock(block)) {
     ctx.error(dataValidationMessages.currentQueryPlacement, query)
     return

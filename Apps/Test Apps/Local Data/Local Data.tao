@@ -1,0 +1,104 @@
+use CurrentSession, FocusSessions, Notes from @data
+use Local from @tao/data/providers/local
+use Memory from @tao/data/providers/memory
+use StackNav from @tao/nav
+use Col, FormButton, Text, TextInput from @tao/ui
+
+app LocalData {
+   Name "Local Data"
+   Navigator StackNav {
+      Initial Workbench
+   }
+   Datasource Local {
+      StorageKey "LocalDataStore"
+}  }
+
+// The same program over a different datasource. `local only` is unmoved by the choice: the focus
+// session still binds to the device-local companion store, never to this app's Memory store.
+app LocalDataMemory = LocalData with {
+   Name "Local Data Memory"
+   Datasource Memory { }
+}
+
+view Workbench() {
+   Title "Workbench"
+   state NoteDraft = ""
+   state SessionDraft = ""
+   action AddNote() {
+      create Note {
+         Title: NoteDraft
+      }
+      set NoteDraft = ""
+   }
+   action StartSession() {
+      create FocusSession {
+         Label: SessionDraft
+      }
+      set SessionDraft = ""
+   }
+   action OpenSession() {
+      present SessionDetail()
+   }
+   query Notes { }
+   render Col() [gap 10, pad 16] {
+      Text("Workbench")
+
+      #noteTitle
+      TextInput(Value: NoteDraft, Label: "Note title") {
+         on submit AddNote
+      }
+
+      #addNote
+      FormButton("Add note") {
+         on press AddNote
+      }
+
+      #sessionLabel
+      TextInput(Value: SessionDraft, Label: "Session label") {
+         on submit StartSession
+      }
+
+      #startSession
+      FormButton("Start session") {
+         on press StartSession
+      }
+
+      #openSession
+      FormButton("Open session") {
+         on press OpenSession
+      }
+      when Notes {
+         empty -> { Text("No notes yet") }
+         otherwise -> {
+            #notes
+            loop Notes / Note {
+               Text("Note: { Note.Title }")
+      }  }  }
+      when CurrentSession {
+         empty -> { Text("No focus session") }
+         otherwise -> {
+            #workbenchSession
+            loop CurrentSession / FocusSession {
+               Text("Focus: { FocusSession.Label }")
+}  }  }  }  }
+
+// A second reader of the same module-level query. Nothing is passed in: the value is in scope here
+// exactly as it is on the workbench.
+workspace
+view SessionDetail() {
+   Title "Session"
+   render Col() [gap 10, pad 16] {
+      when CurrentSession {
+         empty -> { Text("Detail has no session") }
+         otherwise -> {
+            #detailSession
+            loop CurrentSession / FocusSession {
+               Col() {
+                  Text("Detail: { FocusSession.Label }")
+
+                  #renameSession
+                  FormButton("Rename session") {
+                     on press -> { update FocusSession {
+                        Label: "Renamed"
+                     } }
+}  }  }  }  }  }  }

@@ -305,6 +305,129 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.ForEach(_Scope.Drafts.evaluate()')
   })
 
+  Test('partitions local only entities into a device-local companion catalog', async () => {
+    const compiled = await Compiler.compileCode(`
+      use Memory from @tao/data/providers/memory
+      use StackNav from @tao/nav
+      data Notes / Note { Title text }
+      data FocusSessions / FocusSession {
+        Label text
+
+        local only
+      }
+      app Sessions {
+        Name "Sessions"
+        Navigator StackNav { Initial Main }
+        Datasource Memory { }
+      }
+      workspace
+      query FocusSessions as CurrentSession { limit 1 }
+      view Main() {
+        Title "Sessions"
+        action Start() { create FocusSession { Label: "Focus" } }
+        action Write() { create Note { Title: "Note" } }
+        query Notes { }
+        render Text("{ CurrentSession.Count }{ Notes.Count }")
+      }
+      view Text(Value text) { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.code).toContain("_Scope._TaoDataCatalog = TR.Data.Schema({\n  name: 'Data',")
+    Expect(compiled.code).toContain("_Scope._TaoLocalDataCatalog = TR.Data.Schema({\n  name: 'LocalData',")
+    // The synced catalog keeps only the synced entity, and the local catalog only the local one.
+    Expect(compiled.code.slice(compiled.code.indexOf("name: 'Data',"), compiled.code.indexOf("name: 'LocalData',")))
+      .toContain('collection: "Notes"')
+    Expect(compiled.code.slice(compiled.code.indexOf("name: 'LocalData',")))
+      .toContain('collection: "FocusSessions"')
+    Expect(compiled.code.slice(compiled.code.indexOf("name: 'LocalData',")))
+      .not.toContain('collection: "Notes"')
+    // The compiler-emitted datasource carries the stdlib Local declaration's own identity, so a
+    // restored entity reference still resolves to the provider that wrote it.
+    Expect(compiled.code).toContain(
+      'TR.Navigation.Identity(["tao.declaration",1,"tao-stdlib","@tao/data","providers/local/Local","datasource","Local"])',
+    )
+    Expect(compiled.code).toContain("TR.Data.Declaration(\n    'Local',\n    __tao_local_datasource_provider__(),")
+    Expect(compiled.code).toContain(
+      "import { LocalProvider as __tao_local_datasource_provider__ } from './Local'",
+    )
+    Expect(compiled.files.some(file => file.sourcePath.endsWith('/providers/local/Local.ts'))).toBe(true)
+    // Two bindings at the app root: the authored Datasource, and the companion device-local one.
+    Expect(compiled.code).toContain('TR.Data.UseConfigured(\n            _Scope._TaoDataCatalog,')
+    Expect(compiled.code).toContain(
+      'TR.Data.UseConfigured(\n            _Scope._TaoLocalDataCatalog,\n            _Scope._TaoLocalDatasource,\n          )',
+    )
+    // Reads and writes route to the catalog that stores the entity.
+    Expect(compiled.code).toContain('_Scope.CurrentSession = TR.Data.ModuleQuery(\n  _Scope._TaoLocalDataCatalog,')
+    Expect(compiled.code).toContain('_Scope.Notes = TR.Data.Query(\n      _Scope._TaoDataCatalog,')
+    Expect(compiled.code).toContain('_Scope._TaoLocalDataCatalog,\n              "FocusSession",')
+    Expect(compiled.code).toContain('_Scope._TaoDataCatalog,\n              "Note",')
+  })
+
+  Test('imports the companion catalog into an app root that configures no datasource', async () => {
+    await withTaoFiles('tao-local-only-', {
+      'Project.tao': 'project { id "local-only-test" name "Local only test" }',
+      'Catalog.tao': `
+        workspace
+        data FocusSessions / FocusSession {
+          Label text
+
+          local only
+        }
+      `,
+      'Board.tao': `
+        use FocusSessions from ./Catalog
+        workspace
+        view Board() {
+          query FocusSessions { }
+          render Label("{ FocusSessions.Count }")
+        }
+        view Label(Value text) { render inject ${tsFence} return null ${fence} }
+      `,
+      'Main.tao': `
+        use Board from ./Board
+        app Sessions { view Board }
+      `,
+    }, async paths => {
+      const result = await Workspace.compile(paths['Main.tao']!)
+      const appModule = result.files.find(file => file.relativePath === 'App.tsx')
+
+      Expect(appModule).toBeDefined()
+      // An app binds the companion catalog whether or not it names a Datasource of its own, so the
+      // bindings must reach a file that never mentions the catalog.
+      Expect(appModule?.code).toContain(
+        "import { _TaoLocalDataCatalog, _TaoLocalDatasource } from './modules/Catalog.tao'",
+      )
+      Expect(appModule?.code).toContain(
+        'TR.Data.UseConfigured(\n            _Scope._TaoLocalDataCatalog,\n            _Scope._TaoLocalDatasource,\n          )',
+      )
+      Expect(appModule?.code).not.toContain('_Scope._TaoDataCatalog')
+    })
+  })
+
+  Test('emits no companion local catalog for a project without local only entities', async () => {
+    const compiled = await Compiler.compileCode(`
+      use Memory from @tao/data/providers/memory
+      use StackNav from @tao/nav
+      data Notes / Note { Title text }
+      app Notebook {
+        Name "Notebook"
+        Navigator StackNav { Initial Main }
+        Datasource Memory { }
+      }
+      view Main() {
+        Title "Notebook"
+        query Notes { }
+        render Text("{ Notes.Count }")
+      }
+      view Text(Value text) { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.code).toContain("name: 'Data'")
+    Expect(compiled.code).not.toContain('_TaoLocalDataCatalog')
+    Expect(compiled.code).not.toContain('_TaoLocalDatasource')
+    Expect(compiled.code).not.toContain('__tao_local_datasource_provider__')
+  })
+
   Test('resolves the InstantDB datasource package for a selected app variant', async () => {
     const compiled = await Compiler.compileCode(
       `

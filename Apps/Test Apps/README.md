@@ -57,8 +57,8 @@ without erasing compatible coverage:
 ## Navigation
 
 Exercise the navigation layer: the native stack, the portable basic kit, platform sheet and overlay
-presentation, the split surface, and the root-view app form. Five `app` declarations share the
-folder, one per source file, and each check picks its app with `run`.
+presentation, the split surface, the frame shell, and the root-view app form. Six `app` declarations
+share the folder, one per source file, and each check picks its app with `run`.
 
 **Belongs here:**
 
@@ -85,6 +85,12 @@ folder, one per source file, and each check picks its app with `run`.
   which replaces the mounted app with a new launch so the persisted width outlives it and the
   sidebar's view-local state does not, including across `relaunch fresh`, which opts a launch out
   of restoring navigation and not out of the device.
+- _Frame_ (`Frame Shell.tao`): `FrameNav` with all five slots — `@top`, `@bottom`, `@left`,
+  `@right`, `@center` — each carrying `Label`, view-typed `Content`, and a numeric `Size`; every
+  edge and the center rendering at once; a slot whose `Content` is absent contributing no container
+  and growing back when a `replace` restores it; `present` and Back belonging to `@center` while an
+  edge keeps whatever position its own stack reached; the test `relaunch` step reading back each
+  slot's nav state, edges included, and `relaunch fresh` opening every slot at its root.
 - _Root view_ (`Root View App.tao`): the `app X { view Y }` form, whose navigator Tao synthesizes
   rather than the source naming one; `present` and `back` through that synthesized navigator; the
   test `relaunch` step reopening the presented screen it left, and `relaunch fresh` opening on the
@@ -95,6 +101,13 @@ target-resolution, and argument diagnostics; native adapter appearance or transi
 chrome a sheet is hosted in, which is not assertable from a journey; arbitrary row/column resizing,
 multi-window layout, collapse policy, or product-specific workbench behavior; WordFlower product
 behavior.
+
+The frame journey empties a slot by replacing the app's navigator with a second `FrameNav` whose
+`@left` supplies no `Content`, because a nav configuration reads app state but is not itself an
+app-body declaration: a slot's `Content` cannot name state the way `Resizable Split.tao`'s `Width`
+does. The runtime rule the journey stands on is stronger than the journey can drive — a slot's
+`Content` is read on every render, so absence is reversible without remounting — and the runtime's
+own suite in `packages/runtime/TR-tests/` proves that reactive read directly.
 
 The split journey never drags a divider: the Tao test language has no `resize` step, and resize
 interaction is the adapter's. `relaunch` proves that device-local `(persist)` state outlives the
@@ -126,6 +139,24 @@ Exercise the provider-neutral data catalog and an app-configured isolated Memory
 **Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, and stored rows surviving a `relaunch`. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step.
 
 **Does not belong here:** remote providers, credentials, auth, permissions, sync, pagination, or aggregation; navigation or WordFlower product behavior; schema, query, and write diagnostics.
+
+## Local Data
+
+Exercise the two storage facts a catalog can span: the entity-level `local only` fact and the
+module-level `query` that reads across it. One `app` declaration and one datasource variant share
+the folder — `LocalData` over a `Local` datasource and `LocalDataMemory` over `Memory` — with the
+catalog and the module-level query in the folder's `@data` package.
+
+**Belongs here:** `local only` as a trailing entity-level storage fact beside `order by`; an entity
+that stays in the device-local store whatever the app configures as its `Datasource`, proved by
+running the same program as a second variant; `local only` rows surviving a `relaunch`; writes and
+reads routed to the catalog that stores the entity; a module-level `query` with a visibility marker,
+imported through `use … from @data`, read by two views and staying live across a `present` and a
+`back`.
+
+**Does not belong here:** the storage-boundary relation diagnostic and duplicate-`local only`
+diagnostic, which are package tests; the emitted two-catalog shape, which is a compiler test; remote
+providers, sync, or credentials; navigation surfaces beyond the one push a live read needs.
 
 ## Language Core
 

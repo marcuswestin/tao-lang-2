@@ -575,6 +575,44 @@ Describe('parser: core language syntax', () => {
     Expect(Type.ofValueDeclaration(loop).kind).toBe('entity')
   })
 
+  Test('parses local only as an entity storage fact and query at module level', async () => {
+    const parseResult = await testParseCode(`
+      data Notes / Note {
+        Title text
+
+        order by Title
+      }
+      data FocusSessions / FocusSession {
+        Label text
+
+        index Label
+        local only
+      }
+      workspace
+      query FocusSessions as CurrentSession {
+        limit 1
+      }
+      view Board() {
+        render Text(CurrentSession.Count)
+      }
+      view Text(Value number) { render inject \`\`\`ts return null \`\`\` }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const entities = parseResult.entry.ast.statements.filter(AST.isEntityDataDeclaration)
+    Expect(entities.map(entity => entity.block.entries.some(AST.isDataLocalOnly))).toEqual([false, true])
+    const moduleQuery = parseResult.entry.ast.statements.find(AST.isEntityQueryDeclaration)
+    Expect.Is(moduleQuery, AST.isEntityQueryDeclaration)
+    Expect(moduleQuery.name).toBe('CurrentSession')
+    Expect(moduleQuery.visibility).toBe('workspace')
+    Expect(Type.queryEntity(moduleQuery)?.singularName).toBe('FocusSession')
+    // A module-level query is an ordinary top-level declaration, so file placement and cross-file
+    // import both go through the same predicates every other exported declaration uses.
+    Expect(AST.isDeclaration(moduleQuery)).toBe(true)
+    Expect(AST.isTopLevelStatement(moduleQuery)).toBe(true)
+    Expect(AST.isExportableDeclaration(moduleQuery)).toBe(true)
+  })
+
   Test('parses configured apps, view declarations, and contextual presentation', async () => {
     const parseResult = await testParseCode(`
       public type StackNav is nav with {

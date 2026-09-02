@@ -1,0 +1,48 @@
+use LocalData, LocalDataMemory from ./
+
+test "Local Data" {
+   test "keeps local-only rows across a relaunch" {
+      run LocalData
+
+      expect text "No focus session"
+      enter "Deep work" into #sessionLabel
+      press #startSession
+      expect text "Focus: Deep work"
+      relaunch
+      // The focus session lives in the companion device-local catalog, so quitting and reopening
+      // the app finds it exactly where a synced row would be found.
+      expect text "Focus: Deep work"
+   }
+   test "keeps a local-only entity device-local under a different datasource" {
+      // The same program, same catalog, different `Datasource`. A `local only` entity does not
+      // follow that choice: it is stored and read back the same way here as it is above.
+      run LocalDataMemory
+
+      expect text "No notes yet"
+      expect text "No focus session"
+      enter "Synced note" into #noteTitle
+      press #addNote
+      enter "Deep work" into #sessionLabel
+      press #startSession
+      expect text "Note: Synced note"
+      expect text "Focus: Deep work"
+      relaunch
+      expect text "Note: Synced note"
+      expect text "Focus: Deep work"
+   }
+   test "reads one module-level query from two screens across navigation" {
+      run LocalData
+      enter "Deep work" into #sessionLabel
+      press #startSession
+      expect text "Focus: Deep work"
+      press #openSession
+      // The detail screen never received the session: it reads the same module-level query the
+      // workbench reads, which is in scope for both.
+      expect text "Detail: Deep work"
+      press #renameSession
+      expect text "Detail: Renamed"
+      back
+      // The value is live rather than a snapshot taken when the workbench first mounted.
+      expect text "Focus: Renamed"
+   }
+}

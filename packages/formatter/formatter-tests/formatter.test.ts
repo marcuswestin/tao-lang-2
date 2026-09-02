@@ -92,6 +92,33 @@ Describe('Tao formatter data declarations', () => {
       `,
     ),
   )
+
+  Test(
+    'groups local only with the other entity storage facts and breaks a query visibility marker',
+    formats(
+      `
+        data FocusSessions/FocusSession{Label text
+        index Label
+        order by Label
+        local    only}
+        workspace query FocusSessions as CurrentSession{limit 1}
+      `,
+      `
+        data FocusSessions / FocusSession {
+           Label text
+
+           index Label
+           order by Label
+           local only
+        }
+
+        workspace
+        query FocusSessions as CurrentSession {
+           limit 1
+        }
+      `,
+    ),
+  )
 })
 
 Describe('Tao formatter configurable declarations', () => {

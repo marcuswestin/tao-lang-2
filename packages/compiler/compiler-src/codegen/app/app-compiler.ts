@@ -107,6 +107,14 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
         )`
       : gen.noop()
   }
+      ${
+    options.localDataCatalog
+      ? gen`TR.Data.UseConfigured(
+          ${gen.scopeName({ name: '_TaoLocalDataCatalog' })},
+          ${gen.scopeName({ name: '_TaoLocalDatasource' })},
+        )`
+      : gen.noop()
+  }
       ${compileStudioSubject(options, definition)}
       return <TR.AppShell>
         <TR.Navigation.AppHost app={${gen.Name(definition)}} />
