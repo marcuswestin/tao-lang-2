@@ -296,8 +296,8 @@ view DraftRow(Document) {
 
       #finish
       FormButton("Finish document") [buttonSecondary] {
-         // `do <command> with { ... }` fills the command's slot at the invocation, so the row and
-         // any other surface that offers Finish run one declared verb rather than two copies of
+         // Invoking a command reads like invoking an action, so the row and any other surface that
+         // offers Finish run one declared verb rather than two copies of
          // the write.
          on press -> { do Finish(Document) }
       }

@@ -1,8 +1,10 @@
-# Open — shell composition and member syntax
+# Resolved — shell composition and member syntax
 
-Two design questions raised by Ro after T1/T2 landed (2026-09-02). Both concern decisions the
-tranche already implemented, so both are recorded here rather than settled unilaterally. Neither
-blocks T3's label and `(title)` work; the first blocks T3's region derivation.
+Two design questions raised by Ro after T1/T2 landed (2026-09-02), both concerning decisions the
+tranche had already implemented. **Both were resolved the same day in favour of the recommendations
+below and implemented as the "revised" tranche** (`7ac87001` makes the shell a view and retires the
+frame; `27f6884b` moves a command's slots into a parameter list). The reasoning stays here as the
+record; `Decisions.md` §8 and §10 carry the decisions.
 
 ## 1. Does the frame need to be a nav kind at all?
 

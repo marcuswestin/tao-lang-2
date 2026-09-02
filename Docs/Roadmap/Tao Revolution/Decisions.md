@@ -99,8 +99,12 @@ view Status(Message text, Tone default Neutral)
 view CookScreen(Recipe, Meal?)                  // a bare name takes its same-named type
 ```
 
-- **`:` binds a value to a name.** It appears at call sites and in literals, and nowhere else:
-  `Text(Timer.Step.Text, Lines: 1)`, `create Timer { StartedBy: Me }`, `update Me { Units: Imperial }`.
+- **`:` binds a value to a name at call sites and in literals**: `Text(Timer.Step.Text, Lines: 1)`,
+  `create Timer { StartedBy: Me }`, `update Me { Units: Imperial }`. In a _value body_ — a
+  configuration block, a scene's chrome fills, a command's members — juxtaposition binds instead
+  (`Label "Focus session"`, `Icon "checkmark"`), because nothing in such a body can be a declaration.
+  The rule is that **juxtaposition declares in a type body and binds in a value body**, and no block
+  is both: the one that was, the command block, now declares its slots in a parameter list (§8).
 
 This is why a parameter is not written `Link is text` or `Link: text`. `is` is the language's
 predicate word in every expression (`where Role is Owner`, `when Recipe is Favorite`,
