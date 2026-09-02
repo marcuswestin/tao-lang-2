@@ -201,9 +201,21 @@ export type StudioMoveRenderPatchRequest = StudioMoveRenderRequest & {
   kind: 'move-render'
 }
 
+/**
+ * StudioSetDesignEntryPatchRequest (semantic agent PoC) sets one entry on a named design bundle without a
+ * render occurrence, so a design file that renders nothing can still take the edit.
+ */
+export type StudioSetDesignEntryPatchRequest = {
+  designName: string
+  entry: StudioStyleEntry
+  kind: 'set-design-entry'
+  memberName: string
+}
+
 /** StudioSourcePatchRequest declares one semantic visual source mutation from Studio. */
 export type StudioSourcePatchRequest =
   | StudioInsertCapturedFixturePatchRequest
+  | StudioSetDesignEntryPatchRequest
   | StudioInsertComponentPatchRequest
   | StudioInsertProjectViewPatchRequest
   | StudioSetLayoutEntryPatchRequest
@@ -269,6 +281,7 @@ async function applyPatchContent(
     'insert-component': async action => await insertComponent(document, action.component, action),
     'insert-project-view': async action => await insertProjectView(document, action.viewName, action),
     'move-render': async action => await moveRender(document, action),
+    'set-design-entry': async action => await setDesignEntry(document, action),
     'set-layout-entry': async action => await setLayoutEntry(document, action),
     'set-scenario-arguments': async action => await setScenarioArguments(document, action),
     'set-style-entry': async action => await setStyleEntry(document, action, context),
@@ -315,6 +328,7 @@ function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | u
     'insert-component': action => action.beforeId ?? action.afterId,
     'insert-project-view': action => action.beforeId ?? action.afterId,
     'move-render': action => action.draggedId,
+    'set-design-entry': () => undefined,
     'set-layout-entry': action => action.renderId,
     'set-scenario-arguments': () => undefined,
     'set-style-entry': action => action.renderId,
@@ -668,6 +682,26 @@ async function setStyleEntry(
     return await setElementDefault(document, design, render, request.landing.elementName, entry)
   }
   return await setColorToken(document, design, render, request.entry, request.landing.tokenName)
+}
+
+/** setDesignEntry (semantic agent PoC) edits one named bundle/style/text member of a named design in this document. */
+async function setDesignEntry(document: AST.Document, request: StudioSetDesignEntryPatchRequest): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireIdentifier(request.designName, 'design')
+  requireIdentifier(request.memberName, 'design member')
+  const designs = AST.streamAllContents(document.parseResult.value).filter(AST.isDesignDeclaration)
+    .filter(design => design.name === request.designName)
+  if (designs.length !== 1) {
+    throw new Errors.UserInputError(`Design is not uniquely declared in this source file: ${request.designName}`)
+  }
+  const members = designSpecMembers(designs[0]!).filter(member => member.name === request.memberName)
+  if (members.length !== 1) {
+    throw new Errors.UserInputError(
+      `Design member is not uniquely declared in ${request.designName}: ${request.memberName}`,
+    )
+  }
+  const entry = formatDesignEntry(request.entry)
+  return await Formatter.formatCode(setLayoutClauseEntrySource(document.textDocument.getText(), members[0]!.spec, entry))
 }
 
 function selectedDesign(files: readonly AST.TaoFile[]): AST.DesignDeclaration | undefined {

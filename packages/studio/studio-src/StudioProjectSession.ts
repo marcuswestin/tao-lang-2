@@ -1,4 +1,4 @@
-import { AST, Langium } from '@parser'
+import { AST, Langium, type ParseResult } from '@parser'
 import { Assert, Diagnostics, Errors, FS, Repo, TaoFiles } from '@shared'
 import SourceActions, {
   type StudioComponentKind,
@@ -394,6 +394,11 @@ export class StudioProjectSession {
 
   identity(): StudioProjectIdentity {
     return { appName: this.appName, project: this.projectRoot }
+  }
+
+  /** agentPocParse (semantic agent PoC) parses the selected app entry with linked cross-references. */
+  agentPocParse(): Promise<ParseResult> {
+    return this.#workspace.parse(this.entryPath)
   }
 
   compileSnapshot(): StudioCompileSnapshot {
@@ -1479,6 +1484,21 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
       kind: action.kind,
       scenarioGroupName: action['scenarioGroupName'],
       scenarioName: action['scenarioName'],
+    }
+  }
+  if (
+    action.kind === 'set-design-entry'
+    && typeof action['designName'] === 'string'
+    && typeof action['memberName'] === 'string'
+    && Array.isArray(action['entry'])
+    && action['entry'].length > 0
+    && action['entry'].every(value => typeof value === 'string' || typeof value === 'number')
+  ) {
+    return {
+      designName: action['designName'],
+      entry: action['entry'] as unknown as StudioStyleEntry,
+      kind: action.kind,
+      memberName: action['memberName'],
     }
   }
   Errors.throwUserInput(`Unsupported or invalid Studio source action: ${action.kind}`)
