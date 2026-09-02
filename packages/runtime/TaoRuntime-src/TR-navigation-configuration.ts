@@ -4,6 +4,7 @@ import { RuntimeCommand } from './TR-interaction'
 import type {
   TaoAppDeclaration,
   TaoConfiguredNavigation,
+  TaoFrameNavItemDefinition,
   TaoImplementedNavDeclaration,
   TaoNavDeclaration,
   TaoNavigationInput,
@@ -302,4 +303,35 @@ function freezePlainNavValue<ValueT>(value: ValueT): ValueT {
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype
+}
+
+/** patchedFrameSlot normalizes one slot patch into the members a configured frame item carries. */
+export function patchedFrameSlot(
+  value: unknown,
+  navigationName: string,
+  slot: string,
+): Partial<TaoFrameNavItemDefinition> {
+  RuntimeAssert.input(
+    isPlainRecord(value),
+    `Navigation ${navigationName} slot '${slot}' expects a block of slot members.`,
+    { navigationName, slot },
+  )
+  const item = value as Record<string, unknown>
+  const content = item['Content'] === undefined
+    ? undefined
+    // A patched slot's nav still joins the reset set, exactly as a configured one does.
+    : configuredFrameContent(item['Content'], navigationName, `${slot}.Content`, (_configured, mount) => {
+      registerNavigation(mount)
+    })
+  const label = item['Label'] === undefined
+    ? undefined
+    : configuredEvaluable(item['Label'], navigationName, `${slot}.Label`)
+  const size = item['Size'] === undefined
+    ? undefined
+    : configuredEvaluable(item['Size'], navigationName, `${slot}.Size`)
+  return {
+    ...(content ? { content } : {}),
+    ...(label ? { label } : {}),
+    ...(size ? { size } : {}),
+  }
 }

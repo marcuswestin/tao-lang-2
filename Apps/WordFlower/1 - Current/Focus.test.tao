@@ -1,6 +1,34 @@
 use WordFlower from ./
 
 test "WordFlower focused writing" {
+   test "keeps the session visible while you move around the app" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      select #workspaces[1] {
+         press #openWorkspace
+      }
+      enter "Morning pages" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #drafts[1] {
+         press #edit
+      }
+      // Before a session exists the frame's bottom slot holds `none`, so the slot itself is not
+      // there. Asserting on the slot's own label rather than on its contents is what separates a
+      // collapsed slot from one that is present but rendering nothing.
+      expect text "Focused writing"
+      expect missing label "Focus session"
+      press #focusFive
+      expect text "5:00"
+      expect label "Focus session"
+      // The bar lives in the shell frame, not in the screen that started the session, so leaving
+      // the editor does not take the timer with it.
+      back
+      back
+      expect text "5:00"
+      advance 1.s
+      expect text "4:59"
+   }
    test "runs a session down under a controlled clock" {
       run WordFlower
       enter "Home" into #workspaceName
@@ -13,27 +41,26 @@ test "WordFlower focused writing" {
       select #drafts[1] {
          press #edit
       }
-      expect text "Focused writing"
       press #focusFive
       expect text "5:00"
-      advance 1.s
-      expect text "4:59"
-      advance 59.s
+      advance 1.min
       expect text "4:00"
       press #pauseFocus
       advance 1.min
-      expect text "4:00" // paused: the tick is stopped, so the reading is frozen
+      expect text "4:00" // paused: the reading is anchored to the moment it stopped
       press #resumeFocus
       advance 1.min
       expect text "3:00" // resumed: the paused minute was not lost
       advance 3.min
       expect text "Time's up"
       press #stopFocus
+      // Stopping deletes the row, so the slot's content is `none` again and the bar's controls go
+      // with it.
       expect {
          text "Focused writing"
          missing text "Time's up"
    }  }
-   test "stops a session early" {
+   test "keeps a running session across a relaunch" {
       run WordFlower
       enter "Home" into #workspaceName
       press #addWorkspace
@@ -49,8 +76,11 @@ test "WordFlower focused writing" {
       expect text "25:00"
       advance 90.s
       expect text "23:30"
-      press #stopFocus
-      expect {
-         text "Focused writing"
-         missing text "23:30"
-}  }  }
+      // The session is data on the device and `EndsAt` is absolute, so a relaunch resumes the same
+      // countdown rather than restarting it.
+      relaunch
+      expect text "23:30"
+      advance 30.s
+      expect text "23:00"
+   }
+}

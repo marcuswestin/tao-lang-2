@@ -1,5 +1,5 @@
 use Workspaces from @data
-use WordFlowerNavigator from @nav
+use WordFlowerDrawerNavigator, WordFlowerShell, WordFlowerTabsNavigator from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
 use WorkspaceRow from @ui
@@ -279,15 +279,16 @@ project {
 app WordFlower {
    Name "WordFlower"
    Design WordFlowerDesign
-   Navigator WordFlowerNavigator
+   Navigator WordFlowerShell
    Datasource DeviceStore // offline-first: the device owns the writing; sync is a variant
 }
 
 app WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
-   Navigator with { // patches the app's own navigator instead of replacing it
-      Display "drawer"
-}  }
+   Navigator with { // patches the shell's center instead of replacing the shell
+      @center {
+         Content WordFlowerDrawerNavigator
+}  }  }
 
 // The explicit dark preview mounts a complete dark design and keeps the portable tab surface on
 // every target, so the preview does not depend on the host operating system's current appearance.
@@ -295,8 +296,9 @@ app WordFlowerDark = WordFlower with {
    Name "WordFlower - Dark"
    Design WordFlowerDarkDesign
    Navigator with {
-      Display "tabs"
-}  }
+      @center {
+         Content WordFlowerTabsNavigator
+}  }  }
 
 app WordFlowerInstantDB = WordFlower with {
    Name "WordFlower - InstantDB"

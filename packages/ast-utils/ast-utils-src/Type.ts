@@ -250,6 +250,11 @@ export class Type {
     return new TypeResolutionContext().ofProperty(property)
   }
 
+  /** ofNone is the type of absence, the value an optional member takes when it has none. */
+  static ofNone(): TaoType {
+    return primitiveType('none')
+  }
+
   /** ofPropertyRead resolves a field read, including absence for an optional field. */
   static ofPropertyRead(property: AST.TypeProperty): TaoType {
     const declared = Type.ofProperty(property)
@@ -301,6 +306,12 @@ export class Type {
     if (isPrimitiveNamed(expected, 'shortcut') && isPrimitiveNamed(actual, 'text')) {
       return true
     }
+    // Both unions: every value the actual can be must be one the expected accepts. Checked before
+    // the single-sided rules below, which would otherwise ask whether the whole actual union fits
+    // one member of the expected and reject an optional against an optional.
+    if (actual.kind === 'union' && expected.kind === 'union') {
+      return actual.members.every(member => Type.isAssignable(member, expected))
+    }
     if (expected.kind === 'union') {
       return expected.members.some(member => Type.isAssignable(actual, member))
     }
@@ -329,12 +340,24 @@ export class Type {
     }
 
     const candidates = types.filter(candidate => types.every(actual => Type.isAssignable(actual, candidate)))
-    return candidates.reduce<TaoType | undefined>((best, candidate) => {
+    const best = candidates.reduce<TaoType | undefined>((best, candidate) => {
       if (!best) {
         return candidate
       }
       return commonTypeCandidateIsPreferred(candidate, best) ? candidate : best
     }, undefined)
+    if (best) {
+      return best
+    }
+    // Absence unifies with any one value type, because that is what an optional already is: an
+    // optional field reads as `union(declared, none)`. So a conditional whose branches are a value
+    // and `none` produces the optional of that value rather than nothing at all.
+    const present = types.filter(type => !isNoneType(type))
+    if (present.length === types.length || present.length === 0) {
+      return undefined
+    }
+    const common = Type.commonType(present)
+    return common && { kind: 'union', members: [common, primitiveType('none')] }
   }
 
   /**
@@ -1168,6 +1191,10 @@ class TypeResolutionContext {
       ? { ...base, item: { properties } }
       : { ...base, slots: { properties } }
   }
+}
+
+function isNoneType(type: TaoType): boolean {
+  return type.kind === 'primitive' && type.primitive === 'none'
 }
 
 function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {

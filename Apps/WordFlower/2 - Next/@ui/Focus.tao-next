@@ -44,12 +44,12 @@ view FocusBar() {
    state Tick = Interval(1.s)
    render Row() [subtlePanel, gap 12] {
       loop CurrentSession / FocusSession {
-         let Left = when FocusSession.Paused is Paused {
+         let Left = when FocusSession.Paused {
             true -> FocusSession.EndsAt - FocusSession.PausedAt
             otherwise -> FocusSession.EndsAt - Tick.Value
          }
          Text(when Left > 0 Left.Clock / not "Time's up") [title]
-         when FocusSession.Paused is Paused {
+         when FocusSession.Paused {
             true -> {
                #resumeFocus
                FormButton("Resume") {

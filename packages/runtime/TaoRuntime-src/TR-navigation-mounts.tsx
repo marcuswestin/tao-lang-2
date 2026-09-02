@@ -18,6 +18,7 @@ import type {
   TaoStackNavConfiguration,
 } from './TR-navigation'
 import { BasicStackSurface } from './TR-navigation-basic-stack'
+import { patchedFrameSlot } from './TR-navigation-configuration'
 import { RuntimeHostReadChannel } from './TR-navigation-host-slots'
 import { nativeStackAvailable, NativeStackSurface } from './TR-navigation-native-stack'
 import { nativeSelectionTabsAvailable, renderNativeSelectionTabs } from './TR-navigation-native-tabs'
@@ -222,6 +223,9 @@ function runtimeNumber(jsValue: number): any {
 /** The frame's center slot: the one slot that takes presentation and Back. */
 const frameCenterKey = 'center'
 
+/** The frame's slots. One `@key` template declares their shape; these are their names. */
+const frameSlotKeys = ['top', 'bottom', 'left', 'right', 'center'] as const
+
 /**
  * RuntimeFrameNav renders fixed chrome edges around one navigated center.
  *
@@ -251,9 +255,42 @@ export class RuntimeFrameNav extends RuntimeNavigationValue {
     center ? center.present(presentable, arguments_) : this.presentOverlay(presentable, arguments_)
   }
 
+  /**
+   * activate reaches a selection key through the frame. A frame is a container, not a destination:
+   * a tab key names an item in whatever navigator holds it, so the center is asked first and the
+   * edges after, since an edge may itself hold a selection.
+   */
+  override activate(key: string): boolean {
+    const center = this.centerNavigation()
+    if (center?.activate(key)) {
+      return true
+    }
+    return this.slotNavigations().some(navigation => navigation !== center && navigation.activate(key))
+  }
+
+  /**
+   * patched replaces one slot's members and leaves the rest of the frame alone, which is how an app
+   * variant reconfigures part of its shell — previewing a different tab surface in the center
+   * without restating the edges around it.
+   */
   patched(patch: TaoNavigationPatch): RuntimeNavigationValue {
-    assertPatchKeys(patch, [], this.name)
-    return this
+    assertPatchKeys(patch, frameSlotKeys.map(key => `@${key}`), this.name)
+    const items = { ...this.descriptor.config.items }
+    for (const [patchKey, value] of Object.entries(patch)) {
+      const key = patchKey.slice(1)
+      const existing = items[key]
+      RuntimeAssert.input(
+        existing !== undefined,
+        `Navigation ${this.name} has no slot '${patchKey}' to patch.`,
+        { navigationName: this.name, slot: patchKey },
+      )
+      items[key] = { ...existing, ...patchedFrameSlot(value, this.name, patchKey) }
+    }
+    const descriptor = this.descriptor.kind.configure(this.descriptor.declaration, {
+      ...this.descriptor.config,
+      items,
+    })
+    return descriptor.kind.mount(descriptor) as RuntimeNavigationValue
   }
 
   protected canGoBackContent(): boolean {

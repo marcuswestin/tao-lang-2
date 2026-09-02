@@ -235,6 +235,30 @@ export type TaoNavKind<
 }>
 
 /** NavigationControls is the deterministic generated-code API for Tao navigation. */
+/**
+ * patchedKeyedItems merges a patch into each keyed item it names rather than replacing it, so
+ * `Navigator with { @center { Content Other } }` reconfigures that one member and leaves the rest
+ * of the slot — and every other slot — as declared. A delta narrows; it never reopens what it did
+ * not name.
+ */
+function patchedKeyedItems(
+  config: Readonly<Record<string, unknown>>,
+  patch: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(patch)) {
+    if (!key.startsWith('@')) {
+      continue
+    }
+    const base = recordValue(config[key])
+    const delta = recordValue(value)
+    if (base && delta) {
+      merged[key] = { ...base, ...delta }
+    }
+  }
+  return merged
+}
+
 export const NavigationControls = {
   /** Identity constructs one validated canonical declaration identity from generated owner metadata. */
   Identity(tuple: TaoDeclarationIdentityTuple): TaoDeclarationIdentity {
@@ -421,6 +445,7 @@ export const NavigationControls = {
       {
         ...configured.config,
         ...patch,
+        ...patchedKeyedItems(configured.config, patch),
         ...(patchHostSlots
           ? { '__taoHostSlots': { ...baseHostSlots, ...patchHostSlots } }
           : {}),

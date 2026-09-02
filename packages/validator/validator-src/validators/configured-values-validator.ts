@@ -320,7 +320,12 @@ function validateConfiguredProperty(
     return
   }
   const actual = configurationValueType(value)
-  const expected = Type.ofConfigurationProperty(property)
+  // A member defaulted to `none` is optional, exactly as an optional field is, so a conditional
+  // value that may be absent satisfies it. `Datasource datasource is none` in the Prelude is the
+  // same shape; a frame slot's `Content view is none` is what makes an empty edge expressible.
+  const expected = configurationPropertyAcceptsAbsence(property)
+    ? { kind: 'union' as const, members: [Type.ofConfigurationProperty(property), Type.ofNone()] }
+    : Type.ofConfigurationProperty(property)
   if (actual.kind !== 'unresolved' && expected.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
     ctx.error(
       configuredValueValidationMessages.configurationType(
@@ -331,6 +336,11 @@ function validateConfiguredProperty(
       node,
     )
   }
+}
+
+/** A member whose declared default is `none` is optional, so absence is one of its legal values. */
+function configurationPropertyAcceptsAbsence(property: AST.ConfigurationProperty): boolean {
+  return property.value !== undefined && AST.isNoneLiteral(property.value)
 }
 
 function configurationPropertyRequiresValue(property: AST.ConfigurationProperty): boolean {

@@ -108,7 +108,7 @@ view DocumentEditor(Document) {
             WordCountLabel(BodyDraft)
 
             #focusSession
-            FocusSession()
+            FocusStarter()
 
             #markFinal
             Checkbox(Value: Document.Final is Final, Label: "Final") {

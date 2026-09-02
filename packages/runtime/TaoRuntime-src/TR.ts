@@ -188,6 +188,16 @@ class TR {
     return condition.evaluate().jsValue === true ? body() : undefined
   }
 
+  /**
+   * Deferred wraps a configured member's expression so a host reads its current value on every
+   * read rather than the value it had when the navigator was configured. A navigator is built once
+   * and lives for the app; a member that follows the store — a frame edge that appears with a
+   * running session — has to be recomputed, not captured.
+   */
+  static Deferred(compute: () => TR.Evaluable): TR.Evaluable {
+    return { evaluate: () => compute().evaluate() }
+  }
+
   /** WhenCase evaluates one subject once and selects one mutually exclusive value case. */
   static WhenCase<T>(
     subject: TR.Evaluable,

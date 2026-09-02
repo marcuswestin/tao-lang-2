@@ -162,9 +162,13 @@ ConfigurationEntry:
     | reference=[ValueDeclaration:ID]
     | expression=NonIdentifierConstructorEntryValue;
 
+// A configured member takes a value, and `when` is how a value becomes conditional. This is §10's
+// live root reaching a nested slot: a navigator may follow workspace state, and so may one frame
+// edge, which is what makes a slot's presence a property of the data rather than of layout.
 ConfigurationValue:
-    PropertyConfigurationPatch | ConfigurationConstructor | ConfigurationKeyValue
-    | ListLiteral | StringLiteral | NumberLiteral | BooleanLiteral | ViewBinding | ConfigurationReference;
+    PropertyConfigurationPatch | ConfigurationConstructor | ConfigurationKeyValue | WhenExpression
+    | NoneLiteral | ListLiteral | StringLiteral | NumberLiteral | BooleanLiteral | ViewBinding
+    | ConfigurationReference;
 
 // A parameterized view remains a first-class presentation descriptor in configuration position.
 // Its arguments are captured as live bindings when the owning nav is configured; this is distinct
