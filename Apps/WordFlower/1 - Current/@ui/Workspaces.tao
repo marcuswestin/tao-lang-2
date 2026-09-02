@@ -39,7 +39,7 @@ view WorkspaceList() {
    // `ScrollView` scrolls its content; `width max` keeps a readable column on a wide screen, and
    // `centered` places that column in the middle of the available space.
    render ScrollView() [screen] {
-      Col() [width max 960, centered, gap 24] {
+      Col() [workspaceWidth, centeredLayout, gapSection] {
          Col() [hero] {
             Text("YOUR WRITING HOME") [eyebrow]
             Text("WordFlower") [display]
@@ -51,7 +51,7 @@ view WorkspaceList() {
                Text("Could not load WordFlower") [title]
                TextMultiline(Message) [body]
          }  }
-         Panes() [gap 20] {
+         Panes() [gapWide] {
             Col() [panel] {
                Text("CREATE A SPACE") [eyebrow]
                Text("Begin somewhere quiet") [sectionTitle]
@@ -93,7 +93,7 @@ view WorkspaceList() {
 
 // Presented above the nearest nav; overlays stack above content and are dismissible.
 view WorkspaceNameNotice() {
-   render Col() [panel, width max 420] {
+   render Col() [panel, formWidth] {
       Text("A workspace needs a name") [sectionTitle]
       TextMultiline("Add a short name before creating this writing space.") [body]
 
@@ -132,7 +132,7 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
       set DocumentTitle = ""
    }
    render ScrollView() [screen] {
-      Col() [width max 960, centered, gap 24] {
+      Col() [workspaceWidth, centeredLayout, gapSection] {
          Col() [hero] {
             Text("WORKSPACE") [eyebrow]
             Text(Workspace.Name) [display]
@@ -147,7 +147,7 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
             loading -> { Spinner() }
             error -> Message { TextMultiline("Could not load documents: { Message }") [body] }
          }
-         Panes() [gap 20] {
+         Panes() [gapWide] {
             Col() [panel] {
                Text("WORKSPACE DETAILS") [eyebrow]
                Text("Name this space") [sectionTitle]
@@ -180,7 +180,7 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
          }  }  }
          // `Panes` lays its children side by side when the container is wide enough and stacks them
          // otherwise. Children size themselves with the ordinary layout clauses.
-         Panes() [gap 20] {
+         Panes() [gapWide] {
             Col() [panel] {
                Text("DRAFTS") [eyebrow]
                Text("Drafts: { Drafts.Count }") [sectionTitle]
@@ -203,7 +203,7 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
 workspace
 view WorkspaceChooser() {
    query Workspaces { }
-   render Col() [screen, width max 720, centered, gap 20] {
+   render Col() [screen, readableWidth, centeredLayout, gapWide] {
       Col() [hero] {
          Text("YOUR LIBRARY") [eyebrow]
          Text("Choose a workspace") [display]
@@ -220,7 +220,7 @@ view WorkspaceChooser() {
 
 view WorkspaceDocuments(Workspace) {
    query Documents from Workspace.Documents { }
-   render Col() [screen, width max 720, centered, gap 20] {
+   render Col() [screen, readableWidth, centeredLayout, gapWide] {
       Col() [hero] {
          Text("{ Workspace.Name }") [eyebrow]
          Text("Documents in { Workspace.Name }") [display]
@@ -254,7 +254,7 @@ view NoWorkspacesYet() {
    render Col() [subtlePanel] {
       // A decorative image needs no accessibility label. This tranche represents assets as text
       // paths.
-      Image("./images/empty-workspaces.png", Decorative: true) [width 160, centered]
+      Image("./images/empty-workspaces.png", Decorative: true) [illustrationWidth, centeredLayout]
       Text("No workspaces yet") [sectionTitle]
       TextMultiline("Create one to start capturing documents.") [body]
       TextMultiline("Starter prompt: { StarterPrompt.PromptTitle }") [body]

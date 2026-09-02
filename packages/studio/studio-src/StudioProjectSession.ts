@@ -313,6 +313,7 @@ const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
   { method: 'POST', path: '/api/file/draft' },
   { method: 'POST', path: '/api/file/rename' },
   { method: 'POST', path: '/api/language/highlight' },
+  { method: 'POST', path: '/api/ship/beta' },
   { method: 'POST', path: '/api/source-action' },
   { method: 'POST', path: '/api/source-action/inspect' },
   { method: 'POST', path: '/api/source-action/propose' },

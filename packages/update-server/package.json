@@ -1,0 +1,17 @@
+{
+  "name": "tao-update-server",
+  "private": true,
+  "type": "module",
+  "module": "update-server-src/update-service.ts",
+  "bin": {
+    "tao-update-server": "update-server-src/main.ts"
+  },
+  "exports": {
+    ".": "./update-server-src/update-service.ts",
+    "./store": "./update-server-src/update-store.ts",
+    "./types": "./update-server-src/update-types.ts"
+  },
+  "dependencies": {
+    "tao-shared": "workspace:*"
+  }
+}

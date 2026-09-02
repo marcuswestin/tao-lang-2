@@ -10,6 +10,7 @@ export type CommandOutputStream = 'stderr' | 'stdout'
 export type PrefixedOutputOptions = {
   logFile?: FileHandle
   processName: string
+  terminal?: boolean
 }
 
 /** CommandOutputBuffer buffers command output chunks until whole prefixed lines can be written. */
@@ -276,6 +277,9 @@ export function createPrefixedOutputBuffer(options: PrefixedOutputOptions): Comm
   let closePromise: Promise<void> | undefined
 
   const writeLine = (stream: CommandOutputStream, line: string) => {
+    if (options.terminal === false) {
+      return
+    }
     if (stream === 'stderr') {
       HCI.logProcessOutput(options.processName, line, { stderr: true })
     } else {

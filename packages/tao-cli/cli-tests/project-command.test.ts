@@ -12,7 +12,7 @@ Describe('tao project identity commands', () => {
       const path = await createProject('my-project')
       Expect(FS.relativePath(await FS.realPath(root), path)).toBe('my-project/App.tao')
       Expect(await FS.readText(path)).toBe(
-        `project {\n   id "my-project"\n   name "my-project"\n}\n\napp App { view Main }\n\nview Main() { }\n`,
+        `project {\n   id "my-project"\n   name "my-project"\n   version "0.1.0"\n   DefaultApp App\n}\n\napp App { view Main }\n\nview Main() { }\n`,
       )
     } finally {
       Platform.runtimeProcess.chdir(previous)

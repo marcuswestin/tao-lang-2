@@ -45,7 +45,10 @@ use Checkbox, Col, FormButton, Image, Panes, Progress, Row, ScrollView, Spinner,
 // declaration identity, and the key must exist on every launch configuration of that root.
 
 project {
+   id "wordflower"
    name "WordFlower"
+   version "1.0.0"
+   DefaultApp WordFlower
    remote none
    license MIT
 }

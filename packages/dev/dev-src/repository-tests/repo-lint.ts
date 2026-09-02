@@ -35,8 +35,10 @@ export function wordFlowerDirectoryIssues(directory: WordFlowerDirectory): strin
 }
 
 function wordFlowerAbsorbedParityIssues(directory: WordFlowerDirectory): string[] {
-  const current = new Map(directory.currentFiles.map(file => [file.path, file]))
-  const next = new Map(directory.nextFiles.map(file => [currentWordFlowerPath(file.path), file]))
+  const current = new Map(directory.currentFiles.filter(isWordFlowerParityFile).map(file => [file.path, file]))
+  const next = new Map(
+    directory.nextFiles.filter(isWordFlowerParityFile).map(file => [currentWordFlowerPath(file.path), file]),
+  )
   const paths = [...new Set([...current.keys(), ...next.keys()])].sort()
   return paths.flatMap(path => {
     const currentFile = current.get(path)
@@ -51,6 +53,10 @@ function wordFlowerAbsorbedParityIssues(directory: WordFlowerDirectory): string[
       ? []
       : [`${directory.nextPath} is absorbed but ${path} differs from ${directory.currentPath}.`]
   })
+}
+
+function isWordFlowerParityFile(file: SourceFile): boolean {
+  return file.path !== '.tao-project/lock.jsonc'
 }
 
 function currentWordFlowerPath(path: string): string {

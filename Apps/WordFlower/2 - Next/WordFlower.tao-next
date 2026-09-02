@@ -7,6 +7,15 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 
 // Tranche status: absorbed
 //
+// PROJECT RELEASE METADATA. This tranche gives local release tooling the source-owned version and
+// default runnable app it needs without making either value part of runtime behavior.
+//
+// This tranche decides:
+// - `version` is the version currently under development, written as numeric SemVer core only:
+//   exactly `major.minor.patch`, with no leading zeroes, prerelease, or build suffix
+// - `DefaultApp` names one app declaration from this project. Command-line `--app` selection still
+//   overrides it, and projects may omit it when interactive selection is preferable
+//
 // STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
 // shared by Tao tests, review tooling, and Studio. `fixture` owns reusable data/identity setup;
 // `scenarios Subject "group"` collects string-identified entries under shared defaults; each entry
@@ -267,6 +276,8 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 project {
    id "wordflower"
    name "WordFlower"
+   version "1.0.0"
+   DefaultApp WordFlower
    remote none
    license MIT
 }

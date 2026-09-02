@@ -11,6 +11,9 @@ export const projectValidationMessages = {
   duplicateId: () => `Project metadata can declare id only once.`,
   requiredName: () => `Project metadata requires exactly one name.`,
   duplicateName: () => `Project metadata can declare name only once.`,
+  duplicateVersion: () => `Project metadata can declare version only once.`,
+  invalidVersion: () => `Project version must be numeric SemVer core (for example, "1.2.3").`,
+  duplicateDefaultApp: () => `Project metadata can declare DefaultApp only once.`,
   duplicateRemote: () => `Project metadata can declare remote only once.`,
   duplicateLicense: () => `Project metadata can declare license only once.`,
   missingProject: () =>
@@ -75,6 +78,8 @@ function validateProject(project: AST.ProjectDeclaration, ctx: ValidationContext
 function validateProjectBlock(project: AST.ProjectDeclaration, ctx: ValidationContext): void {
   const ids = AST.blockStatementOf(project, { filter: AST.isProjectId })
   const names = AST.blockStatementOf(project, { filter: AST.isProjectName })
+  const versions = AST.blockStatementOf(project, { filter: AST.isProjectVersion })
+  const defaultApps = AST.blockStatementOf(project, { filter: AST.isProjectDefaultApp })
   const remotes = AST.blockStatementOf(project, { filter: AST.isProjectRemote })
   const licenses = AST.blockStatementOf(project, { filter: AST.isProjectLicense })
   const requires = AST.blockStatementOf(project, { filter: AST.isProjectRequires })
@@ -90,6 +95,17 @@ function validateProjectBlock(project: AST.ProjectDeclaration, ctx: ValidationCo
   }
   for (const name of names.slice(1)) {
     ctx.error(projectValidationMessages.duplicateName(), name)
+  }
+  for (const version of versions) {
+    if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(version.value)) {
+      ctx.error(projectValidationMessages.invalidVersion(), version)
+    }
+  }
+  for (const version of versions.slice(1)) {
+    ctx.error(projectValidationMessages.duplicateVersion(), version)
+  }
+  for (const defaultApp of defaultApps.slice(1)) {
+    ctx.error(projectValidationMessages.duplicateDefaultApp(), defaultApp)
   }
   for (const remote of remotes.slice(1)) {
     ctx.error(projectValidationMessages.duplicateRemote(), remote)

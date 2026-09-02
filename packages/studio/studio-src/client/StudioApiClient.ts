@@ -72,6 +72,11 @@ export type StudioAIAvailability = {
   status: 'available' | 'unavailable'
 }
 
+export type StudioBetaShipResult = {
+  appName: string
+  message: string
+}
+
 export type StudioGeneratedFixtureResult =
   | { fixture: StudioFixturePlan; status: 'ready' }
   | { code: string; error: string; issues?: readonly string[]; status: 'failed' }
@@ -179,6 +184,7 @@ export const StudioApiEventStream = {
 /** Typed boundary around Studio's HTTP and WebSocket endpoints. */
 export const StudioApiClient = {
   aiAvailability: async (): Promise<StudioAIAvailability> => await get('/api/ai/availability'),
+  betaShip: async (): Promise<StudioBetaShipResult> => await request('/api/ship/beta', {}),
   captureFixture: async <Result>(body: unknown): Promise<Result> => await request('/api/source-action', body),
   cellInstance: async (body: unknown, signal?: AbortSignal): Promise<unknown> =>
     await request('/api/preview/cell/instance', body, signal),

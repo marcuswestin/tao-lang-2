@@ -14,6 +14,7 @@ export type StudioClientView = {
   drawerContent: HTMLElement
   drawerTabs: HTMLElement
   editorTabs: HTMLElement
+  betaShip: HTMLButtonElement
   globalLoading: HTMLElement
   inspector: HTMLElement
   interactionMode: HTMLButtonElement
@@ -23,6 +24,7 @@ export type StudioClientView = {
   reload: HTMLButtonElement
   scenarioInspector: HTMLElement
   searchInput: HTMLInputElement
+  shipOverlay: HTMLElement
   status: HTMLElement
 }
 
@@ -81,6 +83,7 @@ export function studioShellMarkup(): string {
           <button class="studio-command-palette" type="button" aria-keyshortcuts="Meta+K Control+K">⌘K</button>
         </div>
         <div class="studio-toolbar-actions">
+          <button class="studio-beta-ship" type="button">Beta ship</button>
           <button class="studio-interaction-mode" type="button">Mode: Edit</button>
           <button class="studio-reload" type="button">Reload preview</button>
           <span class="studio-status" role="status">Connecting…</span>
@@ -149,6 +152,13 @@ export function studioShellMarkup(): string {
         <span class="studio-global-loading-spinner" aria-hidden="true"></span>
         <span><strong>Switching app…</strong><small>Please wait while Studio prepares the new preview.</small></span>
       </section>
+      <section class="studio-ship-overlay" hidden aria-live="assertive" aria-label="Beta shipping current app" role="status">
+        <div class="studio-ship-progress">
+          <progress aria-label="Beta ship progress"></progress>
+          <strong>Beta shipping…</strong>
+          <small>Building, uploading, and waiting for TestFlight. This can take several minutes.</small>
+        </div>
+      </section>
     </section>
   `
 }
@@ -172,6 +182,7 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
     drawerContent: requiredElement(root, '.studio-drawer-content'),
     drawerTabs: requiredElement(root, '.studio-drawer-tabs'),
     editorTabs: requiredElement(root, '.studio-editor-tabs'),
+    betaShip: requiredButton(root, '.studio-beta-ship'),
     globalLoading: requiredElement(root, '.studio-global-loading'),
     inspector: requiredElement(root, '.studio-inspector-content'),
     interactionMode: requiredButton(root, '.studio-interaction-mode'),
@@ -181,6 +192,7 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
     reload: requiredButton(root, '.studio-reload'),
     scenarioInspector: requiredElement(root, '.studio-scenario-inspector-content'),
     searchInput: requiredInput(root, '.studio-search-input'),
+    shipOverlay: requiredElement(root, '.studio-ship-overlay'),
     status: requiredElement(root, '.studio-status'),
   }
 }

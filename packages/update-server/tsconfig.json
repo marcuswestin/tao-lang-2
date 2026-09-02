@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.base.json",
+  "include": [
+    "update-server-src/**/*",
+    "update-server-tests/**/*"
+  ],
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "incremental": false,
+    "noEmit": true,
+    "types": [
+      "bun",
+      "node"
+    ]
+  }
+}

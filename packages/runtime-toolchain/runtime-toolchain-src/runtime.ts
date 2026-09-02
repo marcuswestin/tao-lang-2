@@ -1,8 +1,10 @@
 import { AST } from '@parser'
 import { Assert, FS } from '@shared'
 import { Workspace } from '@workspace'
+import { proveReleaseBundle } from './release-bundle-proof'
 import { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 
+export { proveReleaseBundle, type ReleaseBundleProof } from './release-bundle-proof'
 export { RuntimeToolchainPaths } from './runtime-toolchain-paths'
 
 export type GeneratePreviewOptions = {
@@ -24,9 +26,38 @@ export type StudioPreviewPublication = StudioPreviewIdentity & {
 export type GenerateAppOptions = {
   appName?: string
   cwd?: string
+  datasourceConfiguration?: Readonly<Record<string, string>>
   preview?: GeneratePreviewOptions
   runtimePackageRoot?: string
+  ship?: ShipManifest
   validationMode?: 'development' | 'release'
+}
+
+export type ShipUpdatesConfig = {
+  channel: string
+  runtimeFingerprint: string
+  runtimeVersion: { policy: 'fingerprint' }
+  url: string
+}
+
+/** ShipManifest is the generated release host contract consumed by app.config.js and the ship pipeline. */
+export type ShipManifest = {
+  buildNumber: string
+  bundleIdentifier: string
+  git: {
+    commit: string
+    dirty: boolean
+  }
+  icon: 'default' | 'badged'
+  ios: {
+    usesNonExemptEncryption: false
+  }
+  name: string
+  schemaVersion: 1
+  slug: string
+  splash?: string
+  updates?: ShipUpdatesConfig
+  version: string
 }
 
 export type GeneratedApp = {
@@ -35,6 +66,8 @@ export type GeneratedApp = {
   code: string
   preview?: StudioPreviewPublication
   previewRevision?: number
+  shipManifest?: ShipManifest
+  shipManifestPath?: string
   studioManifest?: NonNullable<Awaited<ReturnType<typeof Workspace.compile>>['studioManifest']>
 }
 
@@ -54,8 +87,18 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
   const sourcePath = FS.resolvePath(appPath, opts.cwd)
   const generatedAppPath = FS.resolvePath('_gen_tao-app/App.tsx', runtimePackageRoot)
   const generatedAppRoot = FS.resolvePath('_gen_tao-app', runtimePackageRoot)
+  const shipManifestPath = FS.resolvePath('ship.json', generatedAppRoot)
   return await serializeGeneration(generatedAppRoot, async () => {
+    Assert(
+      opts.ship === undefined || opts.validationMode === 'release',
+      'a ship manifest is generated only in release validation mode',
+    )
+    Assert(
+      opts.ship === undefined || opts.preview === undefined,
+      'a release ship manifest is not combined with a Studio preview publication',
+    )
     const compiled = await Workspace.compile(sourcePath, {
+      appDatasourceConfiguration: opts.datasourceConfiguration,
       appName: opts.appName,
       studio: opts.preview !== undefined,
       validationMode: opts.validationMode,
@@ -66,9 +109,12 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     if (preview !== undefined) {
       assertPreviewCanPublish(generatedAppRoot, preview)
     }
-    const generatedFiles = preview === undefined
+    const compiledFiles = preview === undefined
       ? compiled.files
       : filesWithStablePreviewRoot(compiled.files, preview)
+    const generatedFiles = opts.ship === undefined
+      ? compiledFiles
+      : [...compiledFiles, { relativePath: 'ship.json', code: `${JSON.stringify(opts.ship, null, 2)}\n` }]
     const previousPreview = preview === undefined ? undefined : previewPublications.get(generatedAppRoot)
 
     await writeGeneratedFiles(
@@ -93,6 +139,7 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       sourcePath,
       outputPath: generatedAppPath,
       code: generatedAppCode ?? compiled.code,
+      ...(opts.ship === undefined ? {} : { shipManifest: opts.ship, shipManifestPath }),
       ...(preview === undefined
         ? {}
         : {
@@ -117,6 +164,7 @@ async function resetStudioPreviewSession(opts: { runtimePackageRoot?: string } =
 const Runtime = {
   appNames,
   generateApp,
+  proveReleaseBundle,
   resetStudioPreviewSession,
 }
 

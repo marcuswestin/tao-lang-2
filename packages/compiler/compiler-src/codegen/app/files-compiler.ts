@@ -10,7 +10,6 @@ type TaoFileCompileOptions = CodegenOptions & {
   importLines?: string[]
   scopeBindings?: string[]
   exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
-  selectedAppName?: string
   viewRegistrations?: string
 }
 

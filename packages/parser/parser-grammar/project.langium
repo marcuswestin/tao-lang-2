@@ -1,6 +1,7 @@
 grammar TaoProject
 
 import "./terminals"
+import "./app"
 
 entry ProjectGrammarEntrypoint:
     ProjectDeclaration;
@@ -12,13 +13,19 @@ ProjectBlock:
     '{' statements+=ProjectStatement* '}';
 
 ProjectStatement:
-    ProjectId | ProjectName | ProjectRemote | ProjectLicense | ProjectRequires;
+    ProjectId | ProjectName | ProjectVersion | ProjectDefaultApp | ProjectRemote | ProjectLicense | ProjectRequires;
 
 ProjectId:
     'id' value=STRING;
 
 ProjectName:
     'name' value=STRING;
+
+ProjectVersion:
+    'version' value=STRING;
+
+ProjectDefaultApp:
+    'DefaultApp' app=[AppDeclaration:ID];
 
 ProjectRemote:
     'remote' remote=ProjectRemoteValue;

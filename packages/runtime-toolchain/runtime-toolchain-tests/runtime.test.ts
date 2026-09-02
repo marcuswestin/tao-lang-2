@@ -1,4 +1,4 @@
-import Runtime, { type GeneratePreviewOptions } from '@runtime-toolchain'
+import Runtime, { type GeneratePreviewOptions, type ShipManifest } from '@runtime-toolchain'
 import TR from '@runtime/TR'
 import { Assert, CLI, FS, Repo } from '@shared'
 import { AfterEach, Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
@@ -104,6 +104,80 @@ Describe('Tao runtime app generation', () => {
     Expect(generated.sourcePath).toBe(FS.resolvePath('WordFlower.tao', wordFlowerDir))
     Expect(generated.outputPath).toBe(generatedAppPath(runtimePackageRoot))
     Expect(await FS.readText(generated.outputPath)).toBe(generated.code)
+  })
+
+  Test('publishes a typed ship manifest only with a release graph and removes it on development compile', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    const ship: ShipManifest = {
+      buildNumber: '202609021545',
+      bundleIdentifier: 'lang.tao.release.variant',
+      git: { commit: 'abc1234', dirty: false },
+      icon: 'badged',
+      ios: { usesNonExemptEncryption: false },
+      name: 'Release Variant',
+      schemaVersion: 1,
+      slug: 'release-variant',
+      updates: {
+        channel: 'release-variant',
+        runtimeFingerprint: 'native-fingerprint-1',
+        runtimeVersion: { policy: 'fingerprint' },
+        url: 'https://updates.tao-lang.org/v1/release-variant',
+      },
+      version: '1.2.3',
+    }
+
+    await withTaoFiles(
+      'tao-runtime-release-manifest-',
+      { 'Main.tao': 'app Release { view Main }\nview Main() { render inject ```ts return null ``` }' },
+      async paths => {
+        const generated = await Runtime.generateApp(paths['Main.tao'], {
+          runtimePackageRoot,
+          ship,
+          validationMode: 'release',
+        })
+        const shipManifestPath = generatedPreviewPath(runtimePackageRoot, 'ship.json')
+
+        Expect(generated.shipManifest).toEqual(ship)
+        Expect(generated.shipManifestPath).toBe(shipManifestPath)
+        Expect(await FS.readJson(shipManifestPath)).toEqual(ship)
+
+        const development = await Runtime.generateApp(paths['Main.tao'], { runtimePackageRoot })
+
+        Expect(development.shipManifest).toBeUndefined()
+        Expect(development.shipManifestPath).toBeUndefined()
+        Expect(await FS.exists(shipManifestPath)).toBe(false)
+      },
+    )
+  })
+
+  Test('refuses a ship manifest outside an isolated release generation', async () => {
+    const runtimePackageRoot = await createRuntimePackageRoot()
+    const ship: ShipManifest = {
+      buildNumber: '202609021545',
+      bundleIdentifier: 'lang.tao.release',
+      git: { commit: 'abc1234', dirty: false },
+      icon: 'default',
+      ios: { usesNonExemptEncryption: false },
+      name: 'Release',
+      schemaVersion: 1,
+      slug: 'release',
+      version: '1.2.3',
+    }
+
+    await withTaoFiles(
+      'tao-runtime-release-manifest-guard-',
+      { 'Main.tao': 'app Release { view Main }\nview Main() { render inject ```ts return null ``` }' },
+      async paths => {
+        await Expect(Runtime.generateApp(paths['Main.tao'], { runtimePackageRoot, ship }))
+          .rejects.toThrow('only in release validation mode')
+        await Expect(Runtime.generateApp(paths['Main.tao'], {
+          preview: previewOptions(1),
+          runtimePackageRoot,
+          ship,
+          validationMode: 'release',
+        })).rejects.toThrow('not combined with a Studio preview publication')
+      },
+    )
   })
 
   Test('generates a stable preview root with a caller-supplied revision', async () => {

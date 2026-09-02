@@ -588,6 +588,24 @@ button { color: inherit; font: inherit; }
   border-top-color: #72a0ff; height: 18px; width: 18px;
 }
 @keyframes studio-loading-spin { to { transform: rotate(360deg); } }
+.studio-beta-ship {
+  background: #315fbb; border: 1px solid #5b8def; border-radius: 5px; color: #f4f7ff; cursor: pointer;
+  font-size: 11px; font-weight: 700; padding: 5px 9px;
+}
+.studio-beta-ship:hover { background: #3b6dcc; }
+.studio-beta-ship:disabled { cursor: wait; opacity: .62; }
+.studio-ship-overlay {
+  align-items: center; background: #090b10d9; display: grid; inset: 0; padding: 24px; place-items: center;
+  position: fixed; z-index: 100;
+}
+.studio-ship-overlay[hidden] { display: none; }
+.studio-ship-progress {
+  background: #171a21; border: 1px solid #4f6590; border-radius: 12px; box-shadow: 0 24px 90px #000d;
+  display: grid; gap: 10px; max-width: 460px; padding: 24px; text-align: center; width: min(100%, 460px);
+}
+.studio-ship-progress progress { accent-color: #72a0ff; width: 100%; }
+.studio-ship-progress strong { color: #edf3ff; font-size: 15px; }
+.studio-ship-progress small { color: #9ba7bc; font-size: 11px; line-height: 1.5; }
 
 /* Desktop workbench theme. Component rules above own layout behavior; this layer owns product hierarchy. */
 :root {

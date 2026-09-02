@@ -16,6 +16,14 @@ export default {
     f.oneSpaceAfter('name')
   },
 
+  ProjectVersion(f) {
+    f.oneSpaceAfter('version')
+  },
+
+  ProjectDefaultApp(f) {
+    f.oneSpaceAfter('DefaultApp')
+  },
+
   ProjectRemote(f) {
     f.oneSpaceAfter('remote')
   },

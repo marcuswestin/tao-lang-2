@@ -13,7 +13,7 @@ type ConfirmResult is one of Confirmed
 workspace
 view DocumentScreen(Document) {
    Title Document.Title
-   render Col() [fill] {
+   render Col() [grow] {
       guard Document {
          loading -> { Spinner() }
          missing -> {
@@ -87,9 +87,9 @@ view DocumentEditor(Document) {
          dismiss
    }  }
    // Editing and the paragraph outline sit side by side on a wide screen and stack on a narrow one.
-   render Panes() [screen, gap 20] {
-      ScrollView() [claim 2] {
-         Col() [width max 720, panel] {
+   render Panes() [screen, gapWide] {
+      ScrollView() [claimDouble] {
+         Col() [readableWidth, panel] {
             Text("DOCUMENT") [eyebrow]
             Text(DocumentLabel(Document.Title)) [display]
             TextMultiline("Workspace: { Document.Workspace.Name }") [body]
@@ -100,7 +100,7 @@ view DocumentEditor(Document) {
             }
 
             #editDocumentBody
-            TextInput(Value: BodyDraft, Label: "Document body", Placeholder: "Write the document body") [claim 2] {
+            TextInput(Value: BodyDraft, Label: "Document body", Placeholder: "Write the document body") [claimDouble] {
                on change SetBodyDraft
                on submit SaveDocument
             }
@@ -150,7 +150,7 @@ view DocumentEditor(Document) {
 }  }  }  }  }
 
 view SavedToast(Revert action()) {
-   render Row() [gap 10] {
+   render Row() [gapMedium] {
       TextMultiline("Saved") [body]
 
       #revertSave
@@ -162,7 +162,7 @@ view SavedToast(Revert action()) {
 // none. Each ask is an independent stacked occurrence. Back or plain dismissal answers none before
 // removal.
 view ConfirmCloseDialogue(Document) responds ConfirmResult {
-   render Col() [panel, width max 420] {
+   render Col() [panel, formWidth] {
       Text("Close { Document.Title }?") [sectionTitle]
       TextMultiline("Your latest unsaved changes will stay in this session until you return.") [body]
 

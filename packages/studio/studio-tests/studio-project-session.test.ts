@@ -40,6 +40,7 @@ Test('Studio project session resolves one current Tao app and serves contained v
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/data/fill' })
     Expect(handshake.endpoints).toContainEqual({ method: 'WS', path: '/api/language/lsp' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/language/highlight' })
+    Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/ship/beta' })
     Expect(handshake.endpoints).toContainEqual({ method: 'GET', path: '/api/tests/status' })
     Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/tests/run' })
     Expect(handshake.files.map(candidate => candidate.path)).toEqual([
