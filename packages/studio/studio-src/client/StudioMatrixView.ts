@@ -439,13 +439,87 @@ export async function connectPreviews(
     )
     return connections
   }
+  return [await connectWholeAppPreview(parent, previewUrl, origin, handshake, signal)]
+}
+
+/**
+ * connectWholeAppPreview shows the running app in one frame. It is the preview for an app that declares no
+ * scenarios, so there are no cells to lay out.
+ */
+async function connectWholeAppPreview(
+  parent: HTMLElement,
+  previewUrl: string,
+  origin: string,
+  handshake: StudioHandshake,
+  signal?: AbortSignal,
+): Promise<StudioPreviewConnection> {
   const previewInstanceId = crypto.randomUUID()
   await StudioApiClient.previewInstance({ previewInstanceId }, signal)
   const iframe = document.createElement('iframe')
   iframe.src = StudioPreviewFrameUrl.create(previewUrl, previewInstanceId, window.location)
   iframe.title = `${handshake.identity.appName} live preview`
   parent.replaceChildren(iframe)
-  return [{ iframe, interactionMode: 'edit', origin, previewInstanceId }]
+  return { iframe, interactionMode: 'edit', origin, previewInstanceId }
+}
+
+/**
+ * previewMatrixPlan decides what the preview area should hold. An app that declares no scenarios has no cells,
+ * and must keep showing the whole running app rather than an empty matrix.
+ */
+export function previewMatrixPlan(
+  cellCount: number,
+  hasWholeAppPreview: boolean,
+): 'cells' | 'create-whole-app' | 'keep-whole-app' {
+  if (cellCount > 0) {
+    return 'cells'
+  }
+  return hasWholeAppPreview ? 'keep-whole-app' : 'create-whole-app'
+}
+
+/** previewNoticeFor explains a preview the project's current state cannot back with a live app. */
+export function previewNoticeFor(
+  compile: {
+    diagnostics?: readonly { filePath?: string; message: string; range?: { start: { line: number } } }[]
+    message: string
+    status: string
+  },
+): { detail: string; heading: string } | undefined {
+  if (compile.status !== 'error') {
+    return undefined
+  }
+  const diagnostic = compile.diagnostics?.[0]
+  const where = diagnostic?.filePath === undefined
+    ? ''
+    : `${diagnostic.filePath.split('/').at(-1) ?? diagnostic.filePath}${
+      diagnostic.range === undefined ? '' : `:${diagnostic.range.start.line + 1}`
+    } — `
+  return {
+    detail: `${where}${diagnostic?.message ?? compile.message}`,
+    heading: 'This preview is out of date: the project did not compile.',
+  }
+}
+
+/** studioPreviewNotice puts a human-facing explanation over the preview, without discarding a live frame. */
+export function studioPreviewNotice(
+  parent: HTMLElement,
+  notice: { detail: string; heading: string } | undefined,
+): void {
+  const existing = parent.querySelector<HTMLElement>(':scope > .studio-preview-notice')
+  if (notice === undefined) {
+    existing?.remove()
+    return
+  }
+  const element = existing ?? document.createElement('div')
+  element.className = 'studio-preview-notice'
+  element.setAttribute('role', 'status')
+  const heading = element.querySelector<HTMLElement>('strong') ?? document.createElement('strong')
+  heading.textContent = notice.heading
+  const detail = element.querySelector<HTMLElement>('small') ?? document.createElement('small')
+  detail.textContent = notice.detail
+  element.replaceChildren(heading, detail)
+  if (existing === null) {
+    parent.append(element)
+  }
 }
 
 function connectionGroups(
@@ -1909,6 +1983,19 @@ export async function refreshCellPreviews(
 ): Promise<void> {
   const origin = StudioProtocol.messageOrigin(previewUrl)
   Assert.input(origin, 'Tao Studio preview URL must be an absolute HTTP or HTTPS URL.')
+  const wholeApp = previews.find(preview => preview.cell === undefined)
+  const plan = previewMatrixPlan(manifest.cells.length, wholeApp !== undefined)
+  if (plan === 'keep-whole-app') {
+    if (!parent.contains(wholeApp!.iframe)) {
+      parent.replaceChildren(wholeApp!.iframe)
+    }
+    return
+  }
+  if (plan === 'create-whole-app') {
+    disconnectPreviews(previews, 'This app no longer declares scenarios, so its cells were replaced.')
+    previews.splice(0, previews.length, await connectWholeAppPreview(parent, previewUrl, origin, handshake))
+    return
+  }
   const previousByCell = new Map(
     previews.flatMap(preview => preview.cell === undefined ? [] : [[preview.cell.cellId, preview] as const]),
   )

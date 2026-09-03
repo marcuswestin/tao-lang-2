@@ -36,6 +36,23 @@
         "--no-browser"
       ],
       "port": 4820
+    },
+    {
+      "name": "studio-hnreader",
+      "runtimeExecutable": "direnv",
+      "runtimeArgs": [
+        "exec",
+        ".",
+        "./dev",
+        "studio",
+        "Apps/HNReader",
+        "--app",
+        "HNReaderStub",
+        "--port",
+        "4830",
+        "--no-browser"
+      ],
+      "port": 4830
     }
   ]
 }

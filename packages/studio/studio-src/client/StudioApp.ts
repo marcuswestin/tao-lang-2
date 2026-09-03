@@ -49,9 +49,11 @@ import {
   disconnectPreviews,
   handlePreviewMessage,
   postEditorSelection,
+  previewNoticeFor,
   refreshCellPreviews,
   requestRuntimeCapture,
   StudioActivePreview,
+  studioPreviewNotice,
   StudioPreviewSourceSync,
   StudioRuntimeData,
   type StudioRuntimeDataTable,
@@ -189,6 +191,14 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     })
     let preparedActiveMutationPath: string | undefined
     let preparedOpenMutationPath: string | undefined
+
+    /**
+     * renderPreviewNotice explains a preview that cannot show the app. A failed compile leaves the last good
+     * frame on screen, which otherwise looks like the change simply did nothing.
+     */
+    function renderPreviewNotice(): void {
+      studioPreviewNotice(view.preview, previewNoticeFor(compileState))
+    }
 
     function publishProductHostState(): void {
       const preview = activePreview.current()
@@ -1293,6 +1303,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     const disconnectEvents = connectEvents(view.status, diagnostic => void openCompileDiagnostic(diagnostic), {
       onCompile(state) {
         compileState = state
+        renderPreviewNotice()
         renderDrawer()
         if (view.searchInput.value.trim() !== '') {
           scheduleSearch()
@@ -1338,6 +1349,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         if (config.previewUrl !== undefined) {
           void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
             activePreview.reconcile(wirePreview)
+            renderPreviewNotice()
           }).catch(error => {
             view.status.dataset['state'] = 'error'
             view.status.textContent = error instanceof Error ? error.message : String(error)
