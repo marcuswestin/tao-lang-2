@@ -77,7 +77,7 @@ function stubClient(): {
   }
 }
 
-function renderHost(App: React.ComponentType, client: StudioDeviceClient) {
+function renderHost(App: React.ComponentType, client: StudioDeviceClient, scenarioKind: 'app' | 'view' = 'app') {
   return render(
     createElement(TR.Studio.DeviceHost, {
       App,
@@ -89,13 +89,29 @@ function renderHost(App: React.ComponentType, client: StudioDeviceClient) {
             version: 1,
           },
           fixture: { accounts: [], creates: [] },
-          scenario: { kind: 'app', prepare: [], subjectId: 'Demo' },
+          scenario: { kind: scenarioKind, prepare: [], subjectId: 'Demo' },
         }) as never,
       client,
       manifest: { compileRevision: 4, manifestRevision: 'compile:4', scenarios: [] },
       publication,
     }),
   )
+}
+
+type SafeAreaContextTestMock = {
+  setSafeAreaInsetsForTests(insets: { bottom: number; left: number; right: number; top: number }): void
+}
+
+function safeAreaContextTestMock(): SafeAreaContextTestMock {
+  return require('react-native-safe-area-context') as SafeAreaContextTestMock
+}
+
+/** Flattens whatever shape a style prop arrived in, so an assertion can read one value. */
+function flatStyle(style: unknown): Record<string, unknown> {
+  if (Array.isArray(style)) {
+    return style.reduce<Record<string, unknown>>((merged, entry) => ({ ...merged, ...flatStyle(entry) }), {})
+  }
+  return typeof style === 'object' && style !== null ? style as Record<string, unknown> : {}
 }
 
 describe('Studio device host acknowledgement', () => {
@@ -130,5 +146,56 @@ describe('Studio device host acknowledgement', () => {
     expect(stub.reports[0]?.message).toContain('the cell exploded')
     // The acknowledgement names what is on screen; an error screen is not the assigned revision.
     expect(stub.applied).toEqual([])
+  })
+})
+
+/**
+ * The device is the only place these insets are real, and the rule differs by scenario kind: a
+ * `view` cell mounts one Tao view with no navigator to apply insets, so the host applies them; an
+ * `app` cell keeps its own navigator chrome and must reach the true screen edges. Both directions
+ * were changed structurally and neither was ever rendered, so a regression in either would have been
+ * invisible until someone looked at a phone.
+ */
+describe('Studio device host safe area', () => {
+  const insets = { bottom: 34, left: 0, right: 0, top: 59 }
+
+  beforeEach(() => {
+    safeAreaContextTestMock().setSafeAreaInsetsForTests(insets)
+  })
+
+  afterEach(() => {
+    safeAreaContextTestMock().setSafeAreaInsetsForTests({ bottom: 0, left: 0, right: 0, top: 0 })
+  })
+
+  test('pads a bare view cell out of the status bar and home indicator', async () => {
+    const stub = stubClient()
+    const screen = renderHost(() => createElement(Text, null, 'bare view'), stub.client, 'view')
+
+    await waitFor(() => expect(screen.getByText('bare view')).toBeTruthy())
+    expect(flatStyle(screen.getByTestId('tao-studio-device-cell').props['style'])).toMatchObject({
+      paddingBottom: insets.bottom,
+      paddingTop: insets.top,
+    })
+  })
+
+  test('leaves an app cell unpadded, because its own navigator owns the screen edges', async () => {
+    const stub = stubClient()
+    const screen = renderHost(() => createElement(Text, null, 'whole app'), stub.client, 'app')
+
+    await waitFor(() => expect(screen.getByText('whole app')).toBeTruthy())
+    const style = flatStyle(screen.getByTestId('tao-studio-device-cell').props['style'])
+    expect(style['paddingTop']).toBeUndefined()
+    expect(style['paddingBottom']).toBeUndefined()
+  })
+
+  test('keeps the companion badge clear of the home indicator', async () => {
+    const stub = stubClient()
+    const screen = renderHost(() => createElement(Text, null, 'whole app'), stub.client)
+
+    await waitFor(() => expect(screen.getByTestId('tao-studio-device-badge')).toBeTruthy())
+    // The badge is the only way into the companion menu, so an inset it ignores is a menu a thumb
+    // has to fight the home indicator to reach.
+    const bottom = flatStyle(screen.getByTestId('tao-studio-device-badge').props['style'])['bottom']
+    expect(typeof bottom === 'number' && bottom >= insets.bottom).toBe(true)
   })
 })
