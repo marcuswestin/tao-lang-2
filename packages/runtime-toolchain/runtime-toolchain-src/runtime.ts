@@ -434,7 +434,9 @@ function StudioPreviewContent({ cell, config }: any) {
 function studioCellRuntime(runtime: any, manifest: any) {
   const scenario = manifest.scenarios.find((candidate: any) => candidate.id === runtime.cell.scenarioId)
   if (scenario === undefined) TR.Errors.failInvariant('Tao Studio scenario bootstrap is stale.')
-  const fixture = manifest.fixtures.find((candidate: any) => candidate.id === scenario.fixtureId)
+  const fixture = scenario.fixtureId === undefined
+    ? { accounts: [], creates: [] }
+    : manifest.fixtures.find((candidate: any) => candidate.id === scenario.fixtureId)
   if (fixture === undefined) TR.Errors.failInvariant('Tao Studio fixture bootstrap is stale.')
   const dataState = runtime.resolvedState?.snapshot?.domains?.data?.value
   const replayScheme = runtime.replay?.domains?.find((domain: any) => domain?.domain === 'scheme')?.value
@@ -465,6 +467,7 @@ function studioCellRuntime(runtime: any, manifest: any) {
       arguments: runtime.cell.args,
       kind: scenario.subject.kind,
       prepare: scenario.prepare,
+      steps: scenario.steps,
       subjectId: scenario.subject.subjectId,
     },
     ...(dataState === undefined ? {} : { seed: dataState }),

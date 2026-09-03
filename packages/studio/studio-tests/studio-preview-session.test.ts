@@ -15,13 +15,16 @@ Test(
           use Text from @tao/ui
           app Garden { view Main }
           view Main() { render Text("Before") }
-          fixture Empty { }
           scenarios Main "states" {
-            fixture Empty
             device phone
             scenario "phone" {
-              render Main()
               network online
+              render Main()
+              press down #revertSave
+              advance 600.ms
+              press up #revertSave
+              hover #revertSave
+              focus #revertSave
             }
           }
         `,
@@ -56,7 +59,15 @@ Test(
               presetId: 'phone',
               width: 390,
             })
-            Expect(manifest?.fixtures.map(fixture => fixture.label)).toEqual(['Empty'])
+            Expect(manifest?.fixtures).toEqual([])
+            Expect(manifest?.scenarios[0]?.fixtureId).toBeUndefined()
+            Expect(manifest?.scenarios[0]?.steps?.map(step => step.kind)).toEqual([
+              'pressDown',
+              'advance',
+              'pressUp',
+              'hover',
+              'focus',
+            ])
 
             const invalid = await preview.session.syncDraft({
               content: 'app Garden {',

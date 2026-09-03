@@ -1,5 +1,11 @@
 import TR from '@runtime/TR'
 import { navigationCommandTestId, navigationTitleTestId } from '@runtime/TR-navigation-basic-stack'
+import {
+  replayTaoJourneyStep,
+  type TaoJourneyAdapter,
+  type TaoJourneyEvent,
+  type TaoJourneyStep,
+} from '@runtime/TR-studio-journey'
 import { Errors, Switch } from '@shared/core'
 import { act, fireEvent, within } from '@testing-library/react-native'
 import { renderCompiledApp } from './render-app'
@@ -84,12 +90,54 @@ async function runStep(
     expectNavigationTitle: expectation => assertNavigationTitle(screen, expectation),
     expectInputValue: expectation => assertInputValue(screen, expectation, resolveScope()),
     expectToolbarCommand: expectation => assertToolbarCommand(screen, expectation),
+    focus: focus => journeyEventStep(screen, focus, resolveScope()),
+    hover: hover => journeyEventStep(screen, hover, resolveScope()),
     press: press => pressStep(screen, press, resolveScope()),
+    pressDown: press => journeyEventStep(screen, press, resolveScope()),
+    pressUp: press => journeyEventStep(screen, press, resolveScope()),
     pressToolbarCommand: press => pressToolbarCommandStep(screen, press),
     relaunch: relaunch => relaunchStep(app, relaunch),
     select: select => selectStep(app, select, resolveScope),
     submit: submit => submitStep(screen, submit, resolveScope()),
   })
+}
+
+async function journeyEventStep(
+  screen: RuntimeApp.Screen,
+  step: Extract<TestCompiler.Step, { kind: 'focus' | 'hover' | 'pressDown' | 'pressUp' }>,
+  scope?: TestInstance,
+): Promise<void> {
+  const adapter: TaoJourneyAdapter<TestInstance> = {
+    advance(milliseconds) {
+      TR.Clock.advance(milliseconds)
+    },
+    async dispatch(target, event) {
+      await dispatchInteraction(() => fireEvent(target, journeyTestingLibraryEvent(event)))
+    },
+    find(selector, target) {
+      const matches = querySelector(screen, selector, target, scope)
+      if (matches.length !== 1) {
+        Errors.throwUserInput(
+          `${formatStep(step)} expected one interaction target but found ${matches.length} matches.\n${
+            formatSource(step.source)
+          }`,
+        )
+      }
+      return matches[0]!
+    },
+    settle() {},
+  }
+  await replayTaoJourneyStep(step as TaoJourneyStep, adapter)
+}
+
+function journeyTestingLibraryEvent(event: TaoJourneyEvent): string {
+  return event === 'pressDown'
+    ? 'pressIn'
+    : event === 'pressUp'
+    ? 'pressOut'
+    : event === 'hover'
+    ? 'hoverIn'
+    : 'focus'
 }
 
 /** launchApp mounts one generated app module and waits out the host's own launch reads. */
@@ -401,7 +449,11 @@ function formatStep(step: TestCompiler.Step): string {
       `expect input ${expectation.selector} "${expectation.target}" value "${expectation.value}"`,
     expectToolbarCommand: expectation =>
       `expect toolbar command "${expectation.label}" ${expectation.enabled ? 'enabled' : 'disabled'}`,
+    focus: focus => `focus #${focus.tag}`,
+    hover: hover => `hover ${hover.selector} "${hover.target}"`,
     press: press => `press ${press.selector} "${press.text}"`,
+    pressDown: press => `press down ${press.selector} "${press.target}"`,
+    pressUp: press => `press up ${press.selector} "${press.target}"`,
     pressToolbarCommand: press => `press toolbar command "${press.label}"`,
     relaunch: relaunch => relaunch.fresh ? 'relaunch fresh' : 'relaunch',
     select: select => `select #${select.tag}[${select.index}] { … }`,

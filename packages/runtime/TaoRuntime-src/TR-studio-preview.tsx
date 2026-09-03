@@ -1,11 +1,21 @@
 import React from 'react'
+import { RuntimeAssert } from './TR-assert'
 import { captureArguments, onRuntimeFailure } from './TR-error-containment'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { captureRuntime, restoreRuntimeCapture, type TaoRuntimeCaptureArtifact } from './TR-runtime-capture'
 import type { TaoSchemeSnapshot } from './TR-scheme'
 import { StudioEnvironmentControls, type TaoStudioFixturePlan } from './TR-studio-environment'
+import {
+  createTaoJourneyReplayGate,
+  replayTaoJourney,
+  type TaoJourneyAdapter,
+  type TaoJourneyEvent,
+  type TaoJourneySelector,
+  type TaoJourneyStep,
+} from './TR-studio-journey'
 import { TaoStudioProtocolVersions } from './TR-studio-protocol'
 import type { TaoStudioIdentity } from './TR-TaoProps'
+import { Clock } from './TR-units'
 
 const studioProtocolChannel = TaoStudioProtocolVersions.channel
 const studioProtocolVersion = TaoStudioProtocolVersions.protocolVersion
@@ -56,6 +66,7 @@ type StudioPreviewPointerEvent = {
   stopImmediatePropagation?(): void
   stopPropagation?(): void
   target?: unknown
+  taoStudioJourney?: boolean
 }
 
 type StudioPreviewRect = {
@@ -70,7 +81,10 @@ export type StudioPreviewElement = {
   contains?(element: StudioPreviewElement): boolean
   getAttribute(name: string): string | null
   getBoundingClientRect(): StudioPreviewRect
+  dispatchEvent?(event: unknown): boolean
+  focus?(): void
   parentElement?: StudioPreviewElement | null
+  textContent?: string | null
 }
 
 type StudioPreviewOverlay = StudioPreviewElement & {
@@ -235,12 +249,147 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
 function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
   const captureFixture = StudioEnvironmentControls.useCapture()
   const scheme = StudioEnvironmentControls.useScheme()
+  const scenario = StudioEnvironmentControls.useScenario()
+  const journeyRevision = [
+    props.config.compileRevision,
+    props.config.cellRevision ?? 'app',
+    props.config.manifestRevision ?? 'app',
+    props.config.previewInstanceId,
+  ].join(':')
+  const journeyReplayGate = React.useRef(createTaoJourneyReplayGate())
+  const [journeyError, setJourneyError] = React.useState<unknown>()
   React.useEffect(() => mountStudioPreviewBridge(props.config, undefined, captureFixture), [
     captureFixture,
     props.config,
   ])
   React.useEffect(() => publishStudioScheme(props.config, scheme), [props.config, scheme])
+  React.useEffect(() => {
+    const steps = scenario?.steps
+    if (steps === undefined || steps.length === 0 || !journeyReplayGate.current.shouldReplay(journeyRevision)) {
+      return
+    }
+    let active = true
+    void replayStudioJourney(steps).catch(error => {
+      if (active) {
+        setJourneyError(error)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [journeyRevision, scenario])
+  if (journeyError !== undefined) {
+    return React.createElement(StudioPreviewFailure, { error: journeyError })
+  }
   return React.createElement(React.Fragment, null, props.children)
+}
+
+/** replayStudioJourney drives a scenario prefix in the live browser preview through DOM events. */
+export async function replayStudioJourney(
+  steps: readonly TaoJourneyStep[],
+  suppliedHost?: StudioPreviewHost,
+): Promise<void> {
+  const host = suppliedHost ?? browserPreviewHost()
+  if (host === undefined || steps.length === 0) {
+    return
+  }
+  Clock.beginTest()
+  try {
+    await Promise.resolve()
+    const adapter: TaoJourneyAdapter<StudioPreviewElement> = {
+      advance(milliseconds) {
+        Clock.advance(milliseconds)
+      },
+      dispatch(target, event) {
+        dispatchJourneyEvent(target, event)
+      },
+      find(selector, target) {
+        return findJourneyTarget(host, selector, target)
+      },
+      async settle() {
+        await Promise.resolve()
+        await Promise.resolve()
+      },
+    }
+    await replayTaoJourney(steps, adapter)
+  } finally {
+    Clock.endTest()
+  }
+}
+
+function findJourneyTarget(
+  host: StudioPreviewHost,
+  selector: TaoJourneySelector,
+  target: string,
+): StudioPreviewElement {
+  const candidates = Array.from<StudioPreviewElement>(host.document.querySelectorAll('*')).filter(element => {
+    if (selector === 'tag') {
+      return element.getAttribute('data-testid') === target
+    }
+    if (selector === 'label') {
+      return element.getAttribute('aria-label') === target
+    }
+    if (selector === 'placeholder') {
+      return element.getAttribute('placeholder') === target
+    }
+    return element.textContent?.trim() === target
+  })
+  const matches = selector === 'text'
+    ? candidates.filter(candidate =>
+      !candidates.some(other => other !== candidate && elementIsWithin(other, candidate))
+    )
+    : candidates
+  RuntimeAssert.input(
+    matches.length === 1,
+    `Tao Studio journey expected exactly one ${selector} target '${target}', found ${matches.length}.`,
+    { selector, target },
+  )
+  return matches[0]!
+}
+
+function elementIsWithin(element: StudioPreviewElement, possibleAncestor: StudioPreviewElement): boolean {
+  let parent = element.parentElement
+  while (parent !== undefined && parent !== null) {
+    if (parent === possibleAncestor) {
+      return true
+    }
+    parent = parent.parentElement
+  }
+  return false
+}
+
+function dispatchJourneyEvent(target: StudioPreviewElement, event: TaoJourneyEvent): void {
+  if (event === 'focus' && target.focus !== undefined) {
+    target.focus()
+    return
+  }
+  RuntimeAssert.input(target.dispatchEvent !== undefined, 'A Tao Studio journey target must accept browser events.')
+  const browser = globalThis as unknown as {
+    Event?: new(type: string, init?: unknown) => object
+    MouseEvent?: new(type: string, init?: unknown) => object
+    PointerEvent?: new(type: string, init?: unknown) => object
+  }
+  const type = event === 'pressDown'
+    ? 'mousedown'
+    : event === 'pressUp'
+    ? 'mouseup'
+    : event === 'hover'
+    ? browser.PointerEvent === undefined ? 'mouseenter' : 'pointerenter'
+    : 'focus'
+  const Constructor = event === 'hover'
+    ? browser.PointerEvent ?? browser.MouseEvent ?? browser.Event
+    : browser.MouseEvent ?? browser.Event
+  const browserEvent = Constructor === undefined
+    ? { type }
+    : new Constructor(type, {
+      bubbles: event !== 'hover',
+      button: 0,
+      buttons: event === 'pressDown' ? 1 : 0,
+      cancelable: true,
+      pointerType: 'mouse',
+    })
+  Object.defineProperty(browserEvent, 'taoStudioJourney', { value: true })
+  target.dispatchEvent(browserEvent)
 }
 
 /** Publishes the runtime-resolved cell Scheme without coupling Studio to CSS or host inference. */
@@ -316,6 +465,9 @@ export function mountStudioPreviewBridge(
   }
 
   const onClick = (event: StudioPreviewPointerEvent) => {
+    if (event.taoStudioJourney === true) {
+      return
+    }
     if (interactionMode === 'run') {
       return
     }
@@ -335,6 +487,9 @@ export function mountStudioPreviewBridge(
     postSourceMessage(host, config, 'preview-select-source', target.identity)
   }
   const onMouseDown = (event: StudioPreviewPointerEvent) => {
+    if (event.taoStudioJourney === true) {
+      return
+    }
     if (interactionMode === 'run') {
       return
     }
@@ -351,6 +506,9 @@ export function mountStudioPreviewBridge(
     }
   }
   const onMouseMove = (event: StudioPreviewPointerEvent) => {
+    if (event.taoStudioJourney === true) {
+      return
+    }
     if (
       interactionMode === 'run'
       || drag === undefined
@@ -379,6 +537,9 @@ export function mountStudioPreviewBridge(
     }
   }
   const onMouseUp = (event: StudioPreviewPointerEvent) => {
+    if (event.taoStudioJourney === true) {
+      return
+    }
     if (interactionMode === 'run') {
       return
     }
@@ -394,6 +555,9 @@ export function mountStudioPreviewBridge(
     }
   }
   const onMouseOver = (event: StudioPreviewPointerEvent) => {
+    if (event.taoStudioJourney === true) {
+      return
+    }
     if (interactionMode === 'run') {
       return
     }

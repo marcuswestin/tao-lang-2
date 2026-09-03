@@ -31,13 +31,22 @@ export type StudioParameterSchema = {
 
 export type StudioScenario = {
   args: StudioJsonObject
-  fixtureId: string
+  fixtureId?: string
   group: string
   label: string
   prepare: readonly StudioJsonObject[]
   scenarioId: string
   source: StudioTaoSource
   stateLayers: readonly string[]
+  steps?: readonly (
+    | { kind: 'advance'; milliseconds: number }
+    | { kind: 'focus'; tag: string }
+    | {
+      kind: 'hover' | 'pressDown' | 'pressUp'
+      selector: 'label' | 'placeholder' | 'tag' | 'text'
+      target: string
+    }
+  )[]
   subjectId: string
 }
 
@@ -162,7 +171,7 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
     validateSource(scenario.source, 'Studio scenario source')
     requireText(scenario.group, 'Studio scenario group')
     requireText(scenario.label, 'Studio scenario label')
-    if (!fixtures.has(scenario.fixtureId)) {
+    if (scenario.fixtureId !== undefined && !fixtures.has(scenario.fixtureId)) {
       throw new Errors.UserInputError(`Studio scenario targets an unknown fixture: ${scenario.fixtureId}`)
     }
     const subject = subjects.get(scenario.subjectId)
@@ -171,6 +180,9 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
     }
     validateArgsForSubject(input, subject.subjectId, scenario.args)
     library.resolve(scenario.stateLayers)
+    for (const step of scenario.steps ?? []) {
+      validateJourneyStep(step)
+    }
   }
   uniqueBy(input.cells, cell => cell.cellId, 'Studio cell')
   for (const cell of input.cells) {
@@ -188,6 +200,20 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
     requireText(version, `Studio source version for ${path}`)
   }
   return input
+}
+
+function validateJourneyStep(step: NonNullable<StudioScenario['steps']>[number]): void {
+  if (step.kind === 'advance') {
+    if (!Number.isSafeInteger(step.milliseconds) || step.milliseconds < 0) {
+      throw new Errors.UserInputError('Studio journey advance must be a non-negative whole number of milliseconds.')
+    }
+    return
+  }
+  if (step.kind === 'focus') {
+    requireText(step.tag, 'Studio journey focus tag')
+    return
+  }
+  requireText(step.target, `Studio journey ${step.kind} target`)
 }
 
 function cellIdentity(manifest: StudioPreviewManifestV2, cell: StudioPreviewCell): StudioCellIdentity {

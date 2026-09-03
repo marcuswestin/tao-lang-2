@@ -69,6 +69,38 @@ Describe('Studio preview manifest', () => {
     ;(legacy as { version: number }).version = 1
     Expect(() => StudioPreviewManifest.define(legacy)).toThrow('Unsupported Studio preview manifest version: 1')
   })
+
+  Test('accepts a fixtureless scenario and preserves its ordered journey prefix', () => {
+    const base = fixture()
+    const [first, second] = base.scenarios
+    const { fixtureId: _firstFixture, ...fixturelessFirst } = first!
+    const { fixtureId: _secondFixture, ...fixturelessSecond } = second!
+    const input: StudioPreviewManifestV2 = {
+      ...base,
+      fixtures: [],
+      scenarios: [{
+        ...fixturelessFirst,
+        steps: [
+          { kind: 'pressDown', selector: 'tag', target: 'revertSave' },
+          { kind: 'advance', milliseconds: 600 },
+          { kind: 'pressUp', selector: 'tag', target: 'revertSave' },
+          { kind: 'hover', selector: 'tag', target: 'revertSave' },
+          { kind: 'focus', tag: 'revertSave' },
+        ],
+      }, fixturelessSecond],
+    }
+
+    const defined = StudioPreviewManifest.define(input)
+
+    Expect(defined.scenarios[0]?.fixtureId).toBeUndefined()
+    Expect(defined.scenarios[0]?.steps?.map(step => step.kind)).toEqual([
+      'pressDown',
+      'advance',
+      'pressUp',
+      'hover',
+      'focus',
+    ])
+  })
 })
 
 function fixture(): StudioPreviewManifestV2 & { cells: Array<StudioPreviewManifestV2['cells'][number]> } {

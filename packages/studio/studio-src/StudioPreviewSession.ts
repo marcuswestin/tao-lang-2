@@ -99,13 +99,14 @@ export function matrixManifest(
     args: scenario.subject.kind === 'view'
       ? jsonObject(scenario.subject.arguments)
       : {},
-    fixtureId: scenario.fixtureId,
+    ...(scenario.fixtureId === undefined ? {} : { fixtureId: scenario.fixtureId }),
     group: scenario.group,
     label: scenario.name,
     prepare: scenario.prepare.map(update => jsonObject(update)),
     scenarioId: scenario.id,
     source: taoSource(scenario.source),
     stateLayers: [],
+    steps: scenario.steps,
     subjectId: scenario.subject.subjectId,
   }))
   return {

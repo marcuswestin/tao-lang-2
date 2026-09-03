@@ -2,6 +2,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import {
   mountStudioPreviewBridge,
   publishStudioScheme,
+  replayStudioJourney,
   type StudioPreviewConfig,
   type StudioPreviewElement,
   type StudioPreviewHost,
@@ -32,6 +33,58 @@ const config: StudioPreviewConfig = {
 }
 
 Describe('Studio preview runtime bridge', () => {
+  Test('replays text steps against the deepest exact match instead of its matching ancestors', async () => {
+    const events: string[] = []
+    const parent: StudioPreviewElement = {
+      dispatchEvent: event => {
+        events.push(`parent:${String((event as { type?: string }).type)}`)
+        return true
+      },
+      getAttribute: () => null,
+      getBoundingClientRect: () => ({ height: 0, left: 0, top: 0, width: 0 }),
+      textContent: 'Save',
+    }
+    const leaf: StudioPreviewElement = {
+      dispatchEvent: event => {
+        events.push(`leaf:${String((event as { type?: string }).type)}`)
+        return true
+      },
+      getAttribute: () => null,
+      getBoundingClientRect: () => ({ height: 0, left: 0, top: 0, width: 0 }),
+      parentElement: parent,
+      textContent: 'Save',
+    }
+    const fake = previewHost([parent, leaf])
+
+    await replayStudioJourney([{ kind: 'hover', selector: 'text', target: 'Save' }], fake.host)
+
+    Expect(events).toEqual(['leaf:mouseenter'])
+  })
+
+  Test('maps the held-pointer journey to browser phases in exact order', async () => {
+    const observed: string[] = []
+    const target: StudioPreviewElement = {
+      dispatchEvent: event => {
+        observed.push(String((event as { type?: string }).type))
+        return true
+      },
+      focus: () => observed.push('focus'),
+      getAttribute: name => name === 'data-testid' ? 'revertSave' : null,
+      getBoundingClientRect: () => ({ height: 0, left: 0, top: 0, width: 0 }),
+    }
+    const fake = previewHost([target])
+
+    await replayStudioJourney([
+      { kind: 'pressDown', selector: 'tag', target: 'revertSave' },
+      { kind: 'advance', milliseconds: 600 },
+      { kind: 'pressUp', selector: 'tag', target: 'revertSave' },
+      { kind: 'hover', selector: 'tag', target: 'revertSave' },
+      { kind: 'focus', tag: 'revertSave' },
+    ], fake.host)
+
+    Expect(observed).toEqual(['mousedown', 'mouseup', 'mouseenter', 'focus'])
+  })
+
   Test('publishes the runtime-resolved Scheme with complete provenance', () => {
     const fake = previewHost([])
     publishStudioScheme(config, {

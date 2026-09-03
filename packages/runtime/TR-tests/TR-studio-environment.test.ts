@@ -1,5 +1,5 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, testOverrideSlot } from '@shared/test'
 import type { TaoDataConnection, TaoDataProvider, TaoDataProviderContext, TaoFillOps } from '../TaoRuntime-src/TR-data'
 import {
   capturedFixture,
@@ -14,6 +14,13 @@ const scenarioScheme = {
   requested: 'dark',
   source: 'scenario',
 } as const
+
+const consoleInfoSlot = testOverrideSlot<typeof console.info>({
+  read: () => console.info,
+  write: value => {
+    console.info = value
+  },
+})
 
 function environment(overrides: Partial<TaoStudioEnvironment['network']> = {}): TaoStudioEnvironment {
   return {
@@ -62,6 +69,40 @@ Describe('Studio isolated provider environment', () => {
     Expect(argument.evaluate()).toBe(argument)
     Expect(argument.jsValue).toBe(workspace)
     Expect(TR.Member(argument.evaluate(), ['Name']).evaluate().jsValue).toBe('Novel')
+  })
+
+  Test('binds omitted action parameters to isolated bounded stand-ins with evaluated arguments', () => {
+    const firstHandles = {}
+    const secondHandles = {}
+    const first = TR.Studio.Environment.Argument(
+      { kind: 'action-stand-in', parameter: 'Revert' },
+      firstHandles,
+    )
+    const second = TR.Studio.Environment.Argument(
+      { kind: 'action-stand-in', parameter: 'Revert' },
+      secondHandles,
+    )
+    const calls: unknown[][] = []
+    const restoreConsoleInfo = consoleInfoSlot.install((...arguments_) => calls.push(arguments_))
+    try {
+      const firstAction = first.jsValue as { invoke(...arguments_: unknown[]): void }
+      const secondAction = second.jsValue as { invoke(...arguments_: unknown[]): void }
+      for (let index = 0; index < 102; index += 1) {
+        firstAction.invoke(TR.Value(index), TR.Value(`draft-${index}`))
+      }
+      secondAction.invoke(TR.Value('other cell'))
+
+      const firstLog = TR.Studio.Environment.actionLog(firstHandles)
+      Expect(firstLog).toHaveLength(100)
+      Expect(firstLog[0]).toEqual({ arguments: [2, 'draft-2'], parameter: 'Revert' })
+      Expect(firstLog[99]).toEqual({ arguments: [101, 'draft-101'], parameter: 'Revert' })
+      Expect(TR.Studio.Environment.actionLog(secondHandles)).toEqual([
+        { arguments: ['other cell'], parameter: 'Revert' },
+      ])
+      Expect(calls.at(-1)).toEqual(["Tao Studio action stand-in 'Revert' invoked.", 'other cell'])
+    } finally {
+      restoreConsoleInfo()
+    }
   })
 
   Test('converts captured provider rows into a dependency-ordered fixture plan', async () => {

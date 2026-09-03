@@ -65,6 +65,7 @@ export type TaoStudioFixtureValue =
   | boolean
   | number
   | string
+  | Readonly<{ kind: 'action-stand-in'; parameter: string }>
   | Readonly<{ kind: 'now' }>
   | Readonly<{ handle: string; kind: 'fixture-reference' }>
 
@@ -87,6 +88,7 @@ export type TaoStudioScenarioRuntime = Readonly<{
   arguments?: Readonly<Record<string, TaoStudioFixtureValue>>
   kind: 'app' | 'view'
   prepare: readonly Readonly<{ fields: Readonly<Record<string, TaoStudioFixtureValue>>; target: string }>[]
+  steps?: readonly import('./TR-studio-journey').TaoJourneyStep[]
   subjectId: string
 }>
 
@@ -103,6 +105,14 @@ type StudioHostContextValue = Readonly<{
   providerFor(base: TaoDataProvider): TaoStudioProviderOverlay
   registerSchema(schema: TaoDataSchema): void
 }>
+
+export type TaoStudioActionStandInInvocation = Readonly<{
+  arguments: readonly unknown[]
+  parameter: string
+}>
+
+const maximumStandInInvocations = 100
+const standInInvocationsByHandles = new WeakMap<object, TaoStudioActionStandInInvocation[]>()
 
 const StudioHostContext = React.createContext<StudioHostContextValue | undefined>(undefined)
 
@@ -235,11 +245,19 @@ export const StudioEnvironmentControls = {
     value: TaoStudioFixtureValue,
     handles: Readonly<Record<string, unknown>>,
   ): TaoStudioArgumentValue {
+    if (typeof value === 'object' && value.kind === 'action-stand-in') {
+      return actionStandIn(value.parameter, handles)
+    }
     const argument: TaoStudioArgumentValue = {
       evaluate: () => argument,
       jsValue: resolveValue(value, handles),
     }
     return argument
+  },
+
+  /** actionLog reads the bounded stand-in invocation history belonging to one cell's fixture handles. */
+  actionLog(handles: Readonly<Record<string, unknown>>): readonly TaoStudioActionStandInInvocation[] {
+    return Object.freeze([...(standInInvocationsByHandles.get(handles) ?? [])])
   },
 
   /**
@@ -290,6 +308,13 @@ function resolveValue(value: TaoStudioFixtureValue, handles: Readonly<Record<str
   if (value.kind === 'now') {
     return Clock.now()
   }
+  if (value.kind === 'action-stand-in') {
+    RuntimeAssert.input(
+      false,
+      `Tao Studio action stand-in '${value.parameter}' must be bound as a focused-view argument.`,
+      { parameter: value.parameter },
+    )
+  }
   const resolved = handles[value.handle]
   RuntimeAssert.input(
     resolved !== undefined,
@@ -297,6 +322,41 @@ function resolveValue(value: TaoStudioFixtureValue, handles: Readonly<Record<str
     { handle: value.handle },
   )
   return resolved
+}
+
+function actionStandIn(
+  parameter: string,
+  handles: Readonly<Record<string, unknown>>,
+): TaoStudioArgumentValue {
+  RuntimeAssert.input(parameter.trim().length > 0, 'A Tao Studio action stand-in must name its parameter.')
+  const actionValue = {
+    invoke(...arguments_: unknown[]): void {
+      const evaluated = arguments_.map(argument => evaluateStandInArgument(argument))
+      const invocations = standInInvocationsByHandles.get(handles) ?? []
+      invocations.push(Object.freeze({ arguments: Object.freeze(evaluated), parameter }))
+      if (invocations.length > maximumStandInInvocations) {
+        invocations.splice(0, invocations.length - maximumStandInInvocations)
+      }
+      standInInvocationsByHandles.set(handles, invocations)
+      console.info(`Tao Studio action stand-in '${parameter}' invoked.`, ...evaluated)
+    },
+  }
+  const action: TaoStudioArgumentValue = { evaluate: () => action, jsValue: actionValue }
+  return action
+}
+
+function evaluateStandInArgument(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null || !('evaluate' in value)) {
+    return value
+  }
+  const evaluate = value['evaluate']
+  RuntimeAssert.input(typeof evaluate === 'function', 'A Tao Studio action argument must be evaluable.')
+  const evaluated = evaluate.call(value) as unknown
+  RuntimeAssert.input(
+    typeof evaluated === 'object' && evaluated !== null && 'jsValue' in evaluated,
+    'A Tao Studio action argument must evaluate to a runtime value.',
+  )
+  return evaluated['jsValue']
 }
 
 function providerOverlay(

@@ -1,12 +1,13 @@
 import TR from '@runtime/TR'
 import { Assert, CLI, Errors, FS, Repo } from '@shared'
 import { AfterAll, AfterEach, Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { cleanup, render, waitFor } from '@testing-library/react-native'
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react-native'
 import { type ComponentType, createElement } from 'react'
 import type {
   TaoStudioFixturePlan,
   TaoStudioFixtureValue,
 } from '../../runtime/TaoRuntime-src/TR-studio-environment'
+import type { TaoJourneyStep } from '../../runtime/TaoRuntime-src/TR-studio-journey'
 
 const runtimeRoots: string[] = []
 const wordFlowerDir = Repo.resolvePath('Apps/WordFlower/1 - Current')
@@ -248,6 +249,124 @@ Describe('Tao Studio scenario runtime', () => {
         ownerName: 'WorkspaceRow',
         sourcePath: paths['Workspaces.tao'],
       })
+    })
+  })
+
+  Test('mounts a fixtureless journey view with an action stand-in and leaves it interactive', async () => {
+    const artifactsRoot = Repo.resolvePath('packages/runtime-toolchain/.artifacts/studio-scenario-e2e-tests')
+    await FS.mkdir(artifactsRoot)
+    const runtimePackageRoot = await FS.mkTmpDir(FS.resolvePath('fixtureless-runtime-', artifactsRoot))
+    runtimeRoots.push(runtimePackageRoot)
+    await withTaoFiles('tao-studio-fixtureless-scenario-', {
+      'Main.tao': `
+        use Button, Col, Text from @tao/ui
+
+        app Preview { view Main }
+        view Main() { render Text("Main") }
+        view SavedToast(Revert action()) {
+          render Col() {
+            Text("Saved")
+            #revertSave
+            Button("Revert") { on press Revert }
+          }
+        }
+        scenarios SavedToast "interaction" {
+          device phone
+          scenario "held" {
+            render ()
+            press down #revertSave
+            advance 600.ms
+            press up #revertSave
+            hover #revertSave
+            focus #revertSave
+          }
+        }
+      `,
+    }, async paths => {
+      const generationScript = `
+        import Runtime from ${
+        JSON.stringify(Repo.resolvePath('packages/runtime-toolchain/runtime-toolchain-src/runtime.ts'))
+      }
+        await Runtime.generateApp(${JSON.stringify(paths['Main.tao'])}, ${
+        JSON.stringify({
+          appName: 'Preview',
+          preview: { project: FS.dirname(paths['Main.tao']), revision: 1, sourceVersions: {} },
+          runtimePackageRoot,
+        })
+      })
+      `
+      const generation = await CLI.run('bun', { args: ['-e', generationScript], cwd: Repo.getRoot() })
+      Assert(generation.exitCode === 0, 'fixtureless Studio scenario app generation succeeds', {
+        stderr: generation.stderr,
+        stdout: generation.stdout,
+      })
+      const generatedRoot = FS.resolvePath('_gen_tao-app/current', runtimePackageRoot)
+      const manifest = require(FS.resolvePath('TaoStudioManifest.ts', generatedRoot)).default as {
+        fixtures: readonly unknown[]
+        scenarios: readonly {
+          fixtureId?: string
+          prepare: readonly []
+          steps: readonly TaoJourneyStep[]
+          subject: {
+            arguments: Readonly<Record<string, TaoStudioFixtureValue>>
+            kind: 'view'
+            subjectId: string
+          }
+        }[]
+      }
+      const scenario = manifest.scenarios[0]
+      Assert.defined(scenario, 'fixtureless held scenario exists')
+      Expect(manifest.fixtures).toEqual([])
+      Expect(scenario.fixtureId).toBeUndefined()
+      Expect(scenario.subject.arguments).toEqual({ Revert: { kind: 'action-stand-in', parameter: 'Revert' } })
+      Expect(scenario.steps.map(step => step.kind)).toEqual([
+        'pressDown',
+        'advance',
+        'pressUp',
+        'hover',
+        'focus',
+      ])
+      Expect(scenario.steps[1]).toMatchObject({ kind: 'advance', milliseconds: 600 })
+
+      const generatedApp = require(FS.resolvePath('TaoApp.tsx', generatedRoot)) as { default: ComponentType }
+      const consoleInfo = jest.spyOn(console, 'info').mockImplementation(() => {})
+      try {
+        const screen = render(
+          createElement(
+            TR.Studio.Environment.Host,
+            {
+              cell: {
+                environment: {
+                  network: { mode: 'online' },
+                  scheme: { requested: 'light', source: 'scenario' },
+                  version: 1,
+                },
+                fixture: { accounts: [], creates: [] },
+                scenario: {
+                  arguments: scenario.subject.arguments,
+                  kind: 'view',
+                  prepare: scenario.prepare,
+                  steps: scenario.steps,
+                  subjectId: scenario.subject.subjectId,
+                },
+              },
+              children: createElement(generatedApp.default),
+            },
+          ),
+        )
+
+        await waitFor(() => Expect(screen.getByText('Saved')).toBeDefined())
+        const revert = screen.getByTestId('revertSave')
+        fireEvent(revert, 'pressIn')
+        fireEvent(revert, 'pressOut')
+        fireEvent(revert, 'hoverIn')
+        fireEvent(revert, 'focus')
+        Expect(consoleInfo).not.toHaveBeenCalled()
+        fireEvent.press(revert)
+        Expect(consoleInfo).toHaveBeenCalledWith("Tao Studio action stand-in 'Revert' invoked.")
+      } finally {
+        consoleInfo.mockRestore()
+      }
     })
   })
 })
