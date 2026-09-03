@@ -161,6 +161,57 @@ launch ID, session ID, component (`studio-server`, `preview`, `metro`, `watcher`
 shutdown reason. The terminal shows only the events a person waits on — server ready, a failed
 compile or reload, shutdown, a signal escalation, an orphan — and never source contents or secrets.
 
+## Freehand Draw project state
+
+Unsnapped Draw geometry is committed in `.tao-project/studio/sketches.jsonc`. It is not a launch
+artifact, browser-local preference, or Tao render tree. Catalog format version 1 stores a monotonic
+`nextViewNumber`, a conflict `revision`, and ordered sketches. Each sketch records stable `id`, display
+`name`, project, generated `view`, width, height, and ordered `rects`; each rectangle records stable
+`id`, nonnegative `x` and `y`, positive width and height, an open Tao element `kind`, and optional
+string `content` and `binding`.
+
+Studio accepts JSONC but rewrites the file as canonical indented JSON through a temporary sibling and
+rename. The server is the only writer. Clients submit a unique request ID and expected revision;
+stale edits receive a conflict and identical retries are idempotent. Successful mutations are echoed
+through the session event stream. Selection stays in the client and is not catalog state.
+
+The first outer draw creates `@/studio/ViewN.tao` and its catalog row as one recoverable operation.
+`ViewN` is allocated from `nextViewNumber`; deleted numbers are not reused. The generated file has the
+Studio ownership header, mode `0444`, one public view rendering a same-sized `Placeholder`, and a
+fixtureless phone scenario in the `sketch` group. Free rectangles remain in the catalog and are drawn
+through a TypeScript overlay; Draw does not add rectangle, positioned-container, or offset syntax to
+Tao source. The matrix associates each generated `sketch` scenario row with its catalog sketch by
+`view`, renders a row-scoped workspace beside the live cells, and applies completed gestures through
+the versioned catalog endpoint. Move to package is the supported way to make the generated file
+ordinary authored source.
+
+If source creation or compilation fails, Studio removes the new generated file and restores the prior
+catalog snapshot. Studio rejects a malformed or unsupported catalog, and rejects a mutation against a
+stale revision, rather than guessing. Recover the file from version control or repair it while
+preserving stable IDs, rectangle order, revision, and a `nextViewNumber` greater than every retained
+`view` number. Do not lower the allocator to reuse a deleted name; an existing
+`@/studio/ViewN.tao` is never overwritten.
+
+The project session intentionally rejects sketch deletion until generated-source removal shares the
+same transactional rollback.
+
+Run the focused Draw contracts with the repository's installed profile:
+
+```bash
+bun test packages/studio/studio-tests/studio-sketch-catalog.test.ts packages/studio/studio-tests/studio-sketch-source.test.ts packages/studio/studio-tests/studio-sketch-geometry.test.ts packages/studio/studio-tests/studio-sketch-session.test.ts packages/studio/studio-tests/studio-sketch-view.test.ts
+```
+
+The existing real browser-shell smoke entry point is:
+
+```bash
+just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts
+```
+
+It must run outside the agent sandbox as described below. Its Draw path uses the public sketch
+selectors to create a 360 by 76 sketch, waits for its catalog and generated source, draws a free
+rectangle, verifies that only the catalog changed, reloads the Studio page, and checks the rectangle's
+persisted dimensions.
+
 ## Smoke lanes
 
 The smoke lane is deliberately outside ordinary test discovery: it is slow and it binds real ports.

@@ -2,10 +2,12 @@
 
 Status: authoritative executable contract for the current Tao Studio development surface.
 
-Tao Studio is a local development product over a Tao project. Tao source is the durable authority:
-the editor and visual tools submit versioned source actions, and Studio keeps no hidden layout,
-example, or runtime state as project truth. `fixture` and grouped `scenarios` are the shared Tao-owned
-source for examples; there is no `example` declaration or Studio-only cases file.
+Tao Studio is a local development product over a Tao project. Tao source is the durable authority for
+executable product behavior. The one current exception is unsnapped freehand geometry, whose explicit
+project authority is Studio's committed `.tao-project/studio/sketches.jsonc` catalog. The editor and
+flowed visual tools submit versioned source actions; Studio keeps no other hidden layout, example, or
+runtime state as project truth. `fixture` and grouped `scenarios` are the shared Tao-owned source for
+examples; there is no `example` declaration or Studio-only cases file.
 
 This page distinguishes implemented protocol/runtime foundations from product wiring that remains
 open. A type or manifest field existing does not by itself mean the browser preview executes that
@@ -263,6 +265,91 @@ Project open repairs the mode because Git does not track the write bit. A Studio
 grants only owner-write and restores read-only mode after success or failure; neither Studio nor the
 repository uses filesystem immutable flags. The ordinary Tao and dprint fix lanes check generated
 source but do not rewrite it.
+
+### Freehand Draw catalog
+
+The Draw slice stores each unsnapped rectangle in `.tao-project/studio/sketches.jsonc`. The file is
+JSONC on input and canonical indented JSON on every Studio write. It is committed project state, not
+an artifact or browser preference. Format version 1 has this shape:
+
+```jsonc
+{
+  "formatVersion": 1,
+  "nextViewNumber": 2,
+  "revision": 1,
+  "sketches": [
+    {
+      "height": 76,
+      "id": "sketch-row",
+      "name": "View1",
+      "project": "/path/to/project",
+      "rects": [
+        {
+          "content": "Cover art",
+          "height": 52,
+          "id": "rect-cover",
+          "kind": "Placeholder",
+          "width": 52,
+          "x": 12,
+          "y": 12
+        }
+      ],
+      "view": "View1",
+      "width": 360
+    }
+  ]
+}
+```
+
+Sketches and rectangles have stable unique IDs. Rectangle order is significant. Coordinates are
+finite and nonnegative, dimensions are finite and positive, `kind` is an open Tao element name, and
+optional `content` and `binding` values are strings. Unknown fields, duplicate IDs, duplicate sketch
+names or views, malformed JSONC, and unsupported format versions are rejected rather than repaired
+silently. `revision` is the server conflict precondition. `nextViewNumber` is project-wide and must
+remain greater than every generated `view` association; deletion and reopening never reuse a `ViewN`
+number. `name` remains display text and does not control allocation.
+
+The session handshake includes the current catalog and advertises catalog format version 1. The same
+snapshot is available from `GET /api/sketches`. Draw mutations use typed requests at
+`POST /api/sketches/action` with a unique request ID and the expected catalog revision. The server
+serializes them with other project mutations, rejects a stale revision as an HTTP 409 conflict,
+replays an identical request ID idempotently, rejects reuse of that ID for different input, and
+publishes successful snapshots through `sketch-catalog-changed`.
+
+The catalog provider defines sketch deletion, but the project session currently rejects that action.
+Deleting a sketch remains unavailable until removal of its generated source can participate in the
+same rollback contract. Rectangle creation, update, duplication, and deletion are catalog-only and do
+not compile or rewrite the generated Tao file.
+
+Creating a sketch allocates `ViewN`, atomically replaces the catalog through a sibling temporary file,
+and creates `@/studio/ViewN.tao`. The generated file contains one public view whose flowed render tree
+is a sketch-sized `Placeholder`, plus a co-located, fixtureless phone scenario named `draft` in the
+`sketch` group. It contains no free `Rect`, positioned-container, or offset syntax. If generated-source
+creation or compilation fails, the session removes the new generated file and atomically restores the
+prior catalog snapshot, including its revision and allocator. A generated-name collision is rejected;
+Studio never overwrites an existing `@/studio/ViewN.tao`.
+
+The browser matrix renders ordered catalog rectangles through a row-scoped TypeScript sketch workspace
+beside its keyed preview cells. A generated `sketch` scenario row is associated by its unique view
+subject matching `sketch.view`; an unmatched sketch temporarily falls back to the first matrix row.
+Handshake and catalog-change snapshots re-render the overlay in authoritative catalog order.
+
+The geometry model normalizes drawing in either direction, enforces a four-pixel minimum extent,
+selects the frontmost rectangle, moves and resizes through eight handles, cancels a pointer gesture back
+to its prior snapshot, and duplicates with Option-drag. Pointer capture and primary-pointer ownership
+keep stray events from completing another gesture. Kind and content edits preserve geometry and
+binding. Each completed gesture is serialized into one catalog action; an asynchronous rejection rolls
+the overlay back to its authoritative snapshot and exposes the error on the sketch host. Selecting,
+moving, resizing, retyping, and editing a free rectangle never write the Tao render tree. The language
+boundary is fixed: only the generated placeholder is flowed Tao source; projecting free rectangles into
+flowed elements remains outside this Draw slice.
+
+The catalog is intended to be recovered through version control. A malformed or unsupported catalog
+blocks publication instead of discarding geometry. Restore a known-good committed copy or repair it
+while preserving stable IDs, rectangle order, `revision`, and a `nextViewNumber` above every retained
+`view`. Do not reset the allocator to reuse a deleted number or hand-edit generated source to resolve a
+collision. Studio's automatic rollback covers failed create transactions; Move to package is the
+supported way to take ownership of a generated view.
 
 Move to package transfers one `@/studio/<Name>.tao` file into an existing authored `@package`, removes
 the generated header, restores normal writable ownership, and rewrites every parsed
