@@ -121,6 +121,106 @@ Describe('Studio sketch session protocol', () => {
     })
   })
 
+  Test('prepends a later partial Snap according to geometry while retaining authored children', async () => {
+    await withSketchSession(async (session, root) => {
+      const created = await session.applySketchAction(createHorizontalThreeRectRequest(root, 'create-before'))
+      const initial = await session.readFile('@/studio/View1.tao')
+      const first = await session.applySketchSnap({
+        checkpointId: 'snap-before-existing',
+        expectedCatalogRevision: created.catalog.revision,
+        rectIds: ['middle', 'right'],
+        requestId: 'snap-before-existing-request',
+        sketchId: 'sketch-1',
+        sourceVersion: initial.sourceVersion,
+      })
+      const path = FS.resolvePath('@/studio/View1.tao', root)
+      const generated = new StudioGeneratedSources(root)
+      await generated.rewrite(path, first.file.content.replace('Text("Middle")', 'Text("Edited middle")'))
+      const edited = await session.readFile('@/studio/View1.tao')
+      const second = await session.applySketchSnap({
+        checkpointId: 'snap-before-new',
+        expectedCatalogRevision: first.catalog.revision,
+        rectIds: ['left'],
+        requestId: 'snap-before-new-request',
+        sketchId: 'sketch-1',
+        sourceVersion: edited.sourceVersion,
+      })
+
+      Expect(second.file.content).toContain('Text("Edited middle")')
+      Expect(second.file.content.indexOf('#studio_rect_006c006500660074')).toBeLessThan(
+        second.file.content.indexOf('#studio_rect_006d006900640064006c0065'),
+      )
+      Expect(second.file.content.indexOf('#studio_rect_006d006900640064006c0065')).toBeLessThan(
+        second.file.content.indexOf('#studio_rect_00720069006700680074'),
+      )
+    })
+  })
+
+  Test('wraps the authored Snap subtree when later geometry changes the root axis', async () => {
+    await withSketchSession(async (session, root) => {
+      const created = await session.applySketchAction(createAxisChangeRequest(root, 'create-axis-change'))
+      const initial = await session.readFile('@/studio/View1.tao')
+      const first = await session.applySketchSnap({
+        checkpointId: 'snap-axis-existing',
+        expectedCatalogRevision: created.catalog.revision,
+        rectIds: ['top', 'bottom'],
+        requestId: 'snap-axis-existing-request',
+        sketchId: 'sketch-1',
+        sourceVersion: initial.sourceVersion,
+      })
+      const path = FS.resolvePath('@/studio/View1.tao', root)
+      const generated = new StudioGeneratedSources(root)
+      await generated.rewrite(path, first.file.content.replace('Text("Top")', 'Text("Edited top")'))
+      const edited = await session.readFile('@/studio/View1.tao')
+      const second = await session.applySketchSnap({
+        checkpointId: 'snap-axis-new',
+        expectedCatalogRevision: first.catalog.revision,
+        rectIds: ['right'],
+        requestId: 'snap-axis-new-request',
+        sketchId: 'sketch-1',
+        sourceVersion: edited.sourceVersion,
+      })
+
+      Expect(second.file.content).toContain('render Row()')
+      Expect(second.file.content).toContain('Col()')
+      Expect(second.file.content).toContain('Text("Edited top")')
+      Expect(second.file.content.indexOf('#studio_rect_0074006f0070')).toBeLessThan(
+        second.file.content.indexOf('#studio_rect_00720069006700680074'),
+      )
+    })
+  })
+
+  Test('rejects interleaved partial Snap geometry before source, catalog, or compile mutation', async () => {
+    await withSketchSession(async (session, root, compiles) => {
+      const created = await session.applySketchAction(createHorizontalThreeRectRequest(root, 'create-interleaved'))
+      const initial = await session.readFile('@/studio/View1.tao')
+      const first = await session.applySketchSnap({
+        checkpointId: 'snap-interleaved-edges',
+        expectedCatalogRevision: created.catalog.revision,
+        rectIds: ['left', 'right'],
+        requestId: 'snap-interleaved-edges-request',
+        sketchId: 'sketch-1',
+        sourceVersion: initial.sourceVersion,
+      })
+      const beforeFile = await session.readFile('@/studio/View1.tao')
+      const beforeCatalog = await session.sketchCatalog()
+      const beforeCompileCount = compiles.length
+
+      await Expect(session.applySketchSnap({
+        checkpointId: 'snap-interleaved-middle',
+        expectedCatalogRevision: first.catalog.revision,
+        rectIds: ['middle'],
+        requestId: 'snap-interleaved-middle-request',
+        sketchId: 'sketch-1',
+        sourceVersion: beforeFile.sourceVersion,
+      })).rejects.toThrow('cannot preserve authored source for interleaved rectangle geometry')
+
+      Expect(await session.readFile('@/studio/View1.tao')).toEqual(beforeFile)
+      Expect(await session.sketchCatalog()).toEqual(beforeCatalog)
+      Expect(compiles).toHaveLength(beforeCompileCount)
+    })
+  })
+
   Test('preserves manual and flow edits across partial Snap and Unsnap, including the last leaf', async () => {
     await withSketchSession(async (session, root) => {
       const created = await session.applySketchAction(createTwoRectRequest(root, 'create-preserving'))
@@ -168,7 +268,7 @@ Describe('Studio sketch session protocol', () => {
         sourceVersion: flowed.file.sourceVersion,
       })
       Expect(partial.file.content).toContain('Placeholder("Profile") [width 61, height 52]')
-      Expect(partial.file.content).toContain('render Row() [pad top 12 right 296 bottom 12 left 12]')
+      Expect(partial.file.content).toContain('Row() [pad top 12 right 296 bottom 12 left 12]')
       Expect(partial.catalog.sketches[0]!.snapped[0]!.target.sourceVersion).toBe(partial.file.sourceVersion)
 
       await generated.rewrite(
@@ -787,6 +887,44 @@ function createTwoRectRequest(project: string, requestId: string): StudioSketchC
         { content: 'Subtitle', height: 20, id: 'subtitle', kind: 'Text', width: 120, x: 80, y: 20 },
       ],
       width: 360,
+    },
+    expectedRevision: 0,
+    requestId,
+  }
+}
+
+function createHorizontalThreeRectRequest(project: string, requestId: string): StudioSketchCatalogRequest {
+  return {
+    action: {
+      height: 80,
+      id: 'sketch-1',
+      kind: 'create-sketch',
+      project,
+      rects: [
+        { content: 'Left', height: 20, id: 'left', kind: 'Text', width: 40, x: 10, y: 20 },
+        { content: 'Middle', height: 20, id: 'middle', kind: 'Text', width: 50, x: 80, y: 20 },
+        { content: 'Right', height: 20, id: 'right', kind: 'Text', width: 40, x: 160, y: 20 },
+      ],
+      width: 240,
+    },
+    expectedRevision: 0,
+    requestId,
+  }
+}
+
+function createAxisChangeRequest(project: string, requestId: string): StudioSketchCatalogRequest {
+  return {
+    action: {
+      height: 120,
+      id: 'sketch-1',
+      kind: 'create-sketch',
+      project,
+      rects: [
+        { content: 'Top', height: 20, id: 'top', kind: 'Text', width: 50, x: 10, y: 10 },
+        { content: 'Bottom', height: 20, id: 'bottom', kind: 'Text', width: 50, x: 10, y: 80 },
+        { content: 'Right', height: 100, id: 'right', kind: 'Text', width: 60, x: 120, y: 10 },
+      ],
+      width: 220,
     },
     expectedRevision: 0,
     requestId,

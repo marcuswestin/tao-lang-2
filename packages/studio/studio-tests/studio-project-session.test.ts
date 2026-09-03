@@ -127,6 +127,100 @@ Test('Move to package renames generated source and rewrites every language impor
   })
 })
 
+Test('Move to package retires the catalog sketch after source and compile succeed', async () => {
+  await withTaoFiles('tao-studio-move-retires-sketch-', {
+    '@views/Existing.tao': 'public view Existing() { }\n',
+    'Garden.tao': 'app Garden { view Main }\nview Main() { }\n',
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    const created = await session.applySketchAction({
+      action: {
+        height: 80,
+        id: 'move-sketch',
+        kind: 'create-sketch',
+        project: await FS.realPath(root),
+        rects: [{ content: 'Card', height: 40, id: 'card', kind: 'Text', width: 80, x: 10, y: 10 }],
+        width: 200,
+      },
+      expectedRevision: 0,
+      requestId: 'create-move-sketch',
+    })
+    const generated = await session.readFile('@/studio/View1.tao')
+
+    const result = await session.moveGeneratedSource({
+      path: generated.path,
+      sourceVersion: generated.sourceVersion,
+      targetPackage: '@views',
+      writeId: 'move-retire-sketch',
+    })
+
+    Expect(result.status).toBe('moved')
+    Expect((await session.sketchCatalog()).sketches).toEqual([])
+    Expect((await session.sketchCatalog()).revision).toBe(created.catalog.revision + 1)
+    Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(true)
+    Expect(await FS.exists(FS.resolvePath('@/studio/View1.tao', root))).toBe(false)
+  })
+})
+
+Test('Move to package restores source, imports, catalog, and compile state after compile failure', async () => {
+  let failMoveCompile = false
+  const compiles: Array<readonly { path: string; sourceVersion?: string }[]> = []
+  await withTaoFiles('tao-studio-move-rollback-', {
+    '@views/Existing.tao': 'public view Existing() { }\n',
+    'Garden.tao': 'use View1 from @/studio\napp Garden { view Main }\nview Main() { render View1() }\n',
+    'Nested.tao': 'use View1 from @/studio\nworkspace view Nested() { render View1() }\n',
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile(request) {
+        compiles.push(request.changes)
+        if (failMoveCompile) {
+          failMoveCompile = false
+          Errors.throwUserInput('Moved source does not compile.')
+        }
+      },
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    await session.applySketchAction({
+      action: {
+        height: 80,
+        id: 'move-sketch',
+        kind: 'create-sketch',
+        project: await FS.realPath(root),
+        rects: [{ content: 'Card', height: 40, id: 'card', kind: 'Text', width: 80, x: 10, y: 10 }],
+        width: 200,
+      },
+      expectedRevision: 0,
+      requestId: 'create-move-rollback-sketch',
+    })
+    const beforeFile = await session.readFile('@/studio/View1.tao')
+    const beforeCatalog = await session.sketchCatalog()
+    const beforeGarden = await FS.readText(paths['Garden.tao'])
+    const beforeNested = await FS.readText(paths['Nested.tao'])
+    failMoveCompile = true
+
+    await Expect(session.moveGeneratedSource({
+      path: beforeFile.path,
+      sourceVersion: beforeFile.sourceVersion,
+      targetPackage: '@views',
+      writeId: 'move-rollback-sketch',
+    })).rejects.toThrow('authored Tao source failed to compile')
+
+    Expect(await session.readFile('@/studio/View1.tao')).toEqual(beforeFile)
+    Expect(await FS.readText(paths['Garden.tao'])).toBe(beforeGarden)
+    Expect(await FS.readText(paths['Nested.tao'])).toBe(beforeNested)
+    Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
+    Expect(await FS.fileMode(FS.resolvePath('@/studio/View1.tao', root))).toBe(0o444)
+    Expect(await session.sketchCatalog()).toEqual(beforeCatalog)
+    Expect(session.compileSnapshot().status).toBe('compiled')
+    Expect(compiles).toHaveLength(3)
+  })
+})
+
 Test('Move to package requests a different destination only when the target package declares the name', async () => {
   let compileCount = 0
   await withTaoFiles('tao-studio-move-generated-conflict-', {

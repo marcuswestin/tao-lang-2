@@ -36,11 +36,17 @@ export type StudioSketchSnapSourceAction =
     expectedCatalogRevision: number
     kind: 'snap-sketch-to-flow'
     mergeDirection: 'Col' | 'Row'
+    mergePosition: 'after' | 'before'
     rectIds: readonly string[]
     sketchId: string
     tree: StudioSketchSnapTree
     viewName: string
   }>
+
+export type StudioSketchSnapMergePlan = Readonly<{
+  direction: 'Col' | 'Row'
+  position: 'after' | 'before'
+}>
 
 export type StudioSketchSnapPrepared = Readonly<{
   action: StudioSketchSnapSourceAction
@@ -67,14 +73,53 @@ export type StudioSketchSnapSubmission =
 
 export const StudioSketchSnap = {
   envelope,
+  mergePlan,
   prepare,
   submit,
 } as const
+
+function mergePlan(
+  options: Readonly<{
+    existingRectIds: readonly string[]
+    projectedRectIds: readonly string[]
+    projection: StudioSketchProjectionResult
+  }>,
+): StudioSketchSnapMergePlan {
+  const existing = new Set(options.existingRectIds)
+  const projected = new Set(options.projectedRectIds)
+  Assert.input(existing.size > 0 && projected.size > 0, 'A partial Studio Snap merge requires both rectangle groups.')
+  Assert.input(
+    [...existing].every(id => !projected.has(id)),
+    'A partial Studio Snap merge cannot classify one rectangle as both existing and new.',
+  )
+  Assert.input(options.projection.tree.type === 'container', 'A partial Studio Snap merge requires a flow container.')
+
+  const groups = options.projection.tree.children.map(child => {
+    const ids = projectionRectIds(child)
+    const hasExisting = ids.some(id => existing.has(id))
+    const hasProjected = ids.some(id => projected.has(id))
+    Assert.input(
+      hasExisting !== hasProjected && ids.every(id => existing.has(id) || projected.has(id)),
+      'Studio Snap cannot preserve authored source for interleaved rectangle geometry.',
+    )
+    return hasExisting ? 'existing' : 'projected'
+  })
+  const runs = groups.filter((group, index) => group !== groups[index - 1])
+  Assert.input(
+    runs.length === 2 && runs.includes('existing') && runs.includes('projected'),
+    'Studio Snap cannot preserve authored source for interleaved rectangle geometry.',
+  )
+  return {
+    direction: options.projection.tree.direction,
+    position: runs[0] === 'projected' ? 'before' : 'after',
+  }
+}
 
 function prepare(
   options: Readonly<{
     expectedCatalogRevision: number
     mergeDirection: 'Col' | 'Row'
+    mergePosition?: 'after' | 'before'
     projection: StudioSketchProjectionResult
     rects: readonly StudioSketchRect[]
     sketchId: string
@@ -99,6 +144,7 @@ function prepare(
     expectedCatalogRevision: options.expectedCatalogRevision,
     kind: 'snap-sketch-to-flow',
     mergeDirection: options.mergeDirection,
+    mergePosition: options.mergePosition ?? 'after',
     rectIds: projectedRectIds,
     sketchId: options.sketchId,
     tree,
@@ -109,6 +155,10 @@ function prepare(
     needsConfirmation: options.projection.needsOverlay,
     projectedRectIds,
   }
+}
+
+function projectionRectIds(node: StudioSketchProjectionNode): string[] {
+  return node.type === 'element' ? [node.id] : node.children.flatMap(projectionRectIds)
 }
 
 function envelope(

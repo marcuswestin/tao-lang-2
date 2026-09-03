@@ -52,6 +52,7 @@ Describe('Studio sketch Snap source projection', () => {
       expectedCatalogRevision: 7,
       kind: 'snap-sketch-to-flow',
       mergeDirection: 'Row',
+      mergePosition: 'after',
       rectIds: ['cover', 'title', 'subtitle', 'duration'],
       sketchId: 'playlist-row',
       viewName: 'View4',

@@ -284,6 +284,7 @@ export type StudioSnapSketchToFlowPatchRequest = Readonly<{
   expectedCatalogRevision: number
   kind: 'snap-sketch-to-flow'
   mergeDirection: 'Col' | 'Row'
+  mergePosition: 'after' | 'before'
   rectIds: readonly string[]
   sketchId: string
   tree: StudioSketchSnapTree
@@ -1703,14 +1704,23 @@ async function snapSketchToFlow(
       ? nodeSource.replace('\n', '\nrender ')
       : `render ${nodeSource}`
     edits.push({ end: rootCst.end, replacement, start: rootCst.offset })
-  } else if (root.block !== undefined) {
-    const offset = blockCloseBraceOffset(source, root.block)
+  } else if (root.block !== undefined && root.view?.$refText === request.mergeDirection) {
     const indentation = `${lineIndentAt(source, rootCst.offset)}   `
-    edits.push({
-      end: offset,
-      replacement: `\n${indentSnippet(nodeSource, indentation)}`,
-      start: offset,
-    })
+    if (request.mergePosition === 'before') {
+      const offset = blockOpenBraceOffset(source, root.block)
+      edits.push({
+        end: offset,
+        replacement: `\n${indentSnippet(nodeSource, indentation)}`,
+        start: offset,
+      })
+    } else {
+      const offset = blockCloseBraceOffset(source, root.block)
+      edits.push({
+        end: offset,
+        replacement: `\n${indentSnippet(nodeSource, indentation)}`,
+        start: offset,
+      })
+    }
   } else {
     const rootTag = AST.attachedTag(root)
     const rootStart = rootTag?.tag.startsWith('#studio_rect_') && rootTag.$cstNode !== undefined
@@ -1725,11 +1735,12 @@ async function snapSketchToFlow(
       ? ''
       : `${source.slice(rootStart, rootCst.offset).trim()}\n`
     const existingSource = `${tagSource}${invocationSource}`
+    const children = request.mergePosition === 'before'
+      ? `${indentSnippet(nodeSource, childIndentation)}\n${indentSnippet(existingSource, childIndentation)}`
+      : `${indentSnippet(existingSource, childIndentation)}\n${indentSnippet(nodeSource, childIndentation)}`
     edits.push({
       end: rootCst.end,
-      replacement: `render ${request.mergeDirection}() {\n${indentSnippet(existingSource, childIndentation)}\n${
-        indentSnippet(nodeSource, childIndentation)
-      }\n${indentation}}`,
+      replacement: `render ${request.mergeDirection}() {\n${children}\n${indentation}}`,
       start: rootStart,
     })
   }
@@ -1822,7 +1833,16 @@ async function unsnapSketchFromFlow(
 function validateSnapRequest(request: StudioSnapSketchToFlowPatchRequest): void {
   requireExactKeys(
     request,
-    ['expectedCatalogRevision', 'kind', 'mergeDirection', 'rectIds', 'sketchId', 'tree', 'viewName'],
+    [
+      'expectedCatalogRevision',
+      'kind',
+      'mergeDirection',
+      'mergePosition',
+      'rectIds',
+      'sketchId',
+      'tree',
+      'viewName',
+    ],
     'Snap request',
   )
   if (!Number.isSafeInteger(request.expectedCatalogRevision) || request.expectedCatalogRevision < 0) {
@@ -1838,6 +1858,9 @@ function validateSnapRequest(request: StudioSnapSketchToFlowPatchRequest): void 
   }
   if (request.mergeDirection !== 'Col' && request.mergeDirection !== 'Row') {
     throw new Errors.UserInputError('Studio Snap merge direction is invalid.')
+  }
+  if (request.mergePosition !== 'after' && request.mergePosition !== 'before') {
+    throw new Errors.UserInputError('Studio Snap merge position is invalid.')
   }
   if (!Array.isArray(request.rectIds) || request.rectIds.some(id => typeof id !== 'string' || id.length === 0)) {
     throw new Errors.UserInputError('Studio Snap rectangle identities must be nonempty strings.')
@@ -2975,6 +2998,12 @@ function blockCloseBraceOffset(text: string, block: AST.Block): number {
   const blockEnd = block.$cstNode!.end
   const closeOffset = text.lastIndexOf('}', blockEnd - 1)
   return closeOffset === -1 ? blockEnd : closeOffset
+}
+
+function blockOpenBraceOffset(text: string, block: AST.Block): number {
+  const blockStart = block.$cstNode!.offset
+  const openOffset = text.indexOf('{', blockStart)
+  return openOffset === -1 ? blockStart : openOffset + 1
 }
 
 function insertStudioComponentSnippet(source: string, offset: number, snippet: string): string {

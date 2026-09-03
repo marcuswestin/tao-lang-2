@@ -1517,9 +1517,20 @@ export class StudioProjectSession {
       rects: [...sketch.snapped.map(item => item.rect), ...selected],
       width: sketch.width,
     })
+    const merge = sketch.snapped.length === 0
+      ? {
+        direction: combinedProjection.tree.type === 'container' ? combinedProjection.tree.direction : 'Row' as const,
+        position: 'after' as const,
+      }
+      : StudioSketchSnap.mergePlan({
+        existingRectIds: sketch.snapped.map(item => item.rect.id),
+        projectedRectIds: request.rectIds,
+        projection: combinedProjection,
+      })
     const prepared = StudioSketchSnap.prepare({
       expectedCatalogRevision: request.expectedCatalogRevision,
-      mergeDirection: combinedProjection.tree.type === 'container' ? combinedProjection.tree.direction : 'Row',
+      mergeDirection: merge.direction,
+      mergePosition: merge.position,
       projection,
       rects: selected,
       sketchId: sketch.id,
@@ -1795,6 +1806,12 @@ export class StudioProjectSession {
         return { conflicts, name, status: 'confirmation-required', targetPackage }
       }
 
+      const sourcePath = FS.resolvePath(current.path, this.projectRoot)
+      const beforeCatalog = await this.#sketchCatalog.read()
+      const catalogSketches = beforeCatalog.sketches.filter(sketch => sketch.view === name)
+      Assert.input(catalogSketches.length <= 1, `Move to package found multiple sketches for generated view ${name}.`)
+      const catalogSketch = catalogSketches[0]
+
       const sourceFiles = await this.files()
       const rewrites: Array<{ content: string; current: StudioProjectFileContent; path: string }> = []
       for (const file of sourceFiles) {
@@ -1810,41 +1827,122 @@ export class StudioProjectSession {
       }
       const movedContent = rewrites.find(rewrite => rewrite.current.path === current.path)?.content ?? current.content
       const generated = new StudioGeneratedSources(this.projectRoot)
-      const targetPath = await generated.moveView(name, targetPackage, movedContent)
-      const rewritten: StudioProjectFileContent[] = []
-      for (const rewrite of rewrites.filter(candidate => candidate.current.path !== current.path)) {
-        if (rewrite.current.path.startsWith('@/studio/')) {
-          await generated.rewrite(rewrite.path, rewrite.content)
-        } else {
-          await FS.writeText(rewrite.path, rewrite.content)
+      let targetPath: string | undefined
+      let retiredCatalog: StudioSketchCatalogSnapshot | undefined
+      try {
+        targetPath = await generated.moveView(name, targetPackage, movedContent)
+        const rewritten: StudioProjectFileContent[] = []
+        for (const rewrite of rewrites.filter(candidate => candidate.current.path !== current.path)) {
+          if (rewrite.current.path.startsWith('@/studio/')) {
+            await generated.rewrite(rewrite.path, rewrite.content)
+          } else {
+            await FS.writeText(rewrite.path, rewrite.content)
+          }
+          const sourceVersion = SourceActions.studioSourceVersion(rewrite.content)
+          rewritten.push({
+            content: rewrite.content,
+            ...this.#projectFile(rewrite.current.path, sourceVersion),
+          })
         }
-        const sourceVersion = SourceActions.studioSourceVersion(rewrite.content)
-        rewritten.push({
-          content: rewrite.content,
-          ...this.#projectFile(rewrite.current.path, sourceVersion),
-        })
+        const targetContent = await FS.readText(targetPath)
+        const targetSourceVersion = SourceActions.studioSourceVersion(targetContent)
+        const file: StudioProjectFileContent = {
+          content: targetContent,
+          ...this.#projectFile(FS.relativePath(this.projectRoot, targetPath), targetSourceVersion),
+        }
+        const compile = await this.#coordinator.noteStudioFileMutation([
+          { path: sourcePath, writeId: request.writeId },
+          { path: targetPath, sourceVersion: targetSourceVersion, writeId: request.writeId },
+          ...rewritten.map(candidate => ({
+            path: FS.resolvePath(candidate.path, this.projectRoot),
+            sourceVersion: candidate.sourceVersion,
+            writeId: request.writeId,
+          })),
+        ])
+        if (compile.status === 'error') {
+          Errors.throwUserInput(
+            `Studio did not move ${name} because the authored Tao source failed to compile: ${compile.message}`,
+          )
+        }
+        const files = await this.files()
+        if (catalogSketch !== undefined) {
+          retiredCatalog = (await this.#sketchCatalog.apply({
+            action: { id: catalogSketch.id, kind: 'delete-sketch' },
+            expectedRevision: beforeCatalog.revision,
+            requestId: `catalog:${request.writeId}`,
+          })).catalog
+        }
+        for (const changed of rewritten) {
+          this.#emitFile(changed)
+        }
+        this.#emitFiles(files)
+        if (retiredCatalog !== undefined) {
+          this.#emitSketchCatalog(retiredCatalog)
+        }
+        return { compile, file, files, previousPath: current.path, rewritten, status: 'moved' }
+      } catch (error) {
+        if (targetPath !== undefined) {
+          const rollbackFailures: unknown[] = []
+          try {
+            if (await FS.isFile(targetPath)) {
+              if (await FS.exists(sourcePath)) {
+                await FS.remove(targetPath)
+              } else {
+                await FS.move(targetPath, sourcePath)
+              }
+            }
+            if (await FS.isFile(sourcePath)) {
+              await generated.rewrite(sourcePath, current.content)
+            } else {
+              await FS.writeText(sourcePath, current.content)
+              await FS.chmod(sourcePath, 0o444)
+            }
+          } catch (rollbackError) {
+            rollbackFailures.push(rollbackError)
+          }
+          for (const rewrite of rewrites.filter(candidate => candidate.current.path !== current.path)) {
+            try {
+              if (rewrite.current.path.startsWith('@/studio/')) {
+                await generated.rewrite(rewrite.path, rewrite.current.content)
+              } else {
+                await FS.writeText(rewrite.path, rewrite.current.content)
+              }
+            } catch (rollbackError) {
+              rollbackFailures.push(rollbackError)
+            }
+          }
+          if (retiredCatalog !== undefined) {
+            try {
+              await this.#sketchCatalog.restore(beforeCatalog)
+            } catch (rollbackError) {
+              rollbackFailures.push(rollbackError)
+            }
+          }
+          try {
+            const rollback = await this.#coordinator.noteStudioFileMutation([
+              { path: sourcePath, sourceVersion: current.sourceVersion, writeId: `rollback:${request.writeId}` },
+              { path: targetPath, writeId: `rollback:${request.writeId}` },
+              ...rewrites.filter(candidate => candidate.current.path !== current.path).map(rewrite => ({
+                path: rewrite.path,
+                sourceVersion: rewrite.current.sourceVersion,
+                writeId: `rollback:${request.writeId}`,
+              })),
+            ])
+            if (rollback.status === 'error') {
+              rollbackFailures.push(new Errors.HostEnvironmentError(rollback.message))
+            }
+          } catch (rollbackError) {
+            rollbackFailures.push(rollbackError)
+          }
+          if (rollbackFailures.length > 0) {
+            Errors.throwHostEnvironment(
+              `Studio could not completely roll back the failed move of ${name}.`,
+              { cause: rollbackFailures[0] },
+            )
+          }
+        }
+        throw Errors.fromUnknown(error, { studioOperation: 'move-generated-source', writeId: request.writeId })
       }
-      const targetContent = await FS.readText(targetPath)
-      const targetSourceVersion = SourceActions.studioSourceVersion(targetContent)
-      const file: StudioProjectFileContent = {
-        content: targetContent,
-        ...this.#projectFile(FS.relativePath(this.projectRoot, targetPath), targetSourceVersion),
-      }
-      const compile = await this.#coordinator.noteStudioFileMutation([
-        { path: FS.resolvePath(current.path, this.projectRoot), writeId: request.writeId },
-        { path: targetPath, sourceVersion: targetSourceVersion, writeId: request.writeId },
-        ...rewritten.map(candidate => ({
-          path: FS.resolvePath(candidate.path, this.projectRoot),
-          sourceVersion: candidate.sourceVersion,
-          writeId: request.writeId,
-        })),
-      ])
-      for (const changed of rewritten) {
-        this.#emitFile(changed)
-      }
-      const files = await this.files()
-      this.#emitFiles(files)
-      return { compile, file, files, previousPath: current.path, rewritten, status: 'moved' }
     })
   }
 

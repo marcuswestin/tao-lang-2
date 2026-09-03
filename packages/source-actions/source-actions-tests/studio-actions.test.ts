@@ -1533,6 +1533,67 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content).not.toContain('render Text("Edited")')
   })
 
+  Test('prepends new geometry to a same-axis authored container without rebuilding its children', async () => {
+    const document = await parseDocument(`
+      use Box, Row, Text from @tao/ui
+      public view View4() {
+        render Row() [gap 37, pad 11] {
+          #studio_rect_006f006c0064
+          Text("Edited") [width 111, height 23]
+          Box() [width 1, height fill]
+        }
+      }
+      scenarios View4 "sketch" { scenario "draft" { render () } }
+    `)
+    const patch = await SourceActions.applyStudioPatch(
+      document,
+      playlistSnapRequest({
+        mergePosition: 'before',
+        rectIds: ['new'],
+        tree: leaf('new'),
+      }),
+    )
+
+    const newTag = patch.content.indexOf('#studio_rect_006e00650077')
+    const oldTag = patch.content.indexOf('#studio_rect_006f006c0064')
+    Expect(newTag).toBeGreaterThan(-1)
+    Expect(oldTag).toBeGreaterThan(newTag)
+    Expect(patch.content).toContain('Row() [gap 37, pad 11]')
+    Expect(patch.content).toContain('Text("Edited") [width 111, height 23]')
+    Expect(patch.content).toContain('Box() [width 1, height fill]')
+  })
+
+  Test('wraps an authored container when the combined sketch changes axis', async () => {
+    const document = await parseDocument(`
+      use Col, Row, Text from @tao/ui
+      public view View4() {
+        render Col() [gap 37, pad 11] {
+          #studio_rect_006f006c0064
+          Text("Edited") [width 111, height 23]
+          Text("Manual")
+        }
+      }
+      scenarios View4 "sketch" { scenario "draft" { render () } }
+    `)
+    const patch = await SourceActions.applyStudioPatch(
+      document,
+      playlistSnapRequest({
+        mergeDirection: 'Row',
+        mergePosition: 'after',
+        rectIds: ['new'],
+        tree: leaf('new'),
+      }),
+    )
+
+    Expect(patch.content).toContain('render Row()')
+    Expect(patch.content).toContain('Col() [gap 37, pad 11]')
+    Expect(patch.content).toContain('Text("Edited") [width 111, height 23]')
+    Expect(patch.content).toContain('Text("Manual")')
+    Expect(patch.content.indexOf('#studio_rect_006f006c0064')).toBeLessThan(
+      patch.content.indexOf('#studio_rect_006e00650077'),
+    )
+  })
+
   Test('rejects a missing, non-public, or multiply owned generated view', async () => {
     const privateView = await parseDocument(`
       view View4() { render Text("private") }
@@ -1787,6 +1848,7 @@ function playlistSnapRequest(
     expectedCatalogRevision: 7,
     kind: 'snap-sketch-to-flow',
     mergeDirection: 'Row',
+    mergePosition: 'after',
     rectIds: ['art', 'title', 'artist', 'duration'],
     sketchId: 'playlist-row',
     tree: {
