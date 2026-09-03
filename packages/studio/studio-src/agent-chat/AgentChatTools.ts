@@ -25,6 +25,8 @@ export type AgentChatWorld = {
   /** The app's own behavior tests. Slow, so a tool description says so and the model is told to use it sparingly. */
   runTests?: () => Promise<StudioTestRun>
   testStatus?: () => StudioTestRun | undefined
+  /** Studio's real compile state, which sees validator errors the snapshot's parse does not. */
+  compile?: () => { status: string; diagnostics: readonly { message: string; filePath?: string }[] }
 }
 
 /** A record of one tool call, kept for the transcript the panel renders and the run log on disk. */
@@ -118,7 +120,7 @@ export function readTools(world: AgentChatWorld, record: (call: AgentChatToolCal
         'Facts about this app that are true and unusual: views no scenario covers, actions nothing invokes, fields nothing reads, design bundles nothing uses, compile problems. Use these to ground any suggestion about what to improve or build next. Each fact carries the evidence it came from; cite that evidence when you use it.',
       execute: async () => {
         const snapshot = await world.snapshot()
-        const facts = improvementFacts(snapshot)
+        const facts = improvementFacts(snapshot, world.compile?.())
         return capture('improvementFacts', {}, {
           facts,
           note: facts.length === 0
@@ -157,7 +159,7 @@ export function readTools(world: AgentChatWorld, record: (call: AgentChatToolCal
 
     overview: tool({
       description:
-        'The shape of the whole app in one packet: its views, entities, actions, queries, design, scenarios, and compile status. Start here.',
+        "The shape of the whole app in one packet: its entities and their fields, its views with per-view counts of renders, states, queries and scenarios, its design and that design's bundles, and a count of parse diagnostics. Start here, then use inspect for anything it only counts.",
       execute: async () => {
         const snapshot = await world.snapshot()
         return capture('overview', {}, overview(snapshot))

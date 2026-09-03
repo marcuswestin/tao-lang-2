@@ -78,29 +78,80 @@ export function fileOutlines(
  * improvementFacts is the whole grounding for an advisory answer. It never says what to do; it says what is
  * true and unusual, and leaves the judgment to the model and the person reading it.
  */
-export function improvementFacts(snapshot: SemanticSnapshot): AgentChatFact[] {
+export function improvementFacts(
+  snapshot: SemanticSnapshot,
+  /**
+   * The project's real compile state. The snapshot's own diagnostics come from a parse with validation off,
+   * so they see lexer, parser and linker errors only; a validator error would otherwise be reported as a
+   * clean build.
+   */
+  compile?: { status: string; diagnostics: readonly { message: string; filePath?: string }[] },
+): AgentChatFact[] {
   const facts: AgentChatFact[] = []
   const incoming = (id: string, rel: string) => snapshot.edges.filter(edge => edge.to === id && edge.rel === rel)
   const outgoing = (id: string, rel: string) => snapshot.edges.filter(edge => edge.from === id && edge.rel === rel)
 
-  for (const problem of snapshot.diagnostics) {
-    if (problem.severity !== 'error') {
+  if (compile === undefined) {
+    for (const problem of snapshot.diagnostics) {
+      if (problem.severity !== 'error') {
+        continue
+      }
+      facts.push({
+        detail: `The project does not parse cleanly: ${problem.message}`,
+        evidence: `${problem.source} diagnostic${problem.filePath === undefined ? '' : ` at ${problem.filePath}`}`,
+        kind: 'parse-problem',
+        subject: problem.filePath ?? snapshot.appName,
+      })
+    }
+  } else {
+    for (const problem of compile.diagnostics) {
+      facts.push({
+        detail: `The project does not compile cleanly: ${problem.message}`,
+        evidence: `Studio compile status ${compile.status}${
+          problem.filePath === undefined ? '' : ` at ${problem.filePath}`
+        }`,
+        kind: 'compile-problem',
+        subject: problem.filePath ?? snapshot.appName,
+      })
+    }
+  }
+
+  // A `covers` edge names a scenario's own subject, so counting it alone calls almost every view uncovered:
+  // an app-level scenario exercises everything the app renders without naming any of it. Coverage is
+  // therefore what a scenario's subject reaches through `renders`, and a view named directly is said so.
+  const rendered = new Map<string, string[]>()
+  for (const edge of snapshot.edges) {
+    if (edge.rel === 'renders') {
+      rendered.set(edge.from, [...(rendered.get(edge.from) ?? []), edge.to])
+    }
+  }
+  const directlyCovered = new Set(snapshot.edges.filter(edge => edge.rel === 'covers').map(edge => edge.to))
+  const reached = new Set<string>()
+  const queue = [...directlyCovered]
+  while (queue.length > 0) {
+    const id = queue.shift()!
+    if (reached.has(id)) {
       continue
     }
-    facts.push({
-      detail: `The project does not compile cleanly: ${problem.message}`,
-      evidence: `${problem.source} diagnostic${problem.filePath === undefined ? '' : ` at ${problem.filePath}`}`,
-      kind: 'compile-problem',
-      subject: problem.filePath ?? snapshot.appName,
-    })
+    reached.add(id)
+    queue.push(...(rendered.get(id) ?? []))
   }
 
   for (const view of nodesOfKind(snapshot, 'view')) {
-    if (incoming(view.id, 'covers').length === 0) {
+    if (!reached.has(view.id)) {
       facts.push({
-        detail: `No scenario covers ${view.name}, so nothing in the preview grid shows it in a known state.`,
+        detail:
+          `No scenario reaches ${view.name}: none names it, and nothing a scenario does show renders it. Nothing in the preview grid puts it in a known state.`,
         evidence: where(view),
         kind: 'view-without-scenario',
+        subject: view.name,
+      })
+    } else if (!directlyCovered.has(view.id)) {
+      facts.push({
+        detail:
+          `${view.name} is only reached through another view's scenario, so it is never shown on its own in a known state.`,
+        evidence: where(view),
+        kind: 'view-covered-only-indirectly',
         subject: view.name,
       })
     }

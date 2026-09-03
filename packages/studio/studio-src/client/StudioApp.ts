@@ -1,6 +1,7 @@
 import { Assert, Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import { EditorView } from 'codemirror'
+import { mountStudioAgentChatPanel } from '../agent-chat/StudioAgentChatPanel'
 import { mountStudioAgentPocPanel } from '../agent-poc/StudioAgentPocPanel'
 import type { StudioCompileCompletion } from '../StudioCompileCoordinator'
 import { type StudioDraftFile, StudioDraftSync, type StudioDraftSyncResult } from '../StudioDraftSync'
@@ -548,6 +549,27 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       })
     }
     view.betaShip.addEventListener('click', betaShipListener)
+
+    let chatNames: readonly string[] = []
+    // Studio agent chat: the second, freeform mode; see packages/studio/studio-src/agent-chat.
+    mountStudioAgentChatPanel(root, {
+      knownNames: () => chatNames,
+      openDeclaration: async name => {
+        const found = await StudioApiClient.agentChat<{ found: boolean; path?: string; line?: number }>('locate', {
+          name,
+        })
+        if (found.found && found.path !== undefined) {
+          await openFile(found.path, true)
+        }
+      },
+    })
+    void (async () => {
+      try {
+        chatNames = (await StudioApiClient.agentChat<{ names: string[] }>('names', {})).names
+      } catch {
+        chatNames = []
+      }
+    })()
 
     // Semantic agent proof of concept: a throwaway overlay; see packages/studio/studio-src/agent-poc.
     mountStudioAgentPocPanel(root, {

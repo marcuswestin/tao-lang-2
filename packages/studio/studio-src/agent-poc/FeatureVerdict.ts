@@ -35,11 +35,34 @@ export function featureTestVerdict(
   before: TestRunSummary | undefined,
   after: TestRunSummary | undefined,
 ): FeatureTestVerdict {
-  if (after === undefined || after.status === 'no-tests') {
+  if (after === undefined) {
+    // The run did not happen — the runner was busy, closed, or failed. That is not the same as an app with
+    // no tests, and saying so would be the one wrong thing this verdict must never say.
+    return {
+      broke: [],
+      detail: 'Nothing here can tell you whether the change is right, only that it compiles.',
+      heading: 'The tests did not run, so nothing checked this change.',
+      repaired: [],
+      status: 'unknown',
+    }
+  }
+  if (after.status === 'no-tests') {
     return {
       broke: [],
       detail: 'Nothing here can tell you whether the change is right, only that it compiles.',
       heading: 'This app declares no tests, so nothing checked the change.',
+      repaired: [],
+      status: 'unknown',
+    }
+  }
+  // A run that reported neither a pass nor a failure did not measure anything. `tao test` exits early with no
+  // summary when a test file fails to compile, and a change that breaks a `.test.tao` file does exactly that:
+  // counting that as "everything still passes" would turn the one contradicting check into a rubber stamp.
+  if (after.passed === 0 && after.failed === 0) {
+    return {
+      broke: [],
+      detail: `The runner reported ${after.status} without running a test; check the test sources compile.`,
+      heading: 'The test run produced no result, so nothing checked this change.',
       repaired: [],
       status: 'unknown',
     }
@@ -81,10 +104,21 @@ export function featureTestVerdict(
       status: 'broke',
     }
   }
+  // "Still pass" is a claim about this change, not about the app. An app that was already red stays red, and
+  // the heading has to say so rather than reporting the passing count as though nothing were failing.
+  const stillFailing = after.failures.filter(failure => failedBefore.has(failure.name)).length
+  const notes = [
+    ...(repaired.length === 0 ? [] : [`It also repaired ${repaired.length}.`]),
+    ...(after.failed === 0 ? [] : [`${after.failed} were already failing before it, and still are.`]),
+  ]
   return {
     broke,
-    ...(repaired.length === 0 ? {} : { detail: `It also repaired ${repaired.length}.` }),
-    heading: `The app's tests still pass: ${after.passed} of them.`,
+    ...(notes.length === 0 ? {} : { detail: notes.join(' ') }),
+    heading: after.failed === 0
+      ? `The app's tests still pass: ${after.passed} of them.`
+      : `This change broke nothing: ${after.passed} still pass and the ${stillFailing} red ${
+        stillFailing === 1 ? 'test was' : 'tests were'
+      } red before it.`,
     repaired,
     status: 'held',
   }

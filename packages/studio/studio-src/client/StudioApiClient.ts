@@ -183,6 +183,9 @@ export const StudioApiEventStream = {
 
 /** Typed boundary around Studio's HTTP and WebSocket endpoints. */
 export const StudioApiClient = {
+  agentChat: async <Result>(command: string, body: unknown): Promise<Result> =>
+    await request(`/api/agent-chat/${command}`, body),
+
   agentPoc: async <Result>(command: string, body: unknown): Promise<Result> =>
     await request(`/api/agent-poc/${command}`, body),
   aiAvailability: async (): Promise<StudioAIAvailability> => await get('/api/ai/availability'),

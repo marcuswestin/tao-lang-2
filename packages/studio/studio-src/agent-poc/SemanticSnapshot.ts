@@ -209,6 +209,22 @@ export function buildSemanticSnapshot(
     if (AST.isEntityQueryDeclaration(declaration)) {
       return entityByPlural.get(declaration.sourceName ?? declaration.name)
     }
+    if (AST.isForStatement(declaration)) {
+      // `loop Documents / Document` binds Document to one row of the collection. Without this, every field
+      // read inside a loop body is invisible, which is most of the field reads in a list-shaped UI.
+      const collection = declaration.collection
+      const target = AST.isValueReference(collection)
+        ? collection.target.ref
+        : AST.isMemberAccessExpression(collection)
+        ? collection.target.ref
+        : undefined
+      const throughDeclaration = target === declaration ? undefined : entityOfValue(target)
+      if (throughDeclaration !== undefined) {
+        return throughDeclaration
+      }
+      const root = (collection.$cstNode?.text ?? '').split(/[^A-Za-z0-9_]/).filter(part => part !== '')[0] ?? ''
+      return entityByPlural.get(root)
+    }
     return undefined
   }
 
@@ -561,7 +577,16 @@ export function resolveTarget(snapshot: SemanticSnapshot, target: string): Snaps
       return node
     }
   }
-  return [...snapshot.nodes.values()].find(node => node.name === target || node.name.endsWith(`.${target}`))
+  const nodes = [...snapshot.nodes.values()]
+  const exact = nodes.find(node => node.name === target)
+  if (exact !== undefined) {
+    return exact
+  }
+  // `data Documents / Document` declares one entity under two names. The model is far likelier to write the
+  // singular it sees on every field and parameter, and a field that merely ends in `.Document` is a worse
+  // answer than the entity the name actually denotes.
+  const singular = nodes.find(node => node.kind === 'entity' && node.detail?.['singular'] === target)
+  return singular ?? nodes.find(node => node.name.endsWith(`.${target}`))
 }
 
 export function inspect(snapshot: SemanticSnapshot, target: string, budget = 1500): Json {

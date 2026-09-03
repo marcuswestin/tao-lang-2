@@ -60,9 +60,39 @@ Describe('Semantic agent PoC change verdict', () => {
     Expect(verdict.detail).toBe('It also repaired 1.')
   })
 
+  Test('a run that produced no result is not a green verdict', () => {
+    // `tao test` exits before running anything when a test file fails to compile, which is exactly what a
+    // change that breaks a `.test.tao` file causes. Reading that as "everything passes" would make the one
+    // check that can contradict the agent agree with it automatically.
+    const empty = run({ failed: 0, passed: 0, status: 'failed' })
+    const verdict = featureTestVerdict(run(), empty)
+
+    Expect(verdict.status).toBe('unknown')
+    Expect(verdict.heading).toBe('The test run produced no result, so nothing checked this change.')
+    Expect(verdict.repaired).toEqual([])
+  })
+
+  Test('a run that never happened is not an app without tests', () => {
+    const verdict = featureTestVerdict(run(), undefined)
+
+    Expect(verdict.status).toBe('unknown')
+    Expect(verdict.heading).toBe('The tests did not run, so nothing checked this change.')
+  })
+
+  Test('says the change broke nothing without claiming a red app is green', () => {
+    const red = run({ failed: 1, failures: [FEED], passed: 2 })
+
+    const verdict = featureTestVerdict(red, red)
+
+    Expect(verdict.status).toBe('held')
+    Expect(verdict.broke).toEqual([])
+    // The old heading said "the app's tests still pass: 2 of them" while one was failing.
+    Expect(verdict.heading).toBe('This change broke nothing: 2 still pass and the 1 red test was red before it.')
+    Expect(verdict.detail).toBe('1 were already failing before it, and still are.')
+  })
+
   Test('does not claim a verdict it cannot support', () => {
-    Expect(featureTestVerdict(run(), undefined).status).toBe('unknown')
-    Expect(featureTestVerdict(run(), run({ status: 'no-tests' })).heading)
+    Expect(featureTestVerdict(run(), run({ failed: 0, passed: 0, status: 'no-tests' })).heading)
       .toBe('This app declares no tests, so nothing checked the change.')
     // Without a baseline a failure cannot be attributed to the change, so it is reported without blame.
     const noBaseline = featureTestVerdict(undefined, run({ failed: 1, failures: [FEED], passed: 2 }))

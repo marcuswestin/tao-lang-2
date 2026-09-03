@@ -134,7 +134,27 @@ Describe('Studio agent chat facts', () => {
     Expect(improvementFacts(wired).filter(fact => fact.kind === 'action-never-invoked')).toEqual([])
   })
 
-  Test('reports a compile error as a fact, and ignores a warning', () => {
+  Test('prefers Studio\u2019s real compile state over the snapshot\u2019s parse diagnostics', () => {
+    // The snapshot is parsed with validation off, so it sees linker errors only. A validator error would be
+    // reported as a clean build if the facts trusted it.
+    const facts = improvementFacts(snapshot(), {
+      diagnostics: [{ filePath: PATH, message: 'Unknown view Ghost' }],
+      status: 'error',
+    })
+
+    const problems = facts.filter(fact => fact.kind === 'compile-problem')
+    Expect(problems.length).toBe(1)
+    Expect(problems[0]?.detail).toBe('The project does not compile cleanly: Unknown view Ghost')
+    Expect(problems[0]?.evidence).toBe(`Studio compile status error at ${PATH}`)
+    // A clean compile contributes no problem facts, whatever the parse said.
+    Expect(
+      improvementFacts(snapshot(), { diagnostics: [], status: 'compiled' }).filter(fact =>
+        fact.kind === 'compile-problem'
+      ),
+    ).toEqual([])
+  })
+
+  Test('reports a parse error as a fact, and ignores a warning', () => {
     const broken = snapshot()
     const withDiagnostics: SemanticSnapshot = {
       ...broken,
@@ -144,9 +164,9 @@ Describe('Studio agent chat facts', () => {
       ],
     }
 
-    const problems = improvementFacts(withDiagnostics).filter(fact => fact.kind === 'compile-problem')
+    const problems = improvementFacts(withDiagnostics).filter(fact => fact.kind === 'parse-problem')
     Expect(problems.length).toBe(1)
-    Expect(problems[0]?.detail).toBe('The project does not compile cleanly: Unknown declaration Foo')
+    Expect(problems[0]?.detail).toBe('The project does not parse cleanly: Unknown declaration Foo')
   })
 
   Test('outlines a file as its declarations in source order, with line numbers', () => {

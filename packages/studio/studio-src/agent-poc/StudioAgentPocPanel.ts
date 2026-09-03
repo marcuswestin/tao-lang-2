@@ -216,6 +216,9 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
   async function applyFeature(plan: FeaturePlanResult, box: HTMLElement): Promise<void> {
     box.replaceChildren(line('Applying…'))
     try {
+      // The baseline has to finish before the files change. A run still in flight would see a mix of the old
+      // and new sources, and a test this change breaks would land in the baseline's failures and be excused.
+      const before = await testBaseline
       const result = await StudioApiClient.agentPoc<
         { compile: { status: string; message: string; diagnostics: { message: string }[] }; rolledBack: boolean }
       >(
@@ -241,7 +244,7 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
       undo.addEventListener('click', () => void undoFeature(box))
       const checking = line('Running the app\u2019s own tests against the change\u2026')
       box.append(checking)
-      const [before, after] = [await testBaseline, await runAppTests()]
+      const after = await runAppTests()
       checking.remove()
       renderVerdict(box, featureTestVerdict(before, after))
     } catch (error) {

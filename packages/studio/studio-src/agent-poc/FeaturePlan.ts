@@ -5,6 +5,7 @@
 // shape into formatted source edits. A request outside the kinds this PoC lowers is answered honestly
 // rather than forced into one. Nothing here is a production change model.
 import Formatter from '@formatter'
+import { Errors } from '@shared'
 import { type AgentRunResult, runAgentJob } from './AgentPocRun'
 import { type SemanticSnapshot, type SnapshotNode, type SnapshotText } from './SemanticSnapshot'
 
@@ -396,8 +397,20 @@ function emptyShape(): FeatureShape {
 type Edit = { start: number; end: number; replacement: string }
 
 function applyEdits(source: string, edits: Edit[]): string {
+  // Applying back to front keeps earlier offsets valid, but only while the ranges are disjoint. Two edits
+  // that share a start offset — an inserted import line and a replaced `use` line on the same first line —
+  // would otherwise apply in array order, and the second would swallow what the first just inserted.
+  const ordered = [...edits].sort((a, b) => b.start - a.start || b.end - a.end)
+  for (const [index, edit] of ordered.entries()) {
+    const next = ordered[index + 1]
+    if (next !== undefined && next.end > edit.start) {
+      Errors.throwUnexpected(
+        `Two edits overlap at ${edit.start}: ${JSON.stringify(next)} and ${JSON.stringify(edit)}.`,
+      )
+    }
+  }
   let result = source
-  for (const edit of [...edits].sort((a, b) => b.start - a.start)) {
+  for (const edit of ordered) {
     result = result.slice(0, edit.start) + edit.replacement + result.slice(edit.end)
   }
   return result
@@ -595,7 +608,10 @@ export async function lowerFeature(
   // — a first flag in an app that has none — Tao falls back to the view's structure: after the last field,
   // before the view's render block, and after the last thing the view renders.
   const analogField = pattern === undefined ? undefined : snapshot.nodes.get(String(pattern['field']))
-  const analogAction = pattern === undefined ? undefined : snapshot.nodes.get(String(pattern['writtenBy']))
+  // The analogous writer is only usable as an anchor when it lives in the file the edit is staged against.
+  // Its offsets mean nothing in another file, and splicing at them lands inside whatever text sits there.
+  const analogWriter = pattern === undefined ? undefined : snapshot.nodes.get(String(pattern['writtenBy']))
+  const analogAction = analogWriter?.path === view.path ? analogWriter : undefined
   const analogRender = pattern === undefined ? undefined : snapshot.nodes.get(String(pattern['renderId']))
   const entityFields = [...snapshot.nodes.values()].filter(n =>
     n.kind === 'field' && detail(n)['entity'] === entity.name
@@ -758,9 +774,13 @@ export async function lowerFeature(
     p.includes(`(entity ${shape.entity})`)
   )!.split(' ')[0]!
   // `create <Singular>` in the fixture resolves through the entity's imported plural declaration.
+  // A declaration the entry file declares itself needs no import, and importing it from a folder the project
+  // may not even have is a change that cannot resolve. One-file apps declare both here.
+  const entityIsLocal = entity.path === entryPath
+  const subjectIsLocal = subject.path === entryPath
   const dataImport = /^use (.+) from @data$/m.exec(entryBefore)
   const dataImportNames = dataImport === null ? [] : dataImport[1]!.split(',').map(name => name.trim())
-  const dataImportEdits: Edit[] = dataImportNames.includes(shape.entity)
+  const dataImportEdits: Edit[] = entityIsLocal || dataImportNames.includes(shape.entity)
     ? []
     : dataImport === null
     ? [{ end: 0, replacement: `use ${shape.entity} from @data\n`, start: 0 }]
@@ -770,7 +790,8 @@ export async function lowerFeature(
       start: dataImport.index,
     }]
   const useLine = entryBefore.split('\n').findIndex(line => /^use .* from @ui$/.test(line))
-  const alreadyImported = new RegExp(`^use .*\\b${subject.name}\\b.* from @ui$`, 'm').test(entryBefore)
+  const alreadyImported = subjectIsLocal
+    || new RegExp(`^use .*\\b${subject.name}\\b.* from @ui$`, 'm').test(entryBefore)
   const useInsertOffset = useLine < 0 ? 0 : entryBefore.split('\n').slice(0, useLine + 1).join('\n').length + 1
   const scenario = `\nscenarios ${subject.name} ${
     JSON.stringify(shape.featureName)

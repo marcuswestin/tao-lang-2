@@ -1,8 +1,9 @@
 // Studio agent chat: the endpoint, and the one conversation a project session holds.
 
 import { FS, Repo } from '@shared'
-import { buildSemanticSnapshot } from '../agent-poc/SemanticSnapshot'
+import { buildSemanticSnapshot, resolveTarget, type SemanticSnapshot } from '../agent-poc/SemanticSnapshot'
 import type { StudioProjectSession } from '../StudioProjectSession'
+import { declarationSource } from './AgentChatFacts'
 import { askInstructions } from './AgentChatInstructions'
 import { AgentChatProvider } from './AgentChatProvider'
 import { AgentChatSession, type AgentChatTurn } from './AgentChatSession'
@@ -12,19 +13,41 @@ type Json = Record<string, unknown>
 
 const RUN_LOG_DIR = '.artifacts/agent-chat/runs'
 
-/** worldFor gives the tools their only view of the project. Everything they can reach passes through here. */
-function worldFor(session: StudioProjectSession): AgentChatWorld {
+/**
+ * worldFor gives the tools their only view of the project. Everything they can reach passes through here.
+ *
+ * The snapshot and the file bodies are held for the life of one turn. Rebuilding them per tool call means a
+ * full workspace re-parse and graph walk each time, which a chat loop does ten or twenty times a turn; and a
+ * turn that re-read the project halfway through would answer from two different versions of it.
+ */
+function worldFor(session: StudioProjectSession): AgentChatWorld & { invalidate: () => void } {
+  let snapshot: Promise<SemanticSnapshot> | undefined
+  let files: Promise<readonly { path: string; content: string }[]> | undefined
   return {
-    files: async () =>
-      await Promise.all(
-        (await session.files()).map(async file => ({
-          content: (await session.readFile(file.path)).content,
-          path: file.path,
-        })),
-      ),
+    compile: () => {
+      const state = session.compileSnapshot()
+      return { diagnostics: state.diagnostics, status: state.status }
+    },
+    files: async () => {
+      files ??= (async () =>
+        await Promise.all(
+          (await session.files()).map(async file => ({
+            content: (await session.readFile(file.path)).content,
+            path: file.path,
+          })),
+        ))()
+      return await files
+    },
+    invalidate: () => {
+      files = undefined
+      snapshot = undefined
+    },
     snapshot: async () => {
-      const parsed = await session.agentPocParse()
-      return buildSemanticSnapshot(session.projectRoot, session.appName, parsed.files, parsed.diagnostics)
+      snapshot ??= (async () => {
+        const parsed = await session.agentPocParse()
+        return buildSemanticSnapshot(session.projectRoot, session.appName, parsed.files, parsed.diagnostics)
+      })()
+      return await snapshot
     },
   }
 }
@@ -36,6 +59,7 @@ function worldFor(session: StudioProjectSession): AgentChatWorld {
 class AgentChatConversation {
   readonly #provider: AgentChatProvider
   readonly #session: StudioProjectSession
+  readonly #world: ReturnType<typeof worldFor>
   #chat: AgentChatSession | undefined
   #calls: AgentChatToolCall[] = []
   #history: { role: 'user' | 'assistant'; text: string; toolCalls?: readonly AgentChatToolCall[] }[] = []
@@ -43,6 +67,11 @@ class AgentChatConversation {
   constructor(session: StudioProjectSession, provider: AgentChatProvider) {
     this.#provider = provider
     this.#session = session
+    this.#world = worldFor(session)
+  }
+
+  get world(): AgentChatWorld & { invalidate: () => void } {
+    return this.#world
   }
 
   get provider(): AgentChatProvider {
@@ -69,9 +98,11 @@ class AgentChatConversation {
         drain: () => this.#calls.splice(0, this.#calls.length),
         instructions: askInstructions,
         model,
-        tools: readTools(worldFor(this.#session), call => this.#calls.push(call)),
+        tools: readTools(this.#world, call => this.#calls.push(call)),
       })
     }
+    // The project may have changed between turns, so each turn starts from a freshly read one.
+    this.#world.invalidate()
     this.#history.push({ role: 'user', text })
     const turn = await this.#chat.send(text)
     return await this.#record(turn)
@@ -145,6 +176,26 @@ export const AgentChat = {
     }
     if (command === 'history') {
       return { history: conversation.history }
+    }
+    if (command === 'names') {
+      // The panel turns these into links, so an answer that names a declaration stays checkable.
+      conversation.world.invalidate()
+      const snapshot = await conversation.world.snapshot()
+      return {
+        names: [...snapshot.nodes.values()]
+          .filter(node => ['action', 'bundle', 'entity', 'field', 'query', 'view'].includes(node.kind))
+          .map(node => node.name),
+      }
+    }
+    if (command === 'locate') {
+      conversation.world.invalidate()
+      const snapshot = await conversation.world.snapshot()
+      const found = resolveTarget(snapshot, String(body['name'] ?? ''))
+      if (found === undefined) {
+        return { found: false }
+      }
+      const source = declarationSource(await conversation.world.files(), found)
+      return source === undefined ? { found: false } : { found: true, line: source.line, path: source.path }
     }
     if (command === 'send') {
       const text = String(body['message'] ?? '').trim()
