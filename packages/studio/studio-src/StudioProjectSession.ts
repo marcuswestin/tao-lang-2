@@ -329,6 +329,15 @@ const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
   { method: 'GET', path: '/api/preview/cell/bootstrap' },
   { method: 'POST', path: '/api/preview/cell/instance' },
   { method: 'POST', path: '/api/preview/cell/reconfigure' },
+  { method: 'GET', path: '/api/device/status' },
+  { method: 'POST', path: '/api/device/pairing/open' },
+  { method: 'POST', path: '/api/device/pairing/confirm' },
+  { method: 'POST', path: '/api/device/pairing/decline' },
+  { method: 'POST', path: '/api/device/revoke' },
+  { method: 'POST', path: '/api/device/reconnect' },
+  { method: 'POST', path: '/api/device/select-cell' },
+  { method: 'GET', path: '/api/device/launch' },
+  { method: 'POST', path: '/api/device/launch/open' },
   { method: 'WS', path: '/events' },
   { method: 'WS', path: '/api/language/lsp' },
 ]
@@ -460,6 +469,11 @@ export class StudioProjectSession {
 
   registerCellPreview(input: unknown): StudioCellRuntime {
     return this.#requireMatrix().registerInstance(cellInstanceIdentity(input))
+  }
+
+  /** unregisterCellPreview releases one live instance; a stale or unknown id is a no-op. */
+  unregisterCellPreview(previewInstanceId: string): void {
+    this.#matrix?.unregisterInstance(previewInstanceId)
   }
 
   reconfigureCell(input: unknown): StudioCellRuntime {
