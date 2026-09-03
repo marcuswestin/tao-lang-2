@@ -29,6 +29,8 @@ import {
   StudioFileTreeTransitions,
 } from '../studio-src/client/StudioFileTree'
 import {
+  awaitPreviewJourneyRecordingAcknowledgement,
+  configureInteractionMode,
   currentSourceIdentity,
   disconnectPreviews,
   handlePreviewMessage,
@@ -37,6 +39,7 @@ import {
   StudioActivePreview,
   StudioFixtureGenerationFeedback,
   StudioFixtureProposal,
+  StudioJourneyRecorder,
   StudioMatrixLayout,
   type StudioPreviewConnection,
   StudioPreviewFrameUrl,
@@ -44,6 +47,7 @@ import {
   StudioPreviewSuspension,
   studioReplayConfiguration,
   StudioRetainedPreview,
+  StudioReviewDom,
   StudioRuntimeData,
 } from '../studio-src/client/StudioMatrixView'
 import {
@@ -165,6 +169,10 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('Load failure capture')
   Expect(bundle).toContain('Paste failure capture')
   Expect(bundle).toContain('Replay captured state')
+  Expect(bundle).toContain('Record journey')
+  Expect(bundle).toContain('Retain sensitive text')
+  Expect(bundle).toContain('Save steps to scenario')
+  Expect(bundle).toContain('scenario-start-journey')
   Expect(bundle).toContain('Open failing source')
   Expect(bundle).toContain('set-scenario-arguments')
   Expect(bundle).toContain('scenarioGroupName')
@@ -447,6 +455,27 @@ Test('Studio Tao scenario actions require exact typed cell-bound payloads', () =
     kind: 'scenario-save-arguments',
   })
   Expect(parseScenarioPanelCommand(
+    'scenario-start-journey',
+    JSON.stringify({
+      captureSensitiveText: false,
+      cellId: 'cell:states:default',
+      cellRevision: 8,
+    }),
+  )).toEqual({
+    captureSensitiveText: false,
+    cellId: 'cell:states:default',
+    cellRevision: 8,
+    kind: 'scenario-start-journey',
+  })
+  Expect(parseScenarioPanelCommand(
+    'scenario-save-journey',
+    JSON.stringify({ cellId: 'cell:states:default', cellRevision: 8 }),
+  )).toEqual({
+    cellId: 'cell:states:default',
+    cellRevision: 8,
+    kind: 'scenario-save-journey',
+  })
+  Expect(parseScenarioPanelCommand(
     'scenario-replay-failure',
     JSON.stringify({
       cellId: 'cell:states:default',
@@ -478,6 +507,12 @@ Test('Studio Tao scenario actions require exact typed cell-bound payloads', () =
       JSON.stringify({ arguments: [], cellId: 'cell:states:default', cellRevision: 8 }),
     )
   ).toThrow('arguments require a JSON object')
+  Expect(() =>
+    parseScenarioPanelCommand(
+      'scenario-start-journey',
+      JSON.stringify({ cellId: 'cell:states:default', cellRevision: 8 }),
+    )
+  ).toThrow('sensitive-text choice')
   Expect(() =>
     parseScenarioPanelCommand(
       'scenario-unknown',
@@ -543,6 +578,14 @@ Test('Studio preview teardown releases observers and pending capture work', () =
     interactionMode: 'edit',
     origin: 'http://127.0.0.1:55102',
     previewInstanceId: 'preview-1',
+    journeyRecording: {
+      captureSensitiveText: false,
+      id: 'recording-1',
+      sequence: 0,
+      sourceIdentity: 'source-1',
+      status: 'recording',
+      steps: [],
+    },
     runtimeCaptureRequest: {
       reject(error: Error) {
         rejected = error.message
@@ -565,6 +608,40 @@ Test('Studio preview teardown releases observers and pending capture work', () =
   Expect(preview.iframe.src).toBe('about:blank')
   Expect(preview.runtimeCaptureRequest).toBeUndefined()
   Expect(preview.visibilityObserver).toBeUndefined()
+  Expect(preview.journeyRecording?.status).toBe('invalidated')
+})
+
+Test('Studio invalidates a browser-local recording when its iframe reloads', () => {
+  const iframe = new EventTarget() as HTMLIFrameElement
+  const messages: unknown[] = []
+  Object.defineProperty(iframe, 'contentWindow', {
+    value: {
+      postMessage(message: unknown) {
+        messages.push(message)
+      },
+    },
+  })
+  const preview = { ...previewConnection('preview-journey', 'novel', iframe.contentWindow!), iframe }
+  preview.journeyRecording = {
+    captureSensitiveText: false,
+    id: 'recording-1',
+    sequence: 1,
+    sourceIdentity: 'source-1',
+    status: 'recording',
+    steps: [{ kind: 'press', selector: 'tag', target: 'save' }],
+  }
+  const button = new EventTarget() as HTMLButtonElement
+  Object.assign(button, { dataset: {}, textContent: '', title: '' })
+
+  configureInteractionMode(
+    button,
+    [preview],
+    { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake,
+  )
+  iframe.dispatchEvent(new Event('load'))
+
+  Expect(preview.journeyRecording.status).toBe('invalidated')
+  Expect(messages.at(-1)).toMatchObject({ type: 'set-interaction-mode' })
 })
 
 Test('Studio Tao fixture capture rejects its pending action when the active preview reports failure', async () => {
@@ -603,7 +680,7 @@ Test('Studio Tao fixture capture rejects its pending action when the active prev
       },
       origin: preview.origin,
       source: previewWindow,
-    } as MessageEvent,
+    } as unknown as MessageEvent,
     preview,
     { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake,
     async () => undefined,
@@ -1071,6 +1148,301 @@ Test('Studio matrix groups cells by source order and diffs keyed reconciliation 
     removed: ['removed'],
     retained: ['novel'],
   })
+})
+
+Test('Studio review DOM publishes portable scenario identity and deterministic renderer metadata', () => {
+  const reviewCell = cell('/workspace/Garden.tao#scenario:states:novel')
+  const manifest = {
+    cells: [reviewCell],
+    compileRevision: 7,
+    manifestRevision: 'manifest-7',
+    project: { appName: 'Garden', entryPath: '/workspace/Garden.tao', root: '/workspace' },
+    scenarios: [scenario(reviewCell.scenarioId, 'states', '/workspace/Garden.tao')],
+    sourceVersions: {
+      '/workspace/Z.tao': 'z-1',
+      '/workspace/Garden.tao': 'garden-7',
+      '/elsewhere/Private.tao': 'outside',
+    },
+  } as unknown as StudioPreviewManifestV2
+
+  const environment = JSON.stringify({
+    network: reviewCell.environment.network,
+    scheme: reviewCell.environment.scheme,
+    viewport: reviewCell.environment.viewport,
+  })
+  const renderInputs = JSON.stringify({
+    arguments: {},
+    fixtureId: 'fixture',
+    prepare: [],
+    stateLayers: [],
+    steps: [],
+  })
+  Expect(StudioReviewDom.cell(manifest, reviewCell)).toEqual({
+    environment,
+    group: 'states',
+    key: JSON.stringify(['Garden.tao', 'states', reviewCell.scenarioId, renderInputs, environment]),
+    label: reviewCell.scenarioId,
+    renderInputs,
+  })
+  const argumentVariant = StudioReviewDom.cell(manifest, { ...reviewCell, args: { State: 'error' } })
+  const environmentVariant = StudioReviewDom.cell(manifest, {
+    ...reviewCell,
+    environment: {
+      ...reviewCell.environment,
+      viewport: { height: 1024, width: 768 },
+    },
+  })
+  Expect(argumentVariant?.key).not.toBe(StudioReviewDom.cell(manifest, reviewCell)?.key)
+  Expect(environmentVariant?.key).not.toBe(StudioReviewDom.cell(manifest, reviewCell)?.key)
+  Expect(JSON.parse(StudioReviewDom.manifest(manifest))).toEqual({
+    appName: 'Garden',
+    compileRevision: 7,
+    entryPath: 'Garden.tao',
+    manifestRevision: 'manifest-7',
+    sourceVersions: { 'Garden.tao': 'garden-7', 'Z.tao': 'z-1' },
+  })
+})
+
+Test('Studio review DOM readiness clears stale failure details', () => {
+  const frame = { dataset: {} } as unknown as HTMLElement
+  StudioReviewDom.status(frame, 'failed', 'Could not render')
+  Expect(frame.dataset['taoReviewStatus']).toBe('failed')
+  Expect(frame.dataset['taoReviewError']).toBe('Could not render')
+
+  StudioReviewDom.status(frame, 'pending')
+  Expect(frame.dataset['taoReviewStatus']).toBe('pending')
+  Expect(frame.dataset['taoReviewError']).toBeUndefined()
+  Expect(StudioReviewDom.appliedReady(undefined)).toBe(true)
+  Expect(StudioReviewDom.appliedReady('pending')).toBe(false)
+  Expect(StudioReviewDom.appliedReady('failed')).toBe(false)
+  Expect(StudioReviewDom.appliedReady('settled')).toBe(true)
+})
+
+Test('Studio journey recorder keeps semantic order, formats Tao, and fails closed on gaps', () => {
+  const identity = {
+    appName: 'Garden',
+    cellId: 'novel',
+    cellRevision: 0,
+    compileRevision: 1,
+    manifestRevision: 'manifest-1',
+    previewInstanceId: 'preview-1',
+    project: '/workspace',
+  }
+  const draft = {
+    captureSensitiveText: false,
+    id: 'recording-1',
+    sequence: 0,
+    sourceIdentity: 'source-1',
+    status: 'recording' as const,
+    steps: [],
+  }
+  const entered = StudioJourneyRecorder.receive(draft, {
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    recordingId: 'recording-1',
+    sequence: 1,
+    step: { kind: 'enter', redacted: false, selector: 'tag', target: 'title', value: 'Plan launch' },
+    type: 'preview-journey-step-recorded',
+  })
+  Expect(entered.steps.map(StudioJourneyRecorder.formatStep)).toEqual([
+    'enter "Plan launch" into #title',
+  ])
+  Expect(StudioJourneyRecorder.formatStep({
+    action: 'press',
+    kind: 'unresolved',
+    reason: 'No unique Tao tag, accessibility label, placeholder, or visible text identifies this target.',
+  })).toContain('press: unresolved')
+
+  const duplicate = StudioJourneyRecorder.receive(entered, {
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    recordingId: 'recording-1',
+    sequence: 1,
+    step: { kind: 'press', selector: 'text', target: 'Save' },
+    type: 'preview-journey-step-recorded',
+  })
+  Expect(duplicate).toBe(entered)
+
+  const gap = StudioJourneyRecorder.receive(entered, {
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    recordingId: 'recording-1',
+    sequence: 3,
+    step: { kind: 'submit', selector: 'label', target: 'Task title' },
+    type: 'preview-journey-step-recorded',
+  })
+  Expect(gap.status).toBe('invalidated')
+})
+
+Test('Studio journey recording waits for an exact ready preview and its acknowledgement', async () => {
+  const preview = previewConnection('preview-journey-ready', 'novel', {})
+  preview.appliedRevision = 1
+  preview.expectedRevision = 1
+  Expect(StudioJourneyRecorder.canStart(preview)).toBe(true)
+
+  preview.journeyReplayStatus = 'pending'
+  Expect(StudioJourneyRecorder.canStart(preview)).toBe(false)
+  preview.journeyReplayStatus = 'settled'
+  preview.suspended = true
+  Expect(StudioJourneyRecorder.canStart(preview)).toBe(false)
+  preview.suspended = false
+  preview.appliedRevision = 0
+  Expect(StudioJourneyRecorder.canStart(preview)).toBe(false)
+
+  preview.appliedRevision = 1
+  preview.journeyRecording = {
+    captureSensitiveText: false,
+    id: 'recording-ack',
+    sequence: 0,
+    sourceIdentity: 'source-1',
+    status: 'starting',
+    steps: [],
+  }
+  const acknowledged = StudioJourneyRecorder.receive(preview.journeyRecording, {
+    channel: studioProtocolChannel,
+    identity: { ...preview.cellIdentity!, previewInstanceId: preview.previewInstanceId },
+    protocolVersion: studioProtocolVersion,
+    recordingId: 'recording-ack',
+    sequence: 0,
+    status: 'recording',
+    type: 'preview-journey-recording-state',
+  })
+  Expect(acknowledged.status).toBe('recording')
+
+  preview.journeyRecording = { ...preview.journeyRecording, id: 'recording-timeout' }
+  let changes = 0
+  preview.changed = () => {
+    changes += 1
+  }
+  awaitPreviewJourneyRecordingAcknowledgement(preview, 'recording-timeout', 1)
+  await until(() => preview.journeyRecording?.status === 'invalidated', {
+    description: 'the unacknowledged journey recording to invalidate',
+    intervalMs: 0,
+  })
+  Expect(changes).toBe(1)
+})
+
+Test('Studio journey replies require the active exact cell identity', async () => {
+  const contentWindow = {}
+  const preview = previewConnection('preview-journey', 'novel', contentWindow)
+  preview.journeyRecording = {
+    captureSensitiveText: false,
+    id: 'recording-1',
+    sequence: 0,
+    sourceIdentity: 'source-1',
+    status: 'recording',
+    steps: [],
+  }
+  let changes = 0
+  await handlePreviewMessage(
+    {
+      data: {
+        channel: studioProtocolChannel,
+        identity: {
+          ...preview.cellIdentity,
+          cellRevision: preview.cellIdentity!.cellRevision + 1,
+          previewInstanceId: preview.previewInstanceId,
+        },
+        protocolVersion: studioProtocolVersion,
+        recordingId: 'recording-1',
+        sequence: 1,
+        step: { kind: 'press', selector: 'tag', target: 'save' },
+        type: 'preview-journey-step-recorded',
+      },
+      origin: preview.origin,
+      source: contentWindow,
+    } as unknown as MessageEvent,
+    preview,
+    { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake,
+    async () => undefined,
+    {
+      async applySourceAction() {},
+      changed() {
+        changes += 1
+      },
+      inspect() {},
+    },
+  )
+
+  Expect(preview.journeyRecording.status).toBe('invalidated')
+  Expect(preview.journeyRecording.steps).toEqual([])
+  preview.journeyRecording = { ...preview.journeyRecording, status: 'recording' }
+  await handlePreviewMessage(
+    {
+      data: {
+        channel: studioProtocolChannel,
+        identity: {
+          ...preview.cellIdentity,
+          compileRevision: preview.cellIdentity!.compileRevision + 1,
+          previewInstanceId: preview.previewInstanceId,
+        },
+        protocolVersion: studioProtocolVersion,
+        recordingId: 'recording-1',
+        sequence: 0,
+        status: 'stopped',
+        type: 'preview-journey-recording-state',
+      },
+      origin: preview.origin,
+      source: contentWindow,
+    } as unknown as MessageEvent,
+    preview,
+    { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake,
+    async () => undefined,
+    {
+      async applySourceAction() {},
+      changed() {
+        changes += 1
+      },
+      inspect() {},
+    },
+  )
+  Expect(preview.journeyRecording.status).toBe('invalidated')
+  Expect(changes).toBe(2)
+})
+
+Test('Studio review waits for authenticated journey replay settlement', async () => {
+  const contentWindow = { postMessage() {} }
+  const preview = previewConnection('preview-journey', 'novel', contentWindow)
+  const frame = { dataset: {} } as unknown as HTMLElement
+  preview.frame = frame
+  preview.journeyReplayStatus = 'pending'
+  StudioReviewDom.status(frame, 'pending')
+  const identity = { ...preview.cellIdentity, previewInstanceId: preview.previewInstanceId }
+  const actions = { async applySourceAction() {}, inspect() {} }
+  const handshake = { identity: { appName: 'Garden', project: '/workspace' } } as StudioHandshake
+  const send = async (data: unknown): Promise<void> =>
+    await handlePreviewMessage(
+      { data, origin: preview.origin, source: contentWindow } as unknown as MessageEvent,
+      preview,
+      handshake,
+      async () => undefined,
+      actions,
+    )
+
+  Expect(frame.dataset['taoReviewStatus']).toBe('pending')
+
+  await send({
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    type: 'preview-journey-replay-settled',
+  })
+  Expect(frame.dataset['taoReviewStatus']).toBe('ready')
+
+  preview.journeyReplayStatus = 'pending'
+  StudioReviewDom.status(frame, 'pending')
+  await send({
+    channel: studioProtocolChannel,
+    error: 'Save was not found.',
+    identity,
+    protocolVersion: studioProtocolVersion,
+    type: 'preview-journey-replay-failed',
+  })
+  Expect(frame.dataset['taoReviewStatus']).toBe('failed')
+  Expect(frame.dataset['taoReviewError']).toBe('Save was not found.')
 })
 
 Test('Studio command palette indexes files, views, grouped scenarios, commands, and insertions', () => {

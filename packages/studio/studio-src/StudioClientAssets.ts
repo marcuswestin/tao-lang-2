@@ -564,7 +564,7 @@ button { color: inherit; font: inherit; }
   min-width: 110px; padding: 4px 6px;
 }
 .studio-preview-cell-apply:disabled, .studio-preview-cell-promote:disabled,
-.studio-preview-cell-capture:disabled, .studio-preview-cell-generate:disabled { cursor: wait; opacity: .55; }
+.studio-preview-cell-capture:disabled, .studio-preview-cell-generate:disabled { cursor: default; opacity: .55; }
 .studio-preview-cell-status { color: #91a096; font-size: 10px; overflow-wrap: anywhere; }
 .studio-preview-cell-status[data-state="error"] { color: #ff9c8c; }
 .studio-scenario-inspector { border-bottom: 1px solid #353936; margin: -2px -2px 10px; padding: 0 2px 12px; }

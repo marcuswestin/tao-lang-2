@@ -24,6 +24,62 @@ const expectation = {
 } as const
 
 Describe('Studio protocol v1', () => {
+  Test('validates exact-cell journey recording commands and ordered semantic replies', () => {
+    const cellIdentity = {
+      ...identity,
+      cellId: 'cell-phone',
+      cellRevision: 2,
+      compileRevision: 7,
+      manifestRevision: 'manifest-7',
+    }
+    const control = {
+      active: true,
+      channel: studioProtocolChannel,
+      identity: cellIdentity,
+      protocolVersion: studioProtocolVersion,
+      recordingId: 'recording-1',
+      type: 'set-journey-recording',
+    }
+    const recorded = {
+      channel: studioProtocolChannel,
+      identity: cellIdentity,
+      protocolVersion: studioProtocolVersion,
+      recordingId: 'recording-1',
+      sequence: 1,
+      step: { kind: 'enter', redacted: true, selector: 'label', target: 'Password', value: '' },
+      type: 'preview-journey-step-recorded',
+    }
+    const settled = {
+      channel: studioProtocolChannel,
+      identity: cellIdentity,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-journey-replay-settled',
+    }
+    const failed = { ...settled, error: 'Save button was not found.', type: 'preview-journey-replay-failed' }
+
+    Expect(StudioProtocol.parseMessage(control)).toMatchObject({ active: true, recordingId: 'recording-1' })
+    Expect(StudioProtocol.parseMessage(recorded)).toMatchObject({ sequence: 1, step: recorded.step })
+    Expect(StudioProtocol.parseMessage(settled)).toMatchObject({ type: 'preview-journey-replay-settled' })
+    Expect(StudioProtocol.parseMessage(failed)).toMatchObject({
+      error: 'Save button was not found.',
+      type: 'preview-journey-replay-failed',
+    })
+    Expect(StudioProtocol.parseMessage({ ...control, identity })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...recorded, sequence: 0 })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...settled, identity })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...failed, error: '' })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...recorded, step: { ...recorded.step, redacted: undefined } }))
+      .toBeUndefined()
+    Expect(StudioProtocol.parseMessage({
+      ...recorded,
+      step: {
+        action: 'press',
+        kind: 'unresolved',
+        reason: 'No unique Tao tag, accessibility label, placeholder, or visible text identifies this target.',
+      },
+    })).toMatchObject({ step: { action: 'press', kind: 'unresolved' } })
+  })
+
   Test('parses finite non-negative preview layout measurements and rejects invalid geometry', () => {
     const message = {
       channel: studioProtocolChannel,

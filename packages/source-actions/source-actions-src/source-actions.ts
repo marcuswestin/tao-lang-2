@@ -13,6 +13,7 @@ import {
 import {
   StudioActions,
   type StudioAddSketchEntityParameterPatchRequest,
+  type StudioAppendScenarioStepsPatchRequest,
   type StudioBindSketchFieldPatchRequest,
   type StudioComponentKind,
   type StudioInsertCapturedFixturePatchRequest,
@@ -112,6 +113,7 @@ const SourceActions = {
 export {
   type SourceActionOptions,
   type StudioAddSketchEntityParameterPatchRequest,
+  type StudioAppendScenarioStepsPatchRequest,
   type StudioBindSketchFieldPatchRequest,
   type StudioComponentKind,
   type StudioInsertCapturedFixturePatchRequest,

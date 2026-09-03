@@ -214,6 +214,27 @@ export type StudioSetScenarioArgumentsPatchRequest = {
   scenarioName: string
 }
 
+export type StudioRecordedScenarioStep =
+  | Readonly<{
+    kind: 'press' | 'submit'
+    selector: 'label' | 'placeholder' | 'tag' | 'text'
+    target: string
+  }>
+  | Readonly<{
+    kind: 'enter'
+    selector: 'label' | 'placeholder' | 'tag' | 'text'
+    target: string
+    value: string
+  }>
+
+/** Appends reviewed semantic interactions to one exact authored scenario. */
+export type StudioAppendScenarioStepsPatchRequest = {
+  kind: 'append-scenario-steps'
+  scenarioGroupName: string
+  scenarioName: string
+  steps: readonly StudioRecordedScenarioStep[]
+}
+
 /** StudioInsertCapturedFixturePatchRequest accepts a reviewed runtime-data capture into Tao source. */
 export type StudioInsertCapturedFixturePatchRequest = {
   fixtureName: string
@@ -303,6 +324,7 @@ export type StudioUnsnapSketchFromFlowPatchRequest = Readonly<{
 /** StudioSourcePatchRequest declares one semantic visual source mutation from Studio. */
 export type StudioSourcePatchRequest =
   | StudioAddSketchEntityParameterPatchRequest
+  | StudioAppendScenarioStepsPatchRequest
   | StudioBindSketchFieldPatchRequest
   | StudioInsertCapturedFixturePatchRequest
   | StudioInsertComponentPatchRequest
@@ -336,6 +358,7 @@ export type StudioSourcePatch = {
 /** StudioActions exposes source transforms used by Tao Studio visual editing. */
 export const StudioActions = {
   addSketchEntityParameter,
+  appendScenarioSteps,
   applyPatch,
   bindSketchField,
   insertCapturedFixture,
@@ -378,6 +401,7 @@ async function applyPatchContent(
   validateOccurrencePrecondition(document, request, context.occurrence)
   return await Switch.kind(request, {
     'add-sketch-entity-parameter': async action => await addSketchEntityParameter(document, action, context),
+    'append-scenario-steps': async action => await appendScenarioSteps(document, action),
     'bind-sketch-field': async action => await bindSketchField(document, action),
     'insert-captured-fixture': async action => await insertCapturedFixture(document, action),
     'insert-component': async action => await insertComponent(document, action.component, action),
@@ -393,6 +417,71 @@ async function applyPatchContent(
     'unsnap-sketch-from-flow': async action => await unsnapSketchFromFlow(document, action),
     'wrap-render': async action => await wrapRender(document, action),
   })
+}
+
+async function appendScenarioSteps(
+  document: AST.Document,
+  request: StudioAppendScenarioStepsPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireScenarioIdentity(request.scenarioGroupName, request.scenarioName)
+  if (!Array.isArray(request.steps) || request.steps.length === 0 || request.steps.length > 100) {
+    throw new Errors.UserInputError('Studio journey recording must contain between 1 and 100 interactions.')
+  }
+  const groups = document.parseResult.value.statements
+    .filter(AST.isScenarioGroupDeclaration)
+    .filter(group => group.name === request.scenarioGroupName)
+  const scenarios = groups.flatMap(group => AST.scenarioDeclarations(group))
+    .filter(scenario => scenario.name === request.scenarioName)
+  if (groups.length !== 1 || scenarios.length !== 1 || scenarios[0]?.block.$cstNode === undefined) {
+    throw new Errors.UserInputError(
+      `Studio scenario is not uniquely declared in this source file: ${request.scenarioGroupName} / ${request.scenarioName}`,
+    )
+  }
+  const steps = request.steps.map(recordedScenarioStepSource)
+  const source = document.textDocument.getText()
+  const offset = scenarios[0].block.$cstNode.end - 1
+  return await formatAndReparse(
+    document,
+    applySourceEdits(source, [{
+      end: offset,
+      replacement: `\n${steps.join('\n')}\n`,
+      start: offset,
+    }]),
+  )
+}
+
+function recordedScenarioStepSource(step: StudioRecordedScenarioStep): string {
+  requireExactKeys(
+    step,
+    step.kind === 'enter' ? ['kind', 'selector', 'target', 'value'] : ['kind', 'selector', 'target'],
+    'Recorded scenario step',
+  )
+  if (step.kind !== 'press' && step.kind !== 'submit' && step.kind !== 'enter') {
+    throw new Errors.UserInputError('Studio journey recording contains an unsupported interaction.')
+  }
+  if (!['label', 'placeholder', 'tag', 'text'].includes(step.selector) || step.target.trim() === '') {
+    throw new Errors.UserInputError('Studio journey recording contains an invalid semantic target.')
+  }
+  const target = step.selector === 'tag'
+    ? recordedScenarioTag(step.target)
+    : `${step.selector} ${taoStringLiteral(step.target)}`
+  return step.kind === 'enter'
+    ? `enter ${taoStringLiteral(step.value)} into ${target}`
+    : `${step.kind} ${target}`
+}
+
+function recordedScenarioTag(value: string): string {
+  if (!/^[A-Za-z0-9_]+$/.test(value)) {
+    throw new Errors.UserInputError(`Studio journey recording tag is invalid: ${value}`)
+  }
+  return `#${value}`
+}
+
+function requireScenarioIdentity(group: string, scenario: string): void {
+  if (group.trim() === '' || scenario.trim() === '' || /[\u0000-\u001f\u007f]/u.test(group + scenario)) {
+    throw new Errors.UserInputError('Studio journey recording scenario identity is invalid.')
+  }
 }
 
 function validateOccurrencePrecondition(
@@ -431,6 +520,7 @@ function validateOccurrencePrecondition(
 function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | undefined {
   return Switch.kind(request, {
     'add-sketch-entity-parameter': () => undefined,
+    'append-scenario-steps': () => undefined,
     'bind-sketch-field': action => action.renderId,
     'insert-captured-fixture': () => undefined,
     'insert-component': action => action.beforeId ?? action.afterId,

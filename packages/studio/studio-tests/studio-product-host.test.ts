@@ -30,6 +30,13 @@ import {
   StudioScenarioArgumentsPayload,
   StudioScenarioArgumentsValid,
   StudioScenarioCapturedLayers,
+  StudioScenarioJourneyActive,
+  StudioScenarioJourneyCanRecord,
+  StudioScenarioJourneyCanSave,
+  StudioScenarioJourneyCommand,
+  StudioScenarioJourneyLines,
+  StudioScenarioJourneyPayload,
+  StudioScenarioJourneyStatus,
   StudioScenarioUpdateArgumentDraft,
   TreeFileRow,
   type TreeFileRowProps,
@@ -70,7 +77,7 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).not.toContain('StackNav')
   Expect(source).not.toContain('Title "Tao Studio"')
   Expect(source).not.toContain('FormButton(')
-  Expect(source).toContain('use Button, Col, Picker, Text, TextInput from @tao/ui')
+  Expect(source).toContain('use Button, Checkbox, Col, Picker, Text, TextInput from @tao/ui')
   Expect(source).toContain('view StudioScenarioEnvironment(')
   Expect(source).not.toContain('view StudioScenarioEnvironmentControls(')
   Expect(source).toContain('state Drafts = StudioScenarioArgumentDrafts(State)')
@@ -100,8 +107,15 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).toContain(
     'accepts content slots @files, @components, @projectViews, @screens, @tokens, @search, @drawer, @scenario, @editor, @inspector',
   )
-  Expect(source).toContain('@scenario StudioScenarioPanel(State: "null", ResolvedAppearance: "light")')
-  Expect(source).toContain('view StudioScenarioPanel(State text, ResolvedAppearance text)')
+  Expect(source).toContain(
+    '@scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")',
+  )
+  Expect(source).toContain(
+    'view StudioScenarioPanel(State text, JourneyRecording text, JourneyRecordable boolean, ResolvedAppearance text)',
+  )
+  Expect(source).toContain('StudioScenarioControlGroup("Record interaction")')
+  Expect(source).toContain('Name: StudioScenarioJourneyCommand(JourneyRecording)')
+  Expect(source).toContain('Name: "scenario-save-journey"')
   Expect(source).toContain('query Files as Children')
   Expect(source).toContain('FileTree(FolderPath: File.Path')
   Expect(source).toContain('do CreateFile(NewPath)')
@@ -252,6 +266,53 @@ Test('Tao scenario helpers preserve cell identity and author only resolved appea
   Expect(() => StudioScenarioArgumentsPayload(state, drafts, 'system')).toThrow(
     'resolved light or dark scenario appearance',
   )
+})
+
+Test('Tao scenario journey helpers expose safe semantic drafts to the visible panel', () => {
+  const state = JSON.stringify({
+    arguments: {},
+    capturedLayers: [],
+    cell: { compileRevision: 7, id: 'cell:states:phone', manifestRevision: 'manifest-7', revision: 3 },
+    entry: { id: 'scenario-card', label: 'Card', subjectId: 'view:Card' },
+    group: { id: 'group:states', label: 'states', sourcePath: 'Scenarios.tao' },
+    parameters: [],
+    sourceIdentity: { appName: 'Garden', path: 'Scenarios.tao', project: '/project' },
+    version: 1,
+  })
+  const recording = JSON.stringify({
+    busy: false,
+    captureSensitiveText: false,
+    id: 'recording-1',
+    status: 'stopped',
+    steps: [
+      { kind: 'press', selector: 'tag', target: 'open-card' },
+      { kind: 'enter', redacted: false, selector: 'label', target: 'Name', value: 'Ada' },
+    ],
+  })
+
+  Expect(StudioScenarioJourneyActive(recording)).toBe(false)
+  Expect(StudioScenarioJourneyCanRecord(state, recording, true)).toBe(false)
+  Expect(StudioScenarioJourneyCanRecord(state, 'null', true)).toBe(true)
+  Expect(StudioScenarioJourneyCanRecord(state, 'null', false)).toBe(false)
+  Expect(StudioScenarioJourneyCanSave(recording)).toBe(true)
+  Expect(StudioScenarioJourneyCommand(recording)).toBe('scenario-start-journey')
+  Expect(StudioScenarioJourneyLines(recording)).toEqual([
+    'press #open-card',
+    'enter "Ada" into label "Name"',
+  ])
+  Expect(StudioScenarioJourneyStatus(recording)).toContain('2 steps ready')
+  Expect(JSON.parse(StudioScenarioJourneyPayload(state, true))).toEqual({
+    captureSensitiveText: true,
+    cellId: 'cell:states:phone',
+    cellRevision: 3,
+  })
+
+  const redacted = JSON.stringify({
+    ...JSON.parse(recording),
+    steps: [{ kind: 'enter', redacted: true, selector: 'tag', target: 'password', value: '' }],
+  })
+  Expect(StudioScenarioJourneyCanSave(redacted)).toBe(false)
+  Expect(StudioScenarioJourneyStatus(redacted)).toContain('Sensitive text was redacted')
 })
 
 Test('Tao-owned inspector layout drafts retain invalid text and emit only current typed actions', () => {

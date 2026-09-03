@@ -90,6 +90,32 @@ function createCommands(): Command {
     })
 
   commands
+    .command('review')
+    .argument('[path]', 'Tao project directory to capture in Studio.', '.')
+    .option('--app <name>', 'Select a named app within the project.')
+    .option('--against <review>', 'Compare with an earlier review.json manifest.')
+    .option('--output <directory>', 'Write the immutable review artifact to this new directory.')
+    .description('Capture every Studio scenario as a portable web visual review.')
+    .action(async (path: string, options: { against?: string; app?: string; output?: string }) => {
+      try {
+        const { runStudioReview } = await import('tao-dev/studio-review')
+        const result = await runStudioReview(path, {
+          against: options.against,
+          appName: options.app,
+          artifactRoot: options.output,
+        })
+        const counts = Object.entries(result.statusCounts)
+          .filter(([, count]) => count > 0)
+          .map(([status, count]) => `${count} ${status}`)
+          .join(', ')
+        HCI.writeSuccess(`Captured Tao visual review: ${FS.displayPath(result.reportPath)} (${counts})\n`)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
     .command('compile')
     .argument('<appPath>', 'Tao app path to compile into the local runtime package.')
     .option('--app <name>', 'Select a named app when the file declares multiple apps.')

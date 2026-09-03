@@ -20,10 +20,14 @@ import {
   type StudioFixtureValue,
   type StudioJsonObject,
   type StudioJsonValue,
+  type StudioPreviewIdentity,
+  type StudioPreviewJourneyRecordingStateMessage,
+  type StudioPreviewJourneyStepRecordedMessage,
   type StudioPreviewRuntimeUpdateMessage,
   StudioProtocol,
   studioProtocolChannel,
   studioProtocolVersion,
+  type StudioRecordedJourneyStep,
   type StudioRuntimeCaptureArtifact,
   type StudioSourceActionEnvelope,
   type StudioSourceActionIdentity,
@@ -167,6 +171,159 @@ export const StudioMatrixView = {
   },
   reconcile: reconcileMatrix,
   renderSketches: renderMatrixSketches,
+} as const
+
+export type StudioReviewCellMetadata = Readonly<{
+  environment: string
+  group: string
+  key: string
+  label: string
+  renderInputs: string
+}>
+
+function canonicalReviewJson(value: unknown): string {
+  const normalize = (input: unknown): unknown =>
+    Array.isArray(input)
+      ? input.map(normalize)
+      : input !== null && typeof input === 'object'
+      ? Object.fromEntries(
+        Object.entries(input).sort(([left], [right]) => left.localeCompare(right)).map(
+          ([key, entry]) => [key, normalize(entry)],
+        ),
+      )
+      : input
+  return JSON.stringify(normalize(value))
+}
+
+/** Stable browser markers let review tooling capture cells without understanding Studio internals. */
+export const StudioReviewDom = {
+  appliedReady(journeyReplayStatus: StudioPreviewConnection['journeyReplayStatus']): boolean {
+    return journeyReplayStatus === undefined || journeyReplayStatus === 'settled'
+  },
+  cell(
+    manifest: StudioPreviewManifestV2,
+    cell: StudioPreviewCell,
+  ): StudioReviewCellMetadata | undefined {
+    const scenario = manifest.scenarios.find(candidate => candidate.scenarioId === cell.scenarioId)
+    if (scenario === undefined) {
+      return undefined
+    }
+    const sourcePath = projectRelativePath(manifest.project.root, scenario.source.path)
+    if (sourcePath === undefined) {
+      return undefined
+    }
+    const environment = canonicalReviewJson({
+      network: cell.environment.network,
+      scheme: cell.environment.scheme,
+      viewport: cell.environment.viewport,
+    })
+    const renderInputs = canonicalReviewJson({
+      arguments: cell.args,
+      fixtureId: scenario.fixtureId ?? null,
+      prepare: scenario.prepare,
+      stateLayers: cell.stateLayers,
+      steps: scenario.steps ?? [],
+    })
+    return {
+      environment,
+      group: scenario.group,
+      key: JSON.stringify([sourcePath, scenario.group, scenario.label, renderInputs, environment]),
+      label: scenario.label,
+      renderInputs,
+    }
+  },
+  manifest(manifest: StudioPreviewManifestV2): string {
+    const sourceVersions = Object.fromEntries(
+      Object.entries(manifest.sourceVersions)
+        .flatMap(([path, version]) => {
+          const relative = projectRelativePath(manifest.project.root, path)
+          return relative === undefined ? [] : [[relative, version] as const]
+        })
+        .sort(([left], [right]) => left.localeCompare(right)),
+    )
+    return JSON.stringify({
+      appName: manifest.project.appName,
+      compileRevision: manifest.compileRevision,
+      entryPath: projectRelativePath(manifest.project.root, manifest.project.entryPath)
+        ?? manifest.project.entryPath,
+      manifestRevision: manifest.manifestRevision,
+      sourceVersions,
+    })
+  },
+  status(frame: HTMLElement, status: 'failed' | 'pending' | 'ready', error?: string): void {
+    frame.dataset['taoReviewStatus'] = status
+    if (error === undefined) {
+      delete frame.dataset['taoReviewError']
+    } else {
+      frame.dataset['taoReviewError'] = error
+    }
+  },
+} as const
+
+export type StudioJourneyRecordingDraft = Readonly<{
+  captureSensitiveText: boolean
+  id: string
+  sequence: number
+  sourceIdentity: string
+  status: 'invalidated' | 'recording' | 'starting' | 'stopped'
+  steps: readonly StudioRecordedJourneyStep[]
+}>
+
+export const StudioJourneyRecorder = {
+  canStart(preview: StudioPreviewConnection): boolean {
+    const identity = preview.cellIdentity
+    const appliedRevision = preview.appliedRevision
+    return identity !== undefined
+      && preview.iframe.contentWindow !== null
+      && preview.suspended !== true
+      && appliedRevision !== undefined
+      && appliedRevision >= identity.compileRevision
+      && (preview.expectedRevision === undefined || appliedRevision >= preview.expectedRevision)
+      && StudioReviewDom.appliedReady(preview.journeyReplayStatus)
+  },
+  formatStep(step: StudioRecordedJourneyStep): string {
+    if (step.kind === 'unresolved') {
+      return `${step.action}: unresolved — ${step.reason}`
+    }
+    const target = step.selector === 'tag'
+      ? `#${step.target}`
+      : step.selector === 'text'
+      ? JSON.stringify(step.target)
+      : `${step.selector} ${JSON.stringify(step.target)}`
+    return step.kind === 'enter'
+      ? `enter ${step.redacted ? '<redacted>' : JSON.stringify(step.value)} into ${target}`
+      : `${step.kind} ${target}`
+  },
+  receive(
+    draft: StudioJourneyRecordingDraft,
+    message: StudioPreviewJourneyRecordingStateMessage | StudioPreviewJourneyStepRecordedMessage,
+  ): StudioJourneyRecordingDraft {
+    if (message.recordingId !== draft.id) {
+      return draft
+    }
+    if (message.type === 'preview-journey-recording-state') {
+      if (message.sequence < draft.sequence || draft.status === 'invalidated') {
+        return draft
+      }
+      if (message.sequence > draft.sequence) {
+        return { ...draft, status: 'invalidated' }
+      }
+      if (draft.status === 'stopped' && message.status !== 'invalidated') {
+        return draft
+      }
+      return { ...draft, status: message.status }
+    }
+    if (message.sequence <= draft.sequence) {
+      return draft
+    }
+    if (message.sequence !== draft.sequence + 1 || draft.status !== 'recording' || draft.steps.length >= 100) {
+      return { ...draft, status: 'invalidated' }
+    }
+    return { ...draft, sequence: message.sequence, steps: [...draft.steps, message.step] }
+  },
+  invalidate(draft: StudioJourneyRecordingDraft): StudioJourneyRecordingDraft {
+    return draft.status === 'invalidated' ? draft : { ...draft, status: 'invalidated' }
+  },
 } as const
 
 const mountedSketches = new WeakMap<HTMLElement, MountedMatrixSketches>()
@@ -550,6 +707,9 @@ export type StudioPreviewConnection = {
   reconfigureEnvironment?: (environment: StudioCellEnvironment) => Promise<void>
   reconfigureArguments?: (args: StudioJsonObject) => Promise<void>
   refresh?: Promise<void>
+  journeyRecording?: StudioJourneyRecordingDraft
+  journeyRecordingTimeout?: ReturnType<typeof setTimeout>
+  journeyReplayStatus?: 'failed' | 'pending' | 'settled'
   revisionTimeout?: ReturnType<typeof setTimeout>
   replayRuntimeCapture?: (capture: StudioRuntimeCaptureArtifact) => Promise<void>
   runtimeCaptureRequest?: {
@@ -563,6 +723,7 @@ export type StudioPreviewConnection = {
   scenarioModel?: StudioScenarioControlModel
   scenarioControls?: HTMLFormElement
   scenarioLabel?: string
+  setInteractionMode?: (mode: StudioInteractionMode) => void
   changed?: () => void
   sourceSyncDisconnect?: () => void
   suspended?: boolean
@@ -575,6 +736,7 @@ export function disconnectPreviews(
   reason = 'The Tao Studio preview was disconnected.',
 ): void {
   for (const preview of previews) {
+    invalidatePreviewJourneyRecording(preview)
     if (preview.revisionTimeout !== undefined) {
       clearTimeout(preview.revisionTimeout)
       preview.revisionTimeout = undefined
@@ -595,6 +757,42 @@ export function disconnectPreviews(
     preview.sourceSyncDisconnect = undefined
     preview.iframe.src = 'about:blank'
   }
+}
+
+/** Any preview-lifecycle boundary makes a browser-local recording unsafe to save. */
+export function invalidatePreviewJourneyRecording(preview: StudioPreviewConnection): void {
+  if (preview.journeyRecordingTimeout !== undefined) {
+    clearTimeout(preview.journeyRecordingTimeout)
+    preview.journeyRecordingTimeout = undefined
+  }
+  if (preview.journeyRecording === undefined) {
+    return
+  }
+  const invalidated = StudioJourneyRecorder.invalidate(preview.journeyRecording)
+  if (invalidated === preview.journeyRecording) {
+    return
+  }
+  preview.journeyRecording = invalidated
+  preview.changed?.()
+}
+
+/** Recording starts only after the exact preview acknowledges the request. */
+export function awaitPreviewJourneyRecordingAcknowledgement(
+  preview: StudioPreviewConnection,
+  recordingId: string,
+  timeoutMs = 5_000,
+): void {
+  if (preview.journeyRecordingTimeout !== undefined) {
+    clearTimeout(preview.journeyRecordingTimeout)
+  }
+  preview.journeyRecordingTimeout = setTimeout(() => {
+    preview.journeyRecordingTimeout = undefined
+    const draft = preview.journeyRecording
+    if (draft?.id === recordingId && draft.status === 'starting') {
+      preview.journeyRecording = StudioJourneyRecorder.invalidate(draft)
+      preview.changed?.()
+    }
+  }, timeoutMs)
 }
 
 /** StudioPreviewSourceSync keeps source identity available across an iframe's initial load and reloads. */
@@ -751,6 +949,10 @@ export async function connectPreviews(
         renderCellPreview(frame, connection, previewUrl, manifest)
       },
     )
+    const canvas = parent.querySelector<HTMLElement>(':scope > .studio-preview-grid')
+    if (canvas !== null) {
+      canvas.dataset['taoReviewManifest'] = StudioReviewDom.manifest(manifest)
+    }
     StudioMatrixView.renderSketches(parent, handshake.identity.project, handshake.sketchCatalog)
     return connections
   }
@@ -859,7 +1061,11 @@ export function configureInteractionMode(
     }
   }
   for (const preview of previews) {
-    preview.iframe.addEventListener('load', () => postInteractionMode(preview, handshake))
+    preview.setInteractionMode = setMode
+    preview.iframe.addEventListener('load', () => {
+      invalidatePreviewJourneyRecording(preview)
+      postInteractionMode(preview, handshake)
+    })
   }
   button.addEventListener('click', () => setMode(button.dataset['mode'] === 'edit' ? 'run' : 'edit'))
   setMode('edit')
@@ -909,6 +1115,7 @@ function renderCellPreview(
   const cell = connection.cell!
   frame.style.width = `${Math.max(320, cell.environment.viewport.width)}px`
   const scenario = manifest.scenarios.find(candidate => candidate.scenarioId === cell.scenarioId)
+  connection.journeyReplayStatus = (scenario?.steps?.length ?? 0) > 0 ? 'pending' : undefined
   const subjectParameters = manifest.parametersBySubject[scenario?.subjectId ?? ''] ?? []
   const modeled = StudioScenarioControls.fromManifest({
     cell,
@@ -919,6 +1126,21 @@ function renderCellPreview(
   })
   const scenarioModel = modeled.ok ? modeled.value : undefined
   connection.scenarioModel = scenarioModel
+  const review = StudioReviewDom.cell(manifest, cell)
+  if (review === undefined) {
+    delete frame.dataset['taoReviewKey']
+    delete frame.dataset['taoReviewLabel']
+    delete frame.dataset['taoReviewGroup']
+    delete frame.dataset['taoReviewEnvironment']
+    delete frame.dataset['taoReviewRenderInputs']
+  } else {
+    frame.dataset['taoReviewKey'] = review.key
+    frame.dataset['taoReviewLabel'] = review.label
+    frame.dataset['taoReviewGroup'] = review.group
+    frame.dataset['taoReviewEnvironment'] = review.environment
+    frame.dataset['taoReviewRenderInputs'] = review.renderInputs
+  }
+  StudioReviewDom.status(frame, 'pending')
   const label = document.createElement('header')
   label.className = 'studio-preview-cell-label'
   label.textContent = scenario?.label ?? cell.scenarioId
@@ -1002,8 +1224,22 @@ function renderCellPreview(
     replayFile,
     status,
   )
-  form.append(argumentControls.element, viewportControls.element, networkControls.element, schemeControls, actions)
+  form.append(
+    argumentControls.element,
+    viewportControls.element,
+    networkControls.element,
+    schemeControls,
+    actions,
+  )
   connection.scenarioControls = form
+
+  const sourceIdentity = JSON.stringify(scenarioModel?.sourceIdentity) ?? ''
+  if (
+    connection.journeyRecording !== undefined
+    && connection.journeyRecording.sourceIdentity !== sourceIdentity
+  ) {
+    invalidatePreviewJourneyRecording(connection)
+  }
 
   const viewport = document.createElement('div')
   viewport.className = 'studio-preview-cell-viewport'
@@ -1660,6 +1896,7 @@ function observePreviewVisibility(frame: HTMLElement, connection: StudioPreviewC
     )
     const transition = StudioPreviewSuspension.transition(connection.suspended === true, visible)
     if (transition === 'suspend') {
+      invalidatePreviewJourneyRecording(connection)
       connection.suspendedSource = connection.iframe.src
       connection.suspended = true
       connection.iframe.src = 'about:blank'
@@ -1678,6 +1915,7 @@ function observePreviewVisibility(frame: HTMLElement, connection: StudioPreviewC
 }
 
 function setPreviewSource(connection: StudioPreviewConnection, source: string): void {
+  invalidatePreviewJourneyRecording(connection)
   if (connection.suspended === true) {
     connection.suspendedSource = source
   } else {
@@ -1715,6 +1953,7 @@ function schedulePreviewRevisionFallback(connection: StudioPreviewConnection): v
     }
     const source = connection.iframe.src
     if (source !== '' && source !== 'about:blank') {
+      invalidatePreviewJourneyRecording(connection)
       connection.iframe.src = source
     }
   }, 750)
@@ -1878,6 +2117,21 @@ async function openRuntimeFailureSource(
   opened.editor.focus()
 }
 
+function matchesExactPreviewCellIdentity(
+  preview: StudioPreviewConnection,
+  identity: StudioPreviewIdentity,
+): boolean {
+  const expected = preview.cellIdentity
+  return expected !== undefined
+    && identity.appName === expected.appName
+    && identity.project === expected.project
+    && identity.previewInstanceId === preview.previewInstanceId
+    && identity.cellId === expected.cellId
+    && identity.cellRevision === expected.cellRevision
+    && identity.compileRevision === expected.compileRevision
+    && identity.manifestRevision === expected.manifestRevision
+}
+
 export async function handlePreviewMessage(
   event: MessageEvent,
   preview: StudioPreviewConnection,
@@ -1906,6 +2160,47 @@ export async function handlePreviewMessage(
       timestamp: message.timestamp,
     }].slice(-500)
     actions.changed?.()
+    return
+  }
+  if (
+    message.type === 'preview-journey-step-recorded'
+    || message.type === 'preview-journey-recording-state'
+  ) {
+    const draft = preview.journeyRecording
+    if (draft === undefined || draft.id !== message.recordingId) {
+      return
+    }
+    if (!matchesExactPreviewCellIdentity(preview, message.identity)) {
+      invalidatePreviewJourneyRecording(preview)
+      actions.changed?.()
+      return
+    }
+    preview.journeyRecording = StudioJourneyRecorder.receive(draft, message)
+    if (
+      preview.journeyRecording.status !== 'starting'
+      && preview.journeyRecordingTimeout !== undefined
+    ) {
+      clearTimeout(preview.journeyRecordingTimeout)
+      preview.journeyRecordingTimeout = undefined
+    }
+    actions.changed?.()
+    return
+  }
+  if (
+    message.type === 'preview-journey-replay-settled'
+    || message.type === 'preview-journey-replay-failed'
+  ) {
+    if (!matchesExactPreviewCellIdentity(preview, message.identity)) {
+      return
+    }
+    preview.journeyReplayStatus = message.type === 'preview-journey-replay-settled' ? 'settled' : 'failed'
+    if (preview.frame !== undefined) {
+      if (message.type === 'preview-journey-replay-settled') {
+        StudioReviewDom.status(preview.frame, 'ready')
+      } else {
+        StudioReviewDom.status(preview.frame, 'failed', message.error)
+      }
+    }
     return
   }
   if (message.type === 'preview-layout-measurements') {
@@ -1959,6 +2254,9 @@ export async function handlePreviewMessage(
         preview.revisionTimeout = undefined
       }
     }
+    if (preview.frame !== undefined && StudioReviewDom.appliedReady(preview.journeyReplayStatus)) {
+      StudioReviewDom.status(preview.frame, 'ready')
+    }
     await StudioApiClient.previewApplied(message)
     return
   }
@@ -1980,6 +2278,9 @@ export async function handlePreviewMessage(
       preview.cell?.environment,
     )
     preview.runtimeFailure = capture
+    if (preview.frame !== undefined) {
+      StudioReviewDom.status(preview.frame, 'failed', capture.failure?.error.message ?? 'Runtime failure')
+    }
     preview.frame?.scrollIntoView({ block: 'center' })
     showRuntimeFailure(preview, capture, () => openRuntimeFailureSource(capture, handshake, openFile))
     preview.changed?.()
@@ -2255,6 +2556,7 @@ export async function refreshCellPreviews(
     previews.flatMap(preview => preview.cell === undefined ? [] : [[preview.cell.cellId, preview] as const]),
   )
   const interactionMode = previews[0]?.interactionMode ?? 'edit'
+  const setInteractionMode = previews[0]?.setInteractionMode
   const nextConnections = await Promise.all(manifest.cells.map(async cell => {
     const previous = previousByCell.get(cell.cellId)
     if (previous !== undefined) {
@@ -2262,7 +2564,11 @@ export async function refreshCellPreviews(
     }
     const connection = await connectCellPreview(previewUrl, origin, handshake, manifest, cell)
     connection.interactionMode = interactionMode
-    connection.iframe.addEventListener('load', () => postInteractionMode(connection, handshake))
+    connection.setInteractionMode = setInteractionMode
+    connection.iframe.addEventListener('load', () => {
+      invalidatePreviewJourneyRecording(connection)
+      postInteractionMode(connection, handshake)
+    })
     return connection
   }))
   const nextIds = new Set(manifest.cells.map(cell => cell.cellId))
@@ -2277,6 +2583,10 @@ export async function refreshCellPreviews(
     connection.frame = frame
     renderCellPreview(frame, connection, previewUrl, manifest)
   })
+  const canvas = parent.querySelector<HTMLElement>(':scope > .studio-preview-grid')
+  if (canvas !== null) {
+    canvas.dataset['taoReviewManifest'] = StudioReviewDom.manifest(manifest)
+  }
   const sketchState = mountedSketches.get(parent)
   if (sketchState !== undefined) {
     renderMatrixSketches(parent, sketchState.project, sketchState.catalog)

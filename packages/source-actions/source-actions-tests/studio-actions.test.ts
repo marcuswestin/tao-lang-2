@@ -1260,6 +1260,64 @@ Describe('Studio source-action patch bus', () => {
     Expect(updated.parseResult.parserErrors).toEqual([])
   })
 
+  Test('appends a reviewed semantic recording after the existing scenario journey', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         scenario "edited" {
+            render (Title: "Draft")
+            press #edit
+         }
+      }
+    `)
+
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'append-scenario-steps',
+      scenarioGroupName: 'states',
+      scenarioName: 'edited',
+      steps: [
+        { kind: 'enter', selector: 'label', target: 'Title', value: 'Saved {copy}' },
+        { kind: 'submit', selector: 'placeholder', target: 'Story title' },
+        { kind: 'press', selector: 'text', target: 'Done' },
+      ],
+    })
+    const updated = await parseRawDocument(patch.content)
+
+    Expect(patch.content).toContain([
+      'press #edit',
+      'enter "Saved \\{copy}" into label "Title"',
+      'submit placeholder "Story title"',
+      'press text "Done"',
+    ].join('\n      '))
+    Expect(updated.parseResult.lexerErrors).toEqual([])
+    Expect(updated.parseResult.parserErrors).toEqual([])
+  })
+
+  Test('rejects ambiguous scenario identity and source-shaped recorded steps', async () => {
+    const document = await parseDocument(`
+      view Card() { render Text("Card") }
+      scenarios Card "states" { scenario "same" { } }
+      scenarios Card "states" { scenario "same" { } }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'append-scenario-steps',
+      scenarioGroupName: 'states',
+      scenarioName: 'same',
+      steps: [{ kind: 'press', selector: 'tag', target: 'card' }],
+    })).rejects.toThrow('not uniquely declared')
+
+    const unique = await parseDocument(`
+      view Card() { render Text("Card") }
+      scenarios Card "states" { scenario "same" { } }
+    `)
+    await Expect(SourceActions.applyStudioPatch(unique, {
+      kind: 'append-scenario-steps',
+      scenarioGroupName: 'states',
+      scenarioName: 'same',
+      steps: [{ kind: 'press', selector: 'tag', source: 'press #unsafe', target: 'card' }],
+    } as unknown as StudioSourcePatchRequest)).rejects.toThrow('unsupported fields')
+  })
+
   Test('inserts a captured provider snapshot as canonical Tao fixture source', async () => {
     const document = await parseDocument(`
       data Stories / Story { Title text }

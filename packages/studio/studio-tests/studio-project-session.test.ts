@@ -863,6 +863,60 @@ Test('Studio promotes matrix arguments into the Tao-authored scenario through th
   })
 })
 
+Test('Studio proposes, applies, and undoes a recorded journey as one scenario checkpoint', async () => {
+  await withStudioProject(async session => {
+    const cell = await registerScenarioCell(session, 'journey-preview')
+    const envelope = {
+      action: {
+        kind: 'append-scenario-steps',
+        scenarioGroupName: 'states',
+        scenarioName: 'lead',
+        steps: [
+          { kind: 'press', selector: 'tag', target: 'edit' },
+          { kind: 'enter', selector: 'label', target: 'Title', value: 'Saved' },
+          { kind: 'submit', selector: 'label', target: 'Title' },
+        ],
+      },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'scenario-journey', phase: 'single' },
+      identity: {
+        ...cell.identity,
+        path: cell.file.path,
+        previewInstanceId: 'journey-preview',
+        scenarioId: cell.scenarioId,
+        sourceVersion: cell.file.sourceVersion,
+      },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'scenario-journey-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    } as const
+
+    const proposed = await session.proposeSourceAction(envelope)
+    Expect(proposed.diff).toContain('+      press #edit')
+    Expect(await session.readFile(cell.file.path)).toMatchObject({ content: cell.file.content })
+
+    const applied = await session.applySourceAction(envelope)
+    Expect(applied.content).toContain([
+      'press #edit',
+      'enter "Saved" into label "Title"',
+      'submit label "Title"',
+    ].join('\n      '))
+    Expect(applied.checkpoint).toEqual({ id: 'scenario-journey', status: 'committed' })
+
+    const undone = await session.undoSourceAction({
+      channel: studioProtocolChannel,
+      checkpointId: 'scenario-journey',
+      identity: { ...envelope.identity, sourceVersion: applied.sourceVersion },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'scenario-journey-undo',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action-undo',
+    })
+    Expect(undone.content).toBe(cell.file.content)
+  })
+})
+
 Test('Studio rejects a scenario action that names a different scenario than its cell identity', async () => {
   await withStudioProject(async session => {
     const cell = await registerScenarioCell(session, 'scenario-mismatch-preview')

@@ -1,6 +1,7 @@
 import { AST, Langium } from '@parser'
 import { Assert, Diagnostics, Errors, FS, Repo, TaoFiles } from '@shared'
 import SourceActions, {
+  type StudioAppendScenarioStepsPatchRequest,
   type StudioComponentKind,
   type StudioInsertCapturedFixturePatchRequest,
   type StudioLayoutEntry,
@@ -2525,7 +2526,7 @@ export class StudioProjectSession {
     envelope: StudioSourceActionEnvelope,
     request: StudioSourcePatchRequest,
   ): void {
-    if (request.kind !== 'set-scenario-arguments') {
+    if (request.kind !== 'set-scenario-arguments' && request.kind !== 'append-scenario-steps') {
       return
     }
     Assert.input(
@@ -2938,6 +2939,20 @@ function requireSessionIdentity(
 function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourcePatchRequest {
   const action = envelope.action
   if (
+    action.kind === 'append-scenario-steps'
+    && typeof action['scenarioGroupName'] === 'string'
+    && typeof action['scenarioName'] === 'string'
+    && Array.isArray(action['steps'])
+    && action['steps'].every(isRecordedScenarioStep)
+  ) {
+    return {
+      kind: action.kind,
+      scenarioGroupName: action['scenarioGroupName'],
+      scenarioName: action['scenarioName'],
+      steps: action['steps'],
+    }
+  }
+  if (
     action.kind === 'insert-captured-fixture'
     && typeof action['fixtureName'] === 'string'
     && isCapturedFixturePlan(action['plan'])
@@ -3079,6 +3094,19 @@ function isCapturedFixturePlan(value: unknown): value is StudioInsertCapturedFix
       && typeof create['name'] === 'string'
       && isFixtureFields(create['fields'])
     )
+}
+
+function isRecordedScenarioStep(value: unknown): value is StudioAppendScenarioStepsPatchRequest['steps'][number] {
+  if (!isRecord(value) || typeof value['target'] !== 'string') {
+    return false
+  }
+  const selector = value['selector']
+  if (selector !== 'label' && selector !== 'placeholder' && selector !== 'tag' && selector !== 'text') {
+    return false
+  }
+  return value['kind'] === 'press'
+    || value['kind'] === 'submit'
+    || value['kind'] === 'enter' && typeof value['value'] === 'string'
 }
 
 function isFixtureFields(value: unknown): value is Readonly<Record<string, StudioScenarioArgumentValue>> {

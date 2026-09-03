@@ -43,6 +43,7 @@ import {
 import { StudioEditorTabs } from './StudioEditorTabs'
 import { mountStudioFileTree, StudioFileTreeTransitions } from './StudioFileTree'
 import {
+  awaitPreviewJourneyRecordingAcknowledgement,
   configureInteractionMode,
   connectPreviews,
   currentSourceIdentity,
@@ -52,7 +53,9 @@ import {
   refreshCellPreviews,
   requestRuntimeCapture,
   StudioActivePreview,
+  StudioJourneyRecorder,
   StudioMatrixView,
+  type StudioPreviewConnection,
   StudioPreviewSourceSync,
   StudioRuntimeData,
   type StudioRuntimeDataTable,
@@ -175,6 +178,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let searchRevision = 0
     let searchTimer: ReturnType<typeof setTimeout> | undefined
     let sourceActionBusy = false
+    const journeyOperations = new WeakMap<StudioPreviewConnection, number>()
+    const journeyBusy = new WeakSet<StudioPreviewConnection>()
     let shipActive = false
     let testError: string | undefined
     let testStatus: StudioTestStatus | undefined
@@ -191,6 +196,14 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let preparedActiveMutationPath: string | undefined
     let preparedOpenMutationPath: string | undefined
 
+    const advanceJourneyOperation = (preview: StudioPreviewConnection): number => {
+      const operation = (journeyOperations.get(preview) ?? 0) + 1
+      journeyOperations.set(preview, operation)
+      return operation
+    }
+    const isCurrentJourneyOperation = (preview: StudioPreviewConnection, operation: number): boolean =>
+      journeyOperations.get(preview) === operation
+
     function publishProductHostState(): void {
       const preview = activePreview.current()
       const selection = editor?.state.selection.main
@@ -204,6 +217,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             networkErrorStatus: preview.cell.environment.network.error?.status,
             networkLatencyMs: preview.cell.environment.network.latencyMs,
             networkOutcome: preview.cell.environment.network.outcome,
+            journeyRecordable: StudioJourneyRecorder.canStart(preview),
+            journeyRecording: JSON.stringify(
+              preview.journeyRecording === undefined
+                ? null
+                : { ...preview.journeyRecording, busy: journeyBusy.has(preview) },
+            ),
             scenarioModel: JSON.stringify(preview.scenarioModel ?? null),
             scenarioId: preview.cell.scenarioId,
             schemeCapability: preview.cell.environment.scheme.capability,
@@ -261,6 +280,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             sourceVersion: inspected.identity.sourceVersion,
           },
       })
+    }
+
+    for (const preview of previews) {
+      preview.changed = publishProductHostState
     }
 
     async function openFile(path: string, refresh = false): Promise<StudioOpenFile | undefined> {
@@ -902,7 +925,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       renderInspector()
     }
 
-    async function applySourceAction(envelope: StudioSourceActionEnvelope): Promise<void> {
+    async function applySourceAction(envelope: StudioSourceActionEnvelope): Promise<boolean> {
       setSourceActionBusy(true)
       view.status.dataset['state'] = 'compiling'
       view.status.textContent = `Applying ${sourceActionLabel(envelope.action)}…`
@@ -920,8 +943,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           StudioCompileStatus.completed(result.compile, compileState),
           diagnostic => void openCompileDiagnostic(diagnostic),
         )
+        return true
       } catch (error) {
         showSourceActionError(view.status, error)
+        return false
       } finally {
         setSourceActionBusy(false)
       }
@@ -1365,6 +1390,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             if (drawerTab === 'Data') {
               void loadData()
             }
+            connection.changed?.()
           },
           inspect(selection) {
             inspected = selection
@@ -1631,6 +1657,123 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           if (command.kind === 'scenario-capture-fixture') {
             Assert.input(preview.captureFixture, 'The active scenario cannot currently capture a fixture.')
             await preview.captureFixture(command.fixtureName)
+            return
+          }
+          if (command.kind === 'scenario-start-journey') {
+            Assert.input(!journeyBusy.has(preview), 'Wait for the current journey operation to finish.')
+            Assert.input(
+              preview.journeyRecording === undefined,
+              'Save or discard the current journey recording before starting another.',
+            )
+            Assert.input(
+              StudioJourneyRecorder.canStart(preview),
+              'Wait for this preview and its scenario journey to finish loading before recording.',
+            )
+            const recordingId = crypto.randomUUID()
+            const request = StudioScenarioControls.recordingRequest(
+              model,
+              recordingId,
+              true,
+              command.captureSensitiveText,
+            )
+            if (!request.ok) {
+              Errors.throwUserInput(request.issues.join(' '))
+            }
+            advanceJourneyOperation(preview)
+            preview.journeyRecording = {
+              captureSensitiveText: command.captureSensitiveText,
+              id: recordingId,
+              sequence: 0,
+              sourceIdentity: JSON.stringify(model.sourceIdentity),
+              status: 'starting',
+              steps: [],
+            }
+            preview.setInteractionMode?.('run')
+            awaitPreviewJourneyRecordingAcknowledgement(preview, recordingId)
+            preview.iframe.contentWindow?.postMessage(request.value, preview.origin)
+            publishProductHostState()
+            return
+          }
+          if (command.kind === 'scenario-stop-journey') {
+            Assert.input(!journeyBusy.has(preview), 'Wait for the current journey operation to finish.')
+            const draft = preview.journeyRecording
+            Assert.input(draft?.status === 'recording', 'No journey recording is active for this preview.')
+            const request = StudioScenarioControls.recordingRequest(
+              model,
+              draft.id,
+              false,
+              draft.captureSensitiveText,
+            )
+            if (!request.ok) {
+              Errors.throwUserInput(request.issues.join(' '))
+            }
+            preview.iframe.contentWindow?.postMessage(request.value, preview.origin)
+            return
+          }
+          if (command.kind === 'scenario-discard-journey') {
+            Assert.input(!journeyBusy.has(preview), 'Wait for the current journey operation to finish.')
+            const draft = preview.journeyRecording
+            if (draft?.status === 'recording') {
+              const request = StudioScenarioControls.recordingRequest(
+                model,
+                draft.id,
+                false,
+                draft.captureSensitiveText,
+              )
+              if (request.ok) {
+                preview.iframe.contentWindow?.postMessage(request.value, preview.origin)
+              }
+            }
+            advanceJourneyOperation(preview)
+            preview.journeyRecording = undefined
+            publishProductHostState()
+            return
+          }
+          if (command.kind === 'scenario-save-journey') {
+            Assert.input(!journeyBusy.has(preview), 'Wait for the current journey operation to finish.')
+            const draft = preview.journeyRecording
+            Assert.input(draft?.status === 'stopped', 'Stop the journey recording before saving it.')
+            const action = StudioScenarioControls.appendRecordedStepsAction(
+              model,
+              draft.steps,
+              crypto.randomUUID(),
+            )
+            if (!action.ok) {
+              Errors.throwUserInput(action.issues.join(' '))
+            }
+            if (sourceActionBusy || !requireVisualEditDraftSaved()) {
+              return
+            }
+            const operation = advanceJourneyOperation(preview)
+            const draftId = draft.id
+            journeyBusy.add(preview)
+            publishProductHostState()
+            try {
+              const proposal = await StudioApiClient.sourceActionProposal(action.value)
+              if (
+                !isCurrentJourneyOperation(preview, operation)
+                || preview !== activePreview.current()
+                || preview.journeyRecording !== draft
+              ) {
+                return
+              }
+              if (!window.confirm(`Save these recorded Tao steps?\n\n${proposal.diff}`)) {
+                return
+              }
+              const applied = await applySourceAction(action.value)
+              if (
+                applied
+                && isCurrentJourneyOperation(preview, operation)
+                && preview.journeyRecording?.id === draftId
+              ) {
+                preview.journeyRecording = undefined
+              }
+            } finally {
+              if (isCurrentJourneyOperation(preview, operation)) {
+                journeyBusy.delete(preview)
+                publishProductHostState()
+              }
+            }
             return
           }
           const replay = StudioScenarioControls.replay(
@@ -1950,6 +2093,27 @@ type StudioScenarioPanelCommand =
     cellRevision: number
     kind: 'scenario-replay-capture'
   }>
+  | Readonly<{
+    captureSensitiveText: boolean
+    cellId: string
+    cellRevision: number
+    kind: 'scenario-start-journey'
+  }>
+  | Readonly<{
+    cellId: string
+    cellRevision: number
+    kind: 'scenario-stop-journey'
+  }>
+  | Readonly<{
+    cellId: string
+    cellRevision: number
+    kind: 'scenario-discard-journey'
+  }>
+  | Readonly<{
+    cellId: string
+    cellRevision: number
+    kind: 'scenario-save-journey'
+  }>
 
 export function parseScenarioPanelCommand(name: string, payload: string): StudioScenarioPanelCommand {
   let value: unknown
@@ -1998,6 +2162,19 @@ export function parseScenarioPanelCommand(name: string, payload: string): Studio
   }
   if (name === 'scenario-replay-capture') {
     return { ...identity, capture: input['capture'], kind: name }
+  }
+  if (name === 'scenario-start-journey') {
+    if (typeof input['captureSensitiveText'] !== 'boolean') {
+      Errors.throwUserInput('Tao Studio journey recording requires an explicit sensitive-text choice.')
+    }
+    return { ...identity, captureSensitiveText: input['captureSensitiveText'], kind: name }
+  }
+  if (
+    name === 'scenario-stop-journey'
+    || name === 'scenario-discard-journey'
+    || name === 'scenario-save-journey'
+  ) {
+    return { ...identity, kind: name }
   }
   Errors.throwUserInput(`Unsupported Tao Studio scenario action: ${name}`)
 }

@@ -83,11 +83,47 @@ answers is recorded `failed` and stops, rather than idling in a state that reads
 | `.artifacts/user/studio/recent-projects.json`                 | Welcome's recent-project history                     |
 | `.artifacts/dev/`                                             | Expo logs and the generated preview runtime          |
 | `.artifacts/tests/studio-smoke/<runId>/`                      | One smoke run's isolated lane                        |
+| `.artifacts/reviews/<reviewId>/`                              | Immutable web scenario visual-review bundles         |
 | `.artifacts/tests/studio-canary/`                             | The native canary's report                           |
 | `.artifacts/logs/<lane>/<timestamp>/`                         | One lane run's per-node logs plus `summary.json`     |
 | `.artifacts/logs/<lane>/latest`                               | Symlink to that lane's newest run                    |
 | `.artifacts/timings/`                                         | Measured node durations the scheduler orders by      |
 | `.artifacts/tmp/`                                             | Bootstrap scratch; reclaim with `just clean-scratch` |
+
+## Visual review
+
+Capture every authored scenario cell with the real Studio web renderer:
+
+```bash
+./tao review Apps/HNReader --app HNReader
+```
+
+Compare a later capture with an earlier bundle, or choose a new explicit output directory:
+
+```bash
+./tao review Apps/HNReader --app HNReader \
+  --against .artifacts/reviews/<review-id>/review.json
+./tao review Apps/HNReader --app HNReader --output /tmp/hn-review
+```
+
+The command writes `review.json`, `annotations.json`, `index.html`, `screenshots/`, sanitized browser
+event metadata, and Studio launch logs. Open `index.html` directly to inspect side by side, blink, or
+opacity overlay; record per-cell decisions and comments, then use **Export annotations** to share the
+portable annotation manifest and **Import annotations** to continue a collaborator's pass. Decisions
+are bound to the baseline and current image digests, so a changed rerun keeps earlier context but reopens
+the cell for review.
+
+A changed image is evidence for review, not a failing threshold. Renderer mismatches are labeled
+incomparable, and failed or unstable cells remain visible in the report.
+
+Review waits for authored semantic replay, including explicit `advance` steps. It deliberately does not
+infer ambient network or action quiescence, so scenarios that review delayed outcomes must advance time
+before the expected state.
+
+Review bundles are local derived artifacts and are not uploaded. Screenshots can contain fixture or live
+preview data, so inspect a bundle before sharing it. The first command captures Studio's web renderer only;
+it does not claim native iPhone, Android, or macOS pixel parity. Like the Studio browser smoke, run it from
+an ordinary unsandboxed shell when Chrome cannot create its sockets or Crashpad directories in a sandbox.
 
 ## Launch manifests
 

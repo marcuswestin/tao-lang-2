@@ -52,6 +52,8 @@ export type StudioProductHostState = Readonly<{
     networkErrorStatus?: number
     networkLatencyMs: number
     networkOutcome: StudioProductHostEnvironment['network']['outcome']
+    journeyRecordable: boolean
+    journeyRecording: string
     scenarioModel: string
     scenarioId: string
     schemeCapability: 'fixed-light-native' | 'reactive-browser'

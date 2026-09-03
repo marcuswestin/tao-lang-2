@@ -2,6 +2,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import {
   collectStudioPreviewLayoutMeasurements,
   mountStudioPreviewBridge,
+  publishStudioJourneyReplayResult,
   publishStudioScheme,
   replayStudioJourney,
   type StudioPreviewConfig,
@@ -207,6 +208,52 @@ Describe('Studio preview runtime bridge', () => {
     })
   })
 
+  Test('publishes authenticated exact-cell journey replay outcomes', () => {
+    const fake = previewHost([])
+    const cellConfig: StudioPreviewConfig = {
+      ...config,
+      cellId: 'cell:phone',
+      cellRevision: 2,
+      manifestRevision: 'manifest-7',
+    }
+
+    publishStudioJourneyReplayResult(cellConfig, 'settled', undefined, fake.host)
+    publishStudioJourneyReplayResult(cellConfig, 'failed', new Error('Save was not found.'), fake.host)
+    publishStudioJourneyReplayResult(config, 'settled', undefined, fake.host)
+
+    Expect(fake.messages.map(post => post.message)).toEqual([
+      {
+        channel: 'tao-studio',
+        identity: {
+          appName: 'Demo',
+          cellId: 'cell:phone',
+          cellRevision: 2,
+          compileRevision: 7,
+          manifestRevision: 'manifest-7',
+          previewInstanceId: 'preview-1',
+          project: '/project',
+        },
+        protocolVersion: 1,
+        type: 'preview-journey-replay-settled',
+      },
+      {
+        channel: 'tao-studio',
+        error: 'Save was not found.',
+        identity: {
+          appName: 'Demo',
+          cellId: 'cell:phone',
+          cellRevision: 2,
+          compileRevision: 7,
+          manifestRevision: 'manifest-7',
+          previewInstanceId: 'preview-1',
+          project: '/project',
+        },
+        protocolVersion: 1,
+        type: 'preview-journey-replay-failed',
+      },
+    ])
+  })
+
   Test('separates normal app interaction from selecting and visual editing', () => {
     const render = renderElement('/project/Main.tao', 12, 28, { height: 30, left: 20, top: 10, width: 80 })
     const fake = previewHost([render])
@@ -240,6 +287,148 @@ Describe('Studio preview runtime bridge', () => {
     Expect(fake.messages[2]?.message).toMatchObject({ type: 'preview-select-source' })
     Expect(fake.overlays[0]?.attributes['data-tao-studio-overlay']).toBe('selection')
     cleanup()
+  })
+
+  Test('records ordered semantic interactions, coalesces input, and redacts sensitive text', () => {
+    const button = journeyElement({ 'aria-label': 'Save', 'data-testid': 'save' })
+    const title = journeyElement({ 'aria-label': 'Title' }, '')
+    const password = journeyElement({ 'aria-label': 'Password', type: 'password' }, '')
+    const fake = previewHost([button, title, password])
+    const cellConfig: StudioPreviewConfig = {
+      ...config,
+      cellId: 'cell:phone',
+      cellRevision: 2,
+      manifestRevision: 'manifest-7',
+    }
+    const cleanup = mountStudioPreviewBridge(cellConfig, fake.host)
+    fake.dispatchWindow('message', journeyRecordingMessage(cellConfig, fake.parent, true))
+
+    fake.dispatchDocument('click', { target: button })
+    title.value = 'D'
+    fake.dispatchDocument('input', { target: title })
+    title.value = 'Draft'
+    fake.dispatchDocument('input', { target: title })
+    fake.dispatchDocument('keydown', { key: 'Enter', target: title })
+    password.value = 'secret'
+    fake.dispatchDocument('input', { target: password })
+    fake.dispatchDocument('blur', { target: password })
+    fake.dispatchDocument('click', { taoStudioJourney: true, target: button })
+    fake.dispatchWindow('message', journeyRecordingMessage(cellConfig, fake.parent, false))
+
+    const recorded = fake.messages
+      .map(post => post.message as { sequence?: number; step?: unknown; type?: string })
+      .filter(message => message.type === 'preview-journey-step-recorded')
+    Expect(recorded).toEqual([
+      {
+        channel: 'tao-studio',
+        identity: Expect['objectContaining']({ cellId: 'cell:phone', cellRevision: 2 }),
+        protocolVersion: 1,
+        recordingId: 'recording-1',
+        sequence: 1,
+        step: { kind: 'press', selector: 'tag', target: 'save' },
+        type: 'preview-journey-step-recorded',
+      },
+      {
+        channel: 'tao-studio',
+        identity: Expect['objectContaining']({ cellId: 'cell:phone', cellRevision: 2 }),
+        protocolVersion: 1,
+        recordingId: 'recording-1',
+        sequence: 2,
+        step: { kind: 'enter', redacted: false, selector: 'label', target: 'Title', value: 'Draft' },
+        type: 'preview-journey-step-recorded',
+      },
+      {
+        channel: 'tao-studio',
+        identity: Expect['objectContaining']({ cellId: 'cell:phone', cellRevision: 2 }),
+        protocolVersion: 1,
+        recordingId: 'recording-1',
+        sequence: 3,
+        step: { kind: 'submit', selector: 'label', target: 'Title' },
+        type: 'preview-journey-step-recorded',
+      },
+      {
+        channel: 'tao-studio',
+        identity: Expect['objectContaining']({ cellId: 'cell:phone', cellRevision: 2 }),
+        protocolVersion: 1,
+        recordingId: 'recording-1',
+        sequence: 4,
+        step: { kind: 'enter', redacted: true, selector: 'label', target: 'Password', value: '' },
+        type: 'preview-journey-step-recorded',
+      },
+    ])
+    Expect(fake.messages.at(-1)?.message).toMatchObject({ sequence: 4, status: 'stopped' })
+    cleanup()
+  })
+
+  Test('records Enter only for deliberate single-line submission', () => {
+    const title = journeyElement({ 'aria-label': 'Title' }, '', 'INPUT')
+    const notes = journeyElement({ 'aria-label': 'Notes' }, '', 'TEXTAREA')
+    const save = journeyElement({ 'aria-label': 'Save' }, undefined, 'BUTTON')
+    const fake = previewHost([title, notes, save])
+    const cellConfig: StudioPreviewConfig = {
+      ...config,
+      cellId: 'cell:phone',
+      cellRevision: 2,
+      manifestRevision: 'manifest-7',
+    }
+    const cleanup = mountStudioPreviewBridge(cellConfig, fake.host)
+    fake.dispatchWindow('message', journeyRecordingMessage(cellConfig, fake.parent, true))
+
+    fake.dispatchDocument('keydown', { isComposing: true, key: 'Enter', target: title })
+    fake.dispatchDocument('keydown', { key: 'Enter', repeat: true, target: title })
+    fake.dispatchDocument('keydown', { key: 'Enter', target: notes })
+    fake.dispatchDocument('keydown', { key: 'Enter', target: save })
+    fake.dispatchDocument('click', { target: save })
+    fake.dispatchDocument('keydown', { key: 'Enter', target: title })
+
+    Expect(
+      fake.messages
+        .map(post => post.message as { step?: unknown; type?: string })
+        .filter(message => message.type === 'preview-journey-step-recorded')
+        .map(message => message.step),
+    ).toEqual([
+      { kind: 'press', selector: 'label', target: 'Save' },
+      { kind: 'submit', selector: 'label', target: 'Title' },
+    ])
+    cleanup()
+  })
+
+  Test('fails closed for ambiguous selectors and invalidates recording when its preview unmounts', () => {
+    const first = journeyElement({ 'aria-label': 'Duplicate' })
+    const second = journeyElement({ 'aria-label': 'Duplicate' })
+    const fake = previewHost([first, second])
+    const cellConfig: StudioPreviewConfig = {
+      ...config,
+      cellId: 'cell:phone',
+      cellRevision: 2,
+      manifestRevision: 'manifest-7',
+    }
+    const cleanup = mountStudioPreviewBridge(cellConfig, fake.host)
+    fake.dispatchWindow(
+      'message',
+      journeyRecordingMessage(
+        { ...cellConfig, cellRevision: 1 },
+        fake.parent,
+        true,
+      ),
+    )
+    fake.dispatchDocument('click', { target: first })
+    Expect(fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-journey-step-recorded'))
+      .toEqual([])
+
+    fake.dispatchWindow('message', journeyRecordingMessage(cellConfig, fake.parent, true))
+    fake.dispatchDocument('click', { target: first })
+    cleanup()
+    Expect(fake.messages.at(-2)?.message).toMatchObject({
+      sequence: 1,
+      step: {
+        action: 'press',
+        kind: 'unresolved',
+        reason: 'No unique Tao tag, accessibility label, placeholder, or visible text identifies this target.',
+      },
+      type: 'preview-journey-step-recorded',
+    })
+    Expect(fake.messages.at(-1)?.message).toMatchObject({ sequence: 1, status: 'invalidated' })
   })
 
   Test('captures fixture data only for an exact trusted parent request', async () => {
@@ -579,6 +768,46 @@ function interactionModeMessage(mode: 'edit' | 'run', parent: StudioPreviewHost[
     },
     origin: config.parentOrigin,
     source: parent,
+  }
+}
+
+function journeyRecordingMessage(
+  previewConfig: StudioPreviewConfig,
+  parent: StudioPreviewHost['parent'],
+  active: boolean,
+): { data: Record<string, unknown>; origin: string; source: StudioPreviewHost['parent'] } {
+  return {
+    data: {
+      active,
+      channel: 'tao-studio',
+      identity: {
+        appName: previewConfig.appName,
+        cellId: previewConfig.cellId,
+        cellRevision: previewConfig.cellRevision,
+        compileRevision: previewConfig.compileRevision,
+        manifestRevision: previewConfig.manifestRevision,
+        previewInstanceId: previewConfig.previewInstanceId,
+        project: previewConfig.project,
+      },
+      protocolVersion: 1,
+      recordingId: 'recording-1',
+      type: 'set-journey-recording',
+    },
+    origin: previewConfig.parentOrigin,
+    source: parent,
+  }
+}
+
+function journeyElement(
+  attributes: Readonly<Record<string, string>>,
+  value?: string,
+  tagName = value === undefined ? 'BUTTON' : 'INPUT',
+): StudioPreviewElement {
+  return {
+    getAttribute: name => attributes[name] ?? null,
+    getBoundingClientRect: () => ({ height: 20, left: 0, top: 0, width: 100 }),
+    tagName,
+    ...(value === undefined ? {} : { value }),
   }
 }
 

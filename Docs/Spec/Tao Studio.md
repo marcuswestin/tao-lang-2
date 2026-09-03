@@ -609,13 +609,39 @@ HTTPS release-host round trip still require an ordinary Terminal and release cre
 Per-cell argument controls can save their current values back into the authored focused scenario entry
 as one reviewable and undoable source action. Each matrix cell also exposes `Capture fixture`: Studio
 asks for a Tao fixture name, captures only the isolated provider state, shows the proposed fixture
-source, and writes only after confirmation. The following remain open before the scenario matrix is a
-complete user feature:
+source, and writes only after confirmation.
+
+Each authored matrix cell also exposes `Record journey`. Recording switches that preview to Run mode and
+captures only replayable semantic `press`, committed `enter`, and Enter-driven `submit` operations. It
+chooses a unique Tao tag, accessibility label, placeholder, or visible-text target in that order; an
+ambiguous action becomes an explicit unresolved draft step and cannot be saved. Password, payment,
+one-time-code, and explicitly sensitive input is redacted unless the person opts in before recording.
+Existing journey replay is excluded from capture. A preview remount or source-identity change invalidates
+the draft. Stopped drafts show their canonical Tao operations, obtain a server-canonical source diff,
+and append to the exact scenario as one checkpoint only after confirmation; ordinary Studio Undo can
+restore the prior source.
+
+`tao review` starts the real web Studio renderer, waits for each authored cell's exact applied revision,
+settles fonts and paint, and captures only the cell viewport twice. Replay settlement means that the
+ordered semantic replay, including every authored `advance`, completed; it does not guess when ambient
+network or action work has become quiet. A scenario whose reviewed state depends on delayed work must
+author an `advance` before that state. The immutable review bundle contains
+PNG evidence, relative source/scenario identity, normalized render inputs, environment and renderer
+fingerprints, sanitized browser-event metadata,
+`review.json`, a separate portable `annotations.json`, and a static `index.html`. A prior
+`review.json` structurally pairs added, removed, changed, unchanged, failed, and renderer-incomparable
+cells. The report supports side-by-side, blink, and opacity-overlay inspection plus exportable per-cell
+decisions and comments bound to both image digests; changed pixels reopen earlier decisions while
+preserving them as context. Missing, escaped, altered, or unstable evidence fails closed. Pixel
+difference is not a pass/fail policy, and this first command makes a web-renderer claim only.
+
+The following remain open before the scenario matrix is a complete user feature:
 
 - keep fixture-through-action execution fail-closed while its result/handle contract remains deferred;
 - load accepted captured state through the test harness after those semantics are adopted;
-- resume generalized semantic capture/replay and authored failure-capture promotion only after their
-  explicitly deferred artifact, restoration, naming, and conflict contracts are adopted;
+- expand recording beyond the implemented semantic scenario prefix, and resume generalized runtime-state
+  capture/replay and authored failure-capture promotion only after their explicitly deferred artifact,
+  restoration, naming, and conflict contracts are adopted;
 - complete the remaining wide-screen inspector smoke and real Electrobun interaction passes; live file
   CRUD, independent retained cell state across two recompiles, drawer data/log/compile surfaces, and the
   WordFlower Tao test run have browser evidence;

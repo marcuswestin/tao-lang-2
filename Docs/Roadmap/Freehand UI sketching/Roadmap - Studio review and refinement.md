@@ -1,7 +1,7 @@
 # Roadmap - Studio review and refinement
 
-Status: **approved product direction; implementation begins with interaction recording and collaborative
-visual review**.
+Status: **approved product direction; the first interaction-recording and collaborative visual-review
+slices are implemented**.
 
 This follow-on roadmap turns Studio's scenario matrix into a development loop: demonstrate behavior,
 ask for useful variants, review every affected rendering with collaborators, and improve the design
@@ -201,7 +201,7 @@ not weaken a threshold, add an exception, or claim conformity solely to make cur
 
 ## Implementation sequence
 
-### First target — record one semantic interaction into the current scenario
+### First target — record one semantic interaction into the current scenario (implemented)
 
 Deliver the smallest complete recording loop: one selected cell can record supported `press`, `enter`,
 and `submit` operations, show a canonical draft with unresolved/redacted steps, and append accepted steps
@@ -213,7 +213,7 @@ This is first because scenario-step parsing, manifest lowering, replay, cell ide
 undo already exist. The new work is capture, canonical target resolution, and an append-steps source
 action rather than a second recording architecture.
 
-### Second target — review capture, pairing, and portable decisions
+### Second target — review capture, pairing, and portable decisions (implemented)
 
 Capture scenario cells from two renderer-compatible revisions, pair them structurally, and generate the
 static side-by-side artifact plus review manifest first. Pixel heatmaps and hosted pull-request adapters

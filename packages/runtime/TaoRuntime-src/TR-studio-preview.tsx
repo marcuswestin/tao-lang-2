@@ -62,7 +62,10 @@ type StudioPreviewMessageEvent = {
 type StudioPreviewPointerEvent = {
   clientX?: number
   clientY?: number
+  isComposing?: boolean
+  key?: string
   preventDefault?(): void
+  repeat?: boolean
   stopImmediatePropagation?(): void
   stopPropagation?(): void
   target?: unknown
@@ -84,6 +87,7 @@ export type StudioPreviewElement = {
   dispatchEvent?(event: unknown): boolean
   focus?(): void
   parentElement?: StudioPreviewElement | null
+  tagName?: string
   textContent?: string | null
   value?: string
 }
@@ -98,7 +102,17 @@ export type StudioPreviewHost = {
   console?: Partial<Record<StudioPreviewLogLevel, (...arguments_: unknown[]) => void>>
   document: {
     addEventListener(
-      type: 'click' | 'mousedown' | 'mouseleave' | 'mousemove' | 'mouseover' | 'mouseout' | 'mouseup',
+      type:
+        | 'blur'
+        | 'click'
+        | 'input'
+        | 'keydown'
+        | 'mousedown'
+        | 'mouseleave'
+        | 'mousemove'
+        | 'mouseover'
+        | 'mouseout'
+        | 'mouseup',
       listener: (event: StudioPreviewPointerEvent) => void,
       capture?: boolean,
     ): void
@@ -109,7 +123,17 @@ export type StudioPreviewHost = {
     createElement(name: 'div'): StudioPreviewOverlay
     querySelectorAll(selector: string): ArrayLike<StudioPreviewElement>
     removeEventListener(
-      type: 'click' | 'mousedown' | 'mouseleave' | 'mousemove' | 'mouseover' | 'mouseout' | 'mouseup',
+      type:
+        | 'blur'
+        | 'click'
+        | 'input'
+        | 'keydown'
+        | 'mousedown'
+        | 'mouseleave'
+        | 'mousemove'
+        | 'mouseover'
+        | 'mouseout'
+        | 'mouseup',
       listener: (event: StudioPreviewPointerEvent) => void,
       capture?: boolean,
     ): void
@@ -156,6 +180,23 @@ type StudioDrag = {
   startX: number
   startY: number
   target: StudioRenderTarget
+}
+
+type StudioRecordedJourneyTarget = Readonly<{
+  selector: TaoJourneySelector
+  target: string
+}>
+
+type StudioJourneyRecording = {
+  captureSensitiveText: boolean
+  id: string
+  pending?: Readonly<{
+    element: StudioPreviewElement
+    sensitive: boolean
+    target?: StudioRecordedJourneyTarget
+    value: string
+  }>
+  sequence: number
 }
 
 let nextStudioSourceActionId = 1
@@ -284,10 +325,14 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
     void replayStudioJourney(steps).then(
       () => {
         journeyReplayGate.current.completeReplay(journeyRevision)
+        if (active) {
+          publishStudioJourneyReplayResult(props.config, 'settled')
+        }
       },
       error => {
         journeyReplayGate.current.failReplay(journeyRevision)
         if (active) {
+          publishStudioJourneyReplayResult(props.config, 'failed', error)
           setJourneyError(error)
         }
       },
@@ -485,6 +530,32 @@ function setJourneyInputValue(target: StudioPreviewElement, value: string): void
   }
 }
 
+/** Publishes an exact-cell result only after the runtime journey replay promise resolves or rejects. */
+export function publishStudioJourneyReplayResult(
+  config: StudioPreviewConfig,
+  result: 'failed' | 'settled',
+  error?: unknown,
+  suppliedHost?: StudioPreviewHost,
+): void {
+  const host = suppliedHost ?? browserPreviewHost()
+  if (
+    host === undefined
+    || !validPreviewConfig(config)
+    || config.cellId === undefined
+    || config.cellRevision === undefined
+    || config.manifestRevision === undefined
+  ) {
+    return
+  }
+  host.parent.postMessage({
+    channel: studioProtocolChannel,
+    ...(result === 'failed' ? { error: previewErrorMessage(error) } : {}),
+    identity: previewIdentity(config),
+    protocolVersion: studioProtocolVersion,
+    type: result === 'failed' ? 'preview-journey-replay-failed' : 'preview-journey-replay-settled',
+  }, config.parentOrigin)
+}
+
 /** Publishes the runtime-resolved cell Scheme without coupling Studio to CSS or host inference. */
 export function publishStudioScheme(
   config: StudioPreviewConfig,
@@ -525,6 +596,7 @@ export function mountStudioPreviewBridge(
   let suppressNextClick = false
   let postedHoverKey: string | undefined
   let interactionMode: 'edit' | 'run' = 'edit'
+  let recording: StudioJourneyRecording | undefined
   let measurementQueued = false
   let stopped = false
 
@@ -558,6 +630,133 @@ export function mountStudioPreviewBridge(
     dropOverlay?.remove()
     dragOverlay = undefined
     dropOverlay = undefined
+  }
+
+  const postRecordingState = (
+    activeRecording: StudioJourneyRecording,
+    status: 'recording' | 'stopped' | 'invalidated',
+  ) => {
+    host.parent.postMessage({
+      channel: studioProtocolChannel,
+      identity: previewIdentity(config),
+      protocolVersion: studioProtocolVersion,
+      recordingId: activeRecording.id,
+      sequence: activeRecording.sequence,
+      status,
+      type: 'preview-journey-recording-state',
+    }, config.parentOrigin)
+  }
+  const postRecordedStep = (
+    activeRecording: StudioJourneyRecording,
+    step: Readonly<Record<string, unknown>>,
+  ) => {
+    activeRecording.sequence += 1
+    host.parent.postMessage({
+      channel: studioProtocolChannel,
+      identity: previewIdentity(config),
+      protocolVersion: studioProtocolVersion,
+      recordingId: activeRecording.id,
+      sequence: activeRecording.sequence,
+      step,
+      type: 'preview-journey-step-recorded',
+    }, config.parentOrigin)
+  }
+  const flushRecordedInput = (element?: StudioPreviewElement) => {
+    const activeRecording = recording
+    const pending = activeRecording?.pending
+    if (
+      activeRecording === undefined || pending === undefined || (element !== undefined && pending.element !== element)
+    ) {
+      return
+    }
+    activeRecording.pending = undefined
+    postRecordedStep(
+      activeRecording,
+      pending.target === undefined
+        ? unresolvedRecordedStep('enter')
+        : {
+          kind: 'enter',
+          redacted: pending.sensitive && !activeRecording.captureSensitiveText,
+          ...pending.target,
+          value: pending.sensitive && !activeRecording.captureSensitiveText ? '' : pending.value,
+        },
+    )
+  }
+  const startOrStopRecording = (event: StudioPreviewMessageEvent): boolean => {
+    const control = recordingControlFromMessage(event, config, host.parent)
+    if (control === undefined) {
+      return false
+    }
+    if (control.active) {
+      if (recording !== undefined) {
+        flushRecordedInput()
+        postRecordingState(recording, 'invalidated')
+      }
+      recording = {
+        captureSensitiveText: control.captureSensitiveText,
+        id: control.recordingId,
+        sequence: 0,
+      }
+      interactionMode = 'run'
+      hoverTarget = undefined
+      selectedTarget = undefined
+      sourceTarget = undefined
+      disarmDrag()
+      overlay?.remove()
+      overlay = undefined
+      postRecordingState(recording, 'recording')
+    } else if (recording?.id === control.recordingId) {
+      const stoppedRecording = recording
+      flushRecordedInput()
+      recording = undefined
+      postRecordingState(stoppedRecording, 'stopped')
+    }
+    return true
+  }
+  const onRecordedInput = (event: StudioPreviewPointerEvent) => {
+    if (event.taoStudioJourney === true || recording === undefined) {
+      return
+    }
+    const element = previewElementFromEvent(event)
+    if (element === undefined || typeof element.value !== 'string') {
+      return
+    }
+    const target = recordedJourneyTarget(host, element)
+    if (recording.pending?.element !== element) {
+      flushRecordedInput()
+    }
+    recording.pending = {
+      element,
+      sensitive: isSensitiveJourneyInput(element),
+      target,
+      value: element.value,
+    }
+  }
+  const onRecordedBlur = (event: StudioPreviewPointerEvent) => {
+    if (event.taoStudioJourney !== true) {
+      flushRecordedInput(previewElementFromEvent(event))
+    }
+  }
+  const onRecordedKeyDown = (event: StudioPreviewPointerEvent) => {
+    if (event.taoStudioJourney === true || recording === undefined) {
+      return
+    }
+    const element = previewElementFromEvent(event)
+    if (element === undefined || !isJourneySubmitKey(event, element)) {
+      return
+    }
+    flushRecordedInput(element)
+    const target = recordedJourneyTarget(host, element)
+    postRecordedStep(recording, target === undefined ? unresolvedRecordedStep('submit') : { kind: 'submit', ...target })
+  }
+  const onRecordedClick = (event: StudioPreviewPointerEvent) => {
+    if (event.taoStudioJourney === true || recording === undefined) {
+      return
+    }
+    flushRecordedInput()
+    const element = previewElementFromEvent(event)
+    const target = element === undefined ? undefined : recordedJourneyTarget(host, element)
+    postRecordedStep(recording, target === undefined ? unresolvedRecordedStep('press') : { kind: 'press', ...target })
   }
 
   const redrawOverlay = () => {
@@ -702,6 +901,9 @@ export function mountStudioPreviewBridge(
     redrawOverlay()
   }
   const onMessage = (event: StudioPreviewMessageEvent) => {
+    if (startOrStopRecording(event)) {
+      return
+    }
     const requestedMode = interactionModeFromMessage(event, config, host.parent)
     if (requestedMode !== undefined) {
       interactionMode = requestedMode
@@ -742,6 +944,10 @@ export function mountStudioPreviewBridge(
   }
 
   host.document.addEventListener('click', onClick, true)
+  host.document.addEventListener('click', onRecordedClick, true)
+  host.document.addEventListener('input', onRecordedInput, true)
+  host.document.addEventListener('blur', onRecordedBlur, true)
+  host.document.addEventListener('keydown', onRecordedKeyDown, true)
   host.document.addEventListener('mousedown', onMouseDown, true)
   host.document.addEventListener('mouseleave', disarmDrag)
   host.document.addEventListener('mousemove', onMouseMove, true)
@@ -767,9 +973,19 @@ export function mountStudioPreviewBridge(
 
   return () => {
     stopped = true
+    if (recording !== undefined) {
+      const invalidatedRecording = recording
+      flushRecordedInput()
+      recording = undefined
+      postRecordingState(invalidatedRecording, 'invalidated')
+    }
     restoreConsole()
     stopFailures()
     host.document.removeEventListener('click', onClick, true)
+    host.document.removeEventListener('click', onRecordedClick, true)
+    host.document.removeEventListener('input', onRecordedInput, true)
+    host.document.removeEventListener('blur', onRecordedBlur, true)
+    host.document.removeEventListener('keydown', onRecordedKeyDown, true)
     host.document.removeEventListener('mousedown', onMouseDown, true)
     host.document.removeEventListener('mouseleave', disarmDrag)
     host.document.removeEventListener('mousemove', onMouseMove, true)
@@ -886,6 +1102,136 @@ function interactionModeFromMessage(
       && identity['previewInstanceId'] === config.previewInstanceId
     ? mode
     : undefined
+}
+
+function recordingControlFromMessage(
+  event: StudioPreviewMessageEvent,
+  config: StudioPreviewConfig,
+  parent: StudioPreviewHost['parent'],
+): Readonly<{ active: boolean; captureSensitiveText: boolean; recordingId: string }> | undefined {
+  if (
+    event.origin !== config.parentOrigin
+    || event.source !== parent
+    || config.cellId === undefined
+    || config.cellRevision === undefined
+    || config.manifestRevision === undefined
+    || !isObject(event.data)
+  ) {
+    return undefined
+  }
+  const message = event.data
+  const identity = message['identity']
+  if (
+    message['channel'] !== studioProtocolChannel
+    || message['protocolVersion'] !== studioProtocolVersion
+    || message['type'] !== 'set-journey-recording'
+    || typeof message['active'] !== 'boolean'
+    || typeof message['recordingId'] !== 'string'
+    || message['recordingId'].trim() === ''
+    || (message['captureSensitiveText'] !== undefined && typeof message['captureSensitiveText'] !== 'boolean')
+    || !isObject(identity)
+    || identity['appName'] !== config.appName
+    || identity['project'] !== config.project
+    || identity['previewInstanceId'] !== config.previewInstanceId
+    || identity['cellId'] !== config.cellId
+    || identity['cellRevision'] !== config.cellRevision
+    || identity['compileRevision'] !== config.compileRevision
+    || identity['manifestRevision'] !== config.manifestRevision
+  ) {
+    return undefined
+  }
+  return {
+    active: message['active'],
+    captureSensitiveText: message['captureSensitiveText'] === true,
+    recordingId: message['recordingId'],
+  }
+}
+
+function previewElementFromEvent(event: StudioPreviewPointerEvent): StudioPreviewElement | undefined {
+  const target = event.target
+  return isObject(target)
+      && typeof target['getAttribute'] === 'function'
+      && typeof target['getBoundingClientRect'] === 'function'
+    ? target as unknown as StudioPreviewElement
+    : undefined
+}
+
+function isJourneySubmitKey(event: StudioPreviewPointerEvent, element: StudioPreviewElement): boolean {
+  if (event.key !== 'Enter' || event.isComposing === true || event.repeat === true) {
+    return false
+  }
+  const tagName = element.tagName?.toLowerCase()
+  const role = element.getAttribute('role')?.toLowerCase()
+  if (
+    tagName === 'button'
+    || role === 'button'
+    || tagName === 'textarea'
+    || element.getAttribute('aria-multiline') === 'true'
+    || element.getAttribute('contenteditable') === 'true'
+  ) {
+    return false
+  }
+  if (tagName === 'input') {
+    const type = element.getAttribute('type')?.toLowerCase() ?? 'text'
+    return !['button', 'checkbox', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit'].includes(type)
+  }
+  return role === 'textbox'
+}
+
+/** recordedJourneyTarget chooses only selectors the Tao journey runtime can resolve uniquely later. */
+export function recordedJourneyTarget(
+  host: StudioPreviewHost,
+  startingElement: StudioPreviewElement,
+): StudioRecordedJourneyTarget | undefined {
+  let element: StudioPreviewElement | null | undefined = startingElement
+  while (element !== undefined && element !== null) {
+    const candidates: StudioRecordedJourneyTarget[] = []
+    const tag = element.getAttribute('data-testid')?.trim()
+    if (tag !== undefined && /^[A-Za-z0-9_]+$/.test(tag)) {
+      candidates.push({ selector: 'tag', target: tag })
+    }
+    const label = element.getAttribute('aria-label')?.trim()
+    if (label !== undefined && label !== '') {
+      candidates.push({ selector: 'label', target: label })
+    }
+    const placeholder = element.getAttribute('placeholder')?.trim()
+    if (placeholder !== undefined && placeholder !== '') {
+      candidates.push({ selector: 'placeholder', target: placeholder })
+    }
+    const text = element.textContent?.trim()
+    if (text !== undefined && text !== '') {
+      candidates.push({ selector: 'text', target: text })
+    }
+    const unique = candidates.find(candidate =>
+      findJourneyTargets(host, candidate.selector, candidate.target).length === 1
+    )
+    if (unique !== undefined) {
+      return unique
+    }
+    element = element.parentElement
+  }
+  return undefined
+}
+
+function isSensitiveJourneyInput(element: StudioPreviewElement): boolean {
+  if (element.getAttribute('data-tao-sensitive') === 'true' || element.getAttribute('type') === 'password') {
+    return true
+  }
+  const autocomplete = element.getAttribute('autocomplete')?.toLowerCase().split(/\s+/) ?? []
+  return autocomplete.some(token =>
+    token === 'current-password'
+    || token === 'new-password'
+    || token === 'one-time-code'
+    || token.startsWith('cc-')
+  )
+}
+
+function unresolvedRecordedStep(action: 'enter' | 'press' | 'submit'): Readonly<Record<string, unknown>> {
+  return {
+    action,
+    kind: 'unresolved',
+    reason: 'No unique Tao tag, accessibility label, placeholder, or visible text identifies this target.',
+  }
 }
 
 function captureRequestFromMessage(
