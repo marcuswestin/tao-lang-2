@@ -70,6 +70,7 @@ const {
   secureStoreStorage,
   shouldAcknowledgeCell,
   studioDeviceAppStateAction,
+  studioDeviceAppStateHandler,
   webSocketTransport,
 } = await import('../TaoRuntime-src/TR-studio-device-host')
 
@@ -270,6 +271,33 @@ Describe('Studio device host background lifecycle', () => {
   Test('treats inactive as a transient blip, not a background/foreground edge', () => {
     Expect(studioDeviceAppStateAction('inactive', false)).toBe('none')
     Expect(studioDeviceAppStateAction('inactive', true)).toBe('none')
+  })
+
+  Test('the installed listener stops on the way out and starts on the way back, and never inverts', () => {
+    const calls: string[] = []
+    const handler = studioDeviceAppStateHandler({
+      async start() {
+        calls.push('start')
+      },
+      stop() {
+        calls.push('stop')
+      },
+    })
+
+    handler('inactive')
+    Expect(calls).toEqual([])
+    handler('background')
+    Expect(calls).toEqual(['stop'])
+    handler('background')
+    Expect(calls).toEqual(['stop'])
+    handler('inactive')
+    Expect(calls).toEqual(['stop'])
+    handler('active')
+    Expect(calls).toEqual(['stop', 'start'])
+    handler('active')
+    Expect(calls).toEqual(['stop', 'start'])
+    handler('background')
+    Expect(calls).toEqual(['stop', 'start', 'stop'])
   })
 })
 

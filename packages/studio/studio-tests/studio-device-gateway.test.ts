@@ -206,6 +206,8 @@ Describe('Studio device gateway handshake', () => {
         ['invalid JSON', '{"type": "device.hello"', 'malformed'],
         ['confirm before hello', { signature: 'sig', type: 'device.confirm' }, 'malformed'],
         ['short device key', { ...hello(env, {}), devicePublicKey: 'c2hvcnQ=' }, 'malformed'],
+        ['short nonce', { ...hello(env, {}), nonce: 'c2hvcnQ=' }, 'malformed'],
+        ['key-length nonce', { ...hello(env, {}), nonce: StudioDeviceTrust.generateIdentity().publicKey }, 'malformed'],
         [
           'oversized hello',
           { ...hello(env, {}), padding: 'x'.repeat(TaoStudioDeviceProtocol.helloLimitBytes) },

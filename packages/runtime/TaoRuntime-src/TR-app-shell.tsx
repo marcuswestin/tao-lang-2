@@ -20,7 +20,17 @@ export type SafeAreaInsets = {
 }
 
 export type SafeAreaContextModule = {
-  readonly SafeAreaProvider: React.ComponentType<{ children?: React.ReactNode }>
+  /**
+   * `SafeAreaProvider` renders nothing until it has insets, so a provider with no parent and no
+   * `initialMetrics` withholds its whole subtree for one native layout round trip. Passing
+   * `initialWindowMetrics` — the values the native side captured at startup — means the first frame
+   * renders instead of a blank one.
+   */
+  readonly initialWindowMetrics?: { frame: unknown; insets: SafeAreaInsets } | null
+  readonly SafeAreaProvider: React.ComponentType<{
+    children?: React.ReactNode
+    initialMetrics?: { frame: unknown; insets: SafeAreaInsets } | null
+  }>
   useSafeAreaInsets(): SafeAreaInsets
 }
 

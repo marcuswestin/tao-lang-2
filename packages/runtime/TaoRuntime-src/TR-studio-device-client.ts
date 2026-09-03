@@ -493,7 +493,15 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
         },
       })
     } else if (message.type === 'studio.cellAssigned') {
-      update({ assignment: { identity: message.identity, runtime: message.runtime }, cellUnavailable: undefined })
+      // Remember the cell whoever chose it, not only the on-device sheet: a reconnect asks for
+      // `selectedCellId` and otherwise falls back to the manifest's first scenario, so without this
+      // a cell chosen from the workbench is forgotten the moment the client redials — which the
+      // background/foreground pause now does routinely.
+      update({
+        assignment: { identity: message.identity, runtime: message.runtime },
+        cellUnavailable: undefined,
+        selectedCellId: message.identity.cellId,
+      })
     } else if (message.type === 'studio.cellUnavailable') {
       update({ cellUnavailable: { cellId: message.cellId, code: message.code, message: message.message } })
     } else if (message.type === 'studio.appliedAck') {

@@ -70,10 +70,21 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
     if (!openEndpointAbsent) {
       try {
         const probe = await fetchExpoOpenEndpoint(metroOrigin, 'ios', fetchImpl)
-        if (probe.status !== 404) {
-          return typeof probe.body?.url === 'string' ? probe.body.url : undefined
+        const openUrl = typeof probe.body?.url === 'string' ? probe.body.url : undefined
+        if (openUrl !== undefined) {
+          return openUrl
         }
-        openEndpointAbsent = true
+        if (probe.status !== 404) {
+          // The endpoint exists but answered with nothing usable. Say so and still try /_expo/link
+          // rather than returning empty-handed — under the old ordering link had already been tried,
+          // so this shape used to be harmless and would otherwise become a silent dead end.
+          diagnostics.push({
+            layer: 'expo',
+            message: `Expo at ${metroOrigin} answered /_expo/open with status ${probe.status} and no usable url; `
+              + 'falling back to /_expo/link.',
+          })
+        }
+        openEndpointAbsent = probe.status === 404
       } catch (error) {
         diagnostics.push({
           layer: 'metro',

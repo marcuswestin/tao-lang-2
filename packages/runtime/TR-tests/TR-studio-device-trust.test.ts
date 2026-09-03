@@ -74,8 +74,13 @@ Describe('Studio device trust primitives', () => {
       attackerEphemeral.publicKey,
       seenByDevice,
     )
-    // Two independent six-digit codes collide one time in a million; the transcripts never do.
+    // The key material carries the proof: different transcripts and different shared secrets cannot
+    // derive the same direction keys, so this holds at 2^-256 rather than the code's one in a
+    // million. The code is what a person actually compares, so it is asserted too — a six-digit SAS
+    // genuinely can collide by chance, which is a property of the scheme, not of this test.
     Expect(Array.from(seenByDevice)).not.toEqual(Array.from(honest.transcript))
+    Expect(Array.from(deviceView.sendKey)).not.toEqual(Array.from(honest.studioKeys.receiveKey))
+    Expect(Array.from(deviceView.receiveKey)).not.toEqual(Array.from(honest.studioKeys.sendKey))
     Expect(honest.studioKeys.code).not.toBe(deviceView.code)
   })
 
@@ -131,6 +136,12 @@ Describe('Studio device trust primitives', () => {
     Expect(StudioDeviceTrust.publicKeyOf(identity)).toBe(identity.publicKey)
     Expect(StudioDeviceTrust.validPublicKey(identity.publicKey)).toBe(true)
     Expect(StudioDeviceTrust.validPublicKey('short')).toBe(false)
+    // A nonce is 16 bytes, not a key's 32, and not merely "some bytes".
+    Expect(StudioDeviceTrust.validNonce(StudioDeviceTrust.generateNonce())).toBe(true)
+    Expect(StudioDeviceTrust.validNonce('c2hvcnQ=')).toBe(false)
+    Expect(StudioDeviceTrust.validNonce(identity.publicKey)).toBe(false)
+    Expect(StudioDeviceTrust.validNonce('')).toBe(false)
+    Expect(StudioDeviceTrust.validNonce('not base64!')).toBe(false)
     Expect(StudioDeviceTrust.fingerprint(identity.publicKey)).toMatch(/^[0-9a-f]{4}( [0-9a-f]{4}){3}$/)
     Expect(StudioDeviceTrust.fingerprint(identity.publicKey)).toBe(StudioDeviceTrust.fingerprint(identity.publicKey))
     const bytes = new Uint8Array([0, 1, 2, 250, 251, 252, 253, 254, 255])

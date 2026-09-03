@@ -572,6 +572,30 @@ Describe('Studio device launcher', () => {
     Expect(fetched.urls.some(url => url.includes('/_expo/link'))).toBe(false)
   })
 
+  Test('falls back to /_expo/link when /_expo/open exists but answers with nothing usable', async () => {
+    // Open is tried first now, so an endpoint that answers 200 with no url must not become a dead
+    // end: under the old ordering link had already run, and this shape was harmless.
+    const fetched = scriptedFetch(url =>
+      url.includes('/_expo/open')
+        ? new Response('{}', { headers: { 'content-type': 'application/json' }, status: 200 })
+        : new Response(null, { headers: { location: EXPO_LINK }, status: 307 })
+    )
+    const launcher = createStudioDeviceLauncher({
+      simulator: fakeSimulator({}),
+      device: fakeDevice({ hosts: [] }),
+      fetch: fetched.fetchImpl,
+      lanAddresses: async () => LAN,
+    })
+
+    const info = await launcher.describe({ metroOrigin: 'http://127.0.0.1:8081' })
+
+    Expect(info.url).toBe(EXPO_LINK)
+    Expect(fetched.urls.some(url => url.includes('/_expo/link'))).toBe(true)
+    Expect(
+      info.diagnostics.some(entry => entry.message.includes('answered /_expo/open with status 200 and no usable url')),
+    ).toBe(true)
+  })
+
   Test('never sends a loopback host to a device, even when Expo offers one', async () => {
     const loopbackLink = 'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A8081'
     const launcher = createStudioDeviceLauncher({

@@ -237,6 +237,28 @@ export function studioDeviceAppStateAction(nextAppState: string, paused: boolean
   return 'none'
 }
 
+/**
+ * studioDeviceAppStateHandler is the `AppState` listener the host installs, carrying the `paused`
+ * bookkeeping the decision above needs. Extracted so a test can drive the transitions against a
+ * client and see which calls actually land — the host can only install this for a client it owns
+ * the lifecycle of, so there is no way to observe it through the injected-client seam.
+ */
+export function studioDeviceAppStateHandler(
+  client: Pick<StudioDeviceClient, 'start' | 'stop'>,
+): (nextAppState: string) => void {
+  let paused = false
+  return nextAppState => {
+    const action = studioDeviceAppStateAction(nextAppState, paused)
+    if (action === 'pause') {
+      paused = true
+      client.stop()
+    } else if (action === 'resume') {
+      paused = false
+      void client.start()
+    }
+  }
+}
+
 /** deviceHostPresentation decides what one client snapshot puts on the screen. */
 export function deviceHostPresentation(
   state: TaoStudioDeviceClientState,
@@ -489,17 +511,7 @@ export function StudioDeviceHost(props: StudioDeviceHostProps): React.JSX.Elemen
     if (client === undefined || !ownsClient || AppState === undefined) {
       return undefined
     }
-    let paused = false
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      const action = studioDeviceAppStateAction(nextAppState, paused)
-      if (action === 'pause') {
-        paused = true
-        client.stop()
-      } else if (action === 'resume') {
-        paused = false
-        void client.start()
-      }
-    })
+    const subscription = AppState.addEventListener('change', studioDeviceAppStateHandler(client))
     return () => subscription.remove()
   }, [RN.AppState, client, ownsClient])
   if (client === undefined || resolution.kind === 'missing') {
@@ -566,9 +578,13 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
     : React.createElement(DeviceOverlay, { client, presentation })
   // One provider for the whole host: the badge and sheet are its siblings, not descendants, of
   // `content`, so they need their own path to real insets too — see DeviceBadge and DeviceSheet.
+  const safeArea = requireSafeAreaContext()
   return React.createElement(
-    requireSafeAreaContext().SafeAreaProvider,
-    null,
+    safeArea.SafeAreaProvider,
+    // Without the startup metrics this provider is the outermost element with no parent insets, so
+    // it would withhold the whole host — connecting overlay and pairing code included — until the
+    // native side reports insets for the first time.
+    { initialMetrics: safeArea.initialWindowMetrics ?? null },
     React.createElement(
       RN.View,
       { style: rootStyle, testID: 'tao-studio-device-host' },
@@ -739,9 +755,14 @@ function DeviceBadge(props: { onPress: () => void }): React.JSX.Element {
     ? undefined
     : { height: window.height, width: window.width }
   const bounds = badgeDragBounds({ insets, screen })
-  const [position, setPosition] = React.useState(() =>
+  const [dragged, setDragged] = React.useState(() =>
     clampBadgePosition({ bottom: 24 + insets.bottom, right: 16 + insets.right }, bounds)
   )
+  // Clamped on every render, not only on drag: a rotation shrinks the bounds under a position that
+  // was legal in the other orientation, and the badge is the only way to open the sheet, so letting
+  // it render off-screen would strand scenario switching, Reconnect, and Forget Studio with it.
+  const position = clampBadgePosition(dragged, bounds)
+  const setPosition = setDragged
   const dragStart = React.useRef<
     { bottom: number; moved: boolean; pageX: number; pageY: number; right: number } | undefined
   >(undefined)
