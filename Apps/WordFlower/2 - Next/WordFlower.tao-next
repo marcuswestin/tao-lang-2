@@ -5,7 +5,7 @@ use Local from @tao/data/providers/local
 use WordFlowerShell, WorkspaceRow from @ui
 use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
-// Tranche status: absorbed
+// Tranche status: open
 //
 // STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
 // shared by Tao tests, review tooling, and Studio. `fixture` owns reusable data/identity setup;
@@ -453,6 +453,38 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   are filled in declaration order. Descending reaches an item's inner controls, Escape ascends,
 //   an unmounted/collapsed region re-aims to primary content, modal regions trap and restore focus,
 //   and movement with no target scrolls the focused region
+//
+// THE INTERACTION SYSTEM, PART FOUR: GENERATED SURFACES AND KEY ALLOCATION. This tranche renders
+// the semantic outline and attention state as the affordances a person can actually see. It adds
+// no language grammar: these layers are runtime policy, and `Hint` and `Overview` are ordinary
+// element defaults in the mounted design (`Design - Keyboard driven apps.md`, KEY-D13; `Plan`, T5).
+//
+// This tranche decides:
+// - The app host mounts one interaction-layer host above app content as a sibling after the toast
+//   layer. Hints, overview, the verb menu, and the palette are pure renderings of outline snapshots,
+//   attention snapshots, and current command bindings. They never enter navigation history, and a
+//   hidden layer sets `accessibilityElementsHidden` so it is absent from accessibility traversal
+// - `TR-interaction-layers.tsx` owns those renderings. Hints anchor to the last cached app-relative
+//   bounds of controls and items and stretch across region bounds; overview lists the mounted
+//   regions; the verb menu preserves the reducer's tiers and shows both active accelerators and
+//   shadowed shortcuts; the palette lists every titled command and entity in the generated catalog
+//   and narrows labels with the same locale-aware word-prefix subsequence matcher as attention.
+//   A shared measurement registrar supplies app-relative bounds to the outline and every layer;
+//   opening a surface never performs synchronous measurement or changes layout
+// - `TR-interaction-allocation.ts` owns key allocation as pure runtime policy. It preserves an
+//   identity's previous assignment while that identity remains present, considers new identities
+//   in canonical identity order so render reordering cannot reshuffle keys, segments labels for the
+//   active locale, and tries the first free label letter, then the next distinctive label-derived
+//   letter, then deterministic two-letter sequences. Reducer keys and explicit command shortcuts
+//   or accelerators are excluded, so generated affordances never shadow authored or system behavior
+// - The first hardware-key dispatch records keyboard presence; before that, keyboard affordances
+//   are not rendered. `press key` exercises the same dispatch seam in a test. The hints key toggles
+//   hints, Escape with nothing left to clear opens overview, `.` opens the target's verb menu, and
+//   `primary+K` opens the always-present palette
+// - Generated surface copy is stable and visible: headings are `Interaction hints`, `Interaction
+//   overview`, `Actions for <target>`, and `Command palette`; allocated rows expose an uppercase key
+//   and label as `<KEY> — <label>`. These strings let product journeys prove that a layer exists
+//   only after its key, rather than vacuously asserting text already supplied by app content
 project {
    id "wordflower"
    name "WordFlower"

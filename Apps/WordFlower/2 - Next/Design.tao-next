@@ -67,6 +67,8 @@ design WordFlowerDesign {
    styles {
       AppSurface [background schemeCanvas]
       schemeCard [background schemeCanvas, ink schemeInk, radius designMd, pad designMd, gap designSm]
+      Hint [background accentStrong, ink onAccent, radius designSm, pad designSm, weight 700]
+      Overview [background surfaceRaised, ink schemeInk, border line, radius designMd, pad designMd, gap designSm]
    }
 
    // Capitalized bundles are defaults for linked stdlib elements. The navigation bundles are
@@ -137,6 +139,10 @@ design WordFlowerDarkDesign {
    NavigationChromeButton [pad 8, radius 8, fg accentStrong, weight 600]
    ModalSurface [bg surfaceRaised, border line]
    ToastSurface [bg surfaceRaised, border line, fg ink]
+   styles {
+      Hint [background accentStrong, ink onAccent, radius 8, pad 8, weight 700]
+      Overview [background surfaceRaised, ink ink, border line, radius 12, pad 12, gap 8]
+   }
    screen [fill, content top stretch, pad 24, bg canvas]
    hero [gap 8, pad 24, radius 20, bg accentSoft, border line]
    display [size 40, line 46, weight 700, fg ink]
