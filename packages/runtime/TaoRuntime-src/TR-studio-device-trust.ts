@@ -129,16 +129,6 @@ export const StudioDeviceTrust = {
       throw new StudioDeviceTrustError('bad-frame', `Sealed frame ${frame.seq} did not carry JSON.`)
     }
   },
-  /**
-   * A short, deterministic, one-way token for a value that must reach a device but never carry it
-   * back out — Studio's scenario and cell identifiers embed the project's absolute source path. The
-   * same input always yields the same token, so a device echoing one back is still matchable against
-   * the current manifest; there is no way back from the token to the value it was made from.
-   */
-  opaqueId(value: string): string {
-    const digest = sha256(utf8(value))
-    return Array.from(digest.slice(0, 8), byte => byte.toString(16).padStart(2, '0')).join('')
-  },
   publicKeyOf(identity: TaoStudioDeviceIdentity): string {
     return base64Encode(ed25519.getPublicKey(decodeKey(identity.secretKey, 'secret key')))
   },

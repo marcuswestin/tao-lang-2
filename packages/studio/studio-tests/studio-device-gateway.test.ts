@@ -60,26 +60,24 @@ Describe('Studio device gateway handshake', () => {
         sessionId: env.sessionId,
         type: 'studio.welcome',
       })
-      // cellId and scenarioId cross the device gateway opaque — see StudioDeviceGateway's
-      // deviceManifest — since Studio's real ids embed the project's absolute source path.
       Expect(welcome.type === 'studio.welcome' ? welcome.manifest : undefined).toEqual({
         compileRevision: 1,
         manifestRevision: 'manifest-1',
         scenarios: [
           {
-            cellId: StudioDeviceTrust.opaqueId('cell:phone'),
+            cellId: 'cell:phone',
             cellRevision: 0,
             group: 'Garden',
             label: 'Garden phone',
-            scenarioId: StudioDeviceTrust.opaqueId('Garden.phone'),
+            scenarioId: 'Garden.phone',
             viewport: { height: 844, width: 390 },
           },
           {
-            cellId: StudioDeviceTrust.opaqueId('cell:tablet'),
+            cellId: 'cell:tablet',
             cellRevision: 0,
             group: 'Garden',
             label: 'Garden phone',
-            scenarioId: StudioDeviceTrust.opaqueId('Garden.phone'),
+            scenarioId: 'Garden.phone',
             viewport: { height: 1194, width: 834 },
           },
         ],
@@ -266,8 +264,7 @@ Describe('Studio device gateway sealed control plane', () => {
   Test('assigns fresh preview instances and acknowledges applied revisions through the session', async () => {
     await withGateway({}, async env => {
       const device = await pairedDevice(env)
-      // A real device only ever has the opaque id the manifest gave it (see deviceManifest).
-      device.sendSealed({ cellId: StudioDeviceTrust.opaqueId('cell:phone'), type: 'device.selectCell' })
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
       const assigned = await device.nextSealed()
       Expect(assigned.type).toBe('studio.cellAssigned')
       if (assigned.type !== 'studio.cellAssigned') {
@@ -275,31 +272,38 @@ Describe('Studio device gateway sealed control plane', () => {
       }
       Expect(assigned.identity).toMatchObject({
         appName: 'Garden',
-        cellId: StudioDeviceTrust.opaqueId('cell:phone'),
+        cellId: 'cell:phone',
         cellRevision: 0,
         compileRevision: 1,
         manifestRevision: 'manifest-1',
       })
-      Expect(assigned.runtime).toEqual(env.session.previewCellInstance(assigned.identity.previewInstanceId))
+      // The device gets the bootstrap record it renders from, minus `identity`: that field carries
+      // the project's absolute root, which the gateway never lets a device learn, and the device host
+      // reads only `cell`, `resolvedState`, and `replay`.
+      const { identity: withheld, ...expectedRuntime } = env.session.previewCellInstance(
+        assigned.identity.previewInstanceId,
+      ) as unknown as Record<string, unknown>
+      Expect(withheld).toMatchObject({ project: env.session.projectRoot })
+      Expect(assigned.runtime).toEqual(expectedRuntime)
+      Expect(Object.keys(assigned.runtime as Record<string, unknown>)).not.toContain('identity')
+      Expect(JSON.stringify(assigned.runtime)).not.toContain(env.session.projectRoot)
       Expect(env.gateway.status(env.sessionId).connection).toMatchObject({
         cellId: 'cell:phone',
         scenarioLabel: 'Garden phone',
       })
 
-      device.sendSealed({ cellId: StudioDeviceTrust.opaqueId('cell:tablet'), type: 'device.selectCell' })
+      device.sendSealed({ cellId: 'cell:tablet', type: 'device.selectCell' })
       const reassigned = await device.nextSealed()
       Expect(reassigned.type === 'studio.cellAssigned' && reassigned.identity.cellId).toBe(
-        StudioDeviceTrust.opaqueId('cell:tablet'),
+        'cell:tablet',
       )
       // A device renders one cell at a time, so selecting another releases its previous instance.
       Expect(() => env.session.previewCellInstance(assigned.identity.previewInstanceId)).toThrow('no longer current')
 
-      // Studio-initiated (the browser workbench) always supplies its own real, internal id — #assign
-      // still opaque-wraps whatever it sends the device with, regardless of who triggered it.
       Expect(env.gateway.selectCell(env.sessionId, 'cell:phone')).toEqual({ requested: true })
       const fromStudio = await device.nextSealed()
       Expect(fromStudio.type === 'studio.cellAssigned' && fromStudio.identity.cellId).toBe(
-        StudioDeviceTrust.opaqueId('cell:phone'),
+        'cell:phone',
       )
       Expect(() => env.session.previewCellInstance(assigned.identity.previewInstanceId)).toThrow('no longer current')
       const identity = fromStudio.type === 'studio.cellAssigned' ? fromStudio.identity : assigned.identity
@@ -349,11 +353,9 @@ Describe('Studio device gateway sealed control plane', () => {
       Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBe(1)
       Expect(env.gateway.status(env.sessionId).connection?.lastError).toBeUndefined()
 
-      // An id with no match in the current manifest — garbage, or one from a manifest since replaced
-      // — reaches #assign untranslated and is echoed back the same way every #assign reply is: opaque.
       device.sendSealed({ cellId: 'cell:missing', type: 'device.selectCell' })
       Expect(await device.nextSealed()).toMatchObject({
-        cellId: StudioDeviceTrust.opaqueId('cell:missing'),
+        cellId: 'cell:missing',
         code: 'unknown-cell',
       })
       device.sendSealed({ type: 'device.ping' })
@@ -369,13 +371,89 @@ Describe('Studio device gateway sealed control plane', () => {
     })
   })
 
+  Test('records a device claim the browser already advanced past, and refuses one that never compiled', async () => {
+    await withGateway({}, async env => {
+      const device = await pairedDevice(env)
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      const first = await device.nextSealed()
+      const firstIdentity = first.type === 'studio.cellAssigned' ? first.identity : undefined
+      Expect(firstIdentity).toBeDefined()
+      device.sendSealed({ appliedRevision: 1, compileRevision: 1, identity: firstIdentity, type: 'device.applied' })
+      await until(() => env.gateway.status(env.sessionId).connection?.appliedRevision === 1, {
+        description: 'the first acknowledgement to reach the connection',
+      })
+
+      // Recompile. The device is reassigned at revision 2, and the browser canvas gets its
+      // acknowledgement in first, which is what leaves the coordinator with nothing to advance.
+      await env.session.compileInitial()
+      let assigned: TaoStudioDeviceStudioMessage | undefined
+      while (assigned?.type !== 'studio.cellAssigned') {
+        assigned = await device.nextSealed()
+      }
+      const identity = assigned.identity
+      Expect(identity.compileRevision).toBe(2)
+      const browserInstance = 'browser-instance-1'
+      env.session.registerCellPreview({
+        appName: identity.appName,
+        cellId: 'cell:phone',
+        cellRevision: identity.cellRevision,
+        compileRevision: identity.compileRevision,
+        manifestRevision: identity.manifestRevision,
+        previewInstanceId: browserInstance,
+        project: env.session.projectRoot,
+      })
+      Expect(env.session.acknowledgePreview({
+        appliedRevision: 2,
+        channel: 'tao-studio',
+        compileRevision: 2,
+        identity: {
+          appName: identity.appName,
+          cellId: 'cell:phone',
+          cellRevision: identity.cellRevision,
+          compileRevision: identity.compileRevision,
+          manifestRevision: identity.manifestRevision,
+          previewInstanceId: browserInstance,
+          project: env.session.projectRoot,
+        },
+        protocolVersion: 1,
+        type: 'preview-applied',
+      })).toBe(true)
+      Expect(env.session.compileSnapshot().appliedRevision).toBe(2)
+      // The connection still reports 1, so "recorded" and "left alone" are observably different.
+      Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBe(1)
+
+      device.sendSealed({ appliedRevision: 2, compileRevision: 2, identity, type: 'device.applied' })
+      let alreadyAdvanced: TaoStudioDeviceStudioMessage | undefined
+      while (alreadyAdvanced?.type !== 'studio.appliedAck') {
+        alreadyAdvanced = await device.nextSealed()
+      }
+      Expect(alreadyAdvanced).toEqual({ accepted: false, compileRevision: 2, type: 'studio.appliedAck' })
+      Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBe(2)
+      Expect(env.gateway.status(env.sessionId).connection?.lastError).toBeUndefined()
+
+      // A compile that fails still advances compileRevision to 3 while nothing was ever built at 3.
+      // The device's identity stays current, so nothing refuses it — only the bound can.
+      env.compile.failNext = true
+      await env.session.compileInitial().catch(() => undefined)
+      Expect(env.session.compileSnapshot().compileRevision).toBe(3)
+      Expect(env.session.compileSnapshot().appliedRevision).toBe(2)
+      device.sendSealed({ appliedRevision: 3, compileRevision: 3, identity, type: 'device.applied' })
+      let ack: TaoStudioDeviceStudioMessage | undefined
+      while (ack?.type !== 'studio.appliedAck') {
+        ack = await device.nextSealed()
+      }
+      Expect(ack).toEqual({ accepted: false, compileRevision: 3, type: 'studio.appliedAck' })
+      Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBe(2)
+    })
+  })
+
   Test('pushes the manifest and re-registers the selected cell when a compile changes it', async () => {
     await withGateway({}, async env => {
       const device = await pairedDevice(env)
-      device.sendSealed({ cellId: StudioDeviceTrust.opaqueId('cell:tablet'), type: 'device.selectCell' })
+      device.sendSealed({ cellId: 'cell:tablet', type: 'device.selectCell' })
       const first = await device.nextSealed()
       Expect(first.type === 'studio.cellAssigned' && first.identity.cellId).toBe(
-        StudioDeviceTrust.opaqueId('cell:tablet'),
+        'cell:tablet',
       )
 
       env.cells.splice(0, env.cells.length, 'cell:phone')
@@ -385,12 +463,12 @@ Describe('Studio device gateway sealed control plane', () => {
       const manifest = await device.nextSealed()
       Expect(manifest).toMatchObject({ manifest: { compileRevision: 2, manifestRevision: 'manifest-2' } })
       Expect(manifest.type === 'studio.manifest' ? manifest.manifest.scenarios.map(item => item.cellId) : []).toEqual([
-        StudioDeviceTrust.opaqueId('cell:phone'),
+        'cell:phone',
       ])
       const reassigned = await device.nextSealed()
       Expect(reassigned).toMatchObject({
         identity: {
-          cellId: StudioDeviceTrust.opaqueId('cell:phone'),
+          cellId: 'cell:phone',
           compileRevision: 2,
           manifestRevision: 'manifest-2',
         },
@@ -486,6 +564,7 @@ const fixedNow = new Date('2026-09-02T10:00:00.000Z')
 type Env = {
   cells: string[]
   clock: { now: Date }
+  compile: { failNext: boolean }
   gateway: StudioDeviceGateway
   metroPort: number
   session: StudioProjectSession
@@ -520,6 +599,7 @@ async function withGateway(
     await use({
       cells: project.cells,
       clock,
+      compile: project.compile,
       gateway,
       metroPort: 8081,
       session: project.session,
@@ -538,7 +618,12 @@ async function withGateway(
 async function openProject(
   appName: string,
   prefix: string,
-): Promise<{ cells: string[]; close: () => Promise<void>; session: StudioProjectSession }> {
+): Promise<{
+  cells: string[]
+  close: () => Promise<void>
+  compile: { failNext: boolean }
+  session: StudioProjectSession
+}> {
   const root = await mkTestDir(FS.resolvePath(prefix, FS.tmpdir()))
   await FS.writeText(
     FS.resolvePath('Project.tao', root),
@@ -549,9 +634,16 @@ async function openProject(
     `app ${appName} { view Main }\nview Main() { render Text("${appName}") }\n`,
   )
   const cells = ['cell:phone', 'cell:tablet']
+  // A failing compile still advances the coordinator's compileRevision but never publishes a
+  // manifest, which is the state a device must not be able to claim as applied.
+  const compile = { failNext: false }
   let session: StudioProjectSession | undefined
   session = await StudioProjectSession.open({
     async compile(request) {
+      if (compile.failNext) {
+        compile.failNext = false
+        throw new Errors.UserInputError(`Compile of revision ${request.compileRevision} failed on purpose.`)
+      }
       session?.setMatrixManifest(manifestFor(session, request.compileRevision, cells))
     },
     entryPath: `${appName}.tao`,
@@ -563,6 +655,7 @@ async function openProject(
     async close() {
       await FS.remove(root)
     },
+    compile,
     session,
   }
 }
