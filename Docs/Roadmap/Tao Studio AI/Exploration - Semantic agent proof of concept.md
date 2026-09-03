@@ -43,27 +43,31 @@ These entries distinguish the intended capability from PoC conveniences. “Dire
 PoC should test the proposition, not that Tao has adopted it as product or language law. “PoC boundary”
 controls this experiment only. “PoC convenience” is freely replaceable even during the experiment.
 
-| ID       | Status             | Working decision                                                                                                                                                                                                            | Consequence for the PoC                                                                                                                                                                                                  |
-| -------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SAI-D001 | Direction to prove | Tao, not the model, is the semantic authority for the project.                                                                                                                                                              | Semantic facts should come from resolved Tao/compiler state; the model interprets and communicates them.                                                                                                                 |
-| SAI-D002 | Direction to prove | The model should progressively inquire from product overview to declaration detail to exact source.                                                                                                                         | Do not begin by placing whole files or the whole project in the prompt.                                                                                                                                                  |
-| SAI-D003 | Direction to prove | Tao should return projections of a semantic project graph rather than search-result-shaped text.                                                                                                                            | At least one demo must answer a cross-cutting question through structured nodes, edges, and facts.                                                                                                                       |
-| SAI-D004 | Direction to prove | The reverse interface should express changes in product/declaration terms rather than raw text or public AST surgery.                                                                                                       | At least one demo change begins as a typed semantic request such as changing a design value, adding a field, or adding a scenario.                                                                                       |
-| SAI-D005 | Direction to prove | Tao should lower semantic requests to current source, formatting, validation, compilation, preview, and undo.                                                                                                               | The successful write demo must end in ordinary Tao source and a visible Studio result.                                                                                                                                   |
-| SAI-D006 | Direction to prove | Compiler evidence should remain distinguishable from model inference.                                                                                                                                                       | Answers identify which claims are Tao facts and which are AI suggestions.                                                                                                                                                |
-| SAI-D007 | Direction to prove | Compact semantic context may let a small local model perform useful project work faster and with fewer tokens than source search.                                                                                           | The PoC compares semantic context with a source-context baseline on a few real tasks.                                                                                                                                    |
-| SAI-D008 | PoC boundary       | The model runs strictly on-device through Apple Foundation Models on macOS, with no cloud fallback.                                                                                                                         | Unavailable local intelligence is reported honestly; the PoC need not support another host or model.                                                                                                                     |
-| SAI-D009 | PoC boundary       | The first write path is proposal-first and person-reviewed.                                                                                                                                                                 | The model does not silently change source; Studio shows a proposal before application.                                                                                                                                   |
-| SAI-D010 | PoC boundary       | Existing Studio identity, proposal, compile, preview, checkpoint, and undo seams may be reused opportunistically.                                                                                                           | The PoC need not design a replacement source-action architecture.                                                                                                                                                        |
-| SAI-D011 | PoC boundary       | MCP is an optional adapter, not a prerequisite for proving the core interaction.                                                                                                                                            | A private Studio endpoint or in-process API is sufficient; add MCP only if it cheaply strengthens the proof.                                                                                                             |
-| SAI-D012 | PoC convenience    | The implementer chooses the forcing app, supported graph subset, tool schemas, transport, UI, and demonstration change.                                                                                                     | Hard-code the smallest useful slice and document what was hard-coded.                                                                                                                                                    |
-| SAI-D013 | PoC convenience    | The PoC may expose three to five broad agent tools instead of a complete fine-grained API.                                                                                                                                  | Prefer a small usable loop over designing the final tool catalog.                                                                                                                                                        |
-| SAI-D014 | Direction to prove | Source is a detail that the model requests only when semantic facts are insufficient.                                                                                                                                       | Record every raw-source fallback and why it was needed.                                                                                                                                                                  |
-| SAI-D015 | PoC convenience    | The forcing app is WordFlower `1 - Current`, the journey is "review the selected render and apply one design change", and the write is a new `set-design-entry` source action.                                              | The existing `set-style-entry` bundle edit requires the render and the design to share a file; WordFlower keeps its design in `Design.tao`, so a design-scoped action that needs no render occurrence was added instead. |
-| SAI-D016 | PoC convenience    | The semantic snapshot is rebuilt from the linked Langium AST on every request, in `packages/studio/studio-src/agent-poc/SemanticSnapshot.ts`, with no caching, identity scheme, or manifest reuse.                          | Every node and edge carries `origin: compiler` (resolved cross-reference or declaration structure) or `origin: poc-derived` (a documented name-matching heuristic) plus a `src:<path>:<start>-<end>` evidence handle.    |
-| SAI-D017 | PoC convenience    | The on-device model runs through a separate throwaway Swift helper (`AgentHelper.swift`) that takes JSON-schema tools over NDJSON stdio, rather than the shipped `tao-foundation-models-server`, which has no tool calling. | Tool calls are bridged back to the Studio server process; the helper caps tool calls, suppresses exact repeats, runs a guided turn first, and converts with a schema-only turn if the model drifts into prose.           |
-| SAI-D018 | PoC convenience    | The Studio surface is a fixed overlay panel mounted from `StudioApp.ts`, driven by the existing `/api/source-action/propose`, `/api/source-action`, and `/api/source-action/undo` seams.                                    | No Tao/React portal work and no new checkpoint machinery; proposal, apply, compile, preview refresh, and undo are the existing ones.                                                                                     |
-| SAI-D019 | PoC convenience    | Tao normalizes the model's `bundle` operand against the app design's real members before proposing, and the panel shows that Tao, not the model, resolved it.                                                               | The model once wrote the design name where a bundle name belonged; without normalization the typed request would have failed to lower.                                                                                   |
+| ID       | Status             | Working decision                                                                                                                                                                                                            | Consequence for the PoC                                                                                                                                                                                                       |
+| -------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SAI-D001 | Direction to prove | Tao, not the model, is the semantic authority for the project.                                                                                                                                                              | Semantic facts should come from resolved Tao/compiler state; the model interprets and communicates them.                                                                                                                      |
+| SAI-D002 | Direction to prove | The model should progressively inquire from product overview to declaration detail to exact source.                                                                                                                         | Do not begin by placing whole files or the whole project in the prompt.                                                                                                                                                       |
+| SAI-D003 | Direction to prove | Tao should return projections of a semantic project graph rather than search-result-shaped text.                                                                                                                            | At least one demo must answer a cross-cutting question through structured nodes, edges, and facts.                                                                                                                            |
+| SAI-D004 | Direction to prove | The reverse interface should express changes in product/declaration terms rather than raw text or public AST surgery.                                                                                                       | At least one demo change begins as a typed semantic request such as changing a design value, adding a field, or adding a scenario.                                                                                            |
+| SAI-D005 | Direction to prove | Tao should lower semantic requests to current source, formatting, validation, compilation, preview, and undo.                                                                                                               | The successful write demo must end in ordinary Tao source and a visible Studio result.                                                                                                                                        |
+| SAI-D006 | Direction to prove | Compiler evidence should remain distinguishable from model inference.                                                                                                                                                       | Answers identify which claims are Tao facts and which are AI suggestions.                                                                                                                                                     |
+| SAI-D007 | Direction to prove | Compact semantic context may let a small local model perform useful project work faster and with fewer tokens than source search.                                                                                           | The PoC compares semantic context with a source-context baseline on a few real tasks.                                                                                                                                         |
+| SAI-D008 | PoC boundary       | The model runs strictly on-device through Apple Foundation Models on macOS, with no cloud fallback.                                                                                                                         | Unavailable local intelligence is reported honestly; the PoC need not support another host or model.                                                                                                                          |
+| SAI-D009 | PoC boundary       | The first write path is proposal-first and person-reviewed.                                                                                                                                                                 | The model does not silently change source; Studio shows a proposal before application.                                                                                                                                        |
+| SAI-D010 | PoC boundary       | Existing Studio identity, proposal, compile, preview, checkpoint, and undo seams may be reused opportunistically.                                                                                                           | The PoC need not design a replacement source-action architecture.                                                                                                                                                             |
+| SAI-D011 | PoC boundary       | MCP is an optional adapter, not a prerequisite for proving the core interaction.                                                                                                                                            | A private Studio endpoint or in-process API is sufficient; add MCP only if it cheaply strengthens the proof.                                                                                                                  |
+| SAI-D012 | PoC convenience    | The implementer chooses the forcing app, supported graph subset, tool schemas, transport, UI, and demonstration change.                                                                                                     | Hard-code the smallest useful slice and document what was hard-coded.                                                                                                                                                         |
+| SAI-D013 | PoC convenience    | The PoC may expose three to five broad agent tools instead of a complete fine-grained API.                                                                                                                                  | Prefer a small usable loop over designing the final tool catalog.                                                                                                                                                             |
+| SAI-D014 | Direction to prove | Source is a detail that the model requests only when semantic facts are insufficient.                                                                                                                                       | Record every raw-source fallback and why it was needed.                                                                                                                                                                       |
+| SAI-D015 | PoC convenience    | The forcing app is WordFlower `1 - Current`, the journey is "review the selected render and apply one design change", and the write is a new `set-design-entry` source action.                                              | The existing `set-style-entry` bundle edit requires the render and the design to share a file; WordFlower keeps its design in `Design.tao`, so a design-scoped action that needs no render occurrence was added instead.      |
+| SAI-D016 | PoC convenience    | The semantic snapshot is rebuilt from the linked Langium AST on every request, in `packages/studio/studio-src/agent-poc/SemanticSnapshot.ts`, with no caching, identity scheme, or manifest reuse.                          | Every node and edge carries `origin: compiler` (resolved cross-reference or declaration structure) or `origin: poc-derived` (a documented name-matching heuristic) plus a `src:<path>:<start>-<end>` evidence handle.         |
+| SAI-D017 | PoC convenience    | The on-device model runs through a separate throwaway Swift helper (`AgentHelper.swift`) that takes JSON-schema tools over NDJSON stdio, rather than the shipped `tao-foundation-models-server`, which has no tool calling. | Tool calls are bridged back to the Studio server process; the helper caps tool calls, suppresses exact repeats, runs a guided turn first, and converts with a schema-only turn if the model drifts into prose.                |
+| SAI-D018 | PoC convenience    | The Studio surface is a fixed overlay panel mounted from `StudioApp.ts`, driven by the existing `/api/source-action/propose`, `/api/source-action`, and `/api/source-action/undo` seams.                                    | No Tao/React portal work and no new checkpoint machinery; proposal, apply, compile, preview refresh, and undo are the existing ones.                                                                                          |
+| SAI-D019 | PoC convenience    | Tao normalizes the model's `bundle` operand against the app design's real members before proposing, and the panel shows that Tao, not the model, resolved it.                                                               | The model once wrote the design name where a bundle name belonged; without normalization the typed request would have failed to lower.                                                                                        |
+| SAI-D020 | Direction to prove | A feature request in words is split in two: the model chooses only the feature's **shape**, and Tao decides every **placement** by copying the pattern of an analogous existing declaration.                                | "Add a feature by describing it" lowers into three files without the model authoring any Tao. Each plan step is attributed to the model, to Tao, or to a PoC shortcut.                                                        |
+| SAI-D021 | PoC convenience    | The feature lowering supports exactly one shape: a `yes / no` field on an entity, its `Set<Field>` action, a `Checkbox` bound to it, a fixture row, and a scenario. Other field kinds return an honest unsupported step.    | The analogous field (`Document.Final`) supplies the placement for all five edits. Anything else is refused rather than guessed.                                                                                               |
+| SAI-D022 | PoC convenience    | The multi-file write bypasses the source-action checkpoint bus: one Studio call writes every file, compiles once, restores all of them on a failed compile, and keeps one undo record.                                      | A feature is one step to apply and one step to undo. The production design still owns transaction semantics (SAI-Q019).                                                                                                       |
+| SAI-D023 | Direction to prove | Tao may correct a model operand that is wrong but recoverable from the graph, and must say that it did.                                                                                                                     | Two corrections proved necessary: the model named the screen (`DocumentScreen`) rather than the view owning the pattern, and a file-private view cannot be a scenario subject, so Tao chose the visible view that renders it. |
 
 Record new decisions here as the PoC proceeds. Do not silently promote an implementation choice into a
 product decision. If the experiment changes direction, retain the superseded entry and mark it superseded
@@ -153,6 +157,10 @@ effort, not this experiment, owns durable answers.
   answer the literal request, refuse with candidates, or resolve against the question's own text?
 - **SAI-Q039:** Should a semantic change request carry the model's rationale as a first-class operand so Tao
   can check the operand against it, as the PoC's normalization step did?
+- **SAI-Q040:** When Tao corrects a model operand (screen to owning view, private view to visible subject),
+  is that a silent repair, a visible plan step as in the PoC, or a question back to the model?
+- **SAI-Q041:** Which "analogous declaration" relation should the production graph expose, given that the
+  whole feature lowering hangs off one: a field with a writer and a presentation is a reusable template.
 
 ### Protocol and ecosystem
 
@@ -459,6 +467,46 @@ Benchmark questions run through `POST <session>/api/agent-poc/ask` with `{questi
   process. Model latency for one review was 6.0–7.2 s; the first attempt with a broken stdin was 2.4 s per
   probe turn.
 
+### Second journey: add a feature by describing it
+
+Observed, 2026-09-03, same branch and app:
+
+- Typing "let people archive documents" into the panel produced a complete plan in **2.0 s wall clock,
+  1.7 s of it model time**, from a **1,366-character prompt** over an **868-character** packet of facts.
+  The model made **zero tool calls**: it received the entity list, the views per entity, the existing
+  yes/no patterns, and the scenario groups, and was asked only for the shape.
+- The shape it returned: entity `Documents`, field `Archived`, kind `yes/no`, label `Archive`, present in
+  `DocumentScreen`, scenario `archive`. Eight short strings, no Tao.
+- Tao then decided every placement and reported each one:
+  - present in `DocumentEditor` instead of `DocumentScreen`, because `DocumentScreen` renders it and it
+    already presents a `Document` yes/no field;
+  - add `Archived yes / no` after `Final` in the data file;
+  - add `SetArchived(Value boolean)` after `SetFinished`, writing the new field;
+  - render `Checkbox #markArchived` bound to `Document.Archived` after `#markFinal`, invoking `SetArchived`;
+  - add fixture row `ArchiveDocument = create Document { Title: "Archive sample", Workspace: Novel, Archived: true }`,
+    importing `Documents` from the data folder;
+  - add `scenarios DocumentScreen "Archive" / "archive"` rendering `(Document: ArchiveDocument)`, importing
+    `DocumentScreen`, because `DocumentEditor` is file-private and cannot be a scenario subject.
+- Applying wrote three files, compiled once (preview revision 2), and a new **archive** preview cell appeared
+  showing the document screen with a `Final` checkbox off and the new **Archive** checkbox on, driven by the
+  fixture value. Undo restored all three files in one step (revision 3) and the working tree was clean.
+- Two wrong placements were caught by Tao, not by the model: the screen-versus-view confusion and the
+  file-private scenario subject. Both are reported as plan steps rather than silently repaired.
+
+Interpretation: the split works. The model is good at naming a feature and bad at knowing where code goes;
+the graph knows exactly where code goes. Keeping the model's output to eight strings removed every failure
+mode that dominated the first journey.
+
+### A compiler defect the feature journey surfaced
+
+The Studio preview manifest published a boolean fixture field as the **string** `"true"`, because the
+grammar's boolean literal value is the source word while the manifest's own type declares `boolean`. The
+first applied feature compiled and then failed in the preview with
+`Field 'Document.Archived' expects boolean, got string`. No app fixture in the repository had ever set a
+boolean field, so nothing exercised it. Fixed at both the fixture-field and field-default sites, with a
+compiler test. This is the clearest evidence for the exploration's premise: a generated feature exercised a
+path handwritten code never had.
+
 ### What failed or required raw source
 
 Observed:
@@ -548,7 +596,19 @@ the model's ability to copy exact names.
   Dynamic `DynamicGenerationSchema` from JSON Schema worked for both tools and output.
 - SAI-Q029: budgets that fit are roughly 700 tokens for a packet, 300–700 per tool result, 2–3 calls.
 - SAI-Q032: see "What failed"; the split is recorded per failure.
-- New: SAI-Q037, SAI-Q038, SAI-Q039.
+- New: SAI-Q037, SAI-Q038, SAI-Q039, SAI-Q040, SAI-Q041.
+- SAI-Q018 (deterministic lowering versus model-authored Tao): for one field-shaped feature, **none** of the
+  Tao was model-authored. The model produced eight short strings; Tao produced every edit.
+- SAI-Q021 (expressive without becoming a second language): the typed feature shape stayed at eight fields.
+  It expresses one feature family, not arbitrary features, which is the honest boundary.
+
+### Also fixed: the no-op design edit
+
+The first journey could produce an edit that changed nothing. The model asked for `pad 16` on a bundle
+already at `pad 16`, and the lowering moved the entry to the end of the clause, so the diff looked like a
+change while the preview did not move. Design entries are now edited **in place**, an equal value is refused
+as a no-op both in the source action and in the operand check, and the model is told the value must differ
+from the one it was shown.
 
 ### Recommendation for the production design phase
 
@@ -559,6 +619,13 @@ declaration names as the model's weakest skill (so queries should tolerate or co
 should validate every operand against facts before lowering), and typed reads/writes in the compiler so the
 `poc-derived` edges become compiler facts. Free-form tool calling should stay, but with a Tao-owned budget
 and repeat suppression rather than model discipline.
+
+The second journey sharpens this. The most valuable division of labour found here is not "the model writes
+code Tao validates" but **the model names the intent and Tao derives the code from an analogous declaration
+already in the project**. That inverts where correctness comes from: the model's output was eight strings,
+every one checkable against the graph, and two of them were wrong and caught. A production design should
+look for the general form of the "analogous declaration" relation (SAI-Q041) and for how far a typed shape
+can stretch before it becomes a second language (SAI-Q021).
 
 ## Exit condition and handoff
 
