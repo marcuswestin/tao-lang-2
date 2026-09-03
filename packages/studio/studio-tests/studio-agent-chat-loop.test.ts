@@ -2,6 +2,7 @@
 //
 // Every test here runs against a scripted model, so the loop's own behavior is what is under test and no
 // network is involved.
+import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { jsonSchema, tool } from 'ai'
 import { MockLanguageModelV3 } from 'ai/test'
@@ -208,9 +209,7 @@ Describe('Studio agent chat loop', () => {
     const session = new AgentChatSession({
       instructions: 'Answer from tools.',
       model: new MockLanguageModelV3({
-        doGenerate: async () => {
-          throw new Error('no API key configured')
-        },
+        doGenerate: async () => Errors.throwHostEnvironment('no API key configured'),
       }),
       tools: tools([]),
     })

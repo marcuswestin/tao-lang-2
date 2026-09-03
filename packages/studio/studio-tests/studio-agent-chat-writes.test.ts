@@ -1,4 +1,5 @@
 // Studio agent chat: the change surface, and the reference a model consults before writing Tao.
+import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { findSpec, type SpecSection } from '../studio-src/agent-chat/AgentChatReference'
 import type { AgentChatWriteWorld, StagedChange } from '../studio-src/agent-chat/AgentChatWrites'
@@ -132,9 +133,7 @@ Describe('Studio agent chat writes', () => {
     const changes = new Map<string, StagedChange>()
     const tools = writeTools(
       world({
-        apply: async () => {
-          throw new Error('App.tao changed since this was planned.')
-        },
+        apply: async () => Errors.throwUserInput('App.tao changed since this was planned.'),
       }),
       changes,
       () => {},

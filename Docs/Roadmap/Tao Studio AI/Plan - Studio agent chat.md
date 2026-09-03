@@ -345,3 +345,98 @@ To be numbered into the exploration document's ledger as they are settled:
   raw edits that compiled on the first try with a reference against those without one.
 - What does a grounded "next meaningful feature" suggestion look like, and can a person tell a
   grounded one from a plausible one without checking the citations?
+
+## Implementation record
+
+The slice is implemented in `packages/studio/studio-src/agent-chat/`, beside `agent-poc/` and sharing its
+snapshot, lowering, apply and verdict seams. What follows is what was built, what changed from the plan
+above, and — most importantly — what is still unproven.
+
+### What the phases produced
+
+**Phase 0, the loop.** `AgentChatSession` wraps the AI SDK's `generateText` with the four things Tao has to
+own: a step budget that stops a model that will not stop and says so rather than presenting a partial answer
+as a whole one; an approval pause; the rule that an unanswered approval is a denial rather than a hang; and a
+provider failure that ends a turn instead of throwing into Studio. Eight tests drive it against a scripted
+model, so the loop's behavior is tested without a network.
+
+**Phase 1, ask.** `readTools` is the whole read surface, and `AgentChatFacts` is what an advisory answer may
+rest on. `AgentChatProvider` holds the two separate gates: a key in the environment, and the person turning
+cloud use on for the session.
+
+**Phase 2, build.** Every change is proposed and applied in two steps, and only the applying pauses for
+approval — so the approval card carries the diff rather than the arguments that produced it. `proposeFlag`
+and `proposeReword` reuse the PoC's Tao-owned lowering; `proposeEdit` is the one place the model writes Tao,
+guarded by the formatter, then the compile, then the person. `taoReference` serves `Docs/Spec/` sections
+verbatim, flagged when the section marks what it describes as deferred.
+
+**Phase 3, scenarios and tests.** `authoringTools` adds `proposeScenario`, `proposeTest` and
+`requestCodeChanges`. The gate is enforced by tool availability: in this mode the tools that change app code
+do not exist until a person allows them, so a model deciding to work around the restriction has nothing to
+reach for. `taoGuarantees` is the account of what not to test. `coverageOfView` supplies the half the graph
+does not have, by reading the `.test.tao` sidecars directly.
+
+### What the reviews changed
+
+Two reviews ran against 1f85f010 while this was being built. Both found real defects; the corrections are in
+`32cc0d05` and `aa4e40ce`, and each has a regression test.
+
+In the PoC's source editing: an analogous field's writer was used as an offset anchor even when it lived in
+another file, splicing generated code into the middle of whatever text sat at that offset; two staged edits
+sharing a start offset applied in array order, so a replacement swallowed an insertion; and a one-file app
+had imports added for declarations it declares itself.
+
+In the verdict: it reported "the app's tests still pass" while tests were failing, called a run that never
+happened an app without tests, and read a run that produced no result — what `tao test` does when a test file
+will not compile — as everything passing. The panel also applied the change without waiting for the baseline,
+so a test the change broke could land in the baseline and be excused. A verdict that cannot contradict the
+agent is not a check.
+
+In the graph, three defects that all produced confidently wrong advice:
+
+- A field read inside `loop Documents / Document` produced no `reads` edge, because a loop binding resolved to
+  no entity. That is most of the field reads in a list-shaped UI.
+- A derived app — `HNReaderStub = HNReader with { ... }` — resolved to no design, so HNReader had no styling
+  edges at all and every bundle in it read as unused. Following the inherited design turns 0 `styled-by` edges
+  into 34.
+- Counting only direct `covers` edges called 25 of WordFlower's 26 views uncovered, because an app-level
+  scenario exercises views without naming them. Coverage now follows `renders` from a scenario's subject.
+
+The lesson worth keeping is one shape: **every fact here is a claim about absence, and absence has two
+causes.** The thing is genuinely unused, or the graph cannot see that relation at all. Reporting the second as
+the first is how a cited answer becomes worse than an uncited one, and `improvementFacts` now stays silent
+about a relation with no edges anywhere rather than claiming everything is unused.
+
+The plan's own guarantee fact sheet was wrong twice, and both errors would have taught the agent to skip a
+test the app needs: Tao does have an absent value (`none` is in the value core and optional item fields are
+implemented), and a query distinguishes loading from empty rather than answering to `is empty` alone. Entity
+guard branches moved from "worth a test" to `not-testable-yet`: driving a provider into them from a check is
+retired and the replacement has not landed.
+
+### What is not proven
+
+**No hosted model has run against this.** The agent implementing it had no provider key and no egress to one,
+so every test drives a scripted model. The loop, the tool surface, the refusals, the approval pause, the
+staging and the gate are all tested; whether a real model uses them well is not. In particular these are open:
+
+- whether a model that has never seen Tao writes `proposeEdit` source that compiles, and how often
+  `taoReference` plus an analogous declaration is enough to get it there — the raw-edit compile ratio this
+  plan asked for is still uncollected;
+- whether advisory answers actually cite their facts, or cite them and then say something the facts do not
+  support;
+- whether a model respects `requestCodeChanges` and stops, rather than finding another way;
+- cost and latency per story.
+
+Running these needs Studio started from a terminal with `ANTHROPIC_API_KEY` set, cloud turned on in the panel,
+and someone reading what comes back. That is the next thing to do, and it is the only thing that can settle
+whether this approach works.
+
+### Smaller things worth knowing
+
+- `overview` does not report everything its tool description once claimed; the description now says what the
+  packet actually holds.
+- `resolveTarget` now resolves an entity's singular name (`Document` as well as `Documents`), which the
+  exploration's own findings said was the model's weakest skill.
+- The snapshot is built once per turn rather than once per tool call, and invalidated when a change lands.
+- `applyAgentPocFiles` takes the versions a change was computed against, and the undo record is a stack. A
+  conversation applies several changes; a single slot offered undo while being able to restore only the last.
