@@ -230,6 +230,50 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.click('[data-tao-studio-undo] button')
       await waitForSource(sourcePath, source => source === typedSource)
       await waitForCompileAfter(browser, compileRevision)
+
+      const generatedSketchPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
+      const sketchCatalogPath = FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)
+      await browser.waitFor(
+        `document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`,
+      )
+      await browser.dragBy('[data-tao-studio-sketch-workspace]', { x: 360, y: 76 }, { steps: 12 })
+      await waitForFile(generatedSketchPath)
+      await waitForFile(sketchCatalogPath)
+      await browser.waitFor(
+        `[...document.querySelectorAll('.studio-preview-group-label')].some(label => label.textContent === 'sketch')
+          && [...document.querySelectorAll('[data-studio-tao-scenario="true"] .studio-scenario-inspector-label')]
+            .some(label => label.textContent === 'draft')
+          && document.querySelector('[data-tao-studio-sketch]') instanceof HTMLElement`,
+        { timeoutMs: 30_000 },
+      )
+      const generatedBeforeRect = await FS.readText(generatedSketchPath)
+      const catalogBeforeRect = await FS.readText(sketchCatalogPath)
+      const createdCatalog = smokeSketchCatalog(catalogBeforeRect)
+      Expect(createdCatalog.sketches).toHaveLength(1)
+      Expect(createdCatalog.sketches[0]).toMatchObject({ height: 76, name: 'View1', rects: [], width: 360 })
+
+      await browser.dragBy('[data-tao-studio-sketch]', { x: 64, y: 24 }, { steps: 8 })
+      const persistedCatalog = await waitForSketchRect(sketchCatalogPath, createdCatalog.revision)
+      const persistedSketch = persistedCatalog.sketches[0]!
+      const persistedRect = persistedSketch.rects[0]!
+      Expect(persistedRect).toMatchObject({ height: 24, kind: 'Placeholder', width: 64 })
+      Expect(await FS.readText(generatedSketchPath)).toBe(generatedBeforeRect)
+
+      await browser.goto(projectUrl)
+      await browser.waitFor(
+        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${persistedSketch.id}"]`)})
+          ?.querySelector(${
+          JSON.stringify(`[data-tao-studio-sketch-rect="${persistedRect.id}"]`)
+        }) instanceof HTMLElement`,
+        { timeoutMs: 30_000 },
+      )
+      const reloadedRect = await browser.evaluate<{ height: number; width: number }>(`(() => {
+        const element = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-rect="${persistedRect.id}"]`)})
+        if (!(element instanceof HTMLElement)) return { height: 0, width: 0 }
+        const bounds = element.getBoundingClientRect()
+        return { height: bounds.height, width: bounds.width }
+      })()`)
+      Expect(reloadedRect).toEqual({ height: 24, width: 64 })
       await browser.captureScreenshot('studio-completed-interactions')
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
       Expect(browser.browserFailures()).toEqual([])
@@ -404,6 +448,45 @@ async function waitForSource(path: string, predicate: (source: string) => boolea
     await Time.sleep(100)
   }
   Errors.throwHostEnvironment(`Timed out waiting for Studio source change. Last source:\n${source}`)
+}
+
+type SmokeSketchCatalog = Readonly<{
+  revision: number
+  sketches: readonly Readonly<{
+    height: number
+    id: string
+    name: string
+    rects: readonly Readonly<{ height: number; id: string; kind: string; width: number }>[]
+    width: number
+  }>[]
+}>
+
+function smokeSketchCatalog(content: string): SmokeSketchCatalog {
+  return JSON.parse(content) as SmokeSketchCatalog
+}
+
+async function waitForFile(path: string): Promise<void> {
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    if (await FS.isFile(path)) {
+      return
+    }
+    await Time.sleep(100)
+  }
+  Errors.throwHostEnvironment(`Timed out waiting for Studio to write ${path}.`)
+}
+
+async function waitForSketchRect(path: string, previousRevision: number): Promise<SmokeSketchCatalog> {
+  const deadline = Date.now() + 20_000
+  let catalog: SmokeSketchCatalog | undefined
+  while (Date.now() < deadline) {
+    catalog = smokeSketchCatalog(await FS.readText(path))
+    if (catalog.revision > previousRevision && catalog.sketches[0]?.rects.length === 1) {
+      return catalog
+    }
+    await Time.sleep(100)
+  }
+  Errors.throwHostEnvironment(`Timed out waiting for a persisted Studio rectangle; last=${JSON.stringify(catalog)}`)
 }
 
 async function waitForSourceOrStudioError(
