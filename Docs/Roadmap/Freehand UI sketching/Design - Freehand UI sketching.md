@@ -32,7 +32,8 @@ cell and delegates initial Pencil input to a native sidecar.
   `.tao-project/studio/sketches.jsonc`; they are not Tao render nodes.
 - Snapping is the only operation that writes those rectangles into a view's flowed Tao render tree.
   A partially snapped sketch is therefore a flowed source subtree plus remaining Studio rows, merged
-  by Studio for editing.
+  by Studio for editing. Later Snap and Unsnap operations patch only their selected Studio-owned
+  leaves so manual edits and flow actions survive.
 - Generated project source lives under the reserved root package `@/`, one generator per subfolder.
   Studio owns `@/studio/*.tao`; developers take ownership through Move to package.
 - A snapped `Placeholder` is valid product source. Development makes it visibly labelled and
@@ -54,8 +55,9 @@ cell and delegates initial Pencil input to a native sidecar.
 ### Layout and device boundary
 
 - Snap begins with deterministic projection inference and asks through the existing proposal
-  endpoint only when projections overlap. Unsnap prefers the remembered rectangle position, dropping
-  stale render matches and falling back to measured layout.
+  endpoint when projection is ambiguous, including overlap or two clean separating axes. Unsnap
+  prefers the remembered rectangle position, dropping stale render matches and falling back to
+  measured layout.
 - Free rectangle rendering begins as a TypeScript matrix overlay. A later positioned-container
   tranche moves it into Studio's own Tao client after the `Canvas` and offset spellings are settled.
 - The companion waits for Tao rendering and an app shell. One device renders one cell. PencilKit
@@ -66,6 +68,9 @@ cell and delegates initial Pencil input to a native sidecar.
 - `View1`, `View2`, … comes from a project-wide monotonic allocator; deleted numbers are not reused.
 - Snap direction, nesting, gap, pad, fill, claim, fixed dimensions, and hug behavior are inferred
   from geometry by the FS-D11 projection rules.
+- Generated snapped leaves carry a private source marker so a catalog rectangle can recover the
+  compiler manifest identity after recompilation. Only Studio-owned `@/studio` source publishes that
+  identity, and Move to package removes the marker.
 - A focused instance's entity and handle come from the interaction outline's item provenance. No
   second binding graph is declared.
 - Generated example values come from a stable seed plus field name and type vocabulary.

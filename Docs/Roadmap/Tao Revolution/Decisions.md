@@ -2073,11 +2073,12 @@ scenarios Recipe "devices" {
   app, optionally at a destination; `render RecipeRow(Recipe: Shakshuka)` mounts one parameterized
   view with named fixture-handle arguments. The two subjects are mutually exclusive. Only a scenario
   render may omit a required action, receiving a per-cell invocation-recording stand-in from Studio.
-- **A scenario entry may continue with an ordered interaction prefix.** `press down <selector>`,
-  `press up <selector>`, and `hover <selector>` use the existing exact text, label, placeholder, or
-  `#tag` selector family; `focus #tag` is tag-only; `advance <duration>` moves the held clock. Studio
-  replays the prefix once per mounted revision, leaves the result interactive, and never turns a
-  phase press into the complete activation expressed by plain `press`.
+- **A scenario entry may continue with an ordered interaction prefix spelled exactly like a test
+  body.** Complete `press`, `enter`, and `submit` operations join `press down`, `press up`, `hover`,
+  tag-only `focus`, and deterministic `advance`. `select #tag[index] { … }` scopes nested replayable
+  interactions to one loop row. Assertions, app launch or relaunch, navigation `back`, and host-only
+  toolbar operations remain test-only. Studio replays the prefix once per mounted revision and
+  leaves the reached state interactive.
 - **`prepare` is the scenario-local data delta.** It contains ordered `update <fixture-handle> { … }`
   statements applied after the selected fixture and before the subject mounts. It does not introduce
   a second fixture or hidden Studio-owned state.

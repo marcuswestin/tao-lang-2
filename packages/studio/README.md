@@ -164,9 +164,9 @@ compile or reload, shutdown, a signal escalation, an orphan — and never source
 ## Freehand Draw, Snap, and Feed project state
 
 Unsnapped Draw geometry is committed in `.tao-project/studio/sketches.jsonc`. It is not a launch
-artifact, browser-local preference, or Tao render tree. Catalog format version 3 stores a monotonic
-`nextViewNumber`, a conflict `revision`, and ordered sketches. Versions 1 and 2 migrate atomically. Each
-sketch records stable `id`, display `name`, project, generated `view`, width, height, total
+artifact, browser-local preference, or Tao render tree. Catalog format version 1 stores a monotonic
+`nextViewNumber`, a conflict `revision`, and ordered sketches. Each sketch records stable `id`,
+display `name`, project, generated `view`, width, height, total
 `rectOrder`, free `rects`, and flowed `snapped` associations; each rectangle records stable
 `id`, nonnegative `x` and `y`, positive width and height, an open Tao element `kind`, and optional
 string `content` and optional structured `fieldBinding`. A binding names its entity parameter, dotted
@@ -194,15 +194,23 @@ preserving stable IDs, rectangle order, revision, and a `nextViewNumber` greater
 `view` number. Do not lower the allocator to reuse a deleted name; an existing
 `@/studio/ViewN.tao` is never overwritten.
 
-Snap uses the server's deterministic projection engine. The frozen 16-screen corpus accepts 13
-directly (81.25 percent), flags three overlaps for canonical tree/diff confirmation, and records no
-accepted result above two inspector fixes. Partial Snap rebuilds the flowed tree while leaving other
-rows in the overlay. Generated leaves carry stable Studio markers; the compiler publishes their
-current render identities and the preview reports measured geometry for Unsnap fallback. Direction,
-separator, and weighted Spacer controls are typed source actions. Snap, flow edits, Unsnap, and Undo
-commit generated source plus catalog associations together and roll both back on compile or catalog
-failure. Reopen drops missing, duplicated, or retyped associations. Retained geometry is preferred
-for Unsnap; a current measured render is the fallback.
+Snap uses the server's deterministic projection engine. The committed 16-case component-layout
+regression corpus currently projects 12 directly (75 percent) and sends four ambiguous cases for
+canonical tree/diff confirmation. It is not the 15–20-real-screen FS-D11 acceptance corpus, and it
+does not measure inspector-fix counts; that acceptance evidence remains open. Two clean separating
+axes are ambiguous and require confirmation. Padding is inferred only from the sketch root, so nested
+container insets and cross-axis alignment remain inspector work until their inference rules are
+decided.
+
+Partial Snap inserts only the newly projected subtree, and Unsnap removes only selected Studio-owned
+leaves, preserving existing manual edits and typed flow actions. Generated leaves carry private stable
+Studio markers only while the source remains under `@/studio`; Move to package strips them. The
+compiler publishes their current render identities and the preview reports measured geometry for
+Unsnap fallback. Direction, separator, and weighted Spacer controls are typed source actions. Snap,
+flow edits, Unsnap, and Undo commit generated source plus catalog associations together and roll both
+back on compile or catalog failure. Reopen reconciles only against a manifest whose source version is
+current, then drops missing, duplicated, or retyped associations. Retained geometry is preferred for
+Unsnap; a current measured render is the fallback.
 
 The project session intentionally rejects whole-sketch deletion until generated-source removal shares
 the same transactional rollback.

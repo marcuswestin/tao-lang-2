@@ -167,6 +167,12 @@ scrolling, but their product meaning is settled.
 
 ## Slice 2 — Snap
 
+**Implementation status (2026-09-03).** The transactional Snap/Unsnap, typed flow edits, proposal
+parity, render-identity refresh, and preservation contracts are implemented. The committed 16-case
+component-layout corpus is regression evidence only: 12 cases project directly and four require
+confirmation. The required 15–20 real-screen corpus and operational inspector-fix measurement remain
+open, so FS-D11 acceptance is not yet closed.
+
 **Decisions.** FS-D11, FS-D12.
 
 **Goal.** Convert chosen free rectangles to minimal flowing Tao source, edit flow directly, and
@@ -179,12 +185,12 @@ return a node to its remembered free position without losing identity.
 
 **Introduces.** A pure deterministic projection engine implements the FS-D11 direction, nesting,
 median-gap, edge-pad, fill, claim, fixed-size, and hug rules. Clean separation applies directly;
-overlap produces a canonical proposed tree and diff through the existing proposal endpoint before
-apply. Partial snap deletes only projected catalog rows after source success; remaining rows overlay
-the flowed preview. Drag-one-in reuses palette gap indicators. Direction toggle, separators, and
-spacer claim dragging lower to typed layout actions. The preview reports measured rectangles by
-manifest render identity. Unsnap uses the retained row position, drops stale associations on
-delete/retype/reopen, and otherwise falls back to measurement.
+overlap or two clean separating axes produce a canonical proposed tree and diff through the existing
+proposal endpoint before apply. Partial snap deletes only projected catalog rows after source
+success; remaining rows overlay the flowed preview. Drag-one-in reuses palette gap indicators.
+Direction toggle, separators, and spacer claim dragging lower to typed layout actions. The preview
+reports measured rectangles by manifest render identity. Unsnap uses the retained row position,
+drops stale associations on delete/retype/reopen, and otherwise falls back to measurement.
 
 **Tests.** Unit/property tests pin projection invariants and deterministic output. A committed corpus
 of 15–20 real screens records expected trees, overlay requirement, and inspector-fix count; acceptance

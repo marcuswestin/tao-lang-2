@@ -141,7 +141,9 @@ Packages can make code available to other packages, and even other workspaces.
 Every Tao project reserves its root `@/` directory for committed generated Tao source. It is one
 package named exactly `@`, with one subfolder per generator. Studio owns `@/studio`, whose public
 views are imported normally, for example `use View1 from @/studio`. Existing named package spellings
-such as `@tao/ui` are unchanged.
+such as `@tao/ui` are unchanged. Only the project-root directory has this meaning; a nested directory
+whose literal name is `@` is an ordinary directory and remains reachable within its containing
+package.
 
 Generated source may use ordinary relative imports back into its owning project, such as
 `use Playlist from ../../Data` from `@/studio/View1.tao`. This is a narrow one-way exception: authored
@@ -152,7 +154,7 @@ Generated files are read-only working-tree artifacts. `tao fix`, `tao fmt`, and 
 lanes check them but never rewrite them. The owning generator temporarily enables only owner-write,
 restores mode `0444` after success or failure, and repairs that mode when it opens a project. A
 generated file begins with an ownership header; moving it to an authored package removes that
-ownership and rewrites its `@/studio` import sites.
+ownership and any generator-private rectangle markers, then rewrites its `@/studio` import sites.
 
 ### Making packages available to other files
 

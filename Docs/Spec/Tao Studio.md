@@ -102,14 +102,16 @@ per-cell recording stand-in that logs evaluated invocations without granting pro
 app subject may optionally name a destination with `run App at Destination(...)`;
 destination execution is not connected to the current preview host yet.
 
-After the effective subject, an entry may contain an ordered journey prefix using `press down`,
-`press up`, `hover`, `focus`, and `advance`. Studio replays that prefix once for each mounted cell
-revision, then leaves the reached preview fully interactive. Phase presses do not synthesize a plain
-press. The implemented optional clauses are one ordered `prepare { update ... }` block, `appearance light`
-or `dark`, a string locale or `pseudolocale`, `direction rightToLeft`, and `network online` or
-`offline`. A pseudolocale requires right-to-left direction. Device presets are `phone`, `tablet`, and
-`laptop`; custom positive whole-number width and height may follow the preset. The defaults used by
-the Studio manifest are 390 by 844, 768 by 1024, and 1440 by 900 respectively.
+After the effective subject, an entry may contain an ordered journey prefix using complete `press`,
+`enter`, and `submit` operations; `press down`, `press up`, `hover`, tag-only `focus`, scoped
+`select #tag[index] { ... }`, and deterministic `advance`. Studio replays that prefix once for each
+mounted cell revision, then leaves the reached preview fully interactive. Phase presses do not
+synthesize a plain press. Assertions, launch and relaunch, Back, and host-only toolbar operations
+remain test-only. The implemented optional clauses are one ordered `prepare { update ... }` block,
+`appearance light` or `dark`, a string locale or `pseudolocale`, `direction rightToLeft`, and
+`network online` or `offline`. A pseudolocale requires right-to-left direction. Device presets are
+`phone`, `tablet`, and `laptop`; custom positive whole-number width and height may follow the preset.
+The defaults used by the Studio manifest are 390 by 844, 768 by 1024, and 1440 by 900 respectively.
 
 Scenario groups are also metadata in ordinary app builds. A Studio compilation emits one source-owned
 scenario record and initially one preview cell per authored entry. Focused previews run inside an
@@ -270,12 +272,11 @@ source but do not rewrite it.
 
 The Draw slice stores each unsnapped rectangle in `.tao-project/studio/sketches.jsonc`. The file is
 JSONC on input and canonical indented JSON on every Studio write. It is committed project state, not
-an artifact or browser preference. Format version 3 has this shape; versions 1 and 2 are migrated
-atomically without changing their logical revision:
+an artifact or browser preference. Format version 1 has this shape:
 
 ```jsonc
 {
-  "formatVersion": 3,
+  "formatVersion": 1,
   "nextViewNumber": 2,
   "revision": 1,
   "sketches": [
@@ -315,14 +316,14 @@ snapped association retains the exact rectangle plus the generated path, view, e
 source version, render identity, and Studio rectangle marker. Coordinates are
 finite and nonnegative, dimensions are finite and positive, `kind` is an open Tao element name, and
 optional `content` is a string. An optional `fieldBinding` records a validated parameter, dotted field
-path, and text or image presentation; an image label may name its own path and text affixes. Version 2
-string bindings migrate to that structured form. Unknown fields, duplicate IDs, duplicate sketch
-names or views, malformed JSONC, and unsupported format versions are rejected rather than repaired
-silently. `revision` is the server conflict precondition. `nextViewNumber` is project-wide and must
+path, and text or image presentation; an image label may name its own path and text affixes. Unknown
+fields, duplicate IDs, duplicate sketch names or views, malformed JSONC, and unsupported format
+versions are rejected rather than repaired silently. `revision` is the server conflict precondition.
+`nextViewNumber` is project-wide and must
 remain greater than every generated `view` association; deletion and reopening never reuse a `ViewN`
 number. `name` remains display text and does not control allocation.
 
-The session handshake includes the current catalog and advertises catalog format version 3. The same
+The session handshake includes the current catalog and advertises catalog format version 1. The same
 snapshot is available from `GET /api/sketches`. Draw mutations use typed requests at
 `POST /api/sketches/action` with a unique request ID and the expected catalog revision. The server
 serializes them with other project mutations, rejects a stale revision as an HTTP 409 conflict,
@@ -356,23 +357,29 @@ the overlay back to its authoritative snapshot and exposes the error on the sket
 moving, resizing, retyping, and editing a free rectangle never write the Tao render tree. The language
 boundary is fixed: only snapping writes free rectangles into flowed Tao source.
 
-Snap projects selected rectangles through a deterministic server-owned inference: a clean separating
-axis chooses `Row` or `Col`, stacked lanes nest, median neighbour distance becomes `gap`, sketch-edge
-distance becomes `pad`, opposite-edge contact becomes `fill`, the widest slack assigns `claim 1` to
-its neighbour, fixed sizes remain fixed, and Text/Image hug. The committed 16-screen corpus records
-13 direct projections (81.25 percent) and three overlap proposals; every accepted tree records no
-more than two inspector fixes. Clean projections apply directly. Overlap returns the canonical tree
-and diff through the proposal route and requires the exact proposed source version to confirm.
+Snap projects selected rectangles through a deterministic server-owned inference: one clean
+separating axis chooses `Row` or `Col`, stacked lanes nest, median neighbour distance becomes `gap`,
+sketch-edge distance becomes root `pad`, opposite-edge contact becomes `fill`, the widest slack
+assigns `claim 1` to its neighbour, fixed sizes remain fixed, and Text/Image hug. Two clean axes and
+overlap are ambiguous. The committed 16-case component-layout regression corpus records 12 direct
+projections (75 percent) and four proposals; it does not constitute the FS-D11 real-screen acceptance
+corpus or measure inspector-fix counts. Nested padding and cross-axis alignment inference remain open.
+Clean projections apply directly. Ambiguity returns the canonical tree and diff through the proposal
+route and requires the exact proposed source version to confirm.
 
-Generated leaves carry private `#studio_rect_...` markers. The compiler publishes their current
-render identities and element names; the preview reports finite cell-relative measured rectangles.
-Snap, repeated partial Snap, Unsnap, direction changes, separator insertion, weighted Spacer edits,
-and Undo are serialized source/catalog transactions: generated source compiles before the catalog
-advances, both stores roll back on failure, and successful revisions remain monotonic. Unsnap first
-uses the retained rectangle. On reopen, missing, duplicated, or retyped associations are dropped;
-an active matching preview measurement is the fallback, otherwise Studio returns the retryable
-`measurement-unavailable` conflict without changing either store. Free rows remain in the TypeScript
-overlay beside the flowed preview until they are snapped.
+Generated leaves carry private `#studio_rect_...` markers while Studio owns the source under
+`@/studio`; authored source cannot publish or spoof that identity, and Move to package strips the
+markers. The compiler publishes current render identities and element names; the preview reports
+finite cell-relative measured rectangles. Snap inserts only newly selected projected nodes and Unsnap
+removes only selected Studio leaves, preserving manual edits and typed flow actions. Snap, repeated
+partial Snap, Unsnap, direction changes, separator insertion, weighted Spacer edits, and Undo are
+serialized source/catalog transactions: generated source compiles before the catalog advances, both
+stores roll back on failure, and successful revisions remain monotonic. Unsnap first uses the retained
+rectangle. On reopen, reconciliation waits for a manifest matching the current source version before
+missing, duplicated, or retyped associations are dropped; an active matching preview measurement is
+the fallback, otherwise Studio returns the retryable `measurement-unavailable` conflict without
+changing either store. Free rows remain in the TypeScript overlay beside the flowed preview until they
+are snapped.
 
 ### Feed source contracts
 
@@ -412,7 +419,7 @@ collision. Studio's automatic rollback covers failed create transactions; Move t
 supported way to take ownership of a generated view.
 
 Move to package transfers one `@/studio/<Name>.tao` file into an existing authored `@package`, removes
-the generated header, restores normal writable ownership, and rewrites every parsed
+the generated header and private Studio rectangle markers, restores normal writable ownership, and rewrites every parsed
 `use <Name> from @/studio` site to the target package before one serialized compile. A declaration
 with the same name in the target package returns a conflict for the client to resolve before any
 mutation; all nonconflicting moves proceed without an extra confirmation.
