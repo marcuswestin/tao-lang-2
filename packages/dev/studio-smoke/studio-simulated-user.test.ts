@@ -38,6 +38,26 @@ Test('simulated preview stays within the preview-origin API boundary', () => {
   Expect(html).not.toContain('/api/file?')
 })
 
+Test('sketch persistence evidence requires catalog-only rectangle mutation', () => {
+  const before = smokeSketchCatalog(JSON.stringify({
+    revision: 1,
+    sketches: [{ height: 76, id: 'sketch-1', name: 'View1', rects: [], width: 360 }],
+  }))
+  const after = smokeSketchCatalog(JSON.stringify({
+    revision: 2,
+    sketches: [{
+      height: 76,
+      id: 'sketch-1',
+      name: 'View1',
+      rects: [{ height: 24, id: 'rect-1', kind: 'Placeholder', width: 64 }],
+      width: 360,
+    }],
+  }))
+
+  Expect(sketchPersistenceObserved(before, after, 'generated source', 'generated source')).toBe(true)
+  Expect(sketchPersistenceObserved(before, after, 'generated source', 'rewritten source')).toBe(false)
+})
+
 // The browser branch is the full editor/preview journey in the `full-verify` graph. The native branch
 // validates the unattended Electrobun capability probe; it does not repeat the browser journey.
 Test('simulated user exercises the browser editor or the native Electrobun shell', async () => {
@@ -257,7 +277,12 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       const persistedSketch = persistedCatalog.sketches[0]!
       const persistedRect = persistedSketch.rects[0]!
       Expect(persistedRect).toMatchObject({ height: 24, kind: 'Placeholder', width: 64 })
-      Expect(await FS.readText(generatedSketchPath)).toBe(generatedBeforeRect)
+      Expect(sketchPersistenceObserved(
+        createdCatalog,
+        persistedCatalog,
+        generatedBeforeRect,
+        await FS.readText(generatedSketchPath),
+      )).toBe(true)
 
       await browser.goto(projectUrl)
       await browser.waitFor(
@@ -463,6 +488,21 @@ type SmokeSketchCatalog = Readonly<{
 
 function smokeSketchCatalog(content: string): SmokeSketchCatalog {
   return JSON.parse(content) as SmokeSketchCatalog
+}
+
+function sketchPersistenceObserved(
+  before: SmokeSketchCatalog,
+  after: SmokeSketchCatalog,
+  generatedBefore: string,
+  generatedAfter: string,
+): boolean {
+  const beforeSketch = before.sketches[0]
+  const afterSketch = after.sketches[0]
+  return beforeSketch !== undefined
+    && afterSketch?.id === beforeSketch.id
+    && after.revision > before.revision
+    && afterSketch.rects.length === beforeSketch.rects.length + 1
+    && generatedAfter === generatedBefore
 }
 
 async function waitForFile(path: string): Promise<void> {
