@@ -12,14 +12,14 @@ type AppShellProps = {
   children?: React.ReactNode
 }
 
-type SafeAreaInsets = {
+export type SafeAreaInsets = {
   readonly bottom: number
   readonly left: number
   readonly right: number
   readonly top: number
 }
 
-type SafeAreaContextModule = {
+export type SafeAreaContextModule = {
   readonly SafeAreaProvider: React.ComponentType<{ children?: React.ReactNode }>
   useSafeAreaInsets(): SafeAreaInsets
 }
@@ -133,6 +133,6 @@ function appRootChildren(children: React.ReactNode, devMode: unknown, scheme: Ta
   })
 }
 
-function requireSafeAreaContext(): SafeAreaContextModule {
+export function requireSafeAreaContext(): SafeAreaContextModule {
   return require('react-native-safe-area-context') as SafeAreaContextModule
 }

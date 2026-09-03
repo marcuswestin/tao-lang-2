@@ -9,6 +9,7 @@
  */
 
 import React from 'react'
+import { requireSafeAreaContext } from './TR-app-shell'
 import { errorMessage } from './TR-errors'
 import { NativeModules } from './TR-native-modules'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
@@ -538,16 +539,53 @@ function StudioDeviceCellContent(props: {
       cell,
       children: React.createElement(
         DeviceCellFrame,
-        { testID: 'tao-studio-device-cell' },
+        { bareView: cell.scenario.kind === 'view', testID: 'tao-studio-device-cell' },
         React.createElement(props.App),
       ),
     }),
   )
 }
 
-function DeviceCellFrame(props: { children?: React.ReactNode; testID: string }): React.JSX.Element {
+/**
+ * A `view`-kind scenario mounts one Tao view directly inside AppShell with no navigator to apply
+ * insets (AppShell only provides the SafeAreaProvider context; a navigator's own AppSurfaceFrame is
+ * what turns that into padding), so on a device it paints under the status bar and home indicator.
+ * An `app`-kind scenario keeps its own AppSurfaceFrame or native chrome and must stay unpadded here,
+ * or a window-owning navigator (a native tab bar or stack) would be squeezed inward from the true
+ * screen edges it depends on.
+ */
+function DeviceCellFrame(props: { bareView: boolean; children?: React.ReactNode; testID: string }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
-  return React.createElement(RN.View, { style: rootStyle, testID: props.testID }, props.children)
+  if (!props.bareView) {
+    return React.createElement(RN.View, { style: rootStyle, testID: props.testID }, props.children)
+  }
+  const SafeAreaContext = requireSafeAreaContext()
+  return React.createElement(
+    SafeAreaContext.SafeAreaProvider,
+    null,
+    React.createElement(BareViewCellFrame, { children: props.children, testID: props.testID }),
+  )
+}
+
+function BareViewCellFrame(props: { children?: React.ReactNode; testID: string }): React.JSX.Element {
+  const RN = requireReactNativeRuntime()
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
+  return React.createElement(
+    RN.View,
+    {
+      style: [
+        rootStyle,
+        {
+          paddingBottom: insets.bottom,
+          paddingLeft: insets.left,
+          paddingRight: insets.right,
+          paddingTop: insets.top,
+        },
+      ],
+      testID: props.testID,
+    },
+    props.children,
+  )
 }
 
 function DeviceOverlay(props: {
