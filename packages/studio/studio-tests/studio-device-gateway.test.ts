@@ -60,24 +60,26 @@ Describe('Studio device gateway handshake', () => {
         sessionId: env.sessionId,
         type: 'studio.welcome',
       })
+      // cellId and scenarioId cross the device gateway opaque — see StudioDeviceGateway's
+      // deviceManifest — since Studio's real ids embed the project's absolute source path.
       Expect(welcome.type === 'studio.welcome' ? welcome.manifest : undefined).toEqual({
         compileRevision: 1,
         manifestRevision: 'manifest-1',
         scenarios: [
           {
-            cellId: 'cell:phone',
+            cellId: StudioDeviceTrust.opaqueId('cell:phone'),
             cellRevision: 0,
             group: 'Garden',
             label: 'Garden phone',
-            scenarioId: 'Garden.phone',
+            scenarioId: StudioDeviceTrust.opaqueId('Garden.phone'),
             viewport: { height: 844, width: 390 },
           },
           {
-            cellId: 'cell:tablet',
+            cellId: StudioDeviceTrust.opaqueId('cell:tablet'),
             cellRevision: 0,
             group: 'Garden',
             label: 'Garden phone',
-            scenarioId: 'Garden.phone',
+            scenarioId: StudioDeviceTrust.opaqueId('Garden.phone'),
             viewport: { height: 1194, width: 834 },
           },
         ],
@@ -264,7 +266,8 @@ Describe('Studio device gateway sealed control plane', () => {
   Test('assigns fresh preview instances and acknowledges applied revisions through the session', async () => {
     await withGateway({}, async env => {
       const device = await pairedDevice(env)
-      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      // A real device only ever has the opaque id the manifest gave it (see deviceManifest).
+      device.sendSealed({ cellId: StudioDeviceTrust.opaqueId('cell:phone'), type: 'device.selectCell' })
       const assigned = await device.nextSealed()
       Expect(assigned.type).toBe('studio.cellAssigned')
       if (assigned.type !== 'studio.cellAssigned') {
@@ -272,7 +275,7 @@ Describe('Studio device gateway sealed control plane', () => {
       }
       Expect(assigned.identity).toMatchObject({
         appName: 'Garden',
-        cellId: 'cell:phone',
+        cellId: StudioDeviceTrust.opaqueId('cell:phone'),
         cellRevision: 0,
         compileRevision: 1,
         manifestRevision: 'manifest-1',
@@ -283,15 +286,21 @@ Describe('Studio device gateway sealed control plane', () => {
         scenarioLabel: 'Garden phone',
       })
 
-      device.sendSealed({ cellId: 'cell:tablet', type: 'device.selectCell' })
+      device.sendSealed({ cellId: StudioDeviceTrust.opaqueId('cell:tablet'), type: 'device.selectCell' })
       const reassigned = await device.nextSealed()
-      Expect(reassigned.type === 'studio.cellAssigned' && reassigned.identity.cellId).toBe('cell:tablet')
+      Expect(reassigned.type === 'studio.cellAssigned' && reassigned.identity.cellId).toBe(
+        StudioDeviceTrust.opaqueId('cell:tablet'),
+      )
       // A device renders one cell at a time, so selecting another releases its previous instance.
       Expect(() => env.session.previewCellInstance(assigned.identity.previewInstanceId)).toThrow('no longer current')
 
+      // Studio-initiated (the browser workbench) always supplies its own real, internal id — #assign
+      // still opaque-wraps whatever it sends the device with, regardless of who triggered it.
       Expect(env.gateway.selectCell(env.sessionId, 'cell:phone')).toEqual({ requested: true })
       const fromStudio = await device.nextSealed()
-      Expect(fromStudio.type === 'studio.cellAssigned' && fromStudio.identity.cellId).toBe('cell:phone')
+      Expect(fromStudio.type === 'studio.cellAssigned' && fromStudio.identity.cellId).toBe(
+        StudioDeviceTrust.opaqueId('cell:phone'),
+      )
       Expect(() => env.session.previewCellInstance(assigned.identity.previewInstanceId)).toThrow('no longer current')
       const identity = fromStudio.type === 'studio.cellAssigned' ? fromStudio.identity : assigned.identity
 
@@ -315,7 +324,7 @@ Describe('Studio device gateway sealed control plane', () => {
       Expect(await device.nextSealed()).toEqual({ accepted: false, compileRevision: 1, type: 'studio.appliedAck' })
       Expect(env.gateway.status(env.sessionId).connection?.lastError).toContain('no longer current')
 
-      // A rejected claim proves nothing about the device's real revision — an arbitrarily high one
+      // A refused claim proves nothing about the device's real revision — an arbitrarily high one
       // must not turn the panel's status green for a device the session just refused.
       device.sendSealed({
         appliedRevision: 99,
@@ -326,8 +335,27 @@ Describe('Studio device gateway sealed control plane', () => {
       Expect(await device.nextSealed()).toEqual({ accepted: false, compileRevision: 1, type: 'studio.appliedAck' })
       Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBe(1)
 
+      // Nor can a device inflate the number behind an identity that is genuinely current: the
+      // recorded revision never exceeds one Studio compiled.
+      device.sendSealed({ appliedRevision: 99, compileRevision: 99, identity, type: 'device.applied' })
+      Expect(await device.nextSealed()).toEqual({ accepted: false, compileRevision: 99, type: 'studio.appliedAck' })
+      Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBe(1)
+
+      // Re-acknowledging a revision the coordinator already advanced is not a refusal: it answers
+      // `accepted: false` because there is nothing left to advance, and the device's own claim about
+      // what it is showing is still true, so the panel keeps reporting it rather than "not reported".
+      device.sendSealed({ appliedRevision: 1, compileRevision: 1, identity, type: 'device.applied' })
+      Expect(await device.nextSealed()).toEqual({ accepted: false, compileRevision: 1, type: 'studio.appliedAck' })
+      Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBe(1)
+      Expect(env.gateway.status(env.sessionId).connection?.lastError).toBeUndefined()
+
+      // An id with no match in the current manifest — garbage, or one from a manifest since replaced
+      // — reaches #assign untranslated and is echoed back the same way every #assign reply is: opaque.
       device.sendSealed({ cellId: 'cell:missing', type: 'device.selectCell' })
-      Expect(await device.nextSealed()).toMatchObject({ cellId: 'cell:missing', code: 'unknown-cell' })
+      Expect(await device.nextSealed()).toMatchObject({
+        cellId: StudioDeviceTrust.opaqueId('cell:missing'),
+        code: 'unknown-cell',
+      })
       device.sendSealed({ type: 'device.ping' })
       Expect(await device.nextSealed()).toEqual({ type: 'studio.pong' })
       device.sendSealed({ level: 'error', message: 'Render failed', type: 'device.report' })
@@ -344,9 +372,11 @@ Describe('Studio device gateway sealed control plane', () => {
   Test('pushes the manifest and re-registers the selected cell when a compile changes it', async () => {
     await withGateway({}, async env => {
       const device = await pairedDevice(env)
-      device.sendSealed({ cellId: 'cell:tablet', type: 'device.selectCell' })
+      device.sendSealed({ cellId: StudioDeviceTrust.opaqueId('cell:tablet'), type: 'device.selectCell' })
       const first = await device.nextSealed()
-      Expect(first.type === 'studio.cellAssigned' && first.identity.cellId).toBe('cell:tablet')
+      Expect(first.type === 'studio.cellAssigned' && first.identity.cellId).toBe(
+        StudioDeviceTrust.opaqueId('cell:tablet'),
+      )
 
       env.cells.splice(0, env.cells.length, 'cell:phone')
       await env.session.compileInitial()
@@ -355,11 +385,15 @@ Describe('Studio device gateway sealed control plane', () => {
       const manifest = await device.nextSealed()
       Expect(manifest).toMatchObject({ manifest: { compileRevision: 2, manifestRevision: 'manifest-2' } })
       Expect(manifest.type === 'studio.manifest' ? manifest.manifest.scenarios.map(item => item.cellId) : []).toEqual([
-        'cell:phone',
+        StudioDeviceTrust.opaqueId('cell:phone'),
       ])
       const reassigned = await device.nextSealed()
       Expect(reassigned).toMatchObject({
-        identity: { cellId: 'cell:phone', compileRevision: 2, manifestRevision: 'manifest-2' },
+        identity: {
+          cellId: StudioDeviceTrust.opaqueId('cell:phone'),
+          compileRevision: 2,
+          manifestRevision: 'manifest-2',
+        },
         type: 'studio.cellAssigned',
       })
       const compileState = await device.nextSealed()

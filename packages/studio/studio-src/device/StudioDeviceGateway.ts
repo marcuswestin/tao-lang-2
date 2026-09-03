@@ -554,6 +554,7 @@ export class StudioDeviceGateway {
     }
   }
 
+  /** cellId is always Studio's real, internal id here, from every caller — never a device-supplied token. */
   #assign(connection: Connection, cellId: string): void {
     const ref = connection.ref
     if (ref === undefined) {
@@ -562,7 +563,7 @@ export class StudioDeviceGateway {
     const manifest = ref.session.previewManifest()
     if (manifest === undefined) {
       this.#sendSealed(connection, {
-        cellId,
+        cellId: StudioDeviceTrust.opaqueId(cellId),
         code: 'manifest-unavailable',
         message: 'Studio has not published a preview manifest yet.',
         type: 'studio.cellUnavailable',
@@ -572,9 +573,9 @@ export class StudioDeviceGateway {
     const cell = manifest.cells.find(candidate => candidate.cellId === cellId)
     if (cell === undefined) {
       this.#sendSealed(connection, {
-        cellId,
+        cellId: StudioDeviceTrust.opaqueId(cellId),
         code: 'unknown-cell',
-        message: `The preview manifest has no cell ${cellId}.`,
+        message: 'The preview manifest has no cell with that id.',
         type: 'studio.cellUnavailable',
       })
       return
@@ -592,7 +593,7 @@ export class StudioDeviceGateway {
       this.#sendSealed(connection, {
         identity: {
           appName: identity.appName,
-          cellId: identity.cellId,
+          cellId: StudioDeviceTrust.opaqueId(identity.cellId),
           cellRevision: identity.cellRevision,
           compileRevision: identity.compileRevision,
           manifestRevision: identity.manifestRevision,
@@ -684,11 +685,20 @@ export class StudioDeviceGateway {
       })
       return
     }
+    const manifest = ref.session.previewManifest()
     if (message.type === 'device.selectCell') {
-      this.#assign(connection, message.cellId)
+      // A miss here (an id from a stale manifest, or garbage) reaches #assign as the still-opaque
+      // token; #assign's own "no cell" lookup then fails it the same way, and echoes back a value
+      // that was already safe to send.
+      this.#assign(
+        connection,
+        (manifest === undefined ? undefined : deviceCellId(manifest, message.cellId))
+          ?? message.cellId,
+      )
       return
     }
     let accepted = false
+    let refused = false
     try {
       accepted = ref.session.acknowledgePreview({
         appliedRevision: message.appliedRevision,
@@ -696,7 +706,8 @@ export class StudioDeviceGateway {
         compileRevision: message.compileRevision,
         identity: {
           appName: message.identity.appName,
-          cellId: message.identity.cellId,
+          cellId: (manifest === undefined ? undefined : deviceCellId(manifest, message.identity.cellId))
+            ?? message.identity.cellId,
           cellRevision: message.identity.cellRevision,
           compileRevision: message.identity.compileRevision,
           manifestRevision: message.identity.manifestRevision,
@@ -708,12 +719,16 @@ export class StudioDeviceGateway {
       })
       connection.lastError = undefined
     } catch (error) {
+      refused = true
       connection.lastError = Errors.formatForUser(error)
     }
-    // A rejected acknowledgement (stale identity, wrong instance) proves nothing about the device's
-    // actual revision — recording the device's claim anyway would let the panel show "applied ✓" for
-    // a device the session just refused. Leave the last accepted revision standing instead.
-    if (accepted) {
+    // Only a throw is the session refusing this identity (stale, wrong instance); such a claim
+    // proves nothing about the device and must not reach the panel. `accepted: false` without a
+    // throw is not a refusal — the coordinator declines to advance a revision the browser canvas
+    // already acknowledged, while the device's own claim about itself stays true. Either way the
+    // recorded revision is bounded by one Studio actually compiled, so a device cannot inflate an
+    // arbitrary number into the panel's "applied ✓".
+    if (!refused && message.appliedRevision <= ref.session.compileSnapshot().compileRevision) {
       connection.appliedRevision = message.appliedRevision
     }
     this.#sendSealed(connection, { accepted, compileRevision: message.compileRevision, type: 'studio.appliedAck' })
@@ -908,6 +923,13 @@ export class StudioDeviceGateway {
 }
 
 /** deviceManifest projects the browser manifest onto what a device may know: cells and labels. */
+/**
+ * A cell and scenario id are built from the project's absolute source path (`packages/compiler`'s
+ * `scenarioId`/`cellId` construction), which a device gateway must not expose. `StudioDeviceTrust.
+ * opaqueId` swaps each for a deterministic, one-way token before it crosses the wire; `deviceCellId`
+ * reverses the swap for a token a device echoes back, by hashing every real id in the current
+ * manifest until one matches — the manifest is small and this only runs once per inbound message.
+ */
 function deviceManifest(manifest: StudioPreviewManifestV2): TaoStudioDeviceManifest {
   const scenarios = new Map(manifest.scenarios.map(scenario => [scenario.scenarioId, scenario]))
   return {
@@ -916,11 +938,11 @@ function deviceManifest(manifest: StudioPreviewManifestV2): TaoStudioDeviceManif
     scenarios: manifest.cells.map(cell => {
       const scenario = scenarios.get(cell.scenarioId)
       return {
-        cellId: cell.cellId,
+        cellId: StudioDeviceTrust.opaqueId(cell.cellId),
         cellRevision: cell.cellRevision,
         group: scenario?.group ?? '',
-        label: scenario?.label ?? cell.scenarioId,
-        scenarioId: cell.scenarioId,
+        label: scenario?.label ?? 'Untitled scenario',
+        scenarioId: StudioDeviceTrust.opaqueId(cell.scenarioId),
         viewport: {
           height: Math.max(1, Math.round(cell.environment.viewport.height)),
           width: Math.max(1, Math.round(cell.environment.viewport.width)),
@@ -928,6 +950,11 @@ function deviceManifest(manifest: StudioPreviewManifestV2): TaoStudioDeviceManif
       }
     }),
   }
+}
+
+/** Finds the real cellId a device's opaque token was made from, or undefined if none in the current manifest matches. */
+function deviceCellId(manifest: StudioPreviewManifestV2, opaqueCellId: string): string | undefined {
+  return manifest.cells.find(cell => StudioDeviceTrust.opaqueId(cell.cellId) === opaqueCellId)?.cellId
 }
 
 function compileState(snapshot: StudioCompileSnapshot): TaoStudioDeviceCompileState {
