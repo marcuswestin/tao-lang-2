@@ -20,6 +20,7 @@ import {
   type StudioSourceChange,
   type StudioWatchResult,
 } from './StudioCompileCoordinator'
+import { StudioGeneratedSources } from './StudioGeneratedSources'
 import {
   type StudioCellReconfigureRequest,
   type StudioCellRuntime,
@@ -376,6 +377,7 @@ export class StudioProjectSession {
 
   static async open(options: StudioProjectSessionOptions): Promise<StudioProjectSession> {
     const projectRoot = await requireProjectRoot(options.projectRoot)
+    await new StudioGeneratedSources(projectRoot).repair()
     const workspace = await Workspace.open(projectRoot)
     const apps = await discoverAppVariants(projectRoot, workspace)
     const requestedEntryPath = options.entryPath === undefined

@@ -54,6 +54,23 @@ Test('Studio project session resolves one current Tao app and serves contained v
   })
 })
 
+Test('Studio project open repairs generated Studio sources to read-only mode', async () => {
+  await withTaoFiles('tao-studio-generated-open-', {
+    '@/studio/View1.tao': 'public view View1() { }\n',
+    'Garden.tao': 'app Garden { view Main }\nview Main() { }\n',
+  }, async (paths, root) => {
+    await FS.chmod(paths['@/studio/View1.tao'], 0o644)
+
+    await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+
+    Expect(await FS.fileMode(paths['@/studio/View1.tao'])).toBe(0o444)
+  })
+})
+
 Test('Studio project session publishes every project app variant with a safe relative entry path', async () => {
   await withTaoFiles('tao-studio-app-variants-', {
     'First.tao': 'app First { view Main }\napp FirstCompact = First with { }\nview Main() { }\n',

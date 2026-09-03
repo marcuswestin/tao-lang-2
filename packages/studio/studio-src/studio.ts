@@ -1,4 +1,9 @@
 export {
+  StudioGeneratedSources,
+  studioGeneratedSourceHeader,
+  type StudioGeneratedSourceWriter,
+} from './StudioGeneratedSources'
+export {
   type StudioCompileCause,
   type StudioCompileCompletion,
   StudioCompileCoordinator,
