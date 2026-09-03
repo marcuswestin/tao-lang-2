@@ -49,6 +49,7 @@ import {
   disconnectPreviews,
   handlePreviewMessage,
   postEditorSelection,
+  previewBundleNoticeFor,
   previewNoticeFor,
   refreshCellPreviews,
   requestRuntimeCapture,
@@ -196,8 +197,27 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
      * renderPreviewNotice explains a preview that cannot show the app. A failed compile leaves the last good
      * frame on screen, which otherwise looks like the change simply did nothing.
      */
+    let previewBundleNotice: { detail: string; heading: string } | undefined
     function renderPreviewNotice(): void {
-      studioPreviewNotice(view.preview, previewNoticeFor(compileState))
+      studioPreviewNotice(view.preview, previewNoticeFor(compileState) ?? previewBundleNotice)
+    }
+
+    /**
+     * checkPreviewBundle asks the server whether the preview's bundler can build the app. A bundler failure
+     * leaves an empty frame and reports nothing to the problems panel, so without this a person sees a blank
+     * preview and no reason for it. The probe reads the same bundle the preview asked for, so it is a warm
+     * read whenever the preview did start.
+     */
+    function checkPreviewBundle(): void {
+      if (config.previewUrl === undefined) {
+        return
+      }
+      void StudioApiClient.previewDiagnosis(options.signal).then(diagnosis => {
+        previewBundleNotice = previewBundleNoticeFor(diagnosis)
+        renderPreviewNotice()
+      }).catch(() => {
+        // A probe that cannot run says nothing; the compile notice still covers the failures it knows.
+      })
     }
 
     function publishProductHostState(): void {
@@ -1350,6 +1370,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
             activePreview.reconcile(wirePreview)
             renderPreviewNotice()
+            checkPreviewBundle()
           }).catch(error => {
             view.status.dataset['state'] = 'error'
             view.status.textContent = error instanceof Error ? error.message : String(error)

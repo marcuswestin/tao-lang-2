@@ -499,6 +499,29 @@ export function previewNoticeFor(
   }
 }
 
+/**
+ * previewBundleNoticeFor explains a preview whose app never started. The Tao project compiles, so nothing in
+ * the problems panel is wrong; the failure is in the bundler that builds the generated TypeScript, and it
+ * otherwise shows only as an empty frame.
+ */
+export function previewBundleNoticeFor(
+  diagnosis: { message?: string; status: string } | undefined,
+): { detail: string; heading: string } | undefined {
+  if (diagnosis === undefined || diagnosis.status === 'ok' || diagnosis.status === 'unknown') {
+    return undefined
+  }
+  if (diagnosis.status === 'unreachable') {
+    return {
+      detail: `${diagnosis.message ?? 'no response'} — reload the preview, or restart Studio.`,
+      heading: 'This preview is empty: its app server did not answer.',
+    }
+  }
+  return {
+    detail: `${diagnosis.message ?? 'the bundler reported no detail'} — reload the preview, or restart Studio.`,
+    heading: 'This preview is empty: the project compiled, but the app bundle failed to build.',
+  }
+}
+
 /** studioPreviewNotice puts a human-facing explanation over the preview, without discarding a live frame. */
 export function studioPreviewNotice(
   parent: HTMLElement,

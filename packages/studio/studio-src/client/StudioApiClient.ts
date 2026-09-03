@@ -210,6 +210,8 @@ export const StudioApiClient = {
   lspTransport: async (signal?: AbortSignal): Promise<StudioLspTransport> =>
     await webSocketTransport(webSocketUrl(studioSessionPath('/api/language/lsp')), signal),
   previewApplied: async (body: unknown): Promise<unknown> => await request('/api/preview/applied', body),
+  previewDiagnosis: async (signal?: AbortSignal): Promise<{ message?: string; status: string }> =>
+    await get('/api/preview/diagnosis', signal),
   previewInstance: async (body: unknown, signal?: AbortSignal): Promise<unknown> =>
     await request('/api/preview/instance', body, signal),
   reconfigureCell: async (body: unknown): Promise<StudioCellRuntimeResponse> =>

@@ -404,6 +404,62 @@ function projectOpenRequest(value: unknown): StudioProjectOpenRequest {
   }
 }
 
+/** StudioPreviewDiagnosis says whether the preview's bundler can currently build the app. */
+export type StudioPreviewDiagnosis = {
+  status: 'ok' | 'failed' | 'unreachable' | 'unknown'
+  message?: string
+}
+
+/** The parameters Expo's web runtime asks for, so the probe reads the bundle the preview itself requested. */
+const PREVIEW_BUNDLE_QUERY =
+  'platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable'
+
+/**
+ * previewDiagnosis asks the preview's own bundler whether it can build the app. A project whose Tao compiles
+ * can still fail here, because the bundler resolves the generated TypeScript rather than the Tao source, and
+ * that failure otherwise reaches a person only as a blank preview.
+ */
+async function previewDiagnosis(previewUrl: string | undefined): Promise<StudioPreviewDiagnosis> {
+  if (previewUrl === undefined) {
+    return { status: 'unknown' }
+  }
+  try {
+    const bundle = new URL(`/index.ts.bundle?${PREVIEW_BUNDLE_QUERY}`, previewUrl)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 30_000)
+    try {
+      // Bun and DOM publish structurally different AbortSignal declarations; the runtime object is shared.
+      const signal = controller.signal as unknown as RequestInit['signal']
+      const bundleResponse = await fetch(bundle.toString(), { signal })
+      if (bundleResponse.ok) {
+        return { status: 'ok' }
+      }
+      return { message: bundlerMessage(await bundleResponse.text()), status: 'failed' }
+    } finally {
+      clearTimeout(timer)
+    }
+  } catch (error) {
+    return { message: error instanceof Error ? error.message : String(error), status: 'unreachable' }
+  }
+}
+
+/** bundlerMessage reduces a Metro error payload to the one line that says what could not be built. */
+export function bundlerMessage(body: string): string {
+  let text = body
+  try {
+    const parsed = JSON.parse(body) as { message?: unknown }
+    if (typeof parsed.message === 'string') {
+      text = parsed.message
+    }
+  } catch {
+    // Metro can answer with plain text; the body is then already the message.
+  }
+  const lines = text.replaceAll(/\u001B\[[0-9;]*m/g, '').split('\n').map(line => line.trim()).filter(line =>
+    line !== ''
+  )
+  return lines[0] ?? 'The bundler reported no detail.'
+}
+
 async function handleRequest(
   session: StudioProjectSession,
   datasource: StudioServerDatasource,
@@ -485,6 +541,9 @@ async function handleRequest(
       return response(request, url, options, { error: 'Studio preview manifest is not available yet.' }, 404)
     }
     return response(request, url, options, await fixtureGeneration.generate(manifest, await request.json()))
+  }
+  if (request.method === 'GET' && url.pathname === '/api/preview/diagnosis') {
+    return response(request, url, options, await previewDiagnosis(options.previewUrl))
   }
   if (request.method === 'POST' && url.pathname === '/api/preview/instance') {
     return response(request, url, options, session.registerPreview(await request.json()))
