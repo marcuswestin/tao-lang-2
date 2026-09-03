@@ -215,10 +215,16 @@ Describe('compiler: Studio render occurrences', () => {
       )
       Expect(compiled.code).toContain('TR.Studio.Environment.useScenario()')
       Expect(compiled.code).toContain('TR.Studio.Environment.useFixture(_Scope._TaoDataCatalog)')
-      Expect(compiled.code).toContain(`${JSON.stringify(`${paths['Main.tao']}#OwnerCard`)}: _Scope.OwnerCard`)
       Expect(compiled.code).toContain(
-        'React.createElement(_TaoStudioView, { ..._TaoStudioArgs, __tao: { app: _TaoAppDefinition_Preview } })',
+        `${JSON.stringify(`${paths['Main.tao']}#OwnerCard`)}: TR.Navigation.ViewReference(`,
       )
+      Expect(compiled.code).toContain(
+        '<TR.Studio.FocusedViewHost',
+      )
+      Expect(compiled.code).toContain('app={_TaoAppDefinition_Preview}')
+      Expect(compiled.code).toContain('arguments={_TaoStudioArgs}')
+      Expect(compiled.code).toContain('occurrence={_TaoStudioScenario}')
+      Expect(compiled.code).toContain('view={_TaoStudioView}')
 
       const production = await Workspace.compile(paths['Main.tao'])
       Expect(production.studioManifest).toBeUndefined()

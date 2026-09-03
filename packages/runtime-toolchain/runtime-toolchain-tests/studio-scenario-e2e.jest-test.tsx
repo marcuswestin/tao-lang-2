@@ -1,8 +1,9 @@
 import TR from '@runtime/TR'
 import { Assert, CLI, Errors, FS, Repo } from '@shared'
 import { AfterAll, AfterEach, Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react-native'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native'
 import { type ComponentType, createElement } from 'react'
+import * as RN from 'react-native'
 import type {
   TaoStudioFixturePlan,
   TaoStudioFixtureValue,
@@ -101,8 +102,79 @@ Describe('Tao Studio scenario runtime', () => {
     )
 
     await waitFor(() => Expect(screen.getByText('Novel')).toBeDefined())
+    fireEvent.press(screen.getByTestId('openWorkspace'))
+    await waitFor(() => Expect(screen.getByTestId('workspaceTitle')).toBeDefined())
+    Expect(screen.getByText('WORKSPACE DETAILS')).toBeDefined()
+    act(() => Expect(TR.Navigation.Back()).toBe(true))
+    await waitFor(() => Expect(screen.queryByText('WORKSPACE DETAILS')).toBeNull())
     Expect(screen.getByTestId('openWorkspace')).toBeDefined()
     Expect(screen.getByTestId('deleteWorkspace')).toBeDefined()
+  })
+
+  Test('keeps focused occurrences in isolated app-owned lanes with their app design', () => {
+    const design = TR.Design.Declaration({ bundles: {}, name: 'Studio design', tokens: {} })
+    const detail = TR.Navigation.View({
+      name: 'Focused detail',
+      render: arguments_ =>
+        createElement(
+          RN.Text,
+          null,
+          `${String(arguments_['Label']?.evaluate().jsValue)} detail`,
+        ),
+    })
+    let app: ReturnType<typeof TR.Navigation.App>
+    const focused = TR.Navigation.View({
+      name: 'Focused root',
+      render: (arguments_, taoProps) => {
+        const label = String(arguments_['Label']?.evaluate().jsValue)
+        return createElement(
+          RN.View,
+          null,
+          createElement(RN.Text, null, `${label} root`),
+          createElement(
+            RN.Text,
+            null,
+            taoProps?.app === app && taoProps.app.design === design ? `${label} app design` : `${label} detached`,
+          ),
+          createElement(RN.Pressable, {
+            accessibilityLabel: `Open ${label}`,
+            accessibilityRole: 'button',
+            children: createElement(RN.Text, null, `Open ${label}`),
+            onPress: () => TR.Navigation.PresentIn(taoProps, undefined, detail, { Label: TR.Value(label) }),
+          }),
+        )
+      },
+    })
+    app = TR.Navigation.App({
+      auxiliaries: () => ({}),
+      design: () => design,
+      name: 'Focused occurrence app',
+      navigator: () => focused,
+    })
+    const screen = render(createElement(
+      RN.View,
+      null,
+      createElement(TR.Studio.FocusedViewHost, {
+        app,
+        arguments: { Label: TR.Value('Left') },
+        occurrence: { id: 'left' },
+        view: focused,
+      }),
+      createElement(TR.Studio.FocusedViewHost, {
+        app,
+        arguments: { Label: TR.Value('Right') },
+        occurrence: { id: 'right' },
+        view: focused,
+      }),
+    ))
+
+    Expect(screen.getByText('Left app design')).toBeDefined()
+    Expect(screen.getByText('Right app design')).toBeDefined()
+    fireEvent.press(screen.getByLabelText('Open Left'))
+    Expect(screen.getByText('Left detail')).toBeDefined()
+    Expect(screen.queryByText('Right detail')).toBeNull()
+    fireEvent.press(screen.getByLabelText('Open Right'))
+    Expect(screen.getByText('Right detail')).toBeDefined()
   })
 
   Test('mounts an imported focused view with its fixture entity', async () => {

@@ -77,6 +77,7 @@ import {
   type TaoStackNavConfiguration,
   testNavKind as testNavigationKind,
 } from './TR-navigation'
+import { StudioFocusedViewHost } from './TR-navigation-app-host'
 import type { TaoDeclarationIdentity } from './TR-navigation-identity'
 import {
   beginPersistedStateLaunch,
@@ -611,6 +612,7 @@ class TR {
   static readonly Studio = {
     ...StudioPreview,
     Environment: StudioEnvironmentControls,
+    FocusedViewHost: StudioFocusedViewHost,
     State: StudioStateControls,
   } as const
 

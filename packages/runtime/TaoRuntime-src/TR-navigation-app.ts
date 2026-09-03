@@ -1,4 +1,5 @@
 import React from 'react'
+import { RuntimeAssert } from './TR-assert'
 import type { TaoDesign } from './TR-design'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type {
@@ -19,8 +20,9 @@ import {
   isConfiguredNavigation,
   mountConfiguredNavigation,
 } from './TR-navigation-configuration'
+import { NavKindControls } from './TR-navigation-kinds'
 import type { Evaluable } from './TR-navigation-presentables'
-import { presentableRegistryVersion, resolvePresentable } from './TR-navigation-registry'
+import { presentableRegistryVersion, registerNavigation, resolvePresentable } from './TR-navigation-registry'
 import { NavigationRestorationController } from './TR-navigation-restoration'
 import type { RestorationEnvelope } from './TR-navigation-restoration'
 import type { PresentableEntry, Subscription } from './TR-navigation-state'
@@ -51,6 +53,11 @@ type NavigationLaneRecord = {
   owner: NavigationOwner
   ownerDispose?: () => void
 }
+
+export type FocusedNavigationLease = Readonly<{
+  navigation: TaoNavigationValue
+  attach(): () => void
+}>
 
 const navigationOwners = new WeakMap<TaoNavigationValue, Set<NavigationOwner>>()
 const runtimeApps = new Set<RuntimeAppDefinition>()
@@ -137,6 +144,32 @@ export class RuntimeAppDefinition implements Subscription {
   /** design lazily resolves this mounted app's declaration-local design without a global registry. */
   get design(): TaoDesign | undefined {
     return this.designValue ??= this.definition.design?.()
+  }
+
+  /** mountFocusedView creates an isolated app-owned lane for one Studio preview occurrence. */
+  mountFocusedView(
+    presentable: TaoPresentable,
+    arguments_: TaoNavigationArguments,
+  ): FocusedNavigationLease {
+    const kind = NavKindControls.Stack()
+    const declaration = Object.freeze({
+      ...createAppDeclaration('Tao Studio focused view'),
+      kind,
+    })
+    const descriptor = kind.configure(declaration, {
+      initial: this.localPresentable(presentable).bind({ ...arguments_ }),
+    })
+    const navigation = this.mount(registerNavigation(kind.mount(descriptor) as TaoNavigationValue))
+    const record = this.navigationLaneRecords.get(navigation)
+    RuntimeAssert.defined(record, 'focused Studio navigation lane is registered after mounting')
+    return Object.freeze({
+      navigation,
+      attach: () => {
+        this.navigationLaneRecords.set(navigation, record)
+        this.activateNavigationLane(record)
+        return () => this.deactivateNavigationLane(navigation, true)
+      },
+    })
   }
 
   attachBrowserHistory(driver: BrowserNavigationHistoryDriver): () => void {

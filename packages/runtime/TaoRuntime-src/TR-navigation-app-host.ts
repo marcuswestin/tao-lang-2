@@ -2,6 +2,7 @@ import React from 'react'
 import { AppSurfaceFrame } from './TR-app-shell'
 import { DataControls } from './TR-data'
 import { TaoErrorBoundary } from './TR-error-containment'
+import type { TaoNavigationArguments, TaoPresentable } from './TR-navigation'
 import { RuntimeAppDefinition } from './TR-navigation-app'
 import { browserNavigationHistoryDriver } from './TR-navigation-browser-history'
 import {
@@ -25,6 +26,59 @@ export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     },
     React.createElement(NavigationAppHostContent, props),
   )
+}
+
+/** StudioFocusedViewHost renders one view as the root of an isolated app-owned navigation lane. */
+export function StudioFocusedViewHost(props: {
+  app: RuntimeAppDefinition
+  arguments: TaoNavigationArguments
+  occurrence: unknown
+  view: TaoPresentable
+}): React.JSX.Element {
+  const lease = React.useMemo(
+    () => props.app.mountFocusedView(props.view, props.arguments),
+    [props.app, props.occurrence, props.view],
+  )
+  React.useEffect(() => lease.attach(), [lease])
+  return React.createElement(
+    TaoErrorBoundary,
+    {
+      app: props.app,
+      boundaryId: `studio-view:${props.view.definition.identity?.canonical ?? props.view.name}`,
+      frame: { boundary: 'app', declaration: props.app.definition.name },
+      stateKey: props.app.snapshot(),
+    },
+    React.createElement(MountedFocusedViewHost, { app: props.app, navigation: lease.navigation }),
+  )
+}
+
+function MountedFocusedViewHost(props: {
+  app: RuntimeAppDefinition
+  navigation: ReturnType<RuntimeAppDefinition['mountFocusedView']>['navigation']
+}): React.JSX.Element {
+  useSubscription(props.app)
+  useSubscription(props.navigation)
+  React.useSyncExternalStore(DataControls.subscribeAll, DataControls.revision, DataControls.revision)
+  useNavigationBack(props.navigation)
+  const runtime = requireReactNativeRuntime()
+  const taoProps = { app: props.app, navigationHostActive: true }
+  const toasts = props.app.renderToasts(taoProps)
+  const content = props.navigation.render(taoProps)
+  return React.createElement(runtime.View, {
+    children: [
+      props.navigation.ownsWindowSurface()
+        ? React.createElement(React.Fragment, { key: 'content' }, content)
+        : React.createElement(AppSurfaceFrame, { key: 'content', taoProps }, content),
+      React.Children.count(toasts) > 0
+        ? React.createElement(runtime.View, {
+          children: toasts,
+          key: 'app-toasts',
+          style: toastLayerStyle,
+        })
+        : null,
+    ],
+    style: navigationAppHostStyle,
+  })
 }
 
 function NavigationAppHostContent(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
@@ -124,6 +178,20 @@ function usePlatformBack(target: RuntimeAppDefinition): void {
         clearActiveBackTarget(target)
       }
     }
+    const subscription = requireReactNativeRuntime().BackHandler?.addEventListener(
+      'hardwareBackPress',
+      () => backNavigation(target),
+    )
+    return () => {
+      subscription?.remove()
+      clearActiveBackTarget(target)
+    }
+  }, [target])
+}
+
+function useNavigationBack(target: ReturnType<RuntimeAppDefinition['mountFocusedView']>['navigation']): void {
+  React.useEffect(() => {
+    setActiveBackTarget(target)
     const subscription = requireReactNativeRuntime().BackHandler?.addEventListener(
       'hardwareBackPress',
       () => backNavigation(target),

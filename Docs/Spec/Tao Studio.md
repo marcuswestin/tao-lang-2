@@ -51,7 +51,9 @@ fields, `through`, and `for` plan into the preview manifest.
 A file-level `scenarios` declaration gives a string-named group of entries. The optional declaration
 subject is either a whole app or one focused view. Clauses on the group are defaults; an entry clause
 of the same kind replaces the group clause as a whole, including `run` or `render`. After inheritance,
-every entry selects exactly one fixture, exactly one device, and exactly one subject:
+every entry selects exactly one device and exactly one subject. A fixture is optional; omitting it
+creates a real isolated empty store. A fixture becomes required when `prepare` or a focused-render
+argument references one of its handles:
 
 ```tao
 scenarios HNReader "devices" {
@@ -93,18 +95,24 @@ are adopted; compiler and Studio identity additionally include the source path.
 `run` and `render` are mutually exclusive. A declaration subject supplies the omitted name, as in
 `scenarios StoryRow` plus `render (...)` or `scenarios HNReader` with no explicit `run` clause. Focused
 render arguments are named and validated against the view's parameter names, required parameters, and
-Tao types. An app subject may optionally name a destination with `run App at Destination(...)`;
+Tao types. A required action parameter may be omitted only from a scenario render; Studio supplies a
+per-cell recording stand-in that logs evaluated invocations without granting product authority. An
+app subject may optionally name a destination with `run App at Destination(...)`;
 destination execution is not connected to the current preview host yet.
 
-The implemented optional clauses are one ordered `prepare { update ... }` block, `appearance light`
+After the effective subject, an entry may contain an ordered journey prefix using `press down`,
+`press up`, `hover`, `focus`, and `advance`. Studio replays that prefix once for each mounted cell
+revision, then leaves the reached preview fully interactive. Phase presses do not synthesize a plain
+press. The implemented optional clauses are one ordered `prepare { update ... }` block, `appearance light`
 or `dark`, a string locale or `pseudolocale`, `direction rightToLeft`, and `network online` or
 `offline`. A pseudolocale requires right-to-left direction. Device presets are `phone`, `tablet`, and
 `laptop`; custom positive whole-number width and height may follow the preset. The defaults used by
 the Studio manifest are 390 by 844, 768 by 1024, and 1440 by 900 respectively.
 
 Scenario groups are also metadata in ordinary app builds. A Studio compilation emits one source-owned
-scenario record and initially one preview cell per authored entry. The test runner does not yet
-execute fixtures or scenarios; its current `test`/`check` contract remains separate.
+scenario record and initially one preview cell per authored entry. Focused previews run inside an
+isolated app-owned navigation occurrence, so contextual presentation and Back work exactly as they do
+inside an app while remaining isolated from other cells.
 
 ## Studio compilation manifest
 
@@ -114,8 +122,8 @@ not emit this sidecar. The compiler manifest contains:
 - every app and view subject with stable compilation-local ID and Tao source range;
 - the selected app name and each view's parameter name, requiredness, Tao type name, and control kind;
 - fixture execution plans;
-- scenario group and entry name, fixture, ordered preparation, subject and arguments, viewport,
-  appearance, locale, direction, and network metadata.
+- scenario group and entry name, optional fixture, ordered preparation and journey steps, subject and
+  arguments, viewport, appearance, locale, direction, and network metadata.
 
 The Studio session adapts that compiler output into preview-manifest version 2. The preview manifest
 adds project identity, source versions, compile and manifest revisions, parameter controls, cells,

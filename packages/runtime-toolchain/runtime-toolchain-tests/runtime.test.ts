@@ -340,7 +340,11 @@ Describe('Tao runtime app generation', () => {
     Expect(scenario?.subject.kind).toBe('view')
     Expect(taoApp).toContain('TR.Studio.Environment.useScenario()')
     Expect(taoApp).toContain(JSON.stringify(scenario?.subject.subjectId))
-    Expect(taoApp).toContain('__tao: { app: _TaoAppDefinition_WordFlower }')
+    Expect(taoApp).toContain('<TR.Studio.FocusedViewHost')
+    Expect(taoApp).toContain('app={_TaoAppDefinition_WordFlower}')
+    Expect(taoApp).toContain('arguments={_TaoStudioArgs}')
+    Expect(taoApp).toContain('occurrence={_TaoStudioScenario}')
+    Expect(taoApp).toContain('view={_TaoStudioView}')
     Expect(stableRoot).toContain('<TR.Studio.Environment.Host cell={TaoStudioCell}>')
 
     const typecheck = await typecheckGeneratedApp(runtimePackageRoot)

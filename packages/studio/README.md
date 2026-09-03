@@ -201,9 +201,11 @@ just studio-smoke packages/dev/studio-smoke/studio-launch.test.ts
 
 The other smoke files build a session in-process and do not exercise the CLI.
 
-The deterministic parts of the same behaviour — save-to-preview synchronization and scenario-group
-startup — live in `packages/studio/studio-tests` and run in the ordinary lane, so `./agent verify`
-stays fast.
+The deterministic parts of the same behaviour — save-to-preview synchronization, scenario-group
+startup, fixtureless empty-store setup, and ordered interaction replay — live in
+`packages/studio/studio-tests`, runtime tests, and the runtime-toolchain Studio E2E suite. They run in
+the ordinary lane, so `./agent verify` stays fast. Focused cells mount an isolated app-owned
+navigation occurrence: contextual presentation and Back work without sharing state between cells.
 
 ## Verification
 
