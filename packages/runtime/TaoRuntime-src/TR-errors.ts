@@ -207,9 +207,46 @@ export function reportActionFailure(
   }
 }
 
+/**
+ * errorDetail is what a thrown value actually says about the failure, or nothing when it says
+ * nothing. A platform event (a WebSocket `error`, a media failure) is an object with no `message`
+ * and no useful `toString`, so a caller that knows the operation can name it instead of printing
+ * `[object Object]`.
+ */
+export function errorDetail(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    return error.message.trim().length > 0 ? error.message : undefined
+  }
+  if (typeof error === 'string') {
+    return error.trim().length > 0 ? error : undefined
+  }
+  if (typeof error === 'object' && error !== null) {
+    const carried = (error as { message?: unknown }).message
+    return typeof carried === 'string' && carried.trim().length > 0 ? carried : undefined
+  }
+  return error === undefined || error === null ? undefined : String(error)
+}
+
 /** errorMessage is the one way the runtime reads a user-facing sentence out of an unknown throw. */
 export function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return errorDetail(error) ?? describeThrownValue(error)
+}
+
+/**
+ * describeThrownValue names a value that carries no message. A class name (`Event`, `CloseEvent`)
+ * identifies what the platform handed over, and own fields that are plain values add the rest;
+ * `String(value)` would flatten all of it to `[object Object]`.
+ */
+function describeThrownValue(value: unknown): string {
+  if (typeof value !== 'object' || value === null) {
+    return String(value)
+  }
+  const name = value.constructor?.name ?? 'object'
+  const fields = Object.entries(value)
+    .filter(([, field]) => field === null || ['boolean', 'number', 'string'].includes(typeof field))
+    .slice(0, 4)
+    .map(([key, field]) => `${key}: ${typeof field === 'string' ? field : String(field)}`)
+  return fields.length === 0 ? name : `${name} (${fields.join(', ')})`
 }
 
 /** isRedactedKey names the one credential-shaped key policy every runtime diagnostic capture applies. */
