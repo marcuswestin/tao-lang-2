@@ -19,6 +19,8 @@ const probeTimeoutMs = 30_000
 const defaultAppName = 'Tao Studio'
 const defaultBundleIdentifier = 'dev.tao-lang.studio'
 const defaultHutchCommand = 'hutch'
+const electrobunBuildLockPath = '.hutch/locks/electrobun-build.lock'
+const electrobunReleasesPath = '.hutch/releases/electrobun'
 const hutchInstallUrl = 'https://hutch.blackboard.sh/hutch/install.sh'
 
 export type StudioNativeOptions = {
@@ -67,6 +69,9 @@ type StoppableCommand = StudioProcessTree
 type WaitForNativeClose = () => Promise<number>
 type CommandRunner = (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
 type Sleep = (milliseconds: number) => Promise<void>
+type LockHolderProbe = (lockPath: string) => Promise<readonly number[]>
+type NativeStudioHolder = { command: string; processId: number }
+type ReleaseHolderProbe = () => Promise<readonly NativeStudioHolder[]>
 type NativeRuntimeCloseResult = {
   exitCode: number
   message: string
@@ -78,7 +83,9 @@ export const StudioNative = {
   resolveHutchExecutablePath,
   start,
   testing: {
+    clearStaleElectrobunBuildLock,
     installedHutchExecutablePath,
+    requireIdleElectrobunRelease,
     installStudioServicePayload,
     materializeStudioNodeRuntime,
     materializeStudioServicePayload,
@@ -746,9 +753,108 @@ async function prepareElectrobun(
   hutchPath: string,
   projectRoot: string,
   runner: CommandRunner = CLI.run,
+  holders: LockHolderProbe = electrobunBuildLockHolders,
+  releaseHolders: ReleaseHolderProbe = electrobunReleaseHolders,
 ): Promise<void> {
+  if (await clearStaleElectrobunBuildLock(projectRoot, holders)) {
+    HCI.logProcessInfo('studio-native', 'Cleared an Electrobun build lock an interrupted run left behind.')
+  }
+  await requireIdleElectrobunRelease(releaseHolders)
   await runHutchCommand(hutchPath, ['install'], projectRoot, runner)
   await runHutchCommand(hutchPath, ['electrobun', 'prepare'], projectRoot, runner)
+}
+
+/**
+ * clearStaleElectrobunBuildLock removes a build lock whose owner is gone. Hutch waits on that lock forever
+ * — `hutch electrobun prepare` prints `Waiting for the project build lock...` and never returns — so an
+ * interrupted native launch otherwise blocks every later one in the same project.
+ */
+async function clearStaleElectrobunBuildLock(
+  projectRoot: string,
+  holders: LockHolderProbe = electrobunBuildLockHolders,
+): Promise<boolean> {
+  const lockPath = FS.resolvePath(electrobunBuildLockPath, projectRoot)
+  if (!(await FS.exists(lockPath)) || (await holders(lockPath)).length > 0) {
+    return false
+  }
+  await FS.remove(lockPath)
+  return true
+}
+
+/**
+ * requireIdleElectrobunRelease fails fast when another native Studio is running anywhere on this machine.
+ * Hutch takes the shared Electrobun release lock for a dev shell's whole lifetime, so `electrobun prepare`
+ * would otherwise block inside `open` with no message and no timeout, whatever the worktree.
+ */
+async function requireIdleElectrobunRelease(
+  probe: ReleaseHolderProbe = electrobunReleaseHolders,
+  sleep: Sleep = Time.sleep,
+): Promise<void> {
+  // A holder that is shutting down releases the lock a moment after its process is signalled.
+  let holders = await probe()
+  for (let attempt = 0; attempt < 10 && holders.length > 0; attempt += 1) {
+    await sleep(200)
+    holders = await probe()
+  }
+  if (holders.length === 0) {
+    return
+  }
+  const described = holders.map(holder => `  pid ${holder.processId}: ${holder.command}`).join('\n')
+  Errors.throwHostEnvironment(
+    `Another native Tao Studio holds the shared Electrobun release, so this launch would wait forever.\n${described}\n`
+      + 'Stop it first — `./dev studio-stop --all` in the worktree that started it, or kill the process ids above.',
+  )
+}
+
+async function electrobunReleaseHolders(): Promise<readonly NativeStudioHolder[]> {
+  const releasesRoot = FS.resolvePath(electrobunReleasesPath, FS.homeDir())
+  if (!(await FS.isDirectory(releasesRoot))) {
+    return []
+  }
+  // Layout is `<releases>/electrobun/<version>/<platform>.lock`.
+  const lockPaths: string[] = []
+  for (const version of await FS.listDir(releasesRoot)) {
+    const versionRoot = FS.resolvePath(version, releasesRoot)
+    if (!(await FS.isDirectory(versionRoot))) {
+      continue
+    }
+    for (const entry of await FS.listDir(versionRoot)) {
+      if (entry.endsWith('.lock')) {
+        lockPaths.push(FS.resolvePath(entry, versionRoot))
+      }
+    }
+  }
+  const holders: NativeStudioHolder[] = []
+  for (const lockPath of lockPaths) {
+    for (const processId of await electrobunBuildLockHolders(lockPath)) {
+      holders.push({ command: await processCommand(processId), processId })
+    }
+  }
+  return holders
+}
+
+async function processCommand(processId: number): Promise<string> {
+  const result = await runQuietly('ps', ['-o', 'command=', '-p', String(processId)])
+  return result.trim().split('\n')[0] ?? 'unknown process'
+}
+
+async function electrobunBuildLockHolders(lockPath: string): Promise<readonly number[]> {
+  // `lsof -t` lists the process ids holding the file open, and exits non-zero when there are none.
+  return (await runQuietly('lsof', ['-t', lockPath])).split('\n')
+    .map(line => Number.parseInt(line.trim(), 10))
+    .filter(processId => Number.isInteger(processId) && processId > 0)
+}
+
+/**
+ * runQuietly returns a command's output, or nothing when the command fails or cannot be spawned at all.
+ * These probes only diagnose a launch; a sandbox that refuses `lsof` or `ps` must not stop one.
+ */
+async function runQuietly(command: string, args: readonly string[]): Promise<string> {
+  try {
+    return (await CLI.run(command, { args })).stdout
+  } catch {
+    return ''
+  }
 }
 
 async function resolveHutchExecutablePath(

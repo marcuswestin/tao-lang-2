@@ -307,10 +307,16 @@ Describe('Studio native wrapper foundation', () => {
 
   Test('installs and prepares the generated project through the selected Hutch launcher', async () => {
     const calls: Array<{ args: readonly string[] | undefined; command: string; cwd: string | undefined }> = []
-    await StudioNative.testing.prepareElectrobun('/tools/hutch', '/workspace/native', async (command, spec) => {
-      calls.push({ args: spec.args, command, cwd: spec.cwd })
-      return commandResult(command, spec, 0)
-    })
+    await StudioNative.testing.prepareElectrobun(
+      '/tools/hutch',
+      '/workspace/native',
+      async (command, spec) => {
+        calls.push({ args: spec.args, command, cwd: spec.cwd })
+        return commandResult(command, spec, 0)
+      },
+      async () => [],
+      async () => [],
+    )
 
     Expect(calls).toEqual([
       {
@@ -326,11 +332,52 @@ Describe('Studio native wrapper foundation', () => {
     ])
   })
 
+  Test('clears an Electrobun build lock whose owner is gone, and keeps one a live process holds', async () => {
+    const projectRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-build-lock-', FS.tmpdir()))
+    try {
+      const lockPath = FS.resolvePath('.hutch/locks/electrobun-build.lock', projectRoot)
+      await FS.writeText(lockPath, '')
+
+      await Expect(StudioNative.testing.clearStaleElectrobunBuildLock(projectRoot, async () => [4321])).resolves
+        .toBe(false)
+      Expect(await FS.exists(lockPath)).toBe(true)
+
+      await Expect(StudioNative.testing.clearStaleElectrobunBuildLock(projectRoot, async () => [])).resolves.toBe(true)
+      Expect(await FS.exists(lockPath)).toBe(false)
+
+      await Expect(StudioNative.testing.clearStaleElectrobunBuildLock(projectRoot, async () => [])).resolves
+        .toBe(false)
+    } finally {
+      await FS.remove(projectRoot)
+    }
+  })
+
+  Test('refuses to prepare while another native Studio holds the shared Electrobun release', async () => {
+    const holder = {
+      command: '/Users/dev/.hutch/releases/hutch/0.24.3/bin/hutch-engine electrobun dev --watch',
+      processId: 4242,
+    }
+    await Expect(StudioNative.testing.requireIdleElectrobunRelease(async () => [], async () => {})).resolves
+      .toBeUndefined()
+
+    let probes = 0
+    await Expect(StudioNative.testing.requireIdleElectrobunRelease(async () => {
+      probes += 1
+      return probes === 1 ? [holder] : []
+    }, async () => {})).resolves.toBeUndefined()
+    Expect(probes).toBe(2)
+
+    await Expect(StudioNative.testing.requireIdleElectrobunRelease(async () => [holder], async () => {})).rejects
+      .toThrow('pid 4242')
+  })
+
   Test('surfaces Electrobun preparation failures', async () => {
     await Expect(StudioNative.testing.prepareElectrobun(
       '/tools/hutch',
       '/workspace/native',
       async (command, spec) => commandResult(command, spec, spec.args?.[0] === 'install' ? 0 : 7),
+      async () => [],
+      async () => [],
     )).rejects.toThrow('Command failed: /tools/hutch electrobun prepare')
   })
 
