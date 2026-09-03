@@ -38,6 +38,11 @@ export type AgentChatSessionOptions = {
   maxSteps?: number
   /** Tools that may only run once a person has said yes. */
   approvalRequired?: readonly string[]
+  /**
+   * A last check before a person is asked. A tool call that cannot do anything useful must not become an
+   * approval card: asking someone to approve a change that does not exist teaches them to click yes.
+   */
+  approvalPolicy?: (call: { toolName: string; input: unknown }) => { denied: string } | undefined
   /** Records every tool call for the transcript; supplied by the tool registry. */
   drain?: () => AgentChatToolCall[]
 }
@@ -143,8 +148,18 @@ export class AgentChatSession {
         stopWhen: stepCountIs(maxSteps),
         tools: this.#options.tools,
         ...(approvalRequired.size === 0 ? {} : {
-          toolApproval: ({ toolCall }: { toolCall: { toolName: string } }) =>
-            approvalRequired.has(toolCall.toolName) ? ('user-approval' as const) : undefined,
+          toolApproval: ({ toolCall }: { toolCall: { toolName: string; input: unknown } }) => {
+            if (!approvalRequired.has(toolCall.toolName)) {
+              return undefined
+            }
+            const refused = this.#options.approvalPolicy?.({
+              input: toolCall.input,
+              toolName: toolCall.toolName,
+            })
+            return refused === undefined
+              ? ('user-approval' as const)
+              : ({ reason: refused.denied, type: 'denied' } as const)
+          },
         }),
       })
       this.#messages.push(...result.responseMessages)

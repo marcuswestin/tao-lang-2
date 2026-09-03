@@ -29,9 +29,15 @@ export type AgentChatAvailability = {
 export class AgentChatProvider {
   #enabled = false
   readonly #environment: Record<string, string | undefined>
+  /** A model supplied directly, so the server path can be driven in a test without a provider or a network. */
+  readonly #injected: LanguageModel | undefined
 
-  constructor(environment: Record<string, string | undefined> = process.env) {
+  constructor(
+    environment: Record<string, string | undefined> = process.env,
+    injected?: LanguageModel,
+  ) {
     this.#environment = environment
+    this.#injected = injected
   }
 
   get modelId(): string {
@@ -40,6 +46,9 @@ export class AgentChatProvider {
   }
 
   get #key(): string | undefined {
+    if (this.#injected !== undefined) {
+      return 'injected'
+    }
     const key = this.#environment[KEY_VARIABLE]
     return key === undefined || key === '' ? undefined : key
   }
@@ -77,6 +86,6 @@ export class AgentChatProvider {
     if (key === undefined || !this.#enabled) {
       return undefined
     }
-    return createAnthropic({ apiKey: key })(this.modelId)
+    return this.#injected ?? createAnthropic({ apiKey: key })(this.modelId)
   }
 }

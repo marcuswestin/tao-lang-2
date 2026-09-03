@@ -173,7 +173,10 @@ class AgentChatConversation {
     }
     if (this.#chat === undefined) {
       this.#chat = new AgentChatSession({
-        ...(this.#mode === 'ask' ? {} : { approvalRequired: APPROVAL_REQUIRED }),
+        ...(this.#mode === 'ask' ? {} : {
+          approvalPolicy: call => this.#approvalPolicy(call),
+          approvalRequired: APPROVAL_REQUIRED,
+        }),
         drain: () => this.#calls.splice(0, this.#calls.length),
         instructions: this.#mode === 'build'
           ? buildInstructions
@@ -243,6 +246,21 @@ class AgentChatConversation {
     }
   }
 
+  /**
+   * A person is only asked about a change that exists and can be shown. An applyChange naming nothing is
+   * denied here rather than becoming a card with an empty diff, which is how people learn to approve blindly.
+   */
+  #approvalPolicy(call: { toolName: string; input: unknown }): { denied: string } | undefined {
+    if (call.toolName !== 'applyChange') {
+      return undefined
+    }
+    const id = (call.input as { changeId?: unknown } | undefined)?.changeId
+    if (typeof id !== 'string' || !this.#staged.has(id)) {
+      return { denied: `No change is staged under "${String(id)}", so there is nothing to approve.` }
+    }
+    return undefined
+  }
+
   /** The diff an approval is really about, so a person approves a change rather than an argument list. */
   #diffFor(input: unknown): string | undefined {
     const id = (input as { changeId?: unknown } | undefined)?.changeId
@@ -286,6 +304,16 @@ function conversationFor(session: StudioProjectSession): AgentChatConversation {
   const created = new AgentChatConversation(session, new AgentChatProvider())
   conversations.set(session, created)
   return created
+}
+
+/** conversationForTesting drives the real server object with a supplied model and a stub project session. */
+export function conversationForTesting(
+  session: StudioProjectSession,
+  provider: AgentChatProvider,
+): { handle: (command: string, body: Json) => Promise<unknown> } {
+  const conversation = new AgentChatConversation(session, provider)
+  conversations.set(session, conversation)
+  return { handle: async (command, body) => await AgentChat.handle(session, command, body) }
 }
 
 export const AgentChat = {
