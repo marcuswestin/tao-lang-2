@@ -10,6 +10,12 @@
 
 import type { SemanticSnapshot, SnapshotNode } from '../agent-poc/SemanticSnapshot'
 
+/** tagOf normalises a render's tag to the `#name` a test step writes, whichever form the graph stored. */
+function tagOf(node: SnapshotNode | undefined): string | undefined {
+  const tag = node?.detail?.['tag']
+  return tag === undefined ? undefined : `#${String(tag).replace(/^#/, '')}`
+}
+
 export type TestCheck = { suite: string; name: string; literals: readonly string[] }
 
 export type CoveredText = {
@@ -29,43 +35,82 @@ export type ViewCoverage = {
   note: string
 }
 
-/** parseChecks pulls each check and the quoted strings inside it out of one test file. */
+/** stripped removes comments and string bodies so brace counting sees only structure. */
+function stripped(line: string): string {
+  const withoutStrings = line.replace(/"[^"]*"/g, '""')
+  const comment = withoutStrings.indexOf('//')
+  return comment < 0 ? withoutStrings : withoutStrings.slice(0, comment)
+}
+
+/** literalsIn returns the quoted strings and `#tag` selectors a step names. */
+function literalsIn(line: string): string[] {
+  const withoutComment = line.includes('//') ? line.slice(0, line.indexOf('//')) : line
+  const found = [...withoutComment.matchAll(/"([^"]*)"/g)].map(match => match[1]!).filter(text => text.trim() !== '')
+  // A check drives WordFlower's UI with `press #deleteWorkspace`, never with the label. Ignoring tags called
+  // every text in those views untested.
+  return [...found, ...[...withoutComment.matchAll(/#([A-Za-z_]\w*)/g)].map(match => `#${match[1]!}`)]
+}
+
+/**
+ * parseChecks pulls each check and the literals inside it out of one test file.
+ *
+ * The nesting is counted over structure only: a `}` inside a string or a comment used to pop the suite and
+ * silently drop every later check in the file, and WordFlower's real test files carry both.
+ */
 export function parseChecks(content: string): TestCheck[] {
   const checks: TestCheck[] = []
   const lines = content.split('\n')
   const stack: { name: string; depth: number }[] = []
   let depth = 0
   let current: { suite: string; name: string; literals: string[] } | undefined
+  const close = () => {
+    if (current !== undefined) {
+      checks.push(current)
+      current = undefined
+    }
+  }
   for (const line of lines) {
+    const structure = stripped(line)
     const test = /^\s*test\s+"([^"]*)"\s*\{/.exec(line)
     if (test !== null) {
-      // The outer `test` is the suite; the inner ones are the checks a failure is named after.
+      // The outermost `test` is the suite; anything nested inside it is a check. A file whose only `test` is
+      // flat has one check and no suite, and is read that way rather than yielding nothing.
+      close()
       if (stack.length > 0) {
-        if (current !== undefined) {
-          checks.push(current)
-        }
         current = { literals: [], name: test[1]!, suite: stack[0]!.name }
       }
       stack.push({ depth, name: test[1]! })
-    } else if (current !== undefined) {
-      for (const match of line.matchAll(/"([^"]*)"/g)) {
-        const text = match[1]!
-        if (text.trim() !== '') {
-          current.literals.push(text)
-        }
+      // A one-line check carries its steps on the same line, after the brace.
+      if (current !== undefined) {
+        current.literals.push(...literalsIn(line.slice(test[0].length)))
       }
+    } else if (current !== undefined) {
+      current.literals.push(...literalsIn(line))
     }
-    depth += (line.split('{').length - 1) - (line.split('}').length - 1)
+    depth += (structure.split('{').length - 1) - (structure.split('}').length - 1)
     while (stack.length > 0 && depth <= stack[stack.length - 1]!.depth) {
       stack.pop()
-      if (stack.length === 0 && current !== undefined) {
-        checks.push(current)
-        current = undefined
+      if (stack.length === 0) {
+        close()
       }
     }
   }
-  if (current !== undefined) {
-    checks.push(current)
+  close()
+  if (checks.length === 0) {
+    // A flat file declares its checks at the top level, so each `test` is one.
+    for (const [index, line] of lines.entries()) {
+      const test = /^\s*test\s+"([^"]*)"\s*\{/.exec(line)
+      if (test !== null) {
+        // Past the header, so the check's own name is not counted as something it asserts.
+        const body = lines.slice(index).join('\n').slice(test[0].length)
+        const end = body.indexOf('\n}')
+        checks.push({
+          literals: literalsIn(end < 0 ? body : body.slice(0, end)),
+          name: test[1]!,
+          suite: test[1]!,
+        })
+      }
+    }
   }
   return checks
 }
@@ -96,7 +141,11 @@ export function viewCoverage(
   view: SnapshotNode,
   checks: readonly TestCheck[],
 ): ViewCoverage {
-  const shows = textsOf(snapshot, view).map((text): CoveredText => {
+  const tags = [...snapshot.nodes.values()]
+    .filter(node => node.kind === 'render' && node.detail?.['owner'] === view.name)
+    .map(node => tagOf(node))
+    .filter((tag): tag is string => tag !== undefined)
+  const shows = [...textsOf(snapshot, view), ...tags].map((text): CoveredText => {
     const exact = checks.filter(check => check.literals.includes(text))
     if (exact.length > 0) {
       return { by: 'exact', checks: exact.map(check => check.name), text }
@@ -110,15 +159,29 @@ export function viewCoverage(
       : { by: 'none', checks: [], text }
   })
 
-  const actions = snapshot.edges
-    .filter(edge => edge.from === view.id && edge.rel === 'invokes')
+  // An action is reached by pressing a control, and a check names that control by its `#tag` or its label.
+  // The previous version computed one boolean for the whole view and stamped it on every action, which said
+  // the opposite of what it claimed whenever any text in the view was asserted.
+  const invoked = snapshot.edges.filter(edge => edge.from === view.id && edge.rel === 'invokes')
+  const actions = invoked
     .map(edge => snapshot.nodes.get(edge.to)?.name ?? edge.to)
     .filter((name, index, all) => all.indexOf(name) === index)
     .map(name => {
-      // A check reaches an action by pressing a control whose label the view renders, so an action counts as
-      // exercised only when some check presses text this view actually shows.
-      const labels = shows.filter(entry => entry.by !== 'none').flatMap(entry => entry.checks)
-      return { name, pressedByAnyCheck: labels.length > 0 }
+      const bare = name.split('.').pop() ?? name
+      // The render that invokes the action carries the tag or the label a check would name.
+      const handles = snapshot.edges
+        .filter(edge => edge.rel === 'invokes' && (snapshot.nodes.get(edge.to)?.name ?? edge.to) === name)
+        .map(edge => snapshot.nodes.get(edge.from))
+        .flatMap(node => [
+          ...(tagOf(node) === undefined ? [] : [tagOf(node)!]),
+          ...((node?.detail?.['texts'] ?? []) as { text: string }[]).map(entry => entry.text.replace(/^"|"$/g, '')),
+        ])
+      return {
+        name,
+        pressedByAnyCheck: checks.some(check =>
+          check.literals.some(literal => handles.includes(literal) || literal === `#${bare}`)
+        ),
+      }
     })
 
   const uncovered = shows.filter(entry => entry.by === 'none').length

@@ -31,6 +31,11 @@ export type AgentChatWriteWorld = AgentChatWorld & {
   /** Applies a staged change as one mutation: compiled once, rolled back whole if the compile fails. */
   apply: (change: StagedChange) => Promise<{ status: string; message: string; rolledBack: boolean }>
   undo: () => Promise<{ status: string; message: string; restored: readonly string[] }>
+  /**
+   * The version of the content `files()` returned this turn — not a fresh read. A fresh read would hand the
+   * precondition the version of an edit made after the change was computed, and applying would then overwrite
+   * that edit while believing it had checked for exactly this.
+   */
   sourceVersionOf: (path: string) => Promise<string>
 }
 
@@ -56,12 +61,16 @@ export function stageChange(
 ): (summary: string, edits: readonly { path: string; before: string; after: string }[]) => Promise<
   Record<string, unknown>
 > {
+  // Not `staged.size`: applying removes an entry, so the next proposal reused a live id and overwrote a
+  // change the model still intended to apply, silently.
+  let issued = 0
   return async (summary, edits) => {
     const real = edits.filter(edit => edit.before !== edit.after)
     if (real.length === 0) {
       return refusal('That produces no change: the source already reads that way.')
     }
-    const id = `change-${staged.size + 1}`
+    issued += 1
+    const id = `change-${issued}`
     staged.set(id, {
       edits: real.map(edit => ({ ...edit, diff: diffOf(edit.path, edit.before, edit.after) })),
       expect: await Promise.all(real.map(async edit => ({

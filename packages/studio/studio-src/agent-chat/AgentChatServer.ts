@@ -42,10 +42,10 @@ function worldFor(session: StudioProjectSession): AgentChatWorld & { invalidate:
     files: async () => {
       files ??= (async () =>
         await Promise.all(
-          (await session.files()).map(async file => ({
-            content: (await session.readFile(file.path)).content,
-            path: file.path,
-          })),
+          (await session.files()).map(async file => {
+            const read = await session.readFile(file.path)
+            return { content: read.content, path: file.path, sourceVersion: read.sourceVersion }
+          }),
         ))()
       return await files
     },
@@ -90,6 +90,8 @@ class AgentChatConversation {
   #mode: 'ask' | 'build' | 'scenario' = 'ask'
   #codeChangesGranted = false
   #codeChangeRequests: CodeChangeRequest[] = []
+  /** How many requests existed when this turn began, so only the new ones raise a card. */
+  #requestsBeforeTurn = 0
   #history: { role: 'user' | 'assistant'; text: string; toolCalls?: readonly AgentChatToolCall[] }[] = []
 
   constructor(session: StudioProjectSession, provider: AgentChatProvider) {
@@ -116,6 +118,11 @@ class AgentChatConversation {
     this.#history = []
     this.#staged.clear()
     this.#issuedTexts.clear()
+    // The grant was given in a conversation, for a request made in it. A new conversation has neither.
+    this.#codeChangesGranted = false
+    this.#codeChangeRequests.length = 0
+    this.#requestsBeforeTurn = 0
+    this.#lastVerdict = undefined
   }
 
   /** The mode decides which tools exist at all. A read-only chat has no write tool to refuse. */
@@ -195,6 +202,7 @@ class AgentChatConversation {
     }
     // The project may have changed between turns, so each turn starts from a freshly read one.
     this.#world.invalidate()
+    this.#requestsBeforeTurn = this.#codeChangeRequests.length
     this.#history.push({ role: 'user', text })
     const turn = await this.#chat.send(text)
     return await this.#record(turn)
@@ -233,7 +241,11 @@ class AgentChatConversation {
           status: result.compile.status,
         }
       },
-      sourceVersionOf: async path => (await this.#session.readFile(path)).sourceVersion,
+      // From the same read the staged text came from. A fresh read here would report the version of an edit
+      // made after the change was computed, and the precondition would then wave that edit through.
+      sourceVersionOf: async path =>
+        (await this.#world.files()).find(file => file.path === path)?.sourceVersion
+          ?? (await this.#session.readFile(path)).sourceVersion,
       verdict: async () => {
         const after = await this.#runTests()
         // Without a baseline the verdict says so rather than blaming or excusing this change.
@@ -265,7 +277,10 @@ class AgentChatConversation {
         ...approval,
         diff: this.#diffFor(approval.input),
       })),
-      codeChanges: this.codeChanges,
+      codeChanges: {
+        granted: this.#codeChangesGranted,
+        requests: this.#codeChangeRequests.slice(this.#requestsBeforeTurn),
+      },
       ...(this.#lastVerdict === undefined ? {} : { verdict: this.#lastVerdict }),
       status: turn.status,
       steps: turn.steps,
@@ -400,8 +415,8 @@ export const AgentChat = {
       return { history: conversation.history }
     }
     if (command === 'names') {
-      // The panel turns these into links, so an answer that names a declaration stays checkable.
-      conversation.world.invalidate()
+      // The panel turns these into links, so an answer that names a declaration stays checkable. This must
+      // not invalidate: a person clicking a link while a turn runs would drop that turn's snapshot mid-flight.
       const snapshot = await conversation.world.snapshot()
       return {
         names: [...snapshot.nodes.values()]
@@ -410,7 +425,6 @@ export const AgentChat = {
       }
     }
     if (command === 'locate') {
-      conversation.world.invalidate()
       const snapshot = await conversation.world.snapshot()
       const found = resolveTarget(snapshot, String(body['name'] ?? ''))
       if (found === undefined) {

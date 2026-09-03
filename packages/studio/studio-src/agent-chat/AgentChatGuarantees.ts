@@ -50,8 +50,8 @@ const GUARANTEES: readonly Guarantee[] = [
   {
     area: 'time',
     claim:
-      'The held clock covers what the runtime clock owns. A foreign TypeScript action with its own timer is not part of that, so anything scheduled inside one is still the app’s problem.',
-    source: 'Tao Type System.md § The TypeScript boundary',
+      'The held clock covers what the Tao runtime clock owns. Nothing in the spec extends it to a foreign TypeScript action that schedules its own timer, so do not assume such an action is deterministic under test — check it, or keep the timing in Tao.',
+    source: 'Tao Data.md § Deterministic provider-state tests (states what the held clock covers)',
     verdict: 'worth-testing',
   },
   {
@@ -65,21 +65,29 @@ const GUARANTEES: readonly Guarantee[] = [
     area: 'optional values',
     claim:
       'Tao does have an absent value. `none` is part of the value core and optional item fields (`Field Type?`) are implemented, so a `text?` that was never read and one that read an empty string are different states that can render identically. Where that difference matters on screen, it is worth a check.',
-    source: 'Tao Type System.md § Implemented value and control-flow contract; Tao Packages.md',
+    source:
+      'Tao Type System.md § Implemented value and control-flow contract (`none`); § Implemented declaration and value contract (optional item fields)',
     verdict: 'worth-testing',
   },
   {
     area: 'emptiness',
     claim:
-      '`Value is empty` and `.Count` are the whole emptiness story for text and lists, but not for a query. A query distinguishes loading, error and empty, and availability turns on whether a descriptor has ever filled rather than on how many rows it produced. A list screen showing the same thing while loading and while genuinely empty is a real defect, and worth a check.',
+      'Text, lists and queries all support `Value is empty`, and lists and queries keep `.Count` — but for a query that is not the whole story. A query also distinguishes loading and error from empty, and availability turns on whether a descriptor has ever filled rather than on how many rows it produced. A list screen that shows the same thing while loading and while genuinely empty is a real defect, and worth a check.',
     source: 'Tao Data.md § Queries; Tao Type System.md § Implemented value and control-flow contract',
     verdict: 'worth-testing',
   },
   {
     area: 'entity guards',
     claim:
-      'A `guard` on an entity handle has `loading`, `missing`, `unauthorized` and `error` branches, but a test cannot reach most of them today: driving a provider into `loading`, `error` or `ready` from a test step is retired, the world controls that replace it have not landed, and `unauthorized` is reserved for a provider that can report it. Only the `missing` branch is reachable. Do not write tests for the others and do not claim they are covered.',
-    source: 'Tao Data.md § Entity availability guards; Tao Testing.md § Compiler/runtime boundary',
+      'The `missing` branch of a `guard` is reachable from a check: delete the row and assert what the branch renders. WordFlower already does exactly this. If a view guards, that branch is worth a test.',
+    source: 'Tao Data.md § Entity availability guards',
+    verdict: 'worth-testing',
+  },
+  {
+    area: 'entity guards',
+    claim:
+      'The `loading`, `error` and `unauthorized` branches of a `guard` cannot be reached from a check today. Driving a provider into `loading`, `error` or `ready` from a test step is retired, the world controls that replace it have not landed, and `unauthorized` is reserved for a provider that can report it. Do not write tests for those three, and do not report them as covered.',
+    source: 'Tao Testing.md § Operands and placement; Tao Data.md § Deterministic provider-state tests',
     verdict: 'not-testable-yet',
   },
   {
@@ -100,7 +108,7 @@ const GUARANTEES: readonly Guarantee[] = [
     area: 'render failures',
     claim:
       'The runtime contains a render failure at the loop-item, screen and app boundaries and publishes a diagnostic artifact rather than losing the whole app. That containment is runtime behavior. It does not follow that an unguarded field access is safe: static flow narrowing and rejection of unguarded access are still deferred, so reaching a field on a handle you have not guarded is the app’s problem.',
-    source: 'Tao Actions.md; Tao Type System.md § Implemented value and control-flow contract',
+    source: 'Tao Actions.md (containment); Tao Type System.md § Block-scoped guards (narrowing still deferred)',
     verdict: 'worth-testing',
   },
 ]
@@ -113,9 +121,7 @@ export function taoGuarantees(area?: string): { guarantees: readonly Guarantee[]
   const term = (area ?? '').trim().toLowerCase()
   const matched = term === ''
     ? GUARANTEES
-    : GUARANTEES.filter(entry =>
-      entry.area.includes(term) || entry.claim.toLowerCase().includes(term) || term.includes(entry.area)
-    )
+    : GUARANTEES.filter(entry => entry.area.includes(term) || entry.claim.toLowerCase().includes(term))
   if (matched.length === 0) {
     return {
       guarantees: [],

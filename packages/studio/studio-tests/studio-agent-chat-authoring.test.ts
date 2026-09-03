@@ -141,6 +141,45 @@ Describe('Studio agent chat authoring', () => {
     Expect(after.includes('render (Story: longTitleRow)')).toBe(true)
   })
 
+  Test('a row that would close the fixture and add app code is refused', async () => {
+    // Verified escape: the formatter accepts the result, because it is a syntax gate and not a scope gate.
+    // This mode's whole promise is that it cannot change app code, so the arguments have to be the boundary.
+    const staged: Staged[] = []
+    const escape =
+      'Title: "x" }\n}\n\naction Exfiltrate() {\n   do Something()\n}\n\nfixture Filler {\n   pad = create Story { Title: "y"'
+
+    const result = await call(tools(staged), 'proposeScenario', {
+      fixtureName: 'Evil',
+      groupName: 'states',
+      rows: [escape],
+      scenarioName: 'sneaky',
+      view: 'StoryRow',
+    })
+
+    Expect(String(result['refused']).includes('is not a fixture row')).toBe(true)
+    Expect(staged).toEqual([])
+  })
+
+  Test('a scenario for a view with no rows is valid Tao, not a render of nothing', async () => {
+    // "Show me the front page with no stories" is the first sentence of this story, and it used to produce
+    // `render (: emptyRow)`, which the formatter rejects, leaving the model with nowhere to go.
+    const staged: Staged[] = []
+
+    const result = await call(tools(staged), 'proposeScenario', {
+      fixtureName: 'Nothing',
+      groupName: 'states',
+      rows: [],
+      scenarioName: 'empty',
+      view: 'Empty',
+    })
+
+    Expect(result['refused']).toBe(undefined)
+    const after = staged[0]!.edits[0]!.after
+    Expect(after.includes('scenarios Empty "states"')).toBe(true)
+    Expect(after.includes('scenario "empty"')).toBe(true)
+    Expect(after.includes('render (')).toBe(false)
+  })
+
   Test('a view that takes no entity cannot be given rows, and is told why', async () => {
     const result = await call(tools([]), 'proposeScenario', {
       fixtureName: 'Whatever',
@@ -167,6 +206,22 @@ Describe('Studio agent chat authoring', () => {
     Expect(after.includes('test "says so when there is nothing to show"')).toBe(true)
     // The existing check is still there: a new one is added to the suite, not written over it.
     Expect(after.includes('test "shows a story"')).toBe(true)
+  })
+
+  Test('steps that would add a declaration to the test file are refused', async () => {
+    const staged: Staged[] = []
+
+    const result = await call(tools(staged), 'proposeTest', {
+      name: 'sneaky',
+      steps: ['run Reader', '}\n}\n\nview Injected() {\n   render Text("x")\n}\n\ntest "filler" {\n   test "f" {'],
+      suite: 'reader',
+    })
+
+    // The scope gate names what the change would really do, which the formatter cannot see.
+    Expect(String(result['refused'])).toBe(
+      'That would also view Injected, test filler. This mode may not add a declaration at all; check your arguments for a stray brace or quote.',
+    )
+    Expect(staged).toEqual([])
   })
 
   Test('steps that are not valid Tao are refused before anything is staged', async () => {
@@ -234,9 +289,11 @@ Describe('Studio agent chat Tao guarantees', () => {
 
     Expect(all.guarantees.some(entry => entry.verdict === 'guaranteed')).toBe(true)
     Expect(all.guarantees.every(entry => entry.source !== '')).toBe(true)
-    // The guard branches cannot be driven from a test today, and must never be reported as covered.
-    const guards = all.guarantees.find(entry => entry.area === 'entity guards')
-    Expect(guards?.verdict).toBe('not-testable-yet')
+    // The guard branches split: `missing` is reachable and WordFlower already tests it, while the other three
+    // cannot be driven from a check today. One entry covering both taught the agent to skip a real test.
+    const guards = all.guarantees.filter(entry => entry.area === 'entity guards')
+    Expect(guards.map(entry => entry.verdict).sort()).toEqual(['not-testable-yet', 'worth-testing'])
+    Expect(guards.find(entry => entry.verdict === 'worth-testing')?.claim.includes('missing')).toBe(true)
     Expect(all.note.includes('must not be reported as covered')).toBe(true)
   })
 

@@ -78,13 +78,47 @@ const FILES = [{ content: SOURCE, path: PATH }]
 
 Describe('Studio agent chat facts', () => {
   Test('names a view no scenario covers, so a suggestion can rest on it', () => {
-    const facts = improvementFacts(snapshot())
+    // A scenario has to cover something before "covered" means anything; a graph with no covers edge at all
+    // cannot tell an uncovered view from a relation it does not model.
+    const withScenario = snapshot({
+      edges: [{
+        evidence: `${PATH}:0`,
+        from: 'scenario:Other/one',
+        origin: 'compiler',
+        rel: 'covers',
+        to: 'view:Other',
+        via: 'scenario subject',
+      }],
+      nodes: [
+        { id: 'scenario:Other/one', kind: 'scenario', name: 'Other/one', path: PATH },
+        { id: 'view:Other', kind: 'view', name: 'Other', path: PATH, ...span('view StoryRow(Story) {') },
+      ],
+    })
 
-    const uncovered = facts.filter(fact => fact.kind === 'view-without-scenario')
-    Expect(uncovered.length).toBe(1)
-    Expect(uncovered[0]?.subject).toBe('StoryRow')
-    // The evidence is a source location, so a person can open it and disagree.
-    Expect(uncovered[0]?.evidence.startsWith(`${PATH}:`)).toBe(true)
+    const uncovered = improvementFacts(withScenario).filter(fact => fact.kind === 'view-without-scenario')
+    Expect(uncovered.map(fact => fact.subject)).toEqual(['StoryRow'])
+    // The evidence names the relation that was counted, not just a place in the file.
+    Expect(uncovered[0]?.evidence.includes('no covers edge reaches it')).toBe(true)
+  })
+
+  Test('says nothing about coverage while a scenario names the app itself', () => {
+    // An app-level scenario exercises whatever the app renders, and an app node has no renders edge, so the
+    // walk stops there. Counting only what it reached called 25 of WordFlower's 26 views uncovered.
+    const appLevel = snapshot({
+      edges: [{
+        evidence: `${PATH}:0`,
+        from: 'scenario:devices/phone',
+        origin: 'compiler',
+        rel: 'covers',
+        to: 'app:Reader',
+        via: 'scenario group subject',
+      }],
+      nodes: [{ id: 'scenario:devices/phone', kind: 'scenario', name: 'devices/phone', path: PATH }],
+    })
+
+    const facts = improvementFacts(appLevel)
+    Expect(facts.filter(fact => fact.kind === 'view-without-scenario')).toEqual([])
+    Expect(facts.some(fact => fact.kind === 'relation-not-modelled' && fact.subject === 'covers')).toBe(true)
   })
 
   Test('a view a scenario covers is not reported', () => {
@@ -113,10 +147,42 @@ Describe('Studio agent chat facts', () => {
     Expect(facts.filter(fact => fact.subject === 'Story.Title')).toEqual([])
   })
 
-  Test('names an action nothing invokes', () => {
-    const facts = improvementFacts(snapshot())
+  Test('names an action nothing invokes, once the graph has that relation at all', () => {
+    const withInvokes = snapshot({
+      edges: [{
+        evidence: `${PATH}:0`,
+        from: 'view:StoryRow',
+        origin: 'compiler',
+        rel: 'invokes',
+        to: 'action:Other',
+        via: 'render invokes the action',
+      }],
+      nodes: [{ id: 'action:Other', kind: 'action', name: 'Other', path: PATH }],
+    })
 
-    Expect(facts.filter(fact => fact.kind === 'action-never-invoked').map(fact => fact.subject)).toEqual(['MarkSeen'])
+    Expect(improvementFacts(withInvokes).filter(fact => fact.kind === 'action-never-invoked').map(f => f.subject))
+      .toEqual(['MarkSeen'])
+  })
+
+  Test('an action the source invokes with `do` is not called dead', () => {
+    // The invokes edge is only built for handlers the graph walks, and it misses some; the source settles it.
+    const withInvokes = snapshot({
+      edges: [{
+        evidence: `${PATH}:0`,
+        from: 'view:StoryRow',
+        origin: 'compiler',
+        rel: 'invokes',
+        to: 'action:Other',
+        via: 'render invokes the action',
+      }],
+      nodes: [{ id: 'action:Other', kind: 'action', name: 'Other', path: PATH }],
+    })
+
+    const facts = improvementFacts(withInvokes, undefined, [
+      { content: `${SOURCE}\n      on press -> { do MarkSeen() }\n`, path: PATH },
+    ])
+
+    Expect(facts.filter(fact => fact.kind === 'action-never-invoked')).toEqual([])
   })
 
   Test('an invoked action is not reported', () => {
@@ -132,6 +198,16 @@ Describe('Studio agent chat facts', () => {
     })
 
     Expect(improvementFacts(wired).filter(fact => fact.kind === 'action-never-invoked')).toEqual([])
+  })
+
+  Test('a field used only to order a collection is not called unread', () => {
+    // `order by Ordering` reads the field, and produces no reads edge. Calling that dead is a false claim
+    // about an ordinary way to use a field.
+    const facts = improvementFacts(snapshot(), undefined, [
+      { content: `${SOURCE}\n   order by Seen\n`, path: PATH },
+    ])
+
+    Expect(facts.filter(fact => fact.kind === 'field-written-never-read')).toEqual([])
   })
 
   Test('prefers Studio\u2019s real compile state over the snapshot\u2019s parse diagnostics', () => {
@@ -169,17 +245,10 @@ Describe('Studio agent chat facts', () => {
     Expect(problems[0]?.detail).toBe('The project does not parse cleanly: Unknown declaration Foo')
   })
 
-  Test('says nothing about bundles when the graph has no styling edges at all', () => {
-    // A derived app once resolved to no design, so no styled-by edge existed and every bundle in the project
-    // read as unused. An absent relation is not evidence that nothing uses it.
-    const styled = snapshot({
-      nodes: [{ detail: { design: 'D' }, id: 'bundle:D.card', kind: 'bundle', name: 'card', path: PATH }],
-    })
-
-    Expect(improvementFacts(styled).filter(fact => fact.kind === 'bundle-unused')).toEqual([])
-  })
-
-  Test('reports an unused bundle only when the graph can see bundles being used', () => {
+  Test('says nothing about which bundles are unused, because this graph cannot tell', () => {
+    // `styled-by` is only emitted for a layout entry that names a bundle. A design's component-default and
+    // scheme rules are never named that way, so an unlinked bundle may be either unused or invisible here.
+    // Reporting the second as the first called 63 of WordFlower's 92 bundles dead.
     const styled = snapshot({
       edges: [{
         evidence: `${PATH}:0`,
@@ -195,8 +264,19 @@ Describe('Studio agent chat facts', () => {
       ],
     })
 
-    Expect(improvementFacts(styled).filter(fact => fact.kind === 'bundle-unused').map(fact => fact.subject))
-      .toEqual(['lonely'])
+    const facts = improvementFacts(styled)
+    Expect(facts.filter(fact => fact.kind === 'bundle-unused')).toEqual([])
+    Expect(facts.some(fact => fact.kind === 'relation-not-modelled' && fact.subject === 'styled-by')).toBe(true)
+  })
+
+  Test('a relation with no edges at all produces a statement, not accusations', () => {
+    // HNReader has no `invokes` edge in its whole graph. Reading that as "nothing invokes this action" made
+    // four of its ten facts false, in the one tool an advisory answer is told to rest on.
+    const facts = improvementFacts(snapshot())
+
+    const unmodelled = facts.filter(fact => fact.kind === 'relation-not-modelled').map(fact => fact.subject)
+    Expect(unmodelled.includes('invokes')).toBe(true)
+    Expect(facts.filter(fact => fact.kind === 'action-never-invoked')).toEqual([])
   })
 
   Test('outlines a file as its declarations in source order, with line numbers', () => {

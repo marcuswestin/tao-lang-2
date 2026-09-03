@@ -9,6 +9,7 @@
 import Formatter from '@formatter'
 import { jsonSchema, tool, type ToolSet } from 'ai'
 import { resolveTarget } from '../agent-poc/SemanticSnapshot'
+import { requireOnly } from './AgentChatScope'
 import type { AgentChatToolCall } from './AgentChatTools'
 import type { AgentChatWriteWorld } from './AgentChatWrites'
 
@@ -99,6 +100,19 @@ export function authoringTools(
         if (path === undefined || before === undefined) {
           return capture('proposeScenario', { view }, refusal(`Studio cannot read the source that declares ${view}.`))
         }
+        // Each row is one field assignment, and only a literal is allowed on the right. Without this the
+        // strings are spliced straight into app source, and a row that closes the fixture block can add any
+        // declaration the formatter accepts -- in the one mode that promises it cannot change app code.
+        const badRow = rows.find(row => !/^[A-Z]\w*:\s*(?:"[^"\\]*"|-?\d+(?:\.\d+)?|true|false|now)$/.test(row.trim()))
+        if (badRow !== undefined) {
+          return capture(
+            'proposeScenario',
+            { view },
+            refusal(
+              `"${badRow}" is not a fixture row. Each row is one \`Field: value\` pair whose value is a quoted string, a number, true, false, or now.`,
+            ),
+          )
+        }
         const handle = `${scenarioName.replace(/[^A-Za-z0-9]/g, '')}Row`
         const singular = entityParameter?.match(/\(entity (\w+)\)/)?.[1] ?? ''
         const parameterName = entityParameter?.split(' ')[0] ?? ''
@@ -108,11 +122,14 @@ export function authoringTools(
           : `\nfixture ${fixtureName} {\n   ${handle} = create ${
             String(entityNode?.detail?.['singular'] ?? singular)
           } { ${rows.join(', ')} }\n}\n`
+        // With no rows there is nothing to render the view with, so the entry carries no subject -- the shape
+        // WordFlower already uses for `scenario "library" { }`.
+        const subject = rows.length === 0 ? '' : `\n      render (${parameterName}: ${handle})`
         const scenario = `\nscenarios ${view} ${JSON.stringify(groupName)} {\n${
           rows.length === 0 ? '' : `   fixture ${fixtureName}\n`
         }   device phone\n   appearance light\n   network online\n   locale "en"\n   scenario ${
           JSON.stringify(scenarioName)
-        } {\n      render (${parameterName}: ${handle})\n}  }\n`
+        } {${subject}\n}  }\n`
         let after: string
         try {
           after = await Formatter.formatCode(`${before}${fixture}${scenario}`)
@@ -120,8 +137,14 @@ export function authoringTools(
           return capture(
             'proposeScenario',
             { view },
-            refusal(`That is not valid Tao: ${String(error instanceof Error ? error.message : error)}`),
+            refusal(`That is not valid Tao: ${String(error instanceof Error ? error.message : error)}`, {
+              youWrote: `${fixture}${scenario}`,
+            }),
           )
+        }
+        const outOfScope = await requireOnly(before, after, ['fixture', 'scenarios'])
+        if (outOfScope !== undefined) {
+          return capture('proposeScenario', { view }, refusal(outOfScope))
         }
         return capture(
           'proposeScenario',
@@ -176,6 +199,13 @@ export function authoringTools(
               { youWrote: check },
             ),
           )
+        }
+        // A check lives inside a suite, so a change that adds or alters a top-level declaration wrote
+        // something other than a check -- a stray brace in a step, most likely.
+        // Adding a check rewrites the suite that holds it, and nothing else.
+        const outOfScope = await requireOnly(before, after, [], [`test ${suite}`])
+        if (outOfScope !== undefined) {
+          return capture('proposeTest', { name, steps, suite }, refusal(outOfScope, { youWrote: check }))
         }
         return capture(
           'proposeTest',

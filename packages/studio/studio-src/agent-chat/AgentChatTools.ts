@@ -19,7 +19,7 @@ import { declarationSource, fileOutlines, improvementFacts } from './AgentChatFa
 import { taoGuarantees } from './AgentChatGuarantees'
 import { findSpec, specSections } from './AgentChatReference'
 
-export type AgentChatFile = { path: string; content: string }
+export type AgentChatFile = { path: string; content: string; sourceVersion?: string }
 
 /** AgentChatWorld is everything the tools may touch. Nothing reaches past this. */
 export type AgentChatWorld = {
@@ -144,15 +144,16 @@ export function readTools(world: AgentChatWorld, record: (call: AgentChatToolCal
 
     improvementFacts: tool({
       description:
-        'Facts about this app that are true and unusual: views no scenario covers, actions nothing invokes, fields nothing reads, design bundles nothing uses, compile problems. Use these to ground any suggestion about what to improve or build next. Each fact carries the evidence it came from; cite that evidence when you use it.',
+        'Facts about this app that are true and unusual, and — just as important — the relations this graph cannot see well enough to judge. Use these to ground any suggestion about what to improve or build next. Each fact says where it came from and whether it rests on the compiler or on name matching; cite that when you use it, and do not make a suggestion this returns nothing to support.',
       execute: async () => {
-        const snapshot = await world.snapshot()
-        const facts = improvementFacts(snapshot, world.compile?.())
+        const [snapshot, files] = await Promise.all([world.snapshot(), world.files()])
+        const facts = improvementFacts(snapshot, world.compile?.(), files)
+        const usable = facts.filter(fact => fact.kind !== 'relation-not-modelled')
         return capture('improvementFacts', {}, {
           facts,
-          note: facts.length === 0
-            ? 'Nothing unusual was found. Say so rather than inventing a suggestion.'
-            : 'These are facts, not recommendations. Judge which matter and say why.',
+          note: usable.length === 0
+            ? 'Nothing here supports a suggestion about this app. Say that plainly — say which relations this graph cannot see, and offer to look at something specific instead. Do not fall back on what is usually true of apps.'
+            : 'These are facts, not recommendations. Judge which matter and say why, and cite the evidence line. A fact marked `poc-derived` comes from name matching rather than the compiler, so treat it as a strong hint and check it before relying on it.',
         })
       },
       inputSchema: jsonSchema<Record<string, never>>(NO_ARGS),
