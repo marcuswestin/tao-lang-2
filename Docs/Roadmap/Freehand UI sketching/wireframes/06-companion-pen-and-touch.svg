@@ -20,9 +20,9 @@
     <rect x="74" y="204" width="22" height="22" rx="3"/>
   </g>
   <g stroke="#bbb"><line x1="102" y1="148" x2="160" y2="148"/><line x1="102" y1="180" x2="160" y2="180"/><line x1="102" y1="212" x2="160" y2="212"/></g>
-  <!-- ink stroke being drawn (imperfect rectangle) -->
+  <!-- explicit rectangle tool drag -->
   <path d="M206,150 C260,146 330,148 396,152 C398,190 396,210 394,226 C330,230 262,228 208,226 C204,200 206,172 206,150 Z" fill="none" stroke="#c0392b" stroke-width="2.5" stroke-linecap="round"/>
-  <text x="212" y="142" fill="#c0392b" font-size="10">draw &amp; hold → a clean sketch</text>
+  <text x="212" y="142" fill="#c0392b" font-size="10">squeeze + corner drag → rectangle</text>
   <!-- pencil -->
   <g transform="translate(396,152) rotate(-40)">
     <rect x="0" y="-5" width="120" height="10" rx="3" fill="#eee" stroke="#333"/>
@@ -54,21 +54,21 @@
   <text x="560" y="94" fill="#222" font-size="11" font-weight="600">Playlists — Design</text>
   <rect x="560" y="116" width="80" height="140" rx="8" fill="#fff" stroke="#333"/>
   <rect x="656" y="140" width="190" height="42" fill="#fff" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="6 4"/>
-  <text x="660" y="134" fill="#444" font-size="10" font-weight="600">Untitled1 · sketch</text>
+  <text x="660" y="134" fill="#444" font-size="10" font-weight="600">View1 · sketch</text>
   <text x="662" y="200" fill="#777" font-size="10">appears as it is drawn</text>
   <rect x="560" y="272" width="286" height="100" rx="6" fill="#f7f7f7" stroke="#bbb"/>
-  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="10" fill="#222">
-    <text x="568" y="290">view Untitled1() {</text>
-    <text x="568" y="304">   render Sketch [width 380, height 84] { }</text>
-    <text x="568" y="318">}</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#222">
+    <text x="568" y="290">// @/studio/View1.tao</text>
+    <text x="568" y="304">public view View1() {</text>
+    <text x="568" y="318">   render Placeholder("View1") [width 380, height 84] }</text>
     <text x="568" y="340">// the Mac compiles; the iPad renders its cell</text>
     <text x="568" y="354">// at true scale and sends typed actions back</text>
   </g>
 
   <g fill="#333" font-size="11">
-    <text x="40" y="416">· pencil draws and writes; a finger moves, selects, and pans — the platform's own convention</text>
+    <text x="40" y="416">· PencilKit sidecar owns input first; Tao owns data, positioned rendering, and source actions</text>
     <text x="40" y="434">· scribble inside a box to make it Text with that content; tap a box to retype it from the strip</text>
-    <text x="40" y="452">· one cell per device until runtime state is instance-scoped: the iPad steps through a group, the iPhone shows one at true size</text>
+    <text x="40" y="452">· one cell per device: squeeze/double-tap/strip selects rectangle mode; Scribble enters text</text>
     <text x="40" y="470">· the device never compiles or owns source: every change is a source action the Mac validates, applies, and echoes back</text>
   </g>
 </svg>

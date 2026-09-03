@@ -1,13 +1,14 @@
 # Product - Freehand UI sketching
 
-Status: product document draft, first version, 2026-09-02. It describes a Tao Studio capability from
+Status: product document reconciled to `Design - Freehand UI sketching.md` (FS-D1–FS-D20),
+2026-09-02. It describes a Tao Studio capability from
 the perspectives that matter for designing and then implementing it: the person arriving from Figma,
 the language, Studio's architecture, example data, the companion app, and the developer working
 beside the designer. It carries user stories, wireframes, alternative ways to meet each need, and
-the questions that must be decided before an implementation plan can be cut. Nothing here is
-language law: where it touches grammar it proposes and defers to `../Tao Revolution/Decisions.md`,
-and every spelling marked _proposed_ is a draft. Tao snippets use the decided dialect (`Col [card]`),
-not the executable tranche's `Col() [card]`.
+the alternatives that informed the settled design. The design record is authoritative for this
+project. Language spellings it leaves open are settled through `Apps/WordFlower/2 - Next` before
+their tranche begins. Tao snippets use the decided dialect (`Col [card]`), not the executable
+tranche's `Col() [card]`.
 
 Wireframes live in `wireframes/` beside this file and are embedded where the stories use them.
 
@@ -29,14 +30,15 @@ a good part of this on an iPad with a pencil, or on the phone at true size, with
 
 ## Why it can be better here than anywhere else
 
-- **The canvas is source.** Studio keeps no hidden layout, example, or runtime state as project truth
-  (`Docs/Spec/Tao Studio.md`). Every gesture below is a versioned, undoable source action, so a sketch
-  drawn on Tuesday is a view in Git on Wednesday, and a second client — the companion app — sees the
-  same sketch because it renders the same compiled cell from the same source.
+- **Flow is source; free geometry is Studio data.** Unsnapped rectangles live in the committed
+  `.tao-project/studio/sketches.jsonc` catalog. Snapping writes flowed elements into the generated
+  view, and every source mutation remains versioned and undoable. The companion sees both through
+  the paired Studio session (FS-D1, FS-D4).
 - **The vocabulary is already Figma's.** Fill container, hug contents, and fixed are `fill`, `hug`,
-  and `width N`. Auto layout is `Row` and `Col` with `gap`, `pad`, and `content`. Figma's "absolute
-  position inside auto layout" is the sketch tier this document adds. A designer's muscle memory maps
-  onto the layout language almost word for word (`Docs/Spec/Tao Layout and UI.md`).
+  and `width N`. Auto layout is `Row` and `Col` with `gap`, `pad`, and `content`. Figma's free
+  placement maps to Studio catalog rectangles until Snap turns them into that layout vocabulary. A
+  designer's muscle memory maps onto the flow language almost word for word
+  (`Docs/Spec/Tao Layout and UI.md`).
 - **Data is real, and example data is shared.** A sketch is fed with an entity, not with a content
   plugin's strings. Its example rows are `fixture` rows — the same rows the tests and the scenario
   gallery use — so a screenshot, a journey, and the designer's sketch cannot drift apart.
@@ -58,7 +60,7 @@ a good part of this on an iPad with a pencil, or on the phone at true size, with
 | Frame                                    | a sketch: one `view` plus one `scenarios` entry rendered as a cell        |
 | Auto layout                              | `Row`, `Col`, `WrappingRow`, `Grid`                                       |
 | Fill container / Hug contents / Fixed    | `fill` / `hug` / `width N`, `height N`                                    |
-| Absolute position (inside auto layout)   | `at x y` inside a `Sketch` container — the sketch tier (_proposed_)       |
+| Absolute position while sketching        | a `Rect` row in Studio's sketch catalog; not product source (FS-D1)       |
 | Padding, gap, alignment                  | `pad`, `gap`, `content`                                                   |
 | Component                                | a `view` declaration                                                      |
 | Instance                                 | a render site of that view                                                |
@@ -93,7 +95,7 @@ to see it with real playlists, not lorem ipsum.
 1. Noor opens the project in Studio's Design preset. The app runs in a cell, in its `"full"`
    scenario, exactly as it does today (wireframe 1, callout 1).
 2. They drag on the empty canvas beside the phone. A 360 by 76 sketch appears with a size badge, a
-   tab reading `Untitled1 · sketch`, and a rename field in the inspector. Noor types `PlaylistRow`.
+   tab reading `View1 · sketch`, and a rename field in the inspector. Noor types `PlaylistRow`.
 3. Inside the sketch they draw four boxes: a square at the left, two lines beside it, a small box at
    the right. Each lands exactly where drawn; nothing reflows (wireframe 2, left).
 4. From the Data panel they drag `Playlists / Playlist` onto the sketch. The tab now reads
@@ -123,8 +125,10 @@ to see it with real playlists, not lorem ipsum.
 **What Tao wrote.**
 
 ```tao
-// Playlists/PlaylistRow.tao — the feature folder the row was drawn beside
-view PlaylistRow(Playlist) {
+// @/studio/PlaylistRow.tao — Studio-written, read-only until moved
+use Playlist from ../../Data
+
+public view PlaylistRow(Playlist) {
    render Row [pad 12, gap 14, content left center] {
       Image(Playlist.Cover, Description: Playlist.Title) [width 52, height 52, radius sm]
       Col [gap 10, claim 1] {
@@ -135,7 +139,6 @@ view PlaylistRow(Playlist) {
    }
 }
 
-// Scenarios.tao
 scenarios PlaylistRow "sketches" {
    fixture Sketches
    device phone
@@ -147,6 +150,8 @@ scenarios PlaylistRow "sketches" {
       render (Playlist: ChillVibes)
    }
 }
+
+// @/studio/Sketches.tao holds the shared fixture named above.
 ```
 
 and, in the app's list, `loop Playlists / Playlist { PlaylistRow(Playlist) }`.
@@ -179,8 +184,9 @@ maintaining four copies.
    `disabled + busy`.
 7. They pin `appearance dark` on the group's cells; every button re-renders dark through the design's
    `Scheme` conditions, with nothing drawn twice.
-8. They pin `pressed` on one cell — a world control that forces the runtime's attention state for
-   that cell, the way `network offline` forces the network — to style the press.
+8. They duplicate a cell and append `press down "Play"`, `advance 600.ms`, and
+   `press up "Play"` after its render subject. Studio replays the journey prefix on mount, leaving
+   the cell interactive in the reached state (FS-D7; exact phase spellings settle in L1).
 
 ![Wireframe 4 — variants as scenario entries, and an edit inside one cell](wireframes/04-variants-and-states.svg)
 
@@ -195,21 +201,26 @@ view PrimaryButton(Label text, Press action?, Disabled yes / no default no, Busy
 }
 
 scenarios PrimaryButton "states" {
-   fixture Sketches
    device phone
 
    scenario "default" { render (Label: "Play") }
    scenario "disabled" { render (Label: "Play", Disabled: yes) }
    scenario "busy" { render (Label: "Play", Busy: yes) }
    scenario "disabledBusy" { render (Label: "Play", Disabled: yes, Busy: yes) }
+   scenario "held" {
+      render (Label: "Play")
+      press down "Play"
+      advance 600.ms
+      press up "Play"
+   }
 }
 ```
 
-**What is different.** The four cells are four argument sets over one tree. A change made "in" a
-cell is a conditional clause, never a divergence, and the prompt in step 5 is how the designer says
-which one they meant. `Press` is optional so a cell can render without it; a required action parameter
-has no scenario spelling today and needs a stand-in that logs the press (FS-Q9). A view with no entity
-still names a fixture under the current contract (FS-Q17).
+**What is different.** The cells are argument sets and journey prefixes over one tree. Editing mode
+persists as “this state” or “all states”; the state mode writes the conjunction of non-default
+arguments and the inspector can remove a term. A required action parameter may be omitted because
+the scenario harness supplies a stand-in that logs invocations. A fixture is absent when the entry
+uses no handles (FS-D7–FS-D9, FS-D17).
 
 ### Story 3 — Focus into the row that is everywhere
 
@@ -224,9 +235,9 @@ the app is actually showing.
 2. Edit as a sketch opens a sketch beside the phone, pinned to that instance's arguments: the row is
    `Morning Run`, exactly as the app showed it. If the row had come from the live store rather than
    a fixture, Studio captures it into the fixture first, through the existing capture flow.
-3. Under the title, inside the flowing column, they draw a box. Because the column flows, the box is
-   inserted at the nearest gap (an insertion line shows where) and takes its drawn height. Holding ⌃
-   while drawing would instead drop it free, inside a nested `Sketch`.
+3. Under the title they draw a free rectangle over the flowing column. Studio keeps it as a catalog
+   row and shows the same gap indicator palette drops use; dropping it into the gap snaps just that
+   rectangle into the view's flow (FS-D1, FS-D11).
 4. They drop `Owner.Name` on it. All three rows in the phone update at once, and so does every other
    screen the row is on.
 5. They close the sketch. Its scenario entry remains in source as `"fromPlaylists"` unless they choose
@@ -263,9 +274,10 @@ what stacks and what sits side by side.
    and Noor accepts. The press behavior of the three
    buttons is left for whoever wires actions, with a `Press action` stand-in in the cell meanwhile.
 
-**What is different.** Partial snapping keeps the sketch tier and the flow tier side by side inside
-one sketch, and a release build refuses to ship while any `Sketch` still holds content, so a loose
-sketch cannot leak into the product by accident.
+**What is different.** Partial snapping merges two authorities in Studio: flowed nodes from the Tao
+view and free rectangles from the committed sketch catalog. Product source contains only views.
+Unsnapped rectangles therefore cannot leak into the app, while a snapped unbound `Placeholder`
+ships as an empty box and produces a `tao check` warning (FS-D1, FS-D2).
 
 ### Story 5 — Sketching on the iPad with a pencil, the Mac keeping up
 
@@ -278,8 +290,9 @@ Mac and the source follow.
 1. They open the Tao Studio companion app on the iPad, scan the QR code Studio shows, confirm the
    pairing code on both screens, and pick the project. The iPad shows one cell at a time at its own
    scale, with room around it to draw; the Mac's grid stays the overview (wireframe 6).
-2. With the pencil they draw a rectangle on empty canvas and hold at the end of the stroke; it snaps
-   to a clean sketch, and the sketch appears on the Mac as it settles.
+2. They enter rectangle mode: Pencil Pro squeeze reports began/changed/ended phases; Pencil 2
+   double-tap toggles the tool; fingers and other styluses use the strip. They put the tip at one
+   corner, drag to the opposite corner, and lift or release to commit the rectangle (FS-D19).
 3. Inside it they draw a box and write "Chill Vibes" into it with the pencil; the box becomes a
    `Text` with that content. They draw a square and tap it, and pick Image from the strip.
 4. They drag `Playlist` from the strip's entity menu onto the sketch with a finger, then drag chips
@@ -292,63 +305,58 @@ Mac and the source follow.
 
 ![Wireframe 6 — the companion app on the same session](wireframes/06-companion-pen-and-touch.svg)
 
-**What is different.** The device never compiles or owns source. Every stroke becomes a typed source
-action the Mac validates, applies, and echoes back as a new compiled cell, so the iPad, the iPhone,
-and the Mac are three views of one session. The pen is not a novelty: a row drawn at true size on the
-phone is a row that fits a thumb.
+**What is different.** The device never compiles, owns source, or reads the catalog file. A native
+PencilKit sidecar initially owns canvas input and emits typed rectangle/text/move events. Tao owns
+the data, positioned rendering, and paired source actions; the Mac validates, applies, compiles, and
+echoes them. One device shows one cell at a time until every store is instance-scoped (FS-D18,
+FS-D19).
 
 ## Perspective: the language — what the canvas writes
 
-The stories only work if everything the canvas produces is ordinary Tao. This section lists what
-that requires, what already exists, and what would be new.
+The canvas writes Tao only when an operation produces flowed product behavior. Free geometry stays
+in Studio's catalog. This section separates those authorities and lists the language work required
+for scenarios, placeholders, variants, and Studio's eventual Tao-rendered overlay.
 
-### A sketch is a view and a scenario
+### A sketch is a generated view, a scenario, and Studio data
 
-A sketch is one `view` declaration plus one entry in a `scenarios` group whose subject is that view.
-Both exist today: the focused `render (Parameter: Handle)` subject, group defaults, the device and
-appearance pins, and the `(source path, group, entry)` identity Studio already uses for cells. A sketch
-therefore needs no new declaration; it needs a place to be written (FS-Q1) and a name (FS-Q2).
+Studio creates `@/studio/View1.tao` the moment the designer draws the outer rectangle. The file holds
+a public view and its view-specific `scenarios` group. Before the first snap its render tree is one
+`Placeholder` matching the sketch size. Shared example rows live in `@/studio/Sketches.tao`.
 
-### The sketch tier: free placement in source
+Free geometry is separate. Studio's server persists it in
+`.tao-project/studio/sketches.jsonc`, committed by default:
 
-Free placement must be representable in source, or the sketch would be Studio-only state, which the
-Studio contract forbids and which the companion app could not see. The layout specification keeps raw
-absolute positioning out of ordinary layout syntax deliberately, so the sketch tier must be a fenced
-exception rather than a general positioning mechanism.
-
-_Proposed:_ a stdlib container `Sketch` whose direct children may carry `at x y`. `Sketch` takes
-`width` and `height` and lays nothing out; a child's `at` is its offset from the sketch's top-left.
-`at` is accepted by no other element, which fits the decided rule that every element kind declares
-which clauses it accepts. Development builds render a `Sketch` as drawn; a release build reports a
-`Sketch` that still holds content as an error, mirroring the existing policy under which raw inline
-design exploration is a warning in development and an error at release. Nested `Sketch` is allowed
-so a free region can sit inside flowing content (story 3, step 3). Snapping rewrites a `Sketch` into
-`Row`, `Col`, or a nesting of them and drops every `at`; unsnapping does the reverse from measured
-layout.
-
-`at` is an offset from the container's top-left, which is the anchor-plus-offset vocabulary the
-interaction system already settles for floating surfaces (KEY-D7, spelling deferred as LANG-018): a
-`Sketch` child is content anchored to its container with an offset, and whether the two share one
-spelling is part of FS-Q3. The release fence has no exact precedent either: the existing release rule
-on raw design exploration is a severity policy on values, whereas this is a construct that must be
-empty to ship (FS-Q4).
-
-```tao
-render Sketch [width 360, height 76] {
-   Box [at 12 12, width 52, height 52]
-   Box [at 78 16, width 180, height 14]
+```jsonc
+{
+  "sketches": [
+    {
+      "name": "View1",
+      "project": "music",
+      "view": "View1",
+      "width": 360,
+      "height": 76,
+      "rects": [
+        { "x": 12, "y": 12, "width": 52, "height": 52, "kind": "Placeholder", "content": "Cover art" },
+        { "x": 78, "y": 16, "width": 180, "height": 14, "kind": "Text" },
+      ],
+    },
+  ],
 }
 ```
 
-Alternatives and the recommendation are in _Ways to meet each need_ below.
+The matrix initially renders those rows as a TypeScript overlay. Snapping writes only the projected
+flowed elements into the view and removes the corresponding free rows. A later language tranche
+settles a positioned container, working name `Canvas`, and child offset, working name `at x y`, so
+Studio's own Tao client can render the same catalog. Those constructs render Studio data; they do not
+put free placement into product source (FS-D1, FS-D4, FS-D5).
 
-### Placeholders
+### Placeholders and spacers
 
-A drawn box is `Box [width N, height N]` — a hugging container with an explicit size. In development
-Studio paints a hatched overlay on any `Box` that has a size and no children, as Studio chrome rather
-than source, so placeholders look like placeholders without a `Placeholder` element existing in the
-language (FS-Q5 records the alternative). Retyping replaces the element while keeping its clauses:
-`Box` to `Text`, `Image`, `Button`, `TextInput`, `Switch`, or any project view.
+`Placeholder("Cover art") [width 52, height 52]` is a stdlib element. Development renders a labelled
+hatched box; release renders an empty box with the same dimensions and `tao check` warns. It can
+carry a binding hint, receive a field-chip drop, appear as unbound in the inspector, and participate
+in the design check. The L1 tranche settles whether flexible intentional space is a `Spacer` element
+or `Box [claim 1]`, leaning `Spacer` (FS-D2, FS-D10).
 
 ### Parameters from data and from literals
 
@@ -356,11 +364,12 @@ language (FS-Q5 records the alternative). Retyping replaces the element while ke
   and an argument to every entry of the sketch's group, chosen from the selected example source.
 - Dropping a field chip binds a placeholder by the field's type: `image` to `Image`, `text` and
   numbers to `Text`, a `yes / no` field to a condition or an icon, a to-one relation to nested chips one
-  level deep (`Owner.Name`), a collection to a `loop` with an inner sketch for its row.
+  level deep (`Owner.Name`), and a collection to a `loop` with a flowed row view.
 - Make parameter extracts a literal into a typed parameter and adds the argument to every entry of
   the group; the reverse, inlining a parameter, is the same action backwards.
 - Adding a parameter by hand in the inspector offers the kinds the scenario surface can argue:
-  text, number, yes / no, `one of` cases, an entity, and an action (which needs a stand-in, FS-Q9).
+  text, number, yes / no, `one of` cases, an entity, and an action. An omitted required action gets
+  a per-cell logging stand-in (FS-D8).
 
 ### Variants are scenario entries; states are conditions
 
@@ -370,34 +379,33 @@ text, `0`, a typical value, and a large one for numbers, the next fixture row fo
 Expand all states writes one entry per unvisited case, and a full cross on request. A text variant of
 an entity field is a `prepare { update Handle { … } }` delta, never a mutated fixture.
 
-A style change made inside one cell asks where it applies: always, only under this cell's arguments
-(`when Disabled`), or as a new view. The middle choice writes the decided postfix `when` form.
-Interaction states are decided conditions in the language (`pressed`, `hovered`, `focused`), though the
-executable tranche admits only `when Scheme is …` today. Pinning one on a cell is a world control over
-runtime-owned attention state (KEY-D8), not a language condition, and its spelling belongs with the
-other world controls (FS-Q8).
+A cell carries a persistent mode: `Editing: this state` or `Editing: all states`. A non-default cell
+defaults to this state. The conditional mode writes the conjunction of the cell's non-default
+arguments (`when Disabled and Busy`), and the inspector can remove a term. Interaction states are
+reached by ordered scenario steps after `render`, never forced or restored; the cell remains
+interactive after replay (FS-D7, FS-D17).
 
 ### What would be new in the language
 
-- The `Sketch` container and the `at` clause, with the release diagnostic (a tranche through
-  `Apps/WordFlower/2 - Next`, as every language change is).
+- Scenario-entry journey steps, omitted-action stand-ins, fixture-less scenarios, and the
+  `Placeholder`/spacer stdlib surface (L1).
 - Postfix `when` over a parameter (`background muted when Disabled`) and over interaction states,
   which are decided but not executable: the parser admits only `when Scheme is Light` or `Dark`.
 - `yes / no` as a parameter type, with `yes` and `no` literals, in the executable dialect.
-- Scenario spellings for an interaction-state world control and for an action-parameter stand-in,
-  if they are to be source rather than transient.
-- Nothing else. Parameters, scenarios, fixtures, `prepare`, named slots, and `loop` are decided and
-  implemented.
+- The positioned container and offset used by Studio's own client (L3), after their spellings and
+  relationship to KEY-D7's floating layers are settled in `2 - Next`.
+
+There is no sketch-tier syntax, release diagnostic, `while pressed`, or action-stand-in spelling.
 
 ## Perspective: Studio — canvas, identity, actions, inference
 
 ### The canvas
 
-The existing scenario canvas renders grouped rows of cells. A sketch is a cell whose scenario
-belongs to a `"sketches"` group, so it lives on the same canvas, next to the app. Drawing on empty
-canvas is the one new gesture at the canvas level; everything else happens inside a cell. Cells keep
-their iframe realm each; a sketch's overlays — selection, insertion lines, placeholder hatching,
-size badges, field chips — are Studio chrome drawn over the cell, never nodes in the preview.
+The existing scenario canvas renders grouped rows of cells. A sketch is a generated view and
+scenario cell plus its free catalog rows, so it lives on the same canvas next to the app. Cells keep
+their iframe realm. Until Slice 5, the matrix's TypeScript layer renders free rectangles, selection,
+insertion lines, size badges, and field chips above the preview. Flowed elements remain preview
+nodes. After L3, Studio's Tao client renders the catalog through the positioned container (FS-D5).
 
 ### Identity and trust
 
@@ -405,8 +413,8 @@ Every gesture becomes a source action carrying the identity the protocol already
 app, preview instance, source version, revision-bound range, node kind, owning view, and for a cell
 the exact cell revisions and scenario. The server resolves ranges in current source and rejects
 stale identity with structured conflicts; proposal and apply share one preparation path, and undo is bound to the
-latest checkpoint. None of that changes. A sketch opened from a running instance additionally needs the instance's
-argument bindings, which the render inspection does not publish yet (FS-Q10).
+latest checkpoint. None of that changes. A sketch opened from a running instance takes its entity and
+handle from the interaction outline's item provenance after that keyboard tranche lands (FS-D15).
 
 ### Source actions this needs
 
@@ -420,10 +428,10 @@ argument bindings, which the render inspection does not publish yet (FS-Q10).
 | `wrap-render`                  | exists | `Stack` only; snapping needs `Row` and `Col` with clauses                                    |
 | `set-scenario-arguments`       | exists | rewrites one existing focused-render entry; creating entries belongs to `duplicate-scenario` |
 | `insert-captured-fixture`      | exists | focus-in from a live row; example rows promoted to source                                    |
-| `create-sketch-view`           | new    | writes the view, the group, the entry, and picks the file                                    |
-| `set-position`                 | new    | `at x y` and size on a `Sketch` child                                                        |
-| `snap-to-flow` / `unsnap`      | new    | inference plus rewrite; unsnap reads measured rects from the preview                         |
-| `retype-render`                | new    | `Box` to another element or a project view, clauses kept                                     |
+| `create-sketch-view`           | new    | writes `@/studio/ViewN.tao`, its group and initial `Placeholder`, plus catalog row           |
+| `set-sketch-rect`              | new    | writes position, size, kind, content, or binding in the catalog; never product source        |
+| `snap-to-flow` / `unsnap`      | new    | atomically reconciles catalog rows and source; unsnap can use measured preview rects         |
+| `retype-sketch-rect`           | new    | changes an unsnapped row's kind while it remains Studio data                                 |
 | `add-parameter` / `bind-field` | new    | entity and literal parameters; chip drops                                                    |
 | `set-conditional-style`        | new    | the always / when / fork prompt's result                                                     |
 | `duplicate-scenario`           | new    | generated arguments; expand all states                                                       |
@@ -439,8 +447,9 @@ between neighbours becomes `gap` and the distance to the sketch edge becomes `pa
 both edges becomes `fill`; the widest slack on the main axis puts `claim 1` on the neighbour that
 should absorb it; a box drawn to a size keeps `width` and `height`; text and images hug. When the
 projections are ambiguous Studio shows the proposed tree as an overlay and asks, through the existing
-proposal endpoint, before it applies. The rules are a draft (FS-Q6) and should be tuned on real
-sketches, not settled in prose.
+proposal endpoint, before it applies. The rules are settled by FS-D11 and tuned against a committed
+corpus of 15–20 real screens. At least four in five must snap without an overlay, and no accepted
+tree may need more than two inspector fixes.
 
 ### Gestures in flow
 
@@ -488,11 +497,10 @@ it does not add a second editing protocol.
   An iPhone shows one cell at true size, which is the reason to sketch there at all: a row drawn on
   the phone is a row that fits a thumb. Both are views of the same session; the Mac's grid stays the
   overview.
-- **Pencil draws and writes, finger moves.** The platform's own convention. Draw and hold snaps a
-  stroke to a clean rectangle, as Notes and Freeform do; scribbling inside a box turns it into `Text`
-  with that content through on-device handwriting recognition; a tap opens the retype strip; a
-  two-finger tap undoes; a long-press on anything shows its verbs. Snap, the entity menu, and the
-  palette live on a strip at the bottom.
+- **Rectangle creation is a pencil mode, not recognition.** Pencil Pro squeeze supplies
+  began/changed/ended phases; Pencil 2 double-tap toggles the mode; the strip exposes it to fingers
+  and other styluses. Tip down at one corner, drag to the other, and lift or release to commit.
+  Scribble supplies text. Free ink is never shape-recognized (FS-D19).
 - **The device never owns source.** Ink is drawn locally and optimistically, and on pen-up the
   device sends one typed source action with the full identity tuple. The Mac validates, applies,
   compiles, and echoes the new cell; a stale identity is rejected and the device redraws from the
@@ -501,45 +509,45 @@ it does not add a second editing protocol.
 - **True scale wins.** When a cell is assigned to a device, the device's measured viewport is the
   cell's viewport, reported through the designed `device.cellApplied` message; the sketch's `device` clause
   remains what the Mac's grid renders.
-- **Where the canvas is implemented.** First as a native sidecar — a foreign view over PencilKit
-  inside the companion's own Tao app — because Tao has no drawing or gesture primitives yet. The
-  drag-and-drop example app on the roadmap will tell us how much of this a later Tao-native canvas
-  could own (FS-Q14).
+- **Where the canvas is implemented.** A native PencilKit sidecar, declared as a foreign view with
+  `accepts content slots`, initially owns ink, selection, move, and resize and emits typed `Drew`,
+  `Wrote`, and `Moved` events. Tao owns catalog data, L3 rendering, and paired source actions. The
+  sidecar shrinks toward ink-only as Tao gesture primitives land (FS-D18).
 
 ## Perspective: the developer beside the designer
 
-- **Readable output.** Everything the canvas writes is formatted by the ordinary formatter and reads
-  like hand-written Tao, because it is the same grammar. The snap inference should prefer the fewest
-  clauses that reproduce the drawing, not the most precise.
-- **Predictable homes.** New views land where the decided app decomposition puts them — a file in
-  the feature folder — and their entries in `Scenarios.tao` (FS-Q1), so a developer knows where
-  sketches accumulate and nothing straddles the reviewable layout.
-- **Sketches cannot ship.** The release diagnostic on `Sketch` content, and the existing one on raw
-  inline design exploration, make "the designer left a placeholder" a build failure rather than a
-  surprise in review.
-- **Tests fall out.** Every sketch is a scenario entry over a fixture, so the decided `tao review`
-  will render it once that command exists, and a journey will mount the same view with the same
-  handle once the runner executes fixtures and scenarios, which it does not yet. Coverage of the
+- **Readable output.** Every flowed source action is formatted as ordinary Tao; free geometry is
+  stable, reviewable JSONC. Snap inference prefers the fewest clauses that reproduce the drawing,
+  not the most precise.
+- **Predictable homes.** Studio-generated public views and their view-only declarations live in
+  read-only `@/studio/<Name>.tao`; shared examples live in `@/studio/Sketches.tao`. Move to package
+  moves the file with history, rewrites imports, and offers to relocate its scenario group to the
+  app's `Scenarios.tao` (FS-D3, FS-D6).
+- **Only views ship.** Free rectangles stay outside the app in Studio's catalog. A snapped unbound
+  `Placeholder` ships as an empty sized box and `tao check` warns, so release is never gated (FS-D2).
+- **Tests fall out.** Every sketch has a scenario entry, optionally over a fixture, so the decided
+  `tao review` will render it once that command exists, and a journey can mount the same view with
+  the same handle once the runner executes fixtures and scenarios, which it does not yet. Coverage of the
   sketching features themselves is a Tao behavior test per language construct under
   `Apps/Test Apps/AGENTS.md`, and a Studio journey per gesture in `packages/studio/studio-tests` and
   the smoke lanes `packages/studio/README.md` describes.
 
 ## Ways to meet each need
 
-| Need                               | Options                                                                                                                                                                                         | Recommendation                                                                                                                 |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Free placement                     | (a) Studio-only overlay state; (b) `Sketch` container with `at`, release-refused; (c) general absolute positioning in the layout language; (d) a separate `.tao-sketch` file compiled to a view | (b). (a) breaks the source-is-truth contract and the companion; (c) is what the layout spec refuses; (d) is a second authority |
-| Where a new view is written        | (a) a new file in the feature folder of the screen it was drawn beside, entries in `Scenarios.tao`; (b) one `Sketches.tao` per app holding views, entries, and fixture; (c) ask every time      | (a); it is the decided decomposition, and (b) straddles it                                                                     |
-| Placeholder rendering              | (a) a `Placeholder` stdlib element; (b) Studio chrome over an empty sized `Box`; (c) a dev-only design bundle                                                                                   | (b); it leaves nothing in source that must be removed                                                                          |
-| Example rows                       | (a) fixture only; (b) fixture, generated, live, library, all promoted to fixture on save; (c) Studio-owned example store                                                                        | (b); (c) is the `example` declaration Studio already rejected                                                                  |
-| Variant generation                 | (a) one entry per Option-drag with the next unvisited value; (b) expand all at once; (c) pairwise generation for many parameters                                                                | (a) plus (b); (c) later if sketches grow past three parameters                                                                 |
-| A style edit inside a variant cell | (a) always ask; (b) default to conditional when the cell has a non-default argument, with a toggle; (c) always apply globally                                                                   | (a) first, (b) once the prompt's answer distribution is known                                                                  |
-| Interaction-state pins             | (a) transient only, like appearance before save; (b) a scenario clause; (c) both, transient promoted on save                                                                                    | (c), mirroring appearance                                                                                                      |
-| Focus-in arguments                 | (a) publish a binding graph from the preview; (b) reuse the interaction outline's item provenance (entity plus handle); (c) ask the user                                                        | (b); it is one derived model with many consumers                                                                               |
-| Action parameters in a cell        | (a) a runtime stand-in that logs; (b) a scenario spelling naming a fixture action; (c) forbid action parameters on sketched views                                                               | (a) now, (b) when fixture-through-action semantics are adopted                                                                 |
-| Direction change                   | (a) rewrite `Row` to `Col` and remap `content` terms; (b) wrap in the other container                                                                                                           | (a)                                                                                                                            |
-| Companion canvas                   | (a) native PencilKit sidecar in the companion's Tao app; (b) Tao-native canvas; (c) a web view                                                                                                  | (a); (b) after the drag-and-drop app; (c) never — the device must render real cells                                            |
-| Snap ambiguity                     | (a) pick the best guess silently; (b) show the proposed tree and ask; (c) refuse                                                                                                                | (b), through the proposal endpoint                                                                                             |
+| Need                               | Options                                                                                                                                  | Recommendation                                                                                     |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Free placement                     | (a) Studio catalog rows; (b) `Sketch` + `at` product source; (c) general absolute layout; (d) `.tao-sketch`                              | **Settled: (a), FS-D1.** The later positioned container renders catalog data in Studio only.       |
+| Where a new view is written        | (a) generated `@/studio/<Name>.tao`; (b) feature folder plus `Scenarios.tao`; (c) one app-root file; (d) ask                             | **Settled: (a), FS-D3/D6.** Move to package performs the deliberate transition to authored source. |
+| Placeholder rendering              | (a) `Placeholder`; (b) Studio chrome over empty `Box`; (c) dev-only bundle                                                               | **Settled: (a), FS-D10.** Development hatches; release keeps only the empty size and warns.        |
+| Example rows                       | (a) fixture only; (b) fixture, generated, live, library, all promoted to fixture on save; (c) Studio-owned example store                 | (b); (c) is the `example` declaration Studio already rejected                                      |
+| Variant generation                 | (a) one entry per Option-drag with the next unvisited value; (b) expand all at once; (c) pairwise generation for many parameters         | (a) plus (b); (c) later if sketches grow past three parameters                                     |
+| A style edit inside a variant cell | (a) always ask; (b) persistent this-state/all-states mode; (c) always global                                                             | **Settled: (b), FS-D17.** Non-default arguments select this-state initially.                       |
+| Interaction states                 | (a) force a world value; (b) replay ordinary ordered steps                                                                               | **Settled: (b), FS-D7.** Runtime-owned states are never forced.                                    |
+| Focus-in arguments                 | (a) publish a binding graph from the preview; (b) reuse the interaction outline's item provenance (entity plus handle); (c) ask the user | (b); it is one derived model with many consumers                                                   |
+| Action parameters in a cell        | (a) a runtime stand-in that logs; (b) a scenario spelling naming a fixture action; (c) forbid action parameters on sketched views        | (a) now, (b) when fixture-through-action semantics are adopted                                     |
+| Direction change                   | (a) rewrite `Row` to `Col` and remap `content` terms; (b) wrap in the other container                                                    | (a)                                                                                                |
+| Companion canvas                   | (a) native PencilKit sidecar in the companion's Tao app; (b) Tao-native canvas; (c) a web view                                           | (a); (b) after the drag-and-drop app; (c) never — the device must render real cells                |
+| Snap ambiguity                     | (a) pick the best guess silently; (b) show the proposed tree and ask; (c) refuse                                                         | (b), through the proposal endpoint                                                                 |
 
 ## What exists today, and what is missing
 
@@ -551,85 +559,54 @@ the palette drag with position-aware insertion; layout and style inspection with
 preview bridge; runtime data capture; the companion app decision and its protocol design; the
 decided conditional-styling grammar, of which the executable tranche implements `when Scheme is …`.
 
-**Missing — language.** `Sketch` and `at`; the release diagnostic; postfix `when` over parameters
-and interaction states in the executable dialect; `yes / no` as a parameter type with `yes` and `no`
-literals; scenario spellings for a text-scale pin, an interaction-state world control, and an action
-stand-in; loading and empty as world controls.
+**Missing — language.** L1's ordered scenario steps, omitted-action stand-ins, optional fixture,
+`Placeholder`, and settled spacer; postfix `when` over parameters and interaction states; `yes / no`
+parameter types and literals; L3's positioned container and direct-child offset. Text scale, loading,
+and empty remain out-of-scope world controls.
 
 **Missing — compiler and manifest.** Measured layout rectangles reported per render node for
 unsnap; argument bindings per rendered instance for focus-in; project-view insertion with argument
 binding from scope.
 
-**Missing — Studio.** Drawing on empty canvas; sketch overlays; the new source actions in the table
-above; the snap inference; the Data panel's example sources and generation; the Parameters
-inspector context; the duplication and expansion commands; the conditional-edit prompt; the
-transient interaction pin.
+**Missing — Studio.** The committed sketch catalog and provider; generated `@/studio` views; drawing
+and catalog overlays; the new source actions above; snap inference and corpus; example sources;
+parameter controls; duplication/expansion; and the persistent conditional-edit mode.
 
-**Missing — companion.** The app itself, then its canvas sidecar, handwriting and shape
-recognition, the strip, and the device-side optimistic ink with pen-up commit.
+**Missing — companion.** The app shell, then its PencilKit sidecar, rectangle tool modes, Scribble,
+the strip, and device-side optimistic input with typed-event commit. Shape recognition is withdrawn.
 
-## Key questions and decisions to make
+## Settled-question map
 
-Language questions are Ro's; the others can be resolved by implementation evidence unless Ro wants
-to rule on them.
+The former FS-Q list is closed by the design record:
 
-- **FS-Q1 — Where does a sketched view live?** Decisions §1 fixes the app decomposition: screens in
-  per-feature folders, scenarios in `Scenarios.tao`. The proposal follows it: the view goes to a new
-  file in the feature folder of the screen it was drawn beside (`Playlists/PlaylistRow.tao`), its
-  entries to `Scenarios.tao`, its example rows to the fixture there. Open: which folder when nothing
-  was drawn beside, and whether one `Sketches.tao` per app is an acceptable stated exception for
-  throwaway work.
-- **FS-Q2 — Naming.** `Untitled1` until renamed, with rename through the language service so call
-  sites follow. Should Studio insist on a name before the first scenario is saved?
-- **FS-Q3 — The sketch tier's spelling** (language). `Sketch` with `at x y` as proposed, or `Canvas`,
-  or `Free`; whether `at` may take design sizes (`at md lg`) or only bare pixels; whether nested
-  `Sketch` is allowed. `at` should be read as the anchor-plus-offset vocabulary KEY-D7 settles for
-  floating surfaces (LANG-018); whether the sketch tier and floating layers share one spelling, or the
-  tier argues for a coordinate form of its own, is the core of this question.
-- **FS-Q4 — The release rule** (language). Error at release and warning in development, as for raw
-  design exploration, or an error at every `tao check`? Note the difference in kind: the existing rule
-  is a severity policy on values, whereas this is a construct that must be empty to ship, which has no
-  precedent.
-- **FS-Q5 — Placeholders.** Studio chrome over an empty sized `Box`, or a `Placeholder` element
-  that carries a label and a hatched look in development?
-- **FS-Q6 — Inference rules.** Which heuristics, and what does the proposal overlay show when they
-  disagree? To be tuned on a corpus of real sketches before the plan fixes them.
-- **FS-Q7 — Unsnap fidelity.** Recompute `at` from measured layout only, or also remember the last
-  free positions in source as a comment? The former is honest; the latter is convenient and dubious.
-- **FS-Q8 — Forcing an interaction state on a cell.** Attention state is runtime-owned, never `set`
-  and never restored (KEY-D8), so a pinned `pressed` is a world control like `network offline`, not a
-  language condition. Transient only, or a scenario spelling routed through the KEY-D13 step seam and
-  promoted on save the way `appearance` is?
-- **FS-Q9 — Action parameters in cells** (language). A runtime stand-in that logs the invocation,
-  or a scenario spelling once fixture-through-action semantics are adopted?
-- **FS-Q10 — Focus-in bindings.** Reuse the interaction outline's item provenance (entity plus
-  handle) or publish a separate binding graph from the preview? One derived model is the decided
-  direction for interaction; this should be its second consumer.
-- **FS-Q11 — Generated example values.** Deterministic from a seed and field names, with what
-  vocabulary, and are they ever visible in source before promotion? The rule proposed here is never.
-- **FS-Q12 — The conditional-edit prompt.** Ask every time, or default to the conditional answer
-  when the cell has a non-default argument?
-- **FS-Q13 — Option-drag versus Shift-drag.** Figma duplicates with Option; Ro described the habit
-  as Shift-drag. Either binding works and the mechanism is the same; pick one and mirror it on the
-  companion as a two-finger drag.
-- **FS-Q14 — The companion canvas.** Native PencilKit sidecar first, as proposed, and if so which
-  gestures the sidecar owns versus the Tao app around it? The iPad shows one cell at a time until
-  runtime state is instance-scoped; whether a group can be stepped through on the device, and whether
-  multi-cell isolation is worth landing for the iPad, is part of this question.
-- **FS-Q15 — Handwriting and shape recognition.** On-device only, and which languages; what happens
-  when recognition is wrong (the stroke stays as ink until accepted?).
-- **FS-Q16 — Scope of the first slice.** Draw, boxes, retype, snap, entity feed, and duplicate on the
-  Mac; or start with the language tier and the entity feed alone? Slice order is the plan's question,
-  but the first slice's cut changes what the tranche must carry.
-- **FS-Q17 — Sketches without data.** Every scenario entry selects exactly one fixture today, so a
-  button sketch with no entity parameter still names one. Allow fixture-less focused renders, or have
-  Studio supply an empty project fixture?
+| Former question | Resolution                                                                                                                 |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| FS-Q1           | FS-D3 and FS-D6: `@/studio/<Name>.tao`; shared fixture in `@/studio/Sketches.tao`; Move to package relocates deliberately. |
+| FS-Q2           | FS-D13: project-wide monotonic `View1`, `View2`, …, created immediately; no spaced names.                                  |
+| FS-Q3           | FS-D1 and FS-D5: no sketch tier in product source; L3 separately settles Studio's positioned-container spelling.           |
+| FS-Q4           | FS-D2: no release gate; a shipping `Placeholder` warns.                                                                    |
+| FS-Q5           | FS-D10: stdlib `Placeholder`.                                                                                              |
+| FS-Q6           | FS-D11: projection rules, proposal-on-overlap, and measured corpus threshold.                                              |
+| FS-Q7           | FS-D12: retained catalog position, stale association drop, measured fallback.                                              |
+| FS-Q8           | FS-D7: ordered steps reach states; no forced world control.                                                                |
+| FS-Q9           | FS-D8: runtime logging stand-in with no spelling.                                                                          |
+| FS-Q10          | FS-D15: interaction-outline entity-plus-handle provenance.                                                                 |
+| FS-Q11          | FS-D16: deterministic seeded vocabulary, promoted only when kept.                                                          |
+| FS-Q12          | FS-D17: persistent this-state/all-states mode, conditional by default for non-default arguments.                           |
+| FS-Q13          | FS-D14: Option-drag on Mac; long-press then Duplicate on companion.                                                        |
+| FS-Q14          | FS-D18: one-cell device and native sidecar boundary.                                                                       |
+| FS-Q15          | FS-D19: explicit rectangle mode plus Scribble; no shape recognition.                                                       |
+| FS-Q16          | FS-D20: L1, Tooling, Draw, Snap, Feed, L2/Variants, L3/Tao canvas, Focus-in, Companion.                                    |
+| FS-Q17          | FS-D9: no fixture means an empty store; fixture required only for handle references.                                       |
+
+Only the decisions named **Open before starting** in `Plan - Freehand UI sketching.md` remain to be
+settled, in `2 - Next`, before their respective tranches begin.
 
 ## Non-goals for a first version
 
 - Not a vector tool: no pen paths, arbitrary shapes, or shipped ink. A stroke is a request for a
   rectangle, a text, or a gesture.
-- No absolute positioning in production layouts; the sketch tier cannot reach a release build.
+- No absolute positioning in product render trees; L3 positions Studio-owned catalog rows.
 - No Figma import or export; the design tooling document lists those as a later ecosystem phase.
 - No prototype wiring beyond what call-site presentation already expresses.
 - No multi-user editing beyond one Mac session and its paired devices.
@@ -644,26 +621,14 @@ to rule on them.
 - **Framer**: components bound to a CMS collection, edited with real records.
 - **Play**: a native iOS design tool that edits real UIKit components on the device, paired with a
   Mac — the companion app's nearest relative.
-- **Notes and Freeform**: draw-and-hold shape perfection, pencil versus finger roles, scribble.
+- **Notes and Freeform**: pencil versus finger roles and Scribble. Freehand's rectangles use an
+  explicit pencil mode rather than their draw-and-hold recognition.
 - **SwiftUI previews and Storybook**: named preview states with arguments beside the code — the
   scenario group is that idea made source.
 - **Penpot**: open-source flex layout in a design tool, useful for its inference behaviour.
 
-## Toward a plan
+## Implementation plan
 
-Slices, unordered until the questions above are answered:
-
-1. The sketch tier in the language: `Sketch`, `at`, the release diagnostic, through the tranche
-   process with a WordFlower forcing feature.
-2. Drawing on the Mac: sketches, boxes, retype, free move and resize, the new view and entry written
-   to source.
-3. Snap and unsnap: inference, proposal overlay, measured rectangles from the preview.
-4. Feeding: entity parameters, field chips, example sources, generated rows promoted to fixtures.
-5. Variants: duplicate with generated arguments, expand all states, the conditional-edit prompt,
-   interaction-state pins.
-6. Focus-in from a running instance, on the interaction outline's provenance.
-7. The companion canvas: PencilKit sidecar, strip, optimistic ink, pen-up commit, iPhone true-scale
-   cell.
-
-Each slice proves itself with a Tao behavior test for any language construct and a Studio journey
-for each gesture, and each ends with the documents that own the touched contracts updated.
+`Plan - Freehand UI sketching.md` owns the mandated FS-D20 sequence, dependencies, forcing features,
+tests, documentation reconciliation, and tranche decision gates. Every slice adds a Tao behavior
+test per language construct and a Studio journey per gesture, then leaves `./agent verify` green.

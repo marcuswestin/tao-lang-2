@@ -50,26 +50,26 @@
   <!-- scenario source -->
   <rect x="360" y="216" width="500" height="146" rx="6" fill="#f7f7f7" stroke="#bbb"/>
   <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#222">
-    <text x="370" y="236">view PrimaryButton(Label text, Press action?,</text>
+    <text x="370" y="236">view PrimaryButton(Label text, Press action,</text>
     <text x="370" y="252">   Disabled yes / no default no, Busy yes / no default no)</text>
     <text x="370" y="278">scenarios PrimaryButton "states" {</text>
-    <text x="370" y="294">   fixture Sketches; device phone</text>
+    <text x="370" y="294">   device phone  // omitted Press gets a logging stand-in</text>
     <text x="370" y="310">   scenario "default"  { render (Label: "Play") }</text>
     <text x="370" y="326">   scenario "disabled" { render (Label: "Play", Disabled: yes) }</text>
     <text x="370" y="342">   scenario "busy"     { render (Label: "Play", Busy: yes) }</text>
     <text x="370" y="358">}</text>
   </g>
 
-  <!-- the prompt -->
-  <text x="40" y="386" font-weight="600" fill="#444">Editing inside the "disabled" cell</text>
+  <!-- persistent editing mode -->
+  <text x="40" y="386" font-weight="600" fill="#444">Editing inside the "disabled" cell · Editing: this state</text>
   <rect x="40" y="396" width="400" height="120" rx="8" fill="#fff" stroke="#333"/>
-  <text x="56" y="420" fill="#222">You changed background in "disabled". Apply it…</text>
+  <text x="56" y="420" fill="#222">Persistent mode for this cell</text>
   <g fill="#222" font-size="12">
-    <circle cx="66" cy="442" r="6" fill="none" stroke="#333"/><text x="80" y="446">always — every cell changes</text>
-    <circle cx="66" cy="464" r="6" fill="none" stroke="#333"/><circle cx="66" cy="464" r="3" fill="#c0392b"/><text x="80" y="468" font-weight="600">only when Disabled — this cell and any like it</text>
-    <circle cx="66" cy="486" r="6" fill="none" stroke="#333"/><text x="80" y="490">as a new view — fork PrimaryButton</text>
+    <circle cx="66" cy="442" r="6" fill="none" stroke="#333"/><circle cx="66" cy="442" r="3" fill="#c0392b"/><text x="80" y="446" font-weight="600">this state — write `when Disabled`</text>
+    <circle cx="66" cy="464" r="6" fill="none" stroke="#333"/><text x="80" y="468">all states — update the unconditional entry</text>
+    <text x="56" y="490">Condition terms: Disabled  ×</text>
   </g>
-  <text x="56" y="510" fill="#666" font-size="11">Studio remembers the choice for this cell until you change it.</text>
+  <text x="56" y="510" fill="#666" font-size="11">The mode persists; no per-edit prompt appears.</text>
 
   <rect x="460" y="396" width="400" height="120" rx="6" fill="#f7f7f7" stroke="#bbb"/>
   <text x="470" y="416" fill="#555" font-size="11">Result, in the view's render tree:</text>

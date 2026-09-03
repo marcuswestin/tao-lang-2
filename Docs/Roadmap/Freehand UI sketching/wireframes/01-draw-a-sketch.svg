@@ -25,7 +25,7 @@
   <text x="702" y="176" fill="#444" font-weight="600">Selected</text>
   <text x="702" y="194" fill="#666">new sketch</text>
   <text x="702" y="212" fill="#666">width 360  height 76</text>
-  <text x="702" y="230" fill="#666">name: Untitled1</text>
+  <text x="702" y="230" fill="#666">name: View1</text>
   <rect x="702" y="242" width="150" height="20" rx="4" fill="#fff" stroke="#999"/>
   <text x="710" y="256" fill="#999">rename to PlaylistRow…</text>
 
@@ -48,7 +48,7 @@
   </g>
 
   <!-- the freehand sketch being drawn -->
-  <text x="400" y="128" fill="#444" font-weight="600">Untitled1 · sketch</text>
+  <text x="400" y="128" fill="#444" font-weight="600">View1 · sketch</text>
   <rect x="400" y="138" width="270" height="76" fill="#fff" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="6 4"/>
   <g stroke="#c0392b" stroke-width="1.5">
     <line x1="664" y1="206" x2="676" y2="206"/>
@@ -59,12 +59,13 @@
 
   <!-- source written -->
   <rect x="400" y="262" width="270" height="150" rx="6" fill="#f7f7f7" stroke="#bbb"/>
-  <text x="410" y="280" fill="#555" font-size="11">Studio wrote (view in Playlists/, entry in Scenarios.tao):</text>
+  <text x="410" y="280" fill="#555" font-size="11">Studio writes one generated view file and a catalog row:</text>
   <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#222">
-    <text x="410" y="300">view Untitled1() {</text>
-    <text x="410" y="316">   render Sketch [width 360, height 76] { }</text>
-    <text x="410" y="332">}</text>
-    <text x="410" y="356">scenarios Untitled1 "sketches" {</text>
+    <text x="410" y="300">// @/studio/View1.tao · Studio-written</text>
+    <text x="410" y="316">public view View1() {</text>
+    <text x="410" y="332">   render Placeholder("View1") [width 360, height 76]</text>
+    <text x="410" y="348">}</text>
+    <text x="410" y="356">scenarios View1 "sketches" {</text>
     <text x="410" y="372">   device phone</text>
     <text x="410" y="388">   scenario "first" { render () }</text>
     <text x="410" y="404">}</text>
@@ -77,6 +78,6 @@
     <circle cx="386" cy="272" r="9" fill="#c0392b"/><text x="386" y="276" text-anchor="middle">3</text>
   </g>
   <g fill="#333" font-size="11">
-    <text x="60" y="456">1 the app runs in a cell as usual · 2 drag on empty canvas: a fixed-size sketch · 3 the sketch is already source: a view plus one scenario cell</text>
+    <text x="60" y="456">1 app cell · 2 draw a sketch · 3 generated view is Tao; free geometry is committed Studio data</text>
   </g>
 </svg>

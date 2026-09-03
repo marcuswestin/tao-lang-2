@@ -7,7 +7,7 @@
   <rect width="880" height="520" fill="#ffffff"/>
   <!-- LEFT: free -->
   <text x="40" y="40" font-weight="700" fill="#222" font-size="14">Free — placed by hand, nothing flows</text>
-  <text x="40" y="58" fill="#666">every box carries an `at x y` and a size; siblings do not affect each other</text>
+  <text x="40" y="58" fill="#666">every free box is a Rect row in the Studio catalog; siblings do not affect each other</text>
   <rect x="40" y="80" width="360" height="76" fill="#fff" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="6 4"/>
   <g stroke="#333" stroke-dasharray="4 3" fill="#f3f3f3">
     <rect x="52" y="92" width="52" height="52"/>
@@ -16,21 +16,21 @@
     <rect x="340" y="110" width="44" height="16"/>
   </g>
   <g fill="#c0392b" font-size="10">
-    <text x="52" y="90">at 12 12</text>
-    <text x="118" y="94">at 78 16</text>
-    <text x="118" y="146">at 78 40</text>
-    <text x="340" y="108">at 300 30</text>
+    <text x="52" y="90">x 12 · y 12</text>
+    <text x="118" y="94">x 78 · y 16</text>
+    <text x="118" y="146">x 78 · y 40</text>
+    <text x="340" y="108">x 300 · y 30</text>
   </g>
   <rect x="40" y="176" width="360" height="126" rx="6" fill="#f7f7f7" stroke="#bbb"/>
-  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#222">
-    <text x="50" y="196">render Sketch [width 360, height 76] {</text>
-    <text x="50" y="212">   Box [at 12 12, width 52, height 52]</text>
-    <text x="50" y="228">   Box [at 78 16, width 180, height 14]</text>
-    <text x="50" y="244">   Box [at 78 40, width 120, height 12]</text>
-    <text x="50" y="260">   Box [at 300 30, width 44, height 16]</text>
-    <text x="50" y="276">}</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="8" fill="#222">
+    <text x="50" y="196">.tao-project/studio/sketches.jsonc</text>
+    <text x="50" y="212">{ x: 12,  y: 12, width: 52,  height: 52, kind: "Placeholder" }</text>
+    <text x="50" y="228">{ x: 78,  y: 16, width: 180, height: 14, kind: "Text" }</text>
+    <text x="50" y="244">{ x: 78,  y: 40, width: 120, height: 12, kind: "Text" }</text>
+    <text x="50" y="260">{ x: 300, y: 30, width: 44,  height: 16, kind: "Text" }</text>
+    <text x="50" y="276">free geometry is Studio data, never product Tao</text>
   </g>
-  <text x="40" y="330" fill="#333" font-size="11">Release builds refuse a `Sketch` that still holds content; development renders it as drawn.</text>
+  <text x="40" y="330" fill="#333" font-size="11">Only snapped flow enters the app; a shipping unbound Placeholder is empty and warns.</text>
 
   <!-- arrows -->
   <line x1="410" y1="118" x2="470" y2="118" stroke="#c0392b" stroke-width="2" marker-end="url(#arrow)"/>
@@ -57,14 +57,14 @@
   <text x="761" y="173" text-anchor="middle" fill="#c0392b" font-size="10">claim 1 absorbs the rest</text>
 
   <rect x="480" y="186" width="360" height="146" rx="6" fill="#f7f7f7" stroke="#bbb"/>
-  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#222">
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#222">
     <text x="490" y="206">render Row [pad 12, gap 14, content left center] {</text>
-    <text x="490" y="222">   Box [width 52, height 52]</text>
+    <text x="490" y="222">   Placeholder("Cover art") [width 52, height 52]</text>
     <text x="490" y="238">   Col [gap 10, claim 1] {</text>
-    <text x="490" y="254">      Box [height 14]</text>
-    <text x="490" y="270">      Box [height 12, width 120]</text>
+    <text x="490" y="254">      Placeholder("Title") [height 14]</text>
+    <text x="490" y="270">      Placeholder("Tracks") [height 12, width 120]</text>
     <text x="490" y="286">   }</text>
-    <text x="490" y="302">   Box [width 44, height 16]</text>
+    <text x="490" y="302">   Placeholder("Duration") [width 44, height 16]</text>
     <text x="490" y="318">}</text>
   </g>
 
@@ -72,11 +72,11 @@
   <text x="480" y="362" font-weight="600" fill="#444">Inferred tree</text>
   <g fill="#222" font-size="11">
     <rect x="480" y="372" width="60" height="20" rx="4" fill="#fff" stroke="#333"/><text x="510" y="386" text-anchor="middle">Row</text>
-    <rect x="570" y="372" width="60" height="20" rx="4" fill="#fff" stroke="#333"/><text x="600" y="386" text-anchor="middle">Box</text>
+    <rect x="570" y="372" width="80" height="20" rx="4" fill="#fff" stroke="#333"/><text x="610" y="386" text-anchor="middle">Placeholder</text>
     <rect x="570" y="400" width="60" height="20" rx="4" fill="#fff" stroke="#333"/><text x="600" y="414" text-anchor="middle">Col</text>
-    <rect x="660" y="400" width="60" height="20" rx="4" fill="#fff" stroke="#333"/><text x="690" y="414" text-anchor="middle">Box</text>
-    <rect x="660" y="428" width="60" height="20" rx="4" fill="#fff" stroke="#333"/><text x="690" y="442" text-anchor="middle">Box</text>
-    <rect x="570" y="456" width="60" height="20" rx="4" fill="#fff" stroke="#333"/><text x="600" y="470" text-anchor="middle">Box</text>
+    <rect x="660" y="400" width="80" height="20" rx="4" fill="#fff" stroke="#333"/><text x="700" y="414" text-anchor="middle">Placeholder</text>
+    <rect x="660" y="428" width="80" height="20" rx="4" fill="#fff" stroke="#333"/><text x="700" y="442" text-anchor="middle">Placeholder</text>
+    <rect x="570" y="456" width="80" height="20" rx="4" fill="#fff" stroke="#333"/><text x="610" y="470" text-anchor="middle">Placeholder</text>
   </g>
   <g stroke="#666" fill="none">
     <path d="M540,382 H555 V382 H570"/>
@@ -92,6 +92,6 @@
     <text x="40" y="436">· the median distance between neighbours → gap; distance to the sketch edge → pad</text>
     <text x="40" y="454">· a box touching both edges → fill; the widest gap on the main axis → claim 1 on its neighbour</text>
     <text x="40" y="472">· a box that was drawn to a size keeps it as width/height; text and images hug by default</text>
-    <text x="40" y="496" fill="#666">Unsnap recomputes `at` from the measured layout, so the round trip is lossless for what was measured.</text>
+    <text x="40" y="496" fill="#666">Unsnap returns to the retained catalog position; unmatched nodes fall back to measured layout.</text>
   </g>
 </svg>
