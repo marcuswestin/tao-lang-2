@@ -64,13 +64,22 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
   const toasts = props.app.renderToasts(appTaoProps)
   const onKeyDown = runtime.Platform?.OS === 'web'
     ? (event: TaoAppHostKeyEvent) => {
-      // The outline deliberately stops at an injected or foreign view. Let the browser deliver text
-      // to an editable descendant even when that control has no Tao occurrence to engage.
-      if (isUnmodifiedKey(event) && isEditableTarget(event.target)) {
+      const hardwareEvent = event.nativeEvent ?? event
+      // The outline deliberately stops at an injected or foreign view. Let the browser deliver keys
+      // to an editable descendant that Tao does not own. Escape and Tab return to Tao attention only
+      // while a Tao control is actually engaged.
+      if (
+        isUnmodifiedKey(hardwareEvent)
+        && isEditableTarget(event.target)
+        && (
+          !isEditableAttentionExitKey(hardwareEvent)
+          || InteractionControls.Attention.read().engaged === undefined
+        )
+      ) {
         return
       }
       const handled = dispatchInteractionHardwareKey(
-        event.nativeEvent ?? event,
+        hardwareEvent,
         InteractionControls.PressKey,
         {
           navigatorPlatform: (globalThis as { navigator?: { platform?: string } }).navigator?.platform,
@@ -149,6 +158,11 @@ type TaoEditableTarget = Readonly<{
 
 function isUnmodifiedKey(event: TaoHardwareKeyEvent): boolean {
   return !event.altKey && !event.ctrlKey && !event.metaKey
+}
+
+function isEditableAttentionExitKey(event: TaoHardwareKeyEvent): boolean {
+  const key = event.key?.toLocaleLowerCase()
+  return key === 'escape' || key === 'esc' || key === 'tab'
 }
 
 function isEditableTarget(target: unknown): boolean {

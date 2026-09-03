@@ -1,5 +1,6 @@
 import React from 'react'
 import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
+import type { TaoDesign, TaoDesignSpec } from './TR-design'
 import { CommandControls, type RuntimeCommand } from './TR-interaction'
 import { InteractionAttention, type TaoAttentionKey } from './TR-interaction-attention'
 import { interactionKeyboardPresence } from './TR-interaction-keys'
@@ -527,14 +528,78 @@ function useCommandSurface(surface: TaoCommandSurface): void {
 }
 
 function useOccurrence(props: TaoProps | undefined): void {
-  React.useSyncExternalStore(
-    interactionAttention.subscribe,
-    interactionAttention.snapshot,
-    interactionAttention.snapshot,
-  )
   const owner = TaoPropsControls.interactionOwner(props)
   const occurrence = useOutlineOccurrence(props, owner)
+  const reactive = usesInteractionDesign(props)
+  const snapshot = () => reactive ? occurrenceAttentionSnapshot(occurrence) : ''
+  React.useSyncExternalStore(
+    reactive ? interactionAttention.subscribe : quietSubscribe,
+    snapshot,
+    snapshot,
+  )
+  React.useEffect(() => interactionAttention.refreshVerbs())
   TaoPropsControls.setInteractionOccurrence(props, occurrence, interactionAttention.condition)
+}
+
+const quietSubscribe = (): () => void => () => undefined
+
+function occurrenceAttentionSnapshot(occurrence: TaoInteractionOccurrence): string {
+  return [
+    interactionAttention.condition('focused', undefined, occurrence),
+    interactionAttention.condition('pressed', undefined, occurrence),
+    interactionAttention.condition('hovered', undefined, occurrence),
+    ...(occurrence.regionSubjects ?? []).map(subject =>
+      `${subject}:${interactionAttention.condition(subject, 'active', occurrence)}`
+    ),
+  ].join('|')
+}
+
+function usesInteractionDesign(props: TaoProps | undefined): boolean {
+  const design = TaoPropsControls.ambientContext(props).app?.design
+  const visitedBundles = new Set<string>()
+  let current = props
+  while (current) {
+    if (
+      designSpecUsesInteraction(current.designSpec, design, visitedBundles)
+      || designSpecUsesInteraction(
+        current.designDefault === undefined ? undefined : design?.bundles[current.designDefault],
+        design,
+        visitedBundles,
+      )
+    ) {
+      return true
+    }
+    current = current.callerProps
+  }
+  return false
+}
+
+function designSpecUsesInteraction(
+  spec: TaoDesignSpec | undefined,
+  design: TaoDesign | undefined,
+  visitedBundles: Set<string>,
+): boolean {
+  if (!spec) {
+    return false
+  }
+  for (const entry of spec.entries) {
+    const condition = entry.indexOf('when')
+    if (condition >= 0) {
+      const suffix = entry.slice(condition)
+      if (suffix[0] !== 'when' || suffix[1] !== 'Scheme') {
+        return true
+      }
+    }
+    const effective = condition < 0 ? entry : entry.slice(0, condition)
+    const bundle = effective.length === 1 && typeof effective[0] === 'string' ? effective[0] : undefined
+    if (bundle && !visitedBundles.has(bundle)) {
+      visitedBundles.add(bundle)
+      if (designSpecUsesInteraction(design?.bundles[bundle], design, visitedBundles)) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 /** resetInteractionRuntime clears ephemeral mounted/attention state but preserves module command tables. */
@@ -587,6 +652,11 @@ export const InteractionControls = {
   Disengage(occurrence: TaoInteractionOccurrence | undefined): void {
     if (occurrence?.control) {
       interactionAttention.disengage(occurrence.control)
+    }
+  },
+  Enabled(occurrence: TaoInteractionOccurrence | undefined, enabled: boolean): void {
+    if (occurrence?.control) {
+      occurrence.capabilities.enabled = () => enabled
     }
   },
   Engage(occurrence: TaoInteractionOccurrence | undefined): void {

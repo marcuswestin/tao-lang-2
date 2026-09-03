@@ -19,7 +19,7 @@ dialect is consolidated: a command declares its slots in its parameter list, own
 App-wide module commands are mounted through `Commands`, view commands are local to their mounted
 view, and duplicate module/view declarations have been removed. Modifier shortcuts use the portable
 `primary + "…"` form, while the runtime-owned command palette is always present rather than declared
-by an app. A direct nav root uses `Navigator`; reactive and shell-view roots use `view`.
+by an app. App roots use `view`, including when the root value is itself a nav.
 
 Remaining known deltas include `if / then / else` (retired for `when`), `public publish` (now bare
 `publish`), role-word test selectors (now text or `#tag`), `check "…"` journeys (now `test "…"`;

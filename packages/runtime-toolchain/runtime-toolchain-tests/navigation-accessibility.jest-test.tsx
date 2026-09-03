@@ -96,13 +96,18 @@ Describe('navigation accessibility', () => {
         disabled: false,
         expanded: false,
       })
+      focusEvents.length = 0
       await fireEventAsync.press(screen.getByLabelText('More'))
       Expect(screen.getByLabelText('More').props.accessibilityState).toEqual({
         disabled: false,
         expanded: true,
       })
-      const moreHost = focusEvents.at(-1)?.host
-      Expect(moreHost).toBeDefined()
+      const menu = screen.UNSAFE_getByProps({ accessibilityRole: 'menu' })
+      Expect(menu.props.accessibilityViewIsModal).toBe(true)
+      Expect(menu.props.onAccessibilityEscape).toEqual(expect.any(Function))
+      Expect(focusEvents).toHaveLength(2)
+      const moreHost = focusEvents[0]?.host
+      Expect(focusEvents[1]?.host).not.toBe(moreHost)
 
       focusEvents.length = 0
       await fireEventAsync.press(screen.getByLabelText('Third'))
@@ -130,14 +135,18 @@ Describe('navigation accessibility', () => {
         disabled: false,
         expanded: false,
       })
+      focusEvents.length = 0
       await fireEventAsync.press(screen.getByLabelText('More'))
       Expect(screen.getByLabelText('More').props.accessibilityState).toEqual({
         disabled: false,
         expanded: true,
       })
+      const menu = screen.UNSAFE_getByProps({ accessibilityRole: 'menu' })
+      Expect(menu.props.accessibilityViewIsModal).toBe(true)
+      Expect(focusEvents).toHaveLength(1)
 
       focusEvents.length = 0
-      await fireEventAsync.press(screen.getByLabelText('Third'))
+      act(() => menu.props.onAccessibilityEscape())
       Expect(screen.getByLabelText('More').props.accessibilityState).toEqual({
         disabled: false,
         expanded: false,

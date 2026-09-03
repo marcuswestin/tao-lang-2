@@ -87,7 +87,16 @@ function outlineNodesOf(taoFile: AST.TaoFile): OutlineNode[] {
 function compileNode(node: OutlineNode): Compiled {
   if (node.kind === 'collection') {
     const descriptor = ASTUtils.outlineLoopDescriptor(node.loop)
-    return gen`${gen.jsLiteral({ declaration: node.owner.name, kind: 'collection', ...descriptor })}`
+    const attachedTag = AST.attachedTag(node.loop)?.tag
+    const testTag = attachedTag === undefined ? undefined : attachedTag.slice(1)
+    return gen`${
+      gen.jsLiteral({
+        declaration: node.owner.name,
+        kind: 'collection',
+        ...descriptor,
+        ...(testTag === undefined ? {} : { testTag }),
+      })
+    }`
   }
   if (node.kind === 'control') {
     return gen`${gen.jsLiteral({ declaration: node.owner.name, kind: 'control', ...node.descriptor })}`

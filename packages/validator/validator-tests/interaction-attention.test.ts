@@ -86,7 +86,7 @@ Describe('validator: interaction attention', () => {
   )
 
   Test(
-    'rejects duplicate shortcuts in Toolbar, Commands, entity, and global static scopes',
+    'rejects duplicate shortcuts in view, Toolbar, Commands, entity, and global static scopes',
     rejects(
       `
         ${leaf}
@@ -101,6 +101,8 @@ Describe('validator: interaction attention', () => {
         command GlobalTwo() { Title "Global two" Key "g" do Run() }
         scene Home(Document) {
           Title "Home"
+          command ViewOne() { Title "View one" Key "v" do Run() }
+          command ViewTwo() { Title "View two" Key "v" do Run() }
           Toolbar { First, Second }
           Commands { First, Second }
           render Leaf()
@@ -110,6 +112,7 @@ Describe('validator: interaction attention', () => {
       messages.duplicateShortcut('Toolbar', 'x', 'First', 'Second'),
       messages.duplicateShortcut('Commands', 'x', 'First', 'Second'),
       messages.duplicateShortcut('Global commands', 'g', 'GlobalOne', 'GlobalTwo'),
+      messages.duplicateShortcut("View 'Home' commands", 'v', 'ViewOne', 'ViewTwo'),
     ),
   )
 

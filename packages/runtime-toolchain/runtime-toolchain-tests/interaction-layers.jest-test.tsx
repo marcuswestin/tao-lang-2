@@ -9,6 +9,7 @@ import {
   interactionOutline,
   type TaoOutlineEntry,
 } from '@runtime/TR-interaction-outline'
+import type { TaoProps } from '@runtime/TR-TaoProps'
 import { Describe, Expect, Test } from '@shared/test'
 import { act, render, within } from '@testing-library/react-native'
 import React from 'react'
@@ -312,16 +313,90 @@ Describe('TR.Interaction generated layers', () => {
     resetInteractionRuntime()
   })
 
-  Test('keeps measurement callbacks stable and caches onLayout bounds without synchronous reads', () => {
+  Test('anchors nested measurements to the app root and never treats parent-relative onLayout as global', () => {
     resetInteractionRuntime()
-    const first = interactionMeasurements.bind('control')
-    const second = interactionMeasurements.bind('control')
-    Expect(second['ref']).toBe(first['ref'])
-    Expect(second['onLayout']).toBe(first['onLayout'])
-    ;(first['onLayout'] as (event: unknown) => void)({
-      nativeEvent: { layout: { height: 20, width: 80, x: 12, y: 16 } },
+    const unmeasured = interactionMeasurements.bind('unmeasured')
+    ;(unmeasured['onLayout'] as (event: unknown) => void)({
+      nativeEvent: { layout: { height: 20, width: 80, x: 7, y: 9 } },
     })
-    Expect(interactionMeasurements.read('control')).toEqual({ height: 20, width: 80, x: 12, y: 16 })
+    Expect(interactionMeasurements.read('unmeasured')).toBeUndefined()
+
+    let rootOrigin = { x: 100, y: 200 }
+    let controlWindow = { x: 132, y: 246 }
+    const root = interactionMeasurements.bindRoot()
+    const control = interactionMeasurements.bind('control')
+    ;(root['ref'] as (node: object | null) => void)({
+      measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) =>
+        callback(rootOrigin.x, rootOrigin.y, 500, 700),
+    })
+    ;(control['ref'] as (node: object | null) => void)({
+      measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) =>
+        callback(controlWindow.x, controlWindow.y, 80, 20),
+    })
+    ;(control['onLayout'] as (event: unknown) => void)({
+      nativeEvent: { layout: { height: 20, width: 80, x: 7, y: 9 } },
+    })
+    Expect(interactionMeasurements.read('control')).toEqual({ height: 20, width: 80, x: 32, y: 46 })
+
+    rootOrigin = { x: 112, y: 221 }
+    controlWindow = { x: 140, y: 260 }
+    ;(root['onLayout'] as (event: unknown) => void)({ nativeEvent: { layout: {} } })
+    Expect(interactionMeasurements.read('control')).toEqual({ height: 20, width: 80, x: 28, y: 39 })
+    ;(control['ref'] as (node: object | null) => void)(null)
+    Expect(interactionMeasurements.read('control')).toBeUndefined()
+    resetInteractionRuntime()
+  })
+
+  Test('rerenders only the interaction-designed occurrence whose local attention changed', async () => {
+    resetInteractionRuntime()
+    const renders = { affected: 0, static: 0, unaffected: 0 }
+    const occurrences: Partial<Record<keyof typeof renders, ReturnType<typeof TR.Interaction.FromProps>>> = {}
+    const taoProps = Object.fromEntries(
+      (Object.keys(renders) as Array<keyof typeof renders>).map(name => [
+        name,
+        {
+          ...(name === 'static'
+            ? {}
+            : { designSpec: { entries: [['fill', 'when', 'hovered']] } }),
+          interaction: {
+            control: {
+              declaration: `@test/${name}`,
+              identity: `@test#${name}`,
+              kind: 'control',
+              role: 'action',
+              view: name,
+            },
+          },
+        } satisfies TaoProps,
+      ]),
+    ) as Record<keyof typeof renders, TaoProps>
+    function Probe(props: { name: keyof typeof renders }) {
+      renders[props.name] += 1
+      const owned = taoProps[props.name]
+      TR.Interaction.UseOccurrence(owned)
+      occurrences[props.name] = TR.Interaction.FromProps(owned)
+      return null
+    }
+    const screen = render(React.createElement(
+      React.Fragment,
+      null,
+      React.createElement(Probe, { name: 'affected' }),
+      React.createElement(Probe, { name: 'unaffected' }),
+      React.createElement(Probe, { name: 'static' }),
+    ))
+    await act(async () => undefined)
+    const before = { ...renders }
+
+    await act(async () => {
+      TR.Interaction.Hover(occurrences.affected, true)
+    })
+
+    Expect(renders).toEqual({
+      affected: before.affected + 1,
+      static: before.static,
+      unaffected: before.unaffected,
+    })
+    screen.unmount()
     resetInteractionRuntime()
   })
 })

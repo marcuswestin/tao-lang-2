@@ -79,8 +79,10 @@ export class InteractionAttention {
   #pressed = new Set<string>()
   #hovered = new Set<string>()
   #revision = 0
+  #verbRefreshScheduled = false
   #verbPending: PendingVerb | undefined
   #verbs: readonly TaoInteractionVerb[] = []
+  #verbsOpen = false
 
   constructor(
     private readonly outline: InteractionOutline,
@@ -216,6 +218,7 @@ export class InteractionAttention {
     this.#paletteTarget = undefined
     this.#hints = false
     this.#verbs = []
+    this.#verbsOpen = false
     this.#verbPending = undefined
     this.recomputeCandidates()
     this.emit()
@@ -235,6 +238,7 @@ export class InteractionAttention {
     const memory = this.memory()
     memory.target = identity
     this.#verbs = []
+    this.#verbsOpen = false
     this.#verbPending = undefined
     this.#palette = false
     this.#paletteTarget = undefined
@@ -284,8 +288,34 @@ export class InteractionAttention {
   openVerbs(): void {
     this.#allocatedPrefix = undefined
     this.#verbs = this.catalog.verbsFor(this.node(this.targetIdentity()), this.outline)
+    this.#verbsOpen = this.#verbs.length > 0
     this.#verbPending = undefined
     this.emit()
+  }
+
+  /** refreshVerbs notices reactive command presentation changes without reopening the surface. */
+  refreshVerbs(): void {
+    if (!this.#verbsOpen || this.#verbRefreshScheduled) {
+      return
+    }
+    this.#verbRefreshScheduled = true
+    queueMicrotask(() => {
+      this.#verbRefreshScheduled = false
+      if (!this.#verbsOpen) {
+        return
+      }
+      const fingerprint = verbFingerprint(this.#verbs)
+      const target = this.node(this.targetIdentity())
+      if (!target || !this.targetable(target)) {
+        this.#verbs = []
+        this.#verbsOpen = false
+      } else {
+        this.#verbs = this.catalog.verbsFor(target, this.outline)
+      }
+      if (!this.#verbsOpen || verbFingerprint(this.#verbs) !== fingerprint) {
+        this.emit()
+      }
+    })
   }
 
   /** choosePendingTarget fills the pending entity slot from one eligible mounted item. */
@@ -329,7 +359,7 @@ export class InteractionAttention {
         return false
       }
     }
-    if (this.#verbs.length > 0 && isBareLetter(key)) {
+    if (this.#verbsOpen && isBareLetter(key)) {
       const verb = this.#verbs.find(candidate => candidate.key?.toLocaleLowerCase() === key.toLocaleLowerCase())
       if (verb) {
         this.runVerb(verb)
@@ -410,6 +440,7 @@ export class InteractionAttention {
       this.#allocatedPrefix = undefined
       this.#verbPending = undefined
       this.#verbs = []
+      this.#verbsOpen = false
       this.#hints = false
       this.#overview = false
       this.#palette = true
@@ -489,6 +520,7 @@ export class InteractionAttention {
     this.#pressed.clear()
     this.#verbPending = undefined
     this.#verbs = []
+    this.#verbsOpen = false
     this.emit()
   }
 
@@ -519,6 +551,15 @@ export class InteractionAttention {
       const scope = this.node(memory.scope)
       if (!activeRegions.some(node => node.identity === region) || (memory.scope && (!scope || !this.active(scope)))) {
         memory.scope = undefined
+      }
+    }
+    if (this.#verbsOpen) {
+      const target = this.node(this.targetIdentity())
+      if (!target || !this.targetable(target)) {
+        this.#verbs = []
+        this.#verbsOpen = false
+      } else {
+        this.#verbs = this.catalog.verbsFor(target, this.outline)
       }
     }
     this.recomputeCandidates()
@@ -554,8 +595,9 @@ export class InteractionAttention {
       this.disengage()
       return
     }
-    if (this.#verbs.length > 0 || this.#verbPending) {
+    if (this.#verbsOpen || this.#verbPending) {
       this.#verbs = []
+      this.#verbsOpen = false
       this.#verbPending = undefined
       this.emit()
       return
@@ -598,6 +640,7 @@ export class InteractionAttention {
       return
     }
     this.#verbs = []
+    this.#verbsOpen = false
     const command = verb.command
     const required = verb.slots?.filter(slot => slot.required && command?.unfilledSlots().includes(slot.name)) ?? []
     if (command && required.length > 0) {
@@ -725,7 +768,7 @@ export class InteractionAttention {
   }
 
   private runAllocatedKey(key: string): boolean {
-    if (this.#verbs.length > 0) {
+    if (this.#verbsOpen) {
       const candidates = this.#verbs.filter(verb => verb.key === undefined)
         .map(verb => ({ identity: verb.identity, label: verb.label }))
       return this.dispatchAllocatedKey('verbs', candidates, key, identity => {
@@ -925,7 +968,7 @@ export class InteractionAttention {
     if (this.#verbPending) {
       return 'verb-pending'
     }
-    if (this.#verbs.length > 0) {
+    if (this.#verbsOpen) {
       return 'verbs'
     }
     if (this.#palette) {
@@ -957,6 +1000,10 @@ export class InteractionAttention {
       listener()
     }
   }
+}
+
+function verbFingerprint(verbs: readonly TaoInteractionVerb[]): string {
+  return JSON.stringify(verbs.map(verb => [verb.identity, verb.label, verb.enabled, verb.key]))
 }
 
 /** The root-safe Back affordance sits outside a native modal portal but dismisses its top entry. */

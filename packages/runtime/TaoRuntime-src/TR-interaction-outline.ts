@@ -21,6 +21,8 @@ export type TaoOutlineLoopDescriptor = Readonly<{
   name: string
   root: 'multiple' | 'single'
   selectable: boolean
+  /** testTag privately joins a tagged loop to its rows in the Tao test harness. */
+  testTag?: string
   texts: readonly TaoOutlineTextPath[]
 }>
 
@@ -92,6 +94,8 @@ export type TaoOutlineEntry = {
   label: () => string | undefined
   parent?: string
   provenance: TaoOutlineProvenance
+  /** testTag is mounted test metadata and is deliberately absent from public outline snapshots. */
+  testTag?: string
   live?: TaoOutlineLiveEntry
 }
 
@@ -141,10 +145,9 @@ class InteractionMeasurements {
         nativeProps,
         onLayout: event => {
           functionProperty(binding!.nativeProps, 'onLayout')?.(event)
-          const fallback = completeBounds(event.nativeEvent?.layout)
-          if (fallback) {
-            this.set(identity, fallback)
-          }
+          // onLayout coordinates are relative to the immediate parent. Only measureInWindow can
+          // provide geometry in the interaction root's coordinate space for an arbitrarily nested
+          // control, so an unavailable host measurement leaves the hint deliberately unanchored.
           this.measure(identity)
         },
         ref: node => {
@@ -254,16 +257,6 @@ class InteractionMeasurements {
 
 export const interactionMeasurements = new InteractionMeasurements()
 
-function completeBounds(value: Partial<TaoInteractionBounds> | undefined): TaoInteractionBounds | undefined {
-  return value !== undefined
-      && typeof value.x === 'number'
-      && typeof value.y === 'number'
-      && typeof value.width === 'number'
-      && typeof value.height === 'number'
-    ? { height: value.height, width: value.width, x: value.x, y: value.y }
-    : undefined
-}
-
 function functionProperty(
   object: Record<string, unknown>,
   name: string,
@@ -320,6 +313,9 @@ export class InteractionOutline implements Subscription {
   #liveListeners = new Set<() => void>()
   #listeners = new Set<() => void>()
   #liveRevision = 0
+  #liveFingerprint: string | undefined
+  #liveRefreshScheduled = false
+  #liveStructureDirty = false
   #sequence = 0
   #revision = 0
   #fingerprint: string | undefined
@@ -382,10 +378,32 @@ export class InteractionOutline implements Subscription {
     return [...this.#entries.entries()].map(([mount, entry], order) => ({ ...entry, mount, order }))
   }
 
+  /** itemIdentityForTestTag resolves the selected occurrence of a tagged loop without label inference. */
+  itemIdentityForTestTag(tag: string, index: number, parentIdentity?: string): string | undefined {
+    const entries = [...this.#entries.values()]
+    const collections = new Set(
+      entries.filter(entry =>
+        entry.kind === 'collection'
+        && entry.testTag === tag
+        && (parentIdentity === undefined || entryDescendsFrom(entry, parentIdentity, entries))
+      ).map(entry => entry.identity),
+    )
+    return entries.filter(entry => entry.kind === 'item' && entry.parent && collections.has(entry.parent))[index - 1]
+      ?.identity
+  }
+
   /** subscribeLive observes structure and capability changes independently of public snapshots. */
   subscribeLive(listener: () => void): () => void {
     this.#liveListeners.add(listener)
-    return () => this.#liveListeners.delete(listener)
+    this.#liveFingerprint ??= liveFingerprintOf(this.liveNodes())
+    this.#liveStructureDirty = false
+    return () => {
+      this.#liveListeners.delete(listener)
+      if (this.#liveListeners.size === 0) {
+        this.#liveFingerprint = undefined
+        this.#liveStructureDirty = false
+      }
+    }
   }
 
   /** read evaluates the outline as it is right now: a reader's act, so it is where the corpus is read. */
@@ -436,20 +454,59 @@ export class InteractionOutline implements Subscription {
     })
   }
 
+  /** refreshLive notices stable-identity active/enabled capability changes after a React commit. */
+  refreshLive(): void {
+    if (this.#liveListeners.size === 0 || this.#liveRefreshScheduled) {
+      return
+    }
+    this.#liveRefreshScheduled = true
+    queueMicrotask(() => {
+      this.#liveRefreshScheduled = false
+      if (this.#liveListeners.size === 0) {
+        return
+      }
+      const fingerprint = liveFingerprintOf(this.liveNodes())
+      if (this.#liveStructureDirty) {
+        // changed() already notified every live consumer. Establish one post-batch baseline without
+        // turning N registrations into scans over 1..N mounted entries or emitting a second change.
+        this.#liveStructureDirty = false
+        this.#liveFingerprint = fingerprint
+        return
+      }
+      if (fingerprint === this.#liveFingerprint) {
+        return
+      }
+      this.#liveFingerprint = fingerprint
+      this.#liveRevision += 1
+      for (const listener of [...this.#liveListeners]) {
+        listener()
+      }
+    })
+  }
+
   /** clear empties the outline between checks, the way every other runtime registry resets. */
   clear(): void {
     this.#entries.clear()
     this.#coalesced.clear()
     this.#fingerprint = undefined
+    this.#liveFingerprint = undefined
+    this.#liveStructureDirty = false
     interactionMeasurements.clear()
     this.changed()
   }
 
   private changed(): void {
+    if (this.#liveListeners.size === 0) {
+      this.#liveFingerprint = undefined
+      this.#liveStructureDirty = false
+    } else {
+      this.#liveStructureDirty = true
+    }
     this.#liveRevision += 1
     for (const listener of [...this.#liveListeners]) {
       listener()
     }
+    this.refreshLive()
     this.refresh()
   }
 
@@ -470,6 +527,31 @@ export class InteractionOutline implements Subscription {
 
 function fingerprintOf(snapshot: TaoOutlineSnapshot): string {
   return JSON.stringify(snapshot.nodes)
+}
+
+function liveFingerprintOf(nodes: readonly TaoOutlineLiveNode[]): string {
+  return JSON.stringify(nodes.map(node => [
+    node.identity,
+    node.live?.active?.() ?? true,
+    node.live?.enabled?.() ?? true,
+    node.live?.modal ?? false,
+    node.live?.primary ?? false,
+  ]))
+}
+
+function entryDescendsFrom(
+  entry: TaoOutlineEntry,
+  ancestor: string,
+  entries: readonly TaoOutlineEntry[],
+): boolean {
+  let parent = entry.parent
+  while (parent !== undefined) {
+    if (parent === ancestor) {
+      return true
+    }
+    parent = entries.find(candidate => candidate.identity === parent)?.parent
+  }
+  return false
 }
 
 export const interactionOutline = new InteractionOutline()
@@ -543,6 +625,7 @@ function useRegisteredNode(entry: TaoOutlineEntry | undefined): void {
       ...(registered.live === undefined ? {} : { live: liveEntry(current) }),
       ...(parent === undefined ? {} : { parent }),
       provenance: registered.provenance,
+      ...(registered.testTag === undefined ? {} : { testTag: registered.testTag }),
     }
     if (registered.corpus === undefined) {
       delete live.corpus
@@ -553,6 +636,7 @@ function useRegisteredNode(entry: TaoOutlineEntry | undefined): void {
   React.useEffect(() => {
     if (identity !== undefined) {
       interactionOutline.refresh()
+      interactionOutline.refreshLive()
     }
   })
 }
@@ -583,6 +667,7 @@ function useRegisteredCoalescedNode(entry: TaoOutlineEntry | undefined): void {
   React.useEffect(() => {
     if (identity !== undefined) {
       interactionOutline.refresh()
+      interactionOutline.refreshLive()
     }
   })
 }
@@ -639,6 +724,7 @@ export function useOutlineCollection(descriptor: TaoOutlineLoopNode | undefined)
           loop: descriptor.identity,
           ...(descriptor.entity === undefined ? {} : { entity: descriptor.entity }),
         },
+        ...(descriptor.testTag === undefined ? {} : { testTag: descriptor.testTag }),
       }
       : undefined,
   )

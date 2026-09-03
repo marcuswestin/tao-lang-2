@@ -1307,7 +1307,6 @@ Describe('Expo runtime', () => {
       'First',
       'Second',
       'More',
-      'Dismiss command menu',
       'Add ten',
       'Enable second',
       'Rename',

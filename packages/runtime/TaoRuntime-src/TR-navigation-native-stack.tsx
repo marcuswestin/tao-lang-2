@@ -186,12 +186,20 @@ function NativeOverflowMenu(props: {
   onClose(): void
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
+  const firstHost = React.useRef<TaoAccessibilityHost | null>(null)
+  React.useEffect(() => focusAccessibilityHost(runtime, firstHost.current), [runtime])
   const content = React.createElement(
     runtime.View,
-    { accessibilityRole: 'menu', style: nativeMenuStyle },
+    {
+      accessibilityRole: 'menu',
+      accessibilityViewIsModal: true,
+      onAccessibilityEscape: props.onClose,
+      style: nativeMenuStyle,
+    },
     ...props.commands.map(command =>
       React.createElement(NavigationCommandButton, {
         command,
+        hostRef: command === props.commands[0] ? firstHost : undefined,
         key: command.identity,
         onInvoke: props.onClose,
         role: 'menuitem',

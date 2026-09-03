@@ -148,6 +148,42 @@ Describe('TR.Interaction.Outline', () => {
     Expect(notifications).toBe(1)
   })
 
+  Test('coalesces live capability baselines across a burst of registrations', async () => {
+    const outline = new InteractionOutline()
+    let enabled = true
+    let reads = 0
+    let notifications = 0
+    const unsubscribe = outline.subscribeLive(() => notifications += 1)
+
+    for (let index = 0; index < 100; index += 1) {
+      outline.register({
+        identity: `control#${index}`,
+        kind: 'action',
+        label: () => `Control ${index}`,
+        live: {
+          enabled: () => {
+            reads += 1
+            return enabled
+          },
+        },
+        provenance: {},
+      })
+    }
+
+    Expect(reads).toBe(0)
+    Expect(notifications).toBe(100)
+    await settled()
+    Expect(reads).toBe(100)
+
+    reads = 0
+    enabled = false
+    outline.refreshLive()
+    await settled()
+    Expect(reads).toBe(100)
+    Expect(notifications).toBe(101)
+    unsubscribe()
+  })
+
   Test('keeps an item its identity and provenance across a reorder', () => {
     const outline = new InteractionOutline()
     const rows = [{ Id: 'a', Title: 'Alpha' }, { Id: 'b', Title: 'Beta' }]

@@ -26,7 +26,7 @@ export const interactionValidationMessages = {
 /** InteractionValidator owns static interaction vocabulary and command-surface diagnostics. */
 export const InteractionValidator = {
   checks: {
-    [AST.CommandDeclaration.$type]: validateGlobalCommand,
+    [AST.CommandDeclaration.$type]: validateCommandShortcut,
     [AST.DeclarationSlotFill.$type]: validateCommandSurface,
     [AST.EntityCommandPolicy.$type]: validateEntityCommandPolicy,
     [AST.LayoutCondition.$type]: validateInteractionCondition,
@@ -114,22 +114,48 @@ function validateCommandSurface(fill: AST.DeclarationSlotFill, ctx: ValidationCo
   validateDistinctShortcuts(commands, fill.name, fill, ctx)
 }
 
-function validateGlobalCommand(command: AST.CommandDeclaration, ctx: ValidationContext): void {
+function validateCommandShortcut(command: AST.CommandDeclaration, ctx: ValidationContext): void {
   const shortcut = ASTUtils.commandStaticShortcut(command)
   if (shortcut && editingShortcuts.has(shortcut)) {
     const key = AST.commandFillsOf(command).find(fill => fill.name === 'Key')
     ctx.warning(interactionValidationMessages.editingShortcut(command.name, shortcut), key ?? command)
   }
-  if (!AST.isTaoFile(command.$container) || !shortcut || hasEntitySlot(command)) {
+  if (!shortcut) {
+    return
+  }
+  const container = command.$container
+  if (
+    AST.isBlock(container)
+    && AST.isViewDeclaration(container.$container)
+    && container.$container.block === container
+  ) {
+    const commands = container.statements.filter(AST.isCommandDeclaration)
+    validatePreviousShortcut(command, commands, `View '${container.$container.name}' commands`, ctx)
+    return
+  }
+  if (!AST.isTaoFile(container) || hasEntitySlot(command)) {
     return
   }
   const globals = ctx.workspaceFiles.flatMap(file => file.statements.filter(AST.isCommandDeclaration))
     .filter(candidate => !hasEntitySlot(candidate))
-  const index = globals.indexOf(command)
-  const first = globals.slice(0, index).find(candidate => ASTUtils.commandStaticShortcut(candidate) === shortcut)
+  validatePreviousShortcut(command, globals, 'Global commands', ctx)
+}
+
+function validatePreviousShortcut(
+  command: AST.CommandDeclaration,
+  commands: readonly AST.CommandDeclaration[],
+  scope: string,
+  ctx: ValidationContext,
+): void {
+  const shortcut = ASTUtils.commandStaticShortcut(command)
+  if (!shortcut) {
+    return
+  }
+  const index = commands.indexOf(command)
+  const first = commands.slice(0, index).find(candidate => ASTUtils.commandStaticShortcut(candidate) === shortcut)
   if (first) {
     ctx.error(
-      interactionValidationMessages.duplicateShortcut('Global commands', shortcut, first.name, command.name),
+      interactionValidationMessages.duplicateShortcut(scope, shortcut, first.name, command.name),
       command,
     )
   }

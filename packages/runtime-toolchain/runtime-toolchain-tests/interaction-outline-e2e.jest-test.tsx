@@ -41,10 +41,17 @@ Describe('interaction outline runtime', () => {
     try {
       await testCompileApp(
         `
-          use Text from @tao/ui
+          use Col, FormButton, TextInput from @tao/ui
           use StackNav from @tao/nav
           app KeyApp { Name "Keys" Navigator StackNav { Initial Home } }
-          scene Home() { Title "Home" render Text("Ready") }
+          scene Home() {
+            Title "Home"
+            state Draft = ""
+            render Col() {
+              TextInput(Value: Draft, Label: "Draft") { on submit -> { } }
+              FormButton("Next") { on press -> { } }
+            }
+          }
         `,
         async screen => {
           const host = screen.UNSAFE_getAllByType(RN.View).find(view => view.props.tabIndex === 0)
@@ -70,7 +77,7 @@ Describe('interaction outline runtime', () => {
           })
           Expect(TR.Interaction.Attention.read().narrowing).toBe('')
           Expect(prevented).toBe(0)
-          for (const key of ['Backspace', 'ArrowLeft', 'Enter', 'Tab']) {
+          for (const key of ['Backspace', 'ArrowLeft', 'Enter']) {
             await act(async () => {
               host!.props.onKeyDown({
                 key,
@@ -81,6 +88,40 @@ Describe('interaction outline runtime', () => {
           }
           Expect(TR.Interaction.Attention.read().narrowing).toBe('')
           Expect(prevented).toBe(0)
+          for (const key of ['Escape', 'Tab']) {
+            await act(async () => {
+              host!.props.onKeyDown({
+                key,
+                preventDefault: () => prevented += 1,
+                target: { tagName: 'INPUT' },
+              })
+            })
+          }
+          Expect(TR.Interaction.Attention.read().target).toBeUndefined()
+          Expect(prevented).toBe(0)
+          const input = screen.getByLabelText('Draft')
+          await act(async () => {
+            fireEvent(input, 'focus')
+            host!.props.onKeyDown({
+              key: 'Escape',
+              preventDefault: () => prevented += 1,
+              target: { tagName: 'INPUT' },
+            })
+          })
+          Expect(TR.Interaction.Attention.read().engaged).toBeUndefined()
+          Expect(TR.Interaction.Attention.read().targetLabel).toBe('Draft')
+          Expect(prevented).toBe(1)
+          await act(async () => {
+            fireEvent(input, 'focus')
+            host!.props.onKeyDown({
+              key: 'Tab',
+              preventDefault: () => prevented += 1,
+              target: { tagName: 'INPUT' },
+            })
+          })
+          Expect(TR.Interaction.Attention.read().engaged).toBeUndefined()
+          Expect(TR.Interaction.Attention.read().targetLabel).toBe('Next')
+          Expect(prevented).toBe(2)
           await act(async () => {
             host!.props.onKeyDown({
               code: 'Slash',
@@ -90,11 +131,11 @@ Describe('interaction outline runtime', () => {
           })
           Expect(TR.Interaction.Attention.read().mode).toBe('hints')
           Expect(screen.getByText('Interaction hints')).toBeDefined()
-          Expect(prevented).toBe(1)
+          Expect(prevented).toBe(3)
           await act(async () => {
             host!.props.onKeyDown({ key: 'F7', preventDefault: () => prevented += 1 })
           })
-          Expect(prevented).toBe(1)
+          Expect(prevented).toBe(3)
           await act(async () => {
             host!.props.onKeyDown({
               ctrlKey: true,
@@ -105,12 +146,38 @@ Describe('interaction outline runtime', () => {
             })
           })
           Expect(TR.Interaction.Attention.read().mode).toBe('palette')
-          Expect(prevented).toBe(2)
+          Expect(prevented).toBe(4)
         },
       )
     } finally {
       restoreRuntime.mockRestore()
     }
+  })
+
+  Test('does not keyboard-activate a disabled native @tao/ui button', async () => {
+    await testCompileApp(
+      `
+        use Button, Col, Text from @tao/ui
+        use StackNav from @tao/nav
+        app DisabledApp { Name "Disabled" Navigator StackNav { Initial Home } }
+        scene Home() {
+          Title "Home"
+          state Count = 0
+          render Col() {
+            Button("Never", Disabled: true) { on press -> { set Count += 1 } }
+            Text("Invocations: { Count }")
+          }
+        }
+      `,
+      async screen => {
+        Expect(TR.Interaction.Attention.read().targetLabel).toBeUndefined()
+        await act(async () => {
+          TR.Interaction.PressKey('Enter')
+        })
+        Expect(screen.getByText('Invocations: 0')).toBeDefined()
+        Expect(TR.Interaction.Attention.read().targetLabel).toBeUndefined()
+      },
+    )
   })
 
   Test('targets a navigation command before invoking it exactly once', async () => {

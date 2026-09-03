@@ -15,6 +15,7 @@ view Button(Title text, Press action(), Disabled boolean default false) {
    render inject Title, Press, Disabled, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Button', Layout)
       const Interaction = TR.Interaction.FromVisualLayout(Layout)
+      TR.Interaction.Enabled(Interaction, !Disabled)
       const AccessibilityRef = TR.Interaction.AccessibilityRef(Interaction, Title)
       return TR.VisualNativeRoot(
         Layout,
@@ -40,6 +41,7 @@ view FormButton(Title text, Press action(), Id text default "", Disabled boolean
       TR.WarnUnhonoredLayout('FormButton', Layout)
       const busy = Disabled || Submitting
       const Interaction = TR.Interaction.FromVisualLayout(Layout)
+      TR.Interaction.Enabled(Interaction, !busy)
       const AccessibilityRef = TR.Interaction.AccessibilityRef(Interaction, Title)
       return TR.VisualNativeRoot(
         Layout,
@@ -65,6 +67,7 @@ view Switch(Value boolean, Change action(boolean), Label text, Disabled boolean 
    render inject Value, Change, Label, Disabled, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Switch', Layout)
       const Interaction = TR.Interaction.FromVisualLayout(Layout)
+      TR.Interaction.Enabled(Interaction, !Disabled)
       const AccessibilityRef = TR.Interaction.AccessibilityRef(Interaction, Label)
       return TR.Element(
         RN.View,
@@ -95,6 +98,7 @@ view Slider(Value number, Change action(number), Label text, Minimum number defa
       TR.WarnUnhonoredLayout('Slider', Layout)
       const host = TR.Hosts.Slider()
       const Interaction = TR.Interaction.FromVisualLayout(Layout)
+      TR.Interaction.Enabled(Interaction, !Disabled)
       if (!host) {
         const step = (Maximum - Minimum) / 10
         return TR.Element(

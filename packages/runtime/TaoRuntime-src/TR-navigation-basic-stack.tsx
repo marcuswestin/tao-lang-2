@@ -168,11 +168,15 @@ function BasicOverflowMenu(props: {
   taoProps?: TaoProps
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
+  const firstHost = React.useRef<TaoAccessibilityHost | null>(null)
+  React.useEffect(() => focusAccessibilityHost(runtime, firstHost.current), [runtime])
   const content = React.createElement(runtime.View, {
     accessibilityRole: 'menu',
+    accessibilityViewIsModal: true,
     children: props.commands.map(command =>
       React.createElement(NavigationCommandButton, {
         command: props.observable ? command : { ...command, enabled: false },
+        hostRef: command === props.commands[0] ? firstHost : undefined,
         key: command.identity,
         onInvoke: props.onClose,
         role: 'menuitem',
@@ -180,6 +184,7 @@ function BasicOverflowMenu(props: {
         testID: props.observable ? navigationCommandTestId(command.label) : undefined,
       })
     ),
+    onAccessibilityEscape: props.onClose,
     style: [overflowStyle, mountedDesignStyle(props.taoProps, 'NavigationHeader')],
   })
   if (!runtime.Modal) {

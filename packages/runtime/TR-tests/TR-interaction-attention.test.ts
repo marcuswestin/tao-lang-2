@@ -755,6 +755,99 @@ Describe('TR.Interaction attention', () => {
     Expect(attention.read().mode).toBe('navigating')
   })
 
+  Test('refreshes an open verb surface across reactive changes and temporary zero results', async () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    let enabled = true
+    let label = 'Archive'
+    const archive = TR.Interaction.Command({
+      action: () => TR.Action(() => undefined),
+      members: {
+        Enabled: () => TR.Value(enabled),
+        Label: () => TR.Value(label),
+        Title: () => TR.Value('Archive'),
+      },
+      name: 'Archive',
+      slots: [],
+    })
+    register(outline, region('main', { primary: true }))
+    register(outline, item('draft', 'main', 'Draft'))
+    let withdrawSurface = catalog.registerSurface({ commands: [archive], hidden: [], identity: 'Draft' }, 'draft')
+    attention.revalidateOutline()
+    attention.target('draft')
+    attention.openVerbs()
+    Expect(attention.read().verbs).toEqual([
+      Expect['objectContaining']({ enabled: true, label: 'Archive' }),
+    ])
+
+    enabled = false
+    label = 'Archive unavailable'
+    attention.refreshVerbs()
+    await Promise.resolve()
+    Expect(attention.read().verbs).toEqual([
+      Expect['objectContaining']({ enabled: false, label: 'Archive unavailable' }),
+    ])
+
+    withdrawSurface()
+    attention.refreshVerbs()
+    await Promise.resolve()
+    Expect(attention.read().mode).toBe('verbs')
+    Expect(attention.read().verbs).toEqual([])
+
+    enabled = true
+    label = 'Archive restored'
+    withdrawSurface = catalog.registerSurface({ commands: [archive], hidden: [], identity: 'Draft' }, 'draft')
+    attention.refreshVerbs()
+    await Promise.resolve()
+    Expect(attention.read().mode).toBe('verbs')
+    Expect(attention.read().verbs).toEqual([
+      Expect['objectContaining']({ enabled: true, label: 'Archive restored' }),
+    ])
+    withdrawSurface()
+  })
+
+  Test('notifies attention when stable live capabilities change without remounting', async () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    let active = true
+    let enabled = true
+    const regionLive = { active: () => active, modal: false, primary: true }
+    register(outline, {
+      identity: 'main',
+      kind: 'region',
+      label: () => 'Main',
+      live: regionLive,
+      provenance: {},
+    })
+    register(outline, item('draft', 'main', 'Draft', { activate: () => undefined, enabled: () => enabled }))
+    attention.revalidateOutline()
+    attention.target('draft')
+    Expect(attention.read().target).toBe('draft')
+    // Drain structural registration revalidation so only the stable capability mutation can notify.
+    await Promise.resolve()
+
+    enabled = false
+    outline.refreshLive()
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(attention.read().target).toBeUndefined()
+    Expect(attention.read().candidates).toEqual([])
+
+    const liveRevision = outline.liveSnapshot()
+    regionLive.modal = true
+    regionLive.primary = false
+    outline.refreshLive()
+    await Promise.resolve()
+    Expect(outline.liveSnapshot()).toBe(liveRevision + 1)
+
+    active = false
+    outline.refreshLive()
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(attention.read().focusRegion).toBeUndefined()
+  })
+
   Test('folds a rendered control whose visible verb label duplicates a promoted command', () => {
     const outline = new InteractionOutline()
     const catalog = new CommandCatalog()

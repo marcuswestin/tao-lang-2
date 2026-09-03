@@ -438,49 +438,12 @@ function selectedRow(
       }`,
     )
   }
-  const outlineIdentity = outlineIdentityForSelection(step.tag, step.index, parentScope)
+  const parentIdentity = parentScope === undefined ? undefined : selectedOutlineIdentities.get(parentScope)
+  const outlineIdentity = TR.Interaction.Outline.itemIdentityForTestTag(step.tag, step.index, parentIdentity)
   if (outlineIdentity !== undefined) {
     selectedOutlineIdentities.set(row, outlineIdentity)
   }
   return row
-}
-
-/** Resolve a tagged loop row to its semantic item without putting outline identity on native props. */
-function outlineIdentityForSelection(
-  tag: string,
-  index: number,
-  parentScope?: TestInstance,
-): string | undefined {
-  const nodes = TR.Interaction.Outline.read().nodes
-  const parentIdentity = parentScope === undefined ? undefined : selectedOutlineIdentities.get(parentScope)
-  const collections = nodes.filter(node =>
-    node.kind === 'collection'
-    && normalizedSelectorName(node.label) === normalizedSelectorName(tag)
-    && (parentIdentity === undefined || outlineDescendsFrom(node.identity, parentIdentity, nodes))
-  )
-  if (collections.length !== 1) {
-    return undefined
-  }
-  return nodes.filter(node => node.kind === 'item' && node.parent === collections[0]!.identity)[index - 1]?.identity
-}
-
-function outlineDescendsFrom(
-  identity: string,
-  ancestor: string,
-  nodes: readonly TR.OutlineNode[],
-): boolean {
-  let current = nodes.find(node => node.identity === identity)
-  while (current?.parent !== undefined) {
-    if (current.parent === ancestor) {
-      return true
-    }
-    current = nodes.find(node => node.identity === current?.parent)
-  }
-  return false
-}
-
-function normalizedSelectorName(value: string | undefined): string {
-  return (value ?? '').normalize('NFKC').toLocaleLowerCase().replaceAll(/[^\p{L}\p{N}]/gu, '')
 }
 
 function formatStep(step: TestCompiler.Step): string {

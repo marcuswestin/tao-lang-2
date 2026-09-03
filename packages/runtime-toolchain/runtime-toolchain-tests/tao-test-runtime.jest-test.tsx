@@ -538,6 +538,45 @@ Describe('Expo runtime', () => {
     )
   })
 
+  Test('resolves a selected non-selectable row by its loop tag rather than its collection label', async () => {
+    await withTaoFiles(
+      'tao-runtime-tagged-row-outline-',
+      {
+        'Main.test.tao': `
+          use TaggedRowsApp from ./
+
+          test "Tagged row labels" {
+            test "reads the selected row outline label" {
+              run TaggedRowsApp
+              select #rows[2] {
+                expect label "Chapter two"
+              }
+            }
+          }
+        `,
+        'Main.tao': `
+          use Col, Text from @tao/ui
+
+          let Workspaces = ["Chapter one", "Chapter two"]
+
+          app TaggedRowsApp { view Main }
+
+          view Main() {
+            render Col() {
+              #rows
+              loop Workspaces / Workspace {
+                Col() { Text(Workspace) }
+              }
+            }
+          }
+        `,
+      },
+      async paths => {
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
   Test('tagged loops preserve the same native row hierarchy as untagged loops', async () => {
     await testCompileApp(
       `
