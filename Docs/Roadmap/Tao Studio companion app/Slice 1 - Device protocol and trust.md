@@ -273,19 +273,28 @@ scripted device or any existing test:
   depends on. Verified on the simulator: the `WorkspaceRow` `"novel"` scenario now clears the status
   bar instead of starting under it.
 
-One known limitation closed the same way, from reading rather than a new live repro: backgrounding
-did not trigger a foreground redial, only the Reconnect button did, so a drop the OS caused while
-backgrounded could sit for up to the 15s backoff cap after returning. `ConnectedDeviceHost` now
-listens for the RN `AppState` transition into `active` and calls `client.reconnect()` immediately,
-gated on the client already being `disconnected` — never mid-attempt or already connected, so a
-healthy session is never torn down just because the app came forward. Covered by
-`shouldRedialOnForeground` unit tests. Verified on the simulator for the half that was checkable
+One known limitation closed the same way, from reading rather than a new live repro: the settled
+contract says "backgrounding pauses the client; foregrounding dials again with the stored key," but
+nothing implemented that — the host only started the client on mount and stopped it on unmount, so a
+drop the OS caused while backgrounded relied on the client's own backoff (capped at 15s) after
+returning, and the client stayed live and dialing the whole time it was backgrounded for no reason.
+`StudioDeviceHost` now listens for the RN `AppState` transition and calls the client's existing
+`stop()` on the first move into `background` and `start()` on the move back to `active` — `stop()`
+already resets to `phase: 'idle'` and closes any live socket; `start()` already reloads the identity
+from storage if needed and dials fresh, so this is exactly "pauses... dials again with the stored
+key," not a new mechanism. `'inactive'` (a system alert, the app switcher, a brief interruption) is
+deliberately not treated as backgrounding, since iOS reports it in passing on the way into and out of
+`background` and reacting to it would pause and resume the connection for interruptions that were
+never really backgrounding. Gated on the host owning the client's lifecycle in the first place, same
+as the existing mount/unmount effect — a caller-supplied client controls its own start/stop. Covered
+by `studioDeviceAppStateAction` unit tests. Verified on the simulator for the half that was checkable
 there: pressed Home, waited, reopened via the companion's own URL scheme, and the gateway log shows
-no new `device connection` line and the cell stayed mounted with no overlay — a healthy connection
-survives a real background/foreground cycle without a needless reconnect. The simulator's socket
-does not actually drop while backgrounded the way a physical device's can, so the other half — a
-genuine disconnect-while-backgrounded triggering an immediate redial on foreground — is proven only
-by the unit tests, not yet by a live repro on the phone.
+no new `device connection` line and the cell stayed mounted with no overlay — the simulator does not
+actually background an app hard enough to prove the pause fires (its socket does not drop the way a
+physical device's can while backgrounded), so this only proves the resume path doesn't do anything
+destructive to an already-healthy session. **Verify this on roPhone too**: background it for at least
+a few minutes (long enough that iOS actually suspends the socket), foreground it, and confirm it
+reconnects promptly rather than sitting on the old backoff.
 
 Cable link-local carries Metro by design, not yet by proof: `preferredLanIPv4` already prefers a
 `169.254.x.x` interface over the normal LAN address when one is present, which is what macOS assigns
@@ -295,10 +304,44 @@ be picked up. No run has actually plugged a cable in with Wi-Fi off to confirm i
 roPhone before calling Slice 1 fully proven**: connect over USB, turn Wi-Fi off, press Open, and
 confirm the phone reaches the gateway over the `169.254.x.x` address rather than failing to connect.
 
-Still to record from the phone: code comparison on its screen, the rendered cell, and three scenario
-taps on the Tao badge.
+Still to record from the phone: code comparison on its screen, the rendered cell, three scenario
+taps on the Tao badge, and a Fast Refresh edit arriving — the phone's own proof paragraph above stops
+at `pairing-closed`; Fast Refresh is proven only by the scripted virtual device and the simulator so
+far, not by an edit reaching roPhone.
 
-Known limitations recorded here rather than hidden: scenario and cell identifiers embed the project's
-absolute source path (as the browser preview bundle already does), so the manifest a device receives
-is not path-free yet; and a cell's browser instance and device instance coexist, so the matrix now
-keeps several live instances per cell.
+An adversarial review of the slice found nine more defects, all fixed and covered by tests:
+
+- A cell whose first render threw into the error boundary still sent `device.applied`, because the
+  acknowledgement only looked at the assignment identity. Studio could report "applied ✓" while the
+  phone showed an error screen. The boundary now reports the failure and the acknowledgement is
+  skipped for that identity; a later identity that renders is unaffected.
+- A refused `device.applied` (stale identity, wrong instance) still recorded the device's claimed
+  revision, so a stale device naming an arbitrarily high one turned the panel green. Only a claim
+  whose identity was not refused is recorded, bounded by a revision Studio actually compiled. A
+  plain `accepted: false` is _not_ a refusal — the coordinator answers that when the browser canvas
+  already advanced the revision — and conflating the two briefly cost the panel its honest report.
+- Scenario and cell identifiers embedded the project's absolute source path and crossed the gateway
+  verbatim. Both are now one-way tokens on the wire, translated back per inbound message.
+- A 32-byte all-zero (or otherwise low-order) ephemeral key claimed the session's pairing slot
+  before derivation failed on it, and disposal could not attribute the slot back to its session to
+  release it, locking every other device out until the window cycled.
+- The device's stored Keychain identity was never checked for self-consistency, so a mismatched
+  key pair would fail every signature with no recovery short of Forget Studio.
+- Handshake nonce validation accepted any non-empty value rather than the 16 bytes it generates,
+  and said "32 bytes" for both keys and nonces in the rejection.
+- The badge and sheet sat outside any safe area, on fixed offsets that could fall inside the home
+  indicator; the badge's drag had no ceiling and could be lost off-screen, and a drag could still
+  open the sheet on release.
+- `TR-studio-device-trust.test.ts`'s man-in-the-middle assertion was `codes.size === 2 || a === b`,
+  true for any two values by construction — the test proved nothing about its own claim.
+- The launcher asked `/_expo/link` first and probed `/_expo/open` only as a fallback, the reverse of
+  the documented preference, so a future SDK offering `/_expo/open` would never actually be used.
+
+Known limitations recorded here rather than hidden: a cell's browser instance and device instance
+coexist, so the matrix keeps several live instances per cell; the `StudioDeviceConnection` status the
+workbench renders still carries Studio's real `cellId` despite its own "no paths" note, because
+redacting it there would need the hash in the browser bundle, which deliberately keeps the trust
+module and its crypto out; and cable link-local candidates are computed but only one ever reaches a
+device, since the candidate list is baked into a static Expo manifest field at Studio startup while
+the address detection that would enrich it runs per "Open on device" press — closing that needs a
+decision about how a dynamically discovered address reaches the device's bootstrap.
