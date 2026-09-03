@@ -1,0 +1,216 @@
+[
+  {
+    "name": "toolbar",
+    "width": 360,
+    "height": 64,
+    "rects": [
+      { "id": "back", "kind": "Box", "x": 12, "y": 12, "width": 40, "height": 40 },
+      { "id": "title", "kind": "Text", "x": 68, "y": 20, "width": 120, "height": 24 },
+      { "id": "menu", "kind": "Image", "x": 308, "y": 12, "width": 40, "height": 40 }
+    ],
+    "expectedTree": "Row(gap=68,pad=12/12/12/12)[back:Box(40x40),title:Text(hugxhug,claim=1),menu:Image(hugxhug)]",
+    "needsOverlay": false,
+    "inspectorFixCount": 1
+  },
+  {
+    "name": "form",
+    "width": 360,
+    "height": 260,
+    "rects": [
+      { "id": "heading", "kind": "Text", "x": 20, "y": 20, "width": 180, "height": 28 },
+      { "id": "email", "kind": "Box", "x": 20, "y": 64, "width": 320, "height": 48 },
+      { "id": "password", "kind": "Box", "x": 20, "y": 128, "width": 320, "height": 48 },
+      { "id": "submit", "kind": "Box", "x": 20, "y": 196, "width": 320, "height": 44 }
+    ],
+    "expectedTree": "Col(gap=16,pad=20/20/20/20)[heading:Text(hugxhug),email:Box(320x48),password:Box(320x48,claim=1),submit:Box(320x44)]",
+    "needsOverlay": false,
+    "inspectorFixCount": 1
+  },
+  {
+    "name": "playlist-row",
+    "width": 360,
+    "height": 76,
+    "rects": [
+      { "id": "art", "kind": "Image", "x": 12, "y": 12, "width": 52, "height": 52 },
+      { "id": "title", "kind": "Text", "x": 76, "y": 14, "width": 180, "height": 22 },
+      { "id": "artist", "kind": "Text", "x": 76, "y": 42, "width": 150, "height": 18 },
+      { "id": "duration", "kind": "Text", "x": 304, "y": 28, "width": 44, "height": 20 }
+    ],
+    "expectedTree": "Row(gap=30,pad=12/12/12/12)[art:Image(hugxhug),Col(gap=6,pad=0/0/0/0,claim=1)[title:Text(hugxhug),artist:Text(hugxhug)],duration:Text(hugxhug)]",
+    "needsOverlay": false,
+    "inspectorFixCount": 0
+  },
+  {
+    "name": "bottom-nav",
+    "width": 390,
+    "height": 72,
+    "rects": [
+      { "id": "home", "kind": "Image", "x": 24, "y": 16, "width": 40, "height": 40 },
+      { "id": "search", "kind": "Image", "x": 175, "y": 16, "width": 40, "height": 40 },
+      { "id": "profile", "kind": "Image", "x": 326, "y": 16, "width": 40, "height": 40 }
+    ],
+    "expectedTree": "Row(gap=111,pad=16/24/16/24)[home:Image(hugxhug),search:Image(hugxhug),profile:Image(hugxhug)]",
+    "needsOverlay": false,
+    "inspectorFixCount": 0
+  },
+  {
+    "name": "hero",
+    "width": 390,
+    "height": 240,
+    "rects": [
+      { "id": "eyebrow", "kind": "Text", "x": 24, "y": 24, "width": 100, "height": 18 },
+      { "id": "headline", "kind": "Text", "x": 24, "y": 58, "width": 300, "height": 62 },
+      { "id": "body", "kind": "Text", "x": 24, "y": 136, "width": 330, "height": 44 },
+      { "id": "cta", "kind": "Box", "x": 24, "y": 196, "width": 140, "height": 36 }
+    ],
+    "expectedTree": "Col(gap=16,pad=24/36/8/24)[eyebrow:Text(hugxhug),headline:Text(hugxhug),body:Text(hugxhug),cta:Box(140x36)]",
+    "needsOverlay": false,
+    "inspectorFixCount": 2
+  },
+  {
+    "name": "card-grid",
+    "width": 360,
+    "height": 220,
+    "rects": [
+      { "id": "a", "kind": "Box", "x": 16, "y": 16, "width": 156, "height": 86 },
+      { "id": "b", "kind": "Box", "x": 188, "y": 16, "width": 156, "height": 86 },
+      { "id": "c", "kind": "Box", "x": 16, "y": 118, "width": 156, "height": 86 },
+      { "id": "d", "kind": "Box", "x": 188, "y": 118, "width": 156, "height": 86 }
+    ],
+    "expectedTree": "Col(gap=16,pad=16/16/16/16)[Row(gap=16,pad=0/0/0/0)[a:Box(156x86),b:Box(156x86)],Row(gap=16,pad=0/0/0/0)[c:Box(156x86),d:Box(156x86)]]",
+    "needsOverlay": false,
+    "inspectorFixCount": 1
+  },
+  {
+    "name": "sidebar",
+    "width": 600,
+    "height": 400,
+    "rects": [
+      { "id": "rail", "kind": "Box", "x": 0, "y": 0, "width": 120, "height": 400 },
+      { "id": "content", "kind": "Box", "x": 144, "y": 20, "width": 436, "height": 360 }
+    ],
+    "expectedTree": "Row(gap=24,pad=0/20/0/0)[rail:Box(120xfill),content:Box(436x360)]",
+    "needsOverlay": false,
+    "inspectorFixCount": 1
+  },
+  {
+    "name": "profile-row",
+    "width": 360,
+    "height": 88,
+    "rects": [
+      { "id": "avatar", "kind": "Image", "x": 16, "y": 16, "width": 56, "height": 56 },
+      { "id": "name", "kind": "Text", "x": 88, "y": 18, "width": 160, "height": 24 },
+      { "id": "handle", "kind": "Text", "x": 88, "y": 48, "width": 130, "height": 18 },
+      { "id": "chevron", "kind": "Image", "x": 324, "y": 32, "width": 20, "height": 20 }
+    ],
+    "expectedTree": "Row(gap=46,pad=16/16/16/16)[avatar:Image(hugxhug),Col(gap=6,pad=0/0/0/0,claim=1)[name:Text(hugxhug),handle:Text(hugxhug)],chevron:Image(hugxhug)]",
+    "needsOverlay": false,
+    "inspectorFixCount": 0
+  },
+  {
+    "name": "settings",
+    "width": 390,
+    "height": 250,
+    "rects": [
+      { "id": "title", "kind": "Text", "x": 20, "y": 16, "width": 160, "height": 28 },
+      { "id": "account", "kind": "Box", "x": 20, "y": 60, "width": 350, "height": 48 },
+      { "id": "privacy", "kind": "Box", "x": 20, "y": 120, "width": 350, "height": 48 },
+      { "id": "about", "kind": "Box", "x": 20, "y": 180, "width": 350, "height": 48 }
+    ],
+    "expectedTree": "Col(gap=12,pad=16/20/22/20)[title:Text(hugxhug,claim=1),account:Box(350x48),privacy:Box(350x48),about:Box(350x48)]",
+    "needsOverlay": false,
+    "inspectorFixCount": 0
+  },
+  {
+    "name": "media-row",
+    "width": 420,
+    "height": 110,
+    "rects": [
+      { "id": "cover", "kind": "Image", "x": 12, "y": 12, "width": 86, "height": 86 },
+      { "id": "headline", "kind": "Text", "x": 114, "y": 20, "width": 210, "height": 28 },
+      { "id": "summary", "kind": "Text", "x": 114, "y": 58, "width": 260, "height": 36 }
+    ],
+    "expectedTree": "Row(gap=16,pad=12/46/12/12)[cover:Image(hugxhug),Col(gap=10,pad=0/0/0/0)[headline:Text(hugxhug),summary:Text(hugxhug)]]",
+    "needsOverlay": false,
+    "inspectorFixCount": 1
+  },
+  {
+    "name": "chat",
+    "width": 360,
+    "height": 300,
+    "rects": [
+      { "id": "incoming", "kind": "Box", "x": 16, "y": 20, "width": 220, "height": 54 },
+      { "id": "outgoing", "kind": "Box", "x": 124, "y": 92, "width": 220, "height": 54 },
+      { "id": "incoming2", "kind": "Box", "x": 16, "y": 164, "width": 260, "height": 72 },
+      { "id": "composer", "kind": "Box", "x": 16, "y": 252, "width": 328, "height": 40 }
+    ],
+    "expectedTree": "Col(gap=18,pad=20/16/8/16)[incoming:Box(220x54),outgoing:Box(220x54),incoming2:Box(260x72),composer:Box(328x40)]",
+    "needsOverlay": false,
+    "inspectorFixCount": 2
+  },
+  {
+    "name": "login",
+    "width": 360,
+    "height": 300,
+    "rects": [
+      { "id": "logo", "kind": "Image", "x": 140, "y": 24, "width": 80, "height": 80 },
+      { "id": "username", "kind": "Box", "x": 24, "y": 128, "width": 312, "height": 44 },
+      { "id": "password", "kind": "Box", "x": 24, "y": 188, "width": 312, "height": 44 },
+      { "id": "login", "kind": "Box", "x": 24, "y": 248, "width": 312, "height": 44 }
+    ],
+    "expectedTree": "Col(gap=16,pad=24/24/8/24)[logo:Image(hugxhug,claim=1),username:Box(312x44),password:Box(312x44),login:Box(312x44)]",
+    "needsOverlay": false,
+    "inspectorFixCount": 1
+  },
+  {
+    "name": "dashboard",
+    "width": 600,
+    "height": 300,
+    "rects": [
+      { "id": "header", "kind": "Box", "x": 0, "y": 0, "width": 600, "height": 64 },
+      { "id": "metric1", "kind": "Box", "x": 16, "y": 88, "width": 176, "height": 92 },
+      { "id": "metric2", "kind": "Box", "x": 212, "y": 88, "width": 176, "height": 92 },
+      { "id": "metric3", "kind": "Box", "x": 408, "y": 88, "width": 176, "height": 92 },
+      { "id": "chart", "kind": "Box", "x": 16, "y": 204, "width": 568, "height": 80 }
+    ],
+    "expectedTree": "Col(gap=24,pad=0/0/16/0)[header:Box(fillx64),Row(gap=20,pad=0/0/0/0)[metric1:Box(176x92),metric2:Box(176x92),metric3:Box(176x92)],chart:Box(568x80)]",
+    "needsOverlay": false,
+    "inspectorFixCount": 2
+  },
+  {
+    "name": "badge-overlap",
+    "width": 220,
+    "height": 120,
+    "rects": [
+      { "id": "card", "kind": "Box", "x": 20, "y": 20, "width": 180, "height": 80 },
+      { "id": "badge", "kind": "Text", "x": 168, "y": 8, "width": 40, "height": 24 }
+    ],
+    "expectedTree": "Row(gap=0,pad=8/12/20/20)[card:Box(180x80),badge:Text(hugxhug)]",
+    "needsOverlay": true,
+    "inspectorFixCount": 0
+  },
+  {
+    "name": "floating-action",
+    "width": 360,
+    "height": 300,
+    "rects": [
+      { "id": "list", "kind": "Box", "x": 16, "y": 16, "width": 328, "height": 268 },
+      { "id": "fab", "kind": "Image", "x": 284, "y": 224, "width": 56, "height": 56 }
+    ],
+    "expectedTree": "Row(gap=0,pad=16/16/16/16)[list:Box(328x268),fab:Image(hugxhug)]",
+    "needsOverlay": true,
+    "inspectorFixCount": 0
+  },
+  {
+    "name": "stacked-art",
+    "width": 360,
+    "height": 240,
+    "rects": [
+      { "id": "photo", "kind": "Image", "x": 20, "y": 20, "width": 320, "height": 200 },
+      { "id": "caption", "kind": "Text", "x": 44, "y": 174, "width": 272, "height": 30 }
+    ],
+    "expectedTree": "Col(gap=0,pad=20/20/20/20)[photo:Image(hugxhug),caption:Text(hugxhug)]",
+    "needsOverlay": true,
+    "inspectorFixCount": 0
+  }
+]
