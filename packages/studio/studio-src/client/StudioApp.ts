@@ -20,6 +20,7 @@ import {
   type StudioSourceActionEnvelope,
   type StudioSourceActionIdentity,
 } from '../StudioProtocol'
+import type { StudioSketchCatalogSnapshot } from '../StudioSketchCatalog'
 import type { StudioTestFailure, StudioTestStatus } from '../StudioTestRunner'
 import { StudioTextMateLanguage } from '../StudioTextMateLanguage'
 import {
@@ -51,6 +52,7 @@ import {
   refreshCellPreviews,
   requestRuntimeCapture,
   StudioActivePreview,
+  StudioMatrixView,
   StudioPreviewSourceSync,
   StudioRuntimeData,
   type StudioRuntimeDataTable,
@@ -1334,6 +1336,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           void loadData()
         }
       },
+      onSketchCatalog(catalog) {
+        StudioMatrixView.renderSketches(view.preview, handshake.identity.project, catalog)
+      },
     })
     view.reload.addEventListener('click', () => {
       if (previews.length > 0) {
@@ -1765,6 +1770,7 @@ function connectEvents(
     onFile: (file: StudioFile) => void
     onFiles: (files: readonly StudioFile[]) => void
     onManifest: (manifest: StudioPreviewManifestV2) => void
+    onSketchCatalog: (catalog: StudioSketchCatalogSnapshot) => void
   },
 ): () => void {
   const initialReconnectDelayMs = 500
@@ -1802,8 +1808,10 @@ function connectEvents(
         if (handshake.previewManifest !== undefined) {
           handlers.onManifest(handshake.previewManifest)
         }
+        handlers.onSketchCatalog(handshake.sketchCatalog)
       },
       onManifest: handlers.onManifest,
+      onSketchCatalog: handlers.onSketchCatalog,
     })
   }
   connect()

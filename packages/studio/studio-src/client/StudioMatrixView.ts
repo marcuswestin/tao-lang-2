@@ -22,6 +22,7 @@ import {
   type StudioSourceActionEnvelope,
   type StudioSourceActionIdentity,
 } from '../StudioProtocol'
+import type { StudioSketch, StudioSketchCatalogAction, StudioSketchCatalogSnapshot } from '../StudioSketchCatalog'
 import {
   StudioApiClient,
   StudioApiError,
@@ -36,6 +37,11 @@ import {
   type StudioScenarioDraft,
   type StudioScenarioResult,
 } from './StudioScenarioControls'
+import {
+  type MountedStudioSketchView,
+  type StudioSketchRectChange,
+  StudioSketchView,
+} from './StudioSketchView'
 
 export type StudioMatrixCell<Item> = {
   id: string
@@ -46,6 +52,7 @@ export type StudioMatrixGroup<Item> = {
   cells: readonly StudioMatrixCell<Item>[]
   id: string
   label: string
+  sketchView?: string
 }
 
 export type StudioMatrixGroupLayout = {
@@ -151,13 +158,143 @@ export const StudioMatrixView = {
     reconcileMatrix(parent, groups, render)
   },
   reconcile: reconcileMatrix,
+  renderSketches: renderMatrixSketches,
 } as const
+
+const mountedSketches = new WeakMap<HTMLElement, MountedMatrixSketches>()
+
+type MountedMatrixSketches = {
+  catalog: StudioSketchCatalogSnapshot
+  mounts: Map<HTMLElement, MountedStudioSketchView>
+  mutationLane: StudioSketchMutationLane
+  project: string
+}
+
+function renderMatrixSketches(
+  parent: HTMLElement,
+  project: string,
+  catalog: StudioSketchCatalogSnapshot,
+): void {
+  const state = mountedSketches.get(parent) ?? {
+    catalog,
+    mounts: new Map(),
+    mutationLane: new StudioSketchMutationLane(),
+    project,
+  }
+  state.catalog = catalog
+  state.project = project
+  mountedSketches.set(parent, state)
+  const hosts = [...parent.querySelectorAll<HTMLElement>('[data-tao-studio-sketch-host]')]
+  for (const [host, mount] of state.mounts) {
+    if (!hosts.includes(host)) {
+      mount.dispose()
+      state.mounts.delete(host)
+    }
+  }
+  const assignments = new Map<HTMLElement, StudioSketch[]>()
+  const matched = new Set<string>()
+  for (const host of hosts) {
+    const view = host.dataset['taoStudioSketchView']
+    const sketches = catalog.sketches.filter(sketch => sketch.view === view)
+    sketches.forEach(sketch => matched.add(sketch.id))
+    assignments.set(host, sketches)
+  }
+  const fallback = hosts[0]
+  if (fallback !== undefined) {
+    assignments.set(fallback, [
+      ...(assignments.get(fallback) ?? []),
+      ...catalog.sketches.filter(sketch => !matched.has(sketch.id)),
+    ])
+  }
+  for (const host of hosts) {
+    const sketches = assignments.get(host) ?? []
+    const active = host === fallback || sketches.length > 0
+    host.toggleAttribute('data-tao-studio-sketch-create-surface', host === fallback)
+    let mount = state.mounts.get(host)
+    if (!active) {
+      mount?.dispose()
+      state.mounts.delete(host)
+      continue
+    }
+    if (mount === undefined) {
+      mount = StudioSketchView.mount(host, {
+        onCreateSketch: async size => {
+          const result = await applySketchAction(state, {
+            ...size,
+            id: crypto.randomUUID(),
+            kind: 'create-sketch',
+            project: state.project,
+            rects: [],
+          })
+          delete host.dataset['taoStudioSketchError']
+          renderMatrixSketches(parent, state.project, result.catalog)
+        },
+        onError: error => {
+          host.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
+        },
+        onRectChange: async change => {
+          const result = await applySketchAction(state, sketchAction(change))
+          delete host.dataset['taoStudioSketchError']
+          return result.catalog.sketches
+        },
+        sketches,
+      })
+      state.mounts.set(host, mount)
+    } else {
+      mount.render(sketches)
+    }
+  }
+}
+
+async function applySketchAction(
+  state: MountedMatrixSketches,
+  action: StudioSketchCatalogAction,
+): Promise<Awaited<ReturnType<typeof StudioApiClient.sketchAction>>> {
+  return await state.mutationLane.run(async () => {
+    const result = await StudioApiClient.sketchAction({
+      action,
+      expectedRevision: state.catalog.revision,
+      requestId: crypto.randomUUID(),
+    })
+    state.catalog = result.catalog
+    return result
+  })
+}
+
+export class StudioSketchMutationLane {
+  #lane: Promise<void> = Promise.resolve()
+
+  run<Result>(mutation: () => Promise<Result>): Promise<Result> {
+    const result = this.#lane.then(mutation, mutation)
+    this.#lane = result.then(() => undefined, () => undefined)
+    return result
+  }
+}
+
+function sketchAction(change: StudioSketchRectChange): StudioSketchCatalogAction {
+  if (change.kind === 'add') {
+    return { kind: 'add-rect', rect: change.rect, sketchId: change.sketchId }
+  }
+  if (change.kind === 'duplicate') {
+    Assert.input(change.sourceRectId, 'A duplicated Studio rectangle requires its source identity.')
+    return {
+      id: change.rect.id,
+      kind: 'duplicate-rect',
+      rectId: change.sourceRectId,
+      sketchId: change.sketchId,
+      x: change.rect.x,
+      y: change.rect.y,
+    }
+  }
+  return { kind: 'update-rect', rect: change.rect, rectId: change.rect.id, sketchId: change.sketchId }
+}
 
 function reconcileMatrix<Item>(
   parent: HTMLElement,
   groups: readonly StudioMatrixGroup<Item>[],
   render: (frame: HTMLElement, item: Item) => void,
 ): void {
+  const document = parent.ownerDocument
   const canvas = parent.querySelector<HTMLElement>(':scope > .studio-preview-grid') ?? document.createElement('div')
   canvas.className = 'studio-preview-grid'
   canvas.dataset['taoStudioCanvas'] = 'true'
@@ -187,7 +324,19 @@ function reconcileMatrix<Item>(
       render(frame, cell.item)
       return frame
     })
-    reconcileElementChildren(cells, nextFrames)
+    const sketchHost = cells.querySelector<HTMLElement>(':scope > [data-tao-studio-sketch-host]')
+      ?? document.createElement('section')
+    if (sketchHost.dataset['taoStudioSketchHost'] === undefined) {
+      sketchHost.dataset['taoStudioSketchHost'] = group.id
+      sketchHost.style.flex = '0 0 auto'
+      sketchHost.style.overflow = 'visible'
+    }
+    if (group.sketchView === undefined) {
+      delete sketchHost.dataset['taoStudioSketchView']
+    } else {
+      sketchHost.dataset['taoStudioSketchView'] = group.sketchView
+    }
+    reconcileElementChildren(cells, [...nextFrames, sketchHost])
     reconcileElementChildren(row, [heading, cells])
     return row
   })
@@ -437,6 +586,7 @@ export async function connectPreviews(
         renderCellPreview(frame, connection, previewUrl, manifest)
       },
     )
+    StudioMatrixView.renderSketches(parent, handshake.identity.project, handshake.sketchCatalog)
     return connections
   }
   const previewInstanceId = crypto.randomUUID()
@@ -457,6 +607,7 @@ function connectionGroups(
       connection.cell === undefined ? [] : [[connection.cell.cellId, connection] as const]
     ),
   )
+  const subjects = new Map(manifest.subjects.map(subject => [subject.subjectId, subject]))
   return StudioMatrixLayout.groups(manifest).map(group => ({
     cells: group.cellIds.flatMap(cellId => {
       const connection = connectionsByCell.get(cellId)
@@ -464,6 +615,20 @@ function connectionGroups(
     }),
     id: group.id,
     label: group.label,
+    ...(() => {
+      if (group.label !== 'sketch') {
+        return {}
+      }
+      const viewNames = new Set(manifest.scenarios.flatMap(scenario => {
+        if (StudioScenarioControls.groupId(scenario.source.path, scenario.group) !== group.id) {
+          return []
+        }
+        const subject = subjects.get(scenario.subjectId)
+        return subject?.kind === 'view' ? [subject.viewName] : []
+      }))
+      const sketchView = viewNames.size === 1 ? [...viewNames][0] : undefined
+      return sketchView === undefined ? {} : { sketchView }
+    })(),
   }))
 }
 
@@ -1935,6 +2100,10 @@ export async function refreshCellPreviews(
     connection.frame = frame
     renderCellPreview(frame, connection, previewUrl, manifest)
   })
+  const sketchState = mountedSketches.get(parent)
+  if (sketchState !== undefined) {
+    renderMatrixSketches(parent, sketchState.project, sketchState.catalog)
+  }
 
   await Promise.all(nextConnections.map(async preview => {
     const cell = manifest.cells.find(candidate => candidate.cellId === preview.cell!.cellId)!
