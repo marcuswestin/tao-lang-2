@@ -769,21 +769,31 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
       && nativeSelectionTabsAvailable()
   }
 
-  /** itemEntryLevels renders one tab's entry stack; only the top entry is visible within the tab. */
+  /**
+   * itemEntryLevels renders one tab's entry stack; only the top entry is visible within the tab.
+   * A tab entry carries its own content frame, because the navigator owns the window and the
+   * safe-area scroll frame the app host would normally provide belongs inside the native screen.
+   * An entry that is itself a window-owning navigator — a stack, which already frames each of its
+   * own screens — takes the tab's bounds instead: a scroll frame around it leaves its screens with
+   * no definite height, so they measure as empty and its header draws against nothing.
+   */
   private itemEntryLevels(item: SelectionItemState, taoProps?: TaoProps): React.ReactNode {
-    // Each tab carries its own content frame: the navigator owns the window, so the safe-area
-    // scroll frame the app host would normally provide renders inside the native screen instead.
-    return React.createElement(
-      AppSurfaceFrame,
-      { nativeInsets: true, taoProps: this.entryTaoProps(item, taoProps) },
-      item.entries.map((entry, index) =>
-        React.createElement(NavigationLevel, {
-          children: renderPresentable(entry.presentable, entry.arguments, this.entryTaoProps(item, taoProps)),
-          hidden: index !== item.entries.length - 1,
-          key: `${item.key}-${entry.instanceId}`,
-        })
-      ),
-    )
+    const entryTaoProps = this.entryTaoProps(item, taoProps)
+    return item.entries.map((entry, index) => {
+      const ownsWindow = isNavigation(entry.presentable) && entry.presentable.ownsWindowSurface()
+      const level = React.createElement(NavigationLevel, {
+        children: renderPresentable(entry.presentable, entry.arguments, entryTaoProps),
+        fill: ownsWindow,
+        hidden: index !== item.entries.length - 1,
+        ...(ownsWindow ? { key: `${item.key}-${entry.instanceId}` } : {}),
+      })
+      return ownsWindow ? level : React.createElement(AppSurfaceFrame, {
+        children: level,
+        key: `${item.key}-${entry.instanceId}`,
+        nativeInsets: true,
+        taoProps: entryTaoProps,
+      })
+    })
   }
 
   private activeItem(): SelectionItemState {
