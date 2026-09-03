@@ -35,6 +35,12 @@ test "reader" {
       expect text "Nothing yet"
    }
 }
+
+test "later suite" {
+   test "something else" {
+      run Reader
+   }
+}
 `
 
 function span(needle: string): { start: number; end: number } {
@@ -208,6 +214,33 @@ Describe('Studio agent chat authoring', () => {
     Expect(after.includes('test "shows a story"')).toBe(true)
   })
 
+  Test('a check lands in the suite it named, not in whichever one is last', async () => {
+    const staged: Staged[] = []
+
+    await call(tools(staged), 'proposeTest', {
+      name: 'pins the empty state',
+      steps: ['run Reader', 'expect text "Nothing yet"'],
+      suite: 'reader',
+    })
+
+    const after = staged[0]!.edits[0]!.after
+    const inReader = after.indexOf('pins the empty state')
+    const laterSuite = after.indexOf('test "later suite"')
+    Expect(inReader).not.toBe(-1)
+    // Inserting at the file's last brace would have put it in the second suite.
+    Expect(inReader < laterSuite).toBe(true)
+  })
+
+  Test('a suite the file does not declare is refused, with the ones it has', async () => {
+    const result = await call(tools([]), 'proposeTest', {
+      name: 'whatever',
+      steps: ['run Reader'],
+      suite: 'not a suite',
+    })
+
+    Expect(String(result['refused']).includes('declares no suite named "not a suite"')).toBe(true)
+  })
+
   Test('steps that would add a declaration to the test file are refused', async () => {
     const staged: Staged[] = []
 
@@ -257,9 +290,10 @@ Describe('Studio agent chat coverage', () => {
   Test('reads the checks and their literals out of a test file', () => {
     const checks = parseChecks(TESTS)
 
-    Expect(checks.length).toBe(1)
+    // Two suites, one check each.
+    Expect(checks.map(check => `${check.suite}/${check.name}`))
+      .toEqual(['reader/shows a story', 'later suite/something else'])
     Expect(checks[0]?.suite).toBe('reader')
-    Expect(checks[0]?.name).toBe('shows a story')
     // `run Reader` names the app without quoting it, so only the asserted text is a literal.
     Expect(checks[0]?.literals).toEqual(['Nothing yet'])
   })

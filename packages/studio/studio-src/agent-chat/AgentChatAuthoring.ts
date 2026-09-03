@@ -57,7 +57,10 @@ export function authoringTools(
         return capture('listTestFiles', {}, {
           files: sources.map(file => ({
             path: file.path,
-            suites: [...file.content.matchAll(/^\s*test\s+"([^"]*)"\s*\{/gm)].map(match => match[1]),
+            // A suite is a `test` at the start of a line; the checks inside it are indented. Matching both
+            // handed the model a check name to pass back as a suite.
+            suites: [...file.content.matchAll(/^test\s+"([^"]*)"\s*\{/gm)].map(match => match[1]),
+            checks: [...file.content.matchAll(/^\s+test\s+"([^"]*)"\s*\{/gm)].map(match => match[1]),
           })),
           ...(sources.length === 0
             ? { note: 'This app has no test file yet. Say so before proposing one, and where it would go.' }
@@ -179,7 +182,31 @@ export function authoringTools(
           )
         }
         const before = file.content
-        const closing = before.lastIndexOf('}')
+        // The end of the named suite, not the end of the file: a file with two suites would otherwise take
+        // every new check into the last one, whichever was asked for.
+        const header = new RegExp(`^test\\s+"${suite.replace(/[.*+?^$()|[\]\\]/g, '\\$&')}"\\s*\\{`, 'm')
+        const opens = header.exec(before)
+        if (opens === null) {
+          return capture(
+            'proposeTest',
+            { name, suite },
+            refusal(`${file.path} declares no suite named "${suite}". Call listTestFiles for the ones it has.`),
+          )
+        }
+        let depth = 0
+        let closing = -1
+        for (let index = opens.index; index < before.length; index += 1) {
+          const character = before[index]
+          if (character === '{') {
+            depth += 1
+          } else if (character === '}') {
+            depth -= 1
+            if (depth === 0) {
+              closing = index
+              break
+            }
+          }
+        }
         if (closing < 0) {
           return capture('proposeTest', { name, suite }, refusal(`${file.path} has no suite to add a check to.`))
         }
