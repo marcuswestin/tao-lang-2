@@ -1,8 +1,9 @@
 // The library, one recipe, its editor, and sharing.
 
-// App-wide: mounted on the navigator, so ⌘N works from every tab. It closes over app-wide handles only.
-action NewRecipeIntent() runs single {
-   Title "New recipe"
+use primary from @tao/keys
+
+// App-wide: mounted on the navigator, so primary+N works from every tab. It closes over app-wide handles only.
+action OpenNewRecipe() runs single {
    // Visibility follows permission to create a Recipe in MyKitchen.Recipes, resolved by the store.
    // No row yet, so a draft. It commits once, so an abandoned "New recipe" never syncs to the whole
    // kitchen.
@@ -10,25 +11,16 @@ action NewRecipeIntent() runs single {
    stop if Recipe is none
    open RecipeLink(Recipe)
 }
-command NewRecipe = NewRecipeIntent() with {
-   Label "New recipe"
+command NewRecipe() {
+   Title "New recipe"
    Icon "plus"
-   Key "cmd+n"
+   Key primary + "n"
+   do OpenNewRecipe()
 }
 
 view RecipeLibrary() {
    Title "Recipes"
    Search Query
-   command NewRecipe = NewRecipeIntent() with {
-      Label "New recipe"
-      Icon "plus"
-      Key "cmd+n"
-   }
-   command ImportRecipe = ImportRecipeIntent() with {
-      Label "Import from a link"
-      Icon "link"
-      Key "cmd+shift+n"
-   }
    Toolbar { NewRecipe ImportRecipe }
    state OnlyFavorites = no
    query Recipes from MyKitchen.Recipes {
@@ -77,63 +69,65 @@ view RecipeScreen(Recipe) {
    // Who else has this open. Two cooks in one kitchen is the ordinary case, not an edge case.
    presence Others on Recipe
 
-   action CookIntent() {
-      Title "Cook"
+   action StartCooking() {
       open CookLink(Recipe)
    }
-   command Cook = CookIntent() with {
-      Label "Cook"
+   command Cook() {
+      Title "Cook"
       Icon "flame"
-      Key "cmd+r"
+      Key primary + "r"
       Enabled Recipe.Steps is not empty
+      do StartCooking()
    }
-   action PlanIntent() {
-      Title "Plan"
+   action OpenMealPlan() {
       present PlanMeal(Recipe: Recipe) as sheet
    }
-   command Plan = PlanIntent() with {
-      Label "Plan"
+   command Plan() {
+      Title "Plan"
       Icon "calendar.badge.plus"
+      do OpenMealPlan()
    }
-   action FavoriteIntent() {
-      Title "Favorite"
+   action ToggleFavorite() {
       // Visibility follows permission to change Recipe, resolved by the store.
       toggle Recipe.Favorite
    }
-   command Favorite = FavoriteIntent() with {
+   command Favorite() {
+      Title "Favorite"
       Label if Recipe is Favorite then "Remove from favorites" else "Favorite"
       Icon if Recipe is Favorite then "heart.fill" else "heart"
+      do ToggleFavorite()
    }
-   action EditIntent() {
-      Title "Edit"
+   action OpenRecipeEditor() {
       // Visibility follows permission to change Recipe, resolved by the store.
       present RecipeEditor(Recipe) as sheet
    }
-   command Edit = EditIntent() with {
-      Label "Edit"
+   command Edit() {
+      Title "Edit"
       Icon "pencil"
-      Key "cmd+e"
+      Key primary + "e"
+      do OpenRecipeEditor()
    }
-   action ShareIntent() {
-      Title "Share"
+   action OpenRecipeSharing() {
       // Visibility follows permission to change Recipe, resolved by the store.
       present ShareRecipe(Recipe) as sheet
    }
-   command Share = ShareIntent() with {
+   command Share() {
+      Title "Share"
       Label if Recipe is Shared then "Manage link" else "Share recipe"
       Icon "square.and.arrow.up"
+      do OpenRecipeSharing()
    }
-   action DeleteIntent() runs single {
-      Title "Delete recipe"
+   action ConfirmDeleteRecipe() runs single {
       // Store-derived delete permission controls visibility. The delete effect and explicit
-      // confirmation carry the destructive intent; the command adds no separate role marker.
+      // confirmation carry destructive behavior; the command adds no separate role marker.
       stop unless ask Confirm("Delete { Recipe.Title }?", Body: "This removes it for everyone who cooks here.", Verb: "Delete")
       delete Recipe
       dismiss
    }
-   command Delete = DeleteIntent() with {
-      Label "Delete recipe"
+   command Delete() {
+      Title "Delete recipe"
       Icon "trash"
+      do ConfirmDeleteRecipe()
    }
 
    render ScrollView [screen] {
@@ -202,14 +196,14 @@ file view NewRecipeSheet(Household) responds Recipe {
 // save button, no dirty state, and nothing to discard.
 file view RecipeEditor(Recipe) {
    Title "Edit recipe"
-   action DoneIntent() {
-      Title "Done"
+   action DismissEditor() {
       dismiss
    }
-   command Done = DoneIntent() with {
-      Label "Done"
+   command Done() {
+      Title "Done"
       Icon "checkmark"
       Key "escape"
+      do DismissEditor()
    }
 
    render ScrollView [pad lg] {

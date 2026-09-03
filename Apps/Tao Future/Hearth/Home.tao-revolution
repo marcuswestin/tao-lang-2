@@ -1,5 +1,7 @@
 // Getting in, Today, who lives here, and settings.
 
+use primary from @tao/keys
+
 view Loading() {
    Title "Hearth"
    render Col [screen, content center center] { Spinner(Label: "Opening Hearth…") }
@@ -98,11 +100,6 @@ view JoinHome(Code secret) {
 
 view TodayScreen() {
    Title "Today at { MyHome.Name }"
-   command AddSomething = AddSomethingIntent() with {
-      Label "Add something"
-      Icon "plus"
-      Key "cmd+n"
-   }
    Toolbar { AddSomething }
    query DueToday from MyHome.Lists.Items {
       where is Open
@@ -139,8 +136,7 @@ view PeopleScreen() {
    Toolbar { InviteSomeone }
    query Members from MyHome.Memberships { order by JoinedAt }
 
-   action InviteSomeoneIntent() runs single {
-      Title "Invite someone"
+   action CreateInviteLink() runs single {
       // Visibility is derived from whether the store permits creating an Invite in MyHome.Invites;
       // the command adds no second authorization rule.
       let Invite = ask InviteSheet(MyHome)
@@ -148,10 +144,11 @@ view PeopleScreen() {
       share JoinLink(Invite.Code)
       present Notice("Invite link ready — it works once, for seven days") as toast (Key: "invite")
    }
-   command InviteSomeone = InviteSomeoneIntent() with {
-      Label "Invite someone"
+   command InviteSomeone() {
+      Title "Invite someone"
       Icon "person.badge.plus"
-      Key "cmd+i"
+      Key primary + "i"
+      do CreateInviteLink()
    }
 
    render ScrollView [screen] {
@@ -199,25 +196,25 @@ file view InviteSheet(Home) responds Invite {
 view SettingsScreen() {
    Title "Settings"
 
-   action LeaveIntent() runs single {
-      Title "Leave this home"
+   action ConfirmLeave() runs single {
       stop unless ask Confirm("Leave { MyHome.Name }?", Body: "You will lose access to its lists.", Verb: "Leave")
       do LeaveHome(MyMembership) // a last owner is refused with the home's own sentence
    }
-   command Leave = LeaveIntent() with {
-      Label "Leave this home"
+   command Leave() {
+      Title "Leave this home"
       Icon "rectangle.portrait.and.arrow.right"
+      do ConfirmLeave()
    }
-   action DeleteAccountIntent() runs single {
-      Title "Delete my account"
-      // The delete effect and explicit confirmation carry the destructive intent; commands have no
-      // separate `Intent destructive` marker.
+   action ConfirmDeleteAccount() runs single {
+      // The delete effect and explicit confirmation carry destructive behavior; the command needs
+      // no separate role marker.
       stop unless ask Confirm("Delete your account?", Body: "Your homes stay with the people in them. This cannot be undone.", Verb: "Delete account")
       do DeleteMyAccount()
    }
-   command DeleteAccount = DeleteAccountIntent() with {
-      Label "Delete my account"
+   command DeleteAccount() {
+      Title "Delete my account"
       Icon "person.crop.circle.badge.xmark"
+      do ConfirmDeleteAccount()
    }
 
    render ScrollView [screen] {

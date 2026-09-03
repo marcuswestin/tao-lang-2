@@ -5,6 +5,8 @@
 // so the caller sees it as an ordinary outcome case. The sidecar holds no authority: it returns a value,
 // and one transaction commits it.
 
+use primary from @tao/keys
+
 type RecipeDraft is {
    Title text
    Servings number
@@ -17,15 +19,15 @@ action FetchRecipe(Link text) returns RecipeDraft = inject "./FetchRecipe.ts"
 
 // App-wide, mounted on the navigator.
 folder
-action ImportRecipeIntent() {
-   Title "Import from a link"
+action OpenImportSheet() {
    // Visibility follows permission to create a Recipe in MyKitchen.Recipes, resolved by the store.
    present ImportSheet() as sheet
 }
-command ImportRecipe = ImportRecipeIntent() with {
-   Label "Import from a link"
+command ImportRecipe() {
+   Title "Import from a link"
    Icon "link"
-   Key "cmd+shift+n"
+   Key primary + "i"
+   do OpenImportSheet()
 }
 
 file view ImportSheet() {

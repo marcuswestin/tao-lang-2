@@ -4,7 +4,7 @@ A household kitchen. Plan the week's meals, cook them one step at a time with th
 and shop a list that adds itself up. Everyone who cooks there sees the same thing on whatever they are
 holding: tabs and a thumb-sized checkbox on a phone in the shop; one big step and a running timer on a
 tablet propped against the counter; the week across a laptop on Sunday, with the library beside the
-recipe and ⌘K for anything.
+recipe and the command palette for anything.
 
 There is one source. Nothing in it names a device. Files use `.tao-revolution`, so Tao's discovery
 leaves them alone; the language they are written in is described in [`../README.md`](../README.md).
@@ -21,7 +21,7 @@ leaves them alone; the language they are written in is described in [`../README.
 | `Household.tao-revolution`    | getting in, who cooks here, roles, invitations, preferences, leaving, deleting        |
 | `Recipes.tao-revolution`      | the library, a recipe, its editor, sharing, the public recipe                         |
 | `Import.tao-revolution`       | reading a recipe off a web page — the one thing Tao does not own                      |
-| `Plan.tao-revolution`         | the week, meal menus, planning a meal                                                 |
+| `Plan.tao-revolution`         | the week, meal commands, planning a meal                                              |
 | `Shop.tao-revolution`         | the folded list, by aisle, with a map                                                 |
 | `Cook.tao-revolution`         | cooking, with timers that outlive the window                                          |
 | `Design.tao-revolution`       | sizes, tokens, meaning, dark, palette, bundles, styles, patterns, rules, environments |
@@ -40,6 +40,6 @@ Read `Skillet.tao-revolution` first, then `Data` and `Access` together, then `Re
 - **A live root** — `Navigator when MyKitchen`; starting, joining, and leaving are writes.
 - **Timers as rows and an `automation`** — the alert outlives the window and reaches the cook.
 - **`validate` on the data, `required` for completeness** — one sentence, every write path.
-- **`command` mounted on the navigator** — ⌘N from any tab; a text field keeps its own keys.
+- **`command` mounted on the navigator** — primary+N from any tab; a text field keeps its own keys.
 - **A projection behind a rotating capability** — the public recipe is a different type.
 - **Literal copy** — every button reads as what it says; `Words` only translates.

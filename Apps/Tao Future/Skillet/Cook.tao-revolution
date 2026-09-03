@@ -24,26 +24,26 @@ view CookScreen(Recipe, Meal (optional)) {
    on key "left" Previous
 
    // A window needs its own close, because a full-screen presentation has no frame to supply one.
-   action CloseIntent() {
-      Title "Close"
+   action DismissCooking() {
       dismiss
    }
-   command Close = CloseIntent() with {
-      Label "Close"
+   command Close() {
+      Title "Close"
       Icon "xmark"
       Key "escape"
+      do DismissCooking()
    }
-   action FinishIntent() runs single {
-      Title "Done cooking"
+   action FinishCooking() runs single {
       if Meal is not none { update Meal { Cooked } }
       // Stopping every timer this recipe left running is the automation's cue to cancel its
       // notification; nothing here schedules or cancels an alert by hand.
       update MyTimers { Stopped }
       dismiss
    }
-   command Finish = FinishIntent() with {
-      Label "Done cooking"
+   command Finish() {
+      Title "Done cooking"
       Icon "checkmark"
+      do FinishCooking()
    }
 
    render Panes [screen, gap xl] {
