@@ -33,13 +33,15 @@ the first definition, so module evaluation and test order do not affect target r
 selected app remains the compiled module's default export for launch; filename and source order
 never choose it. A check drives whatever the running app presents, including overlays. Focused
 `render` subjects, authored row seeding, remote-provider adapters, and direct action/value tests remain
-deferred in the test runner.
+deferred in ordinary `test` checks. Studio scenarios do execute their focused renders and ordered
+journey prefixes through the same interaction adapter.
 
 Tao now accepts file-level `fixture` declarations and named `scenarios` groups for source-owned Studio
 examples. Group clauses provide defaults inherited by their scenario entries; an entry may override the
 matching subject or environment clause. These declarations are typechecked and emitted into Studio
-preview metadata, but ordinary production compilation treats them as metadata and `tao test` does not
-execute them yet. In particular, a scenario entry's focused
+preview metadata, but ordinary production compilation treats them as metadata. Studio executes each
+scenario's ordered interaction prefix; `tao test` continues to execute only authored test checks. In
+particular, a scenario entry's focused
 `render View(Parameter: FixtureHandle)` subject must not be confused with a test check's `run AppName`
 subject. See `Tao Studio.md` for the implemented source and manifest contract.
 
@@ -137,6 +139,9 @@ rerender or remove it. Nested selectors and expectations remain inside the selec
 Executable steps run in source order:
 
 - `press`, `enter`, and `submit` deliver the corresponding native event to one matched control;
+- `press down` and `press up` deliver only their respective press phase, and `hover` delivers pointer
+  entry; each accepts the same exact text, label, placeholder, or `#tag` selector family as `press`;
+- `focus #tag` focuses one tagged native control and is intentionally tag-only;
 - `press toolbar command "Label"` invokes one enabled command in the focused host toolbar;
 - `back` dispatches the same root-safe app reducer as the visible Back affordance and platform
   hardware Back;
@@ -148,6 +153,10 @@ Executable steps run in source order:
 - grouped and tag-scoped expectations run as one plan step;
 - `select #tag[N] { ... }` supplies a dynamically re-resolved row scope;
 - `advance <duration>` moves the held clock, described below.
+
+Phase steps never imply a complete activation. For example, `press down #save`, `advance 600.ms`,
+and `press up #save` deliver exactly those phases; a later plain `press #save` remains the full
+activation.
 
 Checkboxes have a control-specific assertion for their two-state surface:
 

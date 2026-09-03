@@ -102,6 +102,11 @@ Also shipped:
 
 - `Image`: displays an image and allows you to size and transform it.
 - `Checkbox`: a checkbox for a two-state value, with a label and disabled state.
+- `Placeholder(Label)`: an explicit unfinished-content leaf. Development renders a labelled hatch;
+  release renders no content while preserving the occurrence's declared layout. `tao check` warns
+  when ordinary application source still renders one.
+- `Spacer()`: a semantic flexible-space leaf with implicit `claim 1`. An occurrence-level
+  `[claim N]` replaces that default weight.
 
 `Image(Source, Decorative: false, Label: "")` treats a non-decorative image as informative and
 requires a nonblank accessibility label at runtime; a decorative image may omit it and is hidden
