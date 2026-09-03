@@ -273,12 +273,28 @@ scripted device or any existing test:
   depends on. Verified on the simulator: the `WorkspaceRow` `"novel"` scenario now clears the status
   bar instead of starting under it.
 
-Still to record from the phone: code comparison on its screen, the rendered cell, three scenario taps
-on the Tao badge, a Fast Refresh edit arriving, background and foreground reconnect, and whether a
-cable link-local address carries Metro. The phone was reachable only over Wi-Fi in these runs.
+One known limitation closed the same way, from reading rather than a new live repro: backgrounding
+did not trigger a foreground redial, only the Reconnect button did, so a drop the OS caused while
+backgrounded could sit for up to the 15s backoff cap after returning. `ConnectedDeviceHost` now
+listens for the RN `AppState` transition into `active` and calls `client.reconnect()` immediately,
+gated on the client already being `disconnected` — never mid-attempt or already connected, so a
+healthy session is never torn down just because the app came forward. Covered by
+`shouldRedialOnForeground` unit tests; not yet proven against a real background/foreground cycle,
+on the phone or the simulator (the simulator does not suspend an app the way iOS does on a physical
+phone, so backgrounding it would not exercise the drop this fixes).
+
+Cable link-local carries Metro by design, not yet by proof: `preferredLanIPv4` already prefers a
+`169.254.x.x` interface over the normal LAN address when one is present, which is what macOS assigns
+a trusted, USB-connected iPhone, and the gateway URL a device dials is recomputed from the current
+interfaces on every "Open on device" press, so nothing needs restarting for a newly plugged cable to
+be picked up. No run has actually plugged a cable in with Wi-Fi off to confirm it. **Verify this on
+roPhone before calling Slice 1 fully proven**: connect over USB, turn Wi-Fi off, press Open, and
+confirm the phone reaches the gateway over the `169.254.x.x` address rather than failing to connect.
+
+Still to record from the phone: code comparison on its screen, the rendered cell, and three scenario
+taps on the Tao badge.
 
 Known limitations recorded here rather than hidden: scenario and cell identifiers embed the project's
 absolute source path (as the browser preview bundle already does), so the manifest a device receives
-is not path-free yet; backgrounding does not yet trigger a foreground redial (the Reconnect control
-does); and a cell's browser instance and device instance coexist, so the matrix now keeps several live
-instances per cell.
+is not path-free yet; and a cell's browser instance and device instance coexist, so the matrix now
+keeps several live instances per cell.

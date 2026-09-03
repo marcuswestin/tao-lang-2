@@ -413,7 +413,10 @@ physical-rendering acceptance.
 Acceptance: a real iPhone installs without starting a second Metro, opens from Studio, pairs in a few taps,
 renders and refreshes beside the browser/Electrobun canvas, switches three scenarios, reconnects without
 rescanning, and rejects wrong/replayed/revoked trust. The proof records whether Wi-Fi or cable link-local
-carried the connection; relay behavior is not required.
+carried the connection; relay behavior is not required. **Still open:** every run so far has been Wi-Fi;
+cable link-local is believed to work by construction (address selection already prefers a `169.254.*`
+interface, see `Slice 1 - Device protocol and trust.md`) but has not actually been run with a cable
+connected and Wi-Fi off — verify before treating this acceptance line as fully closed.
 
 ### 2. Everyday development canvas
 
