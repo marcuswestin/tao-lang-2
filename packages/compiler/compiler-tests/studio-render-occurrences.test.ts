@@ -8,6 +8,49 @@ const tsFence = '```ts'
 const fence = '```'
 
 Describe('compiler: Studio render occurrences', () => {
+  Test('publishes an imported shared fixture without a runtime import binding', async () => {
+    await withTaoFiles('tao-studio-shared-fixture-', {
+      'Data.tao': `public data Playlists / Playlist { Title text }`,
+      'Main.tao': `
+        use Playlists from ./Data
+        use Sketches from ./Sketches
+        app Preview { view Main }
+        view Main() { render Native() }
+        view Native() { render inject ${tsFence} return null ${fence} }
+        view PlaylistRow(Playlist) { render Native() }
+        scenarios PlaylistRow "sketch" {
+          fixture Sketches
+          device phone
+          scenario "draft" { render (Playlist: ChillVibes) }
+        }
+      `,
+      'Sketches.tao': `
+        use Playlists from ./Data
+        public fixture Sketches {
+          ChillVibes = create Playlist { Title: "Chill Vibes" }
+        }
+      `,
+    }, async paths => {
+      const compiled = await Workspace.compile(paths['Main.tao'], { studio: true })
+
+      Expect(compiled.studioManifest?.fixtures).toHaveLength(1)
+      Expect(compiled.studioManifest?.fixtures[0]).toMatchObject({
+        creates: [{ entity: 'Playlist', fields: { Title: 'Chill Vibes' }, name: 'ChillVibes' }],
+        name: 'Sketches',
+        source: { path: paths['Sketches.tao'] },
+      })
+      Expect(compiled.studioManifest?.scenarios[0]).toMatchObject({
+        fixtureId: compiled.studioManifest?.fixtures[0]?.id,
+        subject: {
+          arguments: { Playlist: { handle: 'ChillVibes', kind: 'fixture-reference' } },
+          kind: 'view',
+          viewName: 'PlaylistRow',
+        },
+      })
+      Expect(compiled.code).not.toContain('Sketches as')
+    })
+  })
+
   Test('publishes empty-store journey steps and distinct omitted-action stand-ins', async () => {
     await withTaoFiles('tao-studio-scenario-journey-', {
       'Main.tao': `
