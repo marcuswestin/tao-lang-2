@@ -102,11 +102,12 @@ function NativeStackItem(props: {
         ),
       ),
       headerConfig: {
-        children: Right && observable && slots.toolbar.length > 0
+        children: Right && slots.header && observable && slots.toolbar.length > 0
           ? React.createElement(Right, null, React.createElement(NativeToolbar, { commands: slots.toolbar }))
           : null,
-        hideBackButton: !observable,
-        title: slots.title ?? '',
+        hidden: !slots.header,
+        hideBackButton: !slots.header || !observable,
+        title: slots.header ? slots.title ?? '' : '',
       },
       onDismissed: (event: { nativeEvent?: { dismissCount?: number } }) => {
         const count = Math.max(1, event.nativeEvent?.dismissCount ?? 1)

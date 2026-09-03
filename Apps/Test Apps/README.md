@@ -149,10 +149,11 @@ Exercise the entity-level `local only` storage fact. One `app` declaration and o
 variant share the folder — `LocalData` over a `Local` datasource and `LocalDataMemory` over `Memory`
 — with the catalog in the folder's `@data` package.
 
-**Belongs here:** `local only` as a trailing entity-level storage fact beside `order by`; an entity
-that stays in the device-local store whatever the app configures as its `Datasource`, proved by
-running the same program as a second variant; `local only` rows surviving a `relaunch`; writes and
-reads routed to the catalog that stores the entity through an ordinary view-local query.
+**Belongs here:** `local only` as a trailing entity-level storage fact beside `order by`; local-only
+rows surviving a `relaunch`; and an integration smoke test that both ordinary and local-only rows
+work when the same program runs as a Memory-datasource variant. The journeys prove behavior through
+the public app surface; compiler tests prove that ordinary and local-only entities route to separate
+emitted catalogs regardless of the configured `Datasource`.
 
 **Does not belong here:** the storage-boundary relation diagnostic and duplicate-`local only`
 diagnostic, which are package tests; the emitted two-catalog shape, which is a compiler test; remote

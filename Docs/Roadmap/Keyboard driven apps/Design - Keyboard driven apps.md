@@ -9,7 +9,10 @@ document in the repository** (Ro, 2026-09-02): a live document that disagrees �
 plan's closing documentation sweep (`Plan - Keyboard driven apps.md`, T7); `Docs/Spec/` follows
 implementation; the archive stays frozen unless Ro asks.
 
-Status: **discovery closed** (KEY-D1–D14); **T1–T3 implemented** (2026-09-02), with two decisions revised under review — the shell and the command shape, above. Deferred: Q14 (authority), Q18 (deep links).
+Status: **discovery closed** (KEY-D1–D14); **T1–T5 implemented and absorbed, including T3½**
+(2026-09-03), with T6 deferred for lack of a tracked native build path and T7 complete. Two
+decisions were revised under review — the shell and the command shape, above. Deferred design
+questions: Q14 (authority), Q18 (deep links).
 
 Note on evidence: the codebase investigation ran on 2026-09-01 against a working tree carrying the
 then-unmerged repository-simplification content, which has since landed on `main` (merged into
@@ -110,7 +113,8 @@ through it.
 
 ### What is derived, never declared
 
-Regions (selection items, split panes, presented occurrences — scene or view; the non-nav content of a view that renders a nav is deliberately not yet a region, pending what the attention reducer must address). Collections (loops) and their
+Regions (selection items, split panes, presented occurrences — scene or view — and the coalesced
+non-nav sibling subtree of a view that renders a nav). Collections (loops) and their
 items (row identity). Controls from event wiring (`Press`/`Submit` → action control; `Value:` +
 `Change` → input control). Labels: statically ranked from the row's rendered text — the first row-bound text, preferring
 the `(title)` field when the row renders it — one computation shared with accessibility. Provenance tiers 1–2 (entity + handle per

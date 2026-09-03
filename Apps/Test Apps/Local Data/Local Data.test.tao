@@ -9,13 +9,12 @@ test "Local Data" {
       press #startSession
       expect text "Focus: Deep work"
       relaunch
-      // The focus session lives in the companion device-local catalog, so quitting and reopening
-      // the app finds it exactly where a synced row would be found.
+      // The public behavior proves that a local-only row survives quitting and reopening.
       expect text "Focus: Deep work"
    }
-   test "keeps a local-only entity device-local under a different datasource" {
-      // The same program, same catalog, different `Datasource`. A `local only` entity does not
-      // follow that choice: it is stored and read back the same way here as it is above.
+   test "keeps both entity kinds across a relaunch with Memory configured" {
+      // This is an integration smoke test for both catalogs under the Memory variant. Compiler
+      // tests, rather than this black-box journey, prove that the entities route separately.
       run LocalDataMemory
 
       expect text "No notes yet"

@@ -922,8 +922,7 @@ command Finish(Document) {                  // a slot is a parameter: a bare nam
   all` retires because the palette is always present rather than opted into; and the in-view
   `menu Name { … }` block retires, because the per-view `Commands` slot is the ordering mechanism
   and a surface never needed a second way to list. `Toolbar` stays, `Menu` (the OS menu bar) stays,
-  and `present … as menu` stays. The example above still shows all three and is superseded by this
-  entry.
+  and `present … as menu` stays.
 - **A mention is unfilled on purpose, and the surface supplies the noun.** `Toolbar { Finish }` names
   the verb; the slot is filled from the presenting scene's parameters, matched by type, at
   invocation. That is what makes one declared verb usable from a row's button and from the scene's
@@ -942,8 +941,10 @@ command Finish(Document) {                  // a slot is a parameter: a bare nam
   slots and whether each names an entity, and the value to run — is registered at load through the
   handwritten `TR.Interaction.RegisterCommands`; a view-body command registers while its view is
   mounted. That table is what a verb surface reads to ask which commands act on what a person has in
-  front of them. At the T2 boundary the authored surfaces and dispatch still remained; KEY-D8–D13
-  below supersede that historical implementation boundary.
+  front of them. At the implemented boundary the catalog is scoped to the compiled project, so app
+  variants and sibling app declarations in that project share it; changing that boundary requires
+  an authored app-ownership construct. At the T2 boundary the authored surfaces and dispatch still
+  remained; KEY-D8–D13 below supersede that historical implementation boundary.
 
 **Amended by the keyboard-attention tranche** (implemented; `Docs/Roadmap/Keyboard driven apps/`,
 KEY-D8–D13). The deferred command surfaces and keyboard dispatch above are now implemented.
@@ -967,8 +968,9 @@ KEY-D8–D13). The deferred command surfaces and keyboard dispatch above are now
 - **Command policy folds from authored surfaces.** An entity orders defaults with
   `commands A, B` and withholds one with `commands hide C`; a view promotes commands using
   `Commands { … }` and excludes inherited defaults with `hide C`. The folded verb order is view
-  commands, rendered inner controls, entity defaults, then other applicable commands. Commands with
-  open slots enter a pending flow that fills required slots in declaration order from mounted
+  commands, rendered inner controls, entity defaults, then other applicable commands. The first verb
+  with a given visible label wins, so a verb menu never presents indistinguishable choices. Commands
+  with open slots enter a pending flow that fills required slots in declaration order from mounted
   entity targets, store search, or inline scalar input.
 - **Interaction conditions stay ordinary words.** `pressed`, `focused`, and `hovered` are postfix
   conditions; `when FocusBar is active` tests named region focus. These and the new Tao test phrases

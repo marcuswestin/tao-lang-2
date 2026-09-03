@@ -431,6 +431,33 @@ Describe('TR.Interaction attention', () => {
     Expect(attention.read().mode).toBe('navigating')
   })
 
+  Test('folds a rendered control whose visible verb label duplicates a promoted command', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const finish = TR.Interaction.Command({
+      action: () => TR.Action(() => undefined),
+      members: { Title: () => TR.Value('Finish document') },
+      name: 'Finish',
+    })
+    register(outline, region('documents', { primary: true }))
+    register(outline, item('document', 'documents', 'Draft'))
+    register(outline, {
+      identity: 'finish-button',
+      kind: 'action',
+      label: () => 'Finish document',
+      live: { activate: () => undefined },
+      parent: 'document',
+      provenance: {},
+    })
+    catalog.registerSurface({ commands: [finish], hidden: [], identity: 'DocumentRow' }, 'document')
+    attention.revalidateOutline()
+    attention.target('document')
+    attention.openVerbs()
+
+    Expect(attention.read().verbs.map(verb => verb.label)).toEqual(['Finish document'])
+  })
+
   Test('publishes focused, pressed, and hovered conditions from one semantic control identity', () => {
     const outline = new InteractionOutline()
     const attention = new InteractionAttention(outline, new CommandCatalog())

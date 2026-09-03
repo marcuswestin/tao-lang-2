@@ -114,12 +114,12 @@ test "WordFlower workspaces" {
       // The row's label is derived from `Text(Document.Title)`, the `(title)` field it renders.
       // Its view promotes Finish and hides the inherited Duplicate command. The entity keeps the
       // catalog's Delete command hidden by default, while the explicitly rendered delete control
-      // remains in the inner-control tier. The duplicate Finish labels are distinct affordances:
-      // the promoted command and the rendered button.
+      // remains in the inner-control tier. The promoted Finish command folds the rendered control
+      // with the same visible label, so the verb menu never repeats indistinguishable words.
       narrow "draft the intro"
       expect target "Draft the intro"
       press key "."
-      expect verbs "Finish document", "Open document", "Finish document", "Delete document"
+      expect verbs "Finish document", "Open document", "Delete document"
       expect {
          text "Actions for Draft the intro"
          text "F — Finish document"

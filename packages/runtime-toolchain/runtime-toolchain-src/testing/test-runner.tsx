@@ -242,6 +242,8 @@ function assertFocusRegion(step: Extract<TestCompiler.Step, { kind: 'expectFocus
 }
 
 function assertVerbs(step: Extract<TestCompiler.Step, { kind: 'expectVerbs' }>): void {
+  // Exact membership and tier order are the observable verb-surface contract. Containment would
+  // miss leaked hidden commands, duplicate labels, and priority regressions.
   const actual = TR.Interaction.Attention.read().verbs.map(verb => verb.label)
   if (JSON.stringify(actual) !== JSON.stringify(step.labels)) {
     Errors.throwUserInput(

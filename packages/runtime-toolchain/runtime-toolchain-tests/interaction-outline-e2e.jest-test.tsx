@@ -63,6 +63,15 @@ Describe('interaction outline runtime', () => {
           let prevented = 0
           await act(async () => {
             host!.props.onKeyDown({
+              key: 'a',
+              preventDefault: () => prevented += 1,
+              target: { tagName: 'INPUT' },
+            })
+          })
+          Expect(TR.Interaction.Attention.read().narrowing).toBe('')
+          Expect(prevented).toBe(0)
+          await act(async () => {
+            host!.props.onKeyDown({
               code: 'Slash',
               key: 'Dead',
               preventDefault: () => prevented += 1,

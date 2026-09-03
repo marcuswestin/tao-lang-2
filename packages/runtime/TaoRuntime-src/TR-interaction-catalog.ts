@@ -191,7 +191,7 @@ export class CommandCatalog {
     return undefined
   }
 
-  /** verbsFor applies the decided tier ordering and canonical-identity dedupe. */
+  /** verbsFor applies decided tier ordering, then folds identity and visible-label duplicates. */
   verbsFor(
     target: TaoOutlineLiveNode | undefined,
     outline = interactionOutline,
@@ -211,11 +211,17 @@ export class CommandCatalog {
     }
     const verbs: TaoInteractionVerb[] = []
     const seen = new Set<string>()
+    const seenLabels = new Set<string>()
     const add = (verb: TaoInteractionVerb | undefined, explicitlyPromoted = false) => {
-      if (!verb || seen.has(verb.identity) || (!explicitlyPromoted && hidden.has(verb.identity))) {
+      if (!verb) {
+        return
+      }
+      const label = verb.label.normalize('NFC')
+      if (seen.has(verb.identity) || seenLabels.has(label) || (!explicitlyPromoted && hidden.has(verb.identity))) {
         return
       }
       seen.add(verb.identity)
+      seenLabels.add(label)
       verbs.push(verb)
     }
 

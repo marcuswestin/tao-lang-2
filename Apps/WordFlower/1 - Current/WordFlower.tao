@@ -288,7 +288,8 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   reducer, the gesture, and the hardware key -- only the bar is gone. A scene with a literal
 //   `Header false` may not fill `Title` or `Toolbar`, because that chrome would be dead, and it is
 //   exempt from the pushed-scene `Title` requirement
-// - The frame is a fifth nav kind: `FrameNav`, fixed chrome edges around a navigated center.
+// - [Superseded by the revised shell decision below.] The frame is a fifth nav kind: `FrameNav`,
+//   fixed chrome edges around a navigated center.
 //   Its slots are `@top`, `@bottom`, `@left`, `@right`, and `@center`, holding views or navs.
 //   `left` and `right` are the language's existing layout terms and reverse with the locale exactly
 //   as they do in a layout clause. Horizontal bars win the corners: `@top` and `@bottom` span the
@@ -303,7 +304,8 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // - `local only` is an entity-level storage fact, a third trailing group entry beside `index` and
 //   `order by`: the entity lives in the device store whatever datasource the app configures, so a
 //   synced variant never syncs it. It is the narrow form of per-entity datasource scoping
-// - A `query` may be declared at module level: an app-lifetime reactive read of the store, and an
+// - [Superseded by Interaction Cleanup below.] A `query` may be declared at module level: an
+//   app-lifetime reactive read of the store, and an
 //   ordinary value. A nav is configuration, so there is no view between the shell frame and the
 //   store; without this the frame could not ask whether a focus session is running
 // - `command` is a configured value, in the `app`/`nav`/`design` family, and the only discoverable
@@ -375,13 +377,13 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   item; a render binding `Press` or `Submit`, or a row with `on select`, is an action control;
 //   a render binding `Value` with `Change` is an input control. Regions are structural: selection
 //   items, split panes, and presented occurrences. The non-nav content of a view that renders a
-//   nav is not yet a region; the attention tranche decides what it needs to address
+//   nav is not yet a region; the attention tranche below decides and adds that region
 // - Existence is always registered; the label is always on, because accessibility needs it
 //   synchronously; everything else evaluates only while a consumer is attached
 // - Provenance rides two tiers -- entity and handle per item, loop and entity per collection --
 //   and is never a test selector
 //
-// INTERACTION CLEANUP. The shell's move into an ordinary scene left two general mechanisms without
+// INTERACTION CLEANUP. The shell's move into an ordinary scene left three general mechanisms without
 // a forcing feature (`Design - Keyboard driven apps.md`; `Plan`, T3½).
 //
 // This tranche decides:
@@ -393,6 +395,8 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // - A `when` used as a configuration value compiles directly as its value expression. The generic
 //   `TR.Deferred` wrapper retires; `TR.Interaction.Deferred` is a separate interaction-runtime
 //   mechanism and remains
+// - A direct keyed entry in a configured-value patch replaces the whole item and must be complete.
+//   Special deep merging of partial keyed frame slots retires with the frame
 // - Absence unification in `commonType`, union-to-union assignability, and property-position `with`
 //   remain as general improvements
 //
@@ -442,7 +446,8 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // - An entity data block orders default verbs with `commands A, B` and withholds a command using
 //   `commands hide C`. Any view may promote commands through its `Commands { ... }` supplied slot
 //   and exclude inherited defaults with `hide C`. Verb order is view Commands, rendered inner
-//   controls, entity defaults, then the remaining applicable catalog alphabetically, folded
+//   controls, entity defaults, then the remaining applicable catalog alphabetically. Repeated
+//   visible labels fold onto the first verb in that priority order
 // - `press key "..."`, `narrow "..."`, `expect target "..."`, `expect focus region "..."`, and
 //   `expect verbs "...", "..."` extend tests through ID-headed, spelling-validated seams. They
 //   dispatch reducer operations directly rather than synthetic DOM events. `beginTest` resets

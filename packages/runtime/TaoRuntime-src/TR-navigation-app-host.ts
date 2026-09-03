@@ -64,6 +64,11 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
   const toasts = props.app.renderToasts(appTaoProps)
   const onKeyDown = runtime.Platform?.OS === 'web'
     ? (event: TaoAppHostKeyEvent) => {
+      // The outline deliberately stops at an injected or foreign view. Let the browser deliver text
+      // to an editable descendant even when that control has no Tao occurrence to engage.
+      if (isUnmodifiedPrintableKey(event) && isEditableTarget(event.target)) {
+        return
+      }
       const handled = dispatchInteractionHardwareKey(
         event.nativeEvent ?? event,
         InteractionControls.PressKey,
@@ -127,12 +132,41 @@ type TaoAppHostKeyEvent =
   & Readonly<{
     nativeEvent?: TaoHardwareKeyEvent
     preventDefault?(): void
+    target?: unknown
   }>
 
 type TaoAppHostPointerEvent = Readonly<{
   currentTarget?: { focus?(): void }
   target?: unknown
 }>
+
+type TaoEditableTarget = Readonly<{
+  closest?(selector: string): unknown
+  getAttribute?(name: string): string | null
+  isContentEditable?: boolean
+  tagName?: string
+}>
+
+function isUnmodifiedPrintableKey(event: TaoHardwareKeyEvent): boolean {
+  return !event.altKey && !event.ctrlKey && !event.metaKey && [...(event.key ?? '')].length === 1
+}
+
+function isEditableTarget(target: unknown): boolean {
+  if (!target || typeof target !== 'object') {
+    return false
+  }
+  const element = target as TaoEditableTarget
+  const tag = element.tagName?.toLocaleLowerCase()
+  const editableAncestor = element.closest?.(
+    'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]',
+  )
+  return element.isContentEditable === true
+    || tag === 'input'
+    || tag === 'textarea'
+    || tag === 'select'
+    || element.getAttribute?.('role') === 'textbox'
+    || editableAncestor !== null && editableAncestor !== undefined
+}
 
 function useNavigationRestoration(app: RuntimeAppDefinition): boolean {
   const [ready, setReady] = React.useState(() => !app.restorationRequiresInitialLoad())

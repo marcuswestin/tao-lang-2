@@ -791,13 +791,18 @@ Describe('TR.Navigation', () => {
 
     const declaration = TR.Navigation.Declaration('Configured selection', TR.NavKind.Selection())
     const configured = TR.Navigation.Configure(declaration, {
-      '@home': { Content: home, Label: TR.Value('Home') },
+      '@home': { Content: home, Icon: TR.Value('house'), Label: TR.Value('Home') },
       Display: TR.Value('tabs'),
       Initial: TR.Value('@home'),
     })
     const configuredWithOther = TR.Navigation.Patch(configured, {
       '@other': { Content: detail, Label: TR.Value('Other') },
     })
+    const configuredWithReplacement = TR.Navigation.Patch(configured, {
+      '@home': { Content: detail, Label: TR.Value('Replacement') },
+    })
+    Expect((configured.config['@home'] as Record<string, unknown>)['Icon']).toBeDefined()
+    Expect((configuredWithReplacement.config['@home'] as Record<string, unknown>)['Icon']).toBeUndefined()
     const app = TR.Navigation.App({
       name: 'Configured selection app',
       navigator: () => configuredWithOther,

@@ -1248,8 +1248,23 @@ Describe('Expo runtime', () => {
       Expect(itemProps[0]?.['screenId']).toBe('41')
       Expect(itemProps[1]?.['screenId']).toBe('42')
       Expect(itemProps.map(props => props['activityState'])).toEqual([2, 2])
+      Expect(itemProps[0]?.['headerConfig'].hidden).toBe(false)
       Expect(itemProps[0]?.['headerConfig'].title).toBe('Native title')
       Expect(itemProps[0]?.['headerConfig'].children).toBeDefined()
+
+      const hiddenHost = new RuntimeHostReadChannel()
+      hiddenHost.publish({ header: false, title: 'Ignored title', toolbar: host.read().toolbar })
+      itemProps.length = 0
+      screen.rerender(createElement(NativeStackSurface, {
+        entries: [{ arguments: {}, host: hiddenHost, instanceId: 43, presentable: home }],
+        navigation: stack as any,
+      }))
+      Expect(itemProps[0]?.['headerConfig']).toMatchObject({
+        children: null,
+        hidden: true,
+        hideBackButton: true,
+        title: '',
+      })
     } finally {
       restoreNative()
       restoreRuntime.mockRestore()

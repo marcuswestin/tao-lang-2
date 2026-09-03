@@ -421,9 +421,10 @@ invocation validation enforces the declared content and slot contract. A foreign
 Apps, `nav`, and `datasource` values use a declaration-owned configured-value model.
 The linked declaration is the source of truth for property names and types; validation, formatting,
 and compilation do not dispatch on shipped names. A bare block constructs a descriptor, `with`
-patches its named entries and may add direct keyed entries when the declaration owns a keyed item
-contract. The descriptor retains its declaration identity across imports, aliases, and generated
-modules.
+patches its named entries, and may add or replace direct keyed entries when the declaration owns a
+keyed item contract. A keyed patch is whole-item replacement, not a deep merge, and must satisfy the
+complete keyed-item contract. The descriptor retains its declaration identity across imports,
+aliases, and generated modules.
 
 ```tao
 public

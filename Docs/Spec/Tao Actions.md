@@ -80,8 +80,13 @@ run, so a verb surface can ask which commands act on what a person has in front 
 Entity `commands A, B` entries order the default verbs and `commands hide C` withholds a command
 unless a view explicitly lists it. A view's `Commands { ... }` promotes applicable commands and
 `hide X` excludes inherited defaults. The target verb layer folds view promotions, rendered inner
-controls, entity defaults, then remaining applicable commands; repeated verbs keep their distinct
-provenance while exact duplicate registrations fold.
+controls, entity defaults, then remaining applicable commands. Identical visible labels fold onto
+the first verb in that priority order, retaining its provenance, so a generated verb surface never
+presents indistinguishable duplicate choices; duplicate registrations of one command also fold.
+
+At the implemented boundary, module-level command catalogs belong to the compiled project: app
+variants and sibling app declarations in that project share the catalog. A separate running-app
+ownership boundary requires an authored ownership construct and is not inferred from app variants.
 
 ## Shortcuts
 

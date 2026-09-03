@@ -35,7 +35,9 @@ are retained as execution history, not current syntax or architecture.
   `packages/AGENTS.md`: no capitalized keywords, and no lowercase keyword a design, layout, or test
   vocabulary already uses.
 - **Retired with the frame** (Ro, 2026-09-03): module-level `query` — but the validator keeps a
-  diagnostic for one, saying it could be added and nothing strictly prevents it; and `TR.Deferred`.
+  diagnostic for one, saying it could be added and nothing strictly prevents it; `TR.Deferred`;
+  and special deep merging of keyed configuration items. Keyed patches use the configured-value
+  model's ordinary whole-item replacement and must supply a complete item.
   **Kept**: `when`/`none` as configuration values (§10's live root), property-position `with`,
   absence unification in `commonType`, union-to-union assignability.
 - **Mutation testing is required** for every journey that proves a new construct; the handoff names
@@ -81,7 +83,7 @@ are retained as execution history, not current syntax or architecture.
 | T1  | `scene`, the shell as a view, device-local data | WordFlower persistent focus bar                                                   | —                                | L — landed, revised `7ac87001` |
 | T2  | Commands as configured values, command catalog  | WordFlower workspace save; HNReader open-story; Basic Navigation                  | —                                | L — landed, revised `27f6884b` |
 | T3  | The interaction outline and `(title)`           | Accessibility names on every row; Studio inspection                               | T1, T2                           | L — landed `19f9e3ef`          |
-| T3½ | Retire module-level `query` and `TR.Deferred`   | Decision A/B after the frame's retirement                                         | T3                               | S — landed                     |
+| T3½ | Retire unforced frame support                   | Cleanup after the frame's retirement                                              | T3                               | S — landed                     |
 | T4  | Attention reducer, keyboard dispatch, narrowing | WordFlower: narrow the workspace list, engage the editor, global focus-bar chords | T3                               | XL — landed                    |
 | T5  | Generated surfaces and key allocation           | Interaction hints and overview over WordFlower                                    | T4                               | M — landed                     |
 | T6  | Assistant boundary, menus, native keys          | Apple App Intents from the `Assistant` block; iPadOS menu bar and hardware keys   | T3, T4; an iOS native build path | L — deferred, no native path   |
@@ -302,8 +304,9 @@ and UI.md` (accessible names derived); `Docs/Spec/Tao Data.md`; `Coverage.md`.
 
 ## T3½ — Retire what the frame's retirement left unforced
 
-**Goal.** Two capabilities were introduced only so that a configured navigator could read the store
-reactively. The shell is a view now and holds its own query, so both lost their forcing feature.
+**Goal.** Three capabilities were introduced only for the retired configured frame: app-lifetime
+store reads, deferred configuration evaluation, and partial keyed-slot patching. The shell is a
+view now, so all three lost their forcing feature.
 
 - **Module-level `query` is removed** from the language: `EntityQueryDeclaration` leaves the
   top-level statement set in `blocks.langium`, the visibility marker on it goes, `TR.Data.ModuleQuery`
@@ -315,6 +318,8 @@ reactively. The shell is a view now and holds its own query, so both lost their 
   shell scene's body.
 - **`TR.Deferred` is removed**, and the `WhenExpression` arm in `ConfigurationValue` codegen compiles
   the expression directly. `when`/`none` as configuration values STAY (§10's live root).
+- **Special keyed-item deep merging is removed.** A direct keyed entry in a `with` block replaces
+  that whole item and is validated as a complete item, just like any configured-value entry.
 - Kept as general improvements: absence unification in `Type.commonType`, union-to-union
   assignability, property-position `with`.
 
@@ -378,6 +383,10 @@ T4 also settled the question deferred by T3: the non-nav sibling subtree of a vi
 nav is a region. The compiler emits a descriptor for those siblings and their mounted roots
 coalesce into one region without adding a runtime wrapper or layout node (KEY-D8).
 
+**Mutation record.** Disabling sibling-region registration makes WordFlower's focus-bar region
+journey fail; activating on target commitment makes the workspace journey navigate before Enter;
+including an entity command hidden by the view makes the exact `expect verbs` journey fail.
+
 ---
 
 ## T5 — Generated surfaces and key allocation
@@ -403,6 +412,11 @@ the two knowingly differ.
 
 **Tests.** TR tests: allocation determinism and stability across reorders; journeys: `press key "?"`
 then `expect text` on hint labels; overview region listing.
+
+**Mutation record.** Reversing canonical allocation order, allowing reserved keys, or removing the
+two-letter fallback fails allocation tests; removing the keyboard-presence gate fails the hidden
+surface assertion; changing palette narrowing or app-relative geometry fails their focused runtime
+tests.
 
 **Reconcile.** `Decisions.md` §13 (element defaults `Hint`, `Overview`); LANG-018 direction recorded
 (floating layers); `Coverage.md`.

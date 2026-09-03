@@ -50,7 +50,8 @@ scene WordFlowerShell() {
 ```
 
 That is ordinary layout. It needs no fifth nav kind, no keyed slots, no `Size`, no per-slot
-restoration profile, no conformance branch, and no keyed patch merging — all of which T1 built.
+restoration profile, or conformance branch. T1 briefly built those and special keyed-item patch
+merging; the frame retirement removed their forcing feature, and T3½ retired the special merge.
 The empty-slot rule becomes an ordinary `when` in a render tree, a construct the language already
 has and already tests.
 

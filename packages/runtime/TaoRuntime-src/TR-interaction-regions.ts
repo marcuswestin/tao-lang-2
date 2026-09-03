@@ -2,15 +2,10 @@ import React from 'react'
 import { OutlineScope, type TaoOutlineProvenance, useOutlineNode } from './TR-interaction-outline'
 
 /**
- * A region is a structural place attention can rest: a selection item, a split pane, or a
- * presented occurrence. Nothing declares one; the navigation runtime knows where each is because it
- * mounted it, and hands the outline the identity and the name a person would read.
- *
- * Deliberately not a region yet: the non-nav content of a view that renders a nav, such as the
- * focus bar beside WordFlower's navigator. The runtime has no handle for it — the hosted nav is
- * wrapped in one view, but its siblings are ordinary occurrences with no grouping node — so naming
- * it needs either a compile-time descriptor of "the siblings of a rendered nav" or a new wrapper.
- * The attention tranche decides what it needs to address; this one does not invent it.
+ * A region is a structural place attention can rest: a selection item, a split pane, a presented
+ * occurrence, or the non-nav sibling subtree of a view that renders a nav. Navigation supplies the
+ * first three kinds; the compiler describes the sibling subtree, whose mounted roots coalesce under
+ * one owner occurrence without adding a wrapper or layout node.
  */
 export type TaoOutlineRegionKind = 'occurrence' | 'selection-item' | 'split-pane'
 
