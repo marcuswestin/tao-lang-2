@@ -33,6 +33,7 @@ import { StudioWelcome } from './StudioWelcome'
 /** The gateway surface the loopback routes and `device-state` events need; the real gateway satisfies it. */
 export type StudioServerDeviceGateway = Pick<
   StudioDeviceGateway,
+  | 'captureRuntime'
   | 'confirmPairing'
   | 'declinePairing'
   | 'openPairing'
@@ -394,6 +395,9 @@ async function handleDeviceRequest(
       options,
       gateway.selectCell(sessionId, deviceCellRequest(await request.json()).cellId),
     )
+  }
+  if (request.method === 'POST' && pathname === '/api/device/capture') {
+    return response(request, url, options, await gateway.captureRuntime(sessionId))
   }
   if (pathname === '/api/device/launch' || pathname === '/api/device/launch/open') {
     const launcher = options.deviceLauncher

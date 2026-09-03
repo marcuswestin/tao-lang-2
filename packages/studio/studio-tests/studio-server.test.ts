@@ -493,6 +493,11 @@ Describe('Studio device routes', () => {
       ['/api/device/revoke', { devicePublicKey: 'key-3' }, { revoked: true }],
       ['/api/device/reconnect', {}, { requested: true }],
       ['/api/device/select-cell', { cellId: 'cell:phone' }, { requested: true }],
+      [
+        '/api/device/capture',
+        {},
+        { capture: { domains: [{ domain: 'data', value: { workspaces: 1 } }], version: 1 } },
+      ],
       ['/api/device/launch', undefined, launchInfo],
       ['/api/device/launch/open', { hostId: 'dev-1' }, { hostName: 'roPhone', launched: true, url: launchInfo.url }],
     ]
@@ -509,6 +514,7 @@ Describe('Studio device routes', () => {
       ['revoke', 'device_session', 'key-3'],
       ['requestReconnect', 'device_session'],
       ['selectCell', 'device_session', 'cell:phone'],
+      ['captureRuntime', 'device_session'],
       ['describe', { metroOrigin: 'http://127.0.0.1:8081' }],
       ['open', { hostId: 'dev-1', metroOrigin: 'http://127.0.0.1:8081' }],
     ])
@@ -579,6 +585,10 @@ Describe('Studio device routes', () => {
 
 function fakeGateway(status: StudioDeviceStatus, calls: unknown[]): StudioServerDeviceGateway {
   return {
+    async captureRuntime(sessionId) {
+      calls.push(['captureRuntime', sessionId])
+      return { capture: { domains: [{ domain: 'data', value: { workspaces: 1 } }], version: 1 } }
+    },
     async confirmPairing(sessionId, devicePublicKey) {
       calls.push(['confirmPairing', sessionId, devicePublicKey])
       return { accepted: true }
