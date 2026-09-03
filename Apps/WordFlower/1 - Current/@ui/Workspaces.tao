@@ -1,9 +1,9 @@
-use Documents, Workspaces from @data
+use Documents, Duplicate, Finish, Workspaces from @data
 use WorkspaceNav from @nav
 use Join from @tao/text
 use Col, Image, Panes, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
-use DocumentScreen, Finish from ./
+use DocumentScreen from ./
 
 type PromptTitle is text
 
@@ -89,6 +89,7 @@ scene WorkspaceList() {
                #workspaces
                loop Workspaces / Workspace {
                   WorkspaceRow(Workspace)
+                  on select -> { present WorkspaceDetail(Workspace) }
 }  }  }  }  }  }
 
 // Presented above the nearest nav; overlays stack above content and are dismissible.
@@ -286,6 +287,8 @@ view WorkspaceRow(Workspace) {
 
 // One unfinished document: open it, finish it, or discard it.
 view DraftRow(Document) {
+   Commands { Finish }
+   hide Duplicate
    render Col() [card] {
       Text(Document.Title) [sectionTitle]
 
@@ -309,6 +312,8 @@ view DraftRow(Document) {
 
 // One finished document: reopen it or discard it.
 view FinishedRow(Document) {
+   Commands { Duplicate }
+   hide Finish
    render Col() [card] {
       Text(Document.Title) [sectionTitle]
 

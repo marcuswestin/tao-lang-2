@@ -319,6 +319,33 @@ Describe('TR.Interaction attention', () => {
     Expect(invoked).toEqual(['live'])
   })
 
+  Test('Enter engages an input without invoking its submit activation', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    let engaged = 0
+    let submitted = 0
+    register(outline, region('main', { primary: true }))
+    register(outline, {
+      identity: 'title',
+      kind: 'input',
+      label: () => 'Document title',
+      live: {
+        activate: () => submitted += 1,
+        engage: () => engaged += 1,
+      },
+      parent: 'main',
+      provenance: {},
+    })
+    attention.revalidateOutline()
+    attention.target('title')
+
+    attention.pressKey('Enter')
+
+    Expect(engaged).toBe(1)
+    Expect(submitted).toBe(0)
+    Expect(attention.read().engaged).toBe('title')
+  })
+
   Test('applies engaged input, target, mounted view, app command, then reducer precedence', () => {
     const outline = new InteractionOutline()
     const catalog = new CommandCatalog()
@@ -457,5 +484,62 @@ Describe('TR.Interaction attention', () => {
     Expect(attention.read().engaged).toBeUndefined()
     Expect(attention.read().targetLabel).toBe('Editor')
     unsubscribe()
+  })
+
+  Test('disengages an input before pointer attention transfers to another control', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    let blurs = 0
+    register(outline, region('main', { primary: true }))
+    register(outline, {
+      identity: 'editor',
+      kind: 'input',
+      label: () => 'Editor',
+      live: { blur: () => blurs += 1 },
+      parent: 'main',
+      provenance: {},
+    })
+    register(outline, {
+      identity: 'add',
+      kind: 'action',
+      label: () => 'Add workspace',
+      live: {},
+      parent: 'main',
+      provenance: {},
+    })
+    attention.revalidateOutline()
+    attention.engage('editor')
+
+    attention.target('add')
+    attention.narrow('pro')
+
+    Expect(blurs).toBe(1)
+    Expect(attention.read().engaged).toBeUndefined()
+    Expect(attention.read().narrowing).toBe('pro')
+  })
+
+  Test('direct narrowing disengages an input while hardware typing stays platform-owned', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    register(outline, region('main', { primary: true }))
+    register(outline, {
+      identity: 'editor',
+      kind: 'input',
+      label: () => 'Editor',
+      live: {},
+      parent: 'main',
+      provenance: {},
+    })
+    register(outline, item('projects', 'main', 'Projects'))
+    attention.revalidateOutline()
+    attention.engage('editor')
+
+    Expect(attention.pressKey('p')).toBe(false)
+    Expect(attention.read().engaged).toBe('editor')
+    attention.narrow('pro')
+
+    Expect(attention.read().engaged).toBeUndefined()
+    Expect(attention.read().narrowing).toBe('pro')
+    Expect(attention.read().target).toBe('projects')
   })
 })

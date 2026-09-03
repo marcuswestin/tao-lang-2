@@ -142,6 +142,8 @@ rerender or remove it. Nested selectors and expectations remain inside the selec
 Executable steps run in source order:
 
 - `press`, `enter`, and `submit` deliver the corresponding native event to one matched control;
+- `press key "Key"` dispatches one normalized interaction key through the app's attention reducer;
+- `narrow "words"` appends those words to the focused region's narrowing text;
 - `press toolbar command "Label"` invokes one enabled command in the focused host toolbar;
 - `back` dispatches the same root-safe app reducer as the visible Back affordance and platform
   hardware Back;
@@ -150,6 +152,8 @@ Executable steps run in source order:
 - `expect` and `expect missing` inspect the current rendered tree;
 - `expect navigation title "Title"` observes the focused host's user-visible title, and
   `expect toolbar command "Label" enabled|disabled` observes one focused toolbar control;
+- `expect target "Label"`, `expect focus region "Label"`, and `expect verbs "A", "B"` inspect the
+  reducer's user-visible attention projection and require exact labels and verb order;
 - grouped and tag-scoped expectations run as one plan step;
 - `select #tag[N] { ... }` supplies a dynamically re-resolved row scope;
 - `advance <duration>` moves the held clock, described below.
@@ -183,6 +187,12 @@ failure rather than a silent no-op.
 
 Each event runs inside React's `act` boundary so synchronous Tao state, data, and navigation updates
 settle before the next step. Assertions do not currently poll or sleep.
+
+Keyboard-attention steps drive the semantic reducer directly rather than synthesizing platform DOM
+or native events. `press key` fails when no layer handles the normalized key. `narrow` follows the
+same locale-aware word-prefix subsequence matching as product input; it targets a sole remaining
+candidate without activating it. Attention starts fresh for every check. The `interaction` capture
+contains both immutable `outline` and `attention` snapshots; tests do not receive a mutation handle.
 
 Behavior checks use one deterministic navigation rule: the test runtime disables optional native
 host surfaces and renders the native kind through its synchronous basic surface. Product source can

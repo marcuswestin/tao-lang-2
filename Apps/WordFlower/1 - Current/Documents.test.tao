@@ -22,6 +22,12 @@ test "WordFlower documents" {
          text "Goal: 10 paragraphs"
       }
       expect #editDocumentTitle input value "Draft the intro"
+      narrow "document title"
+      expect target "Document title"
+      press key "Enter"
+      enter "Polish the intro" into #editDocumentTitle
+      press key "Escape"
+      expect target "Document title"
       // The scene's `Toolbar { Finish }` mentions the command without filling its slot; the surface
       // fills it from the presented scene's parameters by type when it is invoked.
       expect toolbar command "Finish document" enabled

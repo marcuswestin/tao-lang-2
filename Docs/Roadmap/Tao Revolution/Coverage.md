@@ -25,9 +25,10 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Editing: write-through + drafts (§7)                        | WordFlower · title/body editing                                         | MVP      | partially in Current     |
 | Draft conflict comparison (§7)                              | Wayfare · stop editing                                                  | Post-MVP | —                        |
 | Commands as configured values (§8)                          | WordFlower · module-level Finish, workspace save toolbar                | MVP      | in Current[^9]           |
-| Shortcut values (§8)                                        | — (key dispatch is the T4 forcing feature)                              | MVP      | partially in Current[^9] |
+| Shortcut values and keyboard dispatch (§8)                  | WordFlower · pause focus command and document verbs                     | MVP      | in Current[^11]          |
 | Interaction outline, derived row labels, `(title)` (§2, §9) | WordFlower · workspace, draft, and paragraph rows; HNReader · story row | MVP      | in Current[^10]          |
-| Command surfaces: menus, rails, palettes (§8)               | WordFlower · command palette and menus                                  | Post-MVP | —                        |
+| Command ordering, hiding, and verb surface (§8)             | WordFlower · draft and finished document rows                           | MVP      | in Current[^11]          |
+| Menus, rails, and rendered palette surface (§8)             | WordFlower · command palette and menus                                  | Post-MVP | —                        |
 | Assistant projection (§8)                                   | WordFlower · assistant block                                            | Post-MVP | —                        |
 | Undo derivation (§8)                                        | WordFlower · document edits                                             | Post-MVP | —                        |
 | Conditionals, ternary, check/guard (§8)                     | WordFlower · everywhere; ternary: focused-writing mode                  | MVP      | partially in Current[^2] |
@@ -37,7 +38,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Headerless scene, pushed plain view (§9–§10)                | Test Apps · Navigation MVP full-bleed and chromeless pushes             | MVP      | in Current               |
 | Ephemeral non-serializable parameters (§9, §10)             | WordFlower · revert-save toast action                                   | MVP      | in Current               |
 | Layout, render, clause lists (§9)                           | WordFlower · all screens                                                | MVP      | in Current               |
-| Conditional styling incl. states (§9)                       | WordFlower · editor chrome                                              | MVP      | pending                  |
+| Conditional styling incl. states (§9)                       | WordFlower · buttons and active focus bar                               | MVP      | in Current[^11]          |
 | Grid over loop, cell min (§9)                               | Skillet · recipe cards                                                  | Post-MVP | —                        |
 | Pages over loop (§9)                                        | Skillet · cook mode steps                                               | Post-MVP | —                        |
 | Navigation: native/basic kits, links, split, windows (§10)  | WordFlower · native stack + deterministic harness                       | MVP      | partially in Current[^5] |
@@ -101,6 +102,15 @@ it (`Docs/Roadmap/Focused writing tranche/`).
     row, and a paragraph row; HNReader's proves a selectable story row whose first text is an
     opaque interpolation. Attention, keyboard dispatch, narrowing, and the surfaces remain at their
     stated later boundary.
+
+[^11]: The keyboard-attention tranche makes the outline operable through one runtime reducer.
+    WordFlower journeys narrow to and activate a workspace, engage and leave the document-title
+    input while retaining its target, invoke a view command through `primary+p`, and open the exact
+    folded verb list for a draft before invoking its `f` accelerator. The same source forces entity
+    `commands` ordering and hiding, view `Commands` promotion and `hide`, control-state and named
+    active-region design conditions, plus the `press key`, `narrow`, `expect target`, `expect focus
+    region`, and `expect verbs` test vocabulary. Menus, rails, and visible palette/hint/overview
+    layers remain later work.
 
 [^1]: The dialect migration tranche retired `data <status>` (Decisions §16) and with it the Data MVP
     check that drove a provider through `loading`, `error`, and `ready`. Nothing replaces it in this

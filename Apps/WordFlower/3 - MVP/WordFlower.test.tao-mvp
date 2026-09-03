@@ -161,6 +161,64 @@ test "WordFlower full target" {
    }
 }
 
+// T4's test vocabulary drives the semantic attention reducer directly. These journeys remain in
+// the full MVP sketch so later product breadth cannot silently regress the settled keyboard model.
+test "WordFlower keyboard attention" {
+   test "narrows and activates a workspace without Back disturbing attention" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      submit #workspaceName
+      enter "Projects" into #workspaceName
+      submit #workspaceName
+
+      narrow "pro"
+      expect focus region "WordFlower"
+      expect target "Projects"
+      back
+      expect focus region "WordFlower"
+      expect target "Projects"
+      press key "Enter"
+      expect navigation title "Projects"
+   }
+
+   test "engages the editor and invokes the focus bar chord" {
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] { press #openWorkspace }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] { press #openDocument }
+
+      narrow "document title"
+      expect target "Document title"
+      press key "Enter"
+      enter "Opening" into #documentTitle
+      press key "Escape"
+      expect target "Document title"
+
+      press #startFocus
+      press key "primary+p"
+      expect text "Resume"
+   }
+
+   test "surfaces only the promoted document verb and runs its accelerator" {
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] { press #openWorkspace }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+
+      narrow "chapter one"
+      expect target "Chapter one"
+      press key "."
+      expect verbs "Finish document", "Open document", "Finish document", "Delete document"
+      press key "f"
+      expect text "No drafts"
+   }
+}
+
 // Provider-state controls operate on the run's isolated InstantDB test provider; journeys never
 // contact a shared remote service.
 test "WordFlower remote data" {

@@ -7,7 +7,6 @@ test "WordFlower workspaces" {
       press #addWorkspace
       enter "Projects" into #workspaceName
       press #addWorkspace
-
       narrow "pro"
       expect focus region "WordFlower"
       expect target "Projects"
@@ -95,12 +94,14 @@ test "WordFlower workspaces" {
          text "No finished documents"
       }
       // The row's label is derived from `Text(Document.Title)`, the `(title)` field it renders.
-      // Its view promotes Finish, hides Duplicate, and the entity keeps Delete hidden by default,
-      // so the exact verb list also proves both exclusions.
+      // Its view promotes Finish and hides the inherited Duplicate command. The entity keeps the
+      // catalog's Delete command hidden by default, while the explicitly rendered delete control
+      // remains in the inner-control tier. The duplicate Finish labels are distinct affordances:
+      // the promoted command and the rendered button.
       narrow "draft the intro"
       expect target "Draft the intro"
       press key "."
-      expect verbs "Finish document"
+      expect verbs "Finish document", "Open document", "Finish document", "Delete document"
       press key "f"
       expect {
          text "Drafts: 0"

@@ -510,7 +510,12 @@ function querySelector(
     return matches
   }
   if (selector === 'label') {
-    return queries.queryAllByLabelText(target)
+    const matches = queries.queryAllByLabelText(target)
+    const semanticRow = accessibleAncestorWithLabel(scope, target)
+    if (semanticRow && !matches.includes(semanticRow)) {
+      return [semanticRow, ...matches]
+    }
+    return matches
   }
   if (selector === 'text') {
     return queries.queryAllByText(target)
@@ -519,6 +524,20 @@ function querySelector(
     return queries.queryAllByPlaceholderText(target)
   }
   Errors.throwUserInput(`Unsupported test selector '${selector}'.`)
+}
+
+function accessibleAncestorWithLabel(scope: TestInstance | undefined, label: string): TestInstance | undefined {
+  let current = scope
+  while (current) {
+    if (
+      current.props.accessibilityLabel === label
+      && (current.props.accessible === true || current.props.accessibilityRole !== undefined)
+    ) {
+      return current
+    }
+    current = current.parent ?? undefined
+  }
+  return undefined
 }
 
 function escapeRegExp(value: string): string {

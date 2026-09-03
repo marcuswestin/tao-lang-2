@@ -152,9 +152,6 @@ export class InteractionAttention {
   targetAndActivate(identity: string, fallback?: () => unknown): unknown {
     this.target(identity)
     const node = this.node(identity)
-    if (node?.kind === 'input') {
-      this.engage(identity)
-    }
     const activate = node?.live?.activate
     return activate ? activate() : fallback?.()
   }
@@ -182,6 +179,9 @@ export class InteractionAttention {
     const region = node ? this.regionOf(node) : undefined
     if (!node || !region || !this.active(region) || !this.targetable(node)) {
       return
+    }
+    if (this.#engaged !== undefined && this.#engaged !== identity) {
+      this.disengage()
     }
     this.#focusRegion = region.identity
     const memory = this.memory()
@@ -213,7 +213,7 @@ export class InteractionAttention {
 
   narrow(value: string): void {
     if (this.#engaged) {
-      return
+      this.disengage()
     }
     const memory = this.memory()
     memory.narrowing += value
@@ -298,7 +298,9 @@ export class InteractionAttention {
       const target = this.targetIdentity()
       if (target) {
         const node = this.node(target)
-        if (
+        if (node?.kind === 'input') {
+          this.engage(target)
+        } else if (
           node?.kind === 'item' && candidateNodes(node.identity, this.outline.liveNodes()).length > 0
           && !node.live?.activate
         ) {

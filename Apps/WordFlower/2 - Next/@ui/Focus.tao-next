@@ -1,4 +1,5 @@
 use FocusSessions from @data
+use primary from @tao/keys
 use Interval from @tao/time
 use Col, Row, Text from @tao/ui
 use FormButton from @tao/ui/basic
@@ -55,7 +56,7 @@ view FocusBar() {
          }
          Text(when Left > 0 Left.Clock / not "Time's up") [title]
          FocusSessionControls(FocusSession)
-}  }  }  }
+}  }  }
 
 // This child is mounted for the one running row, so its command closes over that session while its
 // nearest presented occurrence is the shell. The modifier chord therefore works from the editor

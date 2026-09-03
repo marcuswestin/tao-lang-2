@@ -1,6 +1,23 @@
 use WordFlower from ./
 
 test "WordFlower workspaces" {
+   test "narrows, targets, and activates a workspace without Back disturbing attention" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      press #addWorkspace
+      enter "Projects" into #workspaceName
+      press #addWorkspace
+      narrow "pro"
+      expect focus region "WordFlower"
+      expect target "Projects"
+      // Targeting is free: narrowing to one row does not open it.
+      expect navigation title "WordFlower"
+      back
+      expect focus region "WordFlower"
+      expect target "Projects"
+      press key "Enter"
+      expect navigation title "Projects"
+   }
    test "starts empty and keeps invalid creates inert" {
       run WordFlower
       expect navigation title "WordFlower"
@@ -76,11 +93,16 @@ test "WordFlower workspaces" {
          text "Finished"
          text "No finished documents"
       }
-      select #drafts[1] {
-         // The row's label is derived from `Text(Document.Title)`, the `(title)` field it renders.
-         expect label "Draft the intro"
-         press #finish
-      }
+      // The row's label is derived from `Text(Document.Title)`, the `(title)` field it renders.
+      // Its view promotes Finish and hides the inherited Duplicate command. The entity keeps the
+      // catalog's Delete command hidden by default, while the explicitly rendered delete control
+      // remains in the inner-control tier. The duplicate Finish labels are distinct affordances:
+      // the promoted command and the rendered button.
+      narrow "draft the intro"
+      expect target "Draft the intro"
+      press key "."
+      expect verbs "Finish document", "Open document", "Finish document", "Delete document"
+      press key "f"
       expect {
          text "Drafts: 0"
          text "No drafts"

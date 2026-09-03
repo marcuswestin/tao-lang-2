@@ -1020,6 +1020,35 @@ command Finish(Document) {                  // a slot is a parameter: a bare nam
   front of them. The surfaces themselves (`Commands { … }`, `hide`, entity command lists, key
   dispatch) remain unimplemented.
 
+**Amended by the keyboard-attention tranche** (implemented; `Docs/Roadmap/Keyboard driven apps/`,
+KEY-D8–D13). The deferred command surfaces and keyboard dispatch above are now implemented.
+
+- **Attention is one runtime-owned reducer, not Tao state.** It owns the focused region, one
+  remembered target and narrowing string per region, engagement, and the modal stack; modes such as
+  narrowing, verbs, hints, and overview are derived. Tests and launches reset attention, while the
+  public interaction outline remains immutable snapshots. Mounted nodes privately provide the
+  reducer with activation, focus, engagement, render order, geometry, and row values.
+- **Regions come from presentation semantics.** Presented occurrences, selection items, split
+  panes, and a view's non-nav sibling subtree are regions. That sibling subtree is one compiler
+  descriptor whose mounted roots coalesce without introducing a wrapper or layout node. A target is
+  selected eagerly but never activated implicitly; narrowing uses locale-aware, case-insensitive
+  word-prefix subsequences across rendered text, and a sole candidate becomes the target.
+- **Keyboard and pointer input share semantic operations.** Enter activates or engages; Escape
+  clears narrowing, disengages without losing the target, ascends, then opens overview; arrows move
+  region or target attention; `.` opens verbs; physical `Slash` toggles hints; and `primary+K`
+  opens the palette. Engaged input, modal occurrence, target, focused scene, app command, then
+  reducer key is the dispatch order. Modifier chords invoke directly, while bare letter keys act
+  only as verb accelerators. Pointer activation first targets the same node.
+- **Command policy folds from authored surfaces.** An entity orders defaults with
+  `commands A, B` and withholds one with `commands hide C`; a view promotes commands using
+  `Commands { … }` and excludes inherited defaults with `hide C`. The folded verb order is view
+  commands, rendered inner controls, entity defaults, then other applicable commands. Commands with
+  open slots enter a pending flow that fills required slots in declaration order from mounted
+  entity targets, store search, or inline scalar input.
+- **Interaction conditions stay ordinary words.** `pressed`, `focused`, and `hovered` are postfix
+  conditions; `when FocusBar is active` tests named region focus. These and the new Tao test phrases
+  use spelling-validated identifier seams rather than adding reserved grammar keywords.
+
 ### The AI surface
 
 - **`Assistant { … }` on the app is a closed projection of nouns, verbs, and searches** — the same

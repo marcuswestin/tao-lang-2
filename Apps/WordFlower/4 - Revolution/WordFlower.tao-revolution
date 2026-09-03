@@ -17,6 +17,12 @@ use every, Interval from @tao/time
 // cover that the MVP deliberately does not ship. It contains everything in `../3 - MVP` plus the
 // additions below, and it stays in sync with every decision settled in `../2 - Next`.
 //
+// Keyboard attention follows the settled T4 contract: the runtime derives regions and targets
+// from the read-only interaction outline, narrowing is locale-aware word-prefix matching, and
+// commands remain the one discoverable verb model for pointer, keyboard, palette, assistants, and
+// future host surfaces. The shell's focus-bar siblings form one compiler-described region without
+// a wrapper, so the later tier does not invent another focus owner.
+//
 // Beyond MVP, this file expresses: project identity and external dependencies; locally renamed
 // imports; the full design system (raw tokens, semantic tokens, recipes, rules, platform blocks —
 // `patterns` retired for content-accepting views, Decisions §13); closed unions with `match`; string-valued enums; longhand declaration-property blocks
@@ -131,10 +137,13 @@ design WordFlowerDesign {
    title [size 28, weight 700, fg ink]
    body [size 16, line 22, fg inkMuted]
    panel [pad 12, radius 8, bg paper, border line]
+   FormButton [bg accent, bg paper when pressed, border accent when focused, fg ink, fg accent when hovered]
 
    recipes {
       recipe Button {
-         base [centered, pad horizontal md vertical sm, radius md, type label, minTap 44]
+         // The settled interaction states are postfix conditions, including inside a future recipe;
+         // recipe-specific named states such as disabled remain Revolution-only.
+         base [centered, pad horizontal md vertical sm, radius md, type label, minTap 44, brightness -4% when pressed, scale .98 when pressed]
 
          variant size {
             sm [pad horizontal sm vertical xs, type label.sm]
@@ -148,7 +157,6 @@ design WordFlowerDesign {
             destructive [bg intent.destructive.bg, fg white]
          }
 
-         state pressed [brightness -4%, scale .98]
          state disabled [opacity disabled]
 
          default {
@@ -341,7 +349,7 @@ function MeasureLabel(Value Measure) returns text {
 type DailyPrompt is WritingPrompt with { PromptStreak number }
 
 data Workspaces / Workspace {
-   Name text
+   Name text (title)
    CreatedAt time (default now) // the runtime applies the deferred `now` value for each create
    Pinned yes / no // demonstrative; not yet used by the app
    Documents (relation Documents, owned)
@@ -351,7 +359,7 @@ data Workspaces / Workspace {
 }
 
 data Documents / Document {
-   Title text
+   Title text (title)
    Body text (default "")
    Final yes / Draft no
    Public yes / Private no (default Public) // demonstrative; not yet used by the app
@@ -361,6 +369,8 @@ data Documents / Document {
 
    index CreatedAt
    order by CreatedAt
+   commands Finish, Duplicate
+   commands hide Delete
 }
 
 data Paragraphs / Paragraph {
@@ -385,6 +395,46 @@ data FocusSessions / FocusSession {
    Paused yes / Running no
 
    local only
+}
+
+// Entity command policy is independent of the view that happens to render a document. Finish and
+// Duplicate are the ordered defaults; destructive deletion is available only where a view
+// explicitly promotes it.
+workspace
+command Finish(Document) {
+   Title "Finish document"
+   Description "Moves a document out of drafts and into the archive."
+   Summary "Finish { Document.Title }"
+   Icon "checkmark.circle"
+   Key "f"
+   Enabled Document.Final is Draft
+   do -> { update Document {
+      Final
+   } }
+}
+
+workspace
+command Duplicate(Document) {
+   Title "Duplicate document"
+   Description "Makes a new draft beside this document."
+   Summary "Duplicate { Document.Title }"
+   Icon "doc.on.doc"
+   Key "d"
+   do -> { create Document {
+      Title: "{ Document.Title } copy"
+      Body: Document.Body
+      Document.Workspace
+   } }
+}
+
+workspace
+command Delete(Document) {
+   Title "Delete document"
+   Description "Permanently removes this document."
+   Summary "Delete { Document.Title }"
+   Icon "trash"
+   Key "x"
+   do -> { delete Document }
 }
 
 function DocumentLabel(Title text) returns text {
@@ -615,23 +665,7 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
                   otherwise -> {
                      #documents
                      loop Drafts / Document {
-                        Col() [gap 6] {
-                           #openDocument
-                           FormButton(Document.Title) {
-                              on press -> {
-                                 present WorkspaceSplit(Workspace) in WordFlower@workspace
-                                 present DocumentScreen(Document) in WordFlower@workspace@documents
-                              }
-                           }
-                           #finish
-                           FormButton("Finish document") {
-                              on press -> { update Document { Final } }
-                           }
-                           #delete
-                           FormButton("Delete document", Icon: "trash") {
-                              on press -> { delete Document }
-                           }
-                        }
+                        DraftDocumentRow(Document)
                      }
                   }
                }
@@ -644,20 +678,53 @@ scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-name
                }
                #finishedDocuments
                loop FinishedDocuments / Document {
-                  Col() [gap 6] {
-                     Text(Document.Title)
-                     #reopen
-                     FormButton("Reopen document") {
-                        on press -> { update Document { Draft } }
-                     }
-                     #deleteFinished
-                     FormButton("Delete finished document", Icon: "trash") {
-                        on press -> { delete Document }
-                     }
-                  }
+                  FinishedDocumentRow(Document)
                }
             }
          }
+      }
+   }
+}
+
+// These row views preserve the Revolution screen while applying the settled verb tiers at the
+// occurrence that owns each document target. A draft promotes Finish and excludes Duplicate;
+// a finished row does the inverse. Delete remains hidden by the entity unless a later surface
+// explicitly lists it.
+view DraftDocumentRow(Document) {
+   Commands { Finish }
+   hide Duplicate
+   render Col() [gap 6] {
+      Text(Document.Title)
+      #openDocument
+      FormButton("Open document") {
+         on press -> {
+            present WorkspaceSplit(Document.Workspace) in WordFlower@workspace
+            present DocumentScreen(Document) in WordFlower@workspace@documents
+         }
+      }
+      #finish
+      FormButton("Finish document") {
+         on press -> { do Finish(Document) }
+      }
+      #delete
+      FormButton("Delete document", Icon: "trash") {
+         on press -> { delete Document }
+      }
+   }
+}
+
+view FinishedDocumentRow(Document) {
+   Commands { Duplicate }
+   hide Finish
+   render Col() [gap 6] {
+      Text(Document.Title)
+      #reopen
+      FormButton("Reopen document") {
+         on press -> { update Document { Draft } }
+      }
+      #deleteFinished
+      FormButton("Delete finished document", Icon: "trash") {
+         on press -> { delete Document }
       }
    }
 }
@@ -760,6 +827,8 @@ view FileTree(Workspace) {
 workspace
 scene DocumentScreen(Document) {
    Title Document.Title
+   // The unfilled entity slot is supplied from this presented scene's Document parameter.
+   Toolbar { Finish }
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }
@@ -945,7 +1014,7 @@ file view FocusBar() {
       limit 1
    }
    state Tick = Interval(1.s)
-   render Row() [gap 6, panel] {
+   render Row() [gap 6, panel, border accent when FocusBar is active] {
       Text("Focus session") [body]
       loop CurrentSession / FocusSession {
          let Left = when FocusSession.Paused {
@@ -953,28 +1022,42 @@ file view FocusBar() {
             otherwise -> FocusSession.EndsAt - Tick.Value
          }
          Text(when Left > 0 Left.Clock / not "Time's up") [title]
-         when FocusSession.Paused {
-            true -> {
-               #resumeFocus
-               FormButton("Resume") {
-                  on press -> { update FocusSession {
-                     EndsAt: now + (FocusSession.EndsAt - FocusSession.PausedAt)
-                     Running
-                  } }
-            }  }
-            otherwise -> {
-               #pauseFocus
-               FormButton("Pause") {
-                  on press -> { update FocusSession {
-                     PausedAt: now
-                     Paused
-                  } }
-         }  }  }
-
-         #stopFocus
-         FormButton("Stop") {
-            on press -> { delete FocusSession }
+         FocusSessionControls(FocusSession)
 }  }  }  }
+
+// The child command closes over one mounted session. Its modifier shortcut therefore remains
+// available while attention is in the editor, without promoting the session to global state.
+view FocusSessionControls(FocusSession) {
+   command PauseFocus() {
+      Title "Pause focus session"
+      Key primary + "p"
+      Enabled FocusSession.Paused is Running
+      do -> { update FocusSession {
+         PausedAt: now
+         Paused
+      } }
+   }
+   Commands { PauseFocus }
+   render Row() [gap 6] {
+      when FocusSession.Paused {
+         true -> {
+            #resumeFocus
+            FormButton("Resume") {
+               on press -> { update FocusSession {
+                  EndsAt: now + (FocusSession.EndsAt - FocusSession.PausedAt)
+                  Running
+               } }
+         }  }
+         otherwise -> {
+            #pauseFocus
+            FormButton("Pause") {
+               on press -> { do PauseFocus() }
+      }  }  }
+
+      #stopFocus
+      FormButton("Stop") {
+         on press -> { delete FocusSession }
+}  }  }
 
 view SavedToast() {
    render Text("Saved")

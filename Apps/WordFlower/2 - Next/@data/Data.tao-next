@@ -23,6 +23,7 @@ data Documents / Document {
 
    index CreatedAt
    order by CreatedAt
+
    commands Finish, Duplicate
    commands hide Delete
 }
