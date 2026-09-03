@@ -200,6 +200,11 @@ export const StudioApiClient = {
   draft: async (body: StudioDraftSyncRequest): Promise<StudioDraftSyncResult> => await request('/api/file/draft', body),
   deleteFile: async (body: StudioDeleteFileRequest): Promise<StudioDeleteFileResult> =>
     await request('/api/file/delete', body),
+  deviceHighlight: async (
+    body: {
+      occurrence?: { end: number; ownerName?: string; sourcePath: string; sourceVersion: string; start: number }
+    },
+  ): Promise<{ delivered: boolean }> => await request('/api/device/highlight', body),
   deviceConfirmPairing: async (devicePublicKey: string): Promise<{ accepted: boolean }> =>
     await request('/api/device/pairing/confirm', { devicePublicKey }),
   deviceDeclinePairing: async (devicePublicKey: string): Promise<{ declined: boolean }> =>

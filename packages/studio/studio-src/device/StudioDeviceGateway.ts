@@ -6,6 +6,7 @@ import {
   type TaoStudioDeviceDeviceMessage,
   type TaoStudioDeviceHelloMessage,
   type TaoStudioDeviceManifest,
+  type TaoStudioDeviceOccurrence,
   TaoStudioDeviceProtocol,
   type TaoStudioDeviceRejectCode,
   type TaoStudioDeviceStudioMessage,
@@ -19,8 +20,12 @@ import { Errors, FS } from '@shared'
 import type { StudioCompileSnapshot } from '../StudioCompileCoordinator'
 import { StudioPreviewManifest, type StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import type { StudioProjectSession, StudioSessionEvent } from '../StudioProjectSession'
-import { studioProtocolChannel, studioProtocolVersion } from '../StudioProtocol'
-import type { StudioDeviceConnection, StudioDeviceStatus } from './StudioDeviceStatus'
+import { studioProtocolChannel, studioProtocolVersion, studioSourceActionVersion } from '../StudioProtocol'
+import type {
+  StudioDeviceConnection,
+  StudioDeviceSourceSelection,
+  StudioDeviceStatus,
+} from './StudioDeviceStatus'
 import type { StudioDeviceTrustStore } from './StudioDeviceTrustStore'
 
 /** The slice of a project session the gateway drives; a real `StudioProjectSession` satisfies it. */
@@ -28,6 +33,7 @@ export type StudioDeviceGatewaySession = Pick<
   StudioProjectSession,
   | 'acknowledgePreview'
   | 'appName'
+  | 'applySourceAction'
   | 'compileSnapshot'
   | 'previewCellInstance'
   | 'previewManifest'
@@ -69,6 +75,18 @@ type ConnectionState = 'closed' | 'confirm' | 'connected' | 'hello' | 'pairing'
 
 type Connection = {
   appliedRevision?: number
+  /** The cell this device renders, kept whole so an edit from the phone can name its instance. */
+  assignment?: {
+    identity: {
+      appName: string
+      cellId: string
+      cellRevision: number
+      compileRevision: number
+      manifestRevision: string
+    }
+    previewInstanceId: string
+    scenarioId?: string
+  }
   cellId?: string
   device?: TaoStudioDeviceDescription
   devicePublicKey?: string
@@ -95,6 +113,8 @@ type Connection = {
 
 type SessionState = {
   listeners: Set<StudioDeviceStatusListener>
+  /** The render a device last tapped, and the counter the workbench uses to act on it once. */
+  selection?: StudioDeviceSourceSelection
   pairing?: { expiresAt: Date; timer: ReturnType<typeof setTimeout> }
   /** The one unknown device allowed into pair mode while the window is open. */
   pending?: Connection
@@ -135,6 +155,8 @@ export class StudioDeviceGateway {
   >()
   readonly #store: StudioDeviceTrustStore
   #hosts: readonly string[] = []
+  /** Advances on every device selection so the workbench can tell a new tap from a re-sent status. */
+  #selectionSequence = 0
   #stopped = false
 
   private constructor(options: StudioDeviceGatewayOptions) {
@@ -188,6 +210,7 @@ export class StudioDeviceGateway {
             },
           }),
       },
+      ...(state?.selection === undefined ? {} : { selection: state.selection }),
       sessionId,
       trusted: this.#store.trusted(),
     }
@@ -280,6 +303,24 @@ export class StudioDeviceGateway {
       }
     }
     return { requested }
+  }
+
+  /**
+   * Outlines one render on the connected device, which is the other half of selecting both ways:
+   * the workbench calls this when a person selects source on the Mac. Passing no occurrence clears
+   * the outline, so a cleared selection in the editor does not leave a stale box on the phone.
+   */
+  highlightSource(sessionId: string, occurrence?: TaoStudioDeviceOccurrence): { delivered: boolean } {
+    this.#requireSession(sessionId)
+    const connection = this.#liveConnection(sessionId)
+    if (connection === undefined || connection.state !== 'connected') {
+      return { delivered: false }
+    }
+    this.#sendSealed(connection, {
+      ...(occurrence === undefined ? {} : { occurrence }),
+      type: 'studio.highlightSource',
+    })
+    return { delivered: true }
   }
 
   /** selectCell assigns a cell from the workbench exactly as `device.selectCell` would. */
@@ -629,6 +670,17 @@ export class StudioDeviceGateway {
       const runtime = ref.session.previewCellInstance(previewInstanceId)
       connection.previewInstanceId = previewInstanceId
       connection.cellId = cellId
+      connection.assignment = {
+        identity: {
+          appName: identity.appName,
+          cellId: identity.cellId,
+          cellRevision: identity.cellRevision,
+          compileRevision: identity.compileRevision,
+          manifestRevision: identity.manifestRevision,
+        },
+        previewInstanceId,
+        ...(cell.scenarioId === undefined ? {} : { scenarioId: cell.scenarioId }),
+      }
       connection.lastError = undefined
       connection.scenarioLabel = manifest.scenarios.find(scenario => scenario.scenarioId === cell.scenarioId)?.label
       this.#sendSealed(connection, {
@@ -703,6 +755,71 @@ export class StudioDeviceGateway {
     this.#deviceMessage(connection, message)
   }
 
+  /**
+   * Applies an edit a person made on the phone.
+   *
+   * The envelope is built here rather than on the device on purpose: everything that decides whether
+   * the edit is legal — which cell instance is current, which scenario it renders, what version the
+   * file is at — is Studio's own state, and a device that could assert those could edit against a
+   * tree Studio has already replaced. The device supplies only what it alone knows: which render was
+   * touched and where it should go.
+   */
+  async #applyDeviceSourceAction(
+    connection: Connection,
+    ref: StudioDeviceGatewaySessionRef,
+    message: Extract<TaoStudioDeviceDeviceMessage, { type: 'device.sourceAction' }>,
+  ): Promise<void> {
+    const assignment = connection.assignment
+    if (assignment === undefined) {
+      this.#sendSealed(connection, {
+        error: 'This device is not rendering a cell.',
+        ok: false,
+        requestId: message.requestId,
+        type: 'studio.sourceActionResult',
+      })
+      return
+    }
+    try {
+      await ref.session.applySourceAction({
+        action: message.action,
+        channel: studioProtocolChannel,
+        checkpoint: { id: crypto.randomUUID(), phase: 'single' },
+        identity: {
+          appName: assignment.identity.appName,
+          cellId: assignment.identity.cellId,
+          cellRevision: assignment.identity.cellRevision,
+          compileRevision: assignment.identity.compileRevision,
+          manifestRevision: assignment.identity.manifestRevision,
+          occurrence: {
+            nodeKind: 'render',
+            ...(message.occurrence.ownerName === undefined ? {} : { renderOwner: message.occurrence.ownerName }),
+          },
+          path: message.occurrence.sourcePath,
+          previewInstanceId: assignment.previewInstanceId,
+          project: ref.session.projectRoot,
+          ...(assignment.scenarioId === undefined ? {} : { scenarioId: assignment.scenarioId }),
+          // The device's own version, not the file's current one. Studio refuses the edit if the
+          // file moved on since the bundle was built, which is the whole point of sending it.
+          sourceVersion: message.occurrence.sourceVersion,
+        },
+        protocolVersion: studioProtocolVersion,
+        // Studio's own id, not the device's: `applySourceAction` caches by request id and refuses a
+        // reused one, and a device's counter restarts from zero every time it reconnects.
+        requestId: crypto.randomUUID(),
+        sourceActionVersion: studioSourceActionVersion,
+        type: 'source-action',
+      })
+      this.#sendSealed(connection, { ok: true, requestId: message.requestId, type: 'studio.sourceActionResult' })
+    } catch (error) {
+      this.#sendSealed(connection, {
+        error: Errors.formatForUser(error),
+        ok: false,
+        requestId: message.requestId,
+        type: 'studio.sourceActionResult',
+      })
+    }
+  }
+
   #deviceMessage(connection: Connection, message: TaoStudioDeviceDeviceMessage): void {
     const ref = connection.ref
     if (ref === undefined) {
@@ -728,6 +845,18 @@ export class StudioDeviceGateway {
     }
     if (message.type === 'device.selectCell') {
       this.#assign(connection, message.cellId)
+      return
+    }
+    if (message.type === 'device.selectSource') {
+      const state = this.#states.get(ref.sessionId)
+      if (state !== undefined) {
+        state.selection = { ...message.occurrence, sequence: ++this.#selectionSequence }
+        this.#emit(ref.sessionId)
+      }
+      return
+    }
+    if (message.type === 'device.sourceAction') {
+      void this.#applyDeviceSourceAction(connection, ref, message)
       return
     }
     if (message.type === 'device.runtimeCaptured' || message.type === 'device.runtimeCaptureFailed') {

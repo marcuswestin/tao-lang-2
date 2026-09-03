@@ -17,6 +17,8 @@ import {
   type TaoStudioDeviceDeviceMessage,
   type TaoStudioDeviceHelloMessage,
   type TaoStudioDeviceManifest,
+  type TaoStudioDeviceMoveRender,
+  type TaoStudioDeviceOccurrence,
   TaoStudioDeviceProtocol,
   type TaoStudioDeviceRejectCode,
   type TaoStudioDeviceRejectedMessage,
@@ -140,6 +142,8 @@ export type TaoStudioDeviceClientState = Readonly<{
   code?: string
   compile?: TaoStudioDeviceCompileState
   deviceFingerprint?: string
+  /** What Studio asked this device to outline, so a selection made on the Mac is visible on screen. */
+  highlight?: TaoStudioDeviceOccurrence
   host?: string
   lastError?: TaoStudioDeviceClientError
   manifest?: TaoStudioDeviceManifest
@@ -147,6 +151,8 @@ export type TaoStudioDeviceClientState = Readonly<{
   /** When the next automatic dial is due, in the injected clock's milliseconds. */
   retryAt?: number
   selectedCellId?: string
+  /** The outcome of the last edit this device asked Studio to make, so the phone can report it. */
+  sourceAction?: Readonly<{ error?: string; ok: boolean; requestId: string }>
   studioFingerprint?: string
   transport: 'lan'
   welcome?: TaoStudioDeviceWelcome
@@ -158,6 +164,10 @@ export type StudioDeviceClient = {
   reconnect(): void
   report(level: 'error' | 'info', message: string): void
   selectCell(cellId: string): void
+  /** Tells Studio which render the person tapped, so the Mac opens that source and selects it. */
+  selectSource(occurrence: TaoStudioDeviceOccurrence): void
+  /** Asks Studio to edit the project from the device; returns the request id the result names. */
+  sourceAction(action: TaoStudioDeviceMoveRender, occurrence: TaoStudioDeviceOccurrence): string
   start(): Promise<void>
   state(): TaoStudioDeviceClientState
   stop(): void
@@ -218,6 +228,8 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
   let current: Attempt | undefined
   let retryTimer: unknown
   let started = false
+  /** Numbers this device's edit requests so a result can be matched to the request that caused it. */
+  let sourceActionCounter = 0
 
   const update = (patch: Partial<TaoStudioDeviceClientState>): void => {
     const next: Record<string, unknown> = { ...snapshot }
@@ -548,6 +560,16 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
       update({ appliedAck: { accepted: message.accepted, compileRevision: message.compileRevision } })
     } else if (message.type === 'studio.captureRuntime') {
       sendCapture(attempt, message.requestId)
+    } else if (message.type === 'studio.highlightSource') {
+      update({ highlight: message.occurrence })
+    } else if (message.type === 'studio.sourceActionResult') {
+      update({
+        sourceAction: {
+          ...(message.error === undefined ? {} : { error: message.error }),
+          ok: message.ok,
+          requestId: message.requestId,
+        },
+      })
     } else if (message.type === 'studio.reconnect') {
       redial(attempt)
     } else if (message.type === 'studio.revoked') {
@@ -746,6 +768,15 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
       RuntimeAssert(cellId.trim().length > 0, 'a selected cell id is not empty')
       update({ selectedCellId: cellId })
       sendWhenConnected({ cellId, type: 'device.selectCell' })
+    },
+    selectSource(occurrence) {
+      sendWhenConnected({ occurrence, type: 'device.selectSource' })
+    },
+    sourceAction(action, occurrence) {
+      const requestId = `device-${++sourceActionCounter}`
+      update({ sourceAction: undefined })
+      sendWhenConnected({ action, occurrence, requestId, type: 'device.sourceAction' })
+      return requestId
     },
     async start() {
       if (started) {

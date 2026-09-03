@@ -40,6 +40,7 @@ import {
   StudioDiagnosticNavigation,
   StudioEditorInsertion,
   StudioOpenFileLifecycle,
+  StudioSourceNavigation,
 } from './StudioEditor'
 import { StudioEditorTabs } from './StudioEditorTabs'
 import { mountStudioFileTree, StudioFileTreeTransitions } from './StudioFileTree'
@@ -590,6 +591,57 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         view.appPicker.disabled = false
         view.appPicker.value = String(currentIndex)
         showSourceActionError(view.status, error)
+      }
+    }
+
+    /**
+     * Opens what a person tapped on the phone.
+     *
+     * The status snapshot is re-sent whenever anything about the connection changes, so acting on
+     * every one of them would yank the editor around while someone is typing; the sequence advances
+     * only on a real tap. `openAndSelect` does the rest of the refusing — a device running an older
+     * bundle carries an older `sourceVersion`, and selecting its range in newer text would land on
+     * whatever now occupies those offsets.
+     */
+    let lastDeviceSelection = 0
+    async function revealDeviceSelection(selection: StudioDeviceStatus['selection']): Promise<void> {
+      if (selection === undefined || selection.sequence <= lastDeviceSelection) {
+        return
+      }
+      lastDeviceSelection = selection.sequence
+      const opened = await StudioSourceNavigation.openAndSelect({
+        identity: { path: selection.sourcePath, sourceVersion: selection.sourceVersion },
+        openFile: async path => await openFile(path),
+        project: handshake.identity.project,
+        range: { end: selection.end, start: selection.start },
+      })
+      if (opened === undefined) {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent =
+          `The device selected ${selection.sourcePath}, which has changed on the Mac since the device loaded it.`
+      }
+    }
+
+    /**
+     * Outlines on the phone what was just selected in the browser canvas — the other half of
+     * selecting both ways. It is best-effort: with no device connected the gateway answers that
+     * nothing was delivered, and a failure here must never interrupt selecting on the Mac.
+     */
+    async function highlightOnDevice(selection: StudioInspectorSelection): Promise<void> {
+      try {
+        await StudioApiClient.deviceHighlight({
+          occurrence: {
+            end: selection.range.end,
+            ...(selection.identity.occurrence?.renderOwner === undefined
+              ? {}
+              : { ownerName: selection.identity.occurrence.renderOwner }),
+            sourcePath: selection.identity.path,
+            sourceVersion: selection.identity.sourceVersion,
+            start: selection.range.start,
+          },
+        })
+      } catch {
+        // A device that is not connected is the normal case, not an error worth showing.
       }
     }
 
@@ -1334,6 +1386,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       },
       onDeviceState(status) {
         devicePanel.setStatus(status)
+        void revealDeviceSelection(status.selection)
       },
       onFiles(files) {
         fileTree?.setFiles(files)
@@ -1385,6 +1438,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             inspected = selection
             publishProductHostState()
             void inspectSelection(selection)
+            void highlightOnDevice(selection)
           },
         })
       }

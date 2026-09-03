@@ -66,6 +66,8 @@ function stubClient(): {
         reports.push({ level, message })
       },
       selectCell() {},
+      selectSource() {},
+      sourceAction: () => 'request-1',
       async start() {},
       state: () => state,
       stop() {},

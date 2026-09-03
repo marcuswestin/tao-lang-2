@@ -36,6 +36,7 @@ export type StudioServerDeviceGateway = Pick<
   | 'captureRuntime'
   | 'confirmPairing'
   | 'declinePairing'
+  | 'highlightSource'
   | 'openPairing'
   | 'requestReconnect'
   | 'revoke'
@@ -399,6 +400,10 @@ async function handleDeviceRequest(
   if (request.method === 'POST' && pathname === '/api/device/capture') {
     return response(request, url, options, await gateway.captureRuntime(sessionId))
   }
+  if (request.method === 'POST' && pathname === '/api/device/highlight') {
+    const occurrence = deviceHighlightRequest(await request.json())
+    return response(request, url, options, gateway.highlightSource(sessionId, occurrence))
+  }
   if (pathname === '/api/device/launch' || pathname === '/api/device/launch/open') {
     const launcher = options.deviceLauncher
     if (launcher === undefined) {
@@ -433,6 +438,34 @@ function deviceCellRequest(value: unknown): { cellId: string } {
     throw new Errors.UserInputError('Expected a Studio cell id.')
   }
   return { cellId: value['cellId'] }
+}
+
+/** A highlight with no occurrence clears the device's outline, so an empty body is a valid request. */
+function deviceHighlightRequest(
+  value: unknown,
+): { end: number; ownerName?: string; sourcePath: string; sourceVersion: string; start: number } | undefined {
+  if (!isRecord(value) || value['occurrence'] === undefined) {
+    return undefined
+  }
+  const occurrence = value['occurrence']
+  if (
+    !isRecord(occurrence)
+    || typeof occurrence['sourcePath'] !== 'string'
+    || occurrence['sourcePath'].trim() === ''
+    || typeof occurrence['sourceVersion'] !== 'string'
+    || occurrence['sourceVersion'].trim() === ''
+    || !Number.isSafeInteger(occurrence['start'])
+    || !Number.isSafeInteger(occurrence['end'])
+  ) {
+    throw new Errors.UserInputError('Expected a Tao source occurrence to highlight.')
+  }
+  return {
+    end: occurrence['end'] as number,
+    ...(typeof occurrence['ownerName'] === 'string' ? { ownerName: occurrence['ownerName'] } : {}),
+    sourcePath: occurrence['sourcePath'],
+    sourceVersion: occurrence['sourceVersion'],
+    start: occurrence['start'] as number,
+  }
 }
 
 function deviceLaunchOpenRequest(value: unknown): { hostId: string } {

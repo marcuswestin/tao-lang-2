@@ -30,7 +30,19 @@ import {
   type TaoStudioDeviceStoredRecord,
   type TaoStudioDeviceTransport,
 } from './TR-studio-device-client'
-import type { TaoStudioDeviceCellIdentity, TaoStudioDeviceDescription } from './TR-studio-device-protocol'
+import {
+  bestInspectHit,
+  measureStudioInspectIdentity,
+  measureStudioInspectNodes,
+  moveRenderFor,
+  type StudioInspectHit,
+  type StudioInspectRect,
+} from './TR-studio-device-inspect'
+import type {
+  TaoStudioDeviceCellIdentity,
+  TaoStudioDeviceDescription,
+  TaoStudioDeviceOccurrence,
+} from './TR-studio-device-protocol'
 import { StudioDeviceTrust } from './TR-studio-device-trust'
 import { StudioEnvironmentControls, type TaoStudioCellRuntime } from './TR-studio-environment'
 import { StudioPreview } from './TR-studio-preview'
@@ -543,6 +555,12 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
   const state = React.useSyncExternalStore(client.subscribe, client.state, client.state)
   const presentation = deviceHostPresentation(state, props.publication)
   const [sheetOpen, setSheetOpen] = React.useState(false)
+  const [menuOpen, setMenuOpen] = React.useState(false)
+  const [inspecting, setInspecting] = React.useState(false)
+  const [selection, setSelection] = React.useState<
+    { hit: StudioInspectHit; hits: readonly StudioInspectHit[] } | undefined
+  >(undefined)
+  const [remoteHighlight, setRemoteHighlight] = React.useState<readonly StudioInspectRect[]>([])
   const identityKey = presentation.kind === 'cell' ? cellIdentityKey(presentation.assignment.identity) : undefined
   const identity = presentation.kind === 'cell' ? presentation.assignment.identity : undefined
   const appliedKey = React.useRef<string | undefined>(undefined)
@@ -570,6 +588,103 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
     client.applied(identity, compileRevision)
   }, [client, compileRevision, identity, identityKey])
 
+  // A selection belongs to the cell it was made in: a new scenario, or a recompile that re-assigns
+  // one, renders a different tree, and holding onto rectangles measured in the old one would outline
+  // whatever now happens to sit at those coordinates.
+  React.useEffect(() => {
+    setSelection(undefined)
+    setInspecting(false)
+  }, [identityKey])
+
+  const highlight = state.highlight
+  React.useEffect(() => {
+    if (highlight === undefined) {
+      setRemoteHighlight([])
+      return undefined
+    }
+    let live = true
+    void measureStudioInspectIdentity({ ...highlight, kind: 'render' }).then(rects => {
+      if (live) {
+        setRemoteHighlight(rects)
+      }
+    })
+    return () => {
+      live = false
+    }
+  }, [highlight, identityKey])
+
+  const sourceVersions = props.publication.sourceVersions
+  const selectSource = React.useCallback(
+    (next: { hit: StudioInspectHit; hits: readonly StudioInspectHit[] } | undefined) => {
+      setSelection(next)
+      if (next === undefined) {
+        return
+      }
+      const occurrence = occurrenceOf(next.hit, sourceVersions)
+      if (occurrence === undefined) {
+        client.report('info', `${occurrenceLabel(next.hit.identity)} is not in a file this bundle published.`)
+        return
+      }
+      client.selectSource(occurrence)
+    },
+    [client, sourceVersions],
+  )
+  const move = React.useCallback((direction: 'down' | 'up') => {
+    if (selection === undefined) {
+      return
+    }
+    const occurrence = occurrenceOf(selection.hit, sourceVersions)
+    const action = occurrence === undefined ? undefined : moveRenderFor(selection.hits, selection.hit, direction)
+    if (occurrence === undefined || action === undefined) {
+      client.report('info', `${occurrenceLabel(selection.hit.identity)} has nowhere to move ${direction}.`)
+      return
+    }
+    client.sourceAction(action, occurrence)
+  }, [client, selection, sourceVersions])
+
+  const menuActions: readonly DeviceMenuAction[] = [
+    {
+      active: inspecting,
+      id: 'inspect',
+      label: inspecting ? 'Inspect: on' : 'Inspect',
+      onPress: () => {
+        setInspecting(on => {
+          if (on) {
+            setSelection(undefined)
+          }
+          return !on
+        })
+        setMenuOpen(false)
+      },
+    },
+    {
+      disabled: selection === undefined,
+      id: 'move-up',
+      label: 'Move up',
+      onPress: () => {
+        move('up')
+        setMenuOpen(false)
+      },
+    },
+    {
+      disabled: selection === undefined,
+      id: 'move-down',
+      label: 'Move down',
+      onPress: () => {
+        move('down')
+        setMenuOpen(false)
+      },
+    },
+    {
+      id: 'scenarios',
+      label: 'Scenarios',
+      onPress: () => {
+        setMenuOpen(false)
+        setSheetOpen(true)
+      },
+    },
+  ]
+
   const content = presentation.kind === 'cell'
     ? React.createElement(StudioDeviceCell, {
       App: props.App,
@@ -593,8 +708,18 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
       RN.View,
       { style: rootStyle, testID: 'tao-studio-device-host' },
       content,
+      presentation.kind === 'cell' && !inspecting
+        ? React.createElement(DeviceRemoteHighlight, { rects: remoteHighlight })
+        : null,
+      presentation.kind === 'cell' && inspecting
+        ? React.createElement(DeviceInspectOverlay, { onSelect: selectSource, selection })
+        : null,
       presentation.kind === 'cell'
-        ? React.createElement(DeviceBadge, { onPress: () => setSheetOpen(open => !open) })
+        ? React.createElement(DeviceBadge, {
+          actions: menuActions,
+          onPress: () => setMenuOpen(open => !open),
+          open: menuOpen,
+        })
         : null,
       sheetOpen
         ? React.createElement(DeviceSheet, { client, onClose: () => setSheetOpen(false), state })
@@ -751,7 +876,156 @@ function DeviceActions(props: {
 }
 
 /** DeviceBadge is the floating "Tao" affordance over a rendered cell; a drag moves it, a tap opens the sheet. */
-function DeviceBadge(props: { onPress: () => void }): React.JSX.Element {
+/** Names an occurrence for the label over a selection: the owner if the compiler knew one, else the file. */
+export function occurrenceLabel(identity: { ownerName?: string; sourcePath: string; start: number }): string {
+  if (identity.ownerName !== undefined) {
+    return identity.ownerName
+  }
+  const name = identity.sourcePath.split('/').pop() ?? identity.sourcePath
+  return `${name}:${identity.start}`
+}
+
+/**
+ * Produces the wire form the gateway parses: the runtime's identity without its `kind`, plus the
+ * version of that file in this bundle.
+ *
+ * Returns undefined when the publication does not know the file, which is the honest answer — the
+ * span would be unverifiable, and Studio would have to either trust it blindly or guess a version.
+ */
+export function occurrenceOf(
+  hit: StudioInspectHit,
+  sourceVersions: Readonly<Record<string, string>>,
+): TaoStudioDeviceOccurrence | undefined {
+  const sourceVersion = sourceVersionFor(sourceVersions, hit.identity.sourcePath)
+  if (sourceVersion === undefined) {
+    return undefined
+  }
+  return {
+    end: hit.identity.end,
+    ...(hit.identity.ownerName === undefined ? {} : { ownerName: hit.identity.ownerName }),
+    sourcePath: hit.identity.sourcePath,
+    sourceVersion,
+    start: hit.identity.start,
+  }
+}
+
+/**
+ * Looks a file's version up in the publication, tolerating the difference between the path the
+ * compiler recorded and the key the publication used — the same allowance the browser preview makes.
+ */
+export function sourceVersionFor(
+  sourceVersions: Readonly<Record<string, string>>,
+  sourcePath: string,
+): string | undefined {
+  const direct = sourceVersions[sourcePath]
+  if (direct !== undefined) {
+    return direct
+  }
+  const normalized = normalizeSourcePath(sourcePath)
+  return Object.entries(sourceVersions).find(([path]) => normalizeSourcePath(path) === normalized)?.[1]
+}
+
+function normalizeSourcePath(path: string): string {
+  return path.replace(/\\/gu, '/').replace(/^\.\//u, '')
+}
+
+/**
+ * The inspect mode: a full-screen tap target over the running app that answers "what is this?" with
+ * the render occurrence under the finger, tells Studio to open it, and outlines it on screen.
+ *
+ * It also holds the measured frames from the tap that produced the selection, so a follow-up move
+ * reorders against the geometry the person was actually looking at rather than re-measuring a tree
+ * that may have moved underneath.
+ */
+function DeviceInspectOverlay(props: {
+  onSelect: (selection: { hit: StudioInspectHit; hits: readonly StudioInspectHit[] } | undefined) => void
+  selection: { hit: StudioInspectHit; hits: readonly StudioInspectHit[] } | undefined
+}): React.JSX.Element {
+  const RN = requireReactNativeRuntime()
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
+  const [missed, setMissed] = React.useState(false)
+  const onTap = React.useCallback(async (event: { nativeEvent: { pageX: number; pageY: number } }) => {
+    const point = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY }
+    const hits = await measureStudioInspectNodes()
+    const hit = bestInspectHit(hits, point)
+    setMissed(hit === undefined)
+    props.onSelect(hit === undefined ? undefined : { hit, hits })
+  }, [props])
+  const selected = props.selection
+  return React.createElement(
+    React.Fragment,
+    null,
+    React.createElement(RN.Pressable, {
+      accessibilityLabel: 'Tao Studio inspect',
+      onPress: onTap,
+      style: inspectOverlayStyle,
+      testID: 'tao-studio-device-inspect-overlay',
+    }),
+    selected === undefined ? null : React.createElement(
+      RN.View,
+      {
+        pointerEvents: 'none',
+        style: {
+          ...inspectHighlightStyle,
+          height: selected.hit.rect.height,
+          left: selected.hit.rect.x,
+          top: selected.hit.rect.y,
+          width: selected.hit.rect.width,
+        },
+        testID: 'tao-studio-device-inspect-highlight',
+      },
+      React.createElement(RN.Text, { style: inspectLabelStyle }, occurrenceLabel(selected.hit.identity)),
+    ),
+    React.createElement(
+      RN.Text,
+      { pointerEvents: 'none', style: { ...inspectHintStyle, top: 12 + insets.top } },
+      selected !== undefined
+        ? `Inspecting ${occurrenceLabel(selected.hit.identity)} — open the menu to move it`
+        : missed
+        ? 'Nothing to inspect there — tap a rendered view'
+        : 'Inspect: tap anything to select its source',
+    ),
+  )
+}
+
+/** Outlines what Studio selected on the Mac, so a selection made there is visible on the phone. */
+function DeviceRemoteHighlight(props: { rects: readonly StudioInspectRect[] }): React.JSX.Element | null {
+  const RN = requireReactNativeRuntime()
+  if (props.rects.length === 0) {
+    return null
+  }
+  return React.createElement(
+    React.Fragment,
+    null,
+    ...props.rects.map((rect, index) =>
+      React.createElement(RN.View, {
+        key: `${rect.x}:${rect.y}:${index}`,
+        pointerEvents: 'none',
+        style: {
+          ...inspectRemoteHighlightStyle,
+          height: rect.height,
+          left: rect.x,
+          top: rect.y,
+          width: rect.width,
+        },
+        testID: 'tao-studio-device-remote-highlight',
+      })
+    ),
+  )
+}
+
+/** One entry in the fan-out menu; `active` is what makes a mode read as on rather than available. */
+export type DeviceMenuAction = {
+  active?: boolean
+  disabled?: boolean
+  id: string
+  label: string
+  onPress: () => void
+}
+
+function DeviceBadge(
+  props: { actions: readonly DeviceMenuAction[]; onPress: () => void; open: boolean },
+): React.JSX.Element {
   const RN = requireReactNativeRuntime()
   const insets = requireSafeAreaContext().useSafeAreaInsets()
   const window = RN.Dimensions?.get('window')
@@ -770,7 +1044,7 @@ function DeviceBadge(props: { onPress: () => void }): React.JSX.Element {
   const dragStart = React.useRef<
     { bottom: number; moved: boolean; pageX: number; pageY: number; right: number } | undefined
   >(undefined)
-  return React.createElement(
+  const badge = React.createElement(
     RN.Pressable,
     {
       accessibilityLabel: 'Tao Studio device menu',
@@ -809,6 +1083,41 @@ function DeviceBadge(props: { onPress: () => void }): React.JSX.Element {
     },
     React.createElement(RN.Text, { style: badgeTextStyle }, 'Tao'),
   )
+  if (!props.open || props.actions.length === 0) {
+    return badge
+  }
+  const placement = fanOutPlacement({
+    badgeBottom: position.bottom,
+    itemCount: props.actions.length,
+    maxBottom: bounds.maxBottom,
+  })
+  return React.createElement(
+    React.Fragment,
+    null,
+    badge,
+    ...props.actions.map((action, index) =>
+      React.createElement(
+        RN.Pressable,
+        {
+          accessibilityLabel: action.label,
+          accessibilityRole: 'button',
+          accessibilityState: { disabled: action.disabled === true, selected: action.active === true },
+          disabled: action.disabled === true,
+          key: action.id,
+          onPress: action.onPress,
+          style: {
+            ...menuItemStyle,
+            ...(action.active === true ? menuItemActiveStyle : {}),
+            ...(action.disabled === true ? menuItemDisabledStyle : {}),
+            bottom: placement.bottoms[index] ?? position.bottom,
+            right: position.right,
+          },
+          testID: `tao-studio-device-menu-${action.id}`,
+        },
+        React.createElement(RN.Text, { style: menuItemTextStyle }, action.label),
+      )
+    ),
+  )
 }
 
 const dragThresholdPx = 6
@@ -833,6 +1142,43 @@ export function badgeDragBounds(input: {
     minBottom,
     minRight,
   }
+}
+
+const menuItemHeightPx = 40
+const menuSpacingPx = 8
+
+/**
+ * Places the fan-out menu's items relative to the badge.
+ *
+ * The badge is draggable and lives in bottom-right coordinates, so the menu cannot assume a
+ * direction: fanned upward from a badge already near the top, the items would run off screen, and
+ * the menu is the only way to reach inspect, scenarios and Reconnect. Upward is preferred because
+ * the badge normally sits at the bottom and a thumb reaching up does not cover the items it is
+ * choosing between.
+ */
+export function fanOutPlacement(input: {
+  badgeBottom: number
+  itemCount: number
+  maxBottom: number
+}): { bottoms: readonly number[]; direction: 'down' | 'up' } {
+  const step = menuItemHeightPx + menuSpacingPx
+  const upward = Array.from(
+    { length: input.itemCount },
+    (_unused, index) => input.badgeBottom + badgeStyle.height + menuSpacingPx + index * step,
+  )
+  const highestTop = (upward[upward.length - 1] ?? input.badgeBottom) + menuItemHeightPx
+  // `maxBottom` is the highest the badge itself may sit, so the badge's own height is headroom the
+  // menu may also use.
+  if (input.itemCount === 0 || highestTop <= input.maxBottom + badgeStyle.height) {
+    return { bottoms: upward, direction: 'up' }
+  }
+  const downward = Array.from(
+    { length: input.itemCount },
+    (_unused, index) => input.badgeBottom - (index + 1) * step,
+  )
+  return downward[downward.length - 1] !== undefined && downward[downward.length - 1]! >= 0
+    ? { bottoms: downward, direction: 'down' }
+    : { bottoms: upward, direction: 'up' }
 }
 
 /** clampBadgePosition keeps a dragged position inside the given bounds — the badge can be pushed to an edge, never past it. */
@@ -1003,6 +1349,96 @@ const badgeTextStyle = {
   color: '#f9fafb',
   fontSize: 14,
   fontWeight: '800',
+} as const
+
+const menuItemStyle = {
+  alignItems: 'center',
+  backgroundColor: '#1f2937',
+  borderColor: '#374151',
+  borderRadius: 12,
+  borderWidth: 1,
+  elevation: 10000,
+  height: menuItemHeightPx,
+  justifyContent: 'center',
+  minWidth: 132,
+  paddingHorizontal: 14,
+  position: 'absolute',
+  zIndex: 10000,
+} as const
+
+const menuItemActiveStyle = {
+  backgroundColor: '#2563eb',
+  borderColor: '#60a5fa',
+} as const
+
+const menuItemDisabledStyle = {
+  opacity: 0.45,
+} as const
+
+const menuItemTextStyle = {
+  color: '#f9fafb',
+  fontSize: 13,
+  fontWeight: '600',
+} as const
+
+/**
+ * The inspect layer sits above the app and takes every touch while inspect is on. That is the whole
+ * point of a mode: a tap has to mean "tell me what this is" instead of reaching the app underneath,
+ * and there is no gesture that reliably means one and not the other on a phone already using taps,
+ * long-presses and drags for its own purposes.
+ */
+const inspectOverlayStyle = {
+  bottom: 0,
+  left: 0,
+  position: 'absolute',
+  right: 0,
+  top: 0,
+  zIndex: 9000,
+} as const
+
+const inspectHighlightStyle = {
+  borderColor: '#2563eb',
+  borderRadius: 4,
+  borderWidth: 2,
+  position: 'absolute',
+  zIndex: 9500,
+} as const
+
+const inspectRemoteHighlightStyle = {
+  borderColor: '#f59e0b',
+  borderRadius: 4,
+  borderStyle: 'dashed',
+  borderWidth: 2,
+  position: 'absolute',
+  zIndex: 9500,
+} as const
+
+const inspectLabelStyle = {
+  alignSelf: 'flex-start',
+  backgroundColor: '#2563eb',
+  borderRadius: 4,
+  color: '#f9fafb',
+  fontSize: 11,
+  fontWeight: '700',
+  overflow: 'hidden',
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+} as const
+
+const inspectHintStyle = {
+  backgroundColor: 'rgba(17, 24, 39, 0.92)',
+  borderRadius: 10,
+  color: '#f9fafb',
+  fontSize: 12,
+  fontWeight: '600',
+  left: 12,
+  overflow: 'hidden',
+  paddingHorizontal: 10,
+  paddingVertical: 6,
+  position: 'absolute',
+  right: 12,
+  textAlign: 'center',
+  zIndex: 9600,
 } as const
 
 const sheetBackdropStyle = {

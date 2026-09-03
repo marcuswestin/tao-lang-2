@@ -692,11 +692,214 @@ type Env = {
   store: StudioDeviceTrustStore
 }
 
+/**
+ * The canvas half of the device protocol: a tap on the phone reaches the Mac's editor, a selection
+ * on the Mac reaches the phone, and an edit made on the phone is a real source edit that Studio can
+ * refuse. Slice 2's acceptance calls this "select both ways".
+ */
+Describe('Studio device gateway canvas', () => {
+  const twoRenders = `app Garden { view Main }
+view Main() {
+  render Stack() {
+    Text("First")
+    Text("Second")
+  }
+}
+`
+
+  Test("carries a device's tap to the workbench, once per tap", async () => {
+    await withGateway({}, async env => {
+      const device = await pairedDevice(env)
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      await device.nextSealed()
+      Expect(env.gateway.status(env.sessionId).selection).toBeUndefined()
+
+      device.sendSealed({
+        occurrence: { end: 60, ownerName: 'Main', sourcePath: '/p/Garden.tao', sourceVersion: 'v1', start: 40 },
+        type: 'device.selectSource',
+      })
+      await until(
+        () => env.gateway.status(env.sessionId).selection !== undefined,
+        { description: 'the tapped occurrence' },
+      )
+      Expect(env.gateway.status(env.sessionId).selection).toEqual({
+        end: 60,
+        ownerName: 'Main',
+        sequence: 1,
+        sourcePath: '/p/Garden.tao',
+        sourceVersion: 'v1',
+        start: 40,
+      })
+
+      // The sequence is what lets the workbench tell a new tap from the same status being re-sent,
+      // so a second tap on the very same render has to advance it.
+      device.sendSealed({
+        occurrence: { end: 60, ownerName: 'Main', sourcePath: '/p/Garden.tao', sourceVersion: 'v1', start: 40 },
+        type: 'device.selectSource',
+      })
+      await until(
+        () => env.gateway.status(env.sessionId).selection?.sequence === 2,
+        { description: 'the second tap' },
+      )
+    })
+  })
+
+  Test('applies a move made on the phone and refuses one measured against text that has moved on', async () => {
+    await withGateway({ source: twoRenders }, async env => {
+      const device = await pairedDevice(env)
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      await device.nextSealed()
+
+      const path = FS.resolvePath('Garden.tao', env.session.projectRoot)
+      const before = await env.session.readFile(path)
+      const renderId = (text: string): string => {
+        const start = before.content.indexOf(text)
+        return `${path}:${start}:${start + text.length}`
+      }
+      const first = renderId('Text("First")')
+      const second = renderId('Text("Second")')
+
+      device.sendSealed({
+        action: { beforeId: first, draggedId: second, kind: 'move-render' },
+        occurrence: {
+          end: before.content.indexOf('Text("Second")') + 'Text("Second")'.length,
+          // The owner is a precondition, not decoration: Studio refuses an edit whose render has
+          // been re-owned since the device measured it, exactly as it does for the browser canvas.
+          ownerName: 'Main',
+          sourcePath: path,
+          sourceVersion: before.sourceVersion,
+          start: before.content.indexOf('Text("Second")'),
+        },
+        requestId: 'device-1',
+        type: 'device.sourceAction',
+      })
+      // A successful edit recompiles, so compile-state frames interleave with the answer.
+      const applied = await nextSourceActionResult(device)
+      Expect(applied).toEqual({ ok: true, requestId: 'device-1', type: 'studio.sourceActionResult' })
+
+      const after = await env.session.readFile(path)
+      Expect(after.content.indexOf('Text("Second")')).toBeLessThan(after.content.indexOf('Text("First")'))
+
+      Expect(await env.session.readFile(path)).toMatchObject({ content: after.content })
+    })
+  })
+
+  Test('refuses an edit that claims a version of the file older than the one on the Mac', async () => {
+    await withGateway({ source: twoRenders }, async env => {
+      const device = await pairedDevice(env)
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      await device.nextSealed()
+
+      const path = FS.resolvePath('Garden.tao', env.session.projectRoot)
+      const booted = await env.session.readFile(path)
+      const start = booted.content.indexOf('Text("Second")')
+      const move = {
+        action: {
+          beforeId: `${path}:${booted.content.indexOf('Text("First")')}:${
+            booted.content.indexOf('Text("First")') + 'Text("First")'.length
+          }`,
+          draggedId: `${path}:${start}:${start + 'Text("Second")'.length}`,
+          kind: 'move-render' as const,
+        },
+        occurrence: {
+          end: start + 'Text("Second")'.length,
+          ownerName: 'Main',
+          sourcePath: path,
+          start,
+        },
+      }
+
+      // An edit appended after every render: the file's version changes, and — this is what makes
+      // the test discriminating — the offsets the device measured still point at the same renders.
+      // The only thing wrong with the device's next request is the version it claims.
+      await env.session.syncDraft({
+        content: `${booted.content}\n// a note added on the Mac\n`,
+        path,
+        sourceVersion: booted.sourceVersion,
+        writeId: 'mac-edit',
+      })
+      const current = await env.session.readFile(path)
+      Expect(current.sourceVersion === booted.sourceVersion).toBe(false)
+      Expect(current.content.indexOf('Text("Second")')).toBe(start)
+
+      device.sendSealed({
+        ...move,
+        occurrence: { ...move.occurrence, sourceVersion: booted.sourceVersion },
+        requestId: 'device-stale',
+        type: 'device.sourceAction',
+      })
+      Expect(await nextSourceActionResult(device)).toMatchObject({ ok: false, requestId: 'device-stale' })
+      Expect(await env.session.readFile(path)).toMatchObject({ content: current.content })
+
+      // The same edit, claiming the version the file actually has, is applied.
+      device.sendSealed({
+        ...move,
+        occurrence: { ...move.occurrence, sourceVersion: current.sourceVersion },
+        requestId: 'device-current',
+        type: 'device.sourceAction',
+      })
+      Expect(await nextSourceActionResult(device)).toEqual({
+        ok: true,
+        requestId: 'device-current',
+        type: 'studio.sourceActionResult',
+      })
+      const moved = await env.session.readFile(path)
+      Expect(moved.content.indexOf('Text("Second")')).toBeLessThan(moved.content.indexOf('Text("First")'))
+    })
+  })
+
+  Test('refuses an edit from a device that is not rendering a cell', async () => {
+    await withGateway({ source: twoRenders }, async env => {
+      const device = await pairedDevice(env)
+      device.sendSealed({
+        action: { beforeId: 'a', draggedId: 'b', kind: 'move-render' },
+        occurrence: { end: 10, sourcePath: '/p/Garden.tao', sourceVersion: 'v1', start: 0 },
+        requestId: 'device-1',
+        type: 'device.sourceAction',
+      })
+      const refused = await nextSourceActionResult(device)
+      Expect(refused).toEqual({
+        error: 'This device is not rendering a cell.',
+        ok: false,
+        requestId: 'device-1',
+        type: 'studio.sourceActionResult',
+      })
+    })
+  })
+
+  Test('sends a Studio selection to the connected device and answers honestly with none connected', async () => {
+    await withGateway({}, async env => {
+      const occurrence = { end: 60, sourcePath: '/p/Garden.tao', sourceVersion: 'v1', start: 40 }
+      Expect(env.gateway.highlightSource(env.sessionId, occurrence)).toEqual({ delivered: false })
+
+      const device = await pairedDevice(env)
+      Expect(env.gateway.highlightSource(env.sessionId, occurrence)).toEqual({ delivered: true })
+      Expect(await device.nextSealed()).toEqual({ occurrence, type: 'studio.highlightSource' })
+
+      // Clearing is its own message rather than an empty occurrence, so a cleared selection on the
+      // Mac takes the outline off the phone instead of leaving a stale one.
+      Expect(env.gateway.highlightSource(env.sessionId)).toEqual({ delivered: true })
+      Expect(await device.nextSealed()).toEqual({ type: 'studio.highlightSource' })
+    })
+  })
+})
+
+/** Reads sealed frames until the device's edit is answered; compile state interleaves with it. */
+async function nextSourceActionResult(device: TestDevice): Promise<TaoStudioDeviceStudioMessage> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const message = await device.nextSealed()
+    if (message.type === 'studio.sourceActionResult') {
+      return message
+    }
+  }
+  Errors.throwUnexpected('The gateway never answered the device source action.')
+}
+
 async function withGateway(
-  options: Partial<Pick<StudioDeviceGatewayOptions, 'handshakeTimeoutMs' | 'pairingWindowMs'>>,
+  options: Partial<Pick<StudioDeviceGatewayOptions, 'handshakeTimeoutMs' | 'pairingWindowMs'>> & { source?: string },
   use: (env: Env) => Promise<void>,
 ): Promise<void> {
-  const project = await openProject('Garden', 'tao-studio-device-')
+  const project = await openProject('Garden', 'tao-studio-device-', options.source)
   const trustRoot = await mkTestDir(FS.resolvePath('tao-studio-device-trust-', FS.tmpdir()))
   const sessions = new Map<string, StudioDeviceGatewaySessionRef>()
   sessions.set('first_session', {
@@ -737,6 +940,7 @@ async function withGateway(
 async function openProject(
   appName: string,
   prefix: string,
+  source?: string,
 ): Promise<{
   cells: string[]
   close: () => Promise<void>
@@ -750,7 +954,7 @@ async function openProject(
   )
   await FS.writeText(
     FS.resolvePath(`${appName}.tao`, root),
-    `app ${appName} { view Main }\nview Main() { render Text("${appName}") }\n`,
+    source ?? `app ${appName} { view Main }\nview Main() { render Text("${appName}") }\n`,
   )
   const cells = ['cell:phone', 'cell:tablet']
   // A failing compile still advances the coordinator's compileRevision but never publishes a

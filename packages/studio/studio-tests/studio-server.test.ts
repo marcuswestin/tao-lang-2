@@ -597,6 +597,10 @@ function fakeGateway(status: StudioDeviceStatus, calls: unknown[]): StudioServer
       calls.push(['declinePairing', sessionId, devicePublicKey])
       return { declined: true }
     },
+    highlightSource(sessionId, occurrence) {
+      calls.push(['highlightSource', sessionId, occurrence])
+      return { delivered: true }
+    },
     openPairing(sessionId) {
       calls.push(['openPairing', sessionId])
       return { expiresAt: '2026-09-02T10:02:00.000Z' }

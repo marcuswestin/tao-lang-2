@@ -145,6 +145,8 @@ export type TaoStudioDeviceStudioMessage =
   | { cellId: string; code: TaoStudioDeviceCellCode; message: string; type: 'studio.cellUnavailable' }
   | { accepted: boolean; compileRevision: number; type: 'studio.appliedAck' }
   | { requestId: string; type: 'studio.captureRuntime' }
+  | { occurrence?: TaoStudioDeviceOccurrence; type: 'studio.highlightSource' }
+  | { error?: string; ok: boolean; requestId: string; type: 'studio.sourceActionResult' }
   | { type: 'studio.reconnect' }
   | { reason: string; type: 'studio.revoked' }
   | { type: 'studio.pong' }
@@ -163,7 +165,48 @@ export type TaoStudioDeviceDeviceMessage =
   | { capture: unknown; requestId: string; type: 'device.runtimeCaptured' }
   | { error: string; requestId: string; type: 'device.runtimeCaptureFailed' }
   | { level: 'error' | 'info'; message: string; type: 'device.report' }
+  | { occurrence: TaoStudioDeviceOccurrence; type: 'device.selectSource' }
+  | {
+    action: TaoStudioDeviceMoveRender
+    occurrence: TaoStudioDeviceOccurrence
+    requestId: string
+    type: 'device.sourceAction'
+  }
   | { type: 'device.ping' }
+
+/**
+ * TaoStudioDeviceOccurrence locates one render occurrence in Tao source.
+ *
+ * It is the wire form of the runtime's `TaoStudioIdentity`, minus `kind`: every occurrence that can
+ * be tapped on a device is a render, so carrying the discriminator would only invite a frame that
+ * claims to be something else. The gateway re-attaches it, and a device that sends a span the
+ * project does not contain gets a refusal rather than an edit.
+ */
+export type TaoStudioDeviceOccurrence = {
+  end: number
+  ownerName?: string
+  sourcePath: string
+  /**
+   * The version of that file in the bundle this device is running, not the one on disk now. It is
+   * what makes a span from a phone trustworthy: the device may be minutes behind the Mac, and a
+   * range measured against older text would select — or edit — the wrong thing. Studio refuses a
+   * stale one instead, exactly as it does for the browser canvas.
+   */
+  sourceVersion: string
+  start: number
+}
+
+/**
+ * TaoStudioDeviceMoveRender reorders one render among its siblings, the same action the browser
+ * canvas sends when a render is dragged. Anchors are `sourcePath:start:end` render ids; at least one
+ * of them is required, since a move with neither has no destination.
+ */
+export type TaoStudioDeviceMoveRender = {
+  afterId?: string
+  beforeId?: string
+  draggedId: string
+  kind: 'move-render'
+}
 
 const rejectCodes: ReadonlySet<string> = new Set<TaoStudioDeviceRejectCode>([
   'bad-signature',
@@ -278,6 +321,17 @@ const deviceMessageParsers: MessageParsers<TaoStudioDeviceDeviceMessage> = {
       : undefined,
   'device.selectCell': value =>
     nonEmptyString(value['cellId']) ? { cellId: value['cellId'], type: 'device.selectCell' } : undefined,
+  'device.selectSource': value => {
+    const occurrence = parseOccurrence(value['occurrence'])
+    return occurrence === undefined ? undefined : { occurrence, type: 'device.selectSource' }
+  },
+  'device.sourceAction': value => {
+    const occurrence = parseOccurrence(value['occurrence'])
+    const action = parseMoveRender(value['action'])
+    return occurrence === undefined || action === undefined || !nonEmptyString(value['requestId'])
+      ? undefined
+      : { action, occurrence, requestId: value['requestId'], type: 'device.sourceAction' }
+  },
 }
 
 const studioMessageParsers: MessageParsers<TaoStudioDeviceStudioMessage> = {
@@ -307,6 +361,15 @@ const studioMessageParsers: MessageParsers<TaoStudioDeviceStudioMessage> = {
     nonEmptyString(value['code']) && typeof value['message'] === 'string'
       ? { code: value['code'], message: value['message'], type: 'studio.error' }
       : undefined,
+  'studio.highlightSource': value => {
+    // A highlight with no occurrence is the clear, so absence is meaningful and a malformed
+    // occurrence must not silently become one.
+    if (value['occurrence'] === undefined) {
+      return { type: 'studio.highlightSource' }
+    }
+    const occurrence = parseOccurrence(value['occurrence'])
+    return occurrence === undefined ? undefined : { occurrence, type: 'studio.highlightSource' }
+  },
   'studio.manifest': value => {
     const manifest = parseManifest(value['manifest'])
     return manifest === undefined ? undefined : { manifest, type: 'studio.manifest' }
@@ -314,6 +377,16 @@ const studioMessageParsers: MessageParsers<TaoStudioDeviceStudioMessage> = {
   'studio.pairingPending': () => ({ type: 'studio.pairingPending' }),
   'studio.pong': () => ({ type: 'studio.pong' }),
   'studio.reconnect': () => ({ type: 'studio.reconnect' }),
+  'studio.sourceActionResult': value =>
+    nonEmptyString(value['requestId']) && typeof value['ok'] === 'boolean'
+      && (value['error'] === undefined || typeof value['error'] === 'string')
+      ? {
+        ...(typeof value['error'] === 'string' ? { error: value['error'] } : {}),
+        ok: value['ok'],
+        requestId: value['requestId'],
+        type: 'studio.sourceActionResult',
+      }
+      : undefined,
   'studio.revoked': value =>
     typeof value['reason'] === 'string' ? { reason: value['reason'], type: 'studio.revoked' } : undefined,
   'studio.welcome': value => {
@@ -399,6 +472,51 @@ function parseStudioHello(value: Record<string, unknown>): TaoStudioDeviceStudio
     signature: value['signature'],
     studioPublicKey: value['studioPublicKey'],
     type: 'studio.hello',
+  }
+}
+
+/**
+ * A source span is only usable if it is a real, non-inverted range. `end` may equal `start` for a
+ * zero-width occurrence, but an end before its start would name a range no editor can select.
+ */
+function parseOccurrence(value: unknown): TaoStudioDeviceOccurrence | undefined {
+  if (
+    !isObject(value)
+    || !nonEmptyString(value['sourcePath'])
+    || !nonNegativeInteger(value['start'])
+    || !nonNegativeInteger(value['end'])
+    || value['end'] < value['start']
+    || !nonEmptyString(value['sourceVersion'])
+    || (value['ownerName'] !== undefined && !nonEmptyString(value['ownerName']))
+  ) {
+    return undefined
+  }
+  return {
+    end: value['end'],
+    ...(nonEmptyString(value['ownerName']) ? { ownerName: value['ownerName'] } : {}),
+    sourcePath: value['sourcePath'],
+    sourceVersion: value['sourceVersion'],
+    start: value['start'],
+  }
+}
+
+/** A move needs something to move and somewhere to put it; neither anchor is a move to nowhere. */
+function parseMoveRender(value: unknown): TaoStudioDeviceMoveRender | undefined {
+  if (
+    !isObject(value)
+    || value['kind'] !== 'move-render'
+    || !nonEmptyString(value['draggedId'])
+    || (value['afterId'] !== undefined && !nonEmptyString(value['afterId']))
+    || (value['beforeId'] !== undefined && !nonEmptyString(value['beforeId']))
+    || (value['afterId'] === undefined && value['beforeId'] === undefined)
+  ) {
+    return undefined
+  }
+  return {
+    ...(nonEmptyString(value['afterId']) ? { afterId: value['afterId'] } : {}),
+    ...(nonEmptyString(value['beforeId']) ? { beforeId: value['beforeId'] } : {}),
+    draggedId: value['draggedId'],
+    kind: 'move-render',
   }
 }
 

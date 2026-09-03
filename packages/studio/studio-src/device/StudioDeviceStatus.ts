@@ -41,6 +41,24 @@ export type StudioDevicePairingStatus = {
   }
 }
 
+/**
+ * What a device last asked Studio to select, carried on the status snapshot rather than as its own
+ * event so it reaches the workbench over the subscription that already exists.
+ *
+ * `sequence` is what makes a snapshot usable for something that is really an event: the same status
+ * is re-sent whenever anything else about the connection changes, and re-opening the editor on every
+ * one of those would fight the person's cursor. The workbench acts only when the sequence advances.
+ */
+export type StudioDeviceSourceSelection = {
+  end: number
+  ownerName?: string
+  sequence: number
+  sourcePath: string
+  /** The version the device rendered; the workbench refuses to select a range measured against older text. */
+  sourceVersion: string
+  start: number
+}
+
 /** StudioDeviceStatus is the snapshot the workbench renders and the `device-state` event carries. */
 export type StudioDeviceStatus = {
   connection?: StudioDeviceConnection
@@ -51,6 +69,8 @@ export type StudioDeviceStatus = {
     studioFingerprint: string
   }
   pairing: StudioDevicePairingStatus
+  /** The render a device tapped, for the workbench to open and select in the editor. */
+  selection?: StudioDeviceSourceSelection
   sessionId: string
   trusted: readonly StudioTrustedDevice[]
 }
