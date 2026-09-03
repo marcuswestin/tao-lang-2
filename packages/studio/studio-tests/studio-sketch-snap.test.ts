@@ -31,7 +31,7 @@ const rects = [
   { content: './cover.png', height: 52, id: 'cover', kind: 'Image', width: 52, x: 12, y: 8 },
   { content: 'Night Drive', height: 20, id: 'title', kind: 'Text', width: 90, x: 76, y: 12 },
   { content: 'The Signals', height: 20, id: 'subtitle', kind: 'Text', width: 72, x: 76, y: 36 },
-  { binding: 'Track.Duration', content: '3:42', height: 20, id: 'duration', kind: 'Text', width: 38, x: 310, y: 28 },
+  { content: '3:42', height: 20, id: 'duration', kind: 'Text', width: 38, x: 310, y: 28 },
   { content: 'free', height: 20, id: 'unsnapped', kind: 'Text', width: 40, x: 20, y: 100 },
 ] as const
 
@@ -39,25 +39,19 @@ Describe('Studio sketch Snap source projection', () => {
   Test('builds deterministic minimal flowed Tao and retains only projected rectangle identities', () => {
     const prepared = StudioSketchSnap.prepare({
       expectedCatalogRevision: 7,
+      mergeDirection: 'Row',
       projection,
       rects,
       sketchId: 'playlist-row',
       viewName: 'View4',
     })
 
-    Expect(prepared.source).toBe(`render Row() [gap 12, pad horizontal 12 vertical 8] {
-   Image("./cover.png") [hug]
-   Col() [gap 4] {
-      Text("Night Drive") [hug]
-      Text("The Signals") [hug]
-   }
-   Text("3:42") [width 38, height 20, claim 1]
-}`)
     Expect(prepared.projectedRectIds).toEqual(['cover', 'title', 'subtitle', 'duration'])
     Expect(prepared.projectedRectIds).not.toContain('unsnapped')
     Expect(prepared.action).toMatchObject({
       expectedCatalogRevision: 7,
       kind: 'snap-sketch-to-flow',
+      mergeDirection: 'Row',
       rectIds: ['cover', 'title', 'subtitle', 'duration'],
       sketchId: 'playlist-row',
       viewName: 'View4',
@@ -66,7 +60,7 @@ Describe('Studio sketch Snap source projection', () => {
       children: [
         { arguments: ['./cover.png'], component: 'Image', rectId: 'cover' },
         { direction: 'Col' },
-        { arguments: ['3:42'], binding: 'Track.Duration', component: 'Text', rectId: 'duration' },
+        { arguments: ['3:42'], component: 'Text', rectId: 'duration' },
       ],
       direction: 'Row',
     })
@@ -75,6 +69,7 @@ Describe('Studio sketch Snap source projection', () => {
   Test('uses Placeholder for open or incomplete element kinds without trusting raw Tao source', () => {
     const prepared = StudioSketchSnap.prepare({
       expectedCatalogRevision: 0,
+      mergeDirection: 'Row',
       projection: {
         needsOverlay: false,
         tree: { height: 30, id: 'custom', type: 'element', width: 'fill' },
@@ -84,13 +79,13 @@ Describe('Studio sketch Snap source projection', () => {
       viewName: 'View1',
     })
 
-    Expect(prepared.source).toBe('render Placeholder("Profile") [width fill, height 30]')
     Expect(prepared.action).not.toHaveProperty('source')
   })
 
   Test('routes overlap through the existing canonical proposal and preserves the exact diff', async () => {
     const prepared = StudioSketchSnap.prepare({
       expectedCatalogRevision: 7,
+      mergeDirection: 'Row',
       projection: { ...projection, needsOverlay: true },
       rects,
       sketchId: 'playlist-row',
@@ -119,7 +114,6 @@ Describe('Studio sketch Snap source projection', () => {
       kind: 'proposal',
       projectedRectIds: ['cover', 'title', 'subtitle', 'duration'],
       proposal,
-      source: prepared.source,
     })
     Expect(calls).toEqual([{ action: prepared.action, route: 'propose' }])
   })
@@ -127,6 +121,7 @@ Describe('Studio sketch Snap source projection', () => {
   Test('uses the identical canonical action for direct apply, proposal, and confirmed mutation', async () => {
     const direct = StudioSketchSnap.prepare({
       expectedCatalogRevision: 7,
+      mergeDirection: 'Row',
       projection,
       rects,
       sketchId: 'playlist-row',
@@ -134,6 +129,7 @@ Describe('Studio sketch Snap source projection', () => {
     })
     const proposed = StudioSketchSnap.prepare({
       expectedCatalogRevision: 7,
+      mergeDirection: 'Row',
       projection: { ...projection, needsOverlay: true },
       rects,
       sketchId: 'playlist-row',
@@ -190,6 +186,7 @@ Describe('Studio sketch Snap source projection', () => {
     Expect(() =>
       StudioSketchSnap.prepare({
         expectedCatalogRevision: 1,
+        mergeDirection: 'Row',
         projection: { needsOverlay: false, tree: { height: 10, id: 'missing', type: 'element', width: 10 } },
         rects,
         sketchId: 'playlist-row',
@@ -199,6 +196,7 @@ Describe('Studio sketch Snap source projection', () => {
     Expect(() =>
       StudioSketchSnap.prepare({
         expectedCatalogRevision: 1,
+        mergeDirection: 'Row',
         projection: {
           needsOverlay: false,
           tree: {

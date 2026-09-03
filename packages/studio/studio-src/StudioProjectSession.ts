@@ -346,6 +346,7 @@ export type StudioSketchFlowActionRequest = Readonly<{
 }>
 
 export type StudioSketchSnapProposalResult = Readonly<{
+  content: string
   diff: string
   needsConfirmation: boolean
   path: string
@@ -536,6 +537,7 @@ const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
 const sourceActionResultLimit = 100
 
 type PreparedSketchSnap = Readonly<{
+  beforeTargets: readonly StudioSketchRenderTarget[]
   current: StudioProjectFileContent
   needsConfirmation: boolean
   patch: Awaited<ReturnType<typeof SourceActions.applyStudioPatch>>
@@ -852,11 +854,29 @@ export class StudioProjectSession {
         rendersByMarker.set(render.studioRectId, [...(rendersByMarker.get(render.studioRectId) ?? []), render])
       }
     }
+    const currentSourceVersions = new Map<string, string | undefined>()
+    for (const path of new Set(catalog.sketches.flatMap(sketch => sketch.snapped.map(item => item.target.path)))) {
+      try {
+        currentSourceVersions.set(path, (await this.readFile(path)).sourceVersion)
+      } catch {
+        currentSourceVersions.set(path, undefined)
+      }
+    }
     let changed = false
     const sketches = catalog.sketches.map(sketch => {
       const retained = [] as typeof sketch.snapped[number][]
       const droppedIds = new Set<string>()
       for (const snapped of sketch.snapped) {
+        const absolutePath = FS.resolvePath(snapped.target.path, this.projectRoot)
+        const manifestSourceVersion = manifest.sourceVersions[absolutePath]
+          ?? manifest.sourceVersions[snapped.target.path]
+        if (
+          manifestSourceVersion === undefined
+          || currentSourceVersions.get(snapped.target.path) !== manifestSourceVersion
+        ) {
+          retained.push(snapped)
+          continue
+        }
         const matches = rendersByMarker.get(snapped.target.studioRectId) ?? []
         const match = matches.length === 1 && matches[0]?.elementName === snapped.target.elementName
           ? matches[0]
@@ -986,6 +1006,7 @@ export class StudioProjectSession {
       }
       const prepared = await this.#prepareSketchSnap(request)
       const result: StudioSketchSnapProposalResult = {
+        content: prepared.patch.content,
         diff: sourceActionProposalDiff(prepared.current.path, prepared.current.content, prepared.patch.content),
         needsConfirmation: prepared.needsConfirmation,
         path: prepared.current.path,
@@ -1047,7 +1068,7 @@ export class StudioProjectSession {
           prepared.path,
           prepared.patch.content,
           prepared.patch.sourceVersion,
-          prepared.projectedRectIds,
+          [...prepared.beforeTargets.map(target => target.studioRectId), ...prepared.projectedRectIds],
         )
         const catalogResult = await this.#sketchCatalog.apply({
           action: { kind: 'snap-rects', sketchId: request.sketchId, targets },
@@ -1067,7 +1088,12 @@ export class StudioProjectSession {
           id: request.checkpointId,
           path: prepared.path,
           status: 'committed',
-          undoAction: { kind: 'unsnap-rects', rectIds: prepared.projectedRectIds, sketchId: request.sketchId },
+          undoAction: {
+            kind: 'unsnap-rects',
+            rectIds: prepared.projectedRectIds,
+            sketchId: request.sketchId,
+            targets: prepared.beforeTargets,
+          },
         }
         this.#sketchSnapCheckpoints.set(checkpoint.id, checkpoint)
         this.#checkpointOrder.push(checkpoint.id)
@@ -1269,38 +1295,25 @@ export class StudioProjectSession {
         retained.get(rectId) ?? this.#measuredUnsnapSelection(sketch, rectId)
       )
       const rectIds = selected.map(item => item.rect.id)
-      const remaining = sketch.snapped.filter(item => !requestedIds.has(item.rect.id)).map(item => item.rect)
+      const remainingIds = sketch.snapped.filter(item => !requestedIds.has(item.rect.id)).map(item => item.rect.id)
       const generatedSources = new StudioGeneratedSources(this.projectRoot)
       const generated = await generatedSources.readView(sketch.view)
       const current = await this.readFile(FS.relativePath(this.projectRoot, generated.path))
       requireSourceVersion(current, request.sourceVersion)
-      let content: string
-      if (remaining.length === 0) {
-        const body = await StudioSketchSource.generate(sketch)
-        content = `${studioGeneratedSourceHeader}\n\n${body.trim()}\n`
-      } else {
-        const projection = StudioSketchProjection.project({
-          height: sketch.height,
-          rects: remaining,
-          width: sketch.width,
-        })
-        const prepared = StudioSketchSnap.prepare({
-          expectedCatalogRevision: request.expectedCatalogRevision,
-          projection,
-          rects: remaining,
-          sketchId: sketch.id,
-          viewName: sketch.view,
-        })
-        const parsed = await this.#workspace.parse(generated.path)
-        Assert.input(
-          !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
-          `Cannot Unsnap until ${current.path} parses.`,
-        )
-        content = (await SourceActions.applyStudioPatch(parsed.entry.document, prepared.action, {
-          files: parsed.files.map(file => file.ast),
-        })).content
-      }
-      const sourceVersion = SourceActions.studioSourceVersion(content)
+      const parsed = await this.#workspace.parse(generated.path)
+      Assert.input(
+        !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+        `Cannot Unsnap until ${current.path} parses.`,
+      )
+      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, {
+        fallback: { height: sketch.height, label: sketch.view, width: sketch.width },
+        kind: 'unsnap-sketch-from-flow',
+        rectIds,
+        sketchId: sketch.id,
+        viewName: sketch.view,
+      }, { files: parsed.files.map(file => file.ast) })
+      const content = patch.content
+      const sourceVersion = patch.sourceVersion
       Assert.input(this.#openCheckpointId === undefined, 'Commit the active Studio source-action checkpoint first.')
       Assert.input(
         !this.#actionCheckpoints.has(request.checkpointId) && !this.#sketchSnapCheckpoints.has(request.checkpointId),
@@ -1327,11 +1340,24 @@ export class StudioProjectSession {
             `Studio did not Unsnap because the generated Tao source failed to compile: ${compile.message}`,
           )
         }
+        const survivingTargets = await this.#sketchRenderTargets(
+          generated.path,
+          content,
+          sourceVersion,
+          remainingIds,
+        )
         const synthetic = selected.some(item => !retained.has(item.rect.id))
         const catalogResult = synthetic
-          ? await this.#restoreMeasuredUnsnapCatalog(catalog, sketch, selected, requestedIds, request.requestId)
+          ? await this.#restoreMeasuredUnsnapCatalog(
+            catalog,
+            sketch,
+            selected,
+            requestedIds,
+            survivingTargets,
+            request.requestId,
+          )
           : await this.#sketchCatalog.apply({
-            action: { kind: 'unsnap-rects', rectIds, sketchId: sketch.id },
+            action: { kind: 'unsnap-rects', rectIds, sketchId: sketch.id, targets: survivingTargets },
             expectedRevision: request.expectedCatalogRevision,
             requestId: `catalog:${request.requestId}`,
           })
@@ -1348,7 +1374,14 @@ export class StudioProjectSession {
           id: request.checkpointId,
           path: generated.path,
           status: 'committed',
-          undoAction: { kind: 'snap-rects', sketchId: sketch.id, targets: selected.map(item => item.target) },
+          undoAction: {
+            kind: 'snap-rects',
+            sketchId: sketch.id,
+            targets: [
+              ...sketch.snapped.map(item => item.target),
+              ...selected.filter(item => !retained.has(item.rect.id)).map(item => item.target),
+            ],
+          },
         }
         this.#sketchSnapCheckpoints.set(checkpoint.id, checkpoint)
         this.#checkpointOrder.push(checkpoint.id)
@@ -1478,12 +1511,17 @@ export class StudioProjectSession {
       Assert.input(rect, `Studio rectangle does not exist: ${id}`)
       return rect
     })
-    const rects = [...sketch.snapped.map(item => item.rect), ...selected]
-    const projection = StudioSketchProjection.project({ height: sketch.height, rects, width: sketch.width })
+    const projection = StudioSketchProjection.project({ height: sketch.height, rects: selected, width: sketch.width })
+    const combinedProjection = StudioSketchProjection.project({
+      height: sketch.height,
+      rects: [...sketch.snapped.map(item => item.rect), ...selected],
+      width: sketch.width,
+    })
     const prepared = StudioSketchSnap.prepare({
       expectedCatalogRevision: request.expectedCatalogRevision,
+      mergeDirection: combinedProjection.tree.type === 'container' ? combinedProjection.tree.direction : 'Row',
       projection,
-      rects,
+      rects: selected,
       sketchId: sketch.id,
       viewName: sketch.view,
     })
@@ -1499,8 +1537,9 @@ export class StudioProjectSession {
       files: parsed.files.map(file => file.ast),
     })
     return {
+      beforeTargets: sketch.snapped.map(item => item.target),
       current,
-      needsConfirmation: projection.needsOverlay,
+      needsConfirmation: projection.needsOverlay || combinedProjection.needsOverlay,
       patch,
       path: generated.path,
       projectedRectIds: request.rectIds,
@@ -1623,6 +1662,7 @@ export class StudioProjectSession {
     sketch: StudioSketch,
     selected: readonly StudioSnappedRect[],
     requestedIds: ReadonlySet<string>,
+    survivingTargets: readonly StudioSketchRenderTarget[],
     requestId: string,
   ): Promise<StudioSketchCatalogResult> {
     const order = [...sketch.rectOrder]
@@ -1632,12 +1672,17 @@ export class StudioProjectSession {
       }
     }
     const positions = new Map(order.map((id, index) => [id, index]))
+    const targets = new Map(survivingTargets.map(target => [target.studioRectId, target]))
     const replacement = {
       ...sketch,
       rectOrder: order,
       rects: [...sketch.rects, ...selected.map(item => item.rect)]
         .toSorted((left, right) => positions.get(left.id)! - positions.get(right.id)!),
-      snapped: sketch.snapped.filter(item => !requestedIds.has(item.rect.id)),
+      snapped: sketch.snapped.filter(item => !requestedIds.has(item.rect.id)).map(item => {
+        const target = targets.get(item.rect.id)
+        Assert.defined(target, `Studio measured Unsnap did not refresh surviving rectangle ${item.rect.id}.`)
+        return { ...item, target }
+      }),
     }
     const next = {
       ...catalog,

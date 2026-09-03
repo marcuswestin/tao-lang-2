@@ -9,8 +9,7 @@
       { "id": "menu", "kind": "Image", "x": 308, "y": 12, "width": 40, "height": 40 }
     ],
     "expectedTree": "Row(gap=68,pad=12/12/12/12)[back:Box(40x40),title:Text(hugxhug,claim=1),menu:Image(hugxhug)]",
-    "needsOverlay": false,
-    "inspectorFixCount": 1
+    "needsOverlay": false
   },
   {
     "name": "form",
@@ -23,8 +22,7 @@
       { "id": "submit", "kind": "Box", "x": 20, "y": 196, "width": 320, "height": 44 }
     ],
     "expectedTree": "Col(gap=16,pad=20/20/20/20)[heading:Text(hugxhug),email:Box(320x48),password:Box(320x48,claim=1),submit:Box(320x44)]",
-    "needsOverlay": false,
-    "inspectorFixCount": 1
+    "needsOverlay": false
   },
   {
     "name": "playlist-row",
@@ -37,8 +35,7 @@
       { "id": "duration", "kind": "Text", "x": 304, "y": 28, "width": 44, "height": 20 }
     ],
     "expectedTree": "Row(gap=30,pad=12/12/12/12)[art:Image(hugxhug),Col(gap=6,pad=0/0/0/0,claim=1)[title:Text(hugxhug),artist:Text(hugxhug)],duration:Text(hugxhug)]",
-    "needsOverlay": false,
-    "inspectorFixCount": 0
+    "needsOverlay": false
   },
   {
     "name": "bottom-nav",
@@ -50,8 +47,7 @@
       { "id": "profile", "kind": "Image", "x": 326, "y": 16, "width": 40, "height": 40 }
     ],
     "expectedTree": "Row(gap=111,pad=16/24/16/24)[home:Image(hugxhug),search:Image(hugxhug),profile:Image(hugxhug)]",
-    "needsOverlay": false,
-    "inspectorFixCount": 0
+    "needsOverlay": false
   },
   {
     "name": "hero",
@@ -64,8 +60,7 @@
       { "id": "cta", "kind": "Box", "x": 24, "y": 196, "width": 140, "height": 36 }
     ],
     "expectedTree": "Col(gap=16,pad=24/36/8/24)[eyebrow:Text(hugxhug),headline:Text(hugxhug),body:Text(hugxhug),cta:Box(140x36)]",
-    "needsOverlay": false,
-    "inspectorFixCount": 2
+    "needsOverlay": false
   },
   {
     "name": "card-grid",
@@ -78,8 +73,7 @@
       { "id": "d", "kind": "Box", "x": 188, "y": 118, "width": 156, "height": 86 }
     ],
     "expectedTree": "Col(gap=16,pad=16/16/16/16)[Row(gap=16,pad=0/0/0/0)[a:Box(156x86),b:Box(156x86)],Row(gap=16,pad=0/0/0/0)[c:Box(156x86),d:Box(156x86)]]",
-    "needsOverlay": false,
-    "inspectorFixCount": 1
+    "needsOverlay": true
   },
   {
     "name": "sidebar",
@@ -90,8 +84,7 @@
       { "id": "content", "kind": "Box", "x": 144, "y": 20, "width": 436, "height": 360 }
     ],
     "expectedTree": "Row(gap=24,pad=0/20/0/0)[rail:Box(120xfill),content:Box(436x360)]",
-    "needsOverlay": false,
-    "inspectorFixCount": 1
+    "needsOverlay": false
   },
   {
     "name": "profile-row",
@@ -104,8 +97,7 @@
       { "id": "chevron", "kind": "Image", "x": 324, "y": 32, "width": 20, "height": 20 }
     ],
     "expectedTree": "Row(gap=46,pad=16/16/16/16)[avatar:Image(hugxhug),Col(gap=6,pad=0/0/0/0,claim=1)[name:Text(hugxhug),handle:Text(hugxhug)],chevron:Image(hugxhug)]",
-    "needsOverlay": false,
-    "inspectorFixCount": 0
+    "needsOverlay": false
   },
   {
     "name": "settings",
@@ -118,8 +110,7 @@
       { "id": "about", "kind": "Box", "x": 20, "y": 180, "width": 350, "height": 48 }
     ],
     "expectedTree": "Col(gap=12,pad=16/20/22/20)[title:Text(hugxhug,claim=1),account:Box(350x48),privacy:Box(350x48),about:Box(350x48)]",
-    "needsOverlay": false,
-    "inspectorFixCount": 0
+    "needsOverlay": false
   },
   {
     "name": "media-row",
@@ -131,8 +122,7 @@
       { "id": "summary", "kind": "Text", "x": 114, "y": 58, "width": 260, "height": 36 }
     ],
     "expectedTree": "Row(gap=16,pad=12/46/12/12)[cover:Image(hugxhug),Col(gap=10,pad=0/0/0/0)[headline:Text(hugxhug),summary:Text(hugxhug)]]",
-    "needsOverlay": false,
-    "inspectorFixCount": 1
+    "needsOverlay": false
   },
   {
     "name": "chat",
@@ -145,8 +135,7 @@
       { "id": "composer", "kind": "Box", "x": 16, "y": 252, "width": 328, "height": 40 }
     ],
     "expectedTree": "Col(gap=18,pad=20/16/8/16)[incoming:Box(220x54),outgoing:Box(220x54),incoming2:Box(260x72),composer:Box(328x40)]",
-    "needsOverlay": false,
-    "inspectorFixCount": 2
+    "needsOverlay": false
   },
   {
     "name": "login",
@@ -159,8 +148,7 @@
       { "id": "login", "kind": "Box", "x": 24, "y": 248, "width": 312, "height": 44 }
     ],
     "expectedTree": "Col(gap=16,pad=24/24/8/24)[logo:Image(hugxhug,claim=1),username:Box(312x44),password:Box(312x44),login:Box(312x44)]",
-    "needsOverlay": false,
-    "inspectorFixCount": 1
+    "needsOverlay": false
   },
   {
     "name": "dashboard",
@@ -174,8 +162,7 @@
       { "id": "chart", "kind": "Box", "x": 16, "y": 204, "width": 568, "height": 80 }
     ],
     "expectedTree": "Col(gap=24,pad=0/0/16/0)[header:Box(fillx64),Row(gap=20,pad=0/0/0/0)[metric1:Box(176x92),metric2:Box(176x92),metric3:Box(176x92)],chart:Box(568x80)]",
-    "needsOverlay": false,
-    "inspectorFixCount": 2
+    "needsOverlay": false
   },
   {
     "name": "badge-overlap",
@@ -186,8 +173,7 @@
       { "id": "badge", "kind": "Text", "x": 168, "y": 8, "width": 40, "height": 24 }
     ],
     "expectedTree": "Row(gap=0,pad=8/12/20/20)[card:Box(180x80),badge:Text(hugxhug)]",
-    "needsOverlay": true,
-    "inspectorFixCount": 0
+    "needsOverlay": true
   },
   {
     "name": "floating-action",
@@ -198,8 +184,7 @@
       { "id": "fab", "kind": "Image", "x": 284, "y": 224, "width": 56, "height": 56 }
     ],
     "expectedTree": "Row(gap=0,pad=16/16/16/16)[list:Box(328x268),fab:Image(hugxhug)]",
-    "needsOverlay": true,
-    "inspectorFixCount": 0
+    "needsOverlay": true
   },
   {
     "name": "stacked-art",
@@ -210,7 +195,6 @@
       { "id": "caption", "kind": "Text", "x": 44, "y": 174, "width": 272, "height": 30 }
     ],
     "expectedTree": "Col(gap=0,pad=20/20/20/20)[photo:Image(hugxhug),caption:Text(hugxhug)]",
-    "needsOverlay": true,
-    "inspectorFixCount": 0
+    "needsOverlay": true
   }
 ]

@@ -1,4 +1,4 @@
-import { Assert, FS } from '@shared'
+import { Assert, Errors, FS } from '@shared'
 
 export const studioGeneratedSourceHeader = '// Studio-written generated source. Read-only until moved to a package.'
 
@@ -25,9 +25,22 @@ export class StudioGeneratedSources {
     if (!await FS.isDirectory(this.#studioRoot)) {
       return
     }
+    const failures: Array<{ error: unknown; path: string }> = []
     for await (const path of FS.walk(this.#studioRoot, { extensions: ['.tao'] })) {
-      await this.#requireContainedFile(path)
-      await FS.chmod(path, generatedMode)
+      try {
+        await this.#requireContainedFile(path)
+        await FS.chmod(path, generatedMode)
+      } catch (error) {
+        failures.push({ error, path })
+      }
+    }
+    if (failures.length > 0) {
+      Errors.throwHostEnvironment(
+        `Studio could not restore read-only ownership for ${failures.length} generated source${
+          failures.length === 1 ? '' : 's'
+        }; first failure: ${FS.relativePath(this.projectRoot, failures[0]!.path)}.`,
+        { cause: failures[0]!.error },
+      )
     }
   }
 
@@ -176,5 +189,7 @@ export class StudioGeneratedSources {
 }
 
 function authoredSource(content: string): string {
-  return content.replace(`${studioGeneratedSourceHeader}\n\n`, '')
+  const header = `${studioGeneratedSourceHeader}\n\n`
+  Assert.input(content.startsWith(header), 'Generated Studio source is missing its ownership header.')
+  return content.slice(header.length).replace(/^[ \t]*#studio_rect_[0-9a-f]+\n/gimu, '')
 }

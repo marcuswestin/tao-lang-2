@@ -1446,8 +1446,91 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content.match(/use Text from @tao\/ui/g)).toHaveLength(1)
     Expect(patch.content).toContain('Text("Say \\"hi\\" \\{now}\\\\later\\nnext") [hug]')
     Expect(patch.content).toContain('#studio_rect_00710075006f007400650064')
-    const resnapped = await SourceActions.applyStudioPatch(await parseDocument(patch.content), request)
-    Expect(resnapped.content.match(/#studio_rect_00710075006f007400650064/g)).toHaveLength(1)
+    await Expect(SourceActions.applyStudioPatch(await parseDocument(patch.content), request)).rejects.toThrow(
+      'already snapped',
+    )
+  })
+
+  Test('adds and removes snapped leaves without rebuilding manual flow or declarations', async () => {
+    const document = await parseDocument(`
+      use Box, Placeholder, Row, Text from @tao/ui
+      data Playlists / Playlist { Title text }
+      public view View4(Playlist) {
+        state Expanded = true
+        render Row() [gap 37, pad 11] {
+          #studio_rect_006f006c0064
+          Text(Playlist.Title) [width 111, height 23]
+          Box() [width 1, height fill]
+        }
+      }
+      scenarios View4 "sketch" {
+        scenario "draft" { render (Playlist: Example) }
+      }
+    `)
+    const snapped = await SourceActions.applyStudioPatch(
+      document,
+      playlistSnapRequest({
+        rectIds: ['new'],
+        tree: leaf('new'),
+      }),
+    )
+
+    Expect(snapped.content).toContain('view View4(Playlist)')
+    Expect(snapped.content).toContain('state Expanded = true')
+    Expect(snapped.content).toContain('Row() [gap 37, pad 11]')
+    Expect(snapped.content).toContain('Text(Playlist.Title) [width 111, height 23]')
+    Expect(snapped.content).toContain('Box() [width 1, height fill]')
+    Expect(snapped.content).toContain('#studio_rect_006e00650077')
+    Expect(snapped.content).toContain('render (Playlist: Example)')
+
+    const partiallyUnsnapped = await SourceActions.applyStudioPatch(await parseDocument(snapped.content), {
+      fallback: { height: 76, label: 'View4', width: 360 },
+      kind: 'unsnap-sketch-from-flow',
+      rectIds: ['new'],
+      sketchId: 'playlist-row',
+      viewName: 'View4',
+    })
+    Expect(partiallyUnsnapped.content).toContain('Row() [gap 37, pad 11]')
+    Expect(partiallyUnsnapped.content).toContain('Text(Playlist.Title) [width 111, height 23]')
+    Expect(partiallyUnsnapped.content).toContain('Box() [width 1, height fill]')
+    Expect(partiallyUnsnapped.content).not.toContain('#studio_rect_006e00650077')
+
+    const fullyUnsnapped = await SourceActions.applyStudioPatch(await parseDocument(partiallyUnsnapped.content), {
+      fallback: { height: 76, label: 'View4', width: 360 },
+      kind: 'unsnap-sketch-from-flow',
+      rectIds: ['old'],
+      sketchId: 'playlist-row',
+      viewName: 'View4',
+    })
+    Expect(fullyUnsnapped.content).toContain('view View4(Playlist)')
+    Expect(fullyUnsnapped.content).toContain('state Expanded = true')
+    Expect(fullyUnsnapped.content).toContain('Box() [width 1, height fill]')
+    Expect(fullyUnsnapped.content).not.toContain('#studio_rect_006f006c0064')
+    Expect(fullyUnsnapped.content).toContain('render (Playlist: Example)')
+  })
+
+  Test('wraps a previously snapped root leaf while keeping its identity on the leaf', async () => {
+    const document = await parseDocument(`
+      use Text from @tao/ui
+      public view View4() {
+        #studio_rect_006f006c0064
+        render Text("Edited") [width 111, height 23]
+      }
+      scenarios View4 "sketch" { scenario "draft" { render () } }
+    `)
+    const patch = await SourceActions.applyStudioPatch(
+      document,
+      playlistSnapRequest({
+        mergeDirection: 'Col',
+        rectIds: ['new'],
+        tree: leaf('new'),
+      }),
+    )
+
+    Expect(patch.content).toContain('render Col()')
+    Expect(patch.content).toContain('#studio_rect_006f006c0064\n      Text("Edited") [width 111, height 23]')
+    Expect(patch.content).toContain('#studio_rect_006e00650077\n      Text("text") [hug]')
+    Expect(patch.content).not.toContain('render Text("Edited")')
   })
 
   Test('rejects a missing, non-public, or multiply owned generated view', async () => {
@@ -1703,6 +1786,7 @@ function playlistSnapRequest(
   return {
     expectedCatalogRevision: 7,
     kind: 'snap-sketch-to-flow',
+    mergeDirection: 'Row',
     rectIds: ['art', 'title', 'artist', 'duration'],
     sketchId: 'playlist-row',
     tree: {

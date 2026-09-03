@@ -1,16 +1,9 @@
+import type { StudioSketchRect as CatalogStudioSketchRect } from '../StudioSketchCatalog'
+
 export type StudioSketchPoint = Readonly<{ x: number; y: number }>
 
-/** StudioSketchRect mirrors the FS-D1 rectangle fields, with a stable client/catalog identity. */
-export type StudioSketchRect = Readonly<{
-  binding?: string
-  content?: string
-  height: number
-  id: string
-  kind: string
-  width: number
-  x: number
-  y: number
-}>
+/** Geometry operates on the catalog's canonical rectangle contract. */
+export type StudioSketchRect = CatalogStudioSketchRect
 
 export type StudioSketchResizeHandle =
   | 'east'
@@ -38,11 +31,7 @@ export type StudioSketchGeometryState = Readonly<{
   selectedId?: string
 }>
 
-export type StudioSketchDrawDetails = Readonly<{
-  binding?: string
-  content?: string
-  kind: string
-}>
+export type StudioSketchDrawDetails = Readonly<Pick<StudioSketchRect, 'content' | 'fieldBinding' | 'kind'>>
 
 export type StudioSketchMoveOptions = Readonly<{
   duplicateId?: string

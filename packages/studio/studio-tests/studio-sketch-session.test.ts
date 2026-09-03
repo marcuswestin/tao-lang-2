@@ -2,6 +2,7 @@ import { Errors, FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import { StudioApiEventStream } from '../studio-src/client/StudioApiClient'
 import type { StudioFixtureGeneration } from '../studio-src/StudioFixtureGeneration'
+import { StudioGeneratedSources } from '../studio-src/StudioGeneratedSources'
 import { StudioPreviewManifest } from '../studio-src/StudioPreviewManifest'
 import { StudioProjectSession, type StudioSessionEvent } from '../studio-src/StudioProjectSession'
 import { studioProtocolChannel, studioProtocolVersion } from '../studio-src/StudioProtocol'
@@ -31,7 +32,7 @@ Describe('Studio sketch session protocol', () => {
         Expect(await FS.readText(FS.resolvePath('@/studio/View1.tao', root))).toContain('public\nview View1()')
         Expect(events.filter(event => event.type === 'sketch-catalog-changed')).toHaveLength(1)
         const handshake = await session.handshake()
-        Expect(handshake.capabilities.sketches).toEqual({ catalogVersion: 3, freeGeometry: true })
+        Expect(handshake.capabilities.sketches).toEqual({ catalogVersion: 1, freeGeometry: true })
         Expect(handshake.sketchCatalog).toEqual(created.catalog)
         Expect(handshake.endpoints).toContainEqual({ method: 'GET', path: '/api/sketches' })
         Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/sketches/action' })
@@ -96,8 +97,10 @@ Describe('Studio sketch session protocol', () => {
       Expect(proposal.projectedRectIds).toEqual(['café'])
       Expect(proposal.tree).toMatchObject({ type: 'container' })
       Expect(proposal.diff).toContain('#studio_rect_00630061006600e9')
+      Expect(proposal.content).toContain('#studio_rect_00630061006600e9')
 
       const result = await session.applySketchSnap(request)
+      Expect(result.file.content).toBe(proposal.content)
       const sketch = result.catalog.sketches[0]!
       Expect(sketch.rects.map(rect => rect.id)).toEqual(['subtitle'])
       Expect(sketch.snapped).toHaveLength(1)
@@ -115,6 +118,78 @@ Describe('Studio sketch session protocol', () => {
       Expect(result.file.content).toContain('#studio_rect_00630061006600e9')
       Expect(await FS.fileMode(FS.resolvePath('@/studio/View1.tao', root))).toBe(0o444)
       Expect(compiles).toHaveLength(2)
+    })
+  })
+
+  Test('preserves manual and flow edits across partial Snap and Unsnap, including the last leaf', async () => {
+    await withSketchSession(async (session, root) => {
+      const created = await session.applySketchAction(createTwoRectRequest(root, 'create-preserving'))
+      const initial = await session.readFile('@/studio/View1.tao')
+      const first = await session.applySketchSnap({
+        checkpointId: 'snap-preserving-first',
+        expectedCatalogRevision: created.catalog.revision,
+        rectIds: ['café'],
+        requestId: 'snap-preserving-first-request',
+        sketchId: 'sketch-1',
+        sourceVersion: initial.sourceVersion,
+      })
+      const path = FS.resolvePath('@/studio/View1.tao', root)
+      const generated = new StudioGeneratedSources(root)
+      await generated.rewrite(path, first.file.content.replace('width 52', 'width 61'))
+      const manuallyEdited = await session.readFile('@/studio/View1.tao')
+      const second = await session.applySketchSnap({
+        checkpointId: 'snap-preserving-second',
+        expectedCatalogRevision: first.catalog.revision,
+        rectIds: ['subtitle'],
+        requestId: 'snap-preserving-second-request',
+        sketchId: 'sketch-1',
+        sourceVersion: manuallyEdited.sourceVersion,
+      })
+
+      Expect(second.file.content).toContain('Placeholder("Profile") [width 61, height 52]')
+      Expect(second.catalog.sketches[0]!.snapped).toHaveLength(2)
+      Expect(second.catalog.sketches[0]!.snapped.every(item => item.target.sourceVersion === second.file.sourceVersion))
+        .toBe(true)
+
+      const flowed = await session.applySketchFlowAction({
+        action: { kind: 'toggle-direction', rectId: 'café' },
+        checkpointId: 'flow-preserving',
+        expectedCatalogRevision: second.catalog.revision,
+        requestId: 'flow-preserving-request',
+        sketchId: 'sketch-1',
+        sourceVersion: second.file.sourceVersion,
+      })
+      const partial = await session.applySketchUnsnap({
+        checkpointId: 'unsnap-preserving-partial',
+        expectedCatalogRevision: flowed.catalog.revision,
+        rectIds: ['subtitle'],
+        requestId: 'unsnap-preserving-partial-request',
+        sketchId: 'sketch-1',
+        sourceVersion: flowed.file.sourceVersion,
+      })
+      Expect(partial.file.content).toContain('Placeholder("Profile") [width 61, height 52]')
+      Expect(partial.file.content).toContain('render Row() [pad top 12 right 296 bottom 12 left 12]')
+      Expect(partial.catalog.sketches[0]!.snapped[0]!.target.sourceVersion).toBe(partial.file.sourceVersion)
+
+      await generated.rewrite(
+        path,
+        partial.file.content
+          .replace('view View1() {', 'view View1(Name text) {\n   state Edited = true')
+          .replace('render ()', 'render (Name: "Ada")'),
+      )
+      const enriched = await session.readFile('@/studio/View1.tao')
+      const last = await session.applySketchUnsnap({
+        checkpointId: 'unsnap-preserving-last',
+        expectedCatalogRevision: partial.catalog.revision,
+        rectIds: ['café'],
+        requestId: 'unsnap-preserving-last-request',
+        sketchId: 'sketch-1',
+        sourceVersion: enriched.sourceVersion,
+      })
+      Expect(last.file.content).toContain('view View1(Name text)')
+      Expect(last.file.content).toContain('state Edited = true')
+      Expect(last.file.content).toContain('render (Name: "Ada")')
+      Expect(last.file.content).toContain('render Placeholder("View1") [width 360, height 76]')
     })
   })
 
@@ -343,6 +418,12 @@ Describe('Studio sketch session protocol', () => {
         version: 2 as const,
       }
       session.setMatrixManifest(manifest)
+      const generated = new StudioGeneratedSources(root)
+      await generated.rewrite(generatedPath, `${snapped.file.content}\n`)
+      const retainedAgainstStaleManifest = await session.sketchCatalog()
+      Expect(retainedAgainstStaleManifest.revision).toBe(snapped.catalog.revision)
+      Expect(retainedAgainstStaleManifest.sketches[0]!.snapped.map(item => item.rect.id)).toEqual(['cover'])
+      await generated.rewrite(generatedPath, snapped.file.content)
       const identity = StudioPreviewManifest.cellIdentity(manifest, cell)
       session.registerCellPreview({ ...identity, previewInstanceId: 'preview-measured' })
       session.recordPreviewLayoutMeasurements({
@@ -526,7 +607,7 @@ Describe('Studio sketch session protocol', () => {
   )
 
   Test('routes catalog snapshots/actions and dispatches catalog events through the typed client boundary', async () => {
-    const snapshot = { formatVersion: 3 as const, nextViewNumber: 1, revision: 0, sketches: [] }
+    const snapshot = { formatVersion: 1 as const, nextViewNumber: 1, revision: 0, sketches: [] }
     const actions: unknown[] = []
     const session = {
       async applySketchAction(input: unknown) {

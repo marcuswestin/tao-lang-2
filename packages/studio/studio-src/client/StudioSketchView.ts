@@ -5,7 +5,6 @@ import type {
   StudioSketchSnapUndoResult,
 } from '../StudioProjectSession'
 import type { StudioSketch, StudioSketchRect } from '../StudioSketchCatalog'
-import { StudioSketchSnap } from '../StudioSketchSnap'
 import {
   StudioSketchGeometry,
   type StudioSketchGeometryState,
@@ -29,7 +28,7 @@ export const StudioSketchChanges = {
       && left.width === right.width
       && left.height === right.height
       && left.content === right.content
-      && left.binding === right.binding
+      && equalFieldBinding(left.fieldBinding, right.fieldBinding)
   },
   settle(
     sketches: readonly StudioSketch[],
@@ -39,18 +38,44 @@ export const StudioSketchChanges = {
     if (authoritative !== undefined) {
       return authoritative
     }
-    return sketches.map(sketch =>
-      sketch.id === change.sketchId
-        ? {
-          ...sketch,
-          rects: change.kind === 'add' || change.kind === 'duplicate'
-            ? [...sketch.rects, change.rect]
-            : sketch.rects.map(rect => rect.id === change.rect.id ? change.rect : rect),
-        }
-        : sketch
-    )
+    return sketches.map(sketch => sketch.id === change.sketchId ? settleSketchChange(sketch, change) : sketch)
   },
 } as const
+
+function equalFieldBinding(
+  left: StudioSketchRect['fieldBinding'],
+  right: StudioSketchRect['fieldBinding'],
+): boolean {
+  if (left === undefined || right === undefined) {
+    return left === right
+  }
+  return left.parameter === right.parameter
+    && left.path === right.path
+    && left.presentation.kind === right.presentation.kind
+    && left.presentation.label?.path === right.presentation.label?.path
+    && left.presentation.label?.prefix === right.presentation.label?.prefix
+    && left.presentation.label?.suffix === right.presentation.label?.suffix
+}
+
+function settleSketchChange(sketch: StudioSketch, change: StudioSketchRectChange): StudioSketch {
+  if (change.kind === 'update') {
+    return {
+      ...sketch,
+      rects: sketch.rects.map(rect => rect.id === change.rect.id ? change.rect : rect),
+    }
+  }
+  const rects = [...sketch.rects]
+  const rectOrder = [...sketch.rectOrder]
+  const sourceRectIndex = change.kind === 'duplicate'
+    ? sketch.rects.findIndex(rect => rect.id === change.sourceRectId)
+    : -1
+  const sourceOrderIndex = change.kind === 'duplicate'
+    ? sketch.rectOrder.indexOf(change.sourceRectId ?? '')
+    : -1
+  rects.splice(sourceRectIndex < 0 ? rects.length : sourceRectIndex + 1, 0, change.rect)
+  rectOrder.splice(sourceOrderIndex < 0 ? rectOrder.length : sourceOrderIndex + 1, 0, change.rect.id)
+  return { ...sketch, rectOrder, rects }
+}
 
 export type StudioSketchViewOptions = Readonly<{
   onCreateSketch?: (input: Readonly<{ height: number; width: number }>) => Promise<void> | void
@@ -622,7 +647,7 @@ function renderSketch(
     overlay.dataset['taoStudioSketchSnapProposal'] = sketch.id
     const tree = document.createElement('pre')
     tree.dataset['taoStudioSketchSnapTree'] = 'true'
-    tree.textContent = StudioSketchSnap.source(proposal.tree)
+    tree.textContent = proposal.content
     const diff = document.createElement('pre')
     diff.dataset['taoStudioSketchSnapDiff'] = 'true'
     diff.textContent = proposal.diff

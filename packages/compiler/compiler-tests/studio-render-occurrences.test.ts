@@ -68,6 +68,10 @@ Describe('compiler: Studio render occurrences', () => {
             press up #revertSave
             hover placeholder "Revert save"
             focus #revertSave
+            press #revertSave
+            enter "Tao" into label "Name"
+            submit #name
+            select #rows[2] { press text "Open" }
           }
         }
       `,
@@ -83,6 +87,15 @@ Describe('compiler: Studio render occurrences', () => {
           { kind: 'pressUp', selector: 'tag', target: 'revertSave' },
           { kind: 'hover', selector: 'placeholder', target: 'Revert save' },
           { kind: 'focus', tag: 'revertSave' },
+          { kind: 'press', selector: 'tag', target: 'revertSave' },
+          { kind: 'enter', selector: 'label', target: 'Name', value: 'Tao' },
+          { kind: 'submit', selector: 'tag', target: 'name' },
+          {
+            index: 2,
+            kind: 'select',
+            steps: [{ kind: 'press', selector: 'text', target: 'Open' }],
+            tag: 'rows',
+          },
         ],
         subject: {
           arguments: { Revert: { kind: 'action-stand-in', parameter: 'Revert' } },
@@ -148,6 +161,36 @@ Describe('compiler: Studio render occurrences', () => {
 
   Test('publishes Snap rectangle identity in the render inventory and generated occurrence metadata', async () => {
     await withTaoFiles('tao-studio-render-inventory-', {
+      'App.tao': `
+        use Main from @/studio
+        app Preview { view Main }
+      `,
+      '@/studio/Main.tao': `
+        // Studio-written generated source. Read-only until moved to a package.
+
+        use Text from @tao/ui
+        public view Main() {
+          #studio_rect_006100720074
+          render Text("Hello")
+        }
+      `,
+    }, async paths => {
+      const compiled = await Workspace.compile(paths['App.tao'], { studio: true })
+      const generated = compiled.validation.files.find(file => file.path === paths['@/studio/Main.tao'])!.ast
+      const render = [...AST.streamAllContents(generated).filter(AST.isRender)][0]!
+      const source = render.$cstNode!
+
+      Expect(compiled.studioManifest?.renders).toEqual([{
+        elementName: 'Text',
+        renderId: `${paths['@/studio/Main.tao']}:${source.offset}:${source.end}`,
+        source: { end: source.end, path: paths['@/studio/Main.tao'], start: source.offset },
+        studioRectId: 'art',
+      }])
+    })
+  })
+
+  Test('does not publish spoofed Studio rectangle markers from authored source', async () => {
+    await withTaoFiles('tao-studio-render-spoof-', {
       'Main.tao': `
         use Text from @tao/ui
         app Preview { view Main }
@@ -158,16 +201,9 @@ Describe('compiler: Studio render occurrences', () => {
       `,
     }, async paths => {
       const compiled = await Workspace.compile(paths['Main.tao'], { studio: true })
-      const render = [...AST.streamAllContents(compiled.validation.entry.ast).filter(AST.isRender)][0]!
-      const source = render.$cstNode!
 
-      Expect(compiled.studioManifest?.renders).toEqual([{
-        elementName: 'Text',
-        renderId: `${paths['Main.tao']}:${source.offset}:${source.end}`,
-        source: { end: source.end, path: paths['Main.tao'], start: source.offset },
-        studioRectId: 'art',
-      }])
-      Expect(compact(compiled.code)).toContain('elementName: "Text", studioRectId: "art",')
+      Expect(compiled.studioManifest?.renders[0]).not.toHaveProperty('studioRectId')
+      Expect(compact(compiled.code)).not.toContain('studioRectId: "art"')
     })
   })
 

@@ -97,7 +97,8 @@ function build(rects: readonly StudioSketchRect[], frame: Bounds, root: boolean)
   }
   const partitions = axis === 'x' ? xGroups : yGroups
   const children = partitions.map(partition => build(partition, frame, false))
-  return container(children, axis, frame, root, children.some(child => child.ambiguous))
+  const twoCleanAxes = xGroups.length > 1 && yGroups.length > 1
+  return container(children, axis, frame, root, twoCleanAxes || children.some(child => child.ambiguous))
 }
 
 function container(

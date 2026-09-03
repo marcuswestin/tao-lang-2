@@ -7,8 +7,12 @@ import {
 } from '../studio-src/client/StudioSketchGeometry'
 
 const first: StudioSketchRect = {
-  binding: 'Playlist.Cover',
   content: 'Cover art',
+  fieldBinding: {
+    parameter: 'Playlist',
+    path: 'Cover',
+    presentation: { kind: 'image', label: { path: 'Title' } },
+  },
   height: 20,
   id: 'first',
   kind: 'Placeholder',
@@ -135,7 +139,7 @@ Describe('Studio sketch geometry', () => {
     ).toBe(duplicated)
   })
 
-  Test('updates kind and content inline without disturbing geometry or binding', () => {
+  Test('updates kind and content inline without disturbing geometry or field binding', () => {
     const selected = { ...StudioSketchGeometry.initial([first]), selectedId: first.id }
     const updated = StudioSketchGeometry.updateSelected(selected, { content: 'Now playing', kind: 'Text' })
     Expect(updated.rects).toEqual([{ ...first, content: 'Now playing', kind: 'Text' }])

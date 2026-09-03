@@ -11,7 +11,6 @@ type CorpusEntry =
   & StudioSketchProjectionInput
   & Readonly<{
     expectedTree: string
-    inspectorFixCount: number
     name: string
     needsOverlay: boolean
   }>
@@ -19,7 +18,7 @@ type CorpusEntry =
 const corpus = corpusJson as readonly CorpusEntry[]
 
 Describe('Studio sketch projection corpus', () => {
-  Test('pins 16 realistic screens to canonical trees and overlay decisions', () => {
+  Test('pins 16 component-scale layouts to canonical trees and overlay decisions', () => {
     Expect(corpus).toHaveLength(16)
     for (const sample of corpus) {
       const result = StudioSketchProjection.project(sample)
@@ -31,14 +30,12 @@ Describe('Studio sketch projection corpus', () => {
     }
   })
 
-  Test('meets the FS-D11 acceptance threshold without hiding inspector fixes', () => {
-    const direct = corpus.filter(sample => !sample.needsOverlay)
-    Expect(direct.length / corpus.length).toBeGreaterThanOrEqual(0.8)
-    Expect(Math.max(...direct.map(sample => sample.inspectorFixCount))).toBeLessThanOrEqual(2)
+  Test('reports the engine-derived direct-projection rate without claiming screen-corpus acceptance', () => {
+    const direct = corpus.filter(sample => !StudioSketchProjection.project(sample).needsOverlay)
     Expect({ accepted: direct.length, corpus: corpus.length, rate: direct.length / corpus.length }).toEqual({
-      accepted: 13,
+      accepted: 12,
       corpus: 16,
-      rate: 0.8125,
+      rate: 0.75,
     })
   })
 })
@@ -115,6 +112,14 @@ Describe('Studio sketch projection invariants', () => {
     const second = StudioSketchProjection.project({ ...input, rects: [...input.rects].reverse() })
     Expect(first.needsOverlay).toBe(true)
     Expect(StudioSketchProjection.signature(second.tree)).toBe(StudioSketchProjection.signature(first.tree))
+  })
+
+  Test('marks a two-clean-axis grid as ambiguous even though its canonical proposal is deterministic', () => {
+    const input = corpus.find(entry => entry.name === 'card-grid')!
+    const result = StudioSketchProjection.project(input)
+
+    Expect(result.needsOverlay).toBe(true)
+    Expect(StudioSketchProjection.signature(result.tree)).toBe(input.expectedTree)
   })
 
   Test('rejects duplicate identities, empty sets, and invalid geometry', () => {

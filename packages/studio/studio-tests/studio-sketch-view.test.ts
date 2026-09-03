@@ -58,7 +58,7 @@ Test('Studio overlay geometry preserves order across draw, move, duplicate, resi
   Expect(state.rects.some(rect => rect.id === 'cancelled')).toBe(false)
 })
 
-Test('Studio sketch changes prefer authoritative duplicate order and serialize revision reads', async () => {
+Test('Studio sketch changes preserve optimistic and authoritative order and serialize revision reads', async () => {
   const sketch = {
     height: 76,
     id: 'sketch-1',
@@ -73,6 +73,43 @@ Test('Studio sketch changes prefer authoritative duplicate order and serialize r
   const copy = { ...sketch.rects[0]!, id: 'copy' }
   Expect(StudioSketchChanges.equal(sketch.rects[0]!, { ...sketch.rects[0]! })).toBe(true)
   Expect(StudioSketchChanges.equal(sketch.rects[0]!, { ...sketch.rects[0]!, x: 11 })).toBe(false)
+  const binding = {
+    parameter: 'Playlist',
+    path: 'Title',
+    presentation: { kind: 'text' as const, label: { path: 'Owner.Name', prefix: 'By ', suffix: '!' } },
+  }
+  Expect(StudioSketchChanges.equal(
+    { ...sketch.rects[0]!, fieldBinding: binding },
+    {
+      ...sketch.rects[0]!,
+      fieldBinding: {
+        ...binding,
+        presentation: { ...binding.presentation, label: { ...binding.presentation.label } },
+      },
+    },
+  )).toBe(true)
+  Expect(StudioSketchChanges.equal(
+    { ...sketch.rects[0]!, fieldBinding: binding },
+    { ...sketch.rects[0]!, fieldBinding: { ...binding, path: 'Owner' } },
+  )).toBe(false)
+
+  const added = { ...sketch.rects[0]!, id: 'added' }
+  const optimisticallyAdded = StudioSketchChanges.settle([sketch], {
+    kind: 'add',
+    rect: added,
+    sketchId: sketch.id,
+  })[0]!
+  Expect(optimisticallyAdded.rects.map(rect => rect.id)).toEqual(['back', 'front', 'added'])
+  Expect(optimisticallyAdded.rectOrder).toEqual(['back', 'front', 'added'])
+
+  const optimisticallyDuplicated = StudioSketchChanges.settle([sketch], {
+    kind: 'duplicate',
+    rect: copy,
+    sketchId: sketch.id,
+    sourceRectId: sketch.rects[0]!.id,
+  })[0]!
+  Expect(optimisticallyDuplicated.rects.map(rect => rect.id)).toEqual(['back', 'copy', 'front'])
+  Expect(optimisticallyDuplicated.rectOrder).toEqual(['back', 'copy', 'front'])
   const authoritative = [{
     ...sketch,
     rectOrder: ['back', 'copy', 'front'],
@@ -158,6 +195,7 @@ Test('Studio flow controls expose explicit selection reasons and bounded spacer 
 
 Test('Studio overlap proposal exposes exact confirmation and Cancel performs no mutation', () => {
   const proposal = {
+    content: 'render Text("Front")',
     diff: '--- View1.tao\n+++ View1.tao (proposed)',
     needsConfirmation: true,
     path: '.tao-project/studio/View1.tao',
@@ -356,11 +394,12 @@ function target(rectId: string) {
 }
 
 function catalog(revision: number, sketch: ReturnType<typeof testSketch>) {
-  return { formatVersion: 3 as const, nextViewNumber: 2, revision, sketches: [sketch] }
+  return { formatVersion: 1 as const, nextViewNumber: 2, revision, sketches: [sketch] }
 }
 
 function snapProposal(requestId: string, needsConfirmation: boolean): StudioSketchSnapProposalResult {
   return {
+    content: 'render Text("Front")',
     diff: 'canonical diff',
     needsConfirmation,
     path: '.tao-project/studio/View1.tao',

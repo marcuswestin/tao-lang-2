@@ -23,7 +23,6 @@ export type StudioSketchSnapContainer = Readonly<{
 
 export type StudioSketchSnapElement = Readonly<{
   arguments: readonly string[]
-  binding?: string
   component: 'Image' | 'Placeholder' | 'Text'
   content?: string
   layout: readonly StudioLayoutEntry[]
@@ -36,6 +35,7 @@ export type StudioSketchSnapSourceAction =
   & Readonly<{
     expectedCatalogRevision: number
     kind: 'snap-sketch-to-flow'
+    mergeDirection: 'Col' | 'Row'
     rectIds: readonly string[]
     sketchId: string
     tree: StudioSketchSnapTree
@@ -46,7 +46,6 @@ export type StudioSketchSnapPrepared = Readonly<{
   action: StudioSketchSnapSourceAction
   needsConfirmation: boolean
   projectedRectIds: readonly string[]
-  source: string
 }>
 
 export type StudioSketchSnapTransport = Readonly<{
@@ -59,25 +58,23 @@ export type StudioSketchSnapSubmission =
     kind: 'applied'
     projectedRectIds: readonly string[]
     result: StudioSourceActionResult
-    source: string
   }>
   | Readonly<{
     kind: 'proposal'
     projectedRectIds: readonly string[]
     proposal: StudioSourceActionProposal
-    source: string
   }>
 
 export const StudioSketchSnap = {
   envelope,
   prepare,
-  source,
   submit,
 } as const
 
 function prepare(
   options: Readonly<{
     expectedCatalogRevision: number
+    mergeDirection: 'Col' | 'Row'
     projection: StudioSketchProjectionResult
     rects: readonly StudioSketchRect[]
     sketchId: string
@@ -101,6 +98,7 @@ function prepare(
   const action: StudioSketchSnapSourceAction = {
     expectedCatalogRevision: options.expectedCatalogRevision,
     kind: 'snap-sketch-to-flow',
+    mergeDirection: options.mergeDirection,
     rectIds: projectedRectIds,
     sketchId: options.sketchId,
     tree,
@@ -110,7 +108,6 @@ function prepare(
     action,
     needsConfirmation: options.projection.needsOverlay,
     projectedRectIds,
-    source: source(tree),
   }
 }
 
@@ -152,14 +149,12 @@ async function submit(
       kind: 'proposal',
       projectedRectIds: options.prepared.projectedRectIds,
       proposal: await options.transport.propose(request),
-      source: options.prepared.source,
     }
   }
   return {
     kind: 'applied',
     projectedRectIds: options.prepared.projectedRectIds,
     result: await options.transport.apply(request),
-    source: options.prepared.source,
   }
 }
 
@@ -189,7 +184,6 @@ function snapTree(
     : rect.content ?? ''
   return {
     arguments: [argument],
-    ...(rect.binding === undefined ? {} : { binding: rect.binding }),
     component,
     ...(rect.content === undefined ? {} : { content: rect.content }),
     layout: dimensionEntries(node.width, node.height, node.claim),
@@ -238,53 +232,4 @@ function padEntries(
     return [['pad', 'horizontal', pad.left, 'vertical', pad.top]]
   }
   return [['pad', 'top', pad.top, 'right', pad.right, 'bottom', pad.bottom, 'left', pad.left]]
-}
-
-function source(tree: StudioSketchSnapTree): string {
-  return `render ${nodeSource(tree, '')}`
-}
-
-function nodeSource(node: StudioSketchSnapTree, indentation: string): string {
-  const call = node.type === 'container'
-    ? `${node.direction}()`
-    : `${node.component}(${node.arguments.map(taoStringLiteral).join(', ')})`
-  const layout = node.layout.length === 0 ? '' : ` [${node.layout.map(layoutEntrySource).join(', ')}]`
-  if (node.type === 'element') {
-    return `${call}${layout}`
-  }
-  const childIndentation = `${indentation}   `
-  const children = node.children.map(child => `${childIndentation}${nodeSource(child, childIndentation)}`).join('\n')
-  return `${call}${layout} {\n${children}\n${indentation}}`
-}
-
-function layoutEntrySource(entry: StudioLayoutEntry): string {
-  return entry.join(' ')
-}
-
-function taoStringLiteral(value: string): string {
-  let source = ''
-  for (let index = 0; index < value.length; index += 1) {
-    const character = value[index]!
-    const escaped = taoStringEscapes[character]
-    if (escaped !== undefined) {
-      source += escaped
-      continue
-    }
-    const codeUnit = value.charCodeAt(index)
-    source += codeUnit <= 0x1f || (codeUnit >= 0xd800 && codeUnit <= 0xdfff)
-      ? `\\u${codeUnit.toString(16).padStart(4, '0')}`
-      : character
-  }
-  return `"${source}"`
-}
-
-const taoStringEscapes: Readonly<Record<string, string>> = {
-  '\b': '\\b',
-  '\t': '\\t',
-  '\n': '\\n',
-  '\f': '\\f',
-  '\r': '\\r',
-  '"': '\\"',
-  '\\': '\\\\',
-  '{': '\\{',
 }

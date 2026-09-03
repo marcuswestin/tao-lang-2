@@ -21,6 +21,22 @@ Test('Studio writes generated public views read-only and repairs their mode on r
   })
 })
 
+Test('Studio repairs every contained source before reporting an invalid generated path', async () => {
+  await withTaoFiles('tao-studio-generated-repair-all-', {
+    'Outside.tao': 'view Outside() { }\n',
+    'Project.tao': 'project Garden\n',
+  }, async (paths, root) => {
+    const escaped = FS.resolvePath('@/studio/View1.tao', root)
+    const contained = FS.resolvePath('@/studio/View2.tao', root)
+    await FS.symlink(paths['Outside.tao'], escaped)
+    await FS.writeText(contained, `${studioGeneratedSourceHeader}\n\npublic view View2() { }\n`)
+    await FS.chmod(contained, 0o644)
+
+    await Expect(new StudioGeneratedSources(root).repair()).rejects.toThrow('could not restore read-only ownership')
+    Expect(await FS.fileMode(contained)).toBe(0o444)
+  })
+})
+
 Test('Studio authenticates generated ownership before returning source for a transaction', async () => {
   await withTaoFiles('tao-studio-generated-read-', { 'Project.tao': 'project Garden\n' }, async (_paths, root) => {
     const generated = new StudioGeneratedSources(root)
@@ -81,7 +97,8 @@ Test('Studio removes a partial file when creating generated source fails', async
 
 Test('Studio moves a generated view into an authored package with writable source ownership', async () => {
   await withTaoFiles('tao-studio-generated-move-', {
-    '@/studio/View1.tao': `${studioGeneratedSourceHeader}\n\npublic view View1() { }\n`,
+    '@/studio/View1.tao':
+      `${studioGeneratedSourceHeader}\n\npublic view View1() {\n   #studio_rect_006100720074\n   render Text("Art")\n}\n`,
     '@views/Existing.tao': 'public view Existing() { }\n',
     'Project.tao': 'project Garden\n',
   }, async (paths, root) => {
@@ -90,13 +107,13 @@ Test('Studio moves a generated view into an authored package with writable sourc
     const target = await generated.moveView(
       'View1',
       '@views',
-      `${studioGeneratedSourceHeader}\n\npublic view View1() { render Placeholder("Moved") }\n`,
+      `${studioGeneratedSourceHeader}\n\npublic view View1() {\n   #studio_rect_006100720074\n   render Placeholder("Moved")\n}\n`,
     )
 
     Expect(await FS.exists(paths['@/studio/View1.tao'])).toBe(false)
     Expect(target).toBe(FS.resolvePath('@views/View1.tao', root))
     Expect(await FS.fileMode(target)).toBe(0o644)
-    Expect(await FS.readText(target)).toBe('public view View1() { render Placeholder("Moved") }\n')
+    Expect(await FS.readText(target)).toBe('public view View1() {\n   render Placeholder("Moved")\n}\n')
   })
 })
 
@@ -117,6 +134,21 @@ Test('Studio restores generated ownership and content when preparing a move fail
     })).rejects.toThrow('Simulated move preparation failure.')
     Expect(await FS.readText(source)).toBe(original)
     Expect(await FS.fileMode(source)).toBe(0o444)
+    Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
+  })
+})
+
+Test('Studio refuses to move source whose ownership header is absent or displaced', async () => {
+  await withTaoFiles('tao-studio-generated-move-header-', {
+    '@/studio/View1.tao': `${studioGeneratedSourceHeader}\n\npublic view View1() { }\n`,
+    '@views/Existing.tao': 'public view Existing() { }\n',
+    'Project.tao': 'project Garden\n',
+  }, async (paths, root) => {
+    const generated = new StudioGeneratedSources(root)
+    const displaced = `public view View1() { }\n\n${studioGeneratedSourceHeader}\n\n`
+
+    await Expect(generated.moveView('View1', '@views', displaced)).rejects.toThrow('missing its ownership header')
+    Expect(await FS.readText(paths['@/studio/View1.tao'])).toContain('public view View1()')
     Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
   })
 })

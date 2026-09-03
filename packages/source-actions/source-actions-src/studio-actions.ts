@@ -263,7 +263,6 @@ export type StudioInsertSpacerPatchRequest = Readonly<{
 
 export type StudioSketchSnapElement = Readonly<{
   arguments: readonly string[]
-  binding?: string
   component: 'Image' | 'Placeholder' | 'Text'
   content?: string
   layout: readonly StudioLayoutEntry[]
@@ -284,9 +283,19 @@ export type StudioSketchSnapTree = StudioSketchSnapContainer | StudioSketchSnapE
 export type StudioSnapSketchToFlowPatchRequest = Readonly<{
   expectedCatalogRevision: number
   kind: 'snap-sketch-to-flow'
+  mergeDirection: 'Col' | 'Row'
   rectIds: readonly string[]
   sketchId: string
   tree: StudioSketchSnapTree
+  viewName: string
+}>
+
+/** Structured-only request for removing selected Studio-owned leaves from a generated sketch view. */
+export type StudioUnsnapSketchFromFlowPatchRequest = Readonly<{
+  fallback: Readonly<{ height: number; label: string; width: number }>
+  kind: 'unsnap-sketch-from-flow'
+  rectIds: readonly string[]
+  sketchId: string
   viewName: string
 }>
 
@@ -304,6 +313,7 @@ export type StudioSourcePatchRequest =
   | StudioSetScenarioArgumentsPatchRequest
   | StudioSnapSketchToFlowPatchRequest
   | StudioToggleFlowDirectionPatchRequest
+  | StudioUnsnapSketchFromFlowPatchRequest
   | StudioWrapRenderPatchRequest
   | StudioMoveRenderPatchRequest
 
@@ -379,6 +389,7 @@ async function applyPatchContent(
     'set-style-entry': async action => await setStyleEntry(document, action, context),
     'snap-sketch-to-flow': async action => await snapSketchToFlow(document, action),
     'toggle-flow-direction': async action => await toggleFlowDirection(document, action),
+    'unsnap-sketch-from-flow': async action => await unsnapSketchFromFlow(document, action),
     'wrap-render': async action => await wrapRender(document, action),
   })
 }
@@ -431,6 +442,7 @@ function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | u
     'set-style-entry': action => action.renderId,
     'snap-sketch-to-flow': () => undefined,
     'toggle-flow-direction': action => action.renderId,
+    'unsnap-sketch-from-flow': () => undefined,
     'wrap-render': action => action.renderId,
   })
 }
@@ -1646,7 +1658,7 @@ function removeLayoutClauseEntryEdit(source: string, render: AST.Render, entry: 
 const colorEntryHeads = new Set<string>(ASTUtils.designColorHeads)
 const cssHexColor = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
 
-/** Replaces only a generated public ViewN render from a validated structured Snap tree. */
+/** Adds a validated structured Snap tree without rebuilding an existing snapped render tree. */
 async function snapSketchToFlow(
   document: AST.Document,
   request: StudioSnapSketchToFlowPatchRequest,
@@ -1673,17 +1685,53 @@ async function snapSketchToFlow(
   const leafIds: string[] = []
   const components = new Set<string>()
   const nodeSource = snapNodeSource(request.tree, '', leafIds, components)
-  const replacement = request.tree.type === 'element'
-    ? nodeSource.replace('\n', '\nrender ')
-    : `render ${nodeSource}`
   if (leafIds.length !== request.rectIds.length || leafIds.some((id, index) => id !== request.rectIds[index])) {
     throw new Errors.UserInputError('Studio Snap rectangle identities do not match the structured tree.')
   }
   const source = document.textDocument.getText()
-  const edits: SourceEdit[] = [{ end: renders[0].$cstNode.end, replacement, start: renders[0].$cstNode.offset }]
-  const previousRootTag = AST.attachedTag(renders[0])
-  if (previousRootTag?.tag.startsWith('#studio_rect_') && previousRootTag.$cstNode !== undefined) {
-    edits.push({ end: renders[0].$cstNode.offset, replacement: '', start: previousRootTag.$cstNode.offset })
+  const root = renders[0]!
+  const rootCst = root.$cstNode!
+  const existing = AST.streamAllContents(view).filter(AST.isRender)
+    .filter(render => AST.attachedTag(render)?.tag.startsWith('#studio_rect_'))
+  const requestedTags = new Set(request.rectIds.map(id => `#studio_rect_${encodedTag(id)}`))
+  if (existing.some(render => requestedTags.has(AST.attachedTag(render)!.tag))) {
+    throw new Errors.UserInputError('Studio Snap cannot add a rectangle that is already snapped.')
+  }
+  const edits: SourceEdit[] = []
+  if (existing.length === 0) {
+    const replacement = request.tree.type === 'element'
+      ? nodeSource.replace('\n', '\nrender ')
+      : `render ${nodeSource}`
+    edits.push({ end: rootCst.end, replacement, start: rootCst.offset })
+  } else if (root.block !== undefined) {
+    const offset = blockCloseBraceOffset(source, root.block)
+    const indentation = `${lineIndentAt(source, rootCst.offset)}   `
+    edits.push({
+      end: offset,
+      replacement: `\n${indentSnippet(nodeSource, indentation)}`,
+      start: offset,
+    })
+  } else {
+    const rootTag = AST.attachedTag(root)
+    const rootStart = rootTag?.tag.startsWith('#studio_rect_') && rootTag.$cstNode !== undefined
+      ? rootTag.$cstNode.offset
+      : rootCst.offset
+    const indentation = lineIndentAt(source, rootCst.offset)
+    const childIndentation = `${indentation}   `
+    const invocationSource = source.slice(rootCst.offset, rootCst.end)
+      .replace(/^\s*render\s+/, '')
+      .trim()
+    const tagSource = rootStart === rootCst.offset
+      ? ''
+      : `${source.slice(rootStart, rootCst.offset).trim()}\n`
+    const existingSource = `${tagSource}${invocationSource}`
+    edits.push({
+      end: rootCst.end,
+      replacement: `render ${request.mergeDirection}() {\n${indentSnippet(existingSource, childIndentation)}\n${
+        indentSnippet(nodeSource, childIndentation)
+      }\n${indentation}}`,
+      start: rootStart,
+    })
   }
   const required = [...components].toSorted()
   const uses = document.parseResult.value.statements.filter(AST.isUseStatement)
@@ -1704,10 +1752,77 @@ async function snapSketchToFlow(
   return await Formatter.formatCode(applySourceEdits(source, edits))
 }
 
+/** Removes only selected Studio-owned leaves, preserving the rest of the view and source file. */
+async function unsnapSketchFromFlow(
+  document: AST.Document,
+  request: StudioUnsnapSketchFromFlowPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  validateUnsnapRequest(request)
+  const file = document.parseResult.value
+  const views = file.statements.filter(AST.isViewDeclaration).filter(view => view.name === request.viewName)
+  const view = views.length === 1 ? views[0] : undefined
+  if (view === undefined || view.visibility !== 'public' || view.block === undefined) {
+    throw new Errors.UserInputError(`Studio Unsnap requires one generated public view: ${request.viewName}`)
+  }
+  const owners = file.statements.filter(AST.isScenarioGroupDeclaration)
+    .filter(group => group.name === 'sketch' && group.subject?.ref === view)
+  if (owners.length !== 1) {
+    throw new Errors.UserInputError(
+      `Studio Unsnap view is not owned by one generated sketch scenario: ${request.viewName}`,
+    )
+  }
+  const roots = view.block.statements.filter(AST.isRenderStatement)
+  const root = roots.length === 1 ? roots[0] : undefined
+  if (root?.$cstNode === undefined) {
+    throw new Errors.UserInputError(`Studio Unsnap requires one direct render tree in ${request.viewName}.`)
+  }
+  const selectedTags = new Map(request.rectIds.map(id => [`#studio_rect_${encodedTag(id)}`, id]))
+  const marked = AST.streamAllContents(view).filter(AST.isRender)
+    .map(render => ({ render, tag: AST.attachedTag(render) }))
+    .filter(item => item.tag?.tag.startsWith('#studio_rect_'))
+  const selected = marked.filter(item => selectedTags.has(item.tag!.tag))
+  if (selected.length !== request.rectIds.length) {
+    throw new Errors.UserInputError('Studio Unsnap could not find every selected rectangle in the current source.')
+  }
+  const source = document.textDocument.getText()
+  const selectedRenders = new Set(selected.map(item => item.render))
+  const survivingLeaves = AST.streamAllContents(view).filter(AST.isRender)
+    .filter(render => render.block === undefined && !selectedRenders.has(render))
+  if (survivingLeaves.length === 0) {
+    const rootTag = AST.attachedTag(root)
+    const start = rootTag?.tag.startsWith('#studio_rect_') && rootTag.$cstNode !== undefined
+      ? rootTag.$cstNode.offset
+      : root.$cstNode.offset
+    const replacement = `render Placeholder(${
+      taoStringLiteral(request.fallback.label)
+    }) [width ${request.fallback.width}, height ${request.fallback.height}]`
+    return await formatAndReparse(
+      document,
+      ensureUiComponentImport(
+        applySourceEdits(source, [{ end: root.$cstNode.end, replacement, start }]),
+        file,
+        'Placeholder',
+      ),
+    )
+  }
+  const edits = selected.map(({ render }) => {
+    if (!AST.isViewRender(render) || !AST.isBlock(render.$container)) {
+      throw new Errors.UserInputError('Studio Unsnap can only remove a selected leaf inside the generated render tree.')
+    }
+    const slice = blockStatementSlices(source, render.$container).find(candidate => candidate.statement === render)
+    if (slice === undefined) {
+      throw new Errors.UserInputError('Studio Unsnap could not locate the selected leaf source.')
+    }
+    return { end: slice.end, replacement: '', start: slice.start }
+  })
+  return await formatAndReparse(document, applySourceEdits(source, edits))
+}
+
 function validateSnapRequest(request: StudioSnapSketchToFlowPatchRequest): void {
   requireExactKeys(
     request,
-    ['expectedCatalogRevision', 'kind', 'rectIds', 'sketchId', 'tree', 'viewName'],
+    ['expectedCatalogRevision', 'kind', 'mergeDirection', 'rectIds', 'sketchId', 'tree', 'viewName'],
     'Snap request',
   )
   if (!Number.isSafeInteger(request.expectedCatalogRevision) || request.expectedCatalogRevision < 0) {
@@ -1721,10 +1836,47 @@ function validateSnapRequest(request: StudioSnapSketchToFlowPatchRequest): void 
   ) {
     throw new Errors.UserInputError('Studio Snap requires a generated ViewN and sketch identity.')
   }
+  if (request.mergeDirection !== 'Col' && request.mergeDirection !== 'Row') {
+    throw new Errors.UserInputError('Studio Snap merge direction is invalid.')
+  }
   if (!Array.isArray(request.rectIds) || request.rectIds.some(id => typeof id !== 'string' || id.length === 0)) {
     throw new Errors.UserInputError('Studio Snap rectangle identities must be nonempty strings.')
   }
   validateSnapNode(request.tree, new Set(), 0)
+}
+
+function validateUnsnapRequest(request: StudioUnsnapSketchFromFlowPatchRequest): void {
+  requireExactKeys(request, ['fallback', 'kind', 'rectIds', 'sketchId', 'viewName'], 'Unsnap request')
+  if (!isObject(request.fallback)) {
+    throw new Errors.UserInputError('Studio Unsnap fallback is invalid.')
+  }
+  requireExactKeys(request.fallback, ['height', 'label', 'width'], 'Unsnap fallback')
+  if (
+    typeof request.viewName !== 'string'
+    || !/^View[1-9][0-9]*$/.test(request.viewName)
+    || typeof request.sketchId !== 'string'
+    || request.sketchId.length === 0
+    || typeof request.fallback.label !== 'string'
+    || request.fallback.label.length === 0
+  ) {
+    throw new Errors.UserInputError('Studio Unsnap requires a generated ViewN and sketch identity.')
+  }
+  if (
+    !Array.isArray(request.rectIds)
+    || request.rectIds.length === 0
+    || request.rectIds.some(id => typeof id !== 'string' || id.length === 0)
+    || new Set(request.rectIds).size !== request.rectIds.length
+  ) {
+    throw new Errors.UserInputError('Studio Unsnap rectangle identities must be unique nonempty strings.')
+  }
+  if (
+    !Number.isFinite(request.fallback.width)
+    || request.fallback.width <= 0
+    || !Number.isFinite(request.fallback.height)
+    || request.fallback.height <= 0
+  ) {
+    throw new Errors.UserInputError('Studio Unsnap fallback dimensions must be positive and finite.')
+  }
 }
 
 function validateSnapNode(node: StudioSketchSnapTree, seen: Set<string>, depth: number): void {
@@ -1746,7 +1898,7 @@ function validateSnapNode(node: StudioSketchSnapTree, seen: Set<string>, depth: 
   if (node.type !== 'element') {
     throw new Errors.UserInputError('Studio Snap node kind is invalid.')
   }
-  requireExactKeys(node, ['arguments', 'binding', 'component', 'content', 'layout', 'rectId', 'type'], 'Snap element')
+  requireExactKeys(node, ['arguments', 'component', 'content', 'layout', 'rectId', 'type'], 'Snap element')
   if (!['Image', 'Placeholder', 'Text'].includes(node.component)) {
     throw new Errors.UserInputError(`Studio Snap component is unsupported: ${String(node.component)}`)
   }
@@ -1756,10 +1908,7 @@ function validateSnapNode(node: StudioSketchSnapTree, seen: Set<string>, depth: 
   if (typeof node.rectId !== 'string' || node.rectId.length === 0 || seen.has(node.rectId)) {
     throw new Errors.UserInputError(`Studio Snap rectangle identity is invalid or duplicated: ${String(node.rectId)}`)
   }
-  if (
-    (node.binding !== undefined && typeof node.binding !== 'string')
-    || (node.content !== undefined && typeof node.content !== 'string')
-  ) {
+  if (node.content !== undefined && typeof node.content !== 'string') {
     throw new Errors.UserInputError('Studio Snap element metadata must be text.')
   }
   seen.add(node.rectId)
