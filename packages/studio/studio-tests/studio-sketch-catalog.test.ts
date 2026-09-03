@@ -23,7 +23,7 @@ const cover: StudioSketchRect = {
 Test('Studio sketch catalog creates canonical ordered free geometry and reads JSONC', async () => {
   await withTaoFiles('tao-studio-sketch-catalog-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
-    Expect(await provider.read()).toEqual({ formatVersion: 2, nextViewNumber: 1, revision: 0, sketches: [] })
+    Expect(await provider.read()).toEqual({ formatVersion: 3, nextViewNumber: 1, revision: 0, sketches: [] })
 
     const result = await provider.apply({
       action: {
@@ -41,7 +41,7 @@ Test('Studio sketch catalog creates canonical ordered free geometry and reads JS
     Expect(result.createdSketch).toMatchObject({ id: 'sketch-row', name: 'View1', view: 'View1' })
     Expect(result.catalog.sketches[0]?.rects.map(rect => rect.id)).toEqual(['rect-cover', 'rect-title'])
     Expect(await FS.readText(provider.path())).toBe(`{
-  "formatVersion": 2,
+  "formatVersion": 3,
   "nextViewNumber": 2,
   "revision": 1,
   "sketches": [
@@ -101,7 +101,7 @@ Test('Studio sketch catalog creates canonical ordered free geometry and reads JS
     `,
     )
     const migrated = await provider.read()
-    Expect(migrated).toMatchObject({ formatVersion: 2, revision: 1 })
+    Expect(migrated).toMatchObject({ formatVersion: 3, revision: 1 })
     Expect(migrated.sketches[0]?.rects[0]?.kind).toBe('Text')
     Expect(migrated.sketches[0]?.snapped).toEqual([])
     Expect(await FS.readText(provider.path())).toContain(`"formatVersion": ${studioSketchCatalogFormatVersion}`)
@@ -136,7 +136,7 @@ Test('Studio sketch catalog migrates strict v1 once without changing its logical
 
     const migrated = await provider.read()
     Expect(migrated).toEqual({
-      formatVersion: 2,
+      formatVersion: 3,
       nextViewNumber: 2,
       revision: 9,
       sketches: [{
@@ -159,6 +159,42 @@ Test('Studio sketch catalog migrates strict v1 once without changing its logical
   })
 })
 
+Test('Studio sketch catalog migrates v2 string bindings to structured v3 bindings', async () => {
+  await withTaoFiles('tao-studio-sketch-v2-binding-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    const provider = new StudioSketchCatalog(root)
+    await FS.writeText(
+      provider.path(),
+      JSON.stringify({
+        formatVersion: 2,
+        nextViewNumber: 2,
+        revision: 7,
+        sketches: [{
+          height: 76,
+          id: 'sketch-row',
+          name: 'View1',
+          project: 'music',
+          rectOrder: ['rect-cover'],
+          rects: [{ ...cover, binding: 'Playlist.Cover.Url' }],
+          snapped: [],
+          view: 'View1',
+          width: 360,
+        }],
+      }),
+    )
+
+    const migrated = await provider.read()
+    Expect(migrated).toMatchObject({ formatVersion: 3, revision: 7 })
+    Expect(migrated.sketches[0]?.rects[0]).toMatchObject({
+      fieldBinding: {
+        parameter: 'Playlist',
+        path: 'Cover.Url',
+        presentation: { kind: 'text' },
+      },
+    })
+    Expect(migrated.sketches[0]?.rects[0]?.binding).toBeUndefined()
+  })
+})
+
 Test('Studio sketch catalog leaves valid v1 intact when atomic migration replacement fails', async () => {
   await withTaoFiles(
     'tao-studio-sketch-migration-failure-',
@@ -176,7 +212,7 @@ Test('Studio sketch catalog leaves valid v1 intact when atomic migration replace
       Expect((await FS.listDir(FS.dirname(catalogPath))).filter(name => name.endsWith('.tmp'))).toEqual([])
 
       const recovered = await new StudioSketchCatalog(root).read()
-      Expect(recovered).toEqual({ formatVersion: 2, nextViewNumber: 1, revision: 4, sketches: [] })
+      Expect(recovered).toEqual({ formatVersion: 3, nextViewNumber: 1, revision: 4, sketches: [] })
     },
   )
 })
@@ -201,7 +237,7 @@ Test('Studio sketch actions preserve row order and support edit, duplicate, and 
       action: {
         kind: 'update-rect',
         rect: {
-          binding: 'Playlist.Name',
+          fieldBinding: { parameter: 'Playlist', path: 'Name', presentation: { kind: 'text' } },
           content: 'Mix',
           height: 16,
           id: 'rect-subtitle',
@@ -239,8 +275,17 @@ Test('Studio sketch actions preserve row order and support edit, duplicate, and 
     const rects = deleted.catalog.sketches[0]!.rects
     Expect(rects.map(rect => rect.id)).toEqual(['rect-subtitle', 'rect-copy'])
     Expect(deleted.catalog.sketches[0]!.rectOrder).toEqual(['rect-subtitle', 'rect-copy'])
-    Expect(rects[0]).toMatchObject({ binding: 'Playlist.Name', content: 'Mix', kind: 'Button', width: 140 })
-    Expect(rects[1]).toMatchObject({ binding: 'Playlist.Name', content: 'Mix', x: 90, y: 56 })
+    Expect(rects[0]).toMatchObject({
+      content: 'Mix',
+      fieldBinding: { parameter: 'Playlist', path: 'Name', presentation: { kind: 'text' } },
+      kind: 'Button',
+      width: 140,
+    })
+    Expect(rects[1]).toMatchObject({
+      fieldBinding: { parameter: 'Playlist', path: 'Name', presentation: { kind: 'text' } },
+      x: 90,
+      y: 56,
+    })
   })
 })
 
@@ -292,6 +337,83 @@ Test('Studio sketch actions atomically move selected free rows into strict assoc
     Expect(unsnapped.catalog.sketches[0]?.snapped.map(item => item.rect.id)).toEqual(['rect-title'])
     Expect(unsnapped.catalog.sketches[0]?.rectOrder).toEqual(['rect-cover', 'rect-title', 'rect-free'])
   })
+})
+
+Test('Studio bind-rect updates free and snapped bindings without disturbing geometry, target, or order', async () => {
+  await withTaoFiles('tao-studio-sketch-bind-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    const provider = new StudioSketchCatalog(root)
+    await provider.apply(createSketchRequest(0))
+    const freeBinding = {
+      parameter: 'Playlist',
+      path: 'Title',
+      presentation: { kind: 'text' as const, label: { path: 'Owner.Name', prefix: 'By ', suffix: '!' } },
+    }
+    const boundFree = await provider.apply({
+      action: { binding: freeBinding, kind: 'bind-rect', rectId: 'rect-cover', sketchId: 'sketch-row' },
+      expectedRevision: 1,
+      requestId: 'bind-free',
+    })
+    Expect(boundFree.catalog.sketches[0]?.rects[0]).toEqual({ ...cover, fieldBinding: freeBinding })
+    const snapped = await provider.apply({
+      action: {
+        kind: 'snap-rects',
+        sketchId: 'sketch-row',
+        targets: [target('rect-cover', 'Placeholder', 10, 20)],
+      },
+      expectedRevision: 2,
+      requestId: 'snap-bound',
+    })
+    const before = snapped.catalog.sketches[0]!
+    const imageBinding = { parameter: 'Playlist', path: 'Cover.Url', presentation: { kind: 'image' as const } }
+    const boundSnapped = await provider.apply({
+      action: { binding: imageBinding, kind: 'bind-rect', rectId: 'rect-cover', sketchId: 'sketch-row' },
+      expectedRevision: 3,
+      requestId: 'bind-snapped',
+    })
+    const after = boundSnapped.catalog.sketches[0]!
+    Expect(after.snapped[0]?.rect).toEqual({ ...before.snapped[0]!.rect, fieldBinding: imageBinding })
+    Expect(after.snapped[0]?.target).toEqual(before.snapped[0]?.target)
+    Expect(after.rectOrder).toEqual(before.rectOrder)
+  })
+})
+
+Test('Studio bind-rect validates exact typed payloads and preserves stale/idempotent request behavior', async () => {
+  await withTaoFiles(
+    'tao-studio-sketch-bind-validation-',
+    { 'Project.tao': 'project Music\n' },
+    async (_paths, root) => {
+      const provider = new StudioSketchCatalog(root)
+      await provider.apply(createSketchRequest(0))
+      const request = {
+        action: {
+          binding: { parameter: 'Playlist', path: 'Title', presentation: { kind: 'text' as const } },
+          kind: 'bind-rect' as const,
+          rectId: 'rect-cover',
+          sketchId: 'sketch-row',
+        },
+        expectedRevision: 1,
+        requestId: 'bind-idempotent',
+      }
+      const first = await provider.apply(request)
+      Expect(await provider.apply(request)).toBe(first)
+      await Expect(provider.apply({ ...request, expectedRevision: 1, requestId: 'bind-stale' }))
+        .rejects.toBeInstanceOf(StudioSketchCatalogConflictError)
+      for (
+        const binding of [
+          { parameter: 'not valid', path: 'Title', presentation: { kind: 'text' } },
+          { parameter: 'Playlist', path: '', presentation: { kind: 'text' } },
+          { parameter: 'Playlist', path: 'Title', presentation: { kind: 'video' } },
+          { extra: true, parameter: 'Playlist', path: 'Title', presentation: { kind: 'text' } },
+        ]
+      ) {
+        await Expect(provider.apply({
+          action: { binding, kind: 'bind-rect', rectId: 'rect-cover', sketchId: 'sketch-row' },
+          expectedRevision: 2,
+          requestId: `malformed-${JSON.stringify(binding)}`,
+        } as never)).rejects.toBeInstanceOf(Errors.UserInputError)
+      }
+    },
+  )
 })
 
 Test(

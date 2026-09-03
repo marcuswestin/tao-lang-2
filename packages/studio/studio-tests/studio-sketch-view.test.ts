@@ -356,7 +356,7 @@ function target(rectId: string) {
 }
 
 function catalog(revision: number, sketch: ReturnType<typeof testSketch>) {
-  return { formatVersion: 2 as const, nextViewNumber: 2, revision, sketches: [sketch] }
+  return { formatVersion: 3 as const, nextViewNumber: 2, revision, sketches: [sketch] }
 }
 
 function snapProposal(requestId: string, needsConfirmation: boolean): StudioSketchSnapProposalResult {

@@ -31,7 +31,7 @@ Describe('Studio sketch session protocol', () => {
         Expect(await FS.readText(FS.resolvePath('@/studio/View1.tao', root))).toContain('public\nview View1()')
         Expect(events.filter(event => event.type === 'sketch-catalog-changed')).toHaveLength(1)
         const handshake = await session.handshake()
-        Expect(handshake.capabilities.sketches).toEqual({ catalogVersion: 2, freeGeometry: true })
+        Expect(handshake.capabilities.sketches).toEqual({ catalogVersion: 3, freeGeometry: true })
         Expect(handshake.sketchCatalog).toEqual(created.catalog)
         Expect(handshake.endpoints).toContainEqual({ method: 'GET', path: '/api/sketches' })
         Expect(handshake.endpoints).toContainEqual({ method: 'POST', path: '/api/sketches/action' })
@@ -526,7 +526,7 @@ Describe('Studio sketch session protocol', () => {
   )
 
   Test('routes catalog snapshots/actions and dispatches catalog events through the typed client boundary', async () => {
-    const snapshot = { formatVersion: 2 as const, nextViewNumber: 1, revision: 0, sketches: [] }
+    const snapshot = { formatVersion: 3 as const, nextViewNumber: 1, revision: 0, sketches: [] }
     const actions: unknown[] = []
     const session = {
       async applySketchAction(input: unknown) {

@@ -1,13 +1,28 @@
 import { Assert, Errors, FS } from '@shared'
 
-export const studioSketchCatalogFormatVersion = 2 as const
+export const studioSketchCatalogFormatVersion = 3 as const
 export const studioSketchCatalogRelativePath = '.tao-project/studio/sketches.jsonc'
 
+export type StudioSketchFieldBinding = Readonly<{
+  parameter: string
+  path: string
+  presentation: Readonly<{
+    kind: 'image' | 'text'
+    label?: Readonly<{
+      path: string
+      prefix?: string
+      suffix?: string
+    }>
+  }>
+}>
+
 export type StudioSketchRect = Readonly<{
+  /** @deprecated Read-only compatibility for pre-v3 callers; persisted v3 catalogs reject this field. */
   binding?: string
   content?: string
   height: number
   id: string
+  fieldBinding?: StudioSketchFieldBinding
   kind: string
   width: number
   x: number
@@ -48,6 +63,12 @@ export type StudioSketchCatalogSnapshot = Readonly<{
 }>
 
 export type StudioSketchCatalogAction =
+  | Readonly<{
+    binding: StudioSketchFieldBinding
+    kind: 'bind-rect'
+    rectId: string
+    sketchId: string
+  }>
   | Readonly<{
     height: number
     id: string
@@ -344,6 +365,19 @@ function applyAction(
     rects[index] = action.rect
     return { catalog: replaceSketch(catalog, { ...sketch, rects }) }
   }
+  if (action.kind === 'bind-rect') {
+    const freeIndex = sketch.rects.findIndex(rect => rect.id === action.rectId)
+    if (freeIndex >= 0) {
+      const rects = [...sketch.rects]
+      rects[freeIndex] = { ...rects[freeIndex]!, fieldBinding: action.binding }
+      return { catalog: replaceSketch(catalog, { ...sketch, rects }) }
+    }
+    const snappedIndex = requireSnappedRectIndex(sketch, action.rectId)
+    const snapped = [...sketch.snapped]
+    const item = snapped[snappedIndex]!
+    snapped[snappedIndex] = { ...item, rect: { ...item.rect, fieldBinding: action.binding } }
+    return { catalog: replaceSketch(catalog, { ...sketch, snapped }) }
+  }
   if (action.kind === 'duplicate-rect') {
     const index = requireRectIndex(sketch, action.rectId)
     const source = sketch.rects[index]!
@@ -431,6 +465,13 @@ function validateAction(action: Record<string, unknown>): void {
     validateRect(action['rect'], 'update-rect.rect')
     return
   }
+  if (action['kind'] === 'bind-rect') {
+    requireOnlyKeys(action, ['binding', 'kind', 'rectId', 'sketchId'], 'bind-rect action')
+    requireNonEmptyString(action['sketchId'], 'bind-rect.sketchId')
+    requireNonEmptyString(action['rectId'], 'bind-rect.rectId')
+    validateFieldBinding(action['binding'], 'bind-rect.binding')
+    return
+  }
   if (action['kind'] === 'duplicate-rect') {
     requireOnlyKeys(action, ['id', 'kind', 'rectId', 'sketchId', 'x', 'y'], 'duplicate-rect action')
     requireNonEmptyString(action['sketchId'], 'duplicate-rect.sketchId')
@@ -481,9 +522,59 @@ function parseCatalog(content: string): Readonly<{ catalog: StudioSketchCatalogS
   }
   Assert.input(isRecord(parsed), 'Studio sketch catalog must contain an object.')
   if (parsed['formatVersion'] === 1) {
-    return { catalog: migrateV1Catalog(parsed), migrated: true }
+    return { catalog: migrateV1Catalog(migrateLegacyBindings(parsed)), migrated: true }
+  }
+  if (parsed['formatVersion'] === 2) {
+    return { catalog: migrateV2Catalog(parsed), migrated: true }
   }
   return { catalog: validateCatalog(parsed), migrated: false }
+}
+
+function migrateV2Catalog(value: Record<string, unknown>): StudioSketchCatalogSnapshot {
+  const migrated = migrateLegacyBindings(value)
+  return validateCatalog({ ...migrated, formatVersion: studioSketchCatalogFormatVersion })
+}
+
+function migrateLegacyBindings(value: Record<string, unknown>): Record<string, unknown> {
+  Assert.input(Array.isArray(value['sketches']), 'Studio sketch catalog sketches must be an array.')
+  return {
+    ...value,
+    sketches: value['sketches'].map(sketch => {
+      if (!isRecord(sketch)) {
+        return sketch
+      }
+      return {
+        ...sketch,
+        rects: Array.isArray(sketch['rects']) ? sketch['rects'].map(migrateLegacyRect) : sketch['rects'],
+        ...(Array.isArray(sketch['snapped'])
+          ? {
+            snapped: sketch['snapped'].map(item =>
+              isRecord(item) ? { ...item, rect: migrateLegacyRect(item['rect']) } : item
+            ),
+          }
+          : {}),
+      }
+    }),
+  }
+}
+
+function migrateLegacyRect(value: unknown): unknown {
+  if (!isRecord(value) || value['binding'] === undefined) {
+    return value
+  }
+  const binding = requireNonEmptyString(value['binding'], 'legacy rectangle binding')
+  const [parameter, ...path] = binding.split('.')
+  requireIdentifier(parameter, 'legacy rectangle binding parameter')
+  requirePath(path.join('.'), 'legacy rectangle binding path')
+  const { binding: _binding, ...rect } = value
+  return {
+    ...rect,
+    fieldBinding: {
+      parameter,
+      path: path.join('.'),
+      presentation: { kind: value['kind'] === 'Image' ? 'image' : 'text' },
+    },
+  }
 }
 
 function migrateV1Catalog(value: Record<string, unknown>): StudioSketchCatalogSnapshot {
@@ -613,7 +704,7 @@ function validateRenderTarget(value: unknown, field: string): StudioSketchRender
 
 function validateRect(value: unknown, field: string): StudioSketchRect {
   Assert.input(isRecord(value), `Studio rectangle ${field} must be an object.`)
-  requireOnlyKeys(value, ['binding', 'content', 'height', 'id', 'kind', 'width', 'x', 'y'], field)
+  requireOnlyKeys(value, ['content', 'fieldBinding', 'height', 'id', 'kind', 'width', 'x', 'y'], field)
   const id = requireNonEmptyString(value['id'], `${field}.id`)
   const x = requireNonNegativeFinite(value['x'], `${field}.x`)
   const y = requireNonNegativeFinite(value['y'], `${field}.y`)
@@ -621,9 +712,11 @@ function validateRect(value: unknown, field: string): StudioSketchRect {
   const height = requirePositiveFinite(value['height'], `${field}.height`)
   const kind = requireTaoElementName(value['kind'], `${field}.kind`)
   const content = optionalString(value, 'content', field)
-  const binding = optionalString(value, 'binding', field)
+  const fieldBinding = value['fieldBinding'] === undefined
+    ? undefined
+    : validateFieldBinding(value['fieldBinding'], `${field}.fieldBinding`)
   return {
-    ...(binding === undefined ? {} : { binding }),
+    ...(fieldBinding === undefined ? {} : { fieldBinding }),
     ...(content === undefined ? {} : { content }),
     height,
     id,
@@ -632,6 +725,58 @@ function validateRect(value: unknown, field: string): StudioSketchRect {
     x,
     y,
   }
+}
+
+function validateFieldBinding(value: unknown, field: string): StudioSketchFieldBinding {
+  Assert.input(isRecord(value), `Studio sketch ${field} must be an object.`)
+  requireOnlyKeys(value, ['parameter', 'path', 'presentation'], field)
+  const parameter = requireIdentifier(value['parameter'], `${field}.parameter`)
+  const path = requirePath(value['path'], `${field}.path`)
+  const presentationValue = value['presentation']
+  Assert.input(isRecord(presentationValue), `Studio sketch ${field}.presentation must be an object.`)
+  requireOnlyKeys(presentationValue, ['kind', 'label'], `${field}.presentation`)
+  Assert.input(
+    presentationValue['kind'] === 'text' || presentationValue['kind'] === 'image',
+    `Studio sketch ${field}.presentation.kind must be text or image.`,
+  )
+  const labelValue = presentationValue['label']
+  let label: StudioSketchFieldBinding['presentation']['label']
+  if (labelValue !== undefined) {
+    Assert.input(isRecord(labelValue), `Studio sketch ${field}.presentation.label must be an object.`)
+    requireOnlyKeys(labelValue, ['path', 'prefix', 'suffix'], `${field}.presentation.label`)
+    label = {
+      path: requirePath(labelValue['path'], `${field}.presentation.label.path`),
+      ...(labelValue['prefix'] === undefined
+        ? {}
+        : { prefix: requireNonEmptyString(labelValue['prefix'], `${field}.presentation.label.prefix`) }),
+      ...(labelValue['suffix'] === undefined
+        ? {}
+        : { suffix: requireNonEmptyString(labelValue['suffix'], `${field}.presentation.label.suffix`) }),
+    }
+  }
+  return {
+    parameter,
+    path,
+    presentation: {
+      kind: presentationValue['kind'],
+      ...(label === undefined ? {} : { label }),
+    },
+  }
+}
+
+function requireIdentifier(value: unknown, field: string): string {
+  const identifier = requireNonEmptyString(value, field)
+  Assert.input(/^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier), `Studio sketch ${field} must be an identifier.`)
+  return identifier
+}
+
+function requirePath(value: unknown, field: string): string {
+  const path = requireNonEmptyString(value, field)
+  Assert.input(
+    path.split('.').every(segment => /^[A-Za-z_][A-Za-z0-9_]*$/.test(segment)),
+    `Studio sketch ${field} must be a nonempty identifier path.`,
+  )
+  return path
 }
 
 function serializeCatalog(catalog: StudioSketchCatalogSnapshot): string {
