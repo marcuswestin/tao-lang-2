@@ -337,13 +337,28 @@ function stablePreviewRootSource(): string {
 import TR from '@runtime/TR'
 import { TaoApp, TaoStudioManifest, TaoStudioPublication } from './TaoStudioActivePreview'
 
-const TaoStudioPreviewBootstrap = typeof window === 'undefined'
+// React Native aliases \`window\` to its global, so only the platform says whether this is a browser.
+const TaoStudioNativeDevice = require('react-native').Platform?.OS !== 'web'
+const TaoStudioPreviewBootstrap = TaoStudioNativeDevice || typeof window === 'undefined'
   ? undefined
   : studioPreviewBootstrap(window.location.href)
 const TaoStudioProtocolChannel = 'tao-studio'
 const TaoStudioProtocolVersion = 1
 
 export default function App() {
+  return TaoStudioNativeDevice
+    ? (
+      <TR.Studio.DeviceHost
+        App={TaoApp}
+        cellRuntime={studioCellRuntime}
+        manifest={TaoStudioManifest}
+        publication={TaoStudioPublication}
+      />
+    )
+    : <StudioBrowserApp />
+}
+
+function StudioBrowserApp() {
   const [cell, setCell] = React.useState<any>()
   const [bootstrapError, setBootstrapError] = React.useState<unknown>()
   React.useEffect(() => {

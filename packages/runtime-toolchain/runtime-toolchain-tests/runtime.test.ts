@@ -212,6 +212,12 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).toContain(
           "import { TaoApp, TaoStudioManifest, TaoStudioPublication } from './TaoStudioActivePreview'",
         )
+        // Every platform but web mounts the device host around the same app, manifest, and cell adapter.
+        Expect(stableRoot).toContain("require('react-native').Platform?.OS !== 'web'")
+        Expect(stableRoot).toContain('<TR.Studio.DeviceHost')
+        Expect(stableRoot).toContain('cellRuntime={studioCellRuntime}')
+        Expect(stableRoot).toContain('publication={TaoStudioPublication}')
+        Expect(stableRoot).toContain("TaoStudioNativeDevice || typeof window === 'undefined'")
         Expect(stableRoot).toContain("params.get('taoStudioParentOrigin')")
         Expect(stableRoot).toContain("params.get('taoStudioPreviewInstanceId')")
         Expect(stableRoot).toContain("params.get('taoStudioSessionId')")
