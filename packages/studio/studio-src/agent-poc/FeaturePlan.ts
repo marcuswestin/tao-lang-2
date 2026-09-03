@@ -1,14 +1,17 @@
 // Semantic agent proof of concept: "add a feature by describing it".
 //
-// The model decides the feature's shape (entity, field, kind, label, scenario name). Tao decides every
-// placement from the semantic snapshot by copying the pattern of an analogous existing field, and lowers the
-// plan into formatted source edits across the data, view, and entry files. Only yes/no fields lower; other
-// kinds produce an honest unsupported step. Nothing here is a production change model.
+// The model first says which kind of change the request asks for, then chooses that kind's shape (which
+// entity, which words, which view). Tao decides every placement from the semantic snapshot and lowers the
+// shape into formatted source edits. A request outside the kinds this PoC lowers is answered honestly
+// rather than forced into one. Nothing here is a production change model.
 import Formatter from '@formatter'
 import { type AgentRunResult, runAgentJob } from './AgentPocRun'
-import { type SemanticSnapshot, type SnapshotNode } from './SemanticSnapshot'
+import { type SemanticSnapshot, type SnapshotNode, type SnapshotText } from './SemanticSnapshot'
 
 type Json = Record<string, unknown>
+
+/** The change kinds this PoC can lower. `other` is an honest refusal, not a failure. */
+export type FeatureKind = 'add-flag' | 'reword-text' | 'other'
 
 export type FeatureShape = {
   featureName: string
@@ -19,6 +22,13 @@ export type FeatureShape = {
   presentIn: string
   scenarioName: string
   summary: string
+}
+
+export type RewordShape = {
+  featureName: string
+  newText: string
+  summary: string
+  textHandle: string
 }
 
 export type PlanStep = {
@@ -33,12 +43,15 @@ export type PlanStep = {
 export type FeatureEdit = { path: string; before: string; after: string }
 
 export type FeaturePlan = {
-  shape: FeatureShape
+  kind: FeatureKind
+  shape: Json
   steps: PlanStep[]
   edits: FeatureEdit[]
   packet: Json
   model: AgentRunResult
   problems: string[]
+  /** Set when the request is outside what this PoC lowers: what was asked, and what it can do instead. */
+  explanation?: string
 }
 
 type ReadFile = (path: string) => Promise<string>
@@ -80,6 +93,50 @@ function innermostRender(snapshot: SemanticSnapshot, evidence: string): Snapshot
     .sort((a, b) => (b.start! - a.start!))[0]
 }
 
+// ---- Text candidates -----------------------------------------------------------------------------
+
+export type TextCandidate = {
+  handle: string
+  view: string
+  path: string
+  start: number
+  end: number
+  text: string
+  renderId: string
+}
+
+/** textCandidates lists every string literal a view renders, in source order, with a short model handle. */
+export function textCandidates(snapshot: SemanticSnapshot): TextCandidate[] {
+  const renders = [...snapshot.nodes.values()].filter(n => n.kind === 'render' && detail(n)['texts'] !== undefined)
+    .sort((a, b) => (a.path === b.path ? a.start! - b.start! : a.path!.localeCompare(b.path!)))
+  const candidates: TextCandidate[] = []
+  for (const render of renders) {
+    for (const text of detail(render)['texts'] as SnapshotText[]) {
+      candidates.push({
+        end: text.end,
+        handle: `T${candidates.length + 1}`,
+        path: render.path!,
+        renderId: render.id,
+        start: text.start,
+        text: text.text,
+        view: String(detail(render)['owner']),
+      })
+    }
+  }
+  return candidates
+}
+
+/** interpolationsIn lists the `{ ... }` expressions of a Tao string, trimmed, in order. */
+function interpolationsIn(text: string): string[] {
+  return [...text.matchAll(/\{([^}]*)\}/g)].map(match => match[1]!.trim())
+}
+
+function unquote(text: string): string {
+  return /^".*"$/s.test(text) ? text.slice(1, -1) : text
+}
+
+// ---- Packets -------------------------------------------------------------------------------------
+
 export function featurePacket(snapshot: SemanticSnapshot): Json {
   const entities = [...snapshot.nodes.values()].filter(n => n.kind === 'entity')
   return {
@@ -102,11 +159,73 @@ export function featurePacket(snapshot: SemanticSnapshot): Json {
   }
 }
 
+export function rewordPacket(candidates: TextCandidate[]): Json {
+  return { texts: candidates.map(c => `${c.handle} (${c.view}): ${c.text}`) }
+}
+
+// ---- Planning ------------------------------------------------------------------------------------
+
+const KIND_MENU = [
+  'add-flag: add a new yes/no field to an entity and a checkbox that turns it on and off.',
+  'reword-text: change the wording, or the order of the parts, of text a view already shows on screen.',
+  'other: anything else — new screens, navigation, queries, layout, styling, deleting things.',
+].join('\n')
+
 export async function planFeature(
   snapshot: SemanticSnapshot,
   request: string,
   readFile: ReadFile,
 ): Promise<FeaturePlan> {
+  const classification = await runAgentJob({
+    call: async () => 'no tools',
+    instructions:
+      'You sort a feature request for a Tao app into exactly one kind of change. Choose the kind that matches what the request literally asks for. Do not force a request into a kind that does not fit; choose "other" instead.',
+    maxToolCalls: 0,
+    outputSchema: {
+      properties: {
+        kind: { enum: ['add-flag', 'reword-text', 'other'], type: 'string' },
+        reason: { description: 'One short sentence', type: 'string' },
+      },
+      required: ['kind', 'reason'],
+      type: 'object',
+    },
+    prompt: `Feature request: ${request}\n\nKinds:\n${KIND_MENU}`,
+    tools: [],
+  })
+  const chosen = (classification.value as { kind?: FeatureKind; reason?: string } | undefined) ?? {}
+  const kind = chosen.kind ?? 'other'
+  if (classification.status !== 'ok') {
+    return {
+      edits: [],
+      kind: 'other',
+      model: classification,
+      packet: {},
+      problems: [classification.message ?? 'model failure'],
+      shape: {},
+      steps: [],
+    }
+  }
+  if (kind === 'reword-text') {
+    return await planReword(snapshot, request, readFile, chosen.reason)
+  }
+  if (kind === 'other') {
+    return {
+      edits: [],
+      explanation: `The model read this as: ${
+        chosen.reason ?? 'a change outside the supported kinds'
+      }\nThis proof of concept lowers two kinds of change:\n${KIND_MENU}\nRephrase the request as one of those, or take it to the source.`,
+      kind,
+      model: classification,
+      packet: { kinds: KIND_MENU },
+      problems: [],
+      shape: chosen as Json,
+      steps: [],
+    }
+  }
+  return await planFlag(snapshot, request, readFile)
+}
+
+async function planFlag(snapshot: SemanticSnapshot, request: string, readFile: ReadFile): Promise<FeaturePlan> {
   const packet = featurePacket(snapshot)
   const entityNames = [...snapshot.nodes.values()].filter(n => n.kind === 'entity').map(n => n.name)
   const viewNames = [...snapshot.nodes.values()].filter(n => n.kind === 'view').map(n => n.name)
@@ -139,14 +258,126 @@ export async function planFeature(
   if (model.status !== 'ok' || shape === undefined) {
     return {
       edits: [],
+      kind: 'add-flag',
       model,
       packet,
       problems: [model.message ?? 'model failure'],
-      shape: shape ?? emptyShape(),
+      shape: (shape ?? emptyShape()) as unknown as Json,
       steps: [],
     }
   }
-  return { ...(await lowerFeature(snapshot, shape, readFile, problems)), model, packet, problems, shape }
+  const lowered = await lowerFeature(snapshot, shape, readFile, problems)
+  return { ...lowered, kind: 'add-flag', model, packet, problems, shape: shape as unknown as Json }
+}
+
+async function planReword(
+  snapshot: SemanticSnapshot,
+  request: string,
+  readFile: ReadFile,
+  reason: string | undefined,
+): Promise<FeaturePlan> {
+  const candidates = textCandidates(snapshot)
+  const packet = rewordPacket(candidates)
+  if (candidates.length === 0) {
+    return {
+      edits: [],
+      explanation: 'This app renders no literal text, so there is nothing to reword.',
+      kind: 'reword-text',
+      model: {
+        elapsedMs: 0,
+        helper: '',
+        notes: [],
+        promptChars: 0,
+        status: 'ok',
+        toolCalls: [],
+        toolResultChars: 0,
+        transcript: [],
+      },
+      packet,
+      problems: [],
+      shape: {},
+      steps: [],
+    }
+  }
+  // Two small turns beat one large one on a 4k-token on-device model: asked to choose and rewrite at once
+  // it tends to echo the list it was given. Picking first means the rewriting turn sees a single line.
+  const picked = await runAgentJob({
+    call: async () => 'no tools',
+    instructions: "You choose which line of text on screen a request is about. Answer with that line's handle only.",
+    maxToolCalls: 0,
+    outputSchema: {
+      properties: {
+        reason: { description: 'One short sentence', type: 'string' },
+        textHandle: { enum: candidates.map(c => c.handle), type: 'string' },
+      },
+      required: ['reason', 'textHandle'],
+      type: 'object',
+    },
+    prompt: `Request: ${request}${reason === undefined ? '' : `\nRead as: ${reason}`}\n\nLines on screen:\n${
+      candidates.map(c => `${c.handle} (${c.view}): ${c.text}`).join('\n')
+    }`,
+    tools: [],
+  })
+  const choice = (picked.value as { textHandle?: string } | undefined)?.textHandle
+  const target = candidates.find(c => c.handle === choice)
+  if (picked.status !== 'ok' || target === undefined) {
+    return {
+      edits: [],
+      kind: 'reword-text',
+      model: picked,
+      packet,
+      problems: [picked.message ?? `the model chose ${String(choice)}, which is not a line this app shows`],
+      shape: {},
+      steps: [],
+    }
+  }
+  const placeholders = interpolationsIn(target.text)
+  const model = await runAgentJob({
+    call: async () => 'no tools',
+    instructions: [
+      'You rewrite one line of text that an app shows on screen. Write the new line and nothing else.',
+      'Every { ... } placeholder is a live value. Keep each placeholder exactly as written, character for character. You may put them in a different order and change the ordinary words around them. Never invent a placeholder.',
+    ].join(' '),
+    maxToolCalls: 0,
+    outputSchema: {
+      properties: {
+        featureName: { description: 'Two or three words naming the change', type: 'string' },
+        newText: { description: 'The rewritten line, without surrounding quotes', type: 'string' },
+        summary: { description: 'One sentence saying what changes on screen', type: 'string' },
+      },
+      required: ['featureName', 'newText', 'summary'],
+      type: 'object',
+    },
+    prompt: `Request: ${request}\n\nThe line to rewrite, shown by ${target.view}:\n${unquote(target.text)}${
+      placeholders.length === 0
+        ? ''
+        : `\n\nIts placeholders, all of which must appear in your answer unless the request says to remove one:\n${
+          placeholders.map(p => `{ ${p} }`).join('\n')
+        }`
+    }`,
+    tools: [],
+  })
+  const problems: string[] = []
+  const written = model.value as { featureName?: string; newText?: string; summary?: string } | undefined
+  if (model.status !== 'ok' || written?.newText === undefined) {
+    return {
+      edits: [],
+      kind: 'reword-text',
+      model,
+      packet,
+      problems: [model.message ?? 'model failure'],
+      shape: {},
+      steps: [],
+    }
+  }
+  const shape: RewordShape = {
+    featureName: written.featureName ?? 'Reword',
+    newText: written.newText,
+    summary: written.summary ?? '',
+    textHandle: target.handle,
+  }
+  const lowered = await lowerReword(snapshot, candidates, shape, readFile, problems)
+  return { ...lowered, kind: 'reword-text', model, packet, problems, shape: shape as unknown as Json }
 }
 
 function emptyShape(): FeatureShape {
@@ -172,6 +403,99 @@ function applyEdits(source: string, edits: Edit[]): string {
   return result
 }
 
+/** mergeImportEdit adds one name to a `use ... from <module>` line, or writes the line when there is none. */
+function mergeImportEdit(source: string, module: string, name: string): Edit[] {
+  const line = new RegExp(`^use (.+) from ${module.replace('/', '\\/')}$`, 'm').exec(source)
+  if (line === null) {
+    return [{ end: 0, replacement: `use ${name} from ${module}\n`, start: 0 }]
+  }
+  const names = line[1]!.split(',').map(entry => entry.trim())
+  if (names.includes(name)) {
+    return []
+  }
+  return [{
+    end: line.index + line[0].length,
+    replacement: `use ${[...names, name].sort().join(', ')} from ${module}`,
+    start: line.index,
+  }]
+}
+
+// ---- Reword lowering -----------------------------------------------------------------------------
+
+/**
+ * lowerReword swaps one string literal in place. Tao checks the replacement against the original: every
+ * `{ ... }` placeholder it uses must already exist in that text or name a field of the entity the view
+ * takes, so a reword can rearrange what the screen says but never invent a value that would not compile.
+ */
+export async function lowerReword(
+  snapshot: SemanticSnapshot,
+  candidates: TextCandidate[],
+  shape: RewordShape,
+  readFile: ReadFile,
+  problems: string[],
+): Promise<Pick<FeaturePlan, 'steps' | 'edits'>> {
+  const steps: PlanStep[] = []
+  const edits: FeatureEdit[] = []
+  const target = candidates.find(c => c.handle === shape.textHandle)
+  if (target === undefined) {
+    problems.push(`${shape.textHandle} is not one of the texts this app shows`)
+    return { edits, steps }
+  }
+  const before = unquote(target.text)
+  const after = unquote(shape.newText.trim())
+  if (after.includes('"')) {
+    problems.push('the replacement text contains a quote, which would not parse')
+    return { edits, steps }
+  }
+  if (after === before) {
+    problems.push(`${target.view} already shows "${before}"; the model requested no change (no-op rejected)`)
+    return { edits, steps }
+  }
+  if (after === '') {
+    problems.push('the replacement text is empty')
+    return { edits, steps }
+  }
+  // A placeholder may be one already in this text, or any field of an entity the owning view takes.
+  const view = snapshot.nodes.get(`view:${target.view}`)
+  const reachable = new Set(interpolationsIn(before))
+  for (const parameter of (detail(view)['parameters'] as string[] | undefined) ?? []) {
+    const match = /^(\w+) \(entity (\w+)\)$/.exec(parameter)
+    const entity = match === null ? undefined : snapshot.nodes.get(`entity:${match[2]}`)
+    for (const field of (detail(entity)['fields'] as { name: string }[] | undefined) ?? []) {
+      reachable.add(`${match![1]!}.${field.name}`)
+    }
+  }
+  const used = interpolationsIn(after)
+  const invented = used.filter(expression => !reachable.has(expression))
+  if (invented.length > 0) {
+    problems.push(
+      `the replacement uses ${invented.map(e => `{ ${e} }`).join(', ')}, which ${
+        invented.length === 1 ? 'is not a value' : 'are not values'
+      } ${target.view} can show`,
+    )
+    return { edits, steps }
+  }
+  const dropped = [...new Set(interpolationsIn(before))].filter(expression => !used.includes(expression))
+  const source = await readFile(target.path)
+  const formatted = await Formatter.formatCode(
+    applyEdits(source, [{ end: target.end, replacement: JSON.stringify(after), start: target.start }]),
+  )
+  edits.push({ after: formatted, before: source, path: target.path })
+  steps.push({
+    action: `reword ${target.view}: ${target.text} → ${JSON.stringify(after)}`,
+    decidedBy: 'model',
+    evidence: [target.renderId, `src:${target.path}:${target.start}-${target.end}`],
+    file: target.path,
+    note: `every placeholder it uses resolves${
+      dropped.length === 0 ? '' : `; it no longer shows ${dropped.map(e => `{ ${e} }`).join(', ')}`
+    }`,
+    status: 'ready',
+  })
+  return { edits, steps }
+}
+
+// ---- Flag lowering -------------------------------------------------------------------------------
+
 export async function lowerFeature(
   snapshot: SemanticSnapshot,
   shape: FeatureShape,
@@ -179,12 +503,24 @@ export async function lowerFeature(
   problems: string[],
 ): Promise<Pick<FeaturePlan, 'steps' | 'edits'>> {
   const steps: PlanStep[] = []
-  const edits: FeatureEdit[] = []
+  // An app may declare its entity, its view, and its entry in one file, so every placement is collected as
+  // a range edit against that file's original text and the file is rewritten once. Producing one whole-file
+  // edit per placement would silently drop all but the last.
+  const pending = new Map<string, Edit[]>()
+  const stage = (path: string, ...list: Edit[]) => pending.set(path, [...(pending.get(path) ?? []), ...list])
+  const materialize = async (): Promise<Pick<FeaturePlan, 'steps' | 'edits'>> => {
+    const edits: FeatureEdit[] = []
+    for (const [path, list] of pending) {
+      const before = await readFile(path)
+      edits.push({ after: await Formatter.formatCode(applyEdits(before, list)), before, path })
+    }
+    return { edits, steps }
+  }
   const entity = snapshot.nodes.get(`entity:${shape.entity}`)
   const chosenView = snapshot.nodes.get(`view:${shape.presentIn}`)
   if (entity === undefined || chosenView === undefined) {
     problems.push(`Unknown entity or view: ${shape.entity}, ${shape.presentIn}`)
-    return { edits, steps }
+    return await materialize()
   }
   const singular = String(detail(entity)['singular'])
   // The model may name the screen; the pattern usually lives in a view the screen renders. Follow `renders`
@@ -211,6 +547,20 @@ export async function lowerFeature(
     shape.presentIn = view.name
   }
   const fields = detail(entity)['fields'] as { name: string; type: string }[]
+  // The model often writes the field name in the case it would use in prose. Tao knows the convention, so
+  // it repairs the name and says it did, rather than refusing a shape that is right in every other way.
+  if (/^[a-z][A-Za-z0-9]*$/.test(shape.fieldName)) {
+    const repaired = shape.fieldName.replace(/^./, character => character.toUpperCase())
+    steps.push({
+      action: `capitalize the field name: ${shape.fieldName} → ${repaired}`,
+      decidedBy: 'tao',
+      evidence: [entity.id],
+      file: entity.path!,
+      note: 'Tao field names are capitalized; the model wrote it in prose case',
+      status: 'ready',
+    })
+    shape.fieldName = repaired
+  }
   if (!/^[A-Z][A-Za-z0-9]*$/.test(shape.fieldName)) {
     problems.push(`Field name is not a capitalized identifier: ${shape.fieldName}`)
   }
@@ -224,9 +574,6 @@ export async function lowerFeature(
     problems.push(`${shape.presentIn} does not take a ${singular} parameter`)
   }
   const pattern = patterns.find(a => a['presentedIn'] === view.id)
-  if (pattern === undefined) {
-    problems.push(`${shape.presentIn} has no existing yes/no ${singular} field to copy the pattern from`)
-  }
   if (shape.fieldKind !== 'yes/no') {
     steps.push({
       action: `add ${singular}.${shape.fieldName} ${shape.fieldKind}`,
@@ -236,67 +583,103 @@ export async function lowerFeature(
       note: 'this PoC lowers yes/no fields only',
       status: 'unsupported',
     })
-    return { edits, steps }
+    return await materialize()
   }
-  if (problems.length > 0 || parameter === undefined || pattern === undefined) {
-    return { edits, steps }
+  if (problems.length > 0 || parameter === undefined) {
+    return await materialize()
   }
   const F = shape.fieldName
-  const analogField = snapshot.nodes.get(String(pattern['field']))!
-  const analogAction = snapshot.nodes.get(String(pattern['writtenBy']))!
-  const analogRender = snapshot.nodes.get(String(pattern['renderId']))!
   const actionName = `Set${F}`
-  const actionOwner = analogAction.name.split('.')[0]
 
-  // 1. Data file: the new field right after the analogous field.
+  // Anchors. With an analogous yes/no field, every placement copies that field's own pattern. Without one
+  // — a first flag in an app that has none — Tao falls back to the view's structure: after the last field,
+  // before the view's render block, and after the last thing the view renders.
+  const analogField = pattern === undefined ? undefined : snapshot.nodes.get(String(pattern['field']))
+  const analogAction = pattern === undefined ? undefined : snapshot.nodes.get(String(pattern['writtenBy']))
+  const analogRender = pattern === undefined ? undefined : snapshot.nodes.get(String(pattern['renderId']))
+  const entityFields = [...snapshot.nodes.values()].filter(n =>
+    n.kind === 'field' && detail(n)['entity'] === entity.name
+  )
+  const lastField = entityFields.sort((a, b) => b.end! - a.end!)[0]
+  const viewRenders = [...snapshot.nodes.values()].filter(n =>
+    n.kind === 'render' && n.path === view.path && detail(n)['owner'] === view.name
+  )
+  const rootRender = [...viewRenders].sort((a, b) => a.start! - b.start!)[0]
+  // The last thing the view renders is the one that starts last, not the one that ends last: the render
+  // that ends last is the outermost container, and putting the control after it lands outside the card.
+  const lastRender = [...viewRenders].sort((a, b) => b.start! - a.start!)[0]
+  const fieldAnchor = analogField ?? lastField
+  if (fieldAnchor === undefined || rootRender === undefined || lastRender === undefined) {
+    problems.push(`${view.name} renders nothing, or ${entity.name} declares no fields, so there is nothing to copy`)
+    return await materialize()
+  }
+  const actionOwner = analogAction === undefined ? view.name : analogAction.name.split('.')[0]
+  if (pattern === undefined) {
+    steps.push({
+      action: `place the flag from ${view.name}'s own structure: ${entity.name} has no yes/no field to copy`,
+      decidedBy: 'tao',
+      evidence: [entity.id, view.id],
+      file: view.path!,
+      note: `field after ${fieldAnchor.name}, action before the render block, control after ${lastRender.name}`,
+      status: 'ready',
+    })
+  }
+
+  // 1. Data file: the new field right after the anchor field.
   const dataBefore = await readFile(entity.path!)
-  // Insert after the whole line so a trailing comment on the analogous field stays with it.
-  const fieldLineEnd = dataBefore.indexOf('\n', analogField.end!)
-  const dataAfter = await Formatter.formatCode(applyEdits(dataBefore, [{
-    end: fieldLineEnd,
-    replacement: `\n   ${F} yes / no`,
-    start: fieldLineEnd,
-  }]))
-  edits.push({ after: dataAfter, before: dataBefore, path: entity.path! })
+  // Insert after the whole line so a trailing comment on the anchor field stays with it.
+  const fieldLineEnd = dataBefore.indexOf('\n', fieldAnchor.end!)
+  stage(entity.path!, { end: fieldLineEnd, replacement: `\n   ${F} yes / no`, start: fieldLineEnd })
   steps.push({
-    action: `add field ${singular}.${F} yes / no after ${analogField.name}`,
+    action: `add field ${singular}.${F} yes / no after ${fieldAnchor.name}`,
     decidedBy: 'model',
-    evidence: [analogField.id, `src:${entity.path}:${analogField.start}-${analogField.end}`],
+    evidence: [fieldAnchor.id, `src:${entity.path}:${fieldAnchor.start}-${fieldAnchor.end}`],
     file: entity.path!,
     status: 'ready',
   })
 
-  // 2. View file: the action after the analogous action, the control after the analogous render.
+  // 2. View file: the action, then the control the person taps.
   const viewBefore = await readFile(view.path!)
-  const viewAfter = await Formatter.formatCode(applyEdits(viewBefore, [
+  const actionText = `action ${actionName}(Value boolean) {\n      update ${parameter} {\n         ${F}: Value\n   }  }`
+  const actionEdit: Edit = analogAction !== undefined
+    ? { end: analogAction.end!, replacement: `\n   ${actionText}`, start: analogAction.end! }
+    : (() => {
+      const lineStart = viewBefore.lastIndexOf('\n', rootRender.start! - 1) + 1
+      return { end: lineStart, replacement: `   ${actionText}\n`, start: lineStart }
+    })()
+  const renderAnchorEnd = (analogRender ?? lastRender).end!
+  // Copying a pattern brings the control's element with it; placing a first flag does not, so the view's
+  // stdlib import has to gain Checkbox or the file will not resolve it.
+  const checkboxImportEdits = mergeImportEdit(viewBefore, '@tao/ui', 'Checkbox')
+  stage(
+    view.path!,
+    ...checkboxImportEdits,
+    actionEdit,
     {
-      end: analogAction.end!,
-      replacement:
-        `\n   action ${actionName}(Value boolean) {\n      update ${parameter} {\n         ${F}: Value\n   }  }`,
-      start: analogAction.end!,
-    },
-    {
-      end: analogRender.end!,
+      end: renderAnchorEnd,
       replacement: `\n\n            #mark${F}\n            Checkbox(Value: ${parameter}.${F} is ${F}, Label: ${
         JSON.stringify(shape.label)
       }) {\n               on change ${actionName}\n            }`,
-      start: analogRender.end!,
+      start: renderAnchorEnd,
     },
-  ]))
-  edits.push({ after: viewAfter, before: viewBefore, path: view.path! })
+  )
   steps.push({
-    action:
-      `add action ${actionOwner}.${actionName}(Value boolean) writing ${singular}.${F}, after ${analogAction.name}`,
+    action: `add action ${actionOwner}.${actionName}(Value boolean) writing ${singular}.${F}, ${
+      analogAction === undefined ? `before ${view.name}'s render block` : `after ${analogAction.name}`
+    }`,
     decidedBy: 'tao',
-    evidence: [analogAction.id, `src:${view.path}:${analogAction.start}-${analogAction.end}`],
+    evidence: analogAction === undefined
+      ? [view.id, `src:${view.path}:${rootRender.start}-${rootRender.end}`]
+      : [analogAction.id, `src:${view.path}:${analogAction.start}-${analogAction.end}`],
     file: view.path!,
     status: 'ready',
   })
   steps.push({
-    action:
-      `render Checkbox #mark${F} bound to ${parameter}.${F} after ${analogRender.name}, invoking ${actionName} on change`,
+    action: `render Checkbox #mark${F} bound to ${parameter}.${F} after ${
+      (analogRender ?? lastRender).name
+    }, invoking ${actionName} on change${checkboxImportEdits.length === 0 ? '' : ', importing Checkbox from @tao/ui'}`,
     decidedBy: 'tao',
-    evidence: [analogRender.id],
+    evidence: [(analogRender ?? lastRender).id],
     file: view.path!,
     status: 'ready',
   })
@@ -306,14 +689,15 @@ export async function lowerFeature(
   const fixture = [...snapshot.nodes.values()].find(n => n.kind === 'fixture' && n.path === entryPath)
   if (entryPath === undefined || fixture === undefined) {
     steps.push({
-      action: 'add scenario',
+      action: 'add a scenario showing the new control',
       decidedBy: 'tao',
       evidence: [],
       file: entryPath ?? '?',
-      note: 'no fixture declared in the app entry file',
+      note:
+        'this app declares no fixture in its entry file, so there is no sample row to switch on; the two edits above still stand',
       status: 'unsupported',
     })
-    return { edits, steps }
+    return await materialize()
   }
   const entryBefore = await readFile(entryPath)
   const fixtureText = entryBefore.slice(fixture.start, fixture.end)
@@ -368,7 +752,7 @@ export async function lowerFeature(
       note: `${view.name} is file-private and no visible view rendering it takes a ${singular}`,
       status: 'unsupported',
     })
-    return { edits, steps }
+    return await materialize()
   }
   const subjectParameter = (detail(subject)['parameters'] as string[]).find(p =>
     p.includes(`(entity ${shape.entity})`)
@@ -393,15 +777,15 @@ export async function lowerFeature(
   } {\n   fixture ${fixture.name}\n   device phone\n   appearance light\n   network online\n   locale "en"\n   scenario ${
     JSON.stringify(shape.scenarioName)
   } {\n      render (${subjectParameter}: ${handle})\n}  }\n`
-  const entryAfter = await Formatter.formatCode(applyEdits(entryBefore, [
+  stage(
+    entryPath,
     { end: closing, replacement: `   ${handle} = create ${singular} { ${rowFields.join(', ')} }\n`, start: closing },
     { end: entryBefore.length, replacement: scenario, start: entryBefore.length },
     ...(alreadyImported
       ? []
       : [{ end: useInsertOffset, replacement: `use ${subject.name} from @ui\n`, start: useInsertOffset }]),
     ...dataImportEdits,
-  ]))
-  edits.push({ after: entryAfter, before: entryBefore, path: entryPath })
+  )
   steps.push({
     action: `add fixture row ${handle} = create ${singular} { ${rowFields.join(', ')} } to ${fixture.name}${
       dataImportEdits.length === 0 ? '' : `, importing ${shape.entity} from @data`
@@ -422,5 +806,5 @@ export async function lowerFeature(
     file: entryPath,
     status: 'ready',
   })
-  return { edits, steps }
+  return await materialize()
 }

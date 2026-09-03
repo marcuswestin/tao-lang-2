@@ -350,12 +350,14 @@ export function buildSemanticSnapshot(
         const isProjectView = target !== undefined && targetPath !== undefined && !targetPath.startsWith('..')
         const layout = (render.layoutClause?.entries ?? []).map(entry => ASTUtils.layoutEntryValues(entry))
         const tag = AST.testTagForRender(render)
+        const texts = literalTexts(render)
         add({
           detail: {
             ...(tag === undefined ? {} : { tag: `#${tag}` }),
             layout: layout.map(values => values.join(' ')),
             owner: view.name,
             target: target?.name ?? (AST.isRenderStatement(render) && render.injection !== undefined ? 'inject' : '?'),
+            ...(texts.length === 0 ? {} : { texts }),
           },
           id: renderId,
           kind: 'render',
@@ -470,6 +472,35 @@ function nearestRender(node: AST.Node): AST.Node | undefined {
     current = current.$container
   }
   return current
+}
+
+export type SnapshotText = { start: number; end: number; text: string }
+
+/**
+ * literalTexts lists the string literals this render passes directly — the words a person reads on screen.
+ * Literals belonging to a nested render, or sitting inside an interpolation's own expression, are excluded,
+ * so each literal is attributed to exactly one render. `text` is the raw source including its quotes.
+ */
+function literalTexts(render: AST.Node): SnapshotText[] {
+  const texts: SnapshotText[] = []
+  for (const node of AST.streamAllContents(render)) {
+    if (!AST.isInterpolatedString(node) && !AST.isStringLiteral(node)) {
+      continue
+    }
+    if (nearestRender(node) !== render || node.$cstNode === undefined) {
+      continue
+    }
+    let ancestor: AST.Node | undefined = node.$container
+    let nested = false
+    while (ancestor !== undefined && ancestor !== render) {
+      nested = nested || AST.isInterpolatedString(ancestor)
+      ancestor = ancestor.$container
+    }
+    if (!nested) {
+      texts.push({ end: node.$cstNode.end, start: node.$cstNode.offset, text: node.$cstNode.text })
+    }
+  }
+  return texts.sort((a, b) => a.start - b.start)
 }
 
 // ---- Queries -------------------------------------------------------------------------------------

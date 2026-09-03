@@ -25,6 +25,8 @@ if (flag === '--shape') {
   console.log(
     JSON.stringify(
       {
+        explanation: plan.explanation,
+        kind: plan.kind,
         model: { elapsedMs: plan.model.elapsedMs, status: plan.model.status, message: plan.model.message },
         problems: plan.problems,
         shape: plan.shape,

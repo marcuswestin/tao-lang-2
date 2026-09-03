@@ -76,11 +76,13 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
 
   type PlanStep = { file: string; action: string; decidedBy: string; evidence: string[]; status: string; note?: string }
   type FeaturePlanResult = {
+    kind: 'add-flag' | 'reword-text' | 'other'
     shape: Record<string, string>
     steps: PlanStep[]
     edits: { path: string; before: string; after: string; diff: string }[]
     packet: Json
     problems: string[]
+    explanation?: string
     model: { status: string; message?: string; elapsedMs: number; promptChars: number; toolCalls: unknown[] }
   }
 
@@ -117,6 +119,16 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
       element.textContent = title
       body.append(element)
     }
+    if (plan.explanation !== undefined) {
+      heading('This request is outside what the proof of concept builds')
+      const note = document.createElement('div')
+      note.style.cssText =
+        'margin:3px 0;padding:7px 9px;border-radius:6px;background:#221a10;border-left:3px solid #d9b45c;white-space:pre-wrap'
+      note.textContent = plan.explanation
+      body.append(note)
+      return
+    }
+    heading(`Kind of change the model recognized: ${plan.kind}`)
     heading('Facts given to the model')
     const packet = document.createElement('details')
     packet.innerHTML = `<summary>${JSON.stringify(plan.packet).length} chars</summary>`
