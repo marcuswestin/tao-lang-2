@@ -54,6 +54,13 @@ document owns the _program-level_ process only; the tranche mechanics — the fo
 Steps 0–1 are this branch and the next piece of work; later steps each become roadmap items and
 tranches as they are reached.
 
+The interaction-system program has shipped and absorbed T1–T5 (including the T3½ cleanup): scenes
+and the shell view, device-local data, configured commands and their generated catalog, the
+interaction outline, the attention reducer and narrowing, keyboard dispatch, and generated
+interaction surfaces with deterministic key allocation. T6's Assistant/App Intents, native menu,
+and native hardware-key boundary is deferred because this checkout has no tracked native iOS build
+path. The language-level `Assistant` design remains future contract, not implemented capability.
+
 - **Step 0 — encode the program (this branch).** Decisions, process, and coverage documents in
   `Docs/Roadmap/Tao Revolution/`; the four-design analysis archived; the future apps seeded in
   `Apps/Tao Future/` from design D's demos, pre-consolidation.
@@ -69,7 +76,9 @@ tranches as they are reached.
   as sibling references. This is where "Revolution contains everything decided" becomes spec-code.
 - **Step 3 — consolidate the Tao Future apps.** Align the three demos to `Decisions.md` (they are
   design D's dialect today; the deltas are exactly the decisions that went against or beyond D).
-  Write `Coverage.md`'s remaining rows during this pass — gaps surface while porting.
+  The keyboard-driven T7 pass has already aligned their command, app-root, shortcut, and palette
+  dialect; the remaining groups are recorded in `Apps/Tao Future/README.md`. Write `Coverage.md`'s
+  remaining rows during this pass — gaps surface while porting.
 - **Step 4 — re-derive `3 - MVP` by omission.** From the rewritten Revolution tier: same
   spellings, fewer capabilities. Include the focused-writing mode; exclude automations; settle the
   authority-cluster scope question. The result plus Skillet's future milestone defines v1-done.

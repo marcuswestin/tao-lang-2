@@ -98,7 +98,7 @@ through it.
 - **View mentions**: a scene's `Toolbar { AddToQueue, Like with { Key "l" } }` (chrome; the braced
   reference block is grandfathered from §9); any view's `Commands { … }` (item prominence) and `hide X`. Mentions are unfilled; the surface fills slots
   from the target by type at invocation.
-- **App**: `Navigator` (the root nav — usually a frame, but the root is not special), `Menus list of Menu` (typed literal with required brackets;
+- **App**: `view` (the root view, which may be a nav or a shell rendering one), `Menus list of Menu` (typed literal with required brackets;
   derived from entity `commands` lists plus app-wide commands when absent), and
   `Assistant { Entities { Track as documents.document (…) }  Commands { … } }` with inline schema
   conformance. `Palette all` retires — the palette is always present.

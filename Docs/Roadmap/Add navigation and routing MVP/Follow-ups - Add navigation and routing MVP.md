@@ -93,7 +93,9 @@ Serializing or reconstructing suspended actions is not part of `ask`. Durable wo
 
 ### DEF-NAV-006: Navigation Guard And Lifecycle Syntax
 
-The semantic reducer must reserve interception and lifecycle events, but exact source syntax for unsaved-change guards, appear/disappear/focus/blur, queueing, and cancellation waits for the core reducer and native event loop.
+The semantic navigation and attention reducers now reserve interception and focus behavior. Exact
+source syntax for unsaved-change guards, appear/disappear/focus/blur lifecycle hooks, queueing, and
+cancellation still waits for the native event loop and a forcing product journey.
 
 ### DEF-NAV-007: Presentation Results And Handles
 

@@ -40,7 +40,8 @@ one-capability-two-bindings question.
   other declared case) → `error` (a thrown exception). English never crosses the boundary (§15).
 - **The TypeScript boundary is `<expression> from <path>`** — named exports only, bare paths, no
   inline fences, no `implement`/`inject`; `progress` opt-in; every sidecar gets a `signal`;
-  cancellation is never declared. An intent that crosses the boundary is non-undoable (§8, §15).
+  cancellation is never declared. A command whose action crosses the boundary is non-undoable
+  (§8, §15).
 - **The swap seam is the app variant**: `app SkilletPreview = Skillet with { Datasource Memory }`.
   Test controls must lower to something the runtime can really do — `locale "es"` lowers to mocking
   the localization module; "nothing pretends to change the OS" (§16). `data <status>` was retired in

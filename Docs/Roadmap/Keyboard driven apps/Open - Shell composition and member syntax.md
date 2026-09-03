@@ -6,6 +6,11 @@ below and implemented as the "revised" tranche** (`7ac87001` makes the shell a v
 frame; `27f6884b` moves a command's slots into a parameter list). The reasoning stays here as the
 record; `Decisions.md` §8 and §10 carry the decisions.
 
+**Everything below is historical comparison, including every grammar and Tao code block.** It
+describes the superseded `FrameNav`, app `Navigator`, edge-slot, module-query, and block-slot command
+alternatives so the review can be audited; none is current syntax or architecture. KEY-D7 and
+KEY-D10 are the current contract.
+
 ## 1. Does the frame need to be a nav kind at all?
 
 **What `FrameNav` actually buys.** Not layering or scroll behaviour — a `Col` holding a fixed bar

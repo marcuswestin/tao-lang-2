@@ -599,8 +599,12 @@ transaction JoinWithInvite(Code secret) for Me returns Household {
   answer comes from the rule the store enforces:
 
 ```swift
-command Favorite = FavoriteRecipe(Recipe) with { Icon "heart" }
-// shown only while `can change Recipe` — the intent asks the store; nothing re-implements the rule (§8)
+command Favorite(Recipe) {
+   Title "Favorite recipe"
+   Icon "heart"
+   do FavoriteRecipe(Recipe)
+}
+// shown only while `can change Recipe` — the command asks the store; nothing re-implements the rule (§8)
 ```
 
 ---
@@ -863,100 +867,21 @@ if Edit.Conflicted { RecipeConflict(Edit) }   // a generated diff, not hand-auth
 
 ---
 
-## 8. Intents, commands, actions, and concurrency
+## 8. Commands, actions, and concurrency
 
-### Intents
+### Commands and actions
 
-- **An `action` or `transaction` _is_ an intent — there is no separate `intent` keyword.** Optional
-  metadata members make it discoverable; an action without a `Title` is an ordinary private helper,
-  invisible to every surface, with no flag needed:
-
-```swift
-action FavoriteRecipe(Recipe) {
-   Title "Favorite recipe"                        // its name on any surface; constant copy (§14)
-   Description "Adds a recipe to your favorites, or removes it."
-   Summary "Favorite { Recipe }"                  // the parameter sentence a palette or Siri shows
-   toggle Recipe.Favorite
-}
-
-action Slugify(Title text) returns text { … }    // no Title: not discoverable, nothing to declare
-```
-
-- **Parameters are the disambiguation policy.** They are ordinary typed slots (§2); a parameter typed
-  by an entity is a noun a surface can resolve, a postfix `?` tells an assistant it may proceed
-  without one, and a required parameter is what makes a palette or Siri prompt for it.
-- **Availability belongs to the intent, and the store answers it.** Whether `FavoriteRecipe` may run
-  is `can change Recipe` (§3) — the same answer for a toolbar, a menu, and Siri. _Not permitted_
-  hides; a command may add _not yet_ (below), which disables.
-
-### Commands
-
-- **A `command` is a reference to an intent plus the affordances a menu adds — never a body.**
-  `does` does not exist; the intent's body is the behaviour, and a command that seems to need its own
-  body is a second intent:
-
-```swift
-view RecipeScreen(Recipe) {
-   command Favorite = FavoriteRecipe(Recipe) with {
-      Label when Recipe is Favorite { yes -> "Remove from favorites", no -> "Favorite" }
-      Icon  when Recipe is Favorite { yes -> "heart.fill", no -> "heart" }
-      Key primary + "d"
-   }
-   command Cook = CookRecipe(Recipe) with {
-      Icon "flame"
-      Key primary + "r"
-      Enabled Recipe.Steps is not empty           // possible-but-not-yet: shown, disabled
-   }
-}
-```
-
-- **Command members are capitalized** — `Label`, `Icon`, `Key`, `Enabled` — and `Label` defaults
-  to the intent's `Title`. Each member takes an ordinary reactive expression; `Enabled` expects a
-  boolean value and has no special conditional gate syntax.
-- **Commands nest inside the `view` they act on**, closing over its parameters (`Recipe`, above), so
-  they take no parameters of their own. App-wide commands sit on the app the same way:
-  `command New = CreateRecipe with { Icon "plus", Key primary + "n" }` — with no argument bound, the
-  surface prompts for `CreateRecipe`'s required `Title`.
-- **Commands scope to focus, never to a declaration kind.** A command declared in a view is enabled
-  while the nearest presented instance of that view holds focus — there is no separate screen kind
-  to attach it to (§9), so command lifetime is the presentation's, and lifecycle language throughout
-  this document reads "the presentation", never "the `ui`".
-- **A view's host-facing members are one mechanism.** `Title` and `Toolbar` are supplied slots on
-  `view` (§9); commands are the focused declarations a surface such as `Toolbar` lists. The
-  presenter reads those members from the directly presented view and owns their chrome, so a title,
-  a toolbar, and the commands in that toolbar are not three unrelated channels.
-- **Surfaces list commands; a command never names its surface.** `Toolbar { … }` and `menu Name
-  { … }` inside a `view`; `Menu { … }` (the OS menu bar), `Rail { … }`, and `Palette all` on the app.
-  A view's command listed in the app's `Menu` (`RecipeScreen.Favorite`) is enabled while a presented
-  instance of that view holds focus and runs against that presentation's row — which is why the OS
-  menu is tied to windows.
-  `Palette all` lists every intent with a `Title`, resolved against what is on screen — the in-app
-  twin of Spotlight running intents. A command renders as its own button with `Button(Favorite)`.
-
-```swift
-app Skillet {
-   command New = CreateRecipe with { Icon "plus", Key primary + "n" }
-
-   Menu {
-      "File"   { New }
-      "Recipe" { RecipeScreen.Favorite, RecipeScreen.Cook, separator, RecipeScreen.Remove }
-   }
-   Rail { New, Plan, Lists }
-   Palette all
-}
-```
-
-**Amended by the interaction system tranche** (implemented; `Docs/Roadmap/Keyboard driven apps/`,
-KEY-D10). This section originally decided that an `action` _is_ an intent, made discoverable by
-filling `Title`, `Description`, and `Summary`, and that a `command` is a reference to such an intent
-plus the affordances a menu adds. Both halves change, and the word `intent` retires with them.
+**Settled by the interaction system tranche** (KEY-D10; implemented). The earlier model made an
+action discoverable through title metadata and treated a command as a bound affordance reference.
+KEY-D10 replaces both halves with the configured command model below; the former `intent` concept
+word and its declaration model are retired.
 
 - **The `command` is the discoverable verb, and the `action` behind it is a private procedure.**
   `Title`, `Description`, and `Summary` move off `primitive action` onto `primitive command`. There
   is no longer a way to make an action discoverable, because nothing lists an action: a declaration
   that only ever runs cannot name itself, in the same way a view that is only ever composed cannot
-  name a title (§9). `intent` retires as a word; where this document said "intent" it now says
-  "command", and the metadata an intent carried is the command's.
+  name a title (§9). The former `intent` term retires; the metadata it carried belongs to the
+  command.
 - **A command is a standalone configured value, not a reference plus affordances.** It is declared
   at module level or in a view or scene body — the placement `action` already has — and it declares
   its slots in a parameter list, exactly as an action does. Its body holds member fills and exactly
@@ -1017,8 +942,8 @@ command Finish(Document) {                  // a slot is a parameter: a bare nam
   slots and whether each names an entity, and the value to run — is registered at load through the
   handwritten `TR.Interaction.RegisterCommands`; a view-body command registers while its view is
   mounted. That table is what a verb surface reads to ask which commands act on what a person has in
-  front of them. The surfaces themselves (`Commands { … }`, `hide`, entity command lists, key
-  dispatch) remain unimplemented.
+  front of them. At the T2 boundary the authored surfaces and dispatch still remained; KEY-D8–D13
+  below supersede that historical implementation boundary.
 
 **Amended by the keyboard-attention tranche** (implemented; `Docs/Roadmap/Keyboard driven apps/`,
 KEY-D8–D13). The deferred command surfaces and keyboard dispatch above are now implemented.
@@ -1048,7 +973,7 @@ KEY-D8–D13). The deferred command surfaces and keyboard dispatch above are now
 - **Interaction conditions stay ordinary words.** `pressed`, `focused`, and `hovered` are postfix
   conditions; `when FocusBar is active` tests named region focus. These and the new Tao test phrases
   use spelling-validated identifier seams rather than adding reserved grammar keywords.
-- **Generated interaction surfaces are runtime renderings, not authored navigation.** Hints,
+- **Generated interaction surfaces are runtime renderings, not authored navigation** (KEY-D13). Hints,
   overview, the target's verb menu, and the always-present command palette read the interaction
   outline, attention snapshot, current bindings, and generated catalog. One host renders them above
   app content as a sibling after toasts; they do not enter Back history, and hidden layers are
@@ -1056,7 +981,7 @@ KEY-D8–D13). The deferred command surfaces and keyboard dispatch above are now
   mounted regions, the verb menu preserves the command tiers above, and the palette lists every
   titled command and entity while applying the same locale-aware word-prefix subsequence matcher as
   attention.
-- **Generated keys are deterministic runtime policy.** Existing identities retain their keys across
+- **Generated keys are deterministic runtime policy** (KEY-D13). Existing identities retain their keys across
   reorders; new identities are considered in canonical identity order and receive the first free
   label-derived letter, then another distinctive label letter, then a two-letter sequence. Reducer
   keys and explicit shortcuts or accelerators are never allocated. Affordances remain absent until
@@ -1071,30 +996,37 @@ KEY-D8–D13). The deferred command surfaces and keyboard dispatch above are now
 ```swift
 app Skillet {
    Assistant {
-      Recipe { Title, Course, Servings, Photo }   // what an assistant may read of a Recipe
-      Household { Name }
-      CreateRecipe, FavoriteRecipe, CookRecipe     // what it may run — DeleteRecipe deliberately absent
-      Find Recipes by Title, Course                // what it may search
+      Entities {
+         Recipe
+         Household
+      }
+      Commands {
+         CreateRecipe
+         FavoriteRecipe
+         CookRecipe               // DeleteRecipe deliberately absent
+      }
    }
 }
 ```
 
-- On iOS this compiles to `AppEntity` + `EntityQuery` + `AppIntent` build-time metadata (the intents'
+- On iOS this compiles to `AppEntity` + `EntityQuery` + `AppIntent` build-time metadata (the commands'
   titles and summaries above); on other platforms it emits a JSON tool schema of the same shape,
-  which is what any function-calling model consumes. One block, every assistant.
+  which is what any function-calling model consumes. One block, every assistant. This Assistant and
+  native projection remain unimplemented: T6 is deferred until the repository has a tracked native
+  iOS build path on which the Swift bridge and App Intents tests can run.
 - **A test runs a verb the way an assistant would** and asserts on the store: `as assistant do
   FavoriteRecipe(Shakshuka)`, then `expect stored Shakshuka is Favorite`; a verb not in the block is
   `expect refused`.
 
 ### Undo
 
-- **Undo is a property of the intent, and it is derived, not declared.** An intent whose body is
+- **Undo is a property of the command, and it is derived, not declared.** A command whose action is
   only store writes is undoable, because the store knows every inverse: a `toggle` is its own, an
   `update` records prior values at commit, a `create` reverses to a `delete`, and a `delete` restores
-  through tombstones (§11). An intent that crosses the boundary — a sidecar call, a `notify` — is not,
-  and the compiler sees that too. `Undoable no` opts a store-only intent out (`JoinWithInvite` should
+  through tombstones (§11). A command that crosses the boundary — a sidecar call, a `notify` — is not,
+  and the compiler sees that too. `Undoable no` opts a store-only command out (`JoinWithInvite` should
   not be casually reversed). The platform undo gesture and an assistant's "undo that" both reach it;
-  one intent is one undo step.
+  one command is one undo step.
 
 ### Concurrency
 
@@ -1122,7 +1054,12 @@ Button("Save") [primary, busy when Save.Running] { on press -> { do Save() } }
 - **Shortcuts are platform-abstract.** The primary modifier is named, never hard-coded to a platform:
 
 ```swift
-command New = CreateRecipe with { Key primary + "n" }   // never Key "cmd+n" — cmd names a platform
+command New(Title text) {
+   Title "New recipe"
+   Key primary + "n"
+   do CreateRecipe(Title)
+}
+// never Key "cmd+n" — cmd names a platform
 ```
 
 ### Conditionals
@@ -1261,7 +1198,11 @@ file view NewRecipeSheet(Household) responds Recipe { … }   // answers with a 
 ```swift
 scene RecipeScreen(Recipe) {
    Title Recipe.Title
-   command Share() { Title "Share recipe", Icon "square.and.arrow.up", do ShareRecipe(Recipe) }
+   command Share() {
+      Title "Share recipe"
+      Icon "square.and.arrow.up"
+      do ShareRecipe(Recipe)
+   }
    Toolbar { Share }
    render RecipePage(Recipe)
 }
@@ -1280,11 +1221,11 @@ scene RecipeScreen(Recipe) {
   suppresses its header may not fill `Title` or `Toolbar`, by the same rule that put the slots on
   `scene` in the first place, and is exempt from the pushed-scene `Title` requirement.
 
-- **A host reads only the directly presented view.** Host-facing slots never bubble from descendants;
+- **A host reads only the directly presented scene.** Host-facing slots never bubble from descendants;
   a wrapper that carries a title or toolbar fills its own slots from its own parameters. Because
-  `nav` refines `view`, a nav inherits the same optional slots rather than masking them, but a host
+  `nav is scene is view`, so a nav inherits the same optional slots rather than masking them, but a host
   never reads through the nav to whichever descendant it currently presents.
-- **Self-description stays with the view; presentation policy stays at the call site.** A presenter
+- **Self-description stays with the scene; presentation policy stays at the call site.** A presenter
   cannot override `Title` or `Toolbar`; two presenters that need different policy express that policy
   on `present` (`Key: Recipe` remains on `present … as window`), while stable self-description is a
   slot. Whether a slot is required is inferred from the host usage in §10, never from the view head.
@@ -1306,13 +1247,13 @@ types `visual`, `presentable`, `ui`, `frame`, and `layout` collapse into the sin
 package-exported views was considered and deferred (`Docs/Roadmap/Deferred Tao language
 decisions.md`).
 
-**Amended by the host-read view slots and native nav kit tranche.** The unified view decision made
+**Amended by KEY-D11 and the host-read/native-nav tranche.** The unified view decision made
 every view presentable but left host-owned chrome without a typed way to read the presented view's
 self-description. The declaration model already supplies that mechanism: primitive families own
 supplied slots in the prelude and declarations fill them as named members. `Title` and `Toolbar`
-therefore join the single `view` primitive as optional host-facing slots. They remain reactive,
+therefore live on `scene is view` as optional host-facing slots. They remain reactive,
 direct-only, and usage-required; no second metadata channel, preference bubbling, call-site override,
-or compiler-owned title vocabulary is introduced. `nav is view` keeps the slots by refinement so a
+or compiler-owned title vocabulary is introduced. `nav is scene is view` keeps the slots by refinement so a
 navigator can describe itself when it is itself presented, without exposing its child's slots.
 
 - **Every declaration's parameter list is parenthesized, including an empty one** — `view
@@ -1546,7 +1487,7 @@ app Skillet {
    view SkilletShell(SkilletNavigator)
 }
 
-scene SkilletShell(Navigator nav) {
+view SkilletShell(Navigator nav) {
    render Col() [fill] {
       Navigator() [fill]
       when CurrentCook { empty -> { } otherwise -> { CookBar() } }
@@ -1570,7 +1511,7 @@ scene SkilletShell(Navigator nav) {
   view.
 
 - **A live root.** The top-level experience follows workspace state as an ordinary reactive value:
-  `Navigator when MyKitchen { loading -> …; none -> WelcomeNav; otherwise -> SkilletNavigator }`. No
+  `view when MyKitchen { loading -> Loading, none -> WelcomeNav, otherwise -> SkilletShell(SkilletNavigator) }`. No
   screen imperatively replaces the app.
 - **Reveal-or-focus, never duplicate.** `reveal Screen(Row) in @slot` focuses an equal mount instead
   of stacking a second copy of the same product state:
@@ -1591,7 +1532,7 @@ present ActionsMenu(Recipe) as menu
 present Notice("Saved") as toast
 ```
 
-- **One declaration carries intent, URL, and mounting policy.** There is no separate destination and
+- **One declaration carries address, URL, and mounting policy.** There is no separate destination and
   mount:
 
 ```swift
@@ -1631,8 +1572,9 @@ link JoinLink(Code secret) "/join/{Code}" -> {
   declaration is not wrong; the placement is.
 - **Host read-sets and requirements belong to the stdlib host family.** For the current families and
   presentation modes, the complete set is:
-  - every `StackNav` entry, including `Initial` and later pushes, reads `Title` and `Toolbar` from that
-    entry's own view and requires `Title`;
+  - a `scene` entry in `StackNav`, including `Initial` and later pushes, reads `Title` and `Toolbar`
+    from that scene and requires `Title`; a plain-view entry reads neither and receives Back-only
+    chrome;
   - `present … as window` reads both slots and requires `Title`; its full-screen-sheet fallback on a
     non-windowing target preserves this window contract rather than dropping the chrome;
   - `Toolbar` is optional in both hosts, and an absent toolbar means no toolbar items;
@@ -1643,7 +1585,7 @@ link JoinLink(Code secret) "/join/{Code}" -> {
   Native and basic implementations of a family have the same read-set. The native host renders these
   values in platform chrome; the basic host renders equivalent styled Tao chrome. A missing required
   slot is diagnosed at the placement — for example, "StoryScreen is pushed on a StackNav: it must fill
-  Title" — because the view is valid and that use is not. Slot changes update mounted host chrome
+  Title" — because the scene is valid and that use is not. Slot changes update mounted host chrome
   reactively.
 - **A responding presentation is never restorable.** A view presented while its `responds T` answer
   is awaited does not survive relaunch — the asking context is gone, so restoring the question alone
@@ -1698,14 +1640,14 @@ project { id "skillet", name "Skillet", targets phone, tablet, laptop, languages
 ```
 
 - **`app Name { … }` is the one composition root** selecting design, providers, permissions,
-  language, and navigator:
+  language, and its root view:
 
 ```swift
 app Skillet {
    Design SkilletDesign
    Datasource Kitchen
    Notifications Alerts
-   Navigator SkilletNavigator
+   view SkilletShell(SkilletNavigator)
 }
 ```
 
@@ -1745,8 +1687,8 @@ use Account from @tao/auth
 let Me = Account                 // module-visible; every screen reads Me, tests sign accounts in
 ```
 
-The live root then gates on it as ordinary data: `Navigator when Me { none -> WelcomeNav,
-otherwise -> … }`. Nothing about identity is a keyword.
+The live root then gates on it as ordinary data: `view when Me { none -> WelcomeNav,
+otherwise -> SkilletShell(SkilletNavigator) }`. Nothing about identity is a keyword.
 
 - **The datasource is a `Cloud { … }` value** carrying write behaviour, conflict model, delete
   retention, and an `Offline { … }` block:
@@ -1883,7 +1825,7 @@ design SkilletDesign {
   app starts from the `Text` entry, and `App` is the root's. This replaces the
   `style Control { base / variant / state }` stack: the base is the element default, a variant is a
   bundle, and a state is an ordinary condition.
-- **Generated interaction affordances use ordinary element defaults.** `Hint` styles an anchored
+- **Generated interaction affordances use ordinary element defaults** (KEY-D13). `Hint` styles an anchored
   key-and-label affordance and `Overview` styles the generated overview, verb, and palette surfaces;
   an app may override either in `styles { }` without declaring or owning those runtime layers.
   This settles the floating-layer part of LANG-018: a layer is a host-owned rendering above content,
@@ -2332,26 +2274,26 @@ entity and would collide in every bare-name position; `StartedBy Account` becaus
 case; `[Role in Owner, Cook]` because `|` is the type-union operator; `Key primary + "n"` because
 `cmd` names a platform (§8).
 
-| Concern                | Spelling                                    |
-| ---------------------- | ------------------------------------------- |
-| Grocery category type  | `Aisle`                                     |
-| Last category case     | `Homeware`                                  |
-| Split slot names       | `@list` / `@detail`                         |
-| Shortcut literal       | `Key primary + "n"`                         |
-| Changed-at stamp       | `(default now, touch on change)`            |
-| Delete retention       | `Deletes tombstones for 30 days`            |
-| File size unit         | `megabytes`                                 |
-| Audience filter        | `[Role in Owner, Cook]`                     |
-| Timer owner field      | `StartedBy Account`                         |
-| Button tap minimum     | `tap min 48`                                |
-| Command palette        | `present … as palette` (a sheet on a phone) |
-| Reorder flag           | `Reorderable: yes` (a condition allowed)    |
-| Project identity       | `id "skillet"`                              |
-| Desktop target         | `laptop`                                    |
-| Scenario device        | `device laptop 1440 x 900`                  |
-| Scenario appearance    | `appearance dark`                           |
-| Conflict policy        | `Conflicts fieldwise latest`                |
-| Nav / variant bindings | `nav X = …` / `app X = …`                   |
+| Concern                | Spelling                                         |
+| ---------------------- | ------------------------------------------------ |
+| Grocery category type  | `Aisle`                                          |
+| Last category case     | `Homeware`                                       |
+| Split slot names       | `@list` / `@detail`                              |
+| Shortcut literal       | `Key primary + "n"`                              |
+| Changed-at stamp       | `(default now, touch on change)`                 |
+| Delete retention       | `Deletes tombstones for 30 days`                 |
+| File size unit         | `megabytes`                                      |
+| Audience filter        | `[Role in Owner, Cook]`                          |
+| Timer owner field      | `StartedBy Account`                              |
+| Button tap minimum     | `tap min 48`                                     |
+| Command palette        | runtime-owned and always present; no declaration |
+| Reorder flag           | `Reorderable: yes` (a condition allowed)         |
+| Project identity       | `id "skillet"`                                   |
+| Desktop target         | `laptop`                                         |
+| Scenario device        | `device laptop 1440 x 900`                       |
+| Scenario appearance    | `appearance dark`                                |
+| Conflict policy        | `Conflicts fieldwise latest`                     |
+| Nav / variant bindings | `nav X = …` / `app X = …`                        |
 
 (The source table's `Line` row-pattern and `sizes { }` size-class rows are superseded by §13:
 patterns are retired in favour of ordinary content-accepting views, and the size-class block is

@@ -106,7 +106,7 @@ use Memory from @tao/data/providers/memory
 
 app WordFlower {
    Name "WordFlower"
-   Navigator WordFlowerNavigator
+   view WordFlowerNavigator
    Datasource Local {
       StorageKey "WordFlowerData"
    }

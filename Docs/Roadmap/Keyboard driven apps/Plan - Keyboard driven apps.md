@@ -6,11 +6,13 @@ restate rationale. It is written to hand to an implementation agent who has not 
 
 ## Revision — 2026-09-03
 
-**Status.** T1, T2 and T3 are implemented, absorbed, and green on `feat/tao-keyboard-driven-apps-44b3f4`
-(sixteen commits, `./agent verify` green at each). T4–T7 remain. Two decisions made during T1/T2
-were reversed under review the same day and re-implemented; the design summary carries the revised
-text, and the sections below have been rewritten to match. Read the design summary first; where
-this plan's T1–T3 prose disagrees with what shipped, the code and `Decisions.md` win.
+**Status.** T1–T5, including T3½, are implemented, absorbed, and green on
+`feat/tao-keyboard-driven-apps-44b3f4`. T6 is explicitly deferred: this checkout has Expo targets
+but no tracked native iOS project or build path on which to implement and validate App Intents, the
+native menu bar, or a hardware-key bridge. T7's repository-wide reconciliation is complete. Two
+decisions made during T1/T2 were reversed under review the same day and re-implemented; the design
+summary carries the revised text. Read it first; the historical T1/T2 implementation sketches below
+are retained as execution history, not current syntax or architecture.
 
 **Decisions taken during implementation**, each already in `Decisions.md`:
 
@@ -79,11 +81,11 @@ this plan's T1–T3 prose disagrees with what shipped, the code and `Decisions.m
 | T1  | `scene`, the shell as a view, device-local data | WordFlower persistent focus bar                                                   | —                                | L — landed, revised `7ac87001` |
 | T2  | Commands as configured values, command catalog  | WordFlower workspace save; HNReader open-story; Basic Navigation                  | —                                | L — landed, revised `27f6884b` |
 | T3  | The interaction outline and `(title)`           | Accessibility names on every row; Studio inspection                               | T1, T2                           | L — landed `19f9e3ef`          |
-| T3½ | Retire module-level `query` and `TR.Deferred`   | Decision A/B after the frame's retirement                                         | T3                               | S                              |
-| T4  | Attention reducer, keyboard dispatch, narrowing | WordFlower: narrow the workspace list, engage the editor, global focus-bar chords | T3                               | XL                             |
-| T5  | Generated surfaces and key allocation           | Interaction hints and overview over WordFlower                                    | T4                               | M                              |
-| T6  | Assistant boundary, menus, native keys          | Apple App Intents from the `Assistant` block; iPadOS menu bar and hardware keys   | T3, T4; an iOS native build path | L, later                       |
-| T7  | Documentation reconciliation sweep              | Every live markdown document agrees with KEY-D1–D14                               | T1–T5 (T6 when it lands)         | M                              |
+| T3½ | Retire module-level `query` and `TR.Deferred`   | Decision A/B after the frame's retirement                                         | T3                               | S — landed                     |
+| T4  | Attention reducer, keyboard dispatch, narrowing | WordFlower: narrow the workspace list, engage the editor, global focus-bar chords | T3                               | XL — landed                    |
+| T5  | Generated surfaces and key allocation           | Interaction hints and overview over WordFlower                                    | T4                               | M — landed                     |
+| T6  | Assistant boundary, menus, native keys          | Apple App Intents from the `Assistant` block; iPadOS menu bar and hardware keys   | T3, T4; an iOS native build path | L — deferred, no native path   |
+| T7  | Documentation reconciliation sweep              | Every live markdown document agrees with KEY-D1–D14                               | T1–T5                            | M — complete                   |
 
 T1 and T2 may run in parallel worktrees. Their one seam is `Toolbar`: T1 moves it from `view` to
 `scene` unchanged (`list of action()`); T2 retypes it to `list of command`. Whichever lands second
@@ -92,7 +94,11 @@ they land together. T3 waits for both.
 
 ---
 
-## T1 — `scene`, the frame nav kind, device-local data
+## T1 — historical proposal: `scene`, a frame nav kind, device-local data
+
+**Historical pre-review implementation sketch.** KEY-D7 and the 2026-09-03 revision above supersede
+this section's proposed `FrameNav`, edge slots, `store device`, and module-level query. What shipped
+is a shell view rendering a nav-typed parameter, `local only` entity storage, and no module query.
 
 **Goal.** Host-facing chrome has exactly one home (`scene`), shell chrome has a container (the
 frame), and WordFlower's focus session survives navigation as a bar in that container without ever
@@ -171,6 +177,10 @@ look for a pushed plain view.
 ---
 
 ## T2 — Commands as configured values, and the command catalog
+
+**Historical pre-review implementation sketch.** KEY-D10 and the 2026-09-03 revision above
+supersede this section's block-declared command slots and bound-command declaration form. What
+shipped declares command slots in the parameter list and invokes them with `do X(args)`.
 
 **Goal.** `command` is a configured value with slots and one `do`; `action` is private; every
 command in the app is enumerable; `Toolbar` holds commands; `do <command>` works.
@@ -363,17 +373,18 @@ focus.
 **Reconcile.** `Decisions.md` §16 test steps; §9 conditions; §8 surfacing policy and `Commands`;
 `Docs/Spec/Tao Testing.md`; `Coverage.md`.
 
-**Open before starting.** All three settled (see the revision block): `active`; the key set with
-hints unshifted; `narrow`. One thing T4 must decide as it goes, deferred by T3 with a stated reason:
-whether the non-nav content of a view that renders a nav is a region. Today regions are selection
-items, split panes, and presented occurrences; the focus bar beside WordFlower's navigator has no
-region and no runtime handle (siblings of a rendered nav have no grouping node). If T4's re-aim
-rules or overview need it, add a compile-time descriptor of "the siblings of a rendered nav" rather
-than a runtime wrapper, and say so in `2 - Next`.
+**Resolution.** The initial open spellings settled as `active`, unshifted hint keys, and `narrow`.
+T4 also settled the question deferred by T3: the non-nav sibling subtree of a view that renders a
+nav is a region. The compiler emits a descriptor for those siblings and their mounted roots
+coalesce into one region without adding a runtime wrapper or layout node (KEY-D8).
 
 ---
 
 ## T5 — Generated surfaces and key allocation
+
+**Status: implemented and absorbed.** WordFlower's Tao journeys prove hints, the overview, the
+target verb layer, and palette narrowing; runtime tests prove deterministic identity-stable key
+allocation and app-relative anchoring.
 
 **Goal.** Interaction hints, overview, verb menu, and palette render from the outline; keys for
 regions and items are allocated deterministically.
@@ -399,6 +410,9 @@ then `expect text` on hint labels; overview region listing.
 ---
 
 ## T6 — Assistant boundary, menus, native keys (later; needs an iOS native build path)
+
+**Status: deferred.** This checkout has no tracked native iOS project or build path, so the Swift,
+App Intents, native menu, and hardware-key bridge work cannot be implemented or validated here.
 
 **Goal.** The `Assistant` block compiles to App Intents; onscreen awareness comes from the outline;
 the menu bar and native hardware keys exist where the platform has them.
@@ -440,6 +454,9 @@ Testing framework; `as assistant do …` test step per Decisions §8.
   and windowing only if measured.
 
 ## T7 — Documentation reconciliation sweep
+
+**Status: complete.** T7 reconciles the shipped T1–T5 contract; it records T6 as deferred rather
+than describing its native boundary as implemented.
 
 **Goal.** Every live markdown document in the repository agrees with the decided design; nothing
 still describes the retired spellings or the pre-design model.

@@ -122,7 +122,7 @@ tests written in Tao, green in Current, for every construct introduced.
     aisles, drag to "bought"), bridging RN Gesture Handler + Reanimated the way the card grid
     bridges FlashList. Deliberately an example app to implement, not a design decision to settle
     up front — findings feed back through the tranche process. Context:
-    `Docs/Roadmap/Tao Revolution/Decisions.md` (§9 collections, §8 intents).
+    `Docs/Roadmap/Tao Revolution/Decisions.md` (§9 collections, §8 commands).
 - [ ] Harden `tao test`
   - Filters, watch, richer failure reporting, and broader runtime coverage. Test Apps already assert behavior in Tao.
   - The output half landed with the verification-orchestration plan: the Jest child streams live,
@@ -286,7 +286,10 @@ Product and codebase backlog, unordered.
 - `Docs/Roadmap/Tao ship.md` — ship exploration with open dialogue: the derived publish pipeline (build/sign/submit/OTA), variants as environments, the derived hosted runtime, the schema-migration option space, deploy configuration, error reports and analytics in production, and the commercial shape.
 - `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` — the first ship slice as a plan: `tao ship <App>` to TestFlight and an Android APK link over the developer's own EAS and Apple accounts, then `--update`, testers, and one host for dev and ship; its rulings for Ro and the researched lane facts beside it.
 - `Docs/Roadmap/Multiplayer sync.md` — multiplayer-sync exploration with open dialogue: the typed change-set ledger, the granular-write provider family and its conformance contract, offline queue and late-refusal semantics, fieldwise-latest convergence, presence, and the slice sequence.
-- `Docs/Roadmap/Keyboard driven apps/` — the interaction system design (KEY-D1–D14: interaction outline, attention reducer, `scene`, the shell as a view with a rendered nav, commands as configured values, narrowing, surfaces, App Intents mapping) and its implementation plan.
+- `Docs/Roadmap/Keyboard driven apps/` — the interaction system design (KEY-D1–D14) and
+  implementation record. T1–T5 ship the outline, attention reducer, `scene`, shell view with a
+  rendered nav, configured commands, narrowing, and generated surfaces. The App Intents/native-menu
+  boundary is deferred because this checkout has no native iOS build path.
 - `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..036 deferred-decision inventory.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
 - `Docs/Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.

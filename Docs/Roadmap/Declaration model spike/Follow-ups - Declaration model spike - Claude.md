@@ -24,8 +24,8 @@ primitive names.
 
 **Resolved by the host-read view slots and native nav kit tranche.** Validators now resolve
 primitive slot contracts and refinement inheritance from the parsed prelude. Adding defaulted
-`Title` and `Toolbar` to primitive `view` required no parallel hardcoded expected-slot edit, and
-`nav is view` sees them through the same effective-slot traversal. `prelude-validator.ts` retains
+`Title` and `Toolbar` to primitive `scene` required no parallel hardcoded expected-slot edit, and
+`nav is scene is view` sees them through the same effective-slot traversal. `prelude-validator.ts` retains
 only the closed primitive-name/family integrity checks needed to bootstrap the language.
 
 The unified view tranche shrank the pinned set — `visual`, `presentable`, `ui`, `layout`, and
@@ -43,9 +43,9 @@ but the configurable-declaration branch returns every configuration property unf
 **Resolved by the host-read view slots and native nav kit tranche.** Completeness now asks the
 declaration model whether an effective supplied slot requires a value instead of treating every
 configuration member as required. Primitive defaults therefore remain optional through refinement
-and transparent configurable-type aliases. `Title` and `Toolbar` prove the path: every view may omit
-them, while a StackNav placement independently requires `Title` and reports that usage error at the
-placement.
+and transparent configurable-type aliases. `Title` and `Toolbar` prove the path: a scene may omit
+them generally, while a StackNav scene placement independently requires `Title` and reports that
+usage error at the placement. A plain view has neither slot and receives Back-only chrome.
 
 ## Not follow-ups
 

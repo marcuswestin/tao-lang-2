@@ -123,8 +123,9 @@ Rules to pin during implementation:
 
 The native **tab bar** is a native SelectionNav implementation — the nav-kind seam exists and
 `Display "automatic"` was already pointing at it. Native **stack navigation** maps the same Tao
-reducer-owned entries to platform transitions and header chrome; the directly presented view's
-reactive `Title` and `Toolbar` supplied slots drive that header. **Sheet** is a presentation mode
+reducer-owned entries to platform transitions and header chrome; a directly presented scene's
+reactive `Title` and `Toolbar` supplied slots drive that header, while a plain view receives
+Back-only chrome. **Sheet** is a presentation mode
 (`present X as sheet`) beside overlay and toast. App code keeps writing `nav X = SelectionNav
 { ... }` and `present Y`; native-ness lives in the imported implementation, never at the call site.
 Bare `@tao/nav` aliases `native/`; an explicit `@tao/nav/basic` import selects the portable host.
@@ -158,8 +159,9 @@ Landed:
   `react-native-screens`' BottomTabs (UITabBarController on iOS — Liquid Glass on an iOS 26 build —
   and the Material bar on Android), controlled by Tao's reducer; `present X as sheet` hosts a view in
   the platform's modal. `StackNav` now uses the platform stack/header while retaining Tao's reducer,
-  reads direct reactive `Title`/`Toolbar` slots, and falls back to the same fixed-header basic host on
-  web or under deterministic behavior checks.
+  reads direct reactive `Title`/`Toolbar` slots from scenes while giving plain views Back-only
+  chrome, and falls back to the same fixed-header basic host on web or under deterministic behavior
+  checks.
 - **`@tao/nav` has the standard kit shape**: root configurable-type aliases publish `native/` by
   default, and `basic/` publishes the portable implementations with the same family contracts and
   `TR.NavKind` conformance coverage.

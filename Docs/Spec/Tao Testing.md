@@ -194,6 +194,13 @@ same locale-aware word-prefix subsequence matching as product input; it targets 
 candidate without activating it. Attention starts fresh for every check. The `interaction` capture
 contains both immutable `outline` and `attention` snapshots; tests do not receive a mutation handle.
 
+Generated interaction layers are ordinary rendered output for text assertions. `press key "?"`
+toggles hints, `press key "."` opens the target's verb layer, `press key "primary+k"` opens the
+command palette, and Escape with no narrower operation left opens the region overview. Journeys
+assert stable headings (`Interaction hints`, `Actions for …`, `Command palette`, `Interaction
+overview`) and generated `<KEY> — <label>` rows, so a missing runtime layer cannot pass through app
+copy alone. Keyboard presence is recorded through the same `press key` dispatch seam.
+
 Behavior checks use one deterministic navigation rule: the test runtime disables optional native
 host surfaces and renders the native kind through its synchronous basic surface. Product source can
 therefore keep the bare native-default `@tao/nav` import, while a dedicated harness may import

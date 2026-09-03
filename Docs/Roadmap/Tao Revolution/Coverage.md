@@ -24,9 +24,10 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Presence (§6)                                               | — (collaboration scope question)                                        | Post-MVP | —                        |
 | Editing: write-through + drafts (§7)                        | WordFlower · title/body editing                                         | MVP      | partially in Current     |
 | Draft conflict comparison (§7)                              | Wayfare · stop editing                                                  | Post-MVP | —                        |
-| Commands as configured values (§8)                          | WordFlower · module-level Finish, workspace save toolbar                | MVP      | in Current[^9]           |
+| Commands as configured values and generated catalog (§8)    | WordFlower · module-level Finish, workspace save toolbar                | MVP      | in Current[^9]           |
 | Shortcut values and keyboard dispatch (§8)                  | WordFlower · pause focus command and document verbs                     | MVP      | in Current[^11]          |
 | Interaction outline, derived row labels, `(title)` (§2, §9) | WordFlower · workspace, draft, and paragraph rows; HNReader · story row | MVP      | in Current[^10]          |
+| Attention reducer and locale-aware narrowing (§9)           | WordFlower · workspace targeting and document-title engagement          | MVP      | in Current[^11]          |
 | Command ordering, hiding, and verb surface (§8)             | WordFlower · draft and finished document rows                           | MVP      | in Current[^11]          |
 | Generated interaction surfaces and key allocation (§8, §13) | WordFlower · hints, overview, draft verbs, and command palette          | MVP      | in Current[^12]          |
 | OS menu bar (§8)                                            | WordFlower · command menus                                              | Post-MVP | —                        |
@@ -43,7 +44,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Grid over loop, cell min (§9)                               | Skillet · recipe cards                                                  | Post-MVP | —                        |
 | Pages over loop (§9)                                        | Skillet · cook mode steps                                               | Post-MVP | —                        |
 | Navigation: native/basic kits, links, split, windows (§10)  | WordFlower · native stack + deterministic harness                       | MVP      | partially in Current[^5] |
-| Rendered nav, root view with arguments (§10)                | WordFlower · shell with persistent focus bar; Test Apps · Shell         | MVP      | in Current               |
+| Rendered nav, root view with arguments; frame retired (§10) | WordFlower · shell with persistent focus bar; Test Apps · Shell         | MVP      | in Current               |
 | Device-local entities (§2, §11)                             | **WordFlower · focus session as data** (survives relaunch)              | **MVP**  | in Current               |
 | Restoration policy (§10)                                    | WordFlower · relaunch                                                   | MVP      | in Current               |
 | App composition, variants, providers (§11)                  | WordFlower · app root + test variants                                   | MVP      | partially in Current     |
@@ -73,17 +74,21 @@ it (`Docs/Roadmap/Focused writing tranche/`).
 [^3]: `<expression> from <path>` is in Current and is how both stdlib packages bind their runtimes.
     Declared failures (`fails`), `progress`, and the emitted bridge metadata module are not.
 
-[^4]: The unified view tranche: one `view` kind with content acceptance, slots, and `responds`
-    inferred from the declaration; the `Collapsible` stateful wrapper proves the deleted
-    statelessness ladder, and its conditional `@@content` placement proves the at-most-once rule.
-    The restoration tranche supplies the serialization boundary and diagnoses statically known
-    non-serializable action parameters at each restorable presentation usage site (§10).
+[^4]: The unified view tranche established one renderable family with content acceptance, render
+    slots, and `responds` inferred from the body; the later host-read tranche added `scene is view`
+    for supplied host slots and the presented-not-composed rule. The `Collapsible` stateful wrapper
+    proves the deleted statelessness ladder, and its conditional `@@content` placement proves the
+    at-most-once rule. The restoration tranche supplies the serialization boundary and diagnoses
+    statically known non-serializable action parameters at each restorable presentation usage site
+    (§10).
 
-[^5]: The host-read/nav-kit tranche implements action intent titles, focused bound commands,
+[^5]: The host-read/nav-kit tranche implements command titles, focused bound commands,
     `Toolbar`, reactive direct-only `Title`, native-default and explicit basic `StackNav`, and
     user-visible title/toolbar journey assertions. WordFlower's Tao journey proves Back uses the
     semantic reducer; browser Back/Forward adds no Tao construct and is covered by focused runtime
-    and rendered host tests against that reducer. Broader menus, rails, palettes, SplitNav, window
+    and rendered host tests against that reducer. The runtime-owned target verb menu, palette,
+    overview, and hints, plus keyboard dispatch, ship in the interaction tranches below. Authored
+    and native menus, window
     orchestration, and links/routes remain at their stated later boundary.
 
 [^9]: The interaction system tranche makes a command a standalone configured value: `Title`,
@@ -92,17 +97,17 @@ it (`Docs/Roadmap/Focused writing tranche/`).
     `do <command>(...)` invokes it with arguments bound exactly as an action's are. WordFlower's
     `Finish` is the module-level command with a `Document` slot; `Save` is the view-body command
     reading its scene's own state. Journeys prove the toolbar label, the reactive `Enabled`, and the
-    write a `do Finish(Document)` performs. `shortcut` is carried and published but not dispatched:
-    only the `primary` modifier is registered, and mention refinement, `Commands { ... }`, `hide`,
-    entity command lists, and key dispatch remain at their stated later boundary.
+    write a `do Finish(Document)` performs. The later keyboard-attention tranche dispatches
+    `shortcut` values, registers only the portable `primary` modifier, and adds mention refinement,
+    `Commands { ... }`, `hide`, entity command lists, and key dispatch as described in [^11].
 
 [^10]: The interaction outline tranche derives every node from wiring — collections and items from
     `loop`, action and input controls from `Press`/`Submit` and `Value`+`Change`, regions from what
     a navigator presents — and names each row by one static ranking that prefers the `(title)`
     field. WordFlower's `expect label` journeys prove the ranked label on a workspace row, a draft
     row, and a paragraph row; HNReader's proves a selectable story row whose first text is an
-    opaque interpolation. Attention, keyboard dispatch, narrowing, and the surfaces remain at their
-    stated later boundary.
+    opaque interpolation. Attention, keyboard dispatch, narrowing, and generated surfaces ship in
+    the subsequent interaction tranches described in [^11] and [^12].
 
 [^11]: The keyboard-attention tranche makes the outline operable through one runtime reducer.
     WordFlower journeys narrow to and activate a workspace, engage and leave the document-title

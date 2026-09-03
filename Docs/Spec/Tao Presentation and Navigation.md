@@ -2,10 +2,10 @@
 
 Status: authoritative implemented contract for the current WordFlower tranche.
 
-Tao has one renderable declaration kind, `view`, and presentation is a property of each call
-site: the same view may compose inline in a render tree, be presented as an overlay, sheet, or
-toast, be presented into a nav, or be asked for a typed response. The implemented core hierarchy
-is:
+Tao has one renderable family rooted at `view`, and presentation is a property of each call site: a
+plain view may compose inline in a render tree, be presented as an overlay, sheet, or toast, be
+presented into a nav, or be asked for a typed response. A `scene` carries the additional
+presented-not-composed rule and host-facing description. The implemented core hierarchy is:
 
 ```tao
 primitive view
@@ -17,9 +17,11 @@ primitive scene is view with {
 primitive nav is scene with { implement }
 ```
 
-`nav` refines `view`, so a configured nav fills any view-typed configuration slot; it is not a
-render-bearing declaration, and cannot be embedded as an ordinary render child. Apps mount
-navigation; they do not render ordinary content directly.
+`nav is scene is view`, so a configured nav fills any view-typed configuration slot and may be
+rendered at a view site. A nav is still a configured value rather than a render-bearing product
+declaration: the render site mounts that descriptor through the navigation host. An app owns one
+root through its `view` statement; that root may itself be a nav or an ordinary shell view that
+renders a nav-typed parameter.
 
 ## Apps and configured navigation
 
@@ -48,28 +50,29 @@ nav WordFlowerNavigator = SelectionNav {
 
 app WordFlower {
    Name "WordFlower"
-   Navigator WordFlowerNavigator
+   view WordFlowerNavigator
    Datasource Local {
       StorageKey "WordFlowerData"
    }
 }
 
-view Home() {
+scene Home() {
    Title "Home"
    render HomePage()
 }
 
-view Settings() {
+scene Settings() {
    Title "Settings"
    render SettingsPage()
 }
 ```
 
-`Name` is display text and `Navigator` is the primary configured nav; `view Shell(args)` supplies
-it as sugar, mounting a root view bound to its arguments in a synthesized slot navigator. `Datasource`
-configures the app's provider; Local's storage identity is specified in `Tao Data.md`. App
-auxiliaries remain valid for genuine app-specific hosts such as windows. Overlays and toasts never
-require auxiliary hosts.
+`Name` is display text and `view Root(args)` supplies the app root, mounting a root value bound to
+its arguments in a synthesized slot navigator. A direct nav root such as
+`view WordFlowerNavigator` is valid; a shell instead uses `view Shell(WordFlowerNavigator)` and
+renders that nav inside ordinary layout. `Datasource` configures the app's provider; Local's
+storage identity is specified in `Tao Data.md`. App auxiliaries remain valid for genuine
+app-specific hosts such as windows. Overlays and toasts never require auxiliary hosts.
 
 Every project has one checked-in opaque `id`. `tao create <id>` creates it and
 `tao project id <id> [path]` adds missing metadata; `--replace` deliberately makes a fork independent
@@ -96,15 +99,13 @@ the descriptor resolves its mounted occurrence within the enclosing app. Neither
 target resolution consults a shipped-name table. Two declarations or generated modules may reuse a
 display name without overwriting each other's app or nav definitions.
 
-App variants are immutable launch configurations. A property-position `with` merge-copies the
-configured value already held by that property:
+App variants are immutable launch configurations. A variant may rebind the root view, including a
+shell parameter that selects a differently configured navigator:
 
 ```tao
-workspace let WordFlowerDrawer = WordFlower with {
+app WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
-   Navigator with {
-      Display "drawer"
-   }
+   view WordFlowerShell(WordFlowerDrawerNavigator)
 }
 ```
 
@@ -193,7 +194,8 @@ The stdlib host-family contract fixes the current read and requirement sets:
 
 | Host placement                                                                | Reads              | Requires |
 | ----------------------------------------------------------------------------- | ------------------ | -------- |
-| every `StackNav` entry, including `Initial` and later pushes                  | `Title`, `Toolbar` | `Title`  |
+| a `scene` entry in `StackNav`, including `Initial` and later pushes           | `Title`, `Toolbar` | `Title`  |
+| a plain `view` entry in `StackNav`                                            | neither            | neither  |
 | reserved `present ... as window` contract, including its full-screen fallback | `Title`, `Toolbar` | `Title`  |
 | `SlotNav`, `SelectionNav`, `SplitNav`; root, sheet, menu, and toast           | neither            | neither  |
 
@@ -201,7 +203,8 @@ The stdlib host-family contract fixes the current read and requirement sets:
 configuration, and split-pane configuration is not inferred from child content. Native and basic
 implementations of the same family have identical sets. A missing required fill is diagnosed at the
 placement, not the declaration: a view remains valid until it is placed in a host that requires the
-slot. For example, a push reports that `StoryScreen` is pushed on a `StackNav` and must fill `Title`.
+slot. For example, a push reports that scene `StoryScreen` is pushed on a `StackNav` and must fill
+`Title`. A pushed plain view instead receives Back-only chrome and has no host-facing slots to read.
 
 ## Self-hosted nav declarations and kits
 
@@ -295,7 +298,7 @@ app WordFlowerDrawer = WordFlower with {
    view WordFlowerShell(WordFlowerDrawerNavigator)
 }
 
-scene WordFlowerShell(Navigator nav) {
+view WordFlowerShell(Navigator nav) {
    render Col() [fill] {
       Navigator() [fill]
       when CurrentSession {
@@ -344,7 +347,8 @@ reloadable URLs.
 The configured `Initial` value is a descriptor, not an invoked rendered element. The general
 declaration-completeness rule requires every supplied slot to be filled before any declaration is
 used as a value. Every `Initial` value and every SelectionNav item `Content` is view-typed;
-`nav` refines `view`, so a configured nav fills the same slots.
+`nav is scene is view`, so a configured nav fills the same view-typed slots and carries scene
+chrome when a host presents the nav itself.
 
 Selection keys belong to their configured declaration's namespace. `Initial` must name one of its
 items. The visible controls use each item's `Label`; `Icon` is preserved in the descriptor while the

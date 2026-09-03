@@ -21,7 +21,8 @@ expressions; unit values and dimensional arithmetic; pure functions; immutable `
 named, inline, and typed foreign actions; inferred `fail` cases; `set`, compound `set`, `toggle`, and
 `do`; subject `when`; block-scoped `guard`; homogeneous list literals;
 `loop`; first-class `view` and configured `nav` values under the collapsed primitive hierarchy
-(`view` is the one renderable primitive; `nav` refines it); top-level data/query/write forms;
+(`view` is the renderable primitive, `scene is view`, and `nav is scene is view`); top-level data and
+write forms plus view-body queries;
 declaration-owned configuration; `ask`/`respond` on views declaring `responds`; the
 expression-position TypeScript boundary; prelude-declared host-facing supplied-slot fills; commands
 as configured values with their own slots; and transparent configurable-type aliases.

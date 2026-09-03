@@ -77,6 +77,12 @@ Every module emits a table of the commands it declares and registers it at load 
 table records each command's identity, its slots and whether each names an entity, and the value to
 run, so a verb surface can ask which commands act on what a person has in front of them.
 
+Entity `commands A, B` entries order the default verbs and `commands hide C` withholds a command
+unless a view explicitly lists it. A view's `Commands { ... }` promotes applicable commands and
+`hide X` excludes inherited defaults. The target verb layer folds view promotions, rendered inner
+controls, entity defaults, then remaining applicable commands; repeated verbs keep their distinct
+provenance while exact duplicate registrations fold.
+
 ## Shortcuts
 
 `shortcut` is the type of the key a command answers to. A bare string literal in `Key` position is a
@@ -84,8 +90,12 @@ shortcut literal (`Key "s"`), and `primary + "n"` chains the one registered modi
 `primary` is a value in `@tao/keys`: the host maps it to whatever chord key the platform it runs on
 already uses, so one authored shortcut is correct on every one of them. Naming a platform key
 directly — `cmd`, `ctrl`, `meta` — is an error, and so is a modifier no tranche has registered.
-Dispatching keys to commands is not in this release; a `Key` is carried and published, not yet
-pressed.
+Modifier chords dispatch directly using the nearest applicable scope: engaged input, modal
+occurrence, targeted item, focused scene, app-wide command, then reducer keys. Bare single-letter
+keys are accelerators only while the target verb layer is open. The runtime-owned palette is always
+available through `primary+K`; it lists every titled command and entity and shares attention's
+locale-aware word-prefix subsequence matcher. Hints, overview, verb, and palette rows receive
+deterministic label-derived keys without shadowing reducer keys or explicit shortcuts.
 
 ## Failure contracts
 
