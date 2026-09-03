@@ -74,11 +74,9 @@ Describe('Studio device trust primitives', () => {
       attackerEphemeral.publicKey,
       seenByDevice,
     )
-    const codes = new Set([honest.studioKeys.code, deviceView.code])
-
     // Two independent six-digit codes collide one time in a million; the transcripts never do.
     Expect(Array.from(seenByDevice)).not.toEqual(Array.from(honest.transcript))
-    Expect(codes.size === 2 || honest.studioKeys.code === deviceView.code).toBe(true)
+    Expect(honest.studioKeys.code).not.toBe(deviceView.code)
   })
 
   Test('signatures bind a role to the transcript and fail for any other key, role, or transcript', () => {

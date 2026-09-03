@@ -524,7 +524,10 @@ Describe('Studio device launcher', () => {
     Expect(info.scheme).toBe('taostudiocompanion')
     Expect(info.bundleIdentifier).toBe('dev.tao-lang.studio.companion')
     Expect(info.diagnostics).toEqual([])
-    Expect(fetched.urls).toEqual(['http://127.0.0.1:8081/_expo/link?platform=ios&choice=expo-dev-client'])
+    Expect(fetched.urls).toEqual([
+      'http://127.0.0.1:8081/_expo/open?platform=ios',
+      'http://127.0.0.1:8081/_expo/link?platform=ios&choice=expo-dev-client',
+    ])
   })
 
   Test(
@@ -564,9 +567,9 @@ Describe('Studio device launcher', () => {
     const info = await launcher.describe({ metroOrigin: 'http://127.0.0.1:8081' })
 
     Expect(info.diagnostics[0]?.layer).toBe('metro')
-    Expect(info.diagnostics[0]?.message).toContain('did not answer /_expo/link: fetch failed (ECONNREFUSED)')
+    Expect(info.diagnostics[0]?.message).toContain('did not answer /_expo/open: fetch failed (ECONNREFUSED)')
     Expect(info.url).toBe(companionDevClientUrl({ host: '192.168.50.107', port: 8081, scheme: 'taostudiocompanion' }))
-    Expect(fetched.urls.some(url => url.includes('/_expo/open'))).toBe(false)
+    Expect(fetched.urls.some(url => url.includes('/_expo/link'))).toBe(false)
   })
 
   Test('never sends a loopback host to a device, even when Expo offers one', async () => {

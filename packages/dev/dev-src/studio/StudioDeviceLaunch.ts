@@ -60,13 +60,30 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
   const simulator = deps.simulator ?? createStudioCompanionSimulator()
   const fetchImpl = deps.fetch ?? fetch
   const lanAddresses = deps.lanAddresses ?? detectLanAddresses
-  /** SDK 54 has no `/_expo/open`; once it answers 404 the launcher stops asking. */
+  /** SDK 54 has no `/_expo/open`; once it answers 404 the launcher stops asking and goes to `/_expo/link` directly. */
   let openEndpointAbsent = false
 
   async function resolveExpoUrl(
     metroOrigin: string,
     diagnostics: StudioDeviceLaunchDiagnostic[],
   ): Promise<string | undefined> {
+    if (!openEndpointAbsent) {
+      try {
+        const probe = await fetchExpoOpenEndpoint(metroOrigin, 'ios', fetchImpl)
+        if (probe.status !== 404) {
+          return typeof probe.body?.url === 'string' ? probe.body.url : undefined
+        }
+        openEndpointAbsent = true
+      } catch (error) {
+        diagnostics.push({
+          layer: 'metro',
+          message: `Metro at ${metroOrigin} did not answer /_expo/open: ${
+            networkErrorMessage(error)
+          }. Studio's Metro for this project may still be starting or may have stopped.`,
+        })
+        return undefined
+      }
+    }
     try {
       const link = await expoRuntimeLink(metroOrigin, { devClient: true, fetch: fetchImpl, platform: 'ios' })
       if (link !== undefined) {
@@ -77,6 +94,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
         message:
           `Expo at ${metroOrigin} offered no development-client link from /_expo/link (the preview project may not declare the ${StudioCompanionIdentity.scheme} scheme); using a constructed link instead.`,
       })
+      return undefined
     } catch (error) {
       diagnostics.push({
         layer: 'metro',
@@ -84,19 +102,6 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
           networkErrorMessage(error)
         }. Studio's Metro for this project may still be starting or may have stopped.`,
       })
-      return undefined
-    }
-    if (openEndpointAbsent) {
-      return undefined
-    }
-    try {
-      const probe = await fetchExpoOpenEndpoint(metroOrigin, 'ios', fetchImpl)
-      if (probe.status === 404) {
-        openEndpointAbsent = true
-        return undefined
-      }
-      return typeof probe.body?.url === 'string' ? probe.body.url : undefined
-    } catch {
       return undefined
     }
   }
