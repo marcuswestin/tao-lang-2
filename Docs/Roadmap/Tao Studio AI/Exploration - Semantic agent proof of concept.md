@@ -540,6 +540,42 @@ placeholders. Applying wrote one file, compiled, and the story rows re-rendered 
 restored the file exactly. "Let people bookmark a story" now plans four placements and compiles, with the
 scenario step honestly reported as unsupported because the app declares no fixture to switch on.
 
+### Fourth journey: the change is judged by the app's own tests
+
+Observed, 2026-09-03, HNReader:
+
+Everything before this point checks a change against itself. The plan says a placement is right because the
+graph says so; the compile says the source is well-formed; the preview shows a screen that looks fine. None
+of them can say the change is **wrong**, and the reword journey produced exactly that case: a valid,
+well-placed, compiling change that silently broke what the app is supposed to show.
+
+The panel now runs the app's behavior tests before applying, runs them again after, and reports the
+difference. On the reword it says:
+
+> This change breaks 1 test the app passed before it.
+> `hn reader > fills the front page from the feed`
+> `expect text "42 points by tester · 2 comments" expected rendered text but found none.`
+
+On the bookmark flag, which no journey asserts against, it says the app's tests still pass.
+
+Three things made the verdict worth trusting rather than merely present:
+
+- **The baseline.** Without a run from before the change, a red test cannot be attributed to it. The
+  baseline is taken while the plan is on screen, so it usually costs nothing by the time Apply is pressed,
+  and the verdict names only tests that this change turned red. With no baseline it reports the failures and
+  explicitly declines to blame them on the change.
+- **Counting tests, not records.** The Tao runner reports a failing journey twice: the assertion, then the
+  source frame it sat in. Reported naively the panel claimed two broken tests and quoted a comment from the
+  runner's own source as the second reason. A verdict that miscounts is worse than no verdict.
+- **Declining to answer.** An app with no tests gets "nothing checked the change", not a green tick.
+
+Interpretation: this is the first thing in the exploration that can contradict the agent. The graph makes
+the agent's changes well-formed; only the app's own behavioral contract makes them correct. A production
+design that lets an agent write code without running that contract is shipping the reword bug.
+
+The cost is small: HNReader's suite runs in about 3 seconds, twice per applied change, and the first run
+overlaps with reading the plan.
+
 ### A guardrail worth keeping: the reword cannot invent a value
 
 A reword is the first change kind here where the model writes text that ships. The guardrail is cheap and
@@ -659,6 +695,9 @@ the model's ability to copy exact names.
   rewritten once. A whole-file edit per placement is only correct when no two placements share a file.
 - Added **SAI-D027**: model-authored text that ships must be checkable against the graph. A reword may only
   use placeholders the line already had or fields of an entity the view takes.
+- Added **SAI-D028**: an applied change is judged by the app's behavior tests, measured before and after, so
+  the verdict names what this change broke. A verdict without a baseline, or for an app with no tests, is
+  reported as unknown rather than as success.
 
 ### Questions answered or newly discovered
 
@@ -682,6 +721,13 @@ the model's ability to copy exact names.
 - New: **SAI-Q043** - how should a plan report a step it cannot take? HNReader has no fixture, so the
   scenario step is honestly unsupported while the other placements still apply. A partial plan that says
   what it left out was more useful here than an all-or-nothing refusal, but that is one observation.
+- New: **SAI-Q044** - should an agent's change be applied at all when it breaks a test? The PoC applies,
+  reports, and offers undo, which suits a person watching. An agent working unattended needs a decided
+  policy: revert automatically, or hold the change unapplied until a person rules on it.
+- New: **SAI-Q045** - the tests only judge what they already cover. The bookmark flag passed because no
+  journey asserts anything about it, which is a weaker statement than it appears. Whether an agent should
+  also be asked to write the journey for what it built, and whether a test it wrote itself is evidence,
+  is unresolved.
 
 ### Also fixed: the no-op design edit
 
