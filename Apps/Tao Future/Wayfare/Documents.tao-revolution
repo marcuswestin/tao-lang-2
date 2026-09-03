@@ -3,7 +3,7 @@
 // A document with `PrivateTo` set is readable by that person only. Nothing in this screen filters by it —
 // the access rule does — so the list a viewer sees IS the list they may see.
 
-view DocumentsScreen() {
+scene DocumentsScreen() {
    Title "Documents"
    Toolbar { AddDocument }
    query TripDocuments from MyTrip.Documents { order by Kind, AddedAt }

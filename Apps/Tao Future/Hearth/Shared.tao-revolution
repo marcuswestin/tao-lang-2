@@ -95,7 +95,6 @@ command AddSomething() {
 }
 
 view QuickCapture(Home) {
-   Title "Add something"
    draft New = HearthItem for new { CreatedBy: Me }
    query Lists from Home.Lists { }
 
@@ -149,7 +148,6 @@ command FindAnything() {
 }
 
 view FindSheet() {
-   Title "Find anything"
    Search Query
    query Hits from MyHome.Lists.Items {
       search Query in Title, Note, Comments.Body

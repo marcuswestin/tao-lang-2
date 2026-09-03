@@ -127,7 +127,6 @@ command FindAnything() {
 }
 
 view FindSheet() {
-   Title "Find anything"
    Search Query
    // One query over two fields and two entities, ranked by relevance.
    query Hits from MyKitchen.Recipes {

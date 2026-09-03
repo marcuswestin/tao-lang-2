@@ -1,9 +1,9 @@
 # Tao Revolution — Coverage
 
 The capability → forcing-feature → test matrix. Enforces `Process.md` principle 2: a capability
-exists only if a real feature forces it, and every decided capability names the app feature and Tao
-test that prove it. A capability with an empty Forcing feature cell is either not yet mapped
-(complete the row during Process step 3) or a red flag to resolve at MVP derivation (step 4).
+exists only if a real feature forces it, and every decided capability names that feature and the
+available evidence that proves it. A capability with an empty Forcing feature cell is either not yet
+mapped (complete the row during Process step 3) or a red flag to resolve at MVP derivation (step 4).
 
 Tier values: **MVP** (must run for v1), **Post-MVP** (Revolution; activated with the app
 expansion), **TBD** (assigned at step 4). Test status is updated as tranches land.
@@ -45,7 +45,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Pages over loop (§9)                                        | Skillet · cook mode steps                                               | Post-MVP | —                        |
 | Navigation: native/basic kits, links, split, windows (§10)  | WordFlower · native stack + deterministic harness                       | MVP      | partially in Current[^5] |
 | Rendered nav, root view with arguments; frame retired (§10) | WordFlower · shell with persistent focus bar; Test Apps · Shell         | MVP      | in Current               |
-| Device-local entities (§2, §11)                             | **WordFlower · focus session as data** (survives relaunch)              | **MVP**  | in Current               |
+| Device-local entities (§2, §11)                             | **WordFlower · focus session as data** (journey smoke)                  | **MVP**  | compiler-proven          |
 | Restoration policy (§10)                                    | WordFlower · relaunch                                                   | MVP      | in Current               |
 | App composition, variants, providers (§11)                  | WordFlower · app root + test variants                                   | MVP      | partially in Current     |
 | InstantDB datasource (§11)                                  | WordFlower · sync                                                       | MVP      | experimental             |

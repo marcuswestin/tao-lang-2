@@ -78,7 +78,7 @@ app Wayfare {
    Permissions WayfarePermissions
    // Trips are browsable signed out (the library shows the sign-in panel); a link into a private trip waits
    // for the account. So the root is one navigator, and `Me` is guarded where it matters.
-   view WayfareNavigator
+   Navigator WayfareNavigator
    Language Me.Language
    Restore automatic { Exclude sheets, menus, toasts }
 
@@ -126,7 +126,7 @@ app WayfarePreview = Wayfare with {
 
 // -- Settings ------------------------------------------------------------------------------------------
 
-view SettingsScreen() {
+scene SettingsScreen() {
    Title "Settings"
 
    action ConfirmDeleteAccount() runs single {

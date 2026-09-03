@@ -4,7 +4,7 @@ use primary from @tao/keys
 
 phrase ItemCount(Count number) = one "{ Count } item" / other "{ Count } items"
 
-view HearthListIndex() {
+scene HearthListIndex() {
    Title "Lists"
    Toolbar { NewList }
    query Lists from MyHome.Lists { }
@@ -70,7 +70,7 @@ file view NewListSheet(Home) responds HearthList {
 
 // -- One list -----------------------------------------------------------------------------------------------
 
-view HearthListScreen(HearthList) {
+scene HearthListScreen(HearthList) {
    Title HearthList.Name
    Toolbar { Rename ShareThis DeleteThis }
    Search Find
@@ -197,7 +197,6 @@ view HearthListScreen(HearthList) {
 
 // Renaming needs no draft: the row exists and each field stands on its own.
 file view RenameList(HearthList) {
-   Title "Rename list"
    action DismissRename() {
       dismiss
    }
@@ -216,7 +215,7 @@ file view RenameList(HearthList) {
 
 // -- One item ------------------------------------------------------------------------------------------------
 
-view HearthItemScreen(Item) {
+scene HearthItemScreen(Item) {
    Title Item.Title
    Toolbar { OpenSeparately DeleteItem }
    presence Lookers on Item
@@ -318,7 +317,6 @@ view HearthItemScreen(Item) {
 // -- Sharing --------------------------------------------------------------------------------------------------
 
 file view ShareListSheet(HearthList) {
-   Title "Share list"
    action Start() runs single {
       when ShareList(HearthList) {
          done -> Published { share SharedListLink(Published); dismiss }
@@ -344,7 +342,7 @@ file view ShareListSheet(HearthList) {
                Button("Share link") [primary] { on press -> share SharedListLink(publish HearthList as SharedList) }
 }  }  }  }  }
 
-public view SharedListScreen(SharedList) {
+public scene SharedListScreen(SharedList) {
    Title SharedList.Name
    render ScrollView [screen] {
       guard SharedList

@@ -2,7 +2,7 @@
 // takes the screen. One step at a time, big enough to read from across the counter, with the recipe's
 // own timers running.
 
-view CookScreen(Recipe, Meal (optional)) {
+scene CookScreen(Recipe, Meal (optional)) {
    Title "Cooking { Recipe.Title }"
    Toolbar { Close }
    state StepNumber = 1

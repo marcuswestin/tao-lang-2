@@ -28,8 +28,9 @@ are retained as execution history, not current syntax or architecture.
 - **A command declares slots in a parameter list**; `do X(args)` invokes; `X with { … }` derives;
   `do X with` retired (`27f6884b`). Juxtaposition declares in a type body and binds in a value body,
   and no block is both.
-- **`local only` ships as two emitted catalogs**, never two connections; a relation across the
-  boundary is diagnosed where written (`e6d33957`).
+- **`local only` ships as two emitted catalogs and two bindings/connections**: the app's configured
+  datasource for ordinary entities and a Local companion for device-local entities. A relation
+  across the boundary is diagnosed where written (`e6d33957`).
 - **`(title)` parses as a validated word, not a keyword** — a `title` keyword collided with
   `expect navigation title` and the `[title]` design bundle (`19f9e3ef`). Rule recorded in
   `packages/AGENTS.md`: no capitalized keywords, and no lowercase keyword a design, layout, or test

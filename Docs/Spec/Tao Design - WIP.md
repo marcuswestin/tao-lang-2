@@ -29,7 +29,7 @@ workspace design WordFlowerDesign {
 
 app WordFlower {
    Name "WordFlower"
-   view HomeStack
+   Navigator HomeStack
    Design WordFlowerDesign
 }
 ```
@@ -331,7 +331,7 @@ design AppTheme {
 app HabitTracker {
    Name "Habit Tracker"
    Design AppTheme
-   view HabitStack
+   Navigator HabitStack
 }
 
 nav HabitStack = StackNav { Initial MainView }

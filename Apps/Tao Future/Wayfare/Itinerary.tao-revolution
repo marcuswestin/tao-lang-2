@@ -13,7 +13,7 @@ view NoStopSelected() {
 
 // -- One day ---------------------------------------------------------------------------------------------------
 
-view DayPlan(Day) {
+scene DayPlan(Day) {
    Title if Day.Title is empty then Day.Date.Long else Day.Title
    Toolbar { AddStop }
    query DayStops from Day.Stops { }
@@ -92,7 +92,7 @@ file view NewStopSheet(Day) responds Stop {
 // the screen — so walking away loses nothing and there is no discard-changes dialogue. If a co-traveler
 // changed the stop meanwhile, `save` answers `conflict` and the choice is a person's, field by field.
 
-view StopDetails(Stop) {
+scene StopDetails(Stop) {
    Title Stop.Title
    Toolbar { SaveStop ToggleVisited DeleteStop }
    draft Mine = Stop from Stop
@@ -187,7 +187,6 @@ view StopDetails(Stop) {
 // takes theirs into the draft field by field. It reads the row live, so a third edit mid-decision updates
 // the comparison in place; saving again runs the same outcomes.
 file view ResolveStopConflict(Mine draft of Stop) {
-   Title "Someone else changed this stop"
    action Resolve() runs single {
       when save Mine {
          saved -> { dismiss; present Notice("Saved") as toast (Key: "stop") }
@@ -207,7 +206,7 @@ file view ResolveStopConflict(Mine draft of Stop) {
 
 // -- Today ------------------------------------------------------------------------------------------------------
 
-view TodayScreen() {
+scene TodayScreen() {
    Title "Today"
    render ScrollView [screen] {
       guard Me signed out -> { Text("Sign in to see today's plan.") [body]; SignInPanel }

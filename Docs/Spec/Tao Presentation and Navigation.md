@@ -50,7 +50,7 @@ nav WordFlowerNavigator = SelectionNav {
 
 app WordFlower {
    Name "WordFlower"
-   view WordFlowerNavigator
+   Navigator WordFlowerNavigator
    Datasource Local {
       StorageKey "WordFlowerData"
    }
@@ -67,10 +67,10 @@ scene Settings() {
 }
 ```
 
-`Name` is display text and `view Root(args)` supplies the app root, mounting a root value bound to
-its arguments in a synthesized slot navigator. A direct nav root such as
-`view WordFlowerNavigator` is valid; a shell instead uses `view Shell(WordFlowerNavigator)` and
-renders that nav inside ordinary layout. `Datasource` configures the app's provider; Local's
+`Name` is display text. `Navigator Root` supplies a direct nav root; `view Root(args)` supplies a
+view root, mounting a value bound to its arguments in a synthesized slot navigator. A shell uses
+`view Shell(WordFlowerNavigator)` and renders that nav inside ordinary layout. `Datasource`
+configures the app's provider; Local's
 storage identity is specified in `Tao Data.md`. App auxiliaries remain valid for genuine
 app-specific hosts such as windows. Overlays and toasts never require auxiliary hosts.
 

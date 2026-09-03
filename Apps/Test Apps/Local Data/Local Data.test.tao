@@ -1,7 +1,7 @@
 use LocalData, LocalDataMemory from ./
 
 test "Local Data" {
-   test "keeps local-only rows across a relaunch" {
+   test "keeps a focus session row across a relaunch" {
       run LocalData
 
       expect text "No focus session"
@@ -9,12 +9,13 @@ test "Local Data" {
       press #startSession
       expect text "Focus: Deep work"
       relaunch
-      // The public behavior proves that a local-only row survives quitting and reopening.
+      // The Memory harness proves that the stored row survives quitting and reopening. Compiler
+      // tests establish that its declaration is routed to the local-only catalog.
       expect text "Focus: Deep work"
    }
    test "keeps both entity kinds across a relaunch with Memory configured" {
-      // This is an integration smoke test for both catalogs under the Memory variant. Compiler
-      // tests, rather than this black-box journey, prove that the entities route separately.
+      // This is an integration smoke test for both catalogs under the Memory variant. Because both
+      // connections are memory-backed here, compiler tests prove that the entities route separately.
       run LocalDataMemory
 
       expect text "No notes yet"

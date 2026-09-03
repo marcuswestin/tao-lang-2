@@ -281,7 +281,8 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   supplied slots on `scene` alone, so a `view` that is only ever composed cannot declare chrome
 //   that nothing reads. A scene is presented, never composed inline, diagnosed at the render site.
 //   A plain view may still be pushed or presented anywhere and shows Back-only header chrome; a
-//   scene pushed on a StackNav or presented `as window` must fill `Title`; sheets read `Title`.
+//   scene pushed on a StackNav or presented `as window` must fill `Title`; sheets read neither
+//   `Title` nor `Toolbar`.
 //   `nav is scene`
 // - `Header` is the explicit opt out of header chrome: `Header false` on a scene suppresses the
 //   header bar entirely, for a screen that owns its full surface. Back still works through the

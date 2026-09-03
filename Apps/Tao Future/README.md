@@ -19,7 +19,7 @@ dialect is consolidated: a command declares its slots in its parameter list, own
 App-wide module commands are mounted through `Commands`, view commands are local to their mounted
 view, and duplicate module/view declarations have been removed. Modifier shortcuts use the portable
 `primary + "…"` form, while the runtime-owned command palette is always present rather than declared
-by an app. Each app now binds its root through `view`, including reactive `view when …` roots.
+by an app. A direct nav root uses `Navigator`; reactive and shell-view roots use `view`.
 
 Remaining known deltas include `if / then / else` (retired for `when`), `public publish` (now bare
 `publish`), role-word test selectors (now text or `#tag`), `check "…"` journeys (now `test "…"`;
@@ -27,12 +27,13 @@ Remaining known deltas include `if / then / else` (retired for `when`), `public 
 design-block structure. Consolidating these groups is step 3 of
 `Docs/Roadmap/Tao Revolution/Process.md`.
 
-The unified view kind and host-read view slots are also consolidated with the native navigation kit
-(`Decisions.md` §9 amendments). Every renderable declaration here reads
-`view`; the retired `ui`/`frame`/`layout`/`dialogue` heads were rewritten when that tranche landed,
-with capabilities left to body inference (`@@content`, `@name = empty` slots, `responds T`). Every
-view directly hosted by a `StackNav` now fills its own reactive `Title`; window-presented views do
-the same, without call-site title overrides. A toolbar lists command values in source order; the
+The `scene is view` split and host-read view slots are also consolidated with the native navigation
+kit (`Decisions.md` §9 amendments). Presented declarations that own `Title` or `Toolbar` read
+`scene`; reusable content and sheet-only presentations read `view`. The retired
+`ui`/`frame`/`layout`/`dialogue` heads were rewritten when that tranche landed, with capabilities
+left to body inference (`@@content`, `@name = empty` slots, `responds T`). Every scene directly
+hosted by a `StackNav` now fills its own reactive `Title`; window-presented scenes do the same,
+without call-site title overrides. A toolbar lists command values in source order; the
 earlier call-site `[primary]` annotations are gone, and the leading commands are retained first when
 overflow moves a trailing suffix under `More`. Store authorization on the command's action
 determines whether a command is visible, while boolean `Enabled` represents a permitted action that
@@ -44,7 +45,7 @@ await the step-3 design consolidation.
 SlotNav intentionally reads neither host slot, so detail panes keep their replacement and Back
 semantics without acquiring navigation chrome. Hearth's list/item detail, Skillet's recipe detail,
 and Wayfare's day/stop details therefore expose each host command twice: `Toolbar` remains the
-host-read surface when the same view is presented by a StackNav or window, while a compact
+host-read surface when the same scene is presented by a StackNav or window, while a compact
 `Button(Command)` row renders the commands inside the content when SlotNav hosts the view. Both
 surfaces reference the same commands and actions, so permission, enabled state, labels, and effects
 stay identical. Sheet-presented editors likewise use an in-content `Button(Command)` dismissal;

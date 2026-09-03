@@ -98,7 +98,7 @@ check picks its app with `run`.
   unmounting while the navigator's position is untouched; and `present @key` reaching a rendered
   `SelectionNav` through the shell.
 
-**Does not belong here:** selection, toasts, windows, routes, or transition policy; split,
+**Does not belong here:** toasts, windows, routes, or transition policy; split,
 target-resolution, and argument diagnostics; native adapter appearance or transitions; the platform
 chrome a sheet is hosted in, which is not assertable from a journey; arbitrary row/column resizing,
 multi-window layout, collapse policy, or product-specific workbench behavior; WordFlower product
@@ -149,11 +149,12 @@ Exercise the entity-level `local only` storage fact. One `app` declaration and o
 variant share the folder — `LocalData` over a `Local` datasource and `LocalDataMemory` over `Memory`
 — with the catalog in the folder's `@data` package.
 
-**Belongs here:** `local only` as a trailing entity-level storage fact beside `order by`; local-only
-rows surviving a `relaunch`; and an integration smoke test that both ordinary and local-only rows
-work when the same program runs as a Memory-datasource variant. The journeys prove behavior through
-the public app surface; compiler tests prove that ordinary and local-only entities route to separate
-emitted catalogs regardless of the configured `Datasource`.
+**Belongs here:** `local only` as a trailing entity-level storage fact beside `order by`; a focus
+session row operating and surviving `relaunch` in the Memory harness; and an integration smoke test
+that both ordinary and local-only entity APIs work when the same program runs as a Memory-datasource
+variant. Those journeys cannot distinguish the two memory-backed connections. Compiler tests prove
+that ordinary and local-only entities route to separate emitted catalogs regardless of the
+configured `Datasource`.
 
 **Does not belong here:** the storage-boundary relation diagnostic and duplicate-`local only`
 diagnostic, which are package tests; the emitted two-catalog shape, which is a compiler test; remote

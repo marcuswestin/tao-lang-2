@@ -230,7 +230,7 @@ test "WordFlower keyboard attention" {
       narrow "chapter one"
       expect target "Chapter one"
       press key "."
-      expect verbs "Finish document", "Open document", "Finish document", "Delete document"
+      expect verbs "Finish document", "Open document", "Delete document"
       expect {
          text "Actions for Chapter one"
          text "F — Finish document"

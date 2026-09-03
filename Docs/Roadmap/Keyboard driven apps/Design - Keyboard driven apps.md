@@ -70,7 +70,8 @@ through it.
 
 - **`scene is view`** — the one home for host-facing chrome: `Title`, `Toolbar`, and later LANG-035
   slots. Scenes are presented, never composed inline. A plain `view` may still be pushed or
-  presented anywhere; a pushed plain view shows Back-only header chrome. Sheets read `Title`.
+  presented anywhere; a pushed plain view shows Back-only header chrome. Sheets read neither
+  `Title` nor `Toolbar`.
   `nav is scene`. A presented scene is a region.
 - **The shell is a view** (revised 2026-09-02, superseding the frame nav kind decided under KEY-D7
   and briefly implemented). A render site may name a nav — `nav is scene is view`, and the grammar
@@ -1271,8 +1272,9 @@ should be checked at each decision.
 > inline (diagnosed at the render site). **Ro's modification:** a plain view may still be pushed or
 > presented anywhere — a scene is the way to _add_ chrome, not a requirement for presentation.
 > Consequences: StackNav's "requires `Title`" relaxes to "a pushed scene must fill `Title`; a pushed
-> plain view shows Back-only header chrome" (look settled in the tranche); **sheets read `Title`**
-> (Ro), so a scene in a sheet has no dead fill; `nav is scene`; scenarios' `render` accepts scenes;
+> plain view shows Back-only header chrome" (look settled in the tranche); **sheets read neither
+> `Title` nor `Toolbar`**, so sheet-only declarations remain plain views with no dead fill;
+> `nav is scene`; scenarios' `render` accepts scenes;
 > a presented scene is a region, so the outline's region set is fully declared-or-structural; the
 > per-view `Commands { … }` slot stays on `view`. Word: **`scene`** (Ro); reword DEF-NAV-003's
 > reserved "scene" to "windows and spaces". This also supersedes the archived ruling in

@@ -31,7 +31,6 @@ command ImportRecipe() {
 }
 
 file view ImportSheet() {
-   Title "Import from a link"
    state Link = ""
 
    // `runs single`: a second press while the first fetch is in flight is ignored, not queued. Dismissing

@@ -73,7 +73,7 @@ data Messages / Message {
 
 app ChatApp {
    Name "Chat"
-   view ChatStack
+   Navigator ChatStack
    Datasource Local {
       StorageKey "ChatData"
    }

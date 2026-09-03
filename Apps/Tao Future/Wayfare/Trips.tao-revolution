@@ -22,7 +22,7 @@ command NewTrip() {
    do OpenNewTrip()
 }
 
-view TripLibrary() {
+scene TripLibrary() {
    Title "Trips"
    Toolbar { NewTrip }
    query MyTrips from Trips { order by Begins desc } // the access rule already scopes this to my trips
@@ -78,7 +78,7 @@ view NoTripOpen() {
 
 // -- One trip -----------------------------------------------------------------------------------------------
 
-view TripOverview(Trip) {
+scene TripOverview(Trip) {
    Title Trip.Name
    Toolbar { AddDay EditTrip ShareThis }
    presence Planners on Trip
@@ -163,7 +163,6 @@ view TripOverview(Trip) {
 // The trip's own fields stand on their own, so the editor writes through; `validate Ends >= Begins` holds
 // at every keystroke's commit and shows its sentence in Problems.
 file view TripEditor(Trip) {
-   Title "Edit trip"
    action DismissTripEditor() {
       dismiss
    }
@@ -267,7 +266,6 @@ file view InviteSheet(Trip) responds Member {
 }  }  }
 
 view JoinTrip(Code secret) {
-   Title "Join trip"
    let Invited = InvitedTrip by Code
    state Refusal = ""
    action Join() runs single {
@@ -292,7 +290,6 @@ view JoinTrip(Code secret) {
 // -- Sharing --------------------------------------------------------------------------------------------------
 
 file view ShareTripSheet(Trip) {
-   Title "Share itinerary"
    action Start() runs single {
       when ShareTrip(Trip) { done -> SharedTrip { share SharedTripLink(SharedTrip); dismiss } }
    }
@@ -317,7 +314,7 @@ file view ShareTripSheet(Trip) {
                Button("Share link") [primary] { on press -> share SharedTripLink(publish Trip as SharedTrip) }
 }  }  }  }  }
 
-public view SharedTripScreen(SharedTrip) {
+public scene SharedTripScreen(SharedTrip) {
    Title SharedTrip.Name
    render ScrollView [screen] {
       guard SharedTrip

@@ -4,7 +4,7 @@ use primary from @tao/keys
 
 phrase WeekTitle(Day date) = "Week of { Day.Short }"
 
-view WeekPlan() {
+scene WeekPlan() {
    Title WeekTitle(WeekStart)
    Toolbar { AddMeal ShopThisWeek ThisWeek }
    state WeekStart = StartOfWeek(today in MyKitchen.TimeZone)
@@ -133,7 +133,6 @@ file view MealRow(Meal) {
 
 // Planning a meal from either direction: from a day, or from a recipe. No row yet, so a draft.
 view PlanMeal(Recipe (optional), Day date (optional)) {
-   Title "Add a meal"
    draft New = Meal for new {
       Household: MyKitchen
       Recipe
@@ -172,7 +171,7 @@ view PlanMeal(Recipe (optional), Day date (optional)) {
 }  }  }
 
 // Changing a planned meal: the row exists, so every input writes through.
-view MealScreen(Meal) {
+scene MealScreen(Meal) {
    Title Meal.Recipe.Title
    action DismissMealEditor() {
       dismiss

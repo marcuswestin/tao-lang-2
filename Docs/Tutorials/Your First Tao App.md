@@ -31,7 +31,7 @@ project {
 
 app ReadingList {
    Name "Reading List"
-   view LibraryStack
+   Navigator LibraryStack
 }
 
 nav LibraryStack = StackNav {
@@ -48,8 +48,8 @@ scene BookList() {
 Four declarations, and each one has a job:
 
 - **`project`** names the project. One per project.
-- **`app`** is what launches. Its `view` statement names one root, which may be a navigator or an
-  ordinary shell view that renders a navigator.
+- **`app`** is what launches. `Navigator` names a navigator root directly; `view` instead names an
+  ordinary shell view that may render a navigator.
 - **`nav`** is a navigator _value_. `StackNav` pushes and pops screens, and `Initial` is what it
   shows first. Bare `@tao/nav` selects the native kit, so the platform owns its transition and bar.
 - **`scene`** is a view intended for presentation. `render` is the tree it draws, and `Title` is
@@ -119,7 +119,7 @@ Point the app at it by adding one line to `app ReadingList`:
 app ReadingList {
    Name "Reading List"
    Design ReadingListDesign
-   view LibraryStack
+   Navigator LibraryStack
 }
 ```
 
@@ -181,7 +181,7 @@ use Local from @tao/data/providers/local
 app ReadingList {
    Name "Reading List"
    Design ReadingListDesign
-   view LibraryStack
+   Navigator LibraryStack
    Datasource Local {
       StorageKey "ReadingListData"
 }  }
@@ -414,7 +414,7 @@ nav ReadingListNavigator = SelectionNav {
 app ReadingList {
    Name "Reading List"
    Design ReadingListDesign
-   view ReadingListNavigator
+   Navigator ReadingListNavigator
    Datasource Local {
       StorageKey "ReadingListData"
 }  }
@@ -558,7 +558,7 @@ project {
 app ReadingList {
    Name "Reading List"
    Design ReadingListDesign
-   view ReadingListNavigator
+   Navigator ReadingListNavigator
    Datasource Local {
       StorageKey "ReadingListData"
 }  }
