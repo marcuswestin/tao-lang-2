@@ -60,6 +60,7 @@ export function SelectableRow(props: {
           }
         },
       }),
+    onFocus: () => InteractionControls.TargetIdentity(props.identity),
     onPress: InteractionControls.ActivateIdentity(props.identity, props.onSelect),
     ref: host,
   }

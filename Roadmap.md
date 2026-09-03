@@ -81,10 +81,12 @@ tests written in Tao, green in Current, for every construct introduced.
 
 ## Toward v1
 
-- [ ] Implement the interaction system (keyboard-driven apps)
-  - Design decided 2026-09-02, KEY-D1–D14: `Docs/Roadmap/Keyboard driven apps/Design - Keyboard driven apps.md`.
-    The plan's tranches T1–T7 are ready for an implementation prompt:
-    `Docs/Roadmap/Keyboard driven apps/Plan - Keyboard driven apps.md`.
+- [ ] Make Tao apps accessible by default
+  - The implemented interaction-system foundation derives the outline, attention, names, state,
+    commands, focus projection, and generated surfaces shared by keyboard and accessibility. The
+    first accessibility extension makes native selectable-row focus enter Tao attention without
+    activating selection. Ranked next candidates and their implementation plans live in
+    `Docs/Roadmap/Accessible Tao apps/Plan - Accessible Tao apps.md`.
 - [ ] Complete Tao Studio v2
   - The Studio v2 foundations replace Electron with Electrobun, split the browser client, add
     multi-project sessions and grouped scenario matrices, and establish the Tao-client strangler.
@@ -290,6 +292,9 @@ Product and codebase backlog, unordered.
   implementation record. T1–T5 ship the outline, attention reducer, `scene`, shell view with a
   rendered nav, configured commands, narrowing, and generated surfaces. The App Intents/native-menu
   boundary is deferred because this checkout has no native iOS build path.
+- `Docs/Roadmap/Accessible Tao apps/Plan - Accessible Tao apps.md` — the ranked accessibility
+  program, mainstream assistive-technology compatibility baseline, research watchlist, and first
+  selectable-row focus-intake slice.
 - `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..036 deferred-decision inventory.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
 - `Docs/Roadmap/Archive/Repository foundations/` — the package, automation, and language-service foundation record.

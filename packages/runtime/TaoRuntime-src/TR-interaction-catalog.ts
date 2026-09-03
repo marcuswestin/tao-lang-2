@@ -709,6 +709,11 @@ export const InteractionControls = {
       interactionAttention.focusRegion(occurrence.region)
     }
   },
+  TargetIdentity(identity: string | undefined): void {
+    if (identity !== undefined) {
+      interactionAttention.target(identity)
+    }
+  },
   RegisterCommands: registerCommands,
   RowRoot(value: object): TaoOutlineRowRoot | undefined {
     return rowRootOf(value)

@@ -605,8 +605,12 @@ Visible text and controls remain platform-readable in their ordinary traversal. 
 roots likewise has no root-level label projection. Regions carry their name — a presented
 occurrence's live `Title`, a selection item's `Label`, a pane's key — as a named group. A journey's
 `expect label "…"` asserts the derived outline label; for a selectable row, that same value is the
-press surface's platform accessible name. Directly invokable commands applicable to a selectable
-row are also exposed through the platform's custom accessibility-action menu.
+press surface's platform accessible name. When the platform focuses that surface, Tao targets the
+same outline item and its containing region without running `on select`; pressing it still performs
+selection once through the shared activation path. Directly invokable commands applicable to a
+selectable row are also exposed through the platform's custom accessibility-action menu. This
+focus-intake contract applies to host focus events React Native exposes; it does not claim to observe
+a screen-reader virtual cursor movement the host does not report.
 
 Existence is always registered, and the primary label is always evaluated so the outline has stable
 item metadata and selectable rows can expose it synchronously. Everything else — the row's full text

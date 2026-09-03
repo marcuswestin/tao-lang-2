@@ -136,8 +136,8 @@ View Annotations, `NSUserActivity`, and Spotlight indexing from the outline, pre
   engage; long-press/right-click = target + verbs (the context menu is the verb menu); click empty
   space = region focus; hover = `hovered` only; drag = target then a verb on drop; scroll = nothing.
   The platform adapter projects Tao attention outward with web focus and React Native accessibility
-  focus requests. Platform focus enters Tao only where React Native emits a focus event;
-  screen-reader cursor movement is not generally synchronized back into Tao attention.
+  focus requests. Platform focus enters Tao controls and selectable rows where React Native emits a
+  focus event; screen-reader cursor movement is not generally synchronized back into Tao attention.
 - **Narrowing**: letters narrow by default; case-insensitive, locale-aware word-prefix matching over
   the node's full rendered text, a space starting a further prefix that matches the first later word
   (`d w` → Discover Weekly); candidates are the region's items and controls; non-matches are

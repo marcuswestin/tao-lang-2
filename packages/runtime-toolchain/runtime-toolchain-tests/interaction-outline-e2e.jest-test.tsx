@@ -261,11 +261,27 @@ Describe('interaction outline runtime', () => {
         )
         Expect(archiveAction).toBeDefined()
         Expect(within(surfaces[0]!).getByTestId('rows')).toBe(rows[0])
+        const initialItems = nodes('item')
         await act(async () => {
-          fireEvent.press(surfaces[0]!)
+          fireEvent(surfaces[0]!, 'focus')
         })
         Expect(TR.Interaction.Attention.read().targetLabel).toBe('Chapter one')
-        Expect(screen.getByText('Selected Chapter one')).toBeDefined()
+        Expect(TR.Interaction.Attention.read().target).toBe(initialItems[0]?.identity)
+        Expect(TR.Interaction.Attention.read().focusRegionLabel).toBe('Documents')
+        Expect(screen.getByText('Nothing selected')).toBeDefined()
+        Expect(screen.getByText('Selections: 0')).toBeDefined()
+
+        await act(async () => {
+          fireEvent(surfaces[1]!, 'focus')
+        })
+        Expect(TR.Interaction.Attention.read().targetLabel).toBe('Chapter two')
+        Expect(TR.Interaction.Attention.read().target).toBe(initialItems[1]?.identity)
+        Expect(screen.getByText('Selections: 0')).toBeDefined()
+
+        await act(async () => {
+          fireEvent.press(surfaces[1]!)
+        })
+        Expect(screen.getByText('Selected Chapter two')).toBeDefined()
         Expect(screen.getByText('Selections: 1')).toBeDefined()
 
         await act(async () => {
