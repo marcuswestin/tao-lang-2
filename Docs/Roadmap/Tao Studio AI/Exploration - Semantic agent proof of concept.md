@@ -497,6 +497,67 @@ Interpretation: the split works. The model is good at naming a feature and bad a
 the graph knows exactly where code goes. Keeping the model's output to eight strings removed every failure
 mode that dominated the first journey.
 
+### Third journey: the same panel against a second app
+
+Observed, 2026-09-03, HNReader (a single-file app with no yes/no field, no fixture, and no scenarios):
+
+Asking that panel to "switch to order of points and comments" produced a field named `Order` and the
+sentence "StoryRow has no existing yes/no Story field to copy the pattern from". Nothing was wrong with the
+model. The planner knew exactly one shape, "add a yes/no field", and every request was forced into it.
+
+Three defects sat behind that one screen, and each is worth recording separately.
+
+**One shape is not a vocabulary.** A planner with a single shape cannot decline. It answers every request
+with the only sentence it can form, and a person reads a confident plan for something they did not ask for.
+The fix was to make the model sort the request first, then fill a shape typed for that kind. Sorting is a
+much easier task than shaping: a 4k on-device model classified "switch the order of points and comments",
+"add a search screen", and "make the story cards use a bigger corner radius" correctly on the first try,
+with a one-sentence reason. A request outside the supported kinds is now answered with what was asked and
+what the tool builds, which is a better answer than a wrong plan.
+
+**Copying an analogous declaration does not bootstrap.** Every placement in the second journey was found by
+copying an existing yes/no field's own pattern. That is a good rule and a complete blocker for the first
+flag in any app: HNReader has no boolean field, so nothing could ever be placed. Tao already knows the
+structure without an analogue - the last field of the entity, the view's render block, the last thing the
+view renders - and placing from structure works. The analogue is now a preference, not a precondition, and
+the plan says which of the two was used. It also has to carry what a copied pattern brought along for free:
+the first `Checkbox` in an app needs adding to the view's stdlib import, which copying never had to think
+about.
+
+**A per-placement edit is not a change.** The planner produced one whole-file edit per placement. In an app
+whose entity, view, and entry live in separate files that is correct by accident. HNReader declares all
+three in one file, so the second edit was computed from the original text and silently discarded the first:
+the field vanished and the applied code failed to compile against its own new field. Placements are now
+staged as ranges against each file's original text and the file is rewritten once.
+
+A fourth, smaller thing: the model wrote `bookmarked` where Tao wants `Bookmarked`, and the planner refused
+the whole shape over it. Tao knows the convention. It now repairs the name and reports the repair, the same
+way it resolves a bundle operand in the review journey.
+
+Afterwards, on HNReader: "show the comment count before the points" was sorted as a reword, the right line
+of the right view was chosen out of ten candidate strings, and the rewritten line kept all three
+placeholders. Applying wrote one file, compiled, and the story rows re-rendered with the new order; undo
+restored the file exactly. "Let people bookmark a story" now plans four placements and compiles, with the
+scenario step honestly reported as unsupported because the app declares no fixture to switch on.
+
+### A guardrail worth keeping: the reword cannot invent a value
+
+A reword is the first change kind here where the model writes text that ships. The guardrail is cheap and
+total: every `{ ... }` placeholder in the replacement must already appear in that line, or name a field of
+an entity the view takes. A reword can therefore reorder the screen, drop a value, or reach one more field
+of the same entity, and can never name something that would not compile. It also rejects a replacement
+equal to the original, the same no-op rejection the design-edit journey needed.
+
+The on-device model's wording quality is the weak part, not its safety. One run produced "by points {
+Story.Score } and comments { Story.CommentCount } by { Story.Author }" - valid, placed correctly, and
+clumsy English. The mechanism held; the prose did not. A production design should expect to show the
+rewritten line and let a person accept it, rather than trusting the wording.
+
+Splitting the reword into two model turns - choose the line, then rewrite that one line - was necessary.
+Asked to do both at once the model echoed the whole candidate list into the replacement field. With one
+line in the prompt it rewrote that line. This is the same lesson as SAI-Q028 at a smaller scale: keep each
+guided turn's context to exactly what the answer needs.
+
 ### A compiler defect the feature journey surfaced
 
 The Studio preview manifest published a boolean fixture field as the **string** `"true"`, because the
@@ -589,6 +650,15 @@ the model's ability to copy exact names.
 - SAI-D007 (compact context beats source search) is supported only in the narrow sense above; the 4k window
   dominates.
 - SAI-D014 (source only when facts are insufficient) held: no raw-source fallback occurred.
+- Added **SAI-D024**: the model sorts a request into a change kind before it shapes anything, and a request
+  outside the known kinds is answered as such. A planner with one shape cannot decline, and a plan for the
+  wrong change reads more confident than no plan at all.
+- Added **SAI-D025**: an analogous declaration is a preference for placement, never a precondition. Tao
+  places from the declaration's own structure when no analogue exists, and the plan says which rule applied.
+- Added **SAI-D026**: placements are staged as ranges against each file's original text and each file is
+  rewritten once. A whole-file edit per placement is only correct when no two placements share a file.
+- Added **SAI-D027**: model-authored text that ships must be checkable against the graph. A reword may only
+  use placeholders the line already had or fields of an entity the view takes.
 
 ### Questions answered or newly discovered
 
@@ -600,7 +670,18 @@ the model's ability to copy exact names.
 - SAI-Q018 (deterministic lowering versus model-authored Tao): for one field-shaped feature, **none** of the
   Tao was model-authored. The model produced eight short strings; Tao produced every edit.
 - SAI-Q021 (expressive without becoming a second language): the typed feature shape stayed at eight fields.
-  It expresses one feature family, not arbitrary features, which is the honest boundary.
+  It expresses one feature family, not arbitrary features, which is the honest boundary. A second kind
+  (reword) needed four fields and no new vocabulary, which suggests the shape-per-kind split scales further
+  than one enlarged universal shape would.
+- SAI-Q041 (the general form of the "analogous declaration" relation) gained a second data point: the
+  relation is a shortcut, and the structural rule underneath it - last field, render block, last render -
+  is what actually generalizes. Design the structural rule first and treat the analogue as a refinement.
+- New: **SAI-Q042** - who judges the wording when the model writes text a person will read? The graph can
+  prove a reword compiles and cannot prove it reads well. The PoC shows the line before applying; a
+  production design needs a real answer.
+- New: **SAI-Q043** - how should a plan report a step it cannot take? HNReader has no fixture, so the
+  scenario step is honestly unsupported while the other placements still apply. A partial plan that says
+  what it left out was more useful here than an all-or-nothing refusal, but that is one observation.
 
 ### Also fixed: the no-op design edit
 
@@ -609,6 +690,19 @@ already at `pad 16`, and the lowering moved the entry to the end of the clause, 
 change while the preview did not move. Design entries are now edited **in place**, an equal value is refused
 as a no-op both in the source action and in the operand check, and the model is told the value must differ
 from the one it was shown.
+
+### Also fixed: a preview that was empty for a reason no one could see
+
+Running the panel against HNReader surfaced a Studio problem unrelated to the agent. A project can compile
+and still show an empty preview, because the bundler resolves the generated TypeScript rather than the Tao
+source; its failures reached a person as a white frame and a problems panel reporting nothing wrong. Studio
+now asks the preview's bundler whether it can build the app and puts the answer over the preview in the
+band a failed compile already uses.
+
+The failure that exposed it is worth noting for the developer environment: the preview's Metro instance
+crawls the runtime directory before the first compile writes the generated app into it, and the adds during
+that burst were not picked up. The bundle then fails to resolve a file that plainly exists on disk, for the
+life of the session. Touching the generated tree repairs it. The ordering, not the notice, is the real fix.
 
 ### Recommendation for the production design phase
 
