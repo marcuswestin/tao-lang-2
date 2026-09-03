@@ -17,6 +17,7 @@ import type { TaoProps } from './TR-TaoProps'
 
 type InteractionSurfaceRow = Readonly<{
   bounds?: TaoInteractionBounds
+  enabled?: boolean
   identity: string
   key?: string
   label: string
@@ -96,6 +97,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
     React.createElement(
       runtime.View,
       {
+        accessibilityState: row.enabled === false ? { disabled: true } : undefined,
         key: row.identity,
         style: [
           rowStyle,
@@ -119,7 +121,9 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
     {
       accessibilityElementsHidden: hidden,
       importantForAccessibility: hidden ? 'no-hide-descendants' : 'yes',
-      pointerEvents: hidden ? 'none' : 'box-none',
+      // Generated rows are keyboard affordances, not pointer controls. Let taps continue through
+      // both the full-screen host and its visible descendants to the semantic control underneath.
+      pointerEvents: 'none',
       style: interactionLayerHostStyle,
       testID: 'tao-interaction-layers',
     },
@@ -154,7 +158,7 @@ function allocatedRows(
 }
 
 function keyedRows(
-  candidates: readonly Readonly<{ identity: string; key?: string; label: string }>[],
+  candidates: readonly Readonly<{ enabled: boolean; identity: string; key?: string; label: string }>[],
   explicitKeys: readonly string[],
   previous: Record<string, TaoInteractionKeyAssignments>,
   surface: string,

@@ -4,6 +4,7 @@ import { RuntimeAssert } from './TR-assert'
 import { InteractionControls } from './TR-interaction-catalog'
 import {
   interactionMeasurements,
+  OutlineScope,
   type TaoInteractionOccurrence,
   type TaoOutlineLiveEntry,
   useOutlineNode,
@@ -558,11 +559,14 @@ function renderTaoPrimitiveElement(
   const providedChildren = props.providesParentDirection
     ? ParentDirectionContext.childrenForLayoutParent(elementChildren, elementProps['style'])
     : elementChildren
+  const outlinedChildren = occurrence?.region === undefined
+    ? providedChildren
+    : React.createElement(OutlineScope, { identity: occurrence.region }, providedChildren)
   return createReactElement(
     runtime,
     nativeComponent(runtime, props.kind),
     elementProps,
-    providedChildren,
+    outlinedChildren,
   )
 }
 

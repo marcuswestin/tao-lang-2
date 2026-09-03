@@ -54,6 +54,7 @@ export type TaoCommandSurface = Readonly<{
 }>
 
 type MountedCommandSurface = TaoCommandSurface & Readonly<{ parent?: string; sequence: number }>
+type MountedCommandTable = TaoCommandTable & Readonly<{ parent?: string; sequence: number }>
 
 export type TaoInteractionVerb = Readonly<{
   command?: RuntimeCommand
@@ -72,11 +73,12 @@ export class CommandCatalog {
   #revision = 0
   #sequence = 0
   #surfaces = new Map<number, MountedCommandSurface>()
-  #tables = new Map<string, TaoCommandTable>()
+  #tables = new Map<string, MountedCommandTable>()
 
-  register(table: TaoCommandTable): () => void {
-    const key = `${table.module}#${++this.#sequence}`
-    this.#tables.set(key, table)
+  register(table: TaoCommandTable, parent?: string): () => void {
+    const sequence = ++this.#sequence
+    const key = `${table.module}#${sequence}`
+    this.#tables.set(key, { ...table, ...(parent === undefined ? {} : { parent }), sequence })
     this.changed()
     return () => {
       this.#tables.delete(key)
@@ -115,11 +117,13 @@ export class CommandCatalog {
   }
 
   applicable(entityType: string): readonly TaoCommandTableEntry[] {
-    return this.entries().filter(entry => entry.slots.some(slot => slot.entity && slot.type === entityType))
+    return this.entries().filter(entry =>
+      entry.scope.kind === 'module' && entry.slots.some(slot => slot.entity && slot.type === entityType)
+    )
   }
 
   global(): readonly TaoCommandTableEntry[] {
-    return this.entries().filter(entry => !entry.slots.some(slot => slot.entity))
+    return this.entries().filter(entry => entry.scope.kind === 'module' && !entry.slots.some(slot => slot.entity))
   }
 
   explicitKeys(): readonly string[] {
@@ -132,13 +136,19 @@ export class CommandCatalog {
       .filter(entry => entry.static.title !== undefined || entry.static.label !== undefined)
       .map(entry => {
         const command = entry.command()
+        const snapshot = directlyReadable(command, entry.slots) ? command.read() : undefined
         return {
-          enabled: true,
+          enabled: snapshot?.enabled ?? true,
           command,
           identity: entry.identity,
-          ...(entry.static.key === undefined ? {} : { key: entry.static.key }),
-          label: staticLabel(entry),
-          invoke: () => command.read().invoke(),
+          ...(snapshot?.key === undefined && entry.static.key === undefined
+            ? {}
+            : { key: snapshot?.key ?? entry.static.key }),
+          label: entry.static.title ?? entry.name,
+          invoke: () => {
+            const current = command.read()
+            return current.enabled ? current.invoke() : undefined
+          },
           slots: entry.slots,
           source: 'catalog' as const,
         }
@@ -153,6 +163,17 @@ export class CommandCatalog {
     nodes: readonly TaoOutlineLiveNode[],
   ): TaoInteractionVerb | undefined {
     const normalized = key.toLocaleLowerCase()
+    for (const surface of target ? this.surfacesForTarget(target, nodes) : []) {
+      if (surface.parent !== target?.identity) {
+        continue
+      }
+      for (const command of surface.commands) {
+        const verb = this.verbForCommand(command, 'view')
+        if (verb.key?.toLocaleLowerCase() === normalized) {
+          return verb
+        }
+      }
+    }
     const targetVerb = this.verbsFor(target, interactionOutline, nodes)
       .find(verb => verb.source !== 'view' && verb.key?.toLocaleLowerCase() === normalized)
     if (targetVerb) {
@@ -171,13 +192,25 @@ export class CommandCatalog {
           ? surface.parent === modal.identity || isAncestor(modal.identity, surface.parent ?? '', nodes)
           : surface.parent === focusRegion
             || isAncestor(focusRegion, surface.parent ?? '', nodes)
-            || isAncestor(surface.parent, focusRegion, nodes)))
+            || isAncestor(surface.parent, focusRegion, nodes)
+            || isWithinNavigationSiblingRegion(surface.parent, nodes)))
       })
       .sort((left, right) => right.sequence - left.sequence)
     for (const surface of inFocusedRegion) {
       for (const command of surface.commands) {
         const verb = this.verbForCommand(command, 'view')
         if (verb.key?.toLocaleLowerCase() === normalized) {
+          return verb
+        }
+      }
+    }
+    for (const table of this.scopedTables(target, focusRegion, nodes)) {
+      for (const entry of table.commands) {
+        if (entry.scope.kind !== 'view') {
+          continue
+        }
+        const verb = this.verbForEntry(entry, target, 'catalog')
+        if (verb?.key?.toLocaleLowerCase() === normalized) {
           return verb
         }
       }
@@ -201,9 +234,7 @@ export class CommandCatalog {
       return []
     }
     const hidden = new Set(target.live?.commandPolicy?.hidden ?? [])
-    const surfaces = [...this.#surfaces.values()].filter(surface =>
-      surface.parent === target.identity || isAncestor(surface.parent, target.identity, nodes)
-    )
+    const surfaces = this.surfacesForTarget(target, nodes)
     for (const surface of surfaces) {
       for (const identity of surface.hidden) {
         hidden.add(identity)
@@ -225,7 +256,7 @@ export class CommandCatalog {
       verbs.push(verb)
     }
 
-    for (const surface of surfaces.sort((left, right) => left.sequence - right.sequence)) {
+    for (const surface of surfaces) {
       for (const command of surface.commands) {
         add(this.verbForCommand(command, 'view'), true)
       }
@@ -267,6 +298,44 @@ export class CommandCatalog {
     for (const listener of [...this.#listeners]) {
       listener()
     }
+  }
+
+  private scopedTables(
+    target: TaoOutlineLiveNode | undefined,
+    focusRegion: string | undefined,
+    nodes: readonly TaoOutlineLiveNode[],
+  ): readonly MountedCommandTable[] {
+    return [...this.#tables.values()]
+      .filter(table => {
+        if (table.parent === undefined || !table.commands.some(entry => entry.scope.kind === 'view')) {
+          return false
+        }
+        const parent = nodes.find(node => node.identity === table.parent)
+        if (parent && !isActive(parent, nodes)) {
+          return false
+        }
+        return target
+          ? table.parent === target.identity || isAncestor(table.parent, target.identity, nodes)
+          : table.parent === focusRegion
+      })
+      .sort((left, right) => {
+        const leftDistance = ancestorDistance(left.parent, target?.identity, nodes)
+        const rightDistance = ancestorDistance(right.parent, target?.identity, nodes)
+        return leftDistance - rightDistance || right.sequence - left.sequence
+      })
+  }
+
+  private surfacesForTarget(
+    target: TaoOutlineLiveNode,
+    nodes: readonly TaoOutlineLiveNode[],
+  ): readonly MountedCommandSurface[] {
+    return [...this.#surfaces.values()]
+      .filter(surface => surface.parent === target.identity || isAncestor(surface.parent, target.identity, nodes))
+      .sort((left, right) => {
+        const leftDistance = ancestorDistance(left.parent, target.identity, nodes)
+        const rightDistance = ancestorDistance(right.parent, target.identity, nodes)
+        return leftDistance - rightDistance || right.sequence - left.sequence
+      })
   }
 
   private verbForCommand(command: RuntimeCommand, source: TaoInteractionVerb['source']): TaoInteractionVerb {
@@ -316,6 +385,11 @@ function staticLabel(entry: TaoCommandTableEntry): string {
   return entry.static.label ?? entry.static.title ?? entry.name
 }
 
+function directlyReadable(command: RuntimeCommand, slots: readonly TaoCommandSlotDescription[]): boolean {
+  const unfilled = new Set(command.unfilledSlots())
+  return !slots.some(slot => slot.required && unfilled.has(slot.name))
+}
+
 function controlVerb(node: TaoOutlineLiveNode): TaoInteractionVerb | undefined {
   const activate = node.live?.activate
   const label = node.label()
@@ -349,6 +423,26 @@ function isAncestor(candidate: string | undefined, target: string, nodes: readon
   return false
 }
 
+function ancestorDistance(
+  candidate: string | undefined,
+  target: string | undefined,
+  nodes: readonly TaoOutlineLiveNode[],
+): number {
+  if (candidate === undefined || target === undefined) {
+    return Number.MAX_SAFE_INTEGER
+  }
+  let current: string | undefined = target
+  let distance = 0
+  while (current) {
+    if (current === candidate) {
+      return distance
+    }
+    current = nodes.find(node => node.identity === current)?.parent
+    distance += 1
+  }
+  return Number.MAX_SAFE_INTEGER
+}
+
 function isActive(node: TaoOutlineLiveNode, nodes: readonly TaoOutlineLiveNode[]): boolean {
   let current: TaoOutlineLiveNode | undefined = node
   while (current) {
@@ -358,6 +452,21 @@ function isActive(node: TaoOutlineLiveNode, nodes: readonly TaoOutlineLiveNode[]
     current = nodes.find(candidate => candidate.identity === current?.parent)
   }
   return true
+}
+
+/** A wrapper-free sibling region stays in scope while focus is inside the nav beside it. */
+function isWithinNavigationSiblingRegion(
+  identity: string | undefined,
+  nodes: readonly TaoOutlineLiveNode[],
+): boolean {
+  let current = nodes.find(node => node.identity === identity)
+  while (current) {
+    if (current.kind === 'region') {
+      return current.provenance['role'] === 'nav-siblings'
+    }
+    current = nodes.find(node => node.identity === current?.parent)
+  }
+  return false
 }
 
 export const commandCatalog = new CommandCatalog()
@@ -378,6 +487,7 @@ function registerCommands(table: TaoCommandTable): () => void {
 }
 
 function useRegisteredCommands(table: TaoCommandTable): void {
+  const parent = useOutlineParentIdentity()
   const commands = table.commands
   const identities = commands.map(entry => entry.identity).join('\u0000')
   const current = React.useRef(table)
@@ -389,8 +499,8 @@ function useRegisteredCommands(table: TaoCommandTable): void {
           return current.current.commands
         },
         module: table.module,
-      }),
-    [table.module, identities],
+      }, parent),
+    [parent, table.module, identities],
   )
 }
 

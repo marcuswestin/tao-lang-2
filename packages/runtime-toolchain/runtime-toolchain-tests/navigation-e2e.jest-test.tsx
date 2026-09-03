@@ -334,6 +334,25 @@ Describe('Expo runtime', () => {
     Expect(screen.getAllByLabelText('Back')).toHaveLength(1)
   })
 
+  Test('marks covered basic stack content inactive for navigators rendered inside it', () => {
+    const activity = new Map<string, boolean | undefined>()
+    const presentable = (name: string) =>
+      TR.Navigation.View({
+        name,
+        render: (_arguments, taoProps) => {
+          activity.set(name, taoProps?.navigationHostActive)
+          return createElement(RN.Text, null, name)
+        },
+      })
+    const stack = configuredBasicStack('Retained activity', presentable('Home'))
+    stack.present(presentable('Detail'), {})
+
+    const screen = render(stack.render() as ReactElement)
+
+    Expect(activity).toEqual(new Map([['Home', false], ['Detail', true]]))
+    screen.unmount()
+  })
+
   Test('centralizes same-URL web history and reduces auxiliary overlays before navigator entries', async () => {
     const popListeners = new Set<(event: { state?: unknown }) => void>()
     const pushes: unknown[] = []
@@ -1235,15 +1254,22 @@ Describe('Expo runtime', () => {
         title: 'Native title',
         toolbar: [navigationCommand({ invoke: () => undefined, label: 'Native command' }).read()],
       })
-      const home = TR.Navigation.View({
-        name: 'Native home',
-        render: () => createElement(RN.Text, null, 'Native content'),
-      })
+      const activity = new Map<string, boolean | undefined>()
+      const presentable = (name: string) =>
+        TR.Navigation.View({
+          name,
+          render: (_arguments, taoProps) => {
+            activity.set(name, taoProps?.navigationHostActive)
+            return createElement(RN.Text, null, 'Native content')
+          },
+        })
+      const home = presentable('Native home')
+      const detail = presentable('Native detail')
       const stack = configuredStack('Native adapter', home)
       const screen = render(createElement(NativeStackSurface, {
         entries: [
           { arguments: {}, host, instanceId: 41, presentable: home },
-          { arguments: {}, host, instanceId: 42, presentable: home },
+          { arguments: {}, host, instanceId: 42, presentable: detail },
         ],
         navigation: stack as any,
       }))
@@ -1257,6 +1283,12 @@ Describe('Expo runtime', () => {
       Expect(itemProps[0]?.['headerConfig'].hidden).toBe(false)
       Expect(itemProps[0]?.['headerConfig'].title).toBe('Native title')
       Expect(itemProps[0]?.['headerConfig'].children).toBeDefined()
+      Expect(activity).toEqual(new Map([['Native home', false], ['Native detail', true]]))
+      const outline = TR.Interaction.Outline.read().nodes
+      const activeRegion = outline.find(node => node.kind === 'region' && node.provenance['instanceId'] === 42)
+      const toolbarCommand = outline.find(node => node.kind === 'action' && node.label === 'Native command')
+      Expect(activeRegion).toBeDefined()
+      Expect(toolbarCommand?.parent).toBe(activeRegion?.identity)
 
       const hiddenHost = new RuntimeHostReadChannel()
       hiddenHost.publish({ header: false, title: 'Ignored title', toolbar: host.read().toolbar })

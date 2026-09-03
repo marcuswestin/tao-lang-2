@@ -78,7 +78,31 @@ Describe('TR.Interaction allocation', () => {
       { identity: 'two', label: 'A' },
     ])
 
-    Expect(assignments).toEqual({ one: 'a', three: 'aa', two: 'ab' })
+    Expect(assignments).toEqual({ one: 'a', three: 'ba', two: 'bb' })
+    const keys = Object.values(assignments)
+    Expect(
+      keys.every((key, index) => keys.every((other, otherIndex) => index === otherIndex || !other.startsWith(key))),
+    )
+      .toBe(true)
+  })
+
+  Test('releases a deterministic continuation prefix when every single ASCII letter is occupied', () => {
+    const candidates = Array.from({ length: 26 }, (_, index) => ({
+      identity: `letter-${String.fromCharCode(97 + index)}`,
+      label: String.fromCharCode(65 + index),
+    }))
+    candidates.push({ identity: 'overflow', label: 'A' })
+
+    const assignments = allocateInteractionKeys(candidates)
+    const keys = Object.values(assignments)
+
+    Expect(keys).toHaveLength(27)
+    Expect(keys).not.toContain('z')
+    Expect(keys.filter(key => key.startsWith('z'))).toEqual(['za', 'zb'])
+    Expect(
+      keys.every((key, index) => keys.every((other, otherIndex) => index === otherIndex || !other.startsWith(key))),
+    )
+      .toBe(true)
   })
 
   Test('rejects stale, colliding, and newly excluded previous assignments', () => {

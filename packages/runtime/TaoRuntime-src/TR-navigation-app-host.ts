@@ -66,7 +66,7 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     ? (event: TaoAppHostKeyEvent) => {
       // The outline deliberately stops at an injected or foreign view. Let the browser deliver text
       // to an editable descendant even when that control has no Tao occurrence to engage.
-      if (isUnmodifiedPrintableKey(event) && isEditableTarget(event.target)) {
+      if (isUnmodifiedKey(event) && isEditableTarget(event.target)) {
         return
       }
       const handled = dispatchInteractionHardwareKey(
@@ -147,8 +147,8 @@ type TaoEditableTarget = Readonly<{
   tagName?: string
 }>
 
-function isUnmodifiedPrintableKey(event: TaoHardwareKeyEvent): boolean {
-  return !event.altKey && !event.ctrlKey && !event.metaKey && [...(event.key ?? '')].length === 1
+function isUnmodifiedKey(event: TaoHardwareKeyEvent): boolean {
+  return !event.altKey && !event.ctrlKey && !event.metaKey
 }
 
 function isEditableTarget(target: unknown): boolean {

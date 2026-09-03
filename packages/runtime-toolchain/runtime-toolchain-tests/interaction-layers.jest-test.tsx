@@ -80,6 +80,7 @@ Describe('TR.Interaction generated layers', () => {
       TR.Interaction.PressKey('?')
     })
     Expect(screen.getByText('Interaction hints')).toBeDefined()
+    Expect(screen.UNSAFE_getByProps({ testID: 'tao-interaction-layers' }).props.pointerEvents).toBe('none')
     Expect(screen.getByText('H — Home')).toBeDefined()
     Expect(screen.getByText('P — Projects')).toBeDefined()
     const projectRow = screen.getByTestId('tao-interaction-row:projects')
@@ -133,12 +134,13 @@ Describe('TR.Interaction generated layers', () => {
     resetInteractionRuntime()
   })
 
-  Test('dispatches a collision fallback key through the same allocation shown by hints', async () => {
+  Test('dispatches a two-event collision key through the same prefix-free allocation shown by hints', async () => {
     resetInteractionRuntime()
     const withdraw = [
       interactionOutline.register(region('main', 'Main', true)),
-      interactionOutline.register(item('alpha', 'main', 'Alpha')),
-      interactionOutline.register(item('apple', 'main', 'Apple')),
+      interactionOutline.register(item('one', 'main', 'A')),
+      interactionOutline.register(item('three', 'main', 'A')),
+      interactionOutline.register(item('two', 'main', 'A')),
     ]
     TR.Interaction.Attention.revalidateOutline()
     const screen = render(React.createElement(InteractionLayersHost))
@@ -146,17 +148,66 @@ Describe('TR.Interaction generated layers', () => {
     await act(async () => {
       TR.Interaction.PressKey('?')
     })
-    Expect(screen.getByText('A — Alpha')).toBeDefined()
-    Expect(screen.getByText('P — Apple')).toBeDefined()
+    Expect(within(screen.getByTestId('tao-interaction-row:one')).getByText('A — A')).toBeDefined()
+    Expect(within(screen.getByTestId('tao-interaction-row:three')).getByText('BA — A')).toBeDefined()
+    Expect(within(screen.getByTestId('tao-interaction-row:two')).getByText('BB — A')).toBeDefined()
 
     await act(async () => {
-      TR.Interaction.PressKey('p')
+      TR.Interaction.PressKey('b')
     })
-    Expect(TR.Interaction.Attention.read().targetLabel).toBe('Apple')
+    Expect(TR.Interaction.Attention.read().mode).toBe('hints')
+    await act(async () => {
+      TR.Interaction.PressKey('b')
+    })
+    Expect(TR.Interaction.Attention.read().target).toBe('two')
     Expect(TR.Interaction.Attention.read().narrowing).toBe('')
 
     screen.unmount()
     withdraw.forEach(dispose => dispose())
+    resetInteractionRuntime()
+  })
+
+  Test('renders disabled palette state and refuses to invoke that command', async () => {
+    resetInteractionRuntime()
+    let invoked = 0
+    const disabled = TR.Interaction.Command({
+      action: () => TR.Action(() => invoked += 1),
+      members: {
+        Enabled: () => TR.Value(false),
+        Title: () => TR.Value('Unavailable'),
+      },
+      name: 'Unavailable',
+      slots: [],
+    })
+    const unregister = commandCatalog.register({
+      commands: [{
+        command: () => disabled,
+        identity: '@test/Unavailable',
+        name: 'Unavailable',
+        scope: { kind: 'module' },
+        slots: [],
+        static: { title: 'Unavailable' },
+      }],
+      module: '@test/Unavailable',
+    })
+    const withdraw = interactionOutline.register(region('main', 'Main', true))
+    TR.Interaction.Attention.revalidateOutline()
+    const screen = render(React.createElement(InteractionLayersHost))
+    await act(async () => {
+      TR.Interaction.PressKey('primary+k')
+    })
+
+    Expect(screen.getByTestId('tao-interaction-row:@test/Unavailable').props.accessibilityState).toEqual({
+      disabled: true,
+    })
+    await act(async () => {
+      TR.Interaction.PressKey('Enter')
+    })
+    Expect(invoked).toBe(0)
+
+    screen.unmount()
+    withdraw()
+    unregister()
     resetInteractionRuntime()
   })
 

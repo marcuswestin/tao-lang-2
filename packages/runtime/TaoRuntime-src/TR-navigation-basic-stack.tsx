@@ -46,6 +46,7 @@ function BasicStackLevel(props: {
 }): React.JSX.Element {
   const slots = useHostSlotSnapshot(props.entry.host)
   const observable = !props.hidden && props.taoProps?.navigationHostActive !== false
+  const entryTaoProps = { ...props.taoProps, navigationHostActive: observable }
   useDocumentTitle(observable ? slots.title : undefined)
   const runtime = requireReactNativeRuntime()
   return React.createElement(NavigationLevel, {
@@ -91,8 +92,8 @@ function BasicStackLevel(props: {
         }),
         React.createElement(
           AppSurfaceFrame,
-          { key: 'content', taoProps: props.taoProps },
-          renderPresentable(props.entry.presentable, props.entry.arguments, props.taoProps, props.entry.host),
+          { key: 'content', taoProps: entryTaoProps },
+          renderPresentable(props.entry.presentable, props.entry.arguments, entryTaoProps, props.entry.host),
         ),
       ],
       style: [stackStyle, mountedDesignStyle(props.taoProps, 'NavigationHost')],

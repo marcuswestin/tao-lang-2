@@ -70,6 +70,17 @@ Describe('interaction outline runtime', () => {
           })
           Expect(TR.Interaction.Attention.read().narrowing).toBe('')
           Expect(prevented).toBe(0)
+          for (const key of ['Backspace', 'ArrowLeft', 'Enter', 'Tab']) {
+            await act(async () => {
+              host!.props.onKeyDown({
+                key,
+                preventDefault: () => prevented += 1,
+                target: { tagName: 'TEXTAREA' },
+              })
+            })
+          }
+          Expect(TR.Interaction.Attention.read().narrowing).toBe('')
+          Expect(prevented).toBe(0)
           await act(async () => {
             host!.props.onKeyDown({
               code: 'Slash',
@@ -84,6 +95,17 @@ Describe('interaction outline runtime', () => {
             host!.props.onKeyDown({ key: 'F7', preventDefault: () => prevented += 1 })
           })
           Expect(prevented).toBe(1)
+          await act(async () => {
+            host!.props.onKeyDown({
+              ctrlKey: true,
+              key: 'k',
+              metaKey: true,
+              preventDefault: () => prevented += 1,
+              target: { tagName: 'INPUT' },
+            })
+          })
+          Expect(TR.Interaction.Attention.read().mode).toBe('palette')
+          Expect(prevented).toBe(2)
         },
       )
     } finally {

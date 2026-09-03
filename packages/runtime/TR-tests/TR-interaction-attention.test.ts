@@ -75,6 +75,28 @@ Describe('TR.Interaction attention', () => {
     Expect(attention.read().narrowing).toBe('')
     Expect(attention.pressKey('?')).toBe(true)
     Expect(attention.read().narrowing).toBe('')
+    Expect(attention.pressKey('/')).toBe(true)
+    Expect(attention.read().mode).toBe('hints')
+    Expect(attention.pressKey('Escape')).toBe(true)
+    Expect(attention.read().mode).toBe('overview')
+  })
+
+  Test('dispatches prefix-free two-letter generated keys one hardware event at a time', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    register(outline, region('main', { primary: true }))
+    register(outline, item('one', 'main', 'A'))
+    register(outline, item('three', 'main', 'A'))
+    register(outline, item('two', 'main', 'A'))
+    attention.revalidateOutline()
+    attention.pressKey('?')
+
+    Expect(attention.pressKey('b')).toBe(true)
+    Expect(attention.read().mode).toBe('hints')
+    Expect(attention.read().target).toBeUndefined()
+    Expect(attention.pressKey('b')).toBe(true)
+    Expect(attention.read().mode).toBe('navigating')
+    Expect(attention.read().target).toBe('two')
   })
 
   Test('descends into item controls, ascends, and moves between active regions', () => {
@@ -130,6 +152,57 @@ Describe('TR.Interaction attention', () => {
     modalActive = false
     attention.revalidateOutline()
     Expect(attention.read().focusRegion).toBe('main')
+  })
+
+  Test('rejects direct pointer targeting and activation outside the visible modal', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    const invoked: string[] = []
+    register(outline, region('main', { primary: true }))
+    register(outline, {
+      identity: 'underlay',
+      kind: 'action',
+      label: () => 'Underlay',
+      live: { activate: () => void invoked.push('underlay') },
+      parent: 'main',
+      provenance: {},
+    })
+    register(outline, region('ask', { modal: true }))
+    register(outline, {
+      identity: 'confirm',
+      kind: 'action',
+      label: () => 'Confirm',
+      live: { activate: () => void invoked.push('confirm') },
+      parent: 'ask',
+      provenance: {},
+    })
+    attention.revalidateOutline()
+
+    attention.targetAndActivate('underlay')
+    Expect(attention.read().focusRegion).toBe('ask')
+    Expect(attention.read().target).toBe('confirm')
+    Expect(invoked).toEqual([])
+    attention.targetAndActivate('confirm')
+    Expect(invoked).toEqual(['confirm'])
+  })
+
+  Test('keeps root-safe Back operable when a native modal portal has no outline parent', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    let backs = 0
+    register(outline, region('ask', { modal: true }))
+    register(outline, {
+      identity: 'back',
+      kind: 'action',
+      label: () => 'Back',
+      live: { activate: () => backs += 1 },
+      provenance: { control: 'navigation:back' },
+    })
+    attention.revalidateOutline()
+
+    attention.targetAndActivate('back')
+
+    Expect(backs).toBe(1)
   })
 
   Test('matches named active conditions by stable region members, never duplicate display labels', () => {
@@ -319,6 +392,64 @@ Describe('TR.Interaction attention', () => {
     Expect(invoked).toEqual(['live'])
   })
 
+  Test('excludes disabled nodes from targeting and never invokes them through activation wrappers', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    const invoked: string[] = []
+    register(outline, region('main', { primary: true }))
+    register(outline, {
+      identity: 'disabled',
+      kind: 'action',
+      label: () => 'Disabled',
+      live: { activate: () => void invoked.push('live'), enabled: () => false },
+      parent: 'main',
+      provenance: {},
+    })
+    attention.revalidateOutline()
+
+    Expect(attention.read().candidates).toEqual([])
+    attention.targetAndActivate('disabled', () => invoked.push('fallback'))
+    attention.pressKey('Enter')
+
+    Expect(attention.read().target).toBeUndefined()
+    Expect(invoked).toEqual([])
+  })
+
+  Test('uses the activation fallback when its outline node has not mounted', () => {
+    const attention = new InteractionAttention(new InteractionOutline(), new CommandCatalog())
+    const invoked: string[] = []
+
+    attention.targetAndActivate('not-mounted', () => invoked.push('fallback'))
+
+    Expect(invoked).toEqual(['fallback'])
+  })
+
+  Test('recovers from a descended item whose mounted scope disappears', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    register(outline, region('main', { primary: true }))
+    const removeItem = register(outline, item('draft', 'main', 'Draft'))
+    const removeAction = register(outline, {
+      identity: 'edit',
+      kind: 'action',
+      label: () => 'Edit',
+      live: {},
+      parent: 'draft',
+      provenance: {},
+    })
+    attention.revalidateOutline()
+    attention.pressKey('ArrowRight')
+    Expect(attention.read().candidates).toEqual(['edit'])
+
+    removeAction()
+    removeItem()
+    register(outline, item('replacement', 'main', 'Replacement'))
+    attention.revalidateOutline()
+
+    Expect(attention.read().candidates).toEqual(['replacement'])
+    Expect(attention.read().target).toBe('replacement')
+  })
+
   Test('Enter engages an input without invoking its submit activation', () => {
     const outline = new InteractionOutline()
     const attention = new InteractionAttention(outline, new CommandCatalog())
@@ -428,6 +559,199 @@ Describe('TR.Interaction attention', () => {
     Expect(attention.pressKey('primary+m')).toBe(true)
     Expect(invoked).toEqual(['Target', 'View', 'App', 'Modal'])
     Expect(attention.pressKey('.')).toBe(true)
+    Expect(attention.read().mode).toBe('navigating')
+  })
+
+  Test('dispatches a targeted row surface before a later-mounted sibling with the same chord', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const invoked: string[] = []
+    const command = (name: string) =>
+      TR.Interaction.Command({
+        action: () => TR.Action(() => invoked.push(name)),
+        members: { Key: () => TR.Value('primary+f'), Title: () => TR.Value(name) },
+        name,
+      })
+    register(outline, region('rows', { primary: true }))
+    register(outline, item('first', 'rows', 'First'))
+    register(outline, item('second', 'rows', 'Second'))
+    catalog.registerSurface({ commands: [command('First command')], hidden: [], identity: 'Row' }, 'first')
+    catalog.registerSurface({ commands: [command('Second command')], hidden: [], identity: 'Row' }, 'second')
+    attention.revalidateOutline()
+    attention.target('first')
+
+    Expect(attention.pressKey('primary+f')).toBe(true)
+    Expect(invoked).toEqual(['First command'])
+  })
+
+  Test('keeps view-scoped chords in their active outline ancestry instead of promoting them globally', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const invoked: string[] = []
+    const command = (name: string) =>
+      TR.Interaction.Command({
+        action: () => TR.Action(() => invoked.push(name)),
+        members: { Key: () => TR.Value('primary+s'), Title: () => TR.Value(name) },
+        name,
+      })
+    register(outline, region('active', { primary: true }))
+    register(outline, item('active-item', 'active', 'Active item'))
+    register(outline, region('other'))
+    register(outline, item('other-item', 'other', 'Other item'))
+    catalog.register({
+      commands: [{
+        command: () => command('Scoped'),
+        identity: 'Scoped',
+        name: 'Scoped',
+        scope: { declaration: 'Scene', kind: 'view' },
+        slots: [],
+        static: { key: 'primary+s', title: 'Scoped' },
+      }],
+      module: 'Scene',
+    }, 'active')
+    attention.revalidateOutline()
+
+    Expect(attention.pressKey('primary+s')).toBe(true)
+    Expect(invoked).toEqual(['Scoped'])
+    attention.focusRegion('other')
+    Expect(attention.pressKey('primary+s')).toBe(false)
+    Expect(invoked).toEqual(['Scoped'])
+  })
+
+  Test('keeps a mounted shell-sibling command available while navigation owns the focused region', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    let invoked = 0
+    const pause = TR.Interaction.Command({
+      action: () => TR.Action(() => invoked += 1),
+      members: { Key: () => TR.Value('primary+p'), Title: () => TR.Value('Pause') },
+      name: 'Pause',
+    })
+    register(outline, region('shell'))
+    register(outline, region('editor', { parent: 'shell', primary: true }))
+    register(outline, item('document', 'editor', 'Document'))
+    register(outline, {
+      identity: 'shell-siblings',
+      kind: 'region',
+      label: () => 'Focus session',
+      live: { active: () => true },
+      parent: 'shell',
+      provenance: { role: 'nav-siblings' },
+    })
+    register(outline, {
+      identity: 'focus-sessions',
+      kind: 'collection',
+      label: () => 'Focus sessions',
+      parent: 'shell-siblings',
+      provenance: {},
+    })
+    register(outline, item('session', 'focus-sessions', 'Session'))
+    catalog.registerSurface({ commands: [pause], hidden: [], identity: 'FocusSessionControls' }, 'session')
+    attention.revalidateOutline()
+    attention.target('document')
+
+    Expect(attention.pressKey('primary+p')).toBe(true)
+    Expect(invoked).toBe(1)
+  })
+
+  Test('closes target-local verbs when attention moves to another region', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const command = TR.Interaction.Command({
+      action: () => TR.Action(() => undefined),
+      members: { Title: () => TR.Value('Edit') },
+      name: 'Edit',
+    })
+    register(outline, region('first', { primary: true }))
+    register(outline, item('first-item', 'first', 'First'))
+    register(outline, region('second'))
+    register(outline, item('second-item', 'second', 'Second'))
+    catalog.registerSurface({ commands: [command], hidden: [], identity: 'First' }, 'first-item')
+    attention.revalidateOutline()
+    attention.target('first-item')
+    attention.openVerbs()
+    Expect(attention.read().mode).toBe('verbs')
+
+    attention.pressKey('ArrowRight')
+
+    Expect(attention.read().focusRegion).toBe('second')
+    Expect(attention.read().mode).toBe('navigating')
+    Expect(attention.read().verbs).toEqual([])
+  })
+
+  Test('reflects current command enablement and rechecks it after pending slot fills', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    let enabled = false
+    let invoked = 0
+    const direct = TR.Interaction.Command({
+      action: () => TR.Action(() => invoked += 1),
+      members: {
+        Enabled: () => TR.Value(enabled),
+        Label: () => TR.Value('Reactive direct label'),
+        Title: () => TR.Value('Direct'),
+      },
+      name: 'Direct',
+      slots: [],
+    })
+    const pending = TR.Interaction.Command({
+      action: () => TR.Action(() => invoked += 10),
+      members: { Enabled: () => TR.Value(enabled), Title: () => TR.Value('Pending') },
+      name: 'Pending',
+      slots: ['Document'],
+    })
+    catalog.register({
+      commands: [
+        {
+          command: () => direct,
+          identity: 'Direct',
+          name: 'Direct',
+          scope: { kind: 'module' },
+          slots: [],
+          static: { label: 'Static reactive label', title: 'Direct' },
+        },
+        {
+          command: () => pending,
+          identity: 'Pending',
+          name: 'Pending',
+          scope: { kind: 'module' },
+          slots: [{ entity: true, name: 'Document', required: true, type: 'Document' }],
+          static: { title: 'Pending' },
+        },
+      ],
+      module: 'Commands',
+    })
+    register(outline, region('main', { primary: true }))
+    register(
+      outline,
+      item('document', 'main', 'Draft', {
+        entityType: 'Document',
+        runtimeValue: TR.Value('draft'),
+      }),
+    )
+    attention.revalidateOutline()
+
+    attention.pressKey('primary+k')
+    const directPaletteEntry = attention.read().palette.find(entry => entry.identity === 'Direct')
+    Expect(directPaletteEntry?.enabled).toBe(false)
+    Expect(directPaletteEntry?.label).toBe('Direct')
+    attention.narrow('Direct')
+    attention.pressKey('Enter')
+    Expect(invoked).toBe(0)
+
+    enabled = true
+    attention.pressKey('primary+k')
+    attention.narrow('Pending')
+    attention.pressKey('Enter')
+    Expect(attention.read().mode).toBe('verb-pending')
+    enabled = false
+    Expect(attention.choosePendingTarget('document')).toBe(true)
+    Expect(invoked).toBe(0)
     Expect(attention.read().mode).toBe('navigating')
   })
 
@@ -568,5 +892,49 @@ Describe('TR.Interaction attention', () => {
     Expect(attention.read().engaged).toBeUndefined()
     Expect(attention.read().narrowing).toBe('pro')
     Expect(attention.read().target).toBe('projects')
+  })
+
+  Test('opens the palette by blurring and leaving an engaged input', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    let blurs = 0
+    register(outline, region('main', { primary: true }))
+    register(outline, {
+      identity: 'editor',
+      kind: 'input',
+      label: () => 'Editor',
+      live: { blur: () => blurs += 1 },
+      parent: 'main',
+      provenance: {},
+    })
+    attention.revalidateOutline()
+    attention.engage('editor')
+
+    Expect(attention.pressKey('primary+k')).toBe(true)
+    Expect(blurs).toBe(1)
+    Expect(attention.read().engaged).toBeUndefined()
+    Expect(attention.read().mode).toBe('palette')
+    attention.pressKey('a')
+    Expect(attention.read().narrowing).toBe('a')
+  })
+
+  Test('cannot engage a missing or disabled outline node', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    register(outline, region('main', { primary: true }))
+    register(outline, {
+      identity: 'disabled',
+      kind: 'input',
+      label: () => 'Disabled editor',
+      live: { enabled: () => false },
+      parent: 'main',
+      provenance: {},
+    })
+    attention.revalidateOutline()
+
+    attention.engage('missing')
+    Expect(attention.read().engaged).toBeUndefined()
+    attention.engage('disabled')
+    Expect(attention.read().engaged).toBeUndefined()
   })
 })

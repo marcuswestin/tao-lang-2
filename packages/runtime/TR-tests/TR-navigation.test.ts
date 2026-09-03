@@ -992,11 +992,13 @@ Describe('TR.Navigation', () => {
     mount.present(detail, {})
     Expect(host.canGoBack).toBe(false)
     const detach = host.attachHostedNavigation(mount, true)
+    const detachInactive = host.attachHostedNavigation(mount, false)
     Expect(host.canGoBack).toBe(true)
     Expect(host.back()).toBe(true)
     Expect(host.canGoBack).toBe(false)
     Expect(host.activate('settings')).toBe(true)
     Expect(host.activate('missing')).toBe(false)
+    detachInactive()
 
     // The host's own content goes before the navigator inside it.
     host.present(detail, {})
@@ -1008,6 +1010,12 @@ Describe('TR.Navigation', () => {
     detach()
     mount.present(detail, {})
     Expect(host.canGoBack).toBe(false)
+
+    const inactive = host.attachHostedNavigation(mount, false)
+    const visible = host.attachHostedNavigation(mount, true)
+    visible()
+    Expect(host.activate('home')).toBe(false)
+    inactive()
   })
 
   // The host snapshots a hosted navigator by that navigator's own descriptor identity and restores

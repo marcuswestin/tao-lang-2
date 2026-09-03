@@ -115,11 +115,11 @@ export function observeNavigationActivation(
  * HostedNavigation is one navigator a view rendered inside this occurrence's content. Its mount
  * outlives the React tree that rendered it, which is what keeps its history when the enclosing
  * presentation is covered and comes back. `attached` counts the rendered occurrences of that mount
- * and `active` follows the host's focus, so Back and activation reach only a navigator on screen.
+ * and each attachment records the host focus it observed, so Back and activation reach a navigator
+ * whenever at least one rendered occurrence of that shared mount is on screen.
  */
 type HostedNavigation = {
-  active: boolean
-  attached: number
+  attachments: Map<object, boolean>
   mount: RuntimeNavigationValue
 }
 
@@ -220,7 +220,7 @@ export abstract class RuntimeNavigationValue implements Subscription {
     }
     const mount = create()
     this.hostedByInput.set(input, mount)
-    this.hosted.set(mount, { active: true, attached: 0, mount })
+    this.hosted.set(mount, { attachments: new Map(), mount })
     mount.subscribe(() => this.emit())
     return mount
   }
@@ -237,11 +237,11 @@ export abstract class RuntimeNavigationValue implements Subscription {
       host: this.name,
       navigation: mount.name,
     })
-    record.active = active
-    record.attached += 1
+    const attachment = {}
+    record.attachments.set(attachment, active)
     this.restorePendingHosted(mount)
     return () => {
-      record.attached -= 1
+      record.attachments.delete(attachment)
     }
   }
 
@@ -414,7 +414,7 @@ export abstract class RuntimeNavigationValue implements Subscription {
   /** hostedNavigations lists the rendered, focused navigators this occurrence's content holds. */
   private hostedNavigations(): RuntimeNavigationValue[] {
     return [...this.hosted.values()]
-      .filter(record => record.attached > 0 && record.active)
+      .filter(record => [...record.attachments.values()].some(Boolean))
       .map(record => record.mount)
   }
 

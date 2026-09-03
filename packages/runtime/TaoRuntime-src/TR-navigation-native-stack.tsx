@@ -65,14 +65,29 @@ function NativeStackItem(props: {
   navigation: RuntimeStackNav
   taoProps?: TaoProps
 }): React.JSX.Element {
+  const observable = props.active && props.taoProps?.navigationHostActive !== false
+  return React.createElement(
+    OutlineRegionScope,
+    { region: presentedOccurrenceRegion(props.navigation, props.entry, 'content', () => observable) },
+    React.createElement(NativeStackItemContent, { ...props, observable }),
+  ) as React.JSX.Element
+}
+
+function NativeStackItemContent(props: {
+  active: boolean
+  entry: HostEntry
+  navigation: RuntimeStackNav
+  observable: boolean
+  taoProps?: TaoProps
+}): React.JSX.Element {
   const module = nativeNavigationModule()!
   const slots = useHostSlotSnapshot(props.entry.host)
   const ScreenStackItem = module.ScreenStackItem!
   const Right = module.ScreenStackHeaderRightView
-  const observable = props.active && props.taoProps?.navigationHostActive !== false
+  const entryTaoProps = { ...props.taoProps, navigationHostActive: props.observable }
   const backCapabilities = React.useRef<TaoOutlineLiveEntry>({}).current
   const backIdentity = useOutlineNode(
-    observable && props.navigation.depth > 1
+    props.observable && props.navigation.depth > 1
       ? {
         identity: `navigation:${props.navigation.name}:native-back`,
         kind: 'action',
@@ -93,20 +108,16 @@ function NativeStackItem(props: {
       // screen from activityState 2 to 1 during push, so every retained item stays active here.
       activityState: 2,
       children: React.createElement(
-        OutlineRegionScope,
-        { region: presentedOccurrenceRegion(props.navigation, props.entry, 'content', () => observable) },
-        React.createElement(
-          AppSurfaceFrame,
-          { nativeInsets: true, taoProps: props.taoProps },
-          renderPresentable(props.entry.presentable, props.entry.arguments, props.taoProps, props.entry.host),
-        ),
+        AppSurfaceFrame,
+        { nativeInsets: true, taoProps: entryTaoProps },
+        renderPresentable(props.entry.presentable, props.entry.arguments, entryTaoProps, props.entry.host),
       ),
       headerConfig: {
-        children: Right && slots.header && observable && slots.toolbar.length > 0
+        children: Right && slots.header && props.observable && slots.toolbar.length > 0
           ? React.createElement(Right, null, React.createElement(NativeToolbar, { commands: slots.toolbar }))
           : null,
         hidden: !slots.header,
-        hideBackButton: !slots.header || !observable,
+        hideBackButton: !slots.header || !props.observable,
         title: slots.header ? slots.title ?? '' : '',
       },
       onDismissed: (event: { nativeEvent?: { dismissCount?: number } }) => {

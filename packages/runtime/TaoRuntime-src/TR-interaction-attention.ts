@@ -59,10 +59,13 @@ type PendingVerb = {
   verb: TaoInteractionVerb
 }
 
+type PendingAllocatedKey = Readonly<{ prefix: string; surface: string }>
+
 /** InteractionAttention is the sole mutable owner of modality-neutral attention state. */
 export class InteractionAttention {
   #candidates: string[] = []
   #allocations = new Map<string, TaoInteractionKeyAssignments>()
+  #allocatedPrefix: PendingAllocatedKey | undefined
   #engaged: string | undefined
   #focusRegion: string | undefined
   #focusStack: string[] = []
@@ -168,9 +171,15 @@ export class InteractionAttention {
   }
 
   targetAndActivate(identity: string, fallback?: () => unknown): unknown {
+    const candidate = this.node(identity)
+    if (!candidate) {
+      return fallback?.()
+    }
+    if (!this.activatable(candidate)) {
+      return
+    }
+    const activate = candidate.live?.activate
     this.target(identity)
-    const node = this.node(identity)
-    const activate = node?.live?.activate
     return activate ? activate() : fallback?.()
   }
 
@@ -186,9 +195,13 @@ export class InteractionAttention {
       return
     }
     this.#focusRegion = identity
+    this.#allocatedPrefix = undefined
     this.#overview = false
     this.#palette = false
+    this.#paletteTarget = undefined
     this.#hints = false
+    this.#verbs = []
+    this.#verbPending = undefined
     this.recomputeCandidates()
     this.emit()
   }
@@ -203,6 +216,7 @@ export class InteractionAttention {
       this.disengage()
     }
     this.#focusRegion = region.identity
+    this.#allocatedPrefix = undefined
     const memory = this.memory()
     memory.target = identity
     this.#verbs = []
@@ -215,9 +229,16 @@ export class InteractionAttention {
   }
 
   engage(identity: string): void {
+    const node = this.node(identity)
+    if (!node || !this.targetable(node)) {
+      return
+    }
     this.target(identity)
+    if (this.targetIdentity() !== identity) {
+      return
+    }
     this.#engaged = identity
-    this.node(identity)?.live?.engage?.()
+    node.live?.engage?.()
     this.emit()
   }
 
@@ -238,6 +259,7 @@ export class InteractionAttention {
     }
     const memory = this.memory()
     memory.narrowing += value
+    this.#allocatedPrefix = undefined
     this.#overview = false
     this.#hints = false
     this.#palette ? this.recomputePaletteCandidates() : this.recomputeCandidates()
@@ -245,6 +267,7 @@ export class InteractionAttention {
   }
 
   openVerbs(): void {
+    this.#allocatedPrefix = undefined
     this.#verbs = this.catalog.verbsFor(this.node(this.targetIdentity()), this.outline)
     this.#verbPending = undefined
     this.emit()
@@ -283,6 +306,9 @@ export class InteractionAttention {
 
   pressKey(input: TaoAttentionKey | string): boolean {
     const key = normalizeInteractionKey(input)
+    if (!isBareLetter(key)) {
+      this.#allocatedPrefix = undefined
+    }
     if (this.#engaged && !['Escape', 'Tab', 'primary+k'].includes(key)) {
       if (!key.includes('+') || platformEditingChords.has(key.toLocaleLowerCase())) {
         return false
@@ -320,6 +346,8 @@ export class InteractionAttention {
         if (verb) {
           this.#palette = false
           this.#paletteTarget = undefined
+          this.memory().narrowing = ''
+          this.recomputeCandidates()
           this.runVerb(verb)
         }
         return true
@@ -353,6 +381,7 @@ export class InteractionAttention {
     }
     if (key === '/' || key === '?') {
       this.#hints = !this.#hints
+      this.#allocatedPrefix = undefined
       this.#overview = false
       this.#palette = false
       this.#paletteTarget = undefined
@@ -360,6 +389,10 @@ export class InteractionAttention {
       return true
     }
     if (key === 'primary+k') {
+      if (this.#engaged) {
+        this.disengage()
+      }
+      this.#allocatedPrefix = undefined
       this.#verbPending = undefined
       this.#verbs = []
       this.#hints = false
@@ -427,6 +460,7 @@ export class InteractionAttention {
 
   reset(): void {
     this.#allocations.clear()
+    this.#allocatedPrefix = undefined
     this.#candidates = []
     this.#engaged = undefined
     this.#focusRegion = undefined
@@ -444,6 +478,7 @@ export class InteractionAttention {
   }
 
   revalidateOutline(): void {
+    this.#allocatedPrefix = undefined
     const activeRegions = this.outline.liveNodes().filter(node => node.kind === 'region' && this.active(node))
     const modal = activeRegions.filter(node => node.live?.modal).at(-1)
     const focused = this.node(this.#focusRegion)
@@ -464,7 +499,8 @@ export class InteractionAttention {
       if (!this.node(memory.target)) {
         memory.target = undefined
       }
-      if (!activeRegions.some(node => node.identity === region)) {
+      const scope = this.node(memory.scope)
+      if (!activeRegions.some(node => node.identity === region) || (memory.scope && (!scope || !this.active(scope)))) {
         memory.scope = undefined
       }
     }
@@ -510,6 +546,8 @@ export class InteractionAttention {
     if (this.#palette) {
       this.#palette = false
       this.#paletteTarget = undefined
+      this.memory().narrowing = ''
+      this.recomputeCandidates()
       this.emit()
       return
     }
@@ -526,12 +564,20 @@ export class InteractionAttention {
       this.emit()
       return
     }
+    if (this.#hints) {
+      this.#hints = false
+      this.#overview = true
+      this.emit()
+      return
+    }
     this.#overview = true
     this.emit()
   }
 
   private runVerb(verb: TaoInteractionVerb): void {
     if (!verb.enabled) {
+      this.recomputeCandidates()
+      this.emit()
       return
     }
     this.#verbs = []
@@ -543,7 +589,13 @@ export class InteractionAttention {
       this.emit()
       return
     }
-    verb.invoke()
+    const current = command?.read()
+    if (current && !current.enabled) {
+      this.recomputeCandidates()
+      this.emit()
+      return
+    }
+    current ? current.invoke() : verb.invoke()
     this.emit()
   }
 
@@ -556,7 +608,10 @@ export class InteractionAttention {
     const slots = pending.slots.slice(1)
     if (slots.length === 0) {
       this.#verbPending = undefined
-      command.read().invoke()
+      const current = command.read()
+      if (current.enabled) {
+        current.invoke()
+      }
       this.recomputeCandidates()
       this.emit()
       return
@@ -573,7 +628,7 @@ export class InteractionAttention {
       return
     }
     this.#candidates = this.outline.liveNodes()
-      .filter(node => this.active(node) && node.live?.entityType === pending.slot.type)
+      .filter(node => this.targetable(node) && node.live?.entityType === pending.slot.type)
       .filter(node =>
         this.memory().narrowing.length === 0
         || matchesNarrowing(node.corpus?.() ?? [node.label() ?? ''], this.memory().narrowing)
@@ -656,24 +711,22 @@ export class InteractionAttention {
     if (this.#verbs.length > 0) {
       const candidates = this.#verbs.filter(verb => verb.key === undefined)
         .map(verb => ({ identity: verb.identity, label: verb.label }))
-      const identity = this.allocatedIdentity('verbs', candidates, key)
-      const verb = this.#verbs.find(candidate => candidate.identity === identity)
-      if (verb) {
-        this.runVerb(verb)
-        return true
-      }
+      return this.dispatchAllocatedKey('verbs', candidates, key, identity => {
+        const verb = this.#verbs.find(candidate => candidate.identity === identity)
+        if (verb) {
+          this.runVerb(verb)
+        }
+      })
     }
     if (this.#hints) {
       const candidates = this.#candidates.flatMap(identity => {
         const label = this.node(identity)?.label()
         return label === undefined ? [] : [{ identity, label }]
       })
-      const identity = this.allocatedIdentity('hints', candidates, key)
-      if (identity) {
+      return this.dispatchAllocatedKey('hints', candidates, key, identity => {
         this.#hints = false
         this.target(identity)
-        return true
-      }
+      })
     }
     if (this.#overview) {
       const candidates = this.outline.liveNodes()
@@ -682,36 +735,50 @@ export class InteractionAttention {
           const label = node.label()
           return label === undefined ? [] : [{ identity: node.identity, label }]
         })
-      const identity = this.allocatedIdentity('overview', candidates, key)
-      if (identity) {
+      return this.dispatchAllocatedKey('overview', candidates, key, identity => {
         this.focusRegion(identity)
-        return true
-      }
+      })
     }
     if (this.#palette) {
       const candidates = this.paletteVerbs().filter(verb => verb.key === undefined)
         .map(verb => ({ identity: verb.identity, label: verb.label }))
-      const identity = this.allocatedIdentity('palette', candidates, key)
-      if (identity) {
+      return this.dispatchAllocatedKey('palette', candidates, key, identity => {
         this.#paletteTarget = identity
         this.emit()
-        return true
-      }
+      })
     }
+    this.#allocatedPrefix = undefined
     return false
   }
 
-  private allocatedIdentity(
+  private dispatchAllocatedKey(
     surface: string,
     candidates: readonly Readonly<{ identity: string; label: string }>[],
     key: string,
-  ): string | undefined {
+    dispatch: (identity: string) => void,
+  ): boolean {
     const assignments = allocateInteractionKeys(candidates, {
       explicitKeys: this.catalog.explicitKeys(),
       previous: this.#allocations.get(surface),
     })
     this.#allocations.set(surface, assignments)
-    return candidates.find(candidate => assignments[candidate.identity] === key.toLocaleLowerCase())?.identity
+    const normalized = key.toLocaleLowerCase()
+    const pending = this.#allocatedPrefix?.surface === surface ? this.#allocatedPrefix.prefix : undefined
+    const attempts = pending === undefined ? [normalized] : [`${pending}${normalized}`, normalized]
+    for (const attempt of attempts) {
+      const exact = candidates.find(candidate => assignments[candidate.identity] === attempt)
+      if (exact) {
+        this.#allocatedPrefix = undefined
+        dispatch(exact.identity)
+        return true
+      }
+      if (Object.values(assignments).some(assignment => assignment.startsWith(attempt))) {
+        this.#allocatedPrefix = { prefix: attempt, surface }
+        return true
+      }
+    }
+    this.#allocatedPrefix = undefined
+    return false
   }
 
   private recomputePaletteCandidates(): void {
@@ -807,8 +874,20 @@ export class InteractionAttention {
 
   private targetable(node: TaoOutlineLiveNode): boolean {
     return (node.kind === 'action' || node.kind === 'input' || node.kind === 'item')
-      && node.live?.enabled?.() !== false
+      && this.activatable(node)
       && this.active(node)
+  }
+
+  /** Native activation may precede attention repair, but never crosses disabled or modal bounds. */
+  private activatable(node: TaoOutlineLiveNode): boolean {
+    const modal = this.topActiveModal()
+    return node.live?.enabled?.() !== false
+      && (
+        modal === undefined
+        || node.identity === modal.identity
+        || this.isWithin(node, modal.identity)
+        || isNavigationBackControl(node)
+      )
   }
 
   private active(node: TaoOutlineLiveNode): boolean {
@@ -863,6 +942,12 @@ export class InteractionAttention {
   }
 }
 
+/** The root-safe Back affordance sits outside a native modal portal but dismisses its top entry. */
+function isNavigationBackControl(node: TaoOutlineLiveNode): boolean {
+  const control = node.provenance['control']
+  return typeof control === 'string' && (control === 'navigation:back' || control.endsWith(':back'))
+}
+
 function candidateNodes(scope: string, nodes: readonly TaoOutlineLiveNode[]): TaoOutlineLiveNode[] {
   const children = new Map<string, TaoOutlineLiveNode[]>()
   for (const node of nodes) {
@@ -880,7 +965,10 @@ function candidateNodes(scope: string, nodes: readonly TaoOutlineLiveNode[]): Ta
       }
       if (child.kind === 'collection') {
         visit(child.identity)
-      } else if (child.kind === 'action' || child.kind === 'input' || child.kind === 'item') {
+      } else if (
+        (child.kind === 'action' || child.kind === 'input' || child.kind === 'item')
+        && child.live?.enabled?.() !== false
+      ) {
         candidates.push(child)
       }
     }

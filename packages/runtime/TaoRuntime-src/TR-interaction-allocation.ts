@@ -56,7 +56,10 @@ export function allocateInteractionKeys(
       continue
     }
     const key = normalizeAllocationKey(previous, locale)
-    if (isValidPreviousKey(key, labelLetters(candidate.label, locale)) && !excluded.has(key) && !assigned.has(key)) {
+    if (
+      isValidPreviousKey(key, labelLetters(candidate.label, locale))
+      && generatedKeyAvailable(key, excluded, assigned)
+    ) {
       assignments.set(candidate.identity, key)
       assigned.add(key)
     }
@@ -66,20 +69,47 @@ export function allocateInteractionKeys(
     if (assignments.has(candidate.identity)) {
       continue
     }
-    const key = labelLetters(candidate.label, locale).find(letter => !excluded.has(letter) && !assigned.has(letter))
+    const key = labelLetters(candidate.label, locale).find(letter => generatedKeyAvailable(letter, excluded, assigned))
     if (key !== undefined) {
       assignments.set(candidate.identity, key)
       assigned.add(key)
     }
   }
 
-  const sequences = twoLetterSequences()
-  for (const candidate of ordered) {
-    if (assignments.has(candidate.identity)) {
+  let pending = ordered.filter(candidate => !assignments.has(candidate.identity))
+  const sequencePrefixes = new Set(
+    [...assigned].filter(key => /^[a-z]{2}$/u.test(key)).map(key => key[0]!),
+  )
+  while (availableSequenceCount(sequencePrefixes, excluded, assigned) < pending.length) {
+    const freePrefix = asciiLetters.find(letter =>
+      !sequencePrefixes.has(letter) && !excluded.has(letter) && !assigned.has(letter)
+    )
+    if (freePrefix !== undefined) {
+      sequencePrefixes.add(freePrefix)
       continue
     }
+    // An exceptionally dense surface may consume every ASCII letter as a one-key assignment.
+    // Release the last deterministic single-letter assignment into a continuation branch rather
+    // than introducing a timeout or making a complete key the prefix of another complete key.
+    const released = [...assignments.entries()]
+      .filter(([, key]) => /^[a-z]$/u.test(key) && !excluded.has(key))
+      .sort(([leftIdentity, leftKey], [rightIdentity, rightKey]) =>
+        codePointCompare(leftKey, rightKey) || codePointCompare(leftIdentity, rightIdentity)
+      )
+      .at(-1)
+    if (!released) {
+      break
+    }
+    assignments.delete(released[0])
+    assigned.delete(released[1])
+    sequencePrefixes.add(released[1])
+    pending = ordered.filter(candidate => !assignments.has(candidate.identity))
+  }
+
+  const sequences = prefixedTwoLetterSequences(sequencePrefixes)
+  for (const candidate of pending) {
     let key = sequences.next().value
-    while (typeof key === 'string' && (excluded.has(key) || assigned.has(key))) {
+    while (typeof key === 'string' && !generatedKeyAvailable(key, excluded, assigned)) {
       key = sequences.next().value
     }
     if (typeof key !== 'string') {
@@ -168,10 +198,35 @@ function graphemeLength(value: string): number {
   return graphemes(value, undefined).length
 }
 
-function* twoLetterSequences(): Generator<string> {
-  for (let first = 0; first < 26; first += 1) {
-    for (let second = 0; second < 26; second += 1) {
-      yield String.fromCharCode(97 + first, 97 + second)
+const asciiLetters = Object.freeze(Array.from({ length: 26 }, (_, index) => String.fromCharCode(97 + index)))
+
+function generatedKeyAvailable(key: string, excluded: ReadonlySet<string>, assigned: ReadonlySet<string>): boolean {
+  if (excluded.has(key) || (key.length > 1 && excluded.has(key[0]!))) {
+    return false
+  }
+  return [...assigned].every(existing => !existing.startsWith(key) && !key.startsWith(existing))
+}
+
+function availableSequenceCount(
+  prefixes: ReadonlySet<string>,
+  excluded: ReadonlySet<string>,
+  assigned: ReadonlySet<string>,
+): number {
+  let count = 0
+  for (const prefix of prefixes) {
+    for (const second of asciiLetters) {
+      if (generatedKeyAvailable(`${prefix}${second}`, excluded, assigned)) {
+        count += 1
+      }
+    }
+  }
+  return count
+}
+
+function* prefixedTwoLetterSequences(prefixes: ReadonlySet<string>): Generator<string> {
+  for (const first of [...prefixes].sort(codePointCompare)) {
+    for (const second of asciiLetters) {
+      yield `${first}${second}`
     }
   }
 }
