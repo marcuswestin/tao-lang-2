@@ -91,14 +91,22 @@ export function outlineControlDescriptor(render: AST.Render): OutlineControlDesc
   if (!invocation.view) {
     return undefined
   }
-  const events = new Set(invocation.eventPairs.map(pair => Type.parameterName(pair.parameter)))
+  const actionBindings = new Set([
+    ...invocation.eventPairs.map(pair => Type.parameterName(pair.parameter)),
+    ...invocation.pairs.flatMap(pair => {
+      const type = Type.ofParameter(pair.parameter)
+      return type.kind === 'primitive' && type.primitive === 'action'
+        ? [Type.parameterName(pair.parameter)]
+        : []
+    }),
+  ])
   const valueBound = invocation.pairs.some(pair => Type.parameterName(pair.parameter) === 'Value')
   const label = literalLabel(invocation)
   const view = invocation.view.name
-  if (valueBound && (invocation.implicitChange !== undefined || events.has('Change'))) {
+  if (valueBound && (invocation.implicitChange !== undefined || actionBindings.has('Change'))) {
     return { ...(label === undefined ? {} : { label }), role: 'input', view }
   }
-  if (events.has('Press') || events.has('Submit')) {
+  if (actionBindings.has('Press') || actionBindings.has('Submit')) {
     return { ...(label === undefined ? {} : { label }), role: 'action', view }
   }
   return undefined

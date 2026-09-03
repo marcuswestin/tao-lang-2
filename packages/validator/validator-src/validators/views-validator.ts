@@ -334,8 +334,11 @@ function validateRender(
   // end up composed inline where no host would read it. A nav is a scene by the Prelude and is the
   // one exception: it supplies its own chrome, so a render site may name it.
   const target = render.view?.ref
-  if (AST.isViewDeclaration(target) && target.scene) {
-    ctx.error(viewValidationMessages.sceneComposed(target.name), render)
+  const aliasTarget = AST.isViewDeclaration(target) ? AST.viewAliasTarget(target) : undefined
+  const effectiveTarget = AST.isViewDeclaration(aliasTarget) ? aliasTarget : target
+  if (AST.isViewDeclaration(effectiveTarget) && effectiveTarget.scene) {
+    const renderedName = AST.isViewDeclaration(target) ? target.name : effectiveTarget.name
+    ctx.error(viewValidationMessages.sceneComposed(renderedName), render)
   }
   if (render.block) {
     validateRenderBlock(render.block, ctx)

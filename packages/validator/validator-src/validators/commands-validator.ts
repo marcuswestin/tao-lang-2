@@ -24,6 +24,7 @@ export const commandValidationMessages = {
   memberType: (name: string, expected: string, actual: string) =>
     `Command member '${name}' expects ${expected}, got ${actual}.`,
   missingTitle: (name: string) => `Command '${name}' must fill Title.`,
+  staticTitle: (name: string) => `Command '${name}' must fill Title with a static text literal.`,
   titleOverride: (name: string) => `Command '${name}' may not override Title.`,
   unknownBinding: (name: string, slot: string) => `Command '${name}' has no slot or member named '${slot}'.`,
   shortcutKey: 'A shortcut needs one key after its modifiers.',
@@ -177,6 +178,15 @@ function validateMembers(command: AST.CommandDeclaration, ctx: ValidationContext
       ctx.error(commandValidationMessages.duplicateMember(fill.name), fill)
     }
     filled.add(fill.name)
+    if (fill.name === 'Title' && !AST.isStringLiteral(fill.value)) {
+      const actual = Type.ofExpression(fill.value)
+      if (
+        actual.kind !== 'unresolved'
+        && Type.isAssignable(actual, { kind: 'primitive', primitive: 'text' })
+      ) {
+        ctx.error(commandValidationMessages.staticTitle(command.name), fill.value)
+      }
+    }
     reportMemberValue(fill.name, property, fill.value, ctx)
   }
   if (!filled.has('Title')) {

@@ -154,6 +154,22 @@ Describe('validator: commands as configured values', () => {
   )
 
   Test(
+    'requires Title to be a static text literal',
+    rejects(
+      `
+        ${leaf}
+        let VerbName = "Save"
+        action Run() { }
+        command Save() {
+          Title VerbName
+          do Run()
+        }
+      `,
+      commandValidationMessages.staticTitle('Save'),
+    ),
+  )
+
+  Test(
     'rejects a command whose do names another command rather than an action',
     rejects(
       `

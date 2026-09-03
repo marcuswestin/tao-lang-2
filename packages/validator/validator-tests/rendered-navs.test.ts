@@ -39,6 +39,21 @@ Describe('validator: rendered navs', () => {
   )
 
   Test(
+    'accepts an imported nominal nav type on a rendered parameter',
+    accepts(`
+      use StackNav from @tao/nav
+      ${home}
+      nav Center = StackNav { Initial Home }
+      app ShellApp { view Shell(Center) }
+      scene Shell(Navigator StackNav) {
+        render Column() {
+          Navigator()
+        }
+      }
+    `),
+  )
+
+  Test(
     'still rejects a scene composed inline beside a rendered nav',
     rejects(
       `

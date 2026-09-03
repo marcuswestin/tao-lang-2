@@ -171,6 +171,31 @@ Describe('compiler: interaction outline', () => {
     Expect(compiled.code).toContain('TR.Interaction.UseOccurrence(_ViewProps.__tao)')
   })
 
+  Test('classifies controls whose action parameters are supplied as ordinary arguments', async () => {
+    const compiled = await Compiler.compileCode(
+      outlineApp(
+        `
+          FormButton("Save draft", SaveDraft)
+          TextInput(Value: Draft, Change: ChangeDraft, Submit: SubmitDraft, Label: "Draft title")
+          SubmitControl(Label: "Send draft", Submit: SubmitDraft)
+        `,
+        `
+          action SaveDraft() { }
+          action ChangeDraft(Value text) { }
+          action SubmitDraft() { }
+          view SubmitControl(Label text, Submit action()) {
+            render Text(Label)
+          }
+        `,
+      ),
+    )
+
+    Expect(compiled.code).toContain('"kind":"control","label":"Save draft","role":"action","view":"FormButton"')
+    Expect(compiled.code).toContain('"kind":"control","label":"Draft title","role":"input","view":"TextInput"')
+    Expect(compiled.code).toContain('"kind":"control","label":"Send draft","role":"action","view":"SubmitControl"')
+    Expect(compiled.code.match(/"kind":"control"/g)).toHaveLength(3)
+  })
+
   Test('emits no table for a module without outline nodes', async () => {
     const compiled = await Compiler.compileCode(`
       app QuietApp { view Main }

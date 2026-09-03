@@ -5,6 +5,9 @@ import * as AST from './parserASTExport'
 /** DeclarationNamespace identifies the independent declaration table a name occupies. */
 export type DeclarationNamespace = 'type' | 'value'
 
+/** RenderablePrimitive is a type family whose value may be named at a render site. */
+export type RenderablePrimitive = 'view' | 'scene' | 'nav'
+
 const resolvedUseTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, readonly AST.Declaration[]>()
 
 /** declarationNamespace classifies declarations by the reference contexts that can resolve them. */
@@ -546,6 +549,46 @@ export function configurationPrimitiveOf(
     return undefined
   }
   return configurationPrimitiveOfTypeExpression(declaration.type, seen)
+}
+
+/** renderablePrimitiveOfParameter resolves a parameter's effective view-family type. */
+export function renderablePrimitiveOfParameter(
+  parameter: AST.ParameterDeclaration,
+): RenderablePrimitive | undefined {
+  const type = parameter.inlineType?.type ?? parameter.type
+  return type ? renderablePrimitiveOfTypeExpression(type, new Set()) : undefined
+}
+
+function renderablePrimitiveOfTypeExpression(
+  type: AST.TypeExpression,
+  seen: Set<AST.TypeDeclaration>,
+): RenderablePrimitive | undefined {
+  const base = AST.isDerivedTypeExpression(type) ? type.base : type
+  if (AST.isPrimitiveTypeReference(base)) {
+    return base.primitive === 'view' || base.primitive === 'scene' || base.primitive === 'nav'
+      ? base.primitive
+      : undefined
+  }
+  if (!AST.isNamedTypeReference(base) || base.members.length > 0) {
+    return undefined
+  }
+  const declaration = visibleTypeDeclaration(base, base.root)
+  return declaration ? renderablePrimitiveOfTypeDeclaration(declaration, seen) : undefined
+}
+
+function renderablePrimitiveOfTypeDeclaration(
+  declaration: AST.TypeDeclaration,
+  seen: Set<AST.TypeDeclaration>,
+): RenderablePrimitive | undefined {
+  if (seen.has(declaration)) {
+    return undefined
+  }
+  seen.add(declaration)
+  const aliasTarget = declaration.aliasTarget?.member.ref
+  if (AST.isTypeDeclaration(aliasTarget)) {
+    return renderablePrimitiveOfTypeDeclaration(aliasTarget, seen)
+  }
+  return declaration.type ? renderablePrimitiveOfTypeExpression(declaration.type, seen) : undefined
 }
 
 /** configurationPropertiesOf returns the effective ordinary slots of one reusable configuration type. */

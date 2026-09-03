@@ -852,12 +852,9 @@ function parameterOwningDefault(node: AST.Node | undefined): AST.ParameterDeclar
   return undefined
 }
 
-const renderableParameterFamilies: ReadonlySet<string> = new Set(['view', 'scene', 'nav'])
-
 /** isRenderableParameter reports a parameter whose declared type a render site may name. */
 function isRenderableParameter(parameter: AST.ParameterDeclaration): boolean {
-  const type = parameter.inlineType?.type
-  return AST.isPrimitiveTypeReference(type) && renderableParameterFamilies.has(type.primitive)
+  return AST.renderablePrimitiveOfParameter(parameter) !== undefined
 }
 
 function parameterValueName(parameter: AST.ParameterDeclaration): string | undefined {
