@@ -161,15 +161,16 @@ launch ID, session ID, component (`studio-server`, `preview`, `metro`, `watcher`
 shutdown reason. The terminal shows only the events a person waits on — server ready, a failed
 compile or reload, shutdown, a signal escalation, an orphan — and never source contents or secrets.
 
-## Freehand Draw and Snap project state
+## Freehand Draw, Snap, and Feed project state
 
 Unsnapped Draw geometry is committed in `.tao-project/studio/sketches.jsonc`. It is not a launch
-artifact, browser-local preference, or Tao render tree. Catalog format version 2 stores a monotonic
-`nextViewNumber`, a conflict `revision`, and ordered sketches. Version 1 migrates atomically. Each
+artifact, browser-local preference, or Tao render tree. Catalog format version 3 stores a monotonic
+`nextViewNumber`, a conflict `revision`, and ordered sketches. Versions 1 and 2 migrate atomically. Each
 sketch records stable `id`, display `name`, project, generated `view`, width, height, total
 `rectOrder`, free `rects`, and flowed `snapped` associations; each rectangle records stable
 `id`, nonnegative `x` and `y`, positive width and height, an open Tao element `kind`, and optional
-string `content` and `binding`.
+string `content` and optional structured `fieldBinding`. A binding names its entity parameter, dotted
+field path, and text or image presentation, including an optional image-label path.
 
 Studio accepts JSONC but rewrites the file as canonical indented JSON through a temporary sibling and
 rename. The server is the only writer. Clients submit a unique request ID and expected revision;
@@ -206,10 +207,22 @@ for Unsnap; a current measured render is the fallback.
 The project session intentionally rejects whole-sketch deletion until generated-source removal shares
 the same transactional rollback.
 
-Run the focused Draw and Snap contracts with the repository's installed profile:
+Feed foundations preserve entity parameter identity in the preview manifest and accept imported
+`public fixture` declarations, including cross-file scenario row handles. The deterministic generator
+and inventory normalize fixture, generated, live, and library rows without writing source. The
+`StudioSharedFixtureSource` seam creates or extends the generated `@/studio/Sketches.tao` source,
+deduplicates identical rows, and rejects collisions. Typed source actions add an entity parameter and
+fixture-backed arguments to a generated sketch group, bind a tagged snapped leaf to a validated field,
+and insert parameterized project views using exact-type values visible at the target gap. Catalog
+`bind-rect` persists the corresponding structured binding for free and snapped rectangles.
+
+This does not yet constitute the complete Slice 3 gesture: the client row/chip browser, atomic Keep
+transaction, entity/field drop wiring, and scenario relocation during Move to package remain open.
+
+Run the focused Draw, Snap, and Feed-foundation contracts with the repository's installed profile:
 
 ```bash
-bun test packages/studio/studio-tests/studio-sketch-catalog.test.ts packages/studio/studio-tests/studio-sketch-source.test.ts packages/studio/studio-tests/studio-sketch-geometry.test.ts packages/studio/studio-tests/studio-sketch-projection.test.ts packages/studio/studio-tests/studio-sketch-snap.test.ts packages/studio/studio-tests/studio-sketch-session.test.ts packages/studio/studio-tests/studio-sketch-view.test.ts
+bun test packages/studio/studio-tests/studio-feed-examples.test.ts packages/studio/studio-tests/studio-feed-inventory.test.ts packages/studio/studio-tests/studio-shared-fixture-source.test.ts packages/studio/studio-tests/studio-sketch-catalog.test.ts packages/studio/studio-tests/studio-sketch-source.test.ts packages/studio/studio-tests/studio-sketch-geometry.test.ts packages/studio/studio-tests/studio-sketch-projection.test.ts packages/studio/studio-tests/studio-sketch-snap.test.ts packages/studio/studio-tests/studio-sketch-session.test.ts packages/studio/studio-tests/studio-sketch-view.test.ts
 ```
 
 The existing real browser-shell smoke entry point is:

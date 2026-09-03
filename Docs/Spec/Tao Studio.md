@@ -266,16 +266,16 @@ grants only owner-write and restores read-only mode after success or failure; ne
 repository uses filesystem immutable flags. The ordinary Tao and dprint fix lanes check generated
 source but do not rewrite it.
 
-### Freehand Draw and Snap catalog
+### Freehand Draw, Snap, and Feed catalog
 
 The Draw slice stores each unsnapped rectangle in `.tao-project/studio/sketches.jsonc`. The file is
 JSONC on input and canonical indented JSON on every Studio write. It is committed project state, not
-an artifact or browser preference. Format version 2 has this shape; version 1 is migrated atomically
-without changing its logical revision:
+an artifact or browser preference. Format version 3 has this shape; versions 1 and 2 are migrated
+atomically without changing their logical revision:
 
 ```jsonc
 {
-  "formatVersion": 2,
+  "formatVersion": 3,
   "nextViewNumber": 2,
   "revision": 1,
   "sketches": [
@@ -290,6 +290,11 @@ without changing its logical revision:
           "content": "Cover art",
           "height": 52,
           "id": "rect-cover",
+          "fieldBinding": {
+            "parameter": "Playlist",
+            "path": "Cover",
+            "presentation": { "kind": "image", "label": { "path": "Title" } }
+          },
           "kind": "Placeholder",
           "width": 52,
           "x": 12,
@@ -309,13 +314,15 @@ Sketches and rectangles have stable unique IDs. `rectOrder` preserves the total 
 snapped association retains the exact rectangle plus the generated path, view, element kind,
 source version, render identity, and Studio rectangle marker. Coordinates are
 finite and nonnegative, dimensions are finite and positive, `kind` is an open Tao element name, and
-optional `content` and `binding` values are strings. Unknown fields, duplicate IDs, duplicate sketch
+optional `content` is a string. An optional `fieldBinding` records a validated parameter, dotted field
+path, and text or image presentation; an image label may name its own path and text affixes. Version 2
+string bindings migrate to that structured form. Unknown fields, duplicate IDs, duplicate sketch
 names or views, malformed JSONC, and unsupported format versions are rejected rather than repaired
 silently. `revision` is the server conflict precondition. `nextViewNumber` is project-wide and must
 remain greater than every generated `view` association; deletion and reopening never reuse a `ViewN`
 number. `name` remains display text and does not control allocation.
 
-The session handshake includes the current catalog and advertises catalog format version 2. The same
+The session handshake includes the current catalog and advertises catalog format version 3. The same
 snapshot is available from `GET /api/sketches`. Draw mutations use typed requests at
 `POST /api/sketches/action` with a unique request ID and the expected catalog revision. The server
 serializes them with other project mutations, rejects a stale revision as an HTTP 409 conflict,
@@ -366,6 +373,36 @@ uses the retained rectangle. On reopen, missing, duplicated, or retyped associat
 an active matching preview measurement is the fallback, otherwise Studio returns the retryable
 `measurement-unavailable` conflict without changing either store. Free rows remain in the TypeScript
 overlay beside the flowed preview until they are snapped.
+
+### Feed source contracts
+
+Studio preview manifests preserve a Tao entity parameter's canonical entity identity while retaining
+the JSON-object control representation. Primitive values are rejected for entity arguments. A
+`public fixture` is importable through an ordinary `use` statement; scenario fixture clauses and
+their row handles resolve across that file boundary, and fixture-only imports emit no runtime binding.
+This is the executable basis for the generated `@/studio/Sketches.tao` home.
+
+The deterministic Feed generator requires an explicit seed and emits empty, typical, and edge rows
+from compiler-owned entity metadata. Fixture, generated, live-store, and library rows normalize to one
+immutable typed inventory with stable opaque IDs and promotion records. Generated and live rows remain
+values only; generating them does not write source. The shared-fixture source builder creates or
+extends one Studio-owned `public fixture Sketches`, preserves existing imports and rows, is idempotent,
+and rejects a same-name row whose entity or fields differ.
+
+Two structured source actions implement the source half of binding. `add-sketch-entity-parameter`
+adds the imported entity parameter and supplies a validated fixture handle to every entry in the
+owned sketch scenario group. `bind-sketch-field` resolves a typed field path and rewrites one exact
+tagged leaf as current-dialect `Text` or accessible `Image` source while preserving its marker and
+layout. Catalog action `bind-rect` persists the equivalent structured binding on a free or snapped
+rectangle without disturbing geometry, total order, or its Snap target. Parameterized
+`insert-project-view` derives exact-type arguments from declarations visible at its insertion gap,
+including the nearest loop row and owning-view parameters; unresolved or ambiguous required values
+fail before mutation, and an explicit structured binding can disambiguate.
+
+These are server-side and source-action foundations, not yet the complete Feed gesture. The current
+Studio client does not yet expose the four-source row browser, drag entity/field chips, Keep as one
+multi-file transaction, or Move-to-package scenario-group relocation. Until those land, callers must
+not present Slice 3 as an end-to-end Studio workflow.
 
 The catalog is intended to be recovered through version control. A malformed or unsupported catalog
 blocks publication instead of discarding geometry. Restore a known-good committed copy or repair it

@@ -203,6 +203,12 @@ step; do not change the settled heuristic to fit individual screens invisibly.
 
 ## Slice 3 — Feed
 
+**Implementation status (2026-09-03).** Foundations are green and committed: shared fixture imports,
+entity-aware preview manifests, deterministic four-source inventory, canonical shared-fixture source,
+typed entity/field source actions, durable free/snapped field bindings, and scope-derived arguments for
+parameterized project-view insertion. The slice remains open until Studio exposes the row/chip browser
+and lands entity/field drop, atomic Keep, Move-to-package scenario relocation, and their browser journey.
+
 **Decisions.** FS-D6, FS-D16.
 
 **Goal.** Give a sketch a real entity argument, bind fields to free or snapped targets, and persist
