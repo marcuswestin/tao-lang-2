@@ -30,7 +30,7 @@ Build the companion app with these committed product capabilities:
 - Fast Refresh with exact compile/apply acknowledgement;
 - native inspection, logs, provider/network activity, performance, tests, and automation controls;
 - loading Studio state onto a device and capturing device state back;
-- speaking, recording, replaying, editing, and saving user-story journeys;
+- speaking, replaying, editing, and saving user-story journeys;
 - an iPad-first pen-and-touch canvas that edits real Tao view definitions;
 - invited beta delivery, semantic feedback, visual/theme proposals, and replies;
 - permission-controlled project forks and proposals shared back;
@@ -303,19 +303,9 @@ manual step.
 
 ## Record interaction into an executable journey
 
-- Record Tao actions and render identity rather than reverse-engineering pixels later.
-- Record bound text fields/selectors under a privacy-redacted value policy.
-- Offline, persona switch, rotation, relaunch, state restore, and other environment changes become steps.
-- Promote raw gestures or foreign/native interactions to semantic selectors or retain them as visibly
-  unresolved steps; never present screen coordinates as a stable Tao journey.
-- Render the script live in Studio. Rename steps, add pauses, capture an expectation from current state,
-  or remove incidental actions while recording.
-- Stopping offers replay-only recording, named Studio journey, Tao behavior-test proposal, collaborator
-  mission, or reusable automation.
-- Saving source requires exact generated Tao and a review checkpoint.
-
-Speech and recording compose: speak setup and expectations, perform a hard-to-describe gesture manually,
-then continue speaking into one timeline.
+Recording is being built elsewhere and is no longer part of this plan. What the companion owes it is
+the same thing the rest of this plan already needs: Tao actions and render identity on the device,
+not pixels. Nothing here should grow a second recorder.
 
 ## Developer device laboratory
 

@@ -642,6 +642,14 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
     client.sourceAction(action, occurrence)
   }, [client, selection, sourceVersions])
 
+  // An edit made on the phone is answered by the Mac; the phone is where the person is looking, so
+  // that answer belongs on this screen rather than only in Studio's log.
+  const sourceActionOutcome = state.sourceAction === undefined
+    ? undefined
+    : state.sourceAction.ok
+    ? 'Studio applied the move.'
+    : `Studio refused the move: ${state.sourceAction.error ?? 'no reason given'}`
+
   const menuActions: readonly DeviceMenuAction[] = [
     {
       active: inspecting,
@@ -712,7 +720,11 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
         ? React.createElement(DeviceRemoteHighlight, { rects: remoteHighlight })
         : null,
       presentation.kind === 'cell' && inspecting
-        ? React.createElement(DeviceInspectOverlay, { onSelect: selectSource, selection })
+        ? React.createElement(DeviceInspectOverlay, {
+          onSelect: selectSource,
+          ...(sourceActionOutcome === undefined ? {} : { outcome: sourceActionOutcome }),
+          selection,
+        })
         : null,
       presentation.kind === 'cell'
         ? React.createElement(DeviceBadge, {
@@ -939,6 +951,8 @@ function normalizeSourcePath(path: string): string {
  */
 function DeviceInspectOverlay(props: {
   onSelect: (selection: { hit: StudioInspectHit; hits: readonly StudioInspectHit[] } | undefined) => void
+  /** What the last edit asked for did, so a refusal on the Mac is answerable on the phone. */
+  outcome?: string
   selection: { hit: StudioInspectHit; hits: readonly StudioInspectHit[] } | undefined
 }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
@@ -979,7 +993,9 @@ function DeviceInspectOverlay(props: {
     React.createElement(
       RN.Text,
       { pointerEvents: 'none', style: { ...inspectHintStyle, top: 12 + insets.top } },
-      selected !== undefined
+      props.outcome !== undefined
+        ? props.outcome
+        : selected !== undefined
         ? `Inspecting ${occurrenceLabel(selected.hit.identity)} — open the menu to move it`
         : missed
         ? 'Nothing to inspect there — tap a rendered view'

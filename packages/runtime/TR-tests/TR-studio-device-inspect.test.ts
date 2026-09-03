@@ -202,6 +202,8 @@ Describe('Studio device inspect move actions', () => {
   Test('moving up lands the render before the sibling above it in the source', () => {
     const { card, first, second, third } = columnLayout()
 
+    // Only `beforeId` here, because the destination gap is the top of the block: there is no
+    // render above `first` to anchor against.
     Expect(moveRenderFor([card, first, second, third], second, 'up')).toEqual({
       beforeId: 'App.tao:10:60',
       draggedId: 'App.tao:70:120',
@@ -215,6 +217,33 @@ Describe('Studio device inspect move actions', () => {
     Expect(moveRenderFor([card, first, second, third], second, 'down')).toEqual({
       afterId: 'App.tao:130:180',
       draggedId: 'App.tao:70:120',
+      kind: 'move-render',
+    })
+  })
+
+  Test('a move into a gap between two renders names both of them', () => {
+    const { first, second, third } = columnLayout()
+    // A taller card, so all four rows are genuinely inside it and count as siblings.
+    const card: StudioInspectHit = { identity: identity(0, 500), rect: { height: 400, width: 300, x: 0, y: 0 } }
+    const fourth: StudioInspectHit = {
+      identity: identity(190, 240),
+      rect: { height: 80, width: 280, x: 10, y: 280 },
+    }
+    const hits = [card, first, second, third, fourth]
+
+    // Studio reads a before-only anchor as "make this the first render in the block" and refuses it
+    // when the anchor is not first — which is what a live device edit hit. A gap with a render on
+    // each side has to name both.
+    Expect(moveRenderFor(hits, fourth, 'up')).toEqual({
+      afterId: 'App.tao:70:120',
+      beforeId: 'App.tao:130:180',
+      draggedId: 'App.tao:190:240',
+      kind: 'move-render',
+    })
+    Expect(moveRenderFor(hits, first, 'down')).toEqual({
+      afterId: 'App.tao:70:120',
+      beforeId: 'App.tao:130:180',
+      draggedId: 'App.tao:10:60',
       kind: 'move-render',
     })
   })

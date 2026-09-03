@@ -52,45 +52,109 @@ The client still measures each frame and answers the request with a failure nami
 than sending an oversized frame, so a larger capture degrades to a readable error instead of a
 dropped session.
 
+### The phone is a canvas that selects both ways
+
+The browser canvas hit-tests by asking the DOM what is under a click. A device has no DOM, so a phone
+could render a cell but not answer "what is this?".
+
+`TR-studio-device-inspect.ts` is that answer: every Studio-compiled native root registers a
+measurable handle beside the occurrence identity `TaoProps` already lowers onto it, and a tap
+measures the registered nodes and takes the most specific frame containing the point. Registration
+is Studio-only by construction — the compiler emits studio identity only under `studio: true` — and
+the ref registers nothing for a node without `measureInWindow`, which is every node under
+react-native-web, so the browser canvas pays one property check and nothing else.
+
+Four sealed messages carry it:
+
+```text
+device.selectSource        occurrence
+studio.highlightSource     occurrence?          (absent clears the outline)
+device.sourceAction        action, occurrence, requestId
+studio.sourceActionResult  requestId, ok, error?
+```
+
+A device selection reaches the workbench on the `device-state` status snapshot rather than as its own
+event, carrying a `sequence` that advances per tap — the same status is re-sent whenever anything
+about the connection changes, and re-opening the editor on each one would fight the person's cursor.
+
+**An occurrence carries the source version of the file in the bundle the device is running**, not the
+one on disk now. That is what makes a span from a phone trustworthy: the device may be minutes
+behind, and a range measured against older text would select — or edit — the wrong thing. Studio
+refuses a stale one, exactly as it does for the browser canvas.
+
+The envelope for a device-originated edit is built by the gateway, not the device. Everything that
+decides whether an edit is legal — which cell instance is current, which scenario it renders — is
+Studio's own state; a device that could assert those could edit against a tree Studio has already
+replaced. The device supplies only what it alone knows: which render was touched and where it goes.
+
+### The badge is a fan-out companion menu
+
+Interactions that only make sense on a companion live here rather than in the app: Inspect (a mode),
+Move up, Move down, and Scenarios. Inspect is a mode on purpose — no gesture reliably means "tell me
+about this" on a phone already using taps, long-presses and drags for the app's own purposes — so an
+overlay takes every touch while it is on, and the app underneath is deliberately unreachable.
+
+The result of an edit is shown on the phone. The person making the edit is looking at the device, so
+Studio's answer — applied, or refused and why — belongs on that screen and not only in Studio's log.
+
 ## Proven live on the simulator
 
 - A reconfigure carrying a new environment reaches the device and re-assigns it with a live instance;
   its next acknowledgement is accepted rather than refused as stale.
-- `POST /api/device/capture` returns a complete artifact from the phone.
+- `POST /api/device/capture` returns a complete artifact from the phone (18,713 bytes, all six
+  domains).
 - The artifact carries real interaction state: typing a workspace name into the running app on the
-  device and capturing again produced an artifact containing that text (7,398 bytes against a 7,305
-  byte baseline).
+  device and capturing again produced an artifact containing that text.
+- **Restoring a device capture works.** Feeding one back as `replay` re-assigns the device and the
+  restored screen renders. This previously failed with `Restored navigation descriptor does not match
+  live 'SelectionNav'`; see "Every app variant gets its own navigation capture" below.
+- **A tap on the phone reaches the Mac's source.** Tapping the "Open workspace" button on the device
+  produced exactly `@ui/Workspaces.tao:11186..11278` — the `FormButton("Open workspace")` render —
+  with its owner and the device's own source version.
+- **An edit made on the phone changed the Mac's file.** Selecting that button and choosing Move up
+  reordered it above "Delete workspace" in `Workspaces.tao`, tags and all; Studio recompiled and the
+  phone re-rendered in the new order.
 
-## Open: restore does not round-trip on device
+### What the live run caught that the tests did not
 
-Restoring a device capture fails, reproducibly, and this blocks the "capture/restore WordFlower
-state" half of the acceptance.
+A move named only one side of the gap it was landing in. Studio reads a before-only anchor as "make
+this the block's first render" and refused with _"A before-only drop anchor must be the first render
+expression."_ A move now names both bounding renders, the way the browser canvas does when a render
+is dropped between two others. The device is what surfaced it, and it is a test now.
 
-Feeding a capture back through `POST /api/preview/cell/reconfigure` as `replay` reaches the device
-correctly — the re-assign works — and then the device shows:
+## Fixed here, both older than this slice
 
-```text
-Restored navigation descriptor does not match live 'SelectionNav'.
-```
+**Every app variant gets its own navigation capture.** `appCaptureKey` keyed on the app declaration
+alone, so `WordFlower`, `WordFlower - Drawer Preview`, `WordFlower - Dark` and
+`WordFlower - InstantDB` — four variants sharing one base declaration — shared one capture slot. A
+capture taken in one variant was offered to another on restore, and the navigator refused it because
+the descriptors genuinely differ. The key now includes each lane's canonical descriptor. No rendered
+test anywhere asserted a capture/restore round trip; `capture-restore-e2e.jest-test.tsx` does.
 
-followed by a "Maximum update depth exceeded" notice. It fails the same way for a true round trip:
-capture and immediately restore that same artifact onto the same cell at its current revision.
+**A replayed cell no longer restarts its restore on every render.** `ReplayHost` keyed the restore on
+the replay artifact's object identity, and the generated preview roots rebuild that artifact every
+render, so each render restarted the restore and restarting set state. It is content-keyed now, and
+the fast path is still identity, so a caller that keeps the artifact stable pays nothing.
 
-What is known:
+## Open: a replayed cell still spins
 
-- The refusal is `restoreNavigationSnapshot` in `TR-navigation-value.ts:290-295`, comparing the
-  snapshot's `descriptor` against the live navigator's `canonicalDescriptor`.
-- It is **not** a device-only path. No rendered test anywhere — browser or device — asserts a
-  navigation capture/restore round trip; the only coverage is `TR-runtime-capture.test.ts`, which
-  exercises the registry rather than a mounted navigator. So this is most likely a pre-existing gap
-  in capture/replay that the device surfaced, not something the device introduced.
-- The failure is at least honest: the runtime refuses the restore and says why, rather than silently
-  half-restoring.
+Mounting a cell that carries a replay still logs `Maximum update depth exceeded` repeatedly, in the
+browser canvas as well as on the device. What is established:
 
-Closing it means understanding why a canonical descriptor captured from a mounted `SelectionNav`
-does not equal the one live after a remount. That is work in the navigation capture subsystem, which
-is shared with the browser canvas, and it should be settled there rather than worked around at the
-gateway.
+- It is **not** caused by anything in this slice: it reproduces in the browser canvas, which does not
+  mount the device host, and it predates the inspect registry.
+- It is **not** domain-specific: a replay carrying only the `data` domain reproduces it, as does one
+  with the scheme domain removed.
+- It needs the replay to be present **when the cell mounts** — configuring a replay onto an
+  already-mounted cell does not trigger it, reloading afterwards does.
+- The `ReplayHost` identity churn above was real and is fixed, but was not the whole cause.
+- The restore itself completes and the correct screen renders, so this degrades performance and fills
+  the log rather than breaking the feature.
+
+The next step is a stack, not more bisection: React attributes the loop to a `setState` in an effect
+whose dependency changes every render, and the generated preview root rebuilds its whole cell runtime
+object on each render, which hands a new object to every consumer below it. Memoizing that in codegen
+is the likely fix and would close the class rather than one instance.
 
 ## Not attempted, and why
 
@@ -101,12 +165,6 @@ gateway.
 this is a fork, not a task: bundle a test library into the companion and run headless, or build a
 driver that drives the live cell through the real touch pipeline (which is what the plan means by
 "on the real renderer, show each step"). Ro's call.
-
-**Bidirectional selection.** The render identity is already on the device — `nativePropsWithStudioIdentity`
-lowers `TaoStudioIdentity` onto every generated native root — so what is missing is the geometry and
-hit-test layer the browser gets free from the DOM, plus a decision the exploration document
-explicitly defers: what a tap means when the app is live. Long-press, an explicit mode, or a
-two-finger gesture all collide differently with app gestures and with the badge's own drag.
 
 **Project, app, variant, and persona switching.** `persona` and `variant` have no definition anywhere
 outside the plan — zero occurrences in `packages/` or `Docs/Spec/`. Project and app switching is

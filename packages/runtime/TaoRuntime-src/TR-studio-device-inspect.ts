@@ -290,10 +290,15 @@ export function moveRenderFor(
   if (neighbour === undefined) {
     return undefined
   }
+  // A move names the gap it lands in, by both of the renders that bound it — the same thing the
+  // browser canvas sends when a render is dropped between two others. Naming only one side means
+  // something stricter than intended: a before-only anchor asks to become the block's first render,
+  // which Studio refuses outright unless that anchor really is first.
+  const beyond = direction === 'up' ? siblings[index - 2] : siblings[index + 2]
+  const [after, before] = direction === 'up' ? [beyond, neighbour] : [neighbour, beyond]
   return {
-    ...(direction === 'up'
-      ? { beforeId: studioRenderId(neighbour.identity) }
-      : { afterId: studioRenderId(neighbour.identity) }),
+    ...(after === undefined ? {} : { afterId: studioRenderId(after.identity) }),
+    ...(before === undefined ? {} : { beforeId: studioRenderId(before.identity) }),
     draggedId: studioRenderId(target.identity),
     kind: 'move-render',
   }

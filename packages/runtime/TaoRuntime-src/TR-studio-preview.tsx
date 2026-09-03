@@ -203,20 +203,38 @@ export const StudioPreview = {
   ReplayHost,
 } as const
 
-/** ReplayHost restores every registered semantic domain before mounting the generated app. */
+/**
+ * ReplayHost restores every registered semantic domain before mounting the generated app.
+ *
+ * It identifies the artifact by content rather than by object identity. The generated preview roots
+ * rebuild their cell runtime — and with it the replay artifact — on every render, so keying the
+ * restore on identity restarted it every render; restarting sets state, which renders again, and
+ * the cell spins until React gives up with "Maximum update depth exceeded". Every cell carrying a
+ * replay was affected, on the device and in the browser canvas alike.
+ *
+ * The content key is only computed when the artifact's identity changes, so a caller that keeps it
+ * stable pays nothing for this.
+ */
 function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCaptureArtifact }): React.ReactElement {
   const [ready, setReady] = React.useState(() => props.replay === undefined)
   const [error, setError] = React.useState<unknown>()
+  const replay = props.replay
+  const replayKey = React.useMemo(() => replay === undefined ? undefined : JSON.stringify(replay), [replay])
+  // The effect restores whichever artifact is current when it runs; the key decides only *when* to
+  // run, so this ref keeps the two from disagreeing about which artifact that is.
+  const pending = React.useRef(replay)
+  pending.current = replay
   React.useEffect(() => {
     let active = true
-    if (props.replay === undefined) {
+    const artifact = pending.current
+    if (artifact === undefined) {
       setReady(true)
       return () => {
         active = false
       }
     }
     setReady(false)
-    void restoreRuntimeCapture(props.replay).then(
+    void restoreRuntimeCapture(artifact).then(
       () => {
         if (active) {
           setReady(true)
@@ -231,7 +249,7 @@ function ReplayHost(props: { children?: React.ReactNode; replay?: TaoRuntimeCapt
     return () => {
       active = false
     }
-  }, [props.replay])
+  }, [replayKey])
   if (error !== undefined) {
     return React.createElement(StudioPreviewFailure, { error })
   }
