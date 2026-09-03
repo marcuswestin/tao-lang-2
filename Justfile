@@ -45,6 +45,14 @@ studio project=".":
 studio-native project=".":
     ./dev studio-native "{{ project }}"
 
+# Install the Tao Companion development build on a connected iPhone or iPad, once per native change
+studio-companion-install device="":
+    ./dev studio-companion-install --device "{{ device }}"
+
+# Install the Tao Companion development build on an iOS simulator; no phone, pairing, or unlock needed
+studio-companion-simulator simulator="":
+    ./dev studio-companion-install --simulator "{{ simulator }}"
+
 # Run the focused Tao Studio package suite
 studio-test:
     bun test packages/studio/studio-tests

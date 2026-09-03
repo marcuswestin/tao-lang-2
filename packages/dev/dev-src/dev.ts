@@ -233,6 +233,32 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('studio-companion-install')
+    .description('Build and install the Tao Companion development build on an iPhone, iPad, or iOS simulator.')
+    .option('--device <name>', 'The device name as Finder and Xcode show it.')
+    .option('--simulator [name]', 'An iOS simulator name or UDID; the booted one by default.')
+    .action(async (options: { device?: string; simulator?: boolean | string }) => {
+      try {
+        if (options.device !== undefined && options.simulator !== undefined) {
+          Errors.throwUserInput('Install on one target at a time: pass --device or --simulator, not both.')
+        }
+        if (options.simulator !== undefined) {
+          const { runStudioCompanionInstallOnSimulator } = await import('./studio/StudioCompanionSimulator')
+          const name = typeof options.simulator === 'string' ? options.simulator : ''
+          Platform.runtimeProcess.exit(await runStudioCompanionInstallOnSimulator({ name }))
+        }
+        if (options.device === undefined) {
+          Errors.throwUserInput('Name the target: --device <name> for an iPhone or iPad, or --simulator [name].')
+        }
+        const { runStudioCompanionInstall } = await import('./studio/StudioCompanionDevice')
+        Platform.runtimeProcess.exit(await runStudioCompanionInstall({ deviceName: options.device }))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('studio-native')
     .description('Launch Tao Studio in its local Electrobun shell.')
     .argument('[project]', 'Tao project folder.', '.')
