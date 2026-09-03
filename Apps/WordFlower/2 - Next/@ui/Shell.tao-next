@@ -1,4 +1,4 @@
-use CurrentSession from @data
+use FocusSessions from @data
 use SignedOutNav from @nav
 use Col, Row, Text, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
@@ -10,6 +10,9 @@ use FormButton from @tao/ui/basic
 // lives on its mount and a branch that unmounted it would drop where the person was.
 workspace
 scene WordFlowerShell(Navigator nav) {
+   query FocusSessions as CurrentSession {
+      limit 1
+   }
    render Col() [fill] {
       Navigator() [fill]
       when CurrentSession {

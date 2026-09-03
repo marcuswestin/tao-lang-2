@@ -5,7 +5,7 @@ use Local from @tao/data/providers/local
 use WordFlowerShell, WorkspaceRow from @ui
 use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
-// Tranche status: absorbed
+// Tranche status: open
 //
 // STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
 // shared by Tao tests, review tooling, and Studio. `fixture` owns reusable data/identity setup;
@@ -354,8 +354,6 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // - `do Finish(Document)` invokes a command, mirroring `do SaveWorkspace()`; `Finish with { Document }`
 //   derives a command value with a slot filled, for surfaces and menus. `do X with { }` retires as
 //   redundant
-// - A module-level `query` stays. It lost the feature that forced it -- a shell that is a view holds
-//   its own query -- and is kept only because retiring it is a separate decision; it is flagged
 //
 // THE INTERACTION SYSTEM, PART TWO: THE OUTLINE AND `(title)`. The runtime now keeps a derived,
 // read-only model of the running app -- regions, collections, their items, action controls, input
@@ -382,6 +380,21 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   synchronously; everything else evaluates only while a consumer is attached
 // - Provenance rides two tiers -- entity and handle per item, loop and entity per collection --
 //   and is never a test selector
+//
+// INTERACTION CLEANUP. The shell's move into an ordinary scene left two general mechanisms without
+// a forcing feature (`Design - Keyboard driven apps.md`; `Plan`, T3½).
+//
+// This tranche decides:
+// - A module-level `query` is not a declaration in the language today. The parser recognizes that
+//   shape only so the validator can explain that it is not supported, could be added, and has no
+//   strict technical obstacle; it creates no export, declaration, or runtime binding. Each scene or
+//   view that needs the value owns an ordinary local query instead, as the three `CurrentSession`
+//   reads below demonstrate
+// - A `when` used as a configuration value compiles directly as its value expression. The generic
+//   `TR.Deferred` wrapper retires; `TR.Interaction.Deferred` is a separate interaction-runtime
+//   mechanism and remains
+// - Absence unification in `commonType`, union-to-union assignability, and property-position `with`
+//   remain as general improvements
 project {
    id "wordflower"
    name "WordFlower"

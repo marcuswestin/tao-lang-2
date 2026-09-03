@@ -1,4 +1,4 @@
-use CurrentSession, FocusSessions from @data
+use FocusSessions from @data
 use Interval from @tao/time
 use Col, Row, Text from @tao/ui
 use FormButton from @tao/ui/basic
@@ -11,6 +11,9 @@ use FormButton from @tao/ui/basic
 // view creates the row and nothing else.
 folder
 view FocusStarter() {
+   query FocusSessions as CurrentSession {
+      limit 1
+   }
    action Start(Length duration) {
       create FocusSession {
          EndsAt: now + Length
@@ -39,6 +42,9 @@ view FocusStarter() {
 // resuming re-anchors the deadline to the remainder, so paused time is not lost.
 folder
 view FocusBar() {
+   query FocusSessions as CurrentSession {
+      limit 1
+   }
    state Tick = Interval(1.s)
    render Row() [subtlePanel, gap 12] {
       Text("Focus session") [eyebrow]
