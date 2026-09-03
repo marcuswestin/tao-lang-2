@@ -449,10 +449,46 @@ Text handles are positional — `T1` is the first literal in the project — so 
 them. The tool description said they expire, which is not a mechanism. The conversation now remembers the
 literal each handle was issued for and refuses a handle that no longer names it.
 
+### What the second review changed, and what the record got wrong
+
+Two reviews ran the finished slice against HNReader and WordFlower. They found one hole in the central claim
+and a fact layer that was confidently wrong, and they caught this document overstating both.
+
+**The gate was not a gate.** Scenario mode promised it could not change app code, and enforced that by which
+tools existed. But `proposeScenario` built its fixture by splicing model-supplied strings into the app's own
+source, so a row reading `Title: "x" }` closes the fixture block and opens an `action` — and the formatter
+accepts the result, because a formatter is a syntax gate and not a scope gate. This was reproduced against the
+real formatter, which emitted a top-level `action` into app source. There is now a scope gate that parses
+before and after and refuses a change that touched any top-level declaration the tool did not promise to
+author, plus a literal-only rule for fixture rows.
+
+**The fact layer was wrong on both apps.** Ten facts for HNReader, four of them false; 63 of WordFlower's 92
+bundles called unused; 25 views called uncovered that app-level scenarios do cover. The earlier record claimed
+the absence lesson had been applied — it had been applied to exactly one relation. It now holds everywhere,
+and the honest consequence is that **`improvementFacts` returns almost nothing on these two apps**: three
+statements for HNReader, two for WordFlower, all of them saying which relations this graph cannot decide.
+
+That is the real finding for Story 1, and it should be read as one: **the semantic graph as it stands cannot
+ground the advisory answers that story promised.** Five things would have to exist first — an edge from an app
+to the views its navigator reaches, `invokes` edges for commands and toolbars, `reads` that sees `order by`
+and `index` and relation traversal, `queries` that follows a relation, and some way to tell a design's
+component-default rules from its product bundles. Until then the relational half of Story 1 works and the
+advisory half does not, and the tool says so rather than inventing something plausible.
+
+**Claims in the earlier record that were wrong**, now corrected above: the transitive-coverage fix did not fix
+the case it cited (an app node has no `renders` edge, so the walk stopped immediately); the absence guard
+covered only `styled-by`; and `runTests` was never wired to the session at all, so the tool refused every call
+while the build instructions ordered the model to use it.
+
 ### Smaller things worth knowing
 
 - `overview` does not report everything its tool description once claimed; the description now says what the
-  packet actually holds.
+  packet actually holds, and `coverageOfTests`'s says it reports a last run rather than listing tests.
+- `inspect` and `trace` still truncate at a budget chosen for a 4k on-device window. In a hosted-model mode
+  that is the wrong constant, and it can drop the one edge that answers a question; it is unexamined, not
+  decided.
+- One conversation is held per project, not per browser tab, so two tabs share it and changing the mode in one
+  resets it for the other.
 - `resolveTarget` now resolves an entity's singular name (`Document` as well as `Documents`), which the
   exploration's own findings said was the model's weakest skill.
 - The snapshot is built once per turn rather than once per tool call, and invalidated when a change lands.
