@@ -25,6 +25,7 @@ type TurnResult = {
   usage?: { inputTokens?: number; outputTokens?: number }
   availability?: Availability
   codeChanges?: { granted: boolean; requests: { reason: string; missing: string }[] }
+  verdict?: { status: 'held' | 'broke' | 'unknown'; heading: string; detail?: string; broke: { name: string }[] }
 }
 
 export type StudioAgentChatPanelHooks = {
@@ -294,10 +295,31 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     if (turn.status === 'needs-approval' && (turn.pendingApprovals ?? []).length > 0) {
       askApproval(turn.pendingApprovals ?? [])
     }
+    if (turn.verdict !== undefined) {
+      showVerdict(turn.verdict)
+    }
     const codeChanges = turn.codeChanges
     if (codeChanges !== undefined && !codeChanges.granted && codeChanges.requests.length > 0) {
       askCodeChanges(codeChanges.requests[codeChanges.requests.length - 1]!)
     }
+  }
+
+  /** The app's own tests on a change that landed. This is the only thing here that can contradict the agent. */
+  function showVerdict(verdict: NonNullable<TurnResult['verdict']>): void {
+    const colour = verdict.status === 'broke' ? '#d4736b' : verdict.status === 'held' ? '#6fb38a' : '#9fb3a5'
+    const box = document.createElement('div')
+    box.style.cssText = `border:1px solid ${colour};border-radius:8px;padding:8px`
+    const heading = document.createElement('strong')
+    heading.style.color = colour
+    heading.textContent = verdict.heading
+    box.append(heading)
+    if (verdict.detail !== undefined) {
+      box.append(line(verdict.detail))
+    }
+    for (const broken of verdict.broke) {
+      box.append(line(`· ${broken.name}`, '#d4736b'))
+    }
+    log.append(box)
   }
 
   /**

@@ -5,6 +5,7 @@
 // refusal a model can read, rather than throwing or reaching for something it was not given.
 
 import { jsonSchema, tool, type ToolSet } from 'ai'
+import type { TestRunSummary } from '../agent-poc/FeatureVerdict'
 import {
   fieldStory,
   inspect,
@@ -13,7 +14,6 @@ import {
   type SemanticSnapshot,
   trace,
 } from '../agent-poc/SemanticSnapshot'
-import type { StudioTestRun } from '../StudioTestRunner'
 import { parseChecks, viewCoverage } from './AgentChatCoverage'
 import { declarationSource, fileOutlines, improvementFacts } from './AgentChatFacts'
 import { taoGuarantees } from './AgentChatGuarantees'
@@ -26,8 +26,8 @@ export type AgentChatWorld = {
   snapshot: () => Promise<SemanticSnapshot>
   files: () => Promise<readonly AgentChatFile[]>
   /** The app's own behavior tests. Slow, so a tool description says so and the model is told to use it sparingly. */
-  runTests?: () => Promise<StudioTestRun>
-  testStatus?: () => StudioTestRun | undefined
+  runTests?: () => Promise<TestRunSummary | undefined>
+  testStatus?: () => TestRunSummary | undefined
   /** Studio's real compile state, which sees validator errors the snapshot's parse does not. */
   compile?: () => { status: string; diagnostics: readonly { message: string; filePath?: string }[] }
   /** The app's `.test.tao` sidecars, which the semantic graph never sees. */
@@ -224,6 +224,9 @@ export function readTools(world: AgentChatWorld, record: (call: AgentChatToolCal
           return capture('runTests', {}, refusal('This session cannot run tests.'))
         }
         const run = await world.runTests()
+        if (run === undefined) {
+          return capture('runTests', {}, refusal('This Studio session has no test runtime.'))
+        }
         return capture('runTests', {}, {
           failed: run.failed,
           failures: run.failures.map(failure => ({ message: failure.message, name: failure.name })),

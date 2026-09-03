@@ -2,8 +2,10 @@
 
 import { FS, Repo } from '@shared'
 import type { ToolSet } from 'ai'
+import { type FeatureTestVerdict, featureTestVerdict, type TestRunSummary } from '../agent-poc/FeatureVerdict'
 import { buildSemanticSnapshot, resolveTarget, type SemanticSnapshot } from '../agent-poc/SemanticSnapshot'
 import type { StudioProjectSession } from '../StudioProjectSession'
+import type { StudioTestRunner } from '../StudioTestRunner'
 import { authoringTools, type CodeChangeRequest } from './AgentChatAuthoring'
 import { declarationSource } from './AgentChatFacts'
 import { askInstructions, buildInstructions, scenarioInstructions } from './AgentChatInstructions'
@@ -81,6 +83,10 @@ class AgentChatConversation {
   #calls: AgentChatToolCall[] = []
   #staged = new Map<string, StagedChange>()
   #issuedTexts = new Map<string, string>()
+  /** The app's tests as they stood before this conversation changed anything. */
+  #testBaseline: TestRunSummary | undefined
+  #tests: StudioTestRunner | undefined
+  #lastVerdict: FeatureTestVerdict | undefined
   #mode: 'ask' | 'build' | 'scenario' = 'ask'
   #codeChangesGranted = false
   #codeChangeRequests: CodeChangeRequest[] = []
@@ -147,17 +153,17 @@ class AgentChatConversation {
     const record = (call: AgentChatToolCall) => this.#calls.push(call)
     const writes = this.#writeWorld()
     if (this.#mode === 'ask') {
-      return readTools(this.#world, record)
+      return readTools(this.#reading(), record)
     }
     const all = writeTools(writes, this.#staged, record, this.#issuedTexts)
     if (this.#mode === 'build') {
-      return { ...readTools(this.#world, record), ...all }
+      return { ...readTools(this.#reading(), record), ...all }
     }
     const landing = Object.fromEntries(
       Object.entries(all).filter(([name]) => (APPROVAL_REQUIRED as readonly string[]).includes(name)),
     )
     return {
-      ...readTools(this.#world, record),
+      ...readTools(this.#reading(), record),
       ...authoringTools(writes, stageChange(writes, this.#staged), this.#codeChangeRequests, record),
       ...landing,
       // Applying and undoing are needed for an authored scenario or check; changing app code is not, and is
@@ -194,10 +200,25 @@ class AgentChatConversation {
     return await this.#record(turn)
   }
 
+  /**
+   * The read side of the world. Running the app's tests is a read, and it is also how a baseline gets taken:
+   * a verdict on a change is only worth anything measured against a run from before it.
+   */
+  #reading(): AgentChatWorld {
+    return {
+      ...this.#world,
+      runTests: async () => {
+        const run = await this.#runTests()
+        this.#testBaseline ??= run
+        return run
+      },
+    }
+  }
+
   /** The write side of the world. Every change goes through one Studio mutation that compiles or rolls back. */
   #writeWorld(): AgentChatWriteWorld {
     return {
-      ...this.#world,
+      ...this.#reading(),
       apply: async change => {
         const result = await this.#session.applyAgentPocFiles({
           edits: change.edits.map(edit => ({ content: edit.after, path: edit.path })),
@@ -213,6 +234,13 @@ class AgentChatConversation {
         }
       },
       sourceVersionOf: async path => (await this.#session.readFile(path)).sourceVersion,
+      verdict: async () => {
+        const after = await this.#runTests()
+        // Without a baseline the verdict says so rather than blaming or excusing this change.
+        this.#lastVerdict = featureTestVerdict(this.#testBaseline, after)
+        this.#testBaseline = after
+        return this.#lastVerdict
+      },
       undo: async () => {
         const result = await this.#session.undoAgentPocFiles(crypto.randomUUID())
         this.#world.invalidate()
@@ -238,11 +266,26 @@ class AgentChatConversation {
         diff: this.#diffFor(approval.input),
       })),
       codeChanges: this.codeChanges,
+      ...(this.#lastVerdict === undefined ? {} : { verdict: this.#lastVerdict }),
       status: turn.status,
       steps: turn.steps,
       text: turn.text,
       toolCalls: turn.toolCalls,
       usage: turn.usage,
+    }
+  }
+
+  /** The test runner belongs to the Studio service, not the session, so the route supplies it per request. */
+  useTestRunner(tests: StudioTestRunner | undefined): void {
+    this.#tests = tests
+  }
+
+  /** runTests reads the app's own tests, and reports nothing rather than throwing when it cannot. */
+  async #runTests(): Promise<TestRunSummary | undefined> {
+    try {
+      return this.#tests === undefined ? undefined : await this.#tests.run()
+    } catch {
+      return undefined
     }
   }
 
@@ -310,15 +353,21 @@ function conversationFor(session: StudioProjectSession): AgentChatConversation {
 export function conversationForTesting(
   session: StudioProjectSession,
   provider: AgentChatProvider,
-): { handle: (command: string, body: Json) => Promise<unknown> } {
+): { handle: (command: string, body: Json, tests?: StudioTestRunner) => Promise<unknown> } {
   const conversation = new AgentChatConversation(session, provider)
   conversations.set(session, conversation)
-  return { handle: async (command, body) => await AgentChat.handle(session, command, body) }
+  return { handle: async (command, body, tests) => await AgentChat.handle(session, command, body, tests) }
 }
 
 export const AgentChat = {
-  async handle(session: StudioProjectSession, command: string, body: Json): Promise<unknown> {
+  async handle(
+    session: StudioProjectSession,
+    command: string,
+    body: Json,
+    tests?: StudioTestRunner,
+  ): Promise<unknown> {
     const conversation = conversationFor(session)
+    conversation.useTestRunner(tests)
     if (command === 'availability') {
       return conversation.provider.availability()
     }

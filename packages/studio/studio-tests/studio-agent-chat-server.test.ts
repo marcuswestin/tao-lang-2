@@ -94,8 +94,27 @@ function session(applied: { path: string; content: string }[]): StudioProjectSes
   } as unknown as StudioProjectSession
 }
 
-function chat(turns: readonly Turn[], applied: { path: string; content: string }[] = []) {
-  return conversationForTesting(session(applied), new AgentChatProvider({}, scripted(turns)))
+/** A test runner whose results are scripted, so a verdict can be driven without running a suite. */
+function runner(results: { failed: number; failures: { message: string; name: string }[]; passed: number }[]) {
+  let call = 0
+  return {
+    run: async () => {
+      const result = results[Math.min(call, results.length - 1)]!
+      call += 1
+      return { ...result, status: 'passed' }
+    },
+  }
+}
+
+function chat(
+  turns: readonly Turn[],
+  applied: { path: string; content: string }[] = [],
+  tests?: ReturnType<typeof runner>,
+) {
+  const it = conversationForTesting(session(applied), new AgentChatProvider({}, scripted(turns)))
+  return {
+    handle: async (command: string, body: Record<string, unknown>) => await it.handle(command, body, tests as never),
+  }
 }
 
 Describe('Studio agent chat server', () => {
@@ -215,6 +234,44 @@ Describe('Studio agent chat server', () => {
     await it.handle('respond', { responses: [{ approvalId: approvals[0]!.approvalId, approved: false }] })
 
     Expect(applied).toEqual([])
+  })
+
+  Test('a change that breaks a test is reported as breaking it, not described as done', async () => {
+    // The app passes before the change and fails after it, so the failure belongs to this change.
+    const tests = runner([
+      { failed: 0, failures: [], passed: 2 },
+      { failed: 1, failures: [{ message: 'Expected text "Hello"', name: 'greets' }], passed: 1 },
+    ])
+    const applied: { path: string; content: string }[] = []
+    const it = chat(
+      [
+        { call: { input: {}, name: 'runTests' } },
+        {
+          call: {
+            input: { declaration: 'Greeting', replacement: 'view Greeting() {\n   render Text("Hi")\n}' },
+            name: 'proposeEdit',
+          },
+        },
+        { call: { input: { changeId: 'change-1' }, name: 'applyChange' } },
+        { text: 'Applied, but it broke a test.' },
+      ],
+      applied,
+      tests,
+    )
+    await it.handle('mode', { mode: 'build' })
+    await it.handle('enable', { enabled: true })
+    // The first run is the baseline the model takes before changing anything.
+    const asked = await it.handle('send', { message: 'say Hi instead' }) as Record<string, unknown>
+    const approvals = asked['pendingApprovals'] as { approvalId: string }[]
+
+    const done = await it.handle('respond', {
+      responses: [{ approvalId: approvals[0]!.approvalId, approved: true }],
+    }) as Record<string, unknown>
+
+    const verdict = done['verdict'] as { status: string; heading: string; broke: { name: string }[] }
+    Expect(verdict.status).toBe('broke')
+    Expect(verdict.heading).toBe('This change breaks 1 test the app passed before it.')
+    Expect(verdict.broke.map(test => test.name)).toEqual(['greets'])
   })
 
   Test('scenario mode withholds the code-change tools until a person allows them', async () => {

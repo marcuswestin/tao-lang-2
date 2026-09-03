@@ -23,6 +23,11 @@ export type StagedChange = {
 }
 
 export type AgentChatWriteWorld = AgentChatWorld & {
+  /**
+   * The verdict on a change that just landed, judged by the app's own tests against the last run taken
+   * before it. Reported by the tool so the model must read it, and by the turn so the panel can show it.
+   */
+  verdict?: () => Promise<{ heading: string; status: string; broke: readonly { name: string }[] } | undefined>
   /** Applies a staged change as one mutation: compiled once, rolled back whole if the compile fails. */
   apply: (change: StagedChange) => Promise<{ status: string; message: string; rolledBack: boolean }>
   undo: () => Promise<{ status: string; message: string; restored: readonly string[] }>
@@ -115,6 +120,7 @@ export function writeTools(
           staged.delete(changeId)
           // Text handles are positional, so a change that lands repoints them all.
           issued.clear()
+          const verdict = result.rolledBack ? undefined : await world.verdict?.()
           return capture('applyChange', { changeId }, {
             applied: !result.rolledBack,
             compile: result.status,
@@ -122,6 +128,16 @@ export function writeTools(
             ...(result.rolledBack
               ? { note: 'The compile failed, so every file was restored. Read the message and propose a fix.' }
               : {}),
+            ...(verdict === undefined ? {} : {
+              tests: verdict.heading,
+              ...(verdict.status === 'broke'
+                ? {
+                  broke: verdict.broke.map(test => test.name),
+                  note:
+                    'This change broke tests the app passed before it. Say so before describing what you built, and offer to undo it.',
+                }
+                : {}),
+            }),
           })
         } catch (error) {
           // A conflict means a file moved under the change. Re-proposing against current source is the fix.

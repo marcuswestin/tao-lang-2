@@ -27,6 +27,7 @@ import {
   type StudioSessionManager,
   type StudioSessionResource,
 } from './StudioSessionManager'
+import type { StudioTestRunner } from './StudioTestRunner'
 import { StudioWelcome } from './StudioWelcome'
 
 export type StudioServerOptions = {
@@ -213,6 +214,7 @@ export async function startStudioSessionServer(
             ...requestOptions,
             previewUrl: resource.previewUrl ?? requestOptions.previewUrl,
           },
+          resource.tests,
         )
       } catch (error) {
         return errorResponse(request, url, requestOptions, error)
@@ -468,6 +470,7 @@ async function handleRequest(
   request: Request,
   url: URL,
   options: StudioServerOptions,
+  tests?: StudioTestRunner,
 ): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/') {
     return htmlResponse(studioClientHtml(options))
@@ -530,6 +533,7 @@ async function handleRequest(
         session,
         url.pathname.slice('/api/agent-chat/'.length),
         (await request.json()) as Record<string, unknown>,
+        tests,
       ),
     )
   }
