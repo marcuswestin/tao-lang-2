@@ -44,10 +44,11 @@ export type StudioInsertComponentPatchRequest = {
   kind: 'insert-component'
 }
 
-/** StudioInsertProjectViewPatchRequest inserts a zero-argument project view invocation into a Tao render block. */
+/** StudioInsertProjectViewPatchRequest inserts a project view with parser-resolved lexical bindings. */
 export type StudioInsertProjectViewPatchRequest = {
   afterId?: string
   beforeId?: string
+  bindings?: Readonly<Record<string, string>>
   kind: 'insert-project-view'
   viewName: string
 }
@@ -369,7 +370,7 @@ async function applyPatchContent(
     'bind-sketch-field': async action => await bindSketchField(document, action),
     'insert-captured-fixture': async action => await insertCapturedFixture(document, action),
     'insert-component': async action => await insertComponent(document, action.component, action),
-    'insert-project-view': async action => await insertProjectView(document, action.viewName, action),
+    'insert-project-view': async action => await insertProjectView(document, action),
     'insert-separator': async action => await insertSeparator(document, action),
     'insert-spacer': async action => await insertSpacer(document, action),
     'move-render': async action => await moveRender(document, action),
@@ -972,16 +973,25 @@ async function insertViewRender(
   return await Formatter.formatCode(insertStudioSnippetAtGap(document, insertion, gap))
 }
 
-/** insertProjectView inserts a zero-argument project view invocation into the first render block. */
+/** insertProjectView binds required parameters from the exact target gap's lexical scope. */
 async function insertProjectView(
   document: AST.Document,
-  viewName: string,
-  gap: StudioRenderGap = {},
+  request: StudioInsertProjectViewPatchRequest,
 ): Promise<string> {
   assertNoSyntaxErrors(document)
-  const target = studioInsertionRender(document.parseResult.value)
-  requireInsertableProjectView(document.parseResult.value, viewName, AST.findOwningView(target)?.name)
-  return await insertViewRender(document, `${viewName}()`, gap)
+  validateInsertProjectViewRequest(request)
+  const target = studioInsertionTarget(document, request)
+  const view = requireInsertableProjectView(
+    document.parseResult.value,
+    request.viewName,
+    AST.findOwningView(target.block)?.name,
+  )
+  const arguments_ = projectViewArguments(
+    view,
+    visibleInsertionValues(target.block, target.offset),
+    request.bindings ?? {},
+  )
+  return await insertViewRender(document, `${request.viewName}(${arguments_})`, request)
 }
 
 /** toggleFlowDirection changes the nearest Row/Col that directly or transitively owns a leaf render. */
@@ -1844,17 +1854,150 @@ async function moveRender(document: AST.Document, request: StudioMoveRenderReque
   )
 }
 
-function requireInsertableProjectView(file: AST.TaoFile, viewName: string, targetViewName: string | undefined): void {
-  const view = file.statements.filter(AST.isViewDeclaration).find(candidate => candidate.name === viewName)
-  if (view === undefined) {
-    throw new Errors.UserInputError(`Project view is not declared in this source file: ${viewName}`)
+function validateInsertProjectViewRequest(request: StudioInsertProjectViewPatchRequest): void {
+  requireExactKeys(request, ['afterId', 'beforeId', 'bindings', 'kind', 'viewName'], 'Insert project view request')
+  requireIdentifier(request.viewName, 'project view')
+  if (request.bindings === undefined) {
+    return
   }
-  if (AST.parametersOf(view).length > 0) {
-    throw new Errors.UserInputError(`Cannot insert parameterized project view without arguments: ${viewName}`)
+  if (!isObject(request.bindings)) {
+    throw new Errors.UserInputError('Studio project-view lexical bindings must be an object.')
+  }
+  for (const [parameterName, valueName] of Object.entries(request.bindings)) {
+    requireIdentifier(parameterName, 'project-view parameter')
+    if (typeof valueName !== 'string') {
+      throw new Errors.UserInputError(`Studio lexical binding for ${parameterName} must name a value.`)
+    }
+    requireIdentifier(valueName, 'lexical binding')
+  }
+}
+
+function requireInsertableProjectView(
+  file: AST.TaoFile,
+  viewName: string,
+  targetViewName: string | undefined,
+): AST.ViewDeclaration {
+  const views = file.statements.filter(AST.isViewDeclaration).filter(candidate => candidate.name === viewName)
+  const view = views.length === 1 ? views[0] : undefined
+  if (view === undefined) {
+    throw new Errors.UserInputError(
+      views.length === 0
+        ? `Project view is not declared in this source file: ${viewName}`
+        : `Project view is not uniquely declared in this source file: ${viewName}`,
+    )
   }
   if (viewName === targetViewName) {
     throw new Errors.UserInputError(`Cannot insert project view ${viewName} into its own render block.`)
   }
+  return view
+}
+
+type StudioLexicalValue =
+  | AST.ParameterDeclaration
+  | AST.ForStatement
+  | ReturnType<typeof AST.valueDeclarationsOwnedByBlock>[number]
+
+function visibleInsertionValues(block: AST.Block, insertionOffset: number): ReadonlyMap<string, StudioLexicalValue> {
+  const values = new Map<string, StudioLexicalValue>()
+  const blocks = [block, ...AST.ancestorBlocks(block)]
+  for (const candidateBlock of blocks) {
+    const local = AST.valueDeclarationsOwnedByBlock(candidateBlock)
+      .filter(declaration => (declaration.$cstNode?.offset ?? Number.MAX_SAFE_INTEGER) < insertionOffset)
+      .toSorted((left, right) => (right.$cstNode?.offset ?? 0) - (left.$cstNode?.offset ?? 0))
+    for (const declaration of local) {
+      addVisibleInsertionValue(values, declaration)
+    }
+    const loop = AST.forBindingOwnedByBlock(candidateBlock)
+    if (loop !== undefined) {
+      addVisibleInsertionValue(values, loop)
+    }
+  }
+  const owner = AST.findOwningView(block)
+  for (const parameter of owner === undefined ? [] : AST.parametersOf(owner)) {
+    addVisibleInsertionValue(values, parameter)
+  }
+  return values
+}
+
+function addVisibleInsertionValue(values: Map<string, StudioLexicalValue>, declaration: StudioLexicalValue): void {
+  const name = Type.declarationName(declaration)
+  if (!values.has(name)) {
+    values.set(name, declaration)
+  }
+}
+
+function projectViewArguments(
+  view: AST.ViewDeclaration,
+  visible: ReadonlyMap<string, StudioLexicalValue>,
+  requested: Readonly<Record<string, string>>,
+): string {
+  const parameters = AST.parametersOf(view)
+  const parametersByName = new Map(parameters.map(parameter => [Type.parameterName(parameter), parameter]))
+  const bindings = new Map<string, string>()
+  for (const [parameterName, valueName] of Object.entries(requested)) {
+    const parameter = parametersByName.get(parameterName)
+    if (parameter === undefined) {
+      throw new Errors.UserInputError(`Project view ${view.name} has no parameter named ${parameterName}.`)
+    }
+    const value = visible.get(valueName)
+    if (value === undefined) {
+      throw new Errors.UserInputError(`Lexical value ${valueName} is not visible at the project-view insertion gap.`)
+    }
+    if (!typesExactlyMatch(parameter, value)) {
+      throw new Errors.UserInputError(
+        `Lexical value ${valueName} does not exactly match project-view parameter ${parameterName}.`,
+      )
+    }
+    bindings.set(parameterName, valueName)
+  }
+
+  const required = parameters.filter(parameter =>
+    parameter.defaultValue === undefined && !bindings.has(Type.parameterName(parameter))
+  )
+  const unresolved: string[] = []
+  const ambiguous: string[] = []
+  const requiredTypeCounts = new Map<string, number>()
+  for (const parameter of required) {
+    const key = Type.identityKey(Type.ofParameter(parameter))
+    if (key !== undefined) {
+      requiredTypeCounts.set(key, (requiredTypeCounts.get(key) ?? 0) + 1)
+    }
+  }
+  for (const parameter of required) {
+    const parameterName = Type.parameterName(parameter)
+    const key = Type.identityKey(Type.ofParameter(parameter))
+    if (key === undefined) {
+      unresolved.push(parameterName)
+      continue
+    }
+    const candidates = [...visible.entries()].filter(([, value]) =>
+      Type.identityKey(Type.ofValueDeclaration(value)) === key
+    )
+    if (candidates.length === 0) {
+      unresolved.push(parameterName)
+    } else if (candidates.length > 1 || (requiredTypeCounts.get(key) ?? 0) > 1) {
+      ambiguous.push(parameterName)
+    } else {
+      bindings.set(parameterName, candidates[0]![0])
+    }
+  }
+  if (unresolved.length > 0 || ambiguous.length > 0) {
+    const details = [
+      ...(unresolved.length === 0 ? [] : [`unresolved required parameters: ${unresolved.join(', ')}`]),
+      ...(ambiguous.length === 0 ? [] : [`ambiguous required parameters: ${ambiguous.join(', ')}`]),
+    ].join('; ')
+    throw new Errors.UserInputError(`Cannot insert parameterized project view ${view.name}; ${details}.`)
+  }
+  return parameters.flatMap(parameter => {
+    const parameterName = Type.parameterName(parameter)
+    const valueName = bindings.get(parameterName)
+    return valueName === undefined ? [] : [`${parameterName}: ${valueName}`]
+  }).join(', ')
+}
+
+function typesExactlyMatch(parameter: AST.ParameterDeclaration, value: StudioLexicalValue): boolean {
+  const expected = Type.identityKey(Type.ofParameter(parameter))
+  return expected !== undefined && expected === Type.identityKey(Type.ofValueDeclaration(value))
 }
 
 const studioComponentSnippets: Readonly<Record<StudioComponentKind, string>> = {
@@ -2595,14 +2738,13 @@ function studioComponentInsertionOffset(file: AST.TaoFile, text: string): number
   return blockCloseBraceOffset(text, studioInsertionRender(file).block)
 }
 
-function insertStudioSnippetAtGap(document: AST.Document, snippet: string, gap: StudioRenderGap): string {
+type StudioInsertionTarget = Readonly<{ block: AST.Block; offset: number }>
+
+function studioInsertionTarget(document: AST.Document, gap: StudioRenderGap): StudioInsertionTarget {
   const source = document.textDocument.getText()
   if (gap.afterId === undefined && gap.beforeId === undefined) {
-    return insertStudioComponentSnippet(
-      source,
-      studioComponentInsertionOffset(document.parseResult.value, source),
-      snippet,
-    )
+    const block = studioInsertionRender(document.parseResult.value).block
+    return { block, offset: blockCloseBraceOffset(source, block) }
   }
   if (gap.afterId !== undefined) {
     requireLocalRenderId(document, gap.afterId, 'insert renders')
@@ -2624,6 +2766,21 @@ function insertStudioSnippetAtGap(document: AST.Document, snippet: string, gap: 
     throw new Errors.UserInputError('Can only insert into a drop gap between direct child view renders.')
   }
   const block = targetStatement.$container
+  const slices = blockStatementSlices(source, block)
+  const edit = studioSnippetInsertionEdit(source, slices, gap, '')
+  return { block, offset: edit.start }
+}
+
+function insertStudioSnippetAtGap(document: AST.Document, snippet: string, gap: StudioRenderGap): string {
+  const source = document.textDocument.getText()
+  if (gap.afterId === undefined && gap.beforeId === undefined) {
+    return insertStudioComponentSnippet(
+      source,
+      studioComponentInsertionOffset(document.parseResult.value, source),
+      snippet,
+    )
+  }
+  const { block } = studioInsertionTarget(document, gap)
   const slices = blockStatementSlices(source, block)
   return applySourceEdits(source, [studioSnippetInsertionEdit(source, slices, gap, snippet)])
 }

@@ -182,7 +182,7 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content).toContain('use Stack, Text from @tao/ui')
   })
 
-  Test('rejects missing and parameterized project views', async () => {
+  Test('rejects missing, unresolved parameterized, and recursive project views', async () => {
     const document = await parseDocument(`
       view MainView() {
          render Stack() { Text("First") }
@@ -200,11 +200,84 @@ Describe('Studio source-action patch bus', () => {
     await Expect(SourceActions.applyStudioPatch(document, {
       kind: 'insert-project-view',
       viewName: 'Card',
-    })).rejects.toThrow('Cannot insert parameterized project view')
+    })).rejects.toThrow('unresolved required parameters: Title')
     await Expect(SourceActions.applyStudioPatch(document, {
       kind: 'insert-project-view',
       viewName: 'MainView',
     })).rejects.toThrow('Cannot insert project view MainView into its own render block')
+  })
+
+  Test('auto-binds a parameterized project view from the exact enclosing loop row', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+      data Playlists / Playlist { Title text }
+      view MainView() {
+         query Playlists
+         render Col() {
+            loop Playlists / Playlist {
+               Text(Playlist.Title)
+               Text("After")
+      }  }  }
+      view PlaylistRow(Playlist) { render Text(Playlist.Title) }
+    `)
+    const ids = renderIdsByText(document, ['Playlist.Title', 'After'])
+    const patch = await SourceActions.applyStudioPatch(document, {
+      afterId: ids['Playlist.Title']!,
+      beforeId: ids['After']!,
+      kind: 'insert-project-view',
+      viewName: 'PlaylistRow',
+    })
+
+    Expect(patch.content).toContain(
+      'Text(Playlist.Title)\n         PlaylistRow(Playlist: Playlist)\n         Text("After")',
+    )
+  })
+
+  Test('uses the nearest same-named loop binding without treating its shadowed outer value as ambiguous', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+      data Playlists / Playlist { Title text }
+      view MainView() {
+         query Playlists
+         render Col() {
+            loop Playlists / Playlist {
+               loop Playlists / Playlist {
+                  Text(Playlist.Title)
+                  Text("After")
+      }  }  }  }
+      view PlaylistRow(Playlist) { render Text(Playlist.Title) }
+    `)
+    const ids = renderIdsByText(document, ['Playlist.Title', 'After'])
+    const patch = await SourceActions.applyStudioPatch(document, {
+      afterId: ids['Playlist.Title']!,
+      beforeId: ids['After']!,
+      kind: 'insert-project-view',
+      viewName: 'PlaylistRow',
+    })
+
+    Expect(patch.content).toContain('PlaylistRow(Playlist: Playlist)')
+  })
+
+  Test('rejects ambiguous inferred values but accepts one explicit parser-resolved lexical binding', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+      data Playlists / Playlist { Title text }
+      view MainView(Left Playlist, Right Playlist) {
+         render Col() { Text(Left.Title) }
+      }
+      view PlaylistRow(Playlist) { render Text(Playlist.Title) }
+    `)
+
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'insert-project-view',
+      viewName: 'PlaylistRow',
+    })).rejects.toThrow('ambiguous required parameters: Playlist')
+    const patch = await SourceActions.applyStudioPatch(document, {
+      bindings: { Playlist: 'Right' },
+      kind: 'insert-project-view',
+      viewName: 'PlaylistRow',
+    })
+    Expect(patch.content).toContain('PlaylistRow(Playlist: Right)')
   })
 
   Test('adds and replaces semantic layout entries', async () => {
