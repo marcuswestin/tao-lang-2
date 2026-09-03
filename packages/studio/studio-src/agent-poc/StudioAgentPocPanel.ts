@@ -4,6 +4,7 @@ import { StudioApiClient } from '../client/StudioApiClient'
 import { StudioInspector } from '../StudioInspector'
 import type { StudioInspectorSelection } from '../StudioInspector'
 import type { StudioCanonicalSourceAction, StudioSourceActionIdentity } from '../StudioProtocol'
+import { type FeatureTestVerdict, featureTestVerdict, type TestRunSummary } from './FeatureVerdict'
 
 type Json = Record<string, unknown>
 type Finding = { kind: 'fact' | 'inference' | 'suggestion'; text: string; evidence: string[] }
@@ -68,6 +69,19 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
   let lastCheckpoint:
     | { id: string; identity: StudioSourceActionIdentity; path: string; afterVersion: string }
     | undefined
+
+  // The app's tests as they stood before the agent touched anything. Taken while the plan is on screen, so
+  // a failure after applying can be attributed to this change rather than to whatever was already red.
+  let testBaseline: Promise<TestRunSummary | undefined> | undefined
+
+  async function runAppTests(): Promise<TestRunSummary | undefined> {
+    try {
+      return await StudioApiClient.testRun()
+    } catch {
+      // A Studio service without the test runtime simply yields no verdict.
+      return undefined
+    }
+  }
 
   reviewButton.addEventListener('click', () => void review())
   const featureInput = panel.querySelector<HTMLInputElement>('.poc-feature')!
@@ -187,6 +201,9 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
       details.append(pre)
       body.append(details)
     }
+    // Start measuring the app's current behavior now, while a person reads the plan. By the time they press
+    // Apply the baseline is usually already in hand.
+    testBaseline = runAppTests()
     const apply = document.createElement('button')
     apply.type = 'button'
     apply.textContent = `Apply ${plan.edits.length} files as one change, compile, refresh preview`
@@ -222,9 +239,41 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
       undo.textContent = 'Undo the whole feature (restore all files)'
       box.append(undo)
       undo.addEventListener('click', () => void undoFeature(box))
+      const checking = line('Running the app\u2019s own tests against the change\u2026')
+      box.append(checking)
+      const [before, after] = [await testBaseline, await runAppTests()]
+      checking.remove()
+      renderVerdict(box, featureTestVerdict(before, after))
     } catch (error) {
       box.append(line(`Apply failed: ${String(error)}`))
     }
+  }
+
+  /**
+   * renderVerdict shows what the app's own tests say about the change. A compile says a change is
+   * well-formed; only these say it is right, and they are the only part of this panel that can contradict
+   * a plan that looked convincing.
+   */
+  function renderVerdict(box: HTMLElement, verdict: FeatureTestVerdict): void {
+    const colour = { broke: '#d4736b', held: '#6fb38a', unknown: '#9fb3a5' }[verdict.status]
+    const panel = document.createElement('div')
+    panel.style.cssText =
+      `margin:6px 0;padding:7px 9px;border-radius:6px;background:#0f1411;border-left:3px solid ${colour}`
+    const heading = document.createElement('strong')
+    heading.textContent = verdict.heading
+    panel.append(heading)
+    if (verdict.detail !== undefined) {
+      panel.append(document.createElement('br'), document.createTextNode(verdict.detail))
+    }
+    for (const broken of verdict.broke) {
+      const row = document.createElement('div')
+      row.style.cssText = 'margin-top:5px'
+      const name = document.createElement('em')
+      name.textContent = broken.name
+      row.append(name, document.createElement('br'), document.createTextNode(broken.message))
+      panel.append(row)
+    }
+    box.append(panel)
   }
 
   async function undoFeature(box: HTMLElement): Promise<void> {
