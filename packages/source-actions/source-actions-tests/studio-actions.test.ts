@@ -1,7 +1,10 @@
 import { AST } from '@parser'
-import { Assert, Text } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Assert, FS, Text } from '@shared'
+import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
+import { Workspace } from '@workspace'
 import SourceActions, {
+  type StudioAddSketchEntityParameterPatchRequest,
+  type StudioBindSketchFieldPatchRequest,
   type StudioComponentKind,
   type StudioLayoutEntry,
   type StudioSketchSnapElement,
@@ -1435,7 +1438,191 @@ Describe('Studio source-action patch bus', () => {
       source: 'render Script(`unsafe`)',
     } as unknown as StudioSourcePatchRequest)).rejects.toThrow('unsupported fields')
   })
+
+  Test('adds an imported entity parameter and fixture argument to every sketch scenario', async () => {
+    await withTaoFiles('tao-source-actions-sketch-feed-', {
+      'Data.tao': `workspace data Playlists / Playlist { Cover text Title text Score number }\n`,
+      'View1.tao': `
+        use Placeholder from @tao/ui
+        public view View1() { render Placeholder("View1") [width 360, height 76] }
+        fixture Sketches {
+          ChillVibes = create Playlist { Cover: "cover.png", Title: "Chill Vibes", Score: 7 }
+          MorningRun = create Playlist { Cover: "run.png", Title: "Morning Run", Score: 12 }
+        }
+        scenarios View1 "sketch" {
+          device phone
+          scenario "first" { render () }
+          scenario "second" { render () }
+        }
+      `,
+    }, async paths => {
+      const parsed = await Workspace.parse(paths['View1.tao'])
+      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, addEntityRequest(), {
+        files: parsed.files.map(file => file.ast),
+      })
+      const updated = await Workspace.shared(FS.dirname(paths['View1.tao'])).then(workspace =>
+        workspace.parseSource(patch.content, parsed.entry.document.uri)
+      )
+
+      Expect(patch.content).toContain('use Playlists from ./Data.tao')
+      Expect(patch.content).toContain('public\nview View1(Playlist)')
+      Expect(patch.content).toContain('fixture Sketches\n   device phone')
+      Expect(patch.content).toContain('scenario "first" {\n      render (Playlist: ChillVibes)')
+      Expect(patch.content).toContain('scenario "second" {\n      render (Playlist: MorningRun)')
+      Expect(updated.entry.document.parseResult.lexerErrors).toEqual([])
+      Expect(updated.entry.document.parseResult.parserErrors).toEqual([])
+    })
+  })
+
+  Test('rejects incomplete sketch scenario bindings and arbitrary source text', async () => {
+    const document = await parseDocument(`
+      data Playlists / Playlist { Title text }
+      public view View1() { render Placeholder("View1") }
+      fixture Sketches { ChillVibes = create Playlist { Title: "Chill" } }
+      scenarios View1 "sketch" {
+        scenario "first" { render () }
+        scenario "second" { render () }
+      }
+    `)
+    const request = addEntityRequest({
+      entity: { declarationName: 'Playlists', importPath: './Data', parameterName: 'Playlist' },
+      scenarioArguments: [{ fixtureHandle: 'ChillVibes', scenarioName: 'first' }],
+    })
+
+    await Expect(SourceActions.applyStudioPatch(document, request)).rejects.toThrow('every sketch scenario entry')
+    await Expect(SourceActions.applyStudioPatch(document, {
+      ...request,
+      source: 'Text(`unsafe`)',
+    } as unknown as StudioSourcePatchRequest)).rejects.toThrow('unsupported fields')
+  })
+
+  Test('binds tagged sketch leaves to text, interpolation, and accessible image fields', async () => {
+    const first = await parseDocument(`
+      use Image, Placeholder, Row, Text from @tao/ui
+      data Playlists / Playlist { Cover text Title text Score number }
+      public view View1(Playlist) {
+        render Row() {
+          #studio_rect_0063006f007600650072
+          Placeholder("Cover") [width 52, height 52]
+          #studio_rect_007400690074006c0065
+          Placeholder("Title") [width 100, height 20]
+          #studio_rect_00730063006f00720065
+          Text("7") [width 36, height 20]
+      } }
+      scenarios View1 "sketch" { scenario "draft" { render () } }
+    `)
+    const coverPatch = await SourceActions.applyStudioPatch(
+      first,
+      bindFieldRequest({
+        fieldPath: ['Cover'],
+        presentation: { kind: 'image', labelFieldPath: ['Title'] },
+        rectId: 'cover',
+        renderId: renderId(requireRenderByText(first, 'Cover')),
+      }),
+    )
+    const second = await parseRawDocument(coverPatch.content)
+    const titlePatch = await SourceActions.applyStudioPatch(
+      second,
+      bindFieldRequest({
+        fieldPath: ['Title'],
+        presentation: { kind: 'text' },
+        rectId: 'title',
+        renderId: renderId(requireRenderByText(second, 'Title')),
+      }),
+    )
+    const third = await parseRawDocument(titlePatch.content)
+    const scorePatch = await SourceActions.applyStudioPatch(
+      third,
+      bindFieldRequest({
+        fieldPath: ['Score'],
+        presentation: { kind: 'text', suffix: ' points' },
+        rectId: 'score',
+        renderId: renderId(requireRenderByText(third, '7')),
+      }),
+    )
+
+    Expect(coverPatch.content).toContain(
+      '#studio_rect_0063006f007600650072\n      Image(Playlist.Cover, Label: Playlist.Title) [width 52, height 52]',
+    )
+    Expect(titlePatch.content).toContain(
+      '#studio_rect_007400690074006c0065\n      Text(Playlist.Title) [width 100, height 20]',
+    )
+    Expect(scorePatch.content).toContain(
+      '#studio_rect_00730063006f00720065\n      Text("{ Playlist.Score } points") [width 36, height 20]',
+    )
+    const updated = await parseRawDocument(scorePatch.content)
+    Expect(updated.parseResult.lexerErrors).toEqual([])
+    Expect(updated.parseResult.parserErrors).toEqual([])
+  })
+
+  Test('rejects stale sketch tags, unknown paths, and non-text image fields', async () => {
+    const document = await parseDocument(`
+      use Placeholder from @tao/ui
+      data Playlists / Playlist { Title text Score number }
+      public view View1(Playlist) {
+        #studio_rect_007400690074006c0065
+        render Placeholder("Title") [width 100]
+      }
+      scenarios View1 "sketch" { scenario "draft" { render () } }
+    `)
+    const target = renderId(requireRenderByText(document, 'Title'))
+
+    await Expect(SourceActions.applyStudioPatch(
+      document,
+      bindFieldRequest({
+        fieldPath: ['Missing'],
+        renderId: target,
+      }),
+    )).rejects.toThrow('has no field Missing')
+    await Expect(SourceActions.applyStudioPatch(
+      document,
+      bindFieldRequest({
+        fieldPath: ['Score'],
+        presentation: { kind: 'image' },
+        renderId: target,
+      }),
+    )).rejects.toThrow('image source must be a text field')
+    await Expect(SourceActions.applyStudioPatch(
+      document,
+      bindFieldRequest({
+        rectId: 'other',
+        renderId: target,
+      }),
+    )).rejects.toThrow('does not match rectangle other')
+  })
 })
+
+function addEntityRequest(
+  overrides: Partial<StudioAddSketchEntityParameterPatchRequest> = {},
+): StudioAddSketchEntityParameterPatchRequest {
+  return {
+    entity: { declarationName: 'Playlists', importPath: './Data.tao', parameterName: 'Playlist' },
+    fixtureName: 'Sketches',
+    kind: 'add-sketch-entity-parameter',
+    scenarioArguments: [
+      { fixtureHandle: 'ChillVibes', scenarioName: 'first' },
+      { fixtureHandle: 'MorningRun', scenarioName: 'second' },
+    ],
+    scenarioGroupName: 'sketch',
+    viewName: 'View1',
+    ...overrides,
+  }
+}
+
+function bindFieldRequest(
+  overrides: Partial<StudioBindSketchFieldPatchRequest> = {},
+): StudioBindSketchFieldPatchRequest {
+  return {
+    fieldPath: ['Title'],
+    kind: 'bind-sketch-field',
+    parameterName: 'Playlist',
+    presentation: { kind: 'text' },
+    rectId: 'title',
+    renderId: '/source.tao:0:1',
+    viewName: 'View1',
+    ...overrides,
+  }
+}
 
 function playlistSnapRequest(
   overrides: Partial<StudioSnapSketchToFlowPatchRequest> = {},

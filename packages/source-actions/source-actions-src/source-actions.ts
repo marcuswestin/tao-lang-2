@@ -12,6 +12,8 @@ import {
 } from './source-actions-utils'
 import {
   StudioActions,
+  type StudioAddSketchEntityParameterPatchRequest,
+  type StudioBindSketchFieldPatchRequest,
   type StudioComponentKind,
   type StudioInsertCapturedFixturePatchRequest,
   type StudioInsertComponentPatchRequest,
@@ -32,6 +34,9 @@ import {
   type StudioSetLayoutEntryPatchRequest,
   type StudioSetScenarioArgumentsPatchRequest,
   type StudioSetStyleEntryPatchRequest,
+  type StudioSketchFieldPath,
+  type StudioSketchFieldPresentation,
+  type StudioSketchScenarioFixtureBinding,
   type StudioSketchSnapContainer,
   type StudioSketchSnapElement,
   type StudioSketchSnapTree,
@@ -106,6 +111,8 @@ const SourceActions = {
 
 export {
   type SourceActionOptions,
+  type StudioAddSketchEntityParameterPatchRequest,
+  type StudioBindSketchFieldPatchRequest,
   type StudioComponentKind,
   type StudioInsertCapturedFixturePatchRequest,
   type StudioInsertComponentPatchRequest,
@@ -126,6 +133,9 @@ export {
   type StudioSetLayoutEntryPatchRequest,
   type StudioSetScenarioArgumentsPatchRequest,
   type StudioSetStyleEntryPatchRequest,
+  type StudioSketchFieldPath,
+  type StudioSketchFieldPresentation,
+  type StudioSketchScenarioFixtureBinding,
   type StudioSketchSnapContainer,
   type StudioSketchSnapElement,
   type StudioSketchSnapTree,

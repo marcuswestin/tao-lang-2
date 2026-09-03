@@ -1,8 +1,8 @@
-import { ASTUtils } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import Formatter from '@formatter'
 import { AST } from '@parser'
 import { Errors, Switch } from '@shared'
-import { assertNoSyntaxErrors } from './source-actions-utils'
+import { assertNoSyntaxErrors, parseSourceText } from './source-actions-utils'
 
 export type StudioComponentKind =
   | 'Box'
@@ -51,6 +51,42 @@ export type StudioInsertProjectViewPatchRequest = {
   kind: 'insert-project-view'
   viewName: string
 }
+
+export type StudioSketchScenarioFixtureBinding = Readonly<{
+  fixtureHandle: string
+  scenarioName: string
+}>
+
+/** Adds one entity parameter and fixture-backed argument to every entry of a generated sketch group. */
+export type StudioAddSketchEntityParameterPatchRequest = Readonly<{
+  entity: Readonly<{
+    declarationName: string
+    importPath: string
+    parameterName: string
+  }>
+  fixtureName: string
+  kind: 'add-sketch-entity-parameter'
+  scenarioArguments: readonly StudioSketchScenarioFixtureBinding[]
+  scenarioGroupName: string
+  viewName: string
+}>
+
+export type StudioSketchFieldPath = readonly [string, ...string[]]
+
+export type StudioSketchFieldPresentation =
+  | Readonly<{ kind: 'image'; labelFieldPath?: StudioSketchFieldPath }>
+  | Readonly<{ kind: 'text'; prefix?: string; suffix?: string }>
+
+/** Rebinds one tagged snapped leaf from placeholder content to a typed entity field path. */
+export type StudioBindSketchFieldPatchRequest = Readonly<{
+  fieldPath: StudioSketchFieldPath
+  kind: 'bind-sketch-field'
+  parameterName: string
+  presentation: StudioSketchFieldPresentation
+  rectId: string
+  renderId: string
+  viewName: string
+}>
 
 export type StudioLayoutAlignment = 'baseline' | 'bottom' | 'center' | 'left' | 'right' | 'top'
 export type StudioLayoutContentTerm = StudioLayoutAlignment | 'spread' | 'spread-balanced' | 'spread-inset' | 'stretch'
@@ -255,6 +291,8 @@ export type StudioSnapSketchToFlowPatchRequest = Readonly<{
 
 /** StudioSourcePatchRequest declares one semantic visual source mutation from Studio. */
 export type StudioSourcePatchRequest =
+  | StudioAddSketchEntityParameterPatchRequest
+  | StudioBindSketchFieldPatchRequest
   | StudioInsertCapturedFixturePatchRequest
   | StudioInsertComponentPatchRequest
   | StudioInsertProjectViewPatchRequest
@@ -285,7 +323,9 @@ export type StudioSourcePatch = {
 
 /** StudioActions exposes source transforms used by Tao Studio visual editing. */
 export const StudioActions = {
+  addSketchEntityParameter,
   applyPatch,
+  bindSketchField,
   insertCapturedFixture,
   insertComponent,
   insertProjectView,
@@ -325,6 +365,8 @@ async function applyPatchContent(
 ): Promise<string> {
   validateOccurrencePrecondition(document, request, context.occurrence)
   return await Switch.kind(request, {
+    'add-sketch-entity-parameter': async action => await addSketchEntityParameter(document, action, context),
+    'bind-sketch-field': async action => await bindSketchField(document, action),
     'insert-captured-fixture': async action => await insertCapturedFixture(document, action),
     'insert-component': async action => await insertComponent(document, action.component, action),
     'insert-project-view': async action => await insertProjectView(document, action.viewName, action),
@@ -375,6 +417,8 @@ function validateOccurrencePrecondition(
 
 function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | undefined {
   return Switch.kind(request, {
+    'add-sketch-entity-parameter': () => undefined,
+    'bind-sketch-field': action => action.renderId,
     'insert-captured-fixture': () => undefined,
     'insert-component': action => action.beforeId ?? action.afterId,
     'insert-project-view': action => action.beforeId ?? action.afterId,
@@ -388,6 +432,348 @@ function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | u
     'toggle-flow-direction': action => action.renderId,
     'wrap-render': action => action.renderId,
   })
+}
+
+async function addSketchEntityParameter(
+  document: AST.Document,
+  request: StudioAddSketchEntityParameterPatchRequest,
+  context: StudioWorkspaceDesignContext = {},
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  validateAddSketchEntityParameterRequest(request)
+  const file = document.parseResult.value
+  const view = uniqueGeneratedSketchView(file, request.viewName)
+  const groups = file.statements.filter(AST.isScenarioGroupDeclaration)
+    .filter(group => group.name === request.scenarioGroupName && group.subject?.ref === view)
+  if (groups.length !== 1) {
+    throw new Errors.UserInputError(
+      `Studio entity binding requires one owned sketch scenario group: ${request.scenarioGroupName}`,
+    )
+  }
+  const group = groups[0]!
+  const fixture = file.statements.filter(AST.isFixtureDeclaration)
+    .filter(candidate => candidate.name === request.fixtureName)
+  if (fixture.length !== 1) {
+    throw new Errors.UserInputError(
+      `Studio sketch fixture is not uniquely declared in this source file: ${request.fixtureName}`,
+    )
+  }
+  const entities = [
+    ...new Set(
+      (context.files ?? [file]).flatMap(candidate => candidate.statements.filter(AST.isEntityDataDeclaration)),
+    ),
+  ].filter(candidate =>
+    candidate.name === request.entity.declarationName && candidate.singularName === request.entity.parameterName
+  )
+  if (entities.length > 1) {
+    throw new Errors.UserInputError(
+      `Studio sketch entity is not uniquely declared: ${request.entity.declarationName} / ${request.entity.parameterName}`,
+    )
+  }
+  const entity = entities[0]
+  if (AST.parametersOf(view).some(parameter => Type.parameterName(parameter) === request.entity.parameterName)) {
+    throw new Errors.UserInputError(`Studio sketch view already declares parameter ${request.entity.parameterName}.`)
+  }
+  const scenarios = AST.scenarioDeclarations(group)
+  const handles = new Map(request.scenarioArguments.map(binding => [binding.scenarioName, binding.fixtureHandle]))
+  if (
+    handles.size !== request.scenarioArguments.length
+    || scenarios.length !== handles.size
+    || scenarios.some(scenario => !handles.has(scenario.name))
+  ) {
+    throw new Errors.UserInputError(
+      'Studio entity binding must supply one fixture handle for every sketch scenario entry.',
+    )
+  }
+  const fixtureValues = new Map(AST.fixtureValueDeclarations(fixture[0]!).map(value => [value.name, value]))
+  for (const binding of request.scenarioArguments) {
+    const value = fixtureValues.get(binding.fixtureHandle)
+    if (
+      !AST.isFixtureCreateBinding(value)
+      || value.entity.$refText !== request.entity.parameterName
+      || (entity !== undefined && value.entity.ref !== undefined && value.entity.ref !== entity)
+    ) {
+      throw new Errors.UserInputError(
+        `Studio fixture handle ${binding.fixtureHandle} does not create ${request.entity.parameterName}.`,
+      )
+    }
+  }
+  for (const scenario of scenarios) {
+    const effectiveFixture = AST.effectiveScenarioClause(scenario, AST.isScenarioFixtureClause)
+    if (effectiveFixture !== undefined && effectiveFixture.fixture.ref !== fixture[0]) {
+      throw new Errors.UserInputError(`Studio scenario ${scenario.name} already uses another fixture.`)
+    }
+  }
+
+  const source = document.textDocument.getText()
+  const parameterList = view.parameterList?.$cstNode
+  if (parameterList === undefined) {
+    throw new Errors.UserInputError(`Studio sketch view has no editable parameter list: ${request.viewName}`)
+  }
+  const parameterSources = AST.parametersOf(view).map(parameter => parameter.$cstNode!.text)
+  const edits: SourceEdit[] = [{
+    end: parameterList.end,
+    replacement: `(${[...parameterSources, request.entity.parameterName].join(', ')})`,
+    start: parameterList.offset,
+  }]
+  if (group.block.entries.every(entry => !AST.isScenarioFixtureClause(entry))) {
+    const offset = group.block.$cstNode!.offset + 1
+    edits.push({ end: offset, replacement: `\nfixture ${request.fixtureName}`, start: offset })
+  }
+  for (const scenario of scenarios) {
+    const ownRender = scenario.block.entries.find(AST.isScenarioRenderClause)
+    const effectiveRender = AST.effectiveScenarioSubjectClause(scenario)
+    if (effectiveRender !== undefined && !AST.isScenarioRenderClause(effectiveRender)) {
+      throw new Errors.UserInputError(`Studio sketch scenario ${scenario.name} does not render a view.`)
+    }
+    const arguments_ = effectiveRender?.argumentList?.arguments ?? []
+    if (arguments_.some(argument => argument.label === request.entity.parameterName)) {
+      throw new Errors.UserInputError(
+        `Studio sketch scenario ${scenario.name} already supplies ${request.entity.parameterName}.`,
+      )
+    }
+    const argumentSource = [
+      ...arguments_.map(argument => argument.$cstNode!.text),
+      `${request.entity.parameterName}: ${handles.get(scenario.name)!}`,
+    ].join(', ')
+    const replacement = scenarioRenderSource(scenario, view, argumentSource)
+    if (ownRender?.$cstNode !== undefined) {
+      edits.push({ end: ownRender.$cstNode.end, replacement, start: ownRender.$cstNode.offset })
+    } else {
+      const firstStepOffset = scenario.block.steps[0]?.$cstNode?.offset
+      const offset = firstStepOffset ?? scenario.block.$cstNode!.end - 1
+      edits.push({
+        end: offset,
+        replacement: `${firstStepOffset === undefined ? '\n' : ''}${replacement}\n`,
+        start: offset,
+      })
+    }
+  }
+  const changed = applySourceEdits(source, edits)
+  const imported = ensureNamedImport(
+    changed,
+    file,
+    request.entity.declarationName,
+    request.entity.importPath,
+  )
+  return await formatAndReparse(document, imported)
+}
+
+async function bindSketchField(
+  document: AST.Document,
+  request: StudioBindSketchFieldPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  validateBindSketchFieldRequest(request)
+  requireLocalRenderId(document, request.renderId, 'bind sketch fields')
+  const file = document.parseResult.value
+  const view = uniqueGeneratedSketchView(file, request.viewName)
+  const render = requireRenderById(file, request.renderId)
+  if (
+    !AST.isRender(render)
+    || (AST.isRenderStatement(render) && render.injection !== undefined)
+    || render.block !== undefined
+    || AST.findOwningView(render) !== view
+    || render.$cstNode === undefined
+  ) {
+    throw new Errors.UserInputError('Studio field binding requires one leaf in the generated sketch view.')
+  }
+  if (AST.attachedTag(render)?.tag !== `#studio_rect_${encodedTag(request.rectId)}`) {
+    throw new Errors.UserInputError(`Studio field binding target does not match rectangle ${request.rectId}.`)
+  }
+  const parameter = AST.parametersOf(view)
+    .find(candidate => Type.parameterName(candidate) === request.parameterName)
+  if (parameter === undefined) {
+    throw new Errors.UserInputError(`Studio sketch parameter does not exist: ${request.parameterName}`)
+  }
+  const field = resolveSketchFieldPath(parameter, request.fieldPath)
+  const expression = [request.parameterName, ...request.fieldPath].join('.')
+  let component: 'Image' | 'Text'
+  let invocation: string
+  if (request.presentation.kind === 'image') {
+    requireTextField(field, request.fieldPath, 'image source')
+    const label = request.presentation.labelFieldPath === undefined
+      ? undefined
+      : resolveSketchFieldPath(parameter, request.presentation.labelFieldPath)
+    if (request.presentation.labelFieldPath !== undefined) {
+      requireTextField(label!, request.presentation.labelFieldPath, 'image label')
+    }
+    component = 'Image'
+    invocation = `Image(${expression}${
+      request.presentation.labelFieldPath === undefined
+        ? ''
+        : `, Label: ${[request.parameterName, ...request.presentation.labelFieldPath].join('.')}`
+    })`
+  } else {
+    if (field.kind !== 'primitive' && field.kind !== 'enum') {
+      throw new Errors.UserInputError(`Studio text binding cannot render field path ${request.fieldPath.join('.')}.`)
+    }
+    component = 'Text'
+    invocation = field.kind === 'primitive'
+        && field.primitive === 'text'
+        && request.presentation.prefix === undefined
+        && request.presentation.suffix === undefined
+      ? `Text(${expression})`
+      : `Text(${interpolatedFieldSource(expression, request.presentation.prefix, request.presentation.suffix)})`
+  }
+  const layout = render.layoutClause?.$cstNode?.text
+  const source = applySourceEdits(document.textDocument.getText(), [{
+    end: render.$cstNode.end,
+    replacement: `${AST.isRenderStatement(render) ? 'render ' : ''}${invocation}${
+      layout === undefined ? '' : ` ${layout}`
+    }`,
+    start: render.$cstNode.offset,
+  }])
+  return await formatAndReparse(document, ensureUiComponentImport(source, file, component))
+}
+
+function validateAddSketchEntityParameterRequest(request: StudioAddSketchEntityParameterPatchRequest): void {
+  requireExactKeys(
+    request,
+    ['entity', 'fixtureName', 'kind', 'scenarioArguments', 'scenarioGroupName', 'viewName'],
+    'Add sketch entity parameter request',
+  )
+  requireExactKeys(request.entity, ['declarationName', 'importPath', 'parameterName'], 'Sketch entity reference')
+  requireIdentifier(request.viewName, 'sketch view')
+  requireIdentifier(request.entity.declarationName, 'entity declaration')
+  requireIdentifier(request.entity.parameterName, 'entity parameter')
+  requireIdentifier(request.fixtureName, 'sketch fixture')
+  if (request.scenarioGroupName.length === 0 || /[\u0000-\u001f\u007f]/u.test(request.scenarioGroupName)) {
+    throw new Errors.UserInputError('Studio sketch scenario group name is invalid.')
+  }
+  if (
+    !/^(?:\.\.?\/)+(?:[A-Za-z_][A-Za-z0-9_-]*)(?:\/[A-Za-z_][A-Za-z0-9_-]*)*(?:\.tao)?$/.test(
+      request.entity.importPath,
+    )
+  ) {
+    throw new Errors.UserInputError(`Studio entity import path is invalid: ${request.entity.importPath}`)
+  }
+  if (!Array.isArray(request.scenarioArguments) || request.scenarioArguments.length === 0) {
+    throw new Errors.UserInputError('Studio entity binding requires sketch scenario arguments.')
+  }
+  for (const binding of request.scenarioArguments) {
+    requireExactKeys(binding, ['fixtureHandle', 'scenarioName'], 'Sketch scenario fixture binding')
+    requireIdentifier(binding.fixtureHandle, 'fixture handle')
+    if (binding.scenarioName.length === 0 || /[\u0000-\u001f\u007f]/u.test(binding.scenarioName)) {
+      throw new Errors.UserInputError('Studio sketch scenario name is invalid.')
+    }
+  }
+}
+
+function validateBindSketchFieldRequest(request: StudioBindSketchFieldPatchRequest): void {
+  requireExactKeys(
+    request,
+    ['fieldPath', 'kind', 'parameterName', 'presentation', 'rectId', 'renderId', 'viewName'],
+    'Bind sketch field request',
+  )
+  requireIdentifier(request.viewName, 'sketch view')
+  requireIdentifier(request.parameterName, 'sketch parameter')
+  if (request.rectId.length === 0) {
+    throw new Errors.UserInputError('Studio field binding rectangle identity must be nonempty.')
+  }
+  validateFieldPath(request.fieldPath, 'field')
+  if (request.presentation.kind === 'image') {
+    requireExactKeys(request.presentation, ['kind', 'labelFieldPath'], 'Sketch image presentation')
+    if (request.presentation.labelFieldPath !== undefined) {
+      validateFieldPath(request.presentation.labelFieldPath, 'image label')
+    }
+  } else if (request.presentation.kind === 'text') {
+    requireExactKeys(request.presentation, ['kind', 'prefix', 'suffix'], 'Sketch text presentation')
+    for (const value of [request.presentation.prefix, request.presentation.suffix]) {
+      if (value !== undefined && /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value)) {
+        throw new Errors.UserInputError('Studio text binding affixes contain unsupported control characters.')
+      }
+    }
+  } else {
+    throw new Errors.UserInputError('Studio sketch field presentation is invalid.')
+  }
+}
+
+function validateFieldPath(path: readonly string[], label: string): void {
+  if (!Array.isArray(path) || path.length === 0) {
+    throw new Errors.UserInputError(`Studio ${label} path must contain at least one field.`)
+  }
+  path.forEach(segment => requireIdentifier(segment, `${label} path segment`))
+}
+
+function uniqueGeneratedSketchView(file: AST.TaoFile, viewName: string): AST.ViewDeclaration {
+  const views = file.statements.filter(AST.isViewDeclaration).filter(view => view.name === viewName)
+  const view = views.length === 1 ? views[0] : undefined
+  if (
+    view === undefined || view.visibility !== 'public' || view.block === undefined
+    || !/^View[1-9][0-9]*$/.test(viewName)
+  ) {
+    throw new Errors.UserInputError(`Studio entity binding requires one generated public ViewN: ${viewName}`)
+  }
+  return view
+}
+
+function resolveSketchFieldPath(parameter: AST.ParameterDeclaration, path: readonly string[]) {
+  let type = Type.ofParameter(parameter)
+  for (const [index, segment] of path.entries()) {
+    if (type.kind === 'list' && segment === 'Count' && index === path.length - 1) {
+      return { kind: 'primitive' as const, primitive: 'number' as const }
+    }
+    if (type.kind !== 'entity') {
+      throw new Errors.UserInputError(`Studio field path cannot traverse ${path.slice(0, index).join('.') || 'value'}.`)
+    }
+    const field = Type.dataFields(type.entity).find(candidate => candidate.name === segment)
+    if (field === undefined) {
+      throw new Errors.UserInputError(`Studio entity ${type.entity.singularName} has no field ${segment}.`)
+    }
+    if (field.optional) {
+      throw new Errors.UserInputError(`Studio field path cannot bind optional field ${segment} without a fallback.`)
+    }
+    type = Type.dataFieldType(field)
+  }
+  return type
+}
+
+function requireTextField(
+  field: ReturnType<typeof resolveSketchFieldPath>,
+  path: readonly string[],
+  label: string,
+): void {
+  if (field.kind !== 'primitive' || field.primitive !== 'text') {
+    throw new Errors.UserInputError(`Studio ${label} must be a text field: ${path.join('.')}`)
+  }
+}
+
+function interpolatedFieldSource(expression: string, prefix = '', suffix = ''): string {
+  const escapedPrefix = taoStringLiteral(prefix).slice(1, -1)
+  const escapedSuffix = taoStringLiteral(suffix).slice(1, -1)
+  return `"${escapedPrefix}{ ${expression} }${escapedSuffix}"`
+}
+
+function ensureNamedImport(
+  source: string,
+  file: AST.TaoFile,
+  declarationName: string,
+  importPath: string,
+): string {
+  const use = file.statements.filter(AST.isUseStatement).find(statement => statement.importPath === importPath)
+  if (use?.$cstNode !== undefined) {
+    const imported = use.importedDeclarations.map(reference => reference.$refText)
+    return imported.includes(declarationName)
+      ? source
+      : applySourceEdits(source, [{
+        end: use.$cstNode.end,
+        replacement: `use ${[...new Set([...imported, declarationName])].toSorted().join(', ')} from ${importPath}`,
+        start: use.$cstNode.offset,
+      }])
+  }
+  const offset = file.statements[0]?.$cstNode?.offset ?? 0
+  return applySourceEdits(source, [{
+    end: offset,
+    replacement: `use ${declarationName} from ${importPath}\n\n`,
+    start: offset,
+  }])
+}
+
+async function formatAndReparse(document: AST.Document, source: string): Promise<string> {
+  const formatted = await Formatter.formatCode(source)
+  assertNoSyntaxErrors(await parseSourceText(document, formatted))
+  return formatted
 }
 
 async function insertCapturedFixture(
