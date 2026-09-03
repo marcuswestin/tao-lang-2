@@ -75,6 +75,11 @@ export type TaoStudioDeviceTimers = {
 export type StudioDeviceClientOptions = {
   backoff?: { initialMs?: number; maxMs?: number }
   bootstrap: TaoStudioDeviceBootstrap
+  /**
+   * Produces the runtime capture Studio asks for. Injected rather than imported so this client stays
+   * free of the capture registry, and so a test can hand it a capture that fails.
+   */
+  captureRuntime?: () => Promise<unknown>
   frameLimitBytes?: number
   handshakeTimeoutMs?: number
   now?: () => number
@@ -349,6 +354,41 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     }
   }
 
+  /**
+   * Answers one `studio.captureRuntime`. A capture that throws is reported as a failure against the
+   * same request rather than dropped, so the asking side always gets an answer to wait on, and a
+   * capture too large for one sealed frame surfaces as that failure rather than as a closed socket.
+   */
+  const sendCapture = (attempt: Attempt, requestId: string): void => {
+    const capture = options.captureRuntime
+    if (capture === undefined) {
+      sendSealed(attempt, {
+        error: 'This device cannot capture runtime state.',
+        requestId,
+        type: 'device.runtimeCaptureFailed',
+      })
+      return
+    }
+    void capture().then(
+      artifact => {
+        const message: TaoStudioDeviceDeviceMessage = { capture: artifact, requestId, type: 'device.runtimeCaptured' }
+        const size = JSON.stringify(message).length
+        if (size > frameLimitBytes) {
+          sendSealed(attempt, {
+            error: `The captured state is ${size} bytes, over the ${frameLimitBytes}-byte frame limit.`,
+            requestId,
+            type: 'device.runtimeCaptureFailed',
+          })
+          return
+        }
+        sendSealed(attempt, message)
+      },
+      error => {
+        sendSealed(attempt, { error: errorMessage(error), requestId, type: 'device.runtimeCaptureFailed' })
+      },
+    )
+  }
+
   const sendWhenConnected = (message: TaoStudioDeviceDeviceMessage): void => {
     if (current !== undefined && current.welcomed) {
       sendSealed(current, message)
@@ -506,6 +546,8 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
       update({ cellUnavailable: { cellId: message.cellId, code: message.code, message: message.message } })
     } else if (message.type === 'studio.appliedAck') {
       update({ appliedAck: { accepted: message.accepted, compileRevision: message.compileRevision } })
+    } else if (message.type === 'studio.captureRuntime') {
+      sendCapture(attempt, message.requestId)
     } else if (message.type === 'studio.reconnect') {
       redial(attempt)
     } else if (message.type === 'studio.revoked') {

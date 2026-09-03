@@ -14,6 +14,7 @@ import { errorMessage } from './TR-errors'
 import { NativeModules } from './TR-native-modules'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
 import {
+  captureRuntime,
   registerRuntimeCaptureDomain,
   type TaoRuntimeCaptureArtifact,
   type TaoRuntimeJson,
@@ -399,6 +400,9 @@ export function createNativeStudioDeviceClient(): {
   return {
     client: createStudioDeviceClient({
       bootstrap: resolution.bootstrap,
+      // The capture domains register at module scope on every platform, so the device already has a
+      // complete artifact to give; Studio just had no way to ask for one.
+      captureRuntime: () => captureRuntime(),
       storage: secureStoreStorage(secureStore),
       transport: webSocketTransport(WebSocketImplementation),
     }),

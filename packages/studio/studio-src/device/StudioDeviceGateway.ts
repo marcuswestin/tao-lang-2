@@ -128,6 +128,11 @@ export class StudioDeviceGateway {
   readonly #server: Bun.Server<SocketData>
   readonly #sessions: StudioDeviceGatewaySessions
   readonly #states = new Map<string, SessionState>()
+  /** Capture requests waiting on a device answer, keyed by the id the request carried. */
+  readonly #captures = new Map<
+    string,
+    { resolve: (result: { capture?: unknown; error?: string }) => void; timer: ReturnType<typeof setTimeout> }
+  >()
   readonly #store: StudioDeviceTrustStore
   #hosts: readonly string[] = []
   #stopped = false
@@ -288,6 +293,28 @@ export class StudioDeviceGateway {
     return { requested: true }
   }
 
+  /**
+   * Asks the connected device for its runtime state and waits for the answer. The device always
+   * answers — with the artifact, or with why it could not — so the only way this rejects is a
+   * device that went away mid-request, which the timeout covers.
+   */
+  async captureRuntime(sessionId: string, timeoutMs = 10_000): Promise<{ capture?: unknown; error?: string }> {
+    this.#requireSession(sessionId)
+    const connection = this.#liveConnection(sessionId)
+    if (connection === undefined || connection.state !== 'connected') {
+      Errors.throwUserInput('No device is connected to this project.')
+    }
+    const requestId = crypto.randomUUID()
+    return await new Promise<{ capture?: unknown; error?: string }>(resolve => {
+      const timer = setTimeout(() => {
+        this.#captures.delete(requestId)
+        resolve({ error: `The device did not answer the capture request within ${timeoutMs}ms.` })
+      }, timeoutMs)
+      this.#captures.set(requestId, { resolve, timer })
+      this.#sendSealed(connection, { requestId, type: 'studio.captureRuntime' })
+    })
+  }
+
   stop(): void {
     if (this.#stopped) {
       return
@@ -295,6 +322,12 @@ export class StudioDeviceGateway {
     this.#stopped = true
     for (const connection of [...this.#connections]) {
       this.#reject(connection, 'gateway-stopped', 'The Studio device gateway stopped.')
+    }
+    // Answer anyone still waiting on a device rather than leaving a promise and its timer behind.
+    for (const [requestId, pending] of this.#captures) {
+      clearTimeout(pending.timer)
+      this.#captures.delete(requestId)
+      pending.resolve({ error: 'The Studio device gateway stopped.' })
     }
     for (const state of this.#states.values()) {
       if (state.pairing !== undefined) {
@@ -695,6 +728,21 @@ export class StudioDeviceGateway {
     }
     if (message.type === 'device.selectCell') {
       this.#assign(connection, message.cellId)
+      return
+    }
+    if (message.type === 'device.runtimeCaptured' || message.type === 'device.runtimeCaptureFailed') {
+      const pending = this.#captures.get(message.requestId)
+      if (pending === undefined) {
+        // A late or unasked-for answer: the request already timed out, or the device answered twice.
+        return
+      }
+      this.#captures.delete(message.requestId)
+      clearTimeout(pending.timer)
+      if (message.type === 'device.runtimeCaptured') {
+        pending.resolve({ capture: message.capture })
+      } else {
+        pending.resolve({ error: message.error })
+      }
       return
     }
     let accepted = false

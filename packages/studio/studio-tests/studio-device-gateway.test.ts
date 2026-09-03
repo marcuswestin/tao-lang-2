@@ -449,6 +449,49 @@ Describe('Studio device gateway sealed control plane', () => {
     })
   })
 
+  Test('asks a device for its runtime state and reports a refusal, a silence, or a stop as an answer', async () => {
+    await withGateway({}, async env => {
+      const device = await pairedDevice(env)
+      const captured = { domains: [{ domain: 'data', value: { workspaces: 2 } }], version: 1 }
+
+      const wanted = env.gateway.captureRuntime(env.sessionId)
+      let request: TaoStudioDeviceStudioMessage | undefined
+      while (request?.type !== 'studio.captureRuntime') {
+        request = await device.nextSealed()
+      }
+      device.sendSealed({ capture: captured, requestId: request.requestId, type: 'device.runtimeCaptured' })
+      Expect(await wanted).toEqual({ capture: captured })
+
+      // A device that cannot capture answers the same request rather than going quiet.
+      const refused = env.gateway.captureRuntime(env.sessionId)
+      let second: TaoStudioDeviceStudioMessage | undefined
+      while (second?.type !== 'studio.captureRuntime') {
+        second = await device.nextSealed()
+      }
+      Expect(second.requestId).not.toBe(request.requestId)
+      device.sendSealed({
+        error: 'the data domain is unavailable',
+        requestId: second.requestId,
+        type: 'device.runtimeCaptureFailed',
+      })
+      Expect(await refused).toEqual({ error: 'the data domain is unavailable' })
+
+      // A device that never answers resolves as a timeout, not a hung promise.
+      const timedOut = await env.gateway.captureRuntime(env.sessionId, 10)
+      Expect(typeof timedOut.error).toBe('string')
+      Expect(timedOut.capture).toBeUndefined()
+
+      // An answer to a request that already resolved is ignored rather than crashing the connection.
+      device.sendSealed({ capture: captured, requestId: request.requestId, type: 'device.runtimeCaptured' })
+      device.sendSealed({ type: 'device.ping' })
+      let pong: TaoStudioDeviceStudioMessage | undefined
+      while (pong?.type !== 'studio.pong') {
+        pong = await device.nextSealed()
+      }
+      Expect(env.gateway.status(env.sessionId).connection?.state).toBe('connected')
+    })
+  })
+
   Test('re-assigns the device when the cell it renders is reconfigured, and leaves other cells alone', async () => {
     await withGateway({}, async env => {
       const device = await pairedDevice(env)

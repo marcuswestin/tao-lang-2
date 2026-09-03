@@ -144,6 +144,7 @@ export type TaoStudioDeviceStudioMessage =
   | { identity: TaoStudioDeviceCellIdentity; runtime: unknown; type: 'studio.cellAssigned' }
   | { cellId: string; code: TaoStudioDeviceCellCode; message: string; type: 'studio.cellUnavailable' }
   | { accepted: boolean; compileRevision: number; type: 'studio.appliedAck' }
+  | { requestId: string; type: 'studio.captureRuntime' }
   | { type: 'studio.reconnect' }
   | { reason: string; type: 'studio.revoked' }
   | { type: 'studio.pong' }
@@ -159,6 +160,8 @@ export type TaoStudioDeviceDeviceMessage =
     identity: TaoStudioDeviceCellIdentity
     type: 'device.applied'
   }
+  | { capture: unknown; requestId: string; type: 'device.runtimeCaptured' }
+  | { error: string; requestId: string; type: 'device.runtimeCaptureFailed' }
   | { level: 'error' | 'info'; message: string; type: 'device.report' }
   | { type: 'device.ping' }
 
@@ -265,6 +268,14 @@ const deviceMessageParsers: MessageParsers<TaoStudioDeviceDeviceMessage> = {
     (value['level'] === 'error' || value['level'] === 'info') && typeof value['message'] === 'string'
       ? { level: value['level'], message: value['message'], type: 'device.report' }
       : undefined,
+  'device.runtimeCaptureFailed': value =>
+    nonEmptyString(value['requestId']) && typeof value['error'] === 'string'
+      ? { error: value['error'], requestId: value['requestId'], type: 'device.runtimeCaptureFailed' }
+      : undefined,
+  'device.runtimeCaptured': value =>
+    nonEmptyString(value['requestId']) && 'capture' in value
+      ? { capture: value['capture'], requestId: value['requestId'], type: 'device.runtimeCaptured' }
+      : undefined,
   'device.selectCell': value =>
     nonEmptyString(value['cellId']) ? { cellId: value['cellId'], type: 'device.selectCell' } : undefined,
 }
@@ -274,6 +285,8 @@ const studioMessageParsers: MessageParsers<TaoStudioDeviceStudioMessage> = {
     typeof value['accepted'] === 'boolean' && nonNegativeInteger(value['compileRevision'])
       ? { accepted: value['accepted'], compileRevision: value['compileRevision'], type: 'studio.appliedAck' }
       : undefined,
+  'studio.captureRuntime': value =>
+    nonEmptyString(value['requestId']) ? { requestId: value['requestId'], type: 'studio.captureRuntime' } : undefined,
   'studio.cellAssigned': value => {
     const identity = parseCellIdentity(value['identity'])
     return identity === undefined || !('runtime' in value)

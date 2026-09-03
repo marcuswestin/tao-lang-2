@@ -1,3 +1,4 @@
+import { Errors } from '@shared/core'
 import { Describe, Expect, settle, Test } from '@shared/test'
 import { HostEnvironmentError } from '../TaoRuntime-src/TR-errors'
 import {
@@ -499,6 +500,47 @@ Describe('Studio device client sealed control plane', () => {
     Expect(run.client.state().phase).toBe('connected')
     Expect(run.client.state().attempts).toBe(0)
     Expect(run.client.state().retryAt).toBeUndefined()
+  })
+
+  Test('answers a capture request, and answers a failing or oversized one rather than going quiet', async () => {
+    const captured = { domains: [{ domain: 'data', value: { rows: 2 } }], version: 1 }
+    const run = harness({ captureRuntime: async () => captured })
+    const session = await connect(run)
+
+    session.received() // drain the default cell selection the welcome triggers
+    session.send({ requestId: 'req-1', type: 'studio.captureRuntime' })
+    await Promise.resolve()
+    Expect(session.received()).toEqual([{ capture: captured, requestId: 'req-1', type: 'device.runtimeCaptured' }])
+
+    // A capture that throws must still answer the request it was asked for.
+    const failing = harness({
+      captureRuntime: async () => Errors.throwUnexpected('the data domain is unavailable'),
+    })
+    const failingSession = await connect(failing)
+    failingSession.received()
+    failingSession.send({ requestId: 'req-2', type: 'studio.captureRuntime' })
+    await Promise.resolve()
+    await Promise.resolve()
+    Expect(failingSession.received()).toEqual([{
+      error: 'the data domain is unavailable',
+      requestId: 'req-2',
+      type: 'device.runtimeCaptureFailed',
+    }])
+
+    // A capture too large for one sealed frame is reported, not sent — an oversized frame would
+    // close the connection, so the failure has to arrive as an answer instead.
+    const huge = harness({
+      captureRuntime: async () => ({ domains: [{ domain: 'data', value: 'x'.repeat(300_000) }], version: 1 }),
+    })
+    const hugeSession = await connect(huge)
+    hugeSession.received()
+    hugeSession.send({ requestId: 'req-3', type: 'studio.captureRuntime' })
+    await Promise.resolve()
+    const answers = hugeSession.received()
+    Expect(answers).toHaveLength(1)
+    Expect(answers[0]).toMatchObject({ requestId: 'req-3', type: 'device.runtimeCaptureFailed' })
+    Expect(String((answers[0] as { error: string }).error)).toContain('over the')
+    Expect(huge.client.state().phase).toBe('connected')
   })
 
   Test('rejects a tampered frame as unsealed', async () => {
