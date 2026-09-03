@@ -12,7 +12,6 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Run ordinary shell commands directly. Use `./tao` for Tao CLI commands and `./agent <command>` for common repository workflows; run `./agent help` to discover them. Human developer commands are defined in `Justfile`.
 - Search the repository with `rg`, not `grep -r`: `rg` skips hidden directories and everything Git ignores — the generated `_gen_*` trees, `.artifacts/`, `node_modules/`, and the linked worktrees under `.claude/worktrees/` — while `grep -r` and `find` descend all of them and repeat every hit once per worktree. Pass `--hidden` or `--no-ignore` only when you mean to search a generated or foreign tree.
 - Ask Ro when language design, roadmap priority, destructive work, or ambiguous product behavior cannot be derived safely. Resolve routine implementation choices from repository evidence.
-- Never mention Claude or any other agent identity in work products — not in file names, documents, code, comments, branch names, or commit messages (no AI `Co-Authored-By` trailers).
 - Language work usually crosses parser, validator, formatter or source actions, compiler, and runtime; `packages/AGENTS.md` owns those boundaries.
 
 ## Safety
