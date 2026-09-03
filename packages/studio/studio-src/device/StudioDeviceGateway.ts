@@ -403,12 +403,18 @@ export class StudioDeviceGateway {
       this.#reject(connection, 'unknown-session', 'No open Studio project matches this hello.')
       return
     }
+    // Assigned now rather than after the handshake succeeds: #dispose only clears a session's
+    // `pending` slot when it can find the session through connection.ref, so a connection that
+    // occupies the slot and then fails later in this method (a malformed key, an invalid ephemeral
+    // that fails derivation) must still be attributable to this session, or the slot stays jammed
+    // against every other device until the pairing window closes and reopens.
+    connection.ref = ref
     if (
       !StudioDeviceTrust.validPublicKey(hello.devicePublicKey)
       || !StudioDeviceTrust.validPublicKey(hello.ephemeralPublicKey)
-      || !validBase64(hello.nonce)
+      || !StudioDeviceTrust.validNonce(hello.nonce)
     ) {
-      this.#reject(connection, 'malformed', 'Handshake keys and nonces must be 32-byte base64 values.')
+      this.#reject(connection, 'malformed', 'Handshake keys must be 32-byte base64 values and the nonce 16 bytes.')
       return
     }
     let mode: 'pair' | 'reconnect'
@@ -452,7 +458,6 @@ export class StudioDeviceGateway {
     connection.devicePublicKey = hello.devicePublicKey
     connection.keys = keys
     connection.mode = mode
-    connection.ref = ref
     connection.transcript = transcript
     connection.state = 'confirm'
     this.#sendClear(connection, {
@@ -705,7 +710,12 @@ export class StudioDeviceGateway {
     } catch (error) {
       connection.lastError = Errors.formatForUser(error)
     }
-    connection.appliedRevision = message.appliedRevision
+    // A rejected acknowledgement (stale identity, wrong instance) proves nothing about the device's
+    // actual revision — recording the device's claim anyway would let the panel show "applied ✓" for
+    // a device the session just refused. Leave the last accepted revision standing instead.
+    if (accepted) {
+      connection.appliedRevision = message.appliedRevision
+    }
     this.#sendSealed(connection, { accepted, compileRevision: message.compileRevision, type: 'studio.appliedAck' })
     this.#emit(ref.sessionId)
   }
@@ -958,14 +968,6 @@ function previewPort(previewUrl: string | undefined): number | undefined {
     return url.protocol === 'https:' ? 443 : url.protocol === 'http:' ? 80 : undefined
   } catch {
     return undefined
-  }
-}
-
-function validBase64(value: string): boolean {
-  try {
-    return StudioDeviceTrust.base64Decode(value).length > 0
-  } catch {
-    return false
   }
 }
 

@@ -165,6 +165,13 @@ export const StudioDeviceTrust = {
     }
     return sha256(bytes)
   },
+  validNonce(value: string): boolean {
+    try {
+      return base64Decode(value).length === nonceBytes
+    } catch {
+      return false
+    }
+  },
   validPublicKey(value: string): boolean {
     try {
       return base64Decode(value).length === keyBytes

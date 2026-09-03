@@ -225,6 +225,29 @@ Describe('Studio device gateway handshake', () => {
     })
   })
 
+  Test('a low-order ephemeral key does not jam the pairing slot against the next device', async () => {
+    await withGateway({}, async env => {
+      env.gateway.openPairing(env.sessionId)
+      // A 32-byte all-zero key passes the length check every valid X25519 key also passes, but is a
+      // known low-order point: shared-secret derivation throws on it, after `state.pending` is
+      // already claimed for this connection. If disposal cannot attribute that claim back to this
+      // session, the slot stays jammed and every other device is refused as "already pairing" until
+      // the window closes and reopens.
+      const attacker = new TestDevice(env.gateway.port)
+      await attacker.open()
+      attacker.sendText(JSON.stringify({
+        ...hello(env, {}),
+        devicePublicKey: attacker.identity.publicKey,
+        ephemeralPublicKey: Buffer.alloc(32).toString('base64'),
+      }))
+      Expect((await attacker.rejected()).code).toBe('malformed')
+
+      const legitimate = new TestDevice(env.gateway.port)
+      const studioHello = await legitimate.connect({ metroPort: env.metroPort })
+      Expect(studioHello.mode).toBe('pair')
+    })
+  })
+
   Test('answers the probe and refuses every other HTTP path', async () => {
     await withGateway({}, async env => {
       const probe = await fetch(`http://127.0.0.1:${env.gateway.port}/device/probe`)
@@ -291,6 +314,17 @@ Describe('Studio device gateway sealed control plane', () => {
       })
       Expect(await device.nextSealed()).toEqual({ accepted: false, compileRevision: 1, type: 'studio.appliedAck' })
       Expect(env.gateway.status(env.sessionId).connection?.lastError).toContain('no longer current')
+
+      // A rejected claim proves nothing about the device's real revision — an arbitrarily high one
+      // must not turn the panel's status green for a device the session just refused.
+      device.sendSealed({
+        appliedRevision: 99,
+        compileRevision: 1,
+        identity: { ...identity, previewInstanceId: 'stale' },
+        type: 'device.applied',
+      })
+      Expect(await device.nextSealed()).toEqual({ accepted: false, compileRevision: 1, type: 'studio.appliedAck' })
+      Expect(env.gateway.status(env.sessionId).connection?.appliedRevision).toBe(1)
 
       device.sendSealed({ cellId: 'cell:missing', type: 'device.selectCell' })
       Expect(await device.nextSealed()).toMatchObject({ cellId: 'cell:missing', code: 'unknown-cell' })
