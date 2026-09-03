@@ -255,6 +255,24 @@ in the tab's scroll frame, which is what the app host already does for a root na
 simulator is now the everyday target for this kind of question: it needs no pairing, no unlocked
 screen, and no LAN address.
 
+Two more bugs surfaced by that live use, found only by re-testing after each fix rather than by the
+scripted device or any existing test:
+
+- The device client kept its own copy of the compile revision from construction and refused to
+  `applied()` a later one, so every Fast Refresh after the first edit crashed the device host with
+  "the applied revision is the loaded bundle revision." A live client survives a bundle it was not
+  constructed against — Fast Refresh replaces the bundle out from under it — so there is no correct
+  client-held copy to check; the host already makes the real comparison against its live bundle
+  revision to decide the stale-bundle overlay. The client no longer holds or checks one. Verified on
+  the simulator with a real edit-reload cycle: revision 4 applied, the new text rendered, no crash.
+- A `view`-kind scenario mounts one Tao view directly inside `AppShell` with no navigator to turn
+  `AppShell`'s `SafeAreaProvider` context into padding (only a navigator's `AppSurfaceFrame` does
+  that), so it painted under the status bar and home indicator on a device. `DeviceCellFrame` now
+  applies the device's safe-area insets itself for a `view`-kind cell only, leaving an `app`-kind cell
+  untouched so a window-owning navigator (a native tab bar or stack) keeps the true screen edges it
+  depends on. Verified on the simulator: the `WorkspaceRow` `"novel"` scenario now clears the status
+  bar instead of starting under it.
+
 Still to record from the phone: code comparison on its screen, the rendered cell, three scenario taps
 on the Tao badge, a Fast Refresh edit arriving, background and foreground reconnect, and whether a
 cable link-local address carries Metro. The phone was reachable only over Wi-Fi in these runs.
