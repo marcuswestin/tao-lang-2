@@ -13,7 +13,7 @@ type Availability = {
 
 type ToolCall = { name: string; input: unknown; summary: string; resultChars: number }
 
-type Approval = { approvalId: string; toolName: string; input: unknown; reason?: string }
+type Approval = { approvalId: string; toolName: string; input: unknown; reason?: string; diff?: string }
 
 type TurnResult = {
   status: 'complete' | 'needs-approval' | 'budget-exhausted' | 'failed' | 'unavailable'
@@ -46,6 +46,10 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
   panel.innerHTML = `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
       <strong style="flex:1">Ask about this app</strong>
+      <select class="chat-mode" style="background:#0f1411;color:#e8ede9;border:1px solid #3a4a3f;border-radius:6px;padding:2px 4px;font:inherit" title="Ask can only look. Build can propose changes for you to approve.">
+        <option value="ask">ask</option>
+        <option value="build">build</option>
+      </select>
       <label style="display:flex;gap:4px;align-items:center;color:#9fb3a5" title="Send this project's declarations to a hosted model">
         <input class="chat-cloud" type="checkbox"> cloud
       </label>
@@ -66,6 +70,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
   const input = panel.querySelector<HTMLInputElement>('.chat-input')!
   const send = panel.querySelector<HTMLButtonElement>('.chat-send')!
   const toggle = panel.querySelector<HTMLButtonElement>('.chat-toggle')!
+  const mode = panel.querySelector<HTMLSelectElement>('.chat-mode')!
 
   toggle.addEventListener('click', () => {
     const hidden = !log.hidden
@@ -175,11 +180,117 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     status.style.color = state.enabled ? '#6fb38a' : '#9fb3a5'
   }
 
+  /**
+   * An approval card is the moment a person decides. It shows the change itself, not the arguments that
+   * produced it, because approving an argument list is not consent to a diff nobody has read.
+   */
+  function askApproval(approvals: readonly Approval[]): void {
+    const box = document.createElement('div')
+    box.style.cssText = 'border:1px solid #d4a96b;border-radius:8px;padding:8px'
+    const heading = document.createElement('strong')
+    heading.style.color = '#d4a96b'
+    heading.textContent = approvals.length === 1
+      ? 'The agent wants to change your app'
+      : `The agent wants to make ${approvals.length} changes`
+    box.append(heading)
+    for (const approval of approvals) {
+      box.append(line(`${approval.toolName}${approval.reason === undefined ? '' : `: ${approval.reason}`}`))
+      if (approval.diff !== undefined) {
+        const diff = document.createElement('pre')
+        diff.style.cssText =
+          'white-space:pre-wrap;background:#0f1411;border-radius:6px;padding:6px;margin:4px 0;max-height:220px;overflow:auto'
+        diff.textContent = approval.diff
+        box.append(diff)
+      }
+    }
+    const buttons = document.createElement('div')
+    buttons.style.cssText = 'display:flex;gap:6px;margin-top:6px'
+    const approve = document.createElement('button')
+    approve.type = 'button'
+    approve.textContent = 'Apply it'
+    const decline = document.createElement('button')
+    decline.type = 'button'
+    decline.textContent = 'No'
+    buttons.append(approve, decline)
+    box.append(buttons)
+    log.append(box)
+    log.scrollTop = log.scrollHeight
+
+    const answer = (approved: boolean) => {
+      approve.disabled = true
+      decline.disabled = true
+      buttons.replaceChildren(line(approved ? 'You approved it.' : 'You declined.', '#9fb3a5'))
+      void resume(approvals.map(approval => ({ approvalId: approval.approvalId, approved })))
+    }
+    approve.addEventListener('click', () => answer(true))
+    decline.addEventListener('click', () => answer(false))
+  }
+
+  async function resume(responses: { approvalId: string; approved: boolean }[]): Promise<void> {
+    send.disabled = true
+    const thinking = line('continuing…')
+    log.append(thinking)
+    try {
+      show(await StudioApiClient.agentChat<TurnResult>('respond', { responses }))
+    } catch (error) {
+      log.append(line(`Studio could not continue: ${String(error)}`, '#d4736b'))
+    } finally {
+      thinking.remove()
+      send.disabled = false
+      log.scrollTop = log.scrollHeight
+    }
+  }
+
+  mode.addEventListener('change', () => {
+    void (async () => {
+      await StudioApiClient.agentChat('mode', { mode: mode.value })
+      log.replaceChildren()
+      log.append(
+        line(
+          mode.value === 'build'
+            ? 'Build mode: the agent can propose changes, and you approve each one before it lands.'
+            : 'Ask mode: the agent can only look at your app.',
+          '#9fb3a5',
+        ),
+      )
+    })()
+  })
+
   cloud.addEventListener('change', () => {
     void (async () => {
       showAvailability(await StudioApiClient.agentChat<Availability>('enable', { enabled: cloud.checked }))
     })()
   })
+
+  function show(turn: TurnResult): void {
+    showToolCalls(turn.toolCalls ?? [])
+    if (turn.status === 'unavailable') {
+      if (turn.availability !== undefined) {
+        showAvailability(turn.availability)
+      }
+      log.append(line(turn.availability?.reason ?? 'The chat is not available.', '#d4736b'))
+      return
+    }
+    if (turn.status === 'failed') {
+      log.append(line(`The model could not answer: ${turn.message ?? 'unknown failure'}`, '#d4736b'))
+      return
+    }
+    if (turn.text !== undefined && turn.text !== '') {
+      say('agent', turn.text)
+    }
+    if (turn.status === 'budget-exhausted' && turn.message !== undefined) {
+      log.append(line(turn.message, '#d4a96b'))
+    }
+    const usage = turn.usage
+    if (usage?.inputTokens !== undefined) {
+      log.append(
+        line(`${turn.steps ?? 0} steps, ${usage.inputTokens} in / ${usage.outputTokens ?? 0} out tokens`, '#6b7a70'),
+      )
+    }
+    if (turn.status === 'needs-approval' && (turn.pendingApprovals ?? []).length > 0) {
+      askApproval(turn.pendingApprovals ?? [])
+    }
+  }
 
   async function ask(): Promise<void> {
     const question = input.value.trim()
@@ -195,31 +306,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     try {
       const turn = await StudioApiClient.agentChat<TurnResult>('send', { message: question })
       thinking.remove()
-      showToolCalls(turn.toolCalls ?? [])
-      if (turn.status === 'unavailable') {
-        if (turn.availability !== undefined) {
-          showAvailability(turn.availability)
-        }
-        log.append(line(turn.availability?.reason ?? 'The chat is not available.', '#d4736b'))
-      } else if (turn.status === 'failed') {
-        log.append(line(`The model could not answer: ${turn.message ?? 'unknown failure'}`, '#d4736b'))
-      } else {
-        if (turn.text !== undefined && turn.text !== '') {
-          say('agent', turn.text)
-        }
-        if (turn.status === 'budget-exhausted' && turn.message !== undefined) {
-          log.append(line(turn.message, '#d4a96b'))
-        }
-        const usage = turn.usage
-        if (usage?.inputTokens !== undefined) {
-          log.append(
-            line(
-              `${turn.steps ?? 0} steps, ${usage.inputTokens} in / ${usage.outputTokens ?? 0} out tokens`,
-              '#6b7a70',
-            ),
-          )
-        }
-      }
+      show(turn)
     } catch (error) {
       thinking.remove()
       log.append(line(`Studio could not reach the chat: ${String(error)}`, '#d4736b'))

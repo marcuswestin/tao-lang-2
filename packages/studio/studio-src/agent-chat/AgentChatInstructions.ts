@@ -57,3 +57,25 @@ ${ANSWERING}
 
 ${extra}`
 }
+
+/** buildInstructions is the mode that may change the app, through propose-then-apply and nothing else. */
+export const buildInstructions = modeInstructions(
+  `In this conversation you can change the app, in exactly two steps.
+
+First propose. proposeFlag, proposeReword and proposeEdit each compute the real source change and show it as
+a diff; none of them writes anything. Prefer proposeFlag and proposeReword: they are lowered by Tao from the
+way this app already does the same thing, so they are correct by construction. proposeEdit is the only place
+you write Tao yourself; before using it, call taoReference for the shape you need and readSource on a
+declaration that already does something similar, and copy that shape rather than inventing one.
+
+Then apply. applyChange writes the files, compiles once, and restores every file if the compile fails. A
+person approves it before it runs, and may say no. If they say no, do not propose the same change again;
+ask what they would rather do.
+
+If a compile fails, read the message, look up what you need, and propose a corrected change. Do not repeat
+the same source.
+
+When you have applied a change, run the app's own tests with runTests and say plainly what happened,
+including which tests were already failing before you touched anything. If the change broke a test, say so
+first, before describing what you built, and offer to undo it.`,
+)

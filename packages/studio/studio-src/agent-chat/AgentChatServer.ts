@@ -4,10 +4,11 @@ import { FS, Repo } from '@shared'
 import { buildSemanticSnapshot, resolveTarget, type SemanticSnapshot } from '../agent-poc/SemanticSnapshot'
 import type { StudioProjectSession } from '../StudioProjectSession'
 import { declarationSource } from './AgentChatFacts'
-import { askInstructions } from './AgentChatInstructions'
+import { askInstructions, buildInstructions } from './AgentChatInstructions'
 import { AgentChatProvider } from './AgentChatProvider'
 import { AgentChatSession, type AgentChatTurn } from './AgentChatSession'
 import { type AgentChatToolCall, type AgentChatWorld, readTools } from './AgentChatTools'
+import { type AgentChatWriteWorld, APPROVAL_REQUIRED, type StagedChange, writeTools } from './AgentChatWrites'
 
 type Json = Record<string, unknown>
 
@@ -62,6 +63,8 @@ class AgentChatConversation {
   readonly #world: ReturnType<typeof worldFor>
   #chat: AgentChatSession | undefined
   #calls: AgentChatToolCall[] = []
+  #staged = new Map<string, StagedChange>()
+  #mode: 'ask' | 'build' = 'ask'
   #history: { role: 'user' | 'assistant'; text: string; toolCalls?: readonly AgentChatToolCall[] }[] = []
 
   constructor(session: StudioProjectSession, provider: AgentChatProvider) {
@@ -86,6 +89,19 @@ class AgentChatConversation {
     this.#chat = undefined
     this.#calls = []
     this.#history = []
+    this.#staged.clear()
+  }
+
+  /** The mode decides which tools exist at all. A read-only chat has no write tool to refuse. */
+  setMode(mode: 'ask' | 'build'): void {
+    if (mode !== this.#mode) {
+      this.#mode = mode
+      this.reset()
+    }
+  }
+
+  get mode(): 'ask' | 'build' {
+    return this.#mode
   }
 
   async send(text: string): Promise<Json> {
@@ -94,11 +110,17 @@ class AgentChatConversation {
       return { availability: this.#provider.availability(), status: 'unavailable' }
     }
     if (this.#chat === undefined) {
+      const record = (call: AgentChatToolCall) => this.#calls.push(call)
+      const build = this.#mode === 'build'
       this.#chat = new AgentChatSession({
+        ...(build ? { approvalRequired: APPROVAL_REQUIRED } : {}),
         drain: () => this.#calls.splice(0, this.#calls.length),
-        instructions: askInstructions,
+        instructions: build ? buildInstructions : askInstructions,
         model,
-        tools: readTools(this.#world, call => this.#calls.push(call)),
+        tools: {
+          ...readTools(this.#world, record),
+          ...(build ? writeTools(this.#writeWorld(), this.#staged, record) : {}),
+        },
       })
     }
     // The project may have changed between turns, so each turn starts from a freshly read one.
@@ -108,18 +130,61 @@ class AgentChatConversation {
     return await this.#record(turn)
   }
 
+  /** The write side of the world. Every change goes through one Studio mutation that compiles or rolls back. */
+  #writeWorld(): AgentChatWriteWorld {
+    return {
+      ...this.#world,
+      apply: async change => {
+        const result = await this.#session.applyAgentPocFiles({
+          edits: change.edits.map(edit => ({ content: edit.after, path: edit.path })),
+          expect: change.expect,
+          writeId: crypto.randomUUID(),
+        })
+        // The project just changed, so the next tool call must not answer from the graph it had before.
+        this.#world.invalidate()
+        return {
+          message: result.compile.message,
+          rolledBack: result.rolledBack,
+          status: result.compile.status,
+        }
+      },
+      sourceVersionOf: async path => (await this.#session.readFile(path)).sourceVersion,
+      undo: async () => {
+        const result = await this.#session.undoAgentPocFiles(crypto.randomUUID())
+        this.#world.invalidate()
+        return { message: result.compile.message, restored: result.restored, status: result.compile.status }
+      },
+    }
+  }
+
+  async respond(responses: readonly { approvalId: string; approved: boolean }[]): Promise<Json> {
+    if (this.#chat === undefined) {
+      return { message: 'Nothing is waiting for approval.', status: 'complete' }
+    }
+    return await this.#record(await this.#chat.respond(responses))
+  }
+
   async #record(turn: AgentChatTurn): Promise<Json> {
     this.#history.push({ role: 'assistant', text: turn.text, toolCalls: turn.toolCalls })
     await this.#log(turn)
     return {
       message: turn.message,
-      pendingApprovals: turn.pendingApprovals,
+      pendingApprovals: turn.pendingApprovals.map(approval => ({
+        ...approval,
+        diff: this.#diffFor(approval.input),
+      })),
       status: turn.status,
       steps: turn.steps,
       text: turn.text,
       toolCalls: turn.toolCalls,
       usage: turn.usage,
     }
+  }
+
+  /** The diff an approval is really about, so a person approves a change rather than an argument list. */
+  #diffFor(input: unknown): string | undefined {
+    const id = (input as { changeId?: unknown } | undefined)?.changeId
+    return typeof id === 'string' ? this.#staged.get(id)?.edits.map(edit => edit.diff).join('\n\n') : undefined
   }
 
   /** Every turn is written to disk: a transcript is the only audit trail of what was sent to a hosted model. */
@@ -173,6 +238,19 @@ export const AgentChat = {
     if (command === 'reset') {
       conversation.reset()
       return { status: 'reset' }
+    }
+    if (command === 'mode') {
+      conversation.setMode(body['mode'] === 'build' ? 'build' : 'ask')
+      return { mode: conversation.mode }
+    }
+    if (command === 'respond') {
+      const responses = Array.isArray(body['responses']) ? body['responses'] : []
+      return await conversation.respond(
+        responses.map(entry => ({
+          approvalId: String((entry as Json)['approvalId'] ?? ''),
+          approved: (entry as Json)['approved'] === true,
+        })),
+      )
     }
     if (command === 'history') {
       return { history: conversation.history }

@@ -396,13 +396,28 @@ export class StudioProjectSession {
     return { appName: this.appName, project: this.projectRoot }
   }
 
-  #agentPocUndo: { path: string; content: string; sourceVersion: string }[] | undefined
+  /**
+   * One entry per applied agent change, most recent last. A chat applies several changes in a conversation,
+   * and a single slot would make every change but the last one unrecoverable while still offering "undo".
+   */
+  #agentUndoStack: { path: string; content: string; sourceVersion: string }[][] = []
 
   /**
    * applyAgentPocFiles (semantic agent PoC) writes several files as one mutation, compiles once, and rolls every
    * file back when the compile fails. It keeps one undo record outside the source-action checkpoint bus.
    */
-  applyAgentPocFiles(request: { edits: readonly { path: string; content: string }[]; writeId: string }): Promise<{
+  applyAgentPocFiles(
+    request: {
+      edits: readonly { path: string; content: string }[]
+      writeId: string
+      /**
+       * The versions the change was computed against. An agent reads a file, plans an edit, and a person
+       * approves it some time later; without this, a change made in between is silently overwritten by
+       * content that never saw it.
+       */
+      expect?: readonly { path: string; sourceVersion: string }[]
+    },
+  ): Promise<{
     compile: StudioCompileCompletion
     rolledBack: boolean
   }> {
@@ -411,6 +426,13 @@ export class StudioProjectSession {
         const current = await this.readFile(edit.path)
         return { content: current.content, path: current.path, sourceVersion: current.sourceVersion }
       }))
+      for (const expected of request.expect ?? []) {
+        const current = before.find(file => file.path === expected.path)
+        const version = current?.sourceVersion ?? (await this.readFile(expected.path)).sourceVersion
+        if (version !== expected.sourceVersion) {
+          throw new StudioSourceConflictError(expected.path, expected.sourceVersion, version)
+        }
+      }
       const writes = await Promise.all(request.edits.map(async edit => ({
         path: await this.#resolveTaoFile(edit.path),
         sourceVersion: SourceActions.studioSourceVersion(edit.content),
@@ -430,7 +452,7 @@ export class StudioProjectSession {
         }
         return { compile, rolledBack: true }
       }
-      this.#agentPocUndo = before
+      this.#agentUndoStack.push(before)
       for (const [index, write] of writes.entries()) {
         this.#emitFile(this.#projectFile(before[index]!.path, write.sourceVersion))
       }
@@ -440,15 +462,15 @@ export class StudioProjectSession {
 
   undoAgentPocFiles(writeId: string): Promise<{ compile: StudioCompileCompletion; restored: string[] }> {
     return this.#mutate(async () => {
-      const before = this.#agentPocUndo
-      Assert.input(before !== undefined, 'Nothing applied by the agent PoC to undo.')
+      const before = this.#agentUndoStack[this.#agentUndoStack.length - 1]
+      Assert.input(before !== undefined, 'Nothing applied by the agent to undo.')
       await Promise.all(before.map(async file => FS.writeText(await this.#resolveTaoFile(file.path), file.content)))
       const compile = await this.#coordinator.noteStudioFileMutation(before.map(file => ({
         path: FS.resolvePath(file.path, this.projectRoot),
         sourceVersion: file.sourceVersion,
         writeId,
       })))
-      this.#agentPocUndo = undefined
+      this.#agentUndoStack.pop()
       for (const file of before) {
         this.#emitFile(this.#projectFile(file.path, file.sourceVersion))
       }

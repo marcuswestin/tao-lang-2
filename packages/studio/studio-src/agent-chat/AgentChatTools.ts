@@ -15,6 +15,7 @@ import {
 } from '../agent-poc/SemanticSnapshot'
 import type { StudioTestRun } from '../StudioTestRunner'
 import { declarationSource, fileOutlines, improvementFacts } from './AgentChatFacts'
+import { findSpec, specSections } from './AgentChatReference'
 
 export type AgentChatFile = { path: string; content: string }
 
@@ -205,6 +206,27 @@ export function readTools(world: AgentChatWorld, record: (call: AgentChatToolCal
         })
       },
       inputSchema: jsonSchema<Record<string, never>>(NO_ARGS),
+    }),
+
+    taoReference: tool({
+      description:
+        'Look up how Tao itself works, from the language specification. Use this before writing any Tao: you have not seen this language, and the spec is the only account of what it actually implements. Name a topic, for example "scenario", "checkbox", "query", "fixture" or "test".',
+      execute: async ({ topic }: { topic: string }) => {
+        const found = findSpec(await specSections(), topic)
+        return capture('taoReference', { topic }, {
+          note: found.note,
+          sections: found.sections.map(section => ({
+            deferralWarning: section.carriesDeferral
+              ? 'This section marks part of what it describes as not implemented.'
+              : undefined,
+            from: `Docs/Spec/${section.file}.md § ${section.heading}`,
+            text: section.text,
+          })),
+        })
+      },
+      inputSchema: objectSchema<{ topic: string }>({ topic: TEXT('What to look up, in a word or two.') }, [
+        'topic',
+      ]),
     }),
 
     trace: tool({
