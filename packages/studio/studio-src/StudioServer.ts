@@ -1,5 +1,6 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
 import { CLI, Errors, Repo } from '@shared'
+import { AgentChat } from './agent-chat/AgentChatServer'
 import { AgentPoc } from './agent-poc/AgentPocServer'
 import { type StudioClientAssetProvider, StudioClientAssets } from './StudioClientAssets'
 import { StudioFixtureGeneration } from './StudioFixtureGeneration'
@@ -519,6 +520,18 @@ async function handleRequest(
   }
   if (request.method === 'POST' && url.pathname === '/api/source-action/undo') {
     return response(request, url, options, await session.undoSourceAction(await request.json()))
+  }
+  if (url.pathname.startsWith('/api/agent-chat/')) {
+    return response(
+      request,
+      url,
+      options,
+      await AgentChat.handle(
+        session,
+        url.pathname.slice('/api/agent-chat/'.length),
+        (await request.json()) as Record<string, unknown>,
+      ),
+    )
   }
   if (url.pathname.startsWith('/api/agent-poc/')) {
     return response(
