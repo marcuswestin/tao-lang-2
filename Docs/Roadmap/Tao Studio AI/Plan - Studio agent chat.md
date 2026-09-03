@@ -431,6 +431,24 @@ Running these needs Studio started from a terminal with `ANTHROPIC_API_KEY` set,
 and someone reading what comes back. That is the next thing to do, and it is the only thing that can settle
 whether this approach works.
 
+### Found by writing the tests
+
+Three defects surfaced only because something drove the whole path rather than a piece of it, which is worth
+recording as a reason to write that kind of test early.
+
+The model's own `runTests` tool was never connected to the session. It had refused every call since it was
+written, and the baseline a verdict needs comes from exactly that call — so a verdict could never have been
+better than "not measured". Story three now takes a run before the change, runs the tests again when one
+lands, and reports the verdict in the tool result and in the turn, so a person sees it whatever the model says.
+
+An `applyChange` naming a change that was never staged still became an approval card: someone asked to approve
+an empty diff, which is how people learn to approve without reading. A tool call that cannot do anything is
+denied before anyone is asked.
+
+Text handles are positional — `T1` is the first literal in the project — so one applied change repoints all of
+them. The tool description said they expire, which is not a mechanism. The conversation now remembers the
+literal each handle was issued for and refuses a handle that no longer names it.
+
 ### Smaller things worth knowing
 
 - `overview` does not report everything its tool description once claimed; the description now says what the
