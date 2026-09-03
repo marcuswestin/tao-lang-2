@@ -58,7 +58,9 @@ MockModule('expo-secure-store', () => ({
 }))
 
 const {
+  badgeDragBounds,
   cellIdentityKey,
+  clampBadgePosition,
   createNativeStudioDeviceClient,
   describeDevice,
   deviceHostPresentation,
@@ -317,6 +319,15 @@ Describe('Studio device host platform adapters', () => {
     Expect(parseStoredRecord(JSON.stringify({ ...record, pinnedStudioKey: 7 }))).toBeUndefined()
     Expect(parseStoredRecord('{oops')).toBeUndefined()
     Expect(parseStoredRecord('null')).toBeUndefined()
+
+    // A secretKey that does not actually derive publicKey — a partial write, a bad migration — must
+    // not be handed to the client as usable; every signature it tries to make with it would fail.
+    const other = StudioDeviceTrust.generateIdentity()
+    Expect(
+      parseStoredRecord(
+        JSON.stringify({ identity: { publicKey: record.identity.publicKey, secretKey: other.secretKey } }),
+      ),
+    ).toBeUndefined()
   })
 
   Test('bridges the platform WebSocket events and calls onto the client socket', () => {
@@ -348,5 +359,40 @@ Describe('Studio device host platform adapters', () => {
     ])
     Expect(raw.sent).toEqual(['hello'])
     Expect(raw.closed).toEqual({ code: 1000, reason: 'done' })
+  })
+})
+
+Describe('Studio device host badge positioning', () => {
+  const zeroInsets = { bottom: 0, left: 0, right: 0, top: 0 }
+
+  Test('the minimum bound clears the safe area with no screen size known', () => {
+    Expect(badgeDragBounds({ insets: zeroInsets })).toEqual({
+      maxBottom: Number.POSITIVE_INFINITY,
+      maxRight: Number.POSITIVE_INFINITY,
+      minBottom: 8,
+      minRight: 8,
+    })
+    Expect(badgeDragBounds({ insets: { bottom: 34, left: 0, right: 12, top: 59 } })).toMatchObject({
+      minBottom: 42,
+      minRight: 20,
+    })
+  })
+
+  Test('a known screen size bounds how far the badge can be dragged toward the opposite edge', () => {
+    const bounds = badgeDragBounds({ insets: zeroInsets, screen: { height: 800, width: 400 } })
+    Expect(bounds.maxBottom).toBeLessThan(Number.POSITIVE_INFINITY)
+    Expect(bounds.maxRight).toBeLessThan(Number.POSITIVE_INFINITY)
+    // Never inverted: even a tiny screen leaves the minimum as the floor, not a negative range.
+    Expect(badgeDragBounds({ insets: zeroInsets, screen: { height: 10, width: 10 } })).toMatchObject({
+      maxBottom: 8,
+      maxRight: 8,
+    })
+  })
+
+  Test('clamps a dragged position to the given bounds without crossing either side', () => {
+    const bounds = { maxBottom: 100, maxRight: 100, minBottom: 8, minRight: 8 }
+    Expect(clampBadgePosition({ bottom: 50, right: 50 }, bounds)).toEqual({ bottom: 50, right: 50 })
+    Expect(clampBadgePosition({ bottom: -20, right: -20 }, bounds)).toEqual({ bottom: 8, right: 8 })
+    Expect(clampBadgePosition({ bottom: 500, right: 500 }, bounds)).toEqual({ bottom: 100, right: 100 })
   })
 })

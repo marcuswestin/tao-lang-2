@@ -405,35 +405,45 @@ export function secureStoreStorage(store: SecureStoreModule): TaoStudioDeviceSto
   }
 }
 
-/** parseStoredRecord accepts only a complete record; anything else is treated as no record at all. */
+/**
+ * parseStoredRecord accepts only a complete, self-consistent record; anything else — including a
+ * secretKey that does not actually derive publicKey, the way a partial write or a Keychain
+ * migration gone wrong could leave one — is treated as no record at all, the same as a first launch.
+ * A mismatched pair would otherwise fail every signature the device ever tries to make with no way
+ * to recover short of Forget Studio; falling back to "no record" instead means the client generates
+ * and persists a fresh identity and simply re-pairs.
+ */
 export function parseStoredRecord(raw: string): TaoStudioDeviceStoredRecord | undefined {
-  let value: unknown
   try {
-    value = JSON.parse(raw)
+    const value: unknown = JSON.parse(raw)
+    if (typeof value !== 'object' || value === null) {
+      return undefined
+    }
+    const record = value as Record<string, unknown>
+    const identityValue = record['identity']
+    if (typeof identityValue !== 'object' || identityValue === null) {
+      return undefined
+    }
+    const { publicKey, secretKey } = identityValue as Record<string, unknown>
+    const pinnedStudioKey = record['pinnedStudioKey']
+    if (
+      typeof publicKey !== 'string'
+      || typeof secretKey !== 'string'
+      || !StudioDeviceTrust.validPublicKey(publicKey)
+      || (pinnedStudioKey !== undefined && typeof pinnedStudioKey !== 'string')
+    ) {
+      return undefined
+    }
+    const identity = { publicKey, secretKey }
+    if (StudioDeviceTrust.publicKeyOf(identity) !== publicKey) {
+      return undefined
+    }
+    return {
+      identity,
+      ...(pinnedStudioKey === undefined ? {} : { pinnedStudioKey }),
+    }
   } catch {
     return undefined
-  }
-  if (typeof value !== 'object' || value === null) {
-    return undefined
-  }
-  const record = value as Record<string, unknown>
-  const identity = record['identity']
-  if (typeof identity !== 'object' || identity === null) {
-    return undefined
-  }
-  const { publicKey, secretKey } = identity as Record<string, unknown>
-  const pinnedStudioKey = record['pinnedStudioKey']
-  if (
-    typeof publicKey !== 'string'
-    || typeof secretKey !== 'string'
-    || !StudioDeviceTrust.validPublicKey(publicKey)
-    || (pinnedStudioKey !== undefined && typeof pinnedStudioKey !== 'string')
-  ) {
-    return undefined
-  }
-  return {
-    identity: { publicKey, secretKey },
-    ...(pinnedStudioKey === undefined ? {} : { pinnedStudioKey }),
   }
 }
 
@@ -554,16 +564,22 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
       onError: handleCellError,
     })
     : React.createElement(DeviceOverlay, { client, presentation })
+  // One provider for the whole host: the badge and sheet are its siblings, not descendants, of
+  // `content`, so they need their own path to real insets too — see DeviceBadge and DeviceSheet.
   return React.createElement(
-    RN.View,
-    { style: rootStyle, testID: 'tao-studio-device-host' },
-    content,
-    presentation.kind === 'cell'
-      ? React.createElement(DeviceBadge, { onPress: () => setSheetOpen(open => !open) })
-      : null,
-    sheetOpen
-      ? React.createElement(DeviceSheet, { client, onClose: () => setSheetOpen(false), state })
-      : null,
+    requireSafeAreaContext().SafeAreaProvider,
+    null,
+    React.createElement(
+      RN.View,
+      { style: rootStyle, testID: 'tao-studio-device-host' },
+      content,
+      presentation.kind === 'cell'
+        ? React.createElement(DeviceBadge, { onPress: () => setSheetOpen(open => !open) })
+        : null,
+      sheetOpen
+        ? React.createElement(DeviceSheet, { client, onClose: () => setSheetOpen(false), state })
+        : null,
+    ),
   )
 }
 
@@ -623,24 +639,15 @@ function StudioDeviceCellContent(props: {
  * what turns that into padding), so on a device it paints under the status bar and home indicator.
  * An `app`-kind scenario keeps its own AppSurfaceFrame or native chrome and must stay unpadded here,
  * or a window-owning navigator (a native tab bar or stack) would be squeezed inward from the true
- * screen edges it depends on.
+ * screen edges it depends on. `ConnectedDeviceHost` already establishes the `SafeAreaProvider` this
+ * reads from — it does not need its own.
  */
 function DeviceCellFrame(props: { bareView: boolean; children?: React.ReactNode; testID: string }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
   if (!props.bareView) {
     return React.createElement(RN.View, { style: rootStyle, testID: props.testID }, props.children)
   }
-  const SafeAreaContext = requireSafeAreaContext()
-  return React.createElement(
-    SafeAreaContext.SafeAreaProvider,
-    null,
-    React.createElement(BareViewCellFrame, { children: props.children, testID: props.testID }),
-  )
-}
-
-function BareViewCellFrame(props: { children?: React.ReactNode; testID: string }): React.JSX.Element {
-  const RN = requireReactNativeRuntime()
-  const insets = requireSafeAreaContext().useSafeAreaInsets()
   return React.createElement(
     RN.View,
     {
@@ -726,27 +733,47 @@ function DeviceActions(props: {
 /** DeviceBadge is the floating "Tao" affordance over a rendered cell; a drag moves it, a tap opens the sheet. */
 function DeviceBadge(props: { onPress: () => void }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
-  const [position, setPosition] = React.useState({ bottom: 24, right: 16 })
-  const dragStart = React.useRef<{ bottom: number; pageX: number; pageY: number; right: number } | undefined>(undefined)
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
+  const window = RN.Dimensions?.get('window')
+  const screen = window?.height === undefined || window.width === undefined
+    ? undefined
+    : { height: window.height, width: window.width }
+  const bounds = badgeDragBounds({ insets, screen })
+  const [position, setPosition] = React.useState(() =>
+    clampBadgePosition({ bottom: 24 + insets.bottom, right: 16 + insets.right }, bounds)
+  )
+  const dragStart = React.useRef<
+    { bottom: number; moved: boolean; pageX: number; pageY: number; right: number } | undefined
+  >(undefined)
   return React.createElement(
     RN.Pressable,
     {
       accessibilityLabel: 'Tao Studio device menu',
       accessibilityRole: 'button',
-      onPress: props.onPress,
+      onPress: () => {
+        if (dragStart.current?.moved !== true) {
+          props.onPress()
+        }
+      },
+      onTouchEnd: () => {
+        dragStart.current = undefined
+      },
       onTouchMove: (event: { nativeEvent: { pageX: number; pageY: number } }) => {
         const start = dragStart.current
         if (start === undefined) {
           return
         }
-        setPosition({
-          bottom: Math.max(8, start.bottom - (event.nativeEvent.pageY - start.pageY)),
-          right: Math.max(8, start.right - (event.nativeEvent.pageX - start.pageX)),
-        })
+        const dx = event.nativeEvent.pageX - start.pageX
+        const dy = event.nativeEvent.pageY - start.pageY
+        if (Math.abs(dx) > dragThresholdPx || Math.abs(dy) > dragThresholdPx) {
+          start.moved = true
+        }
+        setPosition(clampBadgePosition({ bottom: start.bottom - dy, right: start.right - dx }, bounds))
       },
       onTouchStart: (event: { nativeEvent: { pageX: number; pageY: number } }) => {
         dragStart.current = {
           bottom: position.bottom,
+          moved: false,
           pageX: event.nativeEvent.pageX,
           pageY: event.nativeEvent.pageY,
           right: position.right,
@@ -759,12 +786,48 @@ function DeviceBadge(props: { onPress: () => void }): React.JSX.Element {
   )
 }
 
+const dragThresholdPx = 6
+const badgeMarginPx = 8
+/** The badge's own width is content-sized (padding around "Tao"); this is a generous estimate for clamping. */
+const badgeWidthEstimatePx = 64
+
+/** badgeDragBounds keeps the badge's drag range clear of the safe area and, when the screen size is known, the screen edge. */
+export function badgeDragBounds(input: {
+  insets: { bottom: number; left: number; right: number; top: number }
+  screen?: { height: number; width: number }
+}): { maxBottom: number; maxRight: number; minBottom: number; minRight: number } {
+  const minBottom = badgeMarginPx + input.insets.bottom
+  const minRight = badgeMarginPx + input.insets.right
+  return {
+    maxBottom: input.screen === undefined
+      ? Number.POSITIVE_INFINITY
+      : Math.max(minBottom, input.screen.height - badgeStyle.height - input.insets.top - badgeMarginPx),
+    maxRight: input.screen === undefined
+      ? Number.POSITIVE_INFINITY
+      : Math.max(minRight, input.screen.width - badgeWidthEstimatePx - input.insets.left - badgeMarginPx),
+    minBottom,
+    minRight,
+  }
+}
+
+/** clampBadgePosition keeps a dragged position inside the given bounds — the badge can be pushed to an edge, never past it. */
+export function clampBadgePosition(
+  position: { bottom: number; right: number },
+  bounds: { maxBottom: number; maxRight: number; minBottom: number; minRight: number },
+): { bottom: number; right: number } {
+  return {
+    bottom: Math.min(Math.max(position.bottom, bounds.minBottom), bounds.maxBottom),
+    right: Math.min(Math.max(position.right, bounds.minRight), bounds.maxRight),
+  }
+}
+
 function DeviceSheet(props: {
   client: StudioDeviceClient
   onClose: () => void
   state: TaoStudioDeviceClientState
 }): React.JSX.Element {
   const RN = requireReactNativeRuntime()
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
   const { client, state } = props
   const scenarios = state.manifest?.scenarios ?? []
   const statusLines = [
@@ -790,7 +853,7 @@ function DeviceSheet(props: {
     ),
     React.createElement(
       RN.View,
-      { style: sheetPanelStyle },
+      { style: [sheetPanelStyle, { paddingBottom: Math.max(sheetPanelStyle.paddingBottom, 16 + insets.bottom) }] },
       React.createElement(RN.Text, { style: sheetTitleStyle }, 'Scenarios'),
       React.createElement(
         RN.ScrollView,
