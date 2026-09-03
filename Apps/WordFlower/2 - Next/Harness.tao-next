@@ -34,6 +34,7 @@ view HarnessHome() {
    Title "Navigation harness"
    render Col() {
       Text("Harness home marker")
+
       #openHarnessDetail
       FormButton("Open deterministic detail") {
          on press -> { present HarnessDetail() }

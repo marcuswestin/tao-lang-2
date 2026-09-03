@@ -5,7 +5,7 @@ use Local from @tao/data/providers/local
 use SavedToast, WorkspaceRow from @ui
 use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
-// Tranche status: open
+// Tranche status: absorbed
 //
 // FREEHAND UI SKETCHING L1. Scenario entries are journey prefixes: ordered interaction steps follow
 // the effective `run` or `render` subject, replay when the Studio cell mounts, and leave it
