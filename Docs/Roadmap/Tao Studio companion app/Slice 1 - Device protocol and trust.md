@@ -151,8 +151,13 @@ Rules:
 - The device renders an assignment only when its loaded bundle's `compileRevision` equals the
   assignment's; until then it shows the stale overlay. After mounting, it sends `device.applied`,
   which the gateway feeds to `session.acknowledgePreview` as an ordinary `preview-applied` message.
-- `projectLabel` is the project folder name. No filesystem path, source content, credential, or
-  unrelated session state crosses the gateway.
+- `projectLabel` is the project folder name, and no source content, credential, or unrelated session
+  state crosses the gateway. Filesystem paths are the exception, and an honest one: cell and scenario
+  identifiers are built from the source document's absolute path, so they cross inside the manifest
+  and every assignment. The bare project root does not — the gateway substitutes its own
+  `projectRoot` for anything a device claims, and withholds the `identity` record that carries it —
+  but the paths inside the identifiers remain, matching what the Metro bundle already hands the same
+  device. Closing that means changing the compiler's identifier scheme; see the proof record.
 - Backgrounding pauses the client; foregrounding dials again with the stored key.
 
 ## Error vocabulary
@@ -286,15 +291,25 @@ key," not a new mechanism. `'inactive'` (a system alert, the app switcher, a bri
 deliberately not treated as backgrounding, since iOS reports it in passing on the way into and out of
 `background` and reacting to it would pause and resume the connection for interruptions that were
 never really backgrounding. Gated on the host owning the client's lifecycle in the first place, same
-as the existing mount/unmount effect — a caller-supplied client controls its own start/stop. Covered
-by `studioDeviceAppStateAction` unit tests. Verified on the simulator for the half that was checkable
-there: pressed Home, waited, reopened via the companion's own URL scheme, and the gateway log shows
-no new `device connection` line and the cell stayed mounted with no overlay — the simulator does not
-actually background an app hard enough to prove the pause fires (its socket does not drop the way a
-physical device's can while backgrounded), so this only proves the resume path doesn't do anything
-destructive to an already-healthy session. **Verify this on roPhone too**: background it for at least
-a few minutes (long enough that iOS actually suspends the socket), foreground it, and confirm it
-reconnects promptly rather than sitting on the old backoff.
+as the existing mount/unmount effect — a caller-supplied client controls its own start/stop.
+
+Verified on the simulator: pressed Home, reopened through the companion's own URL scheme, twice, and
+the gateway logged a fresh `device connection from 127.0.0.1` for each resume — three dials, three
+connections. A scenario chosen from the workbench also survived the cycle, which it did not before
+the same change taught an assignment to record its cell (`selectedCellId` used to be written only by
+the on-device sheet, so a resume fell back to the manifest's first scenario).
+
+An earlier version of this paragraph claimed the opposite evidence — that no new connection appeared
+— and explained it as the simulator not backgrounding hard enough to drop the socket. That reading
+was impossible: `stop()` closes the socket itself, so a resume must dial a new one. The run behind it
+had been made against the earlier, redial-only version of this code, where doing nothing to a healthy
+connection was the correct outcome, and the paragraph was carried forward and re-explained when the
+implementation changed underneath it. Recorded here because a proof record that gets re-narrated is
+worse than one that admits a gap.
+
+Still unproven on a physical device: a background long enough that iOS suspends the socket on its
+own. What the simulator shows is that the pause and the resume both fire and that the session comes
+back intact, not how the OS behaves at the far end of a long background.
 
 Cable link-local carries Metro by design, not yet by proof: `preferredLanIPv4` already prefers a
 `169.254.x.x` interface over the normal LAN address when one is present, which is what macOS assigns
@@ -309,19 +324,31 @@ taps on the Tao badge, and a Fast Refresh edit arriving — the phone's own proo
 at `pairing-closed`; Fast Refresh is proven only by the scripted virtual device and the simulator so
 far, not by an edit reaching roPhone.
 
-An adversarial review of the slice found nine more defects, all fixed and covered by tests:
+Adversarial review of the slice found the defects below. Each one now has a test that fails when its
+fix is reverted — checked by reverting them one at a time, because the first round of these fixes
+shipped with tests that could not tell the fix from the bug: assertions written against a value that
+was already there, and pure decision functions standing in for wiring that could be deleted or
+inverted with everything still green.
 
 - A cell whose first render threw into the error boundary still sent `device.applied`, because the
   acknowledgement only looked at the assignment identity. Studio could report "applied ✓" while the
   phone showed an error screen. The boundary now reports the failure and the acknowledgement is
-  skipped for that identity; a later identity that renders is unaffected.
+  skipped for that identity; a later identity that renders is unaffected. A throw from the cell's
+  own _effects_ still slips through: `captureCommitPhaseError` only enqueues, so `componentDidCatch`
+  runs a commit later, after the passive effect has already acknowledged. The device still reports
+  the error, so the failure is not silent, but the revision reads as applied — open.
 - A refused `device.applied` (stale identity, wrong instance) still recorded the device's claimed
-  revision, so a stale device naming an arbitrarily high one turned the panel green. Only a claim
-  whose identity was not refused is recorded, bounded by a revision Studio actually compiled. A
-  plain `accepted: false` is _not_ a refusal — the coordinator answers that when the browser canvas
-  already advanced the revision — and conflating the two briefly cost the panel its honest report.
-- Scenario and cell identifiers embedded the project's absolute source path and crossed the gateway
-  verbatim. Both are now one-way tokens on the wire, translated back per inbound message.
+  revision, so a stale device naming an arbitrarily high one turned the panel green. Getting this
+  right took three attempts, and the two wrong ones are the interesting part. Recording only on
+  `accepted` looked correct and broke honest devices: the coordinator also answers `false` when the
+  browser canvas advanced the revision first, so a live phone's acknowledgement stopped reaching the
+  panel. Bounding by `compileRevision` looked correct and let a device claim a revision that never
+  compiled, because that counter is incremented when a compile _starts_ and stays incremented when
+  it fails. The bound is the coordinator's `appliedRevision`, which only advances for a revision that
+  compiled; a throw is the only refusal.
+- The device's copy of the bootstrap record carried `identity`, which holds the absolute project
+  root — the one thing the gateway otherwise substitutes rather than accept from a device. The
+  device host never read it, so it is withheld.
 - A 32-byte all-zero (or otherwise low-order) ephemeral key claimed the session's pairing slot
   before derivation failed on it, and disposal could not attribute the slot back to its session to
   release it, locking every other device out until the window cycled.
@@ -331,17 +358,35 @@ An adversarial review of the slice found nine more defects, all fixed and covere
   and said "32 bytes" for both keys and nonces in the rejection.
 - The badge and sheet sat outside any safe area, on fixed offsets that could fall inside the home
   indicator; the badge's drag had no ceiling and could be lost off-screen, and a drag could still
-  open the sheet on release.
+  open the sheet on release. It was also clamped only while being dragged, so a rotation could leave
+  it outside the new bounds — and since the badge is the only way to open the sheet, off-screen means
+  scenario switching, Reconnect and Forget Studio go with it.
+- Hoisting the host's `SafeAreaProvider` to the outermost position left it with no parent insets to
+  inherit, and that provider renders nothing until it has insets — so the whole host was withheld for
+  a native layout round trip. It starts from `initialWindowMetrics` now.
 - `TR-studio-device-trust.test.ts`'s man-in-the-middle assertion was `codes.size === 2 || a === b`,
   true for any two values by construction — the test proved nothing about its own claim.
 - The launcher asked `/_expo/link` first and probed `/_expo/open` only as a fallback, the reverse of
   the documented preference, so a future SDK offering `/_expo/open` would never actually be used.
+  Reordering then exposed a dead end the old order had masked: an `/_expo/open` answering non-404
+  with no usable url returned empty-handed without trying link and without a diagnostic.
 
-Known limitations recorded here rather than hidden: a cell's browser instance and device instance
-coexist, so the matrix keeps several live instances per cell; the `StudioDeviceConnection` status the
-workbench renders still carries Studio's real `cellId` despite its own "no paths" note, because
-redacting it there would need the hash in the browser bundle, which deliberately keeps the trust
-module and its crypto out; and cable link-local candidates are computed but only one ever reaches a
-device, since the candidate list is baked into a static Expo manifest field at Studio startup while
-the address detection that would enrich it runs per "Open on device" press — closing that needs a
-decision about how a dynamically discovered address reaches the device's bootstrap.
+One fix was withdrawn rather than completed. Scenario and cell identifiers embed the project's
+absolute source path, and a first attempt replaced them with one-way tokens on the wire. It could not
+work: the device must receive the raw `runtime.cell.scenarioId` to index the manifest compiled into
+its own Metro bundle, and that bundle already contains every path in the project — which this
+document's own threat model puts out of scope. Hashing two fields while handing over raw ids in the
+next message is not a boundary, and its tests used the hash as their own oracle, so replacing the
+hash with the identity function left them green. Making a device genuinely path-free means changing
+the compiler's identifier scheme, which the browser canvas shares.
+
+Known limitations recorded here rather than hidden: cell and scenario identifiers still embed the
+project's absolute source path everywhere except the withheld `identity`, as they do in the browser
+preview bundle today; a cell's browser instance and device instance coexist, so the matrix keeps
+several live instances per cell; a background/foreground cycle re-establishes the session, so the
+cell remounts and loses in-cell state even for a two-second app switch, which is a real cost of
+implementing the contract's "pause" as stop-and-redial; and cable link-local candidates are computed
+but only one ever reaches a device, since the candidate list is baked into a static Expo manifest
+field at Studio startup while the address detection that would enrich it runs per "Open on device"
+press — closing that needs a decision about how a dynamically discovered address reaches the
+device's bootstrap.
