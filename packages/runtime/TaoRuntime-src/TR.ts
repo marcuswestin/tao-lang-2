@@ -111,6 +111,7 @@ import {
 } from './TR-scheme'
 import { SelectableRow } from './TR-selectable-row'
 import { createShareSheet, type TaoShareSheet } from './TR-share'
+import { StudioDeviceHost } from './TR-studio-device-host'
 import {
   StudioEnvironmentControls,
   type TaoStudioEnvironment,
@@ -610,6 +611,7 @@ class TR {
   /** Studio exposes opt-in preview-only runtime behavior for generated Studio apps. */
   static readonly Studio = {
     ...StudioPreview,
+    DeviceHost: StudioDeviceHost,
     Environment: StudioEnvironmentControls,
     State: StudioStateControls,
   } as const
@@ -960,6 +962,10 @@ namespace TR {
   export type TaoStudioIdentity = TRTaoProps.TaoStudioIdentity
   /** StudioPreviewConfig identifies and secures one generated Studio preview bridge. */
   export type StudioPreviewConfig = import('./TR-studio-preview').StudioPreviewConfig
+  /** StudioDeviceClient drives one device's authenticated connection to the Studio device gateway. */
+  export type StudioDeviceClient = import('./TR-studio-device-client').StudioDeviceClient
+  /** StudioDeviceHostProps configures the native device host the generated preview root mounts. */
+  export type StudioDeviceHostProps = import('./TR-studio-device-host').StudioDeviceHostProps
   /** StudioEnvironment is one isolated preview cell's versioned provider and Scheme configuration. */
   export type StudioEnvironment = TaoStudioEnvironment
   /** StudioStateSeed carries exact full-snapshot provider envelopes into one isolated preview cell. */
