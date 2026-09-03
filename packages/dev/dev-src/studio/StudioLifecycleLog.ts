@@ -31,6 +31,7 @@ export type StudioLifecycleEvent =
 /** The parts of a launch a record can be attributed to. */
 export type StudioComponent =
   | 'browser-smoke'
+  | 'device-gateway'
   | 'metro'
   | 'native-shell'
   | 'preview'
