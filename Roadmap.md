@@ -141,11 +141,17 @@ tests written in Tao, green in Current, for every construct introduced.
   - Decided 2026-09-02. A Tao-published phone app for an improved development experience, paired
     with Tao Studio, and for pre-release testing and feedback by members a developer invites to
     their project on the Tao Lang servers, each with an account there. A `tao ship` flag of its
-    own delivers through it once it exists; plain `tao ship` and `--beta` are the store motions. Sequences after the derived Expo
-    host and the compiled-bundle update lane of `tao ship`. Design rules: project membership
-    as the only access model, no public sharing surface, compiled bundles only, the Studio
-    native-device canvas as first customer, rare shell releases. Context and rules:
-    `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`.
+    own delivers through it once it exists; plain `tao ship` and `--beta` are the store motions.
+    The implementation plan now includes trivial LAN/relay pairing, the everyday native-device
+    development loop, spoken and recorded user-story journeys, an iPad pen-and-touch workbench that
+    edits real view definitions through typed source actions, invited tester feedback and visual
+    proposals, permission-controlled forks, physical-device replay into regression tests, causal
+    inspection/performance, multi-device stories, and same-state revision comparison. Design rules:
+    project membership as the only remote access model, no public sharing surface, compiled bundles
+    only, Studio/source as authority, and rare shell releases. Plan:
+    `Docs/Roadmap/Tao Studio companion app/Plan - Tao Studio companion app.md`. Distribution context:
+    `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`. Slice 1 implementation prompt:
+    `Docs/Roadmap/Tao Studio companion app/Prompt - Implement Slice 1.md`.
 - [ ] Add `tao create` project scaffold
   - New app folder, minimal Tao app, default package layout, docs, dev and test scripts, and an immediate open-and-run path.
 - [ ] Implement secrets

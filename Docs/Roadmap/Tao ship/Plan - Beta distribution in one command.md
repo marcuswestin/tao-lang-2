@@ -507,7 +507,8 @@ for an improved development experience first, paired with Tao Studio while devel
 also for pre-release testing and feedback by members a developer has invited to their project
 on the Tao Lang servers, where every member must have created an account. The sections below
 are the assessment that preceded the decision and the design rules it carries; the program
-itself is opened in `Roadmap.md`.
+itself is opened in `Roadmap.md`. Its dedicated product and implementation plan is
+`../Tao Studio companion app/Plan - Tao Studio companion app.md`.
 
 The original proposal: an iOS app published by Tao, paired with Tao Studio while developing,
 whose first job is to put a build of your own Tao app on your phone without a native install,
