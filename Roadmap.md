@@ -295,7 +295,8 @@ Product and codebase backlog, unordered.
 - `Docs/Roadmap/Freehand UI sketching/` — FS-D1–FS-D20 design record, reconciled product stories and
   hand-authored wireframes, requirement prompt, and ordered implementation plan for Studio-owned
   free rectangles, generated `@/studio` views, snapping to Tao flow, data, variants, focus-in, and
-  the PencilKit-backed companion.
+  the PencilKit-backed companion; its approved review-and-refinement follow-on covers interaction
+  recording, prompted scenario expansion, collaborative visual review, and design conformity.
 - `Docs/Roadmap/Keyboard driven apps/` — the interaction system design (KEY-D1–D14: interaction outline, attention reducer, `scene`, the frame nav kind, commands as configured values, narrowing, surfaces, App Intents mapping) and its implementation plan.
 - `Docs/Roadmap/Deferred Tao language decisions.md` — the LANG-001..036 deferred-decision inventory.
 - `Docs/Roadmap/Add navigation and routing MVP/Follow-ups - …md` — unimplemented navigation work and `DEF-NAV-*` deferrals.
