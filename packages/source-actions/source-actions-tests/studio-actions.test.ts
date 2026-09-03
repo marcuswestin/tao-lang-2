@@ -306,7 +306,7 @@ Describe('Studio source-action patch bus', () => {
       kind: 'set-design-entry',
       memberName: 'card',
     })
-    Expect(patch.content).toContain('card [gap 10, radius 14, pad 18]')
+    Expect(patch.content).toContain('card [gap 10, pad 18, radius 14]')
     Expect(patch.content).toContain('card [pad 4]')
     await Expect(SourceActions.applyStudioPatch(document, {
       designName: 'Theme',

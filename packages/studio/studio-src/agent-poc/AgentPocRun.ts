@@ -243,7 +243,10 @@ export const reviewOutputSchema: Json = {
           enum: ['size', 'line', 'weight', 'pad', 'gap', 'radius'],
           type: 'string',
         },
-        value: { description: 'A whole number as text, e.g. 18', type: 'string' },
+        value: {
+          description: 'A whole number as text that differs from the current value shown in stylesUsed, e.g. 18',
+          type: 'string',
+        },
         rationale: { description: 'One sentence', type: 'string' },
       },
       required: ['operation', 'bundle', 'key', 'value', 'rationale'],

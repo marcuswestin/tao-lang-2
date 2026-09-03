@@ -1,7 +1,8 @@
 // Semantic agent proof of concept: the Studio endpoint. One handler, a switch on the sub-path.
 import { FS } from '@shared'
-import type { StudioProjectSession } from '../StudioProjectSession'
+import { StudioProjectSession } from '../StudioProjectSession'
 import { askQuestion, reviewView } from './AgentPocRun'
+import { planFeature } from './FeaturePlan'
 import {
   buildSemanticSnapshot,
   fieldStory,
@@ -77,7 +78,29 @@ function normalizeChange(
     }
   }
   change['bundle'] = resolved
-  return { original, resolved, note, usedByThisView: viewStyles.includes(resolved), viewStyles }
+  // A value equal to the current one is not a change; say so instead of producing a reordering edit.
+  const entries =
+    ((snapshot.nodes.get(`bundle:${design}.${resolved}`)?.detail ?? {})['entries'] as string[] | undefined)
+      ?? []
+  const key = String(change['key'] ?? '')
+  const current = entries.find(entry => entry.split(' ')[0] === key)
+  const requested = `${key} ${String(change['value'] ?? '')}`
+  if (current === requested) {
+    return {
+      original,
+      resolved: undefined,
+      note: `${resolved} already has ${current}; the model requested no change (no-op rejected)`,
+      viewStyles,
+    }
+  }
+  return {
+    current,
+    original,
+    resolved,
+    note: `${note}${current === undefined ? '' : `; current ${current}`}`,
+    usedByThisView: viewStyles.includes(resolved),
+    viewStyles,
+  }
 }
 
 export const AgentPoc = {
@@ -123,6 +146,33 @@ export const AgentPoc = {
         ? undefined
         : normalizeChange(snapshot, design, viewName, value.change, value.findings ?? [])
       return { ...result, designName: design, designPath: designNode?.path, normalization, viewName }
+    }
+    if (command === 'plan-feature') {
+      const plan = await planFeature(
+        snapshot,
+        String(body['request'] ?? ''),
+        async path => (await session.readFile(path)).content,
+      )
+      return {
+        ...plan,
+        edits: plan.edits.map(edit => ({
+          ...edit,
+          diff: StudioProjectSession.testing.sourceActionProposalDiff(edit.path, edit.before, edit.after),
+        })),
+      }
+    }
+    if (command === 'apply-feature') {
+      const edits = (body['edits'] as { path: string; after: string }[]).map(edit => ({
+        content: edit.after,
+        path: edit.path,
+      }))
+      return await session.applyAgentPocFiles({
+        edits,
+        writeId: `agent-poc-feature:${String(body['writeId'] ?? crypto.randomUUID())}`,
+      })
+    }
+    if (command === 'undo-feature') {
+      return await session.undoAgentPocFiles(`agent-poc-feature-undo:${crypto.randomUUID()}`)
     }
     if (command === 'ask') {
       const files = await Promise.all((await session.files()).map(async file => ({

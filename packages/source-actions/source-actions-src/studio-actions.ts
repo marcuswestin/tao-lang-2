@@ -701,9 +701,25 @@ async function setDesignEntry(document: AST.Document, request: StudioSetDesignEn
     )
   }
   const entry = formatDesignEntry(request.entry)
-  return await Formatter.formatCode(
-    setLayoutClauseEntrySource(document.textDocument.getText(), members[0]!.spec, entry),
-  )
+  // Edit in place and refuse a no-op: moving an unchanged entry to the end of the clause is not a change.
+  const spec = members[0]!.spec
+  const slot = layoutEntrySlot(entry.split(/\s+/))
+  const existing = spec.entries.find(candidate => layoutEntrySlot(ASTUtils.layoutEntryValues(candidate)) === slot)
+  const source = document.textDocument.getText()
+  if (existing !== undefined) {
+    const current = ASTUtils.layoutEntryValues(existing).join(' ')
+    if (current === entry) {
+      throw new Errors.UserInputError(
+        `Design member ${request.memberName} already has ${entry}; the requested change is a no-op.`,
+      )
+    }
+    return await Formatter.formatCode(applySourceEdits(source, [{
+      end: existing.$cstNode!.end,
+      replacement: entry,
+      start: existing.$cstNode!.offset,
+    }]))
+  }
+  return await Formatter.formatCode(setLayoutClauseEntrySource(source, spec, entry))
 }
 
 function selectedDesign(files: readonly AST.TaoFile[]): AST.DesignDeclaration | undefined {
