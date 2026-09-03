@@ -7,8 +7,9 @@ implementation lands. Where a language change is involved, the tranche first wri
 spelling into `Apps/WordFlower/2 - Next`, then reconciles Tao Revolution decisions and executable
 specifications as that vertical slice lands.
 
-Status: **product discovery closed** (FS-D1–FS-D20, Ro, 2026-09-02). Language spellings called out
-as open below remain tranche decisions rather than implementation choices.
+Status: **product discovery closed** (FS-D1–FS-D20, Ro, 2026-09-02). The two L1 spellings called out
+as open by FS-D7 and FS-D10 were settled by Ro on 2026-09-03 and are recorded below. Later tranche
+spellings remain tranche decisions rather than implementation choices.
 
 Terminology: a **sketch** is what Figma calls a frame. `frame` remains the interaction system's
 shell nav kind (KEY-D7) and a retired view kind; freehand work never reuses it.
@@ -91,6 +92,14 @@ cell and delegates initial Pencil input to a native sidecar.
 - The companion until its app shell exists, Tao rectangle rendering has landed, and the required
   physical-device proof can run.
 - Shrinking the native sidecar toward ink-only as Tao gesture primitives land.
+
+### L1 tranche decisions
+
+- Scenario pointer phases are `press down <selector>` and `press up <selector>`; hover is
+  `hover <selector>`. All three accept the existing text, label, placeholder, and `#tag` selector
+  family. Focus is tag-only as `focus #tag`. Plain `press` remains a complete activation.
+- `Spacer()` is the semantic flexible-space leaf. It has implicit `claim 1`, and an explicit
+  `[claim N]` overrides that weight.
 
 ---
 

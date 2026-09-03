@@ -186,7 +186,7 @@ maintaining four copies.
    `Scheme` conditions, with nothing drawn twice.
 8. They duplicate a cell and append `press down "Play"`, `advance 600.ms`, and
    `press up "Play"` after its render subject. Studio replays the journey prefix on mount, leaving
-   the cell interactive in the reached state (FS-D7; exact phase spellings settle in L1).
+   the cell interactive in the reached state (FS-D7; the exact phase spellings are now settled).
 
 ![Wireframe 4 — variants as scenario entries, and an edit inside one cell](wireframes/04-variants-and-states.svg)
 
@@ -355,8 +355,8 @@ put free placement into product source (FS-D1, FS-D4, FS-D5).
 `Placeholder("Cover art") [width 52, height 52]` is a stdlib element. Development renders a labelled
 hatched box; release renders an empty box with the same dimensions and `tao check` warns. It can
 carry a binding hint, receive a field-chip drop, appear as unbound in the inspector, and participate
-in the design check. The L1 tranche settles whether flexible intentional space is a `Spacer` element
-or `Box [claim 1]`, leaning `Spacer` (FS-D2, FS-D10).
+in the design check. Flexible intentional space is the semantic `Spacer()` leaf, with implicit
+`claim 1` and an explicit `[claim N]` override (FS-D2, FS-D10 and the settled L1 decision).
 
 ### Parameters from data and from literals
 

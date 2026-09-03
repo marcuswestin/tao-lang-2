@@ -87,15 +87,10 @@ replays its prefix and remains interactive.
 **Reconcile.** `Decisions.md` §9 and §16, `Docs/Spec/Tao Studio.md`, `Tao Testing.md`, `Tao Layout and
 UI.md`, the stdlib/package catalog, `Coverage.md`, and all WordFlower tiers at absorption.
 
-**Open before starting.** Settle in `2 - Next`:
-
-1. Exact phase/pointer step spellings and selector reach. Recommendation: adopt FS-D7's
-   `press down <selector>`, `press up <selector>`, `hover <selector>`, and `focus #tag`; let the first
-   three reuse the existing text/label/placeholder/`#tag` selector family. They extend `press`
-   without inventing a parallel gesture grammar and map directly to the harness.
-2. `Spacer` versus `Box [claim 1]`. Recommendation: publish `Spacer()` as the semantic, directly
-   draggable leaf with default `claim 1` and an overridable `[claim N]`. A bare box cannot distinguish
-   intentional flexible space from unfinished content in Studio or the design check.
+**Open before starting.** None. Ro settled both items on 2026-09-03: phase steps are
+`press down <selector>`, `press up <selector>`, and `hover <selector>` over the existing
+text/label/placeholder/`#tag` selector family; focus is tag-only as `focus #tag`. `Spacer()` is the
+semantic leaf with implicit `claim 1`, overridable by `[claim N]`.
 
 ---
 

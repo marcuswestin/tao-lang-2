@@ -2,10 +2,22 @@ use Workspaces from @data
 use WordFlowerNavigator from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
-use WorkspaceRow from @ui
+use SavedToast, WorkspaceRow from @ui
 use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
-// Tranche status: absorbed
+// Tranche status: open
+//
+// FREEHAND UI SKETCHING L1. Scenario entries are journey prefixes: ordered interaction steps follow
+// the effective `run` or `render` subject, replay when the Studio cell mounts, and leave it
+// interactive in the reached state. `press down`, `press up`, and `hover` accept the same text,
+// label, placeholder, and #tag selectors as `press`; `focus` is tag-only. Plain `press` remains a
+// complete activation. A required action argument may be omitted only from a scenario render, where
+// Studio supplies a per-cell logging stand-in. A fixture is optional and means an empty store; it is
+// required only when `prepare` or a render argument references a fixture handle.
+//
+// `Placeholder(Label)` is the stdlib's explicit unfinished-content leaf: labelled and hatched in
+// development, empty at its declared size in release, and warned about by `tao check`. `Spacer()` is
+// the semantic flexible-space leaf, with implicit `claim 1` and an overridable `[claim N]`.
 //
 // PROJECT RELEASE METADATA. This tranche gives local release tooling the source-owned version and
 // default runnable app it needs without making either value part of runtime behavior.
@@ -343,6 +355,20 @@ scenarios WorkspaceRow "states" {
    locale "en"
    scenario "novel" {
       render (Workspace: Novel)
+}  }
+
+// This focused state forces every L1 scenario seam in a real WordFlower view. `Revert` is required
+// by the view but intentionally omitted here, so Studio installs the invocation-recording stand-in.
+// No fixture is needed because the entry has no handles or preparation.
+scenarios SavedToast "interaction" {
+   device phone
+   scenario "held" {
+      render ()
+      press down #revertSave
+      advance 600.ms
+      press up #revertSave
+      hover #revertSave
+      focus #revertSave
 }  }
 
 scenarios WordFlower "devices" {
