@@ -4,6 +4,7 @@ import { createAndroid } from './android'
 import {
   createExpoConfig,
   ExpoConfig,
+  type ExpoConfigOptions,
   type ExpoSessionConfig,
   PREFERRED_EXPO_PORT,
 } from './expo-config'
@@ -38,9 +39,10 @@ function createSession(port: number = PREFERRED_EXPO_PORT): ExpoRunnerSession {
 /** createSessionWithAvailablePort prefers 8081 and otherwise allocates an OS-selected free port. */
 async function createSessionWithAvailablePort(
   preferredPort: number = PREFERRED_EXPO_PORT,
+  options: ExpoConfigOptions = {},
 ): Promise<ExpoRunnerSession> {
   const reservation = await Ports.reserveAvailable(preferredPort)
-  return createSessionFromConfig(createExpoConfig(reservation.port), reservation.release)
+  return createSessionFromConfig(createExpoConfig(reservation.port, options), reservation.release)
 }
 
 function createSessionFromConfig(

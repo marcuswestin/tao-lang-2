@@ -3,11 +3,16 @@ export const PREFERRED_EXPO_PORT = 8081
 
 export type ExpoPlatform = 'android' | 'ios' | 'web'
 
+export type ExpoConfigOptions = {
+  /** A custom URI scheme Expo CLI uses for dev-client deep links (`/_expo/link?choice=expo-dev-client`). */
+  scheme?: string
+}
+
 /** ExpoSessionConfig collects the Expo URLs and process options for one Metro session. */
 export type ExpoSessionConfig = ReturnType<typeof createExpoConfig>
 
 /** createExpoConfig derives all port-sensitive Expo settings from one session port. */
-export function createExpoConfig(port: number = PREFERRED_EXPO_PORT) {
+export function createExpoConfig(port: number = PREFERRED_EXPO_PORT, options: ExpoConfigOptions = {}) {
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new RangeError(`Expo port must be an integer from 1 through 65535; received ${port}.`)
   }
@@ -26,6 +31,9 @@ export function createExpoConfig(port: number = PREFERRED_EXPO_PORT) {
       'lan',
       '--port',
       port.toString(),
+      // Expo resolves the custom-runtime deep link only from an explicit scheme when the project
+      // does not itself depend on expo-dev-client, which the isolated Studio preview never does.
+      ...(options.scheme === undefined ? [] : ['--scheme', options.scheme]),
     ],
     EXPO_START_ENV: {
       BROWSER: WEB_BROWSER_APP_NAME,

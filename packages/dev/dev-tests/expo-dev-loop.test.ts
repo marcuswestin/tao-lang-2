@@ -1,14 +1,17 @@
 import { CLI, Errors, FS, Time } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { OutputText } from '../dev-src/cli/OutputText'
 import { DevLoopTUI } from '../dev-src/expo-dev-loop/DevLoopTUI'
 import { createExpoConfig } from '../dev-src/expo-dev-loop/expo-runner/expo-config'
 import { ExpoServer, formatExpoExitFailure } from '../dev-src/expo-dev-loop/expo-runner/expo-server'
 import { ExpoRunner } from '../dev-src/expo-dev-loop/expo-runner/ExpoRunner'
 import { parseIfconfigIPv4, preferredLanIPv4 } from '../dev-src/expo-dev-loop/expo-runner/lan-host'
+import { type ExpoFetch, expoRuntimeLink, fetchExpoOpenEndpoint } from '../dev-src/expo-dev-loop/expo-runner/metro'
 import {
+  devicectlFailure,
   expoGoUrl,
   iosPhysicalDevicesFromDevicectl,
+  runDevicectlJson,
 } from '../dev-src/expo-dev-loop/expo-runner/physical-device'
 import { handleCommandKey } from '../dev-src/expo-dev-loop/keyboard-input/CommandKeys'
 import Commands from '../dev-src/expo-dev-loop/keyboard-input/Commands'
@@ -217,6 +220,22 @@ Describe('Expo dev-loop port helpers', () => {
   })
 })
 
+Describe('Expo session scheme', () => {
+  Test('passes a custom scheme to Expo only when one is requested', () => {
+    Expect(createExpoConfig(8_099).EXPO_START_ARGS).not.toContain('--scheme')
+    Expect(createExpoConfig(8_099, { scheme: 'taostudiocompanion' }).EXPO_START_ARGS).toEqual([
+      'expo',
+      'start',
+      '--host',
+      'lan',
+      '--port',
+      '8099',
+      '--scheme',
+      'taostudiocompanion',
+    ])
+  })
+})
+
 Describe('Expo physical-device host and device listing', () => {
   Test('prefers an active USB link-local address over Wi-Fi', () => {
     const interfaces = parseIfconfigIPv4(`
@@ -259,8 +278,146 @@ en7: flags=8863
     })).toEqual([{ id: 'UDID-1', name: 'roPhone' }])
   })
 
+  Test('keeps a physical device whose Xcode 26 report omits reality', () => {
+    Expect(iosPhysicalDevicesFromDevicectl({
+      result: {
+        devices: [{
+          deviceProperties: { name: 'roPhone' },
+          hardwareProperties: { deviceType: 'iPhone', udid: '00008140-00163CD81481801C' },
+          identifier: 'E4795A5B-C1B6-55BB-A855-1E96A66F15CF',
+        }],
+      },
+    })).toEqual([{ id: '00008140-00163CD81481801C', name: 'roPhone' }])
+  })
+
   Test('builds an Expo Go URL for the detected host', () => {
     Expect(expoGoUrl('169.254.37.4')).toBe('exp://169.254.37.4:8081')
+  })
+
+  Test('reads a devicectl JSON report through a temporary file and removes the file afterwards', async () => {
+    const tmpRoot = await mkTestDir('tao-devicectl-json-')
+    try {
+      const seen: string[][] = []
+      const run: typeof CLI.run = async (command, spec = {}) => {
+        const args = [...(spec.args ?? [])]
+        seen.push([command, ...args])
+        await FS.writeJson(args[args.indexOf('--json-output') + 1] ?? '', { result: { devices: [] } })
+        return { args, command, exitCode: 0, signal: null, stderr: '', stdout: '' }
+      }
+
+      const outcome = await runDevicectlJson<{ result?: { devices?: unknown[] } }>(['list', 'devices'], {
+        run,
+        tmpRoot,
+      })
+
+      Expect(outcome.failure).toBeUndefined()
+      Expect(outcome.payload?.result?.devices).toEqual([])
+      Expect(seen[0]?.slice(0, 4)).toEqual(['xcrun', 'devicectl', 'list', 'devices'])
+      Expect(seen[0]?.[4]).toBe('--json-output')
+      Expect(await FS.listDir(tmpRoot)).toEqual([])
+    } finally {
+      await FS.remove(tmpRoot)
+    }
+  })
+
+  Test('names the devicectl failure from its JSON error block, else from the last stderr line', async () => {
+    const tmpRoot = await mkTestDir('tao-devicectl-failure-')
+    try {
+      const reported = await runDevicectlJson(['list', 'devices'], {
+        run: async (command, spec = {}) => {
+          const args = [...(spec.args ?? [])]
+          await FS.writeJson(args[args.indexOf('--json-output') + 1] ?? '', {
+            error: {
+              code: 1,
+              domain: 'com.apple.coredevice.devicectl',
+              userInfo: { NSLocalizedDescription: { string: 'Timed out waiting for CoreDeviceService.' } },
+            },
+            info: { outcome: 'failed' },
+          })
+          return { args, command, exitCode: 1, signal: null, stderr: 'ERROR: Timed out\n', stdout: '' }
+        },
+        tmpRoot,
+      })
+      Expect(reported.failure).toEqual({
+        code: 1,
+        domain: 'com.apple.coredevice.devicectl',
+        message: 'Timed out waiting for CoreDeviceService.',
+      })
+
+      const silent = await runDevicectlJson(['list', 'devices'], {
+        run: async (command, spec = {}) => ({
+          args: [...(spec.args ?? [])],
+          command,
+          exitCode: 72,
+          signal: null,
+          stderr: 'xcrun: error: unable to find utility "devicectl", not a developer tool or in PATH\n',
+          stdout: '',
+        }),
+        tmpRoot,
+      })
+      Expect(silent.payload).toBeUndefined()
+      Expect(silent.failure?.message).toBe(
+        'xcrun: error: unable to find utility "devicectl", not a developer tool or in PATH',
+      )
+
+      Expect(devicectlFailure({ result: {} })).toBeUndefined()
+      Expect(devicectlFailure({ error: { code: 7 } })?.message).toBe(
+        'devicectl reported a failure without a description.',
+      )
+    } finally {
+      await FS.remove(tmpRoot)
+    }
+  })
+})
+
+Describe('Expo Metro runtime link helpers', () => {
+  Test('asks /_expo/link for the development-client link and follows its redirect', async () => {
+    const requests: string[] = []
+    const fetchImpl: ExpoFetch = async input => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      requests.push(url)
+      return new Response(null, {
+        headers: { location: 'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.1.20%3A8081' },
+        status: 307,
+      })
+    }
+
+    const link = await expoRuntimeLink('http://127.0.0.1:8081', { devClient: true, fetch: fetchImpl, platform: 'ios' })
+
+    Expect(link).toBe('taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.1.20%3A8081')
+    Expect(requests).toEqual(['http://127.0.0.1:8081/_expo/link?platform=ios&choice=expo-dev-client'])
+  })
+
+  Test('asks for the Expo Go link by default and reads a 404 as no link', async () => {
+    const requests: string[] = []
+    const fetchImpl: ExpoFetch = async input => {
+      requests.push(String(input))
+      return new Response('', { status: 404 })
+    }
+
+    Expect(await expoRuntimeLink('http://127.0.0.1:8081', { fetch: fetchImpl, platform: 'android' })).toBeUndefined()
+    Expect(requests).toEqual(['http://127.0.0.1:8081/_expo/link?platform=android'])
+  })
+
+  Test('reports the /_expo/open status and JSON body without interpreting them', async () => {
+    const answers = new Map<string, Response>([
+      [
+        'http://127.0.0.1:8081/_expo/open?platform=ios',
+        new Response(JSON.stringify({ url: 'exp://x' }), {
+          headers: { 'content-type': 'application/json' },
+          status: 200,
+        }),
+      ],
+      ['http://127.0.0.1:8082/_expo/open?platform=ios', new Response('Not found', { status: 404 })],
+    ])
+    const fetchImpl: ExpoFetch = async input => answers.get(String(input)) ?? new Response('', { status: 500 })
+
+    const present = await fetchExpoOpenEndpoint('http://127.0.0.1:8081', 'ios', fetchImpl)
+    Expect(present.status).toBe(200)
+    Expect(present.body?.url).toBe('exp://x')
+
+    const absent = await fetchExpoOpenEndpoint('http://127.0.0.1:8082', 'ios', fetchImpl)
+    Expect(absent).toEqual({ body: undefined, status: 404, text: 'Not found' })
   })
 })
 
