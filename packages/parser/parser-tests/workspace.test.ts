@@ -247,15 +247,21 @@ Describe('minimal Tao parser', () => {
 
   Test('parses local package import paths', async () => {
     const parseResult = await testParseSyntax(`
+      use RootView from @
+      use GeneratedView from @/studio
       use Text from @bar
       use Label from @bar/forms
     `)
 
     Expect(parseResult.entry.document.parseResult.lexerErrors).toEqual([])
     Expect(parseResult.entry.document.parseResult.parserErrors).toEqual([])
-    const [packageUse, subfolderUse] = parseResult.entry.ast.statements
+    const [rootUse, generatedUse, packageUse, subfolderUse] = parseResult.entry.ast.statements
+    Expect.Is(rootUse, AST.isUseStatement)
+    Expect.Is(generatedUse, AST.isUseStatement)
     Expect.Is(packageUse, AST.isUseStatement)
     Expect.Is(subfolderUse, AST.isUseStatement)
+    Expect(rootUse.importPath).toBe('@')
+    Expect(generatedUse.importPath).toBe('@/studio')
     Expect(packageUse.importPath).toBe('@bar')
     Expect(subfolderUse.importPath).toBe('@bar/forms')
   })

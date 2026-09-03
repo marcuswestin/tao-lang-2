@@ -137,7 +137,16 @@ export namespace Packages {
       packages.set(name, paths)
     }
     if (await FS.isDirectory(resolvedRoot)) {
+      const generatedPackage = FS.resolvePath('@', resolvedRoot)
+      if (await FS.isDirectory(generatedPackage)) {
+        // The bare `@` directory is a reserved project package even while its generated scaffold
+        // is empty. Studio may populate it after the package context has been created.
+        record(generatedPackage)
+      }
       for (const path of await Repo.directoriesUnder(resolvedRoot, { namePrefix: '@' })) {
+        if (FS.basename(path) === '@' && path !== generatedPackage) {
+          continue
+        }
         if (await containsTaoSource(path)) {
           record(path)
         }
@@ -279,6 +288,15 @@ export namespace Packages {
     const targetPackage = containingPath(targetPath, context.index)
 
     if (sourcePackage?.path !== targetPackage?.path) {
+      if (relativeImportLeavesGeneratedPackage(sourcePackage, targetPackage, targetPath)) {
+        return {
+          importPath,
+          relation: 'same-project-package',
+          targetPath,
+          candidateMode: 'direct',
+          packageName: sourcePackage.name,
+        }
+      }
       return invalidResolution(importPath, 'package-boundary')
     }
 
@@ -289,6 +307,16 @@ export namespace Packages {
       candidateMode: 'direct',
       packageName: sourcePackage?.name,
     }
+  }
+
+  function relativeImportLeavesGeneratedPackage(
+    sourcePackage: Indexed | undefined,
+    targetPackage: Indexed | undefined,
+    targetPath: string,
+  ): sourcePackage is Indexed {
+    return sourcePackage?.name === '@'
+      && targetPackage === undefined
+      && FS.pathIsWithin(targetPath, FS.dirname(sourcePackage.path))
   }
 
   function relationForRelativeTarget(targetPath: string, fromFilePath: string): Relation {
@@ -467,7 +495,7 @@ export namespace Packages {
   }
 
   function isPackageDirectoryName(name: string): boolean {
-    return name.startsWith('@') && name.length > 1
+    return name.startsWith('@')
   }
 
   /** isVisible returns whether a declaration visibility is accessible through a resolved relation. */
