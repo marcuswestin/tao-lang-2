@@ -21,6 +21,21 @@ export default {
     f.oneSpaceAfter('press')
   },
 
+  /** PressPhaseStep preserves the phase before the ordinary selector target. */
+  PressPhaseStep(f) {
+    f.oneSpaceAfter('press', 'down', 'up')
+    f.oneSpaceBetweenProperties('selector', 'target')
+  },
+
+  HoverStep(f) {
+    f.oneSpaceAfter('hover')
+    f.oneSpaceBetweenProperties('selector', 'target')
+  },
+
+  FocusStep(f) {
+    f.oneSpaceAfter('focus')
+  },
+
   PressToolbarCommandStep(f) {
     f.oneSpaceAfter('press', 'command')
     f.oneSpaceBefore('command')

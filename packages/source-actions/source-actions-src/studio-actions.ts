@@ -418,10 +418,12 @@ async function setScenarioArguments(
     }
   }
   if (additions.length > 0) {
+    const firstStepOffset = scenario.block.steps[0]?.$cstNode?.offset
+    const insertionOffset = firstStepOffset ?? scenario.block.$cstNode.end - 1
     edits.push({
-      end: scenario.block.$cstNode.end - 1,
-      replacement: `\n${additions.join('\n')}\n`,
-      start: scenario.block.$cstNode.end - 1,
+      end: insertionOffset,
+      replacement: `${firstStepOffset === undefined ? '\n' : ''}${additions.join('\n')}\n`,
+      start: insertionOffset,
     })
   }
   const content = applySourceEdits(source, edits)

@@ -74,6 +74,63 @@ Describe('validator: fixtures and scenarios', () => {
   )
 
   Test(
+    'accepts an empty-store focused scenario with an omitted required action and ordered pointer steps',
+    accepts(`
+      view SavedToast(Revert action()) {
+        render inject Revert ${tsFence} return null ${fence}
+      }
+      scenarios SavedToast "states" {
+        device phone
+        scenario "held" {
+          render ()
+          press down #revertSave
+          advance 600.ms
+          press up #revertSave
+          hover #revertSave
+          focus #revertSave
+        }
+      }
+    `),
+  )
+
+  Test(
+    'still requires every omitted non-action render parameter',
+    rejects(
+      `
+        view SavedToast(Label text, Revert action()) {
+          render inject Revert ${tsFence} return null ${fence}
+        }
+        scenarios SavedToast "states" {
+          device phone
+          scenario "missing label" { render () }
+        }
+      `,
+      scenarioValidationMessages.renderMissingArgument('SavedToast', 'Label'),
+    ),
+  )
+
+  Test(
+    'requires a fixture only when a scenario references a handle or prepares fixture data',
+    rejects(
+      `
+        data Stories / Story { Title text }
+        fixture StoriesFixture { Lead = create Story { Title: "Lead" } }
+        view StoryRow(Story) { render inject ${tsFence} return null ${fence} }
+        scenarios StoryRow "states" {
+          device phone
+          scenario "handle" { render (Story: Lead) }
+          scenario "prepare" {
+            render (Story: Lead)
+            prepare { update Lead { Title: "Prepared" } }
+          }
+        }
+      `,
+      scenarioValidationMessages.fixtureRequired('states / handle'),
+      scenarioValidationMessages.fixtureRequired('states / prepare'),
+    ),
+  )
+
+  Test(
     'requires run and render to be mutually exclusive',
     rejects(
       `

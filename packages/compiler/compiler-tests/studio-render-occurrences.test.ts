@@ -7,6 +7,48 @@ const tsFence = '```ts'
 const fence = '```'
 
 Describe('compiler: Studio render occurrences', () => {
+  Test('publishes empty-store journey steps and distinct omitted-action stand-ins', async () => {
+    await withTaoFiles('tao-studio-scenario-journey-', {
+      'Main.tao': `
+        app Preview { view Main }
+        view Main() { render Native() }
+        view SavedToast(Revert action()) { render Native() }
+        view Native() { render inject ${tsFence} return null ${fence} }
+
+        scenarios SavedToast "states" {
+          device phone
+          scenario "held" {
+            render ()
+            press down label "Revert"
+            advance 600.ms
+            press up #revertSave
+            hover placeholder "Revert save"
+            focus #revertSave
+          }
+        }
+      `,
+    }, async paths => {
+      const manifest = (await Workspace.compile(paths['Main.tao'], { studio: true })).studioManifest
+
+      const scenario = manifest?.scenarios[0]
+      Expect(scenario?.fixtureId).toBeUndefined()
+      Expect(scenario).toMatchObject({
+        steps: [
+          { kind: 'pressDown', selector: 'label', target: 'Revert' },
+          { kind: 'advance', milliseconds: 600 },
+          { kind: 'pressUp', selector: 'tag', target: 'revertSave' },
+          { kind: 'hover', selector: 'placeholder', target: 'Revert save' },
+          { kind: 'focus', tag: 'revertSave' },
+        ],
+        subject: {
+          arguments: { Revert: { kind: 'action-stand-in', parameter: 'Revert' } },
+          kind: 'view',
+          viewName: 'SavedToast',
+        },
+      })
+    })
+  })
+
   Test('adds version-bound occurrence metadata without replacing existing Tao props behavior', async () => {
     await withTaoFiles('tao-studio-render-occurrences-', {
       'Main.tao': `

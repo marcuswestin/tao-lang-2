@@ -5,6 +5,7 @@ import "./app"
 import "./data"
 import "./expressions"
 import "./terminals"
+import "./tests"
 
 entry ScenariosGrammarEntrypoint:
     FixtureDeclaration | ScenarioGroupDeclaration;
@@ -69,7 +70,12 @@ ScenarioDeclaration:
 ScenarioBlock:
     '{' entries+=(ScenarioFixtureClause | ScenarioPrepareClause | ScenarioRunClause
         | ScenarioRenderClause | ScenarioDeviceClause | ScenarioAppearanceClause
-        | ScenarioLocaleClause | ScenarioDirectionClause | ScenarioNetworkClause)* '}';
+        | ScenarioLocaleClause | ScenarioDirectionClause | ScenarioNetworkClause)*
+        steps+=(PressPhaseStep | HoverStep | FocusStep | AdvanceStep)* '}';
+
+// A scenario is a state reached by replaying only the useful interaction prefix after its subject,
+// rather than a second spelling of the complete test language.
+type ScenarioStep = PressPhaseStep | HoverStep | FocusStep | AdvanceStep;
 
 type ScenarioClause = ScenarioFixtureClause | ScenarioPrepareClause | ScenarioRunClause
     | ScenarioRenderClause

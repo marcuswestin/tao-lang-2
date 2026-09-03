@@ -65,6 +65,28 @@ type TaoTestPressStep = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestPressPhaseStep delivers one half of a press without synthesizing the other half. */
+type TaoTestPressPhaseStep = {
+  selector: string
+  target: string
+  source: TaoTestSourceLocation
+} & ({ kind: 'pressDown' } | { kind: 'pressUp' })
+
+/** TaoTestHoverStep moves the pointer over one selector target. */
+type TaoTestHoverStep = {
+  kind: 'hover'
+  selector: string
+  target: string
+  source: TaoTestSourceLocation
+}
+
+/** TaoTestFocusStep gives focus to one stable tagged element. */
+type TaoTestFocusStep = {
+  kind: 'focus'
+  tag: string
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestEnterStep declares text entry into one selected input. */
 type TaoTestEnterStep = {
   kind: 'enter'
@@ -146,6 +168,9 @@ type TaoTestStep =
   | TaoTestNavigationTitleExpectation
   | TaoTestInputValueExpectation
   | TaoTestPressStep
+  | TaoTestPressPhaseStep
+  | TaoTestHoverStep
+  | TaoTestFocusStep
   | TaoTestToolbarCommandExpectation
   | TaoTestToolbarCommandPress
   | TaoTestRelaunchStep
@@ -268,6 +293,21 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
       source: sourceLocation(step),
     }),
     PressTextStep: compilePressTextStep,
+    PressPhaseStep: step => ({
+      kind: step.phase === 'down' ? 'pressDown' : 'pressUp',
+      ...pointerTarget(step),
+      source: sourceLocation(step),
+    }),
+    HoverStep: step => ({
+      kind: 'hover',
+      ...pointerTarget(step),
+      source: sourceLocation(step),
+    }),
+    FocusStep: step => ({
+      kind: 'focus',
+      source: sourceLocation(step),
+      tag: tagName(step.tag),
+    }),
     PressToolbarCommandStep: step => ({
       kind: 'pressToolbarCommand',
       label: literalText(step.value),
@@ -368,6 +408,14 @@ function compilePressTextStep(press: AST.PressTextStep): TaoTestPressStep {
     text: press.text,
     source: sourceLocation(press),
   }
+}
+
+function pointerTarget(step: AST.PressPhaseStep | AST.HoverStep): { selector: string; target: string } {
+  if (step.tag !== undefined) {
+    return { selector: 'tag', target: tagName(step.tag) }
+  }
+  Assert.defined(step.target, 'parsed pointer step has a text target or tag')
+  return { selector: step.selector ?? 'text', target: step.target }
 }
 
 function compileSubmitInputStep(submit: AST.SubmitInputStep): TaoTestSubmitStep {

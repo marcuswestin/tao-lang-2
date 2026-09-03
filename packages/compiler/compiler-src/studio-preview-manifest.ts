@@ -1,4 +1,4 @@
-import { Type } from '@ast-utils'
+import { ASTUtils, Type, Units } from '@ast-utils'
 import type { GenerationDeclaration, GenerationField } from '@generation'
 import { AST, type ParsedFile } from '@parser'
 import { Assert, Switch } from '@shared'
@@ -43,6 +43,22 @@ export type StudioPreviewFixtureValue =
   | { kind: 'now' }
   | { handle: string; kind: 'fixture-reference' }
 
+export type StudioPreviewScenarioArgument =
+  | StudioPreviewFixtureValue
+  | { kind: 'action-stand-in'; parameter: string }
+
+type StudioPreviewPointerTarget = {
+  selector: 'label' | 'placeholder' | 'tag' | 'text'
+  target: string
+}
+
+export type StudioPreviewScenarioStep =
+  | (StudioPreviewPointerTarget & { kind: 'pressDown' })
+  | (StudioPreviewPointerTarget & { kind: 'pressUp' })
+  | (StudioPreviewPointerTarget & { kind: 'hover' })
+  | { kind: 'focus'; tag: string }
+  | { kind: 'advance'; milliseconds: number }
+
 export type StudioPreviewFixtureManifest = {
   accounts: readonly {
     fields: Readonly<Record<string, StudioPreviewFixtureValue>>
@@ -71,7 +87,7 @@ export type StudioPreviewScenarioManifest = {
     locale?: string | 'pseudolocale'
     network?: 'offline' | 'online'
   }
-  fixtureId: string
+  fixtureId?: string
   group: string
   id: string
   name: string
@@ -80,6 +96,7 @@ export type StudioPreviewScenarioManifest = {
     target: string
   }[]
   source: StudioPreviewSource
+  steps: readonly StudioPreviewScenarioStep[]
   subject:
     | {
       appName: string
@@ -89,7 +106,7 @@ export type StudioPreviewScenarioManifest = {
       subjectId: string
     }
     | {
-      arguments: Readonly<Record<string, StudioPreviewFixtureValue>>
+      arguments: Readonly<Record<string, StudioPreviewScenarioArgument>>
       kind: 'view'
       subjectId: string
       viewName: string
@@ -272,7 +289,7 @@ function compileScenario(
       ...(locale === undefined ? {} : { locale: locale.pseudolocale ? 'pseudolocale' as const : locale.locale! }),
       ...(network === undefined ? {} : { network }),
     },
-    fixtureId: fixture === undefined ? '' : fixtureId(fixture),
+    ...(fixture === undefined ? {} : { fixtureId: fixtureId(fixture) }),
     group: group.name,
     id: scenarioId(group, scenario),
     name: scenario.name,
@@ -281,6 +298,7 @@ function compileScenario(
       target: update.target.$refText,
     })),
     source: sourceOf(scenario),
+    steps: AST.scenarioSteps(scenario).map(compileScenarioStep),
     subject: app !== undefined
       ? {
         appName: app.name,
@@ -293,15 +311,76 @@ function compileScenario(
         subjectId: appId(app),
       }
       : {
-        arguments: Object.fromEntries((render?.argumentList?.arguments ?? []).map(argument => [
-          argument.label,
-          fixtureValue(argument.value),
-        ])),
+        arguments: {
+          ...Object.fromEntries((render?.argumentList?.arguments ?? []).map(argument => [
+            argument.label,
+            fixtureValue(argument.value),
+          ])),
+          ...omittedActionStandIns(view, render),
+        },
         kind: 'view',
         subjectId: view === undefined ? '' : viewId(view),
         viewName: view?.name ?? '',
       },
   }
+}
+
+function omittedActionStandIns(
+  view: AST.ViewDeclaration | undefined,
+  render: AST.ScenarioRenderClause | undefined,
+): Readonly<Record<string, StudioPreviewScenarioArgument>> {
+  if (view === undefined) {
+    return {}
+  }
+  const supplied = new Set((render?.argumentList?.arguments ?? []).map(argument => argument.label))
+  return Object.fromEntries(
+    AST.parametersOf(view)
+      .filter(parameter => {
+        const type = Type.ofParameter(parameter)
+        return !supplied.has(Type.parameterName(parameter))
+          && !parameter.optional
+          && parameter.defaultValue === undefined
+          && type.kind === 'primitive'
+          && type.primitive === 'action'
+      })
+      .map(parameter => {
+        const name = Type.parameterName(parameter)
+        return [name, { kind: 'action-stand-in' as const, parameter: name }]
+      }),
+  )
+}
+
+function compileScenarioStep(step: AST.ScenarioStep): StudioPreviewScenarioStep {
+  return Switch.type(step, {
+    AdvanceStep: step => {
+      const nanoseconds = ASTUtils.literalDurationOf(step.duration)
+      Assert.defined(nanoseconds, 'validated scenario advance step names a literal duration')
+      return { kind: 'advance' as const, milliseconds: Units.baseToMilliseconds(nanoseconds) }
+    },
+    FocusStep: step => ({ kind: 'focus' as const, tag: tagName(step.tag) }),
+    HoverStep: step => ({ kind: 'hover' as const, ...scenarioPointerTarget(step) }),
+    PressPhaseStep: step => ({
+      kind: step.phase === 'down' ? 'pressDown' as const : 'pressUp' as const,
+      ...scenarioPointerTarget(step),
+    }),
+  })
+}
+
+function scenarioPointerTarget(
+  step: AST.PressPhaseStep | AST.HoverStep,
+): Pick<Extract<StudioPreviewScenarioStep, { target: string }>, 'selector' | 'target'> {
+  if (step.tag !== undefined) {
+    return { selector: 'tag', target: tagName(step.tag) }
+  }
+  Assert.defined(step.target, 'parsed scenario pointer step has a text target or tag')
+  return {
+    selector: (step.selector ?? 'text') as 'label' | 'placeholder' | 'text',
+    target: step.target,
+  }
+}
+
+function tagName(tag: string): string {
+  return tag.slice(1)
 }
 
 function fieldsOf(block: AST.FixtureFieldBlock): Readonly<Record<string, StudioPreviewFixtureValue>> {

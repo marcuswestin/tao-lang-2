@@ -932,6 +932,10 @@ Describe('compiler: language lowering', () => {
             run MyApp
             expect text "Hello"
             press "Add"
+            press down label "Add"
+            press up #add
+            hover placeholder "Add item"
+            focus #add
             enter "Draft" into label "Title"
             submit placeholder "Title"
             expect input placeholder "Title" value "Draft"
@@ -979,10 +983,15 @@ Describe('compiler: language lowering', () => {
             ...('label' in step ? { label: step.label } : {}),
             ...('enabled' in step ? { enabled: step.enabled } : {}),
             ...('fresh' in step ? { fresh: step.fresh } : {}),
+            ...('tag' in step ? { tag: step.tag } : {}),
           })),
         ).toEqual([
           { kind: 'expect', selector: 'text', text: 'Hello' },
           { kind: 'press', selector: 'text', text: 'Add' },
+          { kind: 'pressDown', selector: 'label', target: 'Add' },
+          { kind: 'pressUp', selector: 'tag', target: 'add' },
+          { kind: 'hover', selector: 'placeholder', target: 'Add item' },
+          { kind: 'focus', tag: 'add' },
           { kind: 'enter', selector: 'label', target: 'Title', value: 'Draft' },
           { kind: 'submit', selector: 'placeholder', target: 'Title' },
           { kind: 'expectInputValue', selector: 'placeholder', target: 'Title', value: 'Draft' },

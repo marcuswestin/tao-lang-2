@@ -219,6 +219,11 @@ export function scenarioGroupClauses(group: AST.ScenarioGroupDeclaration): AST.S
   return group.block.entries.filter(AST.isScenarioClause)
 }
 
+/** scenarioSteps returns one entry's interaction prefix in authored replay order. */
+export function scenarioSteps(scenario: AST.ScenarioDeclaration): AST.ScenarioStep[] {
+  return scenario.block.steps
+}
+
 /** effectiveScenarioClause resolves one entry clause over the matching group default. */
 export function effectiveScenarioClause<ClauseT extends AST.ScenarioClause>(
   scenario: AST.ScenarioDeclaration,

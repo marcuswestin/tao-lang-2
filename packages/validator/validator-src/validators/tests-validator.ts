@@ -18,6 +18,8 @@ export const testValidationMessages = {
     `Only run, press, enter, submit, back, and expect statements are allowed in test '${name}'.`,
   runPlacement: 'Run steps are only allowed inside test blocks.',
   pressPlacement: 'Press steps are only allowed inside test blocks.',
+  hoverPlacement: 'Hover steps are only allowed inside test blocks.',
+  focusPlacement: 'Focus steps are only allowed inside test blocks.',
   enterPlacement: 'Enter steps are only allowed inside test blocks.',
   inputExpectationPlacement: 'Input expectations are only allowed inside test blocks.',
   submitPlacement: 'Submit steps are only allowed inside test blocks.',
@@ -43,6 +45,8 @@ export const testValidationMessages = {
 
 const validateRunPlacement = validateStepPlacement(testValidationMessages.runPlacement)
 const validatePressPlacement = validateStepPlacement(testValidationMessages.pressPlacement)
+const validateHoverPlacement = validateStepPlacement(testValidationMessages.hoverPlacement)
+const validateFocusPlacement = validateStepPlacement(testValidationMessages.focusPlacement)
 const validateEnterPlacement = validateStepPlacement(testValidationMessages.enterPlacement)
 const validateInputExpectationPlacement = validateStepPlacement(testValidationMessages.inputExpectationPlacement)
 const validateSubmitPlacement = validateStepPlacement(testValidationMessages.submitPlacement)
@@ -57,6 +61,9 @@ export const testValidationChecks = {
   [AST.RunStep.$type]: validateRunPlacement,
   [AST.PressTextStep.$type]: [validatePressPlacement, validateSelector],
   [AST.TagPressStep.$type]: validatePressPlacement,
+  [AST.PressPhaseStep.$type]: [validatePressPlacement, validatePointerSelector],
+  [AST.HoverStep.$type]: [validateHoverPlacement, validatePointerSelector],
+  [AST.FocusStep.$type]: validateFocusPlacement,
   [AST.PressToolbarCommandStep.$type]: [validatePressPlacement, validateNavigationVocabulary, validateNavigationValue],
   [AST.EnterTextStep.$type]: [validateEnterPlacement, validateSelector],
   [AST.TagEnterStep.$type]: validateEnterPlacement,
@@ -153,6 +160,9 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       ExpectScopeStep: checkStepOrder,
       PressTextStep: checkStepOrder,
       TagPressStep: checkStepOrder,
+      PressPhaseStep: checkStepOrder,
+      HoverStep: checkStepOrder,
+      FocusStep: checkStepOrder,
       PressToolbarCommandStep: checkStepOrder,
       RunStep: () => {
         hasRun = true
@@ -180,6 +190,9 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       | AST.ExpectScopeStep
       | AST.PressTextStep
       | AST.TagPressStep
+      | AST.PressPhaseStep
+      | AST.HoverStep
+      | AST.FocusStep
       | AST.PressToolbarCommandStep
       | AST.SubmitInputStep
       | AST.TagSubmitStep
@@ -268,6 +281,14 @@ function validateInputSelector(step: AST.ExpectInputValueStep, ctx: ValidationCo
   }
 }
 
+function validatePointerSelector(step: AST.PressPhaseStep | AST.HoverStep, ctx: ValidationContext): void {
+  if (
+    step.selector !== undefined && !supportedSelectors.includes(step.selector as (typeof supportedSelectors)[number])
+  ) {
+    ctx.error(testValidationMessages.selector(step.selector), step)
+  }
+}
+
 function validateStepPlacement(message: string): NodeValidationCheck<AST.CheckStep> {
   return (statement, ctx) => {
     if (statementNeedsStepPlacementDiagnostic(statement)) {
@@ -283,5 +304,8 @@ function blockOwner(node: AST.Node): AST.Node | undefined {
 
 function statementNeedsStepPlacementDiagnostic(statement: AST.CheckStep): boolean {
   const owner = blockOwner(statement)
+  if (AST.isScenarioBlock(statement.$container) && AST.isScenarioStep(statement)) {
+    return false
+  }
   return !AST.isTestDeclaration(owner) && !AST.isSelectStep(owner)
 }

@@ -17,7 +17,11 @@ TestDeclaration:
     (dependencies+=[Declaration:ID] (',' dependencies+=[Declaration:ID])*)?
     name=STRING? block=Block;
 
-type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep;
+type CheckStep = RunStep | PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep
+    | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation
+    | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep
+    | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep
+    | ExpectToolbarCommandStep | PressToolbarCommandStep;
 
 RunStep:
     'run' app=[AppValueDeclaration:ID];
@@ -27,6 +31,18 @@ PressTextStep:
 
 TagPressStep:
     'press' tag=TagOrHexColor;
+
+// Phase and pointer steps are ordinary test steps as well as the deliberately narrow journey
+// surface scenarios may replay. A phase press keeps the same selector family as plain `press`.
+PressPhaseStep:
+    'press' phase=('down' | 'up') (selector=TestSelector? target=STRING | tag=TagOrHexColor);
+
+HoverStep:
+    'hover' (selector=TestSelector? target=STRING | tag=TagOrHexColor);
+
+// Focus is intentionally tag-only: focus is about one stable element identity, not matching text.
+FocusStep:
+    'focus' tag=TagOrHexColor;
 
 PressToolbarCommandStep:
     'press' surface=ID 'command' value=Expression;

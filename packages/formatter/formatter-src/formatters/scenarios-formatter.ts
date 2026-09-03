@@ -69,8 +69,9 @@ export default {
 
   ScenarioBlock(f) {
     f.oneSpaceBefore('{')
-    f.indentedBraceBlock(f.node.entries)
-    f.lineSeparatedList(f.node.entries)
+    const contents = [...f.node.entries, ...f.node.steps]
+    f.indentedBraceBlock(contents)
+    f.lineSeparatedList(contents)
   },
 
   ScenarioFixtureClause(f) {
@@ -102,8 +103,6 @@ export default {
     f.oneSpaceAfter('render')
     if (f.node.view) {
       f.noSpaceBefore('(')
-    } else {
-      f.oneSpaceBefore('(')
     }
     f.noSpaceAfter('(')
     f.noSpaceBefore(')')

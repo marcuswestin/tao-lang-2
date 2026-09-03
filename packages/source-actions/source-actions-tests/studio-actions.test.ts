@@ -1146,6 +1146,40 @@ Describe('Studio source-action patch bus', () => {
     Expect(updated.parseResult.parserErrors).toEqual([])
   })
 
+  Test('inserts an inherited render override before an existing scenario journey prefix', async () => {
+    const document = await parseDocument(`
+      view Card(Title text) { render Text(Title) }
+      scenarios Card "states" {
+         render (Title: "Default")
+         device phone
+         scenario "held" {
+            press down #card
+            advance 600.ms
+            press up #card
+         }
+      }
+    `)
+
+    const patch = await SourceActions.applyStudioPatch(document, {
+      appearance: 'dark',
+      arguments: { Title: 'Entry override' },
+      kind: 'set-scenario-arguments',
+      scenarioGroupName: 'states',
+      scenarioName: 'held',
+    })
+    const updated = await parseRawDocument(patch.content)
+
+    const renderIndex = patch.content.indexOf('render (Title: "Entry override")')
+    const appearanceIndex = patch.content.indexOf('appearance dark')
+    const firstStepIndex = patch.content.indexOf('press down #card')
+    Expect(renderIndex).toBeGreaterThan(-1)
+    Expect(appearanceIndex).toBeGreaterThan(renderIndex)
+    Expect(firstStepIndex).toBeGreaterThan(appearanceIndex)
+    Expect(patch.content).toContain('advance 600.ms\n      press up #card')
+    Expect(updated.parseResult.lexerErrors).toEqual([])
+    Expect(updated.parseResult.parserErrors).toEqual([])
+  })
+
   Test('inserts a captured provider snapshot as canonical Tao fixture source', async () => {
     const document = await parseDocument(`
       data Stories / Story { Title text }
