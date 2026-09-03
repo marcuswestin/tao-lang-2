@@ -97,6 +97,188 @@ export type TaoOutlineEntry = {
 
 export type TaoInteractionBounds = Readonly<{ height: number; width: number; x: number; y: number }>
 
+type TaoMeasurableNode = {
+  measureInWindow?(callback: (x: number, y: number, width: number, height: number) => void): void
+}
+
+type TaoInteractionLayoutEvent = Readonly<{
+  nativeEvent?: { layout?: Partial<TaoInteractionBounds> }
+}>
+
+/** InteractionMeasurements caches app-relative geometry; surfaces only read and never measure. */
+class InteractionMeasurements {
+  #bindings = new Map<string, {
+    nativeProps: Record<string, unknown>
+    onLayout(event: TaoInteractionLayoutEvent): void
+    ref(node: TaoMeasurableNode | null): void
+  }>()
+  #bounds = new Map<string, TaoInteractionBounds>()
+  #listeners = new Set<() => void>()
+  #nodes = new Map<string, TaoMeasurableNode>()
+  #revision = 0
+  #root: TaoMeasurableNode | undefined
+  #rootOrigin = { x: 0, y: 0 }
+  #rootBinding: {
+    nativeProps: Record<string, unknown>
+    onLayout(event: TaoInteractionLayoutEvent): void
+    ref(node: TaoMeasurableNode | null): void
+  } | undefined
+
+  readonly snapshot = (): number => this.#revision
+  readonly subscribe = (listener: () => void): () => void => {
+    this.#listeners.add(listener)
+    return () => this.#listeners.delete(listener)
+  }
+
+  read(identity: string): TaoInteractionBounds | undefined {
+    return this.#bounds.get(identity)
+  }
+
+  bind(identity: string, nativeProps: Record<string, unknown> = {}): Record<string, unknown> {
+    let binding = this.#bindings.get(identity)
+    if (!binding) {
+      binding = {
+        nativeProps,
+        onLayout: event => {
+          functionProperty(binding!.nativeProps, 'onLayout')?.(event)
+          const fallback = completeBounds(event.nativeEvent?.layout)
+          if (fallback) {
+            this.set(identity, fallback)
+          }
+          this.measure(identity)
+        },
+        ref: node => {
+          assignRef(binding!.nativeProps['ref'], node)
+          if (node) {
+            this.#nodes.set(identity, node)
+          } else {
+            this.#nodes.delete(identity)
+            this.#bindings.delete(identity)
+            this.delete(identity)
+          }
+        },
+      }
+      this.#bindings.set(identity, binding)
+    }
+    binding.nativeProps = nativeProps
+    return {
+      ...nativeProps,
+      onLayout: binding.onLayout,
+      ref: binding.ref,
+    }
+  }
+
+  bindRoot(nativeProps: Record<string, unknown> = {}): Record<string, unknown> {
+    let binding = this.#rootBinding
+    if (!binding) {
+      binding = {
+        nativeProps,
+        onLayout: event => {
+          functionProperty(binding!.nativeProps, 'onLayout')?.(event)
+          this.measureRoot()
+        },
+        ref: node => {
+          assignRef(binding!.nativeProps['ref'], node)
+          this.#root = node ?? undefined
+          this.measureRoot()
+        },
+      }
+      this.#rootBinding = binding
+    }
+    binding.nativeProps = nativeProps
+    return {
+      ...nativeProps,
+      onLayout: binding.onLayout,
+      ref: binding.ref,
+    }
+  }
+
+  clear(): void {
+    this.#bounds.clear()
+    this.#bindings.clear()
+    this.#nodes.clear()
+    this.#root = undefined
+    this.#rootBinding = undefined
+    this.#rootOrigin = { x: 0, y: 0 }
+    this.changed()
+  }
+
+  private measure(identity: string): void {
+    const node = this.#nodes.get(identity)
+    node?.measureInWindow?.((x, y, width, height) => {
+      this.set(identity, {
+        height,
+        width,
+        x: x - this.#rootOrigin.x,
+        y: y - this.#rootOrigin.y,
+      })
+    })
+  }
+
+  private measureRoot(): void {
+    this.#root?.measureInWindow?.((x, y) => {
+      this.#rootOrigin = { x, y }
+      for (const identity of this.#nodes.keys()) {
+        this.measure(identity)
+      }
+    })
+  }
+
+  private set(identity: string, bounds: TaoInteractionBounds): void {
+    const current = this.#bounds.get(identity)
+    if (
+      current
+      && Object.keys(bounds).every(key =>
+        bounds[key as keyof TaoInteractionBounds] === current[key as keyof TaoInteractionBounds]
+      )
+    ) {
+      return
+    }
+    this.#bounds.set(identity, Object.freeze(bounds))
+    this.changed()
+  }
+
+  private delete(identity: string): void {
+    if (this.#bounds.delete(identity)) {
+      this.changed()
+    }
+  }
+
+  private changed(): void {
+    this.#revision += 1
+    for (const listener of [...this.#listeners]) {
+      listener()
+    }
+  }
+}
+
+export const interactionMeasurements = new InteractionMeasurements()
+
+function completeBounds(value: Partial<TaoInteractionBounds> | undefined): TaoInteractionBounds | undefined {
+  return value !== undefined
+      && typeof value.x === 'number'
+      && typeof value.y === 'number'
+      && typeof value.width === 'number'
+      && typeof value.height === 'number'
+    ? { height: value.height, width: value.width, x: value.x, y: value.y }
+    : undefined
+}
+
+function functionProperty(
+  object: Record<string, unknown>,
+  name: string,
+): ((...arguments_: any[]) => unknown) | undefined {
+  return typeof object[name] === 'function' ? object[name] as (...arguments_: any[]) => unknown : undefined
+}
+
+function assignRef(ref: unknown, value: TaoMeasurableNode | null): void {
+  if (typeof ref === 'function') {
+    ref(value)
+  } else if (ref && typeof ref === 'object' && 'current' in ref) {
+    ;(ref as { current: TaoMeasurableNode | null }).current = value
+  }
+}
+
 /** TaoOutlineLiveEntry is private mounted capability state and never enters a public snapshot. */
 export type TaoOutlineLiveEntry = {
   activate?(): unknown
@@ -256,6 +438,7 @@ export class InteractionOutline implements Subscription {
     this.#entries.clear()
     this.#coalesced.clear()
     this.#fingerprint = undefined
+    interactionMeasurements.clear()
     this.changed()
   }
 
@@ -488,6 +671,7 @@ export function useOutlineItem(
           label: () => label,
           live: {
             ...(activate === undefined ? {} : { activate }),
+            measure: () => interactionMeasurements.read(identity),
             ...(entity === undefined
               ? {}
               : {
@@ -557,6 +741,9 @@ export function useOutlineOccurrence(
       : undefined,
   )
   const controlIdentity = control && !wrapped ? `${control.identity}#${sequence}` : undefined
+  if (controlIdentity !== undefined) {
+    capabilities.measure = () => interactionMeasurements.read(controlIdentity)
+  }
   useRegisteredNode(
     control && controlIdentity !== undefined
       ? {

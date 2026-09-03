@@ -1,5 +1,6 @@
 import { DataControls } from './TR-data'
 import type { RuntimeCommand } from './TR-interaction'
+import { allocateInteractionKeys, type TaoInteractionKeyAssignments } from './TR-interaction-allocation'
 import type {
   CommandCatalog,
   TaoCommandSlotDescription,
@@ -21,6 +22,7 @@ export type TaoAttentionMode =
   | 'narrowing'
   | 'navigating'
   | 'overview'
+  | 'palette'
   | 'verb-pending'
   | 'verbs'
 
@@ -31,6 +33,7 @@ export type TaoAttentionSnapshot = Readonly<{
   focusRegionLabel?: string
   mode: TaoAttentionMode
   narrowing: string
+  palette: readonly Readonly<{ enabled: boolean; identity: string; key?: string; label: string }>[]
   target?: string
   targetLabel?: string
   verbPending?: Readonly<{
@@ -59,6 +62,7 @@ type PendingVerb = {
 /** InteractionAttention is the sole mutable owner of modality-neutral attention state. */
 export class InteractionAttention {
   #candidates: string[] = []
+  #allocations = new Map<string, TaoInteractionKeyAssignments>()
   #engaged: string | undefined
   #focusRegion: string | undefined
   #focusStack: string[] = []
@@ -67,6 +71,8 @@ export class InteractionAttention {
   #memory = new Map<string, RegionMemory>()
   #outlineRevalidationScheduled = false
   #overview = false
+  #palette = false
+  #paletteTarget: string | undefined
   #pressed = new Set<string>()
   #hovered = new Set<string>()
   #revision = 0
@@ -113,6 +119,8 @@ export class InteractionAttention {
   read(): TaoAttentionSnapshot {
     const region = this.node(this.#focusRegion)
     const target = this.node(this.targetIdentity())
+    const palette = this.paletteVerbs()
+    const paletteTarget = palette.find(entry => entry.identity === this.#paletteTarget)
     return Object.freeze({
       candidates: Object.freeze([...this.#candidates]),
       ...(this.#engaged === undefined ? {} : { engaged: this.#engaged }),
@@ -124,9 +132,19 @@ export class InteractionAttention {
         }),
       mode: this.mode(),
       narrowing: this.memory().narrowing,
-      ...(target === undefined
+      palette: Object.freeze(palette.map(verb =>
+        Object.freeze({
+          enabled: verb.enabled,
+          identity: verb.identity,
+          ...(verb.key === undefined ? {} : { key: verb.key }),
+          label: verb.label,
+        })
+      )),
+      ...(target === undefined && paletteTarget === undefined
         ? {}
-        : { target: target.identity, ...(target.label() === undefined ? {} : { targetLabel: target.label() }) }),
+        : paletteTarget !== undefined
+        ? { target: paletteTarget!.identity, targetLabel: paletteTarget!.label }
+        : { target: target!.identity, ...(target!.label() === undefined ? {} : { targetLabel: target!.label() }) }),
       ...(this.#verbPending === undefined
         ? {}
         : {
@@ -169,6 +187,7 @@ export class InteractionAttention {
     }
     this.#focusRegion = identity
     this.#overview = false
+    this.#palette = false
     this.#hints = false
     this.recomputeCandidates()
     this.emit()
@@ -188,6 +207,8 @@ export class InteractionAttention {
     memory.target = identity
     this.#verbs = []
     this.#verbPending = undefined
+    this.#palette = false
+    this.#paletteTarget = undefined
     node.live?.focus?.()
     this.recomputeCandidates()
     this.emit()
@@ -219,7 +240,7 @@ export class InteractionAttention {
     memory.narrowing += value
     this.#overview = false
     this.#hints = false
-    this.recomputeCandidates()
+    this.#palette ? this.recomputePaletteCandidates() : this.recomputeCandidates()
     this.emit()
   }
 
@@ -274,6 +295,9 @@ export class InteractionAttention {
         return true
       }
     }
+    if (isBareLetter(key) && this.runAllocatedKey(key)) {
+      return true
+    }
     if (key.includes('+')) {
       const verb = this.catalog.shortcut(
         key,
@@ -291,6 +315,15 @@ export class InteractionAttention {
       return true
     }
     if (key === 'Enter') {
+      if (this.#palette) {
+        const verb = this.paletteVerbs().find(entry => entry.identity === this.#paletteTarget)
+        if (verb) {
+          this.#palette = false
+          this.#paletteTarget = undefined
+          this.runVerb(verb)
+        }
+        return true
+      }
       if (this.#verbPending) {
         const target = this.#candidates[0]
         return target ? this.choosePendingTarget(target) : true
@@ -319,32 +352,28 @@ export class InteractionAttention {
       return true
     }
     if (key === '/' || key === '?') {
-      this.#hints = true
+      this.#hints = !this.#hints
       this.#overview = false
+      this.#palette = false
+      this.#paletteTarget = undefined
       this.emit()
       return true
     }
     if (key === 'primary+k') {
       this.#verbPending = undefined
-      this.#verbs = this.catalog.global().map(entry => {
-        const command = entry.command()
-        const snapshot = command.read()
-        return {
-          enabled: snapshot.enabled,
-          identity: entry.identity,
-          ...(snapshot.key === undefined ? {} : { key: snapshot.key }),
-          label: snapshot.label,
-          invoke: snapshot.invoke,
-          source: 'catalog' as const,
-        }
-      })
+      this.#verbs = []
+      this.#hints = false
+      this.#overview = false
+      this.#palette = true
+      this.memory().narrowing = ''
+      this.recomputePaletteCandidates()
       this.emit()
       return true
     }
     if (key === 'Backspace') {
       const memory = this.memory()
       memory.narrowing = [...memory.narrowing].slice(0, -1).join('')
-      this.recomputeCandidates()
+      this.#palette ? this.recomputePaletteCandidates() : this.recomputeCandidates()
       this.emit()
       return true
     }
@@ -397,6 +426,7 @@ export class InteractionAttention {
   }
 
   reset(): void {
+    this.#allocations.clear()
     this.#candidates = []
     this.#engaged = undefined
     this.#focusRegion = undefined
@@ -405,6 +435,8 @@ export class InteractionAttention {
     this.#hovered.clear()
     this.#memory.clear()
     this.#overview = false
+    this.#palette = false
+    this.#paletteTarget = undefined
     this.#pressed.clear()
     this.#verbPending = undefined
     this.#verbs = []
@@ -472,6 +504,12 @@ export class InteractionAttention {
     if (this.#verbs.length > 0 || this.#verbPending) {
       this.#verbs = []
       this.#verbPending = undefined
+      this.emit()
+      return
+    }
+    if (this.#palette) {
+      this.#palette = false
+      this.#paletteTarget = undefined
       this.emit()
       return
     }
@@ -571,6 +609,118 @@ export class InteractionAttention {
       memory.target = this.#candidates[0]
     } else if (memory.target && !this.#candidates.includes(memory.target)) {
       memory.target = undefined
+    }
+  }
+
+  private paletteVerbs(): readonly TaoInteractionVerb[] {
+    if (!this.#palette) {
+      return []
+    }
+    const narrowing = this.memory().narrowing
+    const entries: TaoInteractionVerb[] = []
+    const seen = new Set<string>()
+    for (const command of this.catalog.palette()) {
+      if (seen.has(command.identity)) {
+        continue
+      }
+      seen.add(command.identity)
+      entries.push(command)
+    }
+    for (const node of this.outline.liveNodes()) {
+      const label = node.label()
+      const identity = paletteEntityIdentity(node)
+      if (
+        node.kind !== 'item'
+        || node.live?.entityType === undefined
+        || node.live.activate === undefined
+        || label === undefined
+        || label.trim().length === 0
+        || !this.active(node)
+        || seen.has(identity)
+      ) {
+        continue
+      }
+      seen.add(identity)
+      entries.push({
+        enabled: node.live.enabled?.() !== false,
+        identity,
+        label,
+        invoke: () => this.targetAndActivate(node.identity),
+        source: 'entity',
+      })
+    }
+    return entries.filter(verb => narrowing.length === 0 || matchesNarrowing([verb.label], narrowing))
+  }
+
+  private runAllocatedKey(key: string): boolean {
+    if (this.#verbs.length > 0) {
+      const candidates = this.#verbs.filter(verb => verb.key === undefined)
+        .map(verb => ({ identity: verb.identity, label: verb.label }))
+      const identity = this.allocatedIdentity('verbs', candidates, key)
+      const verb = this.#verbs.find(candidate => candidate.identity === identity)
+      if (verb) {
+        this.runVerb(verb)
+        return true
+      }
+    }
+    if (this.#hints) {
+      const candidates = this.#candidates.flatMap(identity => {
+        const label = this.node(identity)?.label()
+        return label === undefined ? [] : [{ identity, label }]
+      })
+      const identity = this.allocatedIdentity('hints', candidates, key)
+      if (identity) {
+        this.#hints = false
+        this.target(identity)
+        return true
+      }
+    }
+    if (this.#overview) {
+      const candidates = this.outline.liveNodes()
+        .filter(node => node.kind === 'region' && this.active(node))
+        .flatMap(node => {
+          const label = node.label()
+          return label === undefined ? [] : [{ identity: node.identity, label }]
+        })
+      const identity = this.allocatedIdentity('overview', candidates, key)
+      if (identity) {
+        this.focusRegion(identity)
+        return true
+      }
+    }
+    if (this.#palette) {
+      const candidates = this.paletteVerbs().filter(verb => verb.key === undefined)
+        .map(verb => ({ identity: verb.identity, label: verb.label }))
+      const identity = this.allocatedIdentity('palette', candidates, key)
+      if (identity) {
+        this.#paletteTarget = identity
+        this.emit()
+        return true
+      }
+    }
+    return false
+  }
+
+  private allocatedIdentity(
+    surface: string,
+    candidates: readonly Readonly<{ identity: string; label: string }>[],
+    key: string,
+  ): string | undefined {
+    const assignments = allocateInteractionKeys(candidates, {
+      explicitKeys: this.catalog.explicitKeys(),
+      previous: this.#allocations.get(surface),
+    })
+    this.#allocations.set(surface, assignments)
+    return candidates.find(candidate => assignments[candidate.identity] === key.toLocaleLowerCase())?.identity
+  }
+
+  private recomputePaletteCandidates(): void {
+    const entries = this.paletteVerbs()
+    this.#candidates = entries.map(entry => entry.identity)
+    if (entries.length === 1) {
+      this.#paletteTarget = entries[0]!.identity
+    } else if (!entries.some(entry => entry.identity === this.#paletteTarget)) {
+      this.#paletteTarget = undefined
     }
   }
 
@@ -682,6 +832,9 @@ export class InteractionAttention {
     if (this.#verbs.length > 0) {
       return 'verbs'
     }
+    if (this.#palette) {
+      return 'palette'
+    }
     if (this.#hints) {
       return 'hints'
     }
@@ -734,6 +887,14 @@ function candidateNodes(scope: string, nodes: readonly TaoOutlineLiveNode[]): Ta
   }
   visit(scope)
   return candidates
+}
+
+function paletteEntityIdentity(node: TaoOutlineLiveNode): string {
+  const entity = node.provenance['entity']
+  const handle = node.provenance['handle']
+  return typeof entity === 'string' && typeof handle === 'string'
+    ? `@entity/${encodeURIComponent(entity)}/${encodeURIComponent(handle)}`
+    : node.identity
 }
 
 function isBareLetter(value: string): boolean {

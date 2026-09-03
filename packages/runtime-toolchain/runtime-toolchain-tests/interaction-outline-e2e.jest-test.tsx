@@ -49,6 +49,9 @@ Describe('interaction outline runtime', () => {
         async screen => {
           const host = screen.UNSAFE_getAllByType(RN.View).find(view => view.props.tabIndex === 0)
           Expect(host).toBeDefined()
+          const hiddenLayer = screen.UNSAFE_getByProps({ testID: 'tao-interaction-layers' })
+          Expect(hiddenLayer.props.accessibilityElementsHidden).toBe(true)
+          Expect(screen.queryByText('Interaction hints')).toBeNull()
           let focused = 0
           const empty = { focus: () => focused += 1 }
           host!.props.onPointerDown({ currentTarget: empty, target: empty })
@@ -66,6 +69,7 @@ Describe('interaction outline runtime', () => {
             })
           })
           Expect(TR.Interaction.Attention.read().mode).toBe('hints')
+          Expect(screen.getByText('Interaction hints')).toBeDefined()
           Expect(prevented).toBe(1)
           await act(async () => {
             host!.props.onKeyDown({ key: 'F7', preventDefault: () => prevented += 1 })
@@ -337,6 +341,7 @@ Describe('interaction outline runtime', () => {
           candidates: [],
           mode: 'navigating',
           narrowing: '',
+          palette: [],
           verbs: [],
         })
       },

@@ -30,6 +30,47 @@ export type TaoKeyPlatform = Readonly<{
   platformOS?: string
 }>
 
+/** InteractionKeyboardPresence hides keyboard-only affordances until a key enters the app. */
+class InteractionKeyboardPresence {
+  #present = false
+  #revision = 0
+  #listeners = new Set<() => void>()
+
+  readonly snapshot = (): number => this.#revision
+  readonly subscribe = (listener: () => void): () => void => {
+    this.#listeners.add(listener)
+    return () => this.#listeners.delete(listener)
+  }
+
+  read(): boolean {
+    return this.#present
+  }
+
+  mark(): void {
+    if (this.#present) {
+      return
+    }
+    this.#present = true
+    this.#revision += 1
+    for (const listener of [...this.#listeners]) {
+      listener()
+    }
+  }
+
+  reset(): void {
+    if (!this.#present) {
+      return
+    }
+    this.#present = false
+    this.#revision += 1
+    for (const listener of [...this.#listeners]) {
+      listener()
+    }
+  }
+}
+
+export const interactionKeyboardPresence = new InteractionKeyboardPresence()
+
 const namedKeys: Readonly<Record<string, TaoAttentionKey>> = Object.freeze({
   arrowdown: 'ArrowDown',
   arrowleft: 'ArrowLeft',
@@ -98,7 +139,11 @@ export function dispatchInteractionHardwareKey(
   platform: TaoKeyPlatform = {},
 ): boolean {
   const key = interactionKeyFromHardwareEvent(event, platform)
-  return key === undefined ? false : dispatch(key)
+  if (key === undefined) {
+    return false
+  }
+  interactionKeyboardPresence.mark()
+  return dispatch(key)
 }
 
 export function isApplePrimaryPlatform(platform: TaoKeyPlatform): boolean {

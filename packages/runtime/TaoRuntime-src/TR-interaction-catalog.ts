@@ -1,6 +1,7 @@
 import React from 'react'
 import { CommandControls, type RuntimeCommand } from './TR-interaction'
 import { InteractionAttention, type TaoAttentionKey } from './TR-interaction-attention'
+import { interactionKeyboardPresence } from './TR-interaction-keys'
 import {
   describeOutlineTable,
   interactionOutline,
@@ -67,6 +68,8 @@ export type TaoInteractionVerb = Readonly<{
 
 /** CommandCatalog owns generated declarations and occurrence-local command surfaces. */
 export class CommandCatalog {
+  #listeners = new Set<() => void>()
+  #revision = 0
   #sequence = 0
   #surfaces = new Map<number, MountedCommandSurface>()
   #tables = new Map<string, TaoCommandTable>()
@@ -74,7 +77,11 @@ export class CommandCatalog {
   register(table: TaoCommandTable): () => void {
     const key = `${table.module}#${++this.#sequence}`
     this.#tables.set(key, table)
-    return () => this.#tables.delete(key)
+    this.changed()
+    return () => {
+      this.#tables.delete(key)
+      this.changed()
+    }
   }
 
   registerSurface(surface: TaoCommandSurface, parent?: string): () => void {
@@ -90,7 +97,17 @@ export class CommandCatalog {
       ...(parent === undefined ? {} : { parent }),
       sequence,
     })
-    return () => this.#surfaces.delete(sequence)
+    this.changed()
+    return () => {
+      this.#surfaces.delete(sequence)
+      this.changed()
+    }
+  }
+
+  readonly snapshot = (): number => this.#revision
+  readonly subscribe = (listener: () => void): () => void => {
+    this.#listeners.add(listener)
+    return () => this.#listeners.delete(listener)
   }
 
   entries(): readonly TaoCommandTableEntry[] {
@@ -103,6 +120,29 @@ export class CommandCatalog {
 
   global(): readonly TaoCommandTableEntry[] {
     return this.entries().filter(entry => !entry.slots.some(slot => slot.entity))
+  }
+
+  explicitKeys(): readonly string[] {
+    return this.entries().flatMap(entry => entry.static.key === undefined ? [] : [entry.static.key])
+  }
+
+  /** palette returns every titled catalog entry without requiring a mounted target. */
+  palette(): readonly TaoInteractionVerb[] {
+    return this.entries()
+      .filter(entry => entry.static.title !== undefined || entry.static.label !== undefined)
+      .map(entry => {
+        const command = entry.command()
+        return {
+          enabled: true,
+          command,
+          identity: entry.identity,
+          ...(entry.static.key === undefined ? {} : { key: entry.static.key }),
+          label: staticLabel(entry),
+          invoke: () => command.read().invoke(),
+          slots: entry.slots,
+          source: 'catalog' as const,
+        }
+      })
   }
 
   /** shortcut resolves nearest mounted scopes before entity-free module commands. */
@@ -213,6 +253,14 @@ export class CommandCatalog {
   clear(): void {
     this.#tables.clear()
     this.#surfaces.clear()
+    this.changed()
+  }
+
+  private changed(): void {
+    this.#revision += 1
+    for (const listener of [...this.#listeners]) {
+      listener()
+    }
   }
 
   private verbForCommand(command: RuntimeCommand, source: TaoInteractionVerb['source']): TaoInteractionVerb {
@@ -375,6 +423,7 @@ function useOccurrence(props: TaoProps | undefined): void {
 export function resetInteractionRuntime(): void {
   interactionOutline.clear()
   interactionAttention.reset()
+  interactionKeyboardPresence.reset()
 }
 
 /** InteractionControls is the handwritten generated-code and semantic-operation facade. */
@@ -435,6 +484,7 @@ export const InteractionControls = {
     return describeOutlineTable(table)
   },
   PressKey(key: TaoAttentionKey | string): boolean {
+    interactionKeyboardPresence.mark()
     return interactionAttention.pressKey(key)
   },
   Pressed(occurrence: TaoInteractionOccurrence | undefined, pressed: boolean): void {

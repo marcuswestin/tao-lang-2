@@ -1,5 +1,6 @@
 import React from 'react'
 import { InteractionControls } from './TR-interaction-catalog'
+import { interactionMeasurements } from './TR-interaction-outline'
 import { requireReactNativeRuntime } from './TR-react-native'
 
 /**
@@ -14,14 +15,15 @@ export function SelectableRow(props: {
   onSelect: () => unknown
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
+  const nativeProps = {
+    ...(props.accessibilityLabel === undefined ? {} : { accessibilityLabel: props.accessibilityLabel }),
+    accessibilityRole: 'button',
+    accessible: true,
+    onPress: InteractionControls.ActivateIdentity(props.identity, props.onSelect),
+  }
   return React.createElement(
     runtime.Pressable,
-    {
-      ...(props.accessibilityLabel === undefined ? {} : { accessibilityLabel: props.accessibilityLabel }),
-      accessibilityRole: 'button',
-      accessible: true,
-      onPress: InteractionControls.ActivateIdentity(props.identity, props.onSelect),
-    },
+    props.identity === undefined ? nativeProps : interactionMeasurements.bind(props.identity, nativeProps),
     props.children,
   )
 }

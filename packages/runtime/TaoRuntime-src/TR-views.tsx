@@ -3,6 +3,7 @@ import { Dev } from './dev-runtime/TR-dev'
 import { RuntimeAssert } from './TR-assert'
 import { InteractionControls } from './TR-interaction-catalog'
 import {
+  interactionMeasurements,
   type TaoInteractionOccurrence,
   type TaoOutlineLiveEntry,
   useOutlineNode,
@@ -440,7 +441,7 @@ function renderTaoTextInput(
   const submit = props.disabled || !props.onSubmit
     ? undefined
     : InteractionControls.Activate(occurrence, props.onSubmit)
-  const input = createReactElement(runtime, runtime.TextInput, {
+  const inputNativeProps = {
     accessibilityLabel: props.label,
     accessibilityState: { disabled: props.disabled === true },
     editable: !props.disabled,
@@ -459,7 +460,14 @@ function renderTaoTextInput(
     style: [textInputStyle, themedStyle],
     testID: props.id || undefined,
     value: props.value,
-  })
+  }
+  const input = createReactElement(
+    runtime,
+    runtime.TextInput,
+    occurrence?.control === undefined
+      ? inputNativeProps
+      : interactionMeasurements.bind(occurrence.control, inputNativeProps),
+  )
   const label = createReactElement(
     runtime,
     runtime.Text,
@@ -513,6 +521,9 @@ function TaoSemanticPrimitiveElement({ merged, props, runtime }: {
     ?? (handwrittenIdentity === undefined
       ? undefined
       : { capabilities: handwrittenCapabilities, control: handwrittenIdentity, scope: handwrittenIdentity })
+  if (handwrittenIdentity !== undefined) {
+    handwrittenCapabilities.measure = () => interactionMeasurements.read(handwrittenIdentity)
+  }
   return renderTaoPrimitiveElement(props, runtime, merged, occurrence)
 }
 
@@ -522,10 +533,13 @@ function renderTaoPrimitiveElement(
   merged: MergedTaoViewProps,
   occurrence: TaoInteractionOccurrence | undefined,
 ): React.ReactElement {
-  const rawElementProps = {
+  const unmeasuredElementProps = {
     ...TaoPropsControls.nativePropsWithStyle(merged),
     ...props.nativePropOverrides,
   }
+  const rawElementProps = occurrence?.control === undefined
+    ? unmeasuredElementProps
+    : interactionMeasurements.bind(occurrence.control, unmeasuredElementProps)
   const elementProps = props.kind === 'Pressable'
     ? {
       ...rawElementProps,

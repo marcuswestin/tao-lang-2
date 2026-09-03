@@ -7,6 +7,8 @@ import {
   dispatchInteractionHardwareKey,
   type TaoHardwareKeyEvent,
 } from './TR-interaction-keys'
+import { InteractionLayersHost } from './TR-interaction-layers'
+import { interactionMeasurements } from './TR-interaction-outline'
 import { RuntimeAppDefinition } from './TR-navigation-app'
 import { browserNavigationHistoryDriver } from './TR-navigation-browser-history'
 import {
@@ -98,7 +100,7 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
       })
     ),
   )
-  return React.createElement(runtime.View, {
+  const hostProps = interactionMeasurements.bindRoot({
     children: [
       navigator.ownsWindowSurface()
         ? content
@@ -110,12 +112,14 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
           style: toastLayerStyle,
         })
         : null,
+      React.createElement(InteractionLayersHost, { key: 'interaction-layers', taoProps: appTaoProps }),
     ],
     onKeyDown,
     onPointerDown,
     style: navigationAppHostStyle,
     tabIndex: runtime.Platform?.OS === 'web' ? 0 : undefined,
   })
+  return React.createElement(runtime.View, hostProps)
 }
 
 type TaoAppHostKeyEvent =
