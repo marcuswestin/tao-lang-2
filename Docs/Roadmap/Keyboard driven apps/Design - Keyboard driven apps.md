@@ -9,7 +9,7 @@ document in the repository** (Ro, 2026-09-02): a live document that disagrees �
 plan's closing documentation sweep (`Plan - Keyboard driven apps.md`, T7); `Docs/Spec/` follows
 implementation; the archive stays frozen unless Ro asks.
 
-Status: **discovery closed** (KEY-D1–D14). Deferred: Q14 (authority), Q18 (deep links).
+Status: **discovery closed** (KEY-D1–D14); **T1–T3 implemented** (2026-09-02), with two decisions revised under review — the shell and the command shape, above. Deferred: Q14 (authority), Q18 (deep links).
 
 Note on evidence: the codebase investigation ran on 2026-09-01 against a working tree carrying the
 then-unmerged repository-simplification content, which has since landed on `main` (merged into
@@ -69,16 +69,24 @@ through it.
   slots. Scenes are presented, never composed inline. A plain `view` may still be pushed or
   presented anywhere; a pushed plain view shows Back-only header chrome. Sheets read `Title`.
   `nav is scene`. A presented scene is a region.
-- **The frame** — a new nav kind for the shell: edge slots (top, bottom, center — left and right per the
-  tranche's ruling, lean all four), each with a `Label`, holding views or navs; a slot whose `Content` is `none` reserves no space (reactive, like the live root);
-  bars never take Back; the frame owns its edges. SplitNav remains navigational peers that progress
-  and fold; a frame edge is fixed chrome. Rail retires (a frame slot). WordFlower's focus bar is the
-  forcing feature, its session held as data.
-- **`command`** — a configured value (the `app`/`nav`/`design` family): parameters are slots
-  (`Track`), metadata members are `Title` (static), `Description`, `Summary` (with holes), `Label` (reactive),
-  `Icon`, `Key` (a `shortcut` value, e.g. `primary + "n"`), `Enabled`, and the behavior is exactly one `do` of a named or inline action.
-  `Like with { Track: Selected }` fills slots; `Like with { Key "k" }` overrides affordances (never
-  `Title`); `do Like with { Track }` invokes. `action` is private: no `Title`, never surfaced.
+- **The shell is a view** (revised 2026-09-02, superseding the frame nav kind decided under KEY-D7
+  and briefly implemented). A render site may name a nav — `nav is scene is view`, and the grammar
+  agrees — so persistent chrome around navigated content is ordinary layout: a `Col` holding the
+  navigator and a bar. The app is rooted in that view with arguments (`view Shell(Navigator)`), and
+  a nav-typed parameter renders like any other view. Three invariants, diagnosed at the render site:
+  a nav renders at most once, never in a loop, never in a conditional branch. A conditional sibling
+  is fine, and that is what the focus bar is. Back reaches a rendered nav through its enclosing
+  presentation. SplitNav keeps its job; the rail retires into ordinary layout. The `@name` sigil
+  stays with named render slots, which a shell's edges never were. WordFlower's focus bar is the
+  forcing feature, its session held as `local only` data.
+- **`command`** — a configured value (the `app`/`nav`/`design` family) that **declares its slots in
+  a parameter list, exactly as an action does** (revised 2026-09-02: `command Like(Track Song) { … }`;
+  the block holds only member fills and one `do`, so juxtaposition means one thing inside it — bind).
+  Metadata members are `Title` (static), `Description`, `Summary` (with holes), `Label` (reactive),
+  `Icon`, `Key` (a `shortcut` value, e.g. `primary + "n"`), `Enabled`; the behavior is exactly one
+  `do` of a named or inline action. `do Like(Track)` invokes, mirroring `do SaveWorkspace()`;
+  `Like with { Track: Selected }` derives a bound command value for surfaces, and `with { Key "k" }`
+  overrides affordances (never `Title`). `do X with { … }` is retired. `action` is private: no `Title`, never surfaced.
   Commands are declared at module level (entity verbs, app-wide commands) or in a view body (closing
   over the view's scope, exactly as `action` may). Retired: `Title` on `action`, "an action is an
   intent", `command X = Y(args) with { … }`, the in-view `menu Name { … }` surface (the per-view
@@ -102,7 +110,7 @@ through it.
 
 ### What is derived, never declared
 
-Regions (frame slots, split panes, selection items, presented occurrences — scene or view). Collections (loops) and their
+Regions (selection items, split panes, presented occurrences — scene or view; the non-nav content of a view that renders a nav is deliberately not yet a region, pending what the attention reducer must address). Collections (loops) and their
 items (row identity). Controls from event wiring (`Press`/`Submit` → action control; `Value:` +
 `Change` → input control). Labels: statically ranked from the row's rendered text — the first row-bound text, preferring
 the `(title)` field when the row renders it — one computation shared with accessibility. Provenance tiers 1–2 (entity + handle per

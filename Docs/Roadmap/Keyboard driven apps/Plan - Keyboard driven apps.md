@@ -4,6 +4,49 @@ The implementation plan for the interaction system decided in `Design - Keyboard
 (KEY-D1–D14). Read that document's **design summary** first; this plan assumes it and does not
 restate rationale. It is written to hand to an implementation agent who has not seen the discovery.
 
+## Revision — 2026-09-03
+
+**Status.** T1, T2 and T3 are implemented, absorbed, and green on `feat/tao-keyboard-driven-apps-44b3f4`
+(sixteen commits, `./agent verify` green at each). T4–T7 remain. Two decisions made during T1/T2
+were reversed under review the same day and re-implemented; the design summary carries the revised
+text, and the sections below have been rewritten to match. Read the design summary first; where
+this plan's T1–T3 prose disagrees with what shipped, the code and `Decisions.md` win.
+
+**Decisions taken during implementation**, each already in `Decisions.md`:
+
+- Ro's answers to the T1/T2 open lists: `FrameNav` (later retired); `@left`/`@right` (moot);
+  horizontal bars win corners (moot); `local only` as the storage-fact spelling; a pushed plain view
+  shows Back-only header chrome, and `Header false` on a scene is the explicit opt out of header
+  chrome; namespace classification for command members (later superseded by the parameter list);
+  `shortcut`; `Description` stays.
+- **`scene` is a keyword on the view declaration, not a separate node type** — that is what
+  `scene is view` means, and only the render site turns a scene away.
+- **The shell is a view** that renders the navigator as a nav-typed parameter; `FrameNav` retired
+  (`7ac87001`). Three invariants on a rendered nav: once, never in a loop, never conditional.
+- **A command declares slots in a parameter list**; `do X(args)` invokes; `X with { … }` derives;
+  `do X with` retired (`27f6884b`). Juxtaposition declares in a type body and binds in a value body,
+  and no block is both.
+- **`local only` ships as two emitted catalogs**, never two connections; a relation across the
+  boundary is diagnosed where written (`e6d33957`).
+- **`(title)` parses as a validated word, not a keyword** — a `title` keyword collided with
+  `expect navigation title` and the `[title]` design bundle (`19f9e3ef`). Rule recorded in
+  `packages/AGENTS.md`: no capitalized keywords, and no lowercase keyword a design, layout, or test
+  vocabulary already uses.
+- **Retired with the frame** (Ro, 2026-09-03): module-level `query` — but the validator keeps a
+  diagnostic for one, saying it could be added and nothing strictly prevents it; and `TR.Deferred`.
+  **Kept**: `when`/`none` as configuration values (§10's live root), property-position `with`,
+  absence unification in `commonType`, union-to-union assignability.
+- **Mutation testing is required** for every journey that proves a new construct; the handoff names
+  the mutation. Two vacuous journeys in T1 were caught only this way.
+- **Slices with shared validation run sequentially.** Concurrent agents on disjoint files are fine;
+  concurrent agents that both need `./agent verify` are not, because verify is whole-tree.
+- The plan's T1 sketch "an expired session is deleted at launch" was dropped: it needs launch
+  lifecycle syntax, which `DEF-NAV-006` reserves.
+- T4's open list is answered: the region-focus condition is **`active`**; the reserved key set is
+  as proposed except **hints are on the unshifted key** (`/` on a US layout, reserved by physical
+  key where the platform reports one, `?` accepted as the same key shifted); the narrowing step is
+  **`narrow "<text>"`**.
+
 ## Ground rules
 
 - Every tranche follows `Docs/Roadmap/Tao Revolution/Process.md`: contract in `Apps/WordFlower/2 -
@@ -31,15 +74,16 @@ restate rationale. It is written to hand to an implementation agent who has not 
 
 ## Sequence
 
-| #  | Tranche                                         | Forcing feature                                                                   | Depends on                       | Size     |
-| -- | ----------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------- | -------- |
-| T1 | `scene`, the frame nav kind, device-local data  | WordFlower persistent focus bar                                                   | —                                | L        |
-| T2 | Commands as configured values, command catalog  | WordFlower workspace save; HNReader open-story; Basic Navigation                  | —                                | L        |
-| T3 | The interaction outline and `(title)`           | Accessibility names on every row; Studio inspection                               | T1, T2                           | L        |
-| T4 | Attention reducer, keyboard dispatch, narrowing | WordFlower: narrow the workspace list, engage the editor, global focus-bar chords | T3                               | XL       |
-| T5 | Generated surfaces and key allocation           | Interaction hints and overview over WordFlower                                    | T4                               | M        |
-| T6 | Assistant boundary, menus, native keys          | Apple App Intents from the `Assistant` block; iPadOS menu bar and hardware keys   | T3, T4; an iOS native build path | L, later |
-| T7 | Documentation reconciliation sweep              | Every live markdown document agrees with KEY-D1–D14                               | T1–T5 (T6 when it lands)         | M        |
+| #   | Tranche                                         | Forcing feature                                                                   | Depends on                       | Size                           |
+| --- | ----------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------- | ------------------------------ |
+| T1  | `scene`, the shell as a view, device-local data | WordFlower persistent focus bar                                                   | —                                | L — landed, revised `7ac87001` |
+| T2  | Commands as configured values, command catalog  | WordFlower workspace save; HNReader open-story; Basic Navigation                  | —                                | L — landed, revised `27f6884b` |
+| T3  | The interaction outline and `(title)`           | Accessibility names on every row; Studio inspection                               | T1, T2                           | L — landed `19f9e3ef`          |
+| T3½ | Retire module-level `query` and `TR.Deferred`   | Decision A/B after the frame's retirement                                         | T3                               | S                              |
+| T4  | Attention reducer, keyboard dispatch, narrowing | WordFlower: narrow the workspace list, engage the editor, global focus-bar chords | T3                               | XL                             |
+| T5  | Generated surfaces and key allocation           | Interaction hints and overview over WordFlower                                    | T4                               | M                              |
+| T6  | Assistant boundary, menus, native keys          | Apple App Intents from the `Assistant` block; iPadOS menu bar and hardware keys   | T3, T4; an iOS native build path | L, later                       |
+| T7  | Documentation reconciliation sweep              | Every live markdown document agrees with KEY-D1–D14                               | T1–T5 (T6 when it lands)         | M                              |
 
 T1 and T2 may run in parallel worktrees. Their one seam is `Toolbar`: T1 moves it from `view` to
 `scene` unchanged (`list of action()`); T2 retypes it to `list of command`. Whichever lands second
@@ -246,6 +290,27 @@ and UI.md` (accessible names derived); `Docs/Spec/Tao Data.md`; `Coverage.md`.
 
 ---
 
+## T3½ — Retire what the frame's retirement left unforced
+
+**Goal.** Two capabilities were introduced only so that a configured navigator could read the store
+reactively. The shell is a view now and holds its own query, so both lost their forcing feature.
+
+- **Module-level `query` is removed** from the language: `EntityQueryDeclaration` leaves the
+  top-level statement set in `blocks.langium`, the visibility marker on it goes, `TR.Data.ModuleQuery`
+  goes, and `Apps/Test Apps/Local Data/`'s third journey and the `Docs/Spec/Tao Data.md` sentence go
+  with it. **The validator keeps a diagnostic** for a `query` at module level (Ro): it says a
+  module-level query is not part of the language today, that it could be added, and that nothing
+  strictly prevents it — a door left open, not a wall. `Decisions.md` §6's module-level bullet is
+  replaced by a one-line note to the same effect. WordFlower's `CurrentSession` moves into the
+  shell scene's body.
+- **`TR.Deferred` is removed**, and the `WhenExpression` arm in `ConfigurationValue` codegen compiles
+  the expression directly. `when`/`none` as configuration values STAY (§10's live root).
+- Kept as general improvements: absence unification in `Type.commonType`, union-to-union
+  assignability, property-position `with`.
+
+**Tests.** The validator diagnostic; `./tao test Apps` green with the Local Data journey removed;
+WordFlower's focus journeys unchanged.
+
 ## T4 — Attention reducer, keyboard dispatch, narrowing, surfacing policy
 
 **Goal.** Keyboard-driven WordFlower: regions, targeting, narrowing, activation, verbs, engagement —
@@ -258,8 +323,10 @@ Test steps through the `surface=ID` seam in `tests.langium`: `press key "<shortc
 "<text>"` (KEY-D13 spelled it `type "…"`; `type` is the type-declaration keyword, so `narrow` is
 proposed), `expect target "<label>"`, `expect focus region "<label>"`, `expect verbs "<a>", "<b>"`;
 runner support in `test-runner.tsx` dispatching through the reducer, not synthetic DOM events.
-Condition vocabulary: `focused` (decided) applies to the targeted control; the region-focus condition
-name is open. Validator: duplicate shortcuts within one **static scope** — one `Toolbar`/`Commands`
+Condition vocabulary: `focused` (decided) applies to the targeted control; **the region-focus
+condition is `active`** (`when Sidebar is active`), settled by Ro. Note that `pressed`/`focused`/
+`hovered` are decided but not yet in the grammar — `LayoutCondition` is `when subject is value` and
+is validated to `Scheme is Light|Dark` alone — so T4 implements the whole condition family. Validator: duplicate shortcuts within one **static scope** — one `Toolbar`/`Commands`
 mention list, one entity's `commands` list, or the entity-slot-free set — and a warning on commands
 declaring platform editing chords.
 
@@ -269,10 +336,13 @@ descending, scrolling fallback, verb-pending (candidates across the screen; stor
 picker fallback; inline input prompt for text/duration slots; required slots in declaration order),
 precedence (engaged → modal → item → scene → app → reducer keys), the verb layer with single-letter
 accelerators, the engagement contract (platform editing chords win; Escape; Tab moves to the next
-control in the current scope's render order; Enter by control). **Reserved reducer keys** (proposed,
-settled in `2 - Next`): arrows, Enter, Escape, Tab, Backspace, Space (narrowing word separator),
-`.` (verbs), `?` (hints), Escape with nothing to clear (overview), `primary + K` (palette — Studio's
-precedent); reserved punctuation never narrows. `TR-interaction-keys.ts`: hardware key dispatch
+control in the current scope's render order; Enter by control). **Reserved reducer keys** (settled by
+Ro): arrows, Enter, Escape, Tab, Backspace, Space (narrowing word separator), `.` (verbs), **the
+unshifted hints key** — `/` on a US layout, reserved by physical key (`event.code === 'Slash'`)
+where the platform reports one and by character otherwise, with `?` accepted as the same key
+shifted — Escape with nothing to clear (overview), `primary + K` (palette — Studio's precedent);
+reserved punctuation never narrows. The runtime reserves nothing today: there is no key handling
+anywhere in `TaoRuntime-src`. `TR-interaction-keys.ts`: hardware key dispatch
 beside `usePlatformBack` in `TR-navigation-app-host.ts` — web (`keydown` on the app host root via
 react-native-web's forwarded handler) and the test harness in this tranche; native hardware keys are
 a T6 deliverable. `shortcut` parsing (`primary` → meta/ctrl by platform). **Modality neutrality
@@ -293,8 +363,13 @@ focus.
 **Reconcile.** `Decisions.md` §16 test steps; §9 conditions; §8 surfacing policy and `Commands`;
 `Docs/Spec/Tao Testing.md`; `Coverage.md`.
 
-**Open before starting.** The region-focus condition name; the reserved key set; the `narrow` step
-name.
+**Open before starting.** All three settled (see the revision block): `active`; the key set with
+hints unshifted; `narrow`. One thing T4 must decide as it goes, deferred by T3 with a stated reason:
+whether the non-nav content of a view that renders a nav is a region. Today regions are selection
+items, split panes, and presented occurrences; the focus bar beside WordFlower's navigator has no
+region and no runtime handle (siblings of a rendered nav have no grouping node). If T4's re-aim
+rules or overview need it, add a compile-time descriptor of "the siblings of a rendered nav" rather
+than a runtime wrapper, and say so in `2 - Next`.
 
 ---
 
@@ -373,21 +448,24 @@ still describes the retired spellings or the pre-design model.
 `Docs/Roadmap/` document (`Deferred Tao language decisions.md`, the navigation follow-ups, the
 exploration ledgers that mention intents, palettes, rails, or focus); `Docs/Spec/*` (the implemented
 contract — updated to what T1–T6 shipped, never ahead of it); `Docs/Tutorials/`; `Docs/README.md`;
-`Roadmap.md`; `Apps/WordFlower/README.md`, `Apps/Tao Future/README.md`, and the `.tao-revolution`
-sources' comments where they state command or navigation vocabulary; every `AGENTS.md` and
+`Roadmap.md`; `Apps/WordFlower/README.md`, `Apps/Tao Future/README.md`, and **the `.tao-revolution`
+sources themselves** — Ro ruled they follow determined decisions before anything merges to `main`, so
+`command X = Y() with { … }` and `Key "cmd+n"` there are T7's to respell; every `AGENTS.md` and
 `agents/skills/*/SKILL.md`; the design document itself (its discovery record moves to
 `Docs/Roadmap/Archive/` only if Ro asks).
 
 **Method.** Search for the retired and renamed vocabulary — `intent` as a declaration or concept
 word, `Palette all`, `Rail`, `menu Name { … }` in views, `present … as palette`, `Title` on
-`action`, `command X = Y(args) with`, `Key "cmd+…"`, `ui`/`frame` as kinds, "an app mounts navs, it
-does not render content directly" — and for every statement about focus, selection, commands,
+`action`, `command X = Y(args) with`, **`command X { Document … }` (block slots), `do X with`,
+`FrameNav`, `@top`/`@bottom`/`@center`, `store device`, module-level `query`**, `Key "cmd+…"`,
+`ui`/`frame` as kinds, "an app mounts navs, it does not render content directly" — and for every
+statement about focus, selection, commands,
 toolbars, navigation containers, or accessibility; compare each against the design summary; update
 or delete. Each `Decisions.md` amendment names the KEY-D entry that decided it. `Coverage.md` gains
 rows for scene, frame, device-local data, commands and the catalog, the outline, the attention
 reducer, narrowing, surfaces, and the Assistant boundary.
 
-**Done when** `just words check` and `./agent verify` are green and a repository-wide search for
+**Done when** `./agent verify` is green (there is no `words` recipe; `_repo-lint` and `dprint` are the prose gates) and a repository-wide search for
 each retired spelling finds only archived or explicitly historical text.
 
 ## Deferred hand-offs
