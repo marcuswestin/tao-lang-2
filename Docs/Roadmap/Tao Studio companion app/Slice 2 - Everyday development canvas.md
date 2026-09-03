@@ -114,6 +114,10 @@ Studio's answer — applied, or refused and why — belongs on that screen and n
 - **An edit made on the phone changed the Mac's file.** Selecting that button and choosing Move up
   reordered it above "Delete workspace" in `Workspaces.tao`, tags and all; Studio recompiled and the
   phone re-rendered in the new order.
+- **A selection made on the Mac outlines on the phone.** Clicking "Open workspace" in Studio's canvas
+  outlined exactly that render on the device, and clicking "Delete workspace" moved the outline to
+  it. The outline is passive — inspect mode is off, and the phone's own touches still reach the app —
+  which is the difference between being shown something and being taken over.
 
 ### What the live run caught that the tests did not
 
