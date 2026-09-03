@@ -21,6 +21,11 @@ test "WordFlower focused writing" {
       press #focusFive
       expect text "5:00"
       expect text "Focus session"
+      // The focus bar's mounted command belongs to the shell occurrence, so its modifier chord is
+      // available even while attention is in the editor rather than on the bar's button.
+      press key "primary+p"
+      expect text "Resume"
+      press #resumeFocus
       // The bar lives in the shell, not in the screen that started the session, so leaving the
       // editor does not take the timer with it.
       back

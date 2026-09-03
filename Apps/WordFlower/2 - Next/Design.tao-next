@@ -73,7 +73,7 @@ design WordFlowerDesign {
    // consumed by Tao's portable/web host so product chrome and content use one mounted design.
    Text [ink ink, ink inkDark when Scheme is Dark]
    TextInput [background surfaceRaised, background surfaceRaisedDark when Scheme is Dark, border line, border lineDark when Scheme is Dark, ink ink, ink inkDark when Scheme is Dark, radius 12, size 16]
-   FormButton [bg accentStrong, fg onAccent, radius 12, weight 700]
+   FormButton [bg accentStrong, bg accent when pressed, border accentStrong when focused, fg onAccent, fg ink when hovered, radius 12, weight 700]
    Checkbox [fg ink]
    Progress [bg line, fg accent, radius 999]
    NavigationHost [background canvas, background canvasDark when Scheme is Dark]

@@ -1,4 +1,4 @@
-use Documents, Paragraphs from @data
+use Documents, Finish, Paragraphs from @data
 use CountWords from @tao/text
 use Checkbox, Col, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
@@ -177,21 +177,6 @@ view ConfirmCloseDialogue(Document) responds ConfirmResult {
          on press -> {
             respond // bare respond answers none
 }  }  }  }
-
-// A module-level command: its slot is a noun, so it is a verb for every document anywhere in the
-// app rather than an affordance belonging to one screen. Slots are parameters, declared exactly as
-// an action declares its own, so the block holds only what a person reads and the one `do`.
-package
-command Finish(Document) {
-   Title "Finish document"
-   Description "Moves a document out of drafts and into the archive."
-   Summary "Finish { Document.Title }"
-   Icon "checkmark.circle"
-   Enabled Document.Final is Draft
-   do -> { update Document {
-      Final
-   } }
-}
 
 // A writing session's goal, used by the editor's progress indicator.
 let ParagraphGoal = 10

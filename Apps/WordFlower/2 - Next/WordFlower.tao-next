@@ -5,7 +5,7 @@ use Local from @tao/data/providers/local
 use WordFlowerShell, WorkspaceRow from @ui
 use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
-// Tranche status: absorbed
+// Tranche status: open
 //
 // STUDIO SCENARIOS. This tranche implements the decided fixture and app-running scenario subset
 // shared by Tao tests, review tooling, and Studio. `fixture` owns reusable data/identity setup;
@@ -395,6 +395,64 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   mechanism and remains
 // - Absence unification in `commonType`, union-to-union assignability, and property-position `with`
 //   remain as general improvements
+//
+// THE INTERACTION SYSTEM, PART THREE: ATTENTION, KEYBOARD DISPATCH, NARROWING, AND SURFACING.
+// This tranche makes the read-only outline operable without giving any consumer a mutation path
+// through it (`Design - Keyboard driven apps.md`, KEY-D8-D13; `Plan`, T4).
+//
+// This tranche decides:
+// - One runtime-owned attention reducer holds region focus, one remembered target per region,
+//   narrowing text and candidates, engagement, and the modal focus stack. Navigating, narrowing,
+//   engaged, verb-pending, overview, and hints are derived modes, never stored Tao state. Attention
+//   is reset between launches and tests and is neither settable nor restored
+// - The public outline remains snapshots only. Mounted nodes additionally give the reducer a
+//   private live channel for activation, native focus/engagement, geometry, render order, and the
+//   actual row value needed to bind an entity command. Provenance remains read-only metadata and is
+//   never used as a selector or mutation handle. Generated descriptors stay in generated modules
+//   and are passed into handwritten `TR.Interaction`; nothing generated attaches to `TR`
+// - Regions are presented occurrences, selection items, split panes, and -- settled here -- the
+//   non-nav sibling subtree of a view that renders a nav. The compiler emits one descriptor for
+//   that subtree and its roots coalesce under one ref-counted runtime registration; no wrapper or
+//   layout node is added. This is required because WordFlower's focus-bar controls otherwise have
+//   no region, contradicting modality-neutral focus, narrowing, overview, and re-aim. The sibling
+//   region is named by its first derived label (`Focus session` here); the rendered nav keeps its
+//   own region
+// - Targeting is eager and free: moving or narrowing may commit a target, and one remaining
+//   candidate auto-targets, but only Enter/activation or a verb performs behavior. Candidates are
+//   mounted items and controls in the focused region. Narrowing is case-insensitive, locale-aware
+//   word-prefix subsequence matching over full rendered text; spaces advance to later words;
+//   nonmatches are subdued rather than unmounted
+// - Arrows move region/target attention; Enter activates or engages; Escape clears narrowing,
+//   disengages while retaining the target, ascends, or opens overview when nothing remains; Tab
+//   leaves an input for the next control; Backspace edits narrowing; Space separates word prefixes;
+//   `.` opens verbs; the unshifted hints physical key is `Slash` (`/` on US layouts, `?` accepted
+//   shifted); `primary+K` opens the palette. Reserved punctuation never narrows
+// - Precedence is engaged input, modal occurrence, targeted item, focused scene, app-wide command,
+//   reducer key. Platform editing chords win while engaged. Modifier chords invoke directly;
+//   bare single-letter `Key` values are accelerators only in the verb layer. Duplicate shortcuts
+//   in one static Toolbar/Commands/entity/global scope are errors; platform editing chords warn
+// - Pointer and keyboard routes share semantic operations: tap is target plus activate; focusing an
+//   input is focus-region plus target plus engage; right-click/long-press is target plus verbs;
+//   empty-space click focuses the region; hover changes only `hovered`; drag targets then performs
+//   a verb on drop; scroll changes no attention. Platform focus and reducer focus synchronize
+// - `pressed`, `focused`, and `hovered` are bare postfix design conditions for a control;
+//   `when FocusBar is active` is the named region-focus form. These existing words parse through
+//   `ID`/layout-word seams and are spelling-validated, not reserved as grammar keywords. `focused`
+//   means the target control in every modality; `active` means the currently focused region
+// - An entity data block orders default verbs with `commands A, B` and withholds a command using
+//   `commands hide C`. Any view may promote commands through its `Commands { ... }` supplied slot
+//   and exclude inherited defaults with `hide C`. Verb order is view Commands, rendered inner
+//   controls, entity defaults, then the remaining applicable catalog alphabetically, folded
+// - `press key "..."`, `narrow "..."`, `expect target "..."`, `expect focus region "..."`, and
+//   `expect verbs "...", "..."` extend tests through ID-headed, spelling-validated seams. They
+//   dispatch reducer operations directly rather than synthetic DOM events. `beginTest` resets
+//   attention. The existing `interaction` capture becomes `{ outline, attention }`; no duplicate
+//   capture domain is registered
+// - A command with open slots enters verb-pending. Entity slots target across the mounted screen
+//   first, then a `(search)` store picker; text and duration slots use inline input; required slots
+//   are filled in declaration order. Descending reaches an item's inner controls, Escape ascends,
+//   an unmounted/collapsed region re-aims to primary content, modal regions trap and restore focus,
+//   and movement with no target scrolls the focused region
 project {
    id "wordflower"
    name "WordFlower"

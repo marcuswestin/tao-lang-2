@@ -23,6 +23,8 @@ data Documents / Document {
 
    index CreatedAt
    order by CreatedAt
+   commands Finish, Duplicate
+   commands hide Delete
 }
 
 workspace
@@ -46,4 +48,44 @@ data FocusSessions / FocusSession {
    Paused yes / Running no
 
    local only
+}
+
+// Entity commands live with the entity policy they participate in, so the data package never
+// imports the UI package that renders them. `Finish` and `Duplicate` are the ordered defaults;
+// destructive deletion is available only where a view explicitly lists it.
+workspace
+command Finish(Document) {
+   Title "Finish document"
+   Description "Moves a document out of drafts and into the archive."
+   Summary "Finish { Document.Title }"
+   Icon "checkmark.circle"
+   Key "f"
+   Enabled Document.Final is Draft
+   do -> { update Document {
+      Final
+   } }
+}
+
+workspace
+command Duplicate(Document) {
+   Title "Duplicate document"
+   Description "Makes a new draft beside this document."
+   Summary "Duplicate { Document.Title }"
+   Icon "doc.on.doc"
+   Key "d"
+   do -> { create Document {
+      Title: "{ Document.Title } copy"
+      Body: Document.Body
+      Document.Workspace
+   } }
+}
+
+workspace
+command Delete(Document) {
+   Title "Delete document"
+   Description "Permanently removes this document."
+   Summary "Delete { Document.Title }"
+   Icon "trash"
+   Key "x"
+   do -> { delete Document }
 }

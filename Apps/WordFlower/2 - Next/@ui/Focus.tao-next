@@ -46,7 +46,7 @@ view FocusBar() {
       limit 1
    }
    state Tick = Interval(1.s)
-   render Row() [subtlePanel, gap 12] {
+   render Row() [subtlePanel, gap 12, border accent when FocusBar is active] {
       Text("Focus session") [eyebrow]
       loop CurrentSession / FocusSession {
          let Left = when FocusSession.Paused {
@@ -54,25 +54,40 @@ view FocusBar() {
             otherwise -> FocusSession.EndsAt - Tick.Value
          }
          Text(when Left > 0 Left.Clock / not "Time's up") [title]
-         when FocusSession.Paused {
-            true -> {
-               #resumeFocus
-               FormButton("Resume") {
-                  on press -> { update FocusSession {
-                     EndsAt: now + (FocusSession.EndsAt - FocusSession.PausedAt)
-                     Running
-                  } }
-            }  }
-            otherwise -> {
-               #pauseFocus
-               FormButton("Pause") {
-                  on press -> { update FocusSession {
-                     PausedAt: now
-                     Paused
-                  } }
-         }  }  }
-
-         #stopFocus
-         FormButton("Stop") [buttonDanger] {
-            on press -> { delete FocusSession }
+         FocusSessionControls(FocusSession)
 }  }  }  }
+
+// This child is mounted for the one running row, so its command closes over that session while its
+// nearest presented occurrence is the shell. The modifier chord therefore works from the editor
+// without making the focus session an app-wide singleton or teaching product code about focus.
+view FocusSessionControls(FocusSession) {
+   command PauseFocus() {
+      Title "Pause focus session"
+      Key primary + "p"
+      Enabled FocusSession.Paused is Running
+      do -> { update FocusSession {
+         PausedAt: now
+         Paused
+      } }
+   }
+   Commands { PauseFocus }
+   render Row() [gap 12] {
+      when FocusSession.Paused {
+         true -> {
+            #resumeFocus
+            FormButton("Resume") {
+               on press -> { update FocusSession {
+                  EndsAt: now + (FocusSession.EndsAt - FocusSession.PausedAt)
+                  Running
+               } }
+         }  }
+         otherwise -> {
+            #pauseFocus
+            FormButton("Pause") {
+               on press -> { do PauseFocus() }
+      }  }  }
+
+      #stopFocus
+      FormButton("Stop") [buttonDanger] {
+         on press -> { delete FocusSession }
+}  }  }
