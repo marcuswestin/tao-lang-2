@@ -23,6 +23,12 @@ export type RunLocation = {
 /** FinishRunOptions describes the completed run whose artifacts are being written. */
 export type FinishRunOptions = {
   location: RunLocation
+  /**
+   * False for a run that shared the machine, whose durations measure the contention rather than
+   * the work. Ordering has a cold-start fallback; an estimate poisoned by a neighbouring worktree
+   * has none, and it mis-orders every later run in this checkout.
+   */
+  recordTimings?: boolean
   states: readonly WorkState[]
   /** The lane's own rollup, written as `summary.json`. */
   summary: unknown
@@ -68,12 +74,14 @@ async function finishRun(options: FinishRunOptions): Promise<string> {
   const summaryPath = FS.resolvePath(SUMMARY_FILE, options.location.logRoot)
   await FS.writeJson(summaryPath, options.summary)
   await refreshLatest(options.location)
-  await RunTimings.record({
-    durations: measuredDurations(options.states),
-    lane: options.location.lane,
-    repositoryRoot: options.location.repositoryRoot,
-    stamp: options.location.stamp,
-  })
+  if (options.recordTimings !== false) {
+    await RunTimings.record({
+      durations: measuredDurations(options.states),
+      lane: options.location.lane,
+      repositoryRoot: options.location.repositoryRoot,
+      stamp: options.location.stamp,
+    })
+  }
   return summaryPath
 }
 

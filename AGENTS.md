@@ -44,6 +44,12 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Run focused tests while working.
 - Run `./agent verify` as the final validation and before commits.
+- Several worktrees share one machine. Lanes divide its CPUs between themselves automatically, so a
+  lane is slower, not oversubscribed, while another agent works. A timeout under that load is
+  reported as `machine-contention`, re-run once on its own, and named in the summary's `contention`
+  block — read that before treating a timed-out suite as a regression. `packages/dev/README.md` owns
+  what is shared and what is not; `just full-verify` is the exception that still needs the machine's
+  GUI to itself.
 
 ## Developer environment feedback
 

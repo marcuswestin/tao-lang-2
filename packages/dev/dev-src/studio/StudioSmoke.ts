@@ -1,8 +1,10 @@
 import { CLI, Errors, FS, Repo } from '@shared'
+import { type PortReservation, Ports } from '../expo-dev-loop/expo-runner/Ports'
 
 const basePort = 42_000
 const portsPerShard = 128
 const portsPerWorker = 2
+const shardCount = 16
 
 export type StudioSmokeResources = {
   artifactRoot: string
@@ -22,12 +24,29 @@ export type StudioSmokeOptions = {
 
 /** StudioSmoke owns explicit, slow Studio smoke execution outside ordinary package discovery. */
 export const StudioSmoke = {
+  defaultShardIndex,
   resources,
   run,
+  shardCount,
 } as const
 
+/**
+ * defaultShardIndex gives each worktree its own block of the port range. Worker index separates the
+ * lanes inside one run; nothing separated one checkout's lanes from another's, so two agents running
+ * a Studio lane at the same time both bound 42000 and the second one failed on a port the first one
+ * owned. Deriving the shard from the worktree path makes the common case — different worktrees —
+ * disjoint by construction, and `run` walks to the next free shard when two paths still collide.
+ */
+function defaultShardIndex(repositoryRoot = Repo.resolvePath()): number {
+  let hash = 0
+  for (const character of repositoryRoot) {
+    hash = (hash * 31 + character.codePointAt(0)!) % 1_000_003
+  }
+  return hash % shardCount
+}
+
 function resources(options: Omit<StudioSmokeOptions, 'files'>): StudioSmokeResources {
-  const shardIndex = nonNegativeIndex(options.shardIndex ?? 0, 'Studio smoke shard index', 15)
+  const shardIndex = nonNegativeIndex(options.shardIndex ?? defaultShardIndex(), 'Studio smoke shard index', 15)
   const workerIndex = nonNegativeIndex(options.workerIndex ?? 0, 'Studio smoke worker index', 63)
   const runId = safeRunId(options.runId)
   const lanePort = basePort + shardIndex * portsPerShard + workerIndex * portsPerWorker
@@ -47,7 +66,9 @@ async function run(options: StudioSmokeOptions): Promise<number> {
     throw new Errors.UserInputError('Studio smoke requires at least one explicit test file.')
   }
   await requireGeneratedParser()
-  const allocation = resources(options)
+  const allocation = options.shardIndex === undefined
+    ? await freeShardAllocation(options)
+    : resources(options)
   await FS.mkdir(allocation.artifactRoot)
   const result = await CLI.run('bun', {
     args: ['test', ...options.files.map(path => FS.resolvePath(path)), '--timeout=180000'],
@@ -62,6 +83,47 @@ async function run(options: StudioSmokeOptions): Promise<number> {
     stdio: 'inherit',
   })
   return result.error === undefined ? result.exitCode ?? 1 : 1
+}
+
+/**
+ * freeShardAllocation starts at this worktree's own shard and takes the first one whose ports are
+ * free, so a lane never dies on a port another worktree's lane is already serving.
+ */
+async function freeShardAllocation(options: Omit<StudioSmokeOptions, 'files'>): Promise<StudioSmokeResources> {
+  const preferred = defaultShardIndex()
+  for (let attempt = 0; attempt < shardCount; attempt += 1) {
+    const allocation = resources({ ...options, shardIndex: (preferred + attempt) % shardCount })
+    if (await portsAreFree([allocation.serverPort, allocation.previewPort])) {
+      return allocation
+    }
+  }
+  throw new Errors.HostEnvironmentError(
+    `Every Studio smoke port block from ${basePort} to ${basePort + shardCount * portsPerShard - 1} is in use, `
+      + 'which means this machine is already running Studio lanes in other worktrees. Wait for one to finish, '
+      + 'or name a free block yourself with --shard.',
+  )
+}
+
+/** portsAreFree reports whether every port in one lane's block can still be bound. */
+async function portsAreFree(ports: readonly number[]): Promise<boolean> {
+  const reservations: PortReservation[] = []
+  try {
+    for (const port of ports) {
+      const reservation = await Ports.reserveAvailable(port)
+      reservations.push(reservation)
+      if (reservation.port !== port) {
+        // `reserveAvailable` falls back to an ephemeral port when the preferred one is taken, and an
+        // ephemeral port is no use here: the lane's environment names the block it must bind.
+        return false
+      }
+    }
+    return true
+  } catch {
+    // A host that refuses to probe at all is not a reason to refuse the run; let the lane try.
+    return true
+  } finally {
+    await Promise.all(reservations.map(reservation => reservation.release().catch(() => {})))
+  }
 }
 
 /**

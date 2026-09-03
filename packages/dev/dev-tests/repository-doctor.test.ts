@@ -21,6 +21,7 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
     generatedParserArtifacts: [{ path: 'packages/parser/parser-src/_gen_tao-parser/ast.ts', present: true }],
     linkedWorktree: true,
     lockfilePresent: true,
+    machine: { cpuCount: 8, lanes: [], loadAverage: 1.2 },
     nodeModulesPresent: true,
     nodeVersion: 'v24.14.1',
     ports: [{ listeners: [], port: 8081, purpose: 'Expo Metro' }],
@@ -89,14 +90,18 @@ Describe('repository doctor', () => {
     Expect(check(report, 'dependency compatibility')?.detail).toContain('react 19.2.8')
   })
 
-  Test('names the process holding a conventional port', () => {
+  Test('names the process holding a conventional port, and who else it might belong to', () => {
     const report = doctorReport(facts({
       ports: [{ listeners: [{ command: 'node', pid: 4242 }], port: 8081, purpose: 'Expo Metro' }],
     }))
 
     Expect(check(report, 'ports')?.status).toBe('warn')
     Expect(check(report, 'ports')?.detail).toContain('node pid 4242')
-    Expect(check(report, 'ports')?.remediation).toBe('Stop it with: kill -TERM 4242')
+    // A conventional port on a machine running several worktrees is as likely to be a sibling
+    // worktree's dev server as this one's, so the identification step comes before the kill.
+    Expect(check(report, 'ports')?.remediation).toContain('another worktree')
+    Expect(check(report, 'ports')?.remediation).toContain('ps -p 4242')
+    Expect(check(report, 'ports')?.remediation).toContain('kill -TERM 4242')
   })
 
   Test('never offers to kill a process this repository does not recognise', () => {
@@ -108,6 +113,38 @@ Describe('repository doctor', () => {
     // way it could do harm.
     Expect(check(report, 'ports')?.remediation).not.toContain('kill -TERM')
     Expect(check(report, 'ports')?.remediation).toContain('ps -p 60803')
+  })
+
+  Test('names the other worktrees whose lanes are sharing this machine', () => {
+    const report = doctorReport(facts({
+      machine: {
+        cpuCount: 8,
+        lanes: [
+          { lane: 'verify', pid: 4242, repositoryRoot: '/w', slots: 4, startedAt: '2026-09-03T12:00:00.000Z' },
+          { lane: 'dev-test', pid: 4243, repositoryRoot: '/other', slots: 4, startedAt: '2026-09-03T12:00:01.000Z' },
+        ],
+        loadAverage: 9,
+      },
+    }))
+
+    // A slow lane or a timed-out suite has an ordinary explanation here, and the doctor is where
+    // somebody looks before they go looking for a regression.
+    Expect(check(report, 'machine lanes')?.status).toBe('warn')
+    Expect(check(report, 'machine lanes')?.detail).toContain('1 Tao lane running elsewhere')
+    Expect(check(report, 'machine lanes')?.detail).toContain('dev-test in /other')
+    // This checkout's own lane is not somebody else's work.
+    Expect(check(report, 'machine lanes')?.detail).not.toContain('verify in /w')
+    Expect(RepositoryDoctorCommand.exitCodeFor(report.status)).toBe(0)
+  })
+
+  Test('warns on a machine that is busy even when no other lane registered', () => {
+    // An Xcode build, a Metro bundler, another repository entirely: none of them register a lane,
+    // and all of them slow this one down.
+    const report = doctorReport(facts({ machine: { cpuCount: 8, lanes: [], loadAverage: 30 } }))
+
+    Expect(check(report, 'machine lanes')?.status).toBe('warn')
+    Expect(check(report, 'machine lanes')?.detail).toContain('no other Tao lane is registered')
+    Expect(check(report, 'machine lanes')?.detail).toContain('load 30.0 on 8 CPUs')
   })
 
   Test('reports an unreadable port as unknown rather than free', () => {

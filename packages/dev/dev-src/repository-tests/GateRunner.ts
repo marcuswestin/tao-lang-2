@@ -1,5 +1,7 @@
 import { Repo, Time } from '@shared'
+import { ContentionRetry } from './ContentionRetry'
 import { GateCatalog } from './GateCatalog'
+import { type ContentionReport, type MachineLane, MachineLanes } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
 import { buildSummary, type GateSummary, skippedResult } from './RunSummary'
 import { RunTimings } from './RunTimings'
@@ -29,6 +31,8 @@ export type RunGatesOptions = {
   now?: () => number
   /** How the run reports itself while it runs. Omitted, it reports nothing but the artifacts. */
   outputMode?: OutputMode
+  /** Injected by tests; defaults to the machine-wide lane registry. */
+  registryRoot?: string
   repositoryRoot?: string
   /** Gates deliberately not run in this lane, as `name=reason`. */
   skipped?: readonly string[]
@@ -58,16 +62,38 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
   const reporter = createReporter(options, location.logRoot)
-
-  const result = await WorkGraph.run(states, {
-    expectedMs,
-    jobs: options.jobs,
-    onEvent: event => reporter.handle(event),
-    runNode: options.runGate === undefined ? undefined : injectedRunner(options.runGate),
+  // Every worktree on this machine reserves against the same CPUs, so the width this lane may take
+  // is decided before anything is scheduled, not by `cpuCount` alone.
+  const machineLane = await MachineLanes.acquire({
+    lane: location.lane,
+    registryRoot: options.registryRoot,
+    repositoryRoot: location.repositoryRoot,
+    requestedJobs: options.jobs,
   })
-  await reporter.finish()
+
+  const runNode = options.runGate === undefined ? undefined : injectedRunner(options.runGate)
+  const { contention, result } = await runUnderLane(async () => {
+    const runResult = await WorkGraph.run(states, {
+      expectedMs,
+      jobs: machineLane.capacity,
+      onEvent: event => reporter.handle(event),
+      runNode,
+    })
+    await reporter.finish()
+    if (!runResult.interrupted) {
+      // A contended timeout is a claim about this machine, and one isolated re-run is what settles it.
+      await ContentionRetry.confirmContendedFailures({
+        contention: machineLane.report(),
+        location,
+        runNode,
+        states,
+      })
+    }
+    return runResult
+  }, machineLane)
 
   const summary = buildSummary({
+    contention,
     declaredSkips,
     elapsedMs: now() - startedAt,
     expectedMs,
@@ -77,11 +103,26 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     order: options.gates,
     states,
   })
-  await RunArtifacts.finishRun({ location, states, summary })
+  await RunArtifacts.finishRun({ location, recordTimings: !contention.contended, states, summary })
   if (options.jsonPath !== undefined) {
     await RunArtifacts.writeSummaryCopy(options.jsonPath, location.repositoryRoot, summary)
   }
   return summary
+}
+
+/** runUnderLane runs one lane's work and releases its machine registration however that ends. */
+async function runUnderLane<T>(
+  work: () => Promise<T>,
+  machineLane: MachineLane,
+): Promise<{ contention: ContentionReport; result: T }> {
+  try {
+    // The report is read after the work, not beside it: its whole value is what the machine did
+    // while the lane ran.
+    const result = await work()
+    return { contention: machineLane.report(), result }
+  } finally {
+    await machineLane.release()
+  }
 }
 
 function injectedRunner(

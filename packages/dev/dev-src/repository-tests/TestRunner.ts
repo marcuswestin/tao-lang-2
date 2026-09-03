@@ -1,4 +1,6 @@
 import * as Shared from '@shared'
+import { ContentionRetry } from './ContentionRetry'
+import { type MachineLane, MachineLanes } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
 import { buildSummary } from './RunSummary'
 import { RunTimings } from './RunTimings'
@@ -56,6 +58,13 @@ type SuiteScheduling = {
   // back cheap suites instead of running under full contention. Default 1.
   cost?: number
 }
+/**
+ * The runtime-jest reservation, and the worker count the Jest child is held to. Jest sizes itself
+ * to the whole machine by default, so without the flag this suite spawns `cpuCount - 1` workers
+ * inside a three-slot reservation and every other suite in the lane runs against a machine that is
+ * already full. The two numbers are one number for that reason.
+ */
+const RUNTIME_JEST_COST = 3
 const SUITE_SCHEDULING = new Map<string, SuiteScheduling>([
   // tao-apps dominates the wall time of a full run; its validate+compile phase is one
   // single-threaded process, so it gets the earliest start and a wide slot reservation.
@@ -67,14 +76,14 @@ const SUITE_SCHEDULING = new Map<string, SuiteScheduling>([
   // behind it: measured on 18 CPUs, `--jobs 12` against the old 12/4/3 weights took 41.6s where
   // `--jobs 18` took 22.6s; at 8/3/2 the same `--jobs 12` run takes 21.5s and `--jobs 18` 22.9s.
   ['tao-apps', { priority: 5, cost: 8 }],
-  ['runtime-jest', { priority: 4, cost: 3 }],
+  ['runtime-jest', { priority: 4, cost: RUNTIME_JEST_COST }],
   // runtime-toolchain spawns tsc typecheck children per test.
   ['runtime-toolchain', { priority: 3, cost: 2 }],
   ['source-actions', { priority: 3 }],
   ['tao-cli', { priority: 2 }],
 ])
 
-async function discoverTestSuites(pattern = ''): Promise<TestSuite[]> {
+async function discoverTestSuites(pattern = '', jobs?: number): Promise<TestSuite[]> {
   const packageRoot = Shared.Repo.resolvePath('packages')
   const packageNames = await Shared.FS.listDir(packageRoot)
   const testFilesByPackage = await packageTestFilesByPackage(packageRoot)
@@ -93,7 +102,7 @@ async function discoverTestSuites(pattern = ''): Promise<TestSuite[]> {
   }
 
   suites.push(...performanceCheckSuites(pattern))
-  suites.push(...runtimeJestSuites(pattern))
+  suites.push(...runtimeJestSuites(pattern, jobs))
   suites.push(...taoAppsSuites(pattern))
   return suites
 }
@@ -146,15 +155,41 @@ function reportToCallbacks(event: WorkEvent, options: RunSuiteProcessesOptions):
 /** runTests discovers, runs, reports, and records one `./dev test` invocation. */
 async function runTests(pattern = '', options: TestRunOptions = {}): Promise<number> {
   const startedAt = Date.now()
-  const suites = await discoverTestSuites(pattern)
+  const location = RunArtifacts.locate({ lane: LANE })
+  // A nested run is already inside the width its parent graph reserved, so it neither registers on
+  // the machine nor divides it again; a top-level `./dev test` shares the machine with whatever
+  // other worktrees are running.
+  const machineLane = await MachineLanes.acquire({
+    lane: LANE,
+    repositoryRoot: location.repositoryRoot,
+    requestedJobs: options.jobs,
+    reservedJobs: reservedJobs(),
+  })
+  try {
+    return await runSuites({ location, machineLane, mode: options.outputMode, pattern, startedAt })
+  } finally {
+    await machineLane.release()
+  }
+}
+
+type RunSuitesOptions = {
+  location: ReturnType<typeof RunArtifacts.locate>
+  machineLane: MachineLane
+  mode?: OutputMode
+  pattern: string
+  startedAt: number
+}
+
+async function runSuites(options: RunSuitesOptions): Promise<number> {
+  const { location, machineLane, pattern } = options
+  const suites = await discoverTestSuites(pattern, machineLane.capacity)
   if (suites.length === 0) {
     Shared.HCI.writeLine('No test suites found.')
     return 0
   }
 
-  const mode = options.outputMode ?? WorkReporter.resolveMode()
+  const mode = options.mode ?? WorkReporter.resolveMode()
   const states = suites.map(createSuiteState)
-  const location = RunArtifacts.locate({ lane: LANE })
   await RunArtifacts.assignLogPaths(states, location)
   const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
@@ -162,16 +197,22 @@ async function runTests(pattern = '', options: TestRunOptions = {}): Promise<num
 
   const result = await WorkGraph.run(states, {
     expectedMs,
-    jobs: options.jobs,
+    jobs: machineLane.capacity,
     onEvent: event => reporter.handle(event),
   })
   await reporter.finish()
+  if (!result.interrupted) {
+    await ContentionRetry.confirmContendedFailures({ contention: machineLane.report(), location, states })
+  }
 
-  const elapsedMs = Date.now() - startedAt
+  const elapsedMs = Date.now() - options.startedAt
+  const contention = machineLane.report()
   const summaryPath = await RunArtifacts.finishRun({
     location,
+    recordTimings: !contention.contended,
     states,
     summary: buildSummary({
+      contention,
       elapsedMs,
       expectedMs,
       interrupted: result.interrupted,
@@ -181,6 +222,7 @@ async function runTests(pattern = '', options: TestRunOptions = {}): Promise<num
     }),
   })
   TestResultSummary.printResultSummary(states, elapsedMs, {
+    contention,
     // A dashboard scrolled the failure away; a quiet run never showed it. Both need it repeated,
     // and an agent reading a pipe needs it short enough to act on.
     includeFailureOutput: mode !== 'lines',
@@ -188,7 +230,15 @@ async function runTests(pattern = '', options: TestRunOptions = {}): Promise<num
     taoAppsSkipped: pattern.length > 0,
   })
   Shared.HCI.writeLine(`Summary: ${Shared.FS.displayPath(summaryPath)}`)
+  // The graph's result holds the same state objects the retry updated, so a suite that recovered on
+  // an isolated retry is already no longer failed here.
   return WorkGraph.exitCodeFor(result)
+}
+
+/** reservedJobs reads the width an outer work graph already reserved for this whole process. */
+function reservedJobs(): number | undefined {
+  const envJobs = Number(Shared.Platform.runtimeProcess.env[WorkGraph.BUDGET_ENV_KEYS.devTest] ?? '')
+  return Number.isInteger(envJobs) && envJobs > 0 ? envJobs : undefined
 }
 
 function packageSuites(packageName: string, testFiles: string[], pattern: string): TestSuite[] {
@@ -218,8 +268,8 @@ function performanceCheckSuites(pattern: string): TestSuite[] {
   )]
 }
 
-function runtimeJestSuites(pattern: string): TestSuite[] {
-  return [runtimeJestSuite('runtime-jest', [], pattern)]
+function runtimeJestSuites(pattern: string, jobs?: number): TestSuite[] {
+  return [runtimeJestSuite('runtime-jest', [], pattern, jobs)]
 }
 
 function taoAppsSuites(pattern: string): TestSuite[] {
@@ -234,16 +284,26 @@ function taoAppsSuites(pattern: string): TestSuite[] {
   }]
 }
 
-function runtimeJestSuite(name: string, testFiles: string[], pattern: string): TestSuite {
+function runtimeJestSuite(name: string, testFiles: string[], pattern: string, jobs?: number): TestSuite {
   const nodePath = Shared.Repo.resolvePath('.devenv/profile/bin/node')
   const args = [
     'node_modules/jest/bin/jest.js',
     ...testFiles,
     '--no-watchman',
+    `--maxWorkers=${runtimeJestWorkers(jobs)}`,
     ...(pattern ? [`--testNamePattern=${pattern}`] : []),
     '--silent',
   ]
   return { name, command: nodePath, args, cwd: Shared.Repo.resolvePath('packages/runtime-toolchain') }
+}
+
+/**
+ * runtimeJestWorkers holds the Jest child to the slots this suite actually reserved, and to the
+ * whole lane's budget when that is narrower still — which it is whenever another worktree is
+ * running a lane on the same machine.
+ */
+function runtimeJestWorkers(jobs: number | undefined): number {
+  return Math.max(1, Math.min(RUNTIME_JEST_COST, jobs ?? RUNTIME_JEST_COST))
 }
 
 async function packageTestFilesByPackage(packageRoot: string): Promise<Map<string, string[]>> {

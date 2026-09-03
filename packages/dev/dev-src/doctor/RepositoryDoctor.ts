@@ -1,9 +1,10 @@
-import { CLI, FS, Repo, Switch } from '@shared'
+import { CLI, FS, Platform, Repo, Switch } from '@shared'
 import { Ports } from '../expo-dev-loop/expo-runner/Ports'
 import {
   dependencyCompatibilityIssues,
   readDependencyFacts,
 } from '../repository-tests/DependencyCompatibility'
+import { type LaneRecord, MachineLanes } from '../repository-tests/MachineLanes'
 import { dependencyHealthError } from './DependencyHealth'
 
 /**
@@ -60,6 +61,15 @@ export type PortOccupancy = {
   purpose: string
 }
 
+/** MachineState records what else is running on this machine, which no single checkout can see. */
+export type MachineState = {
+  cpuCount: number
+  /** One-minute run-queue length, which counts work no Tao lane registered. */
+  loadAverage: number
+  /** Registered Tao lanes, including any this checkout is running. */
+  lanes: readonly LaneRecord[]
+}
+
 /** ArtifactRoot records one scratch tree's writability and size. */
 export type ArtifactRoot = {
   path: string
@@ -83,6 +93,7 @@ export type DoctorFacts = {
   generatedParserArtifacts: readonly { path: string; present: boolean }[]
   linkedWorktree: boolean
   lockfilePresent: boolean
+  machine: MachineState
   nodeModulesPresent: boolean
   nodeVersion?: string
   ports: readonly PortOccupancy[]
@@ -104,6 +115,7 @@ export function repositoryDoctorChecks(facts: DoctorFacts): DoctorCheck[] {
     dependencyInstallationCheck(facts),
     dependencyCompatibilityCheck(facts),
     watchmanCheck(facts),
+    machineLanesCheck(facts),
     parserArtifactCheck(facts),
     ...artifactRootChecks(facts),
     ...portChecks(facts),
@@ -315,6 +327,33 @@ function watchmanCheck(facts: DoctorFacts): DoctorCheck {
   return { detail: facts.watchmanVersion, name: 'watchman', status: 'pass' }
 }
 
+/**
+ * What every other check cannot see: this machine belongs to every worktree on it. A second agent
+ * running `verify` next door is the ordinary explanation for a slow lane or a timed-out test, and
+ * naming it here is what stops the next hour going into a regression that is not there.
+ */
+function machineLanesCheck(facts: DoctorFacts): DoctorCheck {
+  const { cpuCount, lanes, loadAverage } = facts.machine
+  const load = `load ${loadAverage.toFixed(1)} on ${cpuCount} CPUs`
+  const elsewhere = lanes.filter(lane => lane.repositoryRoot !== facts.repositoryRoot)
+  if (elsewhere.length === 0 && loadAverage <= cpuCount * MachineLanes.CONTENDED_LOAD_RATIO) {
+    return { detail: `this checkout has the machine to itself (${load})`, name: 'machine lanes', status: 'pass' }
+  }
+  // Another worktree's root is named absolutely: relative to this one it is a chain of `..` that
+  // says nothing about which checkout is meant.
+  const others = elsewhere.map(lane => `${lane.lane} in ${lane.repositoryRoot}`).join(', ')
+  return {
+    detail: elsewhere.length === 0
+      ? `no other Tao lane is registered, but this machine is already busy (${load})`
+      : `${elsewhere.length} Tao lane${elsewhere.length === 1 ? '' : 's'} running elsewhere (${load}): ${others}`,
+    name: 'machine lanes',
+    remediation:
+      'Lanes share the machine automatically, so this is expected while another worktree works. Timing-sensitive '
+      + 'suites are slower and can time out; re-run a timed-out suite on its own before treating it as a regression.',
+    status: 'warn',
+  }
+}
+
 function parserArtifactCheck(facts: DoctorFacts): DoctorCheck {
   const missing = facts.generatedParserArtifacts.filter(artifact => !artifact.present)
   if (missing.length === 0) {
@@ -367,8 +406,12 @@ function portChecks(facts: DoctorFacts): DoctorCheck[] {
     return {
       detail: `port ${occupancy.port} (${occupancy.purpose}) is held by ${owners}`,
       name: 'ports',
+      // A Tao process on a conventional port is as likely to belong to a sibling worktree as to
+      // this one, and killing another agent's dev server is the worst outcome available here.
       remediation: ours
-        ? `Stop it with: kill -TERM ${pids.join(' ')}`
+        ? `It may belong to another worktree on this machine. Confirm before stopping it: ps -p ${
+          pids.join(',')
+        } -o pid,command  # then, if it is yours: kill -TERM ${pids.join(' ')}`
         : `Identify it before stopping anything: ps -p ${pids.join(',')} -o pid,command`,
       status: 'warn' as const,
     }
@@ -418,6 +461,11 @@ export async function readDoctorFacts(repositoryRoot = Repo.getRoot()): Promise<
     generatedParserArtifacts: await readGeneratedParserArtifacts(repositoryRoot),
     linkedWorktree,
     lockfilePresent: await FS.isFile(FS.resolvePath('bun.lock', repositoryRoot)),
+    machine: {
+      cpuCount: Platform.cpuCount(),
+      lanes: await MachineLanes.activeLanes(),
+      loadAverage: Platform.loadAverage(),
+    },
     nodeModulesPresent: await FS.isDirectory(FS.resolvePath('node_modules', repositoryRoot)),
     nodeVersion,
     ports,

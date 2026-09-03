@@ -61,6 +61,8 @@ export type WorkState = {
   node: WorkNode
   /** Why a node was skipped, or what kind of failure it was, in one line. */
   reason?: string
+  /** True once a node that failed under machine contention has been run again on its own. */
+  retried?: boolean
   startedAt?: number
   status: WorkStatus
 }

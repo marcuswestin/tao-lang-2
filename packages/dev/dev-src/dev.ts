@@ -303,7 +303,10 @@ await runWithCommands(commands => {
     .description('Run explicit slow Studio smoke test files in an isolated resource lane.')
     .argument('<files...>', 'Explicit Studio smoke test files.')
     .requiredOption('--run-id <id>', 'Run identifier used to isolate artifacts.')
-    .option('--shard <index>', 'Zero-based smoke shard index.', '0')
+    .option(
+      '--shard <index>',
+      "Zero-based smoke port block. Defaults to this worktree's own block, then the first free one.",
+    )
     .option('--worker <index>', 'Zero-based worker index.', '0')
     .option('--native', 'Run the shell smoke through Electrobun instead of Chrome.')
     .action(async (files, options) => {
@@ -313,7 +316,7 @@ await runWithCommands(commands => {
           files,
           native: options.native,
           runId: options.runId,
-          shardIndex: parseNonNegativeInteger(options.shard, '--shard'),
+          shardIndex: options.shard === undefined ? undefined : parseNonNegativeInteger(options.shard, '--shard'),
           workerIndex: parseNonNegativeInteger(options.worker, '--worker'),
         }),
       )
