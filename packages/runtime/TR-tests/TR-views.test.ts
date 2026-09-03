@@ -504,6 +504,22 @@ Describe('TR.Views sketch elements', () => {
     Expect(flattenStyle(release.props['style'])).toEqual({ height: 52, width: 52 })
   })
 
+  Test('extends the Placeholder hatch through a tall declared height', () => {
+    const restoreDevelopment = setReactNativeDevModeForTest(true)
+    let placeholder: RuntimeElement
+    try {
+      placeholder = renderRuntimeElement(TR.Views.Placeholder({
+        label: 'Tall draft',
+        layout: { layout: TR.Layout.create([['height', 360]]) },
+      }))
+    } finally {
+      restoreDevelopment()
+    }
+
+    const hatch = String(fragmentChildren(placeholder)[0]?.props['children'])
+    Expect(hatch.split('\n')).toHaveLength(31)
+  })
+
   Test('gives Spacer claim one by default and lets an explicit claim replace it', () => {
     const defaultSpacer = renderRuntimeElement(TR.Views.Spacer(
       {},

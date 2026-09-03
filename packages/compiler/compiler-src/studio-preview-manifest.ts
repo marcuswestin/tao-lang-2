@@ -56,9 +56,13 @@ type StudioPreviewPointerTarget = {
 }
 
 export type StudioPreviewScenarioStep =
+  | (StudioPreviewPointerTarget & { kind: 'press' })
   | (StudioPreviewPointerTarget & { kind: 'pressDown' })
   | (StudioPreviewPointerTarget & { kind: 'pressUp' })
   | (StudioPreviewPointerTarget & { kind: 'hover' })
+  | (StudioPreviewPointerTarget & { kind: 'enter'; value: string })
+  | (StudioPreviewPointerTarget & { kind: 'submit' })
+  | { kind: 'select'; tag: string; index: number; steps: readonly StudioPreviewScenarioStep[] }
   | { kind: 'focus'; tag: string }
   | { kind: 'advance'; milliseconds: number }
 
@@ -376,10 +380,40 @@ function compileScenarioStep(step: AST.ScenarioStep): StudioPreviewScenarioStep 
     },
     FocusStep: step => ({ kind: 'focus' as const, tag: tagName(step.tag) }),
     HoverStep: step => ({ kind: 'hover' as const, ...scenarioPointerTarget(step) }),
+    EnterTextStep: step => ({
+      kind: 'enter' as const,
+      selector: (step.selector ?? 'text') as StudioPreviewPointerTarget['selector'],
+      target: step.target,
+      value: step.value,
+    }),
+    TagEnterStep: step => ({
+      kind: 'enter' as const,
+      selector: 'tag' as const,
+      target: tagName(step.tag),
+      value: step.value,
+    }),
+    PressTextStep: step => ({
+      kind: 'press' as const,
+      selector: (step.selector ?? 'text') as StudioPreviewPointerTarget['selector'],
+      target: step.text,
+    }),
     PressPhaseStep: step => ({
       kind: step.phase === 'down' ? 'pressDown' as const : 'pressUp' as const,
       ...scenarioPointerTarget(step),
     }),
+    SelectStep: step => ({
+      index: step.index,
+      kind: 'select' as const,
+      steps: step.block.statements.filter(AST.isScenarioStep).map(compileScenarioStep),
+      tag: tagName(step.tag),
+    }),
+    SubmitInputStep: step => ({
+      kind: 'submit' as const,
+      selector: (step.selector ?? 'text') as StudioPreviewPointerTarget['selector'],
+      target: step.target,
+    }),
+    TagPressStep: step => ({ kind: 'press' as const, selector: 'tag' as const, target: tagName(step.tag) }),
+    TagSubmitStep: step => ({ kind: 'submit' as const, selector: 'tag' as const, target: tagName(step.tag) }),
   })
 }
 

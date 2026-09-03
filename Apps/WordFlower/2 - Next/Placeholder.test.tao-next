@@ -1,0 +1,15 @@
+use Placeholder from @tao/ui
+
+app PlaceholderHarness {
+   view PlaceholderHarnessView
+}
+
+view PlaceholderHarnessView() {
+   render Placeholder("Draft cover") [width 52, height 52]
+}
+
+test "Placeholder development rendering" {
+   run PlaceholderHarness
+
+   expect text "Draft cover"
+}

@@ -85,6 +85,7 @@ export type StudioPreviewElement = {
   focus?(): void
   parentElement?: StudioPreviewElement | null
   textContent?: string | null
+  value?: string
 }
 
 type StudioPreviewOverlay = StudioPreviewElement & {
@@ -275,15 +276,22 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
   React.useEffect(() => publishStudioScheme(props.config, scheme), [props.config, scheme])
   React.useEffect(() => {
     const steps = scenario?.steps
-    if (steps === undefined || steps.length === 0 || !journeyReplayGate.current.shouldReplay(journeyRevision)) {
+    if (steps === undefined || steps.length === 0 || !journeyReplayGate.current.beginReplay(journeyRevision)) {
       return
     }
     let active = true
-    void replayStudioJourney(steps).catch(error => {
-      if (active) {
-        setJourneyError(error)
-      }
-    })
+    setJourneyError(undefined)
+    void replayStudioJourney(steps).then(
+      () => {
+        journeyReplayGate.current.completeReplay(journeyRevision)
+      },
+      error => {
+        journeyReplayGate.current.failReplay(journeyRevision)
+        if (active) {
+          setJourneyError(error)
+        }
+      },
+    )
     return () => {
       active = false
     }
@@ -303,18 +311,30 @@ export async function replayStudioJourney(
   if (host === undefined || steps.length === 0) {
     return
   }
-  Clock.beginTest()
+  const holdsClock = journeyUsesClock(steps)
+  if (holdsClock) {
+    Clock.beginTest()
+  }
   try {
     await Promise.resolve()
     const adapter: TaoJourneyAdapter<StudioPreviewElement> = {
       advance(milliseconds) {
         Clock.advance(milliseconds)
       },
-      dispatch(target, event) {
-        dispatchJourneyEvent(target, event)
+      dispatch(target, event, value) {
+        dispatchJourneyEvent(target, event, value)
       },
-      find(selector, target) {
-        return findJourneyTarget(host, selector, target)
+      find(selector, target, scope) {
+        return findJourneyTarget(host, selector, target, scope)
+      },
+      select(tag, index, scope) {
+        const matches = findJourneyTargets(host, 'tag', tag, scope)
+        RuntimeAssert.input(
+          index <= matches.length,
+          `Tao Studio journey expected row ${index} for tag '#${tag}', found ${matches.length}.`,
+          { index, matches: matches.length, tag },
+        )
+        return matches[index - 1]!
       },
       async settle() {
         await Promise.resolve()
@@ -323,7 +343,9 @@ export async function replayStudioJourney(
     }
     await replayTaoJourney(steps, adapter)
   } finally {
-    Clock.endTest()
+    if (holdsClock) {
+      Clock.endTest()
+    }
   }
 }
 
@@ -331,8 +353,27 @@ function findJourneyTarget(
   host: StudioPreviewHost,
   selector: TaoJourneySelector,
   target: string,
+  scope?: StudioPreviewElement,
 ): StudioPreviewElement {
+  const matches = findJourneyTargets(host, selector, target, scope)
+  RuntimeAssert.input(
+    matches.length === 1,
+    `Tao Studio journey expected exactly one ${selector} target '${target}', found ${matches.length}.`,
+    { selector, target },
+  )
+  return matches[0]!
+}
+
+function findJourneyTargets(
+  host: StudioPreviewHost,
+  selector: TaoJourneySelector,
+  target: string,
+  scope?: StudioPreviewElement,
+): StudioPreviewElement[] {
   const candidates = Array.from<StudioPreviewElement>(host.document.querySelectorAll('*')).filter(element => {
+    if (scope !== undefined && element !== scope && !elementIsWithin(element, scope)) {
+      return false
+    }
     if (selector === 'tag') {
       return element.getAttribute('data-testid') === target
     }
@@ -349,12 +390,11 @@ function findJourneyTarget(
       !candidates.some(other => other !== candidate && elementIsWithin(other, candidate))
     )
     : candidates
-  RuntimeAssert.input(
-    matches.length === 1,
-    `Tao Studio journey expected exactly one ${selector} target '${target}', found ${matches.length}.`,
-    { selector, target },
-  )
-  return matches[0]!
+  return matches
+}
+
+function journeyUsesClock(steps: readonly TaoJourneyStep[]): boolean {
+  return steps.some(step => step.kind === 'advance' || step.kind === 'select' && journeyUsesClock(step.steps))
 }
 
 function elementIsWithin(element: StudioPreviewElement, possibleAncestor: StudioPreviewElement): boolean {
@@ -368,7 +408,7 @@ function elementIsWithin(element: StudioPreviewElement, possibleAncestor: Studio
   return false
 }
 
-function dispatchJourneyEvent(target: StudioPreviewElement, event: TaoJourneyEvent): void {
+function dispatchJourneyEvent(target: StudioPreviewElement, event: TaoJourneyEvent, value?: string): void {
   if (event === 'focus' && target.focus !== undefined) {
     target.focus()
     return
@@ -376,30 +416,73 @@ function dispatchJourneyEvent(target: StudioPreviewElement, event: TaoJourneyEve
   RuntimeAssert.input(target.dispatchEvent !== undefined, 'A Tao Studio journey target must accept browser events.')
   const browser = globalThis as unknown as {
     Event?: new(type: string, init?: unknown) => object
+    KeyboardEvent?: new(type: string, init?: unknown) => object
     MouseEvent?: new(type: string, init?: unknown) => object
     PointerEvent?: new(type: string, init?: unknown) => object
+  }
+  if (event === 'enter') {
+    RuntimeAssert.input(value !== undefined, 'A Tao Studio enter journey step must carry text.')
+    setJourneyInputValue(target, value)
+    dispatchBrowserEvent(target, 'input', browser.Event, { bubbles: true, cancelable: true })
+    return
+  }
+  if (event === 'submit') {
+    dispatchBrowserEvent(target, 'keydown', browser.KeyboardEvent ?? browser.Event, {
+      bubbles: true,
+      cancelable: true,
+      code: 'Enter',
+      key: 'Enter',
+    })
+    return
+  }
+  if (event === 'hover') {
+    const PointerConstructor = browser.PointerEvent ?? browser.MouseEvent ?? browser.Event
+    const pointer = browser.PointerEvent === undefined ? 'mouse' : 'pointer'
+    dispatchBrowserEvent(target, `${pointer}over`, PointerConstructor, {
+      bubbles: true,
+      cancelable: true,
+      pointerType: 'mouse',
+    })
+    dispatchBrowserEvent(target, `${pointer}enter`, PointerConstructor, {
+      bubbles: false,
+      cancelable: true,
+      pointerType: 'mouse',
+    })
+    return
   }
   const type = event === 'pressDown'
     ? 'mousedown'
     : event === 'pressUp'
     ? 'mouseup'
-    : event === 'hover'
-    ? browser.PointerEvent === undefined ? 'mouseenter' : 'pointerenter'
-    : 'focus'
-  const Constructor = event === 'hover'
-    ? browser.PointerEvent ?? browser.MouseEvent ?? browser.Event
-    : browser.MouseEvent ?? browser.Event
+    : 'click'
+  dispatchBrowserEvent(target, type, browser.MouseEvent ?? browser.Event, {
+    bubbles: true,
+    button: 0,
+    buttons: event === 'pressDown' ? 1 : 0,
+    cancelable: true,
+  })
+}
+
+function dispatchBrowserEvent(
+  target: StudioPreviewElement,
+  type: string,
+  Constructor: (new(type: string, init?: unknown) => object) | undefined,
+  init: Record<string, unknown>,
+): void {
   const browserEvent = Constructor === undefined
     ? { type }
-    : new Constructor(type, {
-      bubbles: event !== 'hover',
-      button: 0,
-      buttons: event === 'pressDown' ? 1 : 0,
-      cancelable: true,
-      pointerType: 'mouse',
-    })
+    : new Constructor(type, init)
   Object.defineProperty(browserEvent, 'taoStudioJourney', { value: true })
-  target.dispatchEvent(browserEvent)
+  target.dispatchEvent?.(browserEvent)
+}
+
+function setJourneyInputValue(target: StudioPreviewElement, value: string): void {
+  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(target) as object, 'value')
+  if (descriptor?.set !== undefined) {
+    descriptor.set.call(target, value)
+  } else {
+    target.value = value
+  }
 }
 
 /** Publishes the runtime-resolved cell Scheme without coupling Studio to CSS or host inference. */

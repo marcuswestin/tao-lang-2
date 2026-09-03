@@ -146,6 +146,37 @@ Describe('Tao package discovery', () => {
     }
   })
 
+  Test('reserves only the project-root bare @ directory as a package boundary', async () => {
+    const root = await mkTestDir('tao-packages-generated-boundary-')
+    try {
+      const mainPath = FS.resolvePath('@cards/Main.tao', root)
+      await FS.writeText(mainPath, '')
+      await FS.writeText(FS.resolvePath('@/studio/Generated.tao', root), '')
+      await FS.writeText(FS.resolvePath('@cards/Apps/Foo/@/Nested.tao', root), '')
+      const context = await Packages.createContext(root)
+      const resolution = Packages.resolve(context, { fromFilePath: mainPath })
+
+      Expect((await Packages.candidateFilePaths(resolution)).map(path => FS.relativePath(root, path))).toEqual([
+        '@cards/Apps/Foo/@/Nested.tao',
+        '@cards/Main.tao',
+      ])
+      Expect(Packages.targetMatches(resolution, {
+        filePath: FS.resolvePath('@cards/Apps/Foo/@/Nested.tao', root),
+        workspaceFilePaths: new Set([
+          mainPath,
+          FS.resolvePath('@/studio/Generated.tao', root),
+          FS.resolvePath('@cards/Apps/Foo/@/Nested.tao', root),
+        ]),
+      })).toBe(true)
+      Expect(Packages.targetMatches(resolution, {
+        filePath: FS.resolvePath('@/studio/Generated.tao', root),
+        workspaceFilePaths: new Set(),
+      })).toBe(false)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('resolves stdlib imports from the context-owned root', async () => {
     const root = await mkTestDir('tao-packages-stdlib-')
     try {

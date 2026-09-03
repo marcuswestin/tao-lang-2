@@ -10,13 +10,24 @@ import {
 Describe('Studio scenario journey replay', () => {
   Test('replays once per cell revision and starts fresh after a remount', () => {
     const mounted = createTaoJourneyReplayGate()
-    Expect(mounted.shouldReplay('compile:1:cell:0')).toBe(true)
-    Expect(mounted.shouldReplay('compile:1:cell:0')).toBe(false)
-    Expect(mounted.shouldReplay('compile:1:cell:1')).toBe(true)
-    Expect(mounted.shouldReplay('compile:1:cell:1')).toBe(false)
+    Expect(mounted.beginReplay('compile:1:cell:0')).toBe(true)
+    Expect(mounted.beginReplay('compile:1:cell:0')).toBe(false)
+    mounted.completeReplay('compile:1:cell:0')
+    Expect(mounted.beginReplay('compile:1:cell:0')).toBe(false)
+    Expect(mounted.beginReplay('compile:1:cell:1')).toBe(true)
+    mounted.completeReplay('compile:1:cell:1')
+    Expect(mounted.beginReplay('compile:1:cell:1')).toBe(false)
 
     const remounted = createTaoJourneyReplayGate()
-    Expect(remounted.shouldReplay('compile:1:cell:1')).toBe(true)
+    Expect(remounted.beginReplay('compile:1:cell:1')).toBe(true)
+  })
+
+  Test('admits the same revision again after a failed replay', () => {
+    const gate = createTaoJourneyReplayGate()
+
+    Expect(gate.beginReplay('compile:1:cell:0')).toBe(true)
+    gate.failReplay('compile:1:cell:0')
+    Expect(gate.beginReplay('compile:1:cell:0')).toBe(true)
   })
 
   Test('delivers phase, time, hover, and focus operations once in source order', async () => {
@@ -35,6 +46,7 @@ Describe('Studio scenario journey replay', () => {
         observed.push(`find:${selector}:${target}`)
         return targets.get(`${selector}:${target}`)!
       },
+      select: () => ({ id: 'selected' }),
       settle() {
         observed.push('settle')
       },
@@ -79,6 +91,7 @@ Describe('Studio scenario journey replay', () => {
         await pending
       },
       find: () => 'target',
+      select: () => 'selected',
       settle: () => {
         observed.push('settled')
       },
@@ -93,5 +106,39 @@ Describe('Studio scenario journey replay', () => {
     release!()
     await replay
     Expect(observed).toEqual(['pressDown', 'settled', 'pressUp', 'settled'])
+  })
+
+  Test('scopes nested selected-row interactions and preserves complete input operations', async () => {
+    const observed: string[] = []
+    const adapter: TaoJourneyAdapter<string> = {
+      advance: () => {},
+      dispatch(target, event, value) {
+        observed.push([event, target, value].filter(part => part !== undefined).join(':'))
+      },
+      find(selector, target, scope) {
+        return `${scope ?? 'root'}/${selector}:${target}`
+      },
+      select(tag, index, scope) {
+        return `${scope ?? 'root'}/${tag}[${index}]`
+      },
+      settle() {},
+    }
+
+    await replayTaoJourney([{
+      index: 2,
+      kind: 'select',
+      steps: [
+        { kind: 'press', selector: 'tag', target: 'open' },
+        { kind: 'enter', selector: 'label', target: 'Name', value: 'Tao' },
+        { kind: 'submit', selector: 'label', target: 'Name' },
+      ],
+      tag: 'rows',
+    }], adapter)
+
+    Expect(observed).toEqual([
+      'press:root/rows[2]/tag:open',
+      'enter:root/rows[2]/label:Name:Tao',
+      'submit:root/rows[2]/label:Name',
+    ])
   })
 })

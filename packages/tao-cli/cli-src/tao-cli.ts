@@ -184,7 +184,7 @@ function createCommands(): Command {
   commands
     .command('check')
     .argument('[paths...]', 'Tao files or directories to check. Defaults to the current directory.')
-    .description('Check .tao files for the full canonical source form without writing.')
+    .description('Check canonical Tao source and report validation warnings without writing.')
     .action(async (paths: string[]) => {
       const { runCheck } = await import('./source-commands')
       await runInPlaceCommand(paths, runCheck, {
@@ -286,8 +286,12 @@ async function runInPlaceCommand(
     }
     const changed = results.filter(result => result.status === 'changed')
     const errored = results.filter(result => result.status === 'error')
+    const warnings = results.flatMap(result => result.warnings ?? [])
 
     writeChangedResults(changed, labels)
+    for (const warning of warnings) {
+      HCI.logProcessWarn(labels.failedVerb, warning)
+    }
     for (const result of errored) {
       HCI.writeErrorLine(`Failed to ${labels.failedVerb} ${FS.displayPath(result.path)}: ${result.error}`)
     }
@@ -297,7 +301,10 @@ async function runInPlaceCommand(
     }
 
     const unchangedCount = results.length - changed.length - errored.length
-    const summary = `${changed.length} ${labels.changed}, ${unchangedCount} unchanged`
+    const warningSummary = warnings.length === 0
+      ? ''
+      : ', ' + String(warnings.length) + ' warning' + (warnings.length === 1 ? '' : 's')
+    const summary = `${changed.length} ${labels.changed}, ${unchangedCount} unchanged` + warningSummary
     const shouldFail = errored.length > 0 || labels.failOnChanged && changed.length > 0
     if (shouldFail) {
       HCI.writeErrorLine(`${summary}${errored.length > 0 ? `, ${errored.length} failed` : ''}`)

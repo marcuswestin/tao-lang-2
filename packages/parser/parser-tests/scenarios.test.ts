@@ -141,6 +141,37 @@ Describe('parser: fixtures and scenarios', () => {
     `),
   )
 
+  Test('accepts the existing test-body interaction family as a scenario journey prefix', async () => {
+    const result = await testParseCode(`
+      view Card() { }
+      scenarios Card "states" {
+        device phone
+        scenario "edited second row" {
+          render ()
+          press #card
+          enter "Tao" into label "Name"
+          submit #name
+          select #rows[2] {
+            press text "Open"
+          }
+        }
+      }
+    `)
+
+    const group = result.entry.ast.statements.find(AST.isScenarioGroupDeclaration)
+    const scenario = group?.block.entries.find(AST.isScenarioDeclaration)
+    Expect.Is(scenario, AST.isScenarioDeclaration)
+    Expect(scenario.block.steps.map(step => step.$type)).toEqual([
+      AST.TagPressStep.$type,
+      AST.EnterTextStep.$type,
+      AST.TagSubmitStep.$type,
+      AST.SelectStep.$type,
+    ])
+    const select = scenario.block.steps[3]
+    Expect.Is(select, AST.isSelectStep)
+    Expect(select.block.statements.map(step => step.$type)).toEqual([AST.PressTextStep.$type])
+  })
+
   Test('accepts arbitrary string group and entry identities', async () => {
     const result = await testParseCode(`
       scenarios "Review states" {

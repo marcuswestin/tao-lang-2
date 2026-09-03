@@ -1,6 +1,6 @@
 use Documents, Paragraphs from @data
 use CountWords from @tao/text
-use Checkbox, Col, Panes, Placeholder, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use Checkbox, Col, Panes, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 
 // Shared values, types, and the typed-injection escape hatch.
@@ -152,7 +152,7 @@ view DocumentEditor(Document) {
 workspace
 view SavedToast(Revert action()) {
    render Row() [gapMedium] {
-      Placeholder("Saved status icon") [width 20, height 20]
+      Text("✓") [width 20, height 20]
       TextMultiline("Saved") [body]
       Spacer()
 

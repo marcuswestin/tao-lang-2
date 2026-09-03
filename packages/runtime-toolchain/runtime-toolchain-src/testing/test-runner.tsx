@@ -1,9 +1,9 @@
 import TR from '@runtime/TR'
 import { navigationCommandTestId, navigationTitleTestId } from '@runtime/TR-navigation-basic-stack'
 import {
-  replayTaoJourneyStep,
-  type TaoJourneyAdapter,
+  replayTaoJourneyEventStep,
   type TaoJourneyEvent,
+  type TaoJourneyEventAdapter,
   type TaoJourneyStep,
 } from '@runtime/TR-studio-journey'
 import { Errors, Switch } from '@shared/core'
@@ -107,10 +107,7 @@ async function journeyEventStep(
   step: Extract<TestCompiler.Step, { kind: 'focus' | 'hover' | 'pressDown' | 'pressUp' }>,
   scope?: TestInstance,
 ): Promise<void> {
-  const adapter: TaoJourneyAdapter<TestInstance> = {
-    advance(milliseconds) {
-      TR.Clock.advance(milliseconds)
-    },
+  const adapter: TaoJourneyEventAdapter<TestInstance> = {
     async dispatch(target, event) {
       await dispatchInteraction(() => fireEvent(target, journeyTestingLibraryEvent(event)))
     },
@@ -125,9 +122,8 @@ async function journeyEventStep(
       }
       return matches[0]!
     },
-    settle() {},
   }
-  await replayTaoJourneyStep(step as TaoJourneyStep, adapter)
+  await replayTaoJourneyEventStep(step as Exclude<TaoJourneyStep, { kind: 'advance' | 'select' }>, adapter)
 }
 
 function journeyTestingLibraryEvent(event: TaoJourneyEvent): string {

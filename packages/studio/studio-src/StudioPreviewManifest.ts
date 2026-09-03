@@ -29,6 +29,22 @@ export type StudioParameterSchema = {
     | { kind: 'time' }
 }
 
+export type StudioScenarioStep =
+  | { kind: 'advance'; milliseconds: number }
+  | { kind: 'focus'; tag: string }
+  | {
+    kind: 'enter'
+    selector: 'label' | 'placeholder' | 'tag' | 'text'
+    target: string
+    value: string
+  }
+  | {
+    kind: 'hover' | 'press' | 'pressDown' | 'pressUp' | 'submit'
+    selector: 'label' | 'placeholder' | 'tag' | 'text'
+    target: string
+  }
+  | { index: number; kind: 'select'; steps: readonly StudioScenarioStep[]; tag: string }
+
 export type StudioScenario = {
   args: StudioJsonObject
   fixtureId?: string
@@ -38,15 +54,7 @@ export type StudioScenario = {
   scenarioId: string
   source: StudioTaoSource
   stateLayers: readonly string[]
-  steps?: readonly (
-    | { kind: 'advance'; milliseconds: number }
-    | { kind: 'focus'; tag: string }
-    | {
-      kind: 'hover' | 'pressDown' | 'pressUp'
-      selector: 'label' | 'placeholder' | 'tag' | 'text'
-      target: string
-    }
-  )[]
+  steps?: readonly StudioScenarioStep[]
   subjectId: string
 }
 
@@ -228,6 +236,16 @@ function validateJourneyStep(step: NonNullable<StudioScenario['steps']>[number])
   }
   if (step.kind === 'focus') {
     requireText(step.tag, 'Studio journey focus tag')
+    return
+  }
+  if (step.kind === 'select') {
+    requireText(step.tag, 'Studio journey select tag')
+    if (!Number.isSafeInteger(step.index) || step.index < 1) {
+      throw new Errors.UserInputError('Studio journey select index must be a positive whole number.')
+    }
+    for (const nestedStep of step.steps) {
+      validateJourneyStep(nestedStep)
+    }
     return
   }
   requireText(step.target, `Studio journey ${step.kind} target`)

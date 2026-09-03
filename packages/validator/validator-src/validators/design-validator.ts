@@ -1,4 +1,4 @@
-import { ASTUtils } from '@ast-utils'
+import { ASTUtils, Packages } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
 import { designValidationCodes } from '../diagnostic-codes'
@@ -116,14 +116,18 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
 }
 
 function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void {
-  const renderedView = ASTUtils.resolveRenderInvocation(render).view
-  if (
-    renderedView?.name === 'Placeholder'
-    && FS.pathIsWithin(AST.getDocument(renderedView).uri.path, ctx.packagesContext.stdlibRoot)
-  ) {
-    ctx.warning(designValidationMessages.placeholderShipping, render, {
-      code: designValidationCodes.placeholderShipping,
-    })
+  // Almost every render can skip package resolution. Placeholder is deliberately uncommon in
+  // authored product source, and this validator runs for every render in every workspace document.
+  if (render.view?.$refText === 'Placeholder' && !isNonShippingSource(render, ctx)) {
+    const renderedView = ASTUtils.resolveRenderInvocation(render).view
+    if (
+      renderedView?.name === 'Placeholder'
+      && FS.pathIsWithin(AST.getDocument(renderedView).uri.path, ctx.packagesContext.stdlibRoot)
+    ) {
+      ctx.warning(designValidationMessages.placeholderShipping, render, {
+        code: designValidationCodes.placeholderShipping,
+      })
+    }
   }
   const clause = render.layoutClause
   if (!clause) {
@@ -177,6 +181,12 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   if (expanded) {
     validateEffectiveConflicts(expanded, ctx)
   }
+}
+
+function isNonShippingSource(render: AST.Render, ctx: ValidationContext): boolean {
+  const sourcePath = AST.getDocument(render).uri.path
+  const studioGeneratedRoot = FS.resolvePath('@/studio', ctx.packagesContext.index.projectRoot)
+  return Packages.isTestSourcePath(sourcePath) || FS.pathIsWithin(sourcePath, studioGeneratedRoot)
 }
 
 function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {

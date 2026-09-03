@@ -237,7 +237,9 @@ function validateScenarioRender(
 
 function scenarioRequiresFixture(scenario: AST.ScenarioDeclaration): boolean {
   const prepare = AST.effectiveScenarioClause(scenario, AST.isScenarioPrepareClause)
-  if (prepare !== undefined) {
+  // Every currently supported prepare statement targets a fixture handle. An empty prepare block
+  // is still meaningful as an explicitly empty data delta and therefore needs no fixture.
+  if ((prepare?.block.statements.length ?? 0) > 0) {
     return true
   }
   const subject = AST.effectiveScenarioSubjectClause(scenario)
@@ -246,7 +248,10 @@ function scenarioRequiresFixture(scenario: AST.ScenarioDeclaration): boolean {
     : AST.isScenarioRunClause(subject)
     ? subject.argumentList?.arguments
     : undefined
-  return (arguments_ ?? []).some(argument => AST.isFixtureValueReference(argument.value))
+  return (arguments_ ?? []).some(argument =>
+    AST.isFixtureValueReference(argument.value)
+    || AST.streamAllContents(argument.value).some(AST.isFixtureValueReference)
+  )
 }
 
 function validateFields(

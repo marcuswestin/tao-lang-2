@@ -8,6 +8,7 @@ import {
   type StudioPreviewElement,
   type StudioPreviewHost,
 } from '../TaoRuntime-src/TR-studio-preview'
+import { Clock } from '../TaoRuntime-src/TR-units'
 
 type Listener = (event: unknown) => void
 
@@ -115,7 +116,7 @@ Describe('Studio preview runtime bridge', () => {
 
     await replayStudioJourney([{ kind: 'hover', selector: 'text', target: 'Save' }], fake.host)
 
-    Expect(events).toEqual(['leaf:mouseenter'])
+    Expect(events).toEqual(['leaf:mouseover', 'leaf:mouseenter'])
   })
 
   Test('maps the held-pointer journey to browser phases in exact order', async () => {
@@ -139,7 +140,48 @@ Describe('Studio preview runtime bridge', () => {
       { kind: 'focus', tag: 'revertSave' },
     ], fake.host)
 
-    Expect(observed).toEqual(['mousedown', 'mouseup', 'mouseenter', 'focus'])
+    Expect(observed).toEqual(['mousedown', 'mouseup', 'mouseover', 'mouseenter', 'focus'])
+  })
+
+  Test('does not freeze the app clock for a journey with no advance step', async () => {
+    const target: StudioPreviewElement = {
+      dispatchEvent: () => true,
+      getAttribute: name => name === 'data-testid' ? 'target' : null,
+      getBoundingClientRect: () => ({ height: 0, left: 0, top: 0, width: 0 }),
+    }
+    const fake = previewHost([target])
+    Clock.beginTest(1234)
+    try {
+      await replayStudioJourney([{ kind: 'pressDown', selector: 'tag', target: 'target' }], fake.host)
+      Expect(Clock.now()).toBe(1234)
+    } finally {
+      Clock.endTest()
+    }
+  })
+
+  Test('keeps state reached by an advanced held-pointer journey after replay releases the clock', async () => {
+    let reached = false
+    const target: StudioPreviewElement = {
+      dispatchEvent: event => {
+        if ((event as { type?: string }).type === 'mousedown') {
+          Clock.after(600, () => {
+            reached = true
+          })
+        }
+        return true
+      },
+      getAttribute: name => name === 'data-testid' ? 'hold' : null,
+      getBoundingClientRect: () => ({ height: 0, left: 0, top: 0, width: 0 }),
+    }
+    const fake = previewHost([target])
+
+    await replayStudioJourney([
+      { kind: 'pressDown', selector: 'tag', target: 'hold' },
+      { kind: 'advance', milliseconds: 600 },
+      { kind: 'pressUp', selector: 'tag', target: 'hold' },
+    ], fake.host)
+
+    Expect(reached).toBe(true)
   })
 
   Test('publishes the runtime-resolved Scheme with complete provenance', () => {

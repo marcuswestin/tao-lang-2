@@ -415,7 +415,7 @@ function TaoPlaceholder({ props, runtimeProps }: {
       createReactElement(runtime, runtime.Text, {
         accessible: false,
         style: placeholderHatchStyle,
-      }, placeholderHatch),
+      }, placeholderHatch(wrapperProps['style'])),
       createReactElement(runtime, runtime.Text, {
         accessible: false,
         style: placeholderLabelStyle,
@@ -609,7 +609,26 @@ const placeholderLabelStyle = {
   paddingVertical: 2,
 } as const
 
-const placeholderHatch = Array.from({ length: 12 }, () => '╱   ╱   ╱   ╱   ╱   ╱').join('\n')
+function placeholderHatch(style: unknown): string {
+  const height = styleProperty(style, 'height')
+  const lineCount = typeof height === 'number' && Number.isFinite(height) && height > 0
+    ? Math.max(12, Math.ceil(height / placeholderHatchStyle.lineHeight) + 1)
+    : 12
+  return Array.from({ length: lineCount }, () => '╱   ╱   ╱   ╱   ╱   ╱').join('\n')
+}
+
+function styleProperty(style: unknown, property: string): unknown {
+  if (Array.isArray(style)) {
+    for (let index = style.length - 1; index >= 0; index--) {
+      const value = styleProperty(style[index], property)
+      if (value !== undefined) {
+        return value
+      }
+    }
+    return undefined
+  }
+  return typeof style === 'object' && style !== null ? (style as Record<string, unknown>)[property] : undefined
+}
 
 function createReactElement(
   runtime: ReactNativeRuntime,

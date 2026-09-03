@@ -1,6 +1,6 @@
 import Compiler, { type CompileOptions, type CompileResult } from '@compiler'
 import { Langium, Parser, type ParseResult } from '@parser'
-import { Assert, FS } from '@shared'
+import { Assert, type Diagnostic, Diagnostics, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { createWorkspaceServices, type WorkspaceServices } from './langium-services'
 import { createProjectContext, type ProjectContext } from './workspace-utils'
@@ -86,6 +86,31 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
   /** validate validates an entry Tao file and all reachable Tao documents. */
   async validate(entryFile: string): Promise<ValidationResult> {
     const parseResult = await this.parse(entryFile)
+    return Validator.validateParseResult(parseResult, this.validatorContext(parseResult))
+  }
+
+  /** validateFiles validates the union of several entry graphs in one workspace validation pass. */
+  async validateFiles(entryFiles: readonly string[]): Promise<ValidationResult> {
+    const entryPaths = [...new Set(entryFiles.map(entryFile => this.resolveEntryFile(entryFile)))]
+    Assert(entryPaths.length > 0, 'workspace validation has at least one entry file')
+
+    const filesByPath = new Map<string, ParseResult['entry']>()
+    const diagnostics: Diagnostic[] = []
+    for (const entryPath of entryPaths) {
+      const parsed = await this.parse(entryPath)
+      for (const file of parsed.files) {
+        filesByPath.set(file.path, file)
+      }
+      diagnostics.push(...parsed.diagnostics)
+    }
+
+    const entry = filesByPath.get(entryPaths[0]!)
+    Assert.defined(entry, 'workspace batch entry exists in parsed files', { entryPath: entryPaths[0] })
+    const parseResult: ParseResult = {
+      diagnostics: Diagnostics.unique(diagnostics),
+      entry,
+      files: [...filesByPath.values()],
+    }
     return Validator.validateParseResult(parseResult, this.validatorContext(parseResult))
   }
 

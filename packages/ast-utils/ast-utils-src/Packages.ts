@@ -51,6 +51,7 @@ export namespace Packages {
     packageName?: string
     duplicatePackagePaths?: readonly string[]
     invalidReason?: InvalidReason
+    reservedPackagePath?: string
   }
 
   /** ResolveRequest declares one import resolution request. */
@@ -234,10 +235,12 @@ export namespace Packages {
         targetPath: containingPackage.path,
         candidateMode: 'recursive',
         packageName: containingPackage.name,
+        reservedPackagePath: FS.resolvePath('@', context.index.projectRoot),
       }
     }
     return {
       relation: 'same-directory',
+      reservedPackagePath: FS.resolvePath('@', context.index.projectRoot),
       targetPath: FS.dirname(request.fromFilePath),
       candidateMode: 'direct',
     }
@@ -387,12 +390,16 @@ export namespace Packages {
       return []
     }
     if (resolution.candidateMode === 'recursive') {
-      return await recursiveCandidateFiles(resolution.targetPath)
+      return await recursiveCandidateFiles(resolution)
     }
     return await directCandidateFilePaths(resolution)
   }
 
-  async function recursiveCandidateFiles(targetPath: string): Promise<string[]> {
+  async function recursiveCandidateFiles(resolution: Resolution): Promise<string[]> {
+    const targetPath = resolution.targetPath
+    if (!targetPath) {
+      return []
+    }
     if (await FS.isFile(targetPath)) {
       return isImportableTaoSourcePath(targetPath) ? [targetPath] : []
     }
@@ -408,7 +415,7 @@ export namespace Packages {
       extensions: ['.tao'],
     }))
       .filter(isImportableTaoSourcePath)
-      .filter(path => !pathCrossesPackageDirectory(targetPath, path))
+      .filter(path => !pathCrossesPackageDirectory(targetPath, path, resolution.reservedPackagePath))
   }
 
   /** targetMatches returns whether a resolution target includes a Tao file path. */
@@ -420,7 +427,7 @@ export namespace Packages {
       return false
     }
     if (resolution.candidateMode === 'recursive') {
-      return recursiveTargetMatches(resolution.targetPath, request.filePath)
+      return recursiveTargetMatches(resolution, request.filePath)
     }
     return directTargetMatches(resolution, request)
   }
@@ -475,7 +482,11 @@ export namespace Packages {
     return FS.extname(filePath) === '.tao' && !isTestSourcePath(filePath)
   }
 
-  function recursiveTargetMatches(targetPath: string, filePath: string): boolean {
+  function recursiveTargetMatches(resolution: Resolution, filePath: string): boolean {
+    const targetPath = resolution.targetPath
+    if (!targetPath) {
+      return false
+    }
     if (filePath === targetPath || filePath === `${targetPath}.tao`) {
       return true
     }
@@ -486,16 +497,31 @@ export namespace Packages {
     if (relativeDirectory === '.') {
       return true
     }
-    return relativeDirectory.split('/').every(segment => segment.length > 0 && !isPackageDirectoryName(segment))
+    let directory = targetPath
+    return relativeDirectory.split('/').every(segment => {
+      directory = FS.resolvePath(segment, directory)
+      return segment.length > 0 && !isPackageDirectory(segment, directory, resolution.reservedPackagePath)
+    })
   }
 
-  function pathCrossesPackageDirectory(rootPath: string, filePath: string): boolean {
+  function pathCrossesPackageDirectory(
+    rootPath: string,
+    filePath: string,
+    reservedPackagePath: string | undefined,
+  ): boolean {
     const relativeDirectory = FS.dirname(FS.relativePath(rootPath, filePath))
-    return relativeDirectory !== '.' && relativeDirectory.split('/').some(isPackageDirectoryName)
+    if (relativeDirectory === '.') {
+      return false
+    }
+    let directory = rootPath
+    return relativeDirectory.split('/').some(segment => {
+      directory = FS.resolvePath(segment, directory)
+      return isPackageDirectory(segment, directory, reservedPackagePath)
+    })
   }
 
-  function isPackageDirectoryName(name: string): boolean {
-    return name.startsWith('@')
+  function isPackageDirectory(name: string, path: string, reservedPackagePath: string | undefined): boolean {
+    return name.startsWith('@') && (name.length > 1 || path === reservedPackagePath)
   }
 
   /** isVisible returns whether a declaration visibility is accessible through a resolved relation. */

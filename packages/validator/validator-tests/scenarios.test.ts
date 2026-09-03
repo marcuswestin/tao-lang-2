@@ -1,5 +1,6 @@
 import { Describe, Test } from '@shared/test'
 import { scenarioValidationMessages } from '../validator-src/validators/scenarios-validator'
+import { testValidationMessages } from '../validator-src/validators/tests-validator'
 import { accepts, fence, rejects, tsFence } from './test-validate'
 
 const storyFixture = `
@@ -127,6 +128,74 @@ Describe('validator: fixtures and scenarios', () => {
       `,
       scenarioValidationMessages.fixtureRequired('states / handle'),
       scenarioValidationMessages.fixtureRequired('states / prepare'),
+    ),
+  )
+
+  Test(
+    'allows an explicitly empty prepare delta without a fixture',
+    accepts(`
+      view EmptyState() {
+        render inject ${tsFence} return null ${fence}
+      }
+      scenarios EmptyState "states" {
+        device phone
+        scenario "empty delta" {
+          render ()
+          prepare { }
+        }
+      }
+    `),
+  )
+
+  Test(
+    'reports fixture declarations nested in a view body',
+    rejects(
+      `
+        view Main() {
+          fixture Nested { }
+        }
+      `,
+      scenarioValidationMessages.fixturePlacement,
+    ),
+  )
+
+  Test(
+    'rejects assertions nested inside a scenario row selection',
+    rejects(
+      `
+        view Rows() { render inject ${tsFence} return null ${fence} }
+        scenarios Rows "states" {
+          device phone
+          scenario "invalid selected state" {
+            render ()
+            select #rows[1] {
+              expect text "Not a replay operation"
+            }
+          }
+        }
+      `,
+      testValidationMessages.scenarioSelectBlock,
+    ),
+  )
+
+  Test(
+    'rejects assertions nested inside nested scenario row selections',
+    rejects(
+      `
+        view Rows() { render inject ${tsFence} return null ${fence} }
+        scenarios Rows "states" {
+          device phone
+          scenario "invalid deeply selected state" {
+            render ()
+            select #sections[1] {
+              select #rows[1] {
+                expect text "Not a replay operation"
+              }
+            }
+          }
+        }
+      `,
+      testValidationMessages.scenarioSelectBlock,
     ),
   )
 

@@ -37,6 +37,7 @@ export const testValidationMessages = {
   runTarget: (name: string) => `Run target '${name}' must be an app.`,
   selectIndex: 'Tagged loop row selection uses a 1-based index greater than zero.',
   selectBlock: 'A select block may contain test steps but cannot start another app.',
+  scenarioSelectBlock: 'A scenario select block may contain only replayable interaction steps.',
   relaunchInSelect: 'A select block cannot relaunch the app; a relaunch replaces every row the selection resolves.',
   navigationValueType: (actual: string) => `Navigation and toolbar test values expect text, got ${actual}.`,
   navigationValueLiteral: 'Navigation and toolbar test values must be text literals.',
@@ -250,6 +251,9 @@ function validateSelect(select: AST.SelectStep, ctx: ValidationContext): void {
     }
     if (!AST.isCheckStep(statement) || AST.isRunStep(statement)) {
       ctx.error(testValidationMessages.selectBlock, statement)
+    }
+    if (AST.findOwningScenario(select) && AST.isCheckStep(statement) && !AST.isScenarioStep(statement)) {
+      ctx.error(testValidationMessages.scenarioSelectBlock, statement)
     }
   }
 }

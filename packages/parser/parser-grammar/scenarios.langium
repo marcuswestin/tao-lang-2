@@ -72,11 +72,13 @@ ScenarioBlock:
     '{' entries+=(ScenarioFixtureClause | ScenarioPrepareClause | ScenarioRunClause
         | ScenarioRenderClause | ScenarioDeviceClause | ScenarioAppearanceClause
         | ScenarioLocaleClause | ScenarioDirectionClause | ScenarioNetworkClause)*
-        steps+=(PressPhaseStep | HoverStep | FocusStep | AdvanceStep)* '}';
+        steps+=(PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep
+            | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | AdvanceStep)* '}';
 
-// A scenario is a state reached by replaying only the useful interaction prefix after its subject,
-// rather than a second spelling of the complete test language.
-type ScenarioStep = PressPhaseStep | HoverStep | FocusStep | AdvanceStep;
+// A scenario is a state reached by replaying the interaction prefix after its subject. Assertions,
+// app launch/relaunch, navigation Back, and host-only toolbar operations remain test-only.
+type ScenarioStep = PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep
+    | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | AdvanceStep;
 
 type ScenarioClause = ScenarioFixtureClause | ScenarioPrepareClause | ScenarioRunClause
     | ScenarioRenderClause

@@ -74,7 +74,10 @@ Describe('tao fmt', () => {
 
   Test('checks an explicitly named generated file without rewriting it', async () => {
     const generated = 'view   Generated() { }'
-    await withTaoFixture({ '@/studio/Generated.tao': generated }, async rootDir => {
+    await withTaoFixture({
+      'Project.tao': 'project { id "generated-fmt" name "Generated fmt" }\n',
+      '@/studio/Generated.tao': generated,
+    }, async rootDir => {
       const path = FS.resolvePath('@/studio/Generated.tao', rootDir)
       const results = await runFmt(path)
 

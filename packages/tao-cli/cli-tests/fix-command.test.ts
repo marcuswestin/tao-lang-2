@@ -63,6 +63,7 @@ Describe('tao fix', () => {
     await withTaoFixture({
       '@/studio/Generated.tao': generated,
       'App.tao': 'view   AppView() { }',
+      'Apps/Foo/@/Nested.tao': 'view   Nested() { }',
       'Packages/@cards/Card.tao': 'view   Card() { }',
     }, async rootDir => {
       const results = await runFix(rootDir)
@@ -70,12 +71,32 @@ Describe('tao fix', () => {
       Expect(statusByFile(results, rootDir)).toEqual({
         '@/studio/Generated.tao': 'error',
         'App.tao': 'changed',
+        'Apps/Foo/@/Nested.tao': 'changed',
         'Packages/@cards/Card.tao': 'changed',
       })
       Expect(await FS.readText(FS.resolvePath('@/studio/Generated.tao', rootDir))).toBe(generated)
       Expect(await FS.readText(FS.resolvePath('App.tao', rootDir))).toBe('view AppView() { }\n')
+      Expect(await FS.readText(FS.resolvePath('Apps/Foo/@/Nested.tao', rootDir))).toBe('view Nested() { }\n')
       Expect(await FS.readText(FS.resolvePath('Packages/@cards/Card.tao', rootDir))).toBe('view Card() { }\n')
       Expect(results[0]?.error).toContain('regenerate it instead of rewriting it')
+    })
+  })
+
+  Test('checks an explicitly named generated root-package file without rewriting it', async () => {
+    const generated = 'view   Generated() { }'
+    await withTaoFixture({
+      'Project.tao': 'project { id "generated-fix" name "Generated fix" }\n',
+      '@/studio/Generated.tao': generated,
+    }, async rootDir => {
+      const path = FS.resolvePath('@/studio/Generated.tao', rootDir)
+      const results = await runFix(path)
+
+      Expect(results).toEqual([{
+        error: 'Generated source under @/ is not canonical; regenerate it instead of rewriting it.',
+        path,
+        status: 'error',
+      }])
+      Expect(await FS.readText(path)).toBe(generated)
     })
   })
 
