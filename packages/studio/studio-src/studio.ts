@@ -122,10 +122,26 @@ export {
   type StudioRenameFileResult,
   type StudioSessionEvent,
   type StudioSessionHandshake,
+  type StudioSketchActionResult,
   type StudioSourceActionResult,
   type StudioSourceActionUndoResult,
   StudioSourceConflictError,
 } from './StudioProjectSession'
+
+export {
+  type StudioSketch,
+  StudioSketchCatalog,
+  type StudioSketchCatalogAction,
+  StudioSketchCatalogConflictError,
+  studioSketchCatalogFormatVersion,
+  studioSketchCatalogRelativePath,
+  type StudioSketchCatalogRequest,
+  type StudioSketchCatalogResult,
+  type StudioSketchCatalogSnapshot,
+  type StudioSketchRect,
+} from './StudioSketchCatalog'
+
+export { StudioSketchSource, type StudioSketchSourceInput } from './StudioSketchSource'
 
 export {
   type StudioServerCheckpointRow,

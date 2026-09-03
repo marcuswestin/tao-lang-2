@@ -15,8 +15,14 @@ import type {
   StudioMoveGeneratedSourceResult,
   StudioRenameFileRequest,
   StudioRenameFileResult,
+  StudioSessionHandshake,
+  StudioSketchActionResult,
 } from '../StudioProjectSession'
 import type { StudioFixturePlan, StudioSourceActionEnvelope } from '../StudioProtocol'
+import type {
+  StudioSketchCatalogRequest,
+  StudioSketchCatalogSnapshot,
+} from '../StudioSketchCatalog'
 import type { StudioTestRun, StudioTestStatus } from '../StudioTestRunner'
 
 export type StudioCompileDiagnostic = {
@@ -47,11 +53,13 @@ export type StudioFile = {
 
 export type StudioHandshake = {
   apps: readonly StudioAppVariant[]
+  capabilities: StudioSessionHandshake['capabilities']
   compile: StudioCompileState
   entryPath: string
   files: readonly StudioFile[]
   identity: { appName: string; project: string }
   previewManifest?: StudioPreviewManifestV2
+  sketchCatalog: StudioSketchCatalogSnapshot
   type: 'handshake'
 }
 
@@ -62,6 +70,7 @@ export type StudioEvent =
   | { file: StudioFile; type: 'file-changed' }
   | { files: readonly StudioFile[]; type: 'files-changed' }
   | { manifest: StudioPreviewManifestV2; type: 'preview-manifest-changed' }
+  | { catalog: StudioSketchCatalogSnapshot; type: 'sketch-catalog-changed' }
   | { type: 'studio-writes-acknowledged' }
 
 export type StudioCellRuntimeResponse = {
@@ -115,6 +124,7 @@ export type StudioApiEventHandlers = {
   onFile: (file: StudioFile) => void
   onFiles?: (files: readonly StudioFile[]) => void
   onManifest: (manifest: StudioPreviewManifestV2) => void
+  onSketchCatalog?: (catalog: StudioSketchCatalogSnapshot) => void
   onHandshake?: (handshake: StudioHandshake) => void
   onDisconnect: () => void
 }
@@ -179,6 +189,8 @@ export const StudioApiEventStream = {
       handlers.onFiles?.(message.files)
     } else if (message.type === 'preview-manifest-changed') {
       handlers.onManifest(message.manifest)
+    } else if (message.type === 'sketch-catalog-changed') {
+      handlers.onSketchCatalog?.(message.catalog)
     }
   },
 }
@@ -218,6 +230,9 @@ export const StudioApiClient = {
     await request('/api/preview/cell/reconfigure', body),
   renameFile: async (body: StudioRenameFileRequest): Promise<StudioRenameFileResult> =>
     await request('/api/file/rename', body),
+  sketchAction: async (body: StudioSketchCatalogRequest): Promise<StudioSketchActionResult> =>
+    await request('/api/sketches/action', body),
+  sketches: async (): Promise<StudioSketchCatalogSnapshot> => await get('/api/sketches'),
   closeCurrentSession: async (): Promise<void> => {
     const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
     if (sessionId === undefined) {

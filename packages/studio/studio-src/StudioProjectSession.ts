@@ -43,6 +43,14 @@ import {
   type StudioSourceActionUndoEnvelope,
   studioSourceActionVersion,
 } from './StudioProtocol'
+import {
+  StudioSketchCatalog,
+  studioSketchCatalogFormatVersion,
+  type StudioSketchCatalogRequest,
+  type StudioSketchCatalogResult,
+  type StudioSketchCatalogSnapshot,
+} from './StudioSketchCatalog'
+import { StudioSketchSource } from './StudioSketchSource'
 
 export type StudioProjectFile = {
   diagnosticCount: number
@@ -284,6 +292,13 @@ export type StudioSourceActionUndoResult = {
   sourceVersion: string
 }
 
+export type StudioSketchActionResult =
+  & StudioSketchCatalogResult
+  & Readonly<{
+    compile?: StudioCompileCompletion
+    generatedFile?: StudioProjectFileContent
+  }>
+
 export type StudioSessionHandshake = {
   apps: readonly StudioAppVariant[]
   capabilities: {
@@ -301,6 +316,10 @@ export type StudioSessionHandshake = {
       scheme: 'reactive-browser-fixed-light-native'
       version: 2
     }
+    sketches: {
+      catalogVersion: typeof studioSketchCatalogFormatVersion
+      freeGeometry: true
+    }
   }
   channel: typeof studioProtocolChannel
   compile: StudioCompileSnapshot
@@ -312,6 +331,7 @@ export type StudioSessionHandshake = {
   files: readonly StudioProjectFile[]
   identity: StudioProjectIdentity
   previewManifest?: StudioPreviewManifestV2
+  sketchCatalog: StudioSketchCatalogSnapshot
   protocolVersion: typeof studioProtocolVersion
   type: 'handshake'
 }
@@ -352,6 +372,12 @@ export type StudioSessionEvent =
     checkpoint: Pick<StudioCheckpointSummary, 'id' | 'status'>
     protocolVersion: typeof studioProtocolVersion
     type: 'checkpoint-changed'
+  }
+  | {
+    catalog: StudioSketchCatalogSnapshot
+    channel: typeof studioProtocolChannel
+    protocolVersion: typeof studioProtocolVersion
+    type: 'sketch-catalog-changed'
   }
 
 type SourceActionCacheEntry = {
@@ -403,6 +429,8 @@ const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
   { method: 'POST', path: '/api/source-action/inspect' },
   { method: 'POST', path: '/api/source-action/propose' },
   { method: 'POST', path: '/api/source-action/undo' },
+  { method: 'GET', path: '/api/sketches' },
+  { method: 'POST', path: '/api/sketches/action' },
   { method: 'GET', path: '/api/tests/status' },
   { method: 'POST', path: '/api/tests/run' },
   { method: 'GET', path: '/api/ai/availability' },
@@ -431,6 +459,8 @@ export class StudioProjectSession {
   readonly #coordinator: StudioCompileCoordinator
   readonly #draftStates = new Map<string, StudioFileDraftState>()
   readonly #listeners = new Set<(event: StudioSessionEvent) => void>()
+  readonly #sketchCatalog: StudioSketchCatalog
+  readonly #sketchResults = new Map<string, Readonly<{ fingerprint: string; result: StudioSketchActionResult }>>()
   readonly #workspace: Workspace
   #mutationLane: Promise<void> = Promise.resolve()
   #matrix: StudioMatrixSession | undefined
@@ -445,6 +475,7 @@ export class StudioProjectSession {
     compile: StudioCompileCoordinatorOptions['compile'],
   ) {
     this.#workspace = workspace
+    this.#sketchCatalog = new StudioSketchCatalog(projectRoot)
     this.#coordinator = new StudioCompileCoordinator({
       appName,
       compile,
@@ -605,6 +636,7 @@ export class StudioProjectSession {
           scheme: 'reactive-browser-fixed-light-native',
           version: 2,
         },
+        sketches: { catalogVersion: studioSketchCatalogFormatVersion, freeGeometry: true },
       },
       channel: studioProtocolChannel,
       compile: this.compileSnapshot(),
@@ -613,9 +645,88 @@ export class StudioProjectSession {
       files: await this.files(),
       identity: this.identity(),
       ...(this.#matrix === undefined ? {} : { previewManifest: this.#matrix.publishedManifest() }),
+      sketchCatalog: await this.sketchCatalog(),
       protocolVersion: studioProtocolVersion,
       type: 'handshake',
     }
+  }
+
+  sketchCatalog(): Promise<StudioSketchCatalogSnapshot> {
+    return this.#sketchCatalog.read()
+  }
+
+  applySketchAction(input: unknown): Promise<StudioSketchActionResult> {
+    return this.#mutate(async () => {
+      const request = input as StudioSketchCatalogRequest
+      const fingerprint = JSON.stringify(input)
+      const requestId = isRecord(input) && typeof input['requestId'] === 'string' ? input['requestId'] : undefined
+      const cached = requestId === undefined ? undefined : this.#sketchResults.get(requestId)
+      if (cached !== undefined) {
+        Assert.input(cached.fingerprint === fingerprint, `Studio sketch request id was reused: ${requestId}`)
+        return cached.result
+      }
+      if (isRecord(input) && isRecord(input['action']) && input['action']['kind'] === 'create-sketch') {
+        Assert.input(
+          input['action']['project'] === this.identity().project,
+          'A Studio sketch can only be created in the active project.',
+        )
+      }
+      if (isRecord(input) && isRecord(input['action']) && input['action']['kind'] === 'delete-sketch') {
+        Errors.throwUserInput('Deleting a Studio sketch is not available until its generated-source lifecycle lands.')
+      }
+
+      const prior = await this.#sketchCatalog.read()
+      let applied = false
+      let createdName: string | undefined
+      let createdPath: string | undefined
+      let writeRegistered = false
+      try {
+        const catalogResult = await this.#sketchCatalog.apply(request)
+        applied = true
+        let result: StudioSketchActionResult = catalogResult
+        if (request.action.kind === 'create-sketch') {
+          const created = catalogResult.createdSketch
+          Assert.defined(created, 'create-sketch catalog result includes the allocated sketch')
+          createdName = created.name
+          const body = await StudioSketchSource.generate(created)
+          const generated = new StudioGeneratedSources(this.projectRoot)
+          createdPath = await generated.createView(created.name, body)
+          const file = await this.readFile(FS.relativePath(this.projectRoot, createdPath))
+          writeRegistered = true
+          const compile = await this.#coordinator.noteStudioFileMutation([{
+            path: createdPath,
+            sourceVersion: file.sourceVersion,
+            writeId: request.requestId,
+          }])
+          if (compile.status === 'error') {
+            Errors.throwUserInput(
+              `Studio did not create ${created.name} because its generated source failed to compile: ${compile.message}`,
+            )
+          }
+          result = { ...catalogResult, compile, generatedFile: file }
+          this.#emitFile(file)
+          this.#emitFiles(await this.files())
+        }
+        this.#sketchResults.set(request.requestId, { fingerprint, result })
+        trimMap(this.#sketchResults, sourceActionResultLimit)
+        this.#emitSketchCatalog(result.catalog)
+        return result
+      } catch (error) {
+        if (applied) {
+          if (createdName !== undefined && createdPath !== undefined && await FS.isFile(createdPath)) {
+            await new StudioGeneratedSources(this.projectRoot).removeView(createdName)
+          }
+          await this.#sketchCatalog.restore(prior)
+          if (writeRegistered && createdPath !== undefined) {
+            await this.#coordinator.noteStudioFileMutation([{
+              path: createdPath,
+              writeId: `rollback:${request.requestId}`,
+            }])
+          }
+        }
+        throw Errors.fromUnknown(error, { requestId: request.requestId, studioOperation: 'sketch-action' })
+      }
+    })
   }
 
   #requireMatrix(): StudioMatrixSession {
@@ -1460,6 +1571,15 @@ export class StudioProjectSession {
       checkpoint,
       protocolVersion: studioProtocolVersion,
       type: 'checkpoint-changed',
+    })
+  }
+
+  #emitSketchCatalog(catalog: StudioSketchCatalogSnapshot): void {
+    this.#emit({
+      catalog,
+      channel: studioProtocolChannel,
+      protocolVersion: studioProtocolVersion,
+      type: 'sketch-catalog-changed',
     })
   }
 
