@@ -35,7 +35,8 @@
         "4820",
         "--no-browser"
       ],
-      "port": 4820
+      "port": 4820,
+      "url": "http://127.0.0.1:4820"
     },
     {
       "name": "studio-hnreader",
@@ -52,7 +53,8 @@
         "4830",
         "--no-browser"
       ],
-      "port": 4830
+      "port": 4830,
+      "url": "http://127.0.0.1:4830"
     }
   ]
 }
