@@ -360,7 +360,13 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
 
   private createFixtureDeclarationScope(node: AST.ScenarioFixtureClause): Langium.Scope {
     const root = AST.findRoot(node)
-    return this.createScopeForNodes(AST.isTaoFile(root) ? root.statements.filter(AST.isFixtureDeclaration) : [])
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    return this.createScopeForNodes([
+      ...root.statements.filter(AST.isFixtureDeclaration),
+      ...this.importedDeclarations(node, AST.isFixtureDeclaration),
+    ])
   }
 
   private createScenarioSubjectScope(node: AST.ScenarioGroupDeclaration): Langium.Scope {
@@ -411,16 +417,9 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
   private scenarioFixtureValues(node: AST.Node): AST.FixtureValueDeclaration[] {
     const scenario = AST.findOwningScenario(node)
     const group = AST.findOwningScenarioGroup(node)
-    const fixtureName = scenario
-      ? AST.effectiveScenarioClause(scenario, AST.isScenarioFixtureClause)?.fixture.$refText
-      : group?.block.entries.find(AST.isScenarioFixtureClause)?.fixture.$refText
-    const root = AST.findRoot(node)
-    if (!fixtureName || !AST.isTaoFile(root)) {
-      return []
-    }
-    const fixture = root.statements
-      .filter(AST.isFixtureDeclaration)
-      .find(candidate => candidate.name === fixtureName)
+    const fixture = scenario
+      ? AST.effectiveScenarioClause(scenario, AST.isScenarioFixtureClause)?.fixture.ref
+      : group?.block.entries.find(AST.isScenarioFixtureClause)?.fixture.ref
     return fixture ? AST.fixtureValueDeclarations(fixture) : []
   }
 

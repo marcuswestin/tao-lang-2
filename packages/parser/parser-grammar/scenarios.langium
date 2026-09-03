@@ -6,6 +6,7 @@ import "./data"
 import "./expressions"
 import "./terminals"
 import "./tests"
+import "./visibility"
 
 entry ScenariosGrammarEntrypoint:
     FixtureDeclaration | ScenarioGroupDeclaration;
@@ -13,7 +14,7 @@ entry ScenariosGrammarEntrypoint:
 // A fixture is reusable setup truth: named accounts plus named rows created in declaration order.
 // This slice intentionally carries only the literal/reference value surface Decisions §16 spells.
 FixtureDeclaration:
-    'fixture' name=ID block=FixtureBlock;
+    visibility=DeclarationVisibility? 'fixture' name=ID block=FixtureBlock;
 
 FixtureBlock:
     '{' entries+=(FixtureAccountDeclaration | FixtureCreateBinding)* '}';

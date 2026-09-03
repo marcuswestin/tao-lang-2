@@ -53,20 +53,20 @@ DeclarationSlotBlock:
 // bare visual/slot uses. Keep every other broad statement parseable in an app body for a semantic
 // placement diagnostic, while leaving those inherently overlapping bare forms to visual blocks.
 AppBlockDiagnosticStatement:
-    Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioGroupDeclaration | RunStep | PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep | StateDeclaration | EntityQueryDeclaration | CommandDeclaration | Injection | TagStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
+    Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration | RunStep | PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep | StateDeclaration | EntityQueryDeclaration | CommandDeclaration | Injection | TagStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
 
 Declaration:
-    PrimitiveDeclaration | AppDeclaration | ViewDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration | DesignDeclaration;
+    PrimitiveDeclaration | AppDeclaration | ViewDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration | DesignDeclaration | FixtureDeclaration;
 
 // File statements are the declarations accepted directly by Tao source files.
-type FileStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioGroupDeclaration;
-type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioGroupDeclaration;
+type FileStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration;
+type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration;
 // View statements are the declarations and render sites accepted by view/layout bodies.
 ViewStatement returns Statement:
     ParsedStatement | DeclarationSlotFill;
 type Statement = AppBlockDiagnosticStatement | ViewRender | RenderSlotUse | CallerContentStatement | CommandDeclaration | DeclarationSlotFill;
 type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | EntityQueryDeclaration | CommandDeclaration | ForStatement | CasePayload | EntityDataField | CaseSetCase | AskStatement;
-type ExportableDeclaration = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;
+type ExportableDeclaration = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration | FixtureDeclaration;
 type EmittingRuntimeBinding = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;
 type ParameterizedDeclaration = ViewDeclaration | ActionDeclaration | FunctionDeclaration;
 type BlockStatementOwner = AppDeclaration | ProjectDeclaration | ViewDeclaration | Render | ActionDeclaration | ActionExpression | ForStatement;
