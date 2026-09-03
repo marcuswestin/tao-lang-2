@@ -145,11 +145,15 @@ Describe('Tao Studio scenario runtime', () => {
         )
       },
     })
+    const appRoot = TR.Navigation.Mount(TR.Navigation.Configure(
+      TR.Navigation.Declaration('Focused occurrence app stack', TR.NavKind.Stack()),
+      { Initial: focused },
+    ))
     app = TR.Navigation.App({
       auxiliaries: () => ({}),
       design: () => design,
       name: 'Focused occurrence app',
-      navigator: () => focused,
+      navigator: () => appRoot,
     })
     const screen = render(createElement(
       RN.View,
