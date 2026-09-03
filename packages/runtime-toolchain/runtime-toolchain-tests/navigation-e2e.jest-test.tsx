@@ -133,80 +133,83 @@ Describe('Expo runtime', () => {
           scene Detail() { Title "Detail" render Text("Stable detail") }
         `,
       },
-      screen => {
-        fireEvent.press(screen.getByText('Open detail'))
+      async screen => {
+        await fireEventAsync.press(screen.getByText('Open detail'))
         ExpectScreen(screen).toHaveText('Stable detail')
       },
     )
   })
 
-  Test('dispatches visible and hardware Back through the configured app reducer and cleans up its subscription', () => {
-    let handler: (() => boolean) | undefined
-    let removes = 0
-    const restoreReactNativeRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
-      ActivityIndicator: RN.ActivityIndicator,
-      BackHandler: {
-        addEventListener(event, nextHandler) {
-          Expect(event).toBe('hardwareBackPress')
-          handler = nextHandler
-          return {
-            remove: () => {
-              removes += 1
-            },
-          }
+  Test(
+    'dispatches visible and hardware Back through the configured app reducer and cleans up its subscription',
+    async () => {
+      let handler: (() => boolean) | undefined
+      let removes = 0
+      const restoreReactNativeRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+        ActivityIndicator: RN.ActivityIndicator,
+        BackHandler: {
+          addEventListener(event, nextHandler) {
+            Expect(event).toBe('hardwareBackPress')
+            handler = nextHandler
+            return {
+              remove: () => {
+                removes += 1
+              },
+            }
+          },
         },
-      },
-      Image: RN.Image,
-      KeyboardAvoidingView: RN.View,
-      Pressable: RN.Pressable,
-      ScrollView: RN.View,
-      Switch: RN.Switch,
-      Text: RN.Text,
-      TextInput: RN.TextInput,
-      View: RN.View,
-    })
+        Image: RN.Image,
+        KeyboardAvoidingView: RN.View,
+        Pressable: RN.Pressable,
+        ScrollView: RN.View,
+        Switch: RN.Switch,
+        Text: RN.Text,
+        TextInput: RN.TextInput,
+        View: RN.View,
+      })
 
-    try {
-      const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
-      const windowRoot = TR.Navigation.View({
-        name: 'Window root',
-        render: () => createElement(RN.Text, null, 'Window root'),
-      })
-      const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
-      const notice = TR.Navigation.View({ name: 'Notice', render: () => createElement(RN.Text, null, 'Notice') })
-      const stack = configuredStack('HardwareBackTest', home)
-      const window = configuredSlot('HardwareBackWindow', windowRoot)
-      const app = TR.Navigation.App({
-        name: 'Hardware Back App',
-        navigator: () => stack,
-        auxiliaries: () => ({ window }),
-      })
-      const screen = render(createElement(TR.Navigation.AppHost, { app }))
+      try {
+        const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+        const windowRoot = TR.Navigation.View({
+          name: 'Window root',
+          render: () => createElement(RN.Text, null, 'Window root'),
+        })
+        const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
+        const notice = TR.Navigation.View({ name: 'Notice', render: () => createElement(RN.Text, null, 'Notice') })
+        const stack = configuredStack('HardwareBackTest', home)
+        const window = configuredSlot('HardwareBackWindow', windowRoot)
+        const app = TR.Navigation.App({
+          name: 'Hardware Back App',
+          navigator: () => stack,
+          auxiliaries: () => ({ window }),
+        })
+        const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
-      Expect(handler?.()).toBe(false)
-      act(() => {
-        TR.Navigation.PresentIn(undefined, stack, detail, {})
-        TR.Navigation.PresentOverlay(undefined, window, notice, {})
-      })
-      ExpectScreen(screen).toHaveText('Detail')
-      ExpectScreen(screen).toHaveText('Notice')
-      fireEvent.press(screen.getByLabelText('Back'))
-      Expect(screen.queryByText('Notice')).toBeNull()
-      ExpectScreen(screen).toHaveText('Detail')
-      let consumed = false
-      act(() => {
-        consumed = handler!()
-      })
-      Expect(consumed).toBe(true)
-      ExpectScreen(screen).toHaveText('Home')
-      Expect(screen.queryByText('Detail')).toBeNull()
+        Expect(handler?.()).toBe(false)
+        act(() => {
+          TR.Navigation.PresentIn(undefined, stack, detail, {})
+          TR.Navigation.PresentOverlay(undefined, window, notice, {})
+        })
+        ExpectScreen(screen).toHaveText('Detail')
+        ExpectScreen(screen).toHaveText('Notice')
+        await fireEventAsync.press(screen.getByLabelText('Back'))
+        Expect(screen.queryByText('Notice')).toBeNull()
+        ExpectScreen(screen).toHaveText('Detail')
+        let consumed = false
+        act(() => {
+          consumed = handler!()
+        })
+        Expect(consumed).toBe(true)
+        ExpectScreen(screen).toHaveText('Home')
+        Expect(screen.queryByText('Detail')).toBeNull()
 
-      screen.unmount()
-      Expect(removes).toBe(1)
-    } finally {
-      restoreReactNativeRuntime.mockRestore()
-    }
-  })
+        screen.unmount()
+        Expect(removes).toBe(1)
+      } finally {
+        restoreReactNativeRuntime.mockRestore()
+      }
+    },
+  )
 
   Test('mirrors browser Back, Forward, and ask response through the app reducer', async () => {
     let popState: ((event: { state: unknown }) => void) | undefined
@@ -266,7 +269,7 @@ Describe('Expo runtime', () => {
       })
       const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
-      act(() => {
+      await act(async () => {
         TR.Navigation.PresentIn({ app, navigation: stack }, stack, detail, {})
       })
       ExpectScreen(screen).toHaveText('Detail')
@@ -279,21 +282,21 @@ Describe('Expo runtime', () => {
         router: 'preserved',
       })
 
-      act(() => popState?.({ state: replacements[0] }))
+      await act(async () => popState?.({ state: replacements[0] }))
       ExpectScreen(screen).toHaveText('Home')
-      act(() => popState?.({ state: pushes[0] }))
+      await act(async () => popState?.({ state: pushes[0] }))
       ExpectScreen(screen).toHaveText('Detail')
 
       let answer: Promise<TR.Evaluable>
-      act(() => {
+      await act(async () => {
         answer = TR.Navigation.Ask({ app, navigation: stack }, confirm, {})
       })
       ExpectScreen(screen).toHaveText('Confirm')
-      act(() => TR.Navigation.Respond(responseProps))
+      await act(async () => TR.Navigation.Respond(responseProps))
       Expect((await answer!).evaluate().jsValue).toBe(null)
       Expect(goes).toEqual([-1])
-      act(() => popState?.({ state: pushes[0] }))
-      act(() => popState?.({ state: pushes[1] }))
+      await act(async () => popState?.({ state: pushes[0] }))
+      await act(async () => popState?.({ state: pushes[1] }))
       ExpectScreen(screen).toHaveText('Detail')
       Expect(screen.queryByText('Confirm')).toBeNull()
       Expect(replacements.at(-1)).toMatchObject({
@@ -312,7 +315,7 @@ Describe('Expo runtime', () => {
     }
   })
 
-  Test('keeps one visible Back affordance above a covered depth-two stack', () => {
+  Test('keeps one visible Back affordance above a covered depth-two stack', async () => {
     const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
     const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
     const notice = TR.Navigation.View({ name: 'Notice', render: () => createElement(RN.Text, null, 'Notice') })
@@ -325,13 +328,13 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Notice')
     Expect(screen.getAllByLabelText('Back')).toHaveLength(1)
 
-    fireEvent.press(screen.getByLabelText('Back'))
+    await fireEventAsync.press(screen.getByLabelText('Back'))
     Expect(screen.queryByText('Notice')).toBeNull()
     ExpectScreen(screen).toHaveText('Detail')
     Expect(screen.getAllByLabelText('Back')).toHaveLength(1)
   })
 
-  Test('centralizes same-URL web history and reduces auxiliary overlays before navigator entries', () => {
+  Test('centralizes same-URL web history and reduces auxiliary overlays before navigator entries', async () => {
     const popListeners = new Set<(event: { state?: unknown }) => void>()
     const pushes: unknown[] = []
     const replacements: unknown[] = []
@@ -477,7 +480,7 @@ Describe('Expo runtime', () => {
     }
   })
 
-  Test('layers stacked StackNav overlays absolutely and preserves covered overlay state', () => {
+  Test('layers stacked StackNav overlays absolutely and preserves covered overlay state', async () => {
     function StatefulOverlay(): ReactElement {
       const [count, setCount] = useState(0)
       return createElement(
@@ -508,7 +511,7 @@ Describe('Expo runtime', () => {
     act(() => {
       TR.Navigation.PresentOverlay(undefined, stack, first, {})
     })
-    fireEvent.press(screen.getByLabelText('Increment overlay'))
+    await fireEventAsync.press(screen.getByLabelText('Increment overlay'))
     ExpectScreen(screen).toHaveText('Overlay count 1')
 
     act(() => {
@@ -527,15 +530,15 @@ Describe('Expo runtime', () => {
       && style.zIndex === 1
     )).toBe(true)
 
-    fireEvent.press(screen.getByLabelText('Back'))
+    await fireEventAsync.press(screen.getByLabelText('Back'))
     Expect(screen.queryByText('Second overlay')).toBeNull()
     ExpectScreen(screen).toHaveText('Overlay count 1')
-    fireEvent.press(screen.getByLabelText('Back'))
+    await fireEventAsync.press(screen.getByLabelText('Back'))
     Expect(screen.queryByText('Overlay count 1')).toBeNull()
     ExpectScreen(screen).toHaveText('Home')
   })
 
-  Test('reconciles native sheet dismissal through the owning app history funnel', () => {
+  Test('reconciles native sheet dismissal through the owning app history funnel', async () => {
     const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
     const sheet = TR.Navigation.View({ name: 'Sheet', render: () => createElement(RN.Text, null, 'Sheet') })
     const stack = configuredStack('Sheet dismissal stack', home)
@@ -553,10 +556,10 @@ Describe('Expo runtime', () => {
     })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
-    act(() => {
+    await act(async () => {
       TR.Navigation.PresentOverlay({ app, navigation: stack }, stack, sheet, {}, { sheet: true })
     })
-    act(() => {
+    await act(async () => {
       screen.UNSAFE_getByType(RN.Modal).props.onRequestClose()
     })
 
@@ -592,7 +595,7 @@ Describe('Expo runtime', () => {
     let first!: Promise<{ evaluate(): { jsValue: unknown } }>
     let second!: Promise<{ evaluate(): { jsValue: unknown } }>
 
-    act(() => {
+    await act(async () => {
       first = TR.Navigation.Ask(
         { navigation: stack },
         confirm,
@@ -607,7 +610,7 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Question Second')
     Expect(screen.queryByText('Question First')).toBeNull()
 
-    act(() => {
+    await act(async () => {
       TR.Navigation.Respond(occurrenceProps.get('First'), TR.Value('first-covered'))
     })
     Expect((await first).evaluate().jsValue).toBe('first-covered')
@@ -619,7 +622,7 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Home')
   })
 
-  Test('replaces keyed app toasts, coexists across keys, restarts expiry, and ignores Back', () => {
+  Test('replaces keyed app toasts, coexists across keys, restarts expiry, and ignores Back', async () => {
     jest.useFakeTimers()
     try {
       const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
@@ -690,7 +693,7 @@ Describe('Expo runtime', () => {
     }
   })
 
-  Test('resolves contextual overlays to a SlotNav and dismisses its overlay stack before content', () => {
+  Test('resolves contextual overlays to a SlotNav and dismisses its overlay stack before content', async () => {
     const first = TR.Navigation.View({
       name: 'Slot overlay one',
       render: () => createElement(RN.Text, null, 'Slot overlay one'),
@@ -715,20 +718,20 @@ Describe('Expo runtime', () => {
     })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
-    fireEvent.press(screen.getByLabelText('Open slot overlay'))
+    await fireEventAsync.press(screen.getByLabelText('Open slot overlay'))
     act(() => {
       TR.Navigation.PresentOverlay(undefined, slot, second, {})
     })
     ExpectScreen(screen).toHaveText('Slot overlay two')
     Expect(screen.queryByText('Slot overlay one')).toBeNull()
-    fireEvent.press(screen.getByLabelText('Back'))
+    await fireEventAsync.press(screen.getByLabelText('Back'))
     ExpectScreen(screen).toHaveText('Slot overlay one')
-    fireEvent.press(screen.getByLabelText('Back'))
+    await fireEventAsync.press(screen.getByLabelText('Back'))
     ExpectScreen(screen).toHaveText('Slot home')
     Expect(slot.back()).toBe(false)
   })
 
-  Test('inherits contextual present, overlay, and dismiss through nested generated view props', () => {
+  Test('inherits contextual present, overlay, and dismiss through nested generated view props', async () => {
     function NestedNavigationAction(props: {
       __tao?: TR.TaoProps
       label: string
@@ -803,14 +806,14 @@ Describe('Expo runtime', () => {
     })
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
-    fireEvent.press(screen.getByLabelText('Open nested detail'))
+    await fireEventAsync.press(screen.getByLabelText('Open nested detail'))
     Expect(screen.queryByText('Nested home')).toBeNull()
-    fireEvent.press(screen.getByLabelText('Dismiss nested detail'))
+    await fireEventAsync.press(screen.getByLabelText('Dismiss nested detail'))
     ExpectScreen(screen).toHaveText('Nested home')
 
-    fireEvent.press(screen.getByLabelText('Open nested overlay'))
+    await fireEventAsync.press(screen.getByLabelText('Open nested overlay'))
     ExpectScreen(screen).toHaveText('Nested overlay')
-    fireEvent.press(screen.getByLabelText('Dismiss nested overlay'))
+    await fireEventAsync.press(screen.getByLabelText('Dismiss nested overlay'))
     Expect(screen.queryByText('Nested overlay')).toBeNull()
     ExpectScreen(screen).toHaveText('Nested home')
   })
@@ -866,7 +869,7 @@ Describe('Expo runtime', () => {
         fireEvent.press(screen.getByText('Open nested ask'))
         await act(async () => {})
         ExpectScreen(screen).toHaveText('Nested ask')
-        fireEvent.press(screen.getByText('Confirm nested ask'))
+        await fireEventAsync.press(screen.getByText('Confirm nested ask'))
         await act(async () => {})
         Expect(screen.queryByText('Nested ask')).toBeNull()
         ExpectScreen(screen).toHaveText('Confirmed')
@@ -874,50 +877,53 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('keeps covered navigation entries mounted and returns through the accessible root-safe back reducer', () => {
-    let stack: TR.NavigationValue
+  Test(
+    'keeps covered navigation entries mounted and returns through the accessible root-safe back reducer',
+    async () => {
+      let stack: TR.NavigationValue
 
-    function Home(): ReactElement {
-      const [count, setCount] = useState(0)
-      return createElement(
-        RN.View,
-        null,
-        createElement(RN.Text, null, `Home count ${count}`),
-        createElement(RN.Pressable, {
-          accessibilityLabel: 'Increment home',
-          onPress: () => setCount(value => value + 1),
-        }),
-        createElement(RN.Pressable, {
-          accessibilityLabel: 'Open detail',
-          onPress: () => TR.Navigation.PresentIn(undefined, stack, detail, {}),
-        }),
-      )
-    }
+      function Home(): ReactElement {
+        const [count, setCount] = useState(0)
+        return createElement(
+          RN.View,
+          null,
+          createElement(RN.Text, null, `Home count ${count}`),
+          createElement(RN.Pressable, {
+            accessibilityLabel: 'Increment home',
+            onPress: () => setCount(value => value + 1),
+          }),
+          createElement(RN.Pressable, {
+            accessibilityLabel: 'Open detail',
+            onPress: () => TR.Navigation.PresentIn(undefined, stack, detail, {}),
+          }),
+        )
+      }
 
-    const home = TR.Navigation.View({ name: 'Home', render: () => createElement(Home) })
-    const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
-    stack = configuredStack('RuntimeNavigationHostTest', home)
-    const app = TR.Navigation.App({
-      name: 'Runtime Navigation Host App',
-      navigator: () => stack,
-      auxiliaries: () => ({}),
-    })
+      const home = TR.Navigation.View({ name: 'Home', render: () => createElement(Home) })
+      const detail = TR.Navigation.View({ name: 'Detail', render: () => createElement(RN.Text, null, 'Detail') })
+      stack = configuredStack('RuntimeNavigationHostTest', home)
+      const app = TR.Navigation.App({
+        name: 'Runtime Navigation Host App',
+        navigator: () => stack,
+        auxiliaries: () => ({}),
+      })
 
-    const screen = render(createElement(TR.Navigation.AppHost, { app }))
-    fireEvent.press(screen.getByLabelText('Increment home'))
-    ExpectScreen(screen).toHaveText('Home count 1')
+      const screen = render(createElement(TR.Navigation.AppHost, { app }))
+      await fireEventAsync.press(screen.getByLabelText('Increment home'))
+      ExpectScreen(screen).toHaveText('Home count 1')
 
-    fireEvent.press(screen.getByLabelText('Open detail'))
-    ExpectScreen(screen).toHaveText('Detail')
-    Expect(screen.queryByLabelText('Increment home')).toBeNull()
-    fireEvent.press(screen.getByLabelText('Back'))
+      await fireEventAsync.press(screen.getByLabelText('Open detail'))
+      ExpectScreen(screen).toHaveText('Detail')
+      Expect(screen.queryByLabelText('Increment home')).toBeNull()
+      await fireEventAsync.press(screen.getByLabelText('Back'))
 
-    ExpectScreen(screen).toHaveText('Home count 1')
-    Expect(screen.queryByLabelText('Back')).toBeNull()
-    Expect(stack.back()).toBe(false)
-  })
+      ExpectScreen(screen).toHaveText('Home count 1')
+      Expect(screen.queryByLabelText('Back')).toBeNull()
+      Expect(stack.back()).toBe(false)
+    },
+  )
 
-  Test('renders keyed selection labels and preserves inactive item state', () => {
+  Test('renders keyed selection labels and preserves inactive item state', async () => {
     function StatefulHome(): ReactElement {
       const [count, setCount] = useState(0)
       return createElement(
@@ -955,15 +961,15 @@ Describe('Expo runtime', () => {
     ExpectScreen(screen).toHaveText('Home')
     ExpectScreen(screen).toHaveText('Settings')
     ExpectScreen(screen).toHaveText('Home count 0')
-    fireEvent.press(screen.getByLabelText('Increment selection home'))
+    await fireEventAsync.press(screen.getByLabelText('Increment selection home'))
     ExpectScreen(screen).toHaveText('Home count 1')
 
-    fireEvent.press(screen.getByText('Settings'))
+    await fireEventAsync.press(screen.getByText('Settings'))
     ExpectScreen(screen).toHaveText('Settings content')
     Expect(screen.queryByLabelText('Increment selection home')).toBeNull()
     Expect(screen.queryByLabelText('Back')).toBeNull()
 
-    fireEvent.press(screen.getByText('Home'))
+    await fireEventAsync.press(screen.getByText('Home'))
     ExpectScreen(screen).toHaveText('Home count 1')
     act(() => TR.Navigation.Activate({ app }, app, 'settings'))
     ExpectScreen(screen).toHaveText('Settings content')
@@ -1024,7 +1030,7 @@ Describe('Expo runtime', () => {
             // Evaluating the second generated module used to overwrite the first app's name-table entry.
             Expect((require(second.testAppPath) as { default?: unknown }).default).toBeDefined()
 
-            fireEvent.press(first.getByText('Open First'))
+            await fireEventAsync.press(first.getByText('Open First'))
             ExpectScreen(first).toHaveText('First notice')
           } finally {
             await FS.remove(generatedRoot)
@@ -1061,7 +1067,7 @@ Describe('Expo runtime', () => {
       async screen => {
         jest.useFakeTimers()
         try {
-          fireEvent.press(screen.getByText('Save'))
+          await fireEventAsync.press(screen.getByText('Save'))
           ExpectScreen(screen).toHaveText('Saved')
           Expect(screen.queryByLabelText('Back')).toBeNull()
           act(() => jest.advanceTimersByTime(1_000))
@@ -1073,7 +1079,7 @@ Describe('Expo runtime', () => {
     )
   })
 
-  Test('publishes reactive direct-view chrome with icons and deterministic Basic overflow', () => {
+  Test('publishes reactive direct-view chrome with icons and deterministic Basic overflow', async () => {
     function Descendant(): ReactElement {
       TR.Navigation.UseHostSlots(undefined, { Title: () => TR.Value('Descendant must not publish') })
       return createElement(RN.Text, null, 'Descendant')
@@ -1129,7 +1135,7 @@ Describe('Expo runtime', () => {
     Expect(screen.getByLabelText('First').props.accessibilityLabel).toBe('First')
     Expect(screen.getByLabelText('Second').props.accessibilityState).toEqual({ disabled: true })
     Expect(screen.queryByLabelText('Third')).toBeNull()
-    fireEvent.press(screen.getByLabelText('More'))
+    await fireEventAsync.press(screen.getByLabelText('More'))
     Expect(screen.getAllByRole('button').map(button => button.props.accessibilityLabel)).toEqual([
       'First',
       'Second',
@@ -1144,20 +1150,20 @@ Describe('Expo runtime', () => {
       'Fourth',
     ])
 
-    fireEvent.press(screen.getByLabelText('Third'))
+    await fireEventAsync.press(screen.getByLabelText('Third'))
     Expect(screen.queryByLabelText('Third')).toBeNull()
-    fireEvent.press(screen.getByLabelText('First'))
+    await fireEventAsync.press(screen.getByLabelText('First'))
     ExpectScreen(screen).toHaveText('Count 2')
-    fireEvent.press(screen.getByLabelText('Add ten'))
-    fireEvent.press(screen.getByLabelText('First'))
+    await fireEventAsync.press(screen.getByLabelText('Add ten'))
+    await fireEventAsync.press(screen.getByLabelText('First'))
     ExpectScreen(screen).toHaveText('Count 13')
-    fireEvent.press(screen.getByLabelText('Enable second'))
+    await fireEventAsync.press(screen.getByLabelText('Enable second'))
     Expect(screen.getByLabelText('Second').props.accessibilityState).toEqual({ disabled: false })
-    fireEvent.press(screen.getByLabelText('Rename'))
+    await fireEventAsync.press(screen.getByLabelText('Rename'))
     Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Updated document')
   })
 
-  Test('renders native toolbar icons and keeps its trailing command suffix behind More', () => {
+  Test('renders native toolbar icons and keeps its trailing command suffix behind More', async () => {
     const invoked: string[] = []
     const commands = [
       navigationCommand({ icon: 'safari', invoke: () => invoked.push('First'), label: 'First' }).read(),
@@ -1178,18 +1184,18 @@ Describe('Expo runtime', () => {
       Expect(safariIcon.props.children).toBe('FontAwesome:safari')
       Expect(screen.getByLabelText('First').props.accessibilityLabel).toBe('First')
       Expect(screen.queryByLabelText('Third')).toBeNull()
-      fireEvent.press(screen.getByLabelText('More'))
+      await fireEventAsync.press(screen.getByLabelText('More'))
       Expect(screen.getAllByRole('menuitem').map(item => item.props.accessibilityLabel)).toEqual([
         'Third',
         'Fourth',
       ])
       Expect(screen.getByLabelText('Fourth').props.accessibilityState).toEqual({ disabled: true })
-      fireEvent.press(screen.getByLabelText('Fourth'))
+      await fireEventAsync.press(screen.getByLabelText('Fourth'))
       Expect(invoked).toEqual([])
-      fireEvent.press(screen.getByLabelText('Third'))
+      await fireEventAsync.press(screen.getByLabelText('Third'))
       Expect(invoked).toEqual(['Third'])
       Expect(screen.queryByLabelText('Third')).toBeNull()
-      fireEvent.press(screen.getByLabelText('More'))
+      await fireEventAsync.press(screen.getByLabelText('More'))
       Expect(screen.getAllByRole('menuitem')).toHaveLength(2)
       screen.rerender(createElement(NativeToolbar, { commands: commands.slice(0, 2) }))
       Expect(screen.queryByLabelText('More')).toBeNull()
@@ -1199,7 +1205,7 @@ Describe('Expo runtime', () => {
     }
   })
 
-  Test('adapts native stack entries to pinned screenId and headerConfig props', () => {
+  Test('adapts native stack entries to pinned screenId and headerConfig props', async () => {
     const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
       ActivityIndicator: RN.ActivityIndicator,
       Image: RN.Image,
@@ -1271,7 +1277,7 @@ Describe('Expo runtime', () => {
     }
   })
 
-  Test('lets only the active selected Stack own chrome selectors and the web document title', () => {
+  Test('lets only the active selected Stack own chrome selectors and the web document title', async () => {
     const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document')
     Object.defineProperty(globalThis, 'document', { configurable: true, value: { title: 'Host title' } })
     try {
@@ -1305,7 +1311,7 @@ Describe('Expo runtime', () => {
       Expect(screen.getAllByTestId(navigationTitleTestId)).toHaveLength(1)
       Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Home title')
       Expect((globalThis as unknown as { document: { title: string } }).document.title).toBe('Home title')
-      fireEvent.press(screen.getByText('Settings'))
+      await fireEventAsync.press(screen.getByText('Settings'))
       Expect(screen.getAllByTestId(navigationTitleTestId)).toHaveLength(1)
       Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Settings title')
       Expect((globalThis as unknown as { document: { title: string } }).document.title).toBe('Settings title')
@@ -1320,7 +1326,7 @@ Describe('Expo runtime', () => {
     }
   })
 
-  Test('publishes configured Title and Toolbar when a nav is itself a Stack entry', () => {
+  Test('publishes configured Title and Toolbar when a nav is itself a Stack entry', async () => {
     let invoked = 0
     let nested: TR.NavigationValue
     const detail = TR.Navigation.View({
@@ -1350,16 +1356,16 @@ Describe('Expo runtime', () => {
 
     ExpectScreen(screen).toHaveText('Nested navigation')
     ExpectScreen(screen).toHaveText('Nested content')
-    fireEvent.press(screen.getByLabelText('Refresh'))
+    await fireEventAsync.press(screen.getByLabelText('Refresh'))
     Expect(invoked).toBe(1)
-    fireEvent.press(screen.getByLabelText('Open nested detail'))
+    await fireEventAsync.press(screen.getByLabelText('Open nested detail'))
     ExpectScreen(screen).toHaveText('Nested detail')
     Expect(screen.getAllByLabelText('Back')).toHaveLength(1)
-    fireEvent.press(screen.getByLabelText('Back'))
+    await fireEventAsync.press(screen.getByLabelText('Back'))
     ExpectScreen(screen).toHaveText('Nested content')
   })
 
-  Test('removes underlying command focus while an auxiliary overlay owns interaction', () => {
+  Test('removes underlying command focus while an auxiliary overlay owns interaction', async () => {
     let invoked = 0
     const home = TR.Navigation.View({
       name: 'Focused home',
@@ -1389,19 +1395,19 @@ Describe('Expo runtime', () => {
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
     Expect(screen.getByTestId(navigationTitleTestId)).toBeDefined()
-    fireEvent.press(screen.getByLabelText('Save'))
+    await fireEventAsync.press(screen.getByLabelText('Save'))
     Expect(invoked).toBe(1)
-    act(() => TR.Navigation.PresentOverlay(undefined, window, notice, {}))
+    await act(async () => TR.Navigation.PresentOverlay(undefined, window, notice, {}))
     ExpectScreen(screen).toHaveText('Notice')
     Expect(screen.queryByTestId(navigationTitleTestId)).toBeNull()
     Expect(screen.getByLabelText('Save').props.accessibilityState).toEqual({ disabled: true })
-    fireEvent.press(screen.getByLabelText('Save'))
+    await fireEventAsync.press(screen.getByLabelText('Save'))
     Expect(invoked).toBe(1)
-    act(() => app.back())
+    await act(async () => app.back())
     Expect(screen.getByTestId(navigationTitleTestId)).toBeDefined()
   })
 
-  Test('preserves auxiliary defocus through the active SelectionNav item', () => {
+  Test('preserves auxiliary defocus through the active SelectionNav item', async () => {
     let invoked = 0
     const home = TR.Navigation.View({
       name: 'Selected home',
@@ -1441,13 +1447,13 @@ Describe('Expo runtime', () => {
     const screen = render(createElement(TR.Navigation.AppHost, { app }))
 
     Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Selected title')
-    fireEvent.press(screen.getByLabelText('Selected save'))
+    await fireEventAsync.press(screen.getByLabelText('Selected save'))
     Expect(invoked).toBe(1)
-    act(() => window.presentOverlay(notice, {}))
+    await act(async () => window.presentOverlay(notice, {}))
     ExpectScreen(screen).toHaveText('Selection notice')
     Expect(screen.queryByTestId(navigationTitleTestId)).toBeNull()
     Expect(screen.getByLabelText('Selected save').props.accessibilityState).toEqual({ disabled: true })
-    fireEvent.press(screen.getByLabelText('Selected save'))
+    await fireEventAsync.press(screen.getByLabelText('Selected save'))
     Expect(invoked).toBe(1)
   })
 
@@ -1477,10 +1483,10 @@ Describe('Expo runtime', () => {
 
         view Inner() { render Text("Inner") }
       `,
-      screen => {
+      async screen => {
         Expect(screen.getByTestId(navigationTitleTestId).props.children).toBe('Nested slot title')
         ExpectScreen(screen).toHaveText('Inner')
-        fireEvent.press(screen.getByLabelText('Refresh'))
+        await fireEventAsync.press(screen.getByLabelText('Refresh'))
       },
     )
   })
