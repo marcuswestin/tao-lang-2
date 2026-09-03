@@ -396,6 +396,66 @@ export class StudioProjectSession {
     return { appName: this.appName, project: this.projectRoot }
   }
 
+  #agentPocUndo: { path: string; content: string; sourceVersion: string }[] | undefined
+
+  /**
+   * applyAgentPocFiles (semantic agent PoC) writes several files as one mutation, compiles once, and rolls every
+   * file back when the compile fails. It keeps one undo record outside the source-action checkpoint bus.
+   */
+  applyAgentPocFiles(request: { edits: readonly { path: string; content: string }[]; writeId: string }): Promise<{
+    compile: StudioCompileCompletion
+    rolledBack: boolean
+  }> {
+    return this.#mutate(async () => {
+      const before = await Promise.all(request.edits.map(async edit => {
+        const current = await this.readFile(edit.path)
+        return { content: current.content, path: current.path, sourceVersion: current.sourceVersion }
+      }))
+      const writes = await Promise.all(request.edits.map(async edit => ({
+        path: await this.#resolveTaoFile(edit.path),
+        sourceVersion: SourceActions.studioSourceVersion(edit.content),
+        writeId: request.writeId,
+      })))
+      await Promise.all(request.edits.map(async (edit, index) => FS.writeText(writes[index]!.path, edit.content)))
+      const compile = await this.#coordinator.noteStudioFileMutation(writes)
+      if (compile.status === 'error') {
+        await Promise.all(before.map(async file => FS.writeText(await this.#resolveTaoFile(file.path), file.content)))
+        await this.#coordinator.noteStudioFileMutation(before.map(file => ({
+          path: FS.resolvePath(file.path, this.projectRoot),
+          sourceVersion: file.sourceVersion,
+          writeId: `rollback:${request.writeId}`,
+        })))
+        for (const file of before) {
+          this.#emitFile(this.#projectFile(file.path, file.sourceVersion))
+        }
+        return { compile, rolledBack: true }
+      }
+      this.#agentPocUndo = before
+      for (const [index, write] of writes.entries()) {
+        this.#emitFile(this.#projectFile(before[index]!.path, write.sourceVersion))
+      }
+      return { compile, rolledBack: false }
+    })
+  }
+
+  undoAgentPocFiles(writeId: string): Promise<{ compile: StudioCompileCompletion; restored: string[] }> {
+    return this.#mutate(async () => {
+      const before = this.#agentPocUndo
+      Assert.input(before !== undefined, 'Nothing applied by the agent PoC to undo.')
+      await Promise.all(before.map(async file => FS.writeText(await this.#resolveTaoFile(file.path), file.content)))
+      const compile = await this.#coordinator.noteStudioFileMutation(before.map(file => ({
+        path: FS.resolvePath(file.path, this.projectRoot),
+        sourceVersion: file.sourceVersion,
+        writeId,
+      })))
+      this.#agentPocUndo = undefined
+      for (const file of before) {
+        this.#emitFile(this.#projectFile(file.path, file.sourceVersion))
+      }
+      return { compile, restored: before.map(file => file.path) }
+    })
+  }
+
   /** agentPocParse (semantic agent PoC) parses the selected app entry with linked cross-references. */
   agentPocParse(): Promise<ParseResult> {
     return this.#workspace.parse(this.entryPath)
