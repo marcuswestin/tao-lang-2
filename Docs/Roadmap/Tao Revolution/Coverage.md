@@ -42,7 +42,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Pages over loop (§9)                                        | Skillet · cook mode steps                                               | Post-MVP | —                        |
 | Navigation: native/basic kits, links, split, windows (§10)  | WordFlower · native stack + deterministic harness                       | MVP      | partially in Current[^5] |
 | Rendered nav, root view with arguments (§10)                | WordFlower · shell with persistent focus bar; Test Apps · Shell         | MVP      | in Current               |
-| Device-local entities, module query (§2, §6, §11)           | **WordFlower · focus session as data** (survives relaunch)              | **MVP**  | in Current               |
+| Device-local entities (§2, §11)                             | **WordFlower · focus session as data** (survives relaunch)              | **MVP**  | in Current               |
 | Restoration policy (§10)                                    | WordFlower · relaunch                                                   | MVP      | in Current               |
 | App composition, variants, providers (§11)                  | WordFlower · app root + test variants                                   | MVP      | partially in Current     |
 | InstantDB datasource (§11)                                  | WordFlower · sync                                                       | MVP      | experimental             |

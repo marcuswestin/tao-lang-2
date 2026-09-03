@@ -313,35 +313,6 @@ Describe('TR.Data provider foundation', () => {
     Expect(rows.map(row => row['Public'])).toEqual([true, false])
   })
 
-  Test('re-reads a module-scope query on every evaluation and activates its fill once', async () => {
-    const descriptors: string[] = []
-    const connection: TaoDataConnection = {
-      ...testDataConnection(),
-      fill: async (request, ops) => {
-        descriptors.push(request.descriptor.entity)
-        ops.upsert('Note', [{ CreatedAt: 0, Done: false, Title: 'Filled' }])
-      },
-    }
-    const schema = TR.Data.Schema(noteDefinition, connection)
-    const plan = { entity: 'Note', filters: [] }
-    // A module-scope query calls no hooks, so it can be evaluated outside any mounted component.
-    const current = TR.Data.ModuleQuery(schema, plan, TR.Value)
-
-    Expect((current.evaluate().jsValue as unknown[]).length).toBe(0)
-    TR.Data.Create(schema, 'Note', { Title: TR.Value('Written') })
-    const rows = current.evaluate().jsValue as Array<Record<string, unknown>>
-
-    Expect(rows.map(row => row['Title'])).toEqual(['Written'])
-
-    await TR.Data.Settle(schema)
-    current.evaluate()
-    current.evaluate()
-    await TR.Data.Settle(schema)
-
-    // App-lifetime activation: repeated reads offer the descriptor once rather than per evaluation.
-    Expect(descriptors).toEqual(['Note'])
-  })
-
   Test('persists the versioned id counter and reloads without identifier collisions', async () => {
     const values = new Map<string, string>()
     const storage = memoryKeyValueStorage(values)

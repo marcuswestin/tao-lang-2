@@ -59,7 +59,6 @@ export default {
   NowExpression() {},
 
   EntityQueryDeclaration(f) {
-    f.visibilityOnOwnLine()
     f.oneSpaceAfter('query', 'as', 'from')
     f.oneSpaceBefore('as', 'from')
   },

@@ -1,4 +1,4 @@
-import { Describe, Test } from '@shared/test'
+import { Describe, Expect, Test } from '@shared/test'
 import { completenessValidationMessages } from '../validator-src/validators/completeness-validator'
 import { configurationValidationMessages } from '../validator-src/validators/configuration-validator'
 import { configuredItemValidationMessages } from '../validator-src/validators/configured-item-validator'
@@ -14,6 +14,8 @@ import {
   rejects,
   stubContainer,
   stubView,
+  testValidateCodeWithErrors,
+  validationErrorMessages,
 } from './test-validate'
 
 Describe('validator: declaration contracts', () => {
@@ -631,19 +633,14 @@ Describe('validator: declaration contracts', () => {
     ),
   )
 
-  // A module-level query is an app-lifetime read with no owning block, so the block-ordering rule
-  // that view-body queries obey does not apply to it and its name reaches every view in the file.
-  Test(
-    'accepts a query declared at file level and read from a view',
-    accepts(
-      `
-        data Workspaces / Workspace { Name text }
-        workspace
-        query Workspaces as Current { limit 1 }
-        ${app('render Col() { Text("{ Current.Count }") }', `${stubContainer('Col')}${stubView('Text', 'Value text')}`)}
-      `,
-    ),
-  )
+  Test('reports exactly one tailored diagnostic for a module-level query', async () => {
+    const result = await testValidateCodeWithErrors(`
+      data Workspaces / Workspace { Name text }
+      query Missing as Current { limit 0 limit 1 }
+    `)
+
+    Expect(validationErrorMessages(result)).toEqual([dataValidationMessages.moduleQuery])
+  })
 
   Test(
     'rejects a query nested inside a control-flow block',

@@ -219,10 +219,7 @@ sync arrives through `subscribe` on the same terms.
 ## Queries
 
 Queries are reactive lists. Inside a view they are declared in unconditional definition or
-root-render placement, before first use and before control flow. A query is also legal at module
-level, where it is a named, app-lifetime read of the store: it carries a visibility marker like any
-other declaration, is imported through `use`, and is an ordinary value every declaration in scope
-may read — including configuration, which has no view between it and the store.
+root-render placement, before first use and before control flow.
 
 ```tao
 query Workspaces { }

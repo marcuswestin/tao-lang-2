@@ -321,10 +321,9 @@ Describe('compiler: language lowering', () => {
         Navigator StackNav { Initial Main }
         Datasource Memory { }
       }
-      workspace
-      query FocusSessions as CurrentSession { limit 1 }
       scene Main() {
         Title "Sessions"
+        query FocusSessions as CurrentSession { limit 1 }
         action Start() { create FocusSession { Label: "Focus" } }
         action Write() { create Note { Title: "Note" } }
         query Notes { }
@@ -358,7 +357,7 @@ Describe('compiler: language lowering', () => {
       'TR.Data.UseConfigured(\n            _Scope._TaoLocalDataCatalog,\n            _Scope._TaoLocalDatasource,\n          )',
     )
     // Reads and writes route to the catalog that stores the entity.
-    Expect(compiled.code).toContain('_Scope.CurrentSession = TR.Data.ModuleQuery(\n  _Scope._TaoLocalDataCatalog,')
+    Expect(compiled.code).toContain('_Scope.CurrentSession = TR.Data.Query(\n      _Scope._TaoLocalDataCatalog,')
     Expect(compiled.code).toContain('_Scope.Notes = TR.Data.Query(\n      _Scope._TaoDataCatalog,')
     Expect(compiled.code).toContain('_Scope._TaoLocalDataCatalog,\n              "FocusSession",')
     Expect(compiled.code).toContain('_Scope._TaoDataCatalog,\n              "Note",')
@@ -988,6 +987,34 @@ Describe('compiler: language lowering', () => {
     Expect(code.match(/"Toolbar": \[/g)).toHaveLength(1)
     Expect(code).toContain('"Toolbar": [TR.Interaction.Deferred(() => _Scope.Save)],')
     Expect(code).not.toContain('TR.Navigation.Command(')
+  })
+
+  Test('compiles when and none configuration values directly', async () => {
+    const compiled = await Compiler.compileCode(`
+      public type TestNav is nav with {
+        Initial view
+        Title text is none
+        nav TestNavImpl from ./TestNavImpl.ts
+      }
+      app HostApp { Name "Host" Navigator Main }
+      let Enabled = true
+      nav Main = TestNav {
+        Initial Home
+        Title when Enabled {
+          true -> "Ready"
+          otherwise -> none
+        }
+      }
+      scene Home() {
+        Title "Home"
+        render Empty()
+      }
+      view Empty() { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const code = compiled.code.replace(/\s+/g, ' ')
+    Expect(code).toContain('"Title": TR.WhenCase(')
+    Expect(code).not.toContain('TR.Deferred')
   })
 
   Test('patches configured nav host slots without discarding unpatched host values', async () => {

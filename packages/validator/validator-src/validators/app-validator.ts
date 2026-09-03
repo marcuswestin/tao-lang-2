@@ -313,6 +313,11 @@ function validateAppPlacement(app: AST.AppValueDeclaration, file: AST.TaoFile, c
 
 function validateTopLevelStatements(file: AST.TaoFile, ctx: ValidationContext): void {
   for (const statement of file.statements) {
+    // A bare module query is intentionally parsed as diagnostic recovery; DataValidator owns its
+    // single, language-specific explanation.
+    if (AST.isEntityQueryDeclaration(statement)) {
+      continue
+    }
     if (!AST.isTopLevelStatement(statement)) {
       ctx.error(appValidationMessages.topLevel, statement)
     }

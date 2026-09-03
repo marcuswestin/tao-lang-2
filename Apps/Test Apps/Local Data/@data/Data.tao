@@ -15,10 +15,3 @@ data FocusSessions / FocusSession {
    order by Label
    local only
 }
-
-// A module-level query is a named, app-lifetime read of the store: one live value the screens share
-// rather than a per-view read each of them repeats.
-workspace
-query FocusSessions as CurrentSession {
-   limit 1
-}

@@ -233,6 +233,9 @@ nav WordFlowerNavigator = SelectionNav {
 // content grows back when the session ends; the navigator never is, because its history lives on
 // its mount and a branch that unmounted it would drop where the person was.
 scene WordFlowerShell(Navigator nav) {
+   query FocusSessions as CurrentSession {
+      limit 1
+   }
    render Col() [fill] {
       Navigator() [fill]
       when CurrentSession {
@@ -375,21 +378,13 @@ data Paragraphs / Paragraph {
 // app configures, so the remote and staged variants never sync it. It is the narrow form of
 // per-entity datasource scoping, and a stored relation may not cross the boundary it draws. Holding
 // the session as data rather than as view state is what lets it survive navigation and relaunch, and
-// lets the shell read it.
+// lets each consumer query it locally.
 data FocusSessions / FocusSession {
    EndsAt time // absolute, so a running session survives relaunch correctly
    PausedAt time (default now) // read only while paused; resuming re-anchors EndsAt from it
    Paused yes / Running no
 
    local only
-}
-
-// A module-level query is an app-lifetime reactive read of the store, and a value like any other.
-// The shell, the starter, and the bar all read this one. The frame that forced the form is gone — a
-// shell that is a view could hold its own query — and it stays only because retiring it is a
-// separate decision.
-query FocusSessions as CurrentSession {
-   limit 1
 }
 
 function DocumentLabel(Title text) returns text {
@@ -922,6 +917,9 @@ view DocumentSnapshot(Snapshot Document.Snapshot) {
 // creates the row and nothing else. The length comes from the person's preference rather than a
 // fixed pair of buttons.
 file view FocusStarter() {
+   query FocusSessions as CurrentSession {
+      limit 1
+   }
    action Start(Length duration) {
       create FocusSession {
          EndsAt: now + Length
@@ -943,6 +941,9 @@ file view FocusStarter() {
 // running session survives relaunch; pausing freezes the reading by recording when it stopped, and
 // resuming re-anchors the deadline to the remainder, so paused time is not lost.
 file view FocusBar() {
+   query FocusSessions as CurrentSession {
+      limit 1
+   }
    state Tick = Interval(1.s)
    render Row() [gap 6, panel] {
       Text("Focus session") [body]

@@ -575,8 +575,8 @@ Describe('parser: core language syntax', () => {
     Expect(Type.ofValueDeclaration(loop).kind).toBe('entity')
   })
 
-  Test('parses local only as an entity storage fact and query at module level', async () => {
-    const parseResult = await testParseCode(`
+  Test('parses local only and keeps a module query only as a diagnostic-recovery statement', async () => {
+    const parseResult = await testParseSyntax(`
       data Notes / Note {
         Title text
 
@@ -588,12 +588,12 @@ Describe('parser: core language syntax', () => {
         index Label
         local only
       }
-      workspace
       query FocusSessions as CurrentSession {
         limit 1
       }
       view Board() {
-        render Text(CurrentSession.Count)
+        query Notes { }
+        render Text(Notes.Count)
       }
       view Text(Value number) { render inject \`\`\`ts return null \`\`\` }
     `)
@@ -604,13 +604,12 @@ Describe('parser: core language syntax', () => {
     const moduleQuery = parseResult.entry.ast.statements.find(AST.isEntityQueryDeclaration)
     Expect.Is(moduleQuery, AST.isEntityQueryDeclaration)
     Expect(moduleQuery.name).toBe('CurrentSession')
-    Expect(moduleQuery.visibility).toBe('workspace')
     Expect(Type.queryEntity(moduleQuery)?.singularName).toBe('FocusSession')
-    // A module-level query is an ordinary top-level declaration, so file placement and cross-file
-    // import both go through the same predicates every other exported declaration uses.
-    Expect(AST.isDeclaration(moduleQuery)).toBe(true)
-    Expect(AST.isTopLevelStatement(moduleQuery)).toBe(true)
-    Expect(AST.isExportableDeclaration(moduleQuery)).toBe(true)
+    Expect(AST.isDeclaration(moduleQuery)).toBe(false)
+    Expect(AST.isTopLevelStatement(moduleQuery)).toBe(false)
+    Expect(AST.isExportableDeclaration(moduleQuery)).toBe(false)
+    Expect(AST.isEmittingRuntimeBinding(moduleQuery)).toBe(false)
+    Expect(AST.isImportableValueDeclaration(moduleQuery)).toBe(false)
   })
 
   Test('parses configured apps, view declarations, and contextual presentation', async () => {

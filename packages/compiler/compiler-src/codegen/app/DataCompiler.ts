@@ -79,11 +79,8 @@ export const DataCompiler = {
     Assert.defined(entity, 'validated current query resolves an entity')
     const clauses = query.block?.clauses ?? []
     const sourceFilter = query.source ? compileRelationSourceFilter(query.source, entity) : undefined
-    // A module-level query has no mount to subscribe from, so it reads through the hookless
-    // app-lifetime form; the app host already re-renders every screen on a data revision.
-    const read = AST.isTaoFile(query.$container) ? 'ModuleQuery' : 'Query'
     return gen`
-      ${gen.scopeName(query)} = TR.Data.${read}(
+      ${gen.scopeName(query)} = TR.Data.Query(
         ${catalogScopeOf(entity)},
         {
           entity: ${gen.jsLiteral(Type.dataEntityName(entity))},

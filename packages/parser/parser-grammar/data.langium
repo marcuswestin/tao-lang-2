@@ -32,11 +32,10 @@ DataLocalOnly:
 DataPrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'time';
 
-// A query is legal in a view body and at module level. A module-level query is a named,
-// app-lifetime reactive read of the store and carries a visibility marker like any declaration.
+// A query is a local reactive read owned by a view. The broad diagnostic statement grammar also
+// recognizes it at file level so validation can leave the door open with a tailored explanation.
 EntityQueryDeclaration:
-    visibility=DeclarationVisibility? 'query'
-    (sourceName=ID 'as' name=ID | name=ID ('from' source=MemberAccessExpression)?) block=QueryBlock?;
+    'query' (sourceName=ID 'as' name=ID | name=ID ('from' source=MemberAccessExpression)?) block=QueryBlock?;
 
 QueryBlock:
     '{' clauses+=QueryClause* '}';

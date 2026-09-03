@@ -25,9 +25,10 @@ export const dataValidationMessages = {
     `Data field '${field}' declares '${modifier}' more than once.`,
   duplicateBooleanCase: (entity: string, name: string) =>
     `Entity '${entity}' declares boolean case '${name}' more than once.`,
+  moduleQuery:
+    'A module-level query is not part of the language today. It could be added; nothing strictly prevents it.',
   queryPlacement: 'Queries must be declared directly inside view bodies.',
-  currentQueryPlacement:
-    'Queries must be declared at file level, or as unconditional statements in a view body or its root render block.',
+  currentQueryPlacement: 'Queries must be unconditional statements in a view body or its root render block.',
   queryAfterControl: 'Queries must be declared before the first guard, when, or loop in their block.',
   querySource: 'A query source must be a top-level plural or a plural relationship.',
   unknownCollection: (data: string, name: string) => `Data '${data}' has no collection named '${name}'.`,
@@ -230,6 +231,12 @@ function validateInverseRelationship(
 }
 
 function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationContext): void {
+  // File-level query syntax is retained only as validator-owned diagnostic recovery. Stop after
+  // this one tailored error so details of an unsupported query cannot add secondary diagnostics.
+  if (AST.isTaoFile(query.$container)) {
+    ctx.error(dataValidationMessages.moduleQuery, query)
+    return
+  }
   validateEntityQueryPlacement(query, ctx)
   const entity = Type.queryEntity(query)
   if (!entity) {
@@ -291,11 +298,6 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
 
 function validateEntityQueryPlacement(query: AST.EntityQueryDeclaration, ctx: ValidationContext): void {
   const block = query.$container
-  // A module-level query is a named, app-lifetime read of the store, so it has no owning block and
-  // no statement ordering to respect.
-  if (AST.isTaoFile(block)) {
-    return
-  }
   if (!AST.isBlock(block)) {
     ctx.error(dataValidationMessages.currentQueryPlacement, query)
     return

@@ -304,7 +304,6 @@ export function importableValueDeclarationsInFile(
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
-  | AST.EntityQueryDeclaration
   | AST.ViewDeclaration
   | AST.CaseSetCase
 > {
@@ -496,7 +495,6 @@ export function isImportableValueDeclaration(
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
-  | AST.EntityQueryDeclaration
   | AST.ViewDeclaration
 {
   return AST.isAliasDeclaration(node)
@@ -507,9 +505,6 @@ export function isImportableValueDeclaration(
     || AST.isNavDeclaration(node)
     || AST.isDatasourceDeclaration(node)
     || AST.isDesignDeclaration(node)
-    // A module-level query is an ordinary named value, so it reaches views in its own file and
-    // crosses file boundaries through `use` exactly as the other importable value declarations do.
-    || (AST.isEntityQueryDeclaration(node) && AST.isTaoFile(node.$container))
     || AST.isViewDeclaration(node)
 }
 

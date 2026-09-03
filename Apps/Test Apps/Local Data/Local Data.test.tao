@@ -30,19 +30,4 @@ test "Local Data" {
       expect text "Note: Synced note"
       expect text "Focus: Deep work"
    }
-   test "reads one module-level query from two screens across navigation" {
-      run LocalData
-      enter "Deep work" into #sessionLabel
-      press #startSession
-      expect text "Focus: Deep work"
-      press #openSession
-      // The detail screen never received the session: it reads the same module-level query the
-      // workbench reads, which is in scope for both.
-      expect text "Detail: Deep work"
-      press #renameSession
-      expect text "Detail: Renamed"
-      back
-      // The value is live rather than a snapshot taken when the workbench first mounted.
-      expect text "Focus: Renamed"
-   }
 }

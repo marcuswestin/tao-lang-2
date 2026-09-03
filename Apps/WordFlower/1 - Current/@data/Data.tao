@@ -38,7 +38,7 @@ data Paragraphs / Paragraph {
 // A focused writing session. `local only` is an entity-level storage fact, beside `index` and
 // `order by`: this entity lives in the device store whatever datasource the app configures, so the
 // synced variant never syncs it. Holding the session as data rather than as view state is what lets
-// it survive navigation and relaunch, and lets the shell frame read it.
+// it survive navigation and relaunch, and lets each consumer query it locally.
 workspace
 data FocusSessions / FocusSession {
    EndsAt time // absolute, so a running session survives relaunch correctly
@@ -46,11 +46,4 @@ data FocusSessions / FocusSession {
    Paused yes / Running no
 
    local only
-}
-
-// A module-level query is an app-lifetime reactive read of the store, and a value like any other.
-// The shell reads it to decide whether the focus bar is on screen.
-workspace
-query FocusSessions as CurrentSession {
-   limit 1
 }

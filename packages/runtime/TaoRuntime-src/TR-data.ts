@@ -291,26 +291,6 @@ export const DataControls = {
     return value(schema.query(plan))
   },
 
-  /**
-   * ModuleQuery is the module-scope form of Query: a named, app-lifetime read declared beside the
-   * declarations that use it rather than inside a mounted view. It calls no hooks, so it re-reads
-   * the store on every evaluation and stays live through the app host's own data subscription. Its
-   * fill activation is app-lifetime too, requested once on first read and never released, because
-   * a module-scope query has no mount whose unmount would end it.
-   */
-  ModuleQuery(schema: RuntimeDataSchema, plan: TaoQueryPlan, value: RuntimeValueFactory): Evaluable {
-    let activated = false
-    return {
-      evaluate: () => {
-        if (!activated) {
-          activated = true
-          schema.activateQuery(plan)
-        }
-        return value(schema.query(plan)).evaluate()
-      },
-    }
-  },
-
   Create(schema: RuntimeDataSchema, entity: string, fields: Record<string, Evaluable>): void {
     schema.create(entity, evaluatedFields(fields))
   },

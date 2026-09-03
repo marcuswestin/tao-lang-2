@@ -777,11 +777,8 @@ query RecentRecipes from MyKitchen.Recipes {
 }
 ```
 
-- **A query may be declared at module level**, where it is an app-lifetime reactive read and an
-  ordinary value (amended by KEY-D7). A view-body query is scoped to that view's mount; a
-  module-level one outlives every mount, which is what lets configuration read the store at all — a
-  nav is a value, not a view, so nothing else sits between a navigator's slot and the row it needs
-  to ask about.
+- **A module-level query is not part of the language today**, although it could be added and nothing
+  strictly prevents it; queries live in the view whose mount owns their reactive lifetime.
 
 - **Queries traverse relations** rather than requiring hand-written joins: `MyKitchen.Recipes` above
   crosses the `Household -> Recipe` relation with no join clause to write.

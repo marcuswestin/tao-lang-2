@@ -25,6 +25,14 @@ Describe('TR.Value', () => {
   })
 })
 
+Describe('TR generated-code surface', () => {
+  Test('retires generic deferred values and module queries without retiring deferred commands', () => {
+    Expect('Deferred' in (TR as unknown as Record<string, unknown>)).toBe(false)
+    Expect('ModuleQuery' in (TR.Data as unknown as Record<string, unknown>)).toBe(false)
+    Expect('Deferred' in TR.Interaction).toBe(true)
+  })
+})
+
 Describe('TR.Alias', () => {
   Test('wraps evaluable Tao values as aliases', () => {
     const value: TR.Value<number> = TR.Value(3)

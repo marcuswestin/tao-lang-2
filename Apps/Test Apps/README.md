@@ -145,21 +145,18 @@ Exercise the provider-neutral data catalog and an app-configured isolated Memory
 
 ## Local Data
 
-Exercise the two storage facts a catalog can span: the entity-level `local only` fact and the
-module-level `query` that reads across it. One `app` declaration and one datasource variant share
-the folder — `LocalData` over a `Local` datasource and `LocalDataMemory` over `Memory` — with the
-catalog and the module-level query in the folder's `@data` package.
+Exercise the entity-level `local only` storage fact. One `app` declaration and one datasource
+variant share the folder — `LocalData` over a `Local` datasource and `LocalDataMemory` over `Memory`
+— with the catalog in the folder's `@data` package.
 
 **Belongs here:** `local only` as a trailing entity-level storage fact beside `order by`; an entity
 that stays in the device-local store whatever the app configures as its `Datasource`, proved by
 running the same program as a second variant; `local only` rows surviving a `relaunch`; writes and
-reads routed to the catalog that stores the entity; a module-level `query` with a visibility marker,
-imported through `use … from @data`, read by two views and staying live across a `present` and a
-`back`.
+reads routed to the catalog that stores the entity through an ordinary view-local query.
 
 **Does not belong here:** the storage-boundary relation diagnostic and duplicate-`local only`
 diagnostic, which are package tests; the emitted two-catalog shape, which is a compiler test; remote
-providers, sync, or credentials; navigation surfaces beyond the one push a live read needs.
+providers, sync, or credentials; navigation beyond the app's root stack.
 
 ## Language Core
 

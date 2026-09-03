@@ -114,9 +114,7 @@ export const ExpressionsCompiler = {
         Assert.never(value as never, 'property-position with is compiled against its owning property'),
       StringLiteral: Compile.Expression,
       ViewBinding: compileViewBinding,
-      // Deferred, so the host reads the condition's current value on every read: a configured
-      // navigator is built once, but a member that follows the store must be recomputed.
-      WhenExpression: expression => gen`TR.Deferred(() => ${Compile.Expression(expression)})`,
+      WhenExpression: Compile.Expression,
     })
   },
 

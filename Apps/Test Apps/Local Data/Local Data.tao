@@ -1,4 +1,4 @@
-use CurrentSession, FocusSessions, Notes from @data
+use FocusSessions, Notes from @data
 use Local from @tao/data/providers/local
 use Memory from @tao/data/providers/memory
 use StackNav from @tao/nav
@@ -36,8 +36,8 @@ scene Workbench() {
       }
       set SessionDraft = ""
    }
-   action OpenSession() {
-      present SessionDetail()
+   query FocusSessions as CurrentSession {
+      limit 1
    }
    query Notes { }
    render Col() [gap 10, pad 16] {
@@ -62,11 +62,6 @@ scene Workbench() {
       FormButton("Start session") {
          on press StartSession
       }
-
-      #openSession
-      FormButton("Open session") {
-         on press OpenSession
-      }
       when Notes {
          empty -> { Text("No notes yet") }
          otherwise -> {
@@ -81,24 +76,3 @@ scene Workbench() {
             loop CurrentSession / FocusSession {
                Text("Focus: { FocusSession.Label }")
 }  }  }  }  }
-
-// A second reader of the same module-level query. Nothing is passed in: the value is in scope here
-// exactly as it is on the workbench.
-workspace
-scene SessionDetail() {
-   Title "Session"
-   render Col() [gap 10, pad 16] {
-      when CurrentSession {
-         empty -> { Text("Detail has no session") }
-         otherwise -> {
-            #detailSession
-            loop CurrentSession / FocusSession {
-               Col() {
-                  Text("Detail: { FocusSession.Label }")
-
-                  #renameSession
-                  FormButton("Rename session") {
-                     on press -> { update FocusSession {
-                        Label: "Renamed"
-                     } }
-}  }  }  }  }  }  }
