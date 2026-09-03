@@ -80,6 +80,13 @@ export function writeTools(
   world: AgentChatWriteWorld,
   staged: Map<string, StagedChange>,
   record: (call: AgentChatToolCall) => void,
+  /**
+   * The literal each text handle was issued for. Handles are positional (`T1`, `T2`, ...), so one applied
+   * change repoints every one of them; a model still holding an old handle would reword a line it never
+   * looked at, and the reword guardrail would happily validate the wrong line. Remembering what a handle
+   * was issued against turns that from a warning in a description into a refusal.
+   */
+  issued: Map<string, string> = new Map(),
 ): ToolSet {
   const capture = (name: string, input: unknown, result: unknown): unknown => {
     record({
@@ -106,6 +113,8 @@ export function writeTools(
         try {
           const result = await world.apply(change)
           staged.delete(changeId)
+          // Text handles are positional, so a change that lands repoints them all.
+          issued.clear()
           return capture('applyChange', { changeId }, {
             applied: !result.rolledBack,
             compile: result.status,
@@ -229,6 +238,25 @@ export function writeTools(
       execute: async ({ newText, textHandle }: { newText: string; textHandle: string }) => {
         const [snapshot, files] = await Promise.all([world.snapshot(), world.files()])
         const candidates = textCandidates(snapshot)
+        const issuedFor = issued.get(textHandle)
+        const now = candidates.find(candidate => candidate.handle === textHandle)
+        if (issuedFor === undefined) {
+          return capture(
+            'proposeReword',
+            { newText, textHandle },
+            refusal(`${textHandle} was not issued in this conversation. Call listTexts and use a handle from it.`),
+          )
+        }
+        if (now === undefined || now.text !== issuedFor) {
+          issued.clear()
+          return capture(
+            'proposeReword',
+            { newText, textHandle },
+            refusal(
+              `${textHandle} no longer names ${issuedFor}: the source changed since you listed it. Call listTexts again and use a fresh handle.`,
+            ),
+          )
+        }
         const problems: string[] = []
         const plan = await lowerReword(
           snapshot,
@@ -261,8 +289,13 @@ export function writeTools(
         'Every piece of text the app shows on screen, with a handle for each. Call this before proposing a reword; the handles are only valid until a change is applied.',
       execute: async () => {
         const snapshot = await world.snapshot()
+        const candidates = textCandidates(snapshot)
+        issued.clear()
+        for (const candidate of candidates) {
+          issued.set(candidate.handle, candidate.text)
+        }
         return capture('listTexts', {}, {
-          texts: textCandidates(snapshot).map(candidate => ({
+          texts: candidates.map(candidate => ({
             handle: candidate.handle,
             text: candidate.text,
             view: candidate.view,

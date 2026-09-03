@@ -80,6 +80,7 @@ class AgentChatConversation {
   #chat: AgentChatSession | undefined
   #calls: AgentChatToolCall[] = []
   #staged = new Map<string, StagedChange>()
+  #issuedTexts = new Map<string, string>()
   #mode: 'ask' | 'build' | 'scenario' = 'ask'
   #codeChangesGranted = false
   #codeChangeRequests: CodeChangeRequest[] = []
@@ -108,6 +109,7 @@ class AgentChatConversation {
     this.#calls = []
     this.#history = []
     this.#staged.clear()
+    this.#issuedTexts.clear()
   }
 
   /** The mode decides which tools exist at all. A read-only chat has no write tool to refuse. */
@@ -147,7 +149,7 @@ class AgentChatConversation {
     if (this.#mode === 'ask') {
       return readTools(this.#world, record)
     }
-    const all = writeTools(writes, this.#staged, record)
+    const all = writeTools(writes, this.#staged, record, this.#issuedTexts)
     if (this.#mode === 'build') {
       return { ...readTools(this.#world, record), ...all }
     }

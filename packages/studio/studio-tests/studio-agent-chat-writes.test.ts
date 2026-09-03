@@ -34,6 +34,14 @@ function snapshot(): SemanticSnapshot {
     path: PATH,
     ...span('view Greeting() {\n   render Text("Hello")\n}'),
   })
+  add({
+    detail: { owner: 'Greeting', texts: [{ ...span('"Hello"'), text: '"Hello"' }] },
+    id: 'render:Greeting:1',
+    kind: 'render',
+    name: 'Text',
+    path: PATH,
+    ...span('render Text("Hello")'),
+  })
   return { appName: 'Reader', diagnostics: [], edges: [], nodes, projectRoot: '/project' }
 }
 
@@ -190,6 +198,42 @@ const SPEC: SpecSection[] = [
   },
   { carriesDeferral: false, file: 'Tao Data', heading: 'Queries', text: 'A query reads rows from a collection.' },
 ]
+
+Describe('Studio agent chat text handles', () => {
+  Test('a handle that was never issued is refused rather than guessed at', async () => {
+    const result = await call(writeTools(world(), new Map(), () => {}), 'proposeReword', {
+      newText: 'Hi',
+      textHandle: 'T1',
+    })
+
+    Expect(String(result['refused']).includes('was not issued in this conversation')).toBe(true)
+  })
+
+  Test('a handle stops naming its line once the source moves under it', async () => {
+    // Handles are positional, so an applied change repoints every one of them. A model still holding an old
+    // handle would otherwise reword a line it never looked at, and the guardrail would validate the wrong one.
+    const issued = new Map<string, string>()
+    const tools = writeTools(world(), new Map(), () => {}, issued)
+    await call(tools, 'listTexts', {})
+    Expect(issued.get('T1')).toBe('"Hello"')
+
+    // The literal the handle was issued for is no longer what T1 names.
+    issued.set('T1', '"Something else"')
+    const result = await call(tools, 'proposeReword', { newText: 'Hi', textHandle: 'T1' })
+
+    Expect(String(result['refused']).includes('no longer names')).toBe(true)
+    Expect(String(result['refused']).includes('Call listTexts again')).toBe(true)
+  })
+
+  Test('listing texts issues a handle for each one', async () => {
+    const issued = new Map<string, string>()
+
+    const result = await call(writeTools(world(), new Map(), () => {}, issued), 'listTexts', {})
+
+    Expect((result['texts'] as unknown[]).length).toBe(1)
+    Expect([...issued.entries()]).toEqual([['T1', '"Hello"']])
+  })
+})
 
 Describe('Studio agent chat Tao reference', () => {
   Test('finds the section whose heading is about the topic', () => {
