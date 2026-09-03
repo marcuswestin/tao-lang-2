@@ -117,8 +117,9 @@ through it.
 Regions (selection items, split panes, presented occurrences — scene or view — and the coalesced
 non-nav sibling subtree of a view that renders a nav). Collections (loops) and their
 items (row identity). Controls from event wiring (`Press`/`Submit` → action control; `Value:` +
-`Change` → input control). Labels: statically ranked from the row's rendered text — the first row-bound text, preferring
-the `(title)` field when the row renders it — one computation shared with accessibility. Provenance tiers 1–2 (entity + handle per
+`Change` → input control). Labels: statically ranked from the row's rendered text — the first
+row-bound text, preferring the `(title)` field when the row renders it — one computation shared by
+the outline and selectable-row accessibility projection. Provenance tiers 1–2 (entity + handle per
 item; loop identity + entity per collection), never query semantics. Activation = the control's own
 wiring. Verbs = every command whose slots the target's type can fill, anywhere in the app. Apple's
 View Annotations, `NSUserActivity`, and Spotlight indexing from the outline, presentation, and
@@ -134,7 +135,9 @@ View Annotations, `NSUserActivity`, and Spotlight indexing from the outline, pre
 - **Modality-neutral**: tap = target + activate; click into an input = focus region + target +
   engage; long-press/right-click = target + verbs (the context menu is the verb menu); click empty
   space = region focus; hover = `hovered` only; drag = target then a verb on drop; scroll = nothing.
-  Platform focus syncs both ways.
+  The platform adapter projects Tao attention outward with web focus and React Native accessibility
+  focus requests. Platform focus enters Tao only where React Native emits a focus event;
+  screen-reader cursor movement is not generally synchronized back into Tao attention.
 - **Narrowing**: letters narrow by default; case-insensitive, locale-aware word-prefix matching over
   the node's full rendered text, a space starting a further prefix that matches the first later word
   (`d w` → Discover Weekly); candidates are the region's items and controls; non-matches are
@@ -387,10 +390,10 @@ investigation already suggests an answer; a lean is not a decision.
     subscriptions — is computed only while a consumer is attached (keyboard engaged, screen
     reader on, palette open, test). Pure walk-on-keypress without registration was assessed and
     not adopted: production has no sanctioned way to walk the mounted tree (the harness's
-    testing-library traversal does not exist there), a displayed consumer (hints, `Enabled`)
-    needs invalidation anyway — which is a subscription, i.e. live maintenance — and the
-    interaction state machine (focus, target) is retained state regardless. So: skeleton always,
-    flesh on demand, everything dropped when the last consumer detaches.
+    testing-library traversal does not exist there), a displayed consumer (hints, `Enabled`) needs
+    invalidation anyway — which is a subscription, i.e. live maintenance — and the interaction
+    state machine (focus, target) is retained state regardless. So: skeleton always, flesh on
+    demand, everything dropped when the last consumer detaches.
   - _Hooking React internals (fiber walking, monkey-patching, or a fork)_ — rejected. The
     decisive fact: **Tao owns codegen, which is a strictly better hook than anything React
     exposes or could be patched to expose.** Anything a patch or fiber walk could observe about
@@ -398,11 +401,13 @@ investigation already suggests an answer; a lean is not a decision.
     version-coupling (Fabric vs. web fibers differ, private APIs churn) for information we already
     control at the source. A fork additionally taxes every RN/Expo upgrade and breaks ecosystem
     tooling for zero unique capability. Two narrow exceptions where the platform is the right
-    source, via public APIs only: **geometry** for spatial navigation (`onLayout`/measure — no
-    tree hook provides boxes anyway) and **platform focus/a11y interop** (UIFocusSystem, web
-    focus, screen-reader focus), which the outline projects onto rather than reimplements.
-    Foreign views and `render inject` stay opaque leaves with declared metadata — consistent with
-    `__tao` deliberately not crossing the inject fence — rather than being fiber-walked.
+    source, via public APIs only: **geometry** for spatial navigation (`onLayout`/measure — no tree
+    hook provides boxes anyway) and **future platform focus/a11y interop** (UIFocusSystem, web
+    focus, screen-reader focus), which the outline can project onto rather than reimplement.
+    Current adapter support projects outward through web focus and React Native accessibility focus
+    requests; focus enters Tao only where React Native emits a focus event. Foreign views and
+    `render inject` stay opaque leaves with declared metadata — consistent with `__tao` deliberately
+    not crossing the inject fence — rather than being fiber-walked.
 - **KEY-Q3 — Where is the boundary between language semantics and runtime policy?** Answered by **KEY-D13** (consolidated). Which parts
   are language contract (what a region _is_, what selection _means_, test observability) and which
   are runtime/host policy (key allocation, hint rendering, timing)? The §13 precedent: policy in
@@ -1032,16 +1037,19 @@ sugar recommended.
   then next distinctive, then two-letter sequences), locale-aware, never a reducer key, assigned by
   identity so reorders do not reshuffle, deterministic for tests; author overrides deferred.
 - _KEY-Q25 platforms:_ universal = outline, attention reducer (pointer/touch dispatch it), a11y
-  projection (names from the outline, regions as accessibility groups, two-way focus sync);
-  keyboard-specific = hardware-key dispatch, hints/overview layers, chords; affordances appear after
-  the first hardware keypress rather than by device detection; voice/agents consume the same data.
+  projection (selectable-row names from the outline, regions as accessibility groups), and
+  adapter-mediated focus projection (web focus and React Native accessibility focus requests
+  outward; focus enters Tao only where React Native emits it); keyboard-specific = hardware-key
+  dispatch, hints/overview layers, chords; affordances appear after the first hardware keypress
+  rather than by device detection; voice/agents consume the same data.
 - _KEY-Q26 testing:_ steps via the `surface=ID` seam — `press key "q"`, `type "disc"` (attention
   reducer, distinct from `enter … into`), `expect target "…"`, `expect focus region "…"`, `expect
   verbs "…"`; determinism from KEY-D9 and the allocation policy; `beginTest` resets attention;
   existing `press "…"` steps update attention (KEY-D8); App Intents Testing for `as assistant do`.
 - _KEY-Q3 consolidated:_ language contract = scene/view/frame/command semantics, outline kinds and
   provenance, attention semantics, narrowing rule, test steps; runtime policy = allocation, hint
-  rendering/timing, tier ordering details, keyboard-presence detection, platform focus sync;
+  rendering/timing, tier ordering details, keyboard-presence detection, platform focus projection
+  and focus-event intake;
   prelude/design = slot vocabulary and appearance.
 
 ### J. Platform and accessibility integration
@@ -1096,9 +1104,11 @@ should be checked at each decision.
 >    diffing, generalizing the existing `RuntimeHostReadChannel` pattern rather than inventing
 >    reactive machinery.
 > 4. No React-internals dependency, ever: fiber walking, monkey-patching, and forking are
->    rejected — Tao owns codegen, which is the strictly better hook. Geometry (spatial
->    navigation) and platform focus/screen-reader interop come through public APIs
->    (`onLayout`/measure, platform focus systems) when those features land.
+>    rejected — Tao owns codegen, which is the strictly better hook. Geometry (spatial navigation)
+>    and broader platform focus/screen-reader interop come through public APIs
+>    (`onLayout`/measure, platform focus systems) as those features land. The implemented adapter
+>    can request web focus or React Native accessibility focus and receives focus only where React
+>    Native emits it.
 >
 > The performance pathway is staged, each stage invisible behind the same consumer-facing read
 > surface: activation gating (built in from day one) → snapshot fingerprint diffing (already in
@@ -1194,18 +1204,21 @@ should be checked at each decision.
 > occurrences trap focus and dismissal returns to the prior region via a focus stack distinct from
 > Back; **F** descending for nested controls, no lifecycle syntax now.
 > _Ruling D, refined by Ro:_ **every interaction in every modality dispatches the attention
-> reducer** — pointer, touch, keys, voice, and screen-reader focus are inputs to one reducer, exactly
-> as every Back source dispatches the navigation reducer — so attention state is separate from
-> OS-level interaction state yet always reconciled by it, and app code reading it reads a
-> modality-neutral truth. Pointer mapping: tap/click a row or button = target + activate; click
+> reducer** — pointer, touch, and keys are inputs today; voice and screen-reader focus become inputs
+> where a platform adapter emits them, exactly as every available Back source dispatches the
+> navigation reducer — so attention state remains separate from OS-level interaction state, and app
+> code reads one modality-neutral projection of the events Tao receives. Pointer mapping: tap/click
+> a row or button = target + activate; click
 > into an input = focus its region + target + engage (and engaging via keyboard focuses the native
 > input, so the soft keyboard appears); long-press/right-click = target + verbs, which makes the
 > context menu and the noun-first verb menu one surface; click empty region space = region focus,
 > no target; hover = the `hovered` condition only, never moves the target; text selection inside an
 > engaged input = the control's own state, the reducer knowing only engagement; drag = target on
 > start, verb on drop (the drag-and-drop example app will stress this); scroll = nothing. Platform
-> focus syncs both ways (attention projects onto native/web focus; platform-driven focus updates
-> attention), and `press "…"` test steps are pointer activations, so journeys stay honest.
+> focus support is adapter-mediated: attention projects outward through web focus and React Native
+> accessibility focus requests, while platform focus updates attention only where React Native emits
+> a focus event. General screen-reader cursor movement is not an incoming Tao event. `press "…"`
+> test steps are pointer activations, so journeys stay honest.
 > _Why:_ without modality neutrality, `focused` lies for pointer users, keyboard-after-mouse
 > resumes from a stale place, and screen-reader focus diverges from Tao focus — the parallel model
 > KEY-D1 forbids.
@@ -1309,13 +1322,16 @@ should be checked at each decision.
 > palette, help) are pure renderings of outline + attention + bindings as floating layers, hints on
 > demand; key allocation is runtime policy — label-derived, locale-aware, identity-stable,
 > deterministic, no author overrides yet; universal = outline, attention reducer, accessibility
-> projection with two-way focus sync, keyboard-specific = dispatch, hint layers, chords, affordances
-> appearing after the first hardware keypress; test steps `press key`, `type`, `expect target`,
+> projection, and adapter-mediated focus projection (web focus and React Native accessibility focus
+> requests outward; focus enters Tao only where React Native emits it), keyboard-specific =
+> dispatch, hint layers, chords, affordances appearing after the first hardware keypress; test steps
+> `press key`, `type`, `expect target`,
 > `expect focus region`, `expect verbs` through the existing step seam, `beginTest` resetting
 > attention. Language contract: scene/view/frame/command semantics, outline node kinds and
 > provenance, attention semantics (targeting is free, engagement, modality neutrality, precedence),
 > the narrowing rule, the test steps. Runtime policy: allocation, hint rendering and timing, tier
-> ordering details, keyboard-presence detection, platform focus sync. Prelude/design: slot
+> ordering details, keyboard-presence detection, platform focus projection and focus-event intake.
+> Prelude/design: slot
 > vocabulary and appearance. **Discovery closes with this decision**; remaining: story sweep,
 > consolidation, implementation plan.
 
@@ -1429,7 +1445,9 @@ and the focus bar as a frame slot over session data — fits the model as decide
   that "what is actionable" needs to become derived data rather than inference.
 - **Platform focus reality:** RN native focus APIs are thin (TV-centric); web focus via RNW is
   real but unmanaged; there is no desktop target yet. The design must define Tao-owned focus that
-  _projects onto_ platform focus/a11y rather than assuming any platform's engine.
+  _projects onto_ platform focus/a11y rather than assuming any platform's engine. The implemented
+  adapter seam can request web focus or React Native accessibility focus; focus comes back into Tao
+  only where React Native emits a focus event, not for general screen-reader cursor movement.
 - **Latent defect found in passing:** `do <command>()` compiles to `invokeJoined` on a command
   value that only exposes `invoke` — programmatic command invocation (exactly what a dispatcher
   wants) likely throws today. The plan's T2 closes it.

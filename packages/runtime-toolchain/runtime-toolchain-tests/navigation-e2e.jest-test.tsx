@@ -9,6 +9,7 @@ import {
 import { RuntimeHostReadChannel } from '@runtime/TR-navigation-host-slots'
 import { overrideNativeNavigationModuleForTest } from '@runtime/TR-navigation-native-hosts'
 import { NativeStackSurface, NativeToolbar } from '@runtime/TR-navigation-native-stack'
+import { navigationContentAccessibilityTestId } from '@runtime/TR-navigation-surfaces'
 import * as TaoReactNative from '@runtime/TR-react-native'
 import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
@@ -530,6 +531,11 @@ Describe('Expo runtime', () => {
     act(() => {
       TR.Navigation.PresentOverlay(undefined, stack, first, {})
     })
+    const baseContent = screen.UNSAFE_getAllByType(RN.View).find(
+      view => view.props.testID === navigationContentAccessibilityTestId,
+    )!
+    Expect(baseContent.props.accessibilityElementsHidden).toBe(false)
+    Expect(baseContent.props.importantForAccessibility).toBe('auto')
     await fireEventAsync.press(screen.getByLabelText('Increment overlay'))
     ExpectScreen(screen).toHaveText('Overlay count 1')
 
@@ -566,6 +572,7 @@ Describe('Expo runtime', () => {
       navigator: () => stack,
       auxiliaries: () => ({}),
     })
+    const dismiss = jest.spyOn(app, 'dismiss')
     const goes: number[] = []
     app.attachBrowserHistory({
       go: delta => goes.push(delta),
@@ -578,12 +585,153 @@ Describe('Expo runtime', () => {
     await act(async () => {
       TR.Navigation.PresentOverlay({ app, navigation: stack }, stack, sheet, {}, { sheet: true })
     })
+    const baseContent = screen.UNSAFE_getAllByType(RN.View).find(
+      view => view.props.testID === navigationContentAccessibilityTestId,
+    )!
+    Expect(baseContent.props.accessibilityElementsHidden).toBe(true)
+    Expect(baseContent.props.importantForAccessibility).toBe('no-hide-descendants')
+    const modalSurfaces = screen.UNSAFE_getAllByType(RN.View).filter(
+      view => view.props.accessibilityViewIsModal === true,
+    )
+    Expect(modalSurfaces).toHaveLength(1)
+    Expect(modalSurfaces[0]?.props.onAccessibilityEscape).toEqual(expect.any(Function))
     await act(async () => {
       screen.UNSAFE_getByType(RN.Modal).props.onRequestClose()
     })
 
+    Expect(dismiss).toHaveBeenCalledTimes(1)
     Expect(goes).toEqual([-1])
     ExpectScreen(screen).toHaveText('Home')
+
+    await act(async () => {
+      TR.Navigation.PresentOverlay({ app, navigation: stack }, stack, sheet, {}, { sheet: true })
+    })
+    await act(async () => {
+      screen.UNSAFE_getAllByType(RN.View).find(
+        view => view.props.accessibilityViewIsModal === true,
+      )?.props.onAccessibilityEscape()
+    })
+
+    Expect(dismiss).toHaveBeenCalledTimes(2)
+    Expect(goes).toEqual([-1])
+    ExpectScreen(screen).toHaveText('Home')
+  })
+
+  Test('contains stacked asks and dismisses only the top ask through accessibility escape', async () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+    const confirm = TR.Navigation.View({
+      name: 'Confirm',
+      render: arguments_ => createElement(RN.Text, null, `Question ${arguments_['Title']?.evaluate().jsValue}`),
+    })
+    const stack = configuredStack('Accessible ask stack', home)
+    const app = TR.Navigation.App({
+      name: 'Accessible ask app',
+      navigator: () => stack,
+      auxiliaries: () => ({}),
+    })
+    const dismiss = jest.spyOn(app, 'dismiss')
+    const screen = render(createElement(TR.Navigation.AppHost, { app }))
+    let first!: Promise<{ evaluate(): { jsValue: unknown } }>
+    let second!: Promise<{ evaluate(): { jsValue: unknown } }>
+
+    await act(async () => {
+      first = TR.Navigation.Ask(
+        { app, navigation: stack },
+        confirm,
+        { Title: TR.Value('First') },
+      )
+      second = TR.Navigation.Ask(
+        { app, navigation: stack },
+        confirm,
+        { Title: TR.Value('Second') },
+      )
+    })
+
+    const baseContent = screen.UNSAFE_getAllByType(RN.View).find(
+      view => view.props.testID === navigationContentAccessibilityTestId,
+    )!
+    Expect(baseContent.props.accessibilityElementsHidden).toBe(true)
+    Expect(baseContent.props.importantForAccessibility).toBe('no-hide-descendants')
+    ExpectScreen(screen).toHaveText('Question Second')
+    Expect(screen.queryByText('Question First')).toBeNull()
+    const activeSurface = screen.UNSAFE_getAllByType(RN.View).filter(
+      view => view.props.accessibilityViewIsModal === true,
+    )
+    Expect(activeSurface).toHaveLength(1)
+
+    await act(async () => {
+      activeSurface[0]?.props.onAccessibilityEscape()
+    })
+    Expect(dismiss).toHaveBeenCalledTimes(1)
+    Expect((await second).evaluate().jsValue).toBe(null)
+    ExpectScreen(screen).toHaveText('Question First')
+    Expect(
+      screen.UNSAFE_getAllByType(RN.View).filter(
+        view => view.props.accessibilityViewIsModal === true,
+      ),
+    ).toHaveLength(1)
+
+    await act(async () => {
+      screen.UNSAFE_getAllByType(RN.View).find(
+        view => view.props.accessibilityViewIsModal === true,
+      )?.props.onAccessibilityEscape()
+    })
+    Expect(dismiss).toHaveBeenCalledTimes(2)
+    Expect((await first).evaluate().jsValue).toBe(null)
+    ExpectScreen(screen).toHaveText('Home')
+    Expect(baseContent.props.accessibilityElementsHidden).toBe(false)
+    Expect(baseContent.props.importantForAccessibility).toBe('auto')
+  })
+
+  Test('contains and accessibility-dismisses a sheet without a native Modal host', async () => {
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ActivityIndicator: RN.ActivityIndicator,
+      Image: RN.Image,
+      KeyboardAvoidingView: RN.KeyboardAvoidingView,
+      Platform: { OS: 'web' },
+      Pressable: RN.Pressable,
+      ScrollView: RN.ScrollView,
+      Switch: RN.Switch,
+      Text: RN.Text,
+      TextInput: RN.TextInput,
+      View: RN.View,
+    })
+    try {
+      const home = TR.Navigation.View({ name: 'Home', render: () => createElement(RN.Text, null, 'Home') })
+      const sheet = TR.Navigation.View({ name: 'Sheet', render: () => createElement(RN.Text, null, 'Sheet') })
+      const stack = configuredStack('Inline accessible sheet stack', home)
+      const app = TR.Navigation.App({
+        name: 'Inline accessible sheet app',
+        navigator: () => stack,
+        auxiliaries: () => ({}),
+      })
+      const dismiss = jest.spyOn(app, 'dismiss')
+      const screen = render(createElement(TR.Navigation.AppHost, { app }))
+
+      await act(async () => {
+        TR.Navigation.PresentOverlay({ app, navigation: stack }, stack, sheet, {}, { sheet: true })
+      })
+
+      const baseContent = screen.UNSAFE_getAllByType(RN.View).find(
+        view => view.props.testID === navigationContentAccessibilityTestId,
+      )!
+      Expect(baseContent.props.accessibilityElementsHidden).toBe(true)
+      Expect(baseContent.props.importantForAccessibility).toBe('no-hide-descendants')
+      const activeSurface = screen.UNSAFE_getAllByType(RN.View).filter(
+        view => view.props.accessibilityViewIsModal === true,
+      )
+      Expect(activeSurface).toHaveLength(1)
+
+      await act(async () => {
+        activeSurface[0]?.props.onAccessibilityEscape()
+      })
+      Expect(dismiss).toHaveBeenCalledTimes(1)
+      ExpectScreen(screen).toHaveText('Home')
+      Expect(baseContent.props.accessibilityElementsHidden).toBe(false)
+      Expect(baseContent.props.importantForAccessibility).toBe('auto')
+    } finally {
+      restoreRuntime.mockRestore()
+    }
   })
 
   Test('stacks independent asked view occurrences and settles only their own suspended asks', async () => {

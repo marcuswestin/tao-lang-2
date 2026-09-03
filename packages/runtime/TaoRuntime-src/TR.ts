@@ -908,6 +908,7 @@ function ForEachItem(props: {
   const row = props.select
     ? React.createElement(SelectableRow, {
       ...(outline.label === undefined ? {} : { accessibilityLabel: outline.label }),
+      capabilities: outline.capabilities,
       ...(outline.identity === undefined ? {} : { identity: outline.identity }),
       onSelect: () => props.select!(props.runtimeValue, props.index),
     }, content)

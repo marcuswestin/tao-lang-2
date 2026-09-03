@@ -1,4 +1,5 @@
 import React from 'react'
+import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import { AppSurfaceFrame } from './TR-app-shell'
 import { mountedDesignStyle } from './TR-mounted-design'
 import { NavigationCommandButton } from './TR-navigation-command-button'
@@ -108,35 +109,50 @@ function BasicToolbar(props: {
 }): React.JSX.Element | null {
   const [expanded, setExpanded] = React.useState(false)
   const runtime = requireReactNativeRuntime()
+  const moreHost = React.useRef<TaoAccessibilityHost | null>(null)
+  const restoreOverflowFocus = React.useRef(false)
+  React.useEffect(() => {
+    if (expanded || !restoreOverflowFocus.current) {
+      return
+    }
+    restoreOverflowFocus.current = false
+    focusAccessibilityHost(runtime, moreHost.current)
+  }, [expanded, runtime])
   if (props.commands.length === 0) {
     return null
   }
   const direct = props.commands.slice(0, directToolbarCapacity)
   const overflow = props.commands.slice(directToolbarCapacity)
+  const closeOverflow = () => {
+    restoreOverflowFocus.current = true
+    setExpanded(false)
+  }
+  const toggleOverflow = () => expanded ? closeOverflow() : setExpanded(true)
   return React.createElement(runtime.View, {
     accessibilityRole: 'toolbar',
     children: [
       ...direct.map(command => commandButton(command, props.observable, undefined, props.taoProps)),
       overflow.length > 0
-        ? React.cloneElement(
-          Views.Pressable(
-            {
-              __tao: { ...props.taoProps, designDefault: 'NavigationChromeButton' },
-              action: { invoke: () => setExpanded(value => !value) },
-              semanticIdentity: 'navigation:toolbar:more',
-              title: 'More',
-            },
-            { nativeProps: { accessibilityLabel: 'More', accessibilityRole: 'button' } },
-          ),
-          { key: 'more' },
-        )
+        ? React.createElement(NavigationCommandButton, {
+          accessibilityState: { expanded },
+          command: {
+            enabled: props.observable,
+            identity: 'navigation:toolbar:more',
+            label: 'More',
+            invoke: toggleOverflow,
+          },
+          hostRef: moreHost,
+          key: 'more',
+          outlineIdentity: 'navigation:toolbar:more',
+          taoProps: props.taoProps,
+        })
         : null,
       expanded && overflow.length > 0
         ? React.createElement(BasicOverflowMenu, {
           commands: overflow,
           key: 'overflow',
           observable: props.observable,
-          onClose: () => setExpanded(false),
+          onClose: closeOverflow,
           taoProps: props.taoProps,
         })
         : null,

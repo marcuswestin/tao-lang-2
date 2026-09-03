@@ -183,6 +183,21 @@ export class InteractionAttention {
     return activate ? activate() : fallback?.()
   }
 
+  /** invokeVerb reruns applicability at dispatch so an assistive action never invokes stale state. */
+  invokeVerb(targetIdentity: string, verbIdentity: string): boolean {
+    const target = this.node(targetIdentity)
+    if (!target || !this.targetable(target)) {
+      return false
+    }
+    const verb = this.catalog.verbsFor(target, this.outline).find(candidate => candidate.identity === verbIdentity)
+    if (!verb) {
+      return false
+    }
+    this.target(targetIdentity)
+    this.runVerb(verb)
+    return true
+  }
+
   focusRegion(identity: string): void {
     const region = this.node(identity)
     const modal = this.topActiveModal()

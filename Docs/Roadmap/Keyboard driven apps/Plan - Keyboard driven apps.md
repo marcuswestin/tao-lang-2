@@ -277,25 +277,31 @@ trait `title`, validator at most one per entity; `DataCompiler.ts` emits it into
 **Per-item registration.** A loop row has no guaranteed native root: `ForEachItem` (`TR.ts`) wraps
 only selectable rows in a `Pressable`, and a row body may render several roots. Registration
 therefore hangs on `ForEachItem` itself — which exists for every row, selectable or not — carrying
-the row's handle. Native-root attachment (the row's `accessibilityLabel`, geometry) applies when the
-body has a single root render; a multi-root body registers with its first native root as anchor and
-no row-level accessibility label (a validator hint suggests a single root).
+the row's handle. Native-root label attachment was considered for a single-root body, but an inert
+label prop does not make a structural root accessible, while making it accessible would hide its
+interactive descendants. A multi-root body likewise has no root-level label projection. A
+selectable row's press surface is a platform accessibility traversal stop and uses the derived label
+as its accessible name. A non-selectable root remains outside accessibility traversal; visible
+descendant text and controls remain platform-readable.
 
 **Runtime.** `TR-interaction-outline.ts` generalizes `TR-navigation-registry.ts` and
 `RuntimeHostReadChannel` (`TR-navigation-host-slots.tsx`) — one registry and one
 subscribe/snapshot/fingerprint mechanism, not a parallel copy. `TR-interaction-labels.ts`: the
-**primary label is always-on** (one statically ranked string per row, needed synchronously as an
-accessibility prop); the full narrowing corpus and everything else evaluate only while a consumer is
-attached. `TR-interaction-regions.ts`: regions from the navigation registry — frame slots, split
-panes, selection items, presented occurrences. Accessibility projection: rows get
-`accessibilityLabel` (fixing `TR-selectable-row.tsx`), regions get `accessibilityRole` groups.
-Provenance is never exposed as a test selector.
+**primary label is always-on** (one statically ranked string per row, retained as outline metadata
+and available synchronously for selectable-row accessibility projection); the full narrowing corpus
+and everything else evaluate only while a consumer is attached. `TR-interaction-regions.ts`:
+regions from the navigation registry — frame slots, split panes, selection items, presented
+occurrences. Accessibility projection: selectable rows get `accessibilityLabel` on their press
+surface (fixing `TR-selectable-row.tsx`), while non-selectable rows do not gain a traversal stop;
+directly invokable target commands become custom accessibility actions; regions get
+`accessibilityRole` groups. Provenance is never exposed as a test selector.
 
 **Tests.** TR tests: registry lifecycle for selectable, non-selectable, and multi-root rows; label
 ranking cases (WorkspaceRow, HNReader story row, image-only card, conditional branch, `(title)`
 rendered vs. not rendered); provenance identity across a reorder; zero corpus evaluation without a
-subscriber. Journeys: `expect label "…"` on rows passes where it could not before. Studio: an
-inspector panel listing the outline (optional).
+subscriber. Journeys: `expect label "…"` asserts the row's outline metadata; for a selectable row,
+the same value is projected as the press surface's accessible name. Studio: an inspector panel
+listing the outline (optional).
 
 **Reconcile.** `Decisions.md` §2 trait table gains `title`; §9 accessibility paragraph gains the
 derivation; §15 gains the generated outline tables beside the bridge module; `Docs/Spec/Tao Layout

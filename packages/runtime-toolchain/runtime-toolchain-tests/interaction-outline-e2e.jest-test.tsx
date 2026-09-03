@@ -141,6 +141,10 @@ Describe('interaction outline runtime', () => {
   Test('labels a selectable row on its press surface and registers it as an item', async () => {
     await testCompileApp(
       `${catalog}
+        command Archive(Document) {
+          Title "Archive document"
+          do -> { delete Document }
+        }
         use StackNav from @tao/nav
         app OutlineApp {
           Name "Outline"
@@ -185,6 +189,10 @@ Describe('interaction outline runtime', () => {
         const surfaces = screen.getAllByLabelText(/Chapter/)
         Expect(surfaces.map(surface => surface.props.accessibilityLabel)).toEqual(['Chapter one', 'Chapter two'])
         Expect(surfaces.every(surface => surface.props.accessibilityRole === 'button')).toBe(true)
+        const archiveAction = surfaces[0]!.props.accessibilityActions.find(
+          (action: { label?: string }) => action.label === 'Archive document',
+        )
+        Expect(archiveAction).toBeDefined()
         Expect(within(surfaces[0]!).getByTestId('rows')).toBe(rows[0])
         await act(async () => {
           fireEvent.press(surfaces[0]!)
@@ -193,9 +201,17 @@ Describe('interaction outline runtime', () => {
         Expect(screen.getByText('Selected Chapter one')).toBeDefined()
         Expect(screen.getByText('Selections: 1')).toBeDefined()
 
+        await act(async () => {
+          fireEvent(surfaces[0]!, 'accessibilityAction', {
+            nativeEvent: { actionName: archiveAction.name },
+          })
+        })
+        Expect(screen.getAllByTestId('rows')).toHaveLength(1)
+        Expect(screen.queryByLabelText('Chapter one')).toBeNull()
+
         const items = nodes('item')
-        Expect(items.map(item => item.label)).toEqual(['Chapter one', 'Chapter two'])
-        Expect(items.map(item => item.provenance['entity'])).toEqual(['Document', 'Document'])
+        Expect(items.map(item => item.label)).toEqual(['Chapter two'])
+        Expect(items.map(item => item.provenance['entity'])).toEqual(['Document'])
         Expect(new Set(items.map(item => item.parent)).size).toBe(1)
         const collection = nodes('collection')[0]
         Expect(collection?.identity).toBe(items[0]?.parent)
@@ -204,7 +220,7 @@ Describe('interaction outline runtime', () => {
     )
   })
 
-  Test('labels a non-selectable single-root row on its root and withdraws the row when it unmounts', async () => {
+  Test('keeps controls reachable in a non-selectable row and withdraws the row when it unmounts', async () => {
     await testCompileApp(
       `${catalog}
         app OutlineApp {
@@ -240,12 +256,12 @@ Describe('interaction outline runtime', () => {
           fireEvent.press(screen.getByTestId('seed'))
         })
 
-        // The rendered `(title)` field outranks the body the row renders first, and lands on the
-        // row's one root: the same native element that carries the loop's tag.
+        // The rendered `(title)` field outranks the body the row renders first. The structural root
+        // stays out of the accessibility tree so it cannot hide the row's interactive descendants.
         const root = screen.getByTestId('rows')
-        Expect(root.props.accessibilityLabel).toBe('Chapter one')
+        Expect(root.props.accessibilityLabel).toBeUndefined()
         Expect(root.props.accessible).toBeUndefined()
-        Expect(screen.getByLabelText('Chapter one')).toBe(root)
+        Expect(screen.getByText('Chapter one')).toBeDefined()
 
         const [item] = nodes('item')
         Expect(item?.label).toBe('Chapter one')
@@ -470,8 +486,38 @@ Describe('interaction outline runtime', () => {
           await Promise.resolve()
         })
         Expect(notifications).toBe(1)
-        Expect(screen.getByTestId('rows').props.accessibilityLabel).toBe('Chapter two')
+        Expect(nodes('item')[0]?.label).toBe('Chapter two')
+        Expect(screen.getByText('Chapter two')).toBeDefined()
         unsubscribe()
+      },
+    )
+  })
+
+  Test('keeps generated control labels live in the outline and native accessibility tree', async () => {
+    await testCompileApp(
+      `
+        use Col, FormButton from @tao/ui
+        app OutlineApp { view Main }
+        view Main() {
+          state Count = 0
+          render Col() {
+            #count
+            FormButton("Count { Count }") { on press -> { set Count += 1 } }
+          }
+        }
+      `,
+      async screen => {
+        const label = () => nodes('action').find(node => node.provenance['occurrence'])?.label
+        Expect(label()).toBe('Count 0')
+        Expect(screen.getByLabelText('Count 0')).toBeDefined()
+
+        await act(async () => {
+          fireEvent.press(screen.getByTestId('count'))
+          await Promise.resolve()
+        })
+
+        Expect(label()).toBe('Count 1')
+        Expect(screen.getByLabelText('Count 1')).toBeDefined()
       },
     )
   })

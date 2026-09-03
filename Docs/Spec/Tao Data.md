@@ -81,11 +81,12 @@ most one field per entity, so reconciliation never depends on field order.
 
 `title` marks the one `text` field that names a row to a person. It is legal only on a `text`
 field, declared at most once per field, and carried by at most one field per entity. The
-interaction outline prefers it as a loop row's accessible name whenever the row renders it, and
-reads it at runtime when the row renders no text of its own (see _Accessible names and the
-interaction outline_ in `Tao Layout and UI.md`). The word is parsed as an ordinary identifier and
-its spelling validated, so `title` stays a legal name elsewhere — a design bundle called `title` is
-exactly what an app declares.
+interaction outline prefers it as a loop row's derived label whenever the row renders it, and reads
+it at runtime when the row renders no text of its own (see _Accessible names and the interaction
+outline_ in `Tao Layout and UI.md`). A selectable row projects that label as the accessible name of
+its press surface; the label remains outline metadata for a non-selectable row. The word is parsed
+as an ordinary identifier and its spelling validated, so `title` stays a legal name elsewhere — a
+design bundle called `title` is exactly what an app declares.
 
 A bare singular name such as `Workspace` is a stored to-one relationship when it names another
 entity. A bare plural name such as `Paragraphs` is an inferred inverse to-many relationship. The

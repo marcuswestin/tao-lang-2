@@ -718,6 +718,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     return React.createElement(runtime.View, {
       children: [
         React.createElement(runtime.View, {
+          accessibilityRole: 'tablist',
           children: this.items.map(item =>
             React.createElement(
               React.Fragment,

@@ -1,4 +1,5 @@
 import React from 'react'
+import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import { InteractionControls } from './TR-interaction-catalog'
 import {
   type TaoInteractionOccurrence,
@@ -19,8 +20,11 @@ type FontAwesomeIcon = React.ComponentType<any> & {
 
 /** NavigationCommandButton keeps icon metadata visual while the accessible name remains Label. */
 export function NavigationCommandButton(props: {
+  accessibilityState?: Readonly<{ expanded?: boolean }>
   command: TaoNavigationCommand
+  hostRef?: React.RefObject<TaoAccessibilityHost | null>
   onInvoke?: () => void
+  outlineIdentity?: string
   role?: CommandRole
   taoProps?: TaoProps
   testID?: string
@@ -32,8 +36,10 @@ export function NavigationCommandButton(props: {
   const icon = supportedIcon(props.command.icon, Icon)
   const fallbackGlyph = props.command.icon ? iconFallbacks[props.command.icon]?.fallback : undefined
   const capabilities = React.useRef<TaoOutlineLiveEntry>({}).current
+  const ownedHost = React.useRef<TaoAccessibilityHost | null>(null)
+  const host = props.hostRef ?? ownedHost
   const identity = useOutlineNode({
-    identity: `navigation-command:${props.command.identity}`,
+    identity: props.outlineIdentity ?? `navigation-command:${props.command.identity}`,
     kind: 'action',
     label: () => props.command.label,
     live: capabilities,
@@ -43,6 +49,7 @@ export function NavigationCommandButton(props: {
     ? undefined
     : { capabilities, control: identity, scope: identity }
   capabilities.enabled = () => props.command.enabled
+  capabilities.focus = () => focusAccessibilityHost(runtime, host.current)
   const invoke = InteractionControls.Activate(occurrence, () => {
     props.onInvoke?.()
     return props.command.invoke()
@@ -52,7 +59,7 @@ export function NavigationCommandButton(props: {
     {
       accessibilityLabel: props.command.label,
       accessibilityRole: props.role ?? 'button',
-      accessibilityState: { disabled: !props.command.enabled },
+      accessibilityState: { disabled: !props.command.enabled, ...props.accessibilityState },
       disabled: !props.command.enabled,
       onBlur: () => InteractionControls.Pressed(occurrence, false),
       onFocus: () => InteractionControls.Target(occurrence),
@@ -64,6 +71,7 @@ export function NavigationCommandButton(props: {
         InteractionControls.Pressed(occurrence, true)
       },
       onPressOut: () => InteractionControls.Pressed(occurrence, false),
+      ref: host,
       style: [designStyle, { opacity: props.command.enabled ? 1 : 0.5 }],
       testID: props.testID,
     },

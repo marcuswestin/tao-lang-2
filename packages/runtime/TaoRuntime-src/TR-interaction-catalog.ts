@@ -1,4 +1,5 @@
 import React from 'react'
+import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import { CommandControls, type RuntimeCommand } from './TR-interaction'
 import { InteractionAttention, type TaoAttentionKey } from './TR-interaction-attention'
 import { interactionKeyboardPresence } from './TR-interaction-keys'
@@ -14,6 +15,7 @@ import {
   useOutlineOccurrence,
   useOutlineParentIdentity,
 } from './TR-interaction-outline'
+import { requireReactNativeRuntime } from './TR-react-native'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 import { type TaoProps, TaoPropsControls, type TaoVisualLayout } from './TR-TaoProps'
 
@@ -544,6 +546,22 @@ export function resetInteractionRuntime(): void {
 
 /** InteractionControls is the handwritten generated-code and semantic-operation facade. */
 export const InteractionControls = {
+  AccessibilityRef(
+    occurrence: TaoInteractionOccurrence | undefined,
+    label: string | undefined,
+  ): ((host: TaoAccessibilityHost | null) => void) | undefined {
+    if (!occurrence?.control) {
+      return undefined
+    }
+    occurrence.capabilities.label = () => label
+    return host => {
+      if (host === null) {
+        delete occurrence.capabilities.focus
+      } else {
+        occurrence.capabilities.focus = () => focusAccessibilityHost(requireReactNativeRuntime(), host)
+      }
+    }
+  },
   ...CommandControls,
   Attention: interactionAttention,
   Catalog: commandCatalog,
@@ -589,6 +607,9 @@ export const InteractionControls = {
     if (occurrence?.control) {
       interactionAttention.setHovered(occurrence.control, hovered)
     }
+  },
+  InvokeVerb(targetIdentity: string, verbIdentity: string): boolean {
+    return interactionAttention.invokeVerb(targetIdentity, verbIdentity)
   },
   Narrow(value: string): void {
     interactionAttention.narrow(value)

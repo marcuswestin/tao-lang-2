@@ -289,6 +289,7 @@ export type TaoOutlineLiveEntry = {
   engage?(): void
   entityType?: string
   focus?(): void
+  label?(): string | undefined
   measure?(): TaoInteractionBounds | undefined
   modal?: boolean
   primary?: boolean
@@ -318,12 +319,14 @@ export class InteractionOutline implements Subscription {
   #coalesced = new Map<string, { entry: TaoOutlineEntry; key: number; refs: number }>()
   #liveListeners = new Set<() => void>()
   #listeners = new Set<() => void>()
+  #liveRevision = 0
   #sequence = 0
   #revision = 0
   #fingerprint: string | undefined
   #refreshScheduled = false
 
   readonly snapshot = (): number => this.#revision
+  readonly liveSnapshot = (): number => this.#liveRevision
 
   readonly subscribe = (listener: () => void): () => void => {
     this.#listeners.add(listener)
@@ -443,6 +446,7 @@ export class InteractionOutline implements Subscription {
   }
 
   private changed(): void {
+    this.#liveRevision += 1
     for (const listener of [...this.#liveListeners]) {
       listener()
     }
@@ -653,10 +657,16 @@ export function useOutlineItem(
   key: number | string,
   index: number,
   activate?: () => unknown,
-): { identity: string | undefined; label: string | undefined } {
+): { capabilities: TaoOutlineLiveEntry; identity: string | undefined; label: string | undefined } {
   const collection = React.useContext(OutlineParentContext)
   const identity = descriptor && collection !== undefined ? `${collection}/${String(key)}` : undefined
   const label = descriptor ? primaryLabel(descriptor, value.jsValue, index) : undefined
+  const capabilities = React.useRef<TaoOutlineLiveEntry>({}).current
+  capabilities.activate = activate
+  capabilities.measure = identity === undefined ? undefined : () => interactionMeasurements.read(identity)
+  capabilities.commandPolicy = undefined
+  capabilities.entityType = undefined
+  capabilities.runtimeValue = undefined
   if (descriptor && label !== undefined && !descriptor.selectable && descriptor.root === 'single') {
     rowRoots.set(value, Object.freeze({ label }))
   }
@@ -669,24 +679,23 @@ export function useOutlineItem(
           identity,
           kind: 'item',
           label: () => label,
-          live: {
-            ...(activate === undefined ? {} : { activate }),
-            measure: () => interactionMeasurements.read(identity),
-            ...(entity === undefined
+          live: Object.assign(
+            capabilities,
+            entity === undefined
               ? {}
               : {
                 commandPolicy: entity.policy,
                 entityType: entity.entity,
                 runtimeValue: value,
-              }),
-          },
+              },
+          ),
           ...(collection === undefined ? {} : { parent: collection }),
           provenance: itemProvenance(descriptor, value.jsValue, key),
         }
       })()
       : undefined,
   )
-  return { identity, label }
+  return { capabilities, identity, label }
 }
 
 function itemProvenance(descriptor: TaoOutlineLoopNode, value: unknown, key: number | string): TaoOutlineProvenance {
@@ -749,7 +758,7 @@ export function useOutlineOccurrence(
       ? {
         identity: controlIdentity,
         kind: control.role,
-        label: () => control.label ?? control.view,
+        label: () => capabilities.label?.() ?? control.label ?? control.view,
         live: capabilities,
         ...((effectiveRegionIdentity ?? parent) === undefined ? {} : { parent: effectiveRegionIdentity ?? parent }),
         provenance: { occurrence: control.identity },

@@ -358,36 +358,17 @@ function visualTag(props: TaoProps | undefined): string | undefined {
   return testTagInChain(props)
 }
 
-/** Lowers private Studio identity, the row label, and the public test tag onto an injected native root. */
+/** Lowers private Studio identity and the public test tag onto an injected native root. */
 function visualNativeProps(layout: TaoVisualLayout | undefined, tag?: string): Record<string, unknown> {
   const metadata = privateMetadataForVisualLayout(layout)
-  const nativeProps = nativePropsWithRowLabel(
-    nativePropsWithStudioIdentity({}, metadata?.studio),
-    metadata?.interaction,
-  )
+  const nativeProps = nativePropsWithStudioIdentity({}, metadata?.studio)
   return tag ? { ...nativeProps, testID: tag } : nativeProps
 }
 
 function nativePropsWithStyle(merged: MergedTaoViewProps): Record<string, unknown> {
   const nativeProps = LayoutRuntime.nativePropsWithStyle(merged.nativeProps, merged.props, merged.direction)
-  const nativePropsWithStudio = nativePropsWithRowLabel(
-    nativePropsWithStudioIdentity(nativeProps, merged.studio),
-    merged.interaction,
-  )
+  const nativePropsWithStudio = nativePropsWithStudioIdentity(nativeProps, merged.studio)
   return merged.testTag ? { ...nativePropsWithStudio, testID: merged.testTag } : nativePropsWithStudio
-}
-
-/**
- * A loop row's derived label becomes the accessible name of the one native root that renders the
- * row. The root is left non-focusable on purpose: making it one accessibility element would hide
- * the controls inside the row, and a selectable row already carries its label on its press surface.
- */
-function nativePropsWithRowLabel(
-  nativeProps: Record<string, unknown>,
-  interaction: TaoInteractionProps | undefined,
-): Record<string, unknown> {
-  const label = interaction?.row?.label
-  return label === undefined ? nativeProps : { ...nativeProps, accessibilityLabel: label }
 }
 
 /**

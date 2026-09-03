@@ -97,7 +97,10 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
     React.createElement(
       runtime.View,
       {
+        accessibilityLabel: `${displayKey(row.key)} — ${row.label}`,
+        accessibilityRole: 'text',
         accessibilityState: row.enabled === false ? { disabled: true } : undefined,
+        accessible: true,
         key: row.identity,
         style: [
           rowStyle,
@@ -110,17 +113,24 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
         ? React.createElement(
           React.Fragment,
           null,
-          React.createElement(runtime.Text, null, `${displayKey(row.key)} — `),
-          React.createElement(runtime.Text, null, row.label),
+          React.createElement(runtime.Text, { accessible: false }, `${displayKey(row.key)} — `),
+          React.createElement(runtime.Text, { accessible: false }, row.label),
         )
-        : React.createElement(runtime.Text, null, `${displayKey(row.key)} — ${row.label}`),
+        : React.createElement(
+          runtime.Text,
+          { accessible: false },
+          `${displayKey(row.key)} — ${row.label}`,
+        ),
     )
   )
   return React.createElement(
     runtime.View,
     {
       accessibilityElementsHidden: hidden,
-      importantForAccessibility: hidden ? 'no-hide-descendants' : 'yes',
+      accessible: false,
+      // The full-screen positioning host is never an accessibility stop. Its visible semantic
+      // heading and rows remain traversable while the hidden state removes every descendant.
+      importantForAccessibility: hidden ? 'no-hide-descendants' : 'no',
       // Generated rows are keyboard affordances, not pointer controls. Let taps continue through
       // both the full-screen host and its visible descendants to the semantic control underneath.
       pointerEvents: 'none',
@@ -135,10 +145,14 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
         React.createElement(
           runtime.View,
           {
-            accessibilityLabel: heading,
+            accessible: false,
             style: [surfaceStyle, mountedDesignStyle(props.taoProps, 'Overview')],
           },
-          React.createElement(runtime.Text, { style: headingStyle }, heading),
+          React.createElement(runtime.Text, {
+            accessibilityLabel: heading,
+            accessibilityRole: 'header',
+            style: headingStyle,
+          }, heading),
           ...(anchored ? [] : rowElements),
         ),
         ...(anchored ? rowElements : []),

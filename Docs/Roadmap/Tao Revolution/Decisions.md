@@ -1422,18 +1422,20 @@ loop Recipes / Recipe {
 Image(Recipe.Photo, Description: Recipe.Title)   // a semantic label, not decoration
 ```
 
-- **A collection row's accessible name is derived, never declared** (amended by KEY-D2, D5). The
-  interaction outline names every `loop` row by one static ranking: the first unconditional `Text`
-  the row renders whose value is a member path on the row — preferring the entity's `(title)` field
-  when the row renders it, and following a bound parameter one level into a rendered row view —
-  then the `(title)` field read at runtime, then the entity and its handle. A function-wrapped or
-  interpolated value is opaque and passes to the next candidate. One computation names the row for
-  the platform, for the palette, and for a journey's `expect label`. A selectable row carries it on
-  its press surface; any other row carries it on its sole root; a row with several roots has
-  nowhere to put it, which the validator hints. The rest of the outline is derived the same way:
-  a `loop` is a collection and each row an item; a render binding `Press` or `Submit`, or a row
-  with `on select`, is an action control; a render binding `Value` with a change is an input
-  control; a presented occurrence, a selection item, and a split pane are regions.
+- **For the Revolution target, a collection row's interaction label is derived, never declared**
+  (amended by KEY-D2, D5). The interaction outline names every `loop` row by one static ranking: the
+  first unconditional `Text` the row renders whose value is a member path on the row — preferring
+  the entity's `(title)` field when the row renders it, and following a bound parameter one level
+  into a rendered row view — then the `(title)` field read at runtime, then the entity and its
+  handle. A function-wrapped or interpolated value is opaque and passes to the next candidate. One
+  computation names the row for the outline, palette, and a journey's `expect label`; a selectable
+  row also projects it as the accessible name of its press surface. A non-selectable row does not
+  gain a row-level accessibility traversal stop: its visible descendant text remains
+  platform-readable. A row with several roots has no root-level label projection, which the
+  validator hints. The rest of the outline is derived the same way: a `loop` is a collection and
+  each row an item; a render binding `Press` or `Submit`, or a row with `on select`, is an action
+  control; a render binding `Value` with a change is an input control; a presented occurrence, a
+  selection item, and a split pane are regions.
 
 - **A map must name a non-map alternative** over the same rows. Location graphics are never the only
   way to use a feature:

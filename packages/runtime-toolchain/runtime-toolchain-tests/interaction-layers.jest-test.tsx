@@ -74,18 +74,25 @@ Describe('TR.Interaction generated layers', () => {
     const screen = render(React.createElement(InteractionLayersHost))
     await act(async () => undefined)
     Expect(screen.queryByText('Interaction hints')).toBeNull()
-    Expect(screen.UNSAFE_getByProps({ testID: 'tao-interaction-layers' }).props.accessibilityElementsHidden).toBe(true)
+    const layerHost = screen.UNSAFE_getByProps({ testID: 'tao-interaction-layers' })
+    Expect(layerHost.props.accessibilityElementsHidden).toBe(true)
+    Expect(layerHost.props.accessible).toBe(false)
 
     await act(async () => {
       TR.Interaction.PressKey('?')
     })
     Expect(screen.getByText('Interaction hints')).toBeDefined()
-    Expect(screen.UNSAFE_getByProps({ testID: 'tao-interaction-layers' }).props.pointerEvents).toBe('none')
+    Expect(layerHost.props.importantForAccessibility).toBe('no')
+    Expect(layerHost.props.pointerEvents).toBe('none')
     Expect(screen.getByText('H — Home')).toBeDefined()
     Expect(screen.getByText('P — Projects')).toBeDefined()
     const projectRow = screen.getByTestId('tao-interaction-row:projects')
+    Expect(projectRow.props.accessibilityLabel).toBe('P — Projects')
+    Expect(projectRow.props.accessibilityRole).toBe('text')
+    Expect(projectRow.props.accessible).toBe(true)
     Expect(projectRow.props.style.flat().find((style: { left?: number }) => style?.left === 120)).toBeDefined()
     const headingPanel = screen.UNSAFE_getByProps({ accessibilityLabel: 'Interaction hints' })
+    Expect(headingPanel.props.accessibilityRole).toBe('header')
     Expect(within(headingPanel).queryByText('P — Projects')).toBeNull()
 
     await act(async () => {
