@@ -4,6 +4,8 @@ import { Describe, Expect, Test } from '@shared/test'
 import SourceActions, {
   type StudioComponentKind,
   type StudioLayoutEntry,
+  type StudioSketchSnapElement,
+  type StudioSnapSketchToFlowPatchRequest,
   type StudioSourcePatchRequest,
 } from '../source-actions-src/source-actions'
 import { parseDocument, parseRawDocument } from './test-source-actions'
@@ -129,12 +131,14 @@ Describe('Studio source-action patch bus', () => {
         'Number',
         'Panes',
         'Picker',
+        'Placeholder',
         'Progress',
         'Row',
         'ScrollView',
         'SegmentedControl',
         'Slider',
         'Spinner',
+        'Spacer',
         'Stack',
         'Switch',
         'Text',
@@ -1203,7 +1207,283 @@ Describe('Studio source-action patch bus', () => {
     Expect(updated.parseResult.parserErrors).toEqual([])
     Expect(stringLiteralValues(updated)).toContain('Captured {draft}')
   })
+
+  Test('toggles the nearest owning flow direction from a stable nested leaf id', async () => {
+    const document = await parseDocument(`
+      use Col, Row, Text from @tao/ui
+      view MainView() {
+         render Row() {
+            Col() {
+               Text("Nested")
+            }
+            Text("Outer")
+      }  }
+    `)
+    const nestedId = renderId(requireRenderByText(document, 'Nested'))
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'toggle-flow-direction',
+      renderId: nestedId,
+    }, { occurrence: { nodeKind: 'render', renderOwner: 'MainView' } })
+
+    Expect(patch.content).toContain('render Row() {\n      Row() {\n         Text("Nested")')
+    Expect(patch.content).toContain('Text("Outer")')
+  })
+
+  Test('inserts direction-aware separators after or between direct flow siblings', async () => {
+    const row = await parseDocument(`
+      use Row, Text from @tao/ui
+      view MainView() { render Row() { Text("First") Text("Second") } }
+    `)
+    const rowIds = renderIdsByText(row)
+    const rowPatch = await SourceActions.applyStudioPatch(row, {
+      afterId: rowIds['First']!,
+      beforeId: rowIds['Second']!,
+      kind: 'insert-separator',
+    })
+    Expect(rowPatch.content).toContain('use Box, Row, Text from @tao/ui')
+    Expect(rowPatch.content).toContain(
+      'Text("First")\n      Box() [width 1, height fill]\n      Text("Second")',
+    )
+
+    const col = await parseDocument(`
+      use Col, Text from @tao/ui
+      view MainView() { render Col() { Text("First") Text("Second") } }
+    `)
+    const colIds = renderIdsByText(col)
+    const colPatch = await SourceActions.applyStudioPatch(col, {
+      afterId: colIds['First']!,
+      kind: 'insert-separator',
+    })
+    Expect(colPatch.content).toContain('Text("First")\n      Box() [width fill, height 1]\n      Text("Second")')
+  })
+
+  Test('inserts a Spacer between adjacent leaves and rewrites both semantic claim slots', async () => {
+    const document = await parseDocument(`
+      use Row, Text from @tao/ui
+      view MainView() {
+         render Row() {
+            Text("First") [width 40, claim 9, height 20]
+            Text("Second") [claim 8, width 60]
+      }  }
+    `)
+    const ids = renderIdsByText(document)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      afterId: ids['First']!,
+      beforeId: ids['Second']!,
+      kind: 'insert-spacer',
+      ratio: [2, 5],
+    }, { occurrence: { nodeKind: 'render', renderOwner: 'MainView' } })
+
+    Expect(patch.content).toContain('use Row, Spacer, Text from @tao/ui')
+    Expect(patch.content).toContain('Text("First") [width 40, height 20, claim 2]')
+    Expect(patch.content).toContain('Spacer()')
+    Expect(patch.content).toContain('Text("Second") [width 60, claim 5]')
+    Expect(patch.content.indexOf('claim 2')).toBeLessThan(patch.content.indexOf('Spacer()'))
+    Expect(patch.content.indexOf('Spacer()')).toBeLessThan(patch.content.indexOf('claim 5'))
+    const reparsed = await parseRawDocument(patch.content)
+    Expect(reparsed.parseResult.parserErrors).toEqual([])
+  })
+
+  Test('rejects stale, cross-owner, nested, nonadjacent, and unbounded flow edits', async () => {
+    const document = await parseDocument(`
+      view FirstView() {
+         render Row() {
+            Text("First")
+            Col() { Text("Nested") }
+            Text("Second")
+            Text("Third")
+      }  }
+      view OtherView() { render Row() { Text("Other") } }
+    `)
+    const ids = renderIdsByText(document, ['First', 'Nested', 'Second', 'Third', 'Other'])
+    await Expect(SourceActions.applyStudioPatch(document, {
+      afterId: ids['First']!,
+      beforeId: ids['Third']!,
+      kind: 'insert-spacer',
+      ratio: [1, 1],
+    })).rejects.toThrow('adjacent render expressions')
+    await Expect(SourceActions.applyStudioPatch(document, {
+      afterId: ids['First']!,
+      beforeId: ids['Other']!,
+      kind: 'insert-spacer',
+      ratio: [1, 1],
+    })).rejects.toThrow('same container')
+    await Expect(SourceActions.applyStudioPatch(document, {
+      afterId: renderId(requireRenderBySource(document, 'Col()')),
+      kind: 'insert-separator',
+    })).rejects.toThrow('direct leaf')
+    await Expect(SourceActions.applyStudioPatch(document, {
+      afterId: ids['Second']!,
+      beforeId: ids['Third']!,
+      kind: 'insert-spacer',
+      ratio: [0, 101],
+    })).rejects.toThrow('integers from 1 through 100')
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'toggle-flow-direction',
+      renderId: `${document.uri.fsPath}:99999:100000`,
+    })).rejects.toThrow('no longer exists')
+  })
+
+  Test('snaps a playlist into a tagged Row with nested Col while preserving unrelated source', async () => {
+    const document = await parseDocument(`
+      use Placeholder from @tao/ui
+      public view Keep() { render Placeholder("Keep") }
+      public view View4() { render Placeholder("View4") [width 360, height 76] }
+      scenarios View4 "sketch" { device phone scenario "draft" { render () } }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, playlistSnapRequest())
+
+    Expect(patch.content).toContain('use Col, Image, Placeholder, Row, Text from @tao/ui')
+    Expect(patch.content).toContain('public\nview Keep() {\n   render Placeholder("Keep")\n}')
+    Expect(patch.content).toContain('render Row() [gap 12, pad horizontal 12 vertical 8] {')
+    Expect(patch.content).toContain('#studio_rect_006100720074\n      Image("cover.png") [hug]')
+    Expect(patch.content).toContain('Col() [gap 4] {')
+    Expect(patch.content).toContain('#studio_rect_007400690074006c0065\n         Text("Night Drive") [hug]')
+    Expect(patch.content).toContain('#studio_rect_006100720074006900730074\n         Text("Signals") [hug]')
+    Expect(patch.content).toContain(
+      '#studio_rect_006400750072006100740069006f006e\n      Text("3:42") [width 38, height 20, claim 1]',
+    )
+    Expect(patch.content).toContain('scenarios View4 "sketch"')
+    const reparsed = await parseRawDocument(patch.content)
+    Expect(reparsed.parseResult.lexerErrors).toEqual([])
+    Expect(reparsed.parseResult.parserErrors).toEqual([])
+  })
+
+  Test('escapes leaf arguments and merges UI imports without duplication', async () => {
+    const document = await parseDocument(`
+      use Text from @tao/ui
+      public view View4() { render Text("old") }
+      scenarios View4 "sketch" { device phone scenario "draft" { render () } }
+    `)
+    const request = playlistSnapRequest({
+      rectIds: ['quoted'],
+      tree: {
+        arguments: ['Say "hi" {now}\\later\nnext'],
+        component: 'Text',
+        layout: [['hug']],
+        rectId: 'quoted',
+        type: 'element',
+      },
+    })
+    const patch = await SourceActions.applyStudioPatch(document, request)
+
+    Expect(patch.content.match(/use Text from @tao\/ui/g)).toHaveLength(1)
+    Expect(patch.content).toContain('Text("Say \\"hi\\" \\{now}\\\\later\\nnext") [hug]')
+    Expect(patch.content).toContain('#studio_rect_00710075006f007400650064')
+    const resnapped = await SourceActions.applyStudioPatch(await parseDocument(patch.content), request)
+    Expect(resnapped.content.match(/#studio_rect_00710075006f007400650064/g)).toHaveLength(1)
+  })
+
+  Test('rejects a missing, non-public, or multiply owned generated view', async () => {
+    const privateView = await parseDocument(`
+      view View4() { render Text("private") }
+      scenarios View4 "sketch" { device phone scenario "draft" { render () } }
+    `)
+    await Expect(SourceActions.applyStudioPatch(privateView, playlistSnapRequest())).rejects.toThrow(
+      'requires one generated public view',
+    )
+    const wrongView = await parseDocument(`
+      public view View5() { render Text("wrong") }
+      scenarios View5 "sketch" { device phone scenario "draft" { render () } }
+    `)
+    await Expect(SourceActions.applyStudioPatch(wrongView, playlistSnapRequest())).rejects.toThrow(
+      'requires one generated public view',
+    )
+    const wrongOwner = await parseDocument('public view View4() { render Text("not generated") }')
+    await Expect(SourceActions.applyStudioPatch(wrongOwner, playlistSnapRequest())).rejects.toThrow(
+      'not owned by one generated sketch scenario',
+    )
+  })
+
+  Test('rejects duplicate rectangle identities and identity order mismatches', async () => {
+    const document = await generatedSketchDocument()
+    const duplicate = playlistSnapRequest({
+      rectIds: ['same', 'same'],
+      tree: {
+        children: [leaf('same'), leaf('same')],
+        direction: 'Row',
+        layout: [],
+        type: 'container',
+      },
+    })
+    await Expect(SourceActions.applyStudioPatch(document, duplicate)).rejects.toThrow('invalid or duplicated')
+    await Expect(SourceActions.applyStudioPatch(document, {
+      ...playlistSnapRequest(),
+      rectIds: ['duration', 'art', 'title', 'artist'],
+    })).rejects.toThrow('identities do not match')
+  })
+
+  Test('rejects invalid component, layout ownership, empty tree, and arbitrary source fields', async () => {
+    const document = await generatedSketchDocument()
+    const invalidTrees: unknown[] = [
+      { ...leaf('bad'), component: 'Script' },
+      { ...leaf('bad'), layout: [['gap', 8]] },
+      { children: [], direction: 'Row', layout: [], type: 'container' },
+      { children: [leaf('bad')], direction: 'Stack', layout: [], type: 'container' },
+    ]
+    for (const tree of invalidTrees) {
+      await Expect(SourceActions.applyStudioPatch(
+        document,
+        playlistSnapRequest({
+          rectIds: ['bad'],
+          tree: tree as StudioSketchSnapElement,
+        }),
+      )).rejects.toThrow()
+    }
+    await Expect(SourceActions.applyStudioPatch(document, {
+      ...playlistSnapRequest({ rectIds: ['bad'], tree: leaf('bad') }),
+      source: 'render Script(`unsafe`)',
+    } as unknown as StudioSourcePatchRequest)).rejects.toThrow('unsupported fields')
+  })
 })
+
+function playlistSnapRequest(
+  overrides: Partial<StudioSnapSketchToFlowPatchRequest> = {},
+): StudioSnapSketchToFlowPatchRequest {
+  return {
+    expectedCatalogRevision: 7,
+    kind: 'snap-sketch-to-flow',
+    rectIds: ['art', 'title', 'artist', 'duration'],
+    sketchId: 'playlist-row',
+    tree: {
+      children: [
+        { arguments: ['cover.png'], component: 'Image', layout: [['hug']], rectId: 'art', type: 'element' },
+        {
+          children: [
+            { arguments: ['Night Drive'], component: 'Text', layout: [['hug']], rectId: 'title', type: 'element' },
+            { arguments: ['Signals'], component: 'Text', layout: [['hug']], rectId: 'artist', type: 'element' },
+          ],
+          direction: 'Col',
+          layout: [['gap', 4]],
+          type: 'container',
+        },
+        {
+          arguments: ['3:42'],
+          component: 'Text',
+          layout: [['width', 38], ['height', 20], ['claim', 1]],
+          rectId: 'duration',
+          type: 'element',
+        },
+      ],
+      direction: 'Row',
+      layout: [['gap', 12], ['pad', 'horizontal', 12, 'vertical', 8]],
+      type: 'container',
+    },
+    viewName: 'View4',
+    ...overrides,
+  }
+}
+
+function leaf(rectId: string): StudioSketchSnapElement {
+  return { arguments: ['text'], component: 'Text', layout: [['hug']], rectId, type: 'element' }
+}
+
+async function generatedSketchDocument(): Promise<AST.Document> {
+  return await parseDocument(`
+    public view View4() { render Text("old") }
+    scenarios View4 "sketch" { device phone scenario "draft" { render () } }
+  `)
+}
 
 function source(text: string): string {
   return `${Text.stripIndent(text)}\n`

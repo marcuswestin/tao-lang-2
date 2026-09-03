@@ -15,12 +15,14 @@ export type StudioComponentKind =
   | 'Number'
   | 'Panes'
   | 'Picker'
+  | 'Placeholder'
   | 'Progress'
   | 'Row'
   | 'ScrollView'
   | 'SegmentedControl'
   | 'Slider'
   | 'Spinner'
+  | 'Spacer'
   | 'Stack'
   | 'Switch'
   | 'Text'
@@ -201,14 +203,68 @@ export type StudioMoveRenderPatchRequest = StudioMoveRenderRequest & {
   kind: 'move-render'
 }
 
+/** Toggles the nearest Row/Col owning one stable leaf render. */
+export type StudioToggleFlowDirectionPatchRequest = Readonly<{
+  kind: 'toggle-flow-direction'
+  renderId: string
+}>
+
+/** Inserts a one-pixel cross-axis separator after a stable leaf render. */
+export type StudioInsertSeparatorPatchRequest = Readonly<{
+  afterId: string
+  beforeId?: string
+  kind: 'insert-separator'
+}>
+
+/** Inserts a Spacer between adjacent leaves and assigns their proportional claims. */
+export type StudioInsertSpacerPatchRequest = Readonly<{
+  afterId: string
+  beforeId: string
+  kind: 'insert-spacer'
+  ratio: readonly [number, number]
+}>
+
+export type StudioSketchSnapElement = Readonly<{
+  arguments: readonly string[]
+  binding?: string
+  component: 'Image' | 'Placeholder' | 'Text'
+  content?: string
+  layout: readonly StudioLayoutEntry[]
+  rectId: string
+  type: 'element'
+}>
+
+export type StudioSketchSnapContainer = Readonly<{
+  children: readonly StudioSketchSnapTree[]
+  direction: 'Col' | 'Row'
+  layout: readonly StudioLayoutEntry[]
+  type: 'container'
+}>
+
+export type StudioSketchSnapTree = StudioSketchSnapContainer | StudioSketchSnapElement
+
+/** Structured-only request for replacing one generated public sketch view's render tree. */
+export type StudioSnapSketchToFlowPatchRequest = Readonly<{
+  expectedCatalogRevision: number
+  kind: 'snap-sketch-to-flow'
+  rectIds: readonly string[]
+  sketchId: string
+  tree: StudioSketchSnapTree
+  viewName: string
+}>
+
 /** StudioSourcePatchRequest declares one semantic visual source mutation from Studio. */
 export type StudioSourcePatchRequest =
   | StudioInsertCapturedFixturePatchRequest
   | StudioInsertComponentPatchRequest
   | StudioInsertProjectViewPatchRequest
+  | StudioInsertSeparatorPatchRequest
+  | StudioInsertSpacerPatchRequest
   | StudioSetLayoutEntryPatchRequest
   | StudioSetStyleEntryPatchRequest
   | StudioSetScenarioArgumentsPatchRequest
+  | StudioSnapSketchToFlowPatchRequest
+  | StudioToggleFlowDirectionPatchRequest
   | StudioWrapRenderPatchRequest
   | StudioMoveRenderPatchRequest
 
@@ -233,12 +289,16 @@ export const StudioActions = {
   insertCapturedFixture,
   insertComponent,
   insertProjectView,
+  insertSeparator,
+  insertSpacer,
   inspectRender,
   moveRender,
   setLayoutEntry,
   setScenarioArguments,
+  snapSketchToFlow,
   setStyleEntry,
   sourceVersion: contentVersion,
+  toggleFlowDirection,
   wrapRender,
 } as const
 
@@ -268,10 +328,14 @@ async function applyPatchContent(
     'insert-captured-fixture': async action => await insertCapturedFixture(document, action),
     'insert-component': async action => await insertComponent(document, action.component, action),
     'insert-project-view': async action => await insertProjectView(document, action.viewName, action),
+    'insert-separator': async action => await insertSeparator(document, action),
+    'insert-spacer': async action => await insertSpacer(document, action),
     'move-render': async action => await moveRender(document, action),
     'set-layout-entry': async action => await setLayoutEntry(document, action),
     'set-scenario-arguments': async action => await setScenarioArguments(document, action),
     'set-style-entry': async action => await setStyleEntry(document, action, context),
+    'snap-sketch-to-flow': async action => await snapSketchToFlow(document, action),
+    'toggle-flow-direction': async action => await toggleFlowDirection(document, action),
     'wrap-render': async action => await wrapRender(document, action),
   })
 }
@@ -314,10 +378,14 @@ function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | u
     'insert-captured-fixture': () => undefined,
     'insert-component': action => action.beforeId ?? action.afterId,
     'insert-project-view': action => action.beforeId ?? action.afterId,
+    'insert-separator': action => action.afterId,
+    'insert-spacer': action => action.afterId,
     'move-render': action => action.draggedId,
     'set-layout-entry': action => action.renderId,
     'set-scenario-arguments': () => undefined,
     'set-style-entry': action => action.renderId,
+    'snap-sketch-to-flow': () => undefined,
+    'toggle-flow-direction': action => action.renderId,
     'wrap-render': action => action.renderId,
   })
 }
@@ -528,6 +596,147 @@ async function insertProjectView(
   const target = studioInsertionRender(document.parseResult.value)
   requireInsertableProjectView(document.parseResult.value, viewName, AST.findOwningView(target)?.name)
   return await insertViewRender(document, `${viewName}()`, gap)
+}
+
+/** toggleFlowDirection changes the nearest Row/Col that directly or transitively owns a leaf render. */
+async function toggleFlowDirection(
+  document: AST.Document,
+  request: StudioToggleFlowDirectionPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireLocalRenderId(document, request.renderId, 'toggle flow direction for renders')
+  const leaf = requireLeafRenderById(document.parseResult.value, request.renderId)
+  const owner = nearestFlowOwner(leaf)
+  const reference = owner.view!.$refNode
+  if (reference === undefined) {
+    throw new Errors.UserInputError('Cannot toggle a flow container without source coordinates.')
+  }
+  const direction: 'Col' | 'Row' = flowDirection(owner) === 'Row' ? 'Col' : 'Row'
+  const source = applySourceEdits(document.textDocument.getText(), [{
+    end: reference.end,
+    replacement: direction,
+    start: reference.offset,
+  }])
+  return await Formatter.formatCode(ensureUiComponentImport(source, document.parseResult.value, direction))
+}
+
+/** insertSeparator inserts the current-dialect Box separator for the owning flow direction. */
+async function insertSeparator(
+  document: AST.Document,
+  request: StudioInsertSeparatorPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  const siblings = requireFlowSiblings(document, request.afterId, request.beforeId)
+  const direction = flowDirection(siblings.owner)
+  const snippet = direction === 'Row' ? 'Box() [width 1, height fill]' : 'Box() [width fill, height 1]'
+  const inserted = insertStudioSnippetAtGap(document, snippet, request)
+  return await Formatter.formatCode(ensureUiComponentImport(inserted, document.parseResult.value, 'Box'))
+}
+
+/** insertSpacer inserts one Spacer and applies a deterministic two-sided claim ratio. */
+async function insertSpacer(
+  document: AST.Document,
+  request: StudioInsertSpacerPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  const ratio = requireClaimRatio(request.ratio)
+  const siblings = requireFlowSiblings(document, request.afterId, request.beforeId)
+  const source = document.textDocument.getText()
+  const slices = blockStatementSlices(source, siblings.block)
+  const insertEdit = studioSnippetInsertionEdit(source, slices, request, 'Spacer()')
+  const edits = [
+    ...setRenderLayoutEntryEdits(source, siblings.after, `claim ${ratio[0]}`),
+    ...setRenderLayoutEntryEdits(source, siblings.before!, `claim ${ratio[1]}`),
+    insertEdit,
+  ]
+  const inserted = applySourceEdits(source, edits)
+  return await Formatter.formatCode(ensureUiComponentImport(inserted, document.parseResult.value, 'Spacer'))
+}
+
+function requireClaimRatio(value: readonly [number, number]): readonly [number, number] {
+  if (
+    !Array.isArray(value)
+    || value.length !== 2
+    || value.some(weight => !Number.isSafeInteger(weight) || weight < 1 || weight > 100)
+  ) {
+    throw new Errors.UserInputError('Studio Spacer claim ratio must contain two integers from 1 through 100.')
+  }
+  return value
+}
+
+type FlowSiblings = {
+  after: AST.ViewRender
+  before?: AST.ViewRender
+  block: AST.Block
+  owner: FlowOwner
+}
+
+function requireFlowSiblings(
+  document: AST.Document,
+  afterId: string,
+  beforeId: string | undefined,
+): FlowSiblings {
+  requireLocalRenderId(document, afterId, 'edit flow siblings')
+  if (beforeId !== undefined) {
+    requireLocalRenderId(document, beforeId, 'edit flow siblings')
+  }
+  const after = requireLeafRenderById(document.parseResult.value, afterId)
+  const before = beforeId === undefined ? undefined : requireLeafRenderById(document.parseResult.value, beforeId)
+  if (!AST.isBlock(after.$container) || (before !== undefined && before.$container !== after.$container)) {
+    throw new Errors.UserInputError('Studio flow edits require direct leaf siblings in the same container.')
+  }
+  const block = after.$container
+  const owner = block.$container
+  if (!isFlowOwner(owner)) {
+    throw new Errors.UserInputError('Studio flow edits require leaf siblings owned by a Row or Col.')
+  }
+  if (
+    AST.findOwningView(after) === undefined
+    || (before !== undefined && AST.findOwningView(before) !== AST.findOwningView(after))
+  ) {
+    throw new Errors.UserInputError('Studio flow edits require render expressions in the same view definition.')
+  }
+  if (before !== undefined) {
+    const slices = blockStatementSlices(document.textDocument.getText(), block)
+    insertionTargetIndex(slices, { afterId, beforeId })
+  }
+  return { after, ...(before === undefined ? {} : { before }), block, owner }
+}
+
+function requireLeafRenderById(file: AST.TaoFile, id: string): AST.ViewRender {
+  const render = requireRenderById(file, id)
+  if (!AST.isViewRender(render) || render.block !== undefined || !AST.isBlock(render.$container)) {
+    throw new Errors.UserInputError(`Studio flow edit target is no longer a direct leaf render: ${id}`)
+  }
+  return render
+}
+
+type FlowOwner = AST.RenderStatement | AST.ViewRender
+
+function flowDirection(render: FlowOwner): 'Col' | 'Row' {
+  const direction = render.view?.$refText
+  if (direction !== 'Row' && direction !== 'Col') {
+    throw new Errors.UnexpectedBehaviorError('Expected a validated Studio Row or Col flow owner.')
+  }
+  return direction
+}
+
+function isFlowOwner(value: unknown): value is FlowOwner {
+  return (AST.isViewRender(value) || AST.isRenderStatement(value))
+    && (value.view?.$refText === 'Row' || value.view?.$refText === 'Col')
+}
+
+function nearestFlowOwner(render: AST.ViewRender): FlowOwner {
+  let candidate: unknown = render.$container
+  while (candidate !== undefined) {
+    if (isFlowOwner(candidate)) {
+      return candidate
+    }
+    candidate = typeof candidate === 'object' && candidate !== null && '$container' in candidate
+      ? candidate.$container
+      : undefined
+  }
+  throw new Errors.UserInputError('Studio direction toggle requires a leaf owned by a Row or Col.')
 }
 
 /** setLayoutEntry sets or replaces one layout entry on a rendered node. */
@@ -1041,6 +1250,188 @@ function removeLayoutClauseEntryEdit(source: string, render: AST.Render, entry: 
 const colorEntryHeads = new Set<string>(ASTUtils.designColorHeads)
 const cssHexColor = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
 
+/** Replaces only a generated public ViewN render from a validated structured Snap tree. */
+async function snapSketchToFlow(
+  document: AST.Document,
+  request: StudioSnapSketchToFlowPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  validateSnapRequest(request)
+  const views = document.parseResult.value.statements.filter(AST.isViewDeclaration)
+    .filter(view => view.name === request.viewName)
+  const view = views.length === 1 ? views[0] : undefined
+  if (view === undefined || view.visibility !== 'public' || view.block === undefined) {
+    throw new Errors.UserInputError(`Studio Snap requires one generated public view: ${request.viewName}`)
+  }
+  const owners = document.parseResult.value.statements.filter(AST.isScenarioGroupDeclaration)
+    .filter(group => group.name === 'sketch' && group.subject?.ref === view)
+  if (owners.length !== 1) {
+    throw new Errors.UserInputError(
+      `Studio Snap view is not owned by one generated sketch scenario: ${request.viewName}`,
+    )
+  }
+  const renders = view.block.statements.filter(AST.isRenderStatement)
+  if (renders.length !== 1 || renders[0]?.$cstNode === undefined) {
+    throw new Errors.UserInputError(`Studio Snap requires one direct render tree in ${request.viewName}.`)
+  }
+  const leafIds: string[] = []
+  const components = new Set<string>()
+  const nodeSource = snapNodeSource(request.tree, '', leafIds, components)
+  const replacement = request.tree.type === 'element'
+    ? nodeSource.replace('\n', '\nrender ')
+    : `render ${nodeSource}`
+  if (leafIds.length !== request.rectIds.length || leafIds.some((id, index) => id !== request.rectIds[index])) {
+    throw new Errors.UserInputError('Studio Snap rectangle identities do not match the structured tree.')
+  }
+  const source = document.textDocument.getText()
+  const edits: SourceEdit[] = [{ end: renders[0].$cstNode.end, replacement, start: renders[0].$cstNode.offset }]
+  const previousRootTag = AST.attachedTag(renders[0])
+  if (previousRootTag?.tag.startsWith('#studio_rect_') && previousRootTag.$cstNode !== undefined) {
+    edits.push({ end: renders[0].$cstNode.offset, replacement: '', start: previousRootTag.$cstNode.offset })
+  }
+  const required = [...components].toSorted()
+  const uses = document.parseResult.value.statements.filter(AST.isUseStatement)
+  const uiUse = uses.find(statement => statement.importPath === '@tao/ui')
+  const imported = new Set(uiUse?.importedDeclarations.map(reference => reference.$refText) ?? [])
+  if (required.some(component => !imported.has(component))) {
+    if (uiUse?.$cstNode !== undefined) {
+      edits.push({
+        end: uiUse.$cstNode.end,
+        replacement: `use ${[...new Set([...imported, ...required])].toSorted().join(', ')} from @tao/ui`,
+        start: uiUse.$cstNode.offset,
+      })
+    } else {
+      const offset = document.parseResult.value.statements[0]?.$cstNode?.offset ?? 0
+      edits.push({ end: offset, replacement: `use ${required.join(', ')} from @tao/ui\n\n`, start: offset })
+    }
+  }
+  return await Formatter.formatCode(applySourceEdits(source, edits))
+}
+
+function validateSnapRequest(request: StudioSnapSketchToFlowPatchRequest): void {
+  requireExactKeys(
+    request,
+    ['expectedCatalogRevision', 'kind', 'rectIds', 'sketchId', 'tree', 'viewName'],
+    'Snap request',
+  )
+  if (!Number.isSafeInteger(request.expectedCatalogRevision) || request.expectedCatalogRevision < 0) {
+    throw new Errors.UserInputError('Studio Snap catalog revision must be a nonnegative integer.')
+  }
+  if (
+    typeof request.viewName !== 'string'
+    || !/^View[1-9][0-9]*$/.test(request.viewName)
+    || typeof request.sketchId !== 'string'
+    || request.sketchId.length === 0
+  ) {
+    throw new Errors.UserInputError('Studio Snap requires a generated ViewN and sketch identity.')
+  }
+  if (!Array.isArray(request.rectIds) || request.rectIds.some(id => typeof id !== 'string' || id.length === 0)) {
+    throw new Errors.UserInputError('Studio Snap rectangle identities must be nonempty strings.')
+  }
+  validateSnapNode(request.tree, new Set(), 0)
+}
+
+function validateSnapNode(node: StudioSketchSnapTree, seen: Set<string>, depth: number): void {
+  if (depth > 64 || !isObject(node)) {
+    throw new Errors.UserInputError('Studio Snap tree is invalid or too deeply nested.')
+  }
+  if (node.type === 'container') {
+    requireExactKeys(node, ['children', 'direction', 'layout', 'type'], 'Snap container')
+    if (
+      (node.direction !== 'Row' && node.direction !== 'Col') || !Array.isArray(node.children)
+      || node.children.length === 0
+    ) {
+      throw new Errors.UserInputError('Studio Snap container direction and children are invalid.')
+    }
+    validateSnapLayout(node.layout, new Set(['gap', 'pad', 'claim']), 'container')
+    node.children.forEach(child => validateSnapNode(child, seen, depth + 1))
+    return
+  }
+  if (node.type !== 'element') {
+    throw new Errors.UserInputError('Studio Snap node kind is invalid.')
+  }
+  requireExactKeys(node, ['arguments', 'binding', 'component', 'content', 'layout', 'rectId', 'type'], 'Snap element')
+  if (!['Image', 'Placeholder', 'Text'].includes(node.component)) {
+    throw new Errors.UserInputError(`Studio Snap component is unsupported: ${String(node.component)}`)
+  }
+  if (!Array.isArray(node.arguments) || node.arguments.length !== 1 || typeof node.arguments[0] !== 'string') {
+    throw new Errors.UserInputError('Studio Snap elements require one text argument.')
+  }
+  if (typeof node.rectId !== 'string' || node.rectId.length === 0 || seen.has(node.rectId)) {
+    throw new Errors.UserInputError(`Studio Snap rectangle identity is invalid or duplicated: ${String(node.rectId)}`)
+  }
+  if (
+    (node.binding !== undefined && typeof node.binding !== 'string')
+    || (node.content !== undefined && typeof node.content !== 'string')
+  ) {
+    throw new Errors.UserInputError('Studio Snap element metadata must be text.')
+  }
+  seen.add(node.rectId)
+  validateSnapLayout(node.layout, new Set(['width', 'height', 'hug', 'claim']), 'element')
+}
+
+function validateSnapLayout(layout: readonly StudioLayoutEntry[], allowed: ReadonlySet<string>, owner: string): void {
+  if (!Array.isArray(layout)) {
+    throw new Errors.UserInputError(`Studio Snap ${owner} layout must be an array.`)
+  }
+  const heads = new Set<string>()
+  for (const raw of layout) {
+    const entry = requireSupportedLayoutEntry(raw)
+    const head = entry[0]
+    if (!allowed.has(head) || heads.has(head)) {
+      throw new Errors.UserInputError(`Studio Snap ${owner} layout entry is invalid or duplicated: ${head}`)
+    }
+    if (head === 'claim' && (entry.length !== 2 || entry[1] !== 1)) {
+      throw new Errors.UserInputError('Studio Snap claim must be exactly 1.')
+    }
+    heads.add(head)
+  }
+}
+
+function snapNodeSource(
+  node: StudioSketchSnapTree,
+  indentation: string,
+  leafIds: string[],
+  components: Set<string>,
+): string {
+  if (node.type === 'element') {
+    leafIds.push(node.rectId)
+    components.add(node.component)
+    return `#studio_rect_${encodedTag(node.rectId)}\n${indentation}${node.component}(${
+      node.arguments.map(taoStringLiteral).join(', ')
+    })${snapLayoutSource(node.layout)}`
+  }
+  components.add(node.direction)
+  const childIndent = `${indentation}   `
+  const children = node.children.map(child =>
+    `${childIndent}${snapNodeSource(child, childIndent, leafIds, components)}`
+  )
+    .join('\n')
+  return `${node.direction}()${snapLayoutSource(node.layout)} {\n${children}\n${indentation}}`
+}
+
+function snapLayoutSource(layout: readonly StudioLayoutEntry[]): string {
+  return layout.length === 0 ? '' : ` [${layout.map(formatLayoutEntry).join(', ')}]`
+}
+
+function encodedTag(value: string): string {
+  let encoded = ''
+  for (let index = 0; index < value.length; index += 1) {
+    encoded += value.charCodeAt(index).toString(16).padStart(4, '0')
+  }
+  return encoded
+}
+
+function requireExactKeys(value: object, allowed: readonly string[], label: string): void {
+  if (Object.keys(value).some(key => !allowed.includes(key))) {
+    throw new Errors.UserInputError(`${label} contains unsupported fields.`)
+  }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 /** wrapRender wraps a rendered node in a Studio-owned Stack() container. */
 async function wrapRender(document: AST.Document, request: StudioWrapRenderPatchRequest): Promise<string> {
   assertNoSyntaxErrors(document)
@@ -1091,6 +1482,7 @@ const studioComponentSnippets: Readonly<Record<StudioComponentKind, string>> = {
   Number: 'Number(0)',
   Panes: 'Panes() {\n   Text("New pane")\n}',
   Picker: 'Picker(Value: "First", Options: ["First", "Second"], Label: "Picker") {\n   on change -> Value { }\n}',
+  Placeholder: 'Placeholder("Unfinished content") [width 120, height 80]',
   Progress: 'Progress(0)',
   Row: 'Row() [gap 8] {\n   Text("New row")\n}',
   ScrollView: 'ScrollView() {\n   Text("Scrollable content")\n}',
@@ -1098,6 +1490,7 @@ const studioComponentSnippets: Readonly<Record<StudioComponentKind, string>> = {
     'SegmentedControl(Value: "First", Options: ["First", "Second"], Label: "Options") {\n   on change -> Value { }\n}',
   Slider: 'Slider(Value: 0, Label: "Slider") {\n   on change -> Value { }\n}',
   Spinner: 'Spinner()',
+  Spacer: 'Spacer()',
   Stack: 'Stack() [gap 8, pad 8] {\n   Text("Nested text")\n}',
   Switch: 'Switch(Value: false, Label: "Switch") {\n   on change -> Value { }\n}',
   Text: 'Text("New text")',
@@ -1227,19 +1620,31 @@ function requireRenderById(file: AST.TaoFile, id: string): AST.Render {
 }
 
 function setRenderLayoutEntrySource(source: string, render: AST.Render, entry: string): string {
+  return applySourceEdits(source, setRenderLayoutEntryEdits(source, render, entry))
+}
+
+function setRenderLayoutEntryEdits(source: string, render: AST.Render, entry: string): readonly SourceEdit[] {
   const layoutClause = render.layoutClause
   if (layoutClause === undefined) {
     const insertionOffset = renderLayoutInsertionOffset(render)
-    return applySourceEdits(source, [{
+    return [{
       end: insertionOffset,
       replacement: ` [${entry}]`,
       start: insertionOffset,
-    }])
+    }]
   }
-  return setLayoutClauseEntrySource(source, layoutClause, entry)
+  return setLayoutClauseEntryEdits(source, layoutClause, entry)
 }
 
 function setLayoutClauseEntrySource(source: string, layoutClause: AST.LayoutClause, entry: string): string {
+  return applySourceEdits(source, setLayoutClauseEntryEdits(source, layoutClause, entry))
+}
+
+function setLayoutClauseEntryEdits(
+  source: string,
+  layoutClause: AST.LayoutClause,
+  entry: string,
+): readonly SourceEdit[] {
   const slot = layoutEntrySlot(entry.split(/\s+/))
   const existingIndex = layoutClause.entries.findLastIndex(candidate =>
     layoutEntrySlot(ASTUtils.layoutEntryValues(candidate)) === slot
@@ -1250,7 +1655,7 @@ function setLayoutClauseEntrySource(source: string, layoutClause: AST.LayoutClau
       const nextEntry = layoutClause.entries[existingIndex + 1]!
       const closeBracket = source.lastIndexOf(']', layoutClause.$cstNode!.end - 1)
       const insertionOffset = closeBracket === -1 ? layoutClause.$cstNode!.end : closeBracket
-      return applySourceEdits(source, [{
+      return [{
         end: nextEntry.$cstNode!.offset,
         replacement: '',
         start: existingEntry.$cstNode!.offset,
@@ -1258,21 +1663,21 @@ function setLayoutClauseEntrySource(source: string, layoutClause: AST.LayoutClau
         end: insertionOffset,
         replacement: `, ${entry}`,
         start: insertionOffset,
-      }])
+      }]
     }
-    return applySourceEdits(source, [{
+    return [{
       end: existingEntry.$cstNode!.end,
       replacement: entry,
       start: existingEntry.$cstNode!.offset,
-    }])
+    }]
   }
   const closeBracket = source.lastIndexOf(']', layoutClause.$cstNode!.end - 1)
   const insertionOffset = closeBracket === -1 ? layoutClause.$cstNode!.end : closeBracket
-  return applySourceEdits(source, [{
+  return [{
     end: insertionOffset,
     replacement: layoutClause.entries.length === 0 ? entry : `, ${entry}`,
     start: insertionOffset,
-  }])
+  }]
 }
 
 function layoutEntrySlot(values: readonly StudioLayoutTermValue[]): string {
@@ -1834,12 +2239,21 @@ function insertStudioSnippetAtGap(document: AST.Document, snippet: string, gap: 
   }
   const block = targetStatement.$container
   const slices = blockStatementSlices(source, block)
+  return applySourceEdits(source, [studioSnippetInsertionEdit(source, slices, gap, snippet)])
+}
+
+function studioSnippetInsertionEdit(
+  source: string,
+  slices: BlockStatementSlice[],
+  gap: StudioRenderGap,
+  snippet: string,
+): SourceEdit {
   const insertIndex = insertionTargetIndex(slices, gap)
   const target = slices[insertIndex] ?? slices[slices.length - 1]!
   const indent = lineIndentAt(source, target.start)
   const inserted = `${indentSnippet(snippet, indent)}\n`
   const offset = insertIndex === slices.length ? target.end : target.start
-  return applySourceEdits(source, [{ end: offset, replacement: inserted, start: offset }])
+  return { end: offset, replacement: inserted, start: offset }
 }
 
 function insertionTargetIndex(slices: BlockStatementSlice[], gap: StudioRenderGap): number {
