@@ -3,6 +3,10 @@ import type React from 'react'
 /** ReactNativeRuntime declares the RN component set used by Tao runtime rendering. */
 export type ReactNativeRuntime = {
   ActivityIndicator: React.ComponentType<any>
+  AppState?: {
+    addEventListener(event: 'change', handler: (state: string) => void): { remove(): void }
+    currentState: string
+  }
   BackHandler?: {
     addEventListener(event: 'hardwareBackPress', handler: () => boolean): { remove(): void }
   }

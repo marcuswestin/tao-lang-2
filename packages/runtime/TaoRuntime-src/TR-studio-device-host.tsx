@@ -23,6 +23,7 @@ import {
   type StudioDeviceClient,
   type TaoStudioDeviceAssignment,
   type TaoStudioDeviceBootstrap,
+  type TaoStudioDeviceClientPhase,
   type TaoStudioDeviceClientState,
   type TaoStudioDeviceSocket,
   type TaoStudioDeviceStorage,
@@ -201,6 +202,20 @@ export function cellIdentityKey(identity: TaoStudioDeviceCellIdentity): string {
     identity.manifestRevision,
     identity.previewInstanceId,
   ].join(':')
+}
+
+/**
+ * shouldRedialOnForeground decides whether the app returning to the foreground should shortcut the
+ * client's own backoff with an immediate reconnect. Only a genuine background→active transition
+ * while the client already gave up (`disconnected`) qualifies — a client mid-attempt or already
+ * connected has nothing for this to fix, and redialing it would tear down a healthy session.
+ */
+export function shouldRedialOnForeground(
+  previousAppState: string,
+  nextAppState: string,
+  phase: TaoStudioDeviceClientPhase,
+): boolean {
+  return previousAppState !== 'active' && nextAppState === 'active' && phase === 'disconnected'
 }
 
 /** deviceHostPresentation decides what one client snapshot puts on the screen. */
@@ -475,6 +490,25 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
     appliedKey.current = identityKey
     client.applied(identity, compileRevision)
   }, [client, compileRevision, identity, identityKey])
+
+  // A dropped socket already retries on its own backoff (capped at 15s); this only shortens that
+  // wait when the app resumes from the background and finds itself still disconnected. It must not
+  // fire when the client is merely mid-attempt (connecting, handshaking, pairing) or already
+  // connected — reconnect() would tear down and redial a healthy session for no reason.
+  React.useEffect(() => {
+    const AppState = RN.AppState
+    if (AppState === undefined) {
+      return undefined
+    }
+    let previousAppState = AppState.currentState
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      if (shouldRedialOnForeground(previousAppState, nextAppState, client.state().phase)) {
+        client.reconnect()
+      }
+      previousAppState = nextAppState
+    })
+    return () => subscription.remove()
+  }, [RN.AppState, client])
 
   const content = presentation.kind === 'cell'
     ? React.createElement(StudioDeviceCell, {

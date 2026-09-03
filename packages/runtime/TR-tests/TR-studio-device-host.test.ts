@@ -66,6 +66,7 @@ const {
   parseStoredRecord,
   resolveDeviceBootstrap,
   secureStoreStorage,
+  shouldRedialOnForeground,
   webSocketTransport,
 } = await import('../TaoRuntime-src/TR-studio-device-host')
 
@@ -243,6 +244,26 @@ Describe('Studio device host presentation', () => {
   Test('keys a mounted cell by its complete identity', () => {
     Expect(cellIdentityKey(identity)).toBe('Demo:states#cell:2:7:compile:7:instance-1')
     Expect(cellIdentityKey({ ...identity, previewInstanceId: 'instance-2' })).not.toBe(cellIdentityKey(identity))
+  })
+})
+
+Describe('Studio device host foreground redial', () => {
+  Test('redials only a genuine background-to-active transition that found the client disconnected', () => {
+    Expect(shouldRedialOnForeground('background', 'active', 'disconnected')).toBe(true)
+    Expect(shouldRedialOnForeground('inactive', 'active', 'disconnected')).toBe(true)
+  })
+
+  Test('leaves a healthy or already-recovering client alone', () => {
+    Expect(shouldRedialOnForeground('background', 'active', 'connected')).toBe(false)
+    Expect(shouldRedialOnForeground('background', 'active', 'connecting')).toBe(false)
+    Expect(shouldRedialOnForeground('background', 'active', 'handshaking')).toBe(false)
+    Expect(shouldRedialOnForeground('background', 'active', 'pairing')).toBe(false)
+  })
+
+  Test('ignores a transition that is not background-to-active', () => {
+    Expect(shouldRedialOnForeground('active', 'active', 'disconnected')).toBe(false)
+    Expect(shouldRedialOnForeground('active', 'background', 'disconnected')).toBe(false)
+    Expect(shouldRedialOnForeground('background', 'inactive', 'disconnected')).toBe(false)
   })
 })
 
