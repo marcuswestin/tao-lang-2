@@ -143,7 +143,7 @@ Describe('Studio device host bootstrap', () => {
     platform.WebSocket = FakeWebSocket
     let client: StudioDeviceClient
     try {
-      const resolution = createNativeStudioDeviceClient(publication)
+      const resolution = createNativeStudioDeviceClient()
       Expect(resolution.kind).toBe('ready')
       client = (resolution as { client: StudioDeviceClient }).client
       await client.start()

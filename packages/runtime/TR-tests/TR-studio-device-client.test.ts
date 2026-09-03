@@ -294,7 +294,6 @@ function harness(
     },
     handshakeTimeoutMs: 5_000,
     now: timers.now,
-    publication: { appName: 'Demo', compileRevision: 7 },
     storage,
     timers,
     transport: studio.transport,
@@ -607,9 +606,11 @@ Describe('Studio device client sealed control plane', () => {
     run.client.applied(identity, 7)
     Expect(session.received()).toEqual([{ appliedRevision: 7, compileRevision: 7, identity, type: 'device.applied' }])
     Expect(run.client.state().appliedRevision).toBe(7)
-    Expect(() => run.client.applied(identity, 8)).toThrow(
-      'Expected: the applied revision is the loaded bundle revision',
-    )
+    // Fast Refresh moves the bundle forward under a live client, so the revision the caller has on
+    // screen is reported as given; the client keeps no revision of its own to refuse it against.
+    run.client.applied(identity, 8)
+    Expect(session.received()).toEqual([{ appliedRevision: 8, compileRevision: 8, identity, type: 'device.applied' }])
+    Expect(run.client.state().appliedRevision).toBe(8)
 
     session.send({ accepted: true, compileRevision: 7, type: 'studio.appliedAck' })
     Expect(run.client.state().appliedAck).toEqual({ accepted: true, compileRevision: 7 })

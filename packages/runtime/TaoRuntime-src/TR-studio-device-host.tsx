@@ -300,9 +300,10 @@ export function deviceHostPresentation(
 }
 
 /** createNativeStudioDeviceClient wires a client to the device, or names the facts the bundle lacks. */
-export function createNativeStudioDeviceClient(
-  publication: TaoStudioDeviceHostPublication,
-): { client: StudioDeviceClient; kind: 'ready' } | { kind: 'missing'; missing: readonly string[] } {
+export function createNativeStudioDeviceClient(): {
+  client: StudioDeviceClient
+  kind: 'ready'
+} | { kind: 'missing'; missing: readonly string[] } {
   const RN = requireReactNativeRuntime() as NativeReactNativeRuntime
   const constants = NativeModules.optional<ExpoConstantsModule>('Studio device host', 'expo-constants')?.default
   const extra = constants?.expoConfig?.extra?.['taoStudioDevice']
@@ -341,7 +342,6 @@ export function createNativeStudioDeviceClient(
   return {
     client: createStudioDeviceClient({
       bootstrap: resolution.bootstrap,
-      publication: { appName: publication.appName, compileRevision: publication.compileRevision },
       storage: secureStoreStorage(secureStore),
       transport: webSocketTransport(WebSocketImplementation),
     }),
@@ -425,7 +425,7 @@ export function StudioDeviceHost(props: StudioDeviceHostProps): React.JSX.Elemen
   const RN = requireReactNativeRuntime()
   const [resolution] = React.useState(() =>
     props.client === undefined
-      ? createNativeStudioDeviceClient(props.publication)
+      ? createNativeStudioDeviceClient()
       : { client: props.client, kind: 'ready' as const }
   )
   const client = resolution.kind === 'ready' ? resolution.client : undefined

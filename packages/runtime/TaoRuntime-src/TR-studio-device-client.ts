@@ -67,11 +67,6 @@ export type TaoStudioDeviceBootstrap = {
   sessionId?: string
 }
 
-export type TaoStudioDevicePublication = {
-  appName: string
-  compileRevision: number
-}
-
 export type TaoStudioDeviceTimers = {
   clearTimeout(handle: unknown): void
   setTimeout(callback: () => void, delayMs: number): unknown
@@ -83,7 +78,6 @@ export type StudioDeviceClientOptions = {
   frameLimitBytes?: number
   handshakeTimeoutMs?: number
   now?: () => number
-  publication: TaoStudioDevicePublication
   storage: TaoStudioDeviceStorage
   timers?: TaoStudioDeviceTimers
   transport: TaoStudioDeviceTransport
@@ -661,13 +655,13 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
   }
 
   return {
+    /**
+     * The revision is the one the caller has on screen. The client cannot check it against a
+     * revision of its own: Fast Refresh replaces the bundle under a live client, so any copy the
+     * client kept from construction is stale by exactly the amount that matters here. The host
+     * compares the assignment against its live bundle revision to decide the stale-bundle overlay.
+     */
     applied(cellIdentity, compileRevision) {
-      // The device only ever draws the bundle it loaded, so any other revision is a host bug.
-      RuntimeAssert(
-        compileRevision === options.publication.compileRevision,
-        'the applied revision is the loaded bundle revision',
-        { compileRevision, publication: options.publication },
-      )
       sendWhenConnected({
         appliedRevision: compileRevision,
         compileRevision,
