@@ -4,6 +4,7 @@ import { Errors } from '@shared'
 import { Expect, Test, until } from '@shared/test'
 import type { StudioRenderInspection } from '@source-actions'
 import {
+  StudioApiClient,
   StudioApiError,
   StudioApiEventStream,
   StudioApiRoutes,
@@ -58,6 +59,7 @@ import {
   studioShellMarkup,
   studioShellRailPanels,
 } from '../studio-src/client/StudioShell'
+import type { StudioDeviceStatus } from '../studio-src/device/StudioDeviceStatus'
 import { StudioClientAssets } from '../studio-src/StudioClientAssets'
 import {
   StudioDraftSync,
@@ -237,6 +239,90 @@ Test('Studio events dispatch typed handshakes so startup scenario manifests are 
   })
 
   Expect(received).toBe(handshake)
+})
+
+Test('Studio events dispatch device-state snapshots to an optional handler', () => {
+  const status = {
+    gateway: { hosts: ['192.168.4.20'], port: 8765, studioFingerprint: 'AB12' },
+    pairing: { open: false },
+    sessionId: 'session-1',
+    trusted: [],
+  } satisfies StudioDeviceStatus
+  const received: StudioDeviceStatus[] = []
+  const handlers = {
+    onCompile() {},
+    onDisconnect() {},
+    onFile() {},
+    onManifest() {},
+  }
+
+  StudioApiEventStream.dispatch({ channel: 'tao-studio', protocolVersion: 1, status, type: 'device-state' }, handlers)
+  StudioApiEventStream.dispatch({ channel: 'tao-studio', protocolVersion: 1, status, type: 'device-state' }, {
+    ...handlers,
+    onDeviceState: value => received.push(value),
+  })
+
+  Expect(received).toEqual([status])
+})
+
+Test('Studio API client addresses every loopback device route with the contract bodies', async () => {
+  const previousFetch = globalThis.fetch
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  const requests: Array<{ body: unknown; method: string; url: string }> = []
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: { location: { pathname: '/sessions/window-7' } },
+    writable: true,
+  })
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    requests.push({
+      body: init?.body === undefined ? undefined : JSON.parse(String(init.body)),
+      method: init?.method ?? 'GET',
+      url,
+    })
+    if (url.endsWith('/api/device/launch')) {
+      return new Response(JSON.stringify({ error: 'Device launch tooling is not injected.' }), { status: 501 })
+    }
+    return new Response(JSON.stringify({ ok: true }), { status: 200 })
+  }) as typeof fetch
+  try {
+    await StudioApiClient.deviceStatus()
+    await StudioApiClient.deviceOpenPairing()
+    await StudioApiClient.deviceConfirmPairing('key-1')
+    await StudioApiClient.deviceDeclinePairing('key-2')
+    await StudioApiClient.deviceRevoke('key-3')
+    await StudioApiClient.deviceReconnect()
+    await StudioApiClient.deviceSelectCell('cell-home')
+    await StudioApiClient.deviceLaunchOpen('host-1')
+    let launchFailure: unknown
+    try {
+      await StudioApiClient.deviceLaunch()
+    } catch (error) {
+      launchFailure = error
+    }
+    Expect(launchFailure).toBeInstanceOf(StudioApiError)
+    Expect((launchFailure as StudioApiError).status).toBe(501)
+    Expect((launchFailure as StudioApiError).message).toBe('Device launch tooling is not injected.')
+    Expect(requests).toEqual([
+      { body: undefined, method: 'GET', url: '/sessions/window-7/api/device/status' },
+      { body: {}, method: 'POST', url: '/sessions/window-7/api/device/pairing/open' },
+      { body: { devicePublicKey: 'key-1' }, method: 'POST', url: '/sessions/window-7/api/device/pairing/confirm' },
+      { body: { devicePublicKey: 'key-2' }, method: 'POST', url: '/sessions/window-7/api/device/pairing/decline' },
+      { body: { devicePublicKey: 'key-3' }, method: 'POST', url: '/sessions/window-7/api/device/revoke' },
+      { body: {}, method: 'POST', url: '/sessions/window-7/api/device/reconnect' },
+      { body: { cellId: 'cell-home' }, method: 'POST', url: '/sessions/window-7/api/device/select-cell' },
+      { body: { hostId: 'host-1' }, method: 'POST', url: '/sessions/window-7/api/device/launch/open' },
+      { body: undefined, method: 'GET', url: '/sessions/window-7/api/device/launch' },
+    ])
+  } finally {
+    globalThis.fetch = previousFetch
+    if (previousWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window
+    } else {
+      Object.defineProperty(globalThis, 'window', previousWindow)
+    }
+  }
 })
 
 Test('Studio generated fixture proposals use the captured-fixture source-action flow', () => {

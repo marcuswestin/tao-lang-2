@@ -1,6 +1,7 @@
 import { Assert, Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import { EditorView } from 'codemirror'
+import type { StudioDeviceStatus } from '../device/StudioDeviceStatus'
 import type { StudioCompileCompletion } from '../StudioCompileCoordinator'
 import { type StudioDraftFile, StudioDraftSync, type StudioDraftSyncResult } from '../StudioDraftSync'
 import {
@@ -30,6 +31,7 @@ import {
   type StudioCompileState,
   type StudioFile,
 } from './StudioApiClient'
+import { createStudioDevicePanel, StudioDevicePanelModel } from './StudioDevicePanel'
 import {
   absoluteSourcePath,
   isStudioSaveShortcut,
@@ -139,6 +141,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
   const view = createStudioShell(root, config)
   const partialOpenTabs = new Map<string, StudioOpenEditorTab>()
   let partialPreviews: Awaited<ReturnType<typeof connectPreviews>> = []
+  let partialDevicePanel: ReturnType<typeof createStudioDevicePanel> | undefined
   try {
     throwIfMountAborted(options.signal)
     const handshake = await StudioApiClient.handshake(options.signal)
@@ -150,6 +153,18 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     throwIfMountAborted(options.signal)
     const activePreview = new StudioActivePreview(previews)
     configureInteractionMode(view.interactionMode, previews, handshake)
+    const devicePanel = createStudioDevicePanel({
+      api: StudioApiClient,
+      button: view.device,
+      handshake,
+      popover: view.devicePopover,
+    })
+    partialDevicePanel = devicePanel
+    void StudioApiClient.deviceStatus(options.signal).then(status => devicePanel.setStatus(status)).catch(error => {
+      if (!isAbortError(error)) {
+        devicePanel.setGatewayUnavailable(StudioDevicePanelModel.gatewayUnavailableMessage(error))
+      }
+    })
 
     let editor: EditorView | undefined
     let compileState = handshake.compile
@@ -1279,6 +1294,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     const disconnectEvents = connectEvents(view.status, diagnostic => void openCompileDiagnostic(diagnostic), {
       onCompile(state) {
         compileState = state
+        devicePanel.setCompileState(state)
         renderDrawer()
         if (view.searchInput.value.trim() !== '') {
           scheduleSearch()
@@ -1316,11 +1332,15 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           void loadData()
         }
       },
+      onDeviceState(status) {
+        devicePanel.setStatus(status)
+      },
       onFiles(files) {
         fileTree?.setFiles(files)
       },
       onManifest(manifest) {
         previewManifest = manifest
+        devicePanel.setManifest(manifest)
         if (config.previewUrl !== undefined) {
           void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
             activePreview.reconcile(wirePreview)
@@ -1680,6 +1700,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       window.removeEventListener('keydown', keydownListener, { capture: true })
       window.removeEventListener('beforeunload', beforeUnloadListener)
       view.betaShip.removeEventListener('click', betaShipListener)
+      devicePanel.dispose()
       if (previewMessageListener !== undefined) {
         window.removeEventListener('message', previewMessageListener)
       }
@@ -1698,6 +1719,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     for (const tab of partialOpenTabs.values()) {
       tab.editor.destroy()
     }
+    partialDevicePanel?.dispose()
     disconnectPreviews(partialPreviews)
     if (!isAbortError(error)) {
       view.status.dataset['state'] = 'error'
@@ -1724,6 +1746,7 @@ function connectEvents(
   openDiagnostic: (diagnostic: StudioCompileDiagnostic) => void,
   handlers: {
     onCompile: (state: StudioCompileState) => void
+    onDeviceState: (status: StudioDeviceStatus) => void
     onFile: (file: StudioFile) => void
     onFiles: (files: readonly StudioFile[]) => void
     onManifest: (manifest: StudioPreviewManifestV2) => void
@@ -1754,6 +1777,7 @@ function connectEvents(
         reconnectTimer = setTimeout(connect, reconnectDelayMs)
         reconnectDelayMs = Math.min(maximumReconnectDelayMs, reconnectDelayMs * 2)
       },
+      onDeviceState: handlers.onDeviceState,
       onFile: handlers.onFile,
       onFiles: handlers.onFiles,
       onHandshake(handshake) {
