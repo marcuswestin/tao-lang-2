@@ -530,7 +530,7 @@ function useOccurrence(props: TaoProps | undefined): void {
     interactionAttention.snapshot,
     interactionAttention.snapshot,
   )
-  const owner = TaoPropsControls.interactionOccurrence(props?.callerProps)
+  const owner = TaoPropsControls.interactionOwner(props)
   const occurrence = useOutlineOccurrence(props, owner)
   TaoPropsControls.setInteractionOccurrence(props, occurrence, interactionAttention.condition)
 }

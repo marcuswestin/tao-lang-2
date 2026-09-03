@@ -128,6 +128,7 @@ const occurrenceByTaoProps = new WeakMap<
     occurrence: TaoInteractionOccurrence
   }>
 >()
+const interactionOwnerByTaoProps = new WeakMap<TaoProps, TaoInteractionOccurrence>()
 
 /** TaoPropsControls exposes runtime Tao props merging for generated views. */
 export const TaoPropsControls = {
@@ -135,6 +136,8 @@ export const TaoPropsControls = {
   appInChain,
   responseInChain,
   interactionOccurrence,
+  interactionOwner,
+  inheritInteractionOwner,
   mergeViewProps,
   nativePropsWithStyle,
   navigationInChain,
@@ -164,6 +167,21 @@ function interactionOccurrence(props: TaoProps | undefined): TaoInteractionOccur
     return undefined
   }
   return occurrenceByTaoProps.get(props)?.occurrence ?? interactionOccurrence(props.callerProps)
+}
+
+/** Preserves only private outline ownership when a generated child intentionally drops caller props. */
+function inheritInteractionOwner(props: TaoProps, callerProps: TaoProps | undefined): void {
+  const owner = interactionOccurrence(callerProps)
+  if (owner) {
+    interactionOwnerByTaoProps.set(props, owner)
+  }
+}
+
+/** Returns the generated child's inherited owner without confusing it with its own prior render. */
+function interactionOwner(props: TaoProps | undefined): TaoInteractionOccurrence | undefined {
+  return props === undefined
+    ? undefined
+    : interactionOwnerByTaoProps.get(props) ?? interactionOccurrence(props.callerProps)
 }
 
 function interactionCondition(props: TaoProps | undefined): TaoDesignCondition | undefined {

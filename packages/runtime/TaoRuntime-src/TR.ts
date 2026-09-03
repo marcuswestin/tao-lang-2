@@ -556,6 +556,7 @@ class TR {
     inheritCallerProps = true,
   ): TR.TaoProps {
     const props = { ...localProps, viewDepth: (callerProps?.viewDepth ?? 1) + 1 }
+    TRTaoProps.TaoPropsControls.inheritInteractionOwner(props, callerProps)
     return inheritCallerProps ? TR.TaoProps(props, callerProps) : props
   }
 

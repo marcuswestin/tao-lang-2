@@ -379,6 +379,42 @@ Describe('interaction outline runtime', () => {
     )
   })
 
+  Test('parents controls beneath ScrollView and Panes sibling roots to their wrapper-free region', async () => {
+    await testCompileApp(
+      `
+        use Col, FormButton, Panes, ScrollView, Text from @tao/ui
+        use StackNav from @tao/nav
+
+        workspace nav MainNav = StackNav { Initial Home }
+        app OutlineApp { Name "Outline" view Shell(MainNav) }
+        scene Home() { Title "Home" render Text("Home") }
+        view Shell(Navigator nav) {
+          render Col() {
+            Navigator()
+            ScrollView() {
+              #scrollAction
+              FormButton("Scroll action") { on press -> { } }
+            }
+            Panes() {
+              #paneAction
+              FormButton("Pane action") { on press -> { } }
+            }
+          }
+        }
+      `,
+      async screen => {
+        const [region] = nodes('region').filter(node => node.provenance['role'] === 'nav-siblings')
+        Expect(region).toBeDefined()
+        Expect(screen.getByTestId('scrollAction')).toBeDefined()
+        Expect(screen.getByTestId('paneAction')).toBeDefined()
+        Expect(nodes('action').filter(node => node.label?.endsWith('action')).map(node => node.parent)).toEqual([
+          region?.identity,
+          region?.identity,
+        ])
+      },
+    )
+  })
+
   Test('tells a subscriber when a row label changes and only then', async () => {
     await testCompileApp(
       `${catalog}

@@ -937,4 +937,36 @@ Describe('TR.Interaction attention', () => {
     attention.engage('disabled')
     Expect(attention.read().engaged).toBeUndefined()
   })
+
+  Test('disengages and blurs an input when its retained outline ancestry becomes inactive or disabled', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    let active = true
+    let enabled = true
+    let blurs = 0
+    register(outline, region('main', { active: () => active, primary: true }))
+    register(outline, {
+      identity: 'editor',
+      kind: 'input',
+      label: () => 'Editor',
+      live: { blur: () => blurs += 1, enabled: () => enabled },
+      parent: 'main',
+      provenance: {},
+    })
+    attention.revalidateOutline()
+    attention.engage('editor')
+
+    active = false
+    attention.revalidateOutline()
+    Expect(attention.read().engaged).toBeUndefined()
+    Expect(blurs).toBe(1)
+
+    active = true
+    attention.revalidateOutline()
+    attention.engage('editor')
+    enabled = false
+    attention.revalidateOutline()
+    Expect(attention.read().engaged).toBeUndefined()
+    Expect(blurs).toBe(2)
+  })
 })

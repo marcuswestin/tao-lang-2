@@ -258,6 +258,7 @@ function TaoScrollView({ props, runtimeProps }: {
     merged.children,
     mergedContentContainerStyle,
   )
+  const outlinedChildren = outlineChildren(children, interactionOccurrence(props, runtimeProps))
   return createReactElement(
     runtime,
     runtime.ScrollView,
@@ -266,7 +267,7 @@ function TaoScrollView({ props, runtimeProps }: {
       contentContainerStyle: mergedContentContainerStyle,
       style: scrollViewportStyle(style),
     },
-    children,
+    outlinedChildren,
   )
 }
 
@@ -305,6 +306,7 @@ function TaoPanes({ props, runtimeProps }: {
   const nativeProps = TaoPropsControls.nativePropsWithStyle(merged)
   const { onLayout, ...viewProps } = nativeProps
   const children = ParentDirectionContext.childrenForLayoutParent(merged.children, nativeProps['style'])
+  const outlinedChildren = outlineChildren(children, interactionOccurrence(props, runtimeProps))
 
   return createReactElement(
     runtime,
@@ -321,7 +323,7 @@ function TaoPanes({ props, runtimeProps }: {
         }
       },
     },
-    children,
+    outlinedChildren,
   )
 }
 
@@ -559,15 +561,23 @@ function renderTaoPrimitiveElement(
   const providedChildren = props.providesParentDirection
     ? ParentDirectionContext.childrenForLayoutParent(elementChildren, elementProps['style'])
     : elementChildren
-  const outlinedChildren = occurrence?.region === undefined
-    ? providedChildren
-    : React.createElement(OutlineScope, { identity: occurrence.region }, providedChildren)
+  const outlinedChildren = outlineChildren(providedChildren, occurrence)
   return createReactElement(
     runtime,
     nativeComponent(runtime, props.kind),
     elementProps,
     outlinedChildren,
   )
+}
+
+/** Wrapper-free sibling regions provide outline ancestry without adding a native layout element. */
+function outlineChildren(
+  children: React.ReactNode,
+  occurrence: TaoInteractionOccurrence | undefined,
+): React.ReactNode {
+  return occurrence?.region === undefined
+    ? children
+    : React.createElement(OutlineScope, { identity: occurrence.region }, children)
 }
 
 function interactionOccurrence(

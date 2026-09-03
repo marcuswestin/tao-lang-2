@@ -492,8 +492,10 @@ export class InteractionAttention {
     } else if (!this.#focusRegion) {
       this.#focusRegion = this.primaryRegion(activeRegions)?.identity
     }
-    if (this.#engaged && !this.node(this.#engaged)) {
+    const engaged = this.node(this.#engaged)
+    if (this.#engaged && (!engaged || !this.targetable(engaged))) {
       this.#engaged = undefined
+      engaged?.live?.blur?.()
     }
     for (const [region, memory] of this.#memory) {
       if (!this.node(memory.target)) {
