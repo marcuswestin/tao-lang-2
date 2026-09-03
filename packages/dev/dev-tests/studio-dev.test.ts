@@ -1,5 +1,5 @@
-import { Errors, FS, Repo, Time } from '@shared'
-import type { CLI, Platform } from '@shared'
+import { Errors, FS, Platform, Repo, Time } from '@shared'
+import type { CLI } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { StudioClientAssets } from '@studio'
 import { startStudioClientDevReload, StudioClientDevReload } from '../dev-src/studio/StudioClientDevReload'
@@ -807,6 +807,38 @@ Describe('Studio smoke resource isolation', () => {
     } finally {
       await first.close()
       await second.close()
+    }
+  })
+
+  Test('keeps the bundler file map inside the preview runtime it describes', async () => {
+    const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
+    const runtime = await StudioPreviewRuntime.create(sourceRoot)
+    const previousSourceRoot = Platform.runtimeProcess.env['TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT']
+    Platform.runtimeProcess.env['TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT'] = sourceRoot
+    try {
+      // Metro keys its file map by project root, so the map of a per-session root is unreadable by
+      // every later session. Inside the root, closing the session removes it; outside, it is a
+      // couple of megabytes of permanent litter per Studio start.
+      const previewConfig = require(FS.resolvePath('metro.config.cjs', runtime.root)) as {
+        fileMapCacheDirectory?: string
+      }
+      const toolchainConfig = require(FS.resolvePath('metro.config.cjs', sourceRoot)) as {
+        fileMapCacheDirectory?: string
+      }
+
+      Expect(previewConfig.fileMapCacheDirectory).toStartWith(`${runtime.root}/`)
+      // The toolchain project is stable and reuses its map, so it keeps Metro's shared default.
+      Expect(toolchainConfig.fileMapCacheDirectory).toBe(undefined)
+
+      await runtime.close()
+      Expect(await FS.exists(runtime.root)).toBe(false)
+    } finally {
+      if (previousSourceRoot === undefined) {
+        delete Platform.runtimeProcess.env['TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT']
+      } else {
+        Platform.runtimeProcess.env['TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT'] = previousSourceRoot
+      }
+      await runtime.close()
     }
   })
 
