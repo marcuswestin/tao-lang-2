@@ -34,6 +34,39 @@ Test('Studio restores generated source to read-only after a failed rewrite', asy
   })
 })
 
+Test('Studio creates generated views without replacement and removes only generated rollback files', async () => {
+  await withTaoFiles('tao-studio-generated-create-', { 'Project.tao': 'project Garden\n' }, async (_paths, root) => {
+    const generated = new StudioGeneratedSources(root)
+    const path = await generated.createView('View1', 'public\nview View1() {}')
+
+    await Expect(generated.createView('View1', 'public\nview View1() { render Text("Replacement") }'))
+      .rejects.toThrow('already exists')
+    Expect(await FS.readText(path)).toContain('view View1() {}')
+
+    await generated.removeView('View1')
+    Expect(await FS.exists(path)).toBe(false)
+
+    await FS.writeText(path, 'public view View1() {}\n')
+    await Expect(generated.removeView('View1')).rejects.toThrow('non-generated')
+    Expect(await FS.exists(path)).toBe(true)
+  })
+})
+
+Test('Studio removes a partial file when creating generated source fails', async () => {
+  await withTaoFiles('tao-studio-generated-create-failure-', {
+    'Project.tao': 'project Garden\n',
+  }, async (_paths, root) => {
+    const generated = new StudioGeneratedSources(root)
+    const path = FS.resolvePath('@/studio/View1.tao', root)
+
+    await Expect(generated.createView('View1', 'public\nview View1() {}', async target => {
+      await FS.writeText(target, 'partial')
+      Errors.throwHostEnvironment('Simulated create failure.')
+    })).rejects.toThrow('Simulated create failure.')
+    Expect(await FS.exists(path)).toBe(false)
+  })
+})
+
 Test('Studio moves a generated view into an authored package with writable source ownership', async () => {
   await withTaoFiles('tao-studio-generated-move-', {
     '@/studio/View1.tao': `${studioGeneratedSourceHeader}\n\npublic view View1() { }\n`,

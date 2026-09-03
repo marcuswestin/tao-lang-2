@@ -26,15 +26,46 @@ export class StudioGeneratedSources {
     }
   }
 
+  /** createView creates one new generated view without ever replacing an allocated name. */
+  async createView(
+    name: string,
+    body: string,
+    writer: StudioGeneratedSourceWriter = FS.writeText,
+  ): Promise<string> {
+    const path = this.#viewPath(name)
+    Assert.input(!await FS.exists(path), `Generated Studio view already exists: @/studio/${name}.tao`)
+    try {
+      return await this.writeView(name, body, writer)
+    } catch (error) {
+      if (await FS.isFile(path)) {
+        await this.#requireContainedFile(path)
+        await FS.chmod(path, ownerWritableMode)
+        await FS.remove(path)
+      }
+      throw error
+    }
+  }
+
+  /** removeView rolls back a newly-created generated view while retaining the ownership boundary. */
+  async removeView(name: string): Promise<void> {
+    const path = this.#viewPath(name)
+    Assert.input(await FS.isFile(path), `Generated Studio view does not exist: @/studio/${name}.tao`)
+    await this.#requireContainedFile(path)
+    Assert.input(
+      (await FS.readText(path)).startsWith(`${studioGeneratedSourceHeader}\n`),
+      `Cannot remove a non-generated Studio view: @/studio/${name}.tao`,
+    )
+    await FS.chmod(path, ownerWritableMode)
+    await FS.remove(path)
+  }
+
   /** writeView writes one public generated view and restores read-only mode even when a rewrite fails. */
   async writeView(
     name: string,
     body: string,
     writer: StudioGeneratedSourceWriter = FS.writeText,
   ): Promise<string> {
-    Assert.input(/^[A-Z][A-Za-z0-9_]*$/.test(name), `Invalid generated Studio view name: ${name}`)
-    const path = FS.resolvePath(`${name}.tao`, this.#studioRoot)
-    Assert.input(FS.pathIsWithin(path, this.#studioRoot), `Generated Studio view escapes @/studio: ${name}`)
+    const path = this.#viewPath(name)
     if (await FS.exists(path)) {
       await this.#requireContainedFile(path)
       await FS.chmod(path, ownerWritableMode)
@@ -116,6 +147,13 @@ export class StudioGeneratedSources {
       FS.pathIsWithin(realPath, realStudioRoot),
       `Generated Studio source resolves outside @/studio: ${FS.relativePath(this.projectRoot, path)}`,
     )
+  }
+
+  #viewPath(name: string): string {
+    Assert.input(/^[A-Z][A-Za-z0-9_]*$/.test(name), `Invalid generated Studio view name: ${name}`)
+    const path = FS.resolvePath(`${name}.tao`, this.#studioRoot)
+    Assert.input(FS.pathIsWithin(path, this.#studioRoot), `Generated Studio view escapes @/studio: ${name}`)
+    return path
   }
 }
 
