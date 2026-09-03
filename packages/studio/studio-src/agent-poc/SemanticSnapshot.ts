@@ -101,7 +101,14 @@ export function buildSemanticSnapshot(
       })
       for (const field of fields) {
         add({
-          detail: { entity: entity.name, type: field.boolean ? 'yes/no' : field.primitive ?? 'relation' },
+          detail: {
+            entity: entity.name,
+            hasDefault: (field.traits?.traits ?? []).some(trait =>
+              trait.defaultValue !== undefined || trait.defaultCase !== undefined
+            ),
+            ...(field.optional ? { optional: true } : {}),
+            type: field.boolean ? 'yes/no' : field.primitive ?? 'relation',
+          },
           id: `field:${entity.singularName}.${field.name}`,
           kind: 'field',
           name: `${entity.singularName}.${field.name}`,
@@ -227,6 +234,7 @@ export function buildSemanticSnapshot(
           parameters,
           queries: queries.map(query => query.name),
           states,
+          visibility: view.visibility ?? 'file',
         },
         id: viewId,
         kind: 'view',

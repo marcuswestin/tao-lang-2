@@ -47,6 +47,10 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
       <button class="poc-toggle" type="button" title="Collapse">–</button>
     </div>
     <div class="poc-status" style="color:#9fb3a5">Select a render in the preview, then Review. Inference runs on-device through Apple Foundation Models.</div>
+    <div style="display:flex;gap:8px;align-items:center;margin:8px 0 4px">
+      <input class="poc-feature" placeholder="describe a feature, e.g. let people archive documents" style="flex:1;background:#0f1411;color:#e8ede9;border:1px solid #3a4a3f;border-radius:6px;padding:3px 6px;font:inherit">
+      <button class="poc-plan" type="button">Plan feature</button>
+    </div>
     <div class="poc-body"></div>
   `
   root.append(panel)
@@ -66,6 +70,164 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
     | undefined
 
   reviewButton.addEventListener('click', () => void review())
+  const featureInput = panel.querySelector<HTMLInputElement>('.poc-feature')!
+  const planButton = panel.querySelector<HTMLButtonElement>('.poc-plan')!
+  planButton.addEventListener('click', () => void planFeature())
+
+  type PlanStep = { file: string; action: string; decidedBy: string; evidence: string[]; status: string; note?: string }
+  type FeaturePlanResult = {
+    shape: Record<string, string>
+    steps: PlanStep[]
+    edits: { path: string; before: string; after: string; diff: string }[]
+    packet: Json
+    problems: string[]
+    model: { status: string; message?: string; elapsedMs: number; promptChars: number; toolCalls: unknown[] }
+  }
+
+  async function planFeature(): Promise<void> {
+    const request = featureInput.value.trim()
+    if (request === '') {
+      status.textContent = 'Describe the feature first.'
+      return
+    }
+    planButton.disabled = true
+    body.replaceChildren()
+    status.textContent = 'Asking the on-device model for the feature shape, then lowering it with Tao…'
+    const started = Date.now()
+    try {
+      const plan = await StudioApiClient.agentPoc<FeaturePlanResult>('plan-feature', { request })
+      status.textContent = plan.model.status === 'ok'
+        ? `Planned in ${((Date.now() - started) / 1000).toFixed(1)}s · model ${
+          (plan.model.elapsedMs / 1000).toFixed(1)
+        }s · prompt ${plan.model.promptChars} chars · ${plan.edits.length} files`
+        : `Model failure: ${plan.model.message ?? 'unknown'}`
+      renderPlan(plan, request)
+    } catch (error) {
+      status.textContent = `Plan failed: ${String(error)}`
+    } finally {
+      planButton.disabled = false
+    }
+  }
+
+  function renderPlan(plan: FeaturePlanResult, request: string): void {
+    const heading = (title: string) => {
+      const element = document.createElement('div')
+      element.style.cssText =
+        'margin:8px 0 3px;color:#9fb3a5;text-transform:uppercase;font-size:10px;letter-spacing:.06em'
+      element.textContent = title
+      body.append(element)
+    }
+    heading('Facts given to the model')
+    const packet = document.createElement('details')
+    packet.innerHTML = `<summary>${JSON.stringify(plan.packet).length} chars</summary>`
+    const packetText = document.createElement('pre')
+    packetText.style.cssText =
+      'white-space:pre-wrap;max-height:160px;overflow:auto;background:#0f1411;padding:6px;border-radius:6px'
+    packetText.textContent = JSON.stringify(plan.packet, null, 1)
+    packet.append(packetText)
+    body.append(packet)
+
+    heading('Feature shape chosen by the model')
+    body.append(line(`"${request}" → ${JSON.stringify(plan.shape)}`))
+    for (const problem of plan.problems) {
+      body.append(line(`Tao rejected: ${problem}`))
+    }
+
+    heading('Plan (placements decided by Tao from the semantic graph)')
+    for (const step of plan.steps) {
+      const row = document.createElement('div')
+      const colour = { model: '#7aa6d9', tao: '#6fb38a', 'poc-hard-coded': '#d9b45c' }[step.decidedBy] ?? '#888'
+      row.style.cssText = 'margin:3px 0;padding:5px 7px;border-radius:6px;background:#0f1411;border-left:3px solid '
+        + colour
+      const label = document.createElement('strong')
+      label.textContent = step.decidedBy === 'model'
+        ? 'Model chose'
+        : step.decidedBy === 'tao'
+        ? 'Tao placed'
+        : 'PoC hard-coded'
+      row.append(
+        label,
+        document.createTextNode(
+          ` — ${step.file}: ${step.action}${step.status === 'unsupported' ? ' (UNSUPPORTED)' : ''}`,
+        ),
+      )
+      if (step.note !== undefined) {
+        row.append(document.createElement('br'), document.createTextNode(step.note))
+      }
+      for (const evidence of step.evidence) {
+        row.append(document.createTextNode(' '), evidenceLink(evidence, { packet: plan.packet } as ReviewResult))
+      }
+      body.append(row)
+    }
+    if (plan.edits.length === 0) {
+      body.append(line('No source edits produced.'))
+      return
+    }
+
+    heading('Source proposal (ordinary Tao, formatted)')
+    for (const edit of plan.edits) {
+      const details = document.createElement('details')
+      details.innerHTML = `<summary>${edit.path}</summary>`
+      const pre = document.createElement('pre')
+      pre.style.cssText =
+        'white-space:pre-wrap;background:#0f1411;padding:6px;border-radius:6px;max-height:220px;overflow:auto'
+      pre.textContent = edit.diff
+      details.append(pre)
+      body.append(details)
+    }
+    const apply = document.createElement('button')
+    apply.type = 'button'
+    apply.textContent = `Apply ${plan.edits.length} files as one change, compile, refresh preview`
+    body.append(apply)
+    const box = document.createElement('div')
+    body.append(box)
+    apply.addEventListener('click', () => void applyFeature(plan, box))
+  }
+
+  async function applyFeature(plan: FeaturePlanResult, box: HTMLElement): Promise<void> {
+    box.replaceChildren(line('Applying…'))
+    try {
+      const result = await StudioApiClient.agentPoc<
+        { compile: { status: string; message: string; diagnostics: { message: string }[] }; rolledBack: boolean }
+      >(
+        'apply-feature',
+        { edits: plan.edits.map(edit => ({ after: edit.after, path: edit.path })), writeId: crypto.randomUUID() },
+      )
+      if (result.rolledBack) {
+        box.append(
+          line(
+            `Compile failed, every file was restored: ${
+              result.compile.diagnostics[0]?.message ?? result.compile.message
+            }`,
+          ),
+        )
+        return
+      }
+      box.append(line(`Applied. Compile: ${result.compile.status} (${result.compile.message}).`))
+      await hooks.openFile(plan.edits[1]?.path ?? plan.edits[0]!.path)
+      const undo = document.createElement('button')
+      undo.type = 'button'
+      undo.textContent = 'Undo the whole feature (restore all files)'
+      box.append(undo)
+      undo.addEventListener('click', () => void undoFeature(box))
+    } catch (error) {
+      box.append(line(`Apply failed: ${String(error)}`))
+    }
+  }
+
+  async function undoFeature(box: HTMLElement): Promise<void> {
+    try {
+      const result = await StudioApiClient.agentPoc<
+        { compile: { status: string; message: string }; restored: string[] }
+      >('undo-feature', {})
+      box.append(
+        line(`Undone: ${result.restored.join(', ')}. Compile: ${result.compile.status} (${result.compile.message}).`),
+      )
+      await hooks.openFile(result.restored[0]!)
+    } catch (error) {
+      box.append(line(`Undo failed: ${String(error)}`))
+    }
+  }
 
   async function review(): Promise<void> {
     const selection = hooks.selection()
