@@ -1,6 +1,6 @@
 import { Errors, FS, Repo, Time } from '@shared'
 import type { CLI, Platform } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { StudioClientAssets } from '@studio'
 import { startStudioClientDevReload, StudioClientDevReload } from '../dev-src/studio/StudioClientDevReload'
 import { createRecentProjectStore, StudioDev } from '../dev-src/studio/StudioDev'
@@ -682,6 +682,79 @@ Describe('Studio smoke resource isolation', () => {
       { entryPath: 'App.tao', projectPath: '/workspace/first' },
       { entryPath: undefined, projectPath: '/workspace/second' },
     ])
+  })
+
+  Test('publishes the generated app into the preview runtime before the bundler starts', async () => {
+    const runtimeRoot = await mkTestDir('studio-publish-order-')
+    const generatedApp = FS.resolvePath('_gen_tao-app/App.tsx', runtimeRoot)
+    const steps: string[] = []
+    let generatedAppWasPublished: boolean | undefined
+    try {
+      await StudioDev.testing.publishPreviewBeforeBundling({
+        async compilePreview() {
+          steps.push('compile')
+          await FS.mkdir(FS.dirname(generatedApp))
+          await FS.writeText(generatedApp, 'export default function App() {}\n')
+        },
+        isStopping: () => false,
+        async startBundler() {
+          steps.push('start')
+          generatedAppWasPublished = await FS.exists(generatedApp)
+        },
+        async waitForBundler() {
+          steps.push('wait')
+          return true
+        },
+      })
+
+      // The bundler only ever sees the files present when it crawls, so the compile must precede it.
+      Expect(generatedAppWasPublished).toBe(true)
+      Expect(steps).toEqual(['compile', 'start', 'wait'])
+    } finally {
+      await FS.remove(runtimeRoot)
+    }
+  })
+
+  Test('never starts the bundler when opening is cancelled during the first compile', async () => {
+    const steps: string[] = []
+    let stopping = false
+
+    await Expect(StudioDev.testing.publishPreviewBeforeBundling({
+      compilePreview: async () => {
+        steps.push('compile')
+        stopping = true
+      },
+      isStopping: () => stopping,
+      startBundler: async () => {
+        steps.push('start')
+      },
+      waitForBundler: async () => {
+        steps.push('wait')
+        return true
+      },
+    })).rejects.toThrow('Studio project opening was cancelled.')
+
+    Expect(steps).toEqual(['compile'])
+  })
+
+  Test('reports a cancelled open when the bundler never becomes ready', async () => {
+    const steps: string[] = []
+
+    await Expect(StudioDev.testing.publishPreviewBeforeBundling({
+      compilePreview: async () => {
+        steps.push('compile')
+      },
+      isStopping: () => false,
+      startBundler: async () => {
+        steps.push('start')
+      },
+      waitForBundler: async () => {
+        steps.push('wait')
+        return false
+      },
+    })).rejects.toThrow('Studio project opening was cancelled.')
+
+    Expect(steps).toEqual(['compile', 'start', 'wait'])
   })
 
   Test('closes each owned project resource once even when close is requested twice', async () => {
