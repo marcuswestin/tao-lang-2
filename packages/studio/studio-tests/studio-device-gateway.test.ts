@@ -449,6 +449,80 @@ Describe('Studio device gateway sealed control plane', () => {
     })
   })
 
+  Test('re-assigns the device when the cell it renders is reconfigured, and leaves other cells alone', async () => {
+    await withGateway({}, async env => {
+      const device = await pairedDevice(env)
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      const first = await device.nextSealed()
+      const firstIdentity = first.type === 'studio.cellAssigned' ? first.identity : undefined
+      Expect(firstIdentity?.cellRevision).toBe(0)
+
+      // Reconfiguring a DIFFERENT cell must not disturb this device.
+      env.session.reconfigureCell({
+        appName: 'Garden',
+        cellId: 'cell:tablet',
+        cellRevision: 0,
+        compileRevision: 1,
+        environment: {
+          network: { latencyMs: 0, outcome: 'offline' as const },
+          scheme: {
+            capability: 'reactive-browser' as const,
+            requested: 'system' as const,
+            resolved: 'light' as const,
+            source: 'system' as const,
+          },
+          viewport: { height: 844, width: 390 },
+        },
+        manifestRevision: 'manifest-1',
+        project: env.session.projectRoot,
+      })
+
+      // Reconfiguring the cell this device renders must hand it a fresh, live instance: the
+      // reconfigure released the old one, so without this its next device.applied is refused.
+      env.session.reconfigureCell({
+        appName: 'Garden',
+        cellId: 'cell:phone',
+        cellRevision: 0,
+        compileRevision: 1,
+        environment: {
+          network: { latencyMs: 0, outcome: 'offline' as const },
+          scheme: {
+            capability: 'reactive-browser' as const,
+            requested: 'system' as const,
+            resolved: 'light' as const,
+            source: 'system' as const,
+          },
+          viewport: { height: 844, width: 390 },
+        },
+        manifestRevision: 'manifest-1',
+        project: env.session.projectRoot,
+      })
+      let reassigned: TaoStudioDeviceStudioMessage | undefined
+      while (reassigned?.type !== 'studio.cellAssigned') {
+        reassigned = await device.nextSealed()
+      }
+      Expect(reassigned.identity.cellId).toBe('cell:phone')
+      Expect(reassigned.identity.cellRevision).toBe(1)
+      Expect(reassigned.identity.previewInstanceId).not.toBe(firstIdentity?.previewInstanceId)
+      // The new environment reached the device with the assignment.
+      Expect(JSON.stringify(reassigned.runtime)).toContain('offline')
+
+      // And the instance it was handed is genuinely current: an acknowledgement is accepted.
+      device.sendSealed({
+        appliedRevision: 1,
+        compileRevision: 1,
+        identity: reassigned.identity,
+        type: 'device.applied',
+      })
+      let ack: TaoStudioDeviceStudioMessage | undefined
+      while (ack?.type !== 'studio.appliedAck') {
+        ack = await device.nextSealed()
+      }
+      Expect(ack).toEqual({ accepted: true, compileRevision: 1, type: 'studio.appliedAck' })
+      Expect(env.gateway.status(env.sessionId).connection?.lastError).toBeUndefined()
+    })
+  })
+
   Test('pushes the manifest and re-registers the selected cell when a compile changes it', async () => {
     await withGateway({}, async env => {
       const device = await pairedDevice(env)

@@ -540,6 +540,15 @@ export class StudioDeviceGateway {
       this.#sendSealed(connection, { ...compileState(event.state), type: 'studio.compileState' })
       return
     }
+    if (event.type === 'cell-reconfigured') {
+      // The reconfigure released every instance of this cell, this device's included, so its next
+      // `device.applied` would be refused as no longer current. Re-assign to hand it a live instance
+      // carrying the new arguments, environment, state layers, or replayed capture.
+      if (connection.cellId === event.cellId) {
+        this.#assign(connection, event.cellId)
+      }
+      return
+    }
     if (event.type === 'preview-manifest-changed') {
       this.#sendSealed(connection, { manifest: deviceManifest(event.manifest), type: 'studio.manifest' })
       if (connection.cellId === undefined) {

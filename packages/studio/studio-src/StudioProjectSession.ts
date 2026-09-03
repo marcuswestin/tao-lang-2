@@ -269,6 +269,18 @@ export type StudioSessionEvent =
     protocolVersion: typeof studioProtocolVersion
     type: 'checkpoint-changed'
   }
+  /**
+   * One cell was reconfigured — new arguments, environment, state layers, or a replayed capture.
+   * Reconfiguring invalidates every live instance of that cell, so a canvas rendering it holds an
+   * instance the session will refuse from that moment on. The browser learns this by driving the
+   * reconfigure itself; anything else rendering the same cell has to be told.
+   */
+  | {
+    cellId: string
+    channel: typeof studioProtocolChannel
+    protocolVersion: typeof studioProtocolVersion
+    type: 'cell-reconfigured'
+  }
 
 type SourceActionCacheEntry = {
   fingerprint: string
@@ -477,7 +489,15 @@ export class StudioProjectSession {
   }
 
   reconfigureCell(input: unknown): StudioCellRuntime {
-    return this.#requireMatrix().reconfigure(cellReconfigureRequest(input))
+    const request = cellReconfigureRequest(input)
+    const runtime = this.#requireMatrix().reconfigure(request)
+    this.#emit({
+      cellId: request.cellId,
+      channel: studioProtocolChannel,
+      protocolVersion: studioProtocolVersion,
+      type: 'cell-reconfigured',
+    })
+    return runtime
   }
 
   acknowledgePreview(input: unknown): boolean {
