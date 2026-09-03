@@ -25,10 +25,11 @@ export class StudioGeneratedSources {
     if (!await FS.isDirectory(this.#studioRoot)) {
       return
     }
+    const roots = await this.#requireStudioRoot(false)
     const failures: Array<{ error: unknown; path: string }> = []
     for await (const path of FS.walk(this.#studioRoot, { extensions: ['.tao'] })) {
       try {
-        await this.#requireContainedFile(path)
+        await this.#requireContainedFile(path, roots)
         await FS.chmod(path, generatedMode)
       } catch (error) {
         failures.push({ error, path })
@@ -97,8 +98,9 @@ export class StudioGeneratedSources {
     writer: StudioGeneratedSourceWriter = FS.writeText,
   ): Promise<string> {
     const path = this.#viewPath(name)
+    const roots = await this.#requireStudioRoot(true)
     if (await FS.exists(path)) {
-      await this.#requireContainedFile(path)
+      await this.#requireContainedFile(path, roots)
       await FS.chmod(path, ownerWritableMode)
     }
     const source = `${studioGeneratedSourceHeader}\n\n${body.trim()}\n`
@@ -106,7 +108,7 @@ export class StudioGeneratedSources {
       await writer(path, source)
     } finally {
       if (await FS.isFile(path)) {
-        await this.#requireContainedFile(path)
+        await this.#requireContainedFile(path, roots)
         await FS.chmod(path, generatedMode)
       }
     }
@@ -127,14 +129,17 @@ export class StudioGeneratedSources {
     )
     const sourcePath = FS.resolvePath(`${name}.tao`, this.#studioRoot)
     Assert.input(await FS.isFile(sourcePath), `Generated Studio view does not exist: @/studio/${name}.tao`)
-    await this.#requireContainedFile(sourcePath)
+    const roots = await this.#requireStudioRoot(false)
+    await this.#requireContainedFile(sourcePath, roots)
     const packageRoot = FS.resolvePath(targetPackage, this.projectRoot)
     Assert.input(await FS.isDirectory(packageRoot), `Target Tao package does not exist: ${targetPackage}`)
-    const targetPath = FS.resolvePath(`${name}.tao`, packageRoot)
+    const realPackageRoot = await FS.realPath(packageRoot)
     Assert.input(
-      FS.pathIsWithin(targetPath, this.projectRoot),
-      `Target Tao package escapes the project: ${targetPackage}`,
+      FS.pathIsWithin(realPackageRoot, roots.realProjectRoot),
+      `Target Tao package resolves outside the project: ${targetPackage}`,
     )
+    const logicalTargetPath = FS.resolvePath(`${name}.tao`, packageRoot)
+    const targetPath = FS.resolvePath(`${name}.tao`, realPackageRoot)
     Assert.input(!await FS.exists(targetPath), `Target Tao source already exists: ${targetPackage}/${name}.tao`)
     const original = await FS.readText(sourcePath)
     try {
@@ -142,7 +147,7 @@ export class StudioGeneratedSources {
       await writer(sourcePath, authoredSource(content))
       await FS.move(sourcePath, targetPath)
       await FS.chmod(targetPath, ownerWritableMode)
-      return targetPath
+      return logicalTargetPath
     } catch (error) {
       if (await FS.isFile(targetPath) && !await FS.exists(sourcePath)) {
         await FS.move(targetPath, sourcePath)
@@ -159,25 +164,52 @@ export class StudioGeneratedSources {
   /** rewrite updates another generated import site without surrendering Studio ownership. */
   async rewrite(path: string, content: string, writer: StudioGeneratedSourceWriter = FS.writeText): Promise<void> {
     Assert.input(FS.pathIsWithin(path, this.#studioRoot), 'Generated Studio rewrite must remain under @/studio.')
-    await this.#requireContainedFile(path)
+    const roots = await this.#requireStudioRoot(false)
+    await this.#requireContainedFile(path, roots)
     await FS.chmod(path, ownerWritableMode)
     try {
       await writer(path, content)
     } finally {
       if (await FS.isFile(path)) {
-        await this.#requireContainedFile(path)
+        await this.#requireContainedFile(path, roots)
         await FS.chmod(path, generatedMode)
       }
     }
   }
 
-  async #requireContainedFile(path: string): Promise<void> {
+  async #requireContainedFile(
+    path: string,
+    roots?: Readonly<{ realProjectRoot: string; realStudioRoot: string }>,
+  ): Promise<void> {
+    roots ??= await this.#requireStudioRoot(false)
     const realPath = await FS.realPath(path)
-    const realStudioRoot = await FS.realPath(this.#studioRoot)
     Assert.input(
-      FS.pathIsWithin(realPath, realStudioRoot),
+      FS.pathIsWithin(realPath, roots.realStudioRoot) && FS.pathIsWithin(realPath, roots.realProjectRoot),
       `Generated Studio source resolves outside @/studio: ${FS.relativePath(this.projectRoot, path)}`,
     )
+  }
+
+  async #requireStudioRoot(create: boolean): Promise<{ realProjectRoot: string; realStudioRoot: string }> {
+    const realProjectRoot = await FS.realPath(this.projectRoot)
+    const rootPackage = FS.resolvePath('@', this.projectRoot)
+    if (await FS.exists(rootPackage)) {
+      Assert.input(await FS.isDirectory(rootPackage), "Tao's root package must be a directory: @")
+      const realRootPackage = await FS.realPath(rootPackage)
+      Assert.input(
+        FS.pathIsWithin(realRootPackage, realProjectRoot),
+        "Tao's root package resolves outside the project: @",
+      )
+    }
+    if (create && !await FS.exists(this.#studioRoot)) {
+      await FS.mkdir(this.#studioRoot)
+    }
+    Assert.input(await FS.isDirectory(this.#studioRoot), 'Generated Studio root must be a directory: @/studio')
+    const realStudioRoot = await FS.realPath(this.#studioRoot)
+    Assert.input(
+      FS.pathIsWithin(realStudioRoot, realProjectRoot),
+      'Generated Studio root resolves outside the project: @/studio',
+    )
+    return { realProjectRoot, realStudioRoot }
   }
 
   #viewPath(name: string): string {

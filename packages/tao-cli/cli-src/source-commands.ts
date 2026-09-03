@@ -10,6 +10,11 @@ type CanonicalSourceOptions = InPlace.PathOptions & {
   write: boolean
 }
 
+type OwnedTaoFile = Readonly<{
+  path: string
+  workspaceRoot: string
+}>
+
 /** runCheck checks canonical source and reports validation warnings without writing. */
 export async function runCheck(path: string, options: InPlace.PathOptions = {}): Promise<InPlace.Result[]> {
   return await runCanonicalSource(path, { ...options, reportWarnings: true, write: false })
@@ -23,24 +28,64 @@ export async function runFix(path: string, options: InPlace.PathOptions = {}): P
 /** runFmt formats every .tao file at or under `path` in place and returns per-file results. */
 export async function runFmt(path: string, options: InPlace.PathOptions = {}): Promise<InPlace.Result[]> {
   const root = FS.resolvePath(path, options.cwd)
-  const workspaceRoot = await inPlace.workspaceRootForPath(root, options)
+  const files = await ownedTaoFiles(root, options)
   // One formatter session serves the whole run instead of building parser services per file.
   const session = Formatter.createSession()
-  return await inPlace.runOnTaoFiles(root, filePath => formatFile(session, filePath, workspaceRoot))
+  const results: InPlace.Result[] = []
+  for (const file of files) {
+    results.push(await formatFile(session, file.path, file.workspaceRoot))
+  }
+  return results
 }
 
 async function runCanonicalSource(path: string, options: CanonicalSourceOptions): Promise<InPlace.Result[]> {
   const root = FS.resolvePath(path, options.cwd)
-  const workspace = await Workspace.open(await inPlace.workspaceRootForPath(root, options))
-  const filePaths = await findTaoFiles(root)
-  const warningsByFile = options.reportWarnings && filePaths.length > 0
-    ? indexWarnings((await workspace.validateFiles(filePaths)).diagnostics)
-    : new Map<string, readonly string[]>()
+  const files = await ownedTaoFiles(root, options)
+  const partitions = new Map<string, { files: string[]; workspace: Workspace }>()
+  for (const file of files) {
+    const existing = partitions.get(file.workspaceRoot)
+    if (existing === undefined) {
+      partitions.set(file.workspaceRoot, {
+        files: [file.path],
+        workspace: await Workspace.open(file.workspaceRoot),
+      })
+    } else {
+      existing.files.push(file.path)
+    }
+  }
+  const warningsByFile = new Map<string, readonly string[]>()
+  if (options.reportWarnings) {
+    for (const partition of partitions.values()) {
+      const warnings = indexWarnings((await partition.workspace.validateFiles(partition.files)).diagnostics)
+      for (const [filePath, messages] of warnings) {
+        warningsByFile.set(filePath, messages)
+      }
+    }
+  }
   const results: InPlace.Result[] = []
-  for (const filePath of filePaths) {
-    results.push(await canonicalizeFile(workspace, filePath, options.write, warningsByFile.get(filePath) ?? []))
+  for (const file of files) {
+    const partition = partitions.get(file.workspaceRoot)
+    if (partition === undefined) {
+      continue
+    }
+    results.push(
+      await canonicalizeFile(
+        partition.workspace,
+        file.path,
+        options.write,
+        warningsByFile.get(file.path) ?? [],
+      ),
+    )
   }
   return results
+}
+
+async function ownedTaoFiles(root: string, options: InPlace.PathOptions): Promise<OwnedTaoFile[]> {
+  const fallbackRoot = await inPlace.workspaceRootForPath(root, options)
+  return await Promise.all((await findTaoFiles(root)).map(async path => ({
+    path,
+    workspaceRoot: await inPlace.workspaceRootForPath(path, { cwd: fallbackRoot }),
+  })))
 }
 
 async function formatFile(session: FormatterSession, path: string, workspaceRoot: string): Promise<InPlace.Result> {

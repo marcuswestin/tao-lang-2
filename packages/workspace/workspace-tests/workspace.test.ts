@@ -203,6 +203,34 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
+  Test('validates multiple app files as independent entry graphs', async () => {
+    await withTaoFiles(
+      'tao-workspace-multiple-entries-',
+      {
+        'First.tao': `
+          app First { view FirstView }
+          view FirstView() { render inject ${tsFence} return null ${fence} }
+        `,
+        'Second.tao': `
+          app Second { view SecondView }
+          view SecondView() { render inject ${tsFence} return null ${fence} }
+        `,
+      },
+      async (paths, rootDir) => {
+        const validation = await (await Workspace.open(rootDir)).validateFiles([
+          paths['First.tao'],
+          paths['Second.tao'],
+        ])
+
+        Expect(errorMessages(validation)).toEqual([])
+        Expect(validation.entry.path).toBe(paths['First.tao'])
+        Expect(validation.files.map(file => file.path)).toEqual(
+          Expect['arrayContaining']([paths['First.tao'], paths['Second.tao']]),
+        )
+      },
+    )
+  })
+
   Test('skips hidden future-source directories while preloading LSP documents', async () => {
     await withTaoFiles(
       'tao-workspace-lsp-sketches-',

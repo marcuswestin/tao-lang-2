@@ -17,7 +17,7 @@ export const TaoPropsCompiler = {
     // Every view occurrence takes the same defaults; layout comes only from the call site's clauses.
     const layout = gen`undefined`
     const testTag = AST.testTagForRender(render)
-    const studio = options.studio === true ? compileStudioRenderOccurrence(render) : undefined
+    const studio = options.studio === true ? compileStudioRenderOccurrence(render, options.projectRoot) : undefined
     return Switch.type(render, {
       RenderStatement: renderStatement =>
         compileTaoPropsForRenderStatement(
@@ -71,11 +71,12 @@ function compileTaoPropsForViewRender(
 }
 
 /** compileStudioRenderOccurrence emits one version-bound source locator for a rendered occurrence. */
-function compileStudioRenderOccurrence(render: AST.Render): Compiled {
+function compileStudioRenderOccurrence(render: AST.Render, projectRoot: string | undefined): Compiled {
   const cstNode = render.$cstNode
   Assert.defined(cstNode, 'compiled render has source coordinates')
+  Assert.defined(projectRoot, 'Studio render compilation has an exact project root')
   const owner = AST.findOwningView(render)
-  const identity = studioRenderIdentity(render)
+  const identity = studioRenderIdentity(render, projectRoot)
   return gen`{
     sourcePath: ${gen.jsLiteral(AST.getDocument(render).uri.fsPath)},
     start: ${cstNode.offset},

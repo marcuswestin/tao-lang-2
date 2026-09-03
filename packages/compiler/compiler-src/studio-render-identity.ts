@@ -6,7 +6,7 @@ const studioRectTagPrefix = '#studio_rect_'
 const studioGeneratedSourceHeader = '// Studio-written generated source. Read-only until moved to a package.'
 
 /** studioRenderIdentity derives Studio's stable source and Snap identities from one render. */
-export function studioRenderIdentity(render: AST.Render): {
+export function studioRenderIdentity(render: AST.Render, projectRoot: string): {
   elementName: string
   renderId: string
   studioRectId?: string
@@ -16,7 +16,7 @@ export function studioRenderIdentity(render: AST.Render): {
   if (elementName === undefined || cstNode === undefined) {
     return undefined
   }
-  const studioRectId = studioRectIdForRender(render)
+  const studioRectId = studioRectIdForRender(render, projectRoot)
   return {
     elementName,
     renderId: `${AST.getDocument(render).uri.fsPath}:${cstNode.offset}:${cstNode.end}`,
@@ -25,10 +25,11 @@ export function studioRenderIdentity(render: AST.Render): {
 }
 
 /** studioRectIdForRender decodes the source-safe UTF-16 hex payload emitted by Snap. */
-export function studioRectIdForRender(render: AST.Render): string | undefined {
+export function studioRectIdForRender(render: AST.Render, projectRoot: string): string | undefined {
   const document = AST.getDocument(render)
+  const studioRoot = FS.resolvePath('@/studio', projectRoot)
   if (
-    !FS.slashPath(document.uri.fsPath).includes('/@/studio/')
+    !FS.pathIsWithin(document.uri.fsPath, studioRoot)
     || !document.textDocument.getText().startsWith(`${studioGeneratedSourceHeader}\n`)
   ) {
     return undefined

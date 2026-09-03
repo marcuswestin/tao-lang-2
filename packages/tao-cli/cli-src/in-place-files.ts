@@ -70,11 +70,26 @@ async function workspaceRootForPath(path: string, options: InPlace.PathOptions =
   if (projectRoot !== undefined) {
     return projectRoot
   }
+  const generatedProjectRoot = rootPackageOwner(root)
+  if (generatedProjectRoot !== undefined) {
+    return generatedProjectRoot
+  }
   const cwd = FS.resolvePath('.', options.cwd)
   if (FS.pathIsWithin(root, cwd)) {
     return packageContainerRoot(cwd) ?? cwd
   }
   return packageAwarePathRoot(root, await FS.isFile(root))
+}
+
+/** rootPackageOwner infers a project root from the nearest exact reserved root-package segment. */
+function rootPackageOwner(path: string): string | undefined {
+  const parts = FS.slashPath(path).split('/')
+  for (let index = parts.length - 1; index >= 0; index--) {
+    if (parts[index] === '@') {
+      return FS.resolvePath(parts.slice(0, index).join('/'))
+    }
+  }
+  return undefined
 }
 
 async function containingProjectRoot(start: string): Promise<string | undefined> {

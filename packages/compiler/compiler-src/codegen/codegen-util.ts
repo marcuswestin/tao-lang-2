@@ -6,6 +6,7 @@ export type Compiled = Langium.GeneratorNode
 
 /** CodegenOptions carries explicit per-compilation generation modes through recursive emitters. */
 export type CodegenOptions = {
+  projectRoot?: string
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppName?: string
   studioDataCatalog?: boolean

@@ -1,5 +1,5 @@
 import { Errors, FS } from '@shared'
-import { Expect, Test, withTaoFiles } from '@shared/test'
+import { Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import {
   studioGeneratedSourceHeader,
   StudioGeneratedSources,
@@ -150,5 +150,53 @@ Test('Studio refuses to move source whose ownership header is absent or displace
     await Expect(generated.moveView('View1', '@views', displaced)).rejects.toThrow('missing its ownership header')
     Expect(await FS.readText(paths['@/studio/View1.tao'])).toContain('public view View1()')
     Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
+  })
+})
+
+Test(
+  'Studio refuses a generated root symlink that resolves outside the real project before writing or repairing',
+  async () => {
+    await withTaoFiles('tao-studio-generated-root-symlink-', {
+      'Project.tao': 'project Garden\n',
+    }, async (_paths, root) => {
+      const outside = await mkTestDir('tao-studio-generated-outside-')
+      try {
+        await FS.writeText(FS.resolvePath('Existing.tao', outside), 'view Existing() { }\n')
+        await FS.symlink(outside, FS.resolvePath('@/studio', root))
+        const generated = new StudioGeneratedSources(root)
+
+        await Expect(generated.repair()).rejects.toThrow('Generated Studio root resolves outside the project')
+        await Expect(generated.writeView('View1', 'public view View1() { }')).rejects.toThrow(
+          'Generated Studio root resolves outside the project',
+        )
+        Expect(await FS.exists(FS.resolvePath('View1.tao', outside))).toBe(false)
+        Expect(await FS.fileMode(FS.resolvePath('Existing.tao', outside))).toBe(0o644)
+      } finally {
+        await FS.remove(outside)
+      }
+    })
+  },
+)
+
+Test('Studio refuses an authored-package symlink that resolves outside the real project before moving', async () => {
+  await withTaoFiles('tao-studio-generated-target-symlink-', {
+    '@/studio/View1.tao': `${studioGeneratedSourceHeader}\n\npublic view View1() { }\n`,
+    'Project.tao': 'project Garden\n',
+  }, async (paths, root) => {
+    const outside = await mkTestDir('tao-studio-authored-outside-')
+    try {
+      await FS.symlink(outside, FS.resolvePath('@views', root))
+      const generated = new StudioGeneratedSources(root)
+
+      await Expect(generated.moveView(
+        'View1',
+        '@views',
+        `${studioGeneratedSourceHeader}\n\npublic view View1() { }\n`,
+      )).rejects.toThrow('Target Tao package resolves outside the project')
+      Expect(await FS.exists(paths['@/studio/View1.tao'])).toBe(true)
+      Expect(await FS.exists(FS.resolvePath('View1.tao', outside))).toBe(false)
+    } finally {
+      await FS.remove(outside)
+    }
   })
 })

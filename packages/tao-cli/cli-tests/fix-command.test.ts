@@ -58,12 +58,13 @@ Describe('tao fix', () => {
     })
   })
 
-  Test('checks generated root-package source without rewriting it', async () => {
+  Test('checks generated root-package source at every inferred project root without rewriting it', async () => {
     const generated = 'view   Generated() { }'
+    const nestedGenerated = 'view   Nested() { }'
     await withTaoFixture({
       '@/studio/Generated.tao': generated,
       'App.tao': 'view   AppView() { }',
-      'Apps/Foo/@/Nested.tao': 'view   Nested() { }',
+      'Apps/Foo/@/Nested.tao': nestedGenerated,
       'Packages/@cards/Card.tao': 'view   Card() { }',
     }, async rootDir => {
       const results = await runFix(rootDir)
@@ -71,12 +72,12 @@ Describe('tao fix', () => {
       Expect(statusByFile(results, rootDir)).toEqual({
         '@/studio/Generated.tao': 'error',
         'App.tao': 'changed',
-        'Apps/Foo/@/Nested.tao': 'changed',
+        'Apps/Foo/@/Nested.tao': 'error',
         'Packages/@cards/Card.tao': 'changed',
       })
       Expect(await FS.readText(FS.resolvePath('@/studio/Generated.tao', rootDir))).toBe(generated)
       Expect(await FS.readText(FS.resolvePath('App.tao', rootDir))).toBe('view AppView() { }\n')
-      Expect(await FS.readText(FS.resolvePath('Apps/Foo/@/Nested.tao', rootDir))).toBe('view Nested() { }\n')
+      Expect(await FS.readText(FS.resolvePath('Apps/Foo/@/Nested.tao', rootDir))).toBe(nestedGenerated)
       Expect(await FS.readText(FS.resolvePath('Packages/@cards/Card.tao', rootDir))).toBe('view Card() { }\n')
       Expect(results[0]?.error).toContain('regenerate it instead of rewriting it')
     })
@@ -97,6 +98,27 @@ Describe('tao fix', () => {
         status: 'error',
       }])
       Expect(await FS.readText(path)).toBe(generated)
+    })
+  })
+
+  Test('protects generated roots owned by nested Tao projects during a repository-wide fix', async () => {
+    const generated = 'view   Generated() { }'
+    await withTaoFixture({
+      'Nested/Project.tao': 'project {\n   id "nested-fix"\n   name "Nested fix"\n}\n',
+      'Nested/@/studio/Generated.tao': generated,
+      'Nested/Authored.tao': 'view   Authored() { }',
+      'Outer.tao': 'view   Outer() { }',
+    }, async rootDir => {
+      const results = await runFix(rootDir)
+
+      Expect(statusByFile(results, rootDir)).toEqual({
+        'Nested/@/studio/Generated.tao': 'error',
+        'Nested/Authored.tao': 'changed',
+        'Nested/Project.tao': 'unchanged',
+        'Outer.tao': 'changed',
+      })
+      Expect(await FS.readText(FS.resolvePath('Nested/@/studio/Generated.tao', rootDir))).toBe(generated)
+      Expect(await FS.readText(FS.resolvePath('Nested/Authored.tao', rootDir))).toBe('view Authored() { }\n')
     })
   })
 

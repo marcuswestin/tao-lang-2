@@ -240,13 +240,16 @@ function compileValidatedInput(
       outputPaths,
       packagesContext: context.packagesContext,
       identityProjects,
+      projectRoot: context.sourceRoot,
       selectedAppDatasourceConfiguration: options.appDatasourceConfiguration,
       selectedAppName: file.path === entryPath ? selectedAppName : undefined,
       studio,
     })
   )
 
-  const studioManifest = studio ? compileStudioPreviewManifest(sourceFiles, selectedAppName) : undefined
+  const studioManifest = studio
+    ? compileStudioPreviewManifest(sourceFiles, selectedAppName, context.sourceRoot)
+    : undefined
   if (studioManifest !== undefined) {
     compiledFiles.push({
       code: studioPreviewManifestModule(studioManifest),
@@ -368,6 +371,7 @@ type CompileSourceFileOptions = {
   outputPaths: PlannedOutputs
   packagesContext: Packages.Context
   identityProjects: readonly DeclarationIdentityProject[]
+  projectRoot: string
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppName: string | undefined
   studio: boolean
@@ -380,6 +384,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     outputPaths,
     packagesContext,
     identityProjects,
+    projectRoot,
     selectedAppDatasourceConfiguration,
     selectedAppName,
     studio,
@@ -439,6 +444,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
             exportedBindings,
             selectedAppDatasourceConfiguration,
             selectedAppName,
+            projectRoot,
             studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
             studio,
             studioViews: studio && selectedAppName !== undefined

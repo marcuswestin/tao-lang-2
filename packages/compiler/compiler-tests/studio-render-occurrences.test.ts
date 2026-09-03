@@ -207,6 +207,48 @@ Describe('compiler: Studio render occurrences', () => {
     })
   })
 
+  Test('does not authenticate a nested authored @/studio path as the project generated root', async () => {
+    await withTaoFiles('tao-studio-render-nested-spoof-', {
+      'Main.tao': `
+        use Text from @tao/ui
+        use Generated from @/studio
+        use Spoof from ./Authored/@/studio
+        app Preview { view Main }
+        view Main() { render Text("Hello") }
+      `,
+      '@/studio/Generated.tao': `
+        // Studio-written generated source. Read-only until moved to a package.
+
+        use Text from @tao/ui
+        public view Generated() {
+          #studio_rect_00670065006e00750069006e0065
+          render Text("Generated")
+        }
+      `,
+      'Authored/@/studio/Spoof.tao': `
+        // Studio-written generated source. Read-only until moved to a package.
+
+        use Text from @tao/ui
+        public view Spoof() {
+          #studio_rect_00730070006f006f0066
+          render Text("Spoof")
+        }
+      `,
+    }, async paths => {
+      const compiled = await Workspace.compile(paths['Main.tao'], { studio: true })
+      const generated = compiled.studioManifest?.renders.find(render =>
+        render.source.path === paths['@/studio/Generated.tao']
+      )
+      const spoof = compiled.studioManifest?.renders.find(render =>
+        render.source.path === paths['Authored/@/studio/Spoof.tao']
+      )
+
+      Expect(generated?.studioRectId).toBe('genuine')
+      Expect(spoof).toBeDefined()
+      Expect(spoof).not.toHaveProperty('studioRectId')
+    })
+  })
+
   Test('publishes source-owned view schemas only for Studio compilations', async () => {
     await withTaoFiles('tao-studio-preview-manifest-', {
       'Main.tao': `

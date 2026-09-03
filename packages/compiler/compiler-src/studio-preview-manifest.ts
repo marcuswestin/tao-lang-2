@@ -146,6 +146,7 @@ export type StudioPreviewRenderManifest = {
 export function compileStudioPreviewManifest(
   files: readonly ParsedFile[],
   selectedAppName: string,
+  projectRoot: string,
 ): StudioPreviewManifest {
   return {
     apps: files.flatMap(file =>
@@ -162,7 +163,7 @@ export function compileStudioPreviewManifest(
     ),
     renders: files.flatMap(file =>
       [...AST.streamAllContents(file.ast).filter(AST.isRender)].flatMap(render => {
-        const identity = studioRenderIdentity(render)
+        const identity = studioRenderIdentity(render, projectRoot)
         return identity === undefined ? [] : [{ ...identity, source: sourceOf(render) }]
       })
     ),

@@ -89,4 +89,23 @@ Describe('tao fmt', () => {
       Expect(await FS.readText(path)).toBe(generated)
     })
   })
+
+  Test('protects generated roots owned by nested Tao projects during repository-wide formatting', async () => {
+    const generated = 'view   Generated() { }'
+    await withTaoFixture({
+      'Nested/Project.tao': 'project {\n   id "nested-fmt"\n   name "Nested fmt"\n}\n',
+      'Nested/@/studio/Generated.tao': generated,
+      'Nested/Authored.tao': 'view   Authored() { }',
+    }, async rootDir => {
+      const results = await runFmt(rootDir)
+
+      Expect(statusByFile(results, rootDir)).toEqual({
+        'Nested/@/studio/Generated.tao': 'error',
+        'Nested/Authored.tao': 'changed',
+        'Nested/Project.tao': 'unchanged',
+      })
+      Expect(await FS.readText(FS.resolvePath('Nested/@/studio/Generated.tao', rootDir))).toBe(generated)
+      Expect(await FS.readText(FS.resolvePath('Nested/Authored.tao', rootDir))).toBe('view Authored() { }\n')
+    })
+  })
 })

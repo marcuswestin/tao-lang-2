@@ -46,6 +46,23 @@ Describe('tao check', () => {
     })
   })
 
+  Test('validates nested Tao projects with their own generated-root ownership', async () => {
+    await withTaoFixture({
+      'Nested/Project.tao': 'project {\n   id "nested-check"\n   name "Nested check"\n}\n',
+      'Nested/@/studio/View1.tao':
+        'use Placeholder from @tao/ui\n\npublic\nview View1() {\n   render Placeholder("Generated")\n}\n',
+      'Nested/Authored.tao': 'use Placeholder from @tao/ui\n\nview Main() {\n   render Placeholder("Authored")\n}\n',
+    }, async rootDir => {
+      const results = await runCheck(rootDir)
+      const generated = results.find(result => result.path.endsWith('/@/studio/View1.tao'))
+      const authored = results.find(result => result.path.endsWith('/Authored.tao'))
+
+      Expect(generated?.warnings).toBeUndefined()
+      Expect(authored?.warnings).toHaveLength(1)
+      Expect(authored?.warnings?.[0]).toContain('Placeholder ships as an empty box in release.')
+    })
+  })
+
   Test('reports drift without writing', async () => {
     await withTaoFixture({
       'drift.tao': 'view   MainView() { }',

@@ -431,8 +431,12 @@ Describe('agent worktree profile bootstrap', () => {
   Test('checks generated root-package files without letting fix lanes rewrite them', async () => {
     for (const lane of ['fix', 'fmt', '_fix-dprint']) {
       const commands = await justCommands(lane)
-      Expect(commands).toContain('dprint fmt --incremental=false --excludes "@/"')
-      Expect(commands).toContain('dprint check --incremental=false --allow-no-files "@/**/*"')
+      Expect(commands).toContain(
+        'dprint fmt --incremental=false --excludes "@/" "**/@/**"',
+      )
+      Expect(commands).toContain(
+        'dprint check --incremental=false --allow-no-files "@/**/*" "**/@/**/*"',
+      )
     }
   })
 
