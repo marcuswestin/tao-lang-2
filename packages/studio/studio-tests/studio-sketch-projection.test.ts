@@ -95,6 +95,14 @@ Describe('Studio sketch projection invariants', () => {
     Expect(leaves.find(leaf => leaf.id === 'fixed')).toMatchObject({ height: 10, width: 30 })
   })
 
+  Test('retains drawn numeric dimensions alongside an inferred main-axis claim', () => {
+    const sample = corpus.find(entry => entry.name === 'form')!
+    const password = elements(StudioSketchProjection.project(sample).tree)
+      .find(leaf => leaf.id === 'password')
+
+    Expect(password).toMatchObject({ claim: 1, height: 48, width: 320 })
+  })
+
   Test('retains sketch-edge padding for a single rectangle', () => {
     const result = StudioSketchProjection.project({
       height: 80,

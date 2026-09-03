@@ -360,7 +360,8 @@ boundary is fixed: only snapping writes free rectangles into flowed Tao source.
 Snap projects selected rectangles through a deterministic server-owned inference: one clean
 separating axis chooses `Row` or `Col`, stacked lanes nest, median neighbour distance becomes `gap`,
 sketch-edge distance becomes root `pad`, opposite-edge contact becomes `fill`, the widest slack
-assigns `claim 1` to its neighbour, fixed sizes remain fixed, and Text/Image hug. Two clean axes and
+assigns `claim 1` to its neighbour, drawn numeric sizes remain `width` and `height` entries even when
+that claim lets the node absorb main-axis slack, and Text/Image hug. Two clean axes and
 overlap are ambiguous. The committed 16-case component-layout regression corpus records 12 direct
 projections (75 percent) and four proposals; it does not constitute the FS-D11 real-screen acceptance
 corpus or measure inspector-fix counts. Nested padding and cross-axis alignment inference remain open.
