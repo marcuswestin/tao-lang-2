@@ -1,0 +1,15 @@
+public
+view Placeholder(Label text) {
+   render inject Label, Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Placeholder({ label: Label, layout: Layout, tag: Tag })
+   ```
+}
+
+public
+view Spacer() {
+   render inject Layout @@layout, Tag @@tag ```ts
+      return TR.Views.Spacer({ layout: Layout, tag: Tag }, {
+        layout: TR.Layout.create([['claim', 1]]),
+      })
+   ```
+}

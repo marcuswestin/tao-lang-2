@@ -36,6 +36,10 @@ type TaoProgressProps = TaoViewProps & {
   value: number
 }
 
+type TaoPlaceholderProps = TaoViewProps & {
+  label: string
+}
+
 type TaoSpinnerProps = TaoViewProps & {
   label?: string
   size?: 'large' | 'small'
@@ -150,6 +154,20 @@ export const Views = {
 
   Panes(props: TaoViewProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
     return React.createElement(TaoPanes, { props, runtimeProps })
+  },
+
+  Placeholder(props: TaoPlaceholderProps, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
+    return React.createElement(TaoPlaceholder, { props, runtimeProps })
+  },
+
+  Spacer(props: TaoViewProps = {}, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
+    return React.createElement(TaoPrimitiveElement, {
+      kind: 'View',
+      nativePropOverrides: { accessible: false },
+      providesParentDirection: false,
+      runtimeProps,
+      viewProps: props,
+    })
   },
 
   Spinner(props: TaoSpinnerProps = {}, runtimeProps: TaoViewRuntimeProps = {}): React.JSX.Element {
@@ -381,6 +399,43 @@ function TaoProgress({ props, runtimeProps }: {
   )
 }
 
+function TaoPlaceholder({ props, runtimeProps }: {
+  props: TaoPlaceholderProps
+  runtimeProps: TaoViewRuntimeProps
+}): React.ReactElement {
+  const runtime = requireReactNativeRuntime()
+  const parentDirection = ParentDirectionContext.use()
+  const merged = TaoPropsControls.mergeViewProps(props, runtimeProps, parentDirection)
+  const wrapperProps = TaoPropsControls.nativePropsWithStyle(merged)
+  const development = Dev.isDevelopmentBuild()
+  const children = development
+    ? React.createElement(
+      React.Fragment,
+      null,
+      createReactElement(runtime, runtime.Text, {
+        accessible: false,
+        style: placeholderHatchStyle,
+      }, placeholderHatch),
+      createReactElement(runtime, runtime.Text, {
+        accessible: false,
+        style: placeholderLabelStyle,
+      }, props.label),
+    )
+    : undefined
+  return createReactElement(
+    runtime,
+    runtime.View,
+    {
+      ...wrapperProps,
+      accessibilityElementsHidden: true,
+      accessible: false,
+      importantForAccessibility: 'no-hide-descendants',
+      style: [wrapperProps['style'], development ? placeholderDevelopmentStyle : undefined],
+    },
+    children,
+  )
+}
+
 function normalizedProgress(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0
 }
@@ -521,6 +576,40 @@ const textInputStyle = {
 } as const
 
 const textInputLabelStyle = { color: '#314238', fontSize: 14, fontWeight: '600' } as const
+
+const placeholderDevelopmentStyle = {
+  alignItems: 'center',
+  backgroundColor: '#f4f5f2',
+  borderColor: '#747b75',
+  borderStyle: 'dashed',
+  borderWidth: 1,
+  justifyContent: 'center',
+  overflow: 'hidden',
+  position: 'relative',
+} as const
+
+const placeholderHatchStyle = {
+  bottom: 0,
+  color: '#aeb3ae',
+  fontSize: 12,
+  left: 0,
+  lineHeight: 12,
+  opacity: 0.55,
+  position: 'absolute',
+  right: 0,
+  top: 0,
+} as const
+
+const placeholderLabelStyle = {
+  backgroundColor: '#f4f5f2dd',
+  color: '#343a35',
+  fontSize: 12,
+  fontWeight: '600',
+  paddingHorizontal: 4,
+  paddingVertical: 2,
+} as const
+
+const placeholderHatch = Array.from({ length: 12 }, () => '╱   ╱   ╱   ╱   ╱   ╱').join('\n')
 
 function createReactElement(
   runtime: ReactNativeRuntime,

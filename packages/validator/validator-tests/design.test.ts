@@ -18,6 +18,40 @@ Describe('validator: minimal design', () => {
     Expect(diagnostics.every(diagnostic => diagnostic.severity === 'warning')).toBe(true)
   })
 
+  Test('warns when the stdlib Placeholder ships while accepting Placeholder and Spacer', async () => {
+    const result = await Validator.validateCode(`
+      use Col, Placeholder, Spacer from @tao/ui
+      view Main() {
+        render Col() {
+          Placeholder("Saved status icon") [width 20, height 20]
+          Spacer() [claim 3]
+        }
+      }
+    `)
+    const diagnostics = result.diagnostics.filter(diagnostic =>
+      diagnostic.code === designValidationCodes.placeholderShipping
+    )
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+    Expect(diagnostics).toHaveLength(1)
+    Expect(diagnostics[0]?.message).toBe(messages.placeholderShipping)
+    Expect(diagnostics[0]?.severity).toBe('warning')
+  })
+
+  Test('does not warn for a project view that happens to be named Placeholder', async () => {
+    const result = await Validator.validateCode(`
+      view Placeholder(Label text) {
+        render inject ${tsFence}
+          return null
+        ${fence}
+      }
+      view Main() { render Placeholder("Project content") }
+    `)
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.placeholderShipping))
+      .toEqual([])
+  })
+
   Test(
     'accepts exact hex forms, WordFlower bundles, and decomposed later layout effects',
     accepts(designApp(

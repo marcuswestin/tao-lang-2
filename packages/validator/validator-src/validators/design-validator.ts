@@ -1,5 +1,6 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
+import { FS } from '@shared'
 import { designValidationCodes } from '../diagnostic-codes'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
@@ -47,6 +48,7 @@ const designValidationMessages = {
     `Design screen '${name}' must use an increasing px threshold; only the last may omit it.`,
   invalidSize: (name: string) => `Design size '${name}' must resolve from px/rem values in the same unit family.`,
   missingMountedDesign: (entry: string) => `Design entry '${entry}' requires an app Design selection.`,
+  placeholderShipping: 'Placeholder ships as an empty box in release.',
   reservedBundle: (name: string) => `Design bundle '${name}' collides with built-in clause '${name}'.`,
   unknownBundle: (design: string, name: string) => `Design '${design}' has no bundle '${name}'.`,
   unknownToken: (design: string, name: string) => `Design '${design}' has no token '${name}'.`,
@@ -114,6 +116,15 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
 }
 
 function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void {
+  const renderedView = ASTUtils.resolveRenderInvocation(render).view
+  if (
+    renderedView?.name === 'Placeholder'
+    && FS.pathIsWithin(AST.getDocument(renderedView).uri.path, ctx.packagesContext.stdlibRoot)
+  ) {
+    ctx.warning(designValidationMessages.placeholderShipping, render, {
+      code: designValidationCodes.placeholderShipping,
+    })
+  }
   const clause = render.layoutClause
   if (!clause) {
     return
