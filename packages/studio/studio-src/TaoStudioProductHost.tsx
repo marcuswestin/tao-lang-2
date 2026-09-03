@@ -43,6 +43,7 @@ import {
   requestStudioProductHostDeleteFile,
   requestStudioProductHostInsertComponent,
   requestStudioProductHostInsertProjectView,
+  requestStudioProductHostMoveGeneratedSource,
   requestStudioProductHostOpenFile,
   requestStudioProductHostOpenScreen,
   requestStudioProductHostPanelAction,
@@ -1795,19 +1796,24 @@ export type TreeFileRowProps =
   & Readonly<{
     BeginDelete: TaoStudioHostAction
     BeginRename: TaoStudioHostAction
+    BeginMove: TaoStudioHostAction
     CancelDelete: TaoStudioHostAction
     CancelRename: TaoStudioHostAction
     ChangeRenamePath: TaoStudioHostTextAction
+    ChangeTargetPackage: TaoStudioHostTextAction
     ConfirmDelete: boolean
     Delete: TaoStudioHostAction
     DiagnosticCount: number
     Dirty: boolean
     Name: string
+    Move: TaoStudioHostAction
+    Moving: boolean
     Open: TaoStudioHostAction
     Path: string
     Rename: TaoStudioHostAction
     RenamePath: string
     Renaming: boolean
+    TargetPackage: string
   }>
 
 /** TreeFileRow exposes compact editing affordances without moving CRUD state or decisions out of Tao. */
@@ -1819,6 +1825,16 @@ export function TreeFileRow(props: TreeFileRowProps): React.ReactElement {
   return (
     <div data-studio-tree-file={props.Path} data-testid={props.Tag} style={props.Layout?.style}>
       <div style={treeRowStyle}>
+        <button
+          aria-label={`Move ${props.Name} to package`}
+          hidden={!props.Path.startsWith('@/studio/')}
+          onClick={() => void props.BeginMove.invoke()}
+          style={rowActionStyle}
+          title="Move to package"
+          type="button"
+        >
+          →
+        </button>
         <button
           onClick={() => void props.Open.invoke()}
           style={treePrimaryButtonStyle}
@@ -1875,6 +1891,29 @@ export function TreeFileRow(props: TreeFileRowProps): React.ReactElement {
             >
               Cancel
             </button>
+          </form>
+        )
+        : undefined}
+      {props.Moving
+        ? (
+          <form
+            aria-label={`Move ${props.Name} to package`}
+            onSubmit={event => {
+              event.preventDefault()
+              void props.Move.invoke()
+            }}
+            style={inlineEditorStyle}
+          >
+            <input
+              aria-label={`Target package for ${props.Name}`}
+              autoFocus
+              onChange={event => void props.ChangeTargetPackage.invoke(TR.Value(event.currentTarget.value))}
+              placeholder="@views"
+              spellCheck={false}
+              style={inlineInputStyle}
+              value={props.TargetPackage}
+            />
+            <button aria-label="Move to package" style={inlineTextButtonStyle} type="submit">Move</button>
           </form>
         )
         : undefined}
@@ -2085,6 +2124,10 @@ export async function CreateFile(path: string): Promise<void> {
 
 export async function RenameFile(path: string, sourceVersion: string, targetPath: string): Promise<void> {
   await requestStudioProductHostRenameFile(path, sourceVersion, targetPath)
+}
+
+export async function MoveGeneratedSource(path: string, sourceVersion: string, targetPackage: string): Promise<void> {
+  await requestStudioProductHostMoveGeneratedSource(path, sourceVersion, targetPackage)
 }
 
 export async function DeleteFile(path: string, sourceVersion: string): Promise<void> {

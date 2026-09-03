@@ -1,9 +1,4 @@
 export {
-  StudioGeneratedSources,
-  studioGeneratedSourceHeader,
-  type StudioGeneratedSourceWriter,
-} from './StudioGeneratedSources'
-export {
   type StudioCompileCause,
   type StudioCompileCompletion,
   StudioCompileCoordinator,
@@ -17,6 +12,11 @@ export {
   type StudioWrite,
   type StudioWriteAcknowledgement,
 } from './StudioCompileCoordinator'
+export {
+  studioGeneratedSourceHeader,
+  StudioGeneratedSources,
+  type StudioGeneratedSourceWriter,
+} from './StudioGeneratedSources'
 
 export {
   type StudioCanonicalSourceAction,
@@ -112,6 +112,8 @@ export {
   type StudioDraftWriteRequest,
   type StudioDraftWriteResult,
   type StudioFileDraftState,
+  type StudioMoveGeneratedSourceRequest,
+  type StudioMoveGeneratedSourceResult,
   type StudioProjectFile,
   type StudioProjectFileContent,
   StudioProjectSession,

@@ -71,6 +71,98 @@ Test('Studio project open repairs generated Studio sources to read-only mode', a
   })
 })
 
+Test('Move to package renames generated source and rewrites every language import site', async () => {
+  const compiles: Array<readonly { path: string; sourceVersion?: string }[]> = []
+  await withTaoFiles('tao-studio-move-generated-', {
+    '@/studio/View1.tao':
+      `${'// Studio-written generated source. Read-only until moved to a package.'}\n\npublic view View1() { }\n`,
+    '@/studio/Other.tao': 'public view Other() { }\n',
+    '@views/Existing.tao': 'public view Existing() { }\n',
+    'Garden.tao': `
+      use View1, Other from @/studio
+      use Existing from @views
+      app Garden { view Main }
+      view Main() { render View1() }
+    `,
+    'Nested.tao': `
+      use View1 from @/studio
+      workspace view Nested() { render View1() }
+    `,
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile(request) {
+        compiles.push(request.changes)
+      },
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    const generated = await session.readFile('@/studio/View1.tao')
+    const result = await session.moveGeneratedSource({
+      path: generated.path,
+      sourceVersion: generated.sourceVersion,
+      targetPackage: ' @views ',
+      writeId: 'move-view-1',
+    })
+
+    Expect(result.status).toBe('moved')
+    if (result.status !== 'moved') {
+      return
+    }
+    Expect(result.previousPath).toBe('@/studio/View1.tao')
+    Expect(result.file.path).toBe('@views/View1.tao')
+    Expect(result.file.content).not.toContain('Studio-written generated source')
+    Expect(await FS.fileMode(FS.resolvePath(result.file.path, root))).toBe(0o644)
+    Expect(await FS.exists(paths['@/studio/View1.tao'])).toBe(false)
+    Expect(await FS.readText(paths['Garden.tao'])).toContain('use Other from @/studio')
+    Expect(await FS.readText(paths['Garden.tao'])).toContain('use Existing, View1 from @views')
+    Expect(await FS.readText(paths['Nested.tao'])).toContain('use View1 from @views')
+    Expect(result.rewritten.map(file => file.path).toSorted()).toEqual(['Garden.tao', 'Nested.tao'])
+    Expect(compiles).toHaveLength(1)
+    Expect(compiles[0]?.map(change => FS.relativePath(session.projectRoot, change.path)).toSorted()).toEqual([
+      '@/studio/View1.tao',
+      '@views/View1.tao',
+      'Garden.tao',
+      'Nested.tao',
+    ])
+  })
+})
+
+Test('Move to package requests a different destination only when the target package declares the name', async () => {
+  let compileCount = 0
+  await withTaoFiles('tao-studio-move-generated-conflict-', {
+    '@/studio/View1.tao':
+      `${'// Studio-written generated source. Read-only until moved to a package.'}\n\npublic view View1() { }\n`,
+    '@views/Existing.tao': 'public view View1() { }\n',
+    'Garden.tao': 'use View1 from @/studio\napp Garden { view View1 }\n',
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {
+        compileCount += 1
+      },
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    const generated = await session.readFile('@/studio/View1.tao')
+    const request = {
+      path: generated.path,
+      sourceVersion: generated.sourceVersion,
+      targetPackage: '@views',
+      writeId: 'move-conflicting-view',
+    }
+    const conflict = await session.moveGeneratedSource(request)
+
+    Expect(conflict).toEqual({
+      conflicts: ['@views/Existing.tao'],
+      name: 'View1',
+      status: 'confirmation-required',
+      targetPackage: '@views',
+    })
+    Expect(compileCount).toBe(0)
+    Expect(await FS.exists(paths['@/studio/View1.tao'])).toBe(true)
+    Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
+  })
+})
+
 Test('Studio project session publishes every project app variant with a safe relative entry path', async () => {
   await withTaoFiles('tao-studio-app-variants-', {
     'First.tao': 'app First { view Main }\napp FirstCompact = First with { }\nview Main() { }\n',

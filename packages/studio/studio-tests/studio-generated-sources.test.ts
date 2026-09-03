@@ -1,8 +1,8 @@
-import { FS } from '@shared'
+import { Errors, FS } from '@shared'
 import { Expect, Test, withTaoFiles } from '@shared/test'
 import {
-  StudioGeneratedSources,
   studioGeneratedSourceHeader,
+  StudioGeneratedSources,
 } from '../studio-src/StudioGeneratedSources'
 
 Test('Studio writes generated public views read-only and repairs their mode on reopen', async () => {
@@ -28,8 +28,50 @@ Test('Studio restores generated source to read-only after a failed rewrite', asy
 
     await Expect(generated.writeView('View1', 'public\nview View1() { render Text("Later") }', async target => {
       Expect(await FS.fileMode(target)).toBe(0o644)
-      throw new Error('simulated generated write failure')
-    })).rejects.toThrow('simulated generated write failure')
+      Errors.throwHostEnvironment('Simulated generated write failure.')
+    })).rejects.toThrow('Simulated generated write failure.')
     Expect(await FS.fileMode(path)).toBe(0o444)
+  })
+})
+
+Test('Studio moves a generated view into an authored package with writable source ownership', async () => {
+  await withTaoFiles('tao-studio-generated-move-', {
+    '@/studio/View1.tao': `${studioGeneratedSourceHeader}\n\npublic view View1() { }\n`,
+    '@views/Existing.tao': 'public view Existing() { }\n',
+    'Project.tao': 'project Garden\n',
+  }, async (paths, root) => {
+    await FS.chmod(paths['@/studio/View1.tao'], 0o444)
+    const generated = new StudioGeneratedSources(root)
+    const target = await generated.moveView(
+      'View1',
+      '@views',
+      `${studioGeneratedSourceHeader}\n\npublic view View1() { render Placeholder("Moved") }\n`,
+    )
+
+    Expect(await FS.exists(paths['@/studio/View1.tao'])).toBe(false)
+    Expect(target).toBe(FS.resolvePath('@views/View1.tao', root))
+    Expect(await FS.fileMode(target)).toBe(0o644)
+    Expect(await FS.readText(target)).toBe('public view View1() { render Placeholder("Moved") }\n')
+  })
+})
+
+Test('Studio restores generated ownership and content when preparing a move fails', async () => {
+  await withTaoFiles('tao-studio-generated-move-failure-', {
+    '@/studio/View1.tao': `${studioGeneratedSourceHeader}\n\npublic view View1() { }\n`,
+    '@views/Existing.tao': 'public view Existing() { }\n',
+    'Project.tao': 'project Garden\n',
+  }, async (paths, root) => {
+    const source = paths['@/studio/View1.tao']
+    await FS.chmod(source, 0o444)
+    const original = await FS.readText(source)
+    const generated = new StudioGeneratedSources(root)
+
+    await Expect(generated.moveView('View1', '@views', original, async path => {
+      await FS.writeText(path, 'partial authored source')
+      Errors.throwHostEnvironment('Simulated move preparation failure.')
+    })).rejects.toThrow('Simulated move preparation failure.')
+    Expect(await FS.readText(source)).toBe(original)
+    Expect(await FS.fileMode(source)).toBe(0o444)
+    Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
   })
 })

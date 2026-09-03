@@ -114,6 +114,8 @@ action CreateFile(Path text) fails Conflict "This file changed under this edit."
 
 action RenameFile(Path text, SourceVersion text, TargetPath text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
 
+action MoveGeneratedSource(Path text, SourceVersion text, TargetPackage text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
+
 action DeleteFile(Path text, SourceVersion text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
 
 action OpenFile(Path text) from ./TaoStudioProductHost.tsx
@@ -194,6 +196,8 @@ view FileRow(File) {
    state RenamePath = File.Path
    state Renaming = false
    state ConfirmDelete = false
+   state Moving = false
+   state TargetPackage = ""
    action Open() {
       do OpenFile(File.Path)
    }
@@ -202,6 +206,7 @@ view FileRow(File) {
    }
    action BeginRename() {
       set ConfirmDelete = false
+      set Moving = false
       set Renaming = true
    }
    action CancelRename() {
@@ -214,6 +219,7 @@ view FileRow(File) {
    }
    action BeginDelete() {
       set Renaming = false
+      set Moving = false
       set ConfirmDelete = true
    }
    action CancelDelete() {
@@ -222,10 +228,22 @@ view FileRow(File) {
    action Delete() {
       do DeleteFile(Path: File.Path, SourceVersion: File.Version)
    }
-   render TreeFileRow(Name: File.Name, Path: File.Path, Dirty: File.Dirty, DiagnosticCount: File.DiagnosticCount, RenamePath: RenamePath, Renaming: Renaming, ConfirmDelete: ConfirmDelete, Open: Open, ChangeRenamePath: ChangeRenamePath, BeginRename: BeginRename, CancelRename: CancelRename, Rename: Rename, BeginDelete: BeginDelete, CancelDelete: CancelDelete, Delete: Delete)
+   action BeginMove() {
+      set ConfirmDelete = false
+      set Renaming = false
+      set Moving = true
+   }
+   action ChangeTargetPackage(Value text) {
+      set TargetPackage = Value
+   }
+   action Move() {
+      do MoveGeneratedSource(Path: File.Path, SourceVersion: File.Version, TargetPackage: TargetPackage)
+      set Moving = false
+   }
+   render TreeFileRow(Name: File.Name, Path: File.Path, Dirty: File.Dirty, DiagnosticCount: File.DiagnosticCount, RenamePath: RenamePath, Renaming: Renaming, ConfirmDelete: ConfirmDelete, Moving: Moving, TargetPackage: TargetPackage, Open: Open, ChangeRenamePath: ChangeRenamePath, BeginRename: BeginRename, CancelRename: CancelRename, Rename: Rename, BeginDelete: BeginDelete, CancelDelete: CancelDelete, Delete: Delete, BeginMove: BeginMove, ChangeTargetPackage: ChangeTargetPackage, Move: Move)
 }
 
-view TreeFileRow(Name text, Path text, Dirty boolean, DiagnosticCount number, RenamePath text, Renaming boolean, ConfirmDelete boolean, Open action(), ChangeRenamePath action(text), BeginRename action(), CancelRename action(), Rename action(), BeginDelete action(), CancelDelete action(), Delete action()) from ./TaoStudioProductHost.tsx
+view TreeFileRow(Name text, Path text, Dirty boolean, DiagnosticCount number, RenamePath text, Renaming boolean, ConfirmDelete boolean, Moving boolean, TargetPackage text, Open action(), ChangeRenamePath action(text), BeginRename action(), CancelRename action(), Rename action(), BeginDelete action(), CancelDelete action(), Delete action(), BeginMove action(), ChangeTargetPackage action(text), Move action()) from ./TaoStudioProductHost.tsx
 
 view StudioEditorSurface() from ./TaoStudioProductHost.tsx
 

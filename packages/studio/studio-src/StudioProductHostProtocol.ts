@@ -16,6 +16,7 @@ export type StudioProductHostActions = Readonly<{
   deleteFile: (path: string, sourceVersion: string) => Promise<void>
   insertComponent: (component: string) => void
   insertProjectView: (viewName: string) => void
+  moveGeneratedSource: (path: string, sourceVersion: string, targetPackage: string) => Promise<void>
   applyInspectorAction: (action: StudioCanonicalSourceAction, proposed: boolean) => Promise<void>
   openFile: (path: string) => Promise<void>
   openScreen: (subjectId: string) => Promise<void>
@@ -96,6 +97,7 @@ type StudioProductHostRequest =
   | Readonly<{ kind: 'delete-file'; path: string; sourceVersion: string }>
   | Readonly<{ component: string; kind: 'insert-component' }>
   | Readonly<{ kind: 'insert-project-view'; viewName: string }>
+  | Readonly<{ kind: 'move-generated-source'; path: string; sourceVersion: string; targetPackage: string }>
   | Readonly<{ kind: 'open-file'; path: string }>
   | Readonly<{ kind: 'open-screen'; subjectId: string }>
   | Readonly<{ kind: 'product-panel-action'; name: string; payload: string }>
@@ -206,6 +208,17 @@ export async function requestStudioProductHostOpenFile(path: string): Promise<vo
   await request({ kind: 'open-file', path })
 }
 
+export async function requestStudioProductHostMoveGeneratedSource(
+  path: string,
+  sourceVersion: string,
+  targetPackage: string,
+): Promise<void> {
+  assertStudioProductHostPath(path)
+  assertSourceVersion(sourceVersion)
+  Assert.input(targetPackage.trim() !== '', 'Move to package requires a target package.')
+  await requestFileAction({ kind: 'move-generated-source', path, sourceVersion, targetPackage })
+}
+
 export async function requestStudioProductHostInsertComponent(component: string): Promise<void> {
   assertNonEmptyProductHostIdentity(component, 'component')
   await request({ component, kind: 'insert-component' })
@@ -300,6 +313,9 @@ async function execute(actions: StudioProductHostActions, action: StudioProductH
       return
     case 'insert-project-view':
       actions.insertProjectView(action.viewName)
+      return
+    case 'move-generated-source':
+      await actions.moveGeneratedSource(action.path, action.sourceVersion, action.targetPackage)
       return
     case 'open-file':
       await actions.openFile(action.path)

@@ -74,6 +74,7 @@ import {
   requestStudioProductHostApplyActiveCellEnvironment,
   requestStudioProductHostChangeActiveFile,
   requestStudioProductHostCreateFile,
+  requestStudioProductHostMoveGeneratedSource,
   requestStudioProductHostOpenFile,
   requestStudioProductHostPanelAction,
   requestStudioProductHostSelectActiveFile,
@@ -326,6 +327,9 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
     insertProjectView(viewName) {
       calls.push(`view:${viewName}`)
     },
+    async moveGeneratedSource(path, sourceVersion, targetPackage) {
+      calls.push(`move:${path}:${sourceVersion}:${targetPackage}`)
+    },
     async openFile(path) {
       calls.push(`open:${path}`)
     },
@@ -347,12 +351,17 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
   })
   try {
     await earlyOpen
+    await requestStudioProductHostMoveGeneratedSource('@/studio/View1.tao', 'version:1', '@views')
     await Expect(requestStudioProductHostCreateFile('Conflict.tao')).rejects.toMatchObject({
       caseName: 'Conflict',
       details: { code: 'stale-source', path: 'Conflict.tao' },
       message: 'This file changed under this edit.',
     })
-    Expect(calls).toEqual(['open:Queued.tao', 'create:Conflict.tao'])
+    Expect(calls).toEqual([
+      'open:Queued.tao',
+      'move:@/studio/View1.tao:version:1:@views',
+      'create:Conflict.tao',
+    ])
     Expect(validStudioProductHostPath('Folder/File.tao')).toBe(true)
     Expect(validStudioProductHostPath('Folder\\File.tao')).toBe(false)
     await Expect(requestStudioProductHostOpenFile('../Outside.tao')).rejects.toThrow('project-relative Tao')

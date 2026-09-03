@@ -1526,6 +1526,44 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         Assert.input(projectView, `Tao Studio project view is no longer available: ${viewName}`)
         insertProjectView(projectView)
       },
+      async moveGeneratedSource(path, sourceVersion, initialTargetPackage) {
+        const selected = projectFiles.find(file => file.path === path && file.sourceVersion === sourceVersion)
+        Assert.input(selected, `Tao Studio generated source is no longer current: ${path}`)
+        const current = await prepareFileMutation(selected)
+        if (current === undefined) {
+          return
+        }
+        let targetPackage = initialTargetPackage
+        while (true) {
+          const result = await StudioApiClient.moveGeneratedSource({
+            path: current.path,
+            sourceVersion: current.sourceVersion,
+            targetPackage,
+            writeId: `move-generated-${crypto.randomUUID()}`,
+          })
+          if (result.status === 'confirmation-required') {
+            const replacement = window.prompt(
+              `${result.targetPackage} already declares ${result.name} in ${
+                result.conflicts.join(', ')
+              }. Choose a different package.`,
+              targetPackage,
+            )
+            if (replacement === null) {
+              return
+            }
+            targetPackage = replacement
+            continue
+          }
+          const wasOpen = preparedOpenMutationPath === result.previousPath
+          preparedActiveMutationPath = undefined
+          preparedOpenMutationPath = undefined
+          fileTree!.setFiles(result.files)
+          if (wasOpen) {
+            await openFile(result.file.path)
+          }
+          return
+        }
+      },
       async openFile(path) {
         Assert.input(
           projectFiles.some(file => file.path === path),

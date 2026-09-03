@@ -20,7 +20,7 @@ import {
   type StudioSourceChange,
   type StudioWatchResult,
 } from './StudioCompileCoordinator'
-import { StudioGeneratedSources } from './StudioGeneratedSources'
+import { studioGeneratedSourceHeader, StudioGeneratedSources } from './StudioGeneratedSources'
 import {
   type StudioCellReconfigureRequest,
   type StudioCellRuntime,
@@ -100,6 +100,13 @@ export type StudioDeleteFileRequest = {
   writeId: string
 }
 
+export type StudioMoveGeneratedSourceRequest = {
+  path: string
+  sourceVersion: string
+  targetPackage: string
+  writeId: string
+}
+
 export type StudioCreateFileResult = {
   compile: StudioCompileCompletion
   file: StudioProjectFileContent
@@ -115,6 +122,22 @@ export type StudioDeleteFileResult = {
   deleted: StudioProjectFile
   files: readonly StudioProjectFile[]
 }
+
+export type StudioMoveGeneratedSourceResult =
+  | {
+    conflicts: readonly string[]
+    name: string
+    status: 'confirmation-required'
+    targetPackage: string
+  }
+  | {
+    compile: StudioCompileCompletion
+    file: StudioProjectFileContent
+    files: readonly StudioProjectFile[]
+    previousPath: string
+    rewritten: readonly StudioProjectFileContent[]
+    status: 'moved'
+  }
 
 export type StudioFileDraftState = {
   diagnostics: readonly string[]
@@ -152,6 +175,66 @@ function studioDesignSource(node: AST.Node): { end: number; start: number } {
   const cst = node.$cstNode
   Assert.input(cst, 'Cannot inspect a structured design value without source coordinates.')
   return { end: cst.end, start: cst.offset }
+}
+
+function normalizedTargetPackage(input: string): string {
+  const targetPackage = input.trim()
+  Assert.input(
+    /^@[A-Za-z][A-Za-z0-9_-]*(?:\/[A-Za-z0-9_-]+)*$/.test(targetPackage),
+    'Move to package requires an authored @package or @package/subfolder path.',
+  )
+  return targetPackage
+}
+
+function rewriteGeneratedStudioImports(
+  content: string,
+  file: AST.TaoFile,
+  name: string,
+  targetPackage: string,
+): string | undefined {
+  const uses = file.statements.filter(AST.isUseStatement)
+  const sourceUses = uses.filter(statement =>
+    statement.importPath === '@/studio'
+    && statement.importedDeclarations.some(reference => reference.$refText === name)
+  )
+  if (sourceUses.length === 0) {
+    return undefined
+  }
+  const targetUse = uses.find(statement => statement.importPath === targetPackage)
+  const edits: Array<{ end: number; replacement: string; start: number }> = sourceUses.map(statement => {
+    Assert.defined(statement.$cstNode, 'parsed use statement has source coordinates')
+    const remaining = statement.importedDeclarations
+      .map(reference => reference.$refText)
+      .filter(imported => imported !== name)
+    return {
+      end: statement.$cstNode.end,
+      replacement: remaining.length === 0 ? '' : `use ${remaining.join(', ')} from @/studio`,
+      start: statement.$cstNode.offset,
+    }
+  })
+  if (targetUse === undefined) {
+    const lastUse = uses.at(-1)
+    if (lastUse?.$cstNode) {
+      edits.push({
+        end: lastUse.$cstNode.end,
+        replacement: `\nuse ${name} from ${targetPackage}`,
+        start: lastUse.$cstNode.end,
+      })
+    } else {
+      edits.push({ end: 0, replacement: `use ${name} from ${targetPackage}\n\n`, start: 0 })
+    }
+  } else if (!targetUse.importedDeclarations.some(reference => reference.$refText === name)) {
+    Assert.defined(targetUse.$cstNode, 'parsed target use statement has source coordinates')
+    const names = [...targetUse.importedDeclarations.map(reference => reference.$refText), name].toSorted()
+    edits.push({
+      end: targetUse.$cstNode.end,
+      replacement: `use ${names.join(', ')} from ${targetPackage}`,
+      start: targetUse.$cstNode.offset,
+    })
+  }
+  return edits
+    .toSorted((left, right) => right.start - left.start)
+    .reduce((rewritten, edit) => rewritten.slice(0, edit.start) + edit.replacement + rewritten.slice(edit.end), content)
 }
 
 export type StudioPreviewRegistration = {
@@ -312,6 +395,7 @@ const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
   { method: 'POST', path: '/api/file/create' },
   { method: 'POST', path: '/api/file/delete' },
   { method: 'POST', path: '/api/file/draft' },
+  { method: 'POST', path: '/api/file/move-generated' },
   { method: 'POST', path: '/api/file/rename' },
   { method: 'POST', path: '/api/language/highlight' },
   { method: 'POST', path: '/api/ship/beta' },
@@ -617,6 +701,111 @@ export class StudioProjectSession {
       this.#emitFiles(files)
       return { compile, file, files, previousPath: current.path }
     })
+  }
+
+  moveGeneratedSource(request: StudioMoveGeneratedSourceRequest): Promise<StudioMoveGeneratedSourceResult> {
+    return this.#mutate(async () => {
+      const current = await this.readFile(request.path)
+      requireSourceVersion(current, request.sourceVersion)
+      const match = current.path.match(/^@\/studio\/([A-Z][A-Za-z0-9_]*)\.tao$/)
+      Assert.input(match, 'Move to package requires a generated @/studio/<Name>.tao source.')
+      Assert.input(
+        current.content.startsWith(`${studioGeneratedSourceHeader}\n`),
+        `${current.path} is not a Studio-generated source.`,
+      )
+      const name = match[1]!
+      const targetPackage = normalizedTargetPackage(request.targetPackage)
+      const conflicts = await this.#targetPackageDeclarationConflicts(targetPackage, name)
+      if (conflicts.length > 0) {
+        return { conflicts, name, status: 'confirmation-required', targetPackage }
+      }
+
+      const sourceFiles = await this.files()
+      const rewrites: Array<{ content: string; current: StudioProjectFileContent; path: string }> = []
+      for (const file of sourceFiles) {
+        const fileContent = file.path === current.path ? current : await this.readFile(file.path)
+        const rewritten = await this.#rewriteGeneratedImport(fileContent, name, targetPackage)
+        if (rewritten !== undefined) {
+          rewrites.push({
+            content: rewritten,
+            current: fileContent,
+            path: FS.resolvePath(file.path, this.projectRoot),
+          })
+        }
+      }
+      const movedContent = rewrites.find(rewrite => rewrite.current.path === current.path)?.content ?? current.content
+      const generated = new StudioGeneratedSources(this.projectRoot)
+      const targetPath = await generated.moveView(name, targetPackage, movedContent)
+      const rewritten: StudioProjectFileContent[] = []
+      for (const rewrite of rewrites.filter(candidate => candidate.current.path !== current.path)) {
+        if (rewrite.current.path.startsWith('@/studio/')) {
+          await generated.rewrite(rewrite.path, rewrite.content)
+        } else {
+          await FS.writeText(rewrite.path, rewrite.content)
+        }
+        const sourceVersion = SourceActions.studioSourceVersion(rewrite.content)
+        rewritten.push({
+          content: rewrite.content,
+          ...this.#projectFile(rewrite.current.path, sourceVersion),
+        })
+      }
+      const targetContent = await FS.readText(targetPath)
+      const targetSourceVersion = SourceActions.studioSourceVersion(targetContent)
+      const file: StudioProjectFileContent = {
+        content: targetContent,
+        ...this.#projectFile(FS.relativePath(this.projectRoot, targetPath), targetSourceVersion),
+      }
+      const compile = await this.#coordinator.noteStudioFileMutation([
+        { path: FS.resolvePath(current.path, this.projectRoot), writeId: request.writeId },
+        { path: targetPath, sourceVersion: targetSourceVersion, writeId: request.writeId },
+        ...rewritten.map(candidate => ({
+          path: FS.resolvePath(candidate.path, this.projectRoot),
+          sourceVersion: candidate.sourceVersion,
+          writeId: request.writeId,
+        })),
+      ])
+      for (const changed of rewritten) {
+        this.#emitFile(changed)
+      }
+      const files = await this.files()
+      this.#emitFiles(files)
+      return { compile, file, files, previousPath: current.path, rewritten, status: 'moved' }
+    })
+  }
+
+  async #targetPackageDeclarationConflicts(targetPackage: string, name: string): Promise<string[]> {
+    const directory = FS.resolvePath(targetPackage, this.projectRoot)
+    Assert.input(await FS.isDirectory(directory), `Target Tao package does not exist: ${targetPackage}`)
+    const conflicts: string[] = []
+    for (const child of await FS.listDir(directory)) {
+      if (!child.endsWith('.tao')) {
+        continue
+      }
+      const path = FS.resolvePath(child, directory)
+      const parsed = await this.#workspace.parseSource(await FS.readText(path), Langium.URI.file(path))
+      Assert.input(
+        !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+        `Cannot move generated source until ${FS.relativePath(this.projectRoot, path)} parses.`,
+      )
+      if (parsed.entry.ast.statements.some(statement => AST.isDeclaration(statement) && statement.name === name)) {
+        conflicts.push(FS.relativePath(this.projectRoot, path))
+      }
+    }
+    return conflicts
+  }
+
+  async #rewriteGeneratedImport(
+    file: StudioProjectFileContent,
+    name: string,
+    targetPackage: string,
+  ): Promise<string | undefined> {
+    const path = FS.resolvePath(file.path, this.projectRoot)
+    const parsed = await this.#workspace.parseSource(file.content, Langium.URI.file(path))
+    Assert.input(
+      !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+      `Cannot move generated source until ${file.path} parses.`,
+    )
+    return rewriteGeneratedStudioImports(file.content, parsed.entry.ast, name, targetPackage)
   }
 
   deleteFile(request: StudioDeleteFileRequest): Promise<StudioDeleteFileResult> {

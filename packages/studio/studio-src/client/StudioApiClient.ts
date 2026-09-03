@@ -11,6 +11,8 @@ import type {
   StudioCreateFileResult,
   StudioDeleteFileRequest,
   StudioDeleteFileResult,
+  StudioMoveGeneratedSourceRequest,
+  StudioMoveGeneratedSourceResult,
   StudioRenameFileRequest,
   StudioRenameFileResult,
 } from '../StudioProjectSession'
@@ -197,6 +199,8 @@ export const StudioApiClient = {
   file: async (path: string, signal?: AbortSignal): Promise<StudioDraftFile> =>
     await get(`/api/file?path=${encodeURIComponent(path)}`, signal),
   files: async (): Promise<{ files: readonly StudioFile[] }> => await get('/api/files'),
+  moveGeneratedSource: async (body: StudioMoveGeneratedSourceRequest): Promise<StudioMoveGeneratedSourceResult> =>
+    await request('/api/file/move-generated', body),
   generateFixture: async (scenarioId: string): Promise<StudioGeneratedFixtureResult> =>
     await request('/api/ai/fixture', { scenarioId }),
   handshake: async (signal?: AbortSignal): Promise<StudioHandshake> => await get('/api/protocol', signal),

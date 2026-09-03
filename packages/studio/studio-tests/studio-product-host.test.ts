@@ -120,6 +120,14 @@ Test('Tao Studio ProductHost injects structured panel values without section-lev
   Expect(source).not.toContain('JSON.stringify(hostState.panels')
 })
 
+Test('Move to package prompts for a replacement only after a declaration conflict', async () => {
+  const source = await FS.readText(FS.resolvePath('../studio-src/client/StudioApp.ts', import.meta.dir))
+
+  Expect(source).toContain("if (result.status === 'confirmation-required')")
+  Expect(source).toContain('const replacement = window.prompt(')
+  Expect(source.indexOf("result.status === 'confirmation-required'")).toBeLessThan(source.indexOf('window.prompt('))
+})
+
 Test('Tao Studio foreign file views render compact tree rows with contextual editing controls', () => {
   const action = noArgAction()
   const textAction = textArgAction()
@@ -136,6 +144,7 @@ Test('Tao Studio foreign file views render compact tree rows with contextual edi
     children: React.createElement('span', null, 'Nested file'),
   })
   const compact = TreeFileRow(fileRowProps({}))
+  const generated = TreeFileRow(fileRowProps({ Name: 'View1.tao', Path: '@/studio/View1.tao' }))
   const renaming = TreeFileRow(fileRowProps({ Renaming: true }))
   const deleting = TreeFileRow(fileRowProps({ ConfirmDelete: true }))
 
@@ -150,6 +159,8 @@ Test('Tao Studio foreign file views render compact tree rows with contextual edi
   Expect(elementWith(compact, 'aria-label', '2 problems')).toBeDefined()
   Expect(elements(compact).some(element => property(element, 'aria-label') === 'Save rename')).toBe(false)
   Expect(elements(compact).some(element => property(element, 'role') === 'alert')).toBe(false)
+  Expect(property(elementWith(compact, 'aria-label', 'Move Roadmap.tao to package'), 'hidden')).toBe(true)
+  Expect(property(elementWith(generated, 'aria-label', 'Move View1.tao to package'), 'hidden')).toBe(false)
   Expect(elementWith(renaming, 'aria-label', 'Save rename')).toBeDefined()
   Expect(property(elementWith(renaming, 'aria-label', 'New path for Roadmap.tao'), 'value'))
     .toBe('Folder/Roadmap.tao')
@@ -406,19 +417,24 @@ function fileRowProps(overrides: Partial<TreeFileRowProps>): TreeFileRowProps {
   return {
     BeginDelete: action,
     BeginRename: action,
+    BeginMove: action,
     CancelDelete: action,
     CancelRename: action,
     ChangeRenamePath: textArgAction(),
+    ChangeTargetPackage: textArgAction(),
     ConfirmDelete: false,
     Delete: action,
     DiagnosticCount: 2,
     Dirty: true,
     Name: 'Roadmap.tao',
+    Move: action,
+    Moving: false,
     Open: action,
     Path: 'Folder/Roadmap.tao',
     Rename: action,
     RenamePath: 'Folder/Roadmap.tao',
     Renaming: false,
+    TargetPackage: '',
     ...overrides,
   }
 }

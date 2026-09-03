@@ -257,6 +257,19 @@ server rejects paths outside the project, non-Tao files, stale source versions, 
 active entry file, and rename/delete while the file has an unresolved dirty draft. File contents remain
 ephemeral editor buffers and never enter the StudioServer entity model.
 
+The project-root `@/` package is reserved for committed generated source. Studio owns `@/studio`,
+writes one public view per file with an ownership header, and keeps those files at mode `0444`.
+Project open repairs the mode because Git does not track the write bit. A Studio write temporarily
+grants only owner-write and restores read-only mode after success or failure; neither Studio nor the
+repository uses filesystem immutable flags. The ordinary Tao and dprint fix lanes check generated
+source but do not rewrite it.
+
+Move to package transfers one `@/studio/<Name>.tao` file into an existing authored `@package`, removes
+the generated header, restores normal writable ownership, and rewrites every parsed
+`use <Name> from @/studio` site to the target package before one serialized compile. A declaration
+with the same name in the target package returns a conflict for the client to resolve before any
+mutation; all nonconflicting moves proceed without an extra confirmation.
+
 ## Foreign views and code editor
 
 A Tao view may name a TypeScript or TSX sidecar with `from`. The compiler imports the named component,

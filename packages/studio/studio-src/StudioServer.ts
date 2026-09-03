@@ -9,6 +9,7 @@ import {
   type StudioCreateFileRequest,
   type StudioDeleteFileRequest,
   type StudioDraftWriteRequest,
+  type StudioMoveGeneratedSourceRequest,
   StudioProjectSession,
   type StudioRenameFileRequest,
   type StudioSessionEvent,
@@ -432,6 +433,14 @@ async function handleRequest(
   if (request.method === 'POST' && url.pathname === '/api/file/rename') {
     return response(request, url, options, await session.renameFile(renameFileRequest(await request.json())))
   }
+  if (request.method === 'POST' && url.pathname === '/api/file/move-generated') {
+    return response(
+      request,
+      url,
+      options,
+      await session.moveGeneratedSource(moveGeneratedSourceRequest(await request.json())),
+    )
+  }
   if (request.method === 'POST' && url.pathname === '/api/file/delete') {
     return response(request, url, options, await session.deleteFile(deleteFileRequest(await request.json())))
   }
@@ -639,6 +648,26 @@ function renameFileRequest(value: unknown): StudioRenameFileRequest {
     path: value['path'],
     sourceVersion: value['sourceVersion'],
     targetPath: value['targetPath'],
+    writeId: value['writeId'],
+  }
+}
+
+function moveGeneratedSourceRequest(value: unknown): StudioMoveGeneratedSourceRequest {
+  if (
+    !isRecord(value)
+    || typeof value['path'] !== 'string'
+    || typeof value['sourceVersion'] !== 'string'
+    || typeof value['targetPackage'] !== 'string'
+    || typeof value['writeId'] !== 'string'
+  ) {
+    throw new Errors.UserInputError(
+      'Expected path, targetPackage, sourceVersion, and writeId to move generated source.',
+    )
+  }
+  return {
+    path: value['path'],
+    sourceVersion: value['sourceVersion'],
+    targetPackage: value['targetPackage'],
     writeId: value['writeId'],
   }
 }
