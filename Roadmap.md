@@ -151,7 +151,11 @@ tests written in Tao, green in Current, for every construct introduced.
     only, Studio/source as authority, and rare shell releases. Plan:
     `Docs/Roadmap/Tao Studio companion app/Plan - Tao Studio companion app.md`. Distribution context:
     `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`. Slice 1 implementation prompt:
-    `Docs/Roadmap/Tao Studio companion app/Prompt - Implement Slice 1.md`.
+    `Docs/Roadmap/Tao Studio companion app/Prompt - Implement Slice 1.md`. Slice 1 (pair and render one
+    real device) is implemented: `packages/studio-companion-app`, the `tao-studio-device-v1` gateway and
+    trust store in `packages/studio`, `TR.Studio.DeviceHost`, the workbench Device popover, and
+    `just studio-companion-install`; contract and proof record in
+    `Docs/Roadmap/Tao Studio companion app/Slice 1 - Device protocol and trust.md`.
 - [ ] Add `tao create` project scaffold
   - New app folder, minimal Tao app, default package layout, docs, dev and test scripts, and an immediate open-and-run path.
 - [ ] Implement secrets

@@ -1,7 +1,9 @@
 # Plan - Tao Studio companion app
 
-Status: product direction settled; the development foundation and Slice 1 are ready to implement;
-later slices remain planned. This plans a Tao-published iPhone and iPad companion for Tao Studio:
+Status: product direction settled; the development foundation and Slice 1 are implemented in software
+(protocol, gateway, trust, native host, companion shell, Studio popover, install tooling) with focused
+tests; the physical proof record is in `Slice 1 - Device protocol and trust.md`; later slices remain
+planned. This plans a Tao-published iPhone and iPad companion for Tao Studio:
 developer tooling first, then an invited-project beta, feedback, and collaboration client. Product
 interactions here do not adopt new Tao language semantics; new source spelling still follows the
 Revolution decision and WordFlower tranche process.
