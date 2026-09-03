@@ -190,7 +190,7 @@ Describe('compiler: Studio render occurrences', () => {
         { kind: 'boolean', name: 'Enabled', required: true, typeName: 'boolean' },
         { choices: ['Neutral', 'Good'], kind: 'choice', name: 'Tone', required: true, typeName: 'Tone' },
         { kind: 'time', name: 'ChangedAt', required: true, typeName: 'time' },
-        { kind: 'unsupported', name: 'Owner', required: true, typeName: 'Account' },
+        { entity: 'Account', kind: 'entity', name: 'Owner', required: true, typeName: 'Account' },
         { kind: 'number', name: 'Count', required: false, typeName: 'number' },
       ])
       Expect(manifest?.views.find(view => view.name === 'Detail')?.source.path).toBe(paths['More.tao'])

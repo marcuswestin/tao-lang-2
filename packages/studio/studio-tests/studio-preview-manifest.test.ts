@@ -101,6 +101,40 @@ Describe('Studio preview manifest', () => {
       'focus',
     ])
   })
+
+  Test('preserves entity parameter identity and requires an object argument', () => {
+    const base = fixture()
+    const manifest: StudioPreviewManifestV2 = {
+      ...base,
+      cells: base.cells.map((cell, index) =>
+        index === 0 ? { ...cell, args: { ...cell.args, owner: { id: 'account-1' } } } : cell
+      ),
+      parametersBySubject: {
+        ...base.parametersBySubject,
+        card: [
+          ...base.parametersBySubject['card']!,
+          { label: 'Owner', parameterId: 'owner', required: true, type: { entity: 'Account', kind: 'json' } },
+        ],
+      },
+      scenarios: base.scenarios.map((scenario, index) =>
+        index === 0
+          ? { ...scenario, args: { ...scenario.args, owner: { handle: 'Lead', kind: 'fixture-reference' } } }
+          : scenario
+      ),
+    }
+
+    const defined = StudioPreviewManifest.define(manifest)
+
+    Expect(defined.parametersBySubject['card']?.[1]?.type).toEqual({ entity: 'Account', kind: 'json' })
+
+    const invalid = {
+      ...manifest,
+      cells: manifest.cells.map((cell, index) =>
+        index === 0 ? { ...cell, args: { ...cell.args, owner: 'account-1' } } : cell
+      ),
+    }
+    Expect(() => StudioPreviewManifest.define(invalid)).toThrow('does not match entity Account')
+  })
 })
 
 function fixture(): StudioPreviewManifestV2 & { cells: Array<StudioPreviewManifestV2['cells'][number]> } {

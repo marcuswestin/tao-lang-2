@@ -23,7 +23,7 @@ export type StudioParameterSchema = {
   type:
     | { kind: 'boolean' }
     | { kind: 'choice'; values: readonly (boolean | number | string)[] }
-    | { kind: 'json' }
+    | { entity?: string; kind: 'json' }
     | { kind: 'number'; maximum?: number; minimum?: number; step?: number }
     | { kind: 'text' }
     | { kind: 'time' }
@@ -269,7 +269,10 @@ function validateArgsForSubject(manifest: StudioPreviewManifestV2, subjectId: st
       continue
     }
     if (!valueMatchesParameter(value, parameter)) {
-      throw new Errors.UserInputError(`Studio argument ${parameter.parameterId} does not match ${parameter.type.kind}.`)
+      const expected = parameter.type.kind === 'json' && parameter.type.entity !== undefined
+        ? `entity ${parameter.type.entity}`
+        : parameter.type.kind
+      throw new Errors.UserInputError(`Studio argument ${parameter.parameterId} does not match ${expected}.`)
     }
   }
 }
@@ -282,6 +285,9 @@ function validateParameter(parameter: StudioParameterSchema): void {
   }
   if (parameter.type.kind === 'choice' && parameter.type.values.length === 0) {
     throw new Errors.UserInputError(`Studio choice parameter has no values: ${parameter.parameterId}`)
+  }
+  if (parameter.type.kind === 'json' && parameter.type.entity !== undefined) {
+    requireText(parameter.type.entity, `Studio entity parameter type for ${parameter.parameterId}`)
   }
   if (parameter.type.kind === 'number') {
     for (const value of [parameter.type.minimum, parameter.type.maximum, parameter.type.step]) {
@@ -302,7 +308,8 @@ function valueMatchesParameter(value: StudioJsonValue, parameter: StudioParamete
     case 'choice':
       return parameter.type.values.some(candidate => Object.is(candidate, value))
     case 'json':
-      return true
+      return parameter.type.entity === undefined
+        || (typeof value === 'object' && value !== null && !Array.isArray(value))
     case 'number':
       return typeof value === 'number'
         && Number.isFinite(value)

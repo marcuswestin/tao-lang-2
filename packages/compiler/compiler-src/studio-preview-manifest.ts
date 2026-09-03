@@ -7,6 +7,7 @@ import { studioRenderIdentity } from './studio-render-identity'
 export type StudioPreviewParameterKind =
   | 'boolean'
   | 'choice'
+  | 'entity'
   | 'number'
   | 'text'
   | 'time'
@@ -14,6 +15,7 @@ export type StudioPreviewParameterKind =
 
 export type StudioPreviewParameterSchema = {
   choices?: readonly string[]
+  entity?: string
   kind: StudioPreviewParameterKind
   name: string
   required: boolean
@@ -472,7 +474,7 @@ function parameterSchema(parameter: AST.ParameterDeclaration): StudioPreviewPara
       : Type.displayName(type),
   }
   return Switch.kind(type, {
-    entity: () => ({ ...base, kind: 'unsupported' }),
+    entity: type => ({ ...base, entity: Type.dataEntityName(type.entity), kind: 'entity' }),
     item: () => ({ ...base, kind: 'unsupported' }),
     list: () => ({ ...base, kind: 'unsupported' }),
     unresolved: () => ({ ...base, kind: 'unsupported' }),

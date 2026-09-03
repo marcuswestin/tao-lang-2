@@ -144,6 +144,58 @@ Test('Studio preview session rejects scenarios declared outside the selected app
   }
 })
 
+Test('Studio preview session preserves compiler entity parameter semantics', async () => {
+  const previewRuntimeRoot = await mkTestDir('tao-studio-entity-parameter-runtime-')
+  try {
+    await withTaoFiles(
+      'tao-studio-entity-parameter-project-',
+      {
+        'Music.tao': `
+          workspace data Playlists / Playlist { Title text }
+          app Music { view Main }
+          view Main() { render Native() }
+          view PlaylistRow(Playlist) { render Native() }
+          view Native() { render inject \`\`\`ts return null \`\`\` }
+          fixture Sketches { Featured = create Playlist { Title: "Focus" } }
+          scenarios PlaylistRow "states" {
+            fixture Sketches
+            device phone
+            scenario "featured" { render (Playlist: Featured) }
+          }
+        `,
+      },
+      async (paths, root) => {
+        const preview = await openStudioPreviewSession({
+          entryPath: paths['Music.tao'],
+          previewRuntimeRoot,
+          projectRoot: root,
+        })
+        try {
+          const compiled = await preview.session.compileInitial()
+          if (compiled.status !== 'compiled') {
+            Errors.throwUnexpected(compiled.message)
+          }
+          const manifest = preview.session.previewManifest()!
+          const subject = manifest.subjects.find(candidate =>
+            candidate.kind === 'view' && candidate.viewName === 'PlaylistRow'
+          )!
+
+          Expect(manifest.parametersBySubject[subject.subjectId]).toEqual([{
+            label: 'Playlist',
+            parameterId: 'Playlist',
+            required: true,
+            type: { entity: 'Playlist', kind: 'json' },
+          }])
+        } finally {
+          await preview.close()
+        }
+      },
+    )
+  } finally {
+    await FS.remove(previewRuntimeRoot)
+  }
+})
+
 Test('Studio preview session scopes app scenarios to the selected variant and keeps focused views', async () => {
   const previewRuntimeRoot = await mkTestDir('tao-studio-selected-app-scenarios-runtime-')
   try {

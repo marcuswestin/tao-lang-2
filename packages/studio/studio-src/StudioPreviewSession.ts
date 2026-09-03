@@ -199,6 +199,9 @@ function parameterType(
   if (parameter.kind === 'choice') {
     return { kind: 'choice', values: parameter.choices ?? [] }
   }
+  if (parameter.kind === 'entity') {
+    return { entity: parameter.entity ?? parameter.typeName, kind: 'json' }
+  }
   if (parameter.kind === 'unsupported') {
     return { kind: 'json' }
   }
