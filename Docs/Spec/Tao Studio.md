@@ -266,15 +266,16 @@ grants only owner-write and restores read-only mode after success or failure; ne
 repository uses filesystem immutable flags. The ordinary Tao and dprint fix lanes check generated
 source but do not rewrite it.
 
-### Freehand Draw catalog
+### Freehand Draw and Snap catalog
 
 The Draw slice stores each unsnapped rectangle in `.tao-project/studio/sketches.jsonc`. The file is
 JSONC on input and canonical indented JSON on every Studio write. It is committed project state, not
-an artifact or browser preference. Format version 1 has this shape:
+an artifact or browser preference. Format version 2 has this shape; version 1 is migrated atomically
+without changing its logical revision:
 
 ```jsonc
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "nextViewNumber": 2,
   "revision": 1,
   "sketches": [
@@ -283,6 +284,7 @@ an artifact or browser preference. Format version 1 has this shape:
       "id": "sketch-row",
       "name": "View1",
       "project": "/path/to/project",
+      "rectOrder": ["rect-cover"],
       "rects": [
         {
           "content": "Cover art",
@@ -294,6 +296,7 @@ an artifact or browser preference. Format version 1 has this shape:
           "y": 12
         }
       ],
+      "snapped": [],
       "view": "View1",
       "width": 360
     }
@@ -301,7 +304,10 @@ an artifact or browser preference. Format version 1 has this shape:
 }
 ```
 
-Sketches and rectangles have stable unique IDs. Rectangle order is significant. Coordinates are
+Sketches and rectangles have stable unique IDs. `rectOrder` preserves the total order across free
+`rects` and flowed `snapped` associations, so partial Snap and Unsnap cannot change z-order. A
+snapped association retains the exact rectangle plus the generated path, view, element kind,
+source version, render identity, and Studio rectangle marker. Coordinates are
 finite and nonnegative, dimensions are finite and positive, `kind` is an open Tao element name, and
 optional `content` and `binding` values are strings. Unknown fields, duplicate IDs, duplicate sketch
 names or views, malformed JSONC, and unsupported format versions are rejected rather than repaired
@@ -309,7 +315,7 @@ silently. `revision` is the server conflict precondition. `nextViewNumber` is pr
 remain greater than every generated `view` association; deletion and reopening never reuse a `ViewN`
 number. `name` remains display text and does not control allocation.
 
-The session handshake includes the current catalog and advertises catalog format version 1. The same
+The session handshake includes the current catalog and advertises catalog format version 2. The same
 snapshot is available from `GET /api/sketches`. Draw mutations use typed requests at
 `POST /api/sketches/action` with a unique request ID and the expected catalog revision. The server
 serializes them with other project mutations, rejects a stale revision as an HTTP 409 conflict,
@@ -341,8 +347,25 @@ keep stray events from completing another gesture. Kind and content edits preser
 binding. Each completed gesture is serialized into one catalog action; an asynchronous rejection rolls
 the overlay back to its authoritative snapshot and exposes the error on the sketch host. Selecting,
 moving, resizing, retyping, and editing a free rectangle never write the Tao render tree. The language
-boundary is fixed: only the generated placeholder is flowed Tao source; projecting free rectangles into
-flowed elements remains outside this Draw slice.
+boundary is fixed: only snapping writes free rectangles into flowed Tao source.
+
+Snap projects selected rectangles through a deterministic server-owned inference: a clean separating
+axis chooses `Row` or `Col`, stacked lanes nest, median neighbour distance becomes `gap`, sketch-edge
+distance becomes `pad`, opposite-edge contact becomes `fill`, the widest slack assigns `claim 1` to
+its neighbour, fixed sizes remain fixed, and Text/Image hug. The committed 16-screen corpus records
+13 direct projections (81.25 percent) and three overlap proposals; every accepted tree records no
+more than two inspector fixes. Clean projections apply directly. Overlap returns the canonical tree
+and diff through the proposal route and requires the exact proposed source version to confirm.
+
+Generated leaves carry private `#studio_rect_...` markers. The compiler publishes their current
+render identities and element names; the preview reports finite cell-relative measured rectangles.
+Snap, repeated partial Snap, Unsnap, direction changes, separator insertion, weighted Spacer edits,
+and Undo are serialized source/catalog transactions: generated source compiles before the catalog
+advances, both stores roll back on failure, and successful revisions remain monotonic. Unsnap first
+uses the retained rectangle. On reopen, missing, duplicated, or retyped associations are dropped;
+an active matching preview measurement is the fallback, otherwise Studio returns the retryable
+`measurement-unavailable` conflict without changing either store. Free rows remain in the TypeScript
+overlay beside the flowed preview until they are snapped.
 
 The catalog is intended to be recovered through version control. A malformed or unsupported catalog
 blocks publication instead of discarding geometry. Restore a known-good committed copy or repair it

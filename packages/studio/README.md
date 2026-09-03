@@ -161,12 +161,13 @@ launch ID, session ID, component (`studio-server`, `preview`, `metro`, `watcher`
 shutdown reason. The terminal shows only the events a person waits on — server ready, a failed
 compile or reload, shutdown, a signal escalation, an orphan — and never source contents or secrets.
 
-## Freehand Draw project state
+## Freehand Draw and Snap project state
 
 Unsnapped Draw geometry is committed in `.tao-project/studio/sketches.jsonc`. It is not a launch
-artifact, browser-local preference, or Tao render tree. Catalog format version 1 stores a monotonic
-`nextViewNumber`, a conflict `revision`, and ordered sketches. Each sketch records stable `id`, display
-`name`, project, generated `view`, width, height, and ordered `rects`; each rectangle records stable
+artifact, browser-local preference, or Tao render tree. Catalog format version 2 stores a monotonic
+`nextViewNumber`, a conflict `revision`, and ordered sketches. Version 1 migrates atomically. Each
+sketch records stable `id`, display `name`, project, generated `view`, width, height, total
+`rectOrder`, free `rects`, and flowed `snapped` associations; each rectangle records stable
 `id`, nonnegative `x` and `y`, positive width and height, an open Tao element `kind`, and optional
 string `content` and `binding`.
 
@@ -192,13 +193,23 @@ preserving stable IDs, rectangle order, revision, and a `nextViewNumber` greater
 `view` number. Do not lower the allocator to reuse a deleted name; an existing
 `@/studio/ViewN.tao` is never overwritten.
 
-The project session intentionally rejects sketch deletion until generated-source removal shares the
-same transactional rollback.
+Snap uses the server's deterministic projection engine. The frozen 16-screen corpus accepts 13
+directly (81.25 percent), flags three overlaps for canonical tree/diff confirmation, and records no
+accepted result above two inspector fixes. Partial Snap rebuilds the flowed tree while leaving other
+rows in the overlay. Generated leaves carry stable Studio markers; the compiler publishes their
+current render identities and the preview reports measured geometry for Unsnap fallback. Direction,
+separator, and weighted Spacer controls are typed source actions. Snap, flow edits, Unsnap, and Undo
+commit generated source plus catalog associations together and roll both back on compile or catalog
+failure. Reopen drops missing, duplicated, or retyped associations. Retained geometry is preferred
+for Unsnap; a current measured render is the fallback.
 
-Run the focused Draw contracts with the repository's installed profile:
+The project session intentionally rejects whole-sketch deletion until generated-source removal shares
+the same transactional rollback.
+
+Run the focused Draw and Snap contracts with the repository's installed profile:
 
 ```bash
-bun test packages/studio/studio-tests/studio-sketch-catalog.test.ts packages/studio/studio-tests/studio-sketch-source.test.ts packages/studio/studio-tests/studio-sketch-geometry.test.ts packages/studio/studio-tests/studio-sketch-session.test.ts packages/studio/studio-tests/studio-sketch-view.test.ts
+bun test packages/studio/studio-tests/studio-sketch-catalog.test.ts packages/studio/studio-tests/studio-sketch-source.test.ts packages/studio/studio-tests/studio-sketch-geometry.test.ts packages/studio/studio-tests/studio-sketch-projection.test.ts packages/studio/studio-tests/studio-sketch-snap.test.ts packages/studio/studio-tests/studio-sketch-session.test.ts packages/studio/studio-tests/studio-sketch-view.test.ts
 ```
 
 The existing real browser-shell smoke entry point is:
@@ -207,10 +218,9 @@ The existing real browser-shell smoke entry point is:
 just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts
 ```
 
-It must run outside the agent sandbox as described below. Its Draw path uses the public sketch
-selectors to create a 360 by 76 sketch, waits for its catalog and generated source, draws a free
-rectangle, verifies that only the catalog changed, reloads the Studio page, and checks the rectangle's
-persisted dimensions.
+It must run on a host where Chrome can expose DevTools. Its Draw path creates a 360 by 76 sketch and
+persists a free rectangle. Its Snap path covers playlist flow, reload, repeated partial Snap by gap
+drop, retained-position Unsnap, overlap Cancel/Apply, and source/catalog Undo.
 
 ## Smoke lanes
 
