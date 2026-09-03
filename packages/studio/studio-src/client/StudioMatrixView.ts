@@ -9,6 +9,12 @@ import {
   type StudioPreviewCell,
   type StudioPreviewManifestV2,
 } from '../StudioPreviewManifest'
+import type {
+  StudioSketchFlowActionRequest,
+  StudioSketchSnapRequest,
+  StudioSketchSnapUndoRequest,
+  StudioSketchUnsnapRequest,
+} from '../StudioProjectSession'
 import {
   type StudioFixturePlan,
   type StudioFixtureValue,
@@ -41,6 +47,7 @@ import {
   type MountedStudioSketchView,
   type StudioSketchRectChange,
   StudioSketchView,
+  type StudioSketchViewFlowActionRequest,
 } from './StudioSketchView'
 
 export type StudioMatrixCell<Item> = {
@@ -52,6 +59,7 @@ export type StudioMatrixGroup<Item> = {
   cells: readonly StudioMatrixCell<Item>[]
   id: string
   label: string
+  sketchSourceVersion?: string
   sketchView?: string
 }
 
@@ -170,6 +178,53 @@ type MountedMatrixSketches = {
   project: string
 }
 
+export type StudioSketchSnapMutationState = {
+  catalog: StudioSketchCatalogSnapshot
+  mutationLane: StudioSketchMutationLane
+}
+
+export const StudioSketchSnapRequests = {
+  flow(
+    request: StudioSketchViewFlowActionRequest,
+    expectedCatalogRevision: number,
+    requestId: string,
+  ): StudioSketchFlowActionRequest {
+    return { ...request, expectedCatalogRevision, requestId }
+  },
+  snap(
+    request: Readonly<{
+      checkpointId: string
+      confirmedProposalVersion?: string
+      rectIds: readonly string[]
+      sketchId: string
+      sourceVersion: string
+    }>,
+    expectedCatalogRevision: number,
+    requestId: string,
+  ): StudioSketchSnapRequest {
+    return { ...request, expectedCatalogRevision, requestId }
+  },
+  undo(
+    request: Readonly<{ checkpointId: string; sourceVersion: string }>,
+    expectedCatalogRevision: number,
+    requestId: string,
+  ): StudioSketchSnapUndoRequest {
+    return { ...request, expectedCatalogRevision, requestId }
+  },
+  unsnap(
+    request: Readonly<{
+      checkpointId: string
+      rectIds: readonly string[]
+      sketchId: string
+      sourceVersion: string
+    }>,
+    expectedCatalogRevision: number,
+    requestId: string,
+  ): StudioSketchUnsnapRequest {
+    return { ...request, expectedCatalogRevision, requestId }
+  },
+} as const
+
 function renderMatrixSketches(
   parent: HTMLElement,
   project: string,
@@ -232,18 +287,123 @@ function renderMatrixSketches(
         onError: error => {
           host.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
         },
+        onFlowAction: async request => await applySketchFlowAction(state, request),
         onRectChange: async change => {
           const result = await applySketchAction(state, sketchAction(change))
           delete host.dataset['taoStudioSketchError']
           return result.catalog.sketches
         },
+        onSnap: async request => await applySketchSnap(state, request),
+        onUnsnap: async request => await applySketchUnsnap(state, request),
+        onUndoSnap: async request => await undoSketchSnap(state, request),
         sketches,
+        sourceVersion: host.dataset['taoStudioSketchSourceVersion'],
       })
       state.mounts.set(host, mount)
     } else {
-      mount.render(sketches)
+      mount.render(sketches, host.dataset['taoStudioSketchSourceVersion'])
     }
   }
+}
+
+export type StudioSketchSnapApi = Pick<
+  typeof StudioApiClient,
+  'sketchSnapApply' | 'sketchSnapProposal' | 'sketchUnsnapApply' | 'undoSketchSnap'
+>
+
+async function applySketchFlowAction(
+  state: MountedMatrixSketches,
+  request: StudioSketchViewFlowActionRequest,
+): Promise<Awaited<ReturnType<typeof StudioApiClient.sketchFlowAction>>> {
+  return await state.mutationLane.run(async () => {
+    const applied = await StudioApiClient.sketchFlowAction(
+      StudioSketchSnapRequests.flow(request, state.catalog.revision, crypto.randomUUID()),
+    )
+    state.catalog = applied.catalog
+    return applied
+  })
+}
+
+export async function applySketchSnap(
+  state: StudioSketchSnapMutationState,
+  request: Readonly<{
+    checkpointId: string
+    confirmedProposalVersion?: string
+    rectIds: readonly string[]
+    sketchId: string
+    sourceVersion: string
+  }>,
+): Promise<
+  | Awaited<ReturnType<typeof StudioApiClient.sketchSnapApply>>
+  | Awaited<ReturnType<typeof StudioApiClient.sketchSnapProposal>>
+> {
+  return await applySketchSnapWith(state, request, StudioApiClient, () => crypto.randomUUID())
+}
+
+export async function applySketchSnapWith(
+  state: StudioSketchSnapMutationState,
+  request: Readonly<{
+    checkpointId: string
+    confirmedProposalVersion?: string
+    rectIds: readonly string[]
+    sketchId: string
+    sourceVersion: string
+  }>,
+  api: StudioSketchSnapApi,
+  requestId: () => string,
+): Promise<
+  | Awaited<ReturnType<typeof StudioApiClient.sketchSnapApply>>
+  | Awaited<ReturnType<typeof StudioApiClient.sketchSnapProposal>>
+> {
+  return await state.mutationLane.run(async () => {
+    const base = StudioSketchSnapRequests.snap(request, state.catalog.revision, requestId())
+    if (request.confirmedProposalVersion !== undefined) {
+      const applied = await api.sketchSnapApply({
+        ...base,
+        confirmedProposalVersion: request.confirmedProposalVersion,
+      })
+      state.catalog = applied.catalog
+      return applied
+    }
+    const proposal = await api.sketchSnapProposal(base)
+    if (proposal.needsConfirmation) {
+      return proposal
+    }
+    const applied = await api.sketchSnapApply(base)
+    state.catalog = applied.catalog
+    return applied
+  })
+}
+
+async function applySketchUnsnap(
+  state: MountedMatrixSketches,
+  request: Readonly<{
+    checkpointId: string
+    rectIds: readonly string[]
+    sketchId: string
+    sourceVersion: string
+  }>,
+): Promise<Awaited<ReturnType<typeof StudioApiClient.sketchUnsnapApply>>> {
+  return await state.mutationLane.run(async () => {
+    const applied = await StudioApiClient.sketchUnsnapApply(
+      StudioSketchSnapRequests.unsnap(request, state.catalog.revision, crypto.randomUUID()),
+    )
+    state.catalog = applied.catalog
+    return applied
+  })
+}
+
+async function undoSketchSnap(
+  state: MountedMatrixSketches,
+  request: Readonly<{ checkpointId: string; sourceVersion: string }>,
+): Promise<Awaited<ReturnType<typeof StudioApiClient.undoSketchSnap>>> {
+  return await state.mutationLane.run(async () => {
+    const undone = await StudioApiClient.undoSketchSnap(
+      StudioSketchSnapRequests.undo(request, state.catalog.revision, crypto.randomUUID()),
+    )
+    state.catalog = undone.catalog
+    return undone
+  })
 }
 
 async function applySketchAction(
@@ -335,6 +495,11 @@ function reconcileMatrix<Item>(
       delete sketchHost.dataset['taoStudioSketchView']
     } else {
       sketchHost.dataset['taoStudioSketchView'] = group.sketchView
+    }
+    if (group.sketchSourceVersion === undefined) {
+      delete sketchHost.dataset['taoStudioSketchSourceVersion']
+    } else {
+      sketchHost.dataset['taoStudioSketchSourceVersion'] = group.sketchSourceVersion
     }
     reconcileElementChildren(cells, [...nextFrames, sketchHost])
     reconcileElementChildren(row, [heading, cells])
@@ -619,15 +784,23 @@ function connectionGroups(
       if (group.label !== 'sketch') {
         return {}
       }
-      const viewNames = new Set(manifest.scenarios.flatMap(scenario => {
-        if (StudioScenarioControls.groupId(scenario.source.path, scenario.group) !== group.id) {
-          return []
-        }
+      const scenarios = manifest.scenarios.filter(scenario =>
+        StudioScenarioControls.groupId(scenario.source.path, scenario.group) === group.id
+      )
+      const viewNames = new Set(scenarios.flatMap(scenario => {
         const subject = subjects.get(scenario.subjectId)
         return subject?.kind === 'view' ? [subject.viewName] : []
       }))
       const sketchView = viewNames.size === 1 ? [...viewNames][0] : undefined
-      return sketchView === undefined ? {} : { sketchView }
+      const sourceVersions = new Set(scenarios.flatMap(scenario => {
+        const sourceVersion = manifest.sourceVersions[scenario.source.path]
+        return sourceVersion === undefined ? [] : [sourceVersion]
+      }))
+      const sketchSourceVersion = sourceVersions.size === 1 ? [...sourceVersions][0] : undefined
+      return {
+        ...(sketchSourceVersion === undefined ? {} : { sketchSourceVersion }),
+        ...(sketchView === undefined ? {} : { sketchView }),
+      }
     })(),
   }))
 }
@@ -1733,6 +1906,10 @@ export async function handlePreviewMessage(
       timestamp: message.timestamp,
     }].slice(-500)
     actions.changed?.()
+    return
+  }
+  if (message.type === 'preview-layout-measurements') {
+    await StudioApiClient.previewLayoutMeasurements(message)
     return
   }
   if (message.type === 'preview-scheme-changed') {

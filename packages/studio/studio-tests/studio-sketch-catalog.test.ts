@@ -3,9 +3,11 @@ import { Expect, Test, withTaoFiles } from '@shared/test'
 import {
   StudioSketchCatalog,
   StudioSketchCatalogConflictError,
+  studioSketchCatalogFormatVersion,
   studioSketchCatalogRelativePath,
   type StudioSketchCatalogRequest,
   type StudioSketchRect,
+  type StudioSketchRenderTarget,
 } from '../studio-src/StudioSketchCatalog'
 
 const cover: StudioSketchRect = {
@@ -21,7 +23,7 @@ const cover: StudioSketchRect = {
 Test('Studio sketch catalog creates canonical ordered free geometry and reads JSONC', async () => {
   await withTaoFiles('tao-studio-sketch-catalog-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
-    Expect(await provider.read()).toEqual({ formatVersion: 1, nextViewNumber: 1, revision: 0, sketches: [] })
+    Expect(await provider.read()).toEqual({ formatVersion: 2, nextViewNumber: 1, revision: 0, sketches: [] })
 
     const result = await provider.apply({
       action: {
@@ -39,7 +41,7 @@ Test('Studio sketch catalog creates canonical ordered free geometry and reads JS
     Expect(result.createdSketch).toMatchObject({ id: 'sketch-row', name: 'View1', view: 'View1' })
     Expect(result.catalog.sketches[0]?.rects.map(rect => rect.id)).toEqual(['rect-cover', 'rect-title'])
     Expect(await FS.readText(provider.path())).toBe(`{
-  "formatVersion": 1,
+  "formatVersion": 2,
   "nextViewNumber": 2,
   "revision": 1,
   "sketches": [
@@ -48,6 +50,10 @@ Test('Studio sketch catalog creates canonical ordered free geometry and reads JS
       "id": "sketch-row",
       "name": "View1",
       "project": "music",
+      "rectOrder": [
+        "rect-cover",
+        "rect-title"
+      ],
       "rects": [
         {
           "content": "Cover art",
@@ -67,6 +73,7 @@ Test('Studio sketch catalog creates canonical ordered free geometry and reads JS
           "y": 16
         }
       ],
+      "snapped": [],
       "view": "View1",
       "width": 360
     }
@@ -93,8 +100,85 @@ Test('Studio sketch catalog creates canonical ordered free geometry and reads JS
     }
     `,
     )
-    Expect((await provider.read()).sketches[0]?.rects[0]?.kind).toBe('Text')
+    const migrated = await provider.read()
+    Expect(migrated).toMatchObject({ formatVersion: 2, revision: 1 })
+    Expect(migrated.sketches[0]?.rects[0]?.kind).toBe('Text')
+    Expect(migrated.sketches[0]?.snapped).toEqual([])
+    Expect(await FS.readText(provider.path())).toContain(`"formatVersion": ${studioSketchCatalogFormatVersion}`)
   })
+})
+
+Test('Studio sketch catalog migrates strict v1 once without changing its logical revision', async () => {
+  await withTaoFiles('tao-studio-sketch-migration-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    const catalogPath = FS.resolvePath(studioSketchCatalogRelativePath, root)
+    const v1 = JSON.stringify({
+      formatVersion: 1,
+      nextViewNumber: 2,
+      revision: 9,
+      sketches: [{
+        height: 76,
+        id: 'sketch-row',
+        name: 'View1',
+        project: 'music',
+        rects: [cover],
+        view: 'View1',
+        width: 360,
+      }],
+    })
+    await FS.writeText(catalogPath, v1)
+    let writes = 0
+    const provider = new StudioSketchCatalog(root, {
+      async writeTemporary(path, content) {
+        writes += 1
+        await FS.writeText(path, content)
+      },
+    })
+
+    const migrated = await provider.read()
+    Expect(migrated).toEqual({
+      formatVersion: 2,
+      nextViewNumber: 2,
+      revision: 9,
+      sketches: [{
+        height: 76,
+        id: 'sketch-row',
+        name: 'View1',
+        project: 'music',
+        rectOrder: ['rect-cover'],
+        rects: [cover],
+        snapped: [],
+        view: 'View1',
+        width: 360,
+      }],
+    })
+    Expect(writes).toBe(1)
+    Expect(JSON.parse(await FS.readText(catalogPath))).toEqual(migrated)
+
+    Expect(await provider.read()).toEqual(migrated)
+    Expect(writes).toBe(1)
+  })
+})
+
+Test('Studio sketch catalog leaves valid v1 intact when atomic migration replacement fails', async () => {
+  await withTaoFiles(
+    'tao-studio-sketch-migration-failure-',
+    { 'Project.tao': 'project Music\n' },
+    async (_paths, root) => {
+      const catalogPath = FS.resolvePath(studioSketchCatalogRelativePath, root)
+      const v1 = JSON.stringify({ formatVersion: 1, nextViewNumber: 1, revision: 4, sketches: [] })
+      await FS.writeText(catalogPath, v1)
+      const failing = new StudioSketchCatalog(root, {
+        move: async () => Errors.throwHostEnvironment('simulated migration rename failure'),
+      })
+
+      await Expect(failing.read()).rejects.toThrow('simulated migration rename failure')
+      Expect(await FS.readText(catalogPath)).toBe(v1)
+      Expect((await FS.listDir(FS.dirname(catalogPath))).filter(name => name.endsWith('.tmp'))).toEqual([])
+
+      const recovered = await new StudioSketchCatalog(root).read()
+      Expect(recovered).toEqual({ formatVersion: 2, nextViewNumber: 1, revision: 4, sketches: [] })
+    },
+  )
 })
 
 Test('Studio sketch actions preserve row order and support edit, duplicate, and delete', async () => {
@@ -154,10 +238,137 @@ Test('Studio sketch actions preserve row order and support edit, duplicate, and 
 
     const rects = deleted.catalog.sketches[0]!.rects
     Expect(rects.map(rect => rect.id)).toEqual(['rect-subtitle', 'rect-copy'])
+    Expect(deleted.catalog.sketches[0]!.rectOrder).toEqual(['rect-subtitle', 'rect-copy'])
     Expect(rects[0]).toMatchObject({ binding: 'Playlist.Name', content: 'Mix', kind: 'Button', width: 140 })
     Expect(rects[1]).toMatchObject({ binding: 'Playlist.Name', content: 'Mix', x: 90, y: 56 })
   })
 })
+
+Test('Studio sketch actions atomically move selected free rows into strict associations and back', async () => {
+  await withTaoFiles('tao-studio-sketch-associations-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    const provider = new StudioSketchCatalog(root)
+    await provider.apply({
+      action: {
+        height: 76,
+        id: 'sketch-row',
+        kind: 'create-sketch',
+        project: 'music',
+        rects: [
+          cover,
+          { content: 'Title', height: 20, id: 'rect-title', kind: 'Text', width: 120, x: 76, y: 12 },
+          { content: 'Free', height: 20, id: 'rect-free', kind: 'Text', width: 50, x: 76, y: 42 },
+        ],
+        width: 360,
+      },
+      expectedRevision: 0,
+      requestId: 'create-row',
+    })
+
+    const snapped = await provider.apply({
+      action: {
+        kind: 'snap-rects',
+        sketchId: 'sketch-row',
+        targets: [target('rect-cover', 'Placeholder', 100, 160), target('rect-title', 'Text', 161, 205)],
+      },
+      expectedRevision: 1,
+      requestId: 'snap-selected',
+    })
+    const sketch = snapped.catalog.sketches[0]!
+    Expect(sketch.rects.map(rect => rect.id)).toEqual(['rect-free'])
+    Expect(sketch.rectOrder).toEqual(['rect-cover', 'rect-title', 'rect-free'])
+    Expect(sketch.snapped.map(item => item.rect.id)).toEqual(['rect-cover', 'rect-title'])
+    Expect(sketch.snapped[0]).toEqual({
+      rect: cover,
+      target: target('rect-cover', 'Placeholder', 100, 160),
+    })
+
+    const unsnapped = await provider.apply({
+      action: { kind: 'unsnap-rects', rectIds: ['rect-cover'], sketchId: 'sketch-row' },
+      expectedRevision: 2,
+      requestId: 'unsnap-cover',
+    })
+    Expect(unsnapped.catalog.sketches[0]?.rects.map(rect => rect.id)).toEqual(['rect-cover', 'rect-free'])
+    Expect(unsnapped.catalog.sketches[0]?.rects[0]).toEqual(cover)
+    Expect(unsnapped.catalog.sketches[0]?.snapped.map(item => item.rect.id)).toEqual(['rect-title'])
+    Expect(unsnapped.catalog.sketches[0]?.rectOrder).toEqual(['rect-cover', 'rect-title', 'rect-free'])
+  })
+})
+
+Test(
+  'Studio sketch associations record the emitted fallback element independently of the free rectangle kind',
+  async () => {
+    await withTaoFiles(
+      'tao-studio-sketch-fallback-association-',
+      { 'Project.tao': 'project Music\n' },
+      async (_paths, root) => {
+        const provider = new StudioSketchCatalog(root)
+        await provider.apply({
+          action: {
+            height: 76,
+            id: 'sketch-row',
+            kind: 'create-sketch',
+            project: 'music',
+            rects: [{ ...cover, id: 'rect-avatar', kind: 'Avatar' }],
+            width: 360,
+          },
+          expectedRevision: 0,
+          requestId: 'create-avatar',
+        })
+
+        const result = await provider.apply({
+          action: {
+            kind: 'snap-rects',
+            sketchId: 'sketch-row',
+            targets: [target('rect-avatar', 'Placeholder', 10, 40)],
+          },
+          expectedRevision: 1,
+          requestId: 'snap-avatar-fallback',
+        })
+
+        Expect(result.catalog.sketches[0]?.snapped[0]).toMatchObject({
+          rect: { id: 'rect-avatar', kind: 'Avatar' },
+          target: { elementName: 'Placeholder', studioRectId: 'rect-avatar' },
+        })
+      },
+    )
+  },
+)
+
+Test(
+  'Studio sketch association validation rejects mismatched and duplicate targets without changing the catalog',
+  async () => {
+    await withTaoFiles(
+      'tao-studio-sketch-association-validation-',
+      { 'Project.tao': 'project Music\n' },
+      async (_paths, root) => {
+        const provider = new StudioSketchCatalog(root)
+        await provider.apply(createSketchRequest(0))
+        const before = await FS.readText(provider.path())
+
+        await Expect(provider.apply({
+          action: {
+            kind: 'snap-rects',
+            sketchId: 'sketch-row',
+            targets: [{ ...target('rect-cover', 'Text', 10, 20), view: 'View2' }],
+          },
+          expectedRevision: 1,
+          requestId: 'wrong-view',
+        })).rejects.toThrow('must target its sketch view View1')
+        await Expect(provider.apply({
+          action: {
+            kind: 'snap-rects',
+            sketchId: 'sketch-row',
+            targets: [target('rect-cover', 'Placeholder', 10, 20), target('rect-cover', 'Placeholder', 10, 20)],
+          },
+          expectedRevision: 1,
+          requestId: 'duplicate-target',
+        })).rejects.toThrow('duplicate snap rectangle id: rect-cover')
+        Expect(await FS.readText(provider.path())).toBe(before)
+        Expect((await provider.read()).revision).toBe(1)
+      },
+    )
+  },
+)
 
 Test('Studio sketch view allocation stays monotonic across deletion and reopen', async () => {
   await withTaoFiles('tao-studio-sketch-names-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
@@ -396,5 +607,22 @@ function createSketchRequest(expectedRevision: number): StudioSketchCatalogReque
     },
     expectedRevision,
     requestId: 'create-row',
+  }
+}
+
+function target(
+  studioRectId: string,
+  elementName: string,
+  start: number,
+  end: number,
+): StudioSketchRenderTarget {
+  const path = '/project/@/studio/View1.tao'
+  return {
+    elementName,
+    path,
+    renderId: `${path}:${start}:${end}`,
+    sourceVersion: 'source-2',
+    studioRectId,
+    view: 'View1',
   }
 }

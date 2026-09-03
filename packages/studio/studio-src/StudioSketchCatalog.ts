@@ -1,6 +1,6 @@
 import { Assert, Errors, FS } from '@shared'
 
-export const studioSketchCatalogFormatVersion = 1 as const
+export const studioSketchCatalogFormatVersion = 2 as const
 export const studioSketchCatalogRelativePath = '.tao-project/studio/sketches.jsonc'
 
 export type StudioSketchRect = Readonly<{
@@ -14,12 +14,28 @@ export type StudioSketchRect = Readonly<{
   y: number
 }>
 
+export type StudioSketchRenderTarget = Readonly<{
+  elementName: string
+  path: string
+  renderId: string
+  sourceVersion: string
+  studioRectId: string
+  view: string
+}>
+
+export type StudioSnappedRect = Readonly<{
+  rect: StudioSketchRect
+  target: StudioSketchRenderTarget
+}>
+
 export type StudioSketch = Readonly<{
   height: number
   id: string
   name: string
   project: string
+  rectOrder: readonly string[]
   rects: readonly StudioSketchRect[]
+  snapped: readonly StudioSnappedRect[]
   view: string
   width: number
 }>
@@ -62,6 +78,21 @@ export type StudioSketchCatalogAction =
     y: number
   }>
   | Readonly<{ kind: 'delete-rect'; rectId: string; sketchId: string }>
+  | Readonly<{
+    kind: 'snap-rects'
+    sketchId: string
+    targets: readonly StudioSketchRenderTarget[]
+  }>
+  | Readonly<{
+    kind: 'unsnap-rects'
+    rectIds: readonly string[]
+    sketchId: string
+  }>
+  | Readonly<{
+    kind: 'refresh-snap-targets'
+    sketchId: string
+    targets: readonly StudioSketchRenderTarget[]
+  }>
 
 export type StudioSketchCatalogRequest = Readonly<{
   action: StudioSketchCatalogAction
@@ -112,6 +143,10 @@ export class StudioSketchCatalog {
   }
 
   async read(): Promise<StudioSketchCatalogSnapshot> {
+    return this.#mutate(() => this.#read())
+  }
+
+  async #read(): Promise<StudioSketchCatalogSnapshot> {
     if (!await FS.exists(this.#catalogPath)) {
       return emptyCatalog()
     }
@@ -119,7 +154,11 @@ export class StudioSketchCatalog {
       await FS.isFile(this.#catalogPath),
       `Studio sketch catalog must be a file: ${studioSketchCatalogRelativePath}`,
     )
-    return parseCatalog(await FS.readText(this.#catalogPath))
+    const parsed = parseCatalog(await FS.readText(this.#catalogPath))
+    if (parsed.migrated) {
+      await this.#write(parsed.catalog)
+    }
+    return parsed.catalog
   }
 
   apply(request: StudioSketchCatalogRequest): Promise<StudioSketchCatalogResult> {
@@ -135,7 +174,7 @@ export class StudioSketchCatalog {
         return cached.result
       }
 
-      const current = await this.read()
+      const current = await this.#read()
       if (request.expectedRevision !== current.revision) {
         throw new StudioSketchCatalogConflictError(request.expectedRevision, current.revision)
       }
@@ -208,7 +247,9 @@ function applyAction(
       id: action.id,
       name,
       project: action.project,
+      rectOrder: action.rects.map(rect => rect.id),
       rects: action.rects,
+      snapped: [],
       view: name,
       width: action.width,
     }
@@ -226,13 +267,75 @@ function applyAction(
     return { catalog: { ...catalog, sketches: catalog.sketches.filter(sketch => sketch.id !== action.id) } }
   }
   const sketch = requireSketch(catalog, action.sketchId)
+  if (action.kind === 'snap-rects') {
+    const ids = action.targets.map(target => target.studioRectId)
+    requireUnique(ids, 'snap rectangle id')
+    const selected = new Set(ids)
+    const snapped = action.targets.map(target => {
+      const rect = sketch.rects[requireRectIndex(sketch, target.studioRectId)]!
+      Assert.input(
+        target.view === sketch.view,
+        `Studio snapped rectangle ${rect.id} must target its sketch view ${sketch.view}.`,
+      )
+      return { rect, target }
+    })
+    return {
+      catalog: replaceSketch(catalog, {
+        ...sketch,
+        rects: sketch.rects.filter(rect => !selected.has(rect.id)),
+        snapped: [...sketch.snapped, ...snapped],
+      }),
+    }
+  }
+  if (action.kind === 'unsnap-rects') {
+    requireUnique(action.rectIds, 'unsnap rectangle id')
+    const selected = new Set(action.rectIds)
+    const restored = action.rectIds.map(id => sketch.snapped[requireSnappedRectIndex(sketch, id)]!.rect)
+    const order = new Map(sketch.rectOrder.map((id, index) => [id, index]))
+    const rects = [...sketch.rects, ...restored].toSorted((left, right) => order.get(left.id)! - order.get(right.id)!)
+    return {
+      catalog: replaceSketch(catalog, {
+        ...sketch,
+        rects,
+        snapped: sketch.snapped.filter(snapped => !selected.has(snapped.rect.id)),
+      }),
+    }
+  }
+  if (action.kind === 'refresh-snap-targets') {
+    const ids = action.targets.map(target => target.studioRectId)
+    requireUnique(ids, 'refreshed snap target rectangle id')
+    const expected = sketch.snapped.map(item => item.rect.id)
+    Assert.input(
+      ids.length === expected.length && expected.every(id => ids.includes(id)),
+      'Studio refreshed snap targets must cover every surviving snapped rectangle exactly once.',
+    )
+    const targets = new Map(action.targets.map(target => [target.studioRectId, target]))
+    return {
+      catalog: replaceSketch(catalog, {
+        ...sketch,
+        snapped: sketch.snapped.map(item => {
+          const target = targets.get(item.rect.id)!
+          Assert.input(
+            target.view === sketch.view && target.studioRectId === item.rect.id,
+            `Studio refreshed rectangle ${item.rect.id} must target its sketch view ${sketch.view}.`,
+          )
+          return { ...item, target }
+        }),
+      }),
+    }
+  }
   if (action.kind === 'add-rect') {
     const insertion = action.afterRectId === undefined
       ? sketch.rects.length
       : requireRectIndex(sketch, action.afterRectId) + 1
     const rects = [...sketch.rects]
     rects.splice(insertion, 0, action.rect)
-    return { catalog: replaceSketch(catalog, { ...sketch, rects }) }
+    const orderInsertion = action.afterRectId === undefined
+      ? sketch.rectOrder.length
+      : sketch.rectOrder.indexOf(action.afterRectId) + 1
+    const rectOrder = [...sketch.rectOrder]
+    rectOrder.splice(orderInsertion, 0, action.rect.id)
+    return { catalog: replaceSketch(catalog, { ...sketch, rectOrder, rects }) }
   }
   if (action.kind === 'update-rect') {
     const index = requireRectIndex(sketch, action.rectId)
@@ -246,12 +349,20 @@ function applyAction(
     const source = sketch.rects[index]!
     const rects = [...sketch.rects]
     rects.splice(index + 1, 0, { ...source, id: action.id, x: action.x, y: action.y })
-    return { catalog: replaceSketch(catalog, { ...sketch, rects }) }
+    const rectOrder = [...sketch.rectOrder]
+    rectOrder.splice(sketch.rectOrder.indexOf(action.rectId) + 1, 0, action.id)
+    return { catalog: replaceSketch(catalog, { ...sketch, rectOrder, rects }) }
   }
   const index = requireRectIndex(sketch, action.rectId)
   const rects = [...sketch.rects]
   rects.splice(index, 1)
-  return { catalog: replaceSketch(catalog, { ...sketch, rects }) }
+  return {
+    catalog: replaceSketch(catalog, {
+      ...sketch,
+      rectOrder: sketch.rectOrder.filter(id => id !== action.rectId),
+      rects,
+    }),
+  }
 }
 
 function replaceSketch(catalog: StudioSketchCatalogSnapshot, replacement: StudioSketch): StudioSketchCatalogSnapshot {
@@ -270,6 +381,12 @@ function requireSketch(catalog: StudioSketchCatalogSnapshot, id: string): Studio
 function requireRectIndex(sketch: StudioSketch, id: string): number {
   const index = sketch.rects.findIndex(rect => rect.id === id)
   Assert.input(index >= 0, `Studio rectangle does not exist: ${id}`)
+  return index
+}
+
+function requireSnappedRectIndex(sketch: StudioSketch, id: string): number {
+  const index = sketch.snapped.findIndex(snapped => snapped.rect.id === id)
+  Assert.input(index >= 0, `Studio snapped rectangle does not exist: ${id}`)
   return index
 }
 
@@ -329,17 +446,57 @@ function validateAction(action: Record<string, unknown>): void {
     requireNonEmptyString(action['rectId'], 'delete-rect.rectId')
     return
   }
+  if (action['kind'] === 'snap-rects') {
+    requireOnlyKeys(action, ['kind', 'sketchId', 'targets'], 'snap-rects action')
+    requireNonEmptyString(action['sketchId'], 'snap-rects.sketchId')
+    Assert.input(Array.isArray(action['targets']), 'Studio sketch snap-rects.targets must be an array.')
+    Assert.input(action['targets'].length > 0, 'Studio sketch snap-rects.targets must not be empty.')
+    action['targets'].forEach((target, index) => validateRenderTarget(target, `snap-rects.targets[${index}]`))
+    return
+  }
+  if (action['kind'] === 'unsnap-rects') {
+    requireOnlyKeys(action, ['kind', 'rectIds', 'sketchId'], 'unsnap-rects action')
+    requireNonEmptyString(action['sketchId'], 'unsnap-rects.sketchId')
+    Assert.input(Array.isArray(action['rectIds']), 'Studio sketch unsnap-rects.rectIds must be an array.')
+    Assert.input(action['rectIds'].length > 0, 'Studio sketch unsnap-rects.rectIds must not be empty.')
+    action['rectIds'].forEach((id, index) => requireNonEmptyString(id, `unsnap-rects.rectIds[${index}]`))
+    return
+  }
+  if (action['kind'] === 'refresh-snap-targets') {
+    requireOnlyKeys(action, ['kind', 'sketchId', 'targets'], 'refresh-snap-targets action')
+    requireNonEmptyString(action['sketchId'], 'refresh-snap-targets.sketchId')
+    Assert.input(Array.isArray(action['targets']), 'Studio sketch refresh-snap-targets.targets must be an array.')
+    action['targets'].forEach((target, index) => validateRenderTarget(target, `refresh-snap-targets.targets[${index}]`))
+    return
+  }
   Errors.throwUserInput(`Unsupported Studio sketch action: ${String(action['kind'])}`)
 }
 
-function parseCatalog(content: string): StudioSketchCatalogSnapshot {
+function parseCatalog(content: string): Readonly<{ catalog: StudioSketchCatalogSnapshot; migrated: boolean }> {
   let parsed: unknown
   try {
     parsed = JSON.parse(stripJsonCommentsAndTrailingCommas(content))
   } catch {
     Errors.throwUserInput(`Studio sketch catalog is malformed JSONC: ${studioSketchCatalogRelativePath}`)
   }
-  return validateCatalog(parsed)
+  Assert.input(isRecord(parsed), 'Studio sketch catalog must contain an object.')
+  if (parsed['formatVersion'] === 1) {
+    return { catalog: migrateV1Catalog(parsed), migrated: true }
+  }
+  return { catalog: validateCatalog(parsed), migrated: false }
+}
+
+function migrateV1Catalog(value: Record<string, unknown>): StudioSketchCatalogSnapshot {
+  requireOnlyKeys(value, ['formatVersion', 'nextViewNumber', 'revision', 'sketches'], 'catalog')
+  const nextViewNumber = requirePositiveInteger(value['nextViewNumber'], 'nextViewNumber')
+  const revision = requireNonNegativeInteger(value['revision'], 'revision')
+  Assert.input(Array.isArray(value['sketches']), 'Studio sketch catalog sketches must be an array.')
+  const sketches = value['sketches'].map((sketch, index) => {
+    const migrated = validateV1Sketch(sketch, index)
+    return { ...migrated, rectOrder: migrated.rects.map(rect => rect.id), snapped: [] }
+  })
+  requireUnique(sketches.flatMap(sketch => sketch.rects.map(rect => rect.id)), 'rectangle id')
+  return validateCatalog({ formatVersion: studioSketchCatalogFormatVersion, nextViewNumber, revision, sketches })
 }
 
 function validateCatalog(value: unknown): StudioSketchCatalogSnapshot {
@@ -356,7 +513,10 @@ function validateCatalog(value: unknown): StudioSketchCatalogSnapshot {
   requireUnique(sketches.map(sketch => sketch.id), 'sketch id')
   requireUnique(sketches.map(sketch => sketch.name), 'sketch name')
   requireUnique(sketches.map(sketch => sketch.view), 'sketch view')
-  requireUnique(sketches.flatMap(sketch => sketch.rects.map(rect => rect.id)), 'rectangle id')
+  requireUnique(
+    sketches.flatMap(sketch => [...sketch.rects.map(rect => rect.id), ...sketch.snapped.map(item => item.rect.id)]),
+    'rectangle id',
+  )
   const allocatedNumbers = sketches.map(sketch => Number(sketch.view.slice('View'.length)))
   const highestAllocated = Math.max(0, ...allocatedNumbers)
   Assert.input(
@@ -366,9 +526,51 @@ function validateCatalog(value: unknown): StudioSketchCatalogSnapshot {
   return { formatVersion: studioSketchCatalogFormatVersion, nextViewNumber, revision, sketches }
 }
 
-function validateSketch(value: unknown, index: number): StudioSketch {
+function validateV1Sketch(value: unknown, index: number): Omit<StudioSketch, 'rectOrder' | 'snapped'> {
   Assert.input(isRecord(value), `Studio sketch at index ${index} must be an object.`)
   requireOnlyKeys(value, ['height', 'id', 'name', 'project', 'rects', 'view', 'width'], `sketch at index ${index}`)
+  return validateSketchFields(value, index)
+}
+
+function validateSketch(value: unknown, index: number): StudioSketch {
+  Assert.input(isRecord(value), `Studio sketch at index ${index} must be an object.`)
+  requireOnlyKeys(
+    value,
+    ['height', 'id', 'name', 'project', 'rectOrder', 'rects', 'snapped', 'view', 'width'],
+    `sketch at index ${index}`,
+  )
+  const fields = validateSketchFields(value, index)
+  Assert.input(Array.isArray(value['rectOrder']), `Studio sketch ${fields.id} rectOrder must be an array.`)
+  const rectOrder = value['rectOrder'].map((id, orderIndex) =>
+    requireNonEmptyString(id, `${fields.id}.rectOrder[${orderIndex}]`)
+  )
+  requireUnique(rectOrder, `rectangle order in ${fields.id}`)
+  Assert.input(Array.isArray(value['snapped']), `Studio sketch ${fields.id} snapped must be an array.`)
+  const snapped = value['snapped'].map((item, itemIndex) =>
+    validateSnappedRect(item, `${fields.id}.snapped[${itemIndex}]`)
+  )
+  const memberIds = [...fields.rects.map(rect => rect.id), ...snapped.map(item => item.rect.id)]
+  Assert.input(
+    rectOrder.length === memberIds.length && memberIds.every(id => rectOrder.includes(id)),
+    `Studio sketch ${fields.id} rectOrder must contain every free and snapped rectangle exactly once.`,
+  )
+  return {
+    height: fields.height,
+    id: fields.id,
+    name: fields.name,
+    project: fields.project,
+    rectOrder,
+    rects: fields.rects,
+    snapped,
+    view: fields.view,
+    width: fields.width,
+  }
+}
+
+function validateSketchFields(
+  value: Record<string, unknown>,
+  index: number,
+): Omit<StudioSketch, 'rectOrder' | 'snapped'> {
   const id = requireNonEmptyString(value['id'], `sketches[${index}].id`)
   const name = requireNonEmptyString(value['name'], `sketches[${index}].name`)
   const project = requireNonEmptyString(value['project'], `sketches[${index}].project`)
@@ -378,6 +580,35 @@ function validateSketch(value: unknown, index: number): StudioSketch {
   Assert.input(Array.isArray(value['rects']), `Studio sketch ${id} rects must be an array.`)
   const rects = value['rects'].map((rect, rectIndex) => validateRect(rect, `${id}.rects[${rectIndex}]`))
   return { height, id, name, project, rects, view, width }
+}
+
+function validateSnappedRect(value: unknown, field: string): StudioSnappedRect {
+  Assert.input(isRecord(value), `Studio snapped rectangle ${field} must be an object.`)
+  requireOnlyKeys(value, ['rect', 'target'], field)
+  const rect = validateRect(value['rect'], `${field}.rect`)
+  const target = validateRenderTarget(value['target'], `${field}.target`)
+  Assert.input(
+    target.studioRectId === rect.id,
+    `Studio snapped rectangle ${field}.target.studioRectId must match its rectangle id.`,
+  )
+  return { rect, target }
+}
+
+function validateRenderTarget(value: unknown, field: string): StudioSketchRenderTarget {
+  Assert.input(isRecord(value), `Studio sketch render target ${field} must be an object.`)
+  requireOnlyKeys(
+    value,
+    ['elementName', 'path', 'renderId', 'sourceVersion', 'studioRectId', 'view'],
+    field,
+  )
+  return {
+    elementName: requireTaoElementName(value['elementName'], `${field}.elementName`),
+    path: requireNonEmptyString(value['path'], `${field}.path`),
+    renderId: requireNonEmptyString(value['renderId'], `${field}.renderId`),
+    sourceVersion: requireNonEmptyString(value['sourceVersion'], `${field}.sourceVersion`),
+    studioRectId: requireNonEmptyString(value['studioRectId'], `${field}.studioRectId`),
+    view: requireGeneratedViewName(value['view'], `${field}.view`),
+  }
 }
 
 function validateRect(value: unknown, field: string): StudioSketchRect {

@@ -69,7 +69,7 @@ type StudioPreviewPointerEvent = {
   taoStudioJourney?: boolean
 }
 
-type StudioPreviewRect = {
+export type StudioPreviewRect = {
   height: number
   left: number
   top: number
@@ -101,7 +101,10 @@ export type StudioPreviewHost = {
       listener: (event: StudioPreviewPointerEvent) => void,
       capture?: boolean,
     ): void
-    body?: { appendChild(element: StudioPreviewOverlay): void }
+    body?: {
+      appendChild(element: StudioPreviewOverlay): void
+      getBoundingClientRect?(): StudioPreviewRect
+    }
     createElement(name: 'div'): StudioPreviewOverlay
     querySelectorAll(selector: string): ArrayLike<StudioPreviewElement>
     removeEventListener(
@@ -130,6 +133,13 @@ type StudioPreviewLogLevel = 'debug' | 'error' | 'info' | 'log' | 'warn'
 type StudioRenderTarget = {
   element: StudioPreviewElement
   identity: TaoStudioIdentity
+}
+
+export type StudioPreviewLayoutMeasurement = {
+  elementName: string
+  rect: { height: number; width: number; x: number; y: number }
+  renderId: string
+  studioRectId?: string
 }
 
 type StudioRenderGap = {
@@ -432,6 +442,32 @@ export function mountStudioPreviewBridge(
   let suppressNextClick = false
   let postedHoverKey: string | undefined
   let interactionMode: 'edit' | 'run' = 'edit'
+  let measurementQueued = false
+  let stopped = false
+
+  const postLayoutMeasurements = () => {
+    measurementQueued = false
+    if (stopped || host.document.body?.getBoundingClientRect === undefined) {
+      return
+    }
+    host.parent.postMessage({
+      channel: studioProtocolChannel,
+      identity: previewIdentity(config),
+      measurements: collectStudioPreviewLayoutMeasurements(
+        host.document.querySelectorAll(studioRenderSelector),
+        host.document.body.getBoundingClientRect(),
+      ),
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-layout-measurements',
+    }, config.parentOrigin)
+  }
+  const scheduleLayoutMeasurements = () => {
+    if (measurementQueued) {
+      return
+    }
+    measurementQueued = true
+    queueMicrotask(postLayoutMeasurements)
+  }
 
   const disarmDrag = () => {
     drag = undefined
@@ -462,6 +498,10 @@ export function mountStudioPreviewBridge(
       top: `${rect.top}px`,
       width: `${Math.max(0, rect.width)}px`,
     })
+  }
+  const onResize = () => {
+    redrawOverlay()
+    scheduleLayoutMeasurements()
   }
 
   const onClick = (event: StudioPreviewPointerEvent) => {
@@ -627,9 +667,10 @@ export function mountStudioPreviewBridge(
   host.document.addEventListener('mouseup', onMouseUp, true)
   host.window.addEventListener('blur', disarmDrag)
   host.window.addEventListener('message', onMessage)
-  host.window.addEventListener('resize', redrawOverlay)
+  host.window.addEventListener('resize', onResize)
   host.window.addEventListener('scroll', redrawOverlay)
   postAppliedRevision(host, config)
+  scheduleLayoutMeasurements()
   const stopFailures = onRuntimeFailure(capture => {
     host.parent.postMessage({
       capture,
@@ -642,6 +683,7 @@ export function mountStudioPreviewBridge(
   const restoreConsole = forwardPreviewConsole(host, config)
 
   return () => {
+    stopped = true
     restoreConsole()
     stopFailures()
     host.document.removeEventListener('click', onClick, true)
@@ -653,11 +695,48 @@ export function mountStudioPreviewBridge(
     host.document.removeEventListener('mouseup', onMouseUp, true)
     host.window.removeEventListener('blur', disarmDrag)
     host.window.removeEventListener('message', onMessage)
-    host.window.removeEventListener('resize', redrawOverlay)
+    host.window.removeEventListener('resize', onResize)
     host.window.removeEventListener('scroll', redrawOverlay)
     overlay?.remove()
     disarmDrag()
   }
+}
+
+/** collectStudioPreviewLayoutMeasurements reads mounted render geometry relative to the cell content root. */
+export function collectStudioPreviewLayoutMeasurements(
+  elements: ArrayLike<StudioPreviewElement>,
+  rootRect: StudioPreviewRect,
+): readonly StudioPreviewLayoutMeasurement[] {
+  const measurements: StudioPreviewLayoutMeasurement[] = []
+  const renderIds = new Set<string>()
+  for (const element of Array.from(elements)) {
+    const target = renderTargetFromElement(element)
+    if (target === undefined || target.identity.elementName === undefined) {
+      continue
+    }
+    const rect = element.getBoundingClientRect()
+    const measurement = {
+      height: rect.height,
+      width: rect.width,
+      x: rect.left - rootRect.left,
+      y: rect.top - rootRect.top,
+    }
+    const id = renderId(target.identity)
+    if (
+      renderIds.has(id)
+      || Object.values(measurement).some(value => !Number.isFinite(value) || value < 0)
+    ) {
+      continue
+    }
+    renderIds.add(id)
+    measurements.push({
+      elementName: target.identity.elementName,
+      rect: measurement,
+      renderId: id,
+      ...(target.identity.studioRectId === undefined ? {} : { studioRectId: target.identity.studioRectId }),
+    })
+  }
+  return measurements
 }
 
 function forwardPreviewConsole(host: StudioPreviewHost, config: StudioPreviewConfig): () => void {
@@ -1058,6 +1137,8 @@ function isStudioIdentity(value: unknown): value is TaoStudioIdentity {
     && nonNegativeInteger(value['end']) !== undefined
     && (value['start'] as number) <= (value['end'] as number)
     && (value['ownerName'] === undefined || nonEmptyValue(value['ownerName']))
+    && (value['elementName'] === undefined || nonEmptyValue(value['elementName']))
+    && (value['studioRectId'] === undefined || nonEmptyValue(value['studioRectId']))
 }
 
 function sourceRange(value: unknown): StudioSourceRange | undefined {

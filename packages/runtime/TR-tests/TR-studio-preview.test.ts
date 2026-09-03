@@ -1,5 +1,6 @@
 import { Describe, Expect, Test } from '@shared/test'
 import {
+  collectStudioPreviewLayoutMeasurements,
   mountStudioPreviewBridge,
   publishStudioScheme,
   replayStudioJourney,
@@ -33,6 +34,62 @@ const config: StudioPreviewConfig = {
 }
 
 Describe('Studio preview runtime bridge', () => {
+  Test('collects finite non-negative render geometry relative to the cell content root', () => {
+    const measured = renderElement('/project/Main.tao', 10, 20, {
+      height: 40,
+      left: 25,
+      top: 35,
+      width: 80,
+    }, { elementName: 'Text', studioRectId: 'art' })
+    const outside = renderElement('/project/Main.tao', 30, 40, {
+      height: 10,
+      left: 5,
+      top: 35,
+      width: 10,
+    }, { elementName: 'Button' })
+
+    Expect(collectStudioPreviewLayoutMeasurements(
+      [measured, outside],
+      { height: 200, left: 10, top: 20, width: 200 },
+    )).toEqual([{
+      elementName: 'Text',
+      rect: { height: 40, width: 80, x: 15, y: 15 },
+      renderId: '/project/Main.tao:10:20',
+      studioRectId: 'art',
+    }])
+  })
+
+  Test('coalesces layout reporting after apply and resize', async () => {
+    const element = renderElement('/project/Main.tao', 10, 20, {
+      height: 40,
+      left: 25,
+      top: 35,
+      width: 80,
+    }, { elementName: 'Text', studioRectId: 'art' })
+    const fake = previewHost([element])
+    fake.host.document.body = {
+      appendChild: overlay => fake.overlays.push(overlay as FakeOverlay),
+      getBoundingClientRect: () => ({ height: 200, left: 10, top: 20, width: 200 }),
+    }
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+
+    await Promise.resolve()
+    Expect(fake.messages[1]?.message).toMatchObject({
+      measurements: [{
+        elementName: 'Text',
+        rect: { height: 40, width: 80, x: 15, y: 15 },
+        renderId: '/project/Main.tao:10:20',
+        studioRectId: 'art',
+      }],
+      type: 'preview-layout-measurements',
+    })
+    fake.dispatchWindow('resize', {})
+    fake.dispatchWindow('resize', {})
+    await Promise.resolve()
+    Expect(fake.messages.filter(post => (post.message as { type?: string }).type === 'preview-layout-measurements'))
+      .toHaveLength(2)
+    cleanup()
+  })
   Test('replays text steps against the deepest exact match instead of its matching ancestors', async () => {
     const events: string[] = []
     const parent: StudioPreviewElement = {
@@ -434,8 +491,9 @@ function renderElement(
   start: number,
   end: number,
   rect: { height: number; left: number; top: number; width: number },
+  studio: { elementName?: string; studioRectId?: string } = {},
 ): StudioPreviewElement {
-  const identity = JSON.stringify({ end, kind: 'render', ownerName: 'MainView', sourcePath, start })
+  const identity = JSON.stringify({ end, kind: 'render', ownerName: 'MainView', sourcePath, start, ...studio })
   const element: StudioPreviewElement = {
     closest: () => element,
     getAttribute: name => name === 'data-tao-studio' ? identity : null,

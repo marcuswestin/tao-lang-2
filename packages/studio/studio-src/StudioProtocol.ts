@@ -241,12 +241,28 @@ export type StudioPreviewSchemeMessage = {
   type: 'preview-scheme-changed'
 }
 
+export type StudioPreviewLayoutMeasurement = {
+  elementName: string
+  rect: Readonly<{ height: number; width: number; x: number; y: number }>
+  renderId: string
+  studioRectId?: string
+}
+
+export type StudioPreviewLayoutMeasurementsMessage = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  measurements: readonly StudioPreviewLayoutMeasurement[]
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-layout-measurements'
+}
+
 export type StudioWindowMessage =
   | StudioHighlightSourceMessage
   | StudioPreviewAppliedMessage
   | StudioPreviewFixtureCapturedMessage
   | StudioPreviewFixtureCaptureFailedMessage
   | StudioPreviewLogMessage
+  | StudioPreviewLayoutMeasurementsMessage
   | StudioPreviewRuntimeCapturedMessage
   | StudioPreviewRuntimeCaptureFailedMessage
   | StudioPreviewRuntimeFailureMessage
@@ -350,6 +366,9 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
   if (value['type'] === 'preview-scheme-changed') {
     return parsePreviewScheme(value)
   }
+  if (value['type'] === 'preview-layout-measurements') {
+    return parsePreviewLayoutMeasurements(value)
+  }
   if (value['type'] === 'source-action') {
     return parseSourceActionEnvelope(value)
   }
@@ -357,6 +376,56 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
     return parseSourceActionUndoEnvelope(value)
   }
   return undefined
+}
+
+function parsePreviewLayoutMeasurements(
+  value: StudioJsonObject,
+): StudioPreviewLayoutMeasurementsMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const rawMeasurements = value['measurements']
+  if (identity === undefined || !Array.isArray(rawMeasurements)) {
+    return undefined
+  }
+  const measurements: StudioPreviewLayoutMeasurement[] = []
+  const renderIds = new Set<string>()
+  for (const raw of rawMeasurements) {
+    if (!isObject(raw) || !nonEmptyString(raw['renderId']) || !nonEmptyString(raw['elementName'])) {
+      return undefined
+    }
+    if (raw['studioRectId'] !== undefined && !nonEmptyString(raw['studioRectId'])) {
+      return undefined
+    }
+    const rect = raw['rect']
+    if (!isObject(rect)) {
+      return undefined
+    }
+    const coordinates = ['height', 'width', 'x', 'y'] as const
+    if (
+      coordinates.some(coordinate =>
+        typeof rect[coordinate] !== 'number' || !Number.isFinite(rect[coordinate]) || rect[coordinate] < 0
+      ) || renderIds.has(raw['renderId'])
+    ) {
+      return undefined
+    }
+    renderIds.add(raw['renderId'])
+    const height = rect['height'] as number
+    const width = rect['width'] as number
+    const x = rect['x'] as number
+    const y = rect['y'] as number
+    measurements.push({
+      elementName: raw['elementName'],
+      rect: { height, width, x, y },
+      renderId: raw['renderId'],
+      ...(raw['studioRectId'] === undefined ? {} : { studioRectId: raw['studioRectId'] }),
+    })
+  }
+  return {
+    channel: studioProtocolChannel,
+    identity,
+    measurements,
+    protocolVersion: studioProtocolVersion,
+    type: 'preview-layout-measurements',
+  }
 }
 
 function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage | undefined {

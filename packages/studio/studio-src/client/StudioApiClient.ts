@@ -17,6 +17,13 @@ import type {
   StudioRenameFileResult,
   StudioSessionHandshake,
   StudioSketchActionResult,
+  StudioSketchFlowActionRequest,
+  StudioSketchSnapApplyResult,
+  StudioSketchSnapProposalResult,
+  StudioSketchSnapRequest,
+  StudioSketchSnapUndoRequest,
+  StudioSketchSnapUndoResult,
+  StudioSketchUnsnapRequest,
 } from '../StudioProjectSession'
 import type { StudioFixturePlan, StudioSourceActionEnvelope } from '../StudioProtocol'
 import type {
@@ -224,6 +231,8 @@ export const StudioApiClient = {
   lspTransport: async (signal?: AbortSignal): Promise<StudioLspTransport> =>
     await webSocketTransport(webSocketUrl(studioSessionPath('/api/language/lsp')), signal),
   previewApplied: async (body: unknown): Promise<unknown> => await request('/api/preview/applied', body),
+  previewLayoutMeasurements: async (body: unknown): Promise<unknown> =>
+    await request('/api/preview/layout-measurements', body),
   previewInstance: async (body: unknown, signal?: AbortSignal): Promise<unknown> =>
     await request('/api/preview/instance', body, signal),
   reconfigureCell: async (body: unknown): Promise<StudioCellRuntimeResponse> =>
@@ -232,6 +241,14 @@ export const StudioApiClient = {
     await request('/api/file/rename', body),
   sketchAction: async (body: StudioSketchCatalogRequest): Promise<StudioSketchActionResult> =>
     await request('/api/sketches/action', body),
+  sketchFlowAction: async (body: StudioSketchFlowActionRequest): Promise<StudioSketchSnapApplyResult> =>
+    await request('/api/sketches/flow/action', body),
+  sketchSnapApply: async (body: StudioSketchSnapRequest): Promise<StudioSketchSnapApplyResult> =>
+    await request('/api/sketches/snap/apply', body),
+  sketchSnapProposal: async (body: StudioSketchSnapRequest): Promise<StudioSketchSnapProposalResult> =>
+    await request('/api/sketches/snap/propose', body),
+  sketchUnsnapApply: async (body: StudioSketchUnsnapRequest): Promise<StudioSketchSnapApplyResult> =>
+    await request('/api/sketches/unsnap/apply', body),
   sketches: async (): Promise<StudioSketchCatalogSnapshot> => await get('/api/sketches'),
   closeCurrentSession: async (): Promise<void> => {
     const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
@@ -257,6 +274,8 @@ export const StudioApiClient = {
   testStatus: async (): Promise<StudioTestStatus> => await get('/api/tests/status'),
   undoSourceAction: async (body: unknown): Promise<StudioSourceActionUndoResult> =>
     await request('/api/source-action/undo', body),
+  undoSketchSnap: async (body: StudioSketchSnapUndoRequest): Promise<StudioSketchSnapUndoResult> =>
+    await request('/api/sketches/snap/undo', body),
 } as const
 
 async function get<Result>(path: string, signal?: AbortSignal): Promise<Result> {

@@ -7,6 +7,11 @@ const ownerWritableMode = 0o644
 
 export type StudioGeneratedSourceWriter = (path: string, content: string) => Promise<void>
 
+export type StudioGeneratedSource = Readonly<{
+  content: string
+  path: string
+}>
+
 /** StudioGeneratedSources owns the reserved @/studio tree and its read-only working-tree contract. */
 export class StudioGeneratedSources {
   readonly #studioRoot: string
@@ -44,6 +49,19 @@ export class StudioGeneratedSources {
       }
       throw error
     }
+  }
+
+  /** readView authenticates one generated view before a source action treats it as Studio-owned. */
+  async readView(name: string): Promise<StudioGeneratedSource> {
+    const path = this.#viewPath(name)
+    Assert.input(await FS.isFile(path), `Generated Studio view does not exist: @/studio/${name}.tao`)
+    await this.#requireContainedFile(path)
+    const content = await FS.readText(path)
+    Assert.input(
+      content.startsWith(`${studioGeneratedSourceHeader}\n`),
+      `Studio generated view is missing its ownership header: @/studio/${name}.tao`,
+    )
+    return { content, path }
   }
 
   /** removeView rolls back a newly-created generated view while retaining the ownership boundary. */

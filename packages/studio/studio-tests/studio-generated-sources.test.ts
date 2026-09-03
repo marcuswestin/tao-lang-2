@@ -21,6 +21,18 @@ Test('Studio writes generated public views read-only and repairs their mode on r
   })
 })
 
+Test('Studio authenticates generated ownership before returning source for a transaction', async () => {
+  await withTaoFiles('tao-studio-generated-read-', { 'Project.tao': 'project Garden\n' }, async (_paths, root) => {
+    const generated = new StudioGeneratedSources(root)
+    const path = await generated.writeView('View1', 'public\nview View1() {}')
+
+    Expect(await generated.readView('View1')).toEqual({ content: await FS.readText(path), path })
+    await FS.chmod(path, 0o644)
+    await FS.writeText(path, 'public view View1() {}\n')
+    await Expect(generated.readView('View1')).rejects.toThrow('missing its ownership header')
+  })
+})
+
 Test('Studio restores generated source to read-only after a failed rewrite', async () => {
   await withTaoFiles('tao-studio-generated-failure-', { 'Project.tao': 'project Garden\n' }, async (_paths, root) => {
     const generated = new StudioGeneratedSources(root)

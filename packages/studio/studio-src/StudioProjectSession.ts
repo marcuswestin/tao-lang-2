@@ -34,6 +34,8 @@ import {
 } from './StudioPreviewManifest'
 import {
   type StudioJsonObject,
+  type StudioPreviewLayoutMeasurement,
+  type StudioPreviewLayoutMeasurementsMessage,
   type StudioProjectIdentity,
   StudioProtocol,
   studioProtocolChannel,
@@ -44,12 +46,21 @@ import {
   studioSourceActionVersion,
 } from './StudioProtocol'
 import {
+  type StudioSketch,
   StudioSketchCatalog,
+  type StudioSketchCatalogAction,
+  StudioSketchCatalogConflictError,
   studioSketchCatalogFormatVersion,
+  type StudioSketchCatalogIO,
   type StudioSketchCatalogRequest,
   type StudioSketchCatalogResult,
   type StudioSketchCatalogSnapshot,
+  type StudioSketchRect,
+  type StudioSketchRenderTarget,
+  type StudioSnappedRect,
 } from './StudioSketchCatalog'
+import { StudioSketchProjection } from './StudioSketchProjection'
+import { StudioSketchSnap, type StudioSketchSnapTree } from './StudioSketchSnap'
 import { StudioSketchSource } from './StudioSketchSource'
 
 export type StudioProjectFile = {
@@ -69,6 +80,7 @@ export type StudioProjectSessionOptions = {
   compile: StudioCompileCoordinatorOptions['compile']
   entryPath?: string
   projectRoot: string
+  sketchCatalogIO?: StudioSketchCatalogIO
 }
 
 export type StudioAppVariant = Readonly<{
@@ -299,6 +311,75 @@ export type StudioSketchActionResult =
     generatedFile?: StudioProjectFileContent
   }>
 
+export type StudioSketchSnapRequest = Readonly<{
+  checkpointId: string
+  confirmedProposalVersion?: string
+  expectedCatalogRevision: number
+  rectIds: readonly string[]
+  requestId: string
+  sketchId: string
+  sourceVersion: string
+}>
+
+export type StudioSketchUnsnapRequest = Readonly<
+  Omit<StudioSketchSnapRequest, 'confirmedProposalVersion'>
+>
+
+export type StudioSketchFlowAction =
+  | Readonly<{ kind: 'toggle-direction'; rectId: string }>
+  | Readonly<{ afterRectId: string; beforeRectId?: string; kind: 'insert-separator' }>
+  | Readonly<{
+    afterRectId: string
+    beforeRectId: string
+    kind: 'insert-spacer'
+    ratio: readonly [number, number]
+  }>
+
+/** Browser-safe flow intent; render identities remain a server/catalog implementation detail. */
+export type StudioSketchFlowActionRequest = Readonly<{
+  action: StudioSketchFlowAction
+  checkpointId: string
+  expectedCatalogRevision: number
+  requestId: string
+  sketchId: string
+  sourceVersion: string
+}>
+
+export type StudioSketchSnapProposalResult = Readonly<{
+  diff: string
+  needsConfirmation: boolean
+  path: string
+  projectedRectIds: readonly string[]
+  proposedSourceVersion: string
+  requestId: string
+  sourceVersion: string
+  tree: StudioSketchSnapTree
+}>
+
+export type StudioSketchSnapApplyResult = Readonly<{
+  catalog: StudioSketchCatalogSnapshot
+  checkpoint: { id: string; status: 'committed' }
+  compile: StudioCompileCompletion
+  file: StudioProjectFileContent
+  projectedRectIds: readonly string[]
+  requestId: string
+}>
+
+export type StudioSketchSnapUndoRequest = Readonly<{
+  checkpointId: string
+  expectedCatalogRevision: number
+  requestId: string
+  sourceVersion: string
+}>
+
+export type StudioSketchSnapUndoResult = Readonly<{
+  catalog: StudioSketchCatalogSnapshot
+  checkpoint: { id: string; status: 'undone' }
+  compile: StudioCompileCompletion
+  file: StudioProjectFileContent
+  requestId: string
+}>
+
 export type StudioSessionHandshake = {
   apps: readonly StudioAppVariant[]
   capabilities: {
@@ -431,12 +512,18 @@ const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
   { method: 'POST', path: '/api/source-action/undo' },
   { method: 'GET', path: '/api/sketches' },
   { method: 'POST', path: '/api/sketches/action' },
+  { method: 'POST', path: '/api/sketches/flow/action' },
+  { method: 'POST', path: '/api/sketches/snap/apply' },
+  { method: 'POST', path: '/api/sketches/snap/propose' },
+  { method: 'POST', path: '/api/sketches/snap/undo' },
+  { method: 'POST', path: '/api/sketches/unsnap/apply' },
   { method: 'GET', path: '/api/tests/status' },
   { method: 'POST', path: '/api/tests/run' },
   { method: 'GET', path: '/api/ai/availability' },
   { method: 'POST', path: '/api/ai/fixture' },
   { method: 'POST', path: '/api/preview/instance' },
   { method: 'POST', path: '/api/preview/applied' },
+  { method: 'POST', path: '/api/preview/layout-measurements' },
   { method: 'GET', path: '/api/preview/manifest' },
   { method: 'GET', path: '/api/preview/cell' },
   { method: 'GET', path: '/api/preview/cell/bootstrap' },
@@ -448,9 +535,31 @@ const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
 
 const sourceActionResultLimit = 100
 
+type PreparedSketchSnap = Readonly<{
+  current: StudioProjectFileContent
+  needsConfirmation: boolean
+  patch: Awaited<ReturnType<typeof SourceActions.applyStudioPatch>>
+  path: string
+  projectedRectIds: readonly string[]
+  request: StudioSketchSnapRequest
+  tree: StudioSketchSnapTree
+}>
+
+type SketchSnapCheckpoint = {
+  afterCatalogRevision: number
+  afterContent: string
+  afterSourceVersion: string
+  beforeContent: string
+  beforeSourceVersion: string
+  id: string
+  path: string
+  status: 'committed' | 'undone'
+  undoAction: StudioSketchCatalogAction
+}
+
 /** StudioProjectSession owns one project/app's disk-synced source and serialized compile state. */
 export class StudioProjectSession {
-  static readonly testing = { sourceActionProposalDiff }
+  static readonly testing = { measuredUnsnapRect, sourceActionProposalDiff }
 
   readonly #actionCheckpoints = new Map<string, SourceActionCheckpoint>()
   readonly #actionResults = new Map<string, SourceActionCacheEntry>()
@@ -459,7 +568,27 @@ export class StudioProjectSession {
   readonly #coordinator: StudioCompileCoordinator
   readonly #draftStates = new Map<string, StudioFileDraftState>()
   readonly #listeners = new Set<(event: StudioSessionEvent) => void>()
+  readonly #previewLayoutMeasurements = new Map<
+    string,
+    Readonly<{
+      identity: StudioCellInstanceIdentity
+      measurements: ReadonlyMap<string, StudioPreviewLayoutMeasurement>
+    }>
+  >()
   readonly #sketchCatalog: StudioSketchCatalog
+  readonly #sketchSnapCheckpoints = new Map<string, SketchSnapCheckpoint>()
+  readonly #sketchSnapProposalResults = new Map<
+    string,
+    Readonly<{ fingerprint: string; result: StudioSketchSnapProposalResult }>
+  >()
+  readonly #sketchSnapResults = new Map<
+    string,
+    Readonly<{ fingerprint: string; result: StudioSketchSnapApplyResult }>
+  >()
+  readonly #sketchSnapUndoResults = new Map<
+    string,
+    Readonly<{ fingerprint: string; result: StudioSketchSnapUndoResult }>
+  >()
   readonly #sketchResults = new Map<string, Readonly<{ fingerprint: string; result: StudioSketchActionResult }>>()
   readonly #workspace: Workspace
   #mutationLane: Promise<void> = Promise.resolve()
@@ -473,9 +602,10 @@ export class StudioProjectSession {
     readonly apps: readonly StudioAppVariant[],
     workspace: Workspace,
     compile: StudioCompileCoordinatorOptions['compile'],
+    sketchCatalogIO?: StudioSketchCatalogIO,
   ) {
     this.#workspace = workspace
-    this.#sketchCatalog = new StudioSketchCatalog(projectRoot)
+    this.#sketchCatalog = new StudioSketchCatalog(projectRoot, sketchCatalogIO)
     this.#coordinator = new StudioCompileCoordinator({
       appName,
       compile,
@@ -506,6 +636,7 @@ export class StudioProjectSession {
       apps,
       workspace,
       options.compile,
+      options.sketchCatalogIO,
     )
   }
 
@@ -522,13 +653,22 @@ export class StudioProjectSession {
   }
 
   checkpoints(): readonly StudioCheckpointSummary[] {
-    return [...this.#actionCheckpoints.values()].map(checkpoint => ({
-      afterSourceVersion: checkpoint.afterSourceVersion,
-      beforeSourceVersion: checkpoint.beforeSourceVersion,
-      id: checkpoint.id,
-      path: checkpoint.path,
-      status: checkpoint.status,
-    }))
+    return [
+      ...[...this.#actionCheckpoints.values()].map(checkpoint => ({
+        afterSourceVersion: checkpoint.afterSourceVersion,
+        beforeSourceVersion: checkpoint.beforeSourceVersion,
+        id: checkpoint.id,
+        path: checkpoint.path,
+        status: checkpoint.status,
+      })),
+      ...[...this.#sketchSnapCheckpoints.values()].map(checkpoint => ({
+        afterSourceVersion: checkpoint.afterSourceVersion,
+        beforeSourceVersion: checkpoint.beforeSourceVersion,
+        id: checkpoint.id,
+        path: FS.relativePath(this.projectRoot, checkpoint.path),
+        status: checkpoint.status,
+      })),
+    ]
   }
 
   compileInitial(): Promise<StudioCompileCompletion> {
@@ -555,6 +695,7 @@ export class StudioProjectSession {
       'Studio preview manifest does not match the open project and app.',
     )
     this.#matrix = this.#matrix?.rebase(manifest) ?? new StudioMatrixSession(manifest)
+    this.#previewLayoutMeasurements.clear()
     this.#emit({
       channel: studioProtocolChannel,
       manifest: this.#matrix.publishedManifest(),
@@ -613,6 +754,50 @@ export class StudioProjectSession {
     return this.#coordinator.acknowledgePreview(message)
   }
 
+  /** recordPreviewLayoutMeasurements accepts geometry only from the current registered matrix-cell instance. */
+  recordPreviewLayoutMeasurements(input: unknown): Readonly<{ accepted: true }> {
+    const message = StudioProtocol.parseMessage(input)
+    if (message?.type !== 'preview-layout-measurements') {
+      Errors.throwUserInput('Expected a valid Tao Studio preview-layout-measurements message.')
+    }
+    const cellIdentity = completeCellInstanceIdentity(message)
+    this.#requireMatrix().assertCurrentInstance(cellIdentity)
+    this.#previewLayoutMeasurements.set(
+      previewMeasurementCellKey(cellIdentity),
+      {
+        identity: cellIdentity,
+        measurements: new Map(message.measurements.map(measurement => [measurement.renderId, measurement])),
+      },
+    )
+    return { accepted: true }
+  }
+
+  /** previewLayoutMeasurement is the read/testing seam for current cell-relative render geometry. */
+  previewLayoutMeasurement(
+    identity: StudioCellInstanceIdentity,
+    renderId: string,
+  ): StudioPreviewLayoutMeasurement | undefined {
+    this.#requireMatrix().assertCurrentInstance(identity)
+    return this.#previewLayoutMeasurements.get(previewMeasurementCellKey(identity))?.measurements.get(renderId)
+  }
+
+  /** measuredUnsnapRect synthesizes fallback free geometry when no retained Snap rectangle is available. */
+  measuredUnsnapRect(
+    identity: StudioCellInstanceIdentity,
+    renderId: string,
+    sketch: Pick<StudioSketch, 'height' | 'width'>,
+  ): StudioSketchRect {
+    const measurement = this.previewLayoutMeasurement(identity, renderId)
+    if (measurement === undefined || measurement.studioRectId === undefined) {
+      throw new StudioSourceActionConflictError(
+        'measurement-unavailable',
+        'Current preview geometry is not available yet; retry Unsnap after the preview finishes measuring.',
+        { renderId },
+      )
+    }
+    return measuredUnsnapRect(measurement, sketch)
+  }
+
   subscribe(listener: (event: StudioSessionEvent) => void): () => void {
     this.#listeners.add(listener)
     return () => this.#listeners.delete(listener)
@@ -652,7 +837,65 @@ export class StudioProjectSession {
   }
 
   sketchCatalog(): Promise<StudioSketchCatalogSnapshot> {
-    return this.#sketchCatalog.read()
+    return this.#mutate(() => this.#reconcileSketchCatalog())
+  }
+
+  async #reconcileSketchCatalog(): Promise<StudioSketchCatalogSnapshot> {
+    const catalog = await this.#sketchCatalog.read()
+    const manifest = this.#matrix?.publishedManifest()
+    if (manifest?.renders === undefined || catalog.sketches.every(sketch => sketch.snapped.length === 0)) {
+      return catalog
+    }
+    const rendersByMarker = new Map<string, NonNullable<StudioPreviewManifestV2['renders']>>()
+    for (const render of manifest.renders) {
+      if (render.studioRectId !== undefined) {
+        rendersByMarker.set(render.studioRectId, [...(rendersByMarker.get(render.studioRectId) ?? []), render])
+      }
+    }
+    let changed = false
+    const sketches = catalog.sketches.map(sketch => {
+      const retained = [] as typeof sketch.snapped[number][]
+      const droppedIds = new Set<string>()
+      for (const snapped of sketch.snapped) {
+        const matches = rendersByMarker.get(snapped.target.studioRectId) ?? []
+        const match = matches.length === 1 && matches[0]?.elementName === snapped.target.elementName
+          ? matches[0]
+          : undefined
+        if (match === undefined) {
+          changed = true
+          droppedIds.add(snapped.rect.id)
+          continue
+        }
+        const path = FS.relativePath(this.projectRoot, match.source.path)
+        const target = {
+          ...snapped.target,
+          path,
+          renderId: match.renderId,
+          sourceVersion: manifest.sourceVersions[match.source.path]
+            ?? manifest.sourceVersions[path]
+            ?? snapped.target.sourceVersion,
+        }
+        changed ||= JSON.stringify(target) !== JSON.stringify(snapped.target)
+        retained.push({ ...snapped, target })
+      }
+      if (droppedIds.size === 0 && retained.length === sketch.snapped.length) {
+        return retained.every((item, index) => item.target === sketch.snapped[index]?.target)
+          ? sketch
+          : { ...sketch, snapped: retained }
+      }
+      return {
+        ...sketch,
+        rectOrder: sketch.rectOrder.filter(id => !droppedIds.has(id)),
+        snapped: retained,
+      }
+    })
+    if (!changed) {
+      return catalog
+    }
+    const reconciled = { ...catalog, revision: catalog.revision + 1, sketches }
+    await this.#sketchCatalog.restore(reconciled)
+    this.#emitSketchCatalog(reconciled)
+    return reconciled
   }
 
   applySketchAction(input: unknown): Promise<StudioSketchActionResult> {
@@ -673,6 +916,9 @@ export class StudioProjectSession {
       }
       if (isRecord(input) && isRecord(input['action']) && input['action']['kind'] === 'delete-sketch') {
         Errors.throwUserInput('Deleting a Studio sketch is not available until its generated-source lifecycle lands.')
+      }
+      if (isRecord(input) && isRecord(input['action']) && input['action']['kind'] === 'refresh-snap-targets') {
+        Errors.throwUserInput('Refreshing Studio Snap targets is owned by generated-source transactions.')
       }
 
       const prior = await this.#sketchCatalog.read()
@@ -727,6 +973,679 @@ export class StudioProjectSession {
         throw Errors.fromUnknown(error, { requestId: request.requestId, studioOperation: 'sketch-action' })
       }
     })
+  }
+
+  proposeSketchSnap(input: unknown): Promise<StudioSketchSnapProposalResult> {
+    return this.#mutate(async () => {
+      const request = parseSketchSnapRequest(input)
+      const fingerprint = JSON.stringify(request)
+      const cached = this.#sketchSnapProposalResults.get(request.requestId)
+      if (cached !== undefined) {
+        Assert.input(cached.fingerprint === fingerprint, `Studio Snap request id was reused: ${request.requestId}`)
+        return cached.result
+      }
+      const prepared = await this.#prepareSketchSnap(request)
+      const result: StudioSketchSnapProposalResult = {
+        diff: sourceActionProposalDiff(prepared.current.path, prepared.current.content, prepared.patch.content),
+        needsConfirmation: prepared.needsConfirmation,
+        path: prepared.current.path,
+        projectedRectIds: prepared.projectedRectIds,
+        proposedSourceVersion: prepared.patch.sourceVersion,
+        requestId: request.requestId,
+        sourceVersion: prepared.current.sourceVersion,
+        tree: prepared.tree,
+      }
+      this.#sketchSnapProposalResults.set(request.requestId, { fingerprint, result })
+      trimMap(this.#sketchSnapProposalResults, sourceActionResultLimit)
+      return result
+    })
+  }
+
+  applySketchSnap(input: unknown): Promise<StudioSketchSnapApplyResult> {
+    return this.#mutate(async () => {
+      const request = parseSketchSnapRequest(input)
+      const fingerprint = JSON.stringify(request)
+      const cached = this.#sketchSnapResults.get(request.requestId)
+      if (cached !== undefined) {
+        Assert.input(cached.fingerprint === fingerprint, `Studio Snap request id was reused: ${request.requestId}`)
+        return cached.result
+      }
+      const prepared = await this.#prepareSketchSnap(request)
+      if (prepared.needsConfirmation) {
+        Assert.input(
+          request.confirmedProposalVersion === prepared.patch.sourceVersion,
+          'Studio Snap overlap requires confirmation of the current canonical proposal.',
+        )
+      }
+      Assert.input(this.#openCheckpointId === undefined, 'Commit the active Studio source-action checkpoint first.')
+      Assert.input(
+        !this.#actionCheckpoints.has(request.checkpointId) && !this.#sketchSnapCheckpoints.has(request.checkpointId),
+        `Studio source-action checkpoint id was reused: ${request.checkpointId}`,
+      )
+
+      const generated = new StudioGeneratedSources(this.projectRoot)
+      let sourceWritten = false
+      try {
+        await generated.rewrite(prepared.path, prepared.patch.content)
+        sourceWritten = true
+        const compile = await this.#coordinator.noteStudioWrite({
+          path: prepared.path,
+          sourceVersion: prepared.patch.sourceVersion,
+          writeId: request.requestId,
+        })
+        if (compile.status === 'error') {
+          await this.#restoreGeneratedSnap(
+            generated,
+            prepared,
+            `rollback:${request.requestId}`,
+          )
+          Errors.throwUserInput(
+            `Studio did not Snap because the generated Tao source failed to compile: ${compile.message}`,
+          )
+        }
+        const targets = await this.#sketchRenderTargets(
+          prepared.path,
+          prepared.patch.content,
+          prepared.patch.sourceVersion,
+          prepared.projectedRectIds,
+        )
+        const catalogResult = await this.#sketchCatalog.apply({
+          action: { kind: 'snap-rects', sketchId: request.sketchId, targets },
+          expectedRevision: request.expectedCatalogRevision,
+          requestId: `catalog:${request.requestId}`,
+        })
+        const file: StudioProjectFileContent = {
+          content: prepared.patch.content,
+          ...this.#projectFile(prepared.current.path, prepared.patch.sourceVersion),
+        }
+        const checkpoint: SketchSnapCheckpoint = {
+          afterCatalogRevision: catalogResult.catalog.revision,
+          afterContent: prepared.patch.content,
+          afterSourceVersion: prepared.patch.sourceVersion,
+          beforeContent: prepared.current.content,
+          beforeSourceVersion: prepared.current.sourceVersion,
+          id: request.checkpointId,
+          path: prepared.path,
+          status: 'committed',
+          undoAction: { kind: 'unsnap-rects', rectIds: prepared.projectedRectIds, sketchId: request.sketchId },
+        }
+        this.#sketchSnapCheckpoints.set(checkpoint.id, checkpoint)
+        this.#checkpointOrder.push(checkpoint.id)
+        this.#trimSourceActionCheckpoints()
+        const result: StudioSketchSnapApplyResult = {
+          catalog: catalogResult.catalog,
+          checkpoint: { id: checkpoint.id, status: 'committed' },
+          compile,
+          file,
+          projectedRectIds: prepared.projectedRectIds,
+          requestId: request.requestId,
+        }
+        this.#sketchSnapResults.set(request.requestId, { fingerprint, result })
+        trimMap(this.#sketchSnapResults, sourceActionResultLimit)
+        this.#emitCheckpoint(result.checkpoint)
+        this.#emitFile(file)
+        this.#emitSketchCatalog(result.catalog)
+        return result
+      } catch (error) {
+        if (sourceWritten && (await FS.readText(prepared.path)) !== prepared.current.content) {
+          await this.#restoreGeneratedSnap(generated, prepared, `rollback:${request.requestId}`)
+        }
+        throw Errors.fromUnknown(error, { requestId: request.requestId, studioOperation: 'sketch-snap' })
+      }
+    })
+  }
+
+  /** Applies an authenticated rect-based flow edit as one generated-source/catalog checkpoint. */
+  applySketchFlowAction(input: unknown): Promise<StudioSketchSnapApplyResult> {
+    return this.#mutate(async () => {
+      const request = parseSketchFlowActionRequest(input)
+      const fingerprint = JSON.stringify(request)
+      const cached = this.#sketchSnapResults.get(request.requestId)
+      if (cached !== undefined) {
+        Assert.input(cached.fingerprint === fingerprint, `Studio flow request id was reused: ${request.requestId}`)
+        return cached.result
+      }
+      const catalog = await this.#sketchCatalog.read()
+      if (catalog.revision !== request.expectedCatalogRevision) {
+        throw new StudioSketchCatalogConflictError(request.expectedCatalogRevision, catalog.revision)
+      }
+      const sketch = catalog.sketches.find(candidate => candidate.id === request.sketchId)
+      Assert.input(sketch, `Studio sketch does not exist: ${request.sketchId}`)
+      const generatedSources = new StudioGeneratedSources(this.projectRoot)
+      const generated = await generatedSources.readView(sketch.view)
+      const current = await this.readFile(FS.relativePath(this.projectRoot, generated.path))
+      requireSourceVersion(current, request.sourceVersion)
+      const expectedPath = FS.relativePath(this.projectRoot, generated.path)
+      const associations = new Map(sketch.snapped.map(item => [item.rect.id, item.target]))
+      for (const item of sketch.snapped) {
+        Assert.input(
+          item.target.path === expectedPath
+            && item.target.view === sketch.view
+            && item.target.studioRectId === item.rect.id
+            && item.target.sourceVersion === current.sourceVersion,
+          `Studio snapped rectangle target is stale or not owned by ${sketch.view}: ${item.rect.id}`,
+        )
+      }
+      const target = (rectId: string): StudioSketchRenderTarget => {
+        const resolved = associations.get(rectId)
+        Assert.input(resolved, `Studio snapped rectangle does not exist: ${rectId}`)
+        return resolved
+      }
+      const action: StudioSourcePatchRequest = request.action.kind === 'toggle-direction'
+        ? { kind: 'toggle-flow-direction', renderId: target(request.action.rectId).renderId }
+        : request.action.kind === 'insert-separator'
+        ? {
+          afterId: target(request.action.afterRectId).renderId,
+          ...(request.action.beforeRectId === undefined
+            ? {}
+            : { beforeId: target(request.action.beforeRectId).renderId }),
+          kind: 'insert-separator',
+        }
+        : {
+          afterId: target(request.action.afterRectId).renderId,
+          beforeId: target(request.action.beforeRectId).renderId,
+          kind: 'insert-spacer',
+          ratio: request.action.ratio,
+        }
+      const parsed = await this.#workspace.parse(generated.path)
+      Assert.input(
+        !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+        `Cannot edit flow until ${current.path} parses.`,
+      )
+      const patch = await SourceActions.applyStudioPatch(parsed.entry.document, action, {
+        files: parsed.files.map(file => file.ast),
+        occurrence: { nodeKind: 'render', renderOwner: sketch.view },
+      })
+      Assert.input(this.#openCheckpointId === undefined, 'Commit the active Studio source-action checkpoint first.')
+      Assert.input(
+        !this.#actionCheckpoints.has(request.checkpointId) && !this.#sketchSnapCheckpoints.has(request.checkpointId),
+        `Studio source-action checkpoint id was reused: ${request.checkpointId}`,
+      )
+      let sourceWritten = false
+      let catalogWritten = false
+      try {
+        await generatedSources.rewrite(generated.path, patch.content)
+        sourceWritten = true
+        const compile = await this.#coordinator.noteStudioWrite({
+          path: generated.path,
+          sourceVersion: patch.sourceVersion,
+          writeId: request.requestId,
+        })
+        if (compile.status === 'error') {
+          Errors.throwUserInput(
+            `Studio did not edit flow because the generated Tao source failed to compile: ${compile.message}`,
+          )
+        }
+        const refreshedTargets = await this.#sketchRenderTargets(
+          generated.path,
+          patch.content,
+          patch.sourceVersion,
+          sketch.snapped.map(item => item.rect.id),
+        )
+        const catalogResult = await this.#sketchCatalog.apply({
+          action: { kind: 'refresh-snap-targets', sketchId: sketch.id, targets: refreshedTargets },
+          expectedRevision: catalog.revision,
+          requestId: `catalog:${request.requestId}`,
+        })
+        catalogWritten = true
+        const file: StudioProjectFileContent = {
+          content: patch.content,
+          ...this.#projectFile(current.path, patch.sourceVersion),
+        }
+        const checkpoint: SketchSnapCheckpoint = {
+          afterCatalogRevision: catalogResult.catalog.revision,
+          afterContent: patch.content,
+          afterSourceVersion: patch.sourceVersion,
+          beforeContent: current.content,
+          beforeSourceVersion: current.sourceVersion,
+          id: request.checkpointId,
+          path: generated.path,
+          status: 'committed',
+          undoAction: {
+            kind: 'refresh-snap-targets',
+            sketchId: sketch.id,
+            targets: sketch.snapped.map(item => item.target),
+          },
+        }
+        this.#sketchSnapCheckpoints.set(checkpoint.id, checkpoint)
+        this.#checkpointOrder.push(checkpoint.id)
+        this.#trimSourceActionCheckpoints()
+        const rectIds = request.action.kind === 'toggle-direction'
+          ? [request.action.rectId]
+          : [
+            request.action.afterRectId,
+            ...(request.action.beforeRectId === undefined ? [] : [request.action.beforeRectId]),
+          ]
+        const result: StudioSketchSnapApplyResult = {
+          catalog: catalogResult.catalog,
+          checkpoint: { id: checkpoint.id, status: 'committed' },
+          compile,
+          file,
+          projectedRectIds: rectIds,
+          requestId: request.requestId,
+        }
+        this.#sketchSnapResults.set(request.requestId, { fingerprint, result })
+        trimMap(this.#sketchSnapResults, sourceActionResultLimit)
+        this.#emitCheckpoint(result.checkpoint)
+        this.#emitFile(file)
+        this.#emitSketchCatalog(result.catalog)
+        return result
+      } catch (error) {
+        if (catalogWritten) {
+          await this.#sketchCatalog.restore(catalog)
+        }
+        if (sourceWritten && (await FS.readText(generated.path)) !== current.content) {
+          await this.#restoreGeneratedContent(
+            generatedSources,
+            generated.path,
+            current.content,
+            current.sourceVersion,
+            `rollback:${request.requestId}`,
+          )
+        }
+        throw Errors.fromUnknown(error, { requestId: request.requestId, studioOperation: 'sketch-flow-action' })
+      }
+    })
+  }
+
+  applySketchUnsnap(input: unknown): Promise<StudioSketchSnapApplyResult> {
+    return this.#mutate(async () => {
+      const request = parseSketchUnsnapRequest(input)
+      const fingerprint = JSON.stringify(request)
+      const cached = this.#sketchSnapResults.get(request.requestId)
+      if (cached !== undefined) {
+        Assert.input(cached.fingerprint === fingerprint, `Studio Unsnap request id was reused: ${request.requestId}`)
+        return cached.result
+      }
+      const catalog = await this.#sketchCatalog.read()
+      if (catalog.revision !== request.expectedCatalogRevision) {
+        throw new StudioSketchCatalogConflictError(request.expectedCatalogRevision, catalog.revision)
+      }
+      const sketch = catalog.sketches.find(candidate => candidate.id === request.sketchId)
+      Assert.input(sketch, `Studio sketch does not exist: ${request.sketchId}`)
+      const requestedIds = new Set(request.rectIds)
+      const retained = new Map(sketch.snapped.map(item => [item.rect.id, item]))
+      const selected = request.rectIds.map(rectId =>
+        retained.get(rectId) ?? this.#measuredUnsnapSelection(sketch, rectId)
+      )
+      const rectIds = selected.map(item => item.rect.id)
+      const remaining = sketch.snapped.filter(item => !requestedIds.has(item.rect.id)).map(item => item.rect)
+      const generatedSources = new StudioGeneratedSources(this.projectRoot)
+      const generated = await generatedSources.readView(sketch.view)
+      const current = await this.readFile(FS.relativePath(this.projectRoot, generated.path))
+      requireSourceVersion(current, request.sourceVersion)
+      let content: string
+      if (remaining.length === 0) {
+        const body = await StudioSketchSource.generate(sketch)
+        content = `${studioGeneratedSourceHeader}\n\n${body.trim()}\n`
+      } else {
+        const projection = StudioSketchProjection.project({
+          height: sketch.height,
+          rects: remaining,
+          width: sketch.width,
+        })
+        const prepared = StudioSketchSnap.prepare({
+          expectedCatalogRevision: request.expectedCatalogRevision,
+          projection,
+          rects: remaining,
+          sketchId: sketch.id,
+          viewName: sketch.view,
+        })
+        const parsed = await this.#workspace.parse(generated.path)
+        Assert.input(
+          !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+          `Cannot Unsnap until ${current.path} parses.`,
+        )
+        content = (await SourceActions.applyStudioPatch(parsed.entry.document, prepared.action, {
+          files: parsed.files.map(file => file.ast),
+        })).content
+      }
+      const sourceVersion = SourceActions.studioSourceVersion(content)
+      Assert.input(this.#openCheckpointId === undefined, 'Commit the active Studio source-action checkpoint first.')
+      Assert.input(
+        !this.#actionCheckpoints.has(request.checkpointId) && !this.#sketchSnapCheckpoints.has(request.checkpointId),
+        `Studio source-action checkpoint id was reused: ${request.checkpointId}`,
+      )
+      let sourceWritten = false
+      try {
+        await generatedSources.rewrite(generated.path, content)
+        sourceWritten = true
+        const compile = await this.#coordinator.noteStudioWrite({
+          path: generated.path,
+          sourceVersion,
+          writeId: request.requestId,
+        })
+        if (compile.status === 'error') {
+          await this.#restoreGeneratedContent(
+            generatedSources,
+            generated.path,
+            current.content,
+            current.sourceVersion,
+            `rollback:${request.requestId}`,
+          )
+          Errors.throwUserInput(
+            `Studio did not Unsnap because the generated Tao source failed to compile: ${compile.message}`,
+          )
+        }
+        const synthetic = selected.some(item => !retained.has(item.rect.id))
+        const catalogResult = synthetic
+          ? await this.#restoreMeasuredUnsnapCatalog(catalog, sketch, selected, requestedIds, request.requestId)
+          : await this.#sketchCatalog.apply({
+            action: { kind: 'unsnap-rects', rectIds, sketchId: sketch.id },
+            expectedRevision: request.expectedCatalogRevision,
+            requestId: `catalog:${request.requestId}`,
+          })
+        const file: StudioProjectFileContent = {
+          content,
+          ...this.#projectFile(current.path, sourceVersion),
+        }
+        const checkpoint: SketchSnapCheckpoint = {
+          afterCatalogRevision: catalogResult.catalog.revision,
+          afterContent: content,
+          afterSourceVersion: sourceVersion,
+          beforeContent: current.content,
+          beforeSourceVersion: current.sourceVersion,
+          id: request.checkpointId,
+          path: generated.path,
+          status: 'committed',
+          undoAction: { kind: 'snap-rects', sketchId: sketch.id, targets: selected.map(item => item.target) },
+        }
+        this.#sketchSnapCheckpoints.set(checkpoint.id, checkpoint)
+        this.#checkpointOrder.push(checkpoint.id)
+        this.#trimSourceActionCheckpoints()
+        const result: StudioSketchSnapApplyResult = {
+          catalog: catalogResult.catalog,
+          checkpoint: { id: checkpoint.id, status: 'committed' },
+          compile,
+          file,
+          projectedRectIds: rectIds,
+          requestId: request.requestId,
+        }
+        this.#sketchSnapResults.set(request.requestId, { fingerprint, result })
+        trimMap(this.#sketchSnapResults, sourceActionResultLimit)
+        this.#emitCheckpoint(result.checkpoint)
+        this.#emitFile(file)
+        this.#emitSketchCatalog(result.catalog)
+        return result
+      } catch (error) {
+        if (sourceWritten && (await FS.readText(generated.path)) !== current.content) {
+          await this.#restoreGeneratedContent(
+            generatedSources,
+            generated.path,
+            current.content,
+            current.sourceVersion,
+            `rollback:${request.requestId}`,
+          )
+        }
+        throw Errors.fromUnknown(error, { requestId: request.requestId, studioOperation: 'sketch-unsnap' })
+      }
+    })
+  }
+
+  undoSketchSnap(input: unknown): Promise<StudioSketchSnapUndoResult> {
+    return this.#mutate(async () => {
+      const request = parseSketchSnapUndoRequest(input)
+      const fingerprint = JSON.stringify(request)
+      const cached = this.#sketchSnapUndoResults.get(request.requestId)
+      if (cached !== undefined) {
+        Assert.input(cached.fingerprint === fingerprint, `Studio Snap undo request id was reused: ${request.requestId}`)
+        return cached.result
+      }
+      Assert.input(
+        this.#checkpointOrder.at(-1) === request.checkpointId,
+        'Studio can only undo the latest committed source-action checkpoint.',
+      )
+      const checkpoint = this.#sketchSnapCheckpoints.get(request.checkpointId)
+      Assert.input(
+        checkpoint?.status === 'committed',
+        `Studio Snap checkpoint is not undoable: ${request.checkpointId}`,
+      )
+      const current = await this.readFile(FS.relativePath(this.projectRoot, checkpoint.path))
+      requireSourceVersion(current, request.sourceVersion)
+      requireSourceVersion(current, checkpoint.afterSourceVersion)
+      const catalog = await this.#sketchCatalog.read()
+      if (
+        catalog.revision !== request.expectedCatalogRevision || catalog.revision !== checkpoint.afterCatalogRevision
+      ) {
+        throw new StudioSketchCatalogConflictError(request.expectedCatalogRevision, catalog.revision)
+      }
+
+      const generated = new StudioGeneratedSources(this.projectRoot)
+      await generated.rewrite(checkpoint.path, checkpoint.beforeContent)
+      const compile = await this.#coordinator.noteStudioWrite({
+        path: checkpoint.path,
+        sourceVersion: checkpoint.beforeSourceVersion,
+        writeId: request.requestId,
+      })
+      if (compile.status === 'error') {
+        await generated.rewrite(checkpoint.path, checkpoint.afterContent)
+        await this.#coordinator.noteStudioWrite({
+          path: checkpoint.path,
+          sourceVersion: checkpoint.afterSourceVersion,
+          writeId: `rollback:${request.requestId}`,
+        })
+        Errors.throwUserInput(
+          `Studio did not undo Snap because the original Tao source failed to compile: ${compile.message}`,
+        )
+      }
+      let undoneCatalog: StudioSketchCatalogSnapshot
+      try {
+        undoneCatalog = (await this.#sketchCatalog.apply({
+          action: checkpoint.undoAction,
+          expectedRevision: catalog.revision,
+          requestId: `catalog:${request.requestId}`,
+        })).catalog
+      } catch (error) {
+        await generated.rewrite(checkpoint.path, checkpoint.afterContent)
+        await this.#coordinator.noteStudioWrite({
+          path: checkpoint.path,
+          sourceVersion: checkpoint.afterSourceVersion,
+          writeId: `rollback:${request.requestId}`,
+        })
+        throw error
+      }
+      checkpoint.status = 'undone'
+      this.#checkpointOrder.pop()
+      const file: StudioProjectFileContent = {
+        content: checkpoint.beforeContent,
+        ...this.#projectFile(FS.relativePath(this.projectRoot, checkpoint.path), checkpoint.beforeSourceVersion),
+      }
+      const result: StudioSketchSnapUndoResult = {
+        catalog: undoneCatalog,
+        checkpoint: { id: checkpoint.id, status: 'undone' },
+        compile,
+        file,
+        requestId: request.requestId,
+      }
+      this.#sketchSnapUndoResults.set(request.requestId, { fingerprint, result })
+      trimMap(this.#sketchSnapUndoResults, sourceActionResultLimit)
+      this.#emitCheckpoint(result.checkpoint)
+      this.#emitFile(file)
+      this.#emitSketchCatalog(result.catalog)
+      return result
+    })
+  }
+
+  async #prepareSketchSnap(request: StudioSketchSnapRequest): Promise<PreparedSketchSnap> {
+    const catalog = await this.#sketchCatalog.read()
+    if (catalog.revision !== request.expectedCatalogRevision) {
+      throw new StudioSketchCatalogConflictError(request.expectedCatalogRevision, catalog.revision)
+    }
+    const sketch = catalog.sketches.find(candidate => candidate.id === request.sketchId)
+    Assert.input(sketch, `Studio sketch does not exist: ${request.sketchId}`)
+    const selected = request.rectIds.map(id => {
+      const rect = sketch.rects.find(candidate => candidate.id === id)
+      Assert.input(rect, `Studio rectangle does not exist: ${id}`)
+      return rect
+    })
+    const rects = [...sketch.snapped.map(item => item.rect), ...selected]
+    const projection = StudioSketchProjection.project({ height: sketch.height, rects, width: sketch.width })
+    const prepared = StudioSketchSnap.prepare({
+      expectedCatalogRevision: request.expectedCatalogRevision,
+      projection,
+      rects,
+      sketchId: sketch.id,
+      viewName: sketch.view,
+    })
+    const generated = await new StudioGeneratedSources(this.projectRoot).readView(sketch.view)
+    const current = await this.readFile(FS.relativePath(this.projectRoot, generated.path))
+    requireSourceVersion(current, request.sourceVersion)
+    const parsed = await this.#workspace.parse(generated.path)
+    Assert.input(
+      !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+      `Cannot Snap until ${current.path} parses.`,
+    )
+    const patch = await SourceActions.applyStudioPatch(parsed.entry.document, prepared.action, {
+      files: parsed.files.map(file => file.ast),
+    })
+    return {
+      current,
+      needsConfirmation: projection.needsOverlay,
+      patch,
+      path: generated.path,
+      projectedRectIds: request.rectIds,
+      request,
+      tree: prepared.action.tree,
+    }
+  }
+
+  async #restoreGeneratedSnap(
+    generated: StudioGeneratedSources,
+    prepared: PreparedSketchSnap,
+    writeId: string,
+  ): Promise<void> {
+    await this.#restoreGeneratedContent(
+      generated,
+      prepared.path,
+      prepared.current.content,
+      prepared.current.sourceVersion,
+      writeId,
+    )
+  }
+
+  async #restoreGeneratedContent(
+    generated: StudioGeneratedSources,
+    path: string,
+    content: string,
+    sourceVersion: string,
+    writeId: string,
+  ): Promise<void> {
+    await generated.rewrite(path, content)
+    await this.#coordinator.noteStudioWrite({
+      path,
+      sourceVersion,
+      writeId,
+    })
+  }
+
+  async #sketchRenderTargets(
+    path: string,
+    content: string,
+    sourceVersion: string,
+    rectIds: readonly string[],
+  ): Promise<readonly StudioSketchRenderTarget[]> {
+    const parsed = await this.#workspace.parseSource(content, Langium.URI.file(path))
+    Assert.input(
+      !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+      'Studio Snap compiled source must remain parseable while associations are recorded.',
+    )
+    const targets = new Map<string, StudioSketchRenderTarget>()
+    for (const render of AST.streamAllContents(parsed.entry.ast).filter(AST.isRender)) {
+      const tag = AST.testTagForRender(render)
+      const rectId = tag === undefined ? undefined : decodeStudioRectTag(tag)
+      if (rectId === undefined || !rectIds.includes(rectId)) {
+        continue
+      }
+      Assert.input(!targets.has(rectId), `Studio Snap emitted duplicate rectangle identity: ${rectId}`)
+      const cst = render.$cstNode
+      Assert.input(cst, `Studio Snap emitted rectangle ${rectId} without source coordinates.`)
+      const elementName = render.view?.$refText
+      Assert.input(elementName, `Studio Snap emitted rectangle ${rectId} without an element name.`)
+      const relativePath = FS.relativePath(this.projectRoot, path)
+      targets.set(rectId, {
+        elementName,
+        path: relativePath,
+        renderId: `${path}:${cst.offset}:${cst.end}`,
+        sourceVersion,
+        studioRectId: rectId,
+        view: AST.findOwningView(render)?.name ?? '',
+      })
+    }
+    return rectIds.map(rectId => {
+      const target = targets.get(rectId)
+      Assert.input(target, `Studio Snap did not emit a render identity for rectangle: ${rectId}`)
+      return target
+    })
+  }
+
+  #measuredUnsnapSelection(sketch: StudioSketch, studioRectId: string): StudioSnappedRect {
+    const manifest = this.#matrix?.publishedManifest()
+    const matches = manifest?.renders?.filter(render => render.studioRectId === studioRectId) ?? []
+    if (matches.length !== 1) {
+      throw measurementUnavailable(studioRectId)
+    }
+    const render = matches[0]!
+    const measurements: StudioPreviewLayoutMeasurement[] = []
+    for (const cached of this.#previewLayoutMeasurements.values()) {
+      try {
+        this.#requireMatrix().assertCurrentInstance(cached.identity)
+      } catch {
+        continue
+      }
+      const measurement = cached.measurements.get(render.renderId)
+      if (measurement !== undefined) {
+        measurements.push(measurement)
+      }
+    }
+    if (measurements.length !== 1 || measurements[0]!.elementName !== render.elementName) {
+      throw measurementUnavailable(render.renderId)
+    }
+    const path = FS.relativePath(this.projectRoot, render.source.path)
+    const sourceVersion = manifest?.sourceVersions[render.source.path] ?? manifest?.sourceVersions[path]
+    if (sourceVersion === undefined) {
+      throw measurementUnavailable(render.renderId)
+    }
+    return {
+      rect: measuredUnsnapRect(measurements[0]!, sketch),
+      target: {
+        elementName: render.elementName,
+        path,
+        renderId: render.renderId,
+        sourceVersion,
+        studioRectId,
+        view: sketch.view,
+      },
+    }
+  }
+
+  async #restoreMeasuredUnsnapCatalog(
+    catalog: StudioSketchCatalogSnapshot,
+    sketch: StudioSketch,
+    selected: readonly StudioSnappedRect[],
+    requestedIds: ReadonlySet<string>,
+    requestId: string,
+  ): Promise<StudioSketchCatalogResult> {
+    const order = [...sketch.rectOrder]
+    for (const item of selected) {
+      if (!order.includes(item.rect.id)) {
+        order.push(item.rect.id)
+      }
+    }
+    const positions = new Map(order.map((id, index) => [id, index]))
+    const replacement = {
+      ...sketch,
+      rectOrder: order,
+      rects: [...sketch.rects, ...selected.map(item => item.rect)]
+        .toSorted((left, right) => positions.get(left.id)! - positions.get(right.id)!),
+      snapped: sketch.snapped.filter(item => !requestedIds.has(item.rect.id)),
+    }
+    const next = {
+      ...catalog,
+      revision: catalog.revision + 1,
+      sketches: catalog.sketches.map(candidate => candidate.id === sketch.id ? replacement : candidate),
+    }
+    await this.#sketchCatalog.restore(next)
+    return { catalog: next, requestId: `catalog:${requestId}` }
   }
 
   #requireMatrix(): StudioMatrixSession {
@@ -1533,6 +2452,7 @@ export class StudioProjectSession {
       const expired = this.#checkpointOrder.shift()
       if (expired !== undefined) {
         this.#actionCheckpoints.delete(expired)
+        this.#sketchSnapCheckpoints.delete(expired)
       }
     }
   }
@@ -1598,6 +2518,174 @@ function trimMap<Key, Value>(map: Map<Key, Value>, limit: number): void {
     }
     map.delete(oldest.value)
   }
+}
+
+function parseSketchSnapRequest(value: unknown): StudioSketchSnapRequest {
+  Assert.input(isRecord(value), 'Studio Snap request must be an object.')
+  requireOnlyInputKeys(
+    value,
+    [
+      'checkpointId',
+      'confirmedProposalVersion',
+      'expectedCatalogRevision',
+      'rectIds',
+      'requestId',
+      'sketchId',
+      'sourceVersion',
+    ],
+    'Studio Snap request',
+  )
+  const checkpointId = requireInputText(value['checkpointId'], 'Studio Snap checkpointId')
+  const requestId = requireInputText(value['requestId'], 'Studio Snap requestId')
+  const sketchId = requireInputText(value['sketchId'], 'Studio Snap sketchId')
+  const sourceVersion = requireInputText(value['sourceVersion'], 'Studio Snap sourceVersion')
+  Assert.input(
+    Number.isSafeInteger(value['expectedCatalogRevision']) && Number(value['expectedCatalogRevision']) >= 0,
+    'Studio Snap expectedCatalogRevision must be a nonnegative integer.',
+  )
+  Assert.input(Array.isArray(value['rectIds']) && value['rectIds'].length > 0, 'Studio Snap rectIds must not be empty.')
+  const rectIds = value['rectIds'].map((id, index) => requireInputText(id, `Studio Snap rectIds[${index}]`))
+  Assert.input(new Set(rectIds).size === rectIds.length, 'Studio Snap rectIds must be unique.')
+  const confirmedProposalVersion = value['confirmedProposalVersion'] === undefined
+    ? undefined
+    : requireInputText(value['confirmedProposalVersion'], 'Studio Snap confirmedProposalVersion')
+  return {
+    checkpointId,
+    ...(confirmedProposalVersion === undefined ? {} : { confirmedProposalVersion }),
+    expectedCatalogRevision: Number(value['expectedCatalogRevision']),
+    rectIds,
+    requestId,
+    sketchId,
+    sourceVersion,
+  }
+}
+
+function parseSketchSnapUndoRequest(value: unknown): StudioSketchSnapUndoRequest {
+  Assert.input(isRecord(value), 'Studio Snap undo request must be an object.')
+  requireOnlyInputKeys(
+    value,
+    ['checkpointId', 'expectedCatalogRevision', 'requestId', 'sourceVersion'],
+    'Studio Snap undo request',
+  )
+  Assert.input(
+    Number.isSafeInteger(value['expectedCatalogRevision']) && Number(value['expectedCatalogRevision']) >= 0,
+    'Studio Snap undo expectedCatalogRevision must be a nonnegative integer.',
+  )
+  return {
+    checkpointId: requireInputText(value['checkpointId'], 'Studio Snap undo checkpointId'),
+    expectedCatalogRevision: Number(value['expectedCatalogRevision']),
+    requestId: requireInputText(value['requestId'], 'Studio Snap undo requestId'),
+    sourceVersion: requireInputText(value['sourceVersion'], 'Studio Snap undo sourceVersion'),
+  }
+}
+
+function parseSketchFlowActionRequest(value: unknown): StudioSketchFlowActionRequest {
+  Assert.input(isRecord(value), 'Studio flow request must be an object.')
+  requireOnlyInputKeys(
+    value,
+    ['action', 'checkpointId', 'expectedCatalogRevision', 'requestId', 'sketchId', 'sourceVersion'],
+    'Studio flow request',
+  )
+  Assert.input(
+    Number.isSafeInteger(value['expectedCatalogRevision']) && Number(value['expectedCatalogRevision']) >= 0,
+    'Studio flow expectedCatalogRevision must be a nonnegative integer.',
+  )
+  Assert.input(isRecord(value['action']), 'Studio flow action must be an object.')
+  const raw = value['action']
+  let action: StudioSketchFlowAction
+  if (raw['kind'] === 'toggle-direction') {
+    requireOnlyInputKeys(raw, ['kind', 'rectId'], 'Studio toggle-direction action')
+    action = { kind: 'toggle-direction', rectId: requireInputText(raw['rectId'], 'Studio flow rectId') }
+  } else if (raw['kind'] === 'insert-separator') {
+    requireOnlyInputKeys(raw, ['afterRectId', 'beforeRectId', 'kind'], 'Studio insert-separator action')
+    action = {
+      afterRectId: requireInputText(raw['afterRectId'], 'Studio flow afterRectId'),
+      ...(raw['beforeRectId'] === undefined
+        ? {}
+        : { beforeRectId: requireInputText(raw['beforeRectId'], 'Studio flow beforeRectId') }),
+      kind: 'insert-separator',
+    }
+  } else if (raw['kind'] === 'insert-spacer') {
+    requireOnlyInputKeys(raw, ['afterRectId', 'beforeRectId', 'kind', 'ratio'], 'Studio insert-spacer action')
+    Assert.input(
+      Array.isArray(raw['ratio'])
+        && raw['ratio'].length === 2
+        && raw['ratio'].every(value => Number.isSafeInteger(value) && Number(value) >= 1 && Number(value) <= 100),
+      'Studio flow Spacer ratio must contain two integers from 1 through 100.',
+    )
+    action = {
+      afterRectId: requireInputText(raw['afterRectId'], 'Studio flow afterRectId'),
+      beforeRectId: requireInputText(raw['beforeRectId'], 'Studio flow beforeRectId'),
+      kind: 'insert-spacer',
+      ratio: [Number(raw['ratio'][0]), Number(raw['ratio'][1])],
+    }
+  } else {
+    Errors.throwUserInput(`Unsupported Studio flow action: ${String(raw['kind'])}`)
+  }
+  return {
+    action,
+    checkpointId: requireInputText(value['checkpointId'], 'Studio flow checkpointId'),
+    expectedCatalogRevision: Number(value['expectedCatalogRevision']),
+    requestId: requireInputText(value['requestId'], 'Studio flow requestId'),
+    sketchId: requireInputText(value['sketchId'], 'Studio flow sketchId'),
+    sourceVersion: requireInputText(value['sourceVersion'], 'Studio flow sourceVersion'),
+  }
+}
+
+function parseSketchUnsnapRequest(value: unknown): StudioSketchUnsnapRequest {
+  Assert.input(isRecord(value), 'Studio Unsnap request must be an object.')
+  requireOnlyInputKeys(
+    value,
+    ['checkpointId', 'expectedCatalogRevision', 'rectIds', 'requestId', 'sketchId', 'sourceVersion'],
+    'Studio Unsnap request',
+  )
+  const parsed = parseSketchSnapRequest(value)
+  return {
+    checkpointId: parsed.checkpointId,
+    expectedCatalogRevision: parsed.expectedCatalogRevision,
+    rectIds: parsed.rectIds,
+    requestId: parsed.requestId,
+    sketchId: parsed.sketchId,
+    sourceVersion: parsed.sourceVersion,
+  }
+}
+
+function requireOnlyInputKeys(
+  value: Readonly<Record<string, unknown>>,
+  allowed: readonly string[],
+  label: string,
+): void {
+  const unsupported = Object.keys(value).filter(key => !allowed.includes(key))
+  Assert.input(unsupported.length === 0, `${label} has unsupported fields: ${unsupported.join(', ')}`)
+}
+
+function requireInputText(value: unknown, label: string): string {
+  Assert.input(typeof value === 'string' && value.trim().length > 0, `${label} must be a nonempty string.`)
+  return value
+}
+
+function decodeStudioRectTag(tag: string): string | undefined {
+  const encoded = tag.match(/^studio_rect_([0-9a-f]+)$/)?.[1]
+  if (encoded === undefined || encoded.length % 4 !== 0) {
+    return undefined
+  }
+  let decoded = ''
+  for (let index = 0; index < encoded.length; index += 4) {
+    decoded += String.fromCharCode(Number.parseInt(encoded.slice(index, index + 4), 16))
+  }
+  for (let index = 0; index < decoded.length; index += 1) {
+    const codeUnit = decoded.charCodeAt(index)
+    if (codeUnit >= 0xd800 && codeUnit <= 0xdbff) {
+      const next = decoded.charCodeAt(index + 1)
+      if (!(next >= 0xdc00 && next <= 0xdfff)) {
+        return undefined
+      }
+      index += 1
+    } else if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) {
+      return undefined
+    }
+  }
+  return decoded
 }
 
 async function requireProjectRoot(input: string): Promise<string> {
@@ -1924,6 +3012,39 @@ function cellIdentity(value: unknown): StudioCellIdentity {
   }
 }
 
+function completeCellInstanceIdentity(message: StudioPreviewLayoutMeasurementsMessage): StudioCellInstanceIdentity {
+  const identity = message.identity
+  if (
+    identity.cellId === undefined
+    || identity.cellRevision === undefined
+    || identity.compileRevision === undefined
+    || identity.manifestRevision === undefined
+  ) {
+    Errors.throwUserInput('Expected a complete Studio cell preview identity for layout measurements.')
+  }
+  return {
+    appName: identity.appName,
+    cellId: identity.cellId,
+    cellRevision: identity.cellRevision,
+    compileRevision: identity.compileRevision,
+    manifestRevision: identity.manifestRevision,
+    previewInstanceId: identity.previewInstanceId,
+    project: identity.project,
+  }
+}
+
+function previewMeasurementCellKey(identity: StudioCellInstanceIdentity): string {
+  return [
+    identity.project,
+    identity.appName,
+    identity.manifestRevision,
+    identity.compileRevision,
+    identity.cellId,
+    identity.cellRevision,
+    identity.previewInstanceId,
+  ].join('\u0000')
+}
+
 function cellInstanceIdentity(value: unknown): StudioCellInstanceIdentity {
   const identity = cellIdentity(value)
   if (!isRecord(value) || typeof value['previewInstanceId'] !== 'string') {
@@ -2019,6 +3140,7 @@ export type StudioSourceActionConflictCode =
   | 'checkpoint-identity-mismatch'
   | 'node-kind-mismatch'
   | 'render-owner-mismatch'
+  | 'measurement-unavailable'
   | 'scenario-action-mismatch'
   | 'stale-preview'
   | 'stale-scenario'
@@ -2060,4 +3182,42 @@ export class StudioSourceConflictError extends StudioSourceActionConflictError {
       path,
     })
   }
+}
+
+/**
+ * Converts cell-relative preview geometry to sketch geometry. Both coordinate spaces currently share a zero origin;
+ * when the sketch board gains an offset, the caller must subtract that offset before invoking this seam.
+ */
+function measuredUnsnapRect(
+  measurement: StudioPreviewLayoutMeasurement,
+  sketch: Pick<StudioSketch, 'height' | 'width'>,
+): StudioSketchRect {
+  Assert.input(
+    measurement.studioRectId !== undefined,
+    'A measured Studio Unsnap rectangle requires its Snap marker identity.',
+  )
+  Assert.input(
+    measurement.rect.width > 0 && measurement.rect.height > 0,
+    'A measured Studio Unsnap rectangle requires positive geometry.',
+  )
+  const width = Math.min(measurement.rect.width, sketch.width)
+  const height = Math.min(measurement.rect.height, sketch.height)
+  const x = Math.min(measurement.rect.x, sketch.width - width)
+  const y = Math.min(measurement.rect.y, sketch.height - height)
+  return {
+    height,
+    id: measurement.studioRectId,
+    kind: measurement.elementName,
+    width,
+    x,
+    y,
+  }
+}
+
+function measurementUnavailable(renderId: string): StudioSourceActionConflictError {
+  return new StudioSourceActionConflictError(
+    'measurement-unavailable',
+    'Current preview geometry is not available yet; retry Unsnap after the preview finishes measuring.',
+    { renderId },
+  )
 }

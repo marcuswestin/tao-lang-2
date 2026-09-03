@@ -153,6 +153,10 @@ export function matrixManifest(
       entryPath: session.entryPath,
       root: session.projectRoot,
     },
+    renders: compiler.renders.map(render => ({
+      ...render,
+      source: taoSource(render.source),
+    })),
     scenarios,
     sourceVersions: publication.sourceVersions,
     states: [],

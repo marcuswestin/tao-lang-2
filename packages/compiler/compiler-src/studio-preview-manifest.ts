@@ -2,6 +2,7 @@ import { ASTUtils, Type, Units } from '@ast-utils'
 import type { GenerationDeclaration, GenerationField } from '@generation'
 import { AST, type ParsedFile } from '@parser'
 import { Assert, Switch } from '@shared'
+import { studioRenderIdentity } from './studio-render-identity'
 
 export type StudioPreviewParameterKind =
   | 'boolean'
@@ -122,9 +123,17 @@ export type StudioPreviewManifest = {
   fixtures: readonly StudioPreviewFixtureManifest[]
   formatVersion: 2
   generationDeclarations: readonly GenerationDeclaration[]
+  renders: readonly StudioPreviewRenderManifest[]
   scenarios: readonly StudioPreviewScenarioManifest[]
   selectedAppName: string
   views: readonly StudioPreviewViewManifest[]
+}
+
+export type StudioPreviewRenderManifest = {
+  elementName: string
+  renderId: string
+  source: StudioPreviewSource
+  studioRectId?: string
 }
 
 /** compileStudioPreviewManifest publishes source-owned preview and generation schemas. */
@@ -144,6 +153,12 @@ export function compileStudioPreviewManifest(
     formatVersion: 2,
     generationDeclarations: files.flatMap(file =>
       file.ast.statements.flatMap(statement => generationDeclaration(statement))
+    ),
+    renders: files.flatMap(file =>
+      [...AST.streamAllContents(file.ast).filter(AST.isRender)].flatMap(render => {
+        const identity = studioRenderIdentity(render)
+        return identity === undefined ? [] : [{ ...identity, source: sourceOf(render) }]
+      })
     ),
     scenarios: files.flatMap(file =>
       file.ast.statements.filter(AST.isScenarioGroupDeclaration).flatMap(group =>

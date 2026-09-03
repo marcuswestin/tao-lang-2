@@ -24,6 +24,33 @@ const expectation = {
 } as const
 
 Describe('Studio protocol v1', () => {
+  Test('parses finite non-negative preview layout measurements and rejects invalid geometry', () => {
+    const message = {
+      channel: studioProtocolChannel,
+      identity,
+      measurements: [{
+        elementName: 'Text',
+        rect: { height: 40, width: 80, x: 15, y: 20 },
+        renderId: '/workspace/garden/Main.tao:10:20',
+        studioRectId: 'art',
+      }],
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-layout-measurements',
+    }
+
+    Expect(StudioProtocol.parseMessage(message)).toMatchObject({
+      measurements: message.measurements,
+      type: 'preview-layout-measurements',
+    })
+    Expect(StudioProtocol.parseMessage({
+      ...message,
+      measurements: [{ ...message.measurements[0], rect: { height: 40, width: 80, x: -1, y: 20 } }],
+    })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({
+      ...message,
+      measurements: [{ ...message.measurements[0], rect: { height: Number.NaN, width: 80, x: 1, y: 20 } }],
+    })).toBeUndefined()
+  })
   Test('parses revision and source identity messages from the expected preview origin', () => {
     const applied = StudioProtocol.parseWindowMessage({
       data: {

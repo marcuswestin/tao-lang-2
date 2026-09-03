@@ -1,3 +1,4 @@
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
@@ -99,6 +100,31 @@ Describe('compiler: Studio render occurrences', () => {
       const production = await Workspace.compile(paths['Main.tao'], { appName: 'Second' })
       Expect(production.code).not.toContain('studio:')
       Expect(production.code).not.toContain(paths['Main.tao'])
+    })
+  })
+
+  Test('publishes Snap rectangle identity in the render inventory and generated occurrence metadata', async () => {
+    await withTaoFiles('tao-studio-render-inventory-', {
+      'Main.tao': `
+        use Text from @tao/ui
+        app Preview { view Main }
+        view Main() {
+          #studio_rect_006100720074
+          render Text("Hello")
+        }
+      `,
+    }, async paths => {
+      const compiled = await Workspace.compile(paths['Main.tao'], { studio: true })
+      const render = [...AST.streamAllContents(compiled.validation.entry.ast).filter(AST.isRender)][0]!
+      const source = render.$cstNode!
+
+      Expect(compiled.studioManifest?.renders).toEqual([{
+        elementName: 'Text',
+        renderId: `${paths['Main.tao']}:${source.offset}:${source.end}`,
+        source: { end: source.end, path: paths['Main.tao'], start: source.offset },
+        studioRectId: 'art',
+      }])
+      Expect(compact(compiled.code)).toContain('elementName: "Text", studioRectId: "art",')
     })
   })
 
@@ -362,11 +388,13 @@ function requireRender(
 function studioOccurrence(render: AST.Render, sourcePath: string): string {
   const cstNode = render.$cstNode
   Assert.defined(cstNode, 'render source coordinates')
+  const elementName = ASTUtils.standardDesignElementName(render)
   return `studio: {
     sourcePath: ${JSON.stringify(sourcePath)},
     start: ${cstNode.offset},
     end: ${cstNode.end},
     kind: 'render',
+    ${elementName === undefined ? '' : `elementName: ${JSON.stringify(elementName)},`}
     ownerName: ${JSON.stringify(AST.findOwningView(render)?.name)},
   }`
 }

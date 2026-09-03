@@ -103,11 +103,20 @@ export type StudioPreviewManifestV2 = {
   manifestRevision: string
   parametersBySubject: Readonly<Record<string, readonly StudioParameterSchema[]>>
   project: { appName: string; entryPath: string; root: string }
+  /** renders is compiler-published when available; older v2 manifests remain readable. */
+  renders?: readonly StudioRenderInventoryEntry[]
   scenarios: readonly StudioScenario[]
   sourceVersions: Readonly<Record<string, string>>
   states: readonly StudioStateEntry[]
   subjects: readonly StudioScenarioSubject[]
   version: typeof studioPreviewManifestVersion
+}
+
+export type StudioRenderInventoryEntry = {
+  elementName: string
+  renderId: string
+  source: StudioTaoSource
+  studioRectId?: string
 }
 
 export type StudioCellIdentity = {
@@ -147,6 +156,14 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
   for (const subject of subjects.values()) {
     validateSource(subject.source, 'Studio subject source')
     requireText(subject.kind === 'app' ? subject.appName : subject.viewName, `Studio ${subject.kind} name`)
+  }
+  const renders = uniqueBy(input.renders ?? [], render => render.renderId, 'Studio render')
+  for (const render of renders.values()) {
+    requireText(render.elementName, 'Studio render element name')
+    validateSource(render.source, 'Studio render source')
+    if (render.studioRectId !== undefined) {
+      requireText(render.studioRectId, 'Studio render rectangle identity')
+    }
   }
   for (const [subjectId, parameters] of Object.entries(input.parametersBySubject)) {
     if (!subjects.has(subjectId)) {

@@ -1,6 +1,7 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
+import { studioRenderIdentity } from '../../studio-render-identity'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
@@ -74,11 +75,14 @@ function compileStudioRenderOccurrence(render: AST.Render): Compiled {
   const cstNode = render.$cstNode
   Assert.defined(cstNode, 'compiled render has source coordinates')
   const owner = AST.findOwningView(render)
+  const identity = studioRenderIdentity(render)
   return gen`{
     sourcePath: ${gen.jsLiteral(AST.getDocument(render).uri.fsPath)},
     start: ${cstNode.offset},
     end: ${cstNode.end},
     kind: 'render',
+    ${identity ? gen`elementName: ${gen.jsLiteral(identity.elementName)},` : ''}
+    ${identity?.studioRectId ? gen`studioRectId: ${gen.jsLiteral(identity.studioRectId)},` : ''}
     ${owner ? gen`ownerName: ${gen.nameLiteral(owner)},` : ''}
   }`
 }

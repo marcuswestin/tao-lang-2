@@ -1136,6 +1136,12 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
         entryPath: 'Garden.tao',
         root: session.projectRoot,
       },
+      renders: [{
+        elementName: 'Text',
+        renderId: `${session.projectRoot}/Garden.tao:1:2`,
+        source: { kind: 'tao' as const, path: `${session.projectRoot}/Garden.tao`, range: { end: 2, start: 1 } },
+        studioRectId: 'title',
+      }],
       scenarios: [{
         args: {},
         fixtureId: 'fixture:base',
@@ -1160,6 +1166,28 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     session.setMatrixManifest(manifest)
     const identity = StudioPreviewManifest.cellIdentity(manifest, cell)
     const registered = session.registerCellPreview({ ...identity, previewInstanceId: 'cell-preview-1' })
+    const layoutMessage = {
+      channel: studioProtocolChannel,
+      identity: { ...registered.identity, previewInstanceId: 'cell-preview-1' },
+      measurements: [{
+        elementName: 'Text',
+        rect: { height: 30, width: 80, x: 12, y: 18 },
+        renderId: `${session.projectRoot}/Garden.tao:1:2`,
+        studioRectId: 'title',
+      }],
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-layout-measurements',
+    } as const
+    Expect(session.recordPreviewLayoutMeasurements(layoutMessage)).toEqual({ accepted: true })
+    Expect(session.previewLayoutMeasurement(
+      { ...registered.identity, previewInstanceId: 'cell-preview-1' },
+      `${session.projectRoot}/Garden.tao:1:2`,
+    )).toMatchObject({ studioRectId: 'title' })
+    Expect(session.measuredUnsnapRect(
+      { ...registered.identity, previewInstanceId: 'cell-preview-1' },
+      `${session.projectRoot}/Garden.tao:1:2`,
+      { height: 40, width: 60 },
+    )).toEqual({ height: 30, id: 'title', kind: 'Text', width: 60, x: 0, y: 10 })
     const file = await session.readFile('Garden.tao')
     const cellSourceAction = {
       action: { component: 'Text', kind: 'insert-component' },
@@ -1212,6 +1240,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
       replay,
     })
     session.registerCellPreview({ ...next.identity, previewInstanceId: 'cell-preview-2' })
+    Expect(() => session.recordPreviewLayoutMeasurements(layoutMessage)).toThrow('stale configuration revision')
     const events: StudioSessionEvent[] = []
     const unsubscribe = session.subscribe(event => events.push(event))
     session.setMatrixManifest({

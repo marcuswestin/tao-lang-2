@@ -1,4 +1,11 @@
+import type {
+  StudioSketchFlowAction,
+  StudioSketchSnapApplyResult,
+  StudioSketchSnapProposalResult,
+  StudioSketchSnapUndoResult,
+} from '../StudioProjectSession'
 import type { StudioSketch, StudioSketchRect } from '../StudioSketchCatalog'
+import { StudioSketchSnap } from '../StudioSketchSnap'
 import {
   StudioSketchGeometry,
   type StudioSketchGeometryState,
@@ -48,15 +55,124 @@ export const StudioSketchChanges = {
 export type StudioSketchViewOptions = Readonly<{
   onCreateSketch?: (input: Readonly<{ height: number; width: number }>) => Promise<void> | void
   onError?: (error: unknown) => void
+  onFlowAction?: (request: StudioSketchViewFlowActionRequest) => Promise<StudioSketchSnapApplyResult>
   onRectChange?: (
     change: StudioSketchRectChange,
   ) => Promise<readonly StudioSketch[] | void> | readonly StudioSketch[] | void
+  onSnap?: (
+    request: StudioSketchViewSnapRequest,
+  ) => Promise<StudioSketchSnapApplyResult | StudioSketchSnapProposalResult>
+  onUnsnap?: (request: StudioSketchViewUnsnapRequest) => Promise<StudioSketchSnapApplyResult>
+  onUndoSnap?: (request: StudioSketchViewUndoRequest) => Promise<StudioSketchSnapUndoResult>
   sketches: readonly StudioSketch[]
+  sourceVersion?: string
 }>
+
+export type StudioSketchViewSnapRequest = Readonly<{
+  checkpointId: string
+  confirmedProposalVersion?: string
+  rectIds: readonly string[]
+  sketchId: string
+  sourceVersion: string
+}>
+
+export type StudioSketchViewFlowActionRequest = Readonly<{
+  action: StudioSketchFlowAction
+  checkpointId: string
+  sketchId: string
+  sourceVersion: string
+}>
+
+export type StudioSketchViewUndoRequest = Readonly<{
+  checkpointId: string
+  sourceVersion: string
+}>
+
+type StudioSketchSnapUiState = {
+  lastCheckpointId?: string
+  pending?: StudioSketchSnapProposalResult
+  pendingCheckpointId?: string
+  sourceVersion?: string
+}
+
+export type StudioSketchViewUnsnapRequest = Readonly<{
+  checkpointId: string
+  rectIds: readonly string[]
+  sketchId: string
+  sourceVersion: string
+}>
+
+export const StudioSketchSelection = {
+  rectIds(sketch: StudioSketch, selected: ReadonlySet<string>): readonly string[] {
+    const chosen = sketch.rects.filter(rect => selected.has(rect.id)).map(rect => rect.id)
+    return chosen.length === 0 ? sketch.rects.map(rect => rect.id) : chosen
+  },
+  settle(sketch: StudioSketch, selected: ReadonlySet<string>): ReadonlySet<string> {
+    const free = new Set(sketch.rects.map(rect => rect.id))
+    return new Set([...selected].filter(id => free.has(id)))
+  },
+  toggle(selected: ReadonlySet<string>, rectId: string, multiple: boolean): ReadonlySet<string> {
+    if (!multiple) {
+      return new Set([rectId])
+    }
+    const next = new Set(selected)
+    if (next.has(rectId)) {
+      next.delete(rectId)
+    } else {
+      next.add(rectId)
+    }
+    return next
+  },
+} as const
+
+export const StudioSketchFlowControls = {
+  availability(selectedCount: number, endpointAvailable: boolean, sourceAvailable: boolean) {
+    const unavailableReason = !endpointAvailable
+      ? 'Flow action endpoint is unavailable.'
+      : !sourceAvailable
+      ? 'Flow editing requires the generated view source version.'
+      : undefined
+    const commonReason = unavailableReason ?? (selectedCount < 1 ? 'Select at least one snapped rectangle.' : '')
+    return {
+      direction: { disabled: unavailableReason !== undefined || selectedCount < 1, reason: commonReason },
+      separator: { disabled: unavailableReason !== undefined || selectedCount < 1, reason: commonReason },
+      spacer: {
+        disabled: unavailableReason !== undefined || selectedCount !== 2,
+        reason: unavailableReason ?? (selectedCount !== 2 ? 'Select exactly two snapped rectangles.' : ''),
+      },
+    } as const
+  },
+  spacerAction(rectIds: readonly string[], sliderValue: number): StudioSketchFlowAction | undefined {
+    if (rectIds.length !== 2 || !Number.isSafeInteger(sliderValue) || sliderValue < 1 || sliderValue > 99) {
+      return undefined
+    }
+    return {
+      afterRectId: rectIds[0]!,
+      beforeRectId: rectIds[1]!,
+      kind: 'insert-spacer',
+      ratio: [sliderValue, 100 - sliderValue],
+    }
+  },
+} as const
+
+export const StudioSketchProposal = {
+  cancel(): undefined {
+    return undefined
+  },
+  confirmation(proposal: StudioSketchSnapProposalResult): Readonly<{
+    confirmedProposalVersion: string
+    rectIds: readonly string[]
+  }> {
+    return {
+      confirmedProposalVersion: proposal.proposedSourceVersion,
+      rectIds: proposal.projectedRectIds,
+    }
+  },
+} as const
 
 export type MountedStudioSketchView = Readonly<{
   dispose(): void
-  render(sketches: readonly StudioSketch[]): void
+  render(sketches: readonly StudioSketch[], sourceVersion?: string): void
 }>
 
 export type StudioSketchOuterGesture = Readonly<{
@@ -122,12 +238,14 @@ export const StudioSketchView = {
     inspector.hidden = true
     inspector.style.width = '180px'
     let sketches = options.sketches
-    let selected: Readonly<{ rectId: string; sketchId: string }> | undefined
+    let currentSourceVersion = options.sourceVersion
+    const snapStates = new Map<string, StudioSketchSnapUiState>()
+    let selected: Readonly<{ rectId: string; rectIds: ReadonlySet<string>; sketchId: string }> | undefined
     let outerGesture: StudioSketchOuterGesture | undefined
 
     const applyChange = (change: StudioSketchRectChange): void => {
       sketches = StudioSketchChanges.settle(sketches, change)
-      selected = { rectId: change.rect.id, sketchId: change.sketchId }
+      selected = { rectId: change.rect.id, rectIds: new Set([change.rect.id]), sketchId: change.sketchId }
       render(sketches)
     }
     const commit = (change: StudioSketchRectChange): void => {
@@ -154,13 +272,38 @@ export const StudioSketchView = {
       }
     }
 
-    const render = (nextSketches: readonly StudioSketch[]): void => {
+    const render = (nextSketches: readonly StudioSketch[], nextSourceVersion?: string): void => {
       sketches = nextSketches
+      currentSourceVersion = nextSourceVersion ?? currentSourceVersion
+      if (selected !== undefined) {
+        const sketch = sketches.find(candidate => candidate.id === selected?.sketchId)
+        if (sketch !== undefined) {
+          const rectIds = StudioSketchSelection.settle(sketch, selected.rectIds)
+          selected = rectIds.size === 0 ? undefined : { ...selected, rectIds }
+        }
+      }
       const boards = sketches.map(sketch =>
-        renderSketch(document, sketch, () => selected, value => {
-          selected = value
-          renderInspector(inspector, sketches, selected, commit)
-        }, commit)
+        renderSketch(
+          document,
+          sketch,
+          (() => {
+            const state = snapStates.get(sketch.id) ?? { sourceVersion: currentSourceVersion }
+            state.sourceVersion = currentSourceVersion ?? state.sourceVersion
+            snapStates.set(sketch.id, state)
+            return state
+          })(),
+          () => selected,
+          value => {
+            selected = value
+            renderInspector(inspector, sketches, selected, commit)
+          },
+          commit,
+          options.onFlowAction,
+          options.onSnap,
+          options.onUnsnap,
+          options.onUndoSnap,
+          (authoritative, version) => render(authoritative, version),
+        )
       )
       workspace.replaceChildren(...boards, inspector)
       renderInspector(inspector, sketches, selected, commit)
@@ -221,9 +364,15 @@ export const StudioSketchView = {
 function renderSketch(
   document: Document,
   sketch: StudioSketch,
-  selection: () => Readonly<{ rectId: string; sketchId: string }> | undefined,
-  select: (value: Readonly<{ rectId: string; sketchId: string }> | undefined) => void,
+  snapState: StudioSketchSnapUiState,
+  selection: () => Readonly<{ rectId: string; rectIds: ReadonlySet<string>; sketchId: string }> | undefined,
+  select: (value: Readonly<{ rectId: string; rectIds: ReadonlySet<string>; sketchId: string }> | undefined) => void,
   onChange: StudioSketchViewOptions['onRectChange'],
+  onFlowAction: StudioSketchViewOptions['onFlowAction'],
+  onSnap: StudioSketchViewOptions['onSnap'],
+  onUnsnap: StudioSketchViewOptions['onUnsnap'],
+  onUndoSnap: StudioSketchViewOptions['onUndoSnap'],
+  renderAuthoritative: (sketches: readonly StudioSketch[], sourceVersion: string) => void,
 ): HTMLElement {
   const board = document.createElement('section')
   board.dataset['taoStudioSketch'] = sketch.id
@@ -233,13 +382,265 @@ function renderSketch(
   board.style.width = `${sketch.width}px`
   let activePointer: number | undefined
   let duplicateSourceId: string | undefined
+  let draggingRectId: string | undefined
+  let busy = false
   let state: StudioSketchGeometryState = StudioSketchGeometry.initial(sketch.rects)
   if (selection()?.sketchId === sketch.id) {
     state = { ...state, selectedId: selection()?.rectId }
   }
   const paint = (): void => {
-    const children = state.rects.map(rect => rectElement(document, rect, selection()?.rectId === rect.id, beginResize))
-    board.replaceChildren(...children)
+    const selectedIds = selection()?.sketchId === sketch.id
+      ? selection()?.rectIds ?? new Set<string>()
+      : new Set<string>()
+    const children = state.rects.map(rect =>
+      rectElement(document, rect, selectedIds.has(rect.id), beginResize, event => {
+        draggingRectId = rect.id
+        event.dataTransfer?.setData('text/plain', rect.id)
+        gapIndicator.hidden = false
+      })
+    )
+    board.replaceChildren(
+      toolbar,
+      gapIndicator,
+      ...children,
+      ...(snapState.pending === undefined ? [] : [proposalElement()]),
+    )
+  }
+  const toolbar = document.createElement('nav')
+  toolbar.dataset['taoStudioSketchSnapControls'] = sketch.id
+  toolbar.style.position = 'absolute'
+  toolbar.style.top = '-32px'
+  const snap = document.createElement('button')
+  snap.textContent = 'Snap'
+  snap.dataset['taoStudioSketchSnap'] = sketch.id
+  const undo = document.createElement('button')
+  undo.textContent = 'Undo Snap'
+  undo.dataset['taoStudioSketchSnapUndo'] = sketch.id
+  undo.disabled = onUndoSnap === undefined || snapState.lastCheckpointId === undefined
+  const snapped = document.createElement('select')
+  snapped.ariaLabel = 'Snapped rectangles'
+  snapped.multiple = true
+  for (const association of sketch.snapped) {
+    const option = document.createElement('option')
+    option.value = association.rect.id
+    option.textContent = association.rect.content ?? association.rect.kind
+    snapped.add(option)
+  }
+  const unsnap = document.createElement('button')
+  unsnap.textContent = 'Unsnap'
+  unsnap.dataset['taoStudioSketchUnsnap'] = sketch.id
+  unsnap.disabled = onUnsnap === undefined || snapState.sourceVersion === undefined || sketch.snapped.length === 0
+  const direction = document.createElement('button')
+  direction.textContent = 'Toggle direction'
+  direction.dataset['taoStudioSketchFlowDirection'] = sketch.id
+  const separator = document.createElement('button')
+  separator.textContent = 'Insert separator'
+  separator.dataset['taoStudioSketchFlowSeparator'] = sketch.id
+  const spacerLabel = document.createElement('label')
+  spacerLabel.textContent = 'Spacer ratio 1:1'
+  spacerLabel.dataset['taoStudioSketchFlowSpacerLabel'] = sketch.id
+  const spacer = document.createElement('input')
+  spacer.type = 'range'
+  spacer.min = '1'
+  spacer.max = '99'
+  spacer.value = '50'
+  spacer.ariaLabel = 'Spacer claim ratio'
+  spacer.dataset['taoStudioSketchFlowSpacer'] = sketch.id
+  spacerLabel.append(spacer)
+  const selectedSnappedIds = (): string[] => [...snapped.selectedOptions].map(option => option.value)
+  const updateFlowControls = (): void => {
+    const count = selectedSnappedIds().length
+    const availability = StudioSketchFlowControls.availability(
+      count,
+      onFlowAction !== undefined && !busy,
+      snapState.sourceVersion !== undefined,
+    )
+    direction.disabled = availability.direction.disabled
+    direction.title = availability.direction.reason
+    separator.disabled = availability.separator.disabled
+    separator.title = availability.separator.reason
+    spacer.disabled = availability.spacer.disabled
+    spacer.title = availability.spacer.reason
+  }
+  snapped.addEventListener('change', updateFlowControls)
+  updateFlowControls()
+  toolbar.append(snap, undo, snapped, unsnap, direction, separator, spacerLabel)
+  const gapIndicator = document.createElement('div')
+  gapIndicator.dataset['taoStudioSketchGapIndicator'] = 'true'
+  gapIndicator.textContent = 'Drop to Snap selected rectangle into flow'
+  gapIndicator.hidden = true
+  const requestSnap = async (rectIds: readonly string[], confirmedProposalVersion?: string): Promise<void> => {
+    if (onSnap === undefined || snapState.sourceVersion === undefined || rectIds.length === 0 || busy) {
+      return
+    }
+    busy = true
+    snap.disabled = true
+    try {
+      const checkpointId = snapState.pendingCheckpointId ?? crypto.randomUUID()
+      const result = await onSnap({
+        checkpointId,
+        ...(confirmedProposalVersion === undefined ? {} : { confirmedProposalVersion }),
+        rectIds,
+        sketchId: sketch.id,
+        sourceVersion: snapState.sourceVersion,
+      })
+      if ('catalog' in result) {
+        snapState.pending = undefined
+        snapState.pendingCheckpointId = undefined
+        snapState.lastCheckpointId = result.checkpoint.id
+        snapState.sourceVersion = result.file.sourceVersion
+        undo.disabled = false
+        renderAuthoritative(result.catalog.sketches, result.file.sourceVersion)
+      } else {
+        snapState.pending = result
+        snapState.pendingCheckpointId = checkpointId
+        paint()
+      }
+    } catch (error) {
+      board.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
+    } finally {
+      busy = false
+      snap.disabled = false
+    }
+  }
+  const requestFlow = async (action: StudioSketchFlowAction): Promise<void> => {
+    if (onFlowAction === undefined || snapState.sourceVersion === undefined || busy) {
+      return
+    }
+    busy = true
+    updateFlowControls()
+    try {
+      const result = await onFlowAction({
+        action,
+        checkpointId: crypto.randomUUID(),
+        sketchId: sketch.id,
+        sourceVersion: snapState.sourceVersion,
+      })
+      snapState.lastCheckpointId = result.checkpoint.id
+      snapState.sourceVersion = result.file.sourceVersion
+      renderAuthoritative(result.catalog.sketches, result.file.sourceVersion)
+    } catch (error) {
+      board.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
+    } finally {
+      busy = false
+      updateFlowControls()
+    }
+  }
+  direction.addEventListener('click', () => {
+    const [rectId] = selectedSnappedIds()
+    if (rectId !== undefined) {
+      void requestFlow({ kind: 'toggle-direction', rectId })
+    }
+  })
+  separator.addEventListener('click', () => {
+    const [afterRectId, beforeRectId] = selectedSnappedIds()
+    if (afterRectId !== undefined) {
+      void requestFlow({
+        afterRectId,
+        ...(beforeRectId === undefined ? {} : { beforeRectId }),
+        kind: 'insert-separator',
+      })
+    }
+  })
+  spacer.addEventListener('change', () => {
+    const selected = selectedSnappedIds()
+    const first = Number(spacer.value)
+    const action = StudioSketchFlowControls.spacerAction(selected, first)
+    if (action === undefined) {
+      return
+    }
+    const second = 100 - first
+    spacerLabel.firstChild!.textContent = `Spacer ratio ${first}:${second}`
+    void requestFlow(action)
+  })
+  snap.disabled = onSnap === undefined || snapState.sourceVersion === undefined || sketch.rects.length === 0
+  if (snapState.sourceVersion === undefined) {
+    snap.title = 'Snap requires the generated view source version.'
+  }
+  snap.addEventListener('click', () => {
+    const selectedIds = selection()?.sketchId === sketch.id
+      ? selection()?.rectIds ?? new Set<string>()
+      : new Set<string>()
+    void requestSnap(StudioSketchSelection.rectIds(sketch, selectedIds))
+  })
+  undo.addEventListener('click', () => {
+    if (
+      snapState.lastCheckpointId === undefined
+      || snapState.sourceVersion === undefined
+      || onUndoSnap === undefined
+      || busy
+    ) {
+      return
+    }
+    busy = true
+    undo.disabled = true
+    void onUndoSnap({ checkpointId: snapState.lastCheckpointId, sourceVersion: snapState.sourceVersion }).then(
+      result => {
+        snapState.lastCheckpointId = undefined
+        snapState.sourceVersion = result.file.sourceVersion
+        renderAuthoritative(result.catalog.sketches, result.file.sourceVersion)
+      },
+      error => {
+        undo.disabled = false
+        board.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
+      },
+    ).finally(() => {
+      busy = false
+    })
+  })
+  unsnap.addEventListener('click', () => {
+    if (onUnsnap === undefined || snapState.sourceVersion === undefined || busy) {
+      return
+    }
+    const selected = [...snapped.selectedOptions].map(option => option.value)
+    const rectIds = selected.length === 0 ? sketch.snapped.map(item => item.rect.id) : selected
+    if (rectIds.length === 0) {
+      return
+    }
+    busy = true
+    unsnap.disabled = true
+    void onUnsnap({
+      checkpointId: crypto.randomUUID(),
+      rectIds,
+      sketchId: sketch.id,
+      sourceVersion: snapState.sourceVersion,
+    }).then(result => {
+      snapState.lastCheckpointId = result.checkpoint.id
+      snapState.sourceVersion = result.file.sourceVersion
+      undo.disabled = false
+      renderAuthoritative(result.catalog.sketches, result.file.sourceVersion)
+    }, error => {
+      unsnap.disabled = false
+      board.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
+    }).finally(() => {
+      busy = false
+    })
+  })
+  const proposalElement = (): HTMLElement => {
+    const proposal = snapState.pending!
+    const overlay = document.createElement('section')
+    overlay.dataset['taoStudioSketchSnapProposal'] = sketch.id
+    const tree = document.createElement('pre')
+    tree.dataset['taoStudioSketchSnapTree'] = 'true'
+    tree.textContent = StudioSketchSnap.source(proposal.tree)
+    const diff = document.createElement('pre')
+    diff.dataset['taoStudioSketchSnapDiff'] = 'true'
+    diff.textContent = proposal.diff
+    const apply = document.createElement('button')
+    apply.textContent = 'Apply'
+    apply.addEventListener('click', () => {
+      const confirmation = StudioSketchProposal.confirmation(proposal)
+      void requestSnap(confirmation.rectIds, confirmation.confirmedProposalVersion)
+    })
+    const cancel = document.createElement('button')
+    cancel.textContent = 'Cancel'
+    cancel.addEventListener('click', () => {
+      snapState.pending = StudioSketchProposal.cancel()
+      snapState.pendingCheckpointId = undefined
+      paint()
+    })
+    overlay.append(tree, diff, apply, cancel)
+    return overlay
   }
   const point = (event: PointerEvent): StudioSketchPoint => {
     const bounds = board.getBoundingClientRect()
@@ -270,13 +671,23 @@ function renderSketch(
     if (hit === undefined) {
       const id = crypto.randomUUID()
       state = StudioSketchGeometry.beginDraw(state, id, location)
-      select({ rectId: id, sketchId: sketch.id })
+      select({ rectId: id, rectIds: new Set([id]), sketchId: sketch.id })
     } else {
       state = { ...state, selectedId: hit.id }
+      const selectedIds = selection()?.sketchId === sketch.id
+        ? selection()?.rectIds ?? new Set<string>()
+        : new Set<string>()
+      const rectIds = StudioSketchSelection.toggle(selectedIds, hit.id, event.shiftKey)
+      const selectedRectId = rectIds.has(hit.id) ? hit.id : rectIds.values().next().value
+      select(selectedRectId === undefined ? undefined : { rectId: selectedRectId, rectIds, sketchId: sketch.id })
+      if (event.shiftKey) {
+        paint()
+        return
+      }
       const duplicateId = event.altKey ? crypto.randomUUID() : undefined
       duplicateSourceId = duplicateId === undefined ? undefined : hit.id
       state = StudioSketchGeometry.beginMove(state, location, { duplicateId, optionKey: event.altKey })
-      select({ rectId: state.selectedId!, sketchId: sketch.id })
+      select({ rectId: state.selectedId!, rectIds: new Set([state.selectedId!]), sketchId: sketch.id })
     }
     if (state.gesture === undefined) {
       return
@@ -333,6 +744,34 @@ function renderSketch(
     duplicateSourceId = undefined
     paint()
   })
+  board.addEventListener('dragover', event => {
+    if (draggingRectId === undefined) {
+      return
+    }
+    event.preventDefault()
+    gapIndicator.hidden = false
+    gapIndicator.dataset['state'] = 'landing'
+  })
+  board.addEventListener('dragleave', () => {
+    gapIndicator.hidden = true
+    delete gapIndicator.dataset['state']
+  })
+  board.addEventListener('drop', event => {
+    if (draggingRectId === undefined) {
+      return
+    }
+    event.preventDefault()
+    const rectId = draggingRectId
+    draggingRectId = undefined
+    gapIndicator.hidden = true
+    delete gapIndicator.dataset['state']
+    void requestSnap([rectId])
+  })
+  board.addEventListener('dragend', () => {
+    draggingRectId = undefined
+    gapIndicator.hidden = true
+    delete gapIndicator.dataset['state']
+  })
   paint()
   return board
 }
@@ -351,6 +790,7 @@ function rectElement(
   rect: StudioSketchRect,
   selected: boolean,
   beginResize: (event: PointerEvent, handle: StudioSketchResizeHandle) => void,
+  beginDrag: (event: DragEvent) => void,
 ): HTMLElement {
   const element = document.createElement('div')
   element.dataset['taoStudioSketchRect'] = rect.id
@@ -361,6 +801,8 @@ function rectElement(
   element.style.top = `${rect.y}px`
   element.style.width = `${rect.width}px`
   element.textContent = rect.content ?? rect.kind
+  element.draggable = true
+  element.addEventListener('dragstart', beginDrag)
   if (selected) {
     element.dataset['selected'] = 'true'
     for (const handle of handles) {
@@ -377,7 +819,7 @@ function rectElement(
 function renderInspector(
   inspector: HTMLElement,
   sketches: readonly StudioSketch[],
-  selected: Readonly<{ rectId: string; sketchId: string }> | undefined,
+  selected: Readonly<{ rectId: string; rectIds: ReadonlySet<string>; sketchId: string }> | undefined,
   update: (change: StudioSketchRectChange) => void,
 ): void {
   const document = inspector.ownerDocument

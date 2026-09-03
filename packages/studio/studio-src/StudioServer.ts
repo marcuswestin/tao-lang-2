@@ -431,6 +431,21 @@ async function handleRequest(
   if (request.method === 'POST' && url.pathname === '/api/sketches/action') {
     return response(request, url, options, await session.applySketchAction(await request.json()))
   }
+  if (request.method === 'POST' && url.pathname === '/api/sketches/flow/action') {
+    return response(request, url, options, await session.applySketchFlowAction(await request.json()))
+  }
+  if (request.method === 'POST' && url.pathname === '/api/sketches/snap/propose') {
+    return response(request, url, options, await session.proposeSketchSnap(await request.json()))
+  }
+  if (request.method === 'POST' && url.pathname === '/api/sketches/snap/apply') {
+    return response(request, url, options, await session.applySketchSnap(await request.json()))
+  }
+  if (request.method === 'POST' && url.pathname === '/api/sketches/snap/undo') {
+    return response(request, url, options, await session.undoSketchSnap(await request.json()))
+  }
+  if (request.method === 'POST' && url.pathname === '/api/sketches/unsnap/apply') {
+    return response(request, url, options, await session.applySketchUnsnap(await request.json()))
+  }
   if (request.method === 'GET' && url.pathname === '/api/file') {
     return response(request, url, options, await session.readFile(requiredPath(url)))
   }
@@ -494,6 +509,9 @@ async function handleRequest(
   }
   if (request.method === 'POST' && url.pathname === '/api/preview/applied') {
     return response(request, url, options, { accepted: session.acknowledgePreview(await request.json()) })
+  }
+  if (request.method === 'POST' && url.pathname === '/api/preview/layout-measurements') {
+    return response(request, url, options, session.recordPreviewLayoutMeasurements(await request.json()))
   }
   if (request.method === 'GET' && url.pathname === '/api/preview/manifest') {
     const manifest = session.previewManifest()
@@ -795,6 +813,7 @@ function originAuthorization(
 function previewOriginPath(pathname: string): boolean {
   return pathname === '/api/preview/instance'
     || pathname === '/api/preview/applied'
+    || pathname === '/api/preview/layout-measurements'
     || pathname === '/api/preview/cell'
     || pathname === '/api/preview/cell/bootstrap'
     || pathname === '/api/preview/cell/instance'

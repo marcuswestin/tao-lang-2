@@ -41,7 +41,7 @@ Test('simulated preview stays within the preview-origin API boundary', () => {
 Test('sketch persistence evidence requires catalog-only rectangle mutation', () => {
   const before = smokeSketchCatalog(JSON.stringify({
     revision: 1,
-    sketches: [{ height: 76, id: 'sketch-1', name: 'View1', rects: [], width: 360 }],
+    sketches: [{ height: 76, id: 'sketch-1', name: 'View1', rectOrder: [], rects: [], snapped: [], width: 360 }],
   }))
   const after = smokeSketchCatalog(JSON.stringify({
     revision: 2,
@@ -49,7 +49,9 @@ Test('sketch persistence evidence requires catalog-only rectangle mutation', () 
       height: 76,
       id: 'sketch-1',
       name: 'View1',
-      rects: [{ height: 24, id: 'rect-1', kind: 'Placeholder', width: 64 }],
+      rectOrder: ['rect-1'],
+      rects: [{ height: 24, id: 'rect-1', kind: 'Placeholder', width: 64, x: 0, y: 0 }],
+      snapped: [],
       width: 360,
     }],
   }))
@@ -299,6 +301,233 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         return { height: bounds.height, width: bounds.width }
       })()`)
       Expect(reloadedRect).toEqual({ height: 24, width: 64 })
+
+      // Preserve the original free rectangle, then build the clean playlist-row projection beside it.
+      const playlistRects = [
+        { height: 52, width: 52, x: 12, y: 8 },
+        { height: 20, width: 100, x: 76, y: 8 },
+        { height: 20, width: 100, x: 76, y: 40 },
+        { height: 20, width: 36, x: 300, y: 28 },
+      ] as const
+      let drawCatalog = persistedCatalog
+      const playlistRectIds: string[] = []
+      for (const rectangle of playlistRects) {
+        await drawSketchRectangle(browser, persistedSketch.id, rectangle)
+        drawCatalog = await waitForSketchCatalog(
+          sketchCatalogPath,
+          catalog =>
+            catalog.revision > drawCatalog.revision && catalog.sketches[0]?.rects.length === playlistRectIds.length + 2,
+        )
+        playlistRectIds.push(drawCatalog.sketches[0]!.rects.at(-1)!.id)
+      }
+      for (const rectId of playlistRectIds.slice(0, -1)) {
+        await shiftSelectSketchRectangle(browser, persistedSketch.id, rectId)
+      }
+      await browser.waitFor(
+        `document.querySelectorAll(${
+          JSON.stringify(
+            `[data-tao-studio-sketch="${persistedSketch.id}"] [data-tao-studio-sketch-rect][data-selected="true"]`,
+          )
+        }).length === 4`,
+      )
+      const sourceBeforeSnap = await FS.readText(generatedSketchPath)
+      await browser.waitFor(
+        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
+          instanceof HTMLButtonElement
+          && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
+            ?.disabled === false`,
+      )
+      await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
+      const snappedCatalog = await waitForSketchCatalog(
+        sketchCatalogPath,
+        catalog =>
+          catalog.revision > drawCatalog.revision
+          && catalog.sketches[0]?.rects.length === 1
+          && catalog.sketches[0]?.snapped.length === 4,
+      )
+      const snappedSource = await FS.readText(generatedSketchPath)
+      Expect(snappedSource).not.toBe(sourceBeforeSnap)
+      Expect(snappedSource).toContain('render Row()')
+      Expect(snappedSource).toContain('Col()')
+      for (const rectId of playlistRectIds) {
+        Expect(snappedSource).toContain(studioRectTag(rectId))
+      }
+      Expect(snappedCatalog.sketches[0]?.rects.map(rect => rect.id)).toEqual([persistedRect.id])
+      Expect(snappedCatalog.sketches[0]?.snapped.map(item => item.rect.id)).toEqual(playlistRectIds)
+      Expect(snappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
+
+      await browser.goto(projectUrl)
+      await browser.waitFor(
+        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
+          instanceof HTMLButtonElement
+          && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
+            ?.disabled === false`,
+        { timeoutMs: 30_000 },
+      )
+      const reloadedSnapCatalog = smokeSketchCatalog(await FS.readText(sketchCatalogPath))
+      Expect(reloadedSnapCatalog.sketches[0]?.snapped.map(item => item.rect.id)).toEqual(playlistRectIds)
+      Expect(await FS.readText(generatedSketchPath)).toBe(snappedSource)
+
+      // Drag the one remaining free rectangle into the existing flow, then undo that incremental Snap.
+      Expect(
+        await browser.evaluate<boolean>(
+          `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-gap-indicator]`)}) instanceof HTMLElement`,
+        ),
+      ).toBe(true)
+      await browser.drag(
+        `[data-tao-studio-sketch-rect="${persistedRect.id}"]`,
+        `[data-tao-studio-sketch="${persistedSketch.id}"]`,
+        { steps: 12 },
+      )
+      const incrementallySnappedCatalog = await waitForSketchCatalog(
+        sketchCatalogPath,
+        catalog =>
+          catalog.revision > reloadedSnapCatalog.revision
+          && catalog.sketches[0]?.rects.length === 0
+          && catalog.sketches[0]?.snapped.length === 5,
+      )
+      Expect(await FS.readText(generatedSketchPath)).toContain(studioRectTag(persistedRect.id))
+      await browser.waitFor(
+        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)})
+          ?.disabled === false`,
+      )
+      await browser.click(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)
+      const incrementalUndoCatalog = await waitForSketchCatalog(
+        sketchCatalogPath,
+        catalog =>
+          catalog.revision > incrementallySnappedCatalog.revision
+          && catalog.sketches[0]?.rects.map(rect => rect.id).join(',') === persistedRect.id
+          && catalog.sketches[0]?.snapped.length === 4,
+      )
+      Expect(incrementalUndoCatalog.sketches[0]?.rectOrder).toEqual(reloadedSnapCatalog.sketches[0]?.rectOrder)
+      Expect(await FS.readText(generatedSketchPath)).toBe(snappedSource)
+
+      const retained = incrementalUndoCatalog.sketches[0]!.snapped[0]!.rect
+      await browser.evaluate(`(() => {
+        const select = document.querySelector(${
+        JSON.stringify(
+          `[data-tao-studio-sketch="${persistedSketch.id}"] select[aria-label="Snapped rectangles"]`,
+        )
+      })
+        if (!(select instanceof HTMLSelectElement)) throw new Error('Missing snapped rectangle selector')
+        const option = [...select.options].find(candidate => candidate.value === ${JSON.stringify(retained.id)})
+        if (!(option instanceof HTMLOptionElement)) throw new Error('Missing retained snapped rectangle option')
+        option.selected = true
+      })()`)
+      await browser.click(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)
+      const unsnappedCatalog = await waitForSketchCatalog(
+        sketchCatalogPath,
+        catalog =>
+          catalog.revision > incrementalUndoCatalog.revision
+          && catalog.sketches[0]?.rects.some(rect => rect.id === retained.id) === true
+          && catalog.sketches[0]?.snapped.length === 3,
+      )
+      Expect(unsnappedCatalog.sketches[0]?.rects.find(rect => rect.id === retained.id)).toEqual(retained)
+      Expect(unsnappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
+      const unsnappedSource = await FS.readText(generatedSketchPath)
+      Expect(unsnappedSource).not.toContain(studioRectTag(retained.id))
+      Expect(unsnappedSource).toContain('render Row()')
+
+      // Clear the remaining snapped tree before the isolated overlap/confirmation transaction.
+      await browser.waitFor(
+        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
+          ?.disabled === false`,
+      )
+      await browser.click(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)
+      const fullyUnsnappedCatalog = await waitForSketchCatalog(
+        sketchCatalogPath,
+        catalog =>
+          catalog.revision > unsnappedCatalog.revision
+          && catalog.sketches[0]?.rects.length === 5
+          && catalog.sketches[0]?.snapped.length === 0,
+      )
+      Expect(await FS.readText(generatedSketchPath)).toContain(`Placeholder("View1")`)
+
+      const firstOverlap = { height: 30, width: 40, x: 200, y: 4 }
+      await drawSketchRectangle(browser, persistedSketch.id, firstOverlap)
+      const overlapOne = await waitForSketchCatalog(
+        sketchCatalogPath,
+        catalog => catalog.revision > fullyUnsnappedCatalog.revision && catalog.sketches[0]?.rects.length === 6,
+      )
+      const firstOverlapId = overlapOne.sketches[0]!.rects.at(-1)!.id
+      await drawSketchRectangle(browser, persistedSketch.id, { height: 20, width: -30, x: 250, y: 14 })
+      const overlapTwo = await waitForSketchCatalog(
+        sketchCatalogPath,
+        catalog => catalog.revision > overlapOne.revision && catalog.sketches[0]?.rects.length === 7,
+      )
+      const secondOverlapId = overlapTwo.sketches[0]!.rects.at(-1)!.id
+      await shiftSelectSketchRectangle(browser, persistedSketch.id, firstOverlapId)
+      const beforeOverlapSource = await FS.readText(generatedSketchPath)
+      const beforeOverlapCatalog = smokeSketchCatalog(await FS.readText(sketchCatalogPath))
+      await browser.waitFor(
+        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
+          ?.disabled === false`,
+      )
+      await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
+      await browser.waitFor(
+        `document.querySelector(${
+          JSON.stringify(
+            `[data-tao-studio-sketch-snap-proposal="${persistedSketch.id}"]`,
+          )
+        }) instanceof HTMLElement`,
+      )
+      Expect(
+        await browser.evaluate<string>(
+          `document.querySelector(${
+            JSON.stringify(
+              `[data-tao-studio-sketch-snap-diff]`,
+            )
+          })?.textContent ?? ''`,
+        ),
+      ).toContain('+++')
+      await clickProposalButton(browser, persistedSketch.id, 'Cancel')
+      await browser.waitFor(
+        `document.querySelector(${
+          JSON.stringify(
+            `[data-tao-studio-sketch-snap-proposal="${persistedSketch.id}"]`,
+          )
+        }) === null`,
+      )
+      Expect(await FS.readText(generatedSketchPath)).toBe(beforeOverlapSource)
+      Expect(smokeSketchCatalog(await FS.readText(sketchCatalogPath))).toEqual(beforeOverlapCatalog)
+
+      await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
+      await browser.waitFor(
+        `document.querySelector(${
+          JSON.stringify(
+            `[data-tao-studio-sketch-snap-proposal="${persistedSketch.id}"]`,
+          )
+        }) instanceof HTMLElement`,
+      )
+      await clickProposalButton(browser, persistedSketch.id, 'Apply')
+      const overlapAppliedCatalog = await waitForSketchCatalog(
+        sketchCatalogPath,
+        catalog =>
+          catalog.revision > beforeOverlapCatalog.revision
+          && catalog.sketches[0]?.snapped.some(item => item.rect.id === firstOverlapId) === true
+          && catalog.sketches[0]?.snapped.some(item => item.rect.id === secondOverlapId) === true,
+      )
+      const overlapAppliedSource = await FS.readText(generatedSketchPath)
+      Expect(overlapAppliedSource).not.toBe(beforeOverlapSource)
+      Expect(overlapAppliedSource).toContain(studioRectTag(firstOverlapId))
+      Expect(overlapAppliedSource).toContain(studioRectTag(secondOverlapId))
+
+      await browser.waitFor(
+        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)})
+          ?.disabled === false`,
+      )
+      await browser.click(`[data-tao-studio-sketch-snap-undo="${persistedSketch.id}"]`)
+      const undoneCatalog = await waitForSketchCatalog(
+        sketchCatalogPath,
+        catalog =>
+          catalog.revision > overlapAppliedCatalog.revision
+          && catalog.sketches[0]?.rects.some(rect => rect.id === firstOverlapId) === true
+          && catalog.sketches[0]?.rects.some(rect => rect.id === secondOverlapId) === true,
+      )
+      Expect(await FS.readText(generatedSketchPath)).toBe(beforeOverlapSource)
+      Expect(undoneCatalog.sketches[0]?.rectOrder).toEqual(beforeOverlapCatalog.sketches[0]?.rectOrder)
+      Expect(undoneCatalog.sketches[0]?.rects).toEqual(beforeOverlapCatalog.sketches[0]?.rects)
+      Expect(undoneCatalog.sketches[0]?.snapped).toEqual(beforeOverlapCatalog.sketches[0]?.snapped)
       await browser.captureScreenshot('studio-completed-interactions')
       Expect(await FS.readText(sourcePath)).toBe(typedSource)
       Expect(browser.browserFailures()).toEqual([])
@@ -319,7 +548,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     await FS.remove(projectRoot)
   }
   Expect(await FS.exists(projectRoot)).toBe(false)
-}, 120_000)
+}, 180_000)
 
 function startPreviewServer(port: number): { stop(): void; url: string } {
   const server = Bun.serve({
@@ -475,13 +704,25 @@ async function waitForSource(path: string, predicate: (source: string) => boolea
   Errors.throwHostEnvironment(`Timed out waiting for Studio source change. Last source:\n${source}`)
 }
 
+type SmokeSketchRect = Readonly<{
+  content?: string
+  height: number
+  id: string
+  kind: string
+  width: number
+  x: number
+  y: number
+}>
+
 type SmokeSketchCatalog = Readonly<{
   revision: number
   sketches: readonly Readonly<{
     height: number
     id: string
     name: string
-    rects: readonly Readonly<{ height: number; id: string; kind: string; width: number }>[]
+    rectOrder: readonly string[]
+    rects: readonly SmokeSketchRect[]
+    snapped: readonly Readonly<{ rect: SmokeSketchRect }>[]
     width: number
   }>[]
 }>
@@ -527,6 +768,102 @@ async function waitForSketchRect(path: string, previousRevision: number): Promis
     await Time.sleep(100)
   }
   Errors.throwHostEnvironment(`Timed out waiting for a persisted Studio rectangle; last=${JSON.stringify(catalog)}`)
+}
+
+async function waitForSketchCatalog(
+  path: string,
+  predicate: (catalog: SmokeSketchCatalog) => boolean,
+): Promise<SmokeSketchCatalog> {
+  const deadline = Date.now() + 30_000
+  let catalog: SmokeSketchCatalog | undefined
+  while (Date.now() < deadline) {
+    catalog = smokeSketchCatalog(await FS.readText(path))
+    if (predicate(catalog)) {
+      return catalog
+    }
+    await Time.sleep(100)
+  }
+  Errors.throwHostEnvironment(
+    `Timed out waiting for a Studio sketch catalog transition; last=${JSON.stringify(catalog)}`,
+  )
+}
+
+async function drawSketchRectangle(
+  browser: StudioCdp,
+  sketchId: string,
+  rectangle: Readonly<{ height: number; width: number; x: number; y: number }>,
+): Promise<void> {
+  await browser.evaluate(`(() => {
+    const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
+    if (!(board instanceof HTMLElement)) throw new Error('Missing Studio sketch board')
+    const bounds = board.getBoundingClientRect()
+    const pointerId = 71
+    const event = (type, x, y) => new PointerEvent(type, {
+      bubbles: true,
+      button: 0,
+      buttons: type === 'pointerup' ? 0 : 1,
+      clientX: bounds.left + x,
+      clientY: bounds.top + y,
+      isPrimary: true,
+      pointerId,
+    })
+    const capture = board.setPointerCapture
+    const release = board.releasePointerCapture
+    board.setPointerCapture = () => {}
+    board.releasePointerCapture = () => {}
+    try {
+      board.dispatchEvent(event('pointerdown', ${rectangle.x}, ${rectangle.y}))
+      board.dispatchEvent(event('pointermove', ${rectangle.x + rectangle.width}, ${rectangle.y + rectangle.height}))
+      board.dispatchEvent(event('pointerup', ${rectangle.x + rectangle.width}, ${rectangle.y + rectangle.height}))
+    } finally {
+      board.setPointerCapture = capture
+      board.releasePointerCapture = release
+    }
+  })()`)
+}
+
+async function shiftSelectSketchRectangle(browser: StudioCdp, sketchId: string, rectId: string): Promise<void> {
+  await browser.evaluate(`(() => {
+    const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
+    const rect = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-rect="${rectId}"]`)})
+    if (!(board instanceof HTMLElement) || !(rect instanceof HTMLElement)) {
+      throw new Error('Missing Studio sketch selection target')
+    }
+    const bounds = rect.getBoundingClientRect()
+    rect.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: bounds.left + bounds.width / 2,
+      clientY: bounds.top + bounds.height / 2,
+      isPrimary: true,
+      pointerId: 72,
+      shiftKey: true,
+    }))
+  })()`)
+}
+
+async function clickProposalButton(browser: StudioCdp, sketchId: string, label: 'Apply' | 'Cancel'): Promise<void> {
+  await browser.evaluate(`(() => {
+    const proposal = document.querySelector(${
+    JSON.stringify(
+      `[data-tao-studio-sketch-snap-proposal="${sketchId}"]`,
+    )
+  })
+    const button = proposal instanceof HTMLElement
+      ? [...proposal.querySelectorAll('button')].find(candidate => candidate.textContent === ${JSON.stringify(label)})
+      : undefined
+    if (!(button instanceof HTMLButtonElement)) throw new Error('Missing Studio Snap proposal ${label} button')
+    button.click()
+  })()`)
+}
+
+function studioRectTag(rectId: string): string {
+  let encoded = ''
+  for (let index = 0; index < rectId.length; index += 1) {
+    encoded += rectId.charCodeAt(index).toString(16).padStart(4, '0')
+  }
+  return `#studio_rect_${encoded}`
 }
 
 async function waitForSourceOrStudioError(
