@@ -279,9 +279,13 @@ backgrounded could sit for up to the 15s backoff cap after returning. `Connected
 listens for the RN `AppState` transition into `active` and calls `client.reconnect()` immediately,
 gated on the client already being `disconnected` — never mid-attempt or already connected, so a
 healthy session is never torn down just because the app came forward. Covered by
-`shouldRedialOnForeground` unit tests; not yet proven against a real background/foreground cycle,
-on the phone or the simulator (the simulator does not suspend an app the way iOS does on a physical
-phone, so backgrounding it would not exercise the drop this fixes).
+`shouldRedialOnForeground` unit tests. Verified on the simulator for the half that was checkable
+there: pressed Home, waited, reopened via the companion's own URL scheme, and the gateway log shows
+no new `device connection` line and the cell stayed mounted with no overlay — a healthy connection
+survives a real background/foreground cycle without a needless reconnect. The simulator's socket
+does not actually drop while backgrounded the way a physical device's can, so the other half — a
+genuine disconnect-while-backgrounded triggering an immediate redial on foreground — is proven only
+by the unit tests, not yet by a live repro on the phone.
 
 Cable link-local carries Metro by design, not yet by proof: `preferredLanIPv4` already prefers a
 `169.254.x.x` interface over the normal LAN address when one is present, which is what macOS assigns
