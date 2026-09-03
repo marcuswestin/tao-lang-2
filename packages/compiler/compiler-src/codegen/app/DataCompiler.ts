@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import { type Compiled, gen, LocalDataBindings, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { compileDeclarationIdentity } from './declaration-identity'
 
 /**
  * The stdlib Local declaration's own canonical identity, restated here because the compiler emits
@@ -55,9 +56,20 @@ export const DataCompiler = {
   EntityDataDefinition(entity: AST.EntityDataDeclaration): Compiled {
     const order = entity.block.entries.find(AST.isDataDefaultOrder)
     const fields = entity.block.entries.filter(AST.isEntityDataField)
+    const policies = AST.entityCommandPoliciesOf(entity)
+    const surfaced = policies.filter(policy => !policy.hide).flatMap(policy => policy.commands.map(resolveRef))
+    const hidden = policies.filter(policy => policy.hide).flatMap(policy => policy.commands.map(resolveRef))
     return gen`
       [${gen.jsLiteral(entity.singularName)}]: {
         collection: ${gen.jsLiteral(entity.name)},
+        ${
+      policies.length === 0
+        ? gen.noop()
+        : gen`commandPolicy: {
+          surfaced: [${gen.join(surfaced, command => gen`${compileDeclarationIdentity(command)}.canonical`)}],
+          hidden: [${gen.join(hidden, command => gen`${compileDeclarationIdentity(command)}.canonical`)}],
+        },`
+    }
         ${
       order
         ? gen`defaultOrder: { field: ${gen.jsLiteral(order.fieldName)}, direction: ${

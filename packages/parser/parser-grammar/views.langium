@@ -14,6 +14,11 @@ entry ViewsGrammarEntrypoint:
 TagStatement:
     tag=TagOrHexColor;
 
+// A view may exclude entity-default verbs from this occurrence's surface. The command remains in
+// the catalog and may still be promoted explicitly through `Commands { ... }`.
+ViewCommandExclusion:
+    'hide' commands+=[CommandDeclaration:ID] (',' commands+=[CommandDeclaration:ID])*;
+
 // The one renderable declaration kind. A view either declares its own parameters and body —
 // optionally promising a typed answer with `responds` — or passes through to a package member:
 // `public view Button = native.Button`. The alias publishes the target under this name; its

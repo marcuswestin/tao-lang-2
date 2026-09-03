@@ -3,7 +3,7 @@ import { beginActionLaunch, deferTransactionCommit, suspendAcrossLaunch } from '
 import { RuntimeAssert } from './TR-assert'
 import type { TaoDesign } from './TR-design'
 import { UnexpectedBehaviorError, UserInputError } from './TR-errors'
-import { resetInteractionOutline } from './TR-interaction-outline'
+import { resetInteractionRuntime } from './TR-interaction-catalog'
 import { ownerOfNavigation, RuntimeAppDefinition } from './TR-navigation-app'
 import { NavigationAppHost } from './TR-navigation-app-host'
 import {
@@ -476,7 +476,7 @@ export const NavigationControls = {
     beginActionLaunch()
     beginNavigationRestorationTest()
     resetNavigationRuntime()
-    resetInteractionOutline()
+    resetInteractionRuntime()
   },
 
   /**
@@ -492,7 +492,7 @@ export const NavigationControls = {
     beginActionLaunch()
     await beginNavigationRestorationLaunch(options)
     resetNavigationRuntime()
-    resetInteractionOutline()
+    resetInteractionRuntime()
   },
 
   endTest(): void {

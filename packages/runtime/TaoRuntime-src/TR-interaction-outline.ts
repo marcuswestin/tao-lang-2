@@ -1,7 +1,8 @@
 import React from 'react'
+import { DataControls, type TaoEntityCommandPolicy } from './TR-data'
 import { labelCorpus, primaryLabel } from './TR-interaction-labels'
 import type { Subscription } from './TR-navigation-state'
-import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
+import type { TaoRuntimeJson } from './TR-runtime-capture'
 import type { TaoProps } from './TR-TaoProps'
 
 /** TaoOutlineTextPath is the member path one row-bound text reads from the row value. */
@@ -33,7 +34,20 @@ export type TaoOutlineControlDescriptor = Readonly<{
   view: string
 }>
 
-export type TaoOutlineDescriptor = TaoOutlineControlDescriptor | TaoOutlineLoopDescriptor
+/** A sibling region groups the concrete roots beside one nav without adding a native wrapper. */
+export type TaoOutlineSiblingRegionDescriptor = Readonly<{
+  declaration: string
+  kind: 'region'
+  label?: string
+  members: readonly string[]
+  nav: string
+  role: 'nav-siblings'
+}>
+
+export type TaoOutlineDescriptor =
+  | TaoOutlineControlDescriptor
+  | TaoOutlineLoopDescriptor
+  | TaoOutlineSiblingRegionDescriptor
 
 /**
  * TaoOutlineTable is what one module emits: its static outline nodes, keyed within the module. The
@@ -49,6 +63,7 @@ export type TaoOutlineTable = Readonly<{
 export type TaoOutlineDescribed<DescriptorT extends TaoOutlineDescriptor> = DescriptorT & Readonly<{ identity: string }>
 export type TaoOutlineLoopNode = TaoOutlineDescribed<TaoOutlineLoopDescriptor>
 export type TaoOutlineControlNode = TaoOutlineDescribed<TaoOutlineControlDescriptor>
+export type TaoOutlineSiblingRegionNode = TaoOutlineDescribed<TaoOutlineSiblingRegionDescriptor>
 /** The described table keeps each key's exact node type, so a site reads the node kind it references. */
 export type TaoOutlineDescribedTable<TableT extends TaoOutlineTable = TaoOutlineTable> = {
   readonly [KeyT in keyof TableT['nodes']]: TaoOutlineDescribed<TableT['nodes'][KeyT]>
@@ -77,7 +92,35 @@ export type TaoOutlineEntry = {
   label: () => string | undefined
   parent?: string
   provenance: TaoOutlineProvenance
+  live?: TaoOutlineLiveEntry
 }
+
+export type TaoInteractionBounds = Readonly<{ height: number; width: number; x: number; y: number }>
+
+/** TaoOutlineLiveEntry is private mounted capability state and never enters a public snapshot. */
+export type TaoOutlineLiveEntry = {
+  activate?(): unknown
+  active?: () => boolean
+  blur?(): void
+  commandPolicy?: TaoEntityCommandPolicy
+  enabled?: () => boolean
+  engage?(): void
+  entityType?: string
+  focus?(): void
+  measure?(): TaoInteractionBounds | undefined
+  modal?: boolean
+  primary?: boolean
+  runtimeValue?: { evaluate(): { jsValue: unknown } }
+  scrollIntoView?(): void
+}
+
+/** TaoOutlineLiveNode is the ordered mounted record consumed only by the attention reducer. */
+export type TaoOutlineLiveNode =
+  & TaoOutlineEntry
+  & Readonly<{
+    mount: number
+    order: number
+  }>
 
 /** TaoOutlineRowRoot is what a loop row hands the native root that renders it. */
 export type TaoOutlineRowRoot = Readonly<{ label: string }>
@@ -90,6 +133,8 @@ export type TaoOutlineRowRoot = Readonly<{ label: string }>
  */
 export class InteractionOutline implements Subscription {
   #entries = new Map<number, TaoOutlineEntry>()
+  #coalesced = new Map<string, { entry: TaoOutlineEntry; key: number; refs: number }>()
+  #liveListeners = new Set<() => void>()
   #listeners = new Set<() => void>()
   #sequence = 0
   #revision = 0
@@ -114,11 +159,48 @@ export class InteractionOutline implements Subscription {
   register(entry: TaoOutlineEntry): () => void {
     const key = ++this.#sequence
     this.#entries.set(key, entry)
-    this.refresh()
+    this.changed()
     return () => {
       this.#entries.delete(key)
-      this.refresh()
+      this.changed()
     }
+  }
+
+  /** registerCoalesced ref-counts concrete roots that describe one wrapper-free logical region. */
+  registerCoalesced(identity: string, entry: TaoOutlineEntry): () => void {
+    const existing = this.#coalesced.get(identity)
+    if (existing) {
+      existing.refs += 1
+      existing.entry = entry
+      this.#entries.set(existing.key, entry)
+      this.changed()
+      return () => this.withdrawCoalesced(identity)
+    }
+    const key = ++this.#sequence
+    this.#coalesced.set(identity, { entry, key, refs: 1 })
+    this.#entries.set(key, entry)
+    this.changed()
+    return () => this.withdrawCoalesced(identity)
+  }
+
+  /** update replaces one mounted entry's live readers without changing its render order. */
+  update(mount: number, entry: TaoOutlineEntry): void {
+    if (!this.#entries.has(mount)) {
+      return
+    }
+    this.#entries.set(mount, entry)
+    this.changed()
+  }
+
+  /** liveNodes is the private ordered channel; callers must never publish these records. */
+  liveNodes(): readonly TaoOutlineLiveNode[] {
+    return [...this.#entries.entries()].map(([mount, entry], order) => ({ ...entry, mount, order }))
+  }
+
+  /** subscribeLive observes structure and capability changes independently of public snapshots. */
+  subscribeLive(listener: () => void): () => void {
+    this.#liveListeners.add(listener)
+    return () => this.#liveListeners.delete(listener)
   }
 
   /** read evaluates the outline as it is right now: a reader's act, so it is where the corpus is read. */
@@ -172,8 +254,30 @@ export class InteractionOutline implements Subscription {
   /** clear empties the outline between checks, the way every other runtime registry resets. */
   clear(): void {
     this.#entries.clear()
+    this.#coalesced.clear()
     this.#fingerprint = undefined
+    this.changed()
+  }
+
+  private changed(): void {
+    for (const listener of [...this.#liveListeners]) {
+      listener()
+    }
     this.refresh()
+  }
+
+  private withdrawCoalesced(identity: string): void {
+    const record = this.#coalesced.get(identity)
+    if (!record) {
+      return
+    }
+    record.refs -= 1
+    if (record.refs > 0) {
+      return
+    }
+    this.#coalesced.delete(identity)
+    this.#entries.delete(record.key)
+    this.changed()
   }
 }
 
@@ -182,12 +286,6 @@ function fingerprintOf(snapshot: TaoOutlineSnapshot): string {
 }
 
 export const interactionOutline = new InteractionOutline()
-
-registerRuntimeCaptureDomain({
-  capture: () => interactionOutline.read() as unknown as TaoRuntimeJson,
-  domain: 'interaction',
-  version: 1,
-})
 
 /** resetInteractionOutline joins the test and launch boundaries beside the navigation reset. */
 export function resetInteractionOutline(): void {
@@ -211,6 +309,11 @@ export function describeOutlineTable<TableT extends TaoOutlineTable>(table: Tabl
  * an item knows its collection, a control its row, and a collection the region it sits in.
  */
 const OutlineParentContext = React.createContext<string | undefined>(undefined)
+
+/** useOutlineParentIdentity exposes the mounted structural scope to interaction-owned hooks. */
+export function useOutlineParentIdentity(): string | undefined {
+  return React.useContext(OutlineParentContext)
+}
 
 /** OutlineScope provides one node's identity as the parent of everything rendered inside it. */
 export function OutlineScope(props: { children?: React.ReactNode; identity: string | undefined }): React.ReactNode {
@@ -250,6 +353,7 @@ function useRegisteredNode(entry: TaoOutlineEntry | undefined): void {
       identity,
       kind: registered.kind,
       label: () => current.current?.label(),
+      ...(registered.live === undefined ? {} : { live: liveEntry(current) }),
       ...(parent === undefined ? {} : { parent }),
       provenance: registered.provenance,
     }
@@ -264,6 +368,72 @@ function useRegisteredNode(entry: TaoOutlineEntry | undefined): void {
       interactionOutline.refresh()
     }
   })
+}
+
+function useRegisteredCoalescedNode(entry: TaoOutlineEntry | undefined): void {
+  const current = React.useRef(entry)
+  current.current = entry
+  const identity = entry?.identity
+  React.useEffect(() => {
+    const registered = current.current
+    if (!registered || identity === undefined) {
+      return
+    }
+    const mounted: TaoOutlineEntry = {
+      corpus: () => current.current?.corpus?.() ?? [],
+      identity,
+      kind: registered.kind,
+      label: () => current.current?.label(),
+      ...(registered.live === undefined ? {} : { live: liveEntry(current) }),
+      ...(registered.parent === undefined ? {} : { parent: registered.parent }),
+      provenance: registered.provenance,
+    }
+    if (registered.corpus === undefined) {
+      delete mounted.corpus
+    }
+    return interactionOutline.registerCoalesced(identity, mounted)
+  }, [identity])
+  React.useEffect(() => {
+    if (identity !== undefined) {
+      interactionOutline.refresh()
+    }
+  })
+}
+
+function liveEntry(current: React.MutableRefObject<TaoOutlineEntry | undefined>): TaoOutlineLiveEntry {
+  const live: TaoOutlineLiveEntry = {}
+  for (
+    const key of [
+      'commandPolicy',
+      'entityType',
+      'modal',
+      'primary',
+      'runtimeValue',
+    ] as const
+  ) {
+    Object.defineProperty(live, key, { enumerable: true, get: () => current.current?.live?.[key] })
+  }
+  for (
+    const key of [
+      'activate',
+      'active',
+      'blur',
+      'enabled',
+      'engage',
+      'focus',
+      'measure',
+      'scrollIntoView',
+    ] as const
+  ) {
+    Object.defineProperty(live, key, {
+      enumerable: true,
+      get: () => {
+        const operation = current.current?.live?.[key] as ((...arguments_: never[]) => unknown) | undefined
+        return operation === undefined ? undefined : (...arguments_: never[]) => operation(...arguments_)
+      },
+    })
+  }
+  return live
 }
 
 /** useOutlineCollection registers one mounted loop and returns the identity its rows hang under. */
@@ -296,9 +466,10 @@ const rowRoots = new WeakMap<object, TaoOutlineRowRoot>()
  */
 export function useOutlineItem(
   descriptor: TaoOutlineLoopNode | undefined,
-  value: { jsValue: unknown },
+  value: { evaluate(): { jsValue: unknown }; jsValue: unknown },
   key: number | string,
   index: number,
+  activate?: () => unknown,
 ): { identity: string | undefined; label: string | undefined } {
   const collection = React.useContext(OutlineParentContext)
   const identity = descriptor && collection !== undefined ? `${collection}/${String(key)}` : undefined
@@ -308,14 +479,27 @@ export function useOutlineItem(
   }
   useRegisteredNode(
     descriptor && identity !== undefined
-      ? {
-        corpus: () => labelCorpus(descriptor, value.jsValue),
-        identity,
-        kind: 'item',
-        label: () => label,
-        ...(collection === undefined ? {} : { parent: collection }),
-        provenance: itemProvenance(descriptor, value.jsValue, key),
-      }
+      ? (() => {
+        const entity = DataControls.EntityInteraction(value.jsValue)
+        return {
+          corpus: () => labelCorpus(descriptor, value.jsValue),
+          identity,
+          kind: 'item',
+          label: () => label,
+          live: {
+            ...(activate === undefined ? {} : { activate }),
+            ...(entity === undefined
+              ? {}
+              : {
+                commandPolicy: entity.policy,
+                entityType: entity.entity,
+                runtimeValue: value,
+              }),
+          },
+          ...(collection === undefined ? {} : { parent: collection }),
+          provenance: itemProvenance(descriptor, value.jsValue, key),
+        }
+      })()
       : undefined,
   )
   return { identity, label }
@@ -338,22 +522,74 @@ export function rowRootOf(value: object): TaoOutlineRowRoot | undefined {
  * wired an event. The outermost control in a caller chain is the one that exists: a view whose root
  * is itself a control renders one button, not two.
  */
-export function useOutlineOccurrence(props: TaoProps | undefined): void {
+export type TaoInteractionOccurrence = Readonly<{
+  control?: string
+  capabilities: TaoOutlineLiveEntry
+  region?: string
+  regionDeclaration?: string
+  regionSubjects?: readonly string[]
+  scope: string
+}>
+
+export function useOutlineOccurrence(
+  props: TaoProps | undefined,
+  owner?: TaoInteractionOccurrence,
+): TaoInteractionOccurrence {
   const control = props?.interaction?.control
+  const region = props?.interaction?.region
   const parent = React.useContext(OutlineParentContext)
   const sequence = useMountSequence()
   const wrapped = control !== undefined && controlInChain(props?.callerProps) !== undefined
-  useRegisteredNode(
-    control && !wrapped
+  const scope = `view#${sequence}`
+  const regionIdentity = region ? siblingRegionIdentity(region.identity, owner?.scope ?? parent ?? scope) : undefined
+  const capabilities = React.useRef<TaoOutlineLiveEntry>({}).current
+  const effectiveRegionIdentity = regionIdentity ?? owner?.region
+  useRegisteredCoalescedNode(
+    region && regionIdentity !== undefined
       ? {
-        identity: `${control.identity}#${sequence}`,
+        identity: regionIdentity,
+        kind: 'region',
+        label: () => region.label,
+        live: { active: () => true },
+        ...(parent === undefined ? {} : { parent }),
+        provenance: { declaration: region.declaration, nav: region.nav, role: region.role },
+      }
+      : undefined,
+  )
+  const controlIdentity = control && !wrapped ? `${control.identity}#${sequence}` : undefined
+  useRegisteredNode(
+    control && controlIdentity !== undefined
+      ? {
+        identity: controlIdentity,
         kind: control.role,
         label: () => control.label ?? control.view,
-        ...(parent === undefined ? {} : { parent }),
+        live: capabilities,
+        ...((effectiveRegionIdentity ?? parent) === undefined ? {} : { parent: effectiveRegionIdentity ?? parent }),
         provenance: { occurrence: control.identity },
       }
       : undefined,
   )
+  return {
+    capabilities,
+    ...(controlIdentity === undefined ? {} : { control: controlIdentity }),
+    ...(regionIdentity === undefined
+      ? {
+        ...(owner?.region === undefined ? {} : { region: owner.region }),
+        ...(owner?.regionDeclaration === undefined ? {} : { regionDeclaration: owner.regionDeclaration }),
+        ...(owner?.regionSubjects === undefined ? {} : { regionSubjects: owner.regionSubjects }),
+      }
+      : {
+        region: regionIdentity,
+        regionDeclaration: region?.declaration,
+        regionSubjects: region!.members,
+      }),
+    scope,
+  }
+}
+
+/** siblingRegionIdentity coalesces roots within one owner occurrence and separates duplicate owners. */
+export function siblingRegionIdentity(descriptor: string, ownerScope: string): string {
+  return `${descriptor}#${ownerScope}`
 }
 
 function controlInChain(props: TaoProps | undefined): TaoOutlineControlNode | undefined {

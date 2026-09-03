@@ -375,6 +375,16 @@ export function commandDoClauseOf(command: AST.CommandDeclaration): AST.CommandD
   return commandDoClausesOf(command)[0]
 }
 
+/** entityCommandPoliciesOf returns one entity's ordered default or hidden command mentions. */
+export function entityCommandPoliciesOf(entity: AST.EntityDataDeclaration): AST.EntityCommandPolicy[] {
+  return entity.block.entries.filter(AST.isEntityCommandPolicy)
+}
+
+/** viewCommandExclusionsOf returns every command directly excluded by one view occurrence shape. */
+export function viewCommandExclusionsOf(view: AST.ViewDeclaration): AST.ViewCommandExclusion[] {
+  return view.block?.statements.filter(AST.isViewCommandExclusion) ?? []
+}
+
 /** configurationEntryName returns the member, slot or reference one configuration entry names. */
 export function configurationEntryName(entry: AST.ConfigurationEntry): string | undefined {
   return entry.name ?? entry.label ?? entry.reference?.$refText

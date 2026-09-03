@@ -896,11 +896,18 @@ function ForEachItem(props: {
   runtimeValue: TR.Value<any>
   select?: (value: TR.Value<any>, index: number) => unknown
 }): React.ReactNode {
-  const outline = useOutlineItem(props.descriptor, props.runtimeValue, props.itemKey, props.index)
+  const outline = useOutlineItem(
+    props.descriptor,
+    props.runtimeValue,
+    props.itemKey,
+    props.index,
+    props.select === undefined ? undefined : () => props.select!(props.runtimeValue, props.index),
+  )
   const content = props.render(props.runtimeValue, props.index)
   const row = props.select
     ? React.createElement(SelectableRow, {
       ...(outline.label === undefined ? {} : { accessibilityLabel: outline.label }),
+      ...(outline.identity === undefined ? {} : { identity: outline.identity }),
       onSelect: () => props.select!(props.runtimeValue, props.index),
     }, content)
     : content

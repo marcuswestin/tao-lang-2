@@ -14,12 +14,15 @@ public
 view Button(Title text, Press action(), Disabled boolean default false) {
    render inject Title, Press, Disabled, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Button', Layout)
+      const Interaction = TR.Interaction.FromVisualLayout(Layout)
       return TR.VisualNativeRoot(
         Layout,
         TR.Element(RN.Button, {
           accessibilityLabel: Title,
           disabled: Disabled,
-          onPress: () => Press.invoke(),
+          onBlur: () => TR.Interaction.Pressed(Interaction, false),
+          onFocus: () => TR.Interaction.Target(Interaction),
+          onPress: TR.Interaction.Activate(Interaction, () => Press.invoke()),
           testID: Tag,
           title: Title,
         }),
@@ -34,13 +37,16 @@ view FormButton(Title text, Press action(), Id text default "", Disabled boolean
    render inject Title, Press, Id, Disabled, Submitting, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('FormButton', Layout)
       const busy = Disabled || Submitting
+      const Interaction = TR.Interaction.FromVisualLayout(Layout)
       return TR.VisualNativeRoot(
         Layout,
         TR.Element(RN.Button, {
           accessibilityLabel: Title,
           accessibilityState: { busy: Submitting, disabled: busy },
           disabled: busy,
-          onPress: () => Press.invoke(),
+          onBlur: () => TR.Interaction.Pressed(Interaction, false),
+          onFocus: () => TR.Interaction.Target(Interaction),
+          onPress: TR.Interaction.Activate(Interaction, () => Press.invoke()),
           testID: Tag || Id || undefined,
           title: Submitting ? 'Saving…' : Title,
         }),
@@ -54,6 +60,7 @@ public
 view Switch(Value boolean, Change action(boolean), Label text, Disabled boolean default false) {
    render inject Value, Change, Label, Disabled, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Switch', Layout)
+      const Interaction = TR.Interaction.FromVisualLayout(Layout)
       return TR.Element(
         RN.View,
         { ...TR.VisualNativeProps(Layout, Tag), style: { alignItems: 'center', flexDirection: 'row', gap: 8 } },
@@ -61,7 +68,12 @@ view Switch(Value boolean, Change action(boolean), Label text, Disabled boolean 
           accessibilityLabel: Label,
           disabled: Disabled,
           key: 'control',
-          onValueChange: (value: boolean) => Change.invoke(TR.Value(value)),
+          onBlur: () => TR.Interaction.Disengage(Interaction),
+          onFocus: () => TR.Interaction.Engage(Interaction),
+          onValueChange: (value: boolean) => {
+            TR.Interaction.Engage(Interaction)
+            return Change.invoke(TR.Value(value))
+          },
           value: Value,
         }),
         TR.Element(RN.Text, { key: 'label' }, Label),
@@ -76,6 +88,7 @@ view Slider(Value number, Change action(number), Label text, Minimum number defa
    render inject Value, Change, Label, Minimum, Maximum, Disabled, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Slider', Layout)
       const host = TR.Hosts.Slider()
+      const Interaction = TR.Interaction.FromVisualLayout(Layout)
       if (!host) {
         const step = (Maximum - Minimum) / 10
         return TR.Element(
@@ -85,7 +98,11 @@ view Slider(Value number, Change action(number), Label text, Minimum number defa
             accessibilityLabel: `Decrease ${Label}`,
             disabled: Disabled,
             key: 'decrease',
-            onPress: () => Change.invoke(TR.Value(Math.max(Minimum, Value - step))),
+            onFocus: () => TR.Interaction.Engage(Interaction),
+            onPress: () => {
+              TR.Interaction.Engage(Interaction)
+              return Change.invoke(TR.Value(Math.max(Minimum, Value - step)))
+            },
             title: '−',
           }),
           TR.Element(RN.Text, { key: 'reading' }, `${Label}: ${Value}`),
@@ -93,7 +110,11 @@ view Slider(Value number, Change action(number), Label text, Minimum number defa
             accessibilityLabel: `Increase ${Label}`,
             disabled: Disabled,
             key: 'increase',
-            onPress: () => Change.invoke(TR.Value(Math.min(Maximum, Value + step))),
+            onFocus: () => TR.Interaction.Engage(Interaction),
+            onPress: () => {
+              TR.Interaction.Engage(Interaction)
+              return Change.invoke(TR.Value(Math.min(Maximum, Value + step)))
+            },
             title: '+',
           }),
         )
@@ -104,7 +125,12 @@ view Slider(Value number, Change action(number), Label text, Minimum number defa
         disabled: Disabled,
         maximumValue: Maximum,
         minimumValue: Minimum,
-        onValueChange: (value: number) => Change.invoke(TR.Value(value)),
+        onBlur: () => TR.Interaction.Disengage(Interaction),
+        onFocus: () => TR.Interaction.Engage(Interaction),
+        onValueChange: (value: number) => {
+          TR.Interaction.Engage(Interaction)
+          return Change.invoke(TR.Value(value))
+        },
         value: Value,
       })
    ```
@@ -133,6 +159,7 @@ view Picker(Value text, Change action(text), Options list of text, Label text) {
    render inject Value, Change, Options, Label, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('Picker', Layout)
       const host = TR.Hosts.Picker()
+      const Interaction = TR.Interaction.FromVisualLayout(Layout)
       if (!host) {
         return TR.Element(
           RN.View,
@@ -141,7 +168,11 @@ view Picker(Value text, Change action(text), Options list of text, Label text) {
             TR.Element(RN.Button, {
               accessibilityState: { selected: option === Value },
               key: option,
-              onPress: () => Change.invoke(TR.Value(option)),
+              onFocus: () => TR.Interaction.Engage(Interaction),
+              onPress: () => {
+                TR.Interaction.Engage(Interaction)
+                return Change.invoke(TR.Value(option))
+              },
               title: option,
             })
           ),
@@ -152,7 +183,12 @@ view Picker(Value text, Change action(text), Options list of text, Label text) {
         {
           ...TR.VisualNativeProps(Layout, Tag),
           accessibilityLabel: Label,
-          onValueChange: (option: string) => Change.invoke(TR.Value(option)),
+          onBlur: () => TR.Interaction.Disengage(Interaction),
+          onFocus: () => TR.Interaction.Engage(Interaction),
+          onValueChange: (option: string) => {
+            TR.Interaction.Engage(Interaction)
+            return Change.invoke(TR.Value(option))
+          },
           selectedValue: Value,
         },
         ...Options.map((option: string) => TR.Element(host.Item, { key: option, label: option, value: option })),
@@ -167,6 +203,7 @@ view SegmentedControl(Value text, Change action(text), Options list of text, Lab
    render inject Value, Change, Options, Label, Layout @@layout, Tag @@tag ```ts
       TR.WarnUnhonoredLayout('SegmentedControl', Layout)
       const host = RN.Platform?.OS === 'ios' ? TR.Hosts.SegmentedControl() : undefined
+      const Interaction = TR.Interaction.FromVisualLayout(Layout)
       if (!host) {
         return TR.Element(
           RN.View,
@@ -179,7 +216,11 @@ view SegmentedControl(Value text, Change action(text), Options list of text, Lab
             TR.Element(RN.Button, {
               accessibilityState: { selected: option === Value },
               key: option,
-              onPress: () => Change.invoke(TR.Value(option)),
+              onFocus: () => TR.Interaction.Engage(Interaction),
+              onPress: () => {
+                TR.Interaction.Engage(Interaction)
+                return Change.invoke(TR.Value(option))
+              },
               title: option,
             })
           ),
@@ -188,7 +229,12 @@ view SegmentedControl(Value text, Change action(text), Options list of text, Lab
       return TR.Element(host, {
         ...TR.VisualNativeProps(Layout, Tag),
         accessibilityLabel: Label,
-        onValueChange: (option: string) => Change.invoke(TR.Value(option)),
+        onBlur: () => TR.Interaction.Disengage(Interaction),
+        onFocus: () => TR.Interaction.Engage(Interaction),
+        onValueChange: (option: string) => {
+          TR.Interaction.Engage(Interaction)
+          return Change.invoke(TR.Value(option))
+        },
         selectedIndex: Math.max(0, Options.indexOf(Value)),
         values: Options,
       })
@@ -204,6 +250,7 @@ view DatePicker(Value time, Change action(time), Label text) {
       TR.WarnUnhonoredLayout('DatePicker', Layout)
       const os = RN.Platform?.OS
       const host = os === 'ios' || os === 'android' ? TR.Hosts.DateTimePicker() : undefined
+      const Interaction = TR.Interaction.FromVisualLayout(Layout)
       if (!host) {
         const day = 24 * 60 * 60 * 1000
         return TR.Element(
@@ -212,14 +259,22 @@ view DatePicker(Value time, Change action(time), Label text) {
           TR.Element(RN.Button, {
             accessibilityLabel: `Previous ${Label}`,
             key: 'previous',
-            onPress: () => Change.invoke(TR.Value(Value - day)),
+            onFocus: () => TR.Interaction.Engage(Interaction),
+            onPress: () => {
+              TR.Interaction.Engage(Interaction)
+              return Change.invoke(TR.Value(Value - day))
+            },
             title: '‹',
           }),
           TR.Element(RN.Text, { key: 'reading' }, `${Label}: ${new Date(Value).toISOString().slice(0, 10)}`),
           TR.Element(RN.Button, {
             accessibilityLabel: `Next ${Label}`,
             key: 'next',
-            onPress: () => Change.invoke(TR.Value(Value + day)),
+            onFocus: () => TR.Interaction.Engage(Interaction),
+            onPress: () => {
+              TR.Interaction.Engage(Interaction)
+              return Change.invoke(TR.Value(Value + day))
+            },
             title: '›',
           }),
         )
@@ -230,9 +285,12 @@ view DatePicker(Value time, Change action(time), Label text) {
         mode: 'date',
         onChange: (_event: unknown, selected?: Date) => {
           if (selected) {
-            Change.invoke(TR.Value(selected.getTime()))
+            TR.Interaction.Engage(Interaction)
+            return Change.invoke(TR.Value(selected.getTime()))
           }
         },
+        onBlur: () => TR.Interaction.Disengage(Interaction),
+        onFocus: () => TR.Interaction.Engage(Interaction),
         value: new Date(Value),
       })
    ```

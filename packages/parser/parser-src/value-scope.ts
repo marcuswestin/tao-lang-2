@@ -72,6 +72,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'references' && AST.isDeclarationSlotReferenceBlock(context.container)) {
       return this.createCommandReferenceScope(context.container)
     }
+    if (
+      context.property === 'commands'
+      && (AST.isEntityCommandPolicy(context.container) || AST.isViewCommandExclusion(context.container))
+    ) {
+      return this.createCommandReferenceScope(context.container)
+    }
     if (context.property === 'importedDeclarations' && AST.isUseStatement(context.container)) {
       return this.createUseImportScope(context.container)
     }
@@ -199,10 +205,17 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return scope
   }
 
-  /** A toolbar lists commands: the declaring view's own, and every command the module can see. */
-  private createCommandReferenceScope(block: AST.DeclarationSlotReferenceBlock): Langium.Scope {
-    let scope = this.createScopeForNodes(AST.visibleFileDeclarations(block, AST.isCommandDeclaration))
-    const view = AST.findOwningView(block)
+  /** A command surface sees file-local, folder/imported, then occurrence-local commands. */
+  private createCommandReferenceScope(
+    node: AST.DeclarationSlotReferenceBlock | AST.EntityCommandPolicy | AST.ViewCommandExclusion,
+  ): Langium.Scope {
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isCommandDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isCommandDeclaration), scope)
+    const view = AST.findOwningView(node)
     if (AST.isViewDeclaration(view)) {
       scope = this.createScopeForNodes(AST.commandsOf(view), scope)
     }

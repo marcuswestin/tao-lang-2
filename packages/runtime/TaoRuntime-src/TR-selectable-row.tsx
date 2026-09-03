@@ -1,4 +1,5 @@
 import React from 'react'
+import { InteractionControls } from './TR-interaction-catalog'
 import { requireReactNativeRuntime } from './TR-react-native'
 
 /**
@@ -9,6 +10,7 @@ import { requireReactNativeRuntime } from './TR-react-native'
 export function SelectableRow(props: {
   accessibilityLabel?: string
   children?: React.ReactNode
+  identity?: string
   onSelect: () => unknown
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
@@ -18,7 +20,7 @@ export function SelectableRow(props: {
       ...(props.accessibilityLabel === undefined ? {} : { accessibilityLabel: props.accessibilityLabel }),
       accessibilityRole: 'button',
       accessible: true,
-      onPress: props.onSelect,
+      onPress: InteractionControls.ActivateIdentity(props.identity, props.onSelect),
     },
     props.children,
   )

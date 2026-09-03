@@ -15,7 +15,7 @@ const viewValidationMessages = {
   renderCount: (name: string) => `View '${name}' must declare exactly one render statement.`,
   renderLast: '`render` must be the last statement in a view body.',
   viewBody:
-    'Only supplied slots, let, state, query, action, command, slot, and render statements are allowed in view bodies.',
+    'Only supplied slots, hide, let, state, query, action, command, slot, and render statements are allowed in view bodies.',
   renderBlock:
     'Only let, render, view invocation, event, when, guard, and loop statements are allowed in render child blocks.',
   renderBlockAliasPlacement: '`let` bindings in render blocks must be declared before child view invocations.',
@@ -236,6 +236,7 @@ function validateViewBodyBlock(block: AST.Block, ctx: ValidationContext): void {
       || AST.isActionDeclaration(statement)
       || AST.isCommandDeclaration(statement)
       || AST.isDeclarationSlotFill(statement)
+      || AST.isViewCommandExclusion(statement)
       || AST.isTagStatement(statement)
       || AST.isRenderSlotDeclaration(statement)
     if (isViewBodySetupStatement) {

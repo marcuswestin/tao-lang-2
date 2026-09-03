@@ -91,6 +91,15 @@ export const ActionsCompiler = {
         gen`{
           identity: ${compileDeclarationIdentity(command)}.canonical,
           name: ${gen.jsLiteral(command.name)},
+          scope: ${compileCommandScope(command)},
+          static: {
+            ${compileStaticCommandMember(command, 'Title', 'title')}
+            ${compileStaticCommandMember(command, 'Description', 'description')}
+            ${compileStaticCommandMember(command, 'Summary', 'summary')}
+            ${compileStaticCommandMember(command, 'Label', 'label')}
+            ${compileStaticCommandMember(command, 'Icon', 'icon')}
+            ${compileStaticShortcut(command)}
+          },
           slots: [
             ${
           gen.list(ASTUtils.commandSlots(command), slot =>
@@ -98,6 +107,7 @@ export const ActionsCompiler = {
               name: ${gen.jsLiteral(slot.name)},
               type: ${gen.jsLiteral(slot.typeName)},
               entity: ${slot.type.kind === 'entity' ? 'true' : 'false'},
+              required: ${slot.parameter.defaultValue === undefined ? 'true' : 'false'},
             },`)
         }
           ],
@@ -249,6 +259,23 @@ export const ActionsCompiler = {
     )`
   },
 } as const
+
+function compileCommandScope(command: AST.CommandDeclaration): Compiled {
+  const owner = AST.commandOwningView(command)
+  return owner
+    ? gen`{ kind: 'view', declaration: ${compileDeclarationIdentity(owner)}.canonical }`
+    : gen`{ kind: 'module' }`
+}
+
+function compileStaticCommandMember(command: AST.CommandDeclaration, source: string, target: string): Compiled {
+  const value = ASTUtils.commandStaticMemberText(command, source)
+  return value === undefined ? gen.noop() : gen`${target}: ${gen.jsLiteral(value)},`
+}
+
+function compileStaticShortcut(command: AST.CommandDeclaration): Compiled {
+  const shortcut = ASTUtils.commandStaticShortcut(command)
+  return shortcut === undefined ? gen.noop() : gen`key: ${gen.jsLiteral(shortcut)},`
+}
 
 function actionParameters(action: AST.ActionDeclaration): ActionParameter[] {
   return AST.parametersOf(action).map((parameter, index) => ({ index, parameter }))

@@ -43,7 +43,9 @@ primitive design
 
 // One renderable primitive. Every declaration made with `view` has this type; what a view can do
 // is inferred from its body, and how it appears is chosen where it is presented.
-primitive view
+primitive view with {
+   Commands list of command is [],
+}
 
 // A scene is a view that is presented rather than composed, and the only declaration that may fill
 // the slots a host reads. Keeping them here rather than on `view` is what makes chrome nothing

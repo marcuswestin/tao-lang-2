@@ -11,10 +11,10 @@ export const declarationSlotValidationMessages = {
   commandBlock: (name: string) => `Supplied slot '${name}' expects a command reference block.`,
   type: (name: string, expected: string, actual: string) =>
     `Supplied slot '${name}' expects ${expected}, got ${actual}.`,
-  foreignCommand: (name: string) => `Toolbar entry '${name}' must be a command.`,
-  duplicateCommand: (name: string) => `Toolbar references command '${name}' more than once.`,
-  unfilledCommand: (name: string, slot: string, owner: string) =>
-    `Toolbar command '${name}' needs a value for slot '${slot}', and ${owner} has no single parameter of that type to supply it.`,
+  foreignCommand: (name: string, surface = 'Toolbar') => `${surface} entry '${name}' must be a command.`,
+  duplicateCommand: (name: string, surface = 'Toolbar') => `${surface} references command '${name}' more than once.`,
+  unfilledCommand: (name: string, slot: string, owner: string, surface = 'Toolbar') =>
+    `${surface} command '${name}' needs a value for slot '${slot}', and ${owner} has no single parameter of that type to supply it.`,
 } as const
 
 export const declarationSlotValidationChecks = {
@@ -95,17 +95,18 @@ function directDeclarationOwner(
  * scene cannot supply unambiguously is the one a host could not offer, and is reported here.
  */
 function validateCommandReferences(block: AST.DeclarationSlotReferenceBlock, ctx: ValidationContext): void {
+  const surface = AST.isDeclarationSlotFill(block.$container) ? block.$container.name : 'Toolbar'
   const seen = new Set<AST.CommandDeclaration>()
   const seenNames = new Set<string>()
   for (const reference of block.references) {
     const command = reference.ref
     const name = reference.$refText
     if (command && !AST.isCommandDeclaration(command)) {
-      ctx.error(declarationSlotValidationMessages.foreignCommand(name), block)
+      ctx.error(declarationSlotValidationMessages.foreignCommand(name, surface), block)
       continue
     }
     if ((command && seen.has(command)) || (!command && seenNames.has(name))) {
-      ctx.error(declarationSlotValidationMessages.duplicateCommand(name), block)
+      ctx.error(declarationSlotValidationMessages.duplicateCommand(name, surface), block)
     }
     if (command) {
       seen.add(command)
@@ -114,7 +115,12 @@ function validateCommandReferences(block: AST.DeclarationSlotReferenceBlock, ctx
       const slot = unresolved[0]
       if (slot) {
         ctx.error(
-          declarationSlotValidationMessages.unfilledCommand(command.name, slot.name, owner?.name ?? 'the surface'),
+          declarationSlotValidationMessages.unfilledCommand(
+            command.name,
+            slot.name,
+            owner?.name ?? 'the surface',
+            surface,
+          ),
           block,
         )
       }

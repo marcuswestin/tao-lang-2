@@ -2,6 +2,11 @@ import React from 'react'
 import { AppSurfaceFrame } from './TR-app-shell'
 import { DataControls } from './TR-data'
 import { TaoErrorBoundary } from './TR-error-containment'
+import { InteractionControls } from './TR-interaction-catalog'
+import {
+  dispatchInteractionHardwareKey,
+  type TaoHardwareKeyEvent,
+} from './TR-interaction-keys'
 import { RuntimeAppDefinition } from './TR-navigation-app'
 import { browserNavigationHistoryDriver } from './TR-navigation-browser-history'
 import {
@@ -55,6 +60,28 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     navigationHostActive: focusedAuxiliary === undefined,
   }
   const toasts = props.app.renderToasts(appTaoProps)
+  const onKeyDown = runtime.Platform?.OS === 'web'
+    ? (event: TaoAppHostKeyEvent) => {
+      const handled = dispatchInteractionHardwareKey(
+        event.nativeEvent ?? event,
+        InteractionControls.PressKey,
+        {
+          navigatorPlatform: (globalThis as { navigator?: { platform?: string } }).navigator?.platform,
+          platformOS: runtime.Platform?.OS,
+        },
+      )
+      if (handled) {
+        event.preventDefault?.()
+      }
+    }
+    : undefined
+  const onPointerDown = runtime.Platform?.OS === 'web'
+    ? (event: TaoAppHostPointerEvent) => {
+      if (event.target === event.currentTarget) {
+        event.currentTarget?.focus?.()
+      }
+    }
+    : undefined
   // A navigator that hands the window to a native surface gets true window bounds; every other
   // navigator renders inside the app's safe-area scroll frame, exactly as before.
   const content = React.createElement(
@@ -84,9 +111,24 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
         })
         : null,
     ],
+    onKeyDown,
+    onPointerDown,
     style: navigationAppHostStyle,
+    tabIndex: runtime.Platform?.OS === 'web' ? 0 : undefined,
   })
 }
+
+type TaoAppHostKeyEvent =
+  & TaoHardwareKeyEvent
+  & Readonly<{
+    nativeEvent?: TaoHardwareKeyEvent
+    preventDefault?(): void
+  }>
+
+type TaoAppHostPointerEvent = Readonly<{
+  currentTarget?: { focus?(): void }
+  target?: unknown
+}>
 
 function useNavigationRestoration(app: RuntimeAppDefinition): boolean {
   const [ready, setReady] = React.useState(() => !app.restorationRequiresInitialLoad())

@@ -1,4 +1,6 @@
 import React from 'react'
+import { InteractionControls } from './TR-interaction-catalog'
+import { type TaoOutlineLiveEntry, useOutlineNode } from './TR-interaction-outline'
 import { nativeNavigationModule } from './TR-navigation-native-hosts'
 import { requireReactNativeRuntime } from './TR-react-native'
 
@@ -42,27 +44,69 @@ export function renderNativeSelectionTabs(options: {
   if (!nativeSelectionTabsAvailable()) {
     return undefined
   }
+  return React.createElement(NativeSelectionTabs, options)
+}
+
+function NativeSelectionTabs(options: {
+  items: readonly TaoNativeTabItem[]
+  activeKey: string
+  onActivate: (key: string) => void
+}): React.ReactNode {
   const os = requireReactNativeRuntime().Platform?.OS
   const module = nativeNavigationModule()!
   const BottomTabs = module.BottomTabs!
-  const BottomTabsScreen = module.BottomTabsScreen!
+  const identities = React.useRef(new Map<string, string>())
   return React.createElement(
     BottomTabs,
     {
       experimentalControlNavigationStateInJS: true,
       onNativeFocusChange: (event: { nativeEvent: { tabKey: string } }) => {
-        options.onActivate(event.nativeEvent.tabKey)
+        const key = event.nativeEvent.tabKey
+        InteractionControls.ActivateIdentity(identities.current.get(key), () => options.onActivate(key))()
       },
     },
     options.items.map(item =>
-      React.createElement(BottomTabsScreen, {
-        children: item.content,
-        isFocused: item.key === options.activeKey,
+      React.createElement(NativeSelectionTab, {
+        active: item.key === options.activeKey,
+        item,
         key: item.key,
-        tabKey: item.key,
-        title: item.title,
-        ...(os === 'ios' && item.iconName ? { icon: { sfSymbolName: item.iconName } } : {}),
+        onActivate: () => options.onActivate(item.key),
+        onIdentity: identity => {
+          identity === undefined ? identities.current.delete(item.key) : identities.current.set(item.key, identity)
+        },
+        os,
       })
     ),
   )
+}
+
+function NativeSelectionTab(props: {
+  active: boolean
+  item: TaoNativeTabItem
+  onActivate(): void
+  onIdentity(identity: string | undefined): void
+  os: string | undefined
+}): React.JSX.Element {
+  const BottomTabsScreen = nativeNavigationModule()!.BottomTabsScreen!
+  const capabilities = React.useRef<TaoOutlineLiveEntry>({}).current
+  const identity = useOutlineNode({
+    identity: `navigation:selection:${props.item.key}`,
+    kind: 'action',
+    label: () => props.item.title,
+    live: capabilities,
+    provenance: { selection: props.item.key },
+  })
+  capabilities.activate = props.onActivate
+  capabilities.enabled = () => true
+  React.useEffect(() => {
+    props.onIdentity(identity)
+    return () => props.onIdentity(undefined)
+  }, [identity, props.onIdentity])
+  return React.createElement(BottomTabsScreen, {
+    children: props.item.content,
+    isFocused: props.active,
+    tabKey: props.item.key,
+    title: props.item.title,
+    ...(props.os === 'ios' && props.item.iconName ? { icon: { sfSymbolName: props.item.iconName } } : {}),
+  })
 }

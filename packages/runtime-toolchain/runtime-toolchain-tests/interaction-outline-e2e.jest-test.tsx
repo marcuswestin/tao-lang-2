@@ -1,6 +1,9 @@
+import { jest } from '@jest/globals'
 import TR from '@runtime/TR'
+import * as TaoReactNative from '@runtime/TR-react-native'
 import { Describe, Expect, Test } from '@shared/test'
 import { act, fireEvent, within } from '@testing-library/react-native'
+import * as RN from 'react-native'
 import { registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
@@ -20,28 +23,118 @@ function nodes(kind?: TR.OutlineNode['kind']): readonly TR.OutlineNode[] {
 }
 
 Describe('interaction outline runtime', () => {
+  Test('handles web keys from the focusable app host and prevents only handled input', async () => {
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ActivityIndicator: RN.ActivityIndicator,
+      BackHandler: RN.BackHandler,
+      Image: RN.Image,
+      KeyboardAvoidingView: RN.KeyboardAvoidingView,
+      Modal: RN.Modal,
+      Platform: { OS: 'web' },
+      Pressable: RN.Pressable,
+      ScrollView: RN.ScrollView,
+      Switch: RN.Switch,
+      Text: RN.Text,
+      TextInput: RN.TextInput,
+      View: RN.View,
+    })
+    try {
+      await testCompileApp(
+        `
+          use Text from @tao/ui
+          use StackNav from @tao/nav
+          app KeyApp { Name "Keys" Navigator StackNav { Initial Home } }
+          scene Home() { Title "Home" render Text("Ready") }
+        `,
+        async screen => {
+          const host = screen.UNSAFE_getAllByType(RN.View).find(view => view.props.tabIndex === 0)
+          Expect(host).toBeDefined()
+          let focused = 0
+          const empty = { focus: () => focused += 1 }
+          host!.props.onPointerDown({ currentTarget: empty, target: empty })
+          Expect(focused).toBe(1)
+          const child = {}
+          host!.props.onPointerDown({ currentTarget: empty, target: child })
+          Expect(focused).toBe(1)
+
+          let prevented = 0
+          await act(async () => {
+            host!.props.onKeyDown({
+              code: 'Slash',
+              key: 'Dead',
+              preventDefault: () => prevented += 1,
+            })
+          })
+          Expect(TR.Interaction.Attention.read().mode).toBe('hints')
+          Expect(prevented).toBe(1)
+          await act(async () => {
+            host!.props.onKeyDown({ key: 'F7', preventDefault: () => prevented += 1 })
+          })
+          Expect(prevented).toBe(1)
+        },
+      )
+    } finally {
+      restoreRuntime.mockRestore()
+    }
+  })
+
+  Test('targets a navigation command before invoking it exactly once', async () => {
+    await testCompileApp(
+      `
+        use Text from @tao/ui
+        use StackNav from @tao/nav
+        app CommandApp { Name "Commands" Navigator StackNav { Initial Home } }
+        scene Home() {
+          Title "Home"
+          state Count = 0
+          action Increment() { set Count += 1 }
+          command Save() { Title "Save" do Increment() }
+          Toolbar { Save }
+          render Text("Invocations: { Count }")
+        }
+      `,
+      async screen => {
+        await act(async () => {
+          fireEvent.press(screen.getByLabelText('Save'))
+        })
+        Expect(TR.Interaction.Attention.read().targetLabel).toBe('Save')
+        Expect(screen.getByText('Invocations: 1')).toBeDefined()
+      },
+    )
+  })
+
   Test('labels a selectable row on its press surface and registers it as an item', async () => {
     await testCompileApp(
       `${catalog}
+        use StackNav from @tao/nav
         app OutlineApp {
-          view Main
+          Name "Outline"
+          Navigator StackNav { Initial Main }
           Datasource Memory { }
         }
-        view Main() {
+        scene Main() {
+          Title "Documents"
           query Documents { }
           state Selected = "Nothing selected"
+          state SelectCount = 0
           action Seed() {
             create Document { Title: "Chapter one" }
             create Document { Title: "Chapter two" }
           }
+          action Ignore() { }
           render Col() {
             Text(Selected)
+            Text("Selections: { SelectCount }")
             #seed
             FormButton("Seed") { on press Seed }
+            FormButton("Other") { on press Ignore }
             #rows
             loop Documents / Document {
               Col() { Text(Document.Title) }
-              on select -> { set Selected = "Selected { Document.Title }" }
+              on select -> {
+                set Selected = "Selected { Document.Title }"
+                set SelectCount += 1
+              }
             }
           }
         }
@@ -50,6 +143,7 @@ Describe('interaction outline runtime', () => {
         await act(async () => {
           fireEvent.press(screen.getByTestId('seed'))
         })
+        Expect(TR.Interaction.Attention.read().targetLabel).toBe('Seed')
 
         const rows = screen.getAllByTestId('rows')
         Expect(rows).toHaveLength(2)
@@ -57,6 +151,12 @@ Describe('interaction outline runtime', () => {
         Expect(surfaces.map(surface => surface.props.accessibilityLabel)).toEqual(['Chapter one', 'Chapter two'])
         Expect(surfaces.every(surface => surface.props.accessibilityRole === 'button')).toBe(true)
         Expect(within(surfaces[0]!).getByTestId('rows')).toBe(rows[0])
+        await act(async () => {
+          fireEvent.press(surfaces[0]!)
+        })
+        Expect(TR.Interaction.Attention.read().targetLabel).toBe('Chapter one')
+        Expect(screen.getByText('Selected Chapter one')).toBeDefined()
+        Expect(screen.getByText('Selections: 1')).toBeDefined()
 
         const items = nodes('item')
         Expect(items.map(item => item.label)).toEqual(['Chapter one', 'Chapter two'])
@@ -192,6 +292,25 @@ Describe('interaction outline runtime', () => {
         Expect(nodes('action').map(control => control.label)).toEqual(['Open detail'])
         const [home] = nodes('region')
         Expect(nodes('input')[0]?.parent).toBe(home?.identity)
+        const input = screen.getByLabelText('Draft title')
+        await act(async () => {
+          fireEvent(input, 'focus')
+        })
+        Expect(TR.Interaction.Attention.read()).toMatchObject({
+          engaged: nodes('input')[0]?.identity,
+          targetLabel: 'Draft title',
+        })
+        await act(async () => {
+          TR.Interaction.PressKey('Escape')
+        })
+        Expect(TR.Interaction.Attention.read().engaged).toBeUndefined()
+        Expect(TR.Interaction.Attention.read().targetLabel).toBe('Draft title')
+        await act(async () => {
+          fireEvent.changeText(input, 'Changed')
+        })
+        Expect(TR.Interaction.Attention.read().targetLabel).toBe('Draft title')
+        Expect(TR.Interaction.Attention.read().engaged).toBe(nodes('input')[0]?.identity)
+        Expect(screen.getByLabelText('Draft title').props.value).toBe('Changed')
 
         await act(async () => {
           fireEvent.press(screen.getByTestId('open'))
@@ -199,15 +318,27 @@ Describe('interaction outline runtime', () => {
         Expect(nodes('region').map(region => region.label)).toEqual(['Home', 'Detail'])
         Expect(nodes('region').map(region => region.provenance['presentation'])).toEqual(['content', 'content'])
 
-        // A capture carries the outline as plain JSON under its own domain.
+        // A capture carries the outline and its sole attention reducer as plain JSON together.
         const captured = await TR.Capture.capture()
         const domain = captured.domains.find(candidate => candidate.domain === 'interaction')
-        Expect(domain?.version).toBe(1)
-        Expect(domain?.value).toEqual(JSON.parse(JSON.stringify(TR.Interaction.Outline.read())))
+        Expect(domain?.version).toBe(2)
+        Expect(domain?.value).toEqual(JSON.parse(JSON.stringify({
+          attention: TR.Interaction.Attention.read(),
+          outline: TR.Interaction.Outline.read(),
+        })))
 
-        // The check boundary hands the next check an empty outline, whatever the last one mounted.
-        TR.Navigation.beginTest()
+        // The check boundary hands the next check an empty outline and untouched attention state.
+        await act(async () => {
+          screen.unmount()
+          TR.Navigation.beginTest()
+        })
         Expect(nodes()).toHaveLength(0)
+        Expect(TR.Interaction.Attention.read()).toEqual({
+          candidates: [],
+          mode: 'navigating',
+          narrowing: '',
+          verbs: [],
+        })
       },
     )
   })

@@ -53,6 +53,55 @@ export function labelCorpus(descriptor: TaoOutlineLoopDescriptor, value: unknown
   return texts
 }
 
+/**
+ * matchesNarrowing applies the interaction contract's greedy word-prefix subsequence rule. Each
+ * typed word must prefix a later rendered word; punctuation separates words and never becomes a
+ * hidden selector language. Intl.Segmenter keeps word boundaries locale-aware where available.
+ */
+export function matchesNarrowing(
+  corpus: readonly string[],
+  narrowing: string,
+  locale?: string,
+): boolean {
+  const prefixes = words(narrowing, locale)
+  if (prefixes.length === 0) {
+    return true
+  }
+  const candidates = corpus.flatMap(text => words(text, locale))
+  const collator = new Intl.Collator(locale, { sensitivity: 'base', usage: 'search' })
+  let candidateIndex = 0
+  for (const prefix of prefixes) {
+    let matched = false
+    while (candidateIndex < candidates.length) {
+      const candidate = candidates[candidateIndex++]!
+      const head = [...candidate].slice(0, [...prefix].length).join('')
+      if (head.length > 0 && collator.compare(head, prefix) === 0) {
+        matched = true
+        break
+      }
+    }
+    if (!matched) {
+      return false
+    }
+  }
+  return true
+}
+
+function words(value: string, locale?: string): string[] {
+  const Segmenter = (Intl as typeof Intl & {
+    Segmenter?: new(
+      locale?: string,
+      options?: { granularity: 'word' },
+    ) => { segment(value: string): Iterable<{ isWordLike?: boolean; segment: string }> }
+  }).Segmenter
+  if (Segmenter) {
+    return [...new Segmenter(locale, { granularity: 'word' }).segment(value)]
+      .filter(part => part.isWordLike !== false)
+      .map(part => part.segment)
+  }
+  return value.match(/[\p{L}\p{N}]+/gu) ?? []
+}
+
 function readText(value: unknown, path: TaoOutlineTextPath): string | undefined {
   let current: unknown = value
   for (const member of path) {

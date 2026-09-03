@@ -18,9 +18,12 @@ export type TaoOutlineRegionKind = 'occurrence' | 'selection-item' | 'split-pane
 export type TaoOutlinePresentation = 'ask' | 'content' | 'overlay' | 'sheet'
 
 export type TaoOutlineRegion = Readonly<{
+  active?(): boolean
   identity: string
   kind: TaoOutlineRegionKind
   label(): string | undefined
+  modal?: boolean
+  primary?: boolean
   provenance: TaoOutlineProvenance
 }>
 
@@ -28,7 +31,17 @@ export type TaoOutlineRegion = Readonly<{
 export function useOutlineRegion(region: TaoOutlineRegion | undefined): string | undefined {
   return useOutlineNode(
     region
-      ? { identity: region.identity, kind: 'region', label: region.label, provenance: region.provenance }
+      ? {
+        identity: region.identity,
+        kind: 'region',
+        label: region.label,
+        live: {
+          active: region.active ?? (() => true),
+          ...(region.modal === undefined ? {} : { modal: region.modal }),
+          ...(region.primary === undefined ? {} : { primary: region.primary }),
+        },
+        provenance: region.provenance,
+      }
       : undefined,
   )
 }
@@ -61,11 +74,15 @@ export function occurrenceRegion(
   instanceId: number,
   presentation: TaoOutlinePresentation,
   label: () => string | undefined,
+  options: { active?: () => boolean; primary?: boolean } = {},
 ): TaoOutlineRegion {
   return {
+    ...(options.active === undefined ? {} : { active: options.active }),
     identity: `occurrence:${navigation}#${instanceId}`,
     kind: 'occurrence',
     label,
+    modal: presentation === 'ask' || presentation === 'sheet',
+    ...(options.primary === undefined ? {} : { primary: options.primary }),
     provenance: { instanceId, navigation, presentation },
   }
 }
@@ -75,8 +92,10 @@ export function selectionItemRegion(
   navigation: string,
   key: string,
   label: () => string | undefined,
+  active?: () => boolean,
 ): TaoOutlineRegion {
   return {
+    ...(active === undefined ? {} : { active }),
     identity: `selection:${navigation}@${key}`,
     kind: 'selection-item',
     label,
@@ -85,8 +104,9 @@ export function selectionItemRegion(
 }
 
 /** splitPaneRegion describes one keyed pane of a split navigator; the key is all that names it. */
-export function splitPaneRegion(navigation: string, key: string): TaoOutlineRegion {
+export function splitPaneRegion(navigation: string, key: string, active?: () => boolean): TaoOutlineRegion {
   return {
+    ...(active === undefined ? {} : { active }),
     identity: `split:${navigation}@${key}`,
     kind: 'split-pane',
     label: () => key,

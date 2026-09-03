@@ -20,6 +20,7 @@ import { declarationSlotValidationChecks } from './validators/declaration-slots-
 import { DesignValidator } from './validators/design-validator'
 import { FunctionalCoreValidator } from './validators/FunctionalCoreValidator'
 import { injectionValidationChecks } from './validators/injections-validator'
+import { InteractionValidator } from './validators/interaction-validator'
 import { InvocationsValidator } from './validators/invocations-validator'
 import { LayoutValidator } from './validators/layout-validator'
 import { navigationValidationChecks } from './validators/navigation-validator'
@@ -50,6 +51,7 @@ const nodeValidationChecks = NodeValidation.compile(
     AliasesValidator.checks,
     LayoutValidator.checks,
     injectionValidationChecks,
+    InteractionValidator.checks,
     testValidationChecks,
     typeValidationChecks,
     InvocationsValidator.checks,

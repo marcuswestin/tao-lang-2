@@ -141,7 +141,7 @@ function SplitNavSurface(props: { navigation: RuntimeSplitNav; taoProps?: TaoPro
   const lastTap = React.useRef<Record<string, number>>({})
   const children: React.ReactNode[] = []
   items.forEach(([key, item], index) => {
-    const region = splitPaneRegion(props.navigation.name, key)
+    const region = splitPaneRegion(props.navigation.name, key, () => (widths[index] ?? 0) > 0)
     children.push(React.createElement(runtime.View, {
       ...regionNativeProps(region),
       children: React.createElement(
@@ -733,6 +733,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
                       this.activate(item.key)
                     },
                   },
+                  semanticIdentity: `navigation:${this.name}:selection:${item.key}`,
                   title: String(item.definition.label.evaluate().jsValue),
                 },
                 {
@@ -811,7 +812,12 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
 
   /** itemRegion is the region one keyed item is: its key, named by its `Label`. */
   private itemRegion(item: SelectionItemState): ReturnType<typeof selectionItemRegion> {
-    return selectionItemRegion(this.name, item.key, () => String(item.definition.label.evaluate().jsValue))
+    return selectionItemRegion(
+      this.name,
+      item.key,
+      () => String(item.definition.label.evaluate().jsValue),
+      () => item.key === this.activeKey,
+    )
   }
 
   private activeItem(): SelectionItemState {

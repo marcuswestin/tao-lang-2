@@ -1,4 +1,10 @@
 import React from 'react'
+import { InteractionControls } from './TR-interaction-catalog'
+import {
+  type TaoInteractionOccurrence,
+  type TaoOutlineLiveEntry,
+  useOutlineNode,
+} from './TR-interaction-outline'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type { TaoNavigationCommand } from './TR-navigation-host-slots'
 import { requireReactNativeRuntime } from './TR-react-native'
@@ -25,6 +31,22 @@ export function NavigationCommandButton(props: {
   const Icon = props.command.icon ? fontAwesomeIcon() : undefined
   const icon = supportedIcon(props.command.icon, Icon)
   const fallbackGlyph = props.command.icon ? iconFallbacks[props.command.icon]?.fallback : undefined
+  const capabilities = React.useRef<TaoOutlineLiveEntry>({}).current
+  const identity = useOutlineNode({
+    identity: `navigation-command:${props.command.identity}`,
+    kind: 'action',
+    label: () => props.command.label,
+    live: capabilities,
+    provenance: { command: props.command.identity },
+  })
+  const occurrence: TaoInteractionOccurrence | undefined = identity === undefined
+    ? undefined
+    : { capabilities, control: identity, scope: identity }
+  capabilities.enabled = () => props.command.enabled
+  const invoke = InteractionControls.Activate(occurrence, () => {
+    props.onInvoke?.()
+    return props.command.invoke()
+  })
   return React.createElement(
     runtime.Pressable,
     {
@@ -32,12 +54,16 @@ export function NavigationCommandButton(props: {
       accessibilityRole: props.role ?? 'button',
       accessibilityState: { disabled: !props.command.enabled },
       disabled: !props.command.enabled,
-      onPress: props.command.enabled
-        ? () => {
-          props.onInvoke?.()
-          return props.command.invoke()
-        }
-        : undefined,
+      onBlur: () => InteractionControls.Pressed(occurrence, false),
+      onFocus: () => InteractionControls.Target(occurrence),
+      onHoverIn: () => InteractionControls.Hover(occurrence, true),
+      onHoverOut: () => InteractionControls.Hover(occurrence, false),
+      onPress: props.command.enabled ? invoke : undefined,
+      onPressIn: () => {
+        InteractionControls.Target(occurrence)
+        InteractionControls.Pressed(occurrence, true)
+      },
+      onPressOut: () => InteractionControls.Pressed(occurrence, false),
       style: [designStyle, { opacity: props.command.enabled ? 1 : 0.5 }],
       testID: props.testID,
     },

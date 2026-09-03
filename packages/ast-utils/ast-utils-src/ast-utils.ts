@@ -1,12 +1,17 @@
 import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
-import { commandSlots, mentionFills } from './commands'
+import { commandSlots, commandStaticMemberText, commandStaticShortcut, mentionFills } from './commands'
 import { resolveDataWriteBindings } from './data-write-bindings'
 import { standardDesignElementName } from './design'
 import { canonicalDesignVisualHead, designColorHeads, designVisualHeads } from './design-visuals'
 import { guardBranches } from './guards'
 import { injectionArgumentName } from './injections'
-import { outlineControlDescriptor, outlineLoopDescriptor } from './interaction-outline'
+import {
+  outlineControlDescriptor,
+  outlineLoopDescriptor,
+  outlineSiblingRegionDescriptor,
+  outlineSiblingRegionForRender,
+} from './interaction-outline'
 import {
   resolveActionInvocation,
   resolveActionTarget,
@@ -26,6 +31,8 @@ export { Packages, Type, Units }
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
   commandSlots,
+  commandStaticMemberText,
+  commandStaticShortcut,
   mentionFills,
   guardBranches,
   canonicalDesignVisualHead,
@@ -37,6 +44,8 @@ export const ASTUtils = {
   literalDurationOf,
   outlineControlDescriptor,
   outlineLoopDescriptor,
+  outlineSiblingRegionDescriptor,
+  outlineSiblingRegionForRender,
   referencedNames,
   renderTargetIsNav,
   renderTargetName,
@@ -69,6 +78,7 @@ export namespace ASTUtils {
   export type LayoutTermValue = import('./layouts').LayoutTermValue
   export type OutlineControlDescriptor = import('./interaction-outline').OutlineControlDescriptor
   export type OutlineLoopDescriptor = import('./interaction-outline').OutlineLoopDescriptor
+  export type OutlineSiblingRegionDescriptor = import('./interaction-outline').OutlineSiblingRegionDescriptor
   export type OutlineTextPath = import('./interaction-outline').OutlineTextPath
   export type RenderEventBindingDiagnostic = import('./invocations').RenderEventBindingDiagnostic
   export type RenderEventBindingPair = import('./invocations').RenderEventBindingPair

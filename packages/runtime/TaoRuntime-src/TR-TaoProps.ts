@@ -1,6 +1,17 @@
 import type React from 'react'
-import { DesignControls, type TaoDesign, type TaoDesignSource, type TaoDesignSpec } from './TR-design'
-import type { TaoOutlineControlNode, TaoOutlineRowRoot } from './TR-interaction-outline'
+import {
+  DesignControls,
+  type TaoDesign,
+  type TaoDesignCondition,
+  type TaoDesignSource,
+  type TaoDesignSpec,
+} from './TR-design'
+import type {
+  TaoInteractionOccurrence,
+  TaoOutlineControlNode,
+  TaoOutlineRowRoot,
+  TaoOutlineSiblingRegionNode,
+} from './TR-interaction-outline'
 import {
   LayoutControls,
   LayoutRuntime,
@@ -29,6 +40,7 @@ export type TaoStudioIdentity = {
  */
 export type TaoInteractionProps = {
   control?: TaoOutlineControlNode
+  region?: TaoOutlineSiblingRegionNode
   row?: TaoOutlineRowRoot
 }
 
@@ -100,6 +112,7 @@ type MergedTaoViewProps = {
 
 type PrivateVisualMetadata = {
   interaction?: TaoInteractionProps
+  occurrence?: TaoInteractionOccurrence
   studio?: TaoStudioIdentity
 }
 
@@ -108,20 +121,57 @@ type PrivateVisualMetadata = {
 // standard-library wrappers do not need a new language-visible ambient channel or access to the
 // complete private __tao bag.
 const privateMetadataByVisualLayout = new WeakMap<object, PrivateVisualMetadata>()
+const occurrenceByTaoProps = new WeakMap<
+  TaoProps,
+  Readonly<{
+    condition: TaoDesignCondition
+    occurrence: TaoInteractionOccurrence
+  }>
+>()
 
 /** TaoPropsControls exposes runtime Tao props merging for generated views. */
 export const TaoPropsControls = {
   ambientContext,
   appInChain,
   responseInChain,
+  interactionOccurrence,
   mergeViewProps,
   nativePropsWithStyle,
   navigationInChain,
   schemeInChain,
+  setInteractionOccurrence,
   visualNativeProps,
+  visualInteractionOccurrence,
   visualLayout,
   visualTag,
 } as const
+
+function setInteractionOccurrence(
+  props: TaoProps | undefined,
+  occurrence: TaoInteractionOccurrence,
+  condition: (subject: string, value: string | undefined, occurrence: TaoInteractionOccurrence | undefined) => boolean,
+): void {
+  if (props) {
+    occurrenceByTaoProps.set(props, {
+      condition: (subject, value) => condition(subject, value, occurrence),
+      occurrence,
+    })
+  }
+}
+
+function interactionOccurrence(props: TaoProps | undefined): TaoInteractionOccurrence | undefined {
+  if (!props) {
+    return undefined
+  }
+  return occurrenceByTaoProps.get(props)?.occurrence ?? interactionOccurrence(props.callerProps)
+}
+
+function interactionCondition(props: TaoProps | undefined): TaoDesignCondition | undefined {
+  if (!props) {
+    return undefined
+  }
+  return occurrenceByTaoProps.get(props)?.condition ?? interactionCondition(props.callerProps)
+}
 
 /** Copies only ambient presentation context from a generated caller-props chain. */
 function ambientContext(props: TaoProps | undefined): TaoAmbientContext {
@@ -226,7 +276,7 @@ function resolveDesignProps(
   const designSpec = props.designSpec === undefined || props.designSource === undefined
     ? props.designSpec
     : DesignControls.Source(props.designSpec, props.designSource)
-  const resolved = DesignControls.resolve(design, designSpec, props.designDefault, scheme)
+  const resolved = DesignControls.resolve(design, designSpec, props.designDefault, scheme, interactionCondition(props))
   const callerProps = resolveDesignProps(props.callerProps, design, scheme)
   const style = mergeResolvedStyles(props.style, resolved.style)
   return {
@@ -264,15 +314,21 @@ function visualLayout(props: TaoProps | undefined): TaoVisualLayout | undefined 
   )
   const studio = studioIdentityInChain(props)
   const interaction = interactionInChain(props)
-  if (studio === undefined && interaction === undefined) {
+  const occurrence = interactionOccurrence(props)
+  if (studio === undefined && interaction === undefined && occurrence === undefined) {
     return resolved
   }
   const visualLayout = resolved ?? {}
   privateMetadataByVisualLayout.set(visualLayout, {
     ...(interaction === undefined ? {} : { interaction }),
+    ...(occurrence === undefined ? {} : { occurrence }),
     ...(studio === undefined ? {} : { studio }),
   })
   return visualLayout
+}
+
+function visualInteractionOccurrence(layout: TaoVisualLayout | undefined): TaoInteractionOccurrence | undefined {
+  return privateMetadataForVisualLayout(layout)?.occurrence
 }
 
 function privateMetadataForVisualLayout(layout: TaoVisualLayout | undefined): PrivateVisualMetadata | undefined {
@@ -326,11 +382,16 @@ function interactionInChain(props: TaoProps | undefined): TaoInteractionProps | 
   }
   const outer = interactionInChain(props.callerProps)
   const control = props.interaction?.control ?? outer?.control
+  const region = props.interaction?.region ?? outer?.region
   const row = props.interaction?.row ?? outer?.row
-  if (control === undefined && row === undefined) {
+  if (control === undefined && region === undefined && row === undefined) {
     return undefined
   }
-  return { ...(control === undefined ? {} : { control }), ...(row === undefined ? {} : { row }) }
+  return {
+    ...(control === undefined ? {} : { control }),
+    ...(region === undefined ? {} : { region }),
+    ...(row === undefined ? {} : { row }),
+  }
 }
 
 function nativePropsWithStudioIdentity(

@@ -7,6 +7,7 @@ import { declarationModuleName } from './declaration-identity'
 type OutlineNode =
   | { kind: 'collection'; loop: AST.ForStatement; owner: AST.ViewDeclaration }
   | { kind: 'control'; descriptor: ASTUtils.OutlineControlDescriptor; owner: AST.ViewDeclaration; render: AST.Render }
+  | { kind: 'region'; descriptor: ASTUtils.OutlineSiblingRegionDescriptor; owner: AST.ViewDeclaration }
 
 /**
  * InteractionOutlineCompiler emits what the runtime's interaction outline knows statically: one
@@ -25,14 +26,14 @@ export const InteractionOutlineCompiler = {
     return gen`const _TaoOutline = TR.Interaction.OutlineTable({
       module: ${gen.jsLiteral(declarationModuleName(first.owner))},
       nodes: {
-        ${gen.list(nodes, node => gen`${gen.jsLiteral(outlineNodeKey(nodeOf(node)))}: ${compileNode(node)},`)}
+        ${gen.list(nodes, node => gen`${gen.jsLiteral(outlineNodeKey(node))}: ${compileNode(node)},`)}
       },
     })`
   },
 
   /** OutlineLoopReference names a loop's table entry for the diagnostics frame `TR.ForEach` takes. */
   OutlineLoopReference(loop: AST.ForStatement): Compiled {
-    return gen`_TaoOutline[${gen.jsLiteral(outlineNodeKey(loop))}]`
+    return gen`_TaoOutline[${gen.jsLiteral(outlineSourceKey(loop))}]`
   },
 
   /**
@@ -43,12 +44,16 @@ export const InteractionOutlineCompiler = {
   OutlineRenderInteraction(render: AST.Render): Compiled | undefined {
     const control = ASTUtils.outlineControlDescriptor(render)
     const loop = rowRootLoop(render)
-    if (!control && !loop) {
+    const region = ASTUtils.outlineSiblingRegionForRender(render)
+    if (!control && !loop && !region) {
       return undefined
     }
     const fields = [
-      ...(control ? [gen`control: _TaoOutline[${gen.jsLiteral(outlineNodeKey(render))}]`] : []),
+      ...(control ? [gen`control: _TaoOutline[${gen.jsLiteral(outlineSourceKey(render))}]`] : []),
       ...(loop ? [gen`row: TR.Interaction.RowRoot(${gen.scopeName(loop)})`] : []),
+      ...(region
+        ? [gen`region: _TaoOutline[${gen.jsLiteral(siblingRegionKey(AST.findOwningView(render)!))}]`]
+        : []),
     ]
     return gen`{ ${gen.join(fields, field => field)} }`
   },
@@ -56,6 +61,12 @@ export const InteractionOutlineCompiler = {
 
 function outlineNodesOf(taoFile: AST.TaoFile): OutlineNode[] {
   const nodes: OutlineNode[] = []
+  for (const owner of taoFile.statements.filter(AST.isViewDeclaration)) {
+    const descriptor = ASTUtils.outlineSiblingRegionDescriptor(owner)
+    if (descriptor) {
+      nodes.push({ descriptor, kind: 'region', owner })
+    }
+  }
   for (const node of AST.streamAllContents(taoFile)) {
     const owner = AST.findOwningView(node)
     if (!owner) {
@@ -73,25 +84,36 @@ function outlineNodesOf(taoFile: AST.TaoFile): OutlineNode[] {
   return nodes
 }
 
-function nodeOf(node: OutlineNode): AST.ForStatement | AST.Render {
-  return node.kind === 'collection' ? node.loop : node.render
-}
-
 function compileNode(node: OutlineNode): Compiled {
   if (node.kind === 'collection') {
     const descriptor = ASTUtils.outlineLoopDescriptor(node.loop)
     return gen`${gen.jsLiteral({ declaration: node.owner.name, kind: 'collection', ...descriptor })}`
   }
-  return gen`${gen.jsLiteral({ declaration: node.owner.name, kind: 'control', ...node.descriptor })}`
+  if (node.kind === 'control') {
+    return gen`${gen.jsLiteral({ declaration: node.owner.name, kind: 'control', ...node.descriptor })}`
+  }
+  // Concrete roots are compiler-only; stable member declaration names belong in the runtime table.
+  const { roots: _roots, ...descriptor } = node.descriptor
+  return gen`${gen.jsLiteral({ declaration: node.owner.name, kind: 'region', role: 'nav-siblings', ...descriptor })}`
 }
 
 /** A node's key is its owning view plus its source offset, unique within the module. */
-function outlineNodeKey(node: AST.ForStatement | AST.Render): string {
+function outlineSourceKey(node: AST.ForStatement | AST.Render): string {
   const owner = AST.findOwningView(node)
   const cst = node.$cstNode
   Assert.defined(owner, 'outline node is written in a view')
   Assert.defined(cst, 'outline node has source coordinates')
   return `${owner.name}#${cst.offset}`
+}
+
+function outlineNodeKey(node: OutlineNode): string {
+  return node.kind === 'region'
+    ? siblingRegionKey(node.owner)
+    : outlineSourceKey(node.kind === 'collection' ? node.loop : node.render)
+}
+
+function siblingRegionKey(owner: AST.ViewDeclaration): string {
+  return `${owner.name}#nav-siblings`
 }
 
 /** rowRootLoop returns the non-selectable loop whose sole unconditional row root this render is. */

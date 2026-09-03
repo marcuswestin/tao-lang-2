@@ -5,6 +5,99 @@ import { registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime', () => {
+  Test('runs keyboard attention steps directly through the reducer', async () => {
+    await withTaoFiles(
+      'tao-runtime-attention-test-plan-',
+      {
+        'Main.test.tao': `
+          use AttentionApp from ./
+          test "Attention" {
+            test "targets and opens verbs" {
+              run AttentionApp
+              narrow "draft"
+              expect focus region "Home"
+              expect target "Draft document"
+              press key "."
+              expect verbs "Save"
+            }
+          }
+        `,
+        'Main.tao': `
+          use StackNav from @tao/nav
+          use Col, FormButton from @tao/ui
+          app AttentionApp { Name "Attention" Navigator StackNav { Initial Home } }
+          scene Home() {
+            Title "Home"
+            action DoNothing() { }
+            command Save() { Title "Save" do DoNothing() }
+            Commands { Save }
+            render Col() {
+              FormButton("Draft document") { on press DoNothing }
+            }
+          }
+        `,
+      },
+      async paths => {
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
+  Test('reports exact keyboard attention assertion failures', async () => {
+    await withTaoFiles(
+      'tao-runtime-attention-errors-',
+      {
+        'Focus.test.tao': `
+          use AttentionApp from ./Main
+          test "Attention" { test "focus mismatch" {
+            run AttentionApp
+            expect focus region "Elsewhere"
+          } }
+        `,
+        'Main.tao': `
+          use StackNav from @tao/nav
+          use Col, FormButton from @tao/ui
+          app AttentionApp { Name "Attention" Navigator StackNav { Initial Home } }
+          scene Home() {
+            Title "Home"
+            action DoNothing() { }
+            command Save() { Title "Save" do DoNothing() }
+            Commands { Save }
+            render Col() { FormButton("Draft document") { on press DoNothing } }
+          }
+        `,
+        'Target.test.tao': `
+          use AttentionApp from ./Main
+          test "Attention" { test "target mismatch" {
+            run AttentionApp
+            narrow "draft"
+            expect target "Other document"
+          } }
+        `,
+        'Verbs.test.tao': `
+          use AttentionApp from ./Main
+          test "Attention" { test "verbs mismatch" {
+            run AttentionApp
+            narrow "draft"
+            press key "."
+            expect verbs "Archive"
+          } }
+        `,
+      },
+      async paths => {
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Focus.test.tao']!)).rejects.toThrow(
+          /expect focus region "Elsewhere" expected interaction focus region "Elsewhere", got "Home"/,
+        )
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Target.test.tao']!)).rejects.toThrow(
+          /expect target "Other document" expected interaction target "Other document", got "Draft document"/,
+        )
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Verbs.test.tao']!)).rejects.toThrow(
+          /expect verbs "Archive" expected interaction verbs \["Archive"\], got \["Save"\]/,
+        )
+      },
+    )
+  })
+
   Test('runs Tao text expectations with duplicate rendered text', async () => {
     await withTaoFiles(
       'tao-runtime-test-plan-',

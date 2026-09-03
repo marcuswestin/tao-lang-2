@@ -64,6 +64,7 @@ function BasicStackLevel(props: {
                   {
                     __tao: { ...props.taoProps, designDefault: 'NavigationChromeButton' },
                     action: { invoke: () => props.navigation.back() },
+                    semanticIdentity: `navigation:${props.navigation.name}:back`,
                     title: 'Back',
                   },
                   { nativeProps: { accessibilityLabel: 'Back', accessibilityRole: 'button' } },
@@ -121,6 +122,7 @@ function BasicToolbar(props: {
             {
               __tao: { ...props.taoProps, designDefault: 'NavigationChromeButton' },
               action: { invoke: () => setExpanded(value => !value) },
+              semanticIdentity: 'navigation:toolbar:more',
               title: 'More',
             },
             { nativeProps: { accessibilityLabel: 'More', accessibilityRole: 'button' } },

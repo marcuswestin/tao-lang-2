@@ -31,7 +31,7 @@ export type TaoCommandSnapshot = Readonly<{
   enabled: boolean
   icon?: string
   identity: string
-  key: string
+  key?: string
   label: string
   invoke(): unknown
 }>
@@ -109,12 +109,13 @@ export class RuntimeCommand {
   /** read renders the command as a host surface sees it right now. */
   read(): TaoCommandSnapshot {
     const icon = textMember(this.member('Icon'))
+    const key = textMember(this.member('Key'))
     const label = textMember(this.member('Label')) ?? textMember(this.member('Title')) ?? this.name
     return Object.freeze({
       enabled: booleanMember(this.member('Enabled'), true),
       ...(icon ? { icon } : {}),
       identity: this.name,
-      key: textMember(this.member('Key')) ?? this.name,
+      ...(key === undefined ? {} : { key }),
       label,
       // A surface runs the command as bound; whatever a host hands its press handler is not a slot.
       invoke: () => this.run(false, []),

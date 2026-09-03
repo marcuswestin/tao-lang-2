@@ -23,7 +23,7 @@ entry BlocksGrammarEntrypoint:
 // declared Statement union additionally includes view-only members without making their bare
 // syntax globally ambiguous.
 ParsedStatement returns Statement:
-    AppBlockDiagnosticStatement | ViewRender | RenderSlotUse | CallerContentStatement;
+    AppBlockDiagnosticStatement | ViewRender | RenderSlotUse | CallerContentStatement | ViewCommandExclusion;
 
 // Supplied declaration slots are named body members whose vocabulary comes from the declaration's
 // primitive family in Prelude.tao. Scalar slots take an ordinary reactive expression; list-valued
@@ -69,7 +69,7 @@ DeclarationSlotReferenceBlock:
 // bare visual/slot uses. Keep every other broad statement parseable in an app body for a semantic
 // placement diagnostic, while leaving those inherently overlapping bare forms to visual blocks.
 AppBlockDiagnosticStatement:
-    Declaration | EntityQueryDeclaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioGroupDeclaration | RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep | StateDeclaration | Injection | TagStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
+    Declaration | EntityQueryDeclaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioGroupDeclaration | RunStep | PressTextStep | TagPressStep | PressKeyStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep | StateDeclaration | Injection | TagStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
 
 // EntityQueryDeclaration remains in the broad diagnostic statement rule so a query written at file
 // level parses far enough for the validator to explain the unsupported shape. It is deliberately
@@ -83,7 +83,7 @@ type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | UsePa
 // View statements are the declarations and render sites accepted by view/layout bodies.
 ViewStatement returns Statement:
     ParsedStatement | DeclarationSlotFill;
-type Statement = AppBlockDiagnosticStatement | ViewRender | RenderSlotUse | CallerContentStatement | CommandDeclaration | DeclarationSlotFill;
+type Statement = AppBlockDiagnosticStatement | ViewRender | RenderSlotUse | CallerContentStatement | CommandDeclaration | DeclarationSlotFill | ViewCommandExclusion | NarrowStep;
 type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | EntityDataField | CaseSetCase | AskStatement;
 type ExportableDeclaration = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;
 type EmittingRuntimeBinding = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;

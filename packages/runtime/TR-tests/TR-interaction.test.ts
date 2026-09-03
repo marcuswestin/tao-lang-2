@@ -95,19 +95,25 @@ Describe('TR.Interaction', () => {
     const table = (
       module: string,
       name: string,
-      slots: readonly { entity: boolean; name: string; type: string }[],
+      slots: readonly { entity: boolean; name: string; required: boolean; type: string }[],
     ) => ({
       commands: [{
         command: () => TR.Interaction.Command({ action: () => TR.Action(() => undefined), name }),
         identity: `${module}.${name}`,
         name,
+        scope: { kind: 'module' as const },
         slots,
+        static: {},
       }],
       module,
     })
 
-    catalog.register(table('@ui/Documents', 'Finish', [{ entity: true, name: 'Document', type: 'Document' }]))
-    catalog.register(table('@ui/Workspaces', 'Rename', [{ entity: true, name: 'Workspace', type: 'Workspace' }]))
+    catalog.register(
+      table('@ui/Documents', 'Finish', [{ entity: true, name: 'Document', required: true, type: 'Document' }]),
+    )
+    catalog.register(
+      table('@ui/Workspaces', 'Rename', [{ entity: true, name: 'Workspace', required: true, type: 'Workspace' }]),
+    )
     const withdraw = catalog.register(table('@ui/Shell', 'NewDocument', []))
 
     Expect(catalog.applicable('Document').map(entry => entry.name)).toEqual(['Finish'])
@@ -138,7 +144,9 @@ Describe('TR.Interaction', () => {
         command: () => command,
         identity: '@ui/Documents.Finish',
         name: 'Finish',
-        slots: [{ entity: true, name: 'Document', type: 'Document' }],
+        scope: { kind: 'module' },
+        slots: [{ entity: true, name: 'Document', required: true, type: 'Document' }],
+        static: {},
       }],
       module: '@ui/Documents',
     })

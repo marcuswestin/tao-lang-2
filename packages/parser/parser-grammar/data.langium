@@ -11,7 +11,7 @@ EntityDataDeclaration:
     visibility=DeclarationVisibility? 'data' name=ID '/' singularName=ID block=EntityDataDeclarationBlock;
 
 EntityDataDeclarationBlock:
-    '{' entries+=(EntityDataField | DataIndex | DataDefaultOrder | DataLocalOnly)* '}';
+    '{' entries+=(EntityDataField | DataIndex | DataDefaultOrder | DataLocalOnly | EntityCommandPolicy)* '}';
 
 EntityDataField:
     name=ID (primitive=DataPrimitiveType | boolean?='yes' '/' negativeName=ID? 'no')?
@@ -28,6 +28,12 @@ DataDefaultOrder:
 // whatever the app configures as its Datasource, so a synced datasource variant never syncs it.
 DataLocalOnly:
     localOnly?='local' 'only';
+
+// An entity orders its default verbs, or explicitly withholds verbs that remain available only
+// when a view promotes them. `commands` and `hide` are audited lowercase vocabulary; command names
+// remain references, so the policy never creates a parallel stringly-typed catalog.
+EntityCommandPolicy:
+    'commands' hide?='hide'? commands+=[CommandDeclaration:ID] (',' commands+=[CommandDeclaration:ID])*;
 
 DataPrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'time';

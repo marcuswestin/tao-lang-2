@@ -1,6 +1,8 @@
 import { AST } from '@parser'
 import { standardDesignElementName } from './design'
+import { guardBranches } from './guards'
 import { type ResolvedRenderInvocation, resolveRenderInvocation } from './invocations'
+import { renderTargetIsNav, renderTargetName, resolveRenderTarget } from './render-targets'
 import { type TaoType, Type } from './Type'
 
 /** OutlineTextPath is the member path one row-bound text reads from the row value. */
@@ -32,6 +34,21 @@ export type OutlineControlDescriptor = {
   role: 'action' | 'input'
   /** view is the rendered view's name, the label of last resort for a control the site left unnamed. */
   view: string
+}
+
+/**
+ * OutlineSiblingRegionDescriptor identifies the wrapper-free subtree beside a rendered nav. Its
+ * concrete roots all carry this one descriptor and the runtime coalesces their registrations.
+ */
+export type OutlineSiblingRegionDescriptor = {
+  /** label is the first statically derived label anywhere in the sibling subtree. */
+  label?: string
+  /** members are the stable declaration names of the concrete views rendered in the region. */
+  members: readonly string[]
+  /** nav names the rendered navigator this subtree sits beside. */
+  nav: string
+  /** roots are the concrete render sites that begin the non-nav sibling subtree. */
+  roots: readonly AST.Render[]
 }
 
 /** The stdlib elements that render one text value; their `Value` argument is what a row reads as. */
@@ -83,6 +100,112 @@ export function outlineControlDescriptor(render: AST.Render): OutlineControlDesc
   }
   if (events.has('Press') || events.has('Submit')) {
     return { ...(label === undefined ? {} : { label }), role: 'action', view }
+  }
+  return undefined
+}
+
+/** outlineSiblingRegionDescriptor derives the non-nav sibling subtree of a view's rendered nav. */
+export function outlineSiblingRegionDescriptor(view: AST.ViewDeclaration): OutlineSiblingRegionDescriptor | undefined {
+  const renderedNav = AST.streamAllContents(view.block ?? view).filter(AST.isRender).find(render => {
+    const target = resolveRenderTarget(render)
+    return target !== undefined && renderTargetIsNav(target)
+  })
+  const block = renderedNav?.$container
+  if (!renderedNav || !AST.isBlock(block)) {
+    return undefined
+  }
+  const roots = siblingRootRenders(block.statements, renderedNav)
+  if (roots.length === 0) {
+    return undefined
+  }
+  const target = resolveRenderTarget(renderedNav)
+  if (!target) {
+    return undefined
+  }
+  const label = roots.map(root => firstDerivedLabel(root, new Set())).find(candidate => candidate !== undefined)
+  const members = siblingMemberNames(roots)
+  return {
+    ...(label === undefined ? {} : { label }),
+    members,
+    nav: renderTargetName(target),
+    roots,
+  }
+}
+
+/** outlineSiblingRegionForRender returns the wrapper-free sibling region rooted at `render`. */
+export function outlineSiblingRegionForRender(render: AST.Render): OutlineSiblingRegionDescriptor | undefined {
+  const owner = AST.findOwningView(render)
+  const descriptor = owner ? outlineSiblingRegionDescriptor(owner) : undefined
+  return descriptor?.roots.includes(render) ? descriptor : undefined
+}
+
+function siblingRootRenders(statements: readonly AST.Statement[], renderedNav: AST.Render): AST.Render[] {
+  const roots: AST.Render[] = []
+  for (const statement of statements) {
+    if (statement === renderedNav || AST.isTagStatement(statement)) {
+      continue
+    }
+    if (AST.isRender(statement)) {
+      const target = resolveRenderTarget(statement)
+      if (!target || !renderTargetIsNav(target)) {
+        roots.push(statement)
+      }
+    } else if (AST.isRenderSlotUse(statement) && statement.render) {
+      roots.push(statement.render)
+    } else if (AST.isWhenRenderStatement(statement)) {
+      for (const branch of [...statement.branches, statement.otherwise]) {
+        roots.push(...siblingRootRenders(branch.block.statements, renderedNav))
+      }
+    } else if (AST.isGuardRenderStatement(statement)) {
+      for (const branch of guardBranches(statement)) {
+        roots.push(...siblingRootRenders(branch.block?.statements ?? [], renderedNav))
+      }
+    } else if (AST.isIfRenderStatement(statement) || AST.isForStatement(statement)) {
+      roots.push(...siblingRootRenders(statement.block.statements, renderedNav))
+    }
+  }
+  return roots
+}
+
+/** Stable declaration names, not display labels, let design conditions identify region members. */
+function siblingMemberNames(roots: readonly AST.Render[]): string[] {
+  const names = new Set<string>()
+  for (const root of roots) {
+    const target = resolveRenderTarget(root)
+    if (target?.kind === 'view') {
+      names.add(target.view.name)
+    }
+  }
+  return [...names]
+}
+
+function firstDerivedLabel(render: AST.Render, seen: Set<AST.ViewDeclaration>): string | undefined {
+  const control = outlineControlDescriptor(render)
+  if (control?.label) {
+    return control.label
+  }
+  const invocation = resolveRenderInvocation(render)
+  const value = invocation.pairs.find(pair => Type.parameterName(pair.parameter) === 'Value')?.argument.value
+  const element = standardDesignElementName(render)
+  if (element && textElements.has(element) && value && AST.isStringLiteral(value)) {
+    return value.value
+  }
+  for (const child of AST.statementsOf(render.block).filter(AST.isRender)) {
+    const label = firstDerivedLabel(child, seen)
+    if (label) {
+      return label
+    }
+  }
+  const view = invocation.view
+  if (!view || seen.has(view)) {
+    return undefined
+  }
+  seen.add(view)
+  for (const child of AST.streamAllContents(view.block ?? view).filter(AST.isRender)) {
+    const label = firstDerivedLabel(child, seen)
+    if (label) {
+      return label
+    }
   }
   return undefined
 }

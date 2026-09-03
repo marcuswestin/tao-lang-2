@@ -23,6 +23,19 @@ export function commandSlots(command: AST.CommandDeclaration): readonly CommandS
   })
 }
 
+/** commandStaticMemberText reads a literal command member without evaluating reactive Tao code. */
+export function commandStaticMemberText(command: AST.CommandDeclaration, name: string): string | undefined {
+  const value = AST.commandFillsOf(command).find(fill => fill.name === name)?.value
+  return value && AST.isStringLiteral(value) ? unquoted(value.value) : undefined
+}
+
+/** commandStaticShortcut reads the normalized literal shortcut a static scope can compare. */
+export function commandStaticShortcut(command: AST.CommandDeclaration): string | undefined {
+  const value = AST.commandFillsOf(command).find(fill => fill.name === 'Key')?.value
+  const text = value ? literalShortcutText(value) : undefined
+  return text?.split('+').map(segment => segment.trim().toLowerCase()).join('+')
+}
+
 /**
  * mentionFills resolves a command mentioned on a surface against the parameters of the declaration
  * that mentions it, matching each still-unfilled slot to a parameter by type (KEY-D10).
@@ -49,4 +62,27 @@ export function mentionFills(
     }
   }
   return { fills, unresolved }
+}
+
+/** literalShortcutText resolves the source forms whose shortcut is known before runtime. */
+function literalShortcutText(value: AST.Expression): string | undefined {
+  if (AST.isStringLiteral(value)) {
+    return unquoted(value.value)
+  }
+  if (AST.isValueReference(value)) {
+    const target = value.target.ref
+    return AST.isAliasDeclaration(target) && AST.isExpression(target.value)
+      ? literalShortcutText(target.value)
+      : undefined
+  }
+  if (AST.isBinaryExpression(value) && value.operator === '+') {
+    const left = literalShortcutText(value.left)
+    const right = literalShortcutText(value.right)
+    return left === undefined || right === undefined ? undefined : `${left}${right}`
+  }
+  return undefined
+}
+
+function unquoted(value: string): string {
+  return value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value
 }

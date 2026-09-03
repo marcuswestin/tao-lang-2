@@ -25,11 +25,14 @@ export function NavigationLevel(props: {
   region?: TaoOutlineRegion
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
+  const region = props.region === undefined
+    ? undefined
+    : { ...props.region, active: () => !props.hidden, primary: !props.hidden }
   return React.createElement(
     OutlineRegionScope,
-    { region: props.region },
+    { region },
     React.createElement(runtime.View, {
-      ...regionNativeProps(props.region),
+      ...regionNativeProps(region),
       accessibilityElementsHidden: props.hidden,
       children: props.children,
       importantForAccessibility: props.hidden ? 'no-hide-descendants' : 'auto',
@@ -43,12 +46,14 @@ export function presentedOccurrenceRegion(
   navigation: TaoNavigationValue,
   entry: PresentableEntry,
   presentation: 'ask' | 'content' | 'overlay' | 'sheet',
+  active?: () => boolean,
 ): TaoOutlineRegion {
   return occurrenceRegion(
     navigation.name,
     entry.instanceId,
     presentation,
     () => entry.host?.read().title ?? entry.presentable.name,
+    { ...(active === undefined ? {} : { active }), primary: presentation === 'content' },
   )
 }
 
@@ -63,6 +68,7 @@ export function NavigationBackAffordance(props: {
           backNavigation(props.target)
         },
       },
+      semanticIdentity: 'navigation:back',
       title: 'Back',
     },
     { nativeProps: { accessibilityLabel: 'Back', accessibilityRole: 'button' } },

@@ -1,5 +1,11 @@
 import React from 'react'
 import { AppSurfaceFrame } from './TR-app-shell'
+import { InteractionControls } from './TR-interaction-catalog'
+import {
+  type TaoInteractionOccurrence,
+  type TaoOutlineLiveEntry,
+  useOutlineNode,
+} from './TR-interaction-outline'
 import { OutlineRegionScope } from './TR-interaction-regions'
 import {
   BasicStackSurface,
@@ -64,6 +70,22 @@ function NativeStackItem(props: {
   const ScreenStackItem = module.ScreenStackItem!
   const Right = module.ScreenStackHeaderRightView
   const observable = props.active && props.taoProps?.navigationHostActive !== false
+  const backCapabilities = React.useRef<TaoOutlineLiveEntry>({}).current
+  const backIdentity = useOutlineNode(
+    observable && props.navigation.depth > 1
+      ? {
+        identity: `navigation:${props.navigation.name}:native-back`,
+        kind: 'action',
+        label: () => 'Back',
+        live: backCapabilities,
+        provenance: { navigation: props.navigation.name },
+      }
+      : undefined,
+  )
+  const backOccurrence: TaoInteractionOccurrence | undefined = backIdentity === undefined
+    ? undefined
+    : { capabilities: backCapabilities, control: backIdentity, scope: backIdentity }
+  const activateBack = InteractionControls.Activate(backOccurrence, () => props.navigation.back())
   return React.createElement(
     ScreenStackItem,
     {
@@ -72,7 +94,7 @@ function NativeStackItem(props: {
       activityState: 2,
       children: React.createElement(
         OutlineRegionScope,
-        { region: presentedOccurrenceRegion(props.navigation, props.entry, 'content') },
+        { region: presentedOccurrenceRegion(props.navigation, props.entry, 'content', () => observable) },
         React.createElement(
           AppSurfaceFrame,
           { nativeInsets: true, taoProps: props.taoProps },
@@ -91,7 +113,7 @@ function NativeStackItem(props: {
         props.navigation.reconcileNativeDismissal(props.entry.instanceId, count)
       },
       onHeaderBackButtonClicked: () => {
-        props.navigation.back()
+        activateBack()
       },
       screenId: String(props.entry.instanceId),
       shouldFreeze: false,
@@ -111,7 +133,11 @@ export function NativeToolbar(props: { commands: readonly TaoNavigationCommand[]
     overflow.length > 0
       ? React.cloneElement(
         Views.Pressable(
-          { action: { invoke: () => setExpanded(value => !value) }, title: 'More' },
+          {
+            action: { invoke: () => setExpanded(value => !value) },
+            semanticIdentity: 'navigation:toolbar:more',
+            title: 'More',
+          },
           { nativeProps: { accessibilityLabel: 'More', accessibilityRole: 'button' } },
         ),
         { key: 'more' },
