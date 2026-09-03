@@ -66,7 +66,8 @@ const {
   parseStoredRecord,
   resolveDeviceBootstrap,
   secureStoreStorage,
-  shouldRedialOnForeground,
+  shouldAcknowledgeCell,
+  studioDeviceAppStateAction,
   webSocketTransport,
 } = await import('../TaoRuntime-src/TR-studio-device-host')
 
@@ -247,23 +248,45 @@ Describe('Studio device host presentation', () => {
   })
 })
 
-Describe('Studio device host foreground redial', () => {
-  Test('redials only a genuine background-to-active transition that found the client disconnected', () => {
-    Expect(shouldRedialOnForeground('background', 'active', 'disconnected')).toBe(true)
-    Expect(shouldRedialOnForeground('inactive', 'active', 'disconnected')).toBe(true)
+Describe('Studio device host background lifecycle', () => {
+  Test('pauses on the first transition into background', () => {
+    Expect(studioDeviceAppStateAction('background', false)).toBe('pause')
   })
 
-  Test('leaves a healthy or already-recovering client alone', () => {
-    Expect(shouldRedialOnForeground('background', 'active', 'connected')).toBe(false)
-    Expect(shouldRedialOnForeground('background', 'active', 'connecting')).toBe(false)
-    Expect(shouldRedialOnForeground('background', 'active', 'handshaking')).toBe(false)
-    Expect(shouldRedialOnForeground('background', 'active', 'pairing')).toBe(false)
+  Test('does not re-pause an already-paused client', () => {
+    Expect(studioDeviceAppStateAction('background', true)).toBe('none')
   })
 
-  Test('ignores a transition that is not background-to-active', () => {
-    Expect(shouldRedialOnForeground('active', 'active', 'disconnected')).toBe(false)
-    Expect(shouldRedialOnForeground('active', 'background', 'disconnected')).toBe(false)
-    Expect(shouldRedialOnForeground('background', 'inactive', 'disconnected')).toBe(false)
+  Test('resumes a paused client returning to active', () => {
+    Expect(studioDeviceAppStateAction('active', true)).toBe('resume')
+  })
+
+  Test('does not resume a client that was never paused', () => {
+    Expect(studioDeviceAppStateAction('active', false)).toBe('none')
+  })
+
+  Test('treats inactive as a transient blip, not a background/foreground edge', () => {
+    Expect(studioDeviceAppStateAction('inactive', false)).toBe('none')
+    Expect(studioDeviceAppStateAction('inactive', true)).toBe('none')
+  })
+})
+
+Describe('Studio device host cell acknowledgement', () => {
+  Test('acknowledges an identity that has neither been applied nor errored', () => {
+    Expect(shouldAcknowledgeCell('a:1', undefined, undefined)).toBe(true)
+    Expect(shouldAcknowledgeCell('a:1', 'a:0', undefined)).toBe(true)
+  })
+
+  Test('does not re-acknowledge the identity already sent', () => {
+    Expect(shouldAcknowledgeCell('a:1', 'a:1', undefined)).toBe(false)
+  })
+
+  Test('does not acknowledge an identity whose first render errored', () => {
+    Expect(shouldAcknowledgeCell('a:1', undefined, 'a:1')).toBe(false)
+  })
+
+  Test('a later identity is unaffected by an earlier one having errored', () => {
+    Expect(shouldAcknowledgeCell('a:2', undefined, 'a:1')).toBe(true)
   })
 })
 

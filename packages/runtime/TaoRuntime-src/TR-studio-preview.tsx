@@ -32,6 +32,9 @@ type StudioPreviewBridgeProps = {
 
 type StudioPreviewErrorBoundaryProps = {
   children?: React.ReactNode
+  /** Called once, synchronously during commit — before any sibling's `useEffect` — so a caller
+   * deciding whether to acknowledge the cell that just mounted can see the failure first. */
+  onError?: (error: unknown) => void
 }
 
 type StudioPreviewErrorBoundaryState = {
@@ -144,6 +147,10 @@ class StudioPreviewErrorBoundary extends React.Component<
 
   static getDerivedStateFromError(error: unknown): StudioPreviewErrorBoundaryState {
     return { error }
+  }
+
+  override componentDidCatch(error: unknown): void {
+    this.props.onError?.(error)
   }
 
   override render(): React.ReactNode {

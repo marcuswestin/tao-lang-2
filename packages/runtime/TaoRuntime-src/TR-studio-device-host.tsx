@@ -23,7 +23,6 @@ import {
   type StudioDeviceClient,
   type TaoStudioDeviceAssignment,
   type TaoStudioDeviceBootstrap,
-  type TaoStudioDeviceClientPhase,
   type TaoStudioDeviceClientState,
   type TaoStudioDeviceSocket,
   type TaoStudioDeviceStorage,
@@ -205,17 +204,37 @@ export function cellIdentityKey(identity: TaoStudioDeviceCellIdentity): string {
 }
 
 /**
- * shouldRedialOnForeground decides whether the app returning to the foreground should shortcut the
- * client's own backoff with an immediate reconnect. Only a genuine background→active transition
- * while the client already gave up (`disconnected`) qualifies — a client mid-attempt or already
- * connected has nothing for this to fix, and redialing it would tear down a healthy session.
+ * shouldAcknowledgeCell decides whether the currently mounted identity should send `device.applied`:
+ * not already sent for this identity, and not the identity whose first render threw into the error
+ * boundary. Acknowledging a cell that failed to render would tell Studio the phone is showing the
+ * assigned revision when it is actually showing an error screen.
  */
-export function shouldRedialOnForeground(
-  previousAppState: string,
-  nextAppState: string,
-  phase: TaoStudioDeviceClientPhase,
+export function shouldAcknowledgeCell(
+  identityKey: string,
+  appliedKey: string | undefined,
+  erroredKey: string | undefined,
 ): boolean {
-  return previousAppState !== 'active' && nextAppState === 'active' && phase === 'disconnected'
+  return identityKey !== appliedKey && identityKey !== erroredKey
+}
+
+/**
+ * studioDeviceAppStateAction decides what an `AppState` transition should do to a client the host
+ * owns: "backgrounding pauses the client; foregrounding dials again with the stored key" (the
+ * settled protocol contract). `paused` is the host's own record of whether it already stopped the
+ * client, not the client's `phase` — `stop()` resets the client to `idle`, so the client's own state
+ * cannot tell a paused client apart from one that never started. `'inactive'` is a transient blip
+ * (a system alert, the app switcher, a brief interruption) that iOS reports on the way into and out
+ * of `'background'`; reacting to it directly would pause and resume the connection for interruptions
+ * that were never really backgrounding.
+ */
+export function studioDeviceAppStateAction(nextAppState: string, paused: boolean): 'none' | 'pause' | 'resume' {
+  if (nextAppState === 'background') {
+    return paused ? 'none' : 'pause'
+  }
+  if (nextAppState === 'active') {
+    return paused ? 'resume' : 'none'
+  }
+  return 'none'
 }
 
 /** deviceHostPresentation decides what one client snapshot puts on the screen. */
@@ -453,6 +472,26 @@ export function StudioDeviceHost(props: StudioDeviceHostProps): React.JSX.Elemen
     void client.start()
     return () => client.stop()
   }, [client, ownsClient])
+  // "Backgrounding pauses the client; foregrounding dials again with the stored key" — only for a
+  // client this host owns the lifecycle of; a caller-supplied client controls its own start/stop.
+  React.useEffect(() => {
+    const AppState = RN.AppState
+    if (client === undefined || !ownsClient || AppState === undefined) {
+      return undefined
+    }
+    let paused = false
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      const action = studioDeviceAppStateAction(nextAppState, paused)
+      if (action === 'pause') {
+        paused = true
+        client.stop()
+      } else if (action === 'resume') {
+        paused = false
+        void client.start()
+      }
+    })
+    return () => subscription.remove()
+  }, [RN.AppState, client, ownsClient])
   if (client === undefined || resolution.kind === 'missing') {
     return React.createElement(
       RN.View,
@@ -481,34 +520,29 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
   const identityKey = presentation.kind === 'cell' ? cellIdentityKey(presentation.assignment.identity) : undefined
   const identity = presentation.kind === 'cell' ? presentation.assignment.identity : undefined
   const appliedKey = React.useRef<string | undefined>(undefined)
+  const erroredKey = React.useRef<string | undefined>(undefined)
   const compileRevision = props.publication.compileRevision
-  // Runs after the cell subtree mounted, once per identity: the acknowledgement names what is on screen.
+  const handleCellError = React.useCallback((error: unknown) => {
+    if (identityKey !== undefined) {
+      erroredKey.current = identityKey
+    }
+    client.report('error', errorMessage(error))
+  }, [client, identityKey])
+  // Runs after the cell subtree mounted, once per identity: the acknowledgement names what is on
+  // screen. `componentDidCatch` (which sets erroredKey) fires during commit, before this passive
+  // effect, so a cell that failed on its first render for this identity is visible here — the
+  // acknowledgement would otherwise claim a revision the phone is showing an error screen for, not
+  // the assigned cell.
   React.useEffect(() => {
-    if (identityKey === undefined || identity === undefined || appliedKey.current === identityKey) {
+    if (identityKey === undefined || identity === undefined) {
+      return
+    }
+    if (!shouldAcknowledgeCell(identityKey, appliedKey.current, erroredKey.current)) {
       return
     }
     appliedKey.current = identityKey
     client.applied(identity, compileRevision)
   }, [client, compileRevision, identity, identityKey])
-
-  // A dropped socket already retries on its own backoff (capped at 15s); this only shortens that
-  // wait when the app resumes from the background and finds itself still disconnected. It must not
-  // fire when the client is merely mid-attempt (connecting, handshaking, pairing) or already
-  // connected — reconnect() would tear down and redial a healthy session for no reason.
-  React.useEffect(() => {
-    const AppState = RN.AppState
-    if (AppState === undefined) {
-      return undefined
-    }
-    let previousAppState = AppState.currentState
-    const subscription = AppState.addEventListener('change', nextAppState => {
-      if (shouldRedialOnForeground(previousAppState, nextAppState, client.state().phase)) {
-        client.reconnect()
-      }
-      previousAppState = nextAppState
-    })
-    return () => subscription.remove()
-  }, [RN.AppState, client])
 
   const content = presentation.kind === 'cell'
     ? React.createElement(StudioDeviceCell, {
@@ -517,6 +551,7 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
       cellRuntime: props.cellRuntime,
       key: identityKey,
       manifest: props.manifest,
+      onError: handleCellError,
     })
     : React.createElement(DeviceOverlay, { client, presentation })
   return React.createElement(
@@ -537,11 +572,13 @@ function StudioDeviceCell(props: {
   assignment: TaoStudioDeviceAssignment
   cellRuntime: StudioDeviceHostProps['cellRuntime']
   manifest: unknown
+  onError: (error: unknown) => void
 }): React.JSX.Element {
+  const { onError, ...content } = props
   return React.createElement(
     StudioPreview.ErrorBoundary,
-    null,
-    React.createElement(StudioDeviceCellContent, props),
+    { onError },
+    React.createElement(StudioDeviceCellContent, content),
   )
 }
 
