@@ -17,6 +17,7 @@ export namespace InPlace {
 
   /** ProcessOptions configures how an in-place file transform applies its output. */
   export type ProcessOptions = {
+    changedIsError?: string
     write: boolean
   }
 
@@ -49,7 +50,13 @@ async function processFile(
   try {
     const before = await FS.readText(path)
     const after = await transform(before)
-    return options.write ? await writeWhenChanged(path, before, after) : compareOnly(path, before, after)
+    if (options.write) {
+      return await writeWhenChanged(path, before, after)
+    }
+    if (options.changedIsError !== undefined && after !== before) {
+      return { path, status: 'error', error: options.changedIsError }
+    }
+    return compareOnly(path, before, after)
   } catch (error) {
     return inPlaceError(path, error)
   }

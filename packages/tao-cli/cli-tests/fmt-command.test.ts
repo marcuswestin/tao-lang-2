@@ -71,4 +71,19 @@ Describe('tao fmt', () => {
       Expect(await FS.readText(path)).toBe('app MyApp {\n   view MainView\n}\n\nview MainView() { }\n')
     })
   })
+
+  Test('checks an explicitly named generated file without rewriting it', async () => {
+    const generated = 'view   Generated() { }'
+    await withTaoFixture({ '@/studio/Generated.tao': generated }, async rootDir => {
+      const path = FS.resolvePath('@/studio/Generated.tao', rootDir)
+      const results = await runFmt(path)
+
+      Expect(results).toEqual([{
+        error: 'Generated source under @/ is not canonical; regenerate it instead of rewriting it.',
+        path,
+        status: 'error',
+      }])
+      Expect(await FS.readText(path)).toBe(generated)
+    })
+  })
 })

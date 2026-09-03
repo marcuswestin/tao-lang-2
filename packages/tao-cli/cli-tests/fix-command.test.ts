@@ -58,6 +58,27 @@ Describe('tao fix', () => {
     })
   })
 
+  Test('checks generated root-package source without rewriting it', async () => {
+    const generated = 'view   Generated() { }'
+    await withTaoFixture({
+      '@/studio/Generated.tao': generated,
+      'App.tao': 'view   AppView() { }',
+      'Packages/@cards/Card.tao': 'view   Card() { }',
+    }, async rootDir => {
+      const results = await runFix(rootDir)
+
+      Expect(statusByFile(results, rootDir)).toEqual({
+        '@/studio/Generated.tao': 'error',
+        'App.tao': 'changed',
+        'Packages/@cards/Card.tao': 'changed',
+      })
+      Expect(await FS.readText(FS.resolvePath('@/studio/Generated.tao', rootDir))).toBe(generated)
+      Expect(await FS.readText(FS.resolvePath('App.tao', rootDir))).toBe('view AppView() { }\n')
+      Expect(await FS.readText(FS.resolvePath('Packages/@cards/Card.tao', rootDir))).toBe('view Card() { }\n')
+      Expect(results[0]?.error).toContain('regenerate it instead of rewriting it')
+    })
+  })
+
   for (const pathCase of packageAwareCliPathCases) {
     Test(`uses package-aware workspace roots for ${pathCase.name}`, async () => {
       await withTaoFixture(packageAwareCliFixture, async rootDir => {

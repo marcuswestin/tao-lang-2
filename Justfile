@@ -106,13 +106,15 @@ test PATTERN="": _compile-word-flower-app
 
 # Format code, without applying the other Tao source fixes
 fmt: _parser-gen
-    dprint fmt --incremental=false
+    dprint fmt --incremental=false --excludes "@/"
+    dprint check --incremental=false --allow-no-files "@/**/*"
     ./tao fmt
     just --fmt
 
 # Fix and format all code
 fix: _parser-gen
-    dprint fmt --incremental=false
+    dprint fmt --incremental=false --excludes "@/"
+    dprint check --incremental=false --allow-no-files "@/**/*"
     ./tao fix
     just --fmt
 
@@ -206,7 +208,8 @@ _dependency-health:
 
 # The three fix steps, each over its own file class, as the verify graph runs them
 _fix-dprint:
-    dprint fmt --incremental=false
+    dprint fmt --incremental=false --excludes "@/"
+    dprint check --incremental=false --allow-no-files "@/**/*"
 
 _fix-tao: _parser-gen
     ./tao fix

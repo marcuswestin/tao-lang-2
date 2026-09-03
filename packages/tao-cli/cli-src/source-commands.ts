@@ -33,7 +33,7 @@ async function runCanonicalSource(path: string, options: CanonicalSourceOptions)
 }
 
 async function formatFile(session: FormatterSession, path: string): Promise<InPlace.Result> {
-  return await inPlace.processFile(path, () => session.formatFile(path), { write: true })
+  return await inPlace.processFile(path, () => session.formatFile(path), protectedWriteOptions(path, true))
 }
 
 async function canonicalizeFile(
@@ -51,6 +51,20 @@ async function canonicalizeFile(
         },
       })
     },
-    { write: options.write },
+    protectedWriteOptions(path, options.write),
   )
+}
+
+function protectedWriteOptions(path: string, requestedWrite: boolean): InPlace.ProcessOptions {
+  const generated = generatedPackageFile(path)
+  return {
+    ...(requestedWrite && generated
+      ? { changedIsError: 'Generated source under @/ is not canonical; regenerate it instead of rewriting it.' }
+      : {}),
+    write: requestedWrite && !generated,
+  }
+}
+
+function generatedPackageFile(path: string): boolean {
+  return FS.slashPath(path).split('/').includes('@')
 }

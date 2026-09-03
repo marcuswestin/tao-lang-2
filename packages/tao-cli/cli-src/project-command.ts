@@ -23,7 +23,9 @@ export async function createProject(id: string): Promise<string> {
   }
 
   const appPath = FS.resolvePath('App.tao', directory)
+  const generatedPackageMarker = FS.resolvePath('@/.gitkeep', directory)
   await FS.writeText(appPath, projectTemplate(id))
+  await FS.writeText(generatedPackageMarker, '')
   return appPath
 }
 

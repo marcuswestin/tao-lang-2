@@ -419,13 +419,21 @@ Describe('agent worktree profile bootstrap', () => {
   })
 
   Test('never runs dprint with the incremental cache that would live in a home directory', async () => {
-    for (const lane of ['fix', 'fmt', '_dprint-check']) {
+    for (const lane of ['fix', 'fmt', '_fix-dprint', '_dprint-check']) {
       const dprintCommands = (await justCommands(lane)).split('\n')
         .filter(line => line.trimStart().startsWith('dprint '))
       Expect(dprintCommands.every(command => command.includes('--incremental=false'))).toBe(true)
     }
     // And the checking gate, which `check` runs, uses the same flag.
     Expect(await justCommands('_dprint-check')).toContain('dprint check --incremental=false')
+  })
+
+  Test('checks generated root-package files without letting fix lanes rewrite them', async () => {
+    for (const lane of ['fix', 'fmt', '_fix-dprint']) {
+      const commands = await justCommands(lane)
+      Expect(commands).toContain('dprint fmt --incremental=false --excludes "@/"')
+      Expect(commands).toContain('dprint check --incremental=false --allow-no-files "@/**/*"')
+    }
   })
 
   Test('formats the Justfile in the same lane that checks its formatting', async () => {
