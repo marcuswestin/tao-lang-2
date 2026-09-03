@@ -37,12 +37,18 @@ export type StudioSharedFixtureRequest = Readonly<{
 export const StudioSharedFixtureSource = {
   async promote(request: StudioSharedFixtureRequest): Promise<StudioSharedFixtureResult> {
     const imports = canonicalImports(request.imports)
-    const promotions = canonicalPromotions(request.promotions, imports)
-    let source = request.source ?? initialSource(imports, promotions)
+    const canonical = canonicalPromotions(request.promotions, imports)
+    let promotions: readonly StudioSharedFixturePromotion[]
+    let source: string
 
-    if (request.source !== undefined) {
+    if (request.source === undefined) {
+      promotions = orderPromotions(canonical, new Set())
+      source = initialSource(imports, promotions)
+    } else {
+      source = request.source
       let document = await parseSource(source)
-      requireSketchesFixture(document)
+      const fixture = requireSketchesFixture(document)
+      promotions = orderPromotions(canonical, new Set(fixture.block.entries.map(entry => entry.name)))
       source = await addMissingImports(source, document, imports)
       document = await parseSource(source)
       source = await addMissingPromotions(source, requireSketchesFixture(document), promotions)
@@ -108,6 +114,62 @@ function canonicalPromotions(
     byName.set(canonical.name, canonical)
   }
   return [...byName.values()].toSorted((left, right) => left.name.localeCompare(right.name))
+}
+
+/** Orders new fixture rows after every promoted row they reference and rejects invalid dependency graphs. */
+function orderPromotions(
+  promotions: readonly StudioSharedFixturePromotion[],
+  existingHandles: ReadonlySet<string>,
+): readonly StudioSharedFixturePromotion[] {
+  const byName = new Map(promotions.map(promotion => [promotion.name, promotion]))
+  const availableHandles = new Set([...existingHandles, ...byName.keys()])
+  for (const promotion of promotions) {
+    for (const dependency of promotionDependencies(promotion)) {
+      if (!availableHandles.has(dependency)) {
+        throw new Errors.UserInputError(
+          `Studio fixture row ${promotion.name} references an unknown fixture handle: ${dependency}`,
+        )
+      }
+    }
+  }
+
+  const pending = new Map(
+    promotions
+      .filter(promotion => !existingHandles.has(promotion.name))
+      .map(promotion => [
+        promotion.name,
+        new Set(promotionDependencies(promotion).filter(dependency => !existingHandles.has(dependency))),
+      ]),
+  )
+  const ordered: StudioSharedFixturePromotion[] = []
+  while (pending.size > 0) {
+    const ready = [...pending.entries()]
+      .filter(([, dependencies]) => [...dependencies].every(dependency => !pending.has(dependency)))
+      .map(([name]) => name)
+      .toSorted()
+    if (ready.length === 0) {
+      throw new Errors.UserInputError(
+        `Studio fixture row dependencies form a cycle: ${[...pending.keys()].toSorted().join(', ')}`,
+      )
+    }
+    for (const name of ready) {
+      ordered.push(byName.get(name)!)
+      pending.delete(name)
+    }
+  }
+
+  return [
+    ...promotions.filter(promotion => existingHandles.has(promotion.name)),
+    ...ordered,
+  ]
+}
+
+function promotionDependencies(promotion: StudioSharedFixturePromotion): string[] {
+  return Object.values(promotion.fields)
+    .filter((value): value is StudioSharedFixtureHandle =>
+      typeof value === 'object' && value.kind === 'fixture-reference'
+    )
+    .map(value => value.handle)
 }
 
 function initialSource(

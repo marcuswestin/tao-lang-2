@@ -11,7 +11,8 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // the effective `run` or `render` subject, replay when the Studio cell mounts, and leave it
 // interactive in the reached state. `press down`, `press up`, and `hover` accept the same text,
 // label, placeholder, and #tag selectors as `press`; `focus` is tag-only. Plain `press` remains a
-// complete activation. A required action argument may be omitted only from a scenario render, where
+// complete activation; `enter`, `submit`, and tagged-row `select` retain their test spellings. A
+// required action argument may be omitted only from a scenario render, where
 // Studio supplies a per-cell logging stand-in. A fixture is optional and means an empty store; it is
 // required only when `prepare` or a render argument references a fixture handle.
 //

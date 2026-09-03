@@ -205,9 +205,7 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
     }
     validateArgsForSubject(input, subject.subjectId, scenario.args)
     library.resolve(scenario.stateLayers)
-    for (const step of scenario.steps ?? []) {
-      validateJourneyStep(step)
-    }
+    validateJourneySteps(scenario.steps)
   }
   uniqueBy(input.cells, cell => cell.cellId, 'Studio cell')
   for (const cell of input.cells) {
@@ -227,28 +225,83 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
   return input
 }
 
-function validateJourneyStep(step: NonNullable<StudioScenario['steps']>[number]): void {
-  if (step.kind === 'advance') {
-    if (!Number.isSafeInteger(step.milliseconds) || step.milliseconds < 0) {
+function validateJourneySteps(steps: unknown, depth = 0): void {
+  if (steps === undefined) {
+    return
+  }
+  if (!Array.isArray(steps)) {
+    throw new Errors.UserInputError('Studio journey steps must be an array.')
+  }
+  if (depth > 64) {
+    throw new Errors.UserInputError('Studio journey steps are nested too deeply.')
+  }
+  for (const step of steps) {
+    validateJourneyStep(step, depth)
+  }
+}
+
+function validateJourneyStep(step: unknown, depth: number): void {
+  if (!isRecord(step) || typeof step['kind'] !== 'string') {
+    throw new Errors.UserInputError('Studio journey step must be an object with a supported kind.')
+  }
+  const kind = step['kind']
+  if (kind === 'advance') {
+    requireOnlyKeys(step, ['kind', 'milliseconds'], 'Studio journey advance')
+    if (!Number.isSafeInteger(step['milliseconds']) || (step['milliseconds'] as number) < 0) {
       throw new Errors.UserInputError('Studio journey advance must be a non-negative whole number of milliseconds.')
     }
     return
   }
-  if (step.kind === 'focus') {
-    requireText(step.tag, 'Studio journey focus tag')
+  if (kind === 'focus') {
+    requireOnlyKeys(step, ['kind', 'tag'], 'Studio journey focus')
+    requireText(step['tag'] as string, 'Studio journey focus tag')
     return
   }
-  if (step.kind === 'select') {
-    requireText(step.tag, 'Studio journey select tag')
-    if (!Number.isSafeInteger(step.index) || step.index < 1) {
+  if (kind === 'select') {
+    requireOnlyKeys(step, ['index', 'kind', 'steps', 'tag'], 'Studio journey select')
+    requireText(step['tag'] as string, 'Studio journey select tag')
+    if (!Number.isSafeInteger(step['index']) || (step['index'] as number) < 1) {
       throw new Errors.UserInputError('Studio journey select index must be a positive whole number.')
     }
-    for (const nestedStep of step.steps) {
-      validateJourneyStep(nestedStep)
+    if (!Array.isArray(step['steps'])) {
+      throw new Errors.UserInputError('Studio journey select steps must be an array.')
+    }
+    validateJourneySteps(step['steps'], depth + 1)
+    return
+  }
+  if (kind === 'enter') {
+    requireOnlyKeys(step, ['kind', 'selector', 'target', 'value'], 'Studio journey enter')
+    validateJourneySelector(step['selector'], kind)
+    requireText(step['target'] as string, 'Studio journey enter target')
+    if (typeof step['value'] !== 'string') {
+      throw new Errors.UserInputError('Studio journey enter value must be text.')
     }
     return
   }
-  requireText(step.target, `Studio journey ${step.kind} target`)
+  if (['hover', 'press', 'pressDown', 'pressUp', 'submit'].includes(kind)) {
+    requireOnlyKeys(step, ['kind', 'selector', 'target'], `Studio journey ${kind}`)
+    validateJourneySelector(step['selector'], kind)
+    requireText(step['target'] as string, `Studio journey ${kind} target`)
+    return
+  }
+  throw new Errors.UserInputError(`Unsupported Studio journey step kind: ${kind}`)
+}
+
+function validateJourneySelector(value: unknown, kind: string): void {
+  if (value !== 'label' && value !== 'placeholder' && value !== 'tag' && value !== 'text') {
+    throw new Errors.UserInputError(`Studio journey ${kind} selector is invalid.`)
+  }
+}
+
+function requireOnlyKeys(value: Readonly<Record<string, unknown>>, allowed: readonly string[], label: string): void {
+  const unknown = Object.keys(value).find(key => !allowed.includes(key))
+  if (unknown !== undefined) {
+    throw new Errors.UserInputError(`${label} contains an unsupported field: ${unknown}`)
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function cellIdentity(manifest: StudioPreviewManifestV2, cell: StudioPreviewCell): StudioCellIdentity {

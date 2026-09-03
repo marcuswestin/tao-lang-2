@@ -52,6 +52,21 @@ Describe('validator: minimal design', () => {
       .toEqual([])
   })
 
+  Test('warns through a transparent project alias to the terminal stdlib Placeholder', async () => {
+    const result = await Validator.validateCode(`
+      use package @tao/ui as ui
+      view Draft = ui.Placeholder
+      view Main() { render Draft("Project content") }
+    `)
+
+    const warnings = result.diagnostics.filter(diagnostic =>
+      diagnostic.code === designValidationCodes.placeholderShipping
+    )
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+    Expect(warnings).toHaveLength(1)
+    Expect(warnings[0]?.message).toBe(messages.placeholderShipping)
+  })
+
   Test(
     'accepts exact hex forms, WordFlower bundles, and decomposed later layout effects',
     accepts(designApp(

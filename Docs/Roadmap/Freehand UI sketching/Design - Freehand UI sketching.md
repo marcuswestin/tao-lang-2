@@ -45,8 +45,9 @@ cell and delegates initial Pencil input to a native sidecar.
 
 - Scenario entries may omit a fixture when no fixture handle is referenced. Required action
   parameters omitted by a focused render receive logging stand-ins.
-- A scenario entry may contain ordered test-shaped steps after its subject. Pointer phase, hover,
-  and focus steps extend the existing step seam; states are reached by replay, never forced.
+- A scenario entry may contain ordered test-shaped steps after its subject. Existing plain press,
+  enter, submit, and tagged-row select steps remain available; pointer phase, hover, and focus extend
+  that seam. States are reached by replay, never forced.
 - Duplicate cells are scenario entries over one definition. Generated values are deterministic and
   become durable only when promoted to ordinary fixture rows.
 - Editing a variant cell is an explicit persistent mode. Conditional changes default to the cell's
@@ -102,7 +103,8 @@ cell and delegates initial Pencil input to a native sidecar.
 
 - Scenario pointer phases are `press down <selector>` and `press up <selector>`; hover is
   `hover <selector>`. All three accept the existing text, label, placeholder, and `#tag` selector
-  family. Focus is tag-only as `focus #tag`. Plain `press` remains a complete activation.
+  family. Focus is tag-only as `focus #tag`. Plain `press`, `enter`, `submit`, and tagged-row
+  `select` retain their test-step spellings in scenario prefixes.
 - `Spacer()` is the semantic flexible-space leaf. It has implicit `claim 1`, and an explicit
   `[claim N]` overrides that weight.
 

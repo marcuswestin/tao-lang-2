@@ -117,12 +117,18 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
 
 function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void {
   // Almost every render can skip package resolution. Placeholder is deliberately uncommon in
-  // authored product source, and this validator runs for every render in every workspace document.
-  if (render.view?.$refText === 'Placeholder' && !isNonShippingSource(render, ctx)) {
-    const renderedView = ASTUtils.resolveRenderInvocation(render).view
+  // authored product source. Alias renders are the only other calls that can terminate at it.
+  const renderedView = render.view?.ref
+  if (
+    renderedView !== undefined
+    && (render.view?.$refText === 'Placeholder' || renderedView.aliasTarget !== undefined)
+    && !isNonShippingSource(render, ctx)
+  ) {
+    const terminalView = renderedView.aliasTarget === undefined ? renderedView : AST.viewAliasTarget(renderedView)
     if (
-      renderedView?.name === 'Placeholder'
-      && FS.pathIsWithin(AST.getDocument(renderedView).uri.path, ctx.packagesContext.stdlibRoot)
+      AST.isViewDeclaration(terminalView)
+      && terminalView.name === 'Placeholder'
+      && FS.pathIsWithin(AST.getDocument(terminalView).uri.path, ctx.packagesContext.stdlibRoot)
     ) {
       ctx.warning(designValidationMessages.placeholderShipping, render, {
         code: designValidationCodes.placeholderShipping,

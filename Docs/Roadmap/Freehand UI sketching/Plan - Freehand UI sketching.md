@@ -58,9 +58,10 @@ tranches because they settle different contracts and force different application
 
 **Decisions.** FS-D7, FS-D8, FS-D9, FS-D10.
 
-**Goal.** A focused scenario can reach pointer phases through ordered journey steps, omit an unused
-fixture, omit required action arguments through logging stand-ins, and render the two sketch-support
-elements without Studio-specific runtime exceptions.
+**Goal.** A focused scenario can reach interaction states through ordered journey steps, including
+activation, input, selection, and pointer phases; omit an unused fixture; omit required action
+arguments through logging stand-ins; and render the two sketch-support elements without
+Studio-specific runtime exceptions.
 
 **Dependencies.** None after the two language spellings below are settled. **Size.** XL.
 
@@ -69,9 +70,10 @@ button sequence with phase steps and `advance 600.ms`, and includes a labelled `
 Studio's own client. L1 proves ordered phase delivery in the shared adapter; Tao-visible `pressed`
 styling waits for L2. The cell log proves the stand-in invocation.
 
-**Introduces.** Scenario entries accept ordered steps after their `run` or `render` subject. The
-test-step IR and runtime gain pointer-down, pointer-up, hover, and focus delivery through Testing
-Library events; the scenario host replays the prefix once before leaving the cell interactive. A
+**Introduces.** Scenario entries accept ordered steps after their `run` or `render` subject. Plain
+press, enter, submit, and tagged-row select retain their test-step spellings; the shared IR and
+runtime add pointer-down, pointer-up, hover, and focus delivery through Testing Library events. The
+scenario host replays the prefix once before leaving the cell interactive. A
 focused render may omit required action parameters, which receive per-cell invocation-recording
 stand-ins. Fixture clauses become optional and validation requires one only for handle-bearing
 arguments or `prepare`. `@tao/ui` publishes `Placeholder` with development/release rendering and
@@ -79,10 +81,10 @@ design-check participation, plus the settled spacer representation.
 
 **Tests.** Parser/formatter/validator tests for step placement, source order, selector rules,
 fixture dependency diagnostics, and omitted action versus non-action parameters. Compiler/runtime
-tests prove the shared test/scenario step IR, exact phase events, replay-before-interaction, stand-in
-log isolation, and release `Placeholder` output. Tao journeys prove held press, hover/focus where
-observable, optional fixture, and both elements in WordFlower Current. Studio journey proves a cell
-replays its prefix and remains interactive.
+tests prove the shared test/scenario step IR, activation/input/selection and exact phase events,
+replay-before-interaction, stand-in log isolation, and release `Placeholder` output. Tao journeys
+prove held press, hover/focus where observable, optional fixture, and both elements in WordFlower
+Current. Studio journey proves a cell replays its prefix and remains interactive.
 
 **Reconcile.** `Decisions.md` §9 and §16, `Docs/Spec/Tao Studio.md`, `Tao Testing.md`, `Tao Layout and
 UI.md`, the stdlib/package catalog, `Coverage.md`, and all WordFlower tiers at absorption.

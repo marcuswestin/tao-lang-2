@@ -1,3 +1,4 @@
+import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { StudioSharedFixtureSource } from '../studio-src/StudioSharedFixtureSource'
 
@@ -68,6 +69,59 @@ Describe('Studio shared fixture source', () => {
     Expect(repeated.source).toBe(extended.source)
   })
 
+  Test('orders promoted rows after their fixture-handle dependencies rather than by name', async () => {
+    const result = await StudioSharedFixtureSource.promote({
+      imports: [accountImport],
+      promotions: [
+        {
+          entity: 'Account',
+          fields: { Owner: { handle: 'Zed', kind: 'fixture-reference' } },
+          name: 'Alpha',
+        },
+        { entity: 'Account', fields: { Name: 'Zed' }, name: 'Zed' },
+      ],
+    })
+
+    Expect(result.source.indexOf('Zed = create Account')).toBeLessThan(
+      result.source.indexOf('Alpha = create Account'),
+    )
+    Expect(result.handles).toEqual([
+      { handle: 'Zed', kind: 'fixture-reference' },
+      { handle: 'Alpha', kind: 'fixture-reference' },
+    ])
+  })
+
+  Test('rejects missing and cyclic promotion dependencies before producing source', async () => {
+    const missing = StudioSharedFixtureSource.promote({
+      imports: [accountImport],
+      promotions: [{
+        entity: 'Account',
+        fields: { Owner: { handle: 'Missing', kind: 'fixture-reference' } },
+        name: 'Alpha',
+      }],
+    })
+    await Expect(missing).rejects.toBeInstanceOf(Errors.UserInputError)
+    await Expect(missing).rejects.toThrow('Alpha references an unknown fixture handle: Missing')
+
+    const cyclic = StudioSharedFixtureSource.promote({
+      imports: [accountImport],
+      promotions: [
+        {
+          entity: 'Account',
+          fields: { Owner: { handle: 'Zed', kind: 'fixture-reference' } },
+          name: 'Alpha',
+        },
+        {
+          entity: 'Account',
+          fields: { Owner: { handle: 'Alpha', kind: 'fixture-reference' } },
+          name: 'Zed',
+        },
+      ],
+    })
+    await Expect(cyclic).rejects.toBeInstanceOf(Errors.UserInputError)
+    await Expect(cyclic).rejects.toThrow('dependencies form a cycle: Alpha, Zed')
+  })
+
   Test('rejects a same-name row with different content', async () => {
     const first = await StudioSharedFixtureSource.promote({
       imports: [playlistImport],
@@ -84,17 +138,20 @@ Describe('Studio shared fixture source', () => {
   Test('serializes strings, time, numbers, booleans, and fixture references safely', async () => {
     const result = await StudioSharedFixtureSource.promote({
       imports: [playlistImport],
-      promotions: [{
-        entity: 'Playlist',
-        fields: {
-          Active: false,
-          Count: 12.5,
-          CreatedAt: { kind: 'now' },
-          Owner: { handle: 'Ada', kind: 'fixture-reference' },
-          Title: 'Quote " slash \\ line\nemoji 😀',
+      promotions: [
+        { entity: 'Playlist', fields: { Title: 'Owner' }, name: 'Ada' },
+        {
+          entity: 'Playlist',
+          fields: {
+            Active: false,
+            Count: 12.5,
+            CreatedAt: { kind: 'now' },
+            Owner: { handle: 'Ada', kind: 'fixture-reference' },
+            Title: 'Quote " slash \\ line\nemoji 😀',
+          },
+          name: 'Escaped',
         },
-        name: 'Escaped',
-      }],
+      ],
     })
 
     Expect(result.source).toContain('Active: false')
@@ -105,17 +162,20 @@ Describe('Studio shared fixture source', () => {
 
     const repeated = await StudioSharedFixtureSource.promote({
       imports: [playlistImport],
-      promotions: [{
-        entity: 'Playlist',
-        fields: {
-          Active: false,
-          Count: 12.5,
-          CreatedAt: { kind: 'now' },
-          Owner: { handle: 'Ada', kind: 'fixture-reference' },
-          Title: 'Quote " slash \\ line\nemoji 😀',
+      promotions: [
+        { entity: 'Playlist', fields: { Title: 'Owner' }, name: 'Ada' },
+        {
+          entity: 'Playlist',
+          fields: {
+            Active: false,
+            Count: 12.5,
+            CreatedAt: { kind: 'now' },
+            Owner: { handle: 'Ada', kind: 'fixture-reference' },
+            Title: 'Quote " slash \\ line\nemoji 😀',
+          },
+          name: 'Escaped',
         },
-        name: 'Escaped',
-      }],
+      ],
       source: result.source,
     })
     Expect(repeated.source).toBe(result.source)
