@@ -1,14 +1,22 @@
 // Studio agent chat: the endpoint, and the one conversation a project session holds.
 
 import { FS, Repo } from '@shared'
+import type { ToolSet } from 'ai'
 import { buildSemanticSnapshot, resolveTarget, type SemanticSnapshot } from '../agent-poc/SemanticSnapshot'
 import type { StudioProjectSession } from '../StudioProjectSession'
+import { authoringTools, type CodeChangeRequest } from './AgentChatAuthoring'
 import { declarationSource } from './AgentChatFacts'
-import { askInstructions, buildInstructions } from './AgentChatInstructions'
+import { askInstructions, buildInstructions, scenarioInstructions } from './AgentChatInstructions'
 import { AgentChatProvider } from './AgentChatProvider'
 import { AgentChatSession, type AgentChatTurn } from './AgentChatSession'
 import { type AgentChatToolCall, type AgentChatWorld, readTools } from './AgentChatTools'
-import { type AgentChatWriteWorld, APPROVAL_REQUIRED, type StagedChange, writeTools } from './AgentChatWrites'
+import {
+  type AgentChatWriteWorld,
+  APPROVAL_REQUIRED,
+  stageChange,
+  type StagedChange,
+  writeTools,
+} from './AgentChatWrites'
 
 type Json = Record<string, unknown>
 
@@ -43,6 +51,14 @@ function worldFor(session: StudioProjectSession): AgentChatWorld & { invalidate:
       files = undefined
       snapshot = undefined
     },
+    testSources: async () => {
+      const files = await Promise.all(
+        (await session.files())
+          .filter(file => file.path.endsWith('.test.tao'))
+          .map(async file => ({ content: (await session.readFile(file.path)).content, path: file.path })),
+      )
+      return files
+    },
     snapshot: async () => {
       snapshot ??= (async () => {
         const parsed = await session.agentPocParse()
@@ -64,7 +80,9 @@ class AgentChatConversation {
   #chat: AgentChatSession | undefined
   #calls: AgentChatToolCall[] = []
   #staged = new Map<string, StagedChange>()
-  #mode: 'ask' | 'build' = 'ask'
+  #mode: 'ask' | 'build' | 'scenario' = 'ask'
+  #codeChangesGranted = false
+  #codeChangeRequests: CodeChangeRequest[] = []
   #history: { role: 'user' | 'assistant'; text: string; toolCalls?: readonly AgentChatToolCall[] }[] = []
 
   constructor(session: StudioProjectSession, provider: AgentChatProvider) {
@@ -93,15 +111,57 @@ class AgentChatConversation {
   }
 
   /** The mode decides which tools exist at all. A read-only chat has no write tool to refuse. */
-  setMode(mode: 'ask' | 'build'): void {
+  setMode(mode: 'ask' | 'build' | 'scenario'): void {
     if (mode !== this.#mode) {
       this.#mode = mode
       this.reset()
     }
   }
 
-  get mode(): 'ask' | 'build' {
+  get mode(): 'ask' | 'build' | 'scenario' {
     return this.#mode
+  }
+
+  /** The requests the agent made to change app code, and whether a person has allowed it. */
+  get codeChanges(): { granted: boolean; requests: readonly CodeChangeRequest[] } {
+    return { granted: this.#codeChangesGranted, requests: this.#codeChangeRequests }
+  }
+
+  /**
+   * grantCodeChanges is the person's answer to "this also needs the app to change". It adds the change tools
+   * to the conversation already in progress rather than starting a new one, because the conversation is where
+   * the request was made and understood.
+   */
+  grantCodeChanges(): void {
+    this.#codeChangesGranted = true
+    this.#chat?.replaceTools(this.#toolsFor(), [...APPROVAL_REQUIRED])
+  }
+
+  /**
+   * The tools a mode actually has. In scenario mode the gate is here and nowhere else: until a person allows
+   * it, the tools that change app code do not exist, so the model cannot reach for one whatever it decides.
+   */
+  #toolsFor(): ToolSet {
+    const record = (call: AgentChatToolCall) => this.#calls.push(call)
+    const writes = this.#writeWorld()
+    if (this.#mode === 'ask') {
+      return readTools(this.#world, record)
+    }
+    const all = writeTools(writes, this.#staged, record)
+    if (this.#mode === 'build') {
+      return { ...readTools(this.#world, record), ...all }
+    }
+    const landing = Object.fromEntries(
+      Object.entries(all).filter(([name]) => (APPROVAL_REQUIRED as readonly string[]).includes(name)),
+    )
+    return {
+      ...readTools(this.#world, record),
+      ...authoringTools(writes, stageChange(writes, this.#staged), this.#codeChangeRequests, record),
+      ...landing,
+      // Applying and undoing are needed for an authored scenario or check; changing app code is not, and is
+      // withheld until the person answers the agent's request for it.
+      ...(this.#codeChangesGranted ? all : {}),
+    }
   }
 
   async send(text: string): Promise<Json> {
@@ -110,17 +170,16 @@ class AgentChatConversation {
       return { availability: this.#provider.availability(), status: 'unavailable' }
     }
     if (this.#chat === undefined) {
-      const record = (call: AgentChatToolCall) => this.#calls.push(call)
-      const build = this.#mode === 'build'
       this.#chat = new AgentChatSession({
-        ...(build ? { approvalRequired: APPROVAL_REQUIRED } : {}),
+        ...(this.#mode === 'ask' ? {} : { approvalRequired: APPROVAL_REQUIRED }),
         drain: () => this.#calls.splice(0, this.#calls.length),
-        instructions: build ? buildInstructions : askInstructions,
+        instructions: this.#mode === 'build'
+          ? buildInstructions
+          : this.#mode === 'scenario'
+          ? scenarioInstructions
+          : askInstructions,
         model,
-        tools: {
-          ...readTools(this.#world, record),
-          ...(build ? writeTools(this.#writeWorld(), this.#staged, record) : {}),
-        },
+        tools: this.#toolsFor(),
       })
     }
     // The project may have changed between turns, so each turn starts from a freshly read one.
@@ -173,6 +232,7 @@ class AgentChatConversation {
         ...approval,
         diff: this.#diffFor(approval.input),
       })),
+      codeChanges: this.codeChanges,
       status: turn.status,
       steps: turn.steps,
       text: turn.text,
@@ -240,8 +300,13 @@ export const AgentChat = {
       return { status: 'reset' }
     }
     if (command === 'mode') {
-      conversation.setMode(body['mode'] === 'build' ? 'build' : 'ask')
+      const requested = body['mode']
+      conversation.setMode(requested === 'build' ? 'build' : requested === 'scenario' ? 'scenario' : 'ask')
       return { mode: conversation.mode }
+    }
+    if (command === 'grant-code-changes') {
+      conversation.grantCodeChanges()
+      return conversation.codeChanges
     }
     if (command === 'respond') {
       const responses = Array.isArray(body['responses']) ? body['responses'] : []

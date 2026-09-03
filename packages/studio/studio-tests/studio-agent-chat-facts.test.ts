@@ -169,6 +169,36 @@ Describe('Studio agent chat facts', () => {
     Expect(problems[0]?.detail).toBe('The project does not parse cleanly: Unknown declaration Foo')
   })
 
+  Test('says nothing about bundles when the graph has no styling edges at all', () => {
+    // A derived app once resolved to no design, so no styled-by edge existed and every bundle in the project
+    // read as unused. An absent relation is not evidence that nothing uses it.
+    const styled = snapshot({
+      nodes: [{ detail: { design: 'D' }, id: 'bundle:D.card', kind: 'bundle', name: 'card', path: PATH }],
+    })
+
+    Expect(improvementFacts(styled).filter(fact => fact.kind === 'bundle-unused')).toEqual([])
+  })
+
+  Test('reports an unused bundle only when the graph can see bundles being used', () => {
+    const styled = snapshot({
+      edges: [{
+        evidence: `${PATH}:0`,
+        from: 'render:StoryRow:1',
+        origin: 'compiler',
+        rel: 'styled-by',
+        to: 'bundle:D.used',
+        via: 'layout entry names a bundle',
+      }],
+      nodes: [
+        { detail: { design: 'D' }, id: 'bundle:D.used', kind: 'bundle', name: 'used', path: PATH },
+        { detail: { design: 'D' }, id: 'bundle:D.lonely', kind: 'bundle', name: 'lonely', path: PATH },
+      ],
+    })
+
+    Expect(improvementFacts(styled).filter(fact => fact.kind === 'bundle-unused').map(fact => fact.subject))
+      .toEqual(['lonely'])
+  })
+
   Test('outlines a file as its declarations in source order, with line numbers', () => {
     const outlines = fileOutlines(snapshot(), FILES)
 

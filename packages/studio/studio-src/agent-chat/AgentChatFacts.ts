@@ -189,7 +189,11 @@ export function improvementFacts(
     }
   }
 
-  for (const bundle of nodesOfKind(snapshot, 'bundle')) {
+  // Every fact here is a claim about absence, and absence has two causes: the thing is genuinely unused, or
+  // the graph cannot see that relation for this app at all. Reporting the second as the first is how an
+  // advisory answer becomes confidently wrong, so a relation with no edges anywhere says nothing.
+  const anyStyling = snapshot.edges.some(edge => edge.rel === 'styled-by')
+  for (const bundle of anyStyling ? nodesOfKind(snapshot, 'bundle') : []) {
     if (incoming(bundle.id, 'styled-by').length === 0) {
       facts.push({
         detail: `The ${bundle.name} bundle is declared in the design but no render uses it.`,

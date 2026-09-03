@@ -45,26 +45,13 @@ const TEXT = (description: string) => ({ description, type: 'string' })
  * writeTools carry the change surface. `applyChange` and `undoLastChange` are the only two that touch the
  * project, and both are named in the approval list so neither can run without a person saying yes.
  */
-export function writeTools(
+export function stageChange(
   world: AgentChatWriteWorld,
   staged: Map<string, StagedChange>,
-  record: (call: AgentChatToolCall) => void,
-): ToolSet {
-  const capture = (name: string, input: unknown, result: unknown): unknown => {
-    record({
-      input,
-      name,
-      resultChars: JSON.stringify(result ?? null).length,
-      summary: JSON.stringify(result).slice(0, 160),
-    })
-    return result
-  }
-
-  /** stage records a computed change and returns what the model (and the person) should see of it. */
-  const stage = async (
-    summary: string,
-    edits: readonly { path: string; before: string; after: string }[],
-  ): Promise<Record<string, unknown>> => {
+): (summary: string, edits: readonly { path: string; before: string; after: string }[]) => Promise<
+  Record<string, unknown>
+> {
+  return async (summary, edits) => {
     const real = edits.filter(edit => edit.before !== edit.after)
     if (real.length === 0) {
       return refusal('That produces no change: the source already reads that way.')
@@ -87,6 +74,25 @@ export function writeTools(
       summary,
     }
   }
+}
+
+export function writeTools(
+  world: AgentChatWriteWorld,
+  staged: Map<string, StagedChange>,
+  record: (call: AgentChatToolCall) => void,
+): ToolSet {
+  const capture = (name: string, input: unknown, result: unknown): unknown => {
+    record({
+      input,
+      name,
+      resultChars: JSON.stringify(result ?? null).length,
+      summary: JSON.stringify(result).slice(0, 160),
+    })
+    return result
+  }
+
+  /** stage records a computed change and returns what the model (and the person) should see of it. */
+  const stage = stageChange(world, staged)
 
   return {
     applyChange: tool({

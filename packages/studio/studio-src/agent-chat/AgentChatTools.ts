@@ -14,7 +14,9 @@ import {
   trace,
 } from '../agent-poc/SemanticSnapshot'
 import type { StudioTestRun } from '../StudioTestRunner'
+import { parseChecks, viewCoverage } from './AgentChatCoverage'
 import { declarationSource, fileOutlines, improvementFacts } from './AgentChatFacts'
+import { taoGuarantees } from './AgentChatGuarantees'
 import { findSpec, specSections } from './AgentChatReference'
 
 export type AgentChatFile = { path: string; content: string }
@@ -28,6 +30,8 @@ export type AgentChatWorld = {
   testStatus?: () => StudioTestRun | undefined
   /** Studio's real compile state, which sees validator errors the snapshot's parse does not. */
   compile?: () => { status: string; diagnostics: readonly { message: string; filePath?: string }[] }
+  /** The app's `.test.tao` sidecars, which the semantic graph never sees. */
+  testSources?: () => Promise<readonly AgentChatFile[]>
 }
 
 /** A record of one tool call, kept for the transcript the panel renders and the run log on disk. */
@@ -90,6 +94,28 @@ export function readTools(world: AgentChatWorld, record: (call: AgentChatToolCal
         })
       },
       inputSchema: jsonSchema<Record<string, never>>(NO_ARGS),
+    }),
+
+    coverageOfView: tool({
+      description:
+        "What one view shows on screen, and which of the app's checks exercise each piece of it. Use this to find what is untested before proposing a test. Match is textual, and the result says so.",
+      execute: async ({ view }: { view: string }) => {
+        const snapshot = await world.snapshot()
+        const node = resolveTarget(snapshot, view)
+        if (node === undefined || node.kind !== 'view') {
+          return capture(
+            'coverageOfView',
+            { view },
+            refusal(`No view named "${view}".`, {
+              known: [...snapshot.nodes.values()].filter(entry => entry.kind === 'view').map(entry => entry.name),
+            }),
+          )
+        }
+        const sources = (await world.testSources?.()) ?? []
+        const checks = sources.flatMap(file => parseChecks(file.content))
+        return capture('coverageOfView', { view }, viewCoverage(snapshot, node, checks))
+      },
+      inputSchema: objectSchema<{ view: string }>({ view: TEXT('The view to review, by name.') }, ['view']),
     }),
 
     fieldStory: tool({
@@ -206,6 +232,17 @@ export function readTools(world: AgentChatWorld, record: (call: AgentChatToolCal
         })
       },
       inputSchema: jsonSchema<Record<string, never>>(NO_ARGS),
+    }),
+
+    taoGuarantees: tool({
+      description:
+        'What Tao already guarantees for an app, so you do not write a test for something that cannot happen — and what only looks guaranteed. Call this before proposing any test. An entry marked `not-testable-yet` must never be reported as covered.',
+      execute: async ({ area }: { area?: string }) => capture('taoGuarantees', { area }, taoGuarantees(area)),
+      inputSchema: jsonSchema<{ area?: string }>({
+        additionalProperties: false,
+        properties: { area: TEXT('Narrow to one area, for example "time", "guards", "emptiness". Omit for all.') },
+        type: 'object',
+      }),
     }),
 
     taoReference: tool({

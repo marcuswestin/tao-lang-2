@@ -177,6 +177,27 @@ export function buildSemanticSnapshot(
 
   // Apps and their selected design (resolved reference: compiler origin).
   let selectedDesign: string | undefined
+  // `app Stub = Base with { ... }` takes everything it does not override from the app it derives from,
+  // including the design. Reading the design only off the app whose name matches leaves a derived app with
+  // no design at all, and then every bundle in the project looks unused.
+  const derivedFrom = new Map<string, string>()
+  for (const file of projectFiles) {
+    for (const app of AST.streamAllContents(file.ast).filter(AST.isAppDeclaration)) {
+      // `Base with { ... }` parses as a refinement expression whose target is the app it refines.
+      const value = app.value
+      const base = value === undefined
+        ? undefined
+        : AST.isRefinementExpression(value)
+        ? value.target.ref
+        : AST.isValueReference(value)
+        ? value.target.ref
+        : undefined
+      if (AST.isAppDeclaration(base)) {
+        derivedFrom.set(app.name, base.name)
+      }
+    }
+  }
+  const designOf = new Map<string, string>()
   for (const file of projectFiles) {
     for (const app of AST.streamAllContents(file.ast).filter(AST.isAppDeclaration)) {
       add({ id: `app:${app.name}`, kind: 'app', name: app.name, ...loc(app) })
@@ -192,11 +213,27 @@ export function buildSemanticSnapshot(
             to: `design:${target.name}`,
             via: 'app Design property resolves to the design declaration',
           })
-          if (app.name === appName) {
-            selectedDesign = target.name
-          }
+          designOf.set(app.name, target.name)
         }
       }
+    }
+  }
+  for (let name: string | undefined = appName; name !== undefined; name = derivedFrom.get(name)) {
+    const design = designOf.get(name)
+    if (design !== undefined) {
+      selectedDesign = design
+      if (name !== appName) {
+        // The derived app inherits it, so the graph should say the app under inspection uses it too.
+        edge({
+          evidence: `app:${appName}`,
+          from: `app:${appName}`,
+          origin: 'compiler',
+          rel: 'uses-design',
+          to: `design:${design}`,
+          via: `inherited from the app ${appName} derives from`,
+        })
+      }
+      break
     }
   }
 

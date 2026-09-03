@@ -49,12 +49,21 @@ const DEFAULT_MAX_STEPS = 12
  * the approval state that goes with them, never travel to the browser and back.
  */
 export class AgentChatSession {
-  readonly #options: AgentChatSessionOptions
+  #options: AgentChatSessionOptions
   #messages: ModelMessage[] = []
   #pending: AgentChatApproval[] = []
 
   constructor(options: AgentChatSessionOptions) {
     this.#options = options
+  }
+
+  /**
+   * replaceTools swaps the tool surface without losing the conversation. It is how a person granting the
+   * agent permission mid-conversation takes effect: the messages so far are exactly the context in which
+   * they granted it, so starting over would discard the reason.
+   */
+  replaceTools(tools: ToolSet, approvalRequired: readonly string[]): void {
+    this.#options = { ...this.#options, approvalRequired, tools }
   }
 
   /** messages exposes the conversation for the run log and for tests; callers must not mutate it. */

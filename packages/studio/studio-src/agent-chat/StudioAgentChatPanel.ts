@@ -24,6 +24,7 @@ type TurnResult = {
   pendingApprovals?: Approval[]
   usage?: { inputTokens?: number; outputTokens?: number }
   availability?: Availability
+  codeChanges?: { granted: boolean; requests: { reason: string; missing: string }[] }
 }
 
 export type StudioAgentChatPanelHooks = {
@@ -48,6 +49,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       <strong style="flex:1">Ask about this app</strong>
       <select class="chat-mode" style="background:#0f1411;color:#e8ede9;border:1px solid #3a4a3f;border-radius:6px;padding:2px 4px;font:inherit" title="Ask can only look. Build can propose changes for you to approve.">
         <option value="ask">ask</option>
+        <option value="scenario">scenario</option>
         <option value="build">build</option>
       </select>
       <label style="display:flex;gap:4px;align-items:center;color:#9fb3a5" title="Send this project's declarations to a hosted model">
@@ -249,6 +251,8 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
         line(
           mode.value === 'build'
             ? 'Build mode: the agent can propose changes, and you approve each one before it lands.'
+            : mode.value === 'scenario'
+            ? 'Scenario mode: the agent can add scenarios and tests. It must ask before changing app code.'
             : 'Ask mode: the agent can only look at your app.',
           '#9fb3a5',
         ),
@@ -290,6 +294,36 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     if (turn.status === 'needs-approval' && (turn.pendingApprovals ?? []).length > 0) {
       askApproval(turn.pendingApprovals ?? [])
     }
+    const codeChanges = turn.codeChanges
+    if (codeChanges !== undefined && !codeChanges.granted && codeChanges.requests.length > 0) {
+      askCodeChanges(codeChanges.requests[codeChanges.requests.length - 1]!)
+    }
+  }
+
+  /**
+   * The agent has said the state asked for cannot be set up without changing the app. That is a different
+   * request from the one that was made, so it is put to the person rather than assumed.
+   */
+  function askCodeChanges(request: { reason: string; missing: string }): void {
+    const box = document.createElement('div')
+    box.style.cssText = 'border:1px solid #8fc7ff;border-radius:8px;padding:8px'
+    const heading = document.createElement('strong')
+    heading.style.color = '#8fc7ff'
+    heading.textContent = 'This also needs the app itself to change'
+    box.append(heading, line(`Missing: ${request.missing}`), line(`Why: ${request.reason}`))
+    const allow = document.createElement('button')
+    allow.type = 'button'
+    allow.textContent = 'Allow app changes in this conversation'
+    box.append(allow)
+    log.append(box)
+    log.scrollTop = log.scrollHeight
+    allow.addEventListener('click', () => {
+      allow.disabled = true
+      void (async () => {
+        await StudioApiClient.agentChat('grant-code-changes', {})
+        box.append(line('Allowed. Ask the agent to continue.', '#6fb38a'))
+      })()
+    })
   }
 
   async function ask(): Promise<void> {
