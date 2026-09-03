@@ -152,6 +152,7 @@ test "WordFlower workspaces" {
    }
    test "opens and narrows the generated command palette" {
       run WordFlower
+
       expect missing text "Command palette"
       press key "primary+k"
       expect {

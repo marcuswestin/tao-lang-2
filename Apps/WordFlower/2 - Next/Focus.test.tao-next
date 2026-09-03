@@ -111,6 +111,4 @@ test "WordFlower focused writing" {
          // `f` is the explicit Finish-document accelerator, so allocation advances through the
          // label instead of shadowing it.
          text "O — Focus session"
-      }
-   }
-}
+}  }  }

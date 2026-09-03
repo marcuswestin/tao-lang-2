@@ -23,6 +23,15 @@ use every, Interval from @tao/time
 // future host surfaces. The shell's focus-bar siblings form one compiler-described region without
 // a wrapper, so the later tier does not invent another focus owner.
 //
+// Generated interaction surfaces follow the settled T5 contract. Hints, the region overview, the
+// target's verb layer, and the always-present command palette are pure runtime renderings of the
+// outline, attention, bindings, and catalog. One app-host layer sits above content after toasts,
+// never enters navigation history or consumes Back, and is absent from accessibility traversal
+// while hidden. Cached app-relative bounds anchor affordances without measuring when a surface
+// opens. Runtime allocation derives locale-aware keys deterministically by identity, preserves them
+// across reorders, and excludes reducer keys plus explicit shortcuts; affordances appear after the
+// first hardware-key dispatch.
+//
 // Beyond MVP, this file expresses: project identity and external dependencies; locally renamed
 // imports; the full design system (raw tokens, semantic tokens, recipes, rules, platform blocks —
 // `patterns` retired for content-accepting views, Decisions §13); closed unions with `match`; string-valued enums; longhand declaration-property blocks
@@ -67,13 +76,14 @@ use every, Interval from @tao/time
 //     host-facing chrome
 //   - Window geometry, detached panels, persisted geometry, native chrome (DEF-NAV-004)
 //   - Durable suspended workflows and continuations (DEF-NAV-005)
-//   - Overlay families: action, input, form, menu, mode (LANG-018)
+//   - Authored overlay families: action, input, form, menu, mode (LANG-018); generated floating
+//     interaction layers are settled runtime policy, not authored presentation
 //   - Interactive toasts and refreshed child-occurrence policy (DEF-NAV-017)
 //   - Non-semantic cosmetic property metadata (DEF-NAV-015)
 // Layout, style, and motion
 //   - `nudge`, `overlay`, scroll helpers, safe-area and keyboard insets (LANG-017, Docs/Spec/Tao Layout and UI.md)
 //   - Logical `start`/`end` directions, aspect ratio, wrapped-line controls (Docs/Spec/Tao Layout and UI.md)
-//   - Visual layers, portals, popovers, one Modal abstraction (LANG-018)
+//   - Authored portals, popovers, and one Modal abstraction (LANG-018)
 //   - Which future spec modifiers, if any, must remain inline-only (LANG-013)
 //   - Motion policy and recipes, with reduced motion expressible (LANG-024)
 //   - Container-query adaptive variants; the condition syntax is unsettled (Docs/Spec/Tao Design - WIP.md)
@@ -138,6 +148,8 @@ design WordFlowerDesign {
    body [size 16, line 22, fg inkMuted]
    panel [pad 12, radius 8, bg paper, border line]
    FormButton [bg accent, bg paper when pressed, border accent when focused, fg ink, fg accent when hovered]
+   Hint [bg accent, fg paper, radius 8, pad 8, weight 700]
+   Overview [bg paper, fg ink, border line, radius 12, pad 12, gap 8]
 
    recipes {
       recipe Button {

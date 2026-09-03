@@ -181,6 +181,23 @@ test "WordFlower keyboard attention" {
       expect navigation title "Projects"
    }
 
+   test "shows stable generated hints only on demand" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      submit #workspaceName
+      enter "Projects" into #workspaceName
+      submit #workspaceName
+      expect missing text "H — Home"
+      press key "?"
+      expect {
+         text "Interaction hints"
+         text "H — Home"
+         text "P — Projects"
+      }
+      press key "?"
+      expect missing text "Interaction hints"
+   }
+
    test "engages the editor and invokes the focus bar chord" {
       run WordFlower
       enter "Novel" into #workspaceName
@@ -214,8 +231,46 @@ test "WordFlower keyboard attention" {
       expect target "Chapter one"
       press key "."
       expect verbs "Finish document", "Open document", "Finish document", "Delete document"
+      expect {
+         text "Actions for Chapter one"
+         text "F — Finish document"
+      }
       press key "f"
       expect text "No drafts"
+   }
+
+   test "opens and narrows the generated command palette" {
+      run WordFlower
+      expect missing text "Command palette"
+      press key "primary+k"
+      expect {
+         text "Command palette"
+         text "Duplicate document"
+      }
+      narrow "dup doc"
+      expect target "Duplicate document"
+   }
+
+   test "opens an overview of the navigator and persistent focus region" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] { press #openWorkspace }
+      enter "Morning pages" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] { press #openDocument }
+      press #startFocus
+      back
+      back
+      expect missing text "Interaction overview"
+      press key "Escape"
+      expect {
+         text "Interaction overview"
+         text "W — WordFlower"
+         // `f` is the explicit Finish-document accelerator, so allocation advances through the
+         // label instead of shadowing it.
+         text "O — Focus session"
+      }
    }
 }
 

@@ -1048,6 +1048,19 @@ KEY-D8–D13). The deferred command surfaces and keyboard dispatch above are now
 - **Interaction conditions stay ordinary words.** `pressed`, `focused`, and `hovered` are postfix
   conditions; `when FocusBar is active` tests named region focus. These and the new Tao test phrases
   use spelling-validated identifier seams rather than adding reserved grammar keywords.
+- **Generated interaction surfaces are runtime renderings, not authored navigation.** Hints,
+  overview, the target's verb menu, and the always-present command palette read the interaction
+  outline, attention snapshot, current bindings, and generated catalog. One host renders them above
+  app content as a sibling after toasts; they do not enter Back history, and hidden layers are
+  removed from accessibility traversal. Hints use cached app-relative bounds, overview lists
+  mounted regions, the verb menu preserves the command tiers above, and the palette lists every
+  titled command and entity while applying the same locale-aware word-prefix subsequence matcher as
+  attention.
+- **Generated keys are deterministic runtime policy.** Existing identities retain their keys across
+  reorders; new identities are considered in canonical identity order and receive the first free
+  label-derived letter, then another distinctive label letter, then a two-letter sequence. Reducer
+  keys and explicit shortcuts or accelerators are never allocated. Affordances remain absent until
+  the first hardware-key dispatch, while `press key` drives that same seam in tests.
 
 ### The AI surface
 
@@ -1870,6 +1883,12 @@ design SkilletDesign {
   app starts from the `Text` entry, and `App` is the root's. This replaces the
   `style Control { base / variant / state }` stack: the base is the element default, a variant is a
   bundle, and a state is an ordinary condition.
+- **Generated interaction affordances use ordinary element defaults.** `Hint` styles an anchored
+  key-and-label affordance and `Overview` styles the generated overview, verb, and palette surfaces;
+  an app may override either in `styles { }` without declaring or owning those runtime layers.
+  This settles the floating-layer part of LANG-018: a layer is a host-owned rendering above content,
+  outside navigation and Back, rather than a declared portal or nav occurrence. The broader modal,
+  popover, and authored overlay-family syntax remains deferred.
 - **Interaction states are conditions.** `pressed`, `focused`, and `hovered` join the condition
   vocabulary, so state styling is §9's postfix `when` (`background ember.20 when pressed`), not a
   sub-grammar of its own.

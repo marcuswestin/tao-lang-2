@@ -27,6 +27,15 @@ use Checkbox, Col, FormButton, Image, Panes, Progress, Row, ScrollView, Spinner,
 // commands remain the one discoverable verb model for pointer, keyboard, palette, and future host
 // surfaces. The shell's focus-bar siblings form one compiler-described region without a wrapper.
 //
+// Generated interaction surfaces follow the settled T5 contract. Hints, the region overview, the
+// target's verb layer, and the always-present command palette are pure runtime renderings of the
+// outline, attention, bindings, and catalog. One app-host layer sits above content after toasts,
+// never enters navigation history or consumes Back, and is absent from accessibility traversal
+// while hidden. Cached app-relative bounds anchor affordances without measuring when a surface
+// opens. Runtime allocation derives locale-aware keys deterministically by identity, preserves them
+// across reorders, and excludes reducer keys plus explicit shortcuts; affordances appear after the
+// first hardware-key dispatch.
+//
 // MVP retains the requirements intentionally moved out of the current Next tranche:
 // - The InstantDB provider protocol handles inbound subscription deltas, write acknowledgement,
 //   externally originated store revisions, and reconciliation between provider row identity and
@@ -72,6 +81,8 @@ design WordFlowerDesign {
    body [size 16, line 22, fg inkMuted]
    panel [pad 12, radius 8, bg paper, border line]
    FormButton [bg accent, bg paper when pressed, border accent when focused, fg ink, fg accent when hovered]
+   Hint [bg accent, fg paper, radius 8, pad 8, weight 700]
+   Overview [bg paper, fg ink, border line, radius 12, pad 12, gap 8]
 }
 
 // A configured nav binding is an immutable descriptor, not a mounted instance or exposed state.

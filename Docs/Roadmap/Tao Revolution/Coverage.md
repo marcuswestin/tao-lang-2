@@ -28,7 +28,8 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Shortcut values and keyboard dispatch (§8)                  | WordFlower · pause focus command and document verbs                     | MVP      | in Current[^11]          |
 | Interaction outline, derived row labels, `(title)` (§2, §9) | WordFlower · workspace, draft, and paragraph rows; HNReader · story row | MVP      | in Current[^10]          |
 | Command ordering, hiding, and verb surface (§8)             | WordFlower · draft and finished document rows                           | MVP      | in Current[^11]          |
-| Menus, rails, and rendered palette surface (§8)             | WordFlower · command palette and menus                                  | Post-MVP | —                        |
+| Generated interaction surfaces and key allocation (§8, §13) | WordFlower · hints, overview, draft verbs, and command palette          | MVP      | in Current[^12]          |
+| OS menu bar (§8)                                            | WordFlower · command menus                                              | Post-MVP | —                        |
 | Assistant projection (§8)                                   | WordFlower · assistant block                                            | Post-MVP | —                        |
 | Undo derivation (§8)                                        | WordFlower · document edits                                             | Post-MVP | —                        |
 | Conditionals, ternary, check/guard (§8)                     | WordFlower · everywhere; ternary: focused-writing mode                  | MVP      | partially in Current[^2] |
@@ -109,8 +110,17 @@ it (`Docs/Roadmap/Focused writing tranche/`).
     folded verb list for a draft before invoking its `f` accelerator. The same source forces entity
     `commands` ordering and hiding, view `Commands` promotion and `hide`, control-state and named
     active-region design conditions, plus the `press key`, `narrow`, `expect target`, `expect focus
-    region`, and `expect verbs` test vocabulary. Menus, rails, and visible palette/hint/overview
-    layers remain later work.
+    region`, and `expect verbs` test vocabulary. Visible palette, hint, overview, and verb layers
+    are covered by the generated-surfaces tranche below.
+
+[^12]: The generated-surfaces tranche mounts one host-owned floating layer above app content and
+    renders interaction hints, the region overview, the target's tiered verb menu, and the
+    always-present command palette from the outline, attention, bindings, and catalog. WordFlower
+    journeys prove that hints are absent until requested and toggle off, the draft verb layer shows
+    its allocated accelerator, the palette narrows `dup doc` to `Duplicate document`, and Escape
+    opens a two-region overview. Allocation is locale-aware, deterministic, stable by identity, and
+    excludes reducer keys plus explicit shortcuts. `Hint` and `Overview` are ordinary design element
+    defaults; hidden layers do not participate in accessibility traversal.
 
 [^1]: The dialect migration tranche retired `data <status>` (Decisions §16) and with it the Data MVP
     check that drove a provider through `loading`, `error`, and `ready`. Nothing replaces it in this
