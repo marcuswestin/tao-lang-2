@@ -157,7 +157,13 @@ tests written in Tao, green in Current, for every construct introduced.
     real device) is implemented: `packages/studio-companion-app`, the `tao-studio-device-v1` gateway and
     trust store in `packages/studio`, `TR.Studio.DeviceHost`, the workbench Device popover, and
     `just studio-companion-install`; contract and proof record in
-    `Docs/Roadmap/Tao Studio companion app/Slice 1 - Device protocol and trust.md`.
+    `Docs/Roadmap/Tao Studio companion app/Slice 1 - Device protocol and trust.md`. Slice 2 (everyday
+    development canvas) is partly implemented: a reconfigure reaches the device, selection works both
+    ways, Studio can capture a device's runtime state, the phone's console is mirrored into Studio, and
+    a device loads the scenario rather than the canvas frame. Its acceptance is not complete — running
+    one journey on the device is a fork rather than a task, and capture/restore has no UI on any
+    surface. Status, what was proven live, and the open decisions are in
+    `Docs/Roadmap/Tao Studio companion app/Slice 2 - Everyday development canvas.md`.
 - [ ] Add `tao create` project scaffold
   - New app folder, minimal Tao app, default package layout, docs, dev and test scripts, and an immediate open-and-run path.
 - [ ] Implement secrets
