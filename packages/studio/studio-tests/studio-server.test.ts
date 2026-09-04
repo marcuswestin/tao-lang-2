@@ -1,14 +1,21 @@
 import { ScriptedGenerationProvider } from '@generation'
 import { Errors } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, until } from '@shared/test'
+import type { StudioDeviceLauncher } from '../studio-src/device/StudioDeviceLauncher'
+import type { StudioDeviceStatus } from '../studio-src/device/StudioDeviceStatus'
 import { StudioFixtureGeneration } from '../studio-src/StudioFixtureGeneration'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 import {
   type StudioProjectSession,
   StudioSourceActionConflictError,
 } from '../studio-src/StudioProjectSession'
-import { StudioServerTesting } from '../studio-src/StudioServer'
-import { StudioSessionManager } from '../studio-src/StudioSessionManager'
+import {
+  startStudioSessionServer,
+  type StudioServerDeviceGateway,
+  type StudioServerOptions,
+  StudioServerTesting,
+} from '../studio-src/StudioServer'
+import { StudioSessionManager, type StudioSessionResource } from '../studio-src/StudioSessionManager'
 
 Describe('Studio server request boundary', () => {
   const boundOrigin = 'http://127.0.0.1:5678'
@@ -404,3 +411,220 @@ Test('Studio event sockets close cleanly when their initial handshake cannot be 
   Expect(sent).toEqual([])
   Expect(closes).toEqual([[1011, 'Could not initialize Studio events']])
 })
+
+Describe('Studio device routes', () => {
+  const resource = {
+    previewUrl: 'http://127.0.0.1:8081',
+    session: { appName: 'Garden', projectRoot: '/projects/Garden' } as StudioProjectSession,
+  }
+  const status: StudioDeviceStatus = {
+    gateway: { hosts: ['192.168.1.20'], port: 4747, studioFingerprint: 'abcd abcd abcd abcd' },
+    pairing: { open: false },
+    sessionId: 'device_session',
+    trusted: [],
+  }
+
+  async function call(
+    options: StudioServerOptions,
+    pathname: string,
+    body?: unknown,
+    sessionResource: StudioSessionResource = resource,
+  ): Promise<Response | undefined> {
+    const url = new URL(`http://127.0.0.1:5678${pathname}`)
+    const request = body === undefined
+      ? new Request(url)
+      : new Request(url, {
+        body: JSON.stringify(body),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      })
+    return await StudioServerTesting.handleDeviceRequest(
+      'device_session',
+      sessionResource,
+      request,
+      url,
+      options,
+      pathname,
+    )
+  }
+
+  Test('answers 501 without a gateway, and for launch routes without a launcher', async () => {
+    const withoutGateway = await call({}, '/api/device/status')
+    Expect(withoutGateway?.status).toBe(501)
+    Expect(await withoutGateway?.json()).toEqual({ error: 'This Studio service does not include the device gateway.' })
+    const gateway = fakeGateway(status, [])
+    const withoutLauncher = await call({ deviceGateway: gateway }, '/api/device/launch')
+    Expect(withoutLauncher?.status).toBe(501)
+    Expect(await withoutLauncher?.json()).toEqual({
+      error: 'This Studio service does not include physical-device launch tooling.',
+    })
+    Expect(await call({}, '/api/preview/manifest')).toBeUndefined()
+  })
+
+  Test('maps every device route onto the gateway and launcher with the session id and Metro origin', async () => {
+    const calls: unknown[] = []
+    const gateway = fakeGateway(status, calls)
+    const launchInfo = {
+      bundleIdentifier: 'dev.tao-lang.studio.companion',
+      candidates: ['192.168.1.20'],
+      diagnostics: [],
+      hosts: [{ id: 'dev-1', installed: true, kind: 'device' as const, name: 'roPhone' }],
+      installCommand: 'just studio-companion-install',
+      metroPort: 8081,
+      scheme: 'taostudiocompanion',
+      url: 'taostudiocompanion://expo-development-client/?url=http%3A%2F%2F192.168.1.20%3A8081',
+    }
+    const launcher: StudioDeviceLauncher = {
+      async describe(input) {
+        calls.push(['describe', input])
+        return launchInfo
+      },
+      async open(input) {
+        calls.push(['open', input])
+        return { hostName: 'roPhone', launched: true, url: launchInfo.url }
+      },
+    }
+    const options = { deviceGateway: gateway, deviceLauncher: launcher }
+    const expected: Array<[string, unknown, unknown]> = [
+      ['/api/device/status', undefined, status],
+      ['/api/device/pairing/open', {}, { expiresAt: '2026-09-02T10:02:00.000Z' }],
+      ['/api/device/pairing/confirm', { devicePublicKey: 'key-1' }, { accepted: true }],
+      ['/api/device/pairing/decline', { devicePublicKey: 'key-2' }, { declined: true }],
+      ['/api/device/revoke', { devicePublicKey: 'key-3' }, { revoked: true }],
+      ['/api/device/reconnect', {}, { requested: true }],
+      ['/api/device/select-cell', { cellId: 'cell:phone' }, { requested: true }],
+      [
+        '/api/device/capture',
+        {},
+        { capture: { domains: [{ domain: 'data', value: { workspaces: 1 } }], version: 1 } },
+      ],
+      ['/api/device/launch', undefined, launchInfo],
+      ['/api/device/launch/open', { hostId: 'dev-1' }, { hostName: 'roPhone', launched: true, url: launchInfo.url }],
+    ]
+    for (const [pathname, body, result] of expected) {
+      const response = await call(options, pathname, body)
+      Expect([pathname, response?.status]).toEqual([pathname, 200])
+      Expect([pathname, await response?.json()]).toEqual([pathname, result])
+    }
+    Expect(calls).toEqual([
+      ['status', 'device_session'],
+      ['openPairing', 'device_session'],
+      ['confirmPairing', 'device_session', 'key-1'],
+      ['declinePairing', 'device_session', 'key-2'],
+      ['revoke', 'device_session', 'key-3'],
+      ['requestReconnect', 'device_session'],
+      ['selectCell', 'device_session', 'cell:phone'],
+      ['captureRuntime', 'device_session'],
+      ['describe', { metroOrigin: 'http://127.0.0.1:8081' }],
+      // Wi-Fi is the default route; a body with no `route` still names one, so the launcher never
+      // has to guess what an older client meant.
+      ['open', { hostId: 'dev-1', metroOrigin: 'http://127.0.0.1:8081', route: 'auto' }],
+    ])
+    await Expect(call(options, '/api/device/pairing/confirm', {})).rejects.toThrow('device public key')
+    await Expect(call(options, '/api/device/select-cell', { cellId: ' ' })).rejects.toThrow('cell id')
+    await Expect(call(options, '/api/device/launch/open', {})).rejects.toThrow('host id')
+    const noMetro = await call(options, '/api/device/launch', undefined, { session: resource.session })
+    Expect(noMetro?.status).toBe(501)
+    Expect((await call(options, '/api/device/unknown'))?.status).toBe(404)
+  })
+
+  Test('sends the device snapshot after the handshake and broadcasts every gateway change', async () => {
+    const listeners = new Map<string, (status: StudioDeviceStatus) => void>()
+    const gateway = {
+      ...fakeGateway(status, []),
+      subscribe(sessionId: string, listener: (status: StudioDeviceStatus) => void) {
+        listeners.set(sessionId, listener)
+        return () => listeners.delete(sessionId)
+      },
+    }
+    const handshake = { channel: 'tao-studio', type: 'handshake' }
+    const manager = new StudioSessionManager({ createSessionId: () => 'device_session' })
+    manager.add({
+      session: {
+        appName: 'Garden',
+        handshake: async () => handshake,
+        projectRoot: '/projects/Garden',
+        subscribe: () => () => {},
+      } as unknown as StudioProjectSession,
+    })
+    const server = await startStudioSessionServer(manager, { compileOnStart: false, deviceGateway: gateway })
+    try {
+      const socket = new WebSocket(`ws://127.0.0.1:${server.port}/sessions/device_session/events`)
+      const messages: unknown[] = []
+      socket.onmessage = event => messages.push(JSON.parse(String(event.data)))
+      await new Promise<void>(resolve => {
+        socket.onopen = () => resolve()
+      })
+      await until(() => messages.length >= 2, { description: 'the handshake and device snapshot' })
+      Expect(messages).toEqual([
+        handshake,
+        { channel: 'tao-studio', protocolVersion: 1, status, type: 'device-state' },
+      ])
+      const connected: StudioDeviceStatus = {
+        ...status,
+        connection: {
+          device: { model: 'iPhone17,1', name: 'roPhone', os: 'iOS 26' },
+          fingerprint: 'ffff ffff ffff ffff',
+          state: 'connected',
+          transport: 'lan',
+        },
+      }
+      listeners.get('device_session')!(connected)
+      await until(() => messages.length >= 3, { description: 'the broadcast device state' })
+      Expect(messages[2]).toEqual({
+        channel: 'tao-studio',
+        protocolVersion: 1,
+        status: connected,
+        type: 'device-state',
+      })
+      socket.close()
+    } finally {
+      server.stop()
+    }
+    Expect(listeners.size).toBe(0)
+  })
+})
+
+function fakeGateway(status: StudioDeviceStatus, calls: unknown[]): StudioServerDeviceGateway {
+  return {
+    async captureRuntime(sessionId) {
+      calls.push(['captureRuntime', sessionId])
+      return { capture: { domains: [{ domain: 'data', value: { workspaces: 1 } }], version: 1 } }
+    },
+    async confirmPairing(sessionId, devicePublicKey) {
+      calls.push(['confirmPairing', sessionId, devicePublicKey])
+      return { accepted: true }
+    },
+    declinePairing(sessionId, devicePublicKey) {
+      calls.push(['declinePairing', sessionId, devicePublicKey])
+      return { declined: true }
+    },
+    highlightSource(sessionId, occurrence) {
+      calls.push(['highlightSource', sessionId, occurrence])
+      return { delivered: true }
+    },
+    openPairing(sessionId) {
+      calls.push(['openPairing', sessionId])
+      return { expiresAt: '2026-09-02T10:02:00.000Z' }
+    },
+    requestReconnect(sessionId) {
+      calls.push(['requestReconnect', sessionId])
+      return { requested: true }
+    },
+    async revoke(sessionId, devicePublicKey) {
+      calls.push(['revoke', sessionId, devicePublicKey])
+      return { revoked: true }
+    },
+    selectCell(sessionId, cellId) {
+      calls.push(['selectCell', sessionId, cellId])
+      return { requested: true }
+    },
+    status(sessionId) {
+      calls.push(['status', sessionId])
+      return status
+    },
+    subscribe() {
+      return () => {}
+    },
+  }
+}

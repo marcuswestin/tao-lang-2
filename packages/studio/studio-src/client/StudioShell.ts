@@ -11,6 +11,8 @@ export type StudioClientView = {
   commandInput: HTMLInputElement
   commandOverlay: HTMLElement
   commandResults: HTMLElement
+  device: HTMLButtonElement
+  devicePopover: HTMLElement
   drawerContent: HTMLElement
   drawerTabs: HTMLElement
   editorTabs: HTMLElement
@@ -83,12 +85,14 @@ export function studioShellMarkup(): string {
           <button class="studio-command-palette" type="button" aria-keyshortcuts="Meta+K Control+K">⌘K</button>
         </div>
         <div class="studio-toolbar-actions">
+          <button class="studio-device" type="button" aria-haspopup="dialog" aria-expanded="false" title="Physical device">Device</button>
           <button class="studio-beta-ship" type="button">Beta ship</button>
           <button class="studio-interaction-mode" type="button">Mode: Edit</button>
           <button class="studio-reload" type="button">Reload preview</button>
           <span class="studio-status" role="status">Connecting…</span>
         </div>
       </header>
+      <section class="studio-device-popover" hidden role="dialog" aria-label="Physical device"></section>
       <section class="studio-body">
         <nav class="studio-rail" aria-label="Studio panels">
           ${studioShellRailPanels.map(item => railButton(item.panel, item.label, item.icon)).join('')}
@@ -179,6 +183,8 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
     commandInput: requiredInput(root, '.studio-command-overlay input'),
     commandOverlay: requiredElement(root, '.studio-command-overlay'),
     commandResults: requiredElement(root, '.studio-command-results'),
+    device: requiredButton(root, '.studio-device'),
+    devicePopover: requiredElement(root, '.studio-device-popover'),
     drawerContent: requiredElement(root, '.studio-drawer-content'),
     drawerTabs: requiredElement(root, '.studio-drawer-tabs'),
     editorTabs: requiredElement(root, '.studio-editor-tabs'),

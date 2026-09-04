@@ -90,12 +90,29 @@ async function openIosSimulator(
     DevLoopTUI.logDevLoop('dev', `opened iOS Simulator (${simulator.name})`)
     return true
   }
-  DevLoopTUI.logDevLoop(
-    'dev',
-    `Could not open iOS Simulator URL: ${result.stderr.trim() || result.error?.message || 'unknown error'}`,
-    'warn',
-  )
+  DevLoopTUI.logDevLoop('dev', simulatorOpenFailure(simulator.name, link, result), 'warn')
   return false
+}
+
+/**
+ * One calm line for a simulator that would not open the app.
+ *
+ * `simctl openurl` reports its refusal as a four-line LaunchServices dump whose only readable
+ * sentence is the one naming the URL, and the dev loop printed all four in the colour it uses for
+ * real breakage. The common cause has a remedy worth naming instead: LaunchServices error 115 is
+ * "no installed application handles this URL", which on a simulator means the development build or
+ * Expo Go is not installed on it.
+ */
+export function simulatorOpenFailure(
+  simulatorName: string,
+  link: string,
+  result: { error?: { message: string }; stderr: string },
+): string {
+  const detail = result.stderr.trim() || result.error?.message || 'unknown error'
+  const reason = /LSApplicationWorkspaceErrorDomain, code=115/.test(detail)
+    ? 'no app installed on it handles that URL — install the development build or Expo Go there first'
+    : detail.split('\n').map(line => line.trim()).filter(line => line.length > 0).at(-1) ?? 'unknown error'
+  return `${simulatorName} did not open ${link}: ${reason}`
 }
 
 /** openStartupTargets opens startup targets while keeping Android limited to already-available devices. */

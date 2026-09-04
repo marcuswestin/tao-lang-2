@@ -134,7 +134,8 @@ and the fact that the root is a Studio cell. The server keeps the cell bootstrap
 fixture plans, state, and source paths are not encoded into the URL.
 
 Reconfiguring a cell validates its parameters, environment, and state layers, increments
-`cellRevision`, and invalidates its former preview instance. Requests with stale manifest, compile,
+`cellRevision`, and invalidates every live preview instance of that cell. A cell may have several
+live instances at once, such as the browser iframe and a paired physical device. Requests with stale manifest, compile,
 cell, or instance identity fail as conflicts rather than applying to a newer render. The browser
 client creates a separate iframe realm for every cell so ordinary module and runtime singletons are
 not shared between examples.
@@ -451,6 +452,19 @@ Scenarios declared in imported files and authored `run App at Destination(...)` 
 Studio compilation with actionable messages. This satisfies the current mount-or-reject and execute-or-reject
 boundary without publishing blank cells or silently substituting the selected app's default route.
 
-A phone or other native device is not currently a Studio renderer. The feasible follow-up design and
-required real-iPhone proof are recorded in
-`Docs/Roadmap/Tao Studio v1/Exploration - Native device as Studio canvas.md`.
+A physical iPhone or iPad renders one cell through the Tao Companion development build
+(`packages/studio-companion-app`, an Expo dev client with a fixed bundle id and scheme). Every Studio launch
+starts one `tao-studio-device-v1` gateway beside the loopback server, bound to every interface on an
+ephemeral port and carrying only pairing, project/app identity, scenario bootstrap, revision state, and
+device reports; the loopback server, its Host validation, and the per-project Metro are unchanged. The
+generated preview root mounts `TR.Studio.DeviceHost` on native platforms and the browser bridge on the web,
+so one compilation and one Metro file graph drive both canvases. Trust is an authenticated X25519 exchange
+with Ed25519 identities, a six-digit code compared on both screens and confirmed in Studio, XChaCha20-Poly1305
+sealed frames with strictly increasing sequence numbers, Keychain storage on the device, and a revocable
+trusted-device list under the Studio user state root. A device is one more opaque preview instance of the
+cell it selects, acknowledges the exact compile revision it rendered, and follows Fast Refresh like the
+browser cell. The workbench **Device** popover opens the installed shell through Expo's dev-client link (with a
+QR and copyable URL), runs pairing, shows compile versus applied revisions, switches scenarios, and revokes
+trust. The protocol, threat model, and message set are in
+`Docs/Roadmap/Tao Studio companion app/Slice 1 - Device protocol and trust.md`; Bonjour discovery, the Tao
+relay, beta delivery, and device-originated source actions remain roadmap work.

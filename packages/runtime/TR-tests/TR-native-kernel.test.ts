@@ -1,6 +1,6 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { HostEnvironmentError } from '../TaoRuntime-src/TR-errors'
-import { createNativeModules } from '../TaoRuntime-src/TR-native-modules'
+import { createNativeModules, loadRandomValuesPolyfill } from '../TaoRuntime-src/TR-native-modules'
 import { createReactiveSource, isReactiveValue } from '../TaoRuntime-src/TR-reactive'
 import { Clock, createTicker } from '../TaoRuntime-src/TR-units'
 
@@ -51,6 +51,40 @@ Describe('TR native module kernel', () => {
     Expect(() => nativeModules.required('Clipboard', 'expo-clipboard')).toThrow(
       "Tao's Clipboard capability requires the native module 'expo-clipboard'",
     )
+  })
+
+  Test('reports the random-values polyfill by the global it installs', () => {
+    const globals = globalThis as { crypto?: unknown }
+    const original = globals.crypto
+    try {
+      globals.crypto = undefined
+      Expect(loadRandomValuesPolyfill(() => {})).toEqual({})
+      const installed = { getRandomValues: () => {} }
+      Expect(loadRandomValuesPolyfill(() => {
+        globals.crypto = installed
+      })).toBe(installed)
+    } finally {
+      globals.crypto = original
+    }
+  })
+
+  Test('treats the installed random-values polyfill as an available module', () => {
+    const globals = globalThis as { crypto?: unknown }
+    const original = globals.crypto
+    try {
+      globals.crypto = undefined
+      const nativeModules = createNativeModules({
+        'react-native-get-random-values': () =>
+          loadRandomValuesPolyfill(() => {
+            globals.crypto = { getRandomValues: () => {} }
+          }),
+      })
+
+      Expect(nativeModules.required('Studio device pairing', 'react-native-get-random-values'))
+        .toBe(globals.crypto)
+    } finally {
+      globals.crypto = original
+    }
   })
 
   Test('preserves the loader cause when a required module fails during evaluation', () => {
