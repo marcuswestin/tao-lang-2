@@ -111,8 +111,20 @@ Describe('Studio device log mirroring', () => {
     Expect(run.console.seen).toEqual(['log:before', 'log:after'])
   })
 
-  Test('an error argument reads as its message, not as an empty object', () => {
-    Expect(formatLogArgument(new TypeError('bad shape'))).toBe('TypeError: bad shape')
+  Test('an error argument reads as its message and where it came from, not as an empty object', () => {
+    const failure = formatLogArgument(new TypeError('bad shape'))
+    Expect(failure.split('\n')[0]).toBe('TypeError: bad shape')
+    // A message alone names what went wrong and never where, and where is the whole reason someone
+    // reads a phone's log on their Mac. Bounded, because a mirrored batch is not a crash report.
+    const frames = failure.split('\n').slice(1)
+    Expect(frames.length > 0 && frames.length <= 6).toBe(true)
+    Expect(frames.every(frame => frame.startsWith('  at '))).toBe(true)
+
+    // Hermes can hand over an error with no stack at all; the message still has to arrive.
+    const bare = new TypeError('no stack here')
+    bare.stack = undefined
+    Expect(formatLogArgument(bare)).toBe('TypeError: no stack here')
+
     Expect(formatLogArgument('plain')).toBe('plain')
     Expect(formatLogArgument(undefined)).toBe('undefined')
     Expect(formatLogArgument({ a: 1 })).toBe('{"a":1}')

@@ -118,19 +118,24 @@ export function captureStudioDeviceLogs(input: {
   }
 }
 
+/** How many frames of a thrown error's stack a mirrored line carries. */
+const stackFrameLimit = 6
+
 /**
  * Renders one console argument as a line of text.
  *
  * An Error becomes its message rather than `{}`, which is what `JSON.stringify` makes of one and the
- * single most common thing to want to read. Anything that cannot be serialized still says what it
- * was rather than throwing inside a logger.
+ * single most common thing to want to read — plus the first few frames of its stack, because a
+ * message alone names what went wrong and never where, and where is the whole reason someone reads
+ * a phone's log on their Mac. Anything that cannot be serialized still says what it was rather than
+ * throwing inside a logger.
  */
 export function formatLogArgument(value: unknown): string {
   if (typeof value === 'string') {
     return value
   }
   if (value instanceof Error) {
-    return `${value.name}: ${value.message}`
+    return `${value.name}: ${value.message}${formatStack(value.stack)}`
   }
   if (value === undefined) {
     return 'undefined'
@@ -140,4 +145,14 @@ export function formatLogArgument(value: unknown): string {
   } catch {
     return Object.prototype.toString.call(value)
   }
+}
+
+/** The first few frames of a stack, indented under the message and never repeating it. */
+export function formatStack(stack: string | undefined): string {
+  const frames = (stack ?? '')
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => line.startsWith('at '))
+    .slice(0, stackFrameLimit)
+  return frames.length === 0 ? '' : `\n${frames.map(frame => `  ${frame}`).join('\n')}`
 }

@@ -227,6 +227,11 @@ export function errorDetail(error: unknown): string | undefined {
   return error === undefined || error === null ? undefined : String(error)
 }
 
+/** errorStack is the stack of a thrown value that carries one, for a log that has to say where. */
+export function errorStack(error: unknown): string | undefined {
+  return error instanceof Error ? error.stack : undefined
+}
+
 /** errorMessage is the one way the runtime reads a user-facing sentence out of an unknown throw. */
 export function errorMessage(error: unknown): string {
   return errorDetail(error) ?? describeThrownValue(error)
