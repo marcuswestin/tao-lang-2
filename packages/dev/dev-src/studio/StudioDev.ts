@@ -1,7 +1,7 @@
 /// <reference path="../expo-dev-loop/expo-runner/better-opn.d.ts" />
 
 import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation/apple-server'
-import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Errors, FS, HCI, Platform, Repo, Time } from '@shared'
 import {
   openStudioPreviewSession,
   resolveStudioProjectRoot,
@@ -37,6 +37,7 @@ export type StudioDevOptions = {
   native?: boolean
   nativeArtifactRoot?: string
   nativeHutchPath?: string
+  nativeHostCommand?: string
   nativeProbe?: boolean
   nativeShowWindow?: boolean
   port?: number
@@ -64,9 +65,11 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     finish = resolve
   })
   let requestedStop = false
+  const nativeAbort = new AbortController()
   const stop = (exitCode: number) => {
     if (!requestedStop) {
       requestedStop = true
+      nativeAbort.abort()
       finish?.(exitCode)
     }
   }
@@ -168,11 +171,13 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       native = await StudioNative.start({
         artifactRoot: options.nativeArtifactRoot,
         hutchPath: nativeHutchPath,
+        nativeHostCommand: options.nativeHostCommand,
         previewUrl: initialResource.previewUrl ?? 'http://127.0.0.1:1',
         // `--no-browser` also means "no extra project window" for the native shell.
         projectUrl: options.browser === false ? undefined : sessionUrl,
         probe: options.nativeProbe,
         showWindow: options.nativeShowWindow,
+        signal: nativeAbort.signal,
         studioUrl: server.url,
       })
       lifecycle.record({ component: 'native-shell', event: 'process-started' })
@@ -244,24 +249,37 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   } finally {
     removeStopSignalHandlers()
     lifecycle?.record({ component: 'studio-server', event: 'shutdown-requested' })
-    await cleanupStudioDev([
-      () => native?.stop(),
-      () => studioClientReload?.close(),
-      () => server?.stop(),
-      () => manager?.closeAll(),
-      () => foundationModels?.stop(),
-      () =>
-        recentProjects.flush().catch(error => {
-          HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
-        }),
-      async () => {
-        // The process record is kept, not cleared: a caller checking for survivors after shutdown
-        // needs to know what this launch owned. Liveness is decided by validation, not by absence.
-        await launch?.finalize({ shutdownReason: 'studio exited' })
-        lifecycle?.record({ component: 'studio-server', event: 'manifest-finalized' })
-        await lifecycle?.close()
-      },
-    ])
+    const cleanupStartedAt = Time.nowMs()
+    if (options.native === true) {
+      HCI.logProcessInfo('studio-native', 'final cleanup: started')
+    }
+    try {
+      await cleanupStudioDev([
+        () => native?.stop(),
+        () => studioClientReload?.close(),
+        () => server?.stop(),
+        () => manager?.closeAll(),
+        () => foundationModels?.stop(),
+        () =>
+          recentProjects.flush().catch(error => {
+            HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
+          }),
+        async () => {
+          // The process record is kept, not cleared: a caller checking for survivors after shutdown
+          // needs to know what this launch owned. Liveness is decided by validation, not by absence.
+          await launch?.finalize({ shutdownReason: 'studio exited' })
+          lifecycle?.record({ component: 'studio-server', event: 'manifest-finalized' })
+          await lifecycle?.close()
+        },
+      ])
+    } finally {
+      if (options.native === true) {
+        HCI.logProcessInfo(
+          'studio-native',
+          `final cleanup: completed in ${Math.max(0, Math.round(Time.nowMs() - cleanupStartedAt))}ms`,
+        )
+      }
+    }
   }
 }
 

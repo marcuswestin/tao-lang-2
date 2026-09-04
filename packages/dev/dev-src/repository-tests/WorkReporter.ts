@@ -10,8 +10,8 @@ import { WorkTUI } from './WorkTUI'
  *
  * - `tui` is the live dashboard a human watching a terminal wants.
  * - `lines` is interleaved prefixed streaming, for dumb terminals and the Expo dev loop.
- * - `quiet` is the agent contract: no streamed node output at all, one line per completion, and
- *   the artifact paths that hold everything else.
+ * - `quiet` is the agent contract: no streamed node output at all, one timestamped line when work
+ *   starts, one line when it completes, and the artifact paths that hold everything else.
  *
  * Because a harness runs commands without a TTY, `./agent verify` becomes terse on its own while
  * `just verify` in a terminal gets the dashboard, and a nested gate inherits non-TTY and stops
@@ -108,6 +108,7 @@ function createLinesReporter(options: ReporterOptions): WorkReporterHandle {
           }),
         planned: ({ states }) => HCI.writeLine(headerText(options, states.length)),
         start: ({ state }) => HCI.logProcessInfo(WorkGraph.nodeLabel(state.node), 'started'),
+        waiting: ({ reason, state }) => HCI.logProcessInfo(WorkGraph.nodeLabel(state.node), reason),
       }),
   }
 }
@@ -121,9 +122,18 @@ function createQuietReporter(options: ReporterOptions): WorkReporterHandle {
         done: () => {},
         output: () => {},
         planned: ({ states }) => HCI.writeLine(headerText(options, states.length)),
-        start: () => {},
+        start: ({ state }) => HCI.writeLine(`${state.name}: started at ${startTime(state)}`),
+        waiting: () => {},
       }),
   }
+}
+
+/** startTime renders the local wall clock so a reader can tell how long a still-running node has waited. */
+function startTime(state: WorkState): string {
+  const startedAt = new Date(state.startedAt ?? Date.now())
+  return [startedAt.getHours(), startedAt.getMinutes(), startedAt.getSeconds()]
+    .map(part => String(part).padStart(2, '0'))
+    .join(':')
 }
 
 /** headerText names the lane, its size, and where its logs land, before any node reports. */

@@ -2,7 +2,23 @@ import { CLI, Platform, Repo } from '@shared'
 import { registerAgentHelpCommand } from './cli/agent-help'
 import { runWithCommands } from './cli/run-with-commands'
 
-const JUST_COMMANDS = ['bench', 'check', 'doctor', 'fix', 'fmt', 'full-verify', 'setup', 'test', 'verify'] as const
+const JUST_COMMANDS = [
+  'bench',
+  'check',
+  'doctor',
+  'fix',
+  'fmt',
+  'full-verify',
+  'full-verify-sandbox',
+  'setup',
+  'test',
+  'test-changed',
+  'test-file',
+  'test-flakes',
+  'test-retry',
+  'test-slowest',
+  'verify',
+] as const
 
 /** Agent-facing CLI entrypoint: expose only the repository workflows intended for `./agent`. */
 await runWithCommands(commands => {

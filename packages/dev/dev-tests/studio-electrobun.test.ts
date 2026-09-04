@@ -123,6 +123,10 @@ Describe('Studio Electrobun project', () => {
     Expect(generated.packageJson).toMatchObject({
       devDependencies: { '@types/bun': '1.4.0', ws: '8.21.0' },
     })
+    Expect(generated.hutchLock).toMatchObject({
+      lockfileVersion: 1,
+      workspaces: { '': { devDependencies: { '@types/bun': '1.4.0', ws: '8.21.0' } } },
+    })
     Expect(() => new Bun.Transpiler({ loader: 'ts' }).transformSync(generated.main)).not.toThrow()
     try {
       const project = await StudioElectrobun.create({ ...options, outputRoot })
@@ -265,6 +269,9 @@ Describe('Studio Electrobun project', () => {
       Expect(await FS.isFile(project.mainPath)).toBe(true)
       Expect(await FS.isFile(project.configPath)).toBe(true)
       Expect(await FS.isFile(FS.resolvePath('hutch.config.ts', project.root))).toBe(true)
+      Expect(await FS.readJson(FS.resolvePath('hutch.lock', project.root))).toEqual(
+        StudioElectrobun.sources(options).hutchLock,
+      )
       Expect(await FS.isFile(FS.resolvePath('package.json', project.root))).toBe(true)
       Expect(await FS.isFile(FS.resolvePath('tsconfig.json', project.root))).toBe(true)
       Expect(await FS.isFile(unrelatedPath)).toBe(true)

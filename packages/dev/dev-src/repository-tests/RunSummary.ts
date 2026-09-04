@@ -1,5 +1,6 @@
 import { FS } from '@shared'
 import { OutputText } from '../cli/OutputText'
+import { type ContentionReport, MachineLanes } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
 import type { WorkState } from './WorkGraph'
 
@@ -17,12 +18,28 @@ import type { WorkState } from './WorkGraph'
 export type GateStatus = 'failed' | 'passed' | 'skipped'
 
 /**
- * Why a node failed, at the level that decides who fixes it. The four are genuinely different
- * jobs: set the environment up, install an optional tool, run the command outside the sandbox,
- * or change the repository. Reporting them as one undifferentiated failure sends every one of
- * them to the same wrong place.
+ * Why a node failed, at the level that decides who fixes it. These are genuinely different jobs:
+ * set the environment up, install an optional tool, run the command outside the sandbox, wait for
+ * the machine, or change the repository. Reporting them as one undifferentiated failure sends
+ * every one of them to the same wrong place.
+ *
+ * `machine-contention` is only ever assigned to a node that ran out of time while this machine was
+ * carrying more work than this run started. It is a claim about the host, so it is never made from
+ * output alone: `classifyFailure` needs the run's own contention report to reach it.
  */
-export type FailureKind = 'environment-setup' | 'optional-tooling' | 'repository' | 'sandbox-restriction'
+export type FailureKind =
+  | 'electrobun-prepare-timeout'
+  | 'environment-setup'
+  | 'hutch-install-timeout'
+  | 'machine-contention'
+  | 'native-host-busy'
+  | 'native-probe-timeout'
+  | 'native-runtime-exit'
+  | 'optional-tooling'
+  | 'repository'
+  | 'sandbox-restriction'
+  | 'test-assertion'
+  | 'user-interruption'
 
 /** GateResult records one node's outcome. */
 export type GateResult = {
@@ -40,11 +57,15 @@ export type GateResult = {
   reason?: string
   /** Named exclusive resources the node held while it ran. */
   resources?: readonly string[]
+  /** True when the node first failed under machine contention and was run again on its own. */
+  retried?: boolean
   status: GateStatus
 }
 
 /** GateSummary is the versioned rollup a run ends with, and the JSON artifact it can write. */
 export type GateSummary = {
+  /** What the machine was carrying while this run happened; absent for a run that did not sample it. */
+  contention?: ContentionReport
   elapsedMs: number
   /** The first failing node, which is the one to act on. */
   firstFailure?: { logPath?: string; name: string; output: string }
@@ -59,6 +80,8 @@ export type GateSummary = {
 
 /** BuildSummaryOptions describes the finished run being rolled up. */
 export type BuildSummaryOptions = {
+  /** What the machine was carrying while this run happened, when the lane sampled it. */
+  contention?: ContentionReport
   /** Nodes the lane deliberately did not run, already resolved to results. */
   declaredSkips?: readonly GateResult[]
   elapsedMs: number
@@ -76,6 +99,16 @@ const FAILURE_OUTPUT_LINES = 40
 const SUMMARY_VERSION = 2
 
 const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
+  { kind: 'native-host-busy', pattern: /Machine resource 'studio-native-host' is busy/i },
+  { kind: 'hutch-install-timeout', pattern: /Hutch install timed out after/i },
+  { kind: 'electrobun-prepare-timeout', pattern: /Hutch electrobun prepare timed out after/i },
+  {
+    kind: 'native-runtime-exit',
+    pattern:
+      /(?:native runtime exited .* before (?:reporting|producing)|Electrobun exited before writing its runtime probe)/i,
+  },
+  { kind: 'native-probe-timeout', pattern: /Timed out waiting for the Electrobun runtime probe/i },
+  { kind: 'user-interruption', pattern: /\b(?:user interruption|was interrupted|interrupted before completion)\b/i },
   { kind: 'environment-setup', pattern: /pinned devenv profile is unavailable|command not found: (bun|node|just)/i },
   { kind: 'environment-setup', pattern: /^error: Cannot find (module|package)/im },
   { kind: 'optional-tooling', pattern: /\b(watchman|hutch|chrome|chromium|lsof|docker) (is )?not (installed|found)/i },
@@ -85,20 +118,62 @@ const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
     kind: 'sandbox-restriction',
     pattern: /^(?!.*expect).*\b(operation not permitted|PermissionDenied|EPERM|EACCES)\b/im,
   },
+  {
+    kind: 'test-assertion',
+    pattern: /(?:\(fail\)|AssertionError|expect\(received\)|^FAIL\s+(?!shutdown:|exit:))/im,
+  },
+]
+
+/**
+ * How each runner says a clock ran out: the work-graph node timeout, Bun's and Jest's per-test
+ * timeouts, and `@shared/test`'s own named waits. A run out of time is the one failure whose cause
+ * can be a busy machine rather than the code, which is why it is matched separately from the kinds
+ * above rather than added to them.
+ */
+const TIMEOUT_SIGNATURES: readonly RegExp[] = [
+  /\btimed out after\b/i,
+  /\btimeout of \d+\s*ms exceeded\b/i,
+  /\bexceeded timeout of\b/i,
+  /\btest (?:timed out|timeout)\b/i,
+  /\bETIMEDOUT\b/,
 ]
 
 /** Lines worth surfacing from a node that still passed, including tool diagnostics. */
 const WARNING_PATTERN = /\b(warning|warn):|is declared but never referenced|deprecated/i
 
-/** classifyFailure names the kind of failure a node's output describes. */
-export function classifyFailure(output: string): FailureKind {
-  return FAILURE_SIGNATURES.find(signature => signature.pattern.test(output))?.kind ?? 'repository'
+/** ClassifyContext carries what the output alone cannot say: what else the machine was carrying. */
+export type ClassifyContext = {
+  contention?: ContentionReport
+  interrupted?: boolean
+}
+
+/** describesTimeout reports whether a node's output says it ran out of time rather than failed. */
+export function describesTimeout(output: string): boolean {
+  return TIMEOUT_SIGNATURES.some(pattern => pattern.test(output))
+}
+
+/**
+ * classifyFailure names the kind of failure a node's output describes. A timeout is only called
+ * contention when the run actually measured contention; on an idle machine the same timeout is a
+ * repository failure and must stay one.
+ */
+export function classifyFailure(output: string, context: ClassifyContext = {}): FailureKind {
+  if (context.interrupted === true) {
+    return 'user-interruption'
+  }
+  const signature = FAILURE_SIGNATURES.find(candidate => candidate.pattern.test(output))
+  if (signature !== undefined) {
+    return signature.kind
+  }
+  return context.contention?.contended === true && describesTimeout(output) ? 'machine-contention' : 'repository'
 }
 
 /** buildSummary rolls one finished run up into the versioned summary it writes and prints. */
 export function buildSummary(options: BuildSummaryOptions): GateSummary {
   const declaredSkips = options.declaredSkips ?? []
-  const results = new Map(options.states.map(state => [state.name, nodeResult(state, options.expectedMs)]))
+  const results = new Map(
+    options.states.map(state => [state.name, nodeResult(state, options.expectedMs, options.contention)]),
+  )
   const order = options.order ?? options.states.map(state => state.name)
   const ordered = [
     ...declaredSkips,
@@ -108,6 +183,7 @@ export function buildSummary(options: BuildSummaryOptions): GateSummary {
   const failedState = options.states.find(state => state.name === firstFailed?.name)
 
   return {
+    contention: options.contention,
     elapsedMs: Math.round(options.elapsedMs),
     firstFailure: firstFailed === undefined ? undefined : {
       logPath: firstFailed.logPath,
@@ -119,8 +195,48 @@ export function buildSummary(options: BuildSummaryOptions): GateSummary {
     logRoot: options.logRoot,
     status: options.interrupted === true || ordered.some(result => result.status === 'failed') ? 'failed' : 'passed',
     version: SUMMARY_VERSION,
-    warnings: collectWarnings(options.states),
+    warnings: [...contentionWarnings(ordered, options.contention), ...collectWarnings(options.states)],
   }
+}
+
+/**
+ * What a reader must be told before they read a failure: this run did not have the machine to
+ * itself. Without it a contended timeout looks exactly like a regression, and the next thing that
+ * happens is somebody bisecting one that is not there.
+ */
+function contentionWarnings(
+  results: readonly GateResult[],
+  contention: ContentionReport | undefined,
+): string[] {
+  if (contention === undefined || !contention.contended) {
+    return []
+  }
+  const warnings = [`machine contention: ${MachineLanes.describeContention(contention)}`]
+  const retried = results.filter(result => result.retried === true && result.status === 'passed')
+  const confirmedFailures = results.filter(result => result.retried === true && result.status === 'failed')
+  const unconfirmed = results.filter(result => result.failureKind === 'machine-contention' && result.retried !== true)
+  if (retried.length > 0) {
+    warnings.push(
+      `passed only on an isolated retry after failing under contention: ${
+        retried.map(result => result.name).join(', ')
+      }`,
+    )
+  }
+  if (confirmedFailures.length > 0) {
+    warnings.push(
+      `failed again on an isolated retry after timing out under contention: ${
+        confirmedFailures.map(result => result.name).join(', ')
+      }`,
+    )
+  }
+  if (unconfirmed.length > 0) {
+    warnings.push(
+      `timed out under contention without an exclusive confirmation: ${
+        unconfirmed.map(result => result.name).join(', ')
+      }`,
+    )
+  }
+  return warnings
 }
 
 /** skippedResult records a node the lane declared it would not run, as `name=reason`. */
@@ -166,10 +282,19 @@ export function gateExitCode(summary: GateSummary): number {
   return summary.status === 'failed' ? 1 : 0
 }
 
-function nodeResult(state: WorkState, expectedMs: BuildSummaryOptions['expectedMs']): GateResult {
+function nodeResult(
+  state: WorkState,
+  expectedMs: BuildSummaryOptions['expectedMs'],
+  contention: ContentionReport | undefined,
+): GateResult {
   const exitCode = typeof state.exitCode === 'number' ? state.exitCode : undefined
   const failed = state.status === 'failed'
-  const failureKind = failed ? classifyFailure(state.fullOutput) : undefined
+  const failureKind = failed
+    ? classifyFailure(state.fullOutput, {
+      contention,
+      interrupted: state.failure?.kind === 'interrupted',
+    })
+    : undefined
   return {
     elapsedMs: Math.round(state.elapsedMs),
     exitCode,
@@ -180,6 +305,7 @@ function nodeResult(state: WorkState, expectedMs: BuildSummaryOptions['expectedM
     needs: state.node.needs,
     reason: state.reason ?? (failed ? `exited ${exitCode ?? 'unknown'} (${failureKind})` : undefined),
     resources: state.node.resources,
+    retried: state.retried,
     status: state.status === 'passed' ? 'passed' : failed ? 'failed' : 'skipped',
   }
 }

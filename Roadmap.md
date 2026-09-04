@@ -13,8 +13,10 @@ app feature and Tao test proves each capability).
 
 - [ ] Deep links and navigation persistence
 - [ ] Enable Codex to interact with studio on its own for testing and development of it.
-- [ ] Instructions to keep track of all dev env/process issues along the way, and then list them when done implementing with suggested solutions.
-  - [ ] Ditto for if there are clear improvement opportunities that you discover while working or implementing. In short, we want to always improve our dev env/process to be the best supportive env for us, tao devs and agents, as we can, and always improving as we go.
+- [ ] Work through the durable developer-environment upgrade ledger.
+  - Agents record and deduplicate material findings as they work; the current backlog, incoming
+    branch fixes, evidence, and acceptance criteria live in
+    `Docs/Roadmap/Developer environment upgrades.md`.
 
 ## Documentation cleanup
 

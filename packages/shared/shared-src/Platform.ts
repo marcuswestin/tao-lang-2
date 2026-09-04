@@ -6,7 +6,7 @@ import {
   type SpawnSyncOptions as NodeSpawnSyncOptions,
   type SpawnSyncReturns,
 } from 'node:child_process'
-import { availableParallelism } from 'node:os'
+import { availableParallelism, loadavg } from 'node:os'
 import type { Readable } from 'node:stream'
 import { throwUnexpected } from './core/Errors'
 
@@ -16,6 +16,29 @@ export type ProcessSignal = NodeJS.Signals
 /** cpuCount returns the number of CPUs available to this process. */
 export function cpuCount(): number {
   return Math.max(1, availableParallelism())
+}
+
+/**
+ * loadAverage returns the one-minute run-queue length this machine is carrying. Compared against
+ * `cpuCount` it is the one reading that notices work this process did not start — another
+ * worktree's test lane, a Metro bundler, an Xcode build.
+ */
+export function loadAverage(): number {
+  return loadavg()[0] ?? 0
+}
+
+/** processIsAlive reports whether a process id still exists, without signalling it. */
+export function processIsAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false
+  }
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    // EPERM means the process exists and belongs to somebody else; only ESRCH means it is gone.
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
 }
 
 /** SpawnOptions declares options for starting a child process. */

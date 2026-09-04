@@ -307,16 +307,10 @@ Describe('Studio native wrapper foundation', () => {
 
   Test('installs and prepares the generated project through the selected Hutch launcher', async () => {
     const calls: Array<{ args: readonly string[] | undefined; command: string; cwd: string | undefined }> = []
-    await StudioNative.testing.prepareElectrobun(
-      '/tools/hutch',
-      '/workspace/native',
-      async (command, spec) => {
-        calls.push({ args: spec.args, command, cwd: spec.cwd })
-        return commandResult(command, spec, 0)
-      },
-      async () => [],
-      async () => [],
-    )
+    await StudioNative.testing.prepareElectrobun('/tools/hutch', '/workspace/native', async (command, spec) => {
+      calls.push({ args: spec.args, command, cwd: spec.cwd })
+      return commandResult(command, spec, 0)
+    })
 
     Expect(calls).toEqual([
       {
@@ -332,52 +326,11 @@ Describe('Studio native wrapper foundation', () => {
     ])
   })
 
-  Test('clears an Electrobun build lock whose owner is gone, and keeps one a live process holds', async () => {
-    const projectRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-build-lock-', FS.tmpdir()))
-    try {
-      const lockPath = FS.resolvePath('.hutch/locks/electrobun-build.lock', projectRoot)
-      await FS.writeText(lockPath, '')
-
-      await Expect(StudioNative.testing.clearStaleElectrobunBuildLock(projectRoot, async () => [4321])).resolves
-        .toBe(false)
-      Expect(await FS.exists(lockPath)).toBe(true)
-
-      await Expect(StudioNative.testing.clearStaleElectrobunBuildLock(projectRoot, async () => [])).resolves.toBe(true)
-      Expect(await FS.exists(lockPath)).toBe(false)
-
-      await Expect(StudioNative.testing.clearStaleElectrobunBuildLock(projectRoot, async () => [])).resolves
-        .toBe(false)
-    } finally {
-      await FS.remove(projectRoot)
-    }
-  })
-
-  Test('refuses to prepare while another native Studio holds the shared Electrobun release', async () => {
-    const holder = {
-      command: '/Users/dev/.hutch/releases/hutch/0.24.3/bin/hutch-engine electrobun dev --watch',
-      processId: 4242,
-    }
-    await Expect(StudioNative.testing.requireIdleElectrobunRelease(async () => [], async () => {})).resolves
-      .toBeUndefined()
-
-    let probes = 0
-    await Expect(StudioNative.testing.requireIdleElectrobunRelease(async () => {
-      probes += 1
-      return probes === 1 ? [holder] : []
-    }, async () => {})).resolves.toBeUndefined()
-    Expect(probes).toBe(2)
-
-    await Expect(StudioNative.testing.requireIdleElectrobunRelease(async () => [holder], async () => {})).rejects
-      .toThrow('pid 4242')
-  })
-
   Test('surfaces Electrobun preparation failures', async () => {
     await Expect(StudioNative.testing.prepareElectrobun(
       '/tools/hutch',
       '/workspace/native',
       async (command, spec) => commandResult(command, spec, spec.args?.[0] === 'install' ? 0 : 7),
-      async () => [],
-      async () => [],
     )).rejects.toThrow('Command failed: /tools/hutch electrobun prepare')
   })
 
@@ -874,6 +827,28 @@ Describe('Studio smoke resource isolation', () => {
         otherShard.previewPort,
       ]).size,
     ).toBe(6)
+  })
+
+  Test('gives each worktree its own port block, so two checkouts never claim one port', () => {
+    const here = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2')
+    const linked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/.claude/worktrees/feature-a')
+    const otherLinked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/.claude/worktrees/feature-b')
+
+    // Every lane bound 42000 upward from shard 0, so the second worktree to start a Studio lane
+    // died on a port the first one was serving.
+    Expect(new Set([here, linked, otherLinked]).size).toBe(3)
+    for (const shard of [here, linked, otherLinked]) {
+      Expect(shard).toBeGreaterThanOrEqual(0)
+      Expect(shard).toBeLessThan(StudioSmoke.shardCount)
+    }
+    Expect(StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2')).toBe(here)
+  })
+
+  Test('a lane with no explicit shard allocates from its own worktree block', () => {
+    const allocated = StudioSmoke.resources({ runId: 'run-17', workerIndex: 1 })
+
+    Expect(allocated.shardIndex).toBe(StudioSmoke.defaultShardIndex())
+    Expect(allocated.artifactRoot).toEndWith(`shard-${allocated.shardIndex}/worker-1`)
   })
 
   Test('rejects unsafe artifact ids and out-of-range lanes', () => {
