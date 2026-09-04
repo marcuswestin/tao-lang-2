@@ -148,11 +148,27 @@ tests written in Tao, green in Current, for every construct introduced.
   - Decided 2026-09-02. A Tao-published phone app for an improved development experience, paired
     with Tao Studio, and for pre-release testing and feedback by members a developer invites to
     their project on the Tao Lang servers, each with an account there. A `tao ship` flag of its
-    own delivers through it once it exists; plain `tao ship` and `--beta` are the store motions. Sequences after the derived Expo
-    host and the compiled-bundle update lane of `tao ship`. Design rules: project membership
-    as the only access model, no public sharing surface, compiled bundles only, the Studio
-    native-device canvas as first customer, rare shell releases. Context and rules:
-    `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`.
+    own delivers through it once it exists; plain `tao ship` and `--beta` are the store motions.
+    The implementation plan now includes trivial LAN/relay pairing, the everyday native-device
+    development loop, spoken and recorded user-story journeys, an iPad pen-and-touch workbench that
+    edits real view definitions through typed source actions, invited tester feedback and visual
+    proposals, permission-controlled forks, physical-device replay into regression tests, causal
+    inspection/performance, multi-device stories, and same-state revision comparison. Design rules:
+    project membership as the only remote access model, no public sharing surface, compiled bundles
+    only, Studio/source as authority, and rare shell releases. Plan:
+    `Docs/Roadmap/Tao Studio companion app/Plan - Tao Studio companion app.md`. Distribution context:
+    `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md`. Slice 1 implementation prompt:
+    `Docs/Roadmap/Tao Studio companion app/Prompt - Implement Slice 1.md`. Slice 1 (pair and render one
+    real device) is implemented: `packages/studio-companion-app`, the `tao-studio-device-v1` gateway and
+    trust store in `packages/studio`, `TR.Studio.DeviceHost`, the workbench Device popover, and
+    `just studio-companion-install`; contract and proof record in
+    `Docs/Roadmap/Tao Studio companion app/Slice 1 - Device protocol and trust.md`. Slice 2 (everyday
+    development canvas) is partly implemented: a reconfigure reaches the device, selection works both
+    ways, Studio can capture a device's runtime state, the phone's console is mirrored into Studio, and
+    a device loads the scenario rather than the canvas frame. Its acceptance is not complete — running
+    one journey on the device is a fork rather than a task, and capture/restore has no UI on any
+    surface. Status, what was proven live, and the open decisions are in
+    `Docs/Roadmap/Tao Studio companion app/Slice 2 - Everyday development canvas.md`.
 - [ ] Add `tao create` project scaffold
   - New app folder, minimal Tao app, default package layout, docs, dev and test scripts, and an immediate open-and-run path.
 - [ ] Implement secrets

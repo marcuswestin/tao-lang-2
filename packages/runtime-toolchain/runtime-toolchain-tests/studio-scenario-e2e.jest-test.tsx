@@ -1,7 +1,7 @@
 import TR from '@runtime/TR'
 import { Assert, CLI, Errors, FS, Repo } from '@shared'
 import { AfterAll, AfterEach, Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { cleanup, render, waitFor } from '@testing-library/react-native'
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react-native'
 import { type ComponentType, createElement } from 'react'
 import type {
   TaoStudioFixturePlan,
@@ -102,6 +102,13 @@ Describe('Tao Studio scenario runtime', () => {
     await waitFor(() => Expect(screen.getByText('Novel')).toBeDefined())
     Expect(screen.getByTestId('openWorkspace')).toBeDefined()
     Expect(screen.getByTestId('deleteWorkspace')).toBeDefined()
+
+    // Presenting is legal in any view body, and this row does it. Mounted bare, `present` found no
+    // navigation above it and the cell died on the first tap with 'no enclosing or explicit
+    // navigation target' — on the phone, where a person is tapping rather than reading a stack.
+    fireEvent.press(screen.getByTestId('openWorkspace'))
+    await waitFor(() => Expect(screen.getByText('WORKSPACE DETAILS')).toBeDefined())
+    Expect(screen.getByTestId('saveWorkspace')).toBeDefined()
   })
 
   Test('mounts an imported focused view with its fixture entity', async () => {

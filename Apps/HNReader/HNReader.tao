@@ -6,6 +6,7 @@ project {
    id "hnreader"
    name "HNReader"
    version "0.1.0"
+   DefaultApp HNReader
    remote none
    license MIT
 }
@@ -206,3 +207,85 @@ view CommentRow(Comment) {
          TextMultiline(Comment.Text) [commentText]
          Text(Comment.Author) [author]
 }  }  }
+
+// Deterministic Studio data. The ids are the stub adapter's, so selecting the stub variant fills
+// over these rows rather than showing a second copy of the feed beside them — the same
+// upsert-by-unique path the journeys exercise.
+fixture HNFrontPage {
+   Lead = create Story {
+      HnId: 101,
+      Title: "Show HN: A Tao reader",
+      Url: "https://example.com/tao-reader",
+      Score: 42,
+      Author: "tester",
+      CommentCount: 2,
+      Rank: 1
+   }
+   Runner = create Story {
+      HnId: 102,
+      Title: "Why local-first sync wins",
+      Score: 17,
+      Author: "writer",
+      CommentCount: 0,
+      Rank: 2
+   }
+   LeadQuestion = create Comment {
+      Story: Lead,
+      HnId: 1011,
+      Author: "alice",
+      Text: "Neat — does the store stay local-first?",
+      Depth: 0,
+      Ordering: 1
+   }
+   LeadAnswer = create Comment {
+      Story: Lead,
+      HnId: 1012,
+      Author: "bob",
+      Text: "Yes, queries evaluate locally.",
+      Depth: 1,
+      Ordering: 2
+}  }
+
+// The shipping app is the subject, so these open with the project rather than behind an app switch.
+// The fixture is what the cell starts from; an online scenario then fills over it through the real
+// adapter, and the offline one shows exactly these rows and says where they came from.
+scenarios HNReader "devices" {
+   fixture HNFrontPage
+   appearance light
+   network online
+   locale "en"
+   scenario "phone" {
+      device phone
+   }
+   scenario "tabletDark" {
+      device tablet 1024 x 1366
+      appearance dark
+   }
+
+   // The query's error case is the point of this one: the feed's guard takes the screen and names
+   // what it could not reach, rather than showing an empty list with no explanation.
+   scenario "offline" {
+      device phone
+      network offline
+}  }
+
+scenarios StoryRow "rows" {
+   fixture HNFrontPage
+   device phone
+   appearance light
+   network online
+   locale "en"
+   scenario "leading" {
+      render (Story: Lead)
+   }
+
+   // A rank in the hundreds and a title that wraps: the row has to stay readable when neither the
+   // number nor the headline is short.
+   scenario "wrapping" {
+      prepare {
+         update Runner {
+            Title: "A very long headline about local-first sync that has to wrap across several lines",
+            Rank: 128
+      }  }
+      render (Story: Runner)
+}  }

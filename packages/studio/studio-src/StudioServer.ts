@@ -2,6 +2,9 @@ import { type GenerationProvider, UnavailableGenerationProvider } from '@generat
 import { CLI, Errors, Repo } from '@shared'
 import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
 import { AgentPoc } from './agent-poc/AgentPocServer'
+import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
+import type { StudioDeviceLauncher } from './device/StudioDeviceLauncher'
+import type { StudioDeviceStateEvent } from './device/StudioDeviceStatus'
 import { type StudioClientAssetProvider, StudioClientAssets } from './StudioClientAssets'
 import { StudioFixtureGeneration } from './StudioFixtureGeneration'
 import { StudioHighlight } from './StudioHighlight'
@@ -30,6 +33,21 @@ import {
 import type { StudioTestRunner } from './StudioTestRunner'
 import { StudioWelcome } from './StudioWelcome'
 
+/** The gateway surface the loopback routes and `device-state` events need; the real gateway satisfies it. */
+export type StudioServerDeviceGateway = Pick<
+  StudioDeviceGateway,
+  | 'captureRuntime'
+  | 'confirmPairing'
+  | 'declinePairing'
+  | 'highlightSource'
+  | 'openPairing'
+  | 'requestReconnect'
+  | 'revoke'
+  | 'selectCell'
+  | 'status'
+  | 'subscribe'
+>
+
 export type StudioServerOptions = {
   /**
    * Secrets the agent chat may use, handed over as a value rather than exported into the environment. Studio
@@ -40,6 +58,8 @@ export type StudioServerOptions = {
   clientAssets?: StudioClientAssetProvider
   clientReloadRevision?: () => number
   compileOnStart?: boolean
+  deviceGateway?: StudioServerDeviceGateway
+  deviceLauncher?: StudioDeviceLauncher
   generationProvider?: GenerationProvider
   hostname?: string
   port?: number
@@ -91,7 +111,9 @@ export async function startStudioSessionServer(
   const eventClients = new Map<string, Set<StudioSocket>>()
   const dataSources = new Map<string, StudioServerDatasource>()
   const dataSourceSubscriptions = new Map<string, () => void>()
+  const deviceSubscriptions = new Map<string, () => void>()
   const sessionSubscriptions = new Map<string, () => void>()
+  const deviceGateway = options.deviceGateway
   const subscribeSession = (sessionId: string): void => {
     if (sessionSubscriptions.has(sessionId)) {
       return
@@ -112,6 +134,14 @@ export async function startStudioSessionServer(
         broadcast(clients, event)
       }),
     )
+    if (deviceGateway !== undefined) {
+      deviceSubscriptions.set(
+        sessionId,
+        deviceGateway.subscribe(sessionId, status => {
+          broadcast(eventClients.get(sessionId) ?? new Set(), deviceStateEvent(status))
+        }),
+      )
+    }
   }
   for (const item of manager.list().current) {
     subscribeSession(item.sessionId)
@@ -128,6 +158,8 @@ export async function startStudioSessionServer(
     sessionSubscriptions.delete(sessionId)
     dataSourceSubscriptions.get(sessionId)?.()
     dataSourceSubscriptions.delete(sessionId)
+    deviceSubscriptions.get(sessionId)?.()
+    deviceSubscriptions.delete(sessionId)
     dataSources.get(sessionId)?.close()
     dataSources.delete(sessionId)
   }
@@ -196,6 +228,17 @@ export async function startStudioSessionServer(
         if (testResponse !== undefined) {
           return testResponse
         }
+        const deviceResponse = await handleDeviceRequest(
+          route.sessionId,
+          resource,
+          request,
+          url,
+          requestOptions,
+          route.pathname,
+        )
+        if (deviceResponse !== undefined) {
+          return deviceResponse
+        }
         if (route.pathname === '/events' || route.pathname === '/api/language/lsp') {
           const upgraded = bunServer.upgrade(request, {
             data: {
@@ -250,7 +293,12 @@ export async function startStudioSessionServer(
           const clients = eventClients.get(socket.data.sessionId) ?? new Set<StudioSocket>()
           clients.add(socket)
           eventClients.set(socket.data.sessionId, clients)
-          void initializeEventSocket(socket, resource.session)
+          const sessionId = socket.data.sessionId
+          void initializeEventSocket(
+            socket,
+            resource.session,
+            deviceGateway === undefined ? undefined : () => deviceStateEvent(deviceGateway.status(sessionId)),
+          )
         } else {
           socket.data.session = StudioLsp.createSession(resource.session.projectRoot, socket)
         }
@@ -274,6 +322,10 @@ export async function startStudioSessionServer(
         unsubscribe()
       }
       dataSourceSubscriptions.clear()
+      for (const unsubscribe of deviceSubscriptions.values()) {
+        unsubscribe()
+      }
+      deviceSubscriptions.clear()
       for (const datasource of dataSources.values()) {
         datasource.close()
       }
@@ -293,12 +345,147 @@ export async function startStudioSessionServer(
 async function initializeEventSocket(
   socket: Pick<StudioSocket, 'close' | 'send'>,
   session: Pick<StudioProjectSession, 'handshake'>,
+  deviceState?: () => StudioDeviceStateEvent,
 ): Promise<void> {
   try {
     socket.send(JSON.stringify(await session.handshake()))
+    if (deviceState !== undefined) {
+      socket.send(JSON.stringify(deviceState()))
+    }
   } catch {
     socket.close(1011, 'Could not initialize Studio events')
   }
+}
+
+function deviceStateEvent(status: StudioDeviceStateEvent['status']): StudioDeviceStateEvent {
+  return { channel: 'tao-studio', protocolVersion: 1, status, type: 'device-state' }
+}
+
+/** Device routes answer 501 without a gateway; launch routes also need the host-tooling launcher. */
+async function handleDeviceRequest(
+  sessionId: string,
+  resource: StudioSessionResource,
+  request: Request,
+  url: URL,
+  options: StudioServerOptions,
+  pathname: string,
+): Promise<Response | undefined> {
+  if (!pathname.startsWith('/api/device/')) {
+    return undefined
+  }
+  const gateway = options.deviceGateway
+  if (gateway === undefined) {
+    return response(request, url, options, { error: 'This Studio service does not include the device gateway.' }, 501)
+  }
+  if (request.method === 'GET' && pathname === '/api/device/status') {
+    return response(request, url, options, gateway.status(sessionId))
+  }
+  if (request.method === 'POST' && pathname === '/api/device/pairing/open') {
+    return response(request, url, options, gateway.openPairing(sessionId))
+  }
+  if (request.method === 'POST' && pathname === '/api/device/pairing/confirm') {
+    const { devicePublicKey } = devicePublicKeyRequest(await request.json())
+    return response(request, url, options, await gateway.confirmPairing(sessionId, devicePublicKey))
+  }
+  if (request.method === 'POST' && pathname === '/api/device/pairing/decline') {
+    const { devicePublicKey } = devicePublicKeyRequest(await request.json())
+    return response(request, url, options, gateway.declinePairing(sessionId, devicePublicKey))
+  }
+  if (request.method === 'POST' && pathname === '/api/device/revoke') {
+    const { devicePublicKey } = devicePublicKeyRequest(await request.json())
+    return response(request, url, options, await gateway.revoke(sessionId, devicePublicKey))
+  }
+  if (request.method === 'POST' && pathname === '/api/device/reconnect') {
+    return response(request, url, options, gateway.requestReconnect(sessionId))
+  }
+  if (request.method === 'POST' && pathname === '/api/device/select-cell') {
+    return response(
+      request,
+      url,
+      options,
+      gateway.selectCell(sessionId, deviceCellRequest(await request.json()).cellId),
+    )
+  }
+  if (request.method === 'POST' && pathname === '/api/device/capture') {
+    return response(request, url, options, await gateway.captureRuntime(sessionId))
+  }
+  if (request.method === 'POST' && pathname === '/api/device/highlight') {
+    const occurrence = deviceHighlightRequest(await request.json())
+    return response(request, url, options, gateway.highlightSource(sessionId, occurrence))
+  }
+  if (pathname === '/api/device/launch' || pathname === '/api/device/launch/open') {
+    const launcher = options.deviceLauncher
+    if (launcher === undefined) {
+      return response(request, url, options, {
+        error: 'This Studio service does not include physical-device launch tooling.',
+      }, 501)
+    }
+    const metroOrigin = resource.previewUrl
+    if (metroOrigin === undefined) {
+      return response(request, url, options, { error: 'This project has no Metro preview to launch on a device.' }, 501)
+    }
+    if (request.method === 'GET' && pathname === '/api/device/launch') {
+      return response(request, url, options, await launcher.describe({ metroOrigin }))
+    }
+    if (request.method === 'POST' && pathname === '/api/device/launch/open') {
+      const { hostId, route } = deviceLaunchOpenRequest(await request.json())
+      return response(request, url, options, await launcher.open({ hostId, metroOrigin, route }))
+    }
+  }
+  return response(request, url, options, { error: 'Studio endpoint not found.' }, 404)
+}
+
+function devicePublicKeyRequest(value: unknown): { devicePublicKey: string } {
+  if (!isRecord(value) || typeof value['devicePublicKey'] !== 'string' || value['devicePublicKey'].trim() === '') {
+    throw new Errors.UserInputError('Expected the device public key.')
+  }
+  return { devicePublicKey: value['devicePublicKey'] }
+}
+
+function deviceCellRequest(value: unknown): { cellId: string } {
+  if (!isRecord(value) || typeof value['cellId'] !== 'string' || value['cellId'].trim() === '') {
+    throw new Errors.UserInputError('Expected a Studio cell id.')
+  }
+  return { cellId: value['cellId'] }
+}
+
+/** A highlight with no occurrence clears the device's outline, so an empty body is a valid request. */
+function deviceHighlightRequest(
+  value: unknown,
+): { end: number; ownerName?: string; sourcePath: string; sourceVersion: string; start: number } | undefined {
+  if (!isRecord(value) || value['occurrence'] === undefined) {
+    return undefined
+  }
+  const occurrence = value['occurrence']
+  if (
+    !isRecord(occurrence)
+    || typeof occurrence['sourcePath'] !== 'string'
+    || occurrence['sourcePath'].trim() === ''
+    || typeof occurrence['sourceVersion'] !== 'string'
+    || occurrence['sourceVersion'].trim() === ''
+    || !Number.isSafeInteger(occurrence['start'])
+    || !Number.isSafeInteger(occurrence['end'])
+  ) {
+    throw new Errors.UserInputError('Expected a Tao source occurrence to highlight.')
+  }
+  return {
+    end: occurrence['end'] as number,
+    ...(typeof occurrence['ownerName'] === 'string' ? { ownerName: occurrence['ownerName'] } : {}),
+    sourcePath: occurrence['sourcePath'],
+    sourceVersion: occurrence['sourceVersion'],
+    start: occurrence['start'] as number,
+  }
+}
+
+function deviceLaunchOpenRequest(value: unknown): { hostId: string; route: 'auto' | 'cable' } {
+  if (!isRecord(value) || typeof value['hostId'] !== 'string' || value['hostId'].trim() === '') {
+    throw new Errors.UserInputError('Expected the host id of the device to launch on.')
+  }
+  const route = value['route']
+  if (route !== undefined && route !== 'auto' && route !== 'cable') {
+    throw new Errors.UserInputError("Expected the launch route to be 'auto' or 'cable'.")
+  }
+  return { hostId: value['hostId'], route: route ?? 'auto' }
 }
 
 async function handleTestRequest(
@@ -908,6 +1095,7 @@ function forbiddenResponse(message: string): Response {
 
 export const StudioServerTesting = {
   errorResponse,
+  handleDeviceRequest,
   handleRequest: handleRequestForTesting,
   handleTestRequest,
   initializeEventSocket,
@@ -965,7 +1153,7 @@ async function handleRequestForTesting(
 
 function broadcast(
   clients: Set<StudioSocket>,
-  event: StudioSessionEvent | (StudioServerInvalidation & { type: 'data-invalidated' }),
+  event: StudioDeviceStateEvent | StudioSessionEvent | (StudioServerInvalidation & { type: 'data-invalidated' }),
 ): void {
   const payload = JSON.stringify(event)
   for (const client of clients) {

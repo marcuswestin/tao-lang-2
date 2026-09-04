@@ -51,8 +51,11 @@ view Toolbar() {
 view Card(Title text) {
    @actions = empty
    render Col() [gapSmall, padMedium, panel] {
+      // The title claims the row and compresses: a card action sits beside a heading that is as
+      // long as the writer's own words, and on a phone the two do not both fit at their natural
+      // widths. Without this the heading keeps its width and both run off the card.
       Row() [spreadCenter] {
-         Text(Title) [title]
+         Text(Title) [title, claim 1, compress]
          @actions
       }
       Col() [gapTight] {

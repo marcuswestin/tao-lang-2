@@ -62,11 +62,13 @@ import {
   NavKindControls,
   type RuntimeHostReadChannel,
   type RuntimeNavigationCommand,
+  type TaoAppDefinition,
   type TaoNavDeclaration,
   type TaoNavDescriptor,
   type TaoNavHostSlot,
   type TaoNavHostSlotConfiguration,
   type TaoNavHostSlotContract,
+  type TaoNavigationArguments,
   type TaoNavigationValue,
   type TaoNavKind,
   type TaoNavKindProfile,
@@ -111,6 +113,7 @@ import {
 } from './TR-scheme'
 import { SelectableRow } from './TR-selectable-row'
 import { createShareSheet, type TaoShareSheet } from './TR-share'
+import { StudioDeviceHost } from './TR-studio-device-host'
 import {
   StudioEnvironmentControls,
   type TaoStudioEnvironment,
@@ -125,6 +128,7 @@ import {
   type TaoStudioStateDomainCodec,
   type TaoStudioStateLayer,
 } from './TR-studio-state'
+import { StudioSubjectHost } from './TR-studio-subject'
 import { runtimeSwitchHandler } from './TR-switch'
 import * as TRTaoProps from './TR-TaoProps'
 import { Clock, createTicker, makeUnitControls, type TaoTicker } from './TR-units'
@@ -610,8 +614,10 @@ class TR {
   /** Studio exposes opt-in preview-only runtime behavior for generated Studio apps. */
   static readonly Studio = {
     ...StudioPreview,
+    DeviceHost: StudioDeviceHost,
     Environment: StudioEnvironmentControls,
     State: StudioStateControls,
+    SubjectHost: StudioSubjectHost,
   } as const
 
   /** Errors is the runtime's one error-handling surface, owned by `TR-errors.ts`. */
@@ -960,6 +966,10 @@ namespace TR {
   export type TaoStudioIdentity = TRTaoProps.TaoStudioIdentity
   /** StudioPreviewConfig identifies and secures one generated Studio preview bridge. */
   export type StudioPreviewConfig = import('./TR-studio-preview').StudioPreviewConfig
+  /** StudioDeviceClient drives one device's authenticated connection to the Studio device gateway. */
+  export type StudioDeviceClient = import('./TR-studio-device-client').StudioDeviceClient
+  /** StudioDeviceHostProps configures the native device host the generated preview root mounts. */
+  export type StudioDeviceHostProps = import('./TR-studio-device-host').StudioDeviceHostProps
   /** StudioEnvironment is one isolated preview cell's versioned provider and Scheme configuration. */
   export type StudioEnvironment = TaoStudioEnvironment
   /** StudioStateSeed carries exact full-snapshot provider envelopes into one isolated preview cell. */
@@ -1051,6 +1061,10 @@ namespace TR {
   export type NavHostSlotConfiguration = TaoNavHostSlotConfiguration
   /** Presentable declares a first-class Tao ui descriptor. */
   export type Presentable = TaoPresentable
+  /** AppDefinition is the lazy app description one `TR.Navigation.App` mounts. */
+  export type AppDefinition = TaoAppDefinition
+  /** NavigationArguments binds one presentation's live argument values by parameter name. */
+  export type NavigationArguments = TaoNavigationArguments
 }
 
 // Frozen operator tables keep the generated app's hottest evaluation path allocation-free:

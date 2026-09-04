@@ -1,6 +1,8 @@
 import type { Transport } from '@codemirror/lsp-client'
 import { Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
+import type { StudioDeviceLaunchInfo, StudioDeviceLaunchOpenResult } from '../device/StudioDeviceLauncher'
+import type { StudioDeviceStateEvent, StudioDeviceStatus } from '../device/StudioDeviceStatus'
 import type { StudioCompileCompletion } from '../StudioCompileCoordinator'
 import type { StudioDraftFile, StudioDraftSyncRequest, StudioDraftSyncResult } from '../StudioDraftSync'
 import type { StudioLanguageHighlight } from '../StudioHighlight'
@@ -56,6 +58,7 @@ export type StudioHandshake = {
 export type StudioLspTransport = Transport & Readonly<{ close: () => void }>
 
 export type StudioEvent =
+  | StudioDeviceStateEvent
   | { state: StudioCompileState; type: 'compile-state' }
   | { file: StudioFile; type: 'file-changed' }
   | { files: readonly StudioFile[]; type: 'files-changed' }
@@ -110,6 +113,7 @@ export type StudioSourceActionUndoResult = {
 export type StudioApiEventHandlers = {
   onConnect?: () => void
   onCompile: (state: StudioCompileState) => void
+  onDeviceState?: (status: StudioDeviceStatus) => void
   onFile: (file: StudioFile) => void
   onFiles?: (files: readonly StudioFile[]) => void
   onManifest: (manifest: StudioPreviewManifestV2) => void
@@ -177,6 +181,8 @@ export const StudioApiEventStream = {
       handlers.onFiles?.(message.files)
     } else if (message.type === 'preview-manifest-changed') {
       handlers.onManifest(message.manifest)
+    } else if (message.type === 'device-state') {
+      handlers.onDeviceState?.(message.status)
     }
   },
 }
@@ -251,6 +257,25 @@ export const StudioApiClient = {
   draft: async (body: StudioDraftSyncRequest): Promise<StudioDraftSyncResult> => await request('/api/file/draft', body),
   deleteFile: async (body: StudioDeleteFileRequest): Promise<StudioDeleteFileResult> =>
     await request('/api/file/delete', body),
+  deviceHighlight: async (
+    body: {
+      occurrence?: { end: number; ownerName?: string; sourcePath: string; sourceVersion: string; start: number }
+    },
+  ): Promise<{ delivered: boolean }> => await request('/api/device/highlight', body),
+  deviceConfirmPairing: async (devicePublicKey: string): Promise<{ accepted: boolean }> =>
+    await request('/api/device/pairing/confirm', { devicePublicKey }),
+  deviceDeclinePairing: async (devicePublicKey: string): Promise<{ declined: boolean }> =>
+    await request('/api/device/pairing/decline', { devicePublicKey }),
+  deviceLaunch: async (): Promise<StudioDeviceLaunchInfo> => await get('/api/device/launch'),
+  deviceLaunchOpen: async (hostId: string): Promise<StudioDeviceLaunchOpenResult> =>
+    await request('/api/device/launch/open', { hostId }),
+  deviceOpenPairing: async (): Promise<{ expiresAt: string }> => await request('/api/device/pairing/open', {}),
+  deviceReconnect: async (): Promise<{ requested: boolean }> => await request('/api/device/reconnect', {}),
+  deviceRevoke: async (devicePublicKey: string): Promise<{ revoked: boolean }> =>
+    await request('/api/device/revoke', { devicePublicKey }),
+  deviceSelectCell: async (cellId: string): Promise<{ requested: boolean }> =>
+    await request('/api/device/select-cell', { cellId }),
+  deviceStatus: async (signal?: AbortSignal): Promise<StudioDeviceStatus> => await get('/api/device/status', signal),
   file: async (path: string, signal?: AbortSignal): Promise<StudioDraftFile> =>
     await get(`/api/file?path=${encodeURIComponent(path)}`, signal),
   files: async (): Promise<{ files: readonly StudioFile[] }> => await get('/api/files'),

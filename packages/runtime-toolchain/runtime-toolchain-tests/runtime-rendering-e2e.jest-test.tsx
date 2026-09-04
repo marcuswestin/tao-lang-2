@@ -133,6 +133,28 @@ Describe('Expo runtime', () => {
     Expect(screen.queryByLabelText('Tao dev overlay')).toBeNull()
   })
 
+  Test('withholds the floating dev menu for a host that already offers its options', () => {
+    TR.setDevMode({ layoutBounds: true })
+
+    function HostedApp(): ReactElement {
+      return createElement(TR.AppShell, null, createElement(TR.Views.Text, null, 'Hosted'))
+    }
+
+    // The Studio device host draws its own draggable affordance over the preview cell and carries
+    // the layout-bounds toggle in it. Two floating buttons over one screen is the thing this
+    // removes; the options themselves stay reachable.
+    TR.Dev.hideMenu(true)
+    try {
+      const hosted = render(createElement(HostedApp))
+      Expect(hosted.queryByLabelText('Tao dev menu')).toBeNull()
+      Expect(TR.Dev.isLayoutBoundsEnabled()).toBe(true)
+    } finally {
+      TR.Dev.hideMenu(false)
+    }
+
+    Expect(render(createElement(HostedApp)).getByLabelText('Tao dev menu')).toBeDefined()
+  })
+
   Test('preserves app state when toggling layout bounds', () => {
     TR.setDevMode({ layoutBounds: true })
 

@@ -76,6 +76,31 @@ Test('Studio project session publishes every project app variant with a safe rel
   })
 })
 
+Test('Studio project session opens the project DefaultApp when the command line named none', async () => {
+  await withTaoFiles('tao-studio-default-app-', {
+    'Project.tao': 'project { id "reader" name "Reader" DefaultApp Second }\n',
+    'Reader.tao': 'app First { view Main }\napp Second { view Main }\nview Main() { }\n',
+  }, async (_paths, root) => {
+    // A project that names its DefaultApp has already answered "which app"; Studio used to refuse
+    // every multi-app project until someone repeated that answer as --app.
+    const session = await StudioProjectSession.open({ async compile() {}, projectRoot: root })
+    Expect(session.appName).toBe('Second')
+
+    const explicit = await StudioProjectSession.open({ appName: 'First', async compile() {}, projectRoot: root })
+    Expect(explicit.appName).toBe('First')
+  })
+})
+
+Test('Studio project session still asks which app to open when the project names no default', async () => {
+  await withTaoFiles('tao-studio-no-default-app-', {
+    'Reader.tao': 'app First { view Main }\napp Second { view Main }\nview Main() { }\n',
+  }, async (_paths, root) => {
+    await Expect(StudioProjectSession.open({ async compile() {}, projectRoot: root })).rejects.toThrow(
+      'Multiple Tao apps found: First, Second.',
+    )
+  })
+})
+
 Test('Studio project session exposes parser-owned design tokens and local bundles', async () => {
   await withTaoFiles('tao-studio-design-', {
     'Garden.tao': `

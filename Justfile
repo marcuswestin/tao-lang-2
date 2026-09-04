@@ -42,13 +42,21 @@ start-local-instantdb:
 stop-local-instantdb:
     {{ LOCAL_INSTANTDB_COMPOSE }} down
 
-# Launch Tao Studio against a project folder
-studio project=".":
+# Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
+studio project="Apps/HNReader":
     ./dev studio "{{ project }}"
 
 # Launch Tao Studio in its local Electrobun shell
-studio-native project=".":
+studio-native project="Apps/HNReader":
     ./dev studio-native "{{ project }}"
+
+# Install the Tao Companion development build on a connected iPhone or iPad, once per native change
+studio-companion-install device="":
+    ./dev studio-companion-install --device "{{ device }}"
+
+# Install the Tao Companion development build on an iOS simulator; no phone, pairing, or unlock needed
+studio-companion-simulator simulator="":
+    ./dev studio-companion-install --simulator "{{ simulator }}"
 
 # Run the focused Tao Studio package suite
 studio-test:

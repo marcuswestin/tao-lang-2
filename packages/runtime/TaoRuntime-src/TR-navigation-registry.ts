@@ -41,9 +41,26 @@ export function registerNavigation<ValueT extends Resettable>(navigation: ValueT
   return navigation
 }
 
+/** Forgets one mounted navigation again; see `unregisterNavigationApp` for why anything would. */
+export function unregisterNavigation(navigation: Resettable): void {
+  navigationValues.delete(navigation)
+}
+
 export function registerNavigationApp<AppT extends Resettable>(app: AppT): AppT {
   appDefinitions.add(app)
   return app
+}
+
+/**
+ * Forgets one app definition again.
+ *
+ * A generated app declaration lives for the life of its module and never needs this. A Studio
+ * preview builds one per focused-view cell instead, and those are as short-lived as the cell —
+ * left registered, each one would keep answering a process-wide reset and a runtime capture long
+ * after its screen was replaced.
+ */
+export function unregisterNavigationApp(app: Resettable): void {
+  appDefinitions.delete(app)
 }
 
 export function registerPresentable<PresentableT extends RegisteredPresentable>(

@@ -269,6 +269,18 @@ export type StudioSessionEvent =
     protocolVersion: typeof studioProtocolVersion
     type: 'checkpoint-changed'
   }
+  /**
+   * One cell was reconfigured — new arguments, environment, state layers, or a replayed capture.
+   * Reconfiguring invalidates every live instance of that cell, so a canvas rendering it holds an
+   * instance the session will refuse from that moment on. The browser learns this by driving the
+   * reconfigure itself; anything else rendering the same cell has to be told.
+   */
+  | {
+    cellId: string
+    channel: typeof studioProtocolChannel
+    protocolVersion: typeof studioProtocolVersion
+    type: 'cell-reconfigured'
+  }
 
 type SourceActionCacheEntry = {
   fingerprint: string
@@ -329,6 +341,15 @@ const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
   { method: 'GET', path: '/api/preview/cell/bootstrap' },
   { method: 'POST', path: '/api/preview/cell/instance' },
   { method: 'POST', path: '/api/preview/cell/reconfigure' },
+  { method: 'GET', path: '/api/device/status' },
+  { method: 'POST', path: '/api/device/pairing/open' },
+  { method: 'POST', path: '/api/device/pairing/confirm' },
+  { method: 'POST', path: '/api/device/pairing/decline' },
+  { method: 'POST', path: '/api/device/revoke' },
+  { method: 'POST', path: '/api/device/reconnect' },
+  { method: 'POST', path: '/api/device/select-cell' },
+  { method: 'GET', path: '/api/device/launch' },
+  { method: 'POST', path: '/api/device/launch/open' },
   { method: 'WS', path: '/events' },
   { method: 'WS', path: '/api/language/lsp' },
 ]
@@ -377,11 +398,11 @@ export class StudioProjectSession {
   static async open(options: StudioProjectSessionOptions): Promise<StudioProjectSession> {
     const projectRoot = await requireProjectRoot(options.projectRoot)
     const workspace = await Workspace.open(projectRoot)
-    const apps = await discoverAppVariants(projectRoot, workspace)
+    const { apps, defaultAppName } = await discoverAppVariants(projectRoot, workspace)
     const requestedEntryPath = options.entryPath === undefined
       ? undefined
       : FS.relativePath(projectRoot, await resolveEntryPath(projectRoot, options.entryPath))
-    const selection = resolveAppSelection(projectRoot, apps, options.appName, requestedEntryPath)
+    const selection = resolveAppSelection(projectRoot, apps, options.appName, requestedEntryPath, defaultAppName)
     return new StudioProjectSession(
       projectRoot,
       FS.resolvePath(selection.entryPath, projectRoot),
@@ -549,8 +570,21 @@ export class StudioProjectSession {
     return this.#requireMatrix().registerInstance(cellInstanceIdentity(input))
   }
 
+  /** unregisterCellPreview releases one live instance; a stale or unknown id is a no-op. */
+  unregisterCellPreview(previewInstanceId: string): void {
+    this.#matrix?.unregisterInstance(previewInstanceId)
+  }
+
   reconfigureCell(input: unknown): StudioCellRuntime {
-    return this.#requireMatrix().reconfigure(cellReconfigureRequest(input))
+    const request = cellReconfigureRequest(input)
+    const runtime = this.#requireMatrix().reconfigure(request)
+    this.#emit({
+      cellId: request.cellId,
+      channel: studioProtocolChannel,
+      protocolVersion: studioProtocolVersion,
+      type: 'cell-reconfigured',
+    })
+    return runtime
   }
 
   acknowledgePreview(input: unknown): boolean {
@@ -1385,31 +1419,49 @@ async function requireProjectRoot(input: string): Promise<string> {
 async function discoverAppVariants(
   projectRoot: string,
   workspace: Workspace,
-): Promise<StudioAppVariant[]> {
+): Promise<{ apps: StudioAppVariant[]; defaultAppName?: string }> {
   const candidates = await Repo.filesUnder(projectRoot, {
     excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
     extensions: ['.tao'],
   })
   const apps: StudioAppVariant[] = []
+  let defaultAppName: string | undefined
   for (const entryPath of candidates) {
     const parsed = await workspace.parse(entryPath)
+    for (const project of parsed.entry.ast.statements.filter(AST.isProjectDeclaration)) {
+      defaultAppName ??= AST.blockStatementOf(project, { filter: AST.isProjectDefaultApp })[0]?.app.$refText
+    }
     for (const declaration of AST.appValueDeclarationsInFile(parsed.entry.ast)) {
       apps.push({ appName: declaration.name, entryPath: FS.relativePath(projectRoot, entryPath) })
     }
   }
-  return apps.toSorted((left, right) =>
-    left.appName.localeCompare(right.appName) || left.entryPath.localeCompare(right.entryPath)
-  )
+  return {
+    apps: apps.toSorted((left, right) =>
+      left.appName.localeCompare(right.appName) || left.entryPath.localeCompare(right.entryPath)
+    ),
+    ...(defaultAppName === undefined ? {} : { defaultAppName }),
+  }
 }
 
+/**
+ * Which app a project opens as, when the command line did not say.
+ *
+ * A project that declares `DefaultApp` has already answered this question for its own tooling —
+ * `tao ship` reads it — so Studio reads it too rather than refusing every multi-app project until
+ * someone repeats the answer as `--app`. An explicit request still wins, and a project without a
+ * DefaultApp still has to be told which of several apps to open.
+ */
 function resolveAppSelection(
   projectRoot: string,
   apps: readonly StudioAppVariant[],
   requestedAppName: string | undefined,
   requestedEntryPath: string | undefined,
+  defaultAppName?: string,
 ): StudioAppVariant {
+  const selected = requestedAppName
+    ?? (apps.filter(app => app.appName === defaultAppName).length === 1 ? defaultAppName : undefined)
   const matching = apps.filter(app =>
-    (requestedAppName === undefined || app.appName === requestedAppName)
+    (selected === undefined || app.appName === selected)
     && (requestedEntryPath === undefined || app.entryPath === requestedEntryPath)
   )
   if (matching.length === 0) {

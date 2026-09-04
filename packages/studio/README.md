@@ -33,6 +33,57 @@ and `--hutch <path>` for an explicit Hutch executable.
 Studio advertises the **session URL**, never the server root. The root is not a usable page: a
 session prefix carries the opaque session ID that its HTTP and WebSocket routes hang off.
 
+## Companion device
+
+A physical iPhone or iPad, or an iOS simulator on this Mac, renders the selected Tao app through the
+**Tao Companion** development build, an Expo dev client under `packages/studio-companion-app`.
+Studio owns the only Metro; the companion loads that Metro's native bundle and dials Studio's
+separate device gateway.
+
+1. **Install once, and again only when native dependencies or app configuration change:**
+
+   ```bash
+   just studio-companion-install device="roPhone"
+   ```
+
+   ```bash
+   just studio-companion-simulator simulator="iPhone 17 Pro"
+   ```
+
+   Both run Expo prebuild as needed and `expo run:ios --device <target> --no-bundler` from the
+   companion package, and neither starts a Metro. A device needs Xcode, CocoaPods (from the devenv
+   profile), a signing identity for the fixed bundle id `dev.tao-lang.studio.companion`, and an
+   unlocked screen. A simulator needs none of that: name any available one, or omit the name for the
+   booted one, and the tooling boots it first. Expo ends a simulator run by asking System Events to
+   bring the Simulator window forward, which fails without macOS automation permission; the tooling
+   asks the simulator whether the app arrived rather than trusting that exit code.
+2. **Run Studio normally** (`just studio <project>` or `just studio-native <project>`). The launch
+   starts the device gateway beside the loopback server and prints its port; `--json` carries it as
+   `deviceGatewayPort`.
+3. **Open on device.** The toolbar **Device** popover lists connected iPhones and every booted
+   simulator, and opens the installed shell with Expo's own custom-runtime URL
+   (`/_expo/link?choice=expo-dev-client`, falling back to the generated
+   `taostudiocompanion://expo-development-client/?url=…` link). A simulator shares this Mac's
+   network stack, so it is opened on `127.0.0.1` instead of the LAN address, and iOS asks once
+   whether to open the link in Tao Companion. **Copy URL** and **Show QR** offer the same link for a
+   manual or camera launch.
+4. **Pair.** Press **Pair a device**; the phone and the popover show the same six-digit code for
+   two minutes. Confirm in Studio only when the codes match. The device key then lives in the
+   phone's Keychain and the trusted record under the device-trust artifact root, so later launches
+   reconnect without a code. **Revoke** removes that trust; a revoked phone must pair again.
+5. **Iterate.** Tao edits compile as usual; Metro Fast Refresh updates the phone and the browser
+   canvas from the same file graph, and the popover shows the compile revision beside the revision the
+   phone acknowledged. The floating **Tao** badge on the phone switches scenarios and reconnects.
+
+Networking: the phone must reach the Mac's LAN address that Expo advertises (the popover names it);
+an active `169.254.*` cable interface is offered as another candidate but must succeed from the
+phone. `localhost` is never sent to a device. A denied Local Network permission, a captive portal,
+a VPN interface, or a firewall shows up as a named diagnostic in the popover rather than a hang.
+`xcrun devicectl` talks to CoreDevice over XPC that an agent sandbox denies, so run Studio from an
+ordinary shell when a device is involved. A simulator avoids all of this, which makes it the target
+to reach for when the question is whether the app renders rather than how it behaves on real
+hardware.
+
 ## Readiness
 
 `--json` prints one JSON line after the session page has answered its readiness probe. Human log
@@ -63,13 +114,14 @@ answers is recorded `failed` and stops, rather than idling in a state that reads
 
 ## Ports
 
-| Port      | Owner                         | Notes                                               |
-| --------- | ----------------------------- | --------------------------------------------------- |
-| 8081      | Expo Metro                    | The Tao CLI dev loop's preferred port               |
-| 9020      | Local InstantDB               | `just start-local-instantdb`                        |
-| 3000      | Local InstantDB dashboard     | Same stack                                          |
-| ephemeral | Studio server, Studio preview | Chosen per launch; read them from `--json`          |
-| 42000+    | `studio-smoke` lanes          | Deterministic per shard and worker, from base 42000 |
+| Port      | Owner                         | Notes                                                  |
+| --------- | ----------------------------- | ------------------------------------------------------ |
+| 8081      | Expo Metro                    | The Tao CLI dev loop's preferred port                  |
+| 9020      | Local InstantDB               | `just start-local-instantdb`                           |
+| 3000      | Local InstantDB dashboard     | Same stack                                             |
+| ephemeral | Studio server, Studio preview | Chosen per launch; read them from `--json`             |
+| ephemeral | Studio device gateway         | `tao-studio-device-v1` on every interface; in `--json` |
+| 42000+    | `studio-smoke` lanes          | Deterministic per shard and worker, from base 42000    |
 
 A smoke shard is 128 ports and a worker is two of them, so a lane's ports are
 `42000 + shard * 128 + worker * 2`. The shard defaults to a block derived from the worktree path, so
@@ -88,6 +140,7 @@ likely to belong to another worktree as to this one — check before killing it.
 | `.artifacts/user/studio/launches/<mode>/logs/lifecycle.jsonl` | Structured lifecycle records, one file per mode      |
 | `.artifacts/user/studio-native/`                              | The generated Electrobun project and its build       |
 | `.artifacts/user/studio/recent-projects.json`                 | Welcome's recent-project history                     |
+| `.artifacts/user/studio/device-trust/`                        | Studio's device-gateway identity and trusted devices |
 | `.artifacts/dev/`                                             | Expo logs and the generated preview runtime          |
 | `.artifacts/tests/studio-smoke/<runId>/`                      | One smoke run's isolated lane                        |
 | `.artifacts/tests/studio-canary/`                             | The native canary's report                           |
