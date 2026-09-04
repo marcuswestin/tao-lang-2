@@ -110,6 +110,11 @@ between a wasted afternoon and a re-run.
 `just test-flakes` and `just test-slowest` report ledger evidence but are not gates. Changed and retry
 runs print one advisory when their change shape or full-run history makes a complete run worthwhile.
 
+When a lane runs through another command, such as `merge-with-main`, its non-interactive report prints
+the local start time for each admitted gate before printing that gate's completion and log path. The
+two durable lines remain readable while several gates run concurrently; the interactive dashboard
+continues updating its tiles in place.
+
 `just merge-with-main` is human-only and defaults to a non-mutating dry run. Its strict preflight
 requires the sole live `main` worktree to equal `origin/main`; a local-ahead `main` must be reconciled
 deliberately first. Successful execution removes the invoking feature worktree, so run it from a
