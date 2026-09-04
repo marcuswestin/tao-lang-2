@@ -3,10 +3,12 @@ import { StudioClientAssets } from '@studio'
 import { Workspace } from '@workspace'
 import { createHash } from 'node:crypto'
 import { delimiter as pathDelimiter } from 'node:path'
+import { MachineLanes, type MachineResourceLease } from '../repository-tests/MachineLanes'
 import {
   StudioElectrobun,
   type StudioElectrobunProject,
 } from './StudioElectrobun'
+import { StudioHutchHome } from './StudioHutchHome'
 import {
   finalizeStudioProcessTree,
   processGroupKillSpec,
@@ -16,6 +18,13 @@ import {
 } from './StudioProcessTree'
 
 const probeTimeoutMs = 30_000
+// Both bounds leave room inside the 120-second native smoke gate for Studio startup, the runtime
+// probe, and process-tree shutdown. Healthy local runs complete both commands in under ten seconds.
+const hutchInstallTimeoutMs = 30_000
+const electrobunPrepareTimeoutMs = 45_000
+const electrobunBuildTimeoutMs = 120_000
+const hutchShutdownTimeoutMs = 5_000
+const hutchDiagnosticOutputLimit = 8_000
 const defaultAppName = 'Tao Studio'
 const defaultBundleIdentifier = 'dev.tao-lang.studio'
 const defaultHutchCommand = 'hutch'
@@ -24,11 +33,14 @@ const hutchInstallUrl = 'https://hutch.blackboard.sh/hutch/install.sh'
 export type StudioNativeOptions = {
   artifactRoot?: string
   hutchPath?: string
+  /** Operation recorded in the machine-wide native-host lease. */
+  nativeHostCommand?: string
   previewUrl: string
   /** Undefined opens the Welcome window only: `--no-browser` must not add a project window. */
   projectUrl?: string
   probe?: boolean
   showWindow?: boolean
+  signal?: AbortSignal
   studioUrl: string
 }
 
@@ -67,6 +79,22 @@ type StoppableCommand = StudioProcessTree
 type WaitForNativeClose = () => Promise<number>
 type CommandRunner = (command: string, spec: CLI.CommandSpec) => Promise<CLI.CommandResult>
 type Sleep = (milliseconds: number) => Promise<void>
+type NativePhaseLog = (message: string) => void
+type StartProcessTree = typeof startStudioProcessTree
+type NativeStartLifecycleOptions = {
+  onProcessSignal?: typeof Platform.onProcessSignal
+}
+type PrepareElectrobunOptions = {
+  hutchHome?: string
+  installTimeoutMs?: number
+  log?: NativePhaseLog
+  now?: () => number
+  prepareTimeoutMs?: number
+  runner?: CommandRunner
+  signal?: AbortSignal
+  startCommand?: StartProcessTree
+  stopCommand?: typeof stopStudioProcessTree
+}
 type NativeRuntimeCloseResult = {
   exitCode: number
   message: string
@@ -80,11 +108,13 @@ export const StudioNative = {
   testing: {
     installedHutchExecutablePath,
     installStudioServicePayload,
+    createNativeInterruption,
     materializeStudioNodeRuntime,
     materializeStudioServicePayload,
     nativeRuntimeCloseResult,
     nativeDevelopmentProcessIds,
     prepareElectrobun,
+    runNativePhase,
     portableStudioClientBundle,
     processGroupKillSpec,
     resolveHutchExecutablePath,
@@ -97,10 +127,50 @@ export const StudioNative = {
   },
 } as const
 
-async function start(options: StudioNativeOptions): Promise<StartedStudioNative> {
-  const hutchPath = await resolveHutchExecutablePath(options.hutchPath)
+async function start(
+  options: StudioNativeOptions,
+  lifecycleOptions: NativeStartLifecycleOptions = {},
+): Promise<StartedStudioNative> {
+  const interruption = createNativeInterruption(options.signal, lifecycleOptions.onProcessSignal)
+  let nativeHostLease: MachineResourceLease | undefined
+  try {
+    const hutchPath = await resolveHutchExecutablePath(options.hutchPath)
+    nativeHostLease = await runNativePhase(
+      'native host lease',
+      async () =>
+        await MachineLanes.acquireResource({
+          command: options.nativeHostCommand ?? 'studio-native',
+          name: 'studio-native-host',
+          repositoryRoot: Repo.getRoot(),
+          waitTimeoutMs: 0,
+        }),
+      { signal: interruption.signal },
+    )
+    return await startWithInterruption(
+      { ...options, hutchPath, signal: interruption.signal },
+      interruption.close,
+      nativeHostLease,
+    )
+  } catch (error) {
+    await releaseNativeHostLease(nativeHostLease)
+    interruption.close()
+    throw error
+  }
+}
+
+async function startWithInterruption(
+  options: StudioNativeOptions,
+  closeInterruption: () => void,
+  nativeHostLease: MachineResourceLease,
+): Promise<StartedStudioNative> {
+  const hutchPath = options.hutchPath ?? defaultHutchCommand
   const artifactRoot = FS.resolvePath(options.artifactRoot ?? '.artifacts/user/studio-native', Repo.getRoot())
-  const stoppedNativeProcesses = await stopExistingNativeDevelopmentProcesses(artifactRoot)
+  const phaseOptions = { signal: options.signal }
+  const stoppedNativeProcesses = await runNativePhase(
+    'owned process inspection',
+    async () => await stopExistingNativeDevelopmentProcesses(artifactRoot),
+    phaseOptions,
+  )
   if (stoppedNativeProcesses > 0) {
     HCI.logProcessInfo(
       'studio-native',
@@ -109,46 +179,113 @@ async function start(options: StudioNativeOptions): Promise<StartedStudioNative>
       }.`,
     )
   }
-  const project = await StudioElectrobun.create({
-    appName: defaultAppName,
-    bundleIdentifier: defaultBundleIdentifier,
-    outputRoot: artifactRoot,
-    previewUrl: options.previewUrl,
-    projectUrl: options.projectUrl,
-    runProbe: options.probe,
-    showWindow: options.showWindow,
-    studioUrl: options.studioUrl,
-  })
+  const hutchHome = await runNativePhase(
+    'isolate Hutch mutable state',
+    async () =>
+      await StudioHutchHome.prepare({
+        targetHome: Repo.resolvePath('.artifacts/user/studio-hutch-home'),
+      }),
+    phaseOptions,
+  )
+  await runNativePhase(
+    'recover stopped project locks',
+    async () => await StudioHutchHome.clearStoppedProjectLocks(artifactRoot),
+    phaseOptions,
+  )
+  const project = await runNativePhase(
+    'materialize Electrobun project',
+    async () =>
+      await StudioElectrobun.create({
+        appName: defaultAppName,
+        bundleIdentifier: defaultBundleIdentifier,
+        outputRoot: artifactRoot,
+        previewUrl: options.previewUrl,
+        projectUrl: options.projectUrl,
+        runProbe: options.probe,
+        showWindow: options.showWindow,
+        studioUrl: options.studioUrl,
+      }),
+    phaseOptions,
+  )
   await FS.remove(project.runtimeResultPath)
-  await prepareElectrobun(hutchPath, project.root)
+  try {
+    await prepareElectrobun(hutchPath, project.root, { hutchHome, signal: options.signal })
+  } catch (error) {
+    await runNativePhase(
+      'failed preparation cleanup',
+      async () => await StudioHutchHome.clearStoppedProjectLocks(project.root),
+    )
+    throw error
+  }
   let finishRuntimeClose: ((result: NativeRuntimeCloseResult) => void) | undefined
   const runtimeClosed = new Promise<NativeRuntimeCloseResult>(resolve => {
     finishRuntimeClose = resolve
   })
   const outputRemainders: Record<CLI.CommandOutputStream, string> = { stderr: '', stdout: '' }
-  const command = startStudioProcessTree(hutchPath, {
-    args: ['electrobun', 'dev', '--watch'],
-    cwd: project.root,
-    env: project.dev.env,
-    onError: error => HCI.logProcessError('studio-native', error.message),
-    onOutput(stream, chunk) {
-      const lines = `${outputRemainders[stream]}${chunk.toString('utf8')}`.split(/\r?\n/)
-      outputRemainders[stream] = lines.pop() ?? ''
-      for (const line of lines.filter(Boolean)) {
-        HCI.logProcessOutput('studio-native', line, { stderr: stream === 'stderr' })
-        const runtimeClose = nativeRuntimeCloseResult(line)
-        if (runtimeClose !== undefined) {
-          finishRuntimeClose?.(runtimeClose)
-        }
-      }
-    },
-  })
+  const command = await runNativePhase(
+    'electrobun dev --watch',
+    () =>
+      startStudioProcessTree(hutchPath, {
+        args: ['electrobun', 'dev', '--watch'],
+        cwd: project.root,
+        env: { ...project.dev.env, HUTCH_HOME: hutchHome },
+        onError: error => HCI.logProcessError('studio-native', error.message),
+        onOutput(stream, chunk) {
+          const lines = `${outputRemainders[stream]}${chunk.toString('utf8')}`.split(/\r?\n/)
+          outputRemainders[stream] = lines.pop() ?? ''
+          for (const line of lines.filter(Boolean)) {
+            HCI.logProcessOutput('studio-native', line, { stderr: stream === 'stderr' })
+            const runtimeClose = nativeRuntimeCloseResult(line)
+            if (runtimeClose !== undefined) {
+              finishRuntimeClose?.(runtimeClose)
+            }
+          }
+        },
+      }),
+    phaseOptions,
+  )
   const waitForHutchClose = finalizeCommand(command)
   let stopping: Promise<void> | undefined
   let closing: Promise<number> | undefined
+  let releasingNativeHost: Promise<void> | undefined
+  let removeAbortStop = () => {}
+  let interruptionClosed = false
+  const closeInterruptionOnce = () => {
+    if (!interruptionClosed) {
+      interruptionClosed = true
+      removeAbortStop()
+      closeInterruption()
+    }
+  }
+  const releaseNativeHostOnce = () => {
+    releasingNativeHost ??= releaseNativeHostLease(nativeHostLease)
+    return releasingNativeHost
+  }
   const stopHutch = () => {
-    stopping ??= stopCommand(command, Time.sleep, waitForHutchClose)
+    stopping ??= runNativePhase(
+      'owned process tree shutdown',
+      async () => await stopCommand(command, Time.sleep, waitForHutchClose),
+    ).then(async () => {
+      HCI.logProcessInfo('studio-native', 'cleanup: all command-owned processes stopped')
+      await StudioHutchHome.clearStoppedProjectLocks(project.root)
+      HCI.logProcessInfo('studio-native', 'cleanup: stopped project Hutch locks cleared')
+    }).finally(async () => {
+      closeInterruptionOnce()
+      await releaseNativeHostOnce()
+    })
     return stopping
+  }
+  if (options.signal !== undefined) {
+    const stopOnAbort = () => {
+      void stopHutch().catch(error => {
+        HCI.logProcessError('studio-native', `Could not stop interrupted Hutch: ${Errors.formatForLog(error)}`)
+      })
+    }
+    options.signal.addEventListener('abort', stopOnAbort, { once: true })
+    removeAbortStop = () => options.signal?.removeEventListener('abort', stopOnAbort)
+    if (options.signal.aborted) {
+      stopOnAbort()
+    }
   }
   const handledRuntimeClose = runtimeClosed.then(async result => {
     if (result.message !== '') {
@@ -159,9 +296,17 @@ async function start(options: StudioNativeOptions): Promise<StartedStudioNative>
   })
   const waitForClose = () => {
     closing ??= Promise.race([
-      waitForHutchClose().then(exitCode => ({ exitCode, message: '' })),
+      waitForHutchClose().then(async exitCode => {
+        // The launcher may exit before every descendant in its detached process group. The close
+        // path owns the same complete-tree cleanup as an explicit stop before releasing the host.
+        await stopHutch()
+        return { exitCode, message: '' }
+      }),
       handledRuntimeClose,
-    ]).then(result => result.exitCode)
+    ]).then(result => result.exitCode).finally(async () => {
+      closeInterruptionOnce()
+      await releaseNativeHostOnce()
+    })
     return closing
   }
   return {
@@ -172,8 +317,55 @@ async function start(options: StudioNativeOptions): Promise<StartedStudioNative>
       if (options.probe !== true) {
         return Promise.reject(new Errors.UserInputError('The native Studio runtime probe was not enabled.'))
       }
-      return waitForProbeResult(project.runtimeResultPath, command, Time.sleep)
+      return runNativePhase(
+        'runtime probe',
+        async () => await waitForProbeResult(project.runtimeResultPath, command, Time.sleep, options.signal),
+        phaseOptions,
+      )
     },
+  }
+}
+
+async function releaseNativeHostLease(lease: MachineResourceLease | undefined): Promise<void> {
+  if (lease === undefined) {
+    return
+  }
+  await runNativePhase('native host lease release', async () => await lease.release())
+}
+
+function createNativeInterruption(
+  parentSignal: AbortSignal | undefined,
+  onProcessSignal: typeof Platform.onProcessSignal = Platform.onProcessSignal,
+): { close: () => void; signal: AbortSignal } {
+  const controller = new AbortController()
+  const interrupt = () => controller.abort()
+  const removeParent = parentSignal === undefined
+    ? () => {}
+    : (() => {
+      parentSignal.addEventListener('abort', interrupt, { once: true })
+      return () => parentSignal.removeEventListener('abort', interrupt)
+    })()
+  const removeSignals = [
+    onProcessSignal('SIGHUP', interrupt),
+    onProcessSignal('SIGINT', interrupt),
+    onProcessSignal('SIGTERM', interrupt),
+  ]
+  if (parentSignal?.aborted === true) {
+    interrupt()
+  }
+  let closed = false
+  return {
+    close() {
+      if (closed) {
+        return
+      }
+      closed = true
+      removeParent()
+      for (const removeSignal of removeSignals) {
+        removeSignal()
+      }
+    },
+    signal: controller.signal,
   }
 }
 
@@ -185,7 +377,7 @@ async function stopExistingNativeDevelopmentProcesses(
 ): Promise<number> {
   const result = await runner('/usr/sbin/lsof', { args: ['-nP', '-d', 'cwd', '-Fpcn'] })
   if (result.exitCode !== 0 && result.stdout.trim() === '') {
-    throw new Errors.UnexpectedBehaviorError(
+    throw new Errors.HostEnvironmentError(
       `Could not inspect existing native Studio processes: ${result.stderr.trim() || 'lsof failed'}`,
     )
   }
@@ -248,7 +440,7 @@ async function runningProcessIds(processIds: readonly number[], runner: CommandR
 
 function assertNativeProcessesSignalable(result: CLI.CommandResult, processIds: readonly number[]): void {
   if (result.exitCode !== 0 && /operation not permitted/i.test(result.stderr)) {
-    throw new Errors.UnexpectedBehaviorError(
+    throw new Errors.HostEnvironmentError(
       `Existing native Studio processes could not be stopped (${processIds.join(', ')}). Close Tao Studio and retry.`,
     )
   }
@@ -327,7 +519,10 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
   const artifactsRoot = FS.resolvePath('artifacts', project.root)
   await FS.remove(artifactsRoot)
   await prepareElectrobun(hutchPath, project.root)
-  await runHutchCommand(hutchPath, ['electrobun', 'build', `--env=${channel}`], project.root)
+  await runHutchCommand(hutchPath, ['electrobun', 'build', `--env=${channel}`], project.root, {
+    failureKind: 'electrobun-build-timeout',
+    timeoutMs: electrobunBuildTimeoutMs,
+  })
   const artifactPaths = await builtArtifacts(artifactsRoot)
   verifyReleaseArtifacts(artifactPaths, channel)
   return { artifactPaths, artifactsRoot, channel, projectRoot }
@@ -745,10 +940,29 @@ async function validateStudioServicePayload(payloadRoot: string): Promise<void> 
 async function prepareElectrobun(
   hutchPath: string,
   projectRoot: string,
-  runner: CommandRunner = CLI.run,
+  optionsOrRunner: PrepareElectrobunOptions | CommandRunner = {},
 ): Promise<void> {
-  await runHutchCommand(hutchPath, ['install'], projectRoot, runner)
-  await runHutchCommand(hutchPath, ['electrobun', 'prepare'], projectRoot, runner)
+  const options = typeof optionsOrRunner === 'function' ? { runner: optionsOrRunner } : optionsOrRunner
+  await runNativePhase(
+    'hutch install',
+    async () =>
+      await runHutchCommand(hutchPath, ['install'], projectRoot, {
+        ...options,
+        failureKind: 'hutch-install-timeout',
+        timeoutMs: options.installTimeoutMs ?? hutchInstallTimeoutMs,
+      }),
+    options,
+  )
+  await runNativePhase(
+    'electrobun prepare',
+    async () =>
+      await runHutchCommand(hutchPath, ['electrobun', 'prepare'], projectRoot, {
+        ...options,
+        failureKind: 'electrobun-prepare-timeout',
+        timeoutMs: options.prepareTimeoutMs ?? electrobunPrepareTimeoutMs,
+      }),
+    options,
+  )
 }
 
 async function resolveHutchExecutablePath(
@@ -794,15 +1008,177 @@ async function runHutchCommand(
   hutchPath: string,
   args: readonly string[],
   projectRoot: string,
-  runner: CommandRunner = CLI.run,
+  options: PrepareElectrobunOptions & { failureKind: string; timeoutMs: number },
 ): Promise<void> {
-  const result = await runner(hutchPath, {
+  throwIfNativeInterrupted(options.signal, args.join(' '), projectRoot)
+  if (options.runner !== undefined) {
+    const result = await options.runner(hutchPath, { args, cwd: projectRoot, stdio: 'stream' })
+    if (result.error !== undefined || result.exitCode !== 0) {
+      throw new Errors.CommandExecutionError(result)
+    }
+    return
+  }
+
+  const startedAt = (options.now ?? Time.nowMs)()
+  let spawnError: Error | undefined
+  let output = ''
+  const commandSpec: Parameters<StartProcessTree>[1] = {
     args,
     cwd: projectRoot,
-    stdio: 'stream',
+    env: options.hutchHome === undefined ? undefined : { HUTCH_HOME: options.hutchHome },
+    onError(error) {
+      spawnError = error
+    },
+    onOutput(_stream, chunk) {
+      output = boundedDiagnosticOutput(`${output}${chunk.toString('utf8')}`)
+    },
+  }
+  let command: StudioProcessTree
+  try {
+    command = (options.startCommand ?? startStudioProcessTree)(hutchPath, commandSpec)
+  } catch (error) {
+    throw new Errors.HostEnvironmentError(
+      `Could not start ${args.join(' ')} in ${projectRoot}.`,
+      { cause: error, details: { command: hutchPath, phase: args.join(' '), projectRoot } },
+    )
+  }
+  const waitForClose = finalizeStudioProcessTree(command)
+  const outcome = await waitForCommandOutcome(waitForClose(), options.timeoutMs, options.signal)
+  if (outcome.kind !== 'closed') {
+    let cleanupError: unknown
+    try {
+      await stopProcessTreeBoundedly(command, waitForClose, options.stopCommand)
+    } catch (error) {
+      cleanupError = error
+    }
+    const elapsedMs = Math.max(0, Math.round((options.now ?? Time.nowMs)() - startedAt))
+    const interrupted = outcome.kind === 'interrupted'
+    const failureKind = interrupted ? 'user-interruption' : options.failureKind
+    const action = interrupted
+      ? `was interrupted after ${elapsedMs}ms`
+      : `timed out after ${options.timeoutMs}ms (elapsed ${elapsedMs}ms)`
+    const diagnostic = output === '' ? '(no Hutch output)' : output
+    throw new Errors.HostEnvironmentError(
+      `Hutch ${args.join(' ')} ${action} in ${projectRoot}.\nRelevant output:\n${diagnostic}`,
+      {
+        cause: cleanupError,
+        details: {
+          command: hutchPath,
+          elapsedMs,
+          failureKind,
+          output: diagnostic,
+          phase: args.join(' '),
+          projectRoot,
+        },
+      },
+    )
+  }
+  if (spawnError !== undefined || outcome.result.exitCode !== 0) {
+    throw new Errors.CommandExecutionError({
+      args,
+      command: hutchPath,
+      cwd: projectRoot,
+      error: spawnError,
+      exitCode: outcome.result.exitCode,
+      signal: outcome.result.signal,
+      stderr: output,
+      stdout: output,
+    })
+  }
+}
+
+type HutchCommandOutcome =
+  | { kind: 'closed'; result: CLI.CommandCloseResult }
+  | { kind: 'interrupted' }
+  | { kind: 'timeout' }
+
+async function waitForCommandOutcome(
+  closed: Promise<CLI.CommandCloseResult>,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<HutchCommandOutcome> {
+  return await new Promise(resolve => {
+    let finished = false
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const complete = (outcome: HutchCommandOutcome) => {
+      if (finished) {
+        return
+      }
+      finished = true
+      if (timeout !== undefined) {
+        clearTimeout(timeout)
+      }
+      signal?.removeEventListener('abort', interrupted)
+      resolve(outcome)
+    }
+    const interrupted = () => complete({ kind: 'interrupted' })
+    signal?.addEventListener('abort', interrupted, { once: true })
+    timeout = setTimeout(() => complete({ kind: 'timeout' }), timeoutMs)
+    void closed.then(result => complete({ kind: 'closed', result }))
+    if (signal?.aborted === true) {
+      interrupted()
+    }
   })
-  if (result.error !== undefined || result.exitCode !== 0) {
-    throw new Errors.CommandExecutionError(result)
+}
+
+async function stopProcessTreeBoundedly(
+  command: StudioProcessTree,
+  waitForClose: () => Promise<unknown>,
+  stopProcessTree: typeof stopStudioProcessTree = stopStudioProcessTree,
+): Promise<void> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  const stopped = stopProcessTree(command, { waitForClose }).then(() => true)
+  try {
+    const completed = await Promise.race([
+      stopped,
+      new Promise<false>(resolve => {
+        timeout = setTimeout(() => resolve(false), hutchShutdownTimeoutMs)
+      }),
+    ])
+    if (!completed) {
+      command.kill('SIGKILL')
+      throw new Errors.HostEnvironmentError('Hutch process-tree cleanup did not complete within 5000ms.')
+    }
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout)
+    }
+  }
+}
+
+function boundedDiagnosticOutput(output: string): string {
+  if (output.length <= hutchDiagnosticOutputLimit) {
+    return output
+  }
+  return `[earlier Hutch output truncated]\n${output.slice(-hutchDiagnosticOutputLimit)}`
+}
+
+async function runNativePhase<Value>(
+  phase: string,
+  run: () => Value | Promise<Value>,
+  options: Pick<PrepareElectrobunOptions, 'log' | 'now' | 'signal'> = {},
+): Promise<Value> {
+  const now = options.now ?? Time.nowMs
+  const log = options.log ?? (message => HCI.logProcessInfo('studio-native', message))
+  throwIfNativeInterrupted(options.signal, phase)
+  const startedAt = now()
+  log(`${phase}: started`)
+  try {
+    const result = await run()
+    log(`${phase}: completed in ${Math.max(0, Math.round(now() - startedAt))}ms`)
+    return result
+  } catch (error) {
+    log(`${phase}: failed after ${Math.max(0, Math.round(now() - startedAt))}ms`)
+    throw error
+  }
+}
+
+function throwIfNativeInterrupted(signal: AbortSignal | undefined, phase: string, projectRoot?: string): void {
+  if (signal?.aborted === true) {
+    throw new Errors.HostEnvironmentError(
+      `Native Studio was interrupted before ${phase}${projectRoot === undefined ? '' : ` in ${projectRoot}`}.`,
+      { details: { failureKind: 'user-interruption', phase, projectRoot } },
+    )
   }
 }
 
@@ -832,18 +1208,20 @@ async function waitForProbeResult(
   resultPath: string,
   command: Pick<StoppableCommand, 'exitCode' | 'signalCode'>,
   sleep: (milliseconds: number) => Promise<void> = Time.sleep,
+  signal?: AbortSignal,
 ): Promise<StudioNativeProbeResult> {
   const deadline = Date.now() + probeTimeoutMs
   while (Date.now() < deadline) {
+    throwIfNativeInterrupted(signal, 'runtime probe')
     if (await FS.isFile(resultPath)) {
       return probeResult(await FS.readJson(resultPath))
     }
     if (command.exitCode !== null || command.signalCode !== null) {
-      throw new Errors.UnexpectedBehaviorError('Electrobun exited before writing its runtime probe result.')
+      throw new Errors.HostEnvironmentError('Electrobun exited before writing its runtime probe result.')
     }
     await sleep(100)
   }
-  throw new Errors.UnexpectedBehaviorError('Timed out waiting for the Electrobun runtime probe.')
+  throw new Errors.HostEnvironmentError('Timed out waiting for the Electrobun runtime probe.')
 }
 
 function probeResult(value: unknown): StudioNativeProbeResult {
@@ -883,7 +1261,11 @@ async function stopCommand(
   sleep: (milliseconds: number) => Promise<void> = Time.sleep,
   waitForClose: WaitForNativeClose = finalizeCommand(command),
 ): Promise<void> {
-  await stopStudioProcessTree(command, { sleep, waitForClose })
+  await stopProcessTreeBoundedly(
+    command,
+    waitForClose,
+    async (ownedCommand, options) => await stopStudioProcessTree(ownedCommand, { ...options, sleep }),
+  )
 }
 
 function finalizeCommand(command: StoppableCommand): WaitForNativeClose {

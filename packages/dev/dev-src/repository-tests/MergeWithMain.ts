@@ -330,10 +330,12 @@ export const MergeWithMainCommand = {
     await stabilizeAndVerify(snapshot, options, dependencies)
     await squashAndVerify(snapshot, dependencies)
     await commitSquash(snapshot, preflight.message, dependencies)
-    await pushAndClean(snapshot, dependencies)
+    await pushArchiveAndPreserve(snapshot, dependencies)
 
     const completed = [
       `PASS  Merged '${preflight.branch}' into main and archived it as merged/${preflight.branch.slice(5)}.`,
+      `PASS  Preserved the clean invoking worktree at ${preflight.featureRoot} on detached HEAD; `
+      + 'archive its owning task when you are ready to remove it.',
     ]
     writeLines(dependencies, completed)
     return { lines: completed, mode: 'executed', snapshotPath: snapshot.snapshotPath }
@@ -356,8 +358,8 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
       : 'PLAN  Run just full-verify on the feature branch.',
     'PLAN  Fetch and, if main moved, merge it into the feature branch and restart full verification.',
     "PLAN  Squash onto main, compare tree hashes, run just verify, and commit with Git's squash appendix.",
-    'PLAN  Push main, archive the remote feature branch, remove its worktree, delete its local branch, and prune.',
-    'WARN  Successful execution removes the invoking feature worktree, so its current shell directory disappears.',
+    'PLAN  Push main, archive the remote feature branch, detach its clean worktree, delete its local branch, and prune.',
+    'PLAN  Preserve the invoking worktree and shell until its owning task is archived.',
     `DRY RUN  No refs or worktrees changed. Execute with: ${command}`,
   ]
 }
@@ -627,7 +629,10 @@ async function commitSquash(
   await assertExpectedLocalState(snapshot, dependencies)
 }
 
-async function pushAndClean(snapshot: MergeSnapshot, dependencies: MergeWithMainDependencies): Promise<void> {
+async function pushArchiveAndPreserve(
+  snapshot: MergeSnapshot,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
   await advanceSnapshot(snapshot, 'push-started', dependencies)
   await runChecked(dependencies, 'git', ['push', REMOTE, `${MAIN_BRANCH}:${MAIN_BRANCH}`], snapshot.mainRoot, true)
   await advanceSnapshot(snapshot, 'pushed', dependencies)
@@ -656,14 +661,47 @@ async function pushAndClean(snapshot: MergeSnapshot, dependencies: MergeWithMain
   }
   await advanceSnapshot(snapshot, 'archived', dependencies)
 
-  await runChecked(dependencies, 'git', ['worktree', 'remove', snapshot.featureRoot], snapshot.mainRoot, true)
+  // Keep the invoking directory usable after success. Detaching at the verified feature tip leaves
+  // its tree unchanged while allowing the local feature ref to be deleted after the remote archive
+  // has made that tip durable.
+  await runChecked(
+    dependencies,
+    'git',
+    ['switch', '--detach', snapshot.currentFeatureHead],
+    snapshot.featureRoot,
+    true,
+  )
+  const detached = await dependencies.run('git', {
+    args: ['symbolic-ref', '--quiet', 'HEAD'],
+    cwd: snapshot.featureRoot,
+    stdio: 'pipe',
+  })
+  if (
+    detached.exitCode !== 1
+    || detached.error !== undefined
+    || detached.signal !== null
+  ) {
+    Errors.throwUnexpected('The preserved feature worktree did not enter detached HEAD state.')
+  }
+  const preservedState = await readLocalState(snapshot, dependencies)
+  assertMainMatches(snapshot, preservedState)
+  if (
+    preservedState.featureHead !== snapshot.currentFeatureHead
+    || preservedState.featureStatus !== ''
+    || preservedState.featureDiff !== ''
+  ) {
+    Errors.throwUnexpected('The preserved feature worktree changed while detaching its archived tip.')
+  }
+  adoptLocalState(snapshot, preservedState)
+  await persistSnapshot(snapshot, dependencies)
+
   // A squash commit has no ancestry relationship to the feature tip, so `-d` cannot remove it even
   // after the remote is safely archived. The preceding push/archive phases make this forced local
   // deletion deliberate and recoverable.
   await runChecked(dependencies, 'git', ['branch', '-D', snapshot.branch], snapshot.mainRoot, true)
   await runChecked(dependencies, 'git', ['worktree', 'prune'], snapshot.mainRoot, true)
   snapshot.phase = 'complete'
-  // The snapshot lives in main's ignored artifacts, so it survives feature-worktree removal.
+  // The snapshot lives in main's ignored artifacts, so it survives local feature-branch deletion.
   snapshot.currentMainHead = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
   snapshot.currentMainStatus = await status(dependencies, snapshot.mainRoot)
   await persistSnapshot(snapshot, dependencies)
