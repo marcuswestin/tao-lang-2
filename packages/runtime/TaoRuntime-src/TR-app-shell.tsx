@@ -34,7 +34,8 @@ export type SafeAreaContextModule = {
   useSafeAreaInsets(): SafeAreaInsets
 }
 
-const appFramePadding = 12
+/** The inset every full-screen Tao surface keeps between its content and the window edge. */
+export const appFramePadding = 12
 
 const contentStyle = {
   flexGrow: 1,
@@ -76,7 +77,7 @@ function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContext
       null,
       appRootChildren(props.children, devMode, scheme.resolved),
     ),
-    devMode.enabled ? React.createElement(DevMenu) : null,
+    devMode.enabled && !Dev.isMenuHidden() ? React.createElement(DevMenu) : null,
   )
 }
 
