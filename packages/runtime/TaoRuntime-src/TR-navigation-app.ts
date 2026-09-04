@@ -20,7 +20,12 @@ import {
   mountConfiguredNavigation,
 } from './TR-navigation-configuration'
 import type { Evaluable } from './TR-navigation-presentables'
-import { presentableRegistryVersion, resolvePresentable } from './TR-navigation-registry'
+import {
+  presentableRegistryVersion,
+  resolvePresentable,
+  unregisterNavigation,
+  unregisterNavigationApp,
+} from './TR-navigation-registry'
 import { NavigationRestorationController } from './TR-navigation-restoration'
 import type { RestorationEnvelope } from './TR-navigation-restoration'
 import type { PresentableEntry, Subscription } from './TR-navigation-state'
@@ -115,6 +120,27 @@ export class RuntimeAppDefinition implements Subscription {
   constructor(readonly definition: TaoAppDefinition) {
     this.declaration = definition.declaration ?? createAppDeclaration(definition.name)
     runtimeApps.add(this)
+  }
+
+  /**
+   * dispose forgets one app definition the process built rather than declared.
+   *
+   * The compiler emits an app definition once at generated-module scope, so a real app never calls
+   * this. Studio's focused-view cells build one per mount, and a definition that outlived its cell
+   * would still answer a process-wide reset, still contribute a lane to every runtime capture, and
+   * still hold its mounted navigation alive.
+   */
+  dispose(): void {
+    this.restoration.dispose()
+    for (const [lane, record] of [...this.navigationLaneRecords]) {
+      this.deactivateNavigationLane(lane, true)
+      for (const mount of record.mounts) {
+        unregisterNavigation(mount)
+      }
+    }
+    runtimeApps.delete(this)
+    unregisterNavigationApp(this)
+    this.listeners.clear()
   }
 
   readonly subscribe = (listener: () => void): () => void => {
@@ -594,8 +620,32 @@ export class RuntimeAppDefinition implements Subscription {
   }
 }
 
+/**
+ * Identifies one app's navigation capture. The declaration alone is not enough: an app variant
+ * (`app Preview = Base with { … }`) keeps its base's declaration identity, so every variant of one
+ * app shared a key. Capture is an object literal, so the last variant overwrote the rest, and
+ * restore handed that one snapshot to all of them — where a navigator whose configuration the
+ * variant had patched refused a descriptor that was never its own, and the whole restore failed.
+ *
+ * The lanes are what makes the capture what it is, so they belong in its name. They are also
+ * exactly what `restore` validates, which gives the key the property worth having: two apps share a
+ * key only when each could restore the other's snapshot.
+ */
 function appCaptureKey(app: RuntimeAppDefinition): string {
-  return app.declaration.canonicalIdentity?.canonical ?? app.definition.name
+  const declaration = app.declaration.canonicalIdentity?.canonical ?? app.definition.name
+  const lanes = [
+    ['', laneCaptureIdentity(app.navigator)] as const,
+    ...Object.entries(app.auxiliaries).map(([key, navigation]) => [key, laneCaptureIdentity(navigation)] as const),
+  ].sort(([left], [right]) => left.localeCompare(right))
+  // The declaration stays verbatim at the front rather than nested, so the key still reads as the
+  // declaration it belongs to. Both halves are JSON, which cannot carry a raw newline, so the
+  // separator cannot collide with either.
+  return `${declaration}\n${JSON.stringify(lanes)}`
+}
+
+/** A lane's structural identity, falling back to its kind where a navigation declares none. */
+function laneCaptureIdentity(navigation: TaoNavigationValue): string {
+  return navigation.descriptor.canonicalDescriptor?.canonical ?? navigation.name
 }
 
 function captureNavigationApps(): TaoRuntimeJson {

@@ -7,7 +7,7 @@ export const schemeCaptureVersion = 1 as const
 
 export type TaoAppearance = 'dark' | 'light' | 'system'
 export type TaoScheme = 'dark' | 'light'
-export type TaoSchemeCapability = 'fixed-light-native' | 'reactive-browser'
+export type TaoSchemeCapability = 'fixed-light-native' | 'pinned-native' | 'reactive-browser'
 export type TaoSchemeSource = 'native-fixed' | 'preference' | 'scenario' | 'system'
 
 export type TaoSchemeSnapshot = Readonly<{
@@ -63,6 +63,18 @@ function resolveScheme(
     ? 'preference'
     : 'system'
   if (environment.platform === 'native') {
+    // A scenario's appearance is part of the scenario, so it travels to a device. `fixed-light-native`
+    // says this runtime cannot follow the device's own appearance; it never said the runtime cannot
+    // render dark, and a Studio cell asking for dark is asking for exactly that. Only a preview cell
+    // ever sets `scenario`, so a shipped app resolves the way it always has.
+    if (request.scenario !== undefined) {
+      return Object.freeze({
+        capability: 'pinned-native',
+        requested: request.scenario,
+        resolved: request.scenario,
+        source: 'scenario',
+      })
+    }
     return Object.freeze({
       capability: 'fixed-light-native',
       requested,
@@ -150,7 +162,7 @@ function decodeSnapshot(value: TaoRuntimeJson): TaoSchemeSnapshot {
     typeof value !== 'object'
     || value === null
     || Array.isArray(value)
-    || (record['capability'] !== 'reactive-browser' && record['capability'] !== 'fixed-light-native')
+    || !['fixed-light-native', 'pinned-native', 'reactive-browser'].includes(String(record['capability']))
     || (record['requested'] !== 'dark' && record['requested'] !== 'light' && record['requested'] !== 'system')
     || (record['resolved'] !== 'dark' && record['resolved'] !== 'light')
     || !['native-fixed', 'preference', 'scenario', 'system'].includes(String(record['source']))
@@ -164,7 +176,7 @@ function decodeSnapshot(value: TaoRuntimeJson): TaoSchemeSnapshot {
 
 function validateSnapshot(snapshot: TaoSchemeSnapshot): void {
   if (
-    (snapshot.capability !== 'reactive-browser' && snapshot.capability !== 'fixed-light-native')
+    !['fixed-light-native', 'pinned-native', 'reactive-browser'].includes(snapshot.capability)
     || (snapshot.requested !== 'dark' && snapshot.requested !== 'light' && snapshot.requested !== 'system')
     || (snapshot.resolved !== 'dark' && snapshot.resolved !== 'light')
     || !['native-fixed', 'preference', 'scenario', 'system'].includes(snapshot.source)
@@ -174,6 +186,10 @@ function validateSnapshot(snapshot: TaoSchemeSnapshot): void {
     || (snapshot.source === 'native-fixed' && snapshot.capability !== 'fixed-light-native')
     || (snapshot.capability === 'fixed-light-native'
       && (snapshot.resolved !== 'light' || snapshot.source !== 'native-fixed'))
+    // A pin is only a pin if the host actually took it: resolved is what was asked for, and the only
+    // thing that asks is a scenario.
+    || (snapshot.capability === 'pinned-native'
+      && (snapshot.source !== 'scenario' || snapshot.resolved !== snapshot.requested))
   ) {
     throw new UserInputError('Tao Scheme snapshot is invalid.', { snapshot })
   }

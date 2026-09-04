@@ -48,14 +48,24 @@ const boundingBoxStyleProperties = new Set([
 ])
 
 let devMode = defaultDevMode()
+/**
+ * Whether a host above the app already offers the dev options, so the floating menu stays away.
+ *
+ * The Studio device host is that host: it renders its own draggable affordance over the preview
+ * cell, and a second floating button beside it — with one option, over an app the person is
+ * inspecting through the first — is two menus for one job.
+ */
+let menuHidden = false
 const listeners = new Set<() => void>()
 
 /** Dev configures Tao runtime development-only diagnostics. */
 export const Dev = {
   /** getMode returns the current Tao runtime development mode. */
   getMode,
+  hideMenu,
   isEnabled,
   isLayoutBoundsEnabled,
+  isMenuHidden,
   processCreateReactElementArgs,
   setMode,
   toggleLayoutBounds,
@@ -65,11 +75,26 @@ export const Dev = {
 /** DevControls exposes public, hook-free Tao runtime diagnostic controls. */
 export const DevControls = {
   getMode,
+  hideMenu,
   isEnabled,
   isLayoutBoundsEnabled,
+  isMenuHidden,
   setMode,
   toggleLayoutBounds,
 } as const
+
+/** hideMenu withholds the floating dev menu for a host that presents the same options itself. */
+function hideMenu(hidden: boolean): void {
+  if (menuHidden === hidden) {
+    return
+  }
+  menuHidden = hidden
+  emit()
+}
+
+function isMenuHidden(): boolean {
+  return menuHidden
+}
 
 function setMode(options?: TaoDevModeOptions): void {
   updateMode(resolveModeOptions(options))
@@ -136,6 +161,10 @@ function updateMode(nextMode: TaoDevModeState): void {
   if (!changed) {
     return
   }
+  emit()
+}
+
+function emit(): void {
   for (const listener of listeners) {
     listener()
   }

@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "Tao Companion",
+    "slug": "tao-studio-companion",
+    "version": "1.0.0",
+    "scheme": "taostudiocompanion",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "bundleIdentifier": "dev.tao-lang.studio.companion",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Tao Studio on your Mac renders the app you are editing. Tao Companion uses the local network to load that app from Studio and keep it in sync while you work.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "updates": {
+      "enabled": false
+    },
+    "plugins": [
+      "expo-dev-client",
+      "./plugins/with-ios-fmt-compat.cjs"
+    ],
+    "experiments": {
+      "autolinkingModuleResolution": true
+    }
+  }
+}
