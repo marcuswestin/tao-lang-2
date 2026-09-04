@@ -2,7 +2,7 @@ import { CLI, Errors, Repo } from '@shared'
 import { OutputText } from '../cli/OutputText'
 import CommandRunner from './CommandRunner'
 import { DevLoopTUI } from './DevLoopTUI'
-import { ExpoRunner } from './expo-runner/ExpoRunner'
+import type { ExpoRunnerSession } from './expo-runner/ExpoRunner'
 
 /** runJust runs a repo-root Just recipe with prefixed output. */
 async function runJust(args: readonly string[]): Promise<void> {
@@ -112,7 +112,12 @@ function formatDevLoopFailure(error: unknown): string {
 }
 
 /** recompileAndReload recompiles the selected app while a command key owns exclusivity, then reloads Expo. */
-async function recompileAndReload(repoRoot: string, appPath: string, appName?: string): Promise<void> {
+async function recompileAndReload(
+  repoRoot: string,
+  appPath: string,
+  expo: ExpoRunnerSession,
+  appName?: string,
+): Promise<void> {
   CommandRunner.assertCommandRunning('recompile and reload')
   const compiled = await compileAppWithoutCommandLock({
     repoRoot,
@@ -124,7 +129,7 @@ async function recompileAndReload(repoRoot: string, appPath: string, appName?: s
   if (!compiled) {
     throw new Errors.UserInputError('Reload skipped because compile failed.')
   }
-  await ExpoRunner.reloadExpoApps()
+  await expo.reloadExpoApps()
 }
 
 /** Run provides dev-loop subprocess helpers. */

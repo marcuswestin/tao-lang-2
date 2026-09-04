@@ -1,7 +1,9 @@
 import { CLI, Errors, FS, Time } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, Test, withCapturedOutput } from '@shared/test'
+import { createServer } from 'node:net'
 import { OutputText } from '../dev-src/cli/OutputText'
 import { DevLoopTUI } from '../dev-src/expo-dev-loop/DevLoopTUI'
+import { createDevLoopExpoSession } from '../dev-src/expo-dev-loop/expo-dev-loop'
 import { createExpoConfig } from '../dev-src/expo-dev-loop/expo-runner/expo-config'
 import { ExpoServer, formatExpoExitFailure } from '../dev-src/expo-dev-loop/expo-runner/expo-server'
 import { ExpoRunner } from '../dev-src/expo-dev-loop/expo-runner/ExpoRunner'
@@ -26,6 +28,7 @@ Describe('Expo dev-loop command helpers', () => {
     const actions: string[] = []
     const context = {
       appPath: '/repo/App.tao',
+      expo: ExpoRunner.createSession(49_152),
       finish: async (exitCode: number) => {
         actions.push(`finish:${exitCode}`)
       },
@@ -41,6 +44,47 @@ Describe('Expo dev-loop command helpers', () => {
     await handleCommandKey('s', context)
 
     Expect(actions).toEqual(['finish:0', 'select-app'])
+  })
+
+  Test('routes target-opening shortcuts through the selected Expo session', async () => {
+    const actions: string[] = []
+    const expo = {
+      ...ExpoRunner.createSession(49_152),
+      openAndroid: async () => {
+        actions.push('android')
+        return true
+      },
+      openIosSimulator: async () => {
+        actions.push('ios')
+        return true
+      },
+      openPhysicalDevice: async () => {
+        actions.push('device')
+        return true
+      },
+      openWeb: async () => {
+        actions.push('web')
+        return true
+      },
+    }
+    const context = {
+      appPath: '/repo/App.tao',
+      expo,
+      finish: async () => {},
+      repoRoot: '/repo',
+      restart: async () => {},
+      selectApp: async () => {},
+      stopServices: async () => {},
+    }
+
+    await withCapturedOutput(async () => {
+      await handleCommandKey('d', context)
+      await handleCommandKey('w', context)
+      await handleCommandKey('i', context)
+      await handleCommandKey('a', context)
+    })
+
+    Expect(actions).toEqual(['device', 'web', 'ios', 'android'])
   })
 
   Test('keeps child-process output as the useful dev-loop failure', () => {
@@ -147,13 +191,40 @@ Describe('Expo dev-loop port helpers', () => {
     Expect(selected).toBe(49_152)
   })
 
+  Test('reserves a different dev-loop port when the preferred port is occupied', async () => {
+    const blocker = createServer()
+    blocker.unref()
+    await new Promise<void>((resolve, reject) => {
+      blocker.once('error', reject)
+      blocker.listen({ host: '127.0.0.1', port: 0 }, resolve)
+    })
+    const address = blocker.address()
+    const blockedPort = typeof address === 'object' && address !== null ? address.port : undefined
+    try {
+      if (blockedPort === undefined) {
+        Errors.throwHostEnvironment('Expected the test listener to have a TCP port.')
+      }
+      const session = await createDevLoopExpoSession(blockedPort)
+      try {
+        Expect(session.config.EXPO_PORT).not.toBe(blockedPort)
+        Expect(session.config.EXPO_PORT).toBeGreaterThan(0)
+      } finally {
+        await session.releasePortReservation()
+      }
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        blocker.close(error => error ? reject(error) : resolve())
+      })
+    }
+  })
+
   Test('explains environments that prohibit local TCP listeners', () => {
     const error = Object.assign(new Error('listen blocked'), { code: 'EPERM' })
     const normalized = ExpoRunner.portDiagnostics.normalizeReservationError(error)
 
     Expect(Errors.formatForUser(normalized)).toBe(
-      'This environment does not allow Studio to bind a local TCP port. '
-        + 'Run Studio in a terminal or development environment that permits listeners on 127.0.0.1.',
+      'This environment does not allow a local development server to bind a TCP port. '
+        + 'Run it in a terminal or development environment that permits listeners on 127.0.0.1.',
     )
   })
 

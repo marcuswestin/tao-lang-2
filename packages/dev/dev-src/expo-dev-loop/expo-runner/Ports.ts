@@ -89,8 +89,8 @@ function normalizeReservationError(error: Error): Error {
   const code = (error as NodeJS.ErrnoException).code
   if (code === 'EACCES' || code === 'EPERM') {
     return new Errors.UserInputError(
-      'This environment does not allow Studio to bind a local TCP port. '
-        + 'Run Studio in a terminal or development environment that permits listeners on 127.0.0.1.',
+      'This environment does not allow a local development server to bind a TCP port. '
+        + 'Run it in a terminal or development environment that permits listeners on 127.0.0.1.',
     )
   }
   return error
