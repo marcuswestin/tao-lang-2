@@ -619,3 +619,25 @@ an entry here may link one when the developer workflow is also affected.
 - **Dependencies:** None.
 - **Acceptance:** A clean `just studio-native` reaches a ready preview with no unresolved-module output.
 - **Source:** 2026-09-04 companion Slice 2 work.
+
+### DEVENV-038 — A blocked Studio canary reports and then hangs
+
+- **Status:** Candidate
+- **Area:** Studio canary
+- **Impact:** `just full-verify` from a managed shell never returns. The lane that should end in seconds
+  with a blocked verdict instead holds the whole run open indefinitely, which reads as a hung
+  verification rather than an unsupported host.
+- **Evidence:** On 2026-09-04 the canary wrote `.artifacts/tests/studio-canary/canary.json` with
+  `"status": "blocked"` and `"blockedReason": "the native runtime exited 143 before reporting … this
+  host refused AppKit registration; run the canary from an ordinary Terminal."` within seconds, and
+  recorded its own pid in `survivingPids`. The command was still alive 40 minutes later with a
+  `hutch-engine electrobun prepare` child running; `_full-verify-native` had already failed at 120.5s on
+  the same host capability.
+- **Workaround:** Run `just full-verify-sandbox` in a managed shell, which names the five Studio lanes as
+  skipped, and `just full-verify` only from an ordinary Terminal.
+- **Proposed change:** Terminate the owned child processes the report already identifies before the
+  canary returns, so a blocked verdict exits with its own exit code.
+- **Dependencies:** None; `survivingOwnedPids` in `StudioCanary.ts` already computes the set.
+- **Acceptance:** A canary run on a host that refuses AppKit registration writes the blocked report and
+  exits within its bound, leaving no surviving owned pid.
+- **Source:** 2026-09-04 companion Slice 2 merge preparation.
