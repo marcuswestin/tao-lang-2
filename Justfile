@@ -162,6 +162,10 @@ dead-exports:
 doctor *ARGS:
     ./dev doctor {{ ARGS }}
 
+# Report process, socket, simulator, and local-service capabilities without changing anything
+capabilities *ARGS:
+    ./dev capabilities {{ ARGS }}
+
 # Benchmark cold and steady-state language-service performance
 bench iterations="10":
     bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"

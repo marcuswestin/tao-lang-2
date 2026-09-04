@@ -4,6 +4,7 @@ import { runWithCommands } from './cli/run-with-commands'
 
 const JUST_COMMANDS = [
   'bench',
+  'capabilities',
   'check',
   'doctor',
   'fix',
