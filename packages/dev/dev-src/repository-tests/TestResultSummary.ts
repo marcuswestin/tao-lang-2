@@ -1,5 +1,7 @@
 import * as Shared from '@shared'
 import { OutputText } from '../cli/OutputText'
+import { type ContentionReport, MachineLanes } from './MachineLanes'
+import { describesTimeout } from './RunSummary'
 import type { SuiteState } from './TestRunner'
 
 type SuiteTestSummary = {
@@ -21,6 +23,8 @@ type TotalTestSummary = {
 }
 
 type ResultSummaryOptions = {
+  /** What the machine was carrying while the run happened, when the lane sampled it. */
+  contention?: ContentionReport
   includeFailureOutput?: boolean
   failureOutputLineLimit?: number
   taoAppsSkipped?: boolean
@@ -51,6 +55,8 @@ function printResultSummary(
     Shared.HCI.writeLine('Note: the tao-apps suite was skipped; a test-name pattern cannot select Tao behavior tests.')
   }
 
+  printContentionNote(states, options.contention)
+
   if (failed.length === 0) {
     Shared.HCI.writeSuccess('test suites ok\n')
     return
@@ -63,6 +69,37 @@ function printResultSummary(
       printFailureOutput(state, options.failureOutputLineLimit ?? FAILURE_OUTPUT_LINE_LIMIT)
     }
     Shared.HCI.writeErrorLine(`log: ${displayPath(state.logPath ?? '')}`)
+  }
+}
+
+/**
+ * printContentionNote says what the machine was doing, so a slow or timed-out suite is read as the
+ * host it ran on rather than as the code it ran over. Silent on a machine this run had to itself:
+ * a note nobody needs is a note nobody reads.
+ */
+function printContentionNote(states: readonly SuiteState[], contention: ContentionReport | undefined): void {
+  if (contention === undefined || !contention.contended) {
+    return
+  }
+  const writeLine = states.some(state => state.status === 'failed') ? Shared.HCI.writeErrorLine : Shared.HCI.writeLine
+  writeLine(`\nMachine contention: ${MachineLanes.describeContention(contention)}.`)
+
+  const retried = states.filter(state => state.retried === true)
+  for (const state of retried) {
+    writeLine(`- ${state.name}: ${state.reason ?? 'run again on its own after a contended timeout'}`)
+  }
+  const timedOut = states.filter(state =>
+    state.status === 'failed' && state.retried !== true && describesTimeout(state.fullOutput)
+  )
+  for (const state of timedOut) {
+    if (state.reason?.includes('failure is unconfirmed') === true) {
+      writeLine(`- ${state.name}: ${state.reason}.`)
+      continue
+    }
+    writeLine(
+      `- ${state.name} ran out of time under that load. Confirm it alone with: ./agent test`
+        + ` (or bun test <file>) once the machine is quiet.`,
+    )
   }
 }
 
@@ -128,6 +165,13 @@ function totalTestSummary(states: readonly SuiteState[]): TotalTestSummary {
 }
 
 function suiteTestSummary(state: SuiteState): SuiteTestSummary {
+  if (state.testObservations !== undefined) {
+    return {
+      failed: state.testObservations.filter(test => test.outcome === 'failed').length,
+      passed: state.testObservations.filter(test => test.outcome === 'passed').length,
+      total: state.testObservations.length,
+    }
+  }
   const output = OutputText.sanitize(state.fullOutput)
   return parseBunTestSummary(output) ?? parseJestTestSummary(output) ?? {}
 }

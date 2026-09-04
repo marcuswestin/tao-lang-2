@@ -7,6 +7,7 @@ BUN_TMP_DIR := justfile_directory() + "/.artifacts/tmp/bun"
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/config/local-instantdb"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
+FULL_VERIFY_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _ship-bundle-proof _full-verify-smoke-launch _full-verify-real-app _full-verify-simulated _full-verify-native _full-verify-canary"
 
 # Print available recipes
 help:
@@ -100,9 +101,39 @@ deps:
     if ! just _dependency-health; then TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force; fi
     if ! just _dependency-health; then mkdir -p "{{ BUN_CACHE_DIR }}"; TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"; just _dependency-health; fi
 
-# Run all tests, optionally filtered by test name
+# Run all tests, or pass one simple test-name pattern such as `just test "formats imports"`
 test PATTERN="": _compile-word-flower-app
     just _test '{{ PATTERN }}'
+
+# Run tests selected by changes since a ref; defaults to this branch's main merge base
+test-changed ref="": _compile-word-flower-app
+    ./dev test-changed {{ if ref == "" { "" } else { "\"" + ref + "\"" } }}
+
+# Run one exact package Bun or runtime Jest test file through the repository test lane
+test-file path: _compile-word-flower-app
+    ./dev test-file "{{ path }}"
+
+# Re-run files that are not green since this checkout's latest complete test run
+test-retry: _compile-word-flower-app
+    ./dev test-retry
+
+# Report tests whose outcome flipped without their file changing
+test-flakes limit="20":
+    ./dev test-flakes --limit "{{ limit }}"
+
+# Report the slowest tests recorded in this checkout's ledger
+test-slowest limit="20":
+    ./dev test-slowest --limit "{{ limit }}"
+
+# Dry-run the human-only feature landing workflow; pass --execute explicitly to mutate refs
+[arg('abort', long='abort')]
+[arg('execute', long='execute', value='true')]
+[arg('message_file', long='message-file')]
+[arg('push', long='push', value='true')]
+[arg('skip_full_verify', long='skip-full-verify', value='true')]
+[arg('yes', long='yes', value='true')]
+merge-with-main execute='false' yes='false' push='false' skip_full_verify='false' message_file='' abort='':
+    ./dev merge-with-main {{ if execute == "true" { "--execute" } else { "" } }} {{ if yes == "true" { "--yes" } else { "" } }} {{ if push == "true" { "--push" } else { "" } }} {{ if skip_full_verify == "true" { "--skip-full-verify" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
 
 # Format code, without applying the other Tao source fixes
 fmt: _parser-gen
@@ -168,7 +199,11 @@ verify:
 
 # Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every automated Studio lane
 full-verify: deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _ship-bundle-proof _full-verify-smoke-launch _full-verify-real-app _full-verify-simulated _full-verify-native _full-verify-canary --lane full-verify --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree"
+    ./dev gates {{ FULL_VERIFY_GATES }} --lane full-verify --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree"
+
+# Run full-verification's sandbox-compatible gates without installing dependencies or claiming the five Studio lanes passed
+full-verify-sandbox:
+    ./dev gates {{ FULL_VERIFY_GATES }} --skip-unsandboxed --lane full-verify-sandbox --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree"
 
 # Private
 #########

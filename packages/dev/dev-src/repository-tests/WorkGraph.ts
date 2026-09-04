@@ -15,6 +15,24 @@ import { OutputText } from '../cli/OutputText'
 /** WorkStatus declares the lifecycle state of one node. `skipped` is never reported as `passed`. */
 export type WorkStatus = 'failed' | 'passed' | 'pending' | 'running' | 'skipped'
 
+/** WorkFailureKind is the machine-readable reason a node did not pass. */
+export type WorkFailureKind = 'dependency' | 'interrupted' | 'nonzero-exit' | 'process-error' | 'timeout'
+
+/** WorkFailure keeps retry and reporting policy out of human-readable output matching. */
+export type WorkFailure = {
+  kind: WorkFailureKind
+  message: string
+}
+
+/** WorkAttempt is an immutable result from one execution of a node. */
+type WorkAttempt = {
+  elapsedMs: number
+  exitCode?: number | null
+  failure?: WorkFailure
+  fullOutput: string
+  status: WorkStatus
+}
+
 /** WorkCommand declares the process one node runs. */
 export type WorkCommand = {
   args: readonly string[]
@@ -28,6 +46,8 @@ export type WorkNode = {
   name: string
   /** Just recipe or explicit command; both run through `CLI.start` with piped output. */
   run: WorkCommand
+  /** Rebuild the command from the slots actually admitted by the machine-wide broker. */
+  runForSlots?: (slots: number) => WorkCommand
   /** Env keys a nested runner reads its own worker budget from; inferred from `run` when absent. */
   budgetEnvKeys?: readonly string[]
   /** Worker slots reserved while running (CPU width). Default 1. */
@@ -51,8 +71,11 @@ export type WorkNode = {
 
 /** WorkState tracks one node's output, status, and timing across a run. */
 export type WorkState = {
+  /** Original and confirmation results, present when a node was retried. */
+  attempts?: readonly WorkAttempt[]
   elapsedMs: number
   exitCode?: number | null
+  failure?: WorkFailure
   fullOutput: string
   /** The last few output lines, for the dashboard. */
   lines: string[]
@@ -61,6 +84,8 @@ export type WorkState = {
   node: WorkNode
   /** Why a node was skipped, or what kind of failure it was, in one line. */
   reason?: string
+  /** True once a node that failed under machine contention has been run again on its own. */
+  retried?: boolean
   startedAt?: number
   status: WorkStatus
 }
@@ -68,6 +93,7 @@ export type WorkState = {
 /** WorkEvent is what a run reports as it progresses; reporters consume nothing else. */
 export type WorkEvent =
   | { kind: 'planned'; states: readonly WorkState[] }
+  | { kind: 'waiting'; reason: string; state: WorkState }
   | { kind: 'start'; state: WorkState }
   | { kind: 'output'; output: string; state: WorkState }
   | { kind: 'complete'; state: WorkState }
@@ -75,6 +101,8 @@ export type WorkEvent =
 
 /** WorkRunContext is what a node's runner is handed when the graph admits it. */
 export type WorkRunContext = {
+  /** Command resolved after admission, including arguments derived from the reserved slots. */
+  run: WorkCommand
   /** Env the command runs with, including the worker budget the graph reserved for it. */
   env: Record<string, string>
   /** Registers how to stop this node early; the graph calls it when the run is interrupted. */
@@ -93,14 +121,32 @@ export type WorkOutcome = {
   output?: string
 }
 
+/** WorkSlotReservation is machine-wide capacity held for one running node. */
+export type WorkSlotReservation = {
+  release: () => Promise<void>
+  slots: number
+}
+
+/** WorkSlotBroker atomically admits nodes across otherwise independent work graphs. */
+export type WorkSlotBroker = {
+  /** Returns no reservation when another lane currently owns the available capacity. */
+  tryAcquire: (requestedSlots: number, allowPartial: boolean) => Promise<WorkSlotReservation | undefined>
+  /** Waits briefly for another process to publish a capacity change. */
+  waitForAvailability: () => Promise<void>
+}
+
 /** WorkRunOptions configures one graph run. */
 export type WorkRunOptions = {
+  /** Environment inherited by every child in this graph, such as the owning machine-lane id. */
+  env?: Record<string, string>
   /** Measured duration per node, for critical-path ordering. Cold start falls back to `cost`. */
   expectedMs?: (name: string) => number | undefined
   jobs?: number
   onEvent?: (event: WorkEvent) => void
   /** Injected so tests observe scheduling without starting real processes. */
   runNode?: (state: WorkState, context: WorkRunContext) => Promise<WorkOutcome>
+  /** Optional machine-wide admission; nested graphs omit it because their parent owns the slots. */
+  slotBroker?: WorkSlotBroker
   /** Registers the run's cancel hook and returns its unsubscribe; defaults to SIGINT. */
   watchInterrupt?: (interrupt: () => void) => () => void
 }
@@ -123,6 +169,7 @@ const OUTPUT_LINE_LIMIT = 6
  */
 const COLD_START_MS_PER_SLOT = 1_000
 const INTERRUPTED_REASON = 'interrupted'
+const MACHINE_CAPACITY_REASON = 'waiting for machine capacity'
 /** How long a cancelled process gets to honor SIGTERM before it is killed outright. */
 const FORCE_KILL_GRACE_MS = 10_000
 /** Env keys the nested runners read their own worker budget from. */
@@ -180,9 +227,13 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
   emit({ kind: 'planned', states })
   try {
     while (pending.length > 0 || running.size > 0) {
-      const admitted = admit()
+      const admission = await admit()
       if (running.size === 0) {
-        if (admitted === 0) {
+        if (admission.machineBlocked) {
+          await options.slotBroker?.waitForAvailability()
+          continue
+        }
+        if (admission.started === 0) {
           // Nothing runs, nothing can start: what is left needs something this run never provides.
           for (const state of pending.splice(0)) {
             finishWithoutRunning(state, 'dependency cycle or unreachable dependency', emit)
@@ -192,14 +243,22 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       }
       await Promise.race([...running.values()].map(node => node.promise))
     }
+  } catch (error) {
+    // A scheduler/broker failure must not let already-admitted children outlive the lane record
+    // their reservations belong to. Reuse interruption's bounded process cancellation, drain the
+    // promises, and only then let the caller release machine-wide coordination.
+    interrupt()
+    await Promise.allSettled([...running.values()].map(node => node.promise))
+    throw error
   } finally {
     stopWatchingInterrupt()
   }
   emit({ kind: 'done', interrupted, states })
   return { interrupted, states }
 
-  function admit(): number {
+  async function admit(): Promise<{ machineBlocked: boolean; started: number }> {
     let started = 0
+    let machineBlocked = false
     for (let index = 0; index < pending.length;) {
       const state = pending[index]!
       const failedDependency = failedDependencyName(state, states)
@@ -214,26 +273,45 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       }
       // A node whose width does not fit waits for running nodes to release slots rather than
       // letting cheaper nodes jump the queue; with nothing running its width clamps to capacity.
-      const slots = Math.min(nodeCost(state.node), capacity)
-      if (slots > availableSlots && running.size > 0) {
+      const requestedSlots = Math.min(nodeCost(state.node), capacity)
+      if (requestedSlots > availableSlots && running.size > 0) {
         break
       }
+      const machineReservation = await options.slotBroker?.tryAcquire(
+        requestedSlots,
+        running.size === 0 && started === 0,
+      )
+      if (interrupted || pending[index] !== state || state.status !== 'pending') {
+        await machineReservation?.release()
+        return { machineBlocked: false, started }
+      }
+      if (options.slotBroker !== undefined && machineReservation === undefined) {
+        machineBlocked = true
+        if (state.reason !== MACHINE_CAPACITY_REASON) {
+          state.reason = MACHINE_CAPACITY_REASON
+          emit({ kind: 'waiting', reason: MACHINE_CAPACITY_REASON, state })
+        }
+        break
+      }
+      const slots = machineReservation?.slots ?? requestedSlots
       pending.splice(index, 1)
       availableSlots -= slots
       for (const resource of state.node.resources ?? []) {
         heldResources.add(resource)
       }
-      startNode(state, slots)
+      startNode(state, slots, machineReservation)
       started += 1
     }
-    return started
+    return { machineBlocked, started }
   }
 
-  function startNode(state: WorkState, slots: number): void {
+  function startNode(state: WorkState, slots: number, machineReservation?: WorkSlotReservation): void {
     let cancel = () => {}
     let timedOut = false
+    const run = state.node.runForSlots?.(slots) ?? state.node.run
     const context: WorkRunContext = {
-      env: { ...state.node.run.env, ...budgetEnv(state.node, slots) },
+      run,
+      env: { ...run.env, ...options.env, ...budgetEnv(state.node, run, slots) },
       onCancel: handler => {
         cancel = handler
       },
@@ -244,6 +322,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       slots,
     }
     state.status = 'running'
+    state.reason = undefined
     state.startedAt = Date.now()
     emit({ kind: 'start', state })
     const timeout = state.node.timeoutMs === undefined ? undefined : setTimeout(() => {
@@ -251,7 +330,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       cancel()
     }, state.node.timeoutMs)
 
-    const promise = executeNode(state, context, runOne).finally(() => {
+    const promise = executeNode(state, context, runOne).finally(async () => {
       if (timeout !== undefined) {
         clearTimeout(timeout)
       }
@@ -260,12 +339,20 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         heldResources.delete(resource)
       }
       running.delete(state)
-      if (timedOut && state.status === 'failed') {
+      if (timedOut) {
+        state.status = 'failed'
         state.reason = `timed out after ${formatTimeout(state.node.timeoutMs ?? 0)}`
+        state.failure = { kind: 'timeout', message: state.reason }
+        if (!state.fullOutput.includes(state.reason)) {
+          appendOutput(state, `${state.fullOutput.length > 0 ? '\n' : ''}${state.reason}\n`)
+        }
       }
-      if (interrupted && state.status === 'failed') {
+      if (interrupted && !timedOut && state.status === 'failed') {
+        state.status = 'failed'
         state.reason = INTERRUPTED_REASON
+        state.failure = { kind: 'interrupted', message: INTERRUPTED_REASON }
       }
+      await machineReservation?.release()
       emit({ kind: 'complete', state })
     })
     running.set(state, { cancel: () => cancel(), promise })
@@ -286,24 +373,30 @@ async function executeNode(
     state.exitCode = outcome.error === undefined ? outcome.exitCode : null
     state.status = outcome.error === undefined && outcome.exitCode === 0 ? 'passed' : 'failed'
     if (outcome.error !== undefined) {
-      appendOutput(state, errorMessage(outcome.error))
+      const message = errorMessage(outcome.error)
+      state.failure = { kind: 'process-error', message }
+      appendOutput(state, message)
+    } else if (outcome.exitCode !== 0) {
+      state.failure = { kind: 'nonzero-exit', message: `exited ${outcome.exitCode ?? 'unknown'}` }
     }
   } catch (error) {
     state.elapsedMs = elapsedMs(state)
     state.exitCode = null
     state.status = 'failed'
-    appendOutput(state, errorMessage(error))
+    const message = errorMessage(error)
+    state.failure = { kind: 'process-error', message }
+    appendOutput(state, message)
   }
 }
 
 /** runProcess is the default runner: one child process with its output piped back to the graph. */
-async function runProcess(state: WorkState, context: WorkRunContext): Promise<WorkOutcome> {
+async function runProcess(_state: WorkState, context: WorkRunContext): Promise<WorkOutcome> {
   let command: CLI.StartedCommand | undefined
   let forceKill: ReturnType<typeof setTimeout> | undefined
   try {
-    command = CLI.start(state.node.run.command, {
-      args: [...state.node.run.args],
-      cwd: state.node.run.cwd,
+    command = CLI.start(context.run.command, {
+      args: [...context.run.args],
+      cwd: context.run.cwd,
       env: context.env,
       onOutput: (_stream, chunk) => context.onOutput(String(chunk)),
       stdio: 'pipe',
@@ -347,6 +440,10 @@ async function waitForCommand(command: CLI.StartedCommand): Promise<WorkOutcome>
 function finishWithoutRunning(state: WorkState, reason: string, emit: (event: WorkEvent) => void): void {
   state.status = 'skipped'
   state.reason = reason
+  state.failure = {
+    kind: reason === INTERRUPTED_REASON ? 'interrupted' : 'dependency',
+    message: reason,
+  }
   emit({ kind: 'complete', state })
 }
 
@@ -439,8 +536,8 @@ function criticalPathRanks(
  * budgetEnv hands a nested runner the width this graph already reserved for it, so `cost` is an
  * enforced bound rather than a guess and the two pools cannot oversubscribe the machine together.
  */
-function budgetEnv(node: WorkNode, slots: number): Record<string, string> {
-  const keys = node.budgetEnvKeys ?? nestedRunnerBudgetKeys(node.run)
+function budgetEnv(node: WorkNode, command: WorkCommand, slots: number): Record<string, string> {
+  const keys = node.budgetEnvKeys ?? nestedRunnerBudgetKeys(command)
   return Object.fromEntries(keys.map(key => [key, String(slots)]))
 }
 

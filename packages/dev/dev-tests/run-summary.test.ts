@@ -1,4 +1,6 @@
+import { Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { RunArtifacts } from '../dev-src/repository-tests/RunArtifacts'
 import { buildSummary, formatGateSummary, gateExitCode } from '../dev-src/repository-tests/RunSummary'
 import { WorkGraph, type WorkNode, type WorkState } from '../dev-src/repository-tests/WorkGraph'
 
@@ -13,6 +15,16 @@ function finishedState(node: Partial<WorkNode> & { name: string }, outcome: Part
 }
 
 Describe('versioned run summary', () => {
+  Test('gives same-millisecond runs collision-proof stamps while allowing deterministic injection', () => {
+    const first = RunArtifacts.locate({ lane: 'test', repositoryRoot: '/repo' })
+    const second = RunArtifacts.locate({ lane: 'test', repositoryRoot: '/repo' })
+    const injected = RunArtifacts.locate({ lane: 'test', repositoryRoot: '/repo', stamp: 'fixture-stamp' })
+
+    Expect(first.stamp).not.toBe(second.stamp)
+    Expect(first.stamp).toContain(`-${Platform.runtimeProcess.pid}-`)
+    Expect(injected.stamp).toBe('fixture-stamp')
+  })
+
   Test('records the lane and each node graph fact a later consumer schedules from', () => {
     const summary = buildSummary({
       elapsedMs: 4_200,
