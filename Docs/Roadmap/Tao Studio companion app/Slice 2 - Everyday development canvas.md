@@ -181,6 +181,9 @@ is the likely fix and would close the class rather than one instance.
 
 ## Next in this area
 
+These three are the work this slice would take next. The full inventory of what was
+surfaced and left open — including these — is under "Discovered and not addressed" at the end.
+
 **Run a test command from the fan-out menu.** `POST /api/tests/run` already exists, and the menu is
 now the established place for companion-only actions, so this is a menu item and a result line rather
 than new plumbing. It is the smallest remaining piece of "the phone as a real Studio canvas".
@@ -293,3 +296,88 @@ bundle, not sending a control message.
 
 **Checkpoint restore.** `checkpoint` in `StudioProjectSession` means the source-action undo group, not
 a state checkpoint; the state mechanism is called `replay`. The bullet is ambiguous between them.
+
+## Discovered and not addressed
+
+The handoff list. Everything the slice's work surfaced and did not close, with enough context to
+decide whether it is worth taking and roughly where the work would land. None of it blocks Slice 2's
+acceptance, and the order is rough leverage, not priority — picking is the next worker's call.
+
+**A device and the canvas lay the same tree out differently.** `Col` and `Row` default to `fill`
+(`Docs/Spec/Tao Layout and UI.md`, UI Defaults), so on a device every container shares its parent's
+main axis — WordFlower's Settings hero and its card each take half the screen, HNReader's header
+takes two thirds — while the browser canvas measures the same tree to its content, because React
+Native Web's `ScrollView` content container gives `flexGrow` no definite height to distribute. Two
+ways out, and they are not equivalent. Make the canvas reproduce the device: give the web content
+container a definite height in `TR-app-shell.tsx` and check both apps against the phone; that is a
+fidelity fix in one file and it leaves the language alone. Or change the default so a container hugs
+and `fill` is asked for; that is a language decision with repo-wide blast radius. Doing neither means
+Studio keeps showing a layout the phone will not produce, which is the more serious half. Also
+recorded under LANG-017 in
+[Deferred Tao language decisions](../Deferred%20Tao%20language%20decisions.md).
+
+**A query filter naming a deleted row throws.** Deleting a workspace twice in WordFlower ends in
+`Query filter refers to missing Workspace '…'.`, asserted by `relationId` in `TR-data-schema.ts`,
+because the screen that deleted the row re-evaluates its own filter before it goes away. The device
+host now contains that failure rather than letting it take the phone, which makes it survivable and
+leaves it undecided: a filter naming a row that is gone could as defensibly evaluate to no matches.
+Deciding "no matches" means moving that assertion out of the filter path and letting the screen show
+its own empty state; deciding "throws" makes it an app-authoring rule — a screen holding a row must
+guard on it still existing — and the guard belongs in WordFlower as an example. Also recorded under
+LANG-008.
+
+**`locale` and `direction` are declared and read by nobody.** Both are accepted in a `scenarios`
+block and carried in `TaoStudioManifest`, and no code on either surface reads them: a scenario
+declaring `locale "de"` renders exactly as one that does not. Either wire them (the device honours
+`appearance` through `resolveScheme` now, and these would follow the same path) or stop accepting
+them until something does — accepting a clause that does nothing is worse than not having it.
+
+**Scenario and preview as separate declarations.** See "Next in this area" above. The split between
+what a device can be and what only a canvas can frame is currently a rule in the runtime; Ro's
+proposal makes it structural in the grammar. Needs a Revolution decision and a tranche. Also recorded
+under LANG-028.
+
+**Device console lines never reach the Logs drawer.** They are mirrored to Studio's stdout only, so
+the one panel built for reading them shows the browser cell alone. Diagnosing the scenario-switch
+freeze needed those lines and they were in a terminal. Blocked on deciding whether a device counts as
+a preview connection for panel purposes — see "Next in this area".
+
+**Nothing in Studio drives capture or restore.** `POST /api/device/capture` and the restore path both
+work and are tested, and neither has a control anywhere: capture/restore is command-line only, so the
+slice's own acceptance sentence is exercised by curl. The fan-out menu is the established place for
+device-side actions and the drawer for Mac-side ones.
+
+**No test command from the fan-out menu.** `POST /api/tests/run` exists; this is a menu item and a
+result line rather than new plumbing, and it is the smallest remaining piece of the phone as a real
+canvas.
+
+**A journey cannot run on the device.** The preview bundle carries no compiled journey, so this is a
+fork rather than a task — bundle a test library into the companion and run headless, or drive the
+live cell through the real touch pipeline. See "Not attempted, and why".
+
+**Project, app, variant and persona switching is architecturally blocked**, not merely unbuilt: a
+connection binds to one session at handshake and the Metro bundle a device loaded is the project. See
+"Not attempted, and why".
+
+**HNReader's online scenarios show fixture rows beside live ones.** The fixture's `HnId`s match
+`StubAdapter`, not the live Algolia feed, so an online cell fills real stories in around two seeded
+rows that never merge with anything. Fine for the stub variant and confusing anywhere else. Either
+seed ids the live feed actually returns, or make the online scenarios start from no fixture at all
+and keep `HNFrontPage` for the offline and row-focused cells.
+
+**A companion has to be re-pointed at Studio after every restart.** Studio takes a fresh preview-Metro
+port and a fresh gateway port each launch, and the companion derives both from the bundle it loaded,
+so a phone left running against a dead Metro shows a blank white screen, dials nothing, and logs
+nothing anywhere. Recovering it means an `openurl` with the new port. Trust already survives restarts,
+so this is discovery rather than pairing: either hold the ports stable across restarts of one project,
+or have the companion re-resolve a session it already trusts. It is the sharpest remaining edge in
+daily use.
+
+**`just studio-native` logs one transient `Unable to resolve "./_gen_tao-app/App"`.** Metro reaches
+the entry before the generated app is written, recovers on the next write, and leaves a red herring in
+the output of the command a person runs most. Ordering the first compile ahead of the Metro start
+would remove it.
+
+**A replayed cell still spins.** Unchanged by this slice and reproducing in the browser canvas too;
+the next step is a stack rather than more bisection, and the likely fix is memoizing the cell runtime
+object in codegen. See "Open: a replayed cell still spins".
