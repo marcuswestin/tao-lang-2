@@ -23,6 +23,22 @@ setup: deps _agent-config
 claude-unsandboxed *ARGS:
     claude --settings "{{ justfile_directory() }}/.claude/settings.unsandboxed.json" {{ ARGS }}
 
+# Launch Claude Code in read-only planning mode
+claude-review *ARGS:
+    claude --permission-mode plan {{ ARGS }}
+
+# Launch Claude Code with opt-in Docker access for the local InstantDB stack
+claude-local-services *ARGS:
+    claude --settings "{{ justfile_directory() }}/.claude/settings.local-services.json" {{ ARGS }}
+
+# Launch Claude Code with prompted native-device commands and native build directories
+claude-native *ARGS:
+    claude --settings "{{ justfile_directory() }}/.claude/settings.native.json" {{ ARGS }}
+
+# Launch Claude Code with prompted signing/notarization tools and Xcode release directories
+claude-release *ARGS:
+    claude --settings "{{ justfile_directory() }}/.claude/settings.release.json" {{ ARGS }}
+
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [positional-arguments]
 dev app_path="Apps" APP="":
@@ -169,6 +185,10 @@ dead-exports:
 # Diagnose this checkout without changing it; pass --json for a structured report
 doctor *ARGS:
     ./dev doctor {{ ARGS }}
+
+# Report process, socket, simulator, and local-service capabilities without changing anything
+capabilities *ARGS:
+    ./dev capabilities {{ ARGS }}
 
 # Benchmark cold and steady-state language-service performance
 bench iterations="10":

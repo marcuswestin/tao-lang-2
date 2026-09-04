@@ -246,7 +246,7 @@ function legacyPortCheck(facts: StudioDoctorFacts): DoctorCheck {
     // Never offered as an automatic stop: no manifest claims these, so nothing proves they are ours.
     detail: `${described}; no launch manifest claims them`,
     name: 'studio ports',
-    remediation: `Identify them before stopping anything: ps -p ${pids.join(',')} -o pid,command`,
+    remediation: `Identify them before stopping anything: ps -o pid=,ppid=,lstart=,command= -p ${pids.join(',')}`,
     status: 'warn',
   }
 }
