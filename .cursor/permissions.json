@@ -54,7 +54,8 @@
       "Allow read-only network requests that do not transmit secrets, credentials, private keys, tokens, private repository contents, or other sensitive local data.",
       "Allow ordinary read-only shell commands used to inspect files, source code, git state, logs, test output, build artifacts, dependencies, and local environment information.",
       "Allow this repository's own workflow commands — ./agent, ./tao, ./dev, just recipes, bun test, bun run, and dprint — including the ones that build, format, generate, or run tests.",
-      "Allow starting, querying, and stopping local development servers and previews bound to loopback addresses, and allow reading their pages, logs, and network activity in a browser or preview tool."
+      "Allow starting, querying, and stopping local development servers and previews bound to loopback addresses, and allow reading their pages, logs, and network activity in a browser or preview tool.",
+      "Allow repository browser-smoke commands to launch headless Chrome with an ephemeral DevTools port and a fresh temporary profile; do not allow arbitrary Chrome launches or access to an existing browser profile."
     ],
     "block_instructions": [
       "Require review for commands that delete or substantially overwrite user or repository data.",

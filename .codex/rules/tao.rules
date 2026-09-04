@@ -2,6 +2,9 @@
 # These exact prefixes need host capabilities the sandbox cannot express. Every other allowed
 # command remains inside the active filesystem and network permission profile.
 
+prefix_rule(pattern=["./dev","studio-smoke"], decision="allow", justification="Repository-approved host command.")
+prefix_rule(pattern=["just","studio-smoke"], decision="allow", justification="Repository-approved host command.")
+prefix_rule(pattern=["just","studio-proof-real-app"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["git","worktree","list"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["ps","-o","comm=,lstart=","-p"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["ps","-o","pid=,ppid=,lstart=,command=","-p"], decision="allow", justification="Repository-approved host command.")
