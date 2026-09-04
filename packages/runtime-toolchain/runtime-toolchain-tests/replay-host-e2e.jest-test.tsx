@@ -1,4 +1,8 @@
-import { registerRuntimeCaptureDomain, type TaoRuntimeCaptureArtifact } from '@runtime/TR-runtime-capture'
+import {
+  registerRuntimeCaptureDomain,
+  restoreRuntimeCapture,
+  type TaoRuntimeCaptureArtifact,
+} from '@runtime/TR-runtime-capture'
 import { StudioPreview } from '@runtime/TR-studio-preview'
 import { act, render } from '@testing-library/react-native'
 import React from 'react'
@@ -77,6 +81,78 @@ describe('replaying a capture into a mounted preview', () => {
     screen.rerender(replayHost('second'))
     await act(async () => {})
 
+    expect(restored).toEqual([{ note: 'first' }, { note: 'second' }])
+  })
+})
+
+/**
+ * A domain that registers from inside a React effect — `TR-scheme.ts` does — used to be restored
+ * again on every re-registration. Its restore sets state, that state changes the effect's
+ * dependencies, and the effect re-registers: every replayed cell spun until React gave up. A replay
+ * is a one-time seed, so it is put back once per domain and no more.
+ */
+describe('a replay is a seed, not a subscription', () => {
+  test('re-registering a domain does not put the same replay back again', async () => {
+    const restored: unknown[] = []
+    const domain = 'replay-seed-test'
+    const register = (): () => void =>
+      registerRuntimeCaptureDomain({
+        capture: () => ({ note: 'ignored' }),
+        domain,
+        restore: value => {
+          restored.push(value)
+        },
+        version: 1,
+      })
+
+    const first = register()
+    await restoreRuntimeCapture({
+      capturedAt: 1,
+      domains: [{ domain, value: { note: 'seeded' }, version: 1 }],
+      version: 1,
+    })
+    expect(restored).toEqual([{ note: 'seeded' }])
+
+    // The churn an effect produces: release, re-register, release, re-register.
+    first()
+    const second = register()
+    second()
+    register()()
+
+    expect(restored).toEqual([{ note: 'seeded' }])
+  })
+
+  test('a domain registering after a newer artifact arrives is seeded from that newer one', async () => {
+    const restored: unknown[] = []
+    const domain = 'replay-seed-test-2'
+    const register = (): () => void =>
+      registerRuntimeCaptureDomain({
+        capture: () => ({ note: 'ignored' }),
+        domain,
+        restore: value => {
+          restored.push(value)
+        },
+        version: 1,
+      })
+
+    const first = register()
+    await restoreRuntimeCapture({
+      capturedAt: 1,
+      domains: [{ domain, value: { note: 'first' }, version: 1 }],
+      version: 1,
+    })
+    expect(restored).toEqual([{ note: 'first' }])
+
+    // The cell is reconfigured with a different capture while this domain happens to be unmounted.
+    first()
+    await restoreRuntimeCapture({
+      capturedAt: 2,
+      domains: [{ domain, value: { note: 'second' }, version: 1 }],
+      version: 1,
+    })
+
+    // Registering again must pick up the newer seed, not be told it has already had one.
+    register()()
     expect(restored).toEqual([{ note: 'first' }, { note: 'second' }])
   })
 })

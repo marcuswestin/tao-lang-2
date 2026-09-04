@@ -67,6 +67,7 @@ function stubClient(): {
       },
       selectCell() {},
       selectSource() {},
+      setNetwork() {},
       sourceAction: () => 'request-1',
       async start() {},
       state: () => state,

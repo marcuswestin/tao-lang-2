@@ -867,6 +867,27 @@ view Main() {
     })
   })
 
+  Test('puts the cell under the network condition the phone chose, and takes it back off', async () => {
+    await withGateway({}, async env => {
+      const device = await pairedDevice(env)
+      device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
+      await device.nextSealed()
+
+      device.sendSealed({ network: 'offline', type: 'device.setNetwork' })
+      const offline = await nextAssignedCell(device)
+      Expect(env.session.previewCellInstance(offline.identity.previewInstanceId)).toMatchObject({
+        cell: { environment: { network: { outcome: 'offline' } } },
+      })
+
+      // Choosing it again turns it off: the phone toggles a situation, it does not accumulate one.
+      device.sendSealed({ network: 'normal', type: 'device.setNetwork' })
+      const back = await nextAssignedCell(device)
+      Expect(env.session.previewCellInstance(back.identity.previewInstanceId)).toMatchObject({
+        cell: { environment: { network: { outcome: 'normal' } } },
+      })
+    })
+  })
+
   Test('sends a Studio selection to the connected device and answers honestly with none connected', async () => {
     await withGateway({}, async env => {
       const occurrence = { end: 60, sourcePath: '/p/Garden.tao', sourceVersion: 'v1', start: 40 }
@@ -883,6 +904,19 @@ view Main() {
     })
   })
 })
+
+/** Reads sealed frames until the device is assigned a cell again, which a reconfigure causes. */
+async function nextAssignedCell(
+  device: TestDevice,
+): Promise<Extract<TaoStudioDeviceStudioMessage, { type: 'studio.cellAssigned' }>> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const message = await device.nextSealed()
+    if (message.type === 'studio.cellAssigned') {
+      return message
+    }
+  }
+  Errors.throwUnexpected('The gateway never re-assigned the device after a network change.')
+}
 
 /** Reads sealed frames until the device's edit is answered; compile state interleaves with it. */
 async function nextSourceActionResult(device: TestDevice): Promise<TaoStudioDeviceStudioMessage> {

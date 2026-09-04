@@ -122,7 +122,7 @@ function measureNode(entry: Registration): Promise<StudioInspectHit | undefined>
   })
 }
 
-/** Returns the number of nodes currently registered, so a caller can report the real hit-test cost. */
+/** How many nodes a hit test would measure. A test seam; nothing in the running host reads it yet. */
 export function studioInspectNodeCount(): number {
   return registrations.size
 }
@@ -179,7 +179,10 @@ export async function measureStudioInspectIdentity(
   return measured.filter(hit => inspectIdentityKey(hit.identity) === key).map(hit => hit.rect)
 }
 
-/** Releases every registration; the device host calls this when a cell is torn down. */
+/**
+ * Empties the registry. Nothing in the running host calls this — mounted nodes release themselves
+ * through their ref cleanup — so it exists for tests, which need a known-empty registry per case.
+ */
 export function resetStudioInspectRegistry(): void {
   registrations.clear()
   refsByKey.clear()

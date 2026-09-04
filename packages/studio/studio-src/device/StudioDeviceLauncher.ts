@@ -31,6 +31,13 @@ export type StudioDeviceLaunchInfo = {
   scheme: string
 }
 
+/**
+ * Which way a launch reaches the device. `auto` prefers Wi-Fi, which survives the cable being
+ * plugged and unplugged; `cable` is for when the phone is not on the Mac's network at all, which
+ * the Mac cannot detect for itself.
+ */
+export type StudioDeviceLaunchRoute = 'auto' | 'cable'
+
 export type StudioDeviceLaunchOpenResult = {
   hostName: string
   launched: true
@@ -41,5 +48,7 @@ export type StudioDeviceLauncher = {
   /** Describes launch facts for one session's Metro origin; never throws for a missing device. */
   describe(input: { metroOrigin: string }): Promise<StudioDeviceLaunchInfo>
   /** Launches the installed shell on one host; throws a `HostEnvironmentError` naming the failing layer. */
-  open(input: { hostId: string; metroOrigin: string }): Promise<StudioDeviceLaunchOpenResult>
+  open(
+    input: { hostId: string; metroOrigin: string; route?: StudioDeviceLaunchRoute },
+  ): Promise<StudioDeviceLaunchOpenResult>
 }

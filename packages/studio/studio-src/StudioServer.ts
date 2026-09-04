@@ -419,8 +419,8 @@ async function handleDeviceRequest(
       return response(request, url, options, await launcher.describe({ metroOrigin }))
     }
     if (request.method === 'POST' && pathname === '/api/device/launch/open') {
-      const { hostId } = deviceLaunchOpenRequest(await request.json())
-      return response(request, url, options, await launcher.open({ hostId, metroOrigin }))
+      const { hostId, route } = deviceLaunchOpenRequest(await request.json())
+      return response(request, url, options, await launcher.open({ hostId, metroOrigin, route }))
     }
   }
   return response(request, url, options, { error: 'Studio endpoint not found.' }, 404)
@@ -468,11 +468,15 @@ function deviceHighlightRequest(
   }
 }
 
-function deviceLaunchOpenRequest(value: unknown): { hostId: string } {
+function deviceLaunchOpenRequest(value: unknown): { hostId: string; route: 'auto' | 'cable' } {
   if (!isRecord(value) || typeof value['hostId'] !== 'string' || value['hostId'].trim() === '') {
     throw new Errors.UserInputError('Expected the host id of the device to launch on.')
   }
-  return { hostId: value['hostId'] }
+  const route = value['route']
+  if (route !== undefined && route !== 'auto' && route !== 'cable') {
+    throw new Errors.UserInputError("Expected the launch route to be 'auto' or 'cable'.")
+  }
+  return { hostId: value['hostId'], route: route ?? 'auto' }
 }
 
 async function handleTestRequest(

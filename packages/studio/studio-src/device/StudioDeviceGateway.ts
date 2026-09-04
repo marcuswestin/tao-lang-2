@@ -34,6 +34,7 @@ export type StudioDeviceGatewaySession = Pick<
   | 'acknowledgePreview'
   | 'appName'
   | 'applySourceAction'
+  | 'reconfigureCell'
   | 'compileSnapshot'
   | 'previewCellInstance'
   | 'previewManifest'
@@ -853,6 +854,42 @@ export class StudioDeviceGateway {
         state.selection = { ...message.occurrence, sequence: ++this.#selectionSequence }
         this.#emit(ref.sessionId)
       }
+      return
+    }
+    if (message.type === 'device.setNetwork') {
+      const assignment = connection.assignment
+      if (assignment === undefined) {
+        return
+      }
+      // Studio owns the figures behind each named condition; the phone chooses the situation.
+      const network = message.network === 'offline'
+        ? { latencyMs: 0, outcome: 'offline' as const }
+        : message.network === 'slow'
+        ? { latencyMs: 1_200, outcome: 'normal' as const }
+        : { latencyMs: 0, outcome: 'normal' as const }
+      try {
+        // An environment is reconfigured whole, so the chosen condition is merged into the one the
+        // cell is already under rather than replacing it — the phone is changing the network, not
+        // resetting the scheme and viewport with it.
+        const current = (ref.session.previewCellInstance(assignment.previewInstanceId) as {
+          cell?: { environment?: Record<string, unknown> }
+        }).cell?.environment ?? {}
+        // The whole identity, because a reconfigure is refused against a cell revision that has
+        // moved on — the phone names a condition, Studio decides whether the cell is still current.
+        ref.session.reconfigureCell({
+          appName: assignment.identity.appName,
+          cellId: assignment.identity.cellId,
+          cellRevision: assignment.identity.cellRevision,
+          compileRevision: assignment.identity.compileRevision,
+          environment: { ...current, network },
+          manifestRevision: assignment.identity.manifestRevision,
+          project: ref.session.projectRoot,
+        })
+        connection.lastError = undefined
+      } catch (error) {
+        connection.lastError = Errors.formatForUser(error)
+      }
+      this.#emit(ref.sessionId)
       return
     }
     if (message.type === 'device.sourceAction') {

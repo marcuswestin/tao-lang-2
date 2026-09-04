@@ -1,0 +1,37 @@
+OVERVIEW: Core Device Device Control: a command line utility for exercising
+Core Device functionality.
+
+devicectl is a Core Device command line utility that you can use to interact
+with devices connected to this host. Automation and integrating with other
+tools is supported via JSON output captured to a file, which is versioned and
+will remain stable across releases. Standard output is meant for human
+consumption and is not guaranteed to be stable across releases.
+
+USAGE: devicectl [--verbose] [--quiet] [--timeout <seconds>] [--json-output <path>] [--log-output <path>] <subcommand>
+
+OUTPUT OPTIONS:
+  -v, --verbose           If given, provide more logging output than normal.
+  -q, --quiet             If given, output will include only errors.
+  -t, --timeout <seconds> The overall command timeout in seconds. If this limit
+                          is exceeded the command is abandoned as a failure.
+  -j, --json-output <path>
+                          An optional path to write a JSON file with command
+                          results.
+        Note: JSON output to a user-provided file on disk is the ONLY supported
+        interface for scripts/programs to consume command output.
+  -l, --log-output <path> An optional path to write all logging otherwise
+                          passed to stdout/stderr.
+
+OPTIONS:
+  --version               Show the version.
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  device                  Commands to interact with devices.
+  diagnose                Gather diagnostic information for debugging or filing
+                          bug reports.
+  list                    List things that devicectl knows about.
+  manage                  Commands to change state between the system and
+                          devices, or between devices themselves.
+
+  See 'devicectl help <subcommand>' for detailed help.

@@ -18,6 +18,7 @@ import {
   type TaoStudioDeviceHelloMessage,
   type TaoStudioDeviceManifest,
   type TaoStudioDeviceMoveRender,
+  type TaoStudioDeviceNetworkCondition,
   type TaoStudioDeviceOccurrence,
   TaoStudioDeviceProtocol,
   type TaoStudioDeviceRejectCode,
@@ -147,6 +148,8 @@ export type TaoStudioDeviceClientState = Readonly<{
   host?: string
   lastError?: TaoStudioDeviceClientError
   manifest?: TaoStudioDeviceManifest
+  /** The network condition this device last asked for, so the menu can show which one is on. */
+  network?: TaoStudioDeviceNetworkCondition
   phase: TaoStudioDeviceClientPhase
   /** When the next automatic dial is due, in the injected clock's milliseconds. */
   retryAt?: number
@@ -166,6 +169,8 @@ export type StudioDeviceClient = {
   selectCell(cellId: string): void
   /** Tells Studio which render the person tapped, so the Mac opens that source and selects it. */
   selectSource(occurrence: TaoStudioDeviceOccurrence): void
+  /** Asks Studio to put this device's cell under a named network condition. */
+  setNetwork(network: TaoStudioDeviceNetworkCondition): void
   /** Asks Studio to edit the project from the device; returns the request id the result names. */
   sourceAction(action: TaoStudioDeviceMoveRender, occurrence: TaoStudioDeviceOccurrence): string
   start(): Promise<void>
@@ -771,6 +776,10 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     },
     selectSource(occurrence) {
       sendWhenConnected({ occurrence, type: 'device.selectSource' })
+    },
+    setNetwork(network) {
+      update({ network })
+      sendWhenConnected({ network, type: 'device.setNetwork' })
     },
     sourceAction(action, occurrence) {
       const requestId = `device-${++sourceActionCounter}`

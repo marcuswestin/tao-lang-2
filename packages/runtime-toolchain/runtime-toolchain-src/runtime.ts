@@ -395,15 +395,18 @@ function StudioBrowserApp() {
   }, [TaoStudioPublication])
   const waitingForCell = TaoStudioPreviewBootstrap?.cell === true
     && !runtimeMatchesPublication(cell, TaoStudioPublication)
-  const TaoStudioPreviewConfig = TaoStudioPreviewBootstrap === undefined
-    ? undefined
-    : waitingForCell
-    ? undefined
-    : {
-      ...TaoStudioPreviewBootstrap,
-      ...(cell?.identity ?? {}),
-      ...TaoStudioPublication,
-    }
+  // Memoized for the same reason as the cell runtime below: this object is a prop, and
+  // PreviewBridge keys an effect on it. A fresh literal every render re-mounts the Studio bridge
+  // every render.
+  const TaoStudioPreviewConfig = React.useMemo(
+    () =>
+      TaoStudioPreviewBootstrap === undefined || waitingForCell ? undefined : {
+        ...TaoStudioPreviewBootstrap,
+        ...(cell?.identity ?? {}),
+        ...TaoStudioPublication,
+      },
+    [cell, waitingForCell],
+  )
   if (waitingForCell) {
     return bootstrapError === undefined
       ? <TR.Studio.Pending />
@@ -434,7 +437,13 @@ function StudioPreviewContent({ cell, config }: any) {
       version: 1,
     })
   }, [cell])
-  const TaoStudioCell = cell === undefined ? undefined : studioCellRuntime(cell, TaoStudioManifest)
+  // Memoized because everything below reads it as a prop: rebuilding it every render hands each of
+  // them a new object every render, and an effect keyed on one of those restarts forever. The native
+  // device host memoizes the same call for the same reason.
+  const TaoStudioCell = React.useMemo(
+    () => cell === undefined ? undefined : studioCellRuntime(cell, TaoStudioManifest),
+    [cell],
+  )
   return (
     TaoStudioCell === undefined
       ? <TR.Studio.PreviewBridge config={config}><TaoApp /></TR.Studio.PreviewBridge>

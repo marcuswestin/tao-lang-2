@@ -684,6 +684,24 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
       },
     },
     {
+      active: state.network === 'offline',
+      id: 'offline',
+      label: state.network === 'offline' ? 'Offline: on' : 'Offline',
+      onPress: () => {
+        client.setNetwork(state.network === 'offline' ? 'normal' : 'offline')
+        setMenuOpen(false)
+      },
+    },
+    {
+      active: state.network === 'slow',
+      id: 'slow-network',
+      label: state.network === 'slow' ? 'Slow network: on' : 'Slow network',
+      onPress: () => {
+        client.setNetwork(state.network === 'slow' ? 'normal' : 'slow')
+        setMenuOpen(false)
+      },
+    },
+    {
       id: 'scenarios',
       label: 'Scenarios',
       onPress: () => {

@@ -166,6 +166,7 @@ export type TaoStudioDeviceDeviceMessage =
   | { error: string; requestId: string; type: 'device.runtimeCaptureFailed' }
   | { level: 'error' | 'info'; message: string; type: 'device.report' }
   | { occurrence: TaoStudioDeviceOccurrence; type: 'device.selectSource' }
+  | { network: TaoStudioDeviceNetworkCondition; type: 'device.setNetwork' }
   | {
     action: TaoStudioDeviceMoveRender
     occurrence: TaoStudioDeviceOccurrence
@@ -195,6 +196,15 @@ export type TaoStudioDeviceOccurrence = {
   sourceVersion: string
   start: number
 }
+
+/**
+ * TaoStudioDeviceNetworkCondition is the network the phone asks Studio to put its cell under.
+ *
+ * The three named conditions rather than raw numbers: a person on a phone is choosing a situation
+ * to test in, not dialling a latency. Studio owns the actual figures, so they stay changeable
+ * without a protocol version.
+ */
+export type TaoStudioDeviceNetworkCondition = 'normal' | 'offline' | 'slow'
 
 /**
  * TaoStudioDeviceMoveRender reorders one render among its siblings, the same action the browser
@@ -325,6 +335,10 @@ const deviceMessageParsers: MessageParsers<TaoStudioDeviceDeviceMessage> = {
     const occurrence = parseOccurrence(value['occurrence'])
     return occurrence === undefined ? undefined : { occurrence, type: 'device.selectSource' }
   },
+  'device.setNetwork': value =>
+    value['network'] === 'normal' || value['network'] === 'offline' || value['network'] === 'slow'
+      ? { network: value['network'], type: 'device.setNetwork' }
+      : undefined,
   'device.sourceAction': value => {
     const occurrence = parseOccurrence(value['occurrence'])
     const action = parseMoveRender(value['action'])

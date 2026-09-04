@@ -117,7 +117,10 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
     }
   }
 
-  async function resolveLaunchUrl(metroOrigin: string): Promise<ResolvedLaunchUrl> {
+  async function resolveLaunchUrl(
+    metroOrigin: string,
+    route: StudioDeviceLaunchRoute = 'auto',
+  ): Promise<ResolvedLaunchUrl> {
     const diagnostics: StudioDeviceLaunchDiagnostic[] = []
     const metroPort = metroPortOf(metroOrigin)
     const expoUrl = await resolveExpoUrl(metroOrigin, diagnostics)
@@ -150,8 +153,20 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
           'This Mac has no LAN or link-local IPv4 address a device could reach. Join the same Wi-Fi as the device or connect it with a cable, then retry.',
       })
     }
+    const cableHost = route === 'cable' ? linkLocalCandidate(candidates) : undefined
+    if (route === 'cable' && cableHost === undefined) {
+      diagnostics.push({
+        layer: 'network',
+        message: 'This Mac has no cable link-local address. Connect the device with a cable, unlock it, '
+          + 'and trust this Mac, then retry.',
+      })
+    }
     const firstCandidate = candidates[0]
-    const url = expoUrl !== undefined && expoHostUsable
+    const url = cableHost !== undefined
+      ? companionDevClientUrl({ host: cableHost, port: metroPort, scheme: StudioCompanionIdentity.scheme })
+      : route === 'cable'
+      ? undefined
+      : expoUrl !== undefined && expoHostUsable
       ? expoUrl
       : firstCandidate === undefined
       ? undefined
@@ -285,7 +300,9 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
       }
     },
 
-    async open(input: { hostId: string; metroOrigin: string }): Promise<StudioDeviceLaunchOpenResult> {
+    async open(
+      input: { hostId: string; metroOrigin: string; route?: StudioDeviceLaunchRoute },
+    ): Promise<StudioDeviceLaunchOpenResult> {
       const simulated = await openSimulator(input)
       if (simulated !== undefined) {
         return simulated
@@ -311,7 +328,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
           }`,
         )
       }
-      const resolved = await resolveLaunchUrl(input.metroOrigin)
+      const resolved = await resolveLaunchUrl(input.metroOrigin, input.route)
       if (resolved.url === undefined) {
         throwStudioDeviceFailure(
           'network',
@@ -339,6 +356,24 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
 }
 
 /** companionDevClientUrl is the SDK 54 development-client deep link the shell opens Metro from. */
+/**
+ * Which way a launch should reach the device.
+ *
+ * `auto` is Wi-Fi whenever the Mac has a LAN address, and that is the default on purpose: a session
+ * bound to Wi-Fi survives the cable being plugged in and pulled out, while one bound to a
+ * `169.254.x.x` address dies the moment the cable goes — that address is transient and comes back
+ * different on the next connection.
+ *
+ * `cable` answers the case the Mac cannot detect: the Mac has Wi-Fi, but the phone is not on it, so
+ * there is no network to join together. Nothing here can observe that, so it is a choice, not a guess.
+ */
+export type StudioDeviceLaunchRoute = 'auto' | 'cable'
+
+/** The cable address among the launch candidates: macOS assigns one only while a device is attached. */
+export function linkLocalCandidate(candidates: readonly string[]): string | undefined {
+  return candidates.find(candidate => candidate.startsWith('169.254.'))
+}
+
 export function companionDevClientUrl(input: { host: string; port: number; scheme: string }): string {
   return `${input.scheme}://expo-development-client/?url=${encodeURIComponent(`http://${input.host}:${input.port}`)}`
 }

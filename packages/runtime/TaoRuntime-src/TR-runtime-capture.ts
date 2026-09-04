@@ -44,6 +44,16 @@ export type TaoRuntimeCaptureDomainRegistration = Readonly<{
 
 const domains = new Map<string, TaoRuntimeCaptureDomainRegistration>()
 let pendingReplay: TaoRuntimeCaptureArtifact | undefined
+/**
+ * Which domains the pending replay has already been put back into.
+ *
+ * A replay is a one-time seed, not a standing subscription. Without this, a domain that registers
+ * from inside a React effect is restored again on every re-registration — and a restore that sets
+ * state changes that effect's dependencies, which re-registers, which restores. `TR-scheme.ts` does
+ * exactly that, and the result was every replayed cell spinning until React gave up with 'Maximum
+ * update depth exceeded', on the device and in the browser canvas alike.
+ */
+const replayedDomains = new Set<string>()
 
 registerRuntimeCaptureDomain({
   capture: () => captureActionHistory() as TaoRuntimeJson,
@@ -61,7 +71,8 @@ export function registerRuntimeCaptureDomain(registration: TaoRuntimeCaptureDoma
   )
   domains.set(registration.domain, registration)
   const replay = pendingReplay?.domains.find(domain => domain.domain === registration.domain)
-  if (replay && registration.restore) {
+  if (replay && registration.restore && !replayedDomains.has(registration.domain)) {
+    replayedDomains.add(registration.domain)
     void Promise.resolve(registration.restore(replay.value))
   }
   return () => {
@@ -93,6 +104,8 @@ export async function captureRuntime(failure?: TaoRuntimeFailure): Promise<TaoRu
 export async function restoreRuntimeCapture(artifact: TaoRuntimeCaptureArtifact): Promise<void> {
   RuntimeAssert.input(artifact.version === 1, `Unsupported Tao runtime capture version '${artifact.version}'.`)
   pendingReplay = artifact
+  // A new artifact is a new seed: whatever the last one put back says nothing about this one.
+  replayedDomains.clear()
   for (const domain of artifact.domains) {
     const registration = domains.get(domain.domain)
     if (!registration?.restore) {
@@ -103,6 +116,7 @@ export async function restoreRuntimeCapture(artifact: TaoRuntimeCaptureArtifact)
       `Unsupported runtime capture domain '${domain.domain}' version '${domain.version}'.`,
       { domain: domain.domain },
     )
+    replayedDomains.add(domain.domain)
     await registration.restore(json(domain.value, domain.domain))
   }
 }

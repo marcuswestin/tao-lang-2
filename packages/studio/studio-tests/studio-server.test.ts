@@ -516,7 +516,9 @@ Describe('Studio device routes', () => {
       ['selectCell', 'device_session', 'cell:phone'],
       ['captureRuntime', 'device_session'],
       ['describe', { metroOrigin: 'http://127.0.0.1:8081' }],
-      ['open', { hostId: 'dev-1', metroOrigin: 'http://127.0.0.1:8081' }],
+      // Wi-Fi is the default route; a body with no `route` still names one, so the launcher never
+      // has to guess what an older client meant.
+      ['open', { hostId: 'dev-1', metroOrigin: 'http://127.0.0.1:8081', route: 'auto' }],
     ])
     await Expect(call(options, '/api/device/pairing/confirm', {})).rejects.toThrow('device public key')
     await Expect(call(options, '/api/device/select-cell', { cellId: ' ' })).rejects.toThrow('cell id')

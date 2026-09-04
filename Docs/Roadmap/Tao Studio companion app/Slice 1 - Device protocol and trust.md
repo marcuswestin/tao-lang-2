@@ -311,32 +311,28 @@ Still unproven on a physical device: a background long enough that iOS suspends 
 own. What the simulator shows is that the pause and the resume both fire and that the session comes
 back intact, not how the OS behaves at the far end of a long background.
 
-**Cable link-local is not reachable today.** An earlier version of this paragraph claimed it worked
-by construction and only wanted proving. That was wrong, and the correction matters because a
-deferral was taken on it.
+**Cable link-local works, and Wi-Fi stays the default anyway.** Proven on roPhone: with the phone's
+Wi-Fi turned off and only a cable attached, launching it at the link-local Metro address loaded the
+bundle and the gateway connection arrived from `169.254.34.247` — the phone's own address on the USB
+link. Both Metro and the sealed control plane ride the cable with no code change, because a device
+derives its gateway URL from the host it loaded Metro from and the gateway listens on every
+interface.
 
-What is true: the transport follows the bundle. A device derives its gateway URL from the host it
-loaded Metro from (`resolveDeviceBootstrap`), and the gateway listens on every interface, so a device
-that loaded its bundle over a cable would reach the gateway over that cable with no further work.
-`preferredLanIPv4` does prefer a `169.254.x.x` interface, which is what macOS assigns a trusted,
-USB-connected iPhone.
+What the launcher does today is still Wi-Fi-only by construction: `orderMetroHostCandidates` orders
+`[expoHost, preferred, …linkLocal, …others]` and the deep link, Copy URL and QR all take
+`candidates[0]`, so with Wi-Fi up the cable is never offered. Reaching it means building the URL by
+hand, as that proof did.
 
-What is not true: that anything offers the device that route. `orderMetroHostCandidates` orders
-`[expoHost, preferred, …linkLocal, …others]`, so Expo's own reported host precedes the link-local
-preference; the launcher then reduces the list to `candidates[0]` for the deep link, Copy URL and the
-QR code alike. With Wi-Fi up, `candidates[0]` is the Wi-Fi address and the cable is never used. The
-`169.254.x.x` entries are diagnostic data, not a fallback.
+**That is now a deliberate default, not an oversight.** Ro's call: a session bound to Wi-Fi survives
+plugging and unplugging the cable, while one bound to `169.254.x.x` dies the moment the cable comes
+out — the address is transient and comes back different on the next connection (two measurements an
+hour apart: `169.254.217.159`, then `169.254.61.95`). Preferring the cable would trade a stable
+session for a marginally shorter path.
 
-The device client is not the missing piece — it already races a candidate list, advancing
-`candidateIndex` when one fails. `resolveDeviceBootstrap` hands it exactly one, because the bundle
-host is all it knows. Closing this is either a route chooser in the launcher, or carrying the Mac's
-gateway hosts in the Expo manifest extra beside `gatewayPort` so the client's existing racing has
-something to race.
-
-Reordering `orderMetroHostCandidates` alone would be worse than the status quo, and that is the
-reason this was not simply changed: the _bundle_ URL is single-valued and has no fallback, so a
-stray-but-active link-local interface that is not the phone would leave the device unable to load
-anything at all. Choosing between these needs a cable, a phone, and Ro.
+If cable-only ever becomes necessary — a locked-down network, a demo with no Wi-Fi — the launch
+response already carries every candidate, so the work is a route chooser in the Device panel rather
+than anything in the protocol. `devicectl` has no port-forwarding subcommand, so the tidier
+"forward a port over USB and use localhost" approach would need a third-party tool such as `iproxy`.
 
 Still to record from the phone: code comparison on its screen, the rendered cell, three scenario
 taps on the Tao badge, and a Fast Refresh edit arriving — the phone's own proof paragraph above stops

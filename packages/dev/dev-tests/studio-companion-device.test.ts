@@ -34,6 +34,7 @@ import {
   createStudioDeviceLauncher,
   isLoopbackHost,
   launchDiagnosticFromError,
+  linkLocalCandidate,
   metroHostFromDevClientUrl,
   metroPortOf,
   orderMetroHostCandidates,
@@ -764,6 +765,13 @@ Describe('Studio device launcher', () => {
       preferred: '192.168.50.107',
     })).toEqual(['169.254.37.4', '192.168.50.107'])
     Expect(orderMetroHostCandidates({ expoHost: 'localhost', interfaces: [], preferred: '127.0.0.1' })).toEqual([])
+
+    // Wi-Fi is the default route because a session bound to it survives the cable being plugged and
+    // unplugged; the cable address is only picked when a person asks for it, and only exists while a
+    // device is attached.
+    Expect(linkLocalCandidate(['192.168.50.107', '169.254.61.95'])).toBe('169.254.61.95')
+    Expect(linkLocalCandidate(['192.168.50.107'])).toBeUndefined()
+    Expect(linkLocalCandidate([])).toBeUndefined()
     Expect(isLoopbackHost('LOCALHOST')).toBe(true)
     Expect(isLoopbackHost('192.168.1.2')).toBe(false)
   })

@@ -46,11 +46,12 @@ ask for one.
 
 **The frame-limit question is settled by measurement, not argument.** A capture is the first message
 on this protocol that could plausibly exceed the 256 KiB sealed-frame limit, and an oversized frame
-closes the connection. A real WordFlower capture from the simulator is **7,305 bytes** — two orders of
-magnitude below the limit (the artifact is at `.artifacts/slice-2/device-capture-wordflower.json`).
-The client still measures each frame and answers the request with a failure naming the size rather
-than sending an oversized frame, so a larger capture degrades to a readable error instead of a
-dropped session.
+closes the connection. Real WordFlower captures taken from the simulator range from **7,305 bytes**
+just after launch to **18,713 bytes** with a scenario's data loaded and a navigation stack built up —
+both more than an order of magnitude below the limit, and the spread is the point: what a capture
+costs is what the app is holding, not a fixed overhead. The client still measures each frame and
+answers the request with a failure naming the size rather than sending an oversized frame, so a
+larger capture degrades to a readable error instead of a dropped session.
 
 ### The phone is a canvas that selects both ways
 
@@ -101,8 +102,8 @@ Studio's answer — applied, or refused and why — belongs on that screen and n
 
 - A reconfigure carrying a new environment reaches the device and re-assigns it with a live instance;
   its next acknowledgement is accepted rather than refused as stale.
-- `POST /api/device/capture` returns a complete artifact from the phone (18,713 bytes, all six
-  domains).
+- `POST /api/device/capture` returns a complete artifact from the phone — all six domains, and the
+  18,713-byte upper measurement quoted above.
 - The artifact carries real interaction state: typing a workspace name into the running app on the
   device and capturing again produced an artifact containing that text.
 - **Restoring a device capture works.** Feeding one back as `replay` re-assigns the device and the
