@@ -50,7 +50,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     tree: 'tree000000000000000000000000000000000000',
     ...overrides,
   }
-  const calls: Array<{ args: string[]; command: string; cwd?: string }> = []
+  const calls: Array<{ args: string[]; command: string; cwd?: string; stdio?: CLI.CommandStdio }> = []
   const files = new Map<string, string>([
     [
       '/repo-feature/.artifacts/merge/feat/example.msg',
@@ -71,7 +71,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
 
   const runner: MergeCommandRunner = async (command, spec) => {
     const args = [...(spec.args ?? [])]
-    calls.push({ args, command, cwd: spec.cwd })
+    calls.push({ args, command, cwd: spec.cwd, stdio: spec.stdio })
     if (command === 'just') {
       return result(command, args, spec.cwd)
     }
@@ -384,9 +384,11 @@ Describe('merge-with-main', () => {
     const prune = operations.indexOf('git worktree prune')
 
     Expect(fullVerify).toBeGreaterThan(0)
+    Expect(fake.calls[fullVerify]?.stdio).toBe('inherit')
     Expect(squash).toBeGreaterThan(fullVerify)
     Expect(treeProof).toBeGreaterThan(squash)
     Expect(verify).toBeGreaterThan(treeProof)
+    Expect(fake.calls[verify]?.stdio).toBe('inherit')
     Expect(commit).toBeGreaterThan(verify)
     Expect(push).toBeGreaterThan(commit)
     Expect(archive).toBeGreaterThan(push)
@@ -402,6 +404,23 @@ Describe('merge-with-main', () => {
     const commitMessage = [...fake.files.entries()].find(([path]) => path.endsWith('.commit-message'))?.[1]
     Expect(commitMessage).toContain('Land example\n\n- Add the example workflow.')
     Expect(commitMessage).toContain('Squashed commit of the following:')
+  })
+
+  Test('keeps verification output durable when merge execution has no terminal', async () => {
+    const fake = fakeDependencies()
+    fake.dependencies.isInteractive = () => false
+
+    await MergeWithMainCommand.run({
+      execute: true,
+      push: true,
+      repositoryRoot: fake.repository.featureRoot,
+      yes: true,
+    }, fake.dependencies)
+
+    const verificationCalls = fake.calls.filter(call =>
+      call.command === 'just' && (call.args[0] === 'full-verify' || call.args[0] === 'verify')
+    )
+    Expect(verificationCalls.map(call => call.stdio)).toEqual(['stream', 'stream'])
   })
 
   Test('integrates a main update discovered after verification and restarts full verification', async () => {

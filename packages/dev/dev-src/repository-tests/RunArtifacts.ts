@@ -114,11 +114,11 @@ async function refreshLatest(location: RunLocation): Promise<void> {
   }
 }
 
-/** measuredDurations reports how long each node that actually ran took. */
+/** measuredDurations learns only from successful work; failures and interruptions are not estimates. */
 function measuredDurations(states: readonly WorkState[]): Map<string, number> {
   return new Map(
     states
-      .filter(state => state.status === 'failed' || state.status === 'passed')
+      .filter(state => state.status === 'passed')
       .map(state => [state.name, state.elapsedMs]),
   )
 }

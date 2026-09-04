@@ -469,7 +469,7 @@ async function stabilizeAndVerify(
         snapshot.featureRoot,
         'feature-integrated',
         dependencies,
-        'feature',
+        { mutation: 'feature' },
       )
     } else {
       assertCommandSucceeded(ancestor)
@@ -484,6 +484,7 @@ async function stabilizeAndVerify(
         snapshot.featureRoot,
         'feature-verified',
         dependencies,
+        { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
       )
       if (
         snapshot.currentFeatureHead !== verifiedHead
@@ -513,7 +514,7 @@ async function stabilizeAndVerify(
           snapshot.mainRoot,
           'feature-verified',
           dependencies,
-          'main',
+          { mutation: 'main' },
         )
       }
       return
@@ -568,7 +569,15 @@ async function squashAndVerify(
     })
   }
   const mainHeadBeforeVerify = snapshot.currentMainHead
-  await runAndSnapshot(snapshot, 'just', ['verify'], snapshot.mainRoot, 'main-verified', dependencies)
+  await runAndSnapshot(
+    snapshot,
+    'just',
+    ['verify'],
+    snapshot.mainRoot,
+    'main-verified',
+    dependencies,
+    { stdio: dependencies.isInteractive() ? 'inherit' : 'stream' },
+  )
   const stagedTreeAfterVerify = (await git(dependencies, snapshot.mainRoot, ['write-tree'])).stdout.trim()
   const mainHeadAfterVerify = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
   if (stagedTreeAfterVerify !== stagedTree || mainHeadAfterVerify !== mainHeadBeforeVerify) {
@@ -607,7 +616,7 @@ async function commitSquash(
     snapshot.mainRoot,
     'committed',
     dependencies,
-    'main',
+    { mutation: 'main' },
   )
   const committedTree = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD^{tree}'])).stdout.trim()
   if (snapshot.stagedTree === undefined || committedTree !== snapshot.stagedTree) {
@@ -966,10 +975,14 @@ async function runAndSnapshot(
   cwd: string,
   successPhase: MergePhase,
   dependencies: MergeWithMainDependencies,
-  mutation: 'feature' | 'main' | 'none' = 'none',
+  options: {
+    mutation?: 'feature' | 'main' | 'none'
+    stdio?: CLI.CommandStdio
+  } = {},
 ): Promise<CLI.CommandResult> {
+  const mutation = options.mutation ?? 'none'
   await assertExpectedLocalState(snapshot, dependencies)
-  const result = await dependencies.run(command, { args, cwd, stdio: 'stream' })
+  const result = await dependencies.run(command, { args, cwd, stdio: options.stdio ?? 'stream' })
   const succeeded = result.exitCode === 0 && result.error === undefined && result.signal === null
   if (!succeeded) {
     await captureFailedMutation(snapshot, mutation, dependencies)

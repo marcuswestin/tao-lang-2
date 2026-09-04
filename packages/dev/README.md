@@ -61,8 +61,9 @@ regression. Lanes therefore sample the machine while they run and say what they 
   marked `retried` and is accepted as green gate evidence only because the exclusive run removed
   peer-machine load; a deterministic assertion on retry is a repository failure even though the
   original attempt timed out.
-- A contended run does not write `.artifacts/timings/durations.json`. Ordering has a cold-start
-  fallback; an estimate poisoned by a neighbouring worktree does not.
+- A contended run does not write `.artifacts/timings/durations.json`, and failed or interrupted gates
+  do not update their estimates. Ordering has a cold-start fallback; neither a neighbouring worktree
+  nor time spent waiting for a stopped child can poison later schedules.
 
 A structured assertion or process-launch failure is never retried, however busy the machine is. A
 nonzero test process is eligible only when its own output contains a recognized test-framework
@@ -110,10 +111,10 @@ between a wasted afternoon and a re-run.
 `just test-flakes` and `just test-slowest` report ledger evidence but are not gates. Changed and retry
 runs print one advisory when their change shape or full-run history makes a complete run worthwhile.
 
-When a lane runs through another command, such as `merge-with-main`, its non-interactive report prints
-the local start time for each admitted gate before printing that gate's completion and log path. The
-two durable lines remain readable while several gates run concurrently; the interactive dashboard
-continues updating its tiles in place.
+Human `merge-with-main` execution hands both verification phases the real terminal, so their parallel
+gates use the same live dashboard as a direct `just full-verify` or `just verify`. A non-interactive
+merge keeps the durable report: it prints the local start time for each admitted gate before that
+gate's completion and log path.
 
 `just merge-with-main` is human-only and defaults to a non-mutating dry run. Its strict preflight
 requires the sole live `main` worktree to equal `origin/main`; a local-ahead `main` must be reconciled

@@ -217,6 +217,31 @@ Describe('repository gate runner', () => {
       await FS.remove(registryRoot)
     }
   })
+
+  Test('does not teach the timings store from failed or interrupted work', async () => {
+    const root = await mkTestDir('tao-gate-runner-failed-timings-')
+    const registryRoot = await mkTestDir('tao-gate-runner-lanes-')
+    try {
+      await runGates({
+        gates: ['_repo-lint', '_doctor-json'],
+        registryRoot,
+        repositoryRoot: root,
+        runGate: async name => ({
+          exitCode: name === '_doctor-json' ? 1 : 0,
+          output: name === '_doctor-json' ? 'interrupted before completion' : '',
+        }),
+      })
+
+      const store = await FS.readJson<{ nodes: Record<string, { samples: number }> }>(
+        FS.resolvePath('.artifacts/timings/durations.json', root),
+      )
+      Expect(store.nodes['_repo-lint']?.samples).toBe(1)
+      Expect(store.nodes['_doctor-json']).toBeUndefined()
+    } finally {
+      await FS.remove(root)
+      await FS.remove(registryRoot)
+    }
+  })
 })
 
 Describe('gate failure classification', () => {
