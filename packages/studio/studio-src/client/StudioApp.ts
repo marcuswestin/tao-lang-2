@@ -77,6 +77,7 @@ import {
   createStudioShell,
   showOpenFile,
   type StudioClientConfig,
+  StudioGlobalLoading,
 } from './StudioShell'
 import {
   showSourceActionError,
@@ -148,7 +149,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     throwIfMountAborted(options.signal)
     const handshake = await StudioApiClient.handshake(options.signal)
     throwIfMountAborted(options.signal)
-    view.project.textContent = StudioProjectContext.label(handshake.identity.project, handshake.identity.appName)
     updateStatus(view.status, handshake.compile, diagnostic => void openCompileDiagnostic(diagnostic))
     const previews = await connectPreviews(view.preview, config.previewUrl, handshake, options.signal)
     partialPreviews = previews
@@ -487,13 +487,43 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       return true
     }
 
-    function configureProjectAndAppPickers(): void {
+    let projectChoices = StudioProjectContext.choices(handshake.identity, [])
+
+    async function configureProjectAndAppPickers(): Promise<void> {
       const currentSessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
-      view.project.disabled = currentSessionId === undefined
+      if (currentSessionId !== undefined) {
+        try {
+          const listing = await StudioApiClient.sessions(options.signal)
+          throwIfMountAborted(options.signal)
+          projectChoices = StudioProjectContext.choices(handshake.identity, listing.recent)
+        } catch (error) {
+          if (isAbortError(error)) {
+            throw error
+          }
+        }
+      }
+      const currentProject = document.createElement('option')
+      currentProject.value = '0'
+      currentProject.textContent = projectChoices[0]!.label
+      currentProject.selected = true
+      const recentProjects = document.createElement('optgroup')
+      recentProjects.label = 'Recent projects'
+      recentProjects.append(
+        ...projectChoices.slice(1).map((project, index) => {
+          const option = document.createElement('option')
+          option.value = String(index + 1)
+          option.textContent = project.label
+          return option
+        }),
+      )
+      view.project.replaceChildren(currentProject, ...projectChoices.length > 1 ? [recentProjects] : [])
+      view.project.disabled = currentSessionId === undefined || projectChoices.length < 2
       view.project.title = currentSessionId === undefined
         ? 'Project selection requires a managed Studio window.'
-        : 'Choose another project'
-      view.project.addEventListener('click', () => void selectProject())
+        : projectChoices.length < 2
+        ? 'No other recent projects'
+        : 'Recent projects'
+      view.project.addEventListener('change', () => void selectProject())
 
       const duplicateNames = new Set(
         handshake.apps.filter((app, index) =>
@@ -544,19 +574,35 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     view.betaShip.addEventListener('click', betaShipListener)
 
     async function selectProject(): Promise<void> {
+      const selected = projectChoices[Number(view.project.value)]
+      if (selected === undefined || selected.project === handshake.identity.project) {
+        view.project.value = '0'
+        return
+      }
       if (!requireAllTabsSaved('Save or revert unsaved files before choosing another project.')) {
+        view.project.value = '0'
         return
       }
       view.project.disabled = true
+      view.appPicker.disabled = true
+      view.status.dataset['state'] = 'compiling'
+      view.status.textContent = `Opening ${selected.label}…`
+      StudioGlobalLoading.show(
+        view.globalLoading,
+        `Opening ${selected.label}…`,
+        'Please wait while Studio loads the project and prepares its preview.',
+      )
       try {
-        await StudioApiClient.closeCurrentSession()
-        const welcome = new URL('/welcome', window.location.origin)
-        if (window.location.search.includes('native-window=project')) {
-          welcome.searchParams.set('native-window', 'welcome')
-        }
-        window.location.assign(`${welcome.pathname}${welcome.search}`)
+        const transition = await StudioApiClient.switchSession({
+          appName: selected.appName,
+          projectPath: selected.project,
+        })
+        window.location.assign(StudioApiRoutes.transitionUrl(transition, new URL(window.location.href)))
       } catch (error) {
-        view.project.disabled = false
+        StudioGlobalLoading.hide(view.globalLoading)
+        view.project.disabled = projectChoices.length < 2
+        view.appPicker.disabled = handshake.apps.length < 2
+        view.project.value = '0'
         showSourceActionError(view.status, error)
       }
     }
@@ -578,26 +624,25 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         return
       }
       view.appPicker.disabled = true
+      view.project.disabled = true
       view.status.dataset['state'] = 'compiling'
       view.status.textContent = `Opening ${selected.appName}…`
-      const loadingTimer = setTimeout(() => {
-        const heading = view.globalLoading.querySelector<HTMLElement>('strong')
-        if (heading !== null) {
-          heading.textContent = `Switching to ${selected.appName}…`
-        }
-        view.globalLoading.hidden = false
-      }, 300)
+      StudioGlobalLoading.show(
+        view.globalLoading,
+        `Switching to ${selected.appName}…`,
+        'Please wait while Studio loads the app and prepares its preview.',
+      )
       try {
-        const transition = await StudioApiClient.switchApp({
+        const transition = await StudioApiClient.switchSession({
           appName: selected.appName,
           entryPath: selected.entryPath,
           projectPath: handshake.identity.project,
         })
         window.location.assign(StudioApiRoutes.transitionUrl(transition, new URL(window.location.href)))
       } catch (error) {
-        clearTimeout(loadingTimer)
-        view.globalLoading.hidden = true
+        StudioGlobalLoading.hide(view.globalLoading)
         view.appPicker.disabled = false
+        view.project.disabled = projectChoices.length < 2
         view.appPicker.value = String(currentIndex)
         showSourceActionError(view.status, error)
       }
@@ -1291,7 +1336,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       },
       prepareMutation: prepareFileMutation,
     })
-    configureProjectAndAppPickers()
+    await configureProjectAndAppPickers()
     const restoredTabs = editorTabs.snapshot()
     const restoredPaths = restoredTabs.paths.length === 0 ? [handshake.entryPath] : restoredTabs.paths
     for (const path of restoredPaths) {
@@ -2042,16 +2087,40 @@ const StudioCompileStatus = {
   },
 }
 
+export type StudioProjectChoice = Readonly<{
+  appName: string
+  label: string
+  project: string
+}>
+
 export const StudioProjectContext = {
-  label(projectPath: string, fallback: string): string {
-    const segments = projectPath.split('/').filter(Boolean)
-    const leaf = segments.at(-1)
-    if (leaf === undefined) {
-      return fallback
-    }
-    return /^\d+\s*-\s*/.test(leaf) ? segments.at(-2) ?? fallback : leaf
+  choices(
+    current: Readonly<{ appName: string; project: string }>,
+    recent: readonly Readonly<{ appName: string; project: string }>[],
+  ): readonly StudioProjectChoice[] {
+    const projects = [current, ...recent].filter((candidate, index, all) =>
+      all.findIndex(project => project.project === candidate.project) === index
+    )
+    const baseLabels = projects.map(project => studioProjectLabel(project.project, project.appName))
+    return projects.map((project, index) => ({
+      appName: project.appName,
+      label: baseLabels.filter(label => label === baseLabels[index]).length > 1
+        ? `${baseLabels[index]} — ${project.project}`
+        : baseLabels[index]!,
+      project: project.project,
+    }))
   },
+  label: studioProjectLabel,
 } as const
+
+function studioProjectLabel(projectPath: string, fallback: string): string {
+  const segments = projectPath.split('/').filter(Boolean)
+  const leaf = segments.at(-1)
+  if (leaf === undefined) {
+    return fallback
+  }
+  return /^\d+\s*-\s*/.test(leaf) ? segments.at(-2) ?? fallback : leaf
+}
 
 function sourceActionUsesRenderOccurrence(action: StudioCanonicalSourceAction): boolean {
   return action.kind === 'move-render'

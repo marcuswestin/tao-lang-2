@@ -26,6 +26,7 @@ import type {
   StudioSketchUnsnapRequest,
 } from '../StudioProjectSession'
 import type { StudioFixturePlan, StudioSourceActionEnvelope } from '../StudioProtocol'
+import type { StudioProjectOpenRequest, StudioSessionListing } from '../StudioSessionManager'
 import type {
   StudioSketchCatalogRequest,
   StudioSketchCatalogSnapshot,
@@ -250,6 +251,7 @@ export const StudioApiClient = {
   sketchUnsnapApply: async (body: StudioSketchUnsnapRequest): Promise<StudioSketchSnapApplyResult> =>
     await request('/api/sketches/unsnap/apply', body),
   sketches: async (): Promise<StudioSketchCatalogSnapshot> => await get('/api/sketches'),
+  sessions: async (signal?: AbortSignal): Promise<StudioSessionListing> => await rootGet('/api/sessions', signal),
   closeCurrentSession: async (): Promise<void> => {
     const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
     if (sessionId === undefined) {
@@ -261,12 +263,10 @@ export const StudioApiClient = {
     await request('/api/source-action', body),
   sourceActionProposal: async (body: StudioSourceActionEnvelope | unknown): Promise<StudioSourceActionProposal> =>
     await request('/api/source-action/propose', body),
-  switchApp: async (
-    body: { appName: string; entryPath: string; projectPath: string },
-  ): Promise<StudioSessionTransition> => {
+  switchSession: async (body: StudioProjectOpenRequest): Promise<StudioSessionTransition> => {
     const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
     if (sessionId === undefined) {
-      Errors.throwUnexpected('App switching requires a managed Studio session.')
+      Errors.throwUnexpected('Project and app switching require a managed Studio session.')
     }
     return await rootRequest(`/api/sessions/${encodeURIComponent(sessionId)}/switch`, body)
   },
@@ -301,6 +301,10 @@ async function rootRequest<Result>(path: string, body: unknown): Promise<Result>
       method: 'POST',
     }),
   )
+}
+
+async function rootGet<Result>(path: string, signal?: AbortSignal): Promise<Result> {
+  return await response<Result>(await fetch(path, { signal }))
 }
 
 async function response<Result>(value: Response): Promise<Result> {

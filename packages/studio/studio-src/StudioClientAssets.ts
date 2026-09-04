@@ -594,12 +594,16 @@ button { color: inherit; font: inherit; }
 .studio-inspector-accordion-content { border-top: 1px solid #353936; padding: 8px; }
 .studio-empty { color: #8f9790; display: grid; height: 100%; padding: 24px; place-items: center; text-align: center; }
 .studio-global-loading {
-  align-items: center; background: #131722f2; border: 1px solid #4f6590; border-radius: 10px; box-shadow: 0 18px 70px #000c;
-  display: flex; gap: 12px; left: 50%; min-width: 300px; padding: 14px 16px; position: fixed; top: 72px;
-  transform: translateX(-50%); z-index: 30;
+  -webkit-backdrop-filter: grayscale(1) brightness(.52); align-items: center;
+  backdrop-filter: grayscale(1) brightness(.52); background: #10131bbb; display: grid;
+  inset: 0; justify-items: center; padding: 24px; position: fixed; z-index: 60;
 }
 .studio-global-loading[hidden] { display: none; }
-.studio-global-loading > span:last-child { display: grid; gap: 2px; }
+.studio-global-loading-panel {
+  align-items: center; background: #171b25f5; border: 1px solid #4f6590; border-radius: 12px;
+  box-shadow: 0 20px 80px #000d; display: flex; gap: 14px; max-width: 420px; min-width: 300px; padding: 18px 20px;
+}
+.studio-global-loading-panel > span:last-child { display: grid; gap: 3px; }
 .studio-global-loading strong { color: #edf3ff; font-size: 12px; }
 .studio-global-loading small { color: #8f9aad; font-size: 10px; }
 .studio-global-loading-spinner {
@@ -673,7 +677,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .studio-window-controls { align-items: center; display: flex; flex: none; gap: 8px; margin: 0 8px 0 3px; }
 .studio-window-controls i { background: #69717d; border-radius: 50%; display: block; height: 10px; width: 10px; }
 .studio-picker { color: var(--studio-text-muted); }
-.studio-project { color: var(--studio-text); font-weight: 650; padding: 5px 6px; }
+.studio-project { background: #181b22; border: 0; color: var(--studio-text); font-weight: 650; padding: 4px 22px 4px 6px; }
 .studio-project:hover, .studio-app-picker:hover { color: #fff; }
 .studio-app-picker { background: #181b22; border-left: 1px solid var(--studio-stroke); padding: 4px 22px 4px 10px; }
 .studio-layout-presets { background: var(--studio-bg-deep); border-color: var(--studio-stroke); border-radius: 8px; padding: 3px; }

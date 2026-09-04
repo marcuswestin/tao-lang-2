@@ -57,6 +57,7 @@ import {
 } from '../studio-src/client/StudioProductPanels'
 import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
 import {
+  StudioGlobalLoading,
   StudioPaneMinimums,
   StudioPaneSizes,
   studioShellMarkup,
@@ -143,7 +144,9 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('Control+K')
   Expect(bundle).toContain('Refreshing live app data')
   Expect(bundle).toContain('Collapse inspector')
-  Expect(bundle).toContain('Switching app…')
+  Expect(bundle).toContain('Recent projects')
+  Expect(bundle).toContain('Please wait while Studio loads the project and prepares its preview.')
+  Expect(bundle).toContain('Please wait while Studio loads the app and prepares its preview.')
   Expect(bundle).toContain('studio-global-loading-spinner')
   Expect(bundle).toContain('studio-inspector-accordion')
   Expect(bundle).toContain('Collapse bottom drawer')
@@ -726,6 +729,8 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
   Expect(markup).toContain('studio-toolbar-mode')
   Expect(markup).toContain('studio-toolbar-actions')
   Expect(markup).toContain('studio-window-controls')
+  Expect(markup).toContain('<select class="studio-project studio-picker"')
+  Expect(markup).not.toContain('<button class="studio-project studio-picker"')
   Expect(markup).toContain('aria-label="Environment and scenario"')
   Expect(markup).toContain('aria-label="Layout, style, data, and actions"')
   Expect(markup).toContain('studio-scenario-inspector-content')
@@ -747,6 +752,48 @@ Test('Studio toolbar keeps project and app context compact', () => {
   Expect(StudioProjectContext.label('/projects/Garden', 'Fallback')).toBe('Garden')
   Expect(StudioProjectContext.label('/repo/Apps/WordFlower/1 - Current', 'WordFlower')).toBe('WordFlower')
   Expect(StudioProjectContext.label('/', 'Fallback')).toBe('Fallback')
+  Expect(StudioProjectContext.choices(
+    { appName: 'WordFlower', project: '/repo/Apps/WordFlower/1 - Current' },
+    [
+      { appName: 'WordFlower', project: '/repo/Apps/WordFlower/1 - Current' },
+      { appName: 'Garden', project: '/projects/Garden' },
+      { appName: 'Archive', project: '/archive/Garden' },
+    ],
+  )).toEqual([
+    { appName: 'WordFlower', label: 'WordFlower', project: '/repo/Apps/WordFlower/1 - Current' },
+    { appName: 'Garden', label: 'Garden — /projects/Garden', project: '/projects/Garden' },
+    { appName: 'Archive', label: 'Garden — /archive/Garden', project: '/archive/Garden' },
+  ])
+})
+
+Test('Studio global loading blocks transitions until success navigation or an error', () => {
+  const heading = { textContent: '' }
+  const detail = { textContent: '' }
+  const overlayAttributes = new Map<string, string>()
+  const shellAttributes = new Map<string, string>()
+  const shell = {
+    removeAttribute: (name: string) => shellAttributes.delete(name),
+    setAttribute: (name: string, value: string) => shellAttributes.set(name, value),
+  }
+  const overlay = {
+    closest: () => shell,
+    hidden: true,
+    querySelector: (selector: string) => selector === 'strong' ? heading : detail,
+    removeAttribute: (name: string) => overlayAttributes.delete(name),
+    setAttribute: (name: string, value: string) => overlayAttributes.set(name, value),
+  } as unknown as HTMLElement
+
+  StudioGlobalLoading.show(overlay, 'Opening Garden…', 'Preparing its preview.')
+  Expect(overlay.hidden).toBe(false)
+  Expect(heading.textContent).toBe('Opening Garden…')
+  Expect(detail.textContent).toBe('Preparing its preview.')
+  Expect(overlayAttributes.get('aria-busy')).toBe('true')
+  Expect(shellAttributes.get('aria-busy')).toBe('true')
+
+  StudioGlobalLoading.hide(overlay)
+  Expect(overlay.hidden).toBe(true)
+  Expect(overlayAttributes.has('aria-busy')).toBe(false)
+  Expect(shellAttributes.has('aria-busy')).toBe(false)
 })
 
 Test('Studio editor tabs restore only available Tao paths and persist active order safely', () => {
