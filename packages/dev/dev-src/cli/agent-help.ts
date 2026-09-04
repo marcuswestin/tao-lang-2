@@ -46,7 +46,11 @@ Examples:
   ./agent bench 25
   ./agent test
   ./agent test "formats imports"
+  ./agent test-file packages/parser/parser-tests/Parser.test.ts
+  ./agent test-changed
+  ./agent test-retry
   ./agent verify
+  ./agent full-verify-sandbox
 
 Every lane writes .artifacts/logs/<lane>/latest/ — one <node>.log per gate plus summary.json.
 On a failure, read summary.json first: it names the first failing gate and its log.

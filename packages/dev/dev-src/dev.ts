@@ -3,6 +3,7 @@ import { AgentConfigGenerator } from './agent-config/AgentConfigGenerator'
 import { runWithCommands } from './cli/run-with-commands'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { runGates } from './repository-tests/GateRunner'
+import { MergeWithMainCommand } from './repository-tests/MergeWithMain'
 import { formatGateSummary, gateExitCode } from './repository-tests/RunSummary'
 import { TestRunner } from './repository-tests/TestRunner'
 import { WorkReporter } from './repository-tests/WorkReporter'
@@ -25,7 +26,17 @@ type GatesCommandOptions = {
   json?: string
   lane?: string
   output?: string
+  skipUnsandboxed?: boolean
   skipped?: string[]
+}
+
+type MergeCommandOptions = {
+  abort?: string
+  execute?: boolean
+  messageFile?: string
+  push?: boolean
+  skipFullVerify?: boolean
+  yes?: boolean
 }
 
 /** Help shared by every command that runs a work graph, so the modes are described once. */
@@ -42,17 +53,52 @@ await runWithCommands(commands => {
     .option('--output <mode>', OUTPUT_OPTION_HELP)
     .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
     .action(async (pattern = '', options: TestCommandOptions = {}) => {
-      try {
-        Platform.runtimeProcess.exit(
-          await TestRunner.runTests(pattern, {
-            jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
-            outputMode: WorkReporter.resolveMode({ requested: options.output }),
-          }),
-        )
-      } catch (error) {
-        HCI.writeErrorLine(Errors.formatForUser(error))
-        Platform.runtimeProcess.exit(1)
-      }
+      await runExitCommand(() => TestRunner.runTests(pattern, testRunOptions(options)))
+    })
+
+  commands
+    .command('test-changed')
+    .description('Run tests selected by changes since a ref or the main merge base.')
+    .argument('[reference]', 'Git ref to compare directly instead of the default main merge base.')
+    .option('--output <mode>', OUTPUT_OPTION_HELP)
+    .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
+    .action(async (reference: string | undefined, options: TestCommandOptions = {}) => {
+      await runExitCommand(() => TestRunner.runChangedTests(reference, testRunOptions(options)))
+    })
+
+  commands
+    .command('test-file')
+    .description('Run one exact package Bun or runtime Jest test file.')
+    .argument('<path>', 'Repository-relative test file path.')
+    .option('--output <mode>', OUTPUT_OPTION_HELP)
+    .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
+    .action(async (path: string, options: TestCommandOptions = {}) => {
+      await runExitCommand(() => TestRunner.runTestFile(path, testRunOptions(options)))
+    })
+
+  commands
+    .command('test-retry')
+    .description("Re-run files not green since this checkout's latest complete test run.")
+    .option('--output <mode>', OUTPUT_OPTION_HELP)
+    .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
+    .action(async (options: TestCommandOptions = {}) => {
+      await runExitCommand(() => TestRunner.runRetryTests(testRunOptions(options)))
+    })
+
+  commands
+    .command('test-flakes')
+    .description('Report tests whose outcome flipped without their file changing.')
+    .option('--limit <count>', 'Maximum tests to print.', '20')
+    .action(async (options: { limit: string }) => {
+      await runExitCommand(() => TestRunner.printFlakes(parsePositiveInteger(options.limit, '--limit')))
+    })
+
+  commands
+    .command('test-slowest')
+    .description("Report the slowest tests in this checkout's ledger.")
+    .option('--limit <count>', 'Maximum tests to print.', '20')
+    .action(async (options: { limit: string }) => {
+      await runExitCommand(() => TestRunner.printSlowest(parsePositiveInteger(options.limit, '--limit')))
     })
 
   commands
@@ -63,6 +109,7 @@ await runWithCommands(commands => {
     .option('--json <path>', 'Also write the summary as a JSON artifact at this path.')
     .option('--lane <name>', 'Artifact lane the run writes its logs and summary under.', 'verify')
     .option('--output <mode>', OUTPUT_OPTION_HELP)
+    .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
     .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       const summary = await runGates({
@@ -71,10 +118,37 @@ await runWithCommands(commands => {
         jsonPath: options.json,
         lane: options.lane,
         outputMode: WorkReporter.resolveMode({ requested: options.output }),
+        skipUnsandboxed: options.skipUnsandboxed === true,
         skipped: options.skipped,
       })
       HCI.writeLine(formatGateSummary(summary))
       Platform.runtimeProcess.exit(gateExitCode(summary))
+    })
+
+  commands
+    .command('merge-with-main')
+    .description('Dry-run the human-only workflow that squash-merges a feature branch into main.')
+    .option('--execute', 'Perform the workflow; the first release defaults to a ref-preserving dry run.')
+    .option('--yes', 'Confirm the normal execution prompt non-interactively.')
+    .option('--push', 'Explicitly authorize pushing from a non-interactive invocation.')
+    .option('--skip-full-verify', 'Explicitly omit the otherwise mandatory unsandboxed full verification.')
+    .option('--message-file <path>', 'Override .artifacts/merge/<branch>.msg.')
+    .option('--abort <snapshot>', 'Restore command-owned local state from a pre-push snapshot.')
+    .action(async (options: MergeCommandOptions = {}) => {
+      try {
+        await MergeWithMainCommand.run({
+          abortSnapshot: options.abort,
+          execute: options.execute === true,
+          messageFile: options.messageFile,
+          push: options.push === true,
+          skipFullVerify: options.skipFullVerify === true,
+          yes: options.yes === true,
+        })
+        Platform.runtimeProcess.exit(0)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
     })
 
   commands
@@ -329,7 +403,10 @@ await runWithCommands(commands => {
     .description('Run explicit slow Studio smoke test files in an isolated resource lane.')
     .argument('<files...>', 'Explicit Studio smoke test files.')
     .requiredOption('--run-id <id>', 'Run identifier used to isolate artifacts.')
-    .option('--shard <index>', 'Zero-based smoke shard index.', '0')
+    .option(
+      '--shard <index>',
+      "Zero-based smoke port block. Defaults to this worktree's own block, then the first free one.",
+    )
     .option('--worker <index>', 'Zero-based worker index.', '0')
     .option('--native', 'Run the shell smoke through Electrobun instead of Chrome.')
     .action(async (files, options) => {
@@ -339,7 +416,7 @@ await runWithCommands(commands => {
           files,
           native: options.native,
           runId: options.runId,
-          shardIndex: parseNonNegativeInteger(options.shard, '--shard'),
+          shardIndex: options.shard === undefined ? undefined : parseNonNegativeInteger(options.shard, '--shard'),
           workerIndex: parseNonNegativeInteger(options.worker, '--worker'),
         }),
       )
@@ -369,6 +446,30 @@ await runWithCommands(commands => {
       await ExpoRunner.startExpo()
     })
 })
+
+function testRunOptions(options: TestCommandOptions) {
+  return {
+    jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
+    outputMode: WorkReporter.resolveMode({ requested: options.output }),
+  }
+}
+
+async function runExitCommand(run: () => Promise<number>): Promise<void> {
+  try {
+    Platform.runtimeProcess.exit(await run())
+  } catch (error) {
+    HCI.writeErrorLine(Errors.formatForUser(error))
+    Platform.runtimeProcess.exit(1)
+  }
+}
+
+function parsePositiveInteger(value: string, label: string): number {
+  const parsed = Number(value)
+  if (Number.isInteger(parsed) && parsed > 0) {
+    return parsed
+  }
+  Errors.throwUserInput(`${label} must be a positive integer.`)
+}
 
 function parseOptionalPositiveInteger(value: string | undefined, label: string): number | undefined {
   if (value === undefined) {

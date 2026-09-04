@@ -14,6 +14,9 @@ const canonicalRules = `{
   },
   "claudecode": {
     "sandbox": {
+      "filesystem": {
+        "allowWrite": ["~/.bun", "~/.cache"],
+      },
       "network": {
         "allowLocalBinding": true,
         "allowedDomains": ["registry.npmjs.org", "*.npmjs.org", "exp.host", "cache.nixos.org"],
@@ -59,6 +62,19 @@ Describe('Codex config generation', () => {
     Expect(profile['network']['allow_local_binding']).toBe(true)
     Expect(profile['network']['unix_sockets']['/var/run/docker.sock']).toBe('allow')
     Expect(profile['network']['domains']['*']).toBeUndefined()
+  })
+
+  Test('grants both harnesses the same caches outside the worktree', () => {
+    const rendered = CodexConfigGenerator.render(CodexConfigGenerator.parsePermissions(canonicalRules))
+    const filesystem = (Bun.TOML.parse(rendered) as any)['permissions']['tao-workspace']['filesystem']
+
+    // The pinned toolchain and the machine-wide lane registry both write under the user's cache
+    // root. A harness that is not granted them prompts, or silently loses shared state the other
+    // harness is keeping.
+    Expect(filesystem['~/.bun']).toBe('write')
+    Expect(filesystem['~/.cache']).toBe('write')
+    // A credential deny inside a granted tree still has to win, so denies are rendered last.
+    Expect(filesystem['~/.ssh/**']).toBe('deny')
   })
 
   Test("denies dotenv files without denying this repository's own .envrc", () => {

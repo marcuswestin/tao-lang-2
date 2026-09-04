@@ -135,9 +135,33 @@ export function throwHostEnvironment(
   throw new HostEnvironmentError(messageForUser, opts)
 }
 
-/** formatForUser renders an error message suitable for terminal users. */
+/**
+ * formatForUser renders an error message suitable for terminal users.
+ *
+ * `TAO_DEBUG_ERRORS=1` swaps in the log rendering instead. An `UnexpectedBehaviorError` reaches the
+ * terminal as the bare sentence "Something went wrong.", which is right for a Tao developer and
+ * useless for whoever has to find the cause; the switch is what turns that report into the same
+ * name, details, cause, and stack the logs already carry.
+ */
 export function formatForUser(error: unknown): string {
+  if (debugErrorsEnabled()) {
+    return formatForLog(error)
+  }
   return isTaoError(error) ? error.messageForUser : unexpectedErrorMessage
+}
+
+/** DEBUG_ERRORS_ENV names the opt-in that makes every user-facing error render its diagnostics. */
+export const DEBUG_ERRORS_ENV = 'TAO_DEBUG_ERRORS'
+
+/**
+ * This module is the leaf every other shared module throws through, so it depends on nothing —
+ * `Platform` imports it, not the other way round. The switch is read off the ambient process
+ * without a Node type in scope, and an environment that has no `process` simply never enables it.
+ */
+function debugErrorsEnabled(): boolean {
+  const ambient = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
+  const value = ambient?.env?.[DEBUG_ERRORS_ENV]
+  return value !== undefined && value !== '' && value !== '0' && value !== 'false'
 }
 
 /** formatForLog renders an error message with diagnostic details. */

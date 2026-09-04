@@ -736,6 +736,28 @@ Describe('Studio smoke resource isolation', () => {
     ).toBe(6)
   })
 
+  Test('gives each worktree its own port block, so two checkouts never claim one port', () => {
+    const here = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2')
+    const linked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/.claude/worktrees/feature-a')
+    const otherLinked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/.claude/worktrees/feature-b')
+
+    // Every lane bound 42000 upward from shard 0, so the second worktree to start a Studio lane
+    // died on a port the first one was serving.
+    Expect(new Set([here, linked, otherLinked]).size).toBe(3)
+    for (const shard of [here, linked, otherLinked]) {
+      Expect(shard).toBeGreaterThanOrEqual(0)
+      Expect(shard).toBeLessThan(StudioSmoke.shardCount)
+    }
+    Expect(StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2')).toBe(here)
+  })
+
+  Test('a lane with no explicit shard allocates from its own worktree block', () => {
+    const allocated = StudioSmoke.resources({ runId: 'run-17', workerIndex: 1 })
+
+    Expect(allocated.shardIndex).toBe(StudioSmoke.defaultShardIndex())
+    Expect(allocated.artifactRoot).toEndWith(`shard-${allocated.shardIndex}/worker-1`)
+  })
+
   Test('rejects unsafe artifact ids and out-of-range lanes', () => {
     Expect(() => StudioSmoke.resources({ runId: '../escape', shardIndex: 0, workerIndex: 0 })).toThrow(
       'run id must use only',
