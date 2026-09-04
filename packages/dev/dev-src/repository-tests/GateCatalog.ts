@@ -18,10 +18,15 @@ import { WorkGraph, type WorkNode } from './WorkGraph'
  */
 
 /** GateMetadata is one gate's scheduling shape, in the vocabulary `WorkNode` already speaks. */
-export type GateMetadata = Pick<
-  WorkNode,
-  'budgetEnvKeys' | 'cost' | 'mutatesTree' | 'needs' | 'priority' | 'resources' | 'timeoutMs'
->
+export type GateMetadata =
+  & Pick<
+    WorkNode,
+    'budgetEnvKeys' | 'cost' | 'mutatesTree' | 'needs' | 'priority' | 'resources' | 'timeoutMs'
+  >
+  & {
+    /** True when the gate needs host capabilities the managed agent sandbox deliberately denies. */
+    requiresUnsandboxed?: boolean
+  }
 
 /** A gate nobody has tuned occupies one slot and waits for nothing. */
 const DEFAULT_METADATA: GateMetadata = { cost: 1 }
@@ -68,6 +73,7 @@ function studioLane(resources?: readonly string[]): GateMetadata {
     // while `fix` is still rewriting it; the mutates-tree barrier handles the second half.
     needs: ['_parser-gen'],
     priority: STUDIO_LANE_PRIORITY,
+    requiresUnsandboxed: true,
     resources,
   }
 }

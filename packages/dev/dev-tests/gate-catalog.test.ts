@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, settle, Test } from '@shared/test'
 import { GateCatalog } from '../dev-src/repository-tests/GateCatalog'
 import { runGates } from '../dev-src/repository-tests/GateRunner'
@@ -31,6 +31,7 @@ async function runLane(gates: readonly string[], jobs: number) {
       gates,
       jobs,
       logRoot: FS.resolvePath('logs', root),
+      registryRoot: FS.resolvePath('registry', root),
       repositoryRoot: root,
       runGate: async name => {
         started.push(name)
@@ -148,9 +149,37 @@ Describe('gate catalog metadata', () => {
     Expect(nodeOf('_full-verify-real-app').resources).toBeUndefined()
     Expect(nodeOf('_full-verify-simulated').resources).toBeUndefined()
   })
+
+  Test('marks exactly the five Studio lanes as requiring an unsandboxed host', () => {
+    const studioLanes = [
+      '_full-verify-smoke-launch',
+      '_full-verify-real-app',
+      '_full-verify-simulated',
+      '_full-verify-native',
+      '_full-verify-canary',
+    ]
+
+    for (const name of studioLanes) {
+      Expect(GateCatalog.metadata(name).requiresUnsandboxed).toBe(true)
+    }
+    for (const name of ['_ship-bundle-proof', '_doctor-json', 'dead-exports', '_test']) {
+      Expect(GateCatalog.metadata(name).requiresUnsandboxed).toBeUndefined()
+    }
+  })
 })
 
 Describe('gate catalog scheduling', () => {
+  Test('keeps full and sandbox verification on one identical gate membership', async () => {
+    const [full, sandbox] = await Promise.all([
+      justGateNames('full-verify'),
+      justGateNames('full-verify-sandbox'),
+    ])
+
+    Expect(full).toEqual(sandbox)
+    Expect(full).toContain('_ship-bundle-proof')
+    Expect(full).toContain('_full-verify-canary')
+  })
+
   Test('runs the generator, then the compile, then the tests', async () => {
     const { started } = await runLane(['_test', '_compile-word-flower-app', '_parser-gen'], 24)
 
@@ -180,3 +209,14 @@ Describe('gate catalog scheduling', () => {
     Expect(overlapped(overlaps, '_full-verify-native', '_full-verify-simulated')).toBe(true)
   })
 })
+
+async function justGateNames(recipe: string): Promise<string[]> {
+  const result = await Bun.$`just --dry-run ${recipe}`.cwd(Repo.getRoot()).quiet().nothrow()
+  Expect(result.exitCode).toBe(0)
+  const output = `${result.stdout.toString()}${result.stderr.toString()}`
+  const gateLine = output.split('\n').find(line => line.includes('./dev gates '))
+  Expect(gateLine).toBeDefined()
+  const tokens = gateLine!.trim().split(/\s+/)
+  const optionIndex = tokens.findIndex(token => token.startsWith('--'))
+  return tokens.slice(2, optionIndex < 0 ? undefined : optionIndex)
+}

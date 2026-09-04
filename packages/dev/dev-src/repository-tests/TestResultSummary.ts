@@ -90,6 +90,10 @@ function printContentionNote(states: readonly SuiteState[], contention: Contenti
   }
   const timedOut = states.filter(state => state.status === 'failed' && describesTimeout(state.fullOutput))
   for (const state of timedOut) {
+    if (state.reason?.includes('failure is unconfirmed') === true) {
+      writeLine(`- ${state.name}: ${state.reason}.`)
+      continue
+    }
     writeLine(
       `- ${state.name} ran out of time under that load. Confirm it alone with: ./agent test`
         + ` (or bun test <file>) once the machine is quiet.`,
@@ -159,6 +163,13 @@ function totalTestSummary(states: readonly SuiteState[]): TotalTestSummary {
 }
 
 function suiteTestSummary(state: SuiteState): SuiteTestSummary {
+  if (state.testObservations !== undefined) {
+    return {
+      failed: state.testObservations.filter(test => test.outcome === 'failed').length,
+      passed: state.testObservations.filter(test => test.outcome === 'passed').length,
+      total: state.testObservations.length,
+    }
+  }
   const output = OutputText.sanitize(state.fullOutput)
   return parseBunTestSummary(output) ?? parseJestTestSummary(output) ?? {}
 }

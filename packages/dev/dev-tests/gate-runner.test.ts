@@ -14,6 +14,7 @@ async function run(gates: readonly string[], script: GateScript, extra: Record<s
       gates,
       jobs: 2,
       logRoot: FS.resolvePath('logs', root),
+      registryRoot: FS.resolvePath('registry', root),
       repositoryRoot: root,
       runGate: async (name, logPath) => {
         started.push(name)
@@ -41,7 +42,8 @@ async function busyRegistryRoot(laneCount = 1): Promise<string> {
       lane: 'verify',
       pid: 1,
       repositoryRoot: `/another-worktree-${index}`,
-      slots: 4,
+      maxSlots: 64,
+      slots: 0,
       startedAt: new Date().toISOString(),
     })
   }
@@ -93,6 +95,25 @@ Describe('repository gate runner', () => {
     Expect(skipped?.reason).toBe('slow lane; run just studio-smoke or just full-verify')
     Expect(summary.gates.filter(gate => gate.status === 'passed').map(gate => gate.name)).toEqual(['_repo-lint'])
     Expect(formatGateSummary(summary)).toContain('1 passed, 0 failed, 1 skipped')
+  })
+
+  Test('skips every catalogued unsandboxed gate before scheduling it', async () => {
+    const hostOnly = [
+      '_full-verify-smoke-launch',
+      '_full-verify-real-app',
+      '_full-verify-simulated',
+      '_full-verify-native',
+      '_full-verify-canary',
+    ]
+    const { started, summary } = await run(['_repo-lint', ...hostOnly], {}, { skipUnsandboxed: true })
+
+    Expect(started).toEqual(['_repo-lint'])
+    Expect(summary.gates.filter(gate => gate.status === 'skipped').map(gate => gate.name)).toEqual(hostOnly)
+    Expect(
+      summary.gates.filter(gate => gate.status === 'skipped').every(gate =>
+        gate.reason?.includes('requires unsandboxed host capabilities')
+      ),
+    ).toBe(true)
   })
 
   Test('surfaces warnings a gate printed without failing on them', async () => {
@@ -215,7 +236,7 @@ Describe('gate runner under a shared machine', () => {
   Test('runs only as many gates at once as its share of a machine full of other lanes allows', async () => {
     // Enough neighbours that the share is the floor on any machine, so the assertion is about the
     // width the lane took and not about how many CPUs the test happened to run on.
-    const registryRoot = await busyRegistryRoot(64)
+    const registryRoot = await busyRegistryRoot(3)
     const root = await mkTestDir('tao-gate-runner-')
     const held = Deferred()
     const started: string[] = []
@@ -223,6 +244,7 @@ Describe('gate runner under a shared machine', () => {
     const finished = runGates({
       gates: ['_repo-lint', '_dprint-check', '_runtime-pack-check'],
       logRoot: FS.resolvePath('logs', root),
+      machineCpuCount: 4,
       registryRoot,
       repositoryRoot: root,
       runGate: async (name, logPath) => {
@@ -233,13 +255,15 @@ Describe('gate runner under a shared machine', () => {
       },
     })
 
-    await until(() => started.length === MachineLanes.MIN_LANE_CAPACITY, {
+    await until(() => started.length === 1, {
       description: 'the lane to fill its share of the machine',
     })
     await settle(20)
     // Without a machine-wide share the third gate would already be running: an untuned gate costs
     // one slot and the graph would have had a whole machine of them.
-    Expect(started).toHaveLength(MachineLanes.MIN_LANE_CAPACITY)
+    // More live lanes than CPUs means some lanes wait and each admitted lane owns one slot; a
+    // minimum of two here would itself oversubscribe the machine.
+    Expect(started).toHaveLength(1)
 
     held.resolve()
     const summary = await finished

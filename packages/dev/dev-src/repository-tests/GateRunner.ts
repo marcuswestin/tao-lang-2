@@ -28,12 +28,16 @@ export type RunGatesOptions = {
   /** Artifact lane; names the log directory and appears in the summary. */
   lane?: string
   logRoot?: string
+  /** Injected CPU total for deterministic coordination tests. */
+  machineCpuCount?: number
   now?: () => number
   /** How the run reports itself while it runs. Omitted, it reports nothing but the artifacts. */
   outputMode?: OutputMode
   /** Injected by tests; defaults to the machine-wide lane registry. */
   registryRoot?: string
   repositoryRoot?: string
+  /** Omit gates whose catalog metadata declares a host capability the managed sandbox denies. */
+  skipUnsandboxed?: boolean
   /** Gates deliberately not run in this lane, as `name=reason`. */
   skipped?: readonly string[]
   /** Injected so tests observe orchestration without running the real recipes. */
@@ -53,19 +57,29 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const startedAt = now()
   // A gate that is both run and declared skipped is run: the declaration is stale, and counting
   // it twice would make the totals disagree with the list above them.
-  const declaredSkips = (options.skipped ?? [])
+  const runnableGates = options.skipUnsandboxed === true
+    ? options.gates.filter(name => GateCatalog.metadata(name).requiresUnsandboxed !== true)
+    : [...options.gates]
+  const unsandboxedSkips = options.skipUnsandboxed === true
+    ? options.gates
+      .filter(name => GateCatalog.metadata(name).requiresUnsandboxed === true)
+      .map(name => `${name}=requires unsandboxed host capabilities; run just full-verify outside the sandbox`)
+    : []
+  const declaredSkips = [...options.skipped ?? [], ...unsandboxedSkips]
     .map(skippedResult)
-    .filter(result => !options.gates.includes(result.name))
+    .filter(result => !runnableGates.includes(result.name))
+    .filter((result, index, results) => results.findIndex(candidate => candidate.name === result.name) === index)
 
-  const states = options.gates.map(name => WorkGraph.createState(GateCatalog.node(name, location.repositoryRoot)))
+  const states = runnableGates.map(name => WorkGraph.createState(GateCatalog.node(name, location.repositoryRoot)))
   await RunArtifacts.assignLogPaths(states, location)
   const timings = await RunTimings.load({ repositoryRoot: location.repositoryRoot })
   const expectedMs = (name: string) => RunTimings.expectedMs(timings, name)
   const reporter = createReporter(options, location.logRoot)
-  // Every worktree on this machine reserves against the same CPUs, so the width this lane may take
-  // is decided before anything is scheduled, not by `cpuCount` alone.
+  // Every worktree on this machine reserves against the same CPUs. Registration establishes this
+  // lane's ceiling; the broker recomputes its fair share at every node admission.
   const machineLane = await MachineLanes.acquire({
     lane: location.lane,
+    cpuCount: options.machineCpuCount,
     registryRoot: options.registryRoot,
     repositoryRoot: location.repositoryRoot,
     requestedJobs: options.jobs,
@@ -75,9 +89,10 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const { contention, result } = await runUnderLane(async () => {
     const runResult = await WorkGraph.run(states, {
       expectedMs,
-      jobs: machineLane.capacity,
+      jobs: machineLane.ceiling,
       onEvent: event => reporter.handle(event),
       runNode,
+      slotBroker: machineLane,
     })
     await reporter.finish()
     if (!runResult.interrupted) {
@@ -85,6 +100,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
       await ContentionRetry.confirmContendedFailures({
         contention: machineLane.report(),
         location,
+        machineLane,
         runNode,
         states,
       })
@@ -100,7 +116,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
     interrupted: result.interrupted,
     lane: location.lane,
     logRoot: location.logRoot,
-    order: options.gates,
+    order: runnableGates,
     states,
   })
   await RunArtifacts.finishRun({ location, recordTimings: !contention.contended, states, summary })

@@ -43,6 +43,60 @@ Describe('test runner suite scheduling', () => {
     Expect(jestSuite?.args).toContain('--maxWorkers=1')
   })
 
+  Test('narrows the Jest child to the slots actually admitted after another lane joins', async () => {
+    const suites = await TestRunner.discoverTestSuites()
+    const jestSuite = suites.find(suite => suite.name === 'runtime-jest')!
+    const state = TestRunner.createSuiteState(jestSuite)
+
+    Expect(state.node.runForSlots?.(1).args).toContain('--maxWorkers=1')
+    Expect(state.node.runForSlots?.(2).args).toContain('--maxWorkers=2')
+  })
+
+  Test('gives every native runner its own structured report artifact', async () => {
+    const suites = await TestRunner.discoverTestSuites('', 3, { reportRoot: '/tmp/test-reports' })
+    const devSuite = suites.find(suite => suite.name === 'dev')
+    const jestSuite = suites.find(suite => suite.name === 'runtime-jest')
+
+    Expect(devSuite?.args).toContain('--reporter=junit')
+    Expect(devSuite?.args).toContain('--reporter-outfile=/tmp/test-reports/dev.xml')
+    Expect(jestSuite?.args).toContain('--json')
+    Expect(jestSuite?.args).toContain('--outputFile=/tmp/test-reports/runtime-jest.json')
+  })
+
+  Test('adds each runner native changed-since argument', async () => {
+    const suites = await TestRunner.discoverTestSuites('', 3, { changedReference: 'abc123' })
+
+    Expect(suites.find(suite => suite.name === 'dev')?.args).toContain('--changed=abc123')
+    Expect(suites.find(suite => suite.name === 'dev')?.args).toContain('--pass-with-no-tests')
+    Expect(suites.find(suite => suite.name === 'runtime-jest')?.args).toContain('--changedSince=abc123')
+  })
+
+  Test('an all-green zero-test name-filter run is an aggregate failure', () => {
+    const states = [suiteState('dev'), suiteState('runtime-jest')]
+    for (const state of states) {
+      state.status = 'passed'
+      state.testObservations = []
+    }
+
+    Expect(TestRunner.noTestsMatched('name', [], states)).toBe(true)
+    Expect(TestRunner.noTestsMatched('name', [{
+      file: 'packages/dev/dev-tests/example.test.ts',
+      name: 'not selected',
+      outcome: 'skipped',
+      suite: 'dev',
+    }], states)).toBe(true)
+    Expect(TestRunner.noTestsMatched('changed', [], states)).toBe(false)
+  })
+
+  Test('routes exact Bun and runtime Jest files to their owning suites', async () => {
+    Expect((await TestRunner.testFile('packages/shared/shared-tests/shared.test.ts')).suite).toBe('shared')
+    Expect(
+      (await TestRunner.testFile(
+        'packages/runtime-toolchain/runtime-toolchain-tests/navigation-e2e.jest-test.tsx',
+      )).suite,
+    ).toBe('runtime-jest')
+  })
+
   Test('a costly suite reserves the whole capacity before cheap suites start', async () => {
     const events: string[] = []
     const states = [suiteState('cheap-a'), suiteState('tao-apps', 0.1), suiteState('cheap-b')]
