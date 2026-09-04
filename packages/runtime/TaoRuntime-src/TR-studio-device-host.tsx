@@ -9,10 +9,12 @@
  */
 
 import React from 'react'
+import { Dev } from './dev-runtime/TR-dev'
 import { requireSafeAreaContext } from './TR-app-shell'
-import { errorMessage } from './TR-errors'
+import { errorMessage, errorStack, onUnownedFailure } from './TR-errors'
 import { NativeModules } from './TR-native-modules'
-import { setNavigationPreviewScope } from './TR-navigation-restoration'
+import { resetNavigationRuntime } from './TR-navigation-registry'
+import { beginNavigationPreviewCell, setNavigationPreviewScope } from './TR-navigation-restoration'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
 import {
   captureRuntime,
@@ -39,7 +41,7 @@ import {
   type StudioInspectHit,
   type StudioInspectRect,
 } from './TR-studio-device-inspect'
-import { captureStudioDeviceLogs, type StudioDeviceLogConsole } from './TR-studio-device-logs'
+import { captureStudioDeviceLogs, formatStack, type StudioDeviceLogConsole } from './TR-studio-device-logs'
 import type {
   TaoStudioDeviceCellIdentity,
   TaoStudioDeviceDescription,
@@ -533,6 +535,15 @@ export function StudioDeviceHost(props: StudioDeviceHostProps): React.JSX.Elemen
     const subscription = AppState.addEventListener('change', studioDeviceAppStateHandler(client))
     return () => subscription.remove()
   }, [RN.AppState, client, ownsClient])
+  // LogBox is worse than useless on a Studio canvas, and actively breaks it. Its window becomes the
+  // key window the moment anything is logged and keeps every touch afterwards, so one contained
+  // failure leaves the whole phone frozen — the badge, the tab bar and the app all stop responding
+  // while still looking alive. Nothing is lost by turning it off: console output is mirrored to
+  // Studio, a render failure still renders this host's own failure screen, and a contained failure
+  // still shows the notice below.
+  React.useEffect(() => {
+    RN.LogBox?.ignoreAllLogs(true)
+  }, [RN.LogBox])
   if (client === undefined || resolution.kind === 'missing') {
     return React.createElement(
       RN.View,
@@ -556,6 +567,7 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
   const RN = requireReactNativeRuntime()
   const { client } = props
   const state = React.useSyncExternalStore(client.subscribe, client.state, client.state)
+  const devMode = Dev.useMode()
   const presentation = deviceHostPresentation(state, props.publication)
   const [sheetOpen, setSheetOpen] = React.useState(false)
   const [menuOpen, setMenuOpen] = React.useState(false)
@@ -564,17 +576,55 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
     { hit: StudioInspectHit; hits: readonly StudioInspectHit[] } | undefined
   >(undefined)
   const [remoteHighlight, setRemoteHighlight] = React.useState<readonly StudioInspectRect[]>([])
+  const [containedFailure, setContainedFailure] = React.useState<string | undefined>(undefined)
+  const [viewportNoticeSeen, setViewportNoticeSeen] = React.useState(false)
   const identityKey = presentation.kind === 'cell' ? cellIdentityKey(presentation.assignment.identity) : undefined
+  const assignedScenario = presentation.kind === 'cell'
+    ? state.manifest?.scenarios.find(scenario => scenario.cellId === presentation.assignment.identity.cellId)
+    : undefined
   // One process renders every cell this device is ever assigned, and keeps real device storage
-  // between them, so persisted navigation has to be scoped to the cell or one scenario restores
-  // another's stack — with entity handles for a fixture that scenario does not have.
+  // between them. A cell change is therefore a relaunch, not a re-render, and it needs both halves:
+  // the stored position has to be scoped to the cell, or one scenario restores another's stack; and
+  // the mounted navigation has to be dropped, because an app definition lives at generated-module
+  // scope and keeps its stack between cells without reading storage at all. The incoming cell seeds
+  // its fixture into a new provider generation, so that carried-over stack names handles from the
+  // old one — its screens re-offer their queries on every revision, every offer throws, and the
+  // phone ends up showing a blank screen and a Back button while ignoring every touch.
   //
-  // Set during render rather than in an effect: effects run child-first, so the cell's own
-  // restoration would have already read storage under the unscoped key by the time a parent effect
-  // could scope it. This is module state either way, and writing it is idempotent.
+  // A layout effect is the one place this fits. The outgoing tree is already unmounted by the time
+  // it runs, so resetting cannot update a component that is still rendering; and every layout
+  // effect runs before any passive one, so it still lands before `attachRestoration` reads the
+  // store — which is the read that has to see the new cell's scope.
   const assignedCellId = presentation.kind === 'cell' ? presentation.assignment.identity.cellId : undefined
-  setNavigationPreviewScope(assignedCellId)
+  React.useLayoutEffect(() => {
+    resetNavigationRuntime()
+    beginNavigationPreviewCell(assignedCellId)
+  }, [assignedCellId])
   React.useEffect(() => () => setNavigationPreviewScope(undefined), [])
+  // Set during render, because the app's own shell reads it while rendering and this host renders
+  // first. The device menu below carries the dev options, so the app's floating one would be a
+  // second button over the same screen, offering what the first one already offers.
+  Dev.hideMenu(true)
+  React.useEffect(() => () => Dev.hideMenu(false), [])
+  // A failure nobody in the program can observe is the phone's business, not the platform's: it is
+  // named on this screen and sent to Studio rather than thrown at the device, where it would reach
+  // LogBox (see above) or, worse, take the process down.
+  //
+  // Only the first of a repeat, and by identity rather than by count: the failures worth containing
+  // include the ones a render or a live query reproduces on every revision, and answering each of
+  // those with a state update and a frame to Studio would make this the thing that runs the phone
+  // out of frames. The console mirror still carries every line, with its own drop accounting.
+  const lastFailure = React.useRef<string | undefined>(undefined)
+  React.useEffect(() =>
+    onUnownedFailure(error => {
+      const message = `${errorMessage(error)}${formatStack(errorStack(error))}`
+      if (lastFailure.current === message) {
+        return
+      }
+      lastFailure.current = message
+      setContainedFailure(message)
+      client.report('error', message)
+    }), [client])
   // Mirrored for as long as this host is mounted, not only while a cell renders: the lines worth
   // seeing most are the ones from a cell that failed to render at all.
   React.useEffect(() =>
@@ -614,6 +664,9 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
   React.useEffect(() => {
     setSelection(undefined)
     setInspecting(false)
+    setContainedFailure(undefined)
+    setViewportNoticeSeen(false)
+    lastFailure.current = undefined
   }, [identityKey])
 
   const highlight = state.highlight
@@ -667,6 +720,15 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
   // stale cell revision, and a menu claiming "Offline: on" over a fully online cell is a lie the
   // person would have no way to notice.
   const assignedNetwork = networkConditionOf(presentation.kind === 'cell' ? presentation.assignment.runtime : undefined)
+
+  // A device runs the scenario, and a scenario's `device` clause is not part of it — it frames a
+  // preview in Studio's canvas, and a phone is already a device. The clause is dropped, and the
+  // notice below says it was, once per cell.
+  const deviceScreen = screenSize(RN)
+  const viewportNotice = deviceViewportNotice({
+    ...(assignedScenario === undefined ? {} : { declared: assignedScenario.viewport }),
+    ...(deviceScreen === undefined ? {} : { screen: deviceScreen }),
+  })
 
   // An edit made on the phone is answered by the Mac; the phone is where the person is looking, so
   // that answer belongs on this screen rather than only in Studio's log.
@@ -728,6 +790,15 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
       },
     },
     {
+      active: devMode.layoutBounds,
+      id: 'layout-bounds',
+      label: devMode.layoutBounds ? 'Layout bounds: on' : 'Layout bounds',
+      onPress: () => {
+        Dev.toggleLayoutBounds()
+        setMenuOpen(false)
+      },
+    },
+    {
       id: 'scenarios',
       label: 'Scenarios',
       onPress: () => {
@@ -770,6 +841,24 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
           selection,
         })
         : null,
+      React.createElement(DeviceNotices, {
+        notices: [
+          ...(containedFailure === undefined ? [] : [{
+            eyebrow: 'TAO STUDIO · SENT TO STUDIO',
+            message: containedFailure,
+            onDismiss: () => setContainedFailure(undefined),
+            testID: 'tao-studio-device-failure',
+            tone: 'failure' as const,
+          }]),
+          ...(viewportNotice === undefined || viewportNoticeSeen ? [] : [{
+            eyebrow: 'TAO STUDIO · DEVICE VIEWPORT',
+            message: viewportNotice,
+            onDismiss: () => setViewportNoticeSeen(true),
+            testID: 'tao-studio-device-viewport',
+            tone: 'info' as const,
+          }]),
+        ],
+      }),
       presentation.kind === 'cell'
         ? React.createElement(DeviceBadge, {
           actions: menuActions,
@@ -867,6 +956,56 @@ function DeviceCellFrame(props: { bareView: boolean; children?: React.ReactNode;
   )
 }
 
+/**
+ * Says something without taking the screen.
+ *
+ * Notices sit at the top rather than over the content: the person is usually mid-gesture in the app
+ * when one arrives, and a failure is already on its way to Studio besides, so a notice only has to
+ * say what happened — not stop the session to say it. Tapping one dismisses it.
+ */
+function DeviceNotices(props: {
+  notices: readonly {
+    eyebrow: string
+    message: string
+    onDismiss: () => void
+    testID: string
+    tone: 'failure' | 'info'
+  }[]
+}): React.JSX.Element | null {
+  const RN = requireReactNativeRuntime()
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
+  if (props.notices.length === 0) {
+    return null
+  }
+  return React.createElement(
+    RN.View,
+    { style: { ...noticeLayerStyle, paddingTop: insets.top } },
+    ...props.notices.map(notice =>
+      React.createElement(
+        RN.Pressable,
+        {
+          accessibilityLabel: `Dismiss: ${notice.message}`,
+          accessibilityRole: 'button',
+          key: notice.testID,
+          onPress: notice.onDismiss,
+          style: notice.tone === 'failure' ? failureNoticeStyle : infoNoticeStyle,
+          testID: notice.testID,
+        },
+        React.createElement(
+          RN.Text,
+          { style: notice.tone === 'failure' ? failureNoticeEyebrowStyle : infoNoticeEyebrowStyle },
+          notice.eyebrow,
+        ),
+        React.createElement(
+          RN.Text,
+          { numberOfLines: 4, style: notice.tone === 'failure' ? failureNoticeTextStyle : infoNoticeTextStyle },
+          notice.message,
+        ),
+      )
+    ),
+  )
+}
+
 function DeviceOverlay(props: {
   client: StudioDeviceClient
   presentation: Extract<TaoStudioDeviceHostPresentation, { kind: 'overlay' }>
@@ -929,6 +1068,67 @@ function DeviceActions(props: {
       )
     ),
   )
+}
+
+/**
+ * The sheet's standing answer to "why does this tablet scenario look like a phone".
+ *
+ * The notice is dismissed and gone; this stays where a person goes to ask.
+ */
+export function viewportLine(
+  assigned: { viewport: { height: number; width: number } } | undefined,
+  screen: { height: number; width: number } | undefined,
+): string {
+  if (screen === undefined) {
+    return 'Viewport: this device'
+  }
+  const declared = assigned?.viewport
+  return declared === undefined || describeViewport(declared) === describeViewport(screen)
+    ? `Viewport: ${describeViewport(screen)}`
+    : `Viewport: ${describeViewport(screen)} · scenario declares ${describeViewport(declared)}`
+}
+
+/** The device's own size in points, or nothing where the platform will not say. */
+export function screenSize(runtime: ReactNativeRuntime): { height: number; width: number } | undefined {
+  const window = runtime.Dimensions?.get('window')
+  return typeof window?.height === 'number' && typeof window.width === 'number'
+    ? { height: window.height, width: window.width }
+    : undefined
+}
+
+/** A viewport as a person reads it: whole points, the way the scenario sheet writes them. */
+export function describeViewport(viewport: { height: number; width: number }): string {
+  return `${Math.round(viewport.width)}×${Math.round(viewport.height)}`
+}
+
+/**
+ * What the phone says about a viewport it cannot honour.
+ *
+ * A scenario's `device` clause frames a preview in Studio's canvas. A phone is already a device and
+ * its own size is the truth, so what a device loads is the scenario — the fixture, the subject, the
+ * appearance, the network — and not the one clause that only ever described a frame.
+ *
+ * It speaks up when the declared frame does not fit on this screen, because a tablet scenario
+ * arriving at phone width is otherwise indistinguishable from a layout that broke. It stays quiet
+ * when the frame does fit: no device is ever exactly a declared preset, and a notice on every
+ * scenario would be a notice nobody reads. The sheet carries the exact numbers either way.
+ */
+export function deviceViewportNotice(input: {
+  declared?: { height: number; width: number }
+  screen?: { height: number; width: number }
+}): string | undefined {
+  const { declared, screen } = input
+  if (declared === undefined || screen === undefined) {
+    return undefined
+  }
+  if (
+    Math.round(declared.width) <= Math.round(screen.width) && Math.round(declared.height) <= Math.round(screen.height)
+  ) {
+    return undefined
+  }
+  return `Running at this device's ${describeViewport(screen)}. The scenario declares ${
+    describeViewport(declared)
+  }, which is a Studio canvas frame and not something a device can be.`
 }
 
 /** DeviceBadge is the floating "Tao" affordance over a rendered cell; a drag moves it, a tap opens the sheet. */
@@ -1101,10 +1301,7 @@ function DeviceBadge(
 ): React.JSX.Element {
   const RN = requireReactNativeRuntime()
   const insets = requireSafeAreaContext().useSafeAreaInsets()
-  const window = RN.Dimensions?.get('window')
-  const screen = window?.height === undefined || window.width === undefined
-    ? undefined
-    : { height: window.height, width: window.width }
+  const screen = screenSize(RN)
   const bounds = badgeDragBounds({ insets, screen })
   const [dragged, setDragged] = React.useState(() =>
     clampBadgePosition({ bottom: 24 + insets.bottom, right: 16 + insets.right }, bounds)
@@ -1274,6 +1471,7 @@ function DeviceSheet(props: {
   const insets = requireSafeAreaContext().useSafeAreaInsets()
   const { client, state } = props
   const scenarios = state.manifest?.scenarios ?? []
+  const assigned = scenarios.find(scenario => scenario.cellId === state.assignment?.identity.cellId)
   const statusLines = [
     `Device: ${state.deviceFingerprint ?? 'unknown'}`,
     `Transport: ${state.transport.toUpperCase()}${state.host === undefined ? '' : ` · ${state.host}`}`,
@@ -1281,6 +1479,7 @@ function DeviceSheet(props: {
     `Project: ${state.welcome?.projectLabel ?? '—'} · ${state.welcome?.appName ?? '—'}`,
     `Compile revision: ${state.compile?.compileRevision ?? '—'} (${state.compile?.status ?? 'unknown'})`,
     `Applied revision: ${state.appliedRevision ?? '—'}`,
+    viewportLine(assigned, screenSize(RN)),
     `Last error: ${state.lastError === undefined ? 'none' : `${state.lastError.code} — ${state.lastError.message}`}`,
   ]
   return React.createElement(
@@ -1404,6 +1603,56 @@ const actionTextStyle = {
   color: '#f8fafc',
   fontSize: 16,
   fontWeight: '700',
+} as const
+
+const noticeLayerStyle = {
+  left: 0,
+  position: 'absolute',
+  right: 0,
+  top: 0,
+  zIndex: 10001,
+} as const
+
+const failureNoticeStyle = {
+  backgroundColor: '#7f1d1d',
+  gap: 4,
+  paddingBottom: 12,
+  paddingHorizontal: 16,
+  paddingTop: 12,
+} as const
+
+const failureNoticeEyebrowStyle = {
+  color: '#fecaca',
+  fontSize: 11,
+  fontWeight: '700',
+  letterSpacing: 1,
+} as const
+
+const failureNoticeTextStyle = {
+  color: '#fef2f2',
+  fontSize: 14,
+  lineHeight: 19,
+} as const
+
+const infoNoticeStyle = {
+  backgroundColor: '#1e293b',
+  gap: 4,
+  paddingBottom: 12,
+  paddingHorizontal: 16,
+  paddingTop: 12,
+} as const
+
+const infoNoticeEyebrowStyle = {
+  color: '#94a3b8',
+  fontSize: 11,
+  fontWeight: '700',
+  letterSpacing: 1,
+} as const
+
+const infoNoticeTextStyle = {
+  color: '#e2e8f0',
+  fontSize: 14,
+  lineHeight: 19,
 } as const
 
 const badgeStyle = {

@@ -1,6 +1,6 @@
 import { Describe, Expect, MockModule, reactNativeStubs, Test } from '@shared/test'
 import type { StudioDeviceClient, TaoStudioDeviceClientState } from '../TaoRuntime-src/TR-studio-device-client'
-import { networkConditionOf } from '../TaoRuntime-src/TR-studio-device-host'
+import { deviceViewportNotice, networkConditionOf, viewportLine } from '../TaoRuntime-src/TR-studio-device-host'
 import type { TaoStudioDeviceCellIdentity } from '../TaoRuntime-src/TR-studio-device-protocol'
 import { StudioDeviceTrust } from '../TaoRuntime-src/TR-studio-device-trust'
 
@@ -446,5 +446,42 @@ Describe('Studio device host network condition', () => {
     Expect(networkConditionOf({})).toBe('normal')
     Expect(networkConditionOf({ cell: { environment: {} } })).toBe('normal')
     Expect(networkConditionOf({ cell: { environment: { network: { outcome: 'error' } } } })).toBe('normal')
+  })
+})
+
+Describe('Studio device host viewport', () => {
+  /**
+   * A scenario's `device` clause frames a preview in Studio's canvas, and a phone is already a
+   * device. So a device loads the scenario and not that clause — and says so, because a tablet
+   * scenario arriving at phone width is otherwise indistinguishable from a layout that broke.
+   */
+  Test('names a declared frame this screen cannot hold, and stays quiet about one it can', () => {
+    const phone = { height: 874, width: 402 }
+
+    const notice = deviceViewportNotice({ declared: { height: 1366, width: 1024 }, screen: phone })
+    Expect(notice).toContain("Running at this device's 402×874")
+    Expect(notice).toContain('The scenario declares 1024×1366')
+
+    // No device is ever exactly a declared preset. A scenario written for a slightly smaller phone
+    // shows the person the layout they came for, so saying so on every load would be noise.
+    Expect(deviceViewportNotice({ declared: { height: 844, width: 390 }, screen: phone })).toBeUndefined()
+    Expect(deviceViewportNotice({ declared: phone, screen: phone })).toBeUndefined()
+
+    // One dimension over is still over: a landscape tablet frame is not a phone frame.
+    Expect(deviceViewportNotice({ declared: { height: 402, width: 1024 }, screen: phone })).toBeDefined()
+
+    Expect(deviceViewportNotice({ screen: phone })).toBeUndefined()
+    Expect(deviceViewportNotice({ declared: phone })).toBeUndefined()
+  })
+
+  Test('the sheet keeps the answer after the notice is dismissed', () => {
+    const phone = { height: 874, width: 402 }
+
+    Expect(viewportLine({ viewport: { height: 1366, width: 1024 } }, phone)).toBe(
+      'Viewport: 402×874 · scenario declares 1024×1366',
+    )
+    Expect(viewportLine({ viewport: phone }, phone)).toBe('Viewport: 402×874')
+    Expect(viewportLine(undefined, phone)).toBe('Viewport: 402×874')
+    Expect(viewportLine(undefined, undefined)).toBe('Viewport: this device')
   })
 })

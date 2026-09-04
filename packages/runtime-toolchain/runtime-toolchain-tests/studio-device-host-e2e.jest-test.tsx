@@ -2,9 +2,9 @@ import TR from '@runtime/TR'
 import type { StudioDeviceClient, TaoStudioDeviceClientState } from '@runtime/TR-studio-device-client'
 import type { TaoStudioDeviceCellIdentity } from '@runtime/TR-studio-device-protocol'
 import { Errors } from '@shared/core'
-import { render, waitFor } from '@testing-library/react-native'
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native'
 import { createElement } from 'react'
-import { Text } from 'react-native'
+import { LogBox, Text } from 'react-native'
 import { registerRuntimeE2ELifecycle } from './test-compile-app'
 
 registerRuntimeE2ELifecycle()
@@ -201,5 +201,76 @@ describe('Studio device host safe area', () => {
     expect(flatStyle(screen.getByTestId('tao-studio-device-badge').props['style'])['bottom']).toBe(
       24 + insets.bottom,
     )
+  })
+})
+
+/**
+ * A phone running a Studio cell is a canvas, not a place to read a stack trace — and LogBox is not
+ * a passive one. Its window becomes the key window the moment anything is logged and keeps every
+ * touch afterwards, so one contained failure froze the badge, the tab bar and the app together
+ * while all three still looked alive. The host turns it off and says what happened itself.
+ */
+describe('Studio device host failure containment', () => {
+  test('turns LogBox off, so a logged failure cannot take the screen', async () => {
+    const ignoreAllLogs = jest.spyOn(LogBox, 'ignoreAllLogs').mockImplementation(() => {})
+    try {
+      const stub = stubClient()
+      const screen = renderHost(() => createElement(Text, null, 'rendered'), stub.client)
+
+      await waitFor(() => expect(screen.getByText('rendered')).toBeTruthy())
+      expect(ignoreAllLogs).toHaveBeenCalledWith(true)
+    } finally {
+      ignoreAllLogs.mockRestore()
+    }
+  })
+
+  test('names a failure nobody in the program could observe, and sends it to Studio', async () => {
+    const stub = stubClient()
+    const screen = renderHost(() => createElement(Text, null, 'rendered'), stub.client)
+    await waitFor(() => expect(screen.getByText('rendered')).toBeTruthy())
+
+    const failure = new Error("Cannot delete missing Workspace 'Workspace-1'.")
+    act(() => {
+      TR.Errors.reportUnowned(failure)
+    })
+
+    await waitFor(() => expect(screen.getByTestId('tao-studio-device-failure')).toBeTruthy())
+    expect(screen.getByText(/Cannot delete missing Workspace 'Workspace-1'\./)).toBeTruthy()
+    const [report] = stub.reports
+    expect(report?.level).toBe('error')
+    expect(report?.message).toContain("Cannot delete missing Workspace 'Workspace-1'.")
+    // With frames: a message alone names what went wrong and never where, and where is the whole
+    // reason someone reads a phone's failure on their Mac.
+    expect(report?.message).toContain('\n  at ')
+    // The cell keeps rendering underneath: the notice reports, it does not replace the screen.
+    expect(screen.getByText('rendered')).toBeTruthy()
+
+    // A failure a live query reproduces on every revision arrives again and again from the same
+    // place. Answering each one with a state update and a frame to Studio is how a contained
+    // failure becomes the freeze it was contained to avoid.
+    act(() => {
+      TR.Errors.reportUnowned(failure)
+    })
+    expect(stub.reports).toHaveLength(1)
+
+    fireEvent.press(screen.getByTestId('tao-studio-device-failure'))
+    expect(screen.queryByTestId('tao-studio-device-failure')).toBeNull()
+  })
+
+  test('carries the layout-bounds toggle, so the app needs no floating menu of its own', async () => {
+    const stub = stubClient()
+    const screen = renderHost(() => createElement(Text, null, 'rendered'), stub.client)
+    await waitFor(() => expect(screen.getByTestId('tao-studio-device-badge')).toBeTruthy())
+
+    expect(TR.Dev.isMenuHidden()).toBe(true)
+    fireEvent.press(screen.getByTestId('tao-studio-device-badge'))
+    const toggle = screen.getByTestId('tao-studio-device-menu-layout-bounds')
+    expect(screen.getByText('Layout bounds')).toBeTruthy()
+
+    fireEvent.press(toggle)
+    expect(TR.Dev.isLayoutBoundsEnabled()).toBe(true)
+    fireEvent.press(screen.getByTestId('tao-studio-device-badge'))
+    expect(screen.getByText('Layout bounds: on')).toBeTruthy()
+    TR.setDevMode()
   })
 })

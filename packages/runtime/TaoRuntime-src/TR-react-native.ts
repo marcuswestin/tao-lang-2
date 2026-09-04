@@ -15,6 +15,7 @@ export type ReactNativeRuntime = {
   }
   Image: React.ComponentType<any>
   KeyboardAvoidingView: React.ComponentType<any>
+  LogBox?: { ignoreAllLogs(ignore?: boolean): void }
   Modal?: React.ComponentType<any>
   TouchableOpacity?: any
   StatusBar?: any
