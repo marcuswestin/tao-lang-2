@@ -141,7 +141,7 @@ function validateDirectoryName(id: string): void {
 
 function projectTemplate(id: string): string {
   const value = taoString(id)
-  return `project {\n   id ${value}\n   name ${value}\n}\n\napp App { view Main }\n\nview Main() { }\n`
+  return `project {\n   id ${value}\n   name ${value}\n   version "0.1.0"\n   DefaultApp App\n}\n\napp App { view Main }\n\nview Main() { }\n`
 }
 
 function projectMetadataTemplate(id: string, name: string): string {

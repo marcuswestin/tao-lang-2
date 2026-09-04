@@ -116,6 +116,14 @@ Describe('gate catalog metadata', () => {
     Expect(nodeOf('_test').run.command).toBe('just')
   })
 
+  Test('schedules the real ship bundle proof as a bounded slow lane', () => {
+    Expect(GateCatalog.metadata('_ship-bundle-proof')).toEqual({
+      cost: GateCatalog.STUDIO_LANE_COST,
+      needs: ['_parser-gen'],
+      timeoutMs: 180_000,
+    })
+  })
+
   Test('starts the Studio lanes before the package gates and keeps four of them fitting at once', () => {
     for (
       const name of [

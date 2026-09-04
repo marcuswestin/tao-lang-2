@@ -99,6 +99,8 @@ use every, Interval from @tao/time
 project {
    id "wordflower" // an opaque, immutable, developer-chosen identity that survives moves and forks
    name "WordFlower"
+   version "1.0.0"
+   DefaultApp WordFlower
    remote none
    license MIT
 

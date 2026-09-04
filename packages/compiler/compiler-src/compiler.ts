@@ -108,6 +108,8 @@ export type CompileResult = {
 
 export type CompileOptions = {
   appName?: string
+  /** appDatasourceConfiguration replaces selected-app datasource slots for a derived release host. */
+  appDatasourceConfiguration?: Readonly<Record<string, string>>
   /** studio emits preview-only render occurrence metadata into generated Tao props. */
   studio?: boolean
   /** release promotes only stable release-gate diagnostics; ordinary development warnings stay non-blocking. */
@@ -185,7 +187,7 @@ function compileValidated(
     `Cannot compile unknown app '${selectedAppName}'. Available apps: ${appNames.join(', ')}.`,
     { appNames, selectedAppName },
   )
-  return compileValidatedInput(validationResult, context, selectedAppName, options.studio === true)
+  return compileValidatedInput(validationResult, context, selectedAppName, options)
 }
 
 function validationForCompileMode(
@@ -227,8 +229,9 @@ function compileValidatedInput(
   validationResult: ValidationResult,
   context: CompilerContext,
   selectedAppName: string,
-  studio: boolean,
+  options: CompileOptions,
 ): CompileResult {
+  const studio = options.studio === true
   const entryPath = validationResult.entry.path
   const sourceFiles = validationResult.files.filter(file =>
     file.ast.statements.length === 0
@@ -254,6 +257,7 @@ function compileValidatedInput(
       outputPaths,
       packagesContext: context.packagesContext,
       identityProjects,
+      selectedAppDatasourceConfiguration: options.appDatasourceConfiguration,
       selectedAppName: file.path === entryPath ? selectedAppName : undefined,
       studio,
     })
@@ -395,6 +399,7 @@ type CompileSourceFileOptions = {
   outputPaths: PlannedOutputs
   packagesContext: Packages.Context
   identityProjects: readonly DeclarationIdentityProject[]
+  selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppName: string | undefined
   studio: boolean
 }
@@ -406,6 +411,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     outputPaths,
     packagesContext,
     identityProjects,
+    selectedAppDatasourceConfiguration,
     selectedAppName,
     studio,
   } = options
@@ -476,6 +482,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
             localDataCatalog: usesLocalDataCatalog,
             scopeBindings,
             exportedBindings,
+            selectedAppDatasourceConfiguration,
             selectedAppName,
             studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
             studio,

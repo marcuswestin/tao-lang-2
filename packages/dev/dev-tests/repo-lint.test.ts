@@ -163,6 +163,16 @@ Describe('repo lint contracts', () => {
     }
   })
 
+  Test('ignores Tao-owned project state when checking absorbed source parity', () => {
+    Expect(wordFlowerDirectoryIssues(directory(
+      [
+        file('WordFlower.tao', absorbed),
+        file('.tao-project/lock.jsonc', '{ "ship": true }'),
+      ],
+      [file('WordFlower.tao-next', absorbed)],
+    ))).toEqual([])
+  })
+
   Test('requires Current to remain absorbed', () => {
     const issues = wordFlowerDirectoryIssues(directory(
       [file('WordFlower.tao', `${open}\nview Main { }`)],

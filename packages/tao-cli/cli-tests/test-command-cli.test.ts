@@ -138,17 +138,19 @@ Describe('tao test CLI', () => {
       'jest-stub.mjs': '',
     }, async rootDir => {
       const previousCwd = Platform.runtimeProcess.cwd()
-      await withJestStub(rootDir, async () => {
-        try {
-          Platform.runtimeProcess.chdir(rootDir)
-          const result = await runTaoCliForTest(['test', '.'])
+      await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
+        await withJestStub(rootDir, async () => {
+          try {
+            Platform.runtimeProcess.chdir(rootDir)
+            const result = await runTaoCliForTest(['test', '.'])
 
-          Expect(`${result.stdout}${result.stderr}`).not.toContain('Git worktree root not found')
-          Expect(result.exitCode).toBe(0)
-          Expect(result.stdout).toContain('Tao tests finished')
-        } finally {
-          Platform.runtimeProcess.chdir(previousCwd)
-        }
+            Expect(`${result.stdout}${result.stderr}`).not.toContain('Git worktree root not found')
+            Expect(result.exitCode).toBe(0)
+            Expect(result.stdout).toContain('Tao tests finished')
+          } finally {
+            Platform.runtimeProcess.chdir(previousCwd)
+          }
+        })
       })
     })
   })
@@ -379,12 +381,14 @@ Describe('tao test CLI', () => {
       // nested Jest startup cannot consume Bun's test timeout under repository-wide load.
       'jest-stub.mjs': '',
     }, async rootDir => {
-      await withJestStub(rootDir, async () => {
-        const result = await runTaoCliForTest(['test', rootDir])
+      await withRuntimeRoot(FS.resolvePath('runtime-root', rootDir), async () => {
+        await withJestStub(rootDir, async () => {
+          const result = await runTaoCliForTest(['test', rootDir])
 
-        Expect(result.exitCode).toBe(0)
-        Expect(result.stdout).toContain('Found 2 Tao test files')
-        Expect(result.stdout).toContain('Tao tests finished')
+          Expect(result.exitCode).toBe(0)
+          Expect(result.stdout).toContain('Found 2 Tao test files')
+          Expect(result.stdout).toContain('Tao tests finished')
+        })
       })
     })
   })

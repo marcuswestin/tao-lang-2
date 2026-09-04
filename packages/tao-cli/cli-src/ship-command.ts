@@ -1,0 +1,315 @@
+import { Errors, HCI } from '@shared'
+import type { Readable, Writable } from 'node:stream'
+import { planShipActions } from './ship-actions'
+import { inspectShipGit, type ShipGitState, shipSourceMatchesBuild } from './ship-git'
+import {
+  acceptedShipEntry,
+  promoteShipEntry,
+  putShipLockEntry,
+  readProjectLock,
+  SHIP_LOCK_RELATIVE_PATH,
+  type ShipLockEntry,
+  type TaoProjectLock,
+} from './ship-lock'
+import {
+  decideShipVersion,
+  deriveShipIdentity,
+  type ShipBump,
+  shipInputHash,
+  type ShipVersion,
+  timestampBuildNumber,
+} from './ship-model'
+import {
+  appStoreConnectKeyPath,
+  inspectShipPreflight,
+  requirePassingPreflight,
+  type ShipPreflightIssue,
+} from './ship-preflight'
+import { discoverShipProject, selectShipApp, type ShipProject, type ShipProjectApp } from './ship-project'
+
+export type ShipCommandOptions = {
+  appName?: string
+  betaRecipients?: readonly string[]
+  bump?: ShipBump
+  dryRun?: boolean
+  ignoreGit?: boolean
+  input?: Readable
+  interactive?: boolean
+  noWait?: boolean
+  notes?: string
+  output?: Writable
+  rollback?: boolean
+  update?: boolean
+  yes?: boolean
+}
+
+export const DEFAULT_SHIP_NAMESPACE = 'dev.tao-lang'
+
+export type PreparedShip = {
+  actions: string[]
+  app: ShipProjectApp
+  buildNumber: string
+  bundleIdentifier: string
+  channel: string
+  entry: ShipLockEntry
+  git: ShipGitState
+  inputHash: string
+  issues: ShipPreflightIssue[]
+  lock: TaoProjectLock
+  project: ShipProject
+  reuseBuild: boolean
+  version: ShipVersion
+  versionBumped: boolean
+}
+
+export type ShipCommandDependencies = {
+  execute?: (prepared: PreparedShip, options: ShipCommandOptions) => Promise<void>
+  inspectPreflight?: typeof inspectShipPreflight
+  now?: () => Date
+}
+
+/** runShipCommand prepares and gates one ship run; --dry-run exercises the entire mutation-free path. */
+export async function runShipCommand(
+  targetPath = '.',
+  options: ShipCommandOptions = {},
+  dependencies: ShipCommandDependencies = {},
+): Promise<'cancelled' | 'dry-run' | 'shipped'> {
+  validateOptions(options)
+  const prepared = await prepareShip(targetPath, options, dependencies)
+  writePlan(prepared, options)
+  if (options.dryRun) {
+    return 'dry-run'
+  }
+  requirePassingPreflight(prepared.issues)
+  if (!options.yes) {
+    const proceed = await HCI.askConfirm({
+      defaultValue: true,
+      input: options.input,
+      interactive: options.interactive,
+      message: 'Proceed with these actions?',
+      output: options.output,
+    })
+    if (!proceed) {
+      return 'cancelled'
+    }
+  }
+  const execute = dependencies.execute ?? (async (value: PreparedShip, commandOptions: ShipCommandOptions) => {
+    const { executePreparedShip } = await import('./ship-executor')
+    await executePreparedShip(value, commandOptions)
+  })
+  await execute(prepared, options)
+  return 'shipped'
+}
+
+export async function prepareShip(
+  targetPath: string,
+  options: ShipCommandOptions,
+  dependencies: ShipCommandDependencies = {},
+): Promise<PreparedShip> {
+  const project = await discoverShipProject(targetPath)
+  const app = await resolveApp(project, options)
+  const primaryAppName = project.primaryAppName
+  const hashInput = {
+    appName: app.name,
+    defaultApp: project.defaultApp,
+    projectId: project.id,
+    releaseDatasourceConfiguration: app.releaseDatasourceConfiguration,
+  }
+  const inputHash = shipInputHash(hashInput)
+  const lock = await readProjectLock(project.root)
+  const entry = await resolveEntry(project, app, lock, inputHash, primaryAppName, options)
+  const accepted = entry.accepted
+  const identity = deriveShipIdentity({
+    appName: app.name,
+    namespace: accepted?.namespace ?? DEFAULT_SHIP_NAMESPACE,
+    primaryAppName,
+    projectId: project.id,
+  })
+  const git = await inspectShipGit(project.root)
+  const consumed = entry.lastBuild?.version === project.version && entry.lastBuild.submittedForReview === true
+  const versionDecision = decideShipVersion(project.version, { consumed, forcedBump: options.bump })
+  const buildSourceMatches = entry.lastBuild === undefined
+    ? false
+    : await shipSourceMatchesBuild(
+      git,
+      entry.lastBuild.commit,
+      `${project.root}/${SHIP_LOCK_RELATIVE_PATH}`,
+    )
+  const incompleteUpload = entry.lastBuild?.processed === false
+  const reuseBuild = !options.update
+    && !versionDecision.bumped
+    && entry.lastBuild?.version === versionDecision.version
+    && (incompleteUpload || (options.betaRecipients === undefined
+      && entry.lastBuild.processed === true
+      && buildSourceMatches))
+  const buildNumber = reuseBuild ? entry.lastBuild!.number : timestampBuildNumber(dependencies.now?.() ?? new Date())
+  const actions = planShipActions({
+    appName: app.name,
+    betaRecipients: options.betaRecipients,
+    buildNumber,
+    bump: versionDecision.bumped ? { from: project.version, to: versionDecision.version } : undefined,
+    noWait: options.noWait === true,
+    notes: options.notes,
+    reuseBuild,
+    update: options.update === true,
+    version: versionDecision.version,
+  })
+  const issues = await (dependencies.inspectPreflight ?? inspectShipPreflight)({
+    appStoreAppId: entry.appStoreAppId,
+    bundleIdentifier: accepted?.bundleIdentifier ?? identity.bundleIdentifier,
+    git,
+    ignoreGit: options.ignoreGit === true,
+    issuerId: accepted?.issuerId,
+    keyId: accepted?.keyId,
+    localDatasourceEndpoint: app.hasLocalDatasourceEndpoint,
+    releaseDatasourceConfiguration: accepted?.datasourceConfiguration,
+  })
+  return {
+    actions,
+    app,
+    buildNumber,
+    bundleIdentifier: accepted?.bundleIdentifier ?? identity.bundleIdentifier,
+    channel: identity.channel,
+    entry,
+    git,
+    inputHash,
+    issues,
+    lock,
+    project,
+    reuseBuild,
+    version: versionDecision.version,
+    versionBumped: versionDecision.bumped,
+  }
+}
+
+async function resolveApp(project: ShipProject, options: ShipCommandOptions): Promise<ShipProjectApp> {
+  const selected = selectShipApp(project, options.appName)
+  if (selected) {
+    return selected
+  }
+  if (!HCI.isInteractive(options)) {
+    Errors.throwUserInput(
+      `Project '${project.name}' has no DefaultApp. Select one with --app. Available apps: ${
+        project.apps.map(app => app.name).join(', ')
+      }.`,
+    )
+  }
+  const appName = await HCI.askChoice({
+    choices: project.apps.map(app => ({ value: app.name })),
+    input: options.input,
+    interactive: options.interactive,
+    message: 'Choose the Tao app to ship',
+    output: options.output,
+  })
+  return selectShipApp(project, appName)!
+}
+
+async function resolveEntry(
+  project: ShipProject,
+  app: ShipProjectApp,
+  lock: TaoProjectLock,
+  inputHash: string,
+  primaryAppName: string,
+  options: ShipCommandOptions,
+): Promise<ShipLockEntry> {
+  const identity = `${project.id}/${app.name}`
+  const accepted = acceptedShipEntry(lock, identity, inputHash)
+  if (accepted) {
+    return accepted
+  }
+  const previous = lock.ship?.apps[identity]
+  if (options.dryRun || !HCI.isInteractive(options)) {
+    return previous ?? {
+      identity,
+      inputHash,
+      provenance: { at: new Date(0).toISOString(), command: 'tao ship', version: 1 },
+      status: 'suggested',
+    }
+  }
+  const keyId = await HCI.askText({
+    input: options.input,
+    interactive: options.interactive,
+    message: 'App Store Connect Key ID',
+    output: options.output,
+    validate: value => value.trim().length > 0 ? undefined : 'Enter the Key ID shown beside the Admin team key.',
+  })
+  const issuerId = await HCI.askText({
+    input: options.input,
+    interactive: options.interactive,
+    message: 'App Store Connect Issuer ID',
+    output: options.output,
+    validate: value => value.trim().length > 0 ? undefined : 'Enter the Issuer ID shown above the team keys table.',
+  })
+  const namespace = await HCI.askText({
+    defaultValue: DEFAULT_SHIP_NAMESPACE,
+    input: options.input,
+    interactive: options.interactive,
+    message: 'Owned reverse-DNS bundle namespace',
+    output: options.output,
+  })
+  const derived = deriveShipIdentity({ appName: app.name, namespace, primaryAppName, projectId: project.id })
+  const confirmed = await HCI.askConfirm({
+    defaultValue: true,
+    input: options.input,
+    interactive: options.interactive,
+    message: `Accept bundle identifier ${derived.bundleIdentifier}?`,
+    output: options.output,
+  })
+  if (!confirmed) {
+    Errors.throwUserInput('Shipping stopped before accepting the bundle identifier.')
+  }
+  return promoteShipEntry({
+    ...previous,
+    identity,
+    inputHash,
+    provenance: { at: new Date().toISOString(), command: 'tao ship', version: 1 },
+    status: 'suggested',
+    suggested: {
+      bundleIdentifier: derived.bundleIdentifier,
+      datasourceConfiguration: app.releaseDatasourceConfiguration,
+      issuerId,
+      keyId,
+      namespace,
+    },
+  })
+}
+
+function writePlan(prepared: PreparedShip, options: ShipCommandOptions): void {
+  HCI.writeLine(`Ship ${prepared.app.name} ${prepared.version} (${prepared.buildNumber})`, options)
+  HCI.writeLine(`Bundle: ${prepared.bundleIdentifier}`, options)
+  if (prepared.issues.length > 0) {
+    HCI.writeLine('Precursors:', options)
+    for (const issue of prepared.issues) {
+      HCI.writeLine(`  - ${issue.message}${issue.url ? ` ${issue.url}` : ''}`, options)
+    }
+  }
+  HCI.writeLine('Actions:', options)
+  for (const [index, action] of prepared.actions.entries()) {
+    HCI.writeLine(`  ${index + 1}. ${action}`, options)
+  }
+}
+
+function validateOptions(options: ShipCommandOptions): void {
+  if (options.update && options.betaRecipients !== undefined) {
+    Errors.throwUserInput('--update cannot be combined with --beta.')
+  }
+  if (options.rollback && !options.update) {
+    Errors.throwUserInput('--rollback requires --update.')
+  }
+  if (options.noWait && options.update) {
+    Errors.throwUserInput('--no-wait applies to Apple build processing, not --update.')
+  }
+}
+
+/** acceptedEntryWithRunState returns the lock update the executor persists at its checkpoints. */
+export function acceptedEntryWithRunState(prepared: PreparedShip, entry: ShipLockEntry): TaoProjectLock {
+  return putShipLockEntry(prepared.lock, { ...entry, inputHash: prepared.inputHash, status: 'accepted' })
+}
+
+export function preparedKeyPath(prepared: PreparedShip): string {
+  const keyId = prepared.entry.accepted?.keyId
+  if (!keyId) {
+    Errors.throwUnexpected('Accepted ship metadata has no App Store Connect Key ID.')
+  }
+  return appStoreConnectKeyPath(keyId)
+}

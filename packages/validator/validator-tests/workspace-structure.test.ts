@@ -11,6 +11,7 @@ import { testValidationMessages } from '../validator-src/validators/tests-valida
 import { useValidationMessages, validateVisibleDeclarations } from '../validator-src/validators/use-validator'
 import {
   accepts,
+  acceptsFiles,
   app,
   checksFiles,
   rejects,
@@ -503,6 +504,16 @@ Describe('validator: workspace structure', () => {
         message: projectValidationMessages.duplicateName(),
       },
       {
+        title: 'rejects duplicate project versions',
+        source: `project { id "one" name "One" version "1.2.3" version "1.2.4" }\n${stubApp()}`,
+        message: projectValidationMessages.duplicateVersion(),
+      },
+      {
+        title: 'rejects duplicate default apps',
+        source: `project { id "one" name "One" DefaultApp First DefaultApp Second }\napp First { }\napp Second { }`,
+        message: projectValidationMessages.duplicateDefaultApp(),
+      },
+      {
         title: 'rejects duplicate project remotes',
         source: `project { id "one" name "One" remote none remote none }\n${stubApp()}`,
         message: projectValidationMessages.duplicateRemote(),
@@ -521,4 +532,30 @@ Describe('validator: workspace structure', () => {
   ) {
     Test(projectCase.title, rejects(projectCase.source, projectCase.message))
   }
+
+  for (const version of ['1.2', '1.2.3-beta', '1.2.3+4', '01.2.3', 'v1.2.3']) {
+    Test(
+      `rejects non-core project version ${version}`,
+      rejects(
+        `project { id "version-test" name "Version test" version "${version}" }\n${stubApp()}`,
+        projectValidationMessages.invalidVersion(),
+      ),
+    )
+  }
+
+  Test(
+    'accepts numeric SemVer core and a default app declared beside project metadata',
+    accepts(`
+      project { id "one" name "One" version "0.12.3" DefaultApp MyApp }
+      ${stubApp()}
+    `),
+  )
+
+  Test(
+    'resolves a default app from a root project metadata file',
+    acceptsFiles({
+      'Project.tao': 'project { id "one" name "One" version "1.2.3" DefaultApp MyApp }',
+      'Main.tao': stubApp(),
+    }),
+  )
 })

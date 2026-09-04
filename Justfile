@@ -65,6 +65,10 @@ studio-proof-real-app run_id="local":
 studio-canary project="Apps/HNReader" app="HNReader":
     ./dev studio-canary --project "{{ project }}" --app "{{ app }}"
 
+# Export real release and Studio-preview iOS bundles and prove only the preview carries Studio code
+ship-bundle-proof:
+    just _ship-bundle-proof
+
 # Run the native Studio checks that require a person; never part of test or verify
 studio-manual-checks project="Apps/HNReader" app="HNReader":
     ./dev studio-manual-checks --project "{{ project }}" --app "{{ app }}"
@@ -164,7 +168,7 @@ verify:
 
 # Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every automated Studio lane
 full-verify: deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _full-verify-smoke-launch _full-verify-real-app _full-verify-simulated _full-verify-native _full-verify-canary --lane full-verify --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree"
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _ship-bundle-proof _full-verify-smoke-launch _full-verify-real-app _full-verify-simulated _full-verify-native _full-verify-canary --lane full-verify --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree"
 
 # Private
 #########
@@ -186,6 +190,9 @@ _full-verify-native:
 
 _full-verify-canary:
     ./dev studio-canary --project Apps/HNReader --app HNReader
+
+_ship-bundle-proof:
+    bun run packages/runtime-toolchain/runtime-toolchain-src/testing/verify-release-bundle.ts
 
 # The doctor's own versioned report, so the node's log is the artifact
 _doctor-json:

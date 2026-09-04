@@ -173,6 +173,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let searchRevision = 0
     let searchTimer: ReturnType<typeof setTimeout> | undefined
     let sourceActionBusy = false
+    let shipActive = false
     let testError: string | undefined
     let testStatus: StudioTestStatus | undefined
     let testWatch = false
@@ -488,6 +489,34 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       view.appPicker.disabled = currentSessionId === undefined || handshake.apps.length < 2
       view.appPicker.addEventListener('change', () => void selectAppVariant())
     }
+
+    const betaShipListener = (): void => {
+      if (shipActive || !requireAllTabsSaved('Save or revert unsaved files before beta shipping.')) {
+        return
+      }
+      shipActive = true
+      view.betaShip.disabled = true
+      view.shipOverlay.hidden = false
+      view.shipOverlay.setAttribute('aria-busy', 'true')
+      const heading = view.shipOverlay.querySelector<HTMLElement>('strong')
+      if (heading !== null) {
+        heading.textContent = `Beta shipping ${handshake.identity.appName}…`
+      }
+      view.status.dataset['state'] = 'compiling'
+      view.status.textContent = `Beta shipping ${handshake.identity.appName}…`
+      void StudioApiClient.betaShip().then(result => {
+        view.status.dataset['state'] = 'compiled'
+        view.status.textContent = result.message
+      }).catch(error => {
+        showSourceActionError(view.status, error)
+      }).finally(() => {
+        shipActive = false
+        view.betaShip.disabled = false
+        view.shipOverlay.hidden = true
+        view.shipOverlay.removeAttribute('aria-busy')
+      })
+    }
+    view.betaShip.addEventListener('click', betaShipListener)
 
     async function selectProject(): Promise<void> {
       if (!requireAllTabsSaved('Save or revert unsaved files before choosing another project.')) {
@@ -1438,7 +1467,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     window.addEventListener('keydown', keydownListener, { capture: true })
     const beforeUnloadListener = (event: BeforeUnloadEvent): void => {
-      if ([...openTabs.values()].some(tab => tab.dirty)) {
+      if (shipActive || [...openTabs.values()].some(tab => tab.dirty)) {
         event.preventDefault()
         event.returnValue = ''
       }
@@ -1650,6 +1679,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       disconnectEvents()
       window.removeEventListener('keydown', keydownListener, { capture: true })
       window.removeEventListener('beforeunload', beforeUnloadListener)
+      view.betaShip.removeEventListener('click', betaShipListener)
       if (previewMessageListener !== undefined) {
         window.removeEventListener('message', previewMessageListener)
       }

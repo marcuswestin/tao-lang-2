@@ -22,6 +22,8 @@ export const LocalDataBindings = {
 export type CodegenOptions = {
   /** localDataCatalog is whether this project emits the companion catalog for `local only` entities. */
   localDataCatalog?: boolean
+  selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
+  selectedAppName?: string
   studioDataCatalog?: boolean
   studio?: boolean
   studioViews?: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>

@@ -8,6 +8,23 @@ const tsFence = '```ts'
 const fence = '```'
 
 Describe('compiler: language lowering', () => {
+  Test('preserves release project metadata in generated source provenance', async () => {
+    const compiled = await Compiler.compileCode(`
+      project {
+        id "release-metadata"
+        name "Release metadata"
+        version "1.2.3"
+        DefaultApp ReleaseApp
+      }
+      app ReleaseApp { view Home }
+      ${stubView('Home')}
+    `)
+
+    Expect(compiled.code).toContain(
+      '// project { id "release-metadata" name "Release metadata" version "1.2.3" DefaultApp ReleaseApp }',
+    )
+  })
+
   Test('lowers app-owned actions and live bound-view arguments into configured navigation', async () => {
     const compiled = await Compiler.compileCode(`
       use StackNav from @tao/nav
@@ -457,6 +474,43 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('"AppId": TR.Value("9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f")')
     Expect(compiled.code).toContain('export default TaoApps["SyncedNotes"]')
     Expect(compiled.files.some(file => file.sourcePath.endsWith('/InstantDB.ts'))).toBe(true)
+  })
+
+  Test('patches only the selected app datasource with derived host configuration', async () => {
+    const compiled = await Compiler.compileCode(
+      `
+        use InstantDB from @tao/data/providers/instantdb
+        use StackNav from @tao/nav
+        data Notes / Note { Title text }
+        app LocalNotes {
+          Name "Local Notes"
+          Navigator StackNav { Initial Main }
+          Datasource InstantDB {
+            AppId "local-app"
+            ApiURI "http://localhost:9020"
+          }
+        }
+        app HostedNotes = LocalNotes with { Name "Hosted Notes" }
+        scene Main() { Title "Notes" render Text("Ready") }
+        view Text(Value text) { render inject ${tsFence} return null ${fence} }
+      `,
+      {
+        appDatasourceConfiguration: {
+          ApiURI: 'https://api.instantdb.com',
+          AppId: 'hosted-app',
+          WebsocketURI: 'wss://api.instantdb.com/runtime/session',
+        },
+        appName: 'HostedNotes',
+      },
+    )
+
+    Expect(compiled.code).toContain('"AppId": TR.Value("local-app")')
+    Expect(compiled.code).toContain('"AppId": TR.Value("hosted-app")')
+    Expect(compiled.code).toContain('"ApiURI": TR.Value("https://api.instantdb.com")')
+    Expect(compiled.code).toContain(
+      '"WebsocketURI": TR.Value("wss://api.instantdb.com/runtime/session")',
+    )
+    Expect(compiled.code.match(/"AppId": TR.Value\("hosted-app"\)/gu)).toHaveLength(2)
   })
 
   Test('lowers render and loop tags through Tao props without adding a row wrapper', async () => {

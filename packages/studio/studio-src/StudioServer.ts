@@ -1,5 +1,5 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
-import { Errors } from '@shared'
+import { CLI, Errors, Repo } from '@shared'
 import { type StudioClientAssetProvider, StudioClientAssets } from './StudioClientAssets'
 import { StudioFixtureGeneration } from './StudioFixtureGeneration'
 import { StudioHighlight } from './StudioHighlight'
@@ -36,7 +36,18 @@ export type StudioServerOptions = {
   hostname?: string
   port?: number
   previewUrl?: string
+  shipBeta?: StudioBetaShip
 }
+
+export type StudioBetaShipRequest = Readonly<{
+  appName: string
+  entryPath: string
+  projectRoot: string
+}>
+
+export type StudioBetaShip = (request: StudioBetaShipRequest) => Promise<void>
+
+const runningBetaShips = new Map<string, Promise<void>>()
 
 export type StartedStudioServer = {
   hostname: string
@@ -433,6 +444,13 @@ async function handleRequest(
   if (request.method === 'POST' && url.pathname === '/api/language/highlight') {
     return response(request, url, options, await StudioHighlight.highlight(await request.json()))
   }
+  if (request.method === 'POST' && url.pathname === '/api/ship/beta') {
+    await shipBeta(session, options.shipBeta ?? runBetaShip)
+    return response(request, url, options, {
+      appName: session.appName,
+      message: `${session.appName} was uploaded and distributed through TestFlight.`,
+    })
+  }
   if (request.method === 'POST' && url.pathname === '/api/source-action') {
     return response(request, url, options, await session.applySourceAction(await request.json()))
   }
@@ -480,6 +498,33 @@ async function handleRequest(
     return response(request, url, options, session.reconfigureCell(await request.json()))
   }
   return response(request, url, options, { error: 'Studio endpoint not found.' }, 404)
+}
+
+async function shipBeta(session: StudioProjectSession, ship: StudioBetaShip): Promise<void> {
+  const key = `${session.projectRoot}\n${session.appName}`
+  if (runningBetaShips.has(key)) {
+    throw new Errors.UserInputError(`A beta ship is already running for ${session.appName}.`)
+  }
+  const running = ship({
+    appName: session.appName,
+    entryPath: session.entryPath,
+    projectRoot: session.projectRoot,
+  })
+  runningBetaShips.set(key, running)
+  try {
+    await running
+  } finally {
+    runningBetaShips.delete(key)
+  }
+}
+
+async function runBetaShip(request: StudioBetaShipRequest): Promise<void> {
+  const repositoryRoot = Repo.getRoot(request.projectRoot)
+  await CLI.mustRun(Repo.resolvePath('tao', repositoryRoot), {
+    args: ['ship', request.entryPath, '--app', request.appName, '--beta', '--yes'],
+    cwd: repositoryRoot,
+    prefixedOutput: { processName: `ship ${request.appName}` },
+  })
 }
 
 function inspectRenderRequest(value: unknown): { path: string; renderId: string; sourceVersion: string } {

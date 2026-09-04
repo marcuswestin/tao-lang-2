@@ -25,7 +25,7 @@ workspace
 scene Settings() {
    Title "Settings"
    render Scroller() [screen] {
-      Col() [width max 720, centered, gap 20] {
+      Col() [readableWidth, centeredLayout, gapWide] {
          Col() [hero] {
             Text("WORDFLOWER") [eyebrow]
             Text("Settings") [display]
@@ -44,7 +44,7 @@ scene Settings() {
 workspace
 scene SignedOut() {
    Title "Signed out"
-   render Col() [screen, centered] {
+   render Col() [screen, centeredLayout] {
       Text("Signed out") [title]
 }  }
 
@@ -59,7 +59,7 @@ let BuildStamp is text = BuildStamp() from ./Shell.ts
 // Content acceptance is inferred from the body, never declared: a view accepts caller content iff
 // it places `@@content`. The simplest case places caller content directly.
 view Toolbar() {
-   render Row() [gap 8, content right] {
+   render Row() [gapSmall, alignRight] {
       @@content
 }  }
 
@@ -68,12 +68,12 @@ view Toolbar() {
 // wrapper's own structure. `@actions` is a named slot with a default, so callers may omit it.
 view Card(Title text) {
    @actions = empty
-   render Col() [gap 8, pad 12, panel] {
-      Row() [content spread center] {
+   render Col() [gapSmall, padMedium, panel] {
+      Row() [spreadCenter] {
          Text(Title) [title]
          @actions
       }
-      Col() [gap 6] {
+      Col() [gapTight] {
          @@content
 }  }  }
 
@@ -82,7 +82,7 @@ view Card(Title text) {
 // its branch is off the caller's content does not mount.
 view Collapsible() {
    state Expanded = true
-   render Col() [gap 6] {
+   render Col() [gapTight] {
       when Expanded {
          true -> {
             #collapseDetails

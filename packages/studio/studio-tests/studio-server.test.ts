@@ -106,6 +106,35 @@ Describe('Studio server request boundary', () => {
     })
   })
 
+  Test('beta ships the active app through the injected shipping boundary', async () => {
+    const ships: unknown[] = []
+    const session = {
+      appName: 'Garden',
+      entryPath: '/projects/Garden/Garden.tao',
+      projectRoot: '/projects/Garden',
+      subscribe: () => () => {},
+    } as unknown as StudioProjectSession
+    const url = new URL('http://127.0.0.1:5678/api/ship/beta')
+    const response = await StudioServerTesting.handleRequest(
+      session,
+      {} as StudioFixtureGeneration,
+      new Request(url, { method: 'POST' }),
+      url,
+      { shipBeta: async request => void ships.push(request) },
+    )
+
+    Expect(response.status).toBe(200)
+    Expect(await response.json()).toEqual({
+      appName: 'Garden',
+      message: 'Garden was uploaded and distributed through TestFlight.',
+    })
+    Expect(ships).toEqual([{
+      appName: 'Garden',
+      entryPath: '/projects/Garden/Garden.tao',
+      projectRoot: '/projects/Garden',
+    }])
+  })
+
   Test('returns the server-canonical source-action proposal without applying it', async () => {
     const requests: unknown[] = []
     const proposal = {

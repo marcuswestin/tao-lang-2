@@ -377,6 +377,20 @@ Describe('CLI', () => {
     Expect(stripAnsi(streamed.stderr)).toBe('[test]: bad\n')
   })
 
+  Test('captures prefixed process output without writing it to the terminal', async () => {
+    const streamed = await withCapturedOutput(() =>
+      CLI.run('/bin/sh', {
+        args: ['-c', 'printf "out\\n"; printf "bad\\n" >&2'],
+        prefixedOutput: { processName: 'test', terminal: false },
+      })
+    )
+
+    Expect(streamed.result.stdout).toBe('out\n')
+    Expect(streamed.result.stderr).toBe('bad\n')
+    Expect(streamed.stdout).toBe('')
+    Expect(streamed.stderr).toBe('')
+  })
+
   Test('streams stdout and stderr chunks to an onOutput callback', async () => {
     const output = { stderr: '', stdout: '' }
     const command = CLI.start('/bin/sh', {

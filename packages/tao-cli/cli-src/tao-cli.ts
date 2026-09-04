@@ -106,6 +106,56 @@ function createCommands(): Command {
     })
 
   commands
+    .command('ship')
+    .argument('[path]', 'Tao project file or directory to discover.', '.')
+    .option('--app <name>', 'Select a named app instead of the project DefaultApp.')
+    .option('--patch', 'Force a patch version bump.')
+    .option('--minor', 'Force a minor version bump.')
+    .option('--major', 'Force a major version bump.')
+    .option('--yes', 'Proceed without the Y/n gate after printing the action list.')
+    .option('--ignore-git', 'Allow shipping from a dirty Git working tree.')
+    .option('--dry-run', 'Print precursors and the action list without mutating or contacting Apple.')
+    .option('--no-wait', 'Return after upload without waiting for Apple processing.')
+    .option('--notes <text>', 'Set TestFlight What to Test text instead of deriving it from Git.')
+    .option('--beta [emails]', 'Distribute through TestFlight; optionally supply comma-separated recipients.')
+    .option('--update', 'Publish a compatible bundle through the Tao update service.')
+    .option('--rollback', 'With --update, republish the previously recorded update bundle.')
+    .description('Build and ship a Tao app through App Store Connect or TestFlight.')
+    .action(async (path: string, options: {
+      app?: string
+      beta?: boolean | string
+      dryRun?: boolean
+      ignoreGit?: boolean
+      major?: boolean
+      minor?: boolean
+      noWait?: boolean
+      notes?: string
+      patch?: boolean
+      rollback?: boolean
+      update?: boolean
+      yes?: boolean
+    }) => {
+      try {
+        const { runShipCommand } = await import('./ship-command')
+        await runShipCommand(path, {
+          appName: options.app,
+          betaRecipients: parseBetaRecipients(options.beta),
+          bump: shipBump(options),
+          dryRun: options.dryRun,
+          ignoreGit: options.ignoreGit,
+          noWait: options.noWait,
+          notes: options.notes,
+          rollback: options.rollback,
+          update: options.update,
+          yes: options.yes,
+        })
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
     .command('fmt')
     .argument('[paths...]', 'Tao files or directories to format. Defaults to the current directory.')
     .description('Format .tao files in place.')
@@ -186,6 +236,35 @@ function createCommands(): Command {
   tab(commands as unknown as BaseCommand)
 
   return commands
+}
+
+function parseBetaRecipients(value: boolean | string | undefined): string[] | undefined {
+  if (value === undefined || value === false) {
+    return undefined
+  }
+  if (value === true || value.trim().length === 0) {
+    return []
+  }
+  const recipients = value.split(',').map(email => email.trim()).filter(Boolean)
+  const invalid = recipients.find(email => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email))
+  if (invalid) {
+    Errors.throwUserInput(`TestFlight recipient '${invalid}' is not an email address.`)
+  }
+  return [...new Set(recipients)]
+}
+
+function shipBump(
+  options: { major?: boolean; minor?: boolean; patch?: boolean },
+): 'major' | 'minor' | 'patch' | undefined {
+  const selected = [
+    ...(options.patch ? ['patch' as const] : []),
+    ...(options.minor ? ['minor' as const] : []),
+    ...(options.major ? ['major' as const] : []),
+  ]
+  if (selected.length > 1) {
+    Errors.throwUserInput('Choose only one of --patch, --minor, or --major.')
+  }
+  return selected[0]
 }
 
 async function runInPlaceCommand(

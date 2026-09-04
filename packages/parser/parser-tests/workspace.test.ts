@@ -297,9 +297,12 @@ Describe('minimal Tao parser', () => {
       project {
         id "package-access"
         name "Package Access"
+        version "1.2.3"
+        DefaultApp PackageAccess
         remote none
         license MIT
       }
+      app PackageAccess { }
     `)
 
     const [project] = parseResult.entry.ast.statements
@@ -307,8 +310,12 @@ Describe('minimal Tao parser', () => {
     Expect(AST.blockStatementOf(project, { map: statement => statement.$type })).toEqual([
       AST.ProjectId.$type,
       AST.ProjectName.$type,
+      AST.ProjectVersion.$type,
+      AST.ProjectDefaultApp.$type,
       AST.ProjectRemote.$type,
       AST.ProjectLicense.$type,
     ])
+    const defaultApp = AST.blockStatementOf(project, { filter: AST.isProjectDefaultApp })[0]
+    Expect(defaultApp?.app.ref?.name).toBe('PackageAccess')
   })
 })

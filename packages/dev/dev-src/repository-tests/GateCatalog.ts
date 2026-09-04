@@ -39,6 +39,7 @@ const TYPECHECK_COST = 3
 const STUDIO_LANE_COST = 3
 /** Generous against a healthy canary run; a bound against a post-report hang regressing. */
 const STUDIO_CANARY_TIMEOUT_MS = 300_000
+const SHIP_BUNDLE_PROOF_TIMEOUT_MS = 180_000
 
 /**
  * Start-order pins. Measured durations order nodes within a priority; these say which node should
@@ -113,6 +114,14 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ['_runtime-pack-check', {}],
     ['dead-exports', {}],
     ['_doctor-json', {}],
+    [
+      '_ship-bundle-proof',
+      {
+        cost: STUDIO_LANE_COST,
+        needs: ['_parser-gen'],
+        timeoutMs: SHIP_BUNDLE_PROOF_TIMEOUT_MS,
+      },
+    ],
 
     // The three browser lanes are parallel-safe on distinct worker indices; the native shell and
     // the canary contend on the window server, which is what `gui` names.

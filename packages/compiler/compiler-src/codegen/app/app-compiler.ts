@@ -68,6 +68,9 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     : []
   const declaredPersistedStates = root === app ? persistedStates : []
   const declaredAppActions = root === app ? appActions : []
+  const selectedDatasourceConfiguration = app.name === options.selectedAppName
+    ? options.selectedAppDatasourceConfiguration
+    : undefined
   return gen`
     ${gen.list(declaredPersistedStates, Compile.StateDeclaration)}
     ${gen.list(declaredAppActions, Compile.ActionDeclaration)}
@@ -81,7 +84,9 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
         variant: ${gen.jsLiteral(app.name)},
         ${
     datasource
-      ? gen`providerIdentity: () => ${compileAppProperty(datasource, 'Datasource')}.bindingIdentity(),`
+      ? gen`providerIdentity: () => ${
+        compileAppProperty(datasource, 'Datasource', selectedDatasourceConfiguration)
+      }.bindingIdentity(),`
       : gen.noop()
   }
       },
@@ -103,7 +108,7 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     datasource
       ? gen`TR.Data.UseConfigured(
           ${gen.scopeName({ name: '_TaoDataCatalog' })},
-          ${compileAppProperty(datasource, 'Datasource')},
+          ${compileAppProperty(datasource, 'Datasource', selectedDatasourceConfiguration)},
         )`
       : gen.noop()
   }
@@ -351,6 +356,7 @@ function applyAppPropertyPatch(
 function compileAppProperty(
   property: EffectiveAppProperty,
   name: 'Name' | 'Navigator' | 'Datasource' | 'Design',
+  datasourceConfiguration?: Readonly<Record<string, string>>,
 ): Compiled {
   let result = compileAppPropertySource(property.value)
   for (const patch of property.patches) {
@@ -361,6 +367,16 @@ function compileAppProperty(
     } else {
       Assert(false, `validated app ${name} cannot be patched`)
     }
+  }
+  if (name === 'Datasource' && datasourceConfiguration && Object.keys(datasourceConfiguration).length > 0) {
+    result = gen`TR.Data.Patch(${result}, {
+      ${
+      gen.list(
+        Object.entries(datasourceConfiguration).toSorted(([left], [right]) => left.localeCompare(right)),
+        ([key, value]) => gen`${gen.jsLiteral(key)}: TR.Value(${gen.jsLiteral(value)}),`,
+      )
+    }
+    })`
   }
   return result
 }
