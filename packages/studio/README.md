@@ -71,7 +71,14 @@ answers is recorded `failed` and stops, rather than idling in a state that reads
 | ephemeral | Studio server, Studio preview | Chosen per launch; read them from `--json`          |
 | 42000+    | `studio-smoke` lanes          | Deterministic per shard and worker, from base 42000 |
 
-`./agent doctor` reports which of the conventional ports are occupied and by which process.
+A smoke shard is 128 ports and a worker is two of them, so a lane's ports are
+`42000 + shard * 128 + worker * 2`. The shard defaults to a block derived from the worktree path, so
+two checkouts on one machine do not claim the same ports; when two paths land on the same block
+anyway, the run walks to the next free one. `--shard <index>` pins one explicitly.
+
+`./agent doctor` reports which of the conventional ports are occupied and by which process, and
+names the other Tao lanes running on this machine. A conventional port held by a Tao process is as
+likely to belong to another worktree as to this one — check before killing it.
 
 ## Artifact roots
 
@@ -303,6 +310,8 @@ just studio-proof-real-app
 ```
 
 Each run gets deterministic ports from base 42000 by shard and worker, and its own artifact root.
+The shard defaults to this worktree's own block (see [Ports](#ports)), so a smoke lane in one
+checkout does not collide with one in another.
 The browser lane drives headless Chrome over the DevTools protocol, honours `TAO_STUDIO_CHROME_PATH`,
 captures a screenshot and the browser console under the run's artifact root, and fails the run on a
 console error or an uncaught exception. It does not yet see failed resource loads or CSP violations,

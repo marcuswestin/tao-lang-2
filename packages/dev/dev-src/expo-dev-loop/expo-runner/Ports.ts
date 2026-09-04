@@ -127,6 +127,14 @@ async function ensureFree(port: number): Promise<boolean> {
   }
 
   DevLoopTUI.logDevLoop('dev', `Port ${port} is already in use by ${formatListeners(listeners)}.`, 'warn')
+  // Several worktrees of this repository share one machine, and they all reach for the same
+  // conventional ports. The holder is as likely to be another checkout's dev loop as a leftover of
+  // this one, so the question names that before the answer kills anything.
+  DevLoopTUI.logDevLoop(
+    'dev',
+    'It may belong to another worktree on this machine; killing it stops that dev loop too.',
+    'warn',
+  )
   const shouldKill = await DevLoopTUI.askConfirm({
     defaultValue: false,
     message: 'Kill it?',

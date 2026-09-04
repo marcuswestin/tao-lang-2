@@ -1,4 +1,5 @@
-import { FS, Repo } from '@shared'
+import { FS, Platform, Repo } from '@shared'
+import { randomUUID } from 'node:crypto'
 import { RunTimings } from './RunTimings'
 import { WorkGraph, type WorkState } from './WorkGraph'
 
@@ -23,6 +24,12 @@ export type RunLocation = {
 /** FinishRunOptions describes the completed run whose artifacts are being written. */
 export type FinishRunOptions = {
   location: RunLocation
+  /**
+   * False for a run that shared the machine, whose durations measure the contention rather than
+   * the work. Ordering has a cold-start fallback; an estimate poisoned by a neighbouring worktree
+   * has none, and it mis-orders every later run in this checkout.
+   */
+  recordTimings?: boolean
   states: readonly WorkState[]
   /** The lane's own rollup, written as `summary.json`. */
   summary: unknown
@@ -33,7 +40,8 @@ const LATEST_LINK = 'latest'
 
 /** runStamp returns the filesystem-safe timestamp a run's directory is named after. */
 function runStamp(now = new Date()): string {
-  return now.toISOString().replaceAll(/[:.]/g, '-')
+  const timestamp = now.toISOString().replaceAll(/[:.]/g, '-')
+  return `${timestamp}-${Platform.runtimeProcess.pid}-${randomUUID().slice(0, 8)}`
 }
 
 /** locate resolves where one lane's run writes, creating nothing yet. */
@@ -64,16 +72,26 @@ async function finishRun(options: FinishRunOptions): Promise<string> {
     if (state.logPath !== undefined) {
       await FS.writeText(state.logPath, state.fullOutput)
     }
+    const initialAttempt = state.attempts?.[0]
+    if (initialAttempt !== undefined) {
+      const initialPath = FS.resolvePath(
+        `${WorkGraph.nodeLabel(state.node)}.initial.log`,
+        options.location.logRoot,
+      )
+      await FS.writeText(initialPath, initialAttempt.fullOutput)
+    }
   }))
   const summaryPath = FS.resolvePath(SUMMARY_FILE, options.location.logRoot)
   await FS.writeJson(summaryPath, options.summary)
   await refreshLatest(options.location)
-  await RunTimings.record({
-    durations: measuredDurations(options.states),
-    lane: options.location.lane,
-    repositoryRoot: options.location.repositoryRoot,
-    stamp: options.location.stamp,
-  })
+  if (options.recordTimings !== false) {
+    await RunTimings.record({
+      durations: measuredDurations(options.states),
+      lane: options.location.lane,
+      repositoryRoot: options.location.repositoryRoot,
+      stamp: options.location.stamp,
+    })
+  }
   return summaryPath
 }
 
@@ -96,11 +114,11 @@ async function refreshLatest(location: RunLocation): Promise<void> {
   }
 }
 
-/** measuredDurations reports how long each node that actually ran took. */
+/** measuredDurations learns only from successful work; failures and interruptions are not estimates. */
 function measuredDurations(states: readonly WorkState[]): Map<string, number> {
   return new Map(
     states
-      .filter(state => state.status === 'failed' || state.status === 'passed')
+      .filter(state => state.status === 'passed')
       .map(state => [state.name, state.elapsedMs]),
   )
 }

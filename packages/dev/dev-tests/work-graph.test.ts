@@ -1,3 +1,4 @@
+import { Errors } from '@shared'
 import { Deferred, Describe, Expect, settle, Test, until } from '@shared/test'
 import { type WorkCommand, WorkGraph, type WorkNode, type WorkState } from '../dev-src/repository-tests/WorkGraph'
 
@@ -112,7 +113,9 @@ Describe('work graph scheduling', () => {
     await run.finished
 
     Expect(run.stateOf('compile').status).toBe('failed')
+    Expect(run.stateOf('compile').failure?.kind).toBe('nonzero-exit')
     Expect(run.stateOf('test').status).toBe('skipped')
+    Expect(run.stateOf('test').failure?.kind).toBe('dependency')
     Expect(run.stateOf('test').reason).toBe('dependency failed: compile')
     Expect(run.stateOf('report').status).toBe('skipped')
     Expect(run.stateOf('report').reason).toBe('dependency failed: test')
@@ -210,9 +213,29 @@ Describe('work graph scheduling', () => {
     const { interrupted } = await run.finished
     Expect(interrupted).toBe(false)
     Expect(run.stateOf('hung-canary').reason).toBe('timed out after 20ms')
+    Expect(run.stateOf('hung-canary').failure?.kind).toBe('timeout')
     Expect(run.stateOf('report').status).toBe('skipped')
     Expect(run.stateOf('report').reason).toBe('dependency failed: hung-canary')
     Expect(run.stateOf('browser').status).toBe('passed')
+  })
+
+  Test('a child that exits zero only after cancellation still records its timeout', async () => {
+    const state = WorkGraph.createState({
+      name: 'masked-timeout',
+      run: { args: [], command: 'ignored' },
+      timeoutMs: 1,
+    })
+
+    await WorkGraph.run([state], {
+      runNode: async (_state, context) =>
+        await new Promise(resolve => {
+          context.onCancel(() => resolve({ exitCode: 0 }))
+        }),
+      watchInterrupt: () => () => {},
+    })
+
+    Expect(state.status).toBe('failed')
+    Expect(state.failure?.kind).toBe('timeout')
   })
 
   Test('an interrupt stops the running children, skips the rest, and fails the run', async () => {
@@ -230,10 +253,133 @@ Describe('work graph scheduling', () => {
     Expect(result.interrupted).toBe(true)
     Expect(run.stateOf('test').status).toBe('failed')
     Expect(run.stateOf('test').reason).toBe('interrupted')
+    Expect(run.stateOf('test').failure?.kind).toBe('interrupted')
     Expect(run.stateOf('typecheck').status).toBe('skipped')
     Expect(run.stateOf('typecheck').reason).toBe('interrupted')
     Expect(run.started).toEqual(['test'])
     Expect(WorkGraph.exitCodeFor(result)).toBe(1)
+  })
+
+  Test('does not rewrite a child that completed successfully while an interrupt was in flight', async () => {
+    const state = WorkGraph.createState(workNode({ name: 'cleanup-aware' }))
+    let interrupt = () => {}
+    let finish = () => {}
+    const finished = WorkGraph.run([state], {
+      jobs: 1,
+      runNode: async (_state, context) =>
+        await new Promise(resolve => {
+          finish = () => resolve({ exitCode: 0 })
+          context.onCancel(finish)
+        }),
+      watchInterrupt: callback => {
+        interrupt = callback
+        return () => {}
+      },
+    })
+    await until(() => state.status === 'running', { description: 'cleanup-aware child to start' })
+
+    interrupt()
+    const result = await finished
+
+    Expect(result.interrupted).toBe(true)
+    Expect(state.status).toBe('passed')
+    Expect(state.failure).toBeUndefined()
+    Expect(WorkGraph.exitCodeFor(result)).toBe(1)
+  })
+
+  Test('releases a reservation that arrives after interruption without starting its node', async () => {
+    const state = WorkGraph.createState(workNode({ name: 'late-admission' }))
+    const admission = Deferred<{ release: () => Promise<void>; slots: number } | undefined>()
+    let interrupt = () => {}
+    let released = false
+    let starts = 0
+    const finished = WorkGraph.run([state], {
+      jobs: 1,
+      runNode: async () => {
+        starts += 1
+        return { exitCode: 0 }
+      },
+      slotBroker: {
+        tryAcquire: async () => await admission.promise,
+        waitForAvailability: async () => {},
+      },
+      watchInterrupt: callback => {
+        interrupt = callback
+        return () => {}
+      },
+    })
+    await settle(2)
+
+    interrupt()
+    admission.resolve({
+      release: async () => {
+        released = true
+      },
+      slots: 1,
+    })
+    const result = await finished
+
+    Expect(result.interrupted).toBe(true)
+    Expect(state.status).toBe('skipped')
+    Expect(starts).toBe(0)
+    Expect(released).toBe(true)
+  })
+
+  Test('reports once when a ready node is waiting for machine capacity', async () => {
+    const state = WorkGraph.createState(workNode({ name: 'capacity-waiter' }))
+    const events: string[] = []
+    let attempts = 0
+
+    await WorkGraph.run([state], {
+      jobs: 1,
+      onEvent: event => events.push(event.kind),
+      runNode: async () => ({ exitCode: 0 }),
+      slotBroker: {
+        tryAcquire: async () =>
+          ++attempts < 3
+            ? undefined
+            : { release: async () => {}, slots: 1 },
+        waitForAvailability: async () => {},
+      },
+      watchInterrupt: () => () => {},
+    })
+
+    Expect(events.filter(kind => kind === 'waiting')).toEqual(['waiting'])
+    Expect(state.status).toBe('passed')
+    Expect(state.reason).toBeUndefined()
+  })
+
+  Test('cancels and drains running nodes when a later broker admission fails', async () => {
+    const states = ['first', 'second'].map(name => WorkGraph.createState(workNode({ name })))
+    let admissions = 0
+    let cancellations = 0
+
+    const finished = WorkGraph.run(states, {
+      jobs: 2,
+      runNode: async (_state, context) =>
+        await new Promise(resolve => {
+          context.onCancel(() => {
+            cancellations += 1
+            resolve({ exitCode: null })
+          })
+        }),
+      slotBroker: {
+        tryAcquire: async () => {
+          admissions += 1
+          if (admissions === 2) {
+            throw new Errors.HostEnvironmentError('registry lock timed out')
+          }
+          return { release: async () => {}, slots: 1 }
+        },
+        waitForAvailability: async () => {},
+      },
+      watchInterrupt: () => () => {},
+    })
+
+    await Expect(finished).rejects.toThrow('registry lock timed out')
+    Expect(cancellations).toBe(1)
+    Expect(states.map(state => state.status)).toEqual(['failed', 'skipped'])
+    Expect(states[0]?.failure?.kind).toBe('interrupted')
   })
 
   Test('reports every node exactly once, in the order the graph reached it', async () => {

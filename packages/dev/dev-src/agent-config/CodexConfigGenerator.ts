@@ -25,6 +25,9 @@ const DOCKER_SOCKET = '/var/run/docker.sock'
 export type CanonicalPermissions = {
   claudecode?: {
     sandbox?: {
+      filesystem?: {
+        allowWrite?: readonly string[]
+      }
       network?: {
         allowLocalBinding?: boolean
         allowedDomains?: readonly string[]
@@ -64,6 +67,7 @@ export function parsePermissions(source: string): CanonicalPermissions {
 /** renderCodexConfig renders the whole `.codex/config.toml` from canonical permission rules. */
 export function renderCodexConfig(permissions: CanonicalPermissions): string {
   const read = permissions.permission?.read ?? {}
+  const allowWrite = permissions.claudecode?.sandbox?.filesystem?.allowWrite ?? []
   const network = permissions.claudecode?.sandbox?.network ?? {}
   return [
     ...header(),
@@ -84,7 +88,7 @@ export function renderCodexConfig(permissions: CanonicalPermissions): string {
     `extends = ${quote(PROFILE_BASE)}`,
     'description = "Tao worktree: write the workspace, read the reference repo, reach documentation and package hosts."',
     '',
-    ...filesystemSection(read),
+    ...filesystemSection(read, allowWrite),
     '',
     ...workspaceRootsSection(read),
     '',
@@ -142,12 +146,16 @@ function header(): string[] {
   ]
 }
 
-function filesystemSection(read: Record<string, string>): string[] {
+function filesystemSection(read: Record<string, string>, allowWrite: readonly string[]): string[] {
   return [
     `[permissions.${PROFILE}.filesystem]`,
     `${quote(PRIMARY_GIT_DIRECTORY)} = "write"`,
+    '# Caches and shared state the pinned toolchain writes outside the worktree. One list serves',
+    "# both harnesses: these are Claude Code's sandbox write paths, spelled as Codex rules.",
+    ...allowWrite.map(path => `${quote(path)} = "write"`),
     '# The previous repository is reference material only (see AGENTS.md).',
     ...homePathRules(read, 'allow').map(path => `${quote(path)} = "read"`),
+    // Denies come last so a credential directory inside an allowed tree is still denied.
     ...homePathRules(read, 'deny').map(path => `${quote(path)} = "deny"`),
   ]
 }
