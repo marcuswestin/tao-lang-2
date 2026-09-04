@@ -92,6 +92,11 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).toContain('view StudioCompilePanelView(')
   Expect(source).toContain('view StudioProblemsPanelView(')
   Expect(source).toContain('view StudioDataPanelView(')
+  Expect(source).toContain('view StudioDataRailPanel(Data StudioDataPanel)')
+  Expect(source).toContain('Text [ink ink]')
+  Expect(source).toContain('TextInput [background panel, border line, ink ink]')
+  Expect(source).toContain('do OpenScreen(View.StableId)')
+  Expect(source).toContain('do OpenSource(Path: DesignToken.SourcePath')
   Expect(source).toContain('view StudioTestsPanelView(')
   Expect(source).toContain('view StudioLogsPanelView(')
   Expect(source).toContain('view StudioSearchPanel(Rows list of StudioSearchPanelRow)')
@@ -105,7 +110,7 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).toContain('view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text')
   Expect(source).toContain('FilePath: ActiveFilePath')
   Expect(source).toContain(
-    'accepts content slots @files, @components, @projectViews, @screens, @tokens, @search, @drawer, @scenario, @editor, @inspector',
+    'accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @editor, @inspector',
   )
   Expect(source).toContain(
     '@scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")',
@@ -423,7 +428,7 @@ Test('Tao-owned inspector Data and Actions expose only the published active sele
   Expect(lines).toContain('Selected element: Text')
   Expect(lines).toContain('Binding metadata: not published for this render.')
   Expect(lines).toContain('Datasource context: cell cell-phone revision 4.')
-  Expect(lines).toContain('Entity tables remain in the Data drawer.')
+  Expect(lines).toContain('Entity tables are available in the Data panel.')
   Expect(StudioInspectorActionIds(inspection, selection)).toEqual(['wrap-stack'])
   Expect(JSON.parse(StudioInspectorAction(selection, 'wrap-stack'))).toEqual({
     kind: 'wrap-render',

@@ -36,6 +36,7 @@ import {
   isStudioSaveShortcut,
   projectRelativePath,
   StudioCodeEditor,
+  StudioDefinitionNavigation,
   StudioDiagnosticNavigation,
   StudioEditorInsertion,
   StudioOpenFileLifecycle,
@@ -163,6 +164,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let dataResult: readonly StudioRuntimeDataTable[] = []
     let dataTimer: ReturnType<typeof setInterval> | undefined
     let drawerTab: StudioDrawerTab = 'Problems'
+    let railPanel = 'files'
     let highlightRequestRevision = 0
     let highlightTimer: ReturnType<typeof setTimeout> | undefined
     let activeFile: StudioDraftFile | undefined
@@ -685,10 +687,30 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       if (opened === undefined) {
         return
       }
-      const offset = Math.min(item.start, opened.editor.state.doc.length)
+      const selection = StudioDefinitionNavigation.selection(opened.editor.state.doc, item.start)
       opened.editor.dispatch({
-        effects: EditorView.scrollIntoView(offset, { y: 'center' }),
-        selection: { anchor: offset },
+        effects: EditorView.scrollIntoView(selection.anchor, { y: 'center' }),
+        selection,
+      })
+      opened.editor.focus()
+    }
+
+    async function openSource(path: string, sourceVersion: string, start: number): Promise<void> {
+      const relativePath = projectRelativePath(handshake.identity.project, path) ?? path
+      const current = projectFiles.find(file => file.path === relativePath)
+      Assert.input(current, `Tao Studio source is no longer available: ${relativePath}`)
+      Assert.input(
+        current.sourceVersion === sourceVersion,
+        `Tao Studio source location is stale; reopen ${relativePath} after the current compile.`,
+      )
+      const opened = await openFile(relativePath)
+      if (opened === undefined) {
+        return
+      }
+      const selection = StudioDefinitionNavigation.selection(opened.editor.state.doc, start)
+      opened.editor.dispatch({
+        effects: EditorView.scrollIntoView(selection.anchor, { y: 'center' }),
+        selection,
       })
       opened.editor.focus()
     }
@@ -805,6 +827,20 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       publishProductHostState()
     }
 
+    function dataPanelVisible(): boolean {
+      return drawerTab === 'Data' || railPanel === 'data'
+    }
+
+    function synchronizeDataPolling(): void {
+      if (dataPanelVisible()) {
+        void loadData()
+        dataTimer ??= setInterval(() => void loadData(), 2_000)
+      } else if (dataTimer !== undefined) {
+        clearInterval(dataTimer)
+        dataTimer = undefined
+      }
+    }
+
     function selectDrawer(tab: StudioDrawerTab): void {
       drawerTab = tab
       for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('[data-drawer-tab]')) {
@@ -815,13 +851,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         }
       }
       renderDrawer()
-      if (tab === 'Data') {
-        void loadData()
-        dataTimer ??= setInterval(() => void loadData(), 2_000)
-      } else if (dataTimer !== undefined) {
-        clearInterval(dataTimer)
-        dataTimer = undefined
-      }
+      synchronizeDataPolling()
     }
 
     const dataFill = new StudioDataFillCoordinator(async isLatest => {
@@ -1195,7 +1225,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       if (view.searchInput.value.trim() !== '') {
         scheduleSearch()
       }
-      if (drawerTab === 'Data') {
+      if (dataPanelVisible()) {
         void loadData()
       }
     }
@@ -1236,7 +1266,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         if (preview === activePreview.current()) {
           publishProductHostState()
           renderInspector()
-          if (drawerTab === 'Data') {
+          if (dataPanelVisible()) {
             void loadData()
           } else if (drawerTab === 'Logs') {
             renderDrawer()
@@ -1253,7 +1283,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       publishProductHostState()
       renderInspector()
       renderDrawer()
-      if (drawerTab === 'Data') {
+      if (dataPanelVisible()) {
         void loadData()
       }
     })
@@ -1298,9 +1328,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     view.rail.addEventListener('click', event => {
       const panel = (event.target as HTMLElement).closest<HTMLElement>('[data-panel]')?.dataset['panel']
-      if (panel === 'data') {
-        selectDrawer('Data')
-      } else if (panel === 'search') {
+      railPanel = panel ?? railPanel
+      synchronizeDataPolling()
+      if (panel === 'search') {
         view.searchInput.focus()
       }
     })
@@ -1358,7 +1388,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         if (state.status !== 'compiling') {
           void fileTree?.refresh().catch(error => showSourceActionError(view.status, error))
         }
-        if (drawerTab === 'Data') {
+        if (dataPanelVisible()) {
           void loadData()
         }
         if (testWatch && state.status === 'compiled') {
@@ -1384,7 +1414,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             view.status.textContent = 'This file changed on disk while the editor has an unsaved draft.'
           }
         }
-        if (drawerTab === 'Data') {
+        if (dataPanelVisible()) {
           void loadData()
         }
       },
@@ -1402,7 +1432,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           })
         }
         renderCommands()
-        if (drawerTab === 'Data') {
+        if (dataPanelVisible()) {
           void loadData()
         }
       },
@@ -1432,7 +1462,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             if (drawerTab === 'Logs') {
               renderDrawer()
             }
-            if (drawerTab === 'Data') {
+            if (dataPanelVisible()) {
               void loadData()
             }
             connection.changed?.()
@@ -1480,7 +1510,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         const preview = previews.find(candidate => candidate.cell?.scenarioId === target.scenarioId)
         if (preview !== undefined) {
           activePreview.activate(preview)
-          if (drawerTab === 'Data') {
+          if (dataPanelVisible()) {
             void loadData()
           }
           if (drawerTab === 'Logs') {
@@ -1651,6 +1681,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         const screen = StudioRailPanels.screens(previewManifest).find(candidate => candidate.id === subjectId)
         Assert.input(screen, `Tao Studio screen is no longer available: ${subjectId}`)
         await openScreen(screen)
+      },
+      async openSource(path, sourceVersion, start) {
+        await openSource(path, sourceVersion, start)
       },
       async productPanelAction(name, payload) {
         if (name.startsWith('scenario-')) {

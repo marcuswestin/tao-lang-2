@@ -46,6 +46,7 @@ import {
   requestStudioProductHostMoveGeneratedSource,
   requestStudioProductHostOpenFile,
   requestStudioProductHostOpenScreen,
+  requestStudioProductHostOpenSource,
   requestStudioProductHostPanelAction,
   requestStudioProductHostRenameFile,
   requestStudioProductHostSelectActiveFile,
@@ -117,6 +118,10 @@ type StudioDrawerSlotProps = Readonly<{
   Tests?: TR.Value<StudioTaoDrawerPanelModel['Tests']>
 }>
 
+type StudioDataSlotProps = Readonly<{
+  Data?: TR.Value<StudioTaoDrawerPanelModel['Data']>
+}>
+
 type StudioSearchSlotProps = Readonly<{
   Rows?: TR.Value<readonly StudioTaoSearchRow[]>
 }>
@@ -134,6 +139,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
   const [projectViewsTarget, setProjectViewsTarget] = React.useState<HTMLElement>()
   const [screensTarget, setScreensTarget] = React.useState<HTMLElement>()
   const [tokensTarget, setTokensTarget] = React.useState<HTMLElement>()
+  const [dataTarget, setDataTarget] = React.useState<HTMLElement>()
   const [drawerTarget, setDrawerTarget] = React.useState<HTMLElement>()
   const [searchTarget, setSearchTarget] = React.useState<HTMLElement>()
   const [scenarioTarget, setScenarioTarget] = React.useState<HTMLElement>()
@@ -183,6 +189,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
     setProjectViewsTarget(root.querySelector<HTMLElement>('.studio-project-views') ?? undefined)
     setScreensTarget(root.querySelector<HTMLElement>('.studio-screens') ?? undefined)
     setTokensTarget(root.querySelector<HTMLElement>('.studio-design-values') ?? undefined)
+    setDataTarget(root.querySelector<HTMLElement>('.studio-data') ?? undefined)
     setDrawerTarget(root.querySelector<HTMLElement>('.studio-drawer-content') ?? undefined)
     setSearchTarget(root.querySelector<HTMLElement>('.studio-search-results') ?? undefined)
     setScenarioTarget(root.querySelector<HTMLElement>('.studio-scenario-inspector-content') ?? undefined)
@@ -213,6 +220,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
   const projectViews = props.Slots?.['@projectViews'] ?? props.Slots?.['projectViews']
   const screens = props.Slots?.['@screens'] ?? props.Slots?.['screens']
   const tokens = props.Slots?.['@tokens'] ?? props.Slots?.['tokens']
+  const data = props.Slots?.['@data'] ?? props.Slots?.['data']
   const drawer = props.Slots?.['@drawer'] ?? props.Slots?.['drawer']
   const search = props.Slots?.['@search'] ?? props.Slots?.['search']
   const scenario = props.Slots?.['@scenario'] ?? props.Slots?.['scenario']
@@ -275,6 +283,9 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       Tests: TR.Value(panelValues.Drawer.Tests),
     })
     : drawer
+  const refreshedData = React.isValidElement<StudioDataSlotProps>(data)
+    ? React.cloneElement(data, { Data: TR.Value(panelValues.Drawer.Data) })
+    : data
   const refreshedSearch = React.isValidElement<StudioSearchSlotProps>(search)
     ? React.cloneElement(search, { Rows: TR.Value(panelValues.Search.Rows) })
     : search
@@ -299,6 +310,9 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
         : createPortal(projectViews, projectViewsTarget)}
       {screensTarget === undefined || screens === undefined ? undefined : createPortal(screens, screensTarget)}
       {tokensTarget === undefined || tokens === undefined ? undefined : createPortal(tokens, tokensTarget)}
+      {dataTarget === undefined || refreshedData === undefined
+        ? undefined
+        : createPortal(refreshedData, dataTarget)}
       {drawerTarget === undefined || refreshedDrawer === undefined
         ? undefined
         : createPortal(refreshedDrawer, drawerTarget)}
@@ -1114,7 +1128,7 @@ export function StudioInspectorDataLines(
       ? 'Datasource context: no active preview cell.'
       : `Datasource context: cell ${activeCellId} revision ${activeCellRevision}.`,
     activeScenarioId === '' ? 'Scenario context: none.' : `Scenario context: ${activeScenarioId}.`,
-    'Entity tables remain in the Data drawer.',
+    'Entity tables are available in the Data panel.',
   ]
 }
 
@@ -2239,6 +2253,11 @@ const deleteButtonStyle = {
 /** OpenFile is the Tao Files panel's typed request into the existing editor host. */
 export async function OpenFile(path: string): Promise<void> {
   await requestStudioProductHostOpenFile(path)
+}
+
+/** OpenSource opens a revision-bound declaration and selects the first line containing it. */
+export async function OpenSource(path: string, sourceVersion: string, start: number): Promise<void> {
+  await requestStudioProductHostOpenSource(path, sourceVersion, start)
 }
 
 /** File writes share the workbench controller so open drafts and tabs transition atomically. */

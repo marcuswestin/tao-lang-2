@@ -13,7 +13,7 @@ const serverEntity = {
 
 const fields = {
   Checkpoint: ['AfterVersion', 'BeforeVersion', 'Path', 'Status'],
-  DesignToken: ['Name', 'SourcePath', 'SourceVersion', 'Value'],
+  DesignToken: ['DesignName', 'End', 'Kind', 'Name', 'SourcePath', 'SourceVersion', 'Start', 'Value'],
   File: ['DiagnosticCount', 'Dirty', 'Folder', 'Name', 'ParentPath', 'Path', 'Version'],
   Problem: [
     'EndCharacter',

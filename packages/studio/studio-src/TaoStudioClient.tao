@@ -19,12 +19,19 @@ app TaoStudioFiles {
 }
 
 design StudioDesign {
+   panel #171a20
+   ink #d7dce4
+   line #394251
    sizes {
       controlGap 4.px
    }
    styles {
       designTokenRow [gap controlGap]
    }
+   Text [ink ink]
+   TextInput [background panel, border line, ink ink]
+   Button [background panel, border line, ink ink]
+   Picker [background panel, border line, ink ink]
 }
 
 type StudioServer is datasource with {
@@ -119,6 +126,8 @@ action MoveGeneratedSource(Path text, SourceVersion text, TargetPackage text) fa
 action DeleteFile(Path text, SourceVersion text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
 
 action OpenFile(Path text) from ./TaoStudioProductHost.tsx
+
+action OpenSource(Path text, SourceVersion text, Start number) from ./TaoStudioProductHost.tsx
 
 action InsertComponent(Name text) from ./TaoStudioProductHost.tsx
 
@@ -288,10 +297,10 @@ view ComponentsPanel() {
 }  }
 
 view ProjectViewRow(View) {
-   action Insert() {
-      do InsertProjectView(View.Name)
+   action Open() {
+      do OpenScreen(View.StableId)
    }
-   render StudioPaletteRow(Label: View.Name, Detail: View.SourcePath, Kind: "project-view", Name: View.Name, Insert: Insert)
+   render StudioSourceRow(Label: View.Name, Detail: View.SourcePath, Open: Open)
 }
 
 view ProjectViewsPanel() {
@@ -325,7 +334,7 @@ view ScreensPanel() {
 
 view DesignTokenRow(DesignToken) {
    action Open() {
-      do OpenFile(DesignToken.SourcePath)
+      do OpenSource(Path: DesignToken.SourcePath, SourceVersion: DesignToken.SourceVersion, Start: DesignToken.Start)
    }
    render Col() [designTokenRow] {
       Text(DesignToken.Kind)
@@ -883,6 +892,14 @@ view StudioDrawerPanel(Tab text, Compile StudioCompilePanel, Problems StudioProb
          otherwise -> { }
 }  }  }
 
+view StudioDataRailPanel(Data StudioDataPanel) {
+   action Dispatch(Name text, Payload text) {
+      do ProductPanelAction(Name: Name, Payload: Payload)
+   }
+   render StudioPanelSurface("Data") {
+      StudioDataPanelView(Data: Data, Dispatch: Dispatch)
+}  }
+
 view StudioPanelCommand(Label text, Command StudioPanelAction, Dispatch action(text, text), Disabled boolean) {
    action Invoke() {
       do Dispatch(Command.Name, Command.Payload)
@@ -1257,6 +1274,7 @@ view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
       @projectViews ProjectViewsPanel()
       @screens ScreensPanel()
       @tokens DesignTokensPanel()
+      @data StudioDataRailPanel(InitialDataPanel)
       @search StudioSearchPanel([])
       @drawer StudioDrawerPanel(Tab: "Problems", Compile: InitialCompilePanel, Problems: InitialProblemsPanel, Data: InitialDataPanel, Tests: InitialTestsPanel, Logs: InitialLogsPanel)
       @scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")
@@ -1264,4 +1282,4 @@ view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
       @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", ActiveCellId: "", CellRevision: 0, ActiveScenarioId: "", ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser", InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null")
 }  }
 
-view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @search, @drawer, @scenario, @editor, @inspector from ./TaoStudioProductHost.tsx
+view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @editor, @inspector from ./TaoStudioProductHost.tsx

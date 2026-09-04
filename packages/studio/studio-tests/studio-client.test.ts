@@ -18,6 +18,7 @@ import {
 import {
   isStudioSaveShortcut,
   StudioCodeEditor,
+  StudioDefinitionNavigation,
   StudioDiagnosticNavigation,
   StudioEditorInsertion,
   StudioOpenFileLifecycle,
@@ -81,6 +82,7 @@ import {
   requestStudioProductHostCreateFile,
   requestStudioProductHostMoveGeneratedSource,
   requestStudioProductHostOpenFile,
+  requestStudioProductHostOpenSource,
   requestStudioProductHostPanelAction,
   requestStudioProductHostSelectActiveFile,
   studioProductHostState,
@@ -347,6 +349,9 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
     async openScreen(subjectId) {
       calls.push(`screen:${subjectId}`)
     },
+    async openSource(path, sourceVersion, start) {
+      calls.push(`source:${path}:${sourceVersion}:${start}`)
+    },
     async productPanelAction(name, payload) {
       calls.push(`panel:${name}:${payload}`)
     },
@@ -377,6 +382,7 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
     Expect(validStudioProductHostPath('Folder\\File.tao')).toBe(false)
     await Expect(requestStudioProductHostOpenFile('../Outside.tao')).rejects.toThrow('project-relative Tao')
     await requestStudioProductHostPanelAction('run-tests', 'null')
+    await requestStudioProductHostOpenSource('/project/Garden.tao', 'version:1', 14)
     await Expect(requestStudioProductHostPanelAction('', 'null')).rejects.toThrow('panel')
     await Expect(requestStudioProductHostPanelAction('run-tests', 'x'.repeat(1_000_001))).rejects.toThrow(
       'at most one megabyte',
@@ -423,13 +429,13 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
     Expect(stateUpdates).toBe(1)
     requestStudioProductHostChangeActiveFile('changed')
     requestStudioProductHostSelectActiveFile(2, 5)
-    Expect(calls.slice(-5)).toEqual([
-      'panel:run-tests:null',
+    Expect(calls.slice(-4)).toEqual([
       'environment:cell:1:7',
       'environment:stale:6',
       'change:changed',
       'select:2:5',
     ])
+    Expect(calls).toContain('source:/project/Garden.tao:version:1:14')
   } finally {
     unsubscribeState()
     unregister()
@@ -722,6 +728,8 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
     'search',
   ])
   Expect(markup.match(/class="studio-files"/g)).toHaveLength(1)
+  Expect(markup.match(/class="studio-data"/g)).toHaveLength(1)
+  Expect(markup).not.toContain('Live entity tables and refresh controls are in the Data drawer.')
   for (const item of studioShellRailPanels) {
     Expect(markup).toContain(`data-panel="${item.panel}"`)
   }
@@ -1998,6 +2006,16 @@ Test('Studio diagnostic navigation converts compiler lines into a bounded CodeMi
   })).toEqual({
     anchor: state.doc.line(2).from + 2,
     head: state.doc.line(2).to,
+  })
+})
+
+Test('Studio definition navigation selects the complete declaration line from a source offset', () => {
+  const state = EditorState.create({ doc: 'first\n   view Main() {\n      Text("Hello")\n   }\n' })
+  const line = state.doc.line(2)
+
+  Expect(StudioDefinitionNavigation.selection(state.doc, line.from + 7)).toEqual({
+    anchor: line.from,
+    head: line.to,
   })
 })
 

@@ -805,6 +805,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   background: var(--studio-accent-surface); color: #f0f5ff;
 }
 .studio-drawer-content { color: var(--studio-text-muted); padding: 10px 13px; }
+.studio-data { color: var(--studio-text-muted); padding: 10px 12px; }
+.studio-data .studio-data-table { display: block; overflow-x: auto; }
 .studio-drawer-content dt, .studio-drawer-content dd { border-bottom-color: #242a32; }
 .studio-drawer-row { border-radius: 5px; color: #e7a8a1; padding: 6px 8px; }
 .studio-drawer-row:hover:not(:disabled) { background: var(--studio-surface-hover); }

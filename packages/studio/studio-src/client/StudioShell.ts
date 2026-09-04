@@ -102,7 +102,7 @@ export function studioShellMarkup(): string {
           </section>
           <section class="studio-design-values studio-left-panel" data-studio-panel="tokens" hidden></section>
           <section class="studio-left-panel" data-studio-panel="screens" hidden><nav class="studio-screens" aria-label="Project screens"></nav></section>
-          <section class="studio-left-panel studio-panel-note" data-studio-panel="data" hidden>Live entity tables and refresh controls are in the Data drawer.</section>
+          <section class="studio-left-panel" data-studio-panel="data" hidden><div class="studio-data"></div></section>
           <section class="studio-left-panel studio-search-panel" data-studio-panel="search" hidden>
             <label><span>Search project</span><input class="studio-search-input" type="search" placeholder="Text or diagnostic"></label>
             <div class="studio-search-results" role="listbox"></div>

@@ -20,6 +20,7 @@ export type StudioProductHostActions = Readonly<{
   applyInspectorAction: (action: StudioCanonicalSourceAction, proposed: boolean) => Promise<void>
   openFile: (path: string) => Promise<void>
   openScreen: (subjectId: string) => Promise<void>
+  openSource: (path: string, sourceVersion: string, start: number) => Promise<void>
   productPanelAction: (name: string, payload: string) => Promise<void>
   renameFile: (path: string, sourceVersion: string, targetPath: string) => Promise<void>
   selectActiveFile: (anchor: number, head: number) => void
@@ -102,6 +103,7 @@ type StudioProductHostRequest =
   | Readonly<{ kind: 'move-generated-source'; path: string; sourceVersion: string; targetPackage: string }>
   | Readonly<{ kind: 'open-file'; path: string }>
   | Readonly<{ kind: 'open-screen'; subjectId: string }>
+  | Readonly<{ kind: 'open-source'; path: string; sourceVersion: string; start: number }>
   | Readonly<{ kind: 'product-panel-action'; name: string; payload: string }>
   | Readonly<{ kind: 'rename-file'; path: string; sourceVersion: string; targetPath: string }>
   | Readonly<{ kind: 'undo-inspector-action' }>
@@ -208,6 +210,18 @@ export async function requestStudioProductHostDeleteFile(path: string, sourceVer
 export async function requestStudioProductHostOpenFile(path: string): Promise<void> {
   assertStudioProductHostPath(path)
   await request({ kind: 'open-file', path })
+}
+
+export async function requestStudioProductHostOpenSource(
+  path: string,
+  sourceVersion: string,
+  start: number,
+): Promise<void> {
+  assertNonEmptyProductHostIdentity(path, 'source path')
+  Assert.input(path.endsWith('.tao') && !path.includes('\\'), 'Tao Studio source navigation requires a Tao file path.')
+  assertSourceVersion(sourceVersion)
+  Assert.input(Number.isInteger(start) && start >= 0, 'Tao Studio source navigation requires a valid offset.')
+  await request({ kind: 'open-source', path, sourceVersion, start })
 }
 
 export async function requestStudioProductHostMoveGeneratedSource(
@@ -324,6 +338,9 @@ async function execute(actions: StudioProductHostActions, action: StudioProductH
       return
     case 'open-screen':
       await actions.openScreen(action.subjectId)
+      return
+    case 'open-source':
+      await actions.openSource(action.path, action.sourceVersion, action.start)
       return
     case 'product-panel-action':
       await actions.productPanelAction(action.name, action.payload)
