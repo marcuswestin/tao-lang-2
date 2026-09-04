@@ -4,6 +4,7 @@ export type ChangedSelection = {
   changedPaths: readonly string[]
   hasMergeCommit: boolean
   newestCommitAt?: string
+  newestMergeAt?: string
   reference: string
 }
 
@@ -27,18 +28,20 @@ async function changedSelection(
   const reference = explicitReference === undefined
     ? await defaultReference(repositoryRoot, run)
     : await resolveCommit(explicitReference, repositoryRoot, run)
-  const [paths, untracked, merges, newest] = await Promise.all([
+  const [paths, untracked, merges, newest, newestMerge] = await Promise.all([
     // Match the runners' changed modes: include committed, staged, and working-tree changes since
     // the comparison commit rather than looking only at the committed `<ref>..HEAD` range.
     checkedGit(['diff', '--name-only', reference], repositoryRoot, run),
     checkedGit(['ls-files', '--others', '--exclude-standard'], repositoryRoot, run),
     checkedGit(['rev-list', '--merges', '--count', `${reference}..HEAD`], repositoryRoot, run),
     checkedGit(['log', '-1', '--format=%cI', `${reference}..HEAD`], repositoryRoot, run),
+    checkedGit(['log', '-1', '--merges', '--format=%cI', `${reference}..HEAD`], repositoryRoot, run),
   ])
   return {
     changedPaths: [...new Set(`${paths}\n${untracked}`.split(/\r?\n/).filter(Boolean).map(FS.slashPath))].sort(),
     hasMergeCommit: Number(merges.trim()) > 0,
     newestCommitAt: newest.split(/\r?\n/).find(Boolean),
+    newestMergeAt: newestMerge.split(/\r?\n/).find(Boolean),
     reference,
   }
 }

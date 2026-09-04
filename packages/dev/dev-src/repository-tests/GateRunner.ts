@@ -5,7 +5,7 @@ import { type ContentionReport, type MachineLane, MachineLanes } from './Machine
 import { RunArtifacts } from './RunArtifacts'
 import { buildSummary, type GateSummary, skippedResult } from './RunSummary'
 import { RunTimings } from './RunTimings'
-import { WorkGraph, type WorkOutcome, type WorkState } from './WorkGraph'
+import { WorkGraph, type WorkOutcome, type WorkRunContext, type WorkState } from './WorkGraph'
 import { type OutputMode, WorkReporter, type WorkReporterHandle } from './WorkReporter'
 
 /**
@@ -41,7 +41,11 @@ export type RunGatesOptions = {
   /** Gates deliberately not run in this lane, as `name=reason`. */
   skipped?: readonly string[]
   /** Injected so tests observe orchestration without running the real recipes. */
-  runGate?: (name: string, logPath: string) => Promise<{ exitCode: number; output: string }>
+  runGate?: (
+    name: string,
+    logPath: string,
+    environment: Readonly<Record<string, string>>,
+  ) => Promise<{ exitCode: number; output: string }>
 }
 
 const DEFAULT_LANE = 'verify'
@@ -88,6 +92,7 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   const runNode = options.runGate === undefined ? undefined : injectedRunner(options.runGate)
   const { contention, result } = await runUnderLane(async () => {
     const runResult = await WorkGraph.run(states, {
+      env: machineLane.id === undefined ? undefined : { [MachineLanes.LANE_ID_ENV_KEY]: machineLane.id },
       expectedMs,
       jobs: machineLane.ceiling,
       onEvent: event => reporter.handle(event),
@@ -143,9 +148,9 @@ async function runUnderLane<T>(
 
 function injectedRunner(
   runGate: NonNullable<RunGatesOptions['runGate']>,
-): (state: WorkState) => Promise<WorkOutcome> {
-  return async state => {
-    const result = await runGate(state.name, state.logPath ?? '')
+): (state: WorkState, context: WorkRunContext) => Promise<WorkOutcome> {
+  return async (state, context) => {
+    const result = await runGate(state.name, state.logPath ?? '', context.env)
     return { exitCode: result.exitCode, output: result.output }
   }
 }

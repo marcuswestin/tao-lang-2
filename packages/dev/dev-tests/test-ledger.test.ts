@@ -1,5 +1,5 @@
-import { FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { CLI, FS, Repo } from '@shared'
+import { Describe, Expect, mkTestDir, Test, until } from '@shared/test'
 import { TestAdvisory } from '../dev-src/repository-tests/TestAdvisory'
 import { TestLedger, type TestObservation } from '../dev-src/repository-tests/TestLedger'
 import { TestReport } from '../dev-src/repository-tests/TestReport'
@@ -28,6 +28,17 @@ Describe('per-test ledger', () => {
       Expect(await TestLedger.load(root)).toEqual({ tests: {}, version: 1 })
       await FS.writeText(FS.resolvePath(TestLedger.LEDGER_PATH, root), '{broken')
       Expect(await TestLedger.load(root)).toEqual({ tests: {}, version: 1 })
+      for (
+        const value of [
+          { tests: null, version: 1 },
+          { tests: [], version: 1 },
+          { tests: { bad: { id: 'bad', outcome: 'maybe' } }, version: 1 },
+          { lastFullRunStartedAt: 'not-a-date', tests: {}, version: 1 },
+        ]
+      ) {
+        await FS.writeJson(FS.resolvePath(TestLedger.LEDGER_PATH, root), value)
+        Expect(await TestLedger.load(root)).toEqual({ tests: {}, version: 1 })
+      }
     })
   })
 
@@ -90,6 +101,24 @@ Describe('per-test ledger', () => {
     })
   })
 
+  Test('compares parseable ledger timestamps chronologically rather than lexically', async () => {
+    await withRepository(async root => {
+      const file = await writeTestFile(root)
+      const store = await TestLedger.recordRun({
+        fullRun: true,
+        observations: [observation(file, 'passed')],
+        repositoryRoot: root,
+        startedAt: Date.parse('2026-01-01T00:00:00.000Z'),
+      })
+      const record = Object.values(store.tests)[0]!
+      record.lastPassedAt = 'Thu, 01 Jan 1970 00:00:00 GMT'
+      await FS.writeJson(FS.resolvePath(TestLedger.LEDGER_PATH, root), store)
+
+      Expect((await TestLedger.selectRetryFiles([{ file, suite: 'example' }], root)).files)
+        .toEqual([{ file, suite: 'example' }])
+    })
+  })
+
   Test('records unchanged-file outcome reversals and rolling slow-test durations', async () => {
     await withRepository(async root => {
       const file = await writeTestFile(root)
@@ -112,27 +141,119 @@ Describe('per-test ledger', () => {
     })
   })
 
-  Test('compacts long histories while retaining recent unchanged-file reversals', async () => {
+  Test('compacts long histories while retaining adjacent outcomes for every test', async () => {
     await withRepository(async root => {
       const file = await writeTestFile(root)
-      const largeName = `group > ${'long-name-'.repeat(2_500)}`
-      for (let index = 0; index < 30; index += 1) {
+      const observations = Array.from(
+        { length: 40 },
+        (_, index) => observation(file, 'passed', `group ${index} > ${'long-name-'.repeat(4_000)}`),
+      )
+      for (let run = 0; run < 3; run += 1) {
         await TestLedger.recordRun({
           fullRun: false,
-          observations: [observation(file, index % 2 === 0 ? 'passed' : 'failed', largeName)],
+          observations: observations.map(item => ({
+            ...item,
+            outcome: run % 2 === 0 ? 'passed' : 'failed',
+          })),
           repositoryRoot: root,
-          startedAt: index,
+          startedAt: run,
         })
       }
 
-      const history = await FS.readFile(FS.resolvePath(TestLedger.HISTORY_PATH, root))
-      Expect(history.byteLength).toBeLessThanOrEqual(1_000_000)
-      Expect((await TestLedger.flakes(root))[0]?.reversals).toBeGreaterThan(0)
+      const history = (await FS.readText(FS.resolvePath(TestLedger.HISTORY_PATH, root)))
+        .trim().split('\n').map(line => JSON.parse(line) as { id: string })
+      const counts = new Map<string, number>()
+      for (const event of history) {
+        counts.set(event.id, (counts.get(event.id) ?? 0) + 1)
+      }
+      Expect(history.length).toBeLessThan(120)
+      Expect(counts.size).toBe(40)
+      Expect([...counts.values()].every(count => count >= 2)).toBe(true)
+      Expect(await TestLedger.flakes(root, 50)).toHaveLength(40)
+    })
+  })
+
+  Test('serializes concurrent process updates without losing either result', async () => {
+    await withRepository(async root => {
+      const first = await writeTestFile(root, 'packages/example/example-tests/first.test.ts')
+      const second = await writeTestFile(root, 'packages/example/example-tests/second.test.ts')
+      const modulePath = Repo.resolvePath('packages/dev/dev-src/repository-tests/TestLedger.ts')
+      const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+      const script = `
+        import { Errors, FS, Time } from ${JSON.stringify(sharedPath)}
+        import { TestLedger } from ${JSON.stringify(modulePath)}
+        const root = process.env['TAO_LEDGER_TEST_ROOT']
+        const file = process.env['TAO_LEDGER_TEST_FILE']
+        if (!root || !file) Errors.throwUnexpected('Missing fixture input.')
+        await FS.writeText(FS.resolvePath('ready-' + FS.basename(file), root), '')
+        while (!await FS.exists(FS.resolvePath('begin', root))) await Time.sleep(5)
+        await TestLedger.recordRun({
+          fullRun: false,
+          observations: [{ file, name: 'group > test', outcome: 'passed', suite: 'example' }],
+          repositoryRoot: root,
+          startedAt: Date.now(),
+        })
+      `
+      const runChild = (file: string) =>
+        CLI.run('bun', {
+          args: ['-e', script],
+          env: { TAO_LEDGER_TEST_FILE: file, TAO_LEDGER_TEST_ROOT: root },
+          stdio: 'pipe',
+        })
+      const children = [runChild(first), runChild(second)]
+      try {
+        await until(async () =>
+          await FS.exists(FS.resolvePath(`ready-${FS.basename(first)}`, root))
+          && await FS.exists(FS.resolvePath(`ready-${FS.basename(second)}`, root)), {
+          description: 'both ledger writers to reach the barrier',
+        })
+        await FS.writeText(FS.resolvePath('begin', root), '')
+        const results = await Promise.all(children)
+
+        Expect(results.map(result => result.exitCode)).toEqual([0, 0])
+        const ledger = await TestLedger.load(root)
+        Expect(Object.values(ledger.tests).map(record => record.file).toSorted()).toEqual([first, second])
+        Expect((await FS.readText(FS.resolvePath(TestLedger.HISTORY_PATH, root))).trim().split('\n')).toHaveLength(2)
+      } finally {
+        await FS.writeText(FS.resolvePath('begin', root), '').catch(() => {})
+        await Promise.all(children).catch(() => {})
+      }
     })
   })
 })
 
 Describe('native test result reports', () => {
+  Test('reports missing and malformed native files as unavailable evidence', async () => {
+    await withRepository(async root => {
+      const missing = { format: 'bun-junit' as const, path: FS.resolvePath('missing.xml', root), suite: 'x' }
+      Expect(await TestReport.read(missing, root)).toBeUndefined()
+      await FS.writeText(missing.path, '<testcase broken')
+      Expect(await TestReport.read(missing, root)).toBeUndefined()
+      await FS.writeText(missing.path, '<testsuites>')
+      Expect(await TestReport.read(missing, root)).toBeUndefined()
+      await FS.writeText(missing.path, '<testsuites tests="1"></testsuites>')
+      Expect(await TestReport.read(missing, root)).toBeUndefined()
+      const malformed = { format: 'jest-json' as const, path: FS.resolvePath('bad.json', root), suite: 'x' }
+      await FS.writeText(malformed.path, '{broken')
+      Expect(await TestReport.read(malformed, root)).toBeUndefined()
+      await FS.writeText(malformed.path, JSON.stringify({ testResults: [] }))
+      Expect(await TestReport.read(malformed, root)).toBeUndefined()
+      await FS.writeText(malformed.path, JSON.stringify({ numTotalTests: 1, testResults: [] }))
+      Expect(await TestReport.read(malformed, root)).toBeUndefined()
+    })
+  })
+
+  Test('accepts complete native reports that prove zero tests executed', async () => {
+    await withRepository(async root => {
+      const bunReport = { format: 'bun-junit' as const, path: FS.resolvePath('empty.xml', root), suite: 'x' }
+      await FS.writeText(bunReport.path, '<testsuites tests="0"></testsuites>')
+      Expect(await TestReport.read(bunReport, root)).toEqual([])
+      const jestReport = { format: 'jest-json' as const, path: FS.resolvePath('empty.json', root), suite: 'x' }
+      await FS.writeText(jestReport.path, JSON.stringify({ numTotalTests: 0, testResults: [] }))
+      Expect(await TestReport.read(jestReport, root)).toEqual([])
+    })
+  })
+
   Test('parses Bun JUnit into full-path names and outcomes', () => {
     const observations = TestReport.parseBunJunit(
       `
@@ -199,6 +320,7 @@ Describe('full-run advisory', () => {
     changedPaths: [] as string[],
     hasMergeCommit: false,
     newestCommitAt: '2026-09-01T00:00:00Z',
+    newestMergeAt: undefined,
     reference: 'abc',
   }
 
@@ -216,5 +338,17 @@ Describe('full-run advisory', () => {
       tests: {},
       version: 1,
     })).toBe('the last complete test run predates this branch')
+  })
+
+  Test('does not keep advising about a merge after a newer complete run', () => {
+    Expect(TestAdvisory.fullRunReason({
+      ...base,
+      hasMergeCommit: true,
+      newestMergeAt: '2026-09-01T12:00:00Z',
+    }, {
+      lastFullRunStartedAt: '2026-09-02T00:00:00Z',
+      tests: {},
+      version: 1,
+    })).toBeUndefined()
   })
 })

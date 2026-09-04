@@ -1,3 +1,4 @@
+import { Errors } from '@shared'
 import { Deferred, Describe, Expect, settle, Test, until } from '@shared/test'
 import { type WorkCommand, WorkGraph, type WorkNode, type WorkState } from '../dev-src/repository-tests/WorkGraph'
 
@@ -286,6 +287,44 @@ Describe('work graph scheduling', () => {
     Expect(WorkGraph.exitCodeFor(result)).toBe(1)
   })
 
+  Test('releases a reservation that arrives after interruption without starting its node', async () => {
+    const state = WorkGraph.createState(workNode({ name: 'late-admission' }))
+    const admission = Deferred<{ release: () => Promise<void>; slots: number } | undefined>()
+    let interrupt = () => {}
+    let released = false
+    let starts = 0
+    const finished = WorkGraph.run([state], {
+      jobs: 1,
+      runNode: async () => {
+        starts += 1
+        return { exitCode: 0 }
+      },
+      slotBroker: {
+        tryAcquire: async () => await admission.promise,
+        waitForAvailability: async () => {},
+      },
+      watchInterrupt: callback => {
+        interrupt = callback
+        return () => {}
+      },
+    })
+    await settle(2)
+
+    interrupt()
+    admission.resolve({
+      release: async () => {
+        released = true
+      },
+      slots: 1,
+    })
+    const result = await finished
+
+    Expect(result.interrupted).toBe(true)
+    Expect(state.status).toBe('skipped')
+    Expect(starts).toBe(0)
+    Expect(released).toBe(true)
+  })
+
   Test('reports once when a ready node is waiting for machine capacity', async () => {
     const state = WorkGraph.createState(workNode({ name: 'capacity-waiter' }))
     const events: string[] = []
@@ -308,6 +347,39 @@ Describe('work graph scheduling', () => {
     Expect(events.filter(kind => kind === 'waiting')).toEqual(['waiting'])
     Expect(state.status).toBe('passed')
     Expect(state.reason).toBeUndefined()
+  })
+
+  Test('cancels and drains running nodes when a later broker admission fails', async () => {
+    const states = ['first', 'second'].map(name => WorkGraph.createState(workNode({ name })))
+    let admissions = 0
+    let cancellations = 0
+
+    const finished = WorkGraph.run(states, {
+      jobs: 2,
+      runNode: async (_state, context) =>
+        await new Promise(resolve => {
+          context.onCancel(() => {
+            cancellations += 1
+            resolve({ exitCode: null })
+          })
+        }),
+      slotBroker: {
+        tryAcquire: async () => {
+          admissions += 1
+          if (admissions === 2) {
+            throw new Errors.HostEnvironmentError('registry lock timed out')
+          }
+          return { release: async () => {}, slots: 1 }
+        },
+        waitForAvailability: async () => {},
+      },
+      watchInterrupt: () => () => {},
+    })
+
+    await Expect(finished).rejects.toThrow('registry lock timed out')
+    Expect(cancellations).toBe(1)
+    Expect(states.map(state => state.status)).toEqual(['failed', 'skipped'])
+    Expect(states[0]?.failure?.kind).toBe('interrupted')
   })
 
   Test('reports every node exactly once, in the order the graph reached it', async () => {

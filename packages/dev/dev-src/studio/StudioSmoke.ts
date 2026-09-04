@@ -117,13 +117,20 @@ async function reserveResources(options: ReservationOptions): Promise<StudioSmok
         `Studio smoke shard ${allocation.shardIndex}, worker ${allocation.workerIndex} is already reserved by another worktree.`,
       )
     }
-    if (!await (options.portsAvailable ?? portsAreFree)([allocation.serverPort, allocation.previewPort])) {
-      await lease.release()
-      throw new Errors.HostEnvironmentError(
-        `Studio smoke shard ${allocation.shardIndex}, worker ${allocation.workerIndex} has a port already in use.`,
-      )
+    let retained = false
+    try {
+      if (!await (options.portsAvailable ?? portsAreFree)([allocation.serverPort, allocation.previewPort])) {
+        throw new Errors.HostEnvironmentError(
+          `Studio smoke shard ${allocation.shardIndex}, worker ${allocation.workerIndex} has a port already in use.`,
+        )
+      }
+      retained = true
+      return resourceReservation(allocation, lease)
+    } finally {
+      if (!retained) {
+        await lease.release()
+      }
     }
-    return resourceReservation(allocation, lease)
   }
   return freeShardAllocation(options)
 }
@@ -140,10 +147,17 @@ async function freeShardAllocation(options: ReservationOptions): Promise<StudioS
     if (lease === undefined) {
       continue
     }
-    if (await (options.portsAvailable ?? portsAreFree)([allocation.serverPort, allocation.previewPort])) {
-      return resourceReservation(allocation, lease)
+    let retained = false
+    try {
+      if (await (options.portsAvailable ?? portsAreFree)([allocation.serverPort, allocation.previewPort])) {
+        retained = true
+        return resourceReservation(allocation, lease)
+      }
+    } finally {
+      if (!retained) {
+        await lease.release()
+      }
     }
-    await lease.release()
   }
   throw new Errors.HostEnvironmentError(
     `Every Studio smoke port block from ${basePort} to ${basePort + shardCount * portsPerShard - 1} is in use, `

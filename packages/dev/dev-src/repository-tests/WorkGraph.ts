@@ -137,6 +137,8 @@ export type WorkSlotBroker = {
 
 /** WorkRunOptions configures one graph run. */
 export type WorkRunOptions = {
+  /** Environment inherited by every child in this graph, such as the owning machine-lane id. */
+  env?: Record<string, string>
   /** Measured duration per node, for critical-path ordering. Cold start falls back to `cost`. */
   expectedMs?: (name: string) => number | undefined
   jobs?: number
@@ -241,6 +243,13 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       }
       await Promise.race([...running.values()].map(node => node.promise))
     }
+  } catch (error) {
+    // A scheduler/broker failure must not let already-admitted children outlive the lane record
+    // their reservations belong to. Reuse interruption's bounded process cancellation, drain the
+    // promises, and only then let the caller release machine-wide coordination.
+    interrupt()
+    await Promise.allSettled([...running.values()].map(node => node.promise))
+    throw error
   } finally {
     stopWatchingInterrupt()
   }
@@ -272,6 +281,10 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         requestedSlots,
         running.size === 0 && started === 0,
       )
+      if (interrupted || pending[index] !== state || state.status !== 'pending') {
+        await machineReservation?.release()
+        return { machineBlocked: false, started }
+      }
       if (options.slotBroker !== undefined && machineReservation === undefined) {
         machineBlocked = true
         if (state.reason !== MACHINE_CAPACITY_REASON) {
@@ -298,7 +311,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
     const run = state.node.runForSlots?.(slots) ?? state.node.run
     const context: WorkRunContext = {
       run,
-      env: { ...run.env, ...budgetEnv(state.node, run, slots) },
+      env: { ...run.env, ...options.env, ...budgetEnv(state.node, run, slots) },
       onCancel: handler => {
         cancel = handler
       },

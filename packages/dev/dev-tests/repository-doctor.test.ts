@@ -144,10 +144,9 @@ Describe('repository doctor', () => {
     // A slow lane or a timed-out suite has an ordinary explanation here, and the doctor is where
     // somebody looks before they go looking for a regression.
     Expect(check(report, 'machine lanes')?.status).toBe('warn')
-    Expect(check(report, 'machine lanes')?.detail).toContain('1 Tao lane running elsewhere')
+    Expect(check(report, 'machine lanes')?.detail).toContain('2 Tao lanes running')
     Expect(check(report, 'machine lanes')?.detail).toContain('dev-test in /other')
-    // This checkout's own lane is not somebody else's work.
-    Expect(check(report, 'machine lanes')?.detail).not.toContain('verify in /w')
+    Expect(check(report, 'machine lanes')?.detail).toContain('verify in this checkout')
     Expect(RepositoryDoctorCommand.exitCodeFor(report.status)).toBe(0)
   })
 
@@ -159,6 +158,65 @@ Describe('repository doctor', () => {
     Expect(check(report, 'machine lanes')?.status).toBe('warn')
     Expect(check(report, 'machine lanes')?.detail).toContain('no other Tao lane is registered')
     Expect(check(report, 'machine lanes')?.detail).toContain('load 30.0 on 8 CPUs')
+  })
+
+  Test('warns about same-checkout lanes and an unavailable registry', () => {
+    const local = doctorReport(facts({
+      machine: {
+        cpuCount: 8,
+        lanes: [{
+          lane: 'test',
+          maxSlots: 8,
+          pid: 4242,
+          repositoryRoot: '/w',
+          slots: 2,
+          startedAt: '2026-09-03T12:00:00.000Z',
+        }],
+        loadAverage: 1,
+        registryAvailable: true,
+      },
+    }))
+    Expect(check(local, 'machine lanes')?.status).toBe('warn')
+    Expect(check(local, 'machine lanes')?.detail).toContain('test in this checkout')
+
+    const unavailable = doctorReport(facts({
+      machine: { cpuCount: 8, lanes: [], loadAverage: 1, registryAvailable: false },
+    }))
+    Expect(check(unavailable, 'machine lanes')?.status).toBe('warn')
+    Expect(check(unavailable, 'machine lanes')?.detail).toContain('could not be inspected')
+  })
+
+  Test('excludes only the enclosing lane from nested doctor diagnostics', () => {
+    const report = doctorReport(facts({
+      machine: {
+        cpuCount: 8,
+        currentLaneId: 'outer',
+        lanes: [
+          {
+            id: 'outer',
+            lane: 'full-verify',
+            maxSlots: 8,
+            pid: 4242,
+            repositoryRoot: '/w',
+            slots: 1,
+            startedAt: '2026-09-03T12:00:00.000Z',
+          },
+          {
+            id: 'sibling',
+            lane: 'test',
+            maxSlots: 8,
+            pid: 4243,
+            repositoryRoot: '/w',
+            slots: 1,
+            startedAt: '2026-09-03T12:00:01.000Z',
+          },
+        ],
+        loadAverage: 1,
+      },
+    }))
+
+    Expect(check(report, 'machine lanes')?.detail).not.toContain('full-verify')
+    Expect(check(report, 'machine lanes')?.detail).toContain('test in this checkout')
   })
 
   Test('reports an unreadable port as unknown rather than free', () => {

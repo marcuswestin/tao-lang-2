@@ -32,7 +32,16 @@ description: >-
 - `just test-flakes` and `just test-slowest` are reports, not gates.
 - `just merge-with-main` is a human command. Agents prepare the branch and message file but never
   invoke, automate, or approve the command.
-- `merge-with-main` defaults to a ref-preserving dry run. Its output names the explicit execution,
-  verification-skip, and push flags; never substitute `--yes` for a less-strict choice. Preflight
+- Put its message at `.artifacts/merge/<full-feature-branch>.msg` unless passing `--message-file`.
+  Write a summary of at most 72 characters, one blank line, then one or more contiguous `- ...`
+  bullets. Do not add Git's squash appendix or any automated-author attribution; the command
+  validates the complete final message and appends Git's generated appendix itself.
+- `merge-with-main` defaults to a ref-preserving dry run. `--execute` enables mutation, `--yes`
+  answers normal confirmation non-interactively, `--push` independently authorizes a
+  non-interactive push, and `--skip-full-verify` is the only verification escape hatch. Preflight
   intentionally requires local `main` to equal `origin/main`, and successful execution removes the
   invoking feature worktree and invalidates its shell directory.
+- `--abort <snapshot>` restores only command-owned local state while the snapshot still matches.
+  Once a snapshot says `push-started`, the remote result may be ambiguous and automatic history
+  rewriting is forbidden; inspect remote `main` and `merged/*` and follow the printed recovery
+  guidance.

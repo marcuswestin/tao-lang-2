@@ -64,10 +64,14 @@ export type PortOccupancy = {
 /** MachineState records what else is running on this machine, which no single checkout can see. */
 export type MachineState = {
   cpuCount: number
+  /** Registration that encloses this doctor process, excluded without hiding sibling local lanes. */
+  currentLaneId?: string
   /** One-minute run-queue length, which counts work no Tao lane registered. */
   loadAverage: number
   /** Registered Tao lanes, including any this checkout is running. */
   lanes: readonly LaneRecord[]
+  /** False when the shared registry exists but the host refused to list it. */
+  registryAvailable?: boolean
 }
 
 /** ArtifactRoot records one scratch tree's writability and size. */
@@ -333,22 +337,35 @@ function watchmanCheck(facts: DoctorFacts): DoctorCheck {
  * naming it here is what stops the next hour going into a regression that is not there.
  */
 function machineLanesCheck(facts: DoctorFacts): DoctorCheck {
-  const { cpuCount, lanes, loadAverage } = facts.machine
+  const { cpuCount, currentLaneId, lanes, loadAverage } = facts.machine
+  const peerLanes = currentLaneId === undefined ? lanes : lanes.filter(lane => lane.id !== currentLaneId)
   const load = `load ${loadAverage.toFixed(1)} on ${cpuCount} CPUs`
-  const elsewhere = lanes.filter(lane => lane.repositoryRoot !== facts.repositoryRoot)
-  if (elsewhere.length === 0 && loadAverage <= cpuCount * MachineLanes.CONTENDED_LOAD_RATIO) {
+  if (facts.machine.registryAvailable === false) {
+    return {
+      detail: `the machine-lane registry could not be inspected (${load})`,
+      name: 'machine lanes',
+      remediation: 'Check the permissions of the per-user Tao cache before trusting parallel lane diagnostics.',
+      status: 'warn',
+    }
+  }
+  const elsewhere = peerLanes.filter(lane => lane.repositoryRoot !== facts.repositoryRoot)
+  const local = peerLanes.filter(lane => lane.repositoryRoot === facts.repositoryRoot)
+  if (peerLanes.length === 0 && loadAverage <= cpuCount * MachineLanes.CONTENDED_LOAD_RATIO) {
     return { detail: `this checkout has the machine to itself (${load})`, name: 'machine lanes', status: 'pass' }
   }
   // Another worktree's root is named absolutely: relative to this one it is a chain of `..` that
   // says nothing about which checkout is meant.
-  const others = elsewhere.map(lane => `${lane.lane} in ${lane.repositoryRoot}`).join(', ')
+  const others = [
+    ...local.map(lane => `${lane.lane} in this checkout`),
+    ...elsewhere.map(lane => `${lane.lane} in ${lane.repositoryRoot}`),
+  ].join(', ')
   return {
-    detail: elsewhere.length === 0
+    detail: peerLanes.length === 0
       ? `no other Tao lane is registered, but this machine is already busy (${load})`
-      : `${elsewhere.length} Tao lane${elsewhere.length === 1 ? '' : 's'} running elsewhere (${load}): ${others}`,
+      : `${peerLanes.length} Tao lane${peerLanes.length === 1 ? '' : 's'} running (${load}): ${others}`,
     name: 'machine lanes',
     remediation:
-      'Lanes share the machine automatically, so this is expected while another worktree works. Timing-sensitive '
+      'Lanes share the machine automatically, so this is expected while other Tao work runs. Timing-sensitive '
       + 'suites are slower and can time out; re-run a timed-out suite on its own before treating it as a regression.',
     status: 'warn',
   }
@@ -451,11 +468,11 @@ export async function readDoctorFacts(
     Promise.all(CONVENTIONAL_PORTS.map(readPortOccupancy)),
     readDependencyIssues(),
   ])
-  const [canonicalRepositoryRoot, lanes] = await Promise.all([
+  const [canonicalRepositoryRoot, laneInspection] = await Promise.all([
     canonicalPath(repositoryRoot),
-    MachineLanes.activeLanes(options.machineRegistryRoot, { prune: false }),
+    MachineLanes.inspectLanes(options.machineRegistryRoot, { prune: false }),
   ])
-  const canonicalLanes = await Promise.all(lanes.map(async lane => ({
+  const canonicalLanes = await Promise.all(laneInspection.lanes.map(async lane => ({
     ...lane,
     repositoryRoot: await canonicalPath(lane.repositoryRoot),
   })))
@@ -474,8 +491,10 @@ export async function readDoctorFacts(
     lockfilePresent: await FS.isFile(FS.resolvePath('bun.lock', repositoryRoot)),
     machine: {
       cpuCount: Platform.cpuCount(),
+      currentLaneId: Platform.runtimeProcess.env[MachineLanes.LANE_ID_ENV_KEY],
       lanes: canonicalLanes,
       loadAverage: Platform.loadAverage(),
+      registryAvailable: laneInspection.available,
     },
     nodeModulesPresent: await FS.isDirectory(FS.resolvePath('node_modules', repositoryRoot)),
     nodeVersion,

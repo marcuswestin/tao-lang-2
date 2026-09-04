@@ -132,6 +132,27 @@ Describe('repository gate runner', () => {
     Expect(started.toSorted()).toEqual(['a', 'b', 'c', 'd', 'e'])
   })
 
+  Test('propagates the enclosing lane identity to nested diagnostics', async () => {
+    const root = await mkTestDir('tao-gate-runner-lane-env-')
+    const registryRoot = FS.resolvePath('registry', root)
+    let laneId: string | undefined
+    try {
+      await runGates({
+        gates: ['_doctor-json'],
+        registryRoot,
+        repositoryRoot: root,
+        runGate: async (_name, _logPath, environment) => {
+          laneId = environment[MachineLanes.LANE_ID_ENV_KEY]
+          return { exitCode: 0, output: '' }
+        },
+      })
+
+      Expect(laneId).toMatch(/^\d+-[0-9a-f-]+$/u)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('writes a JSON summary artifact when one is requested', async () => {
     const root = await mkTestDir('tao-gate-runner-json-')
     try {

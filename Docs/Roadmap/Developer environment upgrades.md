@@ -154,7 +154,7 @@ an entry here may link one when the developer workflow is also affected.
 
 ### DEVENV-009 — Safe, repeatable feature landing
 
-- **Status:** In progress
+- **Status:** Resolved
 - **Area:** Git workflow
 - **Impact:** Manually squashing before validation can strand `main` dirty, omit the full host proof, or
   lose the repository's squash-message convention.
@@ -164,8 +164,9 @@ an entry here may link one when the developer workflow is also affected.
 - **Proposed change:** Add a human-only, dry-run-first `merge-with-main` command with snapshots, strict
   phase ordering, tree equality, guarded abort, and explicit push authority.
 - **Dependencies:** Implemented by `feat/verification-lanes`; no Git hook.
-- **Acceptance:** A real-branch dry run moves no refs and tests cover preflight, message validation,
-  snapshots, and abort guards.
+- **Acceptance:** Unit tests cover read-only preflight, complete-message validation, atomic snapshots,
+  concurrent-state refusal, the pre-push recovery boundary, and abort guards; a disposable bare
+  remote plus two real Git worktrees proves squash, tree equality, push, archive, and cleanup.
 - **Source:** 2026-09-03 verification-lanes brief.
 
 ## Incoming fixes — do not duplicate
@@ -557,3 +558,19 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** Both modes finish the same test-file inventory without failures or surviving workers,
   and repeated measurements show a clear wall-time win before scheduling changes are proposed.
 - **Source:** 2026-09-03 measurement on `feat/verification-lanes`; Bun 1.3.13, 18 workers.
+
+### DEVENV-035 — Performance-contract timeout under the full graph
+
+- **Status:** Resolved
+- **Area:** Test reliability
+- **Impact:** The sandbox full-verification lane could fail even though the performance-contract test
+  only launches four fast `just --dry-run` inspections and passes immediately by itself.
+- **Evidence:** The test hit Bun's default five-second timeout while `_ship-bundle-proof` ran beside the
+  package-test node; an immediate isolated run completed in 27 milliseconds.
+- **Workaround:** Re-run the focused performance-check suite after the full lane becomes quiet.
+- **Proposed change:** Give this subprocess-based contract test an explicit 30-second timeout while
+  preserving its assertions and keeping actual benchmarks outside verification.
+- **Dependencies:** Resolved on `feat/verification-lanes`; no scheduling policy changed.
+- **Acceptance:** The focused test and a subsequent `full-verify-sandbox` pass without weakening the
+  rule that only `bench` reaches the language benchmark.
+- **Source:** 2026-09-04 `full-verify-sandbox` acceptance run on `feat/verification-lanes`.

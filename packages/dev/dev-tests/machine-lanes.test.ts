@@ -104,6 +104,54 @@ Describe('machine lanes', () => {
     Expect(await FS.exists(path)).toBe(false)
   })
 
+  Test('keeps conservative accounting for a live lease from the preceding allocator', async () => {
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    await FS.mkdir(registryRoot)
+    await FS.writeJson(FS.resolvePath('legacy.json', registryRoot), {
+      lane: 'legacy-verify',
+      pid: 1,
+      repositoryRoot: '/older-worktree',
+      slots: 4,
+      startedAt: new Date().toISOString(),
+    })
+
+    const lane = await MachineLanes.acquire({
+      cpuCount: 8,
+      lane: 'current-verify',
+      registryRoot,
+      repositoryRoot: '/current-worktree',
+    })
+    const work = await lane.tryAcquire(8, true)
+
+    Expect(work?.slots).toBe(4)
+    Expect((await MachineLanes.activeLanes(registryRoot)).find(record => record.lane === 'legacy-verify'))
+      .toMatchObject({ maxSlots: 4, slots: 4 })
+    await work?.release()
+    await lane.release()
+  })
+
+  Test('rejects malformed ids and fractional accounting records', async () => {
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    await FS.mkdir(registryRoot)
+    for (
+      const [name, invalid] of [
+        ['id', { id: 42, maxSlots: 4, slots: 0 }],
+        ['slots', { id: 'slots', maxSlots: 4, slots: 0.5 }],
+        ['max', { id: 'max', maxSlots: 1.5, slots: 0 }],
+      ] as const
+    ) {
+      await FS.writeJson(FS.resolvePath(`${name}.json`, registryRoot), {
+        lane: 'verify',
+        pid: Platform.runtimeProcess.pid,
+        repositoryRoot: '/elsewhere',
+        startedAt: new Date().toISOString(),
+        ...invalid,
+      })
+    }
+
+    Expect(await MachineLanes.activeLanes(registryRoot, { prune: false })).toEqual([])
+  })
+
   Test('a nested lane does not register again, while explicit jobs is a top-level ceiling', async () => {
     const registryRoot = await mkTestDir('tao-machine-lanes-')
 
@@ -210,6 +258,57 @@ Describe('machine lanes', () => {
     await second.release()
   })
 
+  Test('exclusive confirmation drains a reservation held by another process', async () => {
+    const root = await mkTestDir('tao-machine-exclusive-process-')
+    const registryRoot = FS.resolvePath('registry', root)
+    const releasePath = FS.resolvePath('release', root)
+    const modulePath = Repo.resolvePath('packages/dev/dev-src/repository-tests/MachineLanes.ts')
+    const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+    const parent = await MachineLanes.acquire({ cpuCount: 4, lane: 'parent', registryRoot, repositoryRoot: root })
+    const script = `
+      import { Errors, FS, Time } from ${JSON.stringify(sharedPath)}
+      import { MachineLanes } from ${JSON.stringify(modulePath)}
+      const root = process.env['TAO_LANE_TEST_ROOT']
+      if (!root) Errors.throwUnexpected('Missing process test root.')
+      const lane = await MachineLanes.acquire({
+        cpuCount: 4, lane: 'child', registryRoot: FS.resolvePath('registry', root), repositoryRoot: root,
+      })
+      const work = await lane.tryAcquire(2, false)
+      if (!work) Errors.throwUnexpected('Child did not acquire its reservation.')
+      await FS.writeText(FS.resolvePath('ready', root), '')
+      while (!await FS.exists(FS.resolvePath('release', root))) await Time.sleep(5)
+      await work.release()
+      await lane.release()
+    `
+    const child = CLI.run('bun', {
+      args: ['-e', script],
+      env: { TAO_LANE_TEST_ROOT: root },
+      stdio: 'pipe',
+    })
+    try {
+      await until(async () => await FS.exists(FS.resolvePath('ready', root)), {
+        description: 'child process to hold a machine reservation',
+      })
+      let acquired = false
+      const exclusive = parent.acquireExclusive(1_000).then(lease => {
+        acquired = lease !== undefined
+        return lease
+      })
+      await settle(5)
+      Expect(acquired).toBe(false)
+
+      await FS.writeText(releasePath, '')
+      Expect((await child).exitCode).toBe(0)
+      await until(() => acquired, { description: 'exclusive lease after child process drains' })
+      await (await exclusive)?.release()
+    } finally {
+      await FS.writeText(releasePath, '').catch(() => {})
+      await child.catch(() => undefined)
+      await parent.release()
+      await FS.remove(root)
+    }
+  })
+
   Test('coordinates simultaneous admissions from independent processes against one CPU total', async () => {
     const root = await mkTestDir('tao-machine-lanes-processes-')
     const registryRoot = FS.resolvePath('registry', root)
@@ -246,9 +345,10 @@ Describe('machine lanes', () => {
         env: { TAO_LANE_TEST_ID: id, TAO_LANE_TEST_ROOT: root },
         stdio: 'pipe',
       })
+    let children: Promise<CLI.CommandResult>[] = []
     try {
       const earlyExits: CLI.CommandResult[] = []
-      const children = [runChild('first'), runChild('second')].map(child =>
+      children = [runChild('first'), runChild('second')].map(child =>
         child.then(result => {
           earlyExits.push(result)
           return result
@@ -281,8 +381,29 @@ Describe('machine lanes', () => {
       const exits = await Promise.all(children)
       Expect(exits.every(result => result.exitCode === 0)).toBe(true)
     } finally {
+      await FS.writeText(beginPath, '').catch(() => {})
       await FS.writeText(releasePath, '').catch(() => {})
+      await Promise.allSettled(children)
       await FS.remove(root)
+    }
+  })
+
+  Test('does not fail open when a live process holds the registry mutex', async () => {
+    const registryRoot = await mkTestDir('tao-machine-live-mutex-')
+    const ownerRoot = FS.resolvePath('.mutex-contenders', registryRoot)
+    const ownerPath = FS.resolvePath('live.json', ownerRoot)
+    await FS.writeJson(ownerPath, { pid: Platform.runtimeProcess.pid, startedAt: new Date().toISOString() })
+    await FS.symlink(FS.relativePath(registryRoot, ownerPath), FS.resolvePath('.mutex', registryRoot))
+    try {
+      await Expect(MachineLanes.acquire({
+        lane: 'verify',
+        lockTimeoutMs: 5,
+        registryRoot,
+        repositoryRoot: '/here',
+      })).rejects.toThrow('Timed out waiting for the machine-lane registry lock')
+      Expect((await leaseFiles(registryRoot)).filter(name => name.endsWith('.lane.json'))).toEqual([])
+    } finally {
+      await FS.remove(registryRoot)
     }
   })
 

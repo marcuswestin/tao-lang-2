@@ -46,6 +46,8 @@ export type MachineLane = {
   readonly capacity: number
   /** Per-lane ceiling. The broker, not the local graph, applies the changing fair share. */
   readonly ceiling: number
+  /** Registration identity propagated to nested diagnostics so they can exclude their owner. */
+  readonly id?: string
   acquireExclusive: (timeoutMs?: number) => Promise<MachineExclusiveLease | undefined>
   report: () => ContentionReport
   release: () => Promise<void>
@@ -62,11 +64,15 @@ export type AcquireOptions = {
   lane: string
   /** Injected by tests. */
   cpuCount?: number
+  /** Injected by tests. */
+  lockTimeoutMs?: number
   registryRoot?: string
   repositoryRoot: string
 }
 
 export type ResourceOptions = {
+  /** Injected by tests. */
+  lockTimeoutMs?: number
   name: string
   registryRoot?: string
 }
@@ -95,6 +101,13 @@ type LaneEntry = {
   record: LaneRecord & { id: string; maxSlots: number }
 }
 
+export type LaneInspection = {
+  available: boolean
+  lanes: readonly LaneRecord[]
+}
+
+class RegistryLockTimeoutError extends Errors.HostEnvironmentError {}
+
 const REGISTRY_DIRECTORY = 'tao/machine-lanes'
 const SAMPLE_INTERVAL_MS = 3_000
 const ADMISSION_POLL_MS = 25
@@ -105,6 +118,7 @@ const MUTEX_ACQUIRE_TIMEOUT_MS = 30_000
 const EXCLUSIVE_TIMEOUT_MS = 5 * 60 * 1_000
 const MUTEX_LINK = '.mutex'
 const EXCLUSIVE_PATH = '.exclusive'
+const LANE_ID_ENV_KEY = 'TAO_MACHINE_LANE_ID'
 
 /** registryRoot resolves the machine-wide directory shared by every worktree. */
 function registryRoot(): string {
@@ -115,7 +129,22 @@ function registryRoot(): string {
 
 /** activeLanes returns all live registrations, pruning crashed processes unless asked not to. */
 async function activeLanes(root = registryRoot(), options: { prune?: boolean } = {}): Promise<LaneRecord[]> {
-  return (await activeLaneEntries(root, options.prune ?? true)).map(entry => entry.record)
+  return [...(await inspectLanes(root, options)).lanes]
+}
+
+/** inspectLanes distinguishes an empty registry from one the host refused to reveal. */
+async function inspectLanes(root = registryRoot(), options: { prune?: boolean } = {}): Promise<LaneInspection> {
+  try {
+    return {
+      available: true,
+      lanes: (await activeLaneEntries(root, options.prune ?? true)).map(entry => entry.record),
+    }
+  } catch (error) {
+    if (errorCode(error) === 'ENOENT') {
+      return { available: true, lanes: [] }
+    }
+    return { available: false, lanes: [] }
+  }
 }
 
 /**
@@ -151,15 +180,27 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
       await atomicWriteJson(path, record)
       const allocations = fairAllocations(cpuCount, [...entries.map(entry => entry.record), record])
       return { capacity: allocations.get(id) ?? 0, laneCount: entries.length + 1 }
-    })
+    }, options.lockTimeoutMs)
     initialCapacity = registration.capacity
     initialLaneCount = registration.laneCount
-  } catch {
+  } catch (error) {
+    if (error instanceof RegistryLockTimeoutError) {
+      throw error
+    }
     // An unavailable registry must not make a repository command unrunnable.
     return unregisteredLane(record.maxSlots)
   }
 
-  return registeredLane({ cpuCount, id, initialCapacity, initialLaneCount, path, record, root })
+  return registeredLane({
+    cpuCount,
+    id,
+    initialCapacity,
+    initialLaneCount,
+    lockTimeoutMs: options.lockTimeoutMs,
+    path,
+    record,
+    root,
+  })
 }
 
 /**
@@ -211,6 +252,7 @@ function registeredLane(options: {
   id: string
   initialCapacity: number
   initialLaneCount: number
+  lockTimeoutMs?: number
   path: string
   record: LaneRecord & { id: string; maxSlots: number }
   root: string
@@ -235,6 +277,7 @@ function registeredLane(options: {
       return capacity
     },
     ceiling: options.record.maxSlots,
+    id: options.id,
     acquireExclusive: async (timeoutMs = EXCLUSIVE_TIMEOUT_MS) => acquireExclusive(options.root, options.id, timeoutMs),
     report: () => contentionReport({ cpuCount: options.cpuCount, peakLanes, peakLoadAverage }),
     release: async () => {
@@ -284,14 +327,17 @@ function registeredLane(options: {
           own.record.updatedAt = new Date().toISOString()
           await atomicWriteJson(own.path, own.record)
           return slots
-        })
+        }, options.lockTimeoutMs)
         if (reservation === undefined) {
           admissionPollMs = Math.min(MAX_ADMISSION_POLL_MS, admissionPollMs * 2)
           return undefined
         }
         admissionPollMs = ADMISSION_POLL_MS
         return slotReservation(options.root, options.id, reservation)
-      } catch {
+      } catch (error) {
+        if (error instanceof RegistryLockTimeoutError) {
+          throw error
+        }
         // Coordination is advisory only when its storage is actually unavailable.
         return uncoordinatedReservation(requestedSlots)
       }
@@ -429,7 +475,7 @@ async function tryAcquireResource(options: ResourceOptions): Promise<MachineReso
   try {
     const acquired = await withRegistryLock(root, async () => {
       const existing = await readRecord<ResourceRecord>(path)
-      if (existing !== undefined && isLive(existing)) {
+      if (isResourceRecord(existing) && isLive(existing)) {
         return false
       }
       await FS.remove(path).catch(() => {})
@@ -443,7 +489,7 @@ async function tryAcquireResource(options: ResourceOptions): Promise<MachineReso
         } satisfies ResourceRecord,
       )
       return true
-    })
+    }, options.lockTimeoutMs)
     if (!acquired) {
       return undefined
     }
@@ -522,20 +568,15 @@ function uncoordinatedReservation(slots: number): MachineSlotReservation {
 }
 
 async function activeLaneEntries(root: string, prune: boolean): Promise<LaneEntry[]> {
-  let entries: string[]
-  try {
-    entries = await FS.listDir(root)
-  } catch {
-    return []
-  }
+  const entries = await FS.listDir(root)
   const lanes: LaneEntry[] = []
   for (const entry of entries) {
     if (!entry.endsWith('.lane.json') && (!entry.endsWith('.json') || entry.startsWith('.'))) {
       continue
     }
     const path = FS.resolvePath(entry, root)
-    const raw = await readRecord<unknown>(path)
-    if (!isLaneRecord(raw) || !isLive(raw)) {
+    const raw = normalizeLaneRecord(await readRecord<unknown>(path), entry)
+    if (raw === undefined || !isLive(raw)) {
       if (prune) {
         await FS.remove(path).catch(() => {})
       }
@@ -545,7 +586,7 @@ async function activeLaneEntries(root: string, prune: boolean): Promise<LaneEntr
       path,
       record: {
         ...raw,
-        id: raw.id ?? entry.replace(/\.json$/, ''),
+        id: raw.id,
         maxSlots: raw.maxSlots,
         slots: raw.slots,
       },
@@ -554,7 +595,11 @@ async function activeLaneEntries(root: string, prune: boolean): Promise<LaneEntr
   return lanes
 }
 
-async function withRegistryLock<T>(root: string, work: () => Promise<T>): Promise<T> {
+async function withRegistryLock<T>(
+  root: string,
+  work: () => Promise<T>,
+  timeoutMs = MUTEX_ACQUIRE_TIMEOUT_MS,
+): Promise<T> {
   await FS.mkdir(root)
   const ownerRoot = FS.resolvePath('.mutex-contenders', root)
   const ownerPath = FS.resolvePath(`${Platform.runtimeProcess.pid}-${randomUUID()}.json`, ownerRoot)
@@ -566,7 +611,7 @@ async function withRegistryLock<T>(root: string, work: () => Promise<T>): Promis
       startedAt: new Date().toISOString(),
     } satisfies MutexRecord,
   )
-  const deadline = Time.nowMs() + MUTEX_ACQUIRE_TIMEOUT_MS
+  const deadline = Time.nowMs() + Math.max(0, timeoutMs)
 
   while (true) {
     try {
@@ -584,7 +629,7 @@ async function withRegistryLock<T>(root: string, work: () => Promise<T>): Promis
       }
       if (Time.nowMs() >= deadline) {
         await FS.remove(ownerPath).catch(() => {})
-        throw new Errors.HostEnvironmentError('Timed out waiting for the machine-lane registry lock.')
+        throw new RegistryLockTimeoutError('Timed out waiting for the machine-lane registry lock.')
       }
       await Time.sleep(ADMISSION_POLL_MS)
     }
@@ -636,22 +681,49 @@ function mutexIsStale(record: MutexRecord): boolean {
     || !Number.isFinite(startedAt)
 }
 
-function isLaneRecord(value: unknown): value is LaneRecord {
+function normalizeLaneRecord(
+  value: unknown,
+  filename: string,
+): (LaneRecord & { id: string }) | undefined {
   if (typeof value !== 'object' || value === null) {
-    return false
+    return undefined
   }
   const record = value as Partial<LaneRecord>
-  return Number.isInteger(record.pid)
+  const valid = Number.isInteger(record.pid)
     && (record.pid ?? 0) > 0
+    && (record.id === undefined || typeof record.id === 'string')
     && typeof record.lane === 'string'
     && record.lane.length > 0
     && typeof record.repositoryRoot === 'string'
     && typeof record.startedAt === 'string'
     && Number.isFinite(Date.parse(record.startedAt))
-    && Number.isFinite(record.slots)
+    && Number.isInteger(record.slots)
     && (record.slots ?? -1) >= 0
-    && Number.isFinite(record.maxSlots)
-    && (record.maxSlots ?? 0) > 0
+    && (record.maxSlots === undefined || Number.isInteger(record.maxSlots) && record.maxSlots > 0)
+  if (!valid) {
+    return undefined
+  }
+  return {
+    ...(record as LaneRecord),
+    id: record.id ?? filename.replace(/\.json$/, ''),
+    // The preceding static allocator stored its entire share in `slots`. Counting that width as
+    // occupied is conservative while old and new worktrees overlap during rollout.
+    maxSlots: record.maxSlots ?? Math.max(1, record.slots!),
+    slots: record.slots!,
+  }
+}
+
+function isResourceRecord(value: unknown): value is ResourceRecord {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const record = value as Partial<ResourceRecord>
+  return typeof record.id === 'string'
+    && typeof record.name === 'string'
+    && Number.isInteger(record.pid)
+    && (record.pid ?? 0) > 0
+    && typeof record.startedAt === 'string'
+    && Number.isFinite(Date.parse(record.startedAt))
 }
 
 function errorCode(error: unknown): string | undefined {
@@ -670,11 +742,13 @@ function resourcePath(root: string, name: string): string {
 export const MachineLanes = {
   CONTENDED_LOAD_RATIO,
   EXCLUSIVE_TIMEOUT_MS,
+  LANE_ID_ENV_KEY,
   acquire,
   activeLanes,
   contentionReport,
   describeContention,
   fairAllocations,
+  inspectLanes,
   registryRoot,
   tryAcquireResource,
 } as const

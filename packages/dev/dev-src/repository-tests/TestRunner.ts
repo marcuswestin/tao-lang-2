@@ -438,12 +438,21 @@ async function observationsFor(states: readonly SuiteState[], repositoryRoot: st
         durationMs: state.elapsedMs,
         file: 'Apps',
         name: 'all Tao behavior tests',
-        outcome: state.status === 'passed' ? 'passed' : 'failed',
+        outcome: state.status === 'passed' ? 'passed' : state.status === 'failed' ? 'failed' : 'skipped',
         suite: state.name,
       }]
       : state.testReport === undefined
       ? undefined
       : await TestReport.read(state.testReport, repositoryRoot)
+    if (state.testReport !== undefined && state.testObservations === undefined && state.status === 'passed') {
+      state.status = 'failed'
+      state.exitCode = 1
+      state.reason = `test result report unavailable: ${Shared.FS.displayPath(state.testReport.path)}`
+      state.failure = { kind: 'process-error', message: state.reason }
+      state.fullOutput += `${
+        state.fullOutput.endsWith('\n') || state.fullOutput.length === 0 ? '' : '\n'
+      }${state.reason}\n`
+    }
     if ((state.testObservations?.length ?? 0) === 0 && state.status === 'failed') {
       state.testObservations = (state.selectedTestFiles ?? []).map(file => ({
         durationMs: state.elapsedMs,
@@ -553,7 +562,8 @@ function noTestsMatched(
   states: readonly SuiteState[],
 ): boolean {
   return kind === 'name'
-    && observations.length > 0
+    && states.length > 0
+    && states.every(state => state.testObservations !== undefined)
     && observations.every(observation => observation.outcome === 'skipped')
     && states.every(state => state.status === 'passed')
 }

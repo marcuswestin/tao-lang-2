@@ -1,5 +1,6 @@
-import { FS, Repo } from '@shared'
+import { Errors, FS, Repo, Time } from '@shared'
 import { createHash, randomUUID } from 'node:crypto'
+import { MachineLanes, type MachineResourceLease } from './MachineLanes'
 
 /** TestOutcome is the result a native test reporter recorded for one test. */
 export type TestOutcome = 'failed' | 'passed' | 'skipped'
@@ -62,9 +63,11 @@ export type Flake = {
 
 const LEDGER_PATH = '.artifacts/testing/ledger.json'
 const HISTORY_PATH = '.artifacts/testing/history.jsonl'
-const HISTORY_MAX_BYTES = 1_000_000
-const HISTORY_TARGET_BYTES = 750_000
+const HISTORY_MAX_BYTES = 4_000_000
+const HISTORY_TARGET_BYTES = 3_000_000
 const HISTORY_EVENTS_PER_TEST = 20
+const HISTORY_MIN_EVENTS_PER_TEST = 2
+const LEDGER_LOCK_TIMEOUT_MS = 30_000
 const VERSION = 1 as const
 
 function empty(): TestLedgerStore {
@@ -82,11 +85,8 @@ function historyPath(repositoryRoot: string): string {
 /** load treats missing, corrupt, and older stores as a cold checkout rather than blocking testing. */
 async function load(repositoryRoot = Repo.getRoot()): Promise<TestLedgerStore> {
   try {
-    const value = await FS.readJson<Partial<TestLedgerStore>>(ledgerPath(repositoryRoot))
-    if (value.version !== VERSION || value.tests === undefined || typeof value.tests !== 'object') {
-      return empty()
-    }
-    return { lastFullRunStartedAt: value.lastFullRunStartedAt, tests: value.tests, version: VERSION }
+    const value = await FS.readJson<unknown>(ledgerPath(repositoryRoot))
+    return isLedgerStore(value) ? value : empty()
   } catch {
     return empty()
   }
@@ -95,6 +95,18 @@ async function load(repositoryRoot = Repo.getRoot()): Promise<TestLedgerStore> {
 /** recordRun merges native reporter observations and appends their immutable history events. */
 async function recordRun(options: RecordTestRunOptions): Promise<TestLedgerStore> {
   const repositoryRoot = options.repositoryRoot ?? Repo.getRoot()
+  const lease = await acquireLedgerLease(repositoryRoot)
+  try {
+    return await recordRunUnlocked(options, repositoryRoot)
+  } finally {
+    await lease.release()
+  }
+}
+
+async function recordRunUnlocked(
+  options: RecordTestRunOptions,
+  repositoryRoot: string,
+): Promise<TestLedgerStore> {
   const store = await load(repositoryRoot)
   const previousTests = { ...store.tests }
   const recordedAt = new Date().toISOString()
@@ -133,6 +145,19 @@ async function recordRun(options: RecordTestRunOptions): Promise<TestLedgerStore
   await writeStore(store, repositoryRoot)
   await appendHistory(events, repositoryRoot)
   return store
+}
+
+async function acquireLedgerLease(repositoryRoot: string): Promise<MachineResourceLease> {
+  const deadline = Time.nowMs() + LEDGER_LOCK_TIMEOUT_MS
+  const registryRoot = FS.resolvePath('.artifacts/testing/transaction-lock', repositoryRoot)
+  while (Time.nowMs() <= deadline) {
+    const lease = await MachineLanes.tryAcquireResource({ name: 'test-ledger', registryRoot })
+    if (lease !== undefined) {
+      return lease
+    }
+    await Time.sleep(25)
+  }
+  throw new Errors.HostEnvironmentError('Timed out waiting for another test command to finish updating the ledger.')
 }
 
 /** selectRetryFiles selects whole files while settlement remains a per-test fact. */
@@ -209,7 +234,9 @@ function isSettled(record: TestLedgerRecord, fullRunStartedAt: string | undefine
   if (fullRunStartedAt === undefined || record.lastPassedAt === undefined) {
     return false
   }
-  return record.lastPassedAt >= fullRunStartedAt && record.lastPassedAt > (record.lastFailedAt ?? '')
+  const passedAt = Date.parse(record.lastPassedAt)
+  return passedAt >= Date.parse(fullRunStartedAt)
+    && passedAt > (record.lastFailedAt === undefined ? Number.NEGATIVE_INFINITY : Date.parse(record.lastFailedAt))
 }
 
 function testId(observation: Pick<TestObservation, 'file' | 'name' | 'suite'>): string {
@@ -298,7 +325,7 @@ async function compactHistoryIfNeeded(repositoryRoot: string): Promise<void> {
   }
   const events = parseHistory(new TextDecoder().decode(source))
   const retainedPerTest = new Map<string, number>()
-  const candidates: string[] = []
+  const candidateIndexes: number[] = []
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]!
     const retained = retainedPerTest.get(event.id) ?? 0
@@ -306,20 +333,40 @@ async function compactHistoryIfNeeded(repositoryRoot: string): Promise<void> {
       continue
     }
     retainedPerTest.set(event.id, retained + 1)
-    candidates.push(`${JSON.stringify(event)}\n`)
+    candidateIndexes.push(index)
   }
-  const retainedLines: string[] = []
-  let retainedBytes = 0
-  for (const line of candidates) {
-    const bytes = new TextEncoder().encode(line).byteLength
-    if (retainedLines.length > 0 && retainedBytes + bytes > HISTORY_TARGET_BYTES) {
-      break
+  const byTest = new Map<string, number[]>()
+  for (const index of candidateIndexes) {
+    const indexes = byTest.get(events[index]!.id) ?? []
+    indexes.push(index)
+    byTest.set(events[index]!.id, indexes)
+  }
+  const retainedIndexes = new Set<number>()
+  for (const indexes of byTest.values()) {
+    for (const index of indexes.slice(0, HISTORY_MIN_EVENTS_PER_TEST)) {
+      retainedIndexes.add(index)
     }
-    retainedLines.push(line)
-    retainedBytes += bytes
   }
+  let retainedBytes = [...retainedIndexes].reduce(
+    (sum, index) => sum + encodedHistoryEventSize(events[index]!),
+    0,
+  )
+  for (const index of candidateIndexes) {
+    if (retainedIndexes.has(index)) {
+      continue
+    }
+    const line = `${JSON.stringify(events[index]!)}\n`
+    const bytes = new TextEncoder().encode(line).byteLength
+    if (retainedBytes + bytes <= HISTORY_TARGET_BYTES) {
+      retainedIndexes.add(index)
+      retainedBytes += bytes
+    }
+  }
+  const retainedLines = [...retainedIndexes]
+    .sort((left, right) => left - right)
+    .map(index => `${JSON.stringify(events[index]!)}\n`)
   const temporaryPath = `${path}.${randomUUID()}.tmp`
-  await FS.writeText(temporaryPath, retainedLines.reverse().join(''))
+  await FS.writeText(temporaryPath, retainedLines.join(''))
   try {
     await FS.move(temporaryPath, path)
   } catch (error) {
@@ -328,14 +375,18 @@ async function compactHistoryIfNeeded(repositoryRoot: string): Promise<void> {
   }
 }
 
+function encodedHistoryEventSize(event: TestHistoryEvent): number {
+  return new TextEncoder().encode(`${JSON.stringify(event)}\n`).byteLength
+}
+
 function parseHistory(source: string): TestHistoryEvent[] {
   return source
     .split('\n')
     .filter(Boolean)
     .flatMap(line => {
       try {
-        const value = JSON.parse(line) as Partial<TestHistoryEvent>
-        return value.version === VERSION && typeof value.id === 'string' ? [value as TestHistoryEvent] : []
+        const value = JSON.parse(line) as unknown
+        return isHistoryEvent(value) ? [value] : []
       } catch {
         return []
       }
@@ -344,6 +395,48 @@ function parseHistory(source: string): TestHistoryEvent[] {
 
 function positiveLimit(limit: number): number {
   return Number.isInteger(limit) && limit > 0 ? limit : 20
+}
+
+function isLedgerStore(value: unknown): value is TestLedgerStore {
+  if (!isPlainRecord(value) || value['version'] !== VERSION || !isPlainRecord(value['tests'])) {
+    return false
+  }
+  if (value['lastFullRunStartedAt'] !== undefined && !isTimestamp(value['lastFullRunStartedAt'])) {
+    return false
+  }
+  return Object.entries(value['tests']).every(([id, record]) => isLedgerRecord(record) && record.id === id)
+}
+
+function isLedgerRecord(value: unknown): value is TestLedgerRecord {
+  if (!isPlainRecord(value)) {
+    return false
+  }
+  return typeof value['id'] === 'string'
+    && typeof value['suite'] === 'string'
+    && typeof value['file'] === 'string'
+    && typeof value['name'] === 'string'
+    && typeof value['fileIdentity'] === 'string'
+    && (value['outcome'] === 'failed' || value['outcome'] === 'passed' || value['outcome'] === 'skipped')
+    && (value['durationMs'] === undefined
+      || typeof value['durationMs'] === 'number' && Number.isFinite(value['durationMs']) && value['durationMs'] >= 0)
+    && isTimestamp(value['lastRunAt'])
+    && (value['lastFailedAt'] === undefined || isTimestamp(value['lastFailedAt']))
+    && (value['lastPassedAt'] === undefined || isTimestamp(value['lastPassedAt']))
+}
+
+function isHistoryEvent(value: unknown): value is TestHistoryEvent {
+  return isPlainRecord(value)
+    && value['version'] === VERSION
+    && isTimestamp(value['recordedAt'])
+    && isLedgerRecord(value)
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value))
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** TestLedger owns durable per-test state, retry selection, and history-backed reports. */

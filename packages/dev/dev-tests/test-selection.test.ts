@@ -19,6 +19,8 @@ Describe('changed test selection', () => {
         ? '1\n'
         : joined === 'log -1 --format=%cI abc123..HEAD'
         ? '2026-09-03T12:00:00Z\n'
+        : joined === 'log -1 --merges --format=%cI abc123..HEAD'
+        ? '2026-09-02T12:00:00Z\n'
         : ''
       return { args, command, cwd: spec?.cwd, error: undefined, exitCode: 0, signal: null, stderr: '', stdout }
     }
@@ -29,6 +31,7 @@ Describe('changed test selection', () => {
     Expect(selection.changedPaths).toEqual(['Apps/New.tao', 'packages/parser/parser-src/Parser.ts'])
     Expect(selection.hasMergeCommit).toBe(true)
     Expect(selection.newestCommitAt).toBe('2026-09-03T12:00:00Z')
+    Expect(selection.newestMergeAt).toBe('2026-09-02T12:00:00Z')
     Expect(calls.some(call => call.startsWith('merge-base'))).toBe(false)
   })
 

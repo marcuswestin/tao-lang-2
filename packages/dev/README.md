@@ -91,8 +91,8 @@ between a wasted afternoon and a re-run.
   it selected or skipped.
 - `just test-retry` re-runs files not green since this checkout's latest complete test run. The
   ledger is under `.artifacts/testing`, so a new worktree starts cold and retries everything. Its
-  JSONL history is compacted to a bounded recent window while retaining adjacent outcomes needed
-  for flake detection.
+  JSONL history is compacted to a bounded recent window while retaining at least the newest two
+  valid outcomes for every recorded test, so one test cannot crowd out another's flake evidence.
 - `just test` is the complete package and Tao app suite. Gates always use this complete mode and
   never consult the retry ledger.
 - `just verify` is the commit gate. `just full-verify-sandbox` runs the same full gate membership in
@@ -106,7 +106,9 @@ runs print one advisory when their change shape or full-run history makes a comp
 requires the sole live `main` worktree to equal `origin/main`; a local-ahead `main` must be reconciled
 deliberately first. Successful execution removes the invoking feature worktree, so run it from a
 shell you are prepared to leave. `--abort` cannot be combined with merge-start flags, and remote-main
-movement is bounded to three verification passes before the command stops safely.
+movement is bounded to three verification passes before the command stops safely. Snapshots are
+written atomically, and `push-started` is an irreversible recovery boundary because a failed client
+may not know whether the remote accepted the push.
 
 ## Reading a failed lane
 

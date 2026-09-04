@@ -1,4 +1,5 @@
 import { CLI, Errors, FS, HCI, Repo } from '@shared'
+import { randomUUID } from 'node:crypto'
 
 // TODO(merge-with-main-default): Change `execute`'s CLI default from false to true after this command
 // has landed several merges safely; retain an explicit `--dry-run` escape hatch when doing so.
@@ -14,6 +15,7 @@ const MERGE_PHASES: readonly MergePhase[] = [
   'squashed',
   'main-verified',
   'committed',
+  'push-started',
   'pushed',
   'archived',
   'complete',
@@ -47,6 +49,7 @@ export type MergePhase =
   | 'squashed'
   | 'main-verified'
   | 'committed'
+  | 'push-started'
   | 'pushed'
   | 'archived'
   | 'complete'
@@ -113,6 +116,7 @@ export type MergeWithMainDependencies = {
   askConfirm: (message: string) => Promise<boolean>
   exists: (path: string) => Promise<boolean>
   isInteractive: () => boolean
+  move: (fromPath: string, toPath: string) => Promise<void>
   now: () => Date
   readJson: <ValueT>(path: string) => Promise<ValueT>
   readText: (path: string) => Promise<string>
@@ -133,6 +137,7 @@ const defaultDependencies: MergeWithMainDependencies = {
   askConfirm: async message => await HCI.askConfirm({ defaultValue: false, message }),
   exists: FS.exists,
   isInteractive: HCI.isInteractive,
+  move: FS.move,
   now: () => new Date(),
   readJson: FS.readJson,
   readText: FS.readText,
@@ -163,18 +168,18 @@ export function validateMergeMessage(source: string): string {
       'The merge message must end with a contiguous bullet block using one `- ...` bullet per line.',
     )
   }
-  if (
-    /^co-authored-by:/imu.test(message)
-    || /\b(?:machine|automatically)[ -]generated\b/iu.test(message)
-    || /^generated-with:/imu.test(message)
-  ) {
-    Errors.throwUserInput('The merge message must not contain an automated-author attribution trailer.')
-  }
+  assertNoAutomatedAttribution(message)
   if (/^Squashed commit of the following:/mu.test(message)) {
     Errors.throwUserInput("Do not hand-write the squash appendix; merge-with-main appends Git's generated appendix.")
   }
 
   return message
+}
+
+function assertNoAutomatedAttribution(message: string): void {
+  if (/^(?:co-authored-by|generated(?:-by|-with)?|ai-assisted-by|assisted-by):\s*\S/imu.test(message)) {
+    Errors.throwUserInput('The merge message must not contain automated-author attribution.')
+  }
 }
 
 /** Parse `git worktree list --porcelain` without depending on human-formatted columns. */
@@ -405,7 +410,7 @@ async function createSnapshot(
   dependencies: MergeWithMainDependencies,
 ): Promise<MergeSnapshot> {
   const createdAt = dependencies.now().toISOString()
-  const stamp = createdAt.replaceAll(/[:.]/gu, '-')
+  const stamp = `${createdAt.replaceAll(/[:.]/gu, '-')}-${randomUUID().slice(0, 8)}`
   const snapshotPath = FS.resolvePath(`.artifacts/merge/${stamp}.json`, preflight.mainRoot)
   const [featureTree, featureIndexTree, mainTree, mainIndexTree] = await Promise.all([
     git(dependencies, preflight.featureRoot, ['rev-parse', 'HEAD^{tree}']).then(result => result.stdout.trim()),
@@ -464,6 +469,7 @@ async function stabilizeAndVerify(
         snapshot.featureRoot,
         'feature-integrated',
         dependencies,
+        'feature',
       )
     } else {
       assertCommandSucceeded(ancestor)
@@ -486,7 +492,7 @@ async function stabilizeAndVerify(
         Errors.throwUnexpected('Full verification changed the feature branch or its tracked worktree state.')
       }
     } else {
-      await updateSnapshotState(snapshot, 'feature-verified', dependencies)
+      await advanceSnapshot(snapshot, 'feature-verified', dependencies)
     }
 
     const remoteMain = (await remoteHeads(dependencies, snapshot.featureRoot, [MAIN_BRANCH])).get(MAIN_BRANCH)
@@ -507,12 +513,13 @@ async function stabilizeAndVerify(
           snapshot.mainRoot,
           'feature-verified',
           dependencies,
+          'main',
         )
       }
       return
     }
     if (pass === MAX_STABILIZATION_PASSES) {
-      await updateSnapshotState(snapshot, 'failed', dependencies)
+      await advanceSnapshot(snapshot, 'failed', dependencies)
       Errors.throwHostEnvironment(
         `${REMOTE}/main moved during ${MAX_STABILIZATION_PASSES} consecutive verification passes; `
           + 'stop and retry when main is stable.',
@@ -529,6 +536,7 @@ async function squashAndVerify(
   snapshot: MergeSnapshot,
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
+  await assertExpectedLocalState(snapshot, dependencies)
   const stableFeatureHead = (await git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
   const stableFeatureTree = (await git(
     dependencies,
@@ -541,12 +549,19 @@ async function squashAndVerify(
     stdio: 'stream',
   })
   if (squashResult.exitCode !== 0 || squashResult.error !== undefined || squashResult.signal !== null) {
-    await updateSnapshotState(snapshot, 'failed', dependencies)
+    await captureFailedMutation(snapshot, 'main', dependencies)
     assertCommandSucceeded(squashResult)
+  }
+  const afterSquash = await readLocalState(snapshot, dependencies)
+  assertFeatureMatches(snapshot, afterSquash)
+  if (afterSquash.mainHead !== snapshot.currentMainHead || hasUnstagedOrUntracked(afterSquash.mainStatus)) {
+    Errors.throwUserInput('Repository state changed unexpectedly while preparing the staged squash.')
   }
   const stagedTree = (await git(dependencies, snapshot.mainRoot, ['write-tree'])).stdout.trim()
   snapshot.stagedTree = stagedTree
-  await updateSnapshotState(snapshot, 'squashed', dependencies)
+  adoptLocalState(snapshot, afterSquash)
+  snapshot.phase = 'squashed'
+  await persistSnapshot(snapshot, dependencies)
   if (stagedTree !== stableFeatureTree) {
     Errors.throwUnexpected('The staged squash tree does not equal the verified feature tree.', {
       details: { stagedTree, stableFeatureTree },
@@ -566,11 +581,14 @@ async function commitSquash(
   message: string,
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
-  const squashMessagePath = (await git(
-    dependencies,
+  const squashMessagePath = FS.resolvePath(
+    (await git(
+      dependencies,
+      snapshot.mainRoot,
+      ['rev-parse', '--git-path', 'SQUASH_MSG'],
+    )).stdout.trim(),
     snapshot.mainRoot,
-    ['rev-parse', '--git-path', 'SQUASH_MSG'],
-  )).stdout.trim()
+  )
   if (!await dependencies.exists(squashMessagePath)) {
     Errors.throwUnexpected('git merge --squash did not produce SQUASH_MSG.')
   }
@@ -579,7 +597,9 @@ async function commitSquash(
     Errors.throwUnexpected('Git produced an unrecognised squash appendix.', { details: { squashMessagePath } })
   }
   const commitMessagePath = `${snapshot.snapshotPath}.commit-message`
-  await dependencies.writeText(commitMessagePath, `${message}\n\n${appendix}\n`)
+  const finalMessage = `${message}\n\n${appendix}\n`
+  assertNoAutomatedAttribution(finalMessage)
+  await dependencies.writeText(commitMessagePath, finalMessage)
   await runAndSnapshot(
     snapshot,
     'git',
@@ -587,18 +607,27 @@ async function commitSquash(
     snapshot.mainRoot,
     'committed',
     dependencies,
+    'main',
   )
+  const committedTree = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD^{tree}'])).stdout.trim()
+  if (snapshot.stagedTree === undefined || committedTree !== snapshot.stagedTree) {
+    Errors.throwUnexpected('The committed main tree does not equal the verified squash tree.', {
+      details: { committedTree, verifiedTree: snapshot.stagedTree },
+    })
+  }
+  await assertExpectedLocalState(snapshot, dependencies)
 }
 
 async function pushAndClean(snapshot: MergeSnapshot, dependencies: MergeWithMainDependencies): Promise<void> {
+  await advanceSnapshot(snapshot, 'push-started', dependencies)
   await runChecked(dependencies, 'git', ['push', REMOTE, `${MAIN_BRANCH}:${MAIN_BRANCH}`], snapshot.mainRoot, true)
-  await updateSnapshotState(snapshot, 'pushed', dependencies)
+  await advanceSnapshot(snapshot, 'pushed', dependencies)
 
   const archive = `merged/${snapshot.branch.slice(5)}`
   await runChecked(
     dependencies,
     'git',
-    ['push', REMOTE, `${snapshot.branch}:refs/heads/${archive}`],
+    ['push', REMOTE, `--force-with-lease=refs/heads/${archive}:`, `${snapshot.branch}:refs/heads/${archive}`],
     snapshot.featureRoot,
     true,
   )
@@ -616,7 +645,7 @@ async function pushAndClean(snapshot: MergeSnapshot, dependencies: MergeWithMain
       true,
     )
   }
-  await updateSnapshotState(snapshot, 'archived', dependencies)
+  await advanceSnapshot(snapshot, 'archived', dependencies)
 
   await runChecked(dependencies, 'git', ['worktree', 'remove', snapshot.featureRoot], snapshot.mainRoot, true)
   // A squash commit has no ancestry relationship to the feature tip, so `-d` cannot remove it even
@@ -658,11 +687,14 @@ async function abortMerge(
   await assertSnapshotState(snapshot, dependencies)
   await runChecked(dependencies, 'git', ['reset', '--hard', snapshot.mainHead], snapshot.mainRoot, true)
   await runChecked(dependencies, 'git', ['reset', '--hard', snapshot.featureHead], snapshot.featureRoot, true)
-  const squashMessagePath = (await git(
-    dependencies,
+  const squashMessagePath = FS.resolvePath(
+    (await git(
+      dependencies,
+      snapshot.mainRoot,
+      ['rev-parse', '--git-path', 'SQUASH_MSG'],
+    )).stdout.trim(),
     snapshot.mainRoot,
-    ['rev-parse', '--git-path', 'SQUASH_MSG'],
-  )).stdout.trim()
+  )
   await dependencies.remove(squashMessagePath)
   await dependencies.remove(`${snapshot.snapshotPath}.commit-message`)
   snapshot.phase = 'aborted'
@@ -682,22 +714,8 @@ async function assertSnapshotState(
   snapshot: MergeSnapshot,
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
-  const [featureHead, mainHead, featureDiff, mainDiff, featureStatus, mainStatus] = await Promise.all([
-    git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD']).then(result => result.stdout.trim()),
-    git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD']).then(result => result.stdout.trim()),
-    diff(dependencies, snapshot.featureRoot),
-    diff(dependencies, snapshot.mainRoot),
-    status(dependencies, snapshot.featureRoot),
-    status(dependencies, snapshot.mainRoot),
-  ])
-  if (
-    featureHead !== snapshot.currentFeatureHead
-    || mainHead !== snapshot.currentMainHead
-    || featureDiff !== snapshot.currentFeatureDiff
-    || mainDiff !== snapshot.currentMainDiff
-    || featureStatus !== snapshot.currentFeatureStatus
-    || mainStatus !== snapshot.currentMainStatus
-  ) {
+  const current = await readLocalState(snapshot, dependencies)
+  if (!localStateMatches(snapshot, current)) {
     Errors.throwUserInput('Repository state no longer matches the merge snapshot; refusing to discard later work.')
   }
   if (snapshot.stagedTree !== undefined) {
@@ -751,31 +769,32 @@ function isMergePhase(value: unknown): value is MergePhase {
 }
 
 function phaseAtOrAfterPush(phase: MergePhase): boolean {
-  return phase === 'pushed' || phase === 'archived' || phase === 'complete'
-}
-
-async function updateSnapshotState(
-  snapshot: MergeSnapshot,
-  phase: MergePhase,
-  dependencies: MergeWithMainDependencies,
-): Promise<void> {
-  snapshot.phase = phase
-  snapshot.currentFeatureHead = (await git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()
-  snapshot.currentFeatureDiff = await diff(dependencies, snapshot.featureRoot)
-  snapshot.currentFeatureStatus = await status(dependencies, snapshot.featureRoot)
-  snapshot.currentMainHead = (await git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
-  snapshot.currentMainDiff = await diff(dependencies, snapshot.mainRoot)
-  snapshot.currentMainStatus = await status(dependencies, snapshot.mainRoot)
-  if (snapshot.stagedTree !== undefined) {
-    snapshot.stagedTree = (await git(dependencies, snapshot.mainRoot, ['write-tree'])).stdout.trim()
-  }
-  await persistSnapshot(snapshot, dependencies)
+  return phase === 'push-started' || phase === 'pushed' || phase === 'archived' || phase === 'complete'
 }
 
 async function assertExpectedLocalState(
   snapshot: MergeSnapshot,
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
+  const current = await readLocalState(snapshot, dependencies)
+  if (!localStateMatches(snapshot, current)) {
+    Errors.throwUserInput('Repository state changed after preflight; refusing to continue the merge.')
+  }
+}
+
+type LocalState = {
+  featureDiff: string
+  featureHead: string
+  featureStatus: string
+  mainDiff: string
+  mainHead: string
+  mainStatus: string
+}
+
+async function readLocalState(
+  snapshot: MergeSnapshot,
+  dependencies: MergeWithMainDependencies,
+): Promise<LocalState> {
   const [featureHead, mainHead, featureDiff, mainDiff, featureStatus, mainStatus] = await Promise.all([
     git(dependencies, snapshot.featureRoot, ['rev-parse', 'HEAD']).then(result => result.stdout.trim()),
     git(dependencies, snapshot.mainRoot, ['rev-parse', 'HEAD']).then(result => result.stdout.trim()),
@@ -784,20 +803,80 @@ async function assertExpectedLocalState(
     status(dependencies, snapshot.featureRoot),
     status(dependencies, snapshot.mainRoot),
   ])
-  if (
-    featureHead !== snapshot.currentFeatureHead
-    || mainHead !== snapshot.currentMainHead
-    || featureDiff !== snapshot.currentFeatureDiff
-    || mainDiff !== snapshot.currentMainDiff
-    || featureStatus !== snapshot.currentFeatureStatus
-    || mainStatus !== snapshot.currentMainStatus
-  ) {
-    Errors.throwUserInput('Repository state changed after preflight; refusing to continue the merge.')
+  return { featureDiff, featureHead, featureStatus, mainDiff, mainHead, mainStatus }
+}
+
+function localStateMatches(snapshot: MergeSnapshot, current: LocalState): boolean {
+  return current.featureHead === snapshot.currentFeatureHead
+    && current.featureDiff === snapshot.currentFeatureDiff
+    && current.featureStatus === snapshot.currentFeatureStatus
+    && current.mainHead === snapshot.currentMainHead
+    && current.mainDiff === snapshot.currentMainDiff
+    && current.mainStatus === snapshot.currentMainStatus
+}
+
+function assertLocalStateMatches(snapshot: MergeSnapshot, current: LocalState): void {
+  if (!localStateMatches(snapshot, current)) {
+    Errors.throwUserInput('Repository state changed while validation was running; refusing to continue the merge.')
   }
 }
 
+function assertFeatureMatches(snapshot: MergeSnapshot, current: LocalState): void {
+  if (!featureMatches(snapshot, current)) {
+    Errors.throwUserInput('The feature worktree changed unexpectedly while the merge command was running.')
+  }
+}
+
+function assertMainMatches(snapshot: MergeSnapshot, current: LocalState): void {
+  if (!mainMatches(snapshot, current)) {
+    Errors.throwUserInput('The main worktree changed unexpectedly while the merge command was running.')
+  }
+}
+
+function featureMatches(snapshot: MergeSnapshot, current: LocalState): boolean {
+  return current.featureHead === snapshot.currentFeatureHead
+    && current.featureDiff === snapshot.currentFeatureDiff
+    && current.featureStatus === snapshot.currentFeatureStatus
+}
+
+function mainMatches(snapshot: MergeSnapshot, current: LocalState): boolean {
+  return current.mainHead === snapshot.currentMainHead
+    && current.mainDiff === snapshot.currentMainDiff
+    && current.mainStatus === snapshot.currentMainStatus
+}
+
+function adoptLocalState(snapshot: MergeSnapshot, current: LocalState): void {
+  snapshot.currentFeatureHead = current.featureHead
+  snapshot.currentFeatureDiff = current.featureDiff
+  snapshot.currentFeatureStatus = current.featureStatus
+  snapshot.currentMainHead = current.mainHead
+  snapshot.currentMainDiff = current.mainDiff
+  snapshot.currentMainStatus = current.mainStatus
+}
+
+function hasUnstagedOrUntracked(statusOutput: string): boolean {
+  return statusOutput.split('\n').filter(Boolean).some(line => line.startsWith('??') || line[1] !== ' ')
+}
+
+async function advanceSnapshot(
+  snapshot: MergeSnapshot,
+  phase: MergePhase,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  await assertExpectedLocalState(snapshot, dependencies)
+  snapshot.phase = phase
+  await persistSnapshot(snapshot, dependencies)
+}
+
 async function persistSnapshot(snapshot: MergeSnapshot, dependencies: MergeWithMainDependencies): Promise<void> {
-  await dependencies.writeJson(snapshot.snapshotPath, snapshot)
+  const temporaryPath = `${snapshot.snapshotPath}.${randomUUID()}.tmp`
+  await dependencies.writeJson(temporaryPath, snapshot)
+  try {
+    await dependencies.move(temporaryPath, snapshot.snapshotPath)
+  } catch (error) {
+    await dependencies.remove(temporaryPath).catch(() => {})
+    throw error
+  }
 }
 
 async function fullRunWarnings(dependencies: MergeWithMainDependencies, featureRoot: string): Promise<string[]> {
@@ -887,12 +966,64 @@ async function runAndSnapshot(
   cwd: string,
   successPhase: MergePhase,
   dependencies: MergeWithMainDependencies,
+  mutation: 'feature' | 'main' | 'none' = 'none',
 ): Promise<CLI.CommandResult> {
+  await assertExpectedLocalState(snapshot, dependencies)
   const result = await dependencies.run(command, { args, cwd, stdio: 'stream' })
   const succeeded = result.exitCode === 0 && result.error === undefined && result.signal === null
-  await updateSnapshotState(snapshot, succeeded ? successPhase : 'failed', dependencies)
+  if (!succeeded) {
+    await captureFailedMutation(snapshot, mutation, dependencies)
+    assertCommandSucceeded(result)
+  }
+  const current = await readLocalState(snapshot, dependencies)
+  if (mutation === 'none') {
+    assertLocalStateMatches(snapshot, current)
+  } else if (mutation === 'feature') {
+    assertMainMatches(snapshot, current)
+    if (current.featureStatus !== '' || current.featureDiff !== '') {
+      Errors.throwUserInput('The feature worktree was not clean after the command-owned Git operation.')
+    }
+  } else {
+    assertFeatureMatches(snapshot, current)
+    if (current.mainStatus !== '' || current.mainDiff !== '') {
+      Errors.throwUserInput('The main worktree was not clean after the command-owned Git operation.')
+    }
+  }
+  adoptLocalState(snapshot, current)
+  snapshot.phase = successPhase
+  await persistSnapshot(snapshot, dependencies)
   assertCommandSucceeded(result)
   return result
+}
+
+async function captureFailedMutation(
+  snapshot: MergeSnapshot,
+  mutation: 'feature' | 'main' | 'none',
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  const current = await readLocalState(snapshot, dependencies)
+  const targetIsRecoverable = mutation === 'feature'
+    ? mainMatches(snapshot, current)
+      && current.featureHead === snapshot.currentFeatureHead
+      && recoverableMergeFailureStatus(current.featureStatus)
+    : mutation === 'main'
+    ? featureMatches(snapshot, current)
+      && current.mainHead === snapshot.currentMainHead
+      && recoverableMergeFailureStatus(current.mainStatus)
+    : false
+  if (localStateMatches(snapshot, current) || targetIsRecoverable) {
+    adoptLocalState(snapshot, current)
+  }
+  snapshot.phase = 'failed'
+  await persistSnapshot(snapshot, dependencies)
+}
+
+const MERGE_CONFLICT_CODES = new Set(['AA', 'AU', 'DD', 'DU', 'UA', 'UD', 'UU'])
+
+function recoverableMergeFailureStatus(statusOutput: string): boolean {
+  const lines = statusOutput.split('\n').filter(Boolean)
+  return lines.some(line => MERGE_CONFLICT_CODES.has(line.slice(0, 2)))
+    && lines.every(line => line.length >= 2 && (line[1] === ' ' || MERGE_CONFLICT_CODES.has(line.slice(0, 2))))
 }
 
 function assertCommandSucceeded(result: CLI.CommandResult): void {

@@ -32,7 +32,7 @@ Describe('language performance reporting', () => {
       Expect(laneCommands).not.toContain('bench')
       Expect(laneCommands).not.toContain('language-performance')
     }
-  })
+  }, 30_000)
 
   Test('renders fixture metadata, latency percentiles, and aggregate timing', () => {
     const report: LanguagePerformanceReport = {

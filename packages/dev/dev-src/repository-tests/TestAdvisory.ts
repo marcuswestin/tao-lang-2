@@ -19,7 +19,14 @@ function fullRunReason(selection: ChangedSelection, ledger: TestLedgerStore): st
   ) {
     return 'runtime or release-bundle code changed since the comparison point'
   }
-  if (selection.hasMergeCommit) {
+  if (
+    selection.hasMergeCommit
+    && (
+      ledger.lastFullRunStartedAt === undefined
+      || selection.newestMergeAt === undefined
+      || Date.parse(ledger.lastFullRunStartedAt) < Date.parse(selection.newestMergeAt)
+    )
+  ) {
     return 'a merge commit was brought into this branch'
   }
   if (ledger.lastFullRunStartedAt === undefined) {

@@ -78,13 +78,21 @@ Describe('test runner suite scheduling', () => {
       state.testObservations = []
     }
 
-    Expect(TestRunner.noTestsMatched('name', [], states)).toBe(false)
+    Expect(TestRunner.noTestsMatched('name', [], states)).toBe(true)
     Expect(TestRunner.noTestsMatched('name', [{
       file: 'packages/dev/dev-tests/example.test.ts',
       name: 'not selected',
       outcome: 'skipped',
       suite: 'dev',
     }], states)).toBe(true)
+    states[0]!.testReport = { format: 'bun-junit', path: '/missing.xml', suite: 'dev' }
+    states[0]!.testObservations = undefined
+    Expect(TestRunner.noTestsMatched('name', [{
+      file: 'packages/runtime-toolchain/runtime-toolchain-tests/example.jest-test.ts',
+      name: 'not selected',
+      outcome: 'skipped',
+      suite: 'runtime-jest',
+    }], states)).toBe(false)
     Expect(TestRunner.noTestsMatched('changed', [], states)).toBe(false)
   })
 

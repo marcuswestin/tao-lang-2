@@ -11,13 +11,50 @@ export type NativeTestReport = {
 async function read(report: NativeTestReport, repositoryRoot: string): Promise<TestObservation[] | undefined> {
   try {
     const source = await FS.readText(report.path)
-    return report.format === 'bun-junit'
-      ? parseBunJunit(source, report.suite, repositoryRoot)
-      : parseJestJson(source, report.suite, repositoryRoot)
+    if (report.format === 'bun-junit') {
+      const declaredTests = completeJunitTestCount(source)
+      if (declaredTests === undefined) {
+        throw new SyntaxError('Bun JUnit report has no complete test-suite root.')
+      }
+      const observations = parseBunJunit(source, report.suite, repositoryRoot)
+      if (observations.length !== declaredTests) {
+        throw new SyntaxError('Bun JUnit report does not contain its declared test inventory.')
+      }
+      return observations
+    }
+    const value = JSON.parse(source) as { numTotalTests?: unknown; testResults?: unknown }
+    if (
+      !Number.isInteger(value.numTotalTests)
+      || (value.numTotalTests as number) < 0
+      || !Array.isArray(value.testResults)
+    ) {
+      throw new SyntaxError('Jest JSON report has no complete test inventory.')
+    }
+    const observations = parseJestJson(source, report.suite, repositoryRoot)
+    if (observations.length !== value.numTotalTests) {
+      throw new SyntaxError('Jest JSON report does not contain its declared test inventory.')
+    }
+    return observations
   } catch {
     // A process that failed before its reporter initialized has no per-test facts to add.
     return undefined
   }
+}
+
+function completeJunitTestCount(source: string): number | undefined {
+  const root = /<(testsuites?)\b[^>]*>/u.exec(source)
+  if (root?.[1] === undefined) {
+    return undefined
+  }
+  if (!root[0].endsWith('/>') && !source.includes(`</${root[1]}>`, root.index + root[0].length)) {
+    return undefined
+  }
+  const testsAttribute = xmlAttributes(root[0]).get('tests')
+  if (testsAttribute === undefined || !/^\d+$/u.test(testsAttribute)) {
+    return undefined
+  }
+  const tests = Number(testsAttribute)
+  return Number.isInteger(tests) && tests >= 0 ? tests : undefined
 }
 
 function parseBunJunit(source: string, suite: string, repositoryRoot?: string): TestObservation[] {
