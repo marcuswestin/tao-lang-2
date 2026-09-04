@@ -1,5 +1,5 @@
 use Documents, Duplicate, Finish, Workspaces from @data
-use WorkspaceNav from @nav
+use SlotNav from @tao/nav
 use Join from @tao/text
 use Col, Image, Panes, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
@@ -10,6 +10,11 @@ type PromptTitle is text
 type PromptMinutes is number
 
 type PromptTags is list of text
+
+workspace
+nav WorkspaceNav = SlotNav {
+   Initial WorkspaceChooser
+}
 
 // Primitive-rooted types remain scalar values and may not add supplied per-value fields that change
 // the primitive representation.

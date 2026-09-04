@@ -1,5 +1,5 @@
 use FocusSessions from @data
-use SignedOutNav from @nav
+use StackNav from @tao/nav
 use Col, Row, Text, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 
@@ -47,6 +47,10 @@ scene SignedOut() {
    render Col() [screen, centeredLayout] {
       Text("Signed out") [title]
 }  }
+
+nav SignedOutNav = StackNav {
+   Initial SignedOut
+}
 
 // `is` narrows, `=` binds. An ascribed binding keeps the `let` column while naming the type it must
 // satisfy; `ParagraphGoal` above demonstrates the equivalent inferred form without the constraint.
