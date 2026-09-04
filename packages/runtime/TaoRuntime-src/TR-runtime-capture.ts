@@ -108,7 +108,10 @@ export async function restoreRuntimeCapture(artifact: TaoRuntimeCaptureArtifact)
   replayedDomains.clear()
   for (const domain of artifact.domains) {
     const registration = domains.get(domain.domain)
-    if (!registration?.restore) {
+    // `replayedDomains` is checked here too, not only added to: a domain can re-register while an
+    // earlier domain's restore is still awaited — which is exactly the React-effect churn this
+    // guard exists for — and would then be seeded by that path and again by this loop.
+    if (!registration?.restore || replayedDomains.has(domain.domain)) {
       continue
     }
     RuntimeAssert.input(

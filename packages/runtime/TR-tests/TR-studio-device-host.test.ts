@@ -1,5 +1,6 @@
 import { Describe, Expect, MockModule, reactNativeStubs, Test } from '@shared/test'
 import type { StudioDeviceClient, TaoStudioDeviceClientState } from '../TaoRuntime-src/TR-studio-device-client'
+import { networkConditionOf } from '../TaoRuntime-src/TR-studio-device-host'
 import type { TaoStudioDeviceCellIdentity } from '../TaoRuntime-src/TR-studio-device-protocol'
 import { StudioDeviceTrust } from '../TaoRuntime-src/TR-studio-device-trust'
 
@@ -422,5 +423,28 @@ Describe('Studio device host badge positioning', () => {
     Expect(clampBadgePosition({ bottom: 50, right: 50 }, bounds)).toEqual({ bottom: 50, right: 50 })
     Expect(clampBadgePosition({ bottom: -20, right: -20 }, bounds)).toEqual({ bottom: 8, right: 8 })
     Expect(clampBadgePosition({ bottom: 500, right: 500 }, bounds)).toEqual({ bottom: 100, right: 100 })
+  })
+})
+
+Describe('Studio device host network condition', () => {
+  /**
+   * What the phone asked for is not what its cell is under. The request is dropped while
+   * disconnected, ignored by the gateway without an assignment, and refused against a cell revision
+   * that has moved on — so the menu reads the assigned cell, which is the only account Studio has
+   * agreed to.
+   */
+  Test('reads the condition off the assigned cell rather than the last request', () => {
+    const cell = (network: unknown) => ({ cell: { environment: { network } } })
+
+    Expect(networkConditionOf(cell({ latencyMs: 0, outcome: 'offline' }))).toBe('offline')
+    Expect(networkConditionOf(cell({ latencyMs: 1_200, outcome: 'normal' }))).toBe('slow')
+    Expect(networkConditionOf(cell({ latencyMs: 0, outcome: 'normal' }))).toBe('normal')
+  })
+
+  Test('an unconfigured or unreadable cell reads as normal, never as a condition it is not under', () => {
+    Expect(networkConditionOf(undefined)).toBe('normal')
+    Expect(networkConditionOf({})).toBe('normal')
+    Expect(networkConditionOf({ cell: { environment: {} } })).toBe('normal')
+    Expect(networkConditionOf({ cell: { environment: { network: { outcome: 'error' } } } })).toBe('normal')
   })
 })

@@ -196,8 +196,10 @@ describe('Studio device host safe area', () => {
 
     await waitFor(() => expect(screen.getByTestId('tao-studio-device-badge')).toBeTruthy())
     // The badge is the only way into the companion menu, so an inset it ignores is a menu a thumb
-    // has to fight the home indicator to reach.
-    const bottom = flatStyle(screen.getByTestId('tao-studio-device-badge').props['style'])['bottom']
-    expect(typeof bottom === 'number' && bottom >= insets.bottom).toBe(true)
+    // has to fight the home indicator to reach. Pinned exactly, not as a lower bound: the margin
+    // above the inset is the part that keeps it off the indicator rather than merely level with it.
+    expect(flatStyle(screen.getByTestId('tao-studio-device-badge').props['style'])['bottom']).toBe(
+      24 + insets.bottom,
+    )
   })
 })

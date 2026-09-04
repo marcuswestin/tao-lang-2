@@ -1,4 +1,4 @@
-import type { TaoStudioDeviceLogEntry } from './TR-studio-device-protocol'
+import { type TaoStudioDeviceLogEntry, TaoStudioDeviceProtocol } from './TR-studio-device-protocol'
 
 /**
  * Console output from a phone, on its way to Studio.
@@ -28,8 +28,14 @@ export type StudioDeviceLogConsole = {
   warn?: (...args: unknown[]) => void
 }
 
-/** How many lines are held before the oldest are dropped, so a runaway loop cannot exhaust memory. */
-const maxBuffered = 200
+/**
+ * How many lines one batch may carry, taken from the protocol rather than restated.
+ *
+ * The two used to be separate literals that happened to agree, and the drop notice pushed the batch
+ * one entry past the limit — so the runaway-loop case the cap exists for was the exact case whose
+ * batch the gateway then rejected whole.
+ */
+const maxBatch = TaoStudioDeviceProtocol.logBatchLimit
 const flushDelayMs = 250
 
 /**
@@ -59,16 +65,21 @@ export function captureStudioDeviceLogs(input: {
     if (buffered.length === 0) {
       return
     }
-    const entries = buffered.splice(0, buffered.length)
+    // The notice has to fit inside the batch, not extend it: one entry over the limit and the
+    // gateway refuses every line in it.
+    const entries = buffered.splice(0, dropped > 0 ? maxBatch - 1 : maxBatch)
     if (dropped > 0) {
       entries.push({ level: 'warn', message: `[${dropped} device log lines dropped]`, timestamp: now() })
       dropped = 0
     }
     input.sink(entries)
+    if (buffered.length > 0 && timer === undefined) {
+      timer = timers.setTimeout(flush, flushDelayMs)
+    }
   }
 
   const record = (level: TaoStudioDeviceLogEntry['level'], args: readonly unknown[]): void => {
-    if (buffered.length >= maxBuffered) {
+    if (buffered.length >= maxBatch) {
       dropped++
       return
     }

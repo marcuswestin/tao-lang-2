@@ -43,6 +43,7 @@ import { captureStudioDeviceLogs, type StudioDeviceLogConsole } from './TR-studi
 import type {
   TaoStudioDeviceCellIdentity,
   TaoStudioDeviceDescription,
+  TaoStudioDeviceNetworkCondition,
   TaoStudioDeviceOccurrence,
 } from './TR-studio-device-protocol'
 import { StudioDeviceTrust } from './TR-studio-device-trust'
@@ -661,6 +662,12 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
     client.sourceAction(action, occurrence)
   }, [client, selection, sourceVersions])
 
+  // Read from the cell the device is actually rendering, never from what it last asked for: the
+  // request can be dropped while disconnected, ignored without an assignment, or refused against a
+  // stale cell revision, and a menu claiming "Offline: on" over a fully online cell is a lie the
+  // person would have no way to notice.
+  const assignedNetwork = networkConditionOf(presentation.kind === 'cell' ? presentation.assignment.runtime : undefined)
+
   // An edit made on the phone is answered by the Mac; the phone is where the person is looking, so
   // that answer belongs on this screen rather than only in Studio's log.
   const sourceActionOutcome = state.sourceAction === undefined
@@ -703,20 +710,20 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
       },
     },
     {
-      active: state.network === 'offline',
+      active: assignedNetwork === 'offline',
       id: 'offline',
-      label: state.network === 'offline' ? 'Offline: on' : 'Offline',
+      label: assignedNetwork === 'offline' ? 'Offline: on' : 'Offline',
       onPress: () => {
-        client.setNetwork(state.network === 'offline' ? 'normal' : 'offline')
+        client.setNetwork(assignedNetwork === 'offline' ? 'normal' : 'offline')
         setMenuOpen(false)
       },
     },
     {
-      active: state.network === 'slow',
+      active: assignedNetwork === 'slow',
       id: 'slow-network',
-      label: state.network === 'slow' ? 'Slow network: on' : 'Slow network',
+      label: assignedNetwork === 'slow' ? 'Slow network: on' : 'Slow network',
       onPress: () => {
-        client.setNetwork(state.network === 'slow' ? 'normal' : 'slow')
+        client.setNetwork(assignedNetwork === 'slow' ? 'normal' : 'slow')
         setMenuOpen(false)
       },
     },
@@ -925,6 +932,19 @@ function DeviceActions(props: {
 }
 
 /** DeviceBadge is the floating "Tao" affordance over a rendered cell; a drag moves it, a tap opens the sheet. */
+/**
+ * The named network condition the assigned cell is under, read from the bootstrap record the gateway
+ * sent. Anything unrecognised reads as `normal`, which is what an unconfigured cell is.
+ */
+export function networkConditionOf(runtime: unknown): TaoStudioDeviceNetworkCondition {
+  const network = (runtime as { cell?: { environment?: { network?: { latencyMs?: unknown; outcome?: unknown } } } })
+    ?.cell?.environment?.network
+  if (network?.outcome === 'offline') {
+    return 'offline'
+  }
+  return typeof network?.latencyMs === 'number' && network.latencyMs > 0 ? 'slow' : 'normal'
+}
+
 /** Names an occurrence for the label over a selection: the owner if the compiler knew one, else the file. */
 export function occurrenceLabel(identity: { ownerName?: string; sourcePath: string; start: number }): string {
   if (identity.ownerName !== undefined) {

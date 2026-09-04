@@ -355,7 +355,6 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
   }
 }
 
-/** companionDevClientUrl is the SDK 54 development-client deep link the shell opens Metro from. */
 /**
  * Which way a launch should reach the device.
  *
@@ -374,6 +373,7 @@ export function linkLocalCandidate(candidates: readonly string[]): string | unde
   return candidates.find(candidate => candidate.startsWith('169.254.'))
 }
 
+/** companionDevClientUrl is the SDK 54 development-client deep link the shell opens Metro from. */
 export function companionDevClientUrl(input: { host: string; port: number; scheme: string }): string {
   return `${input.scheme}://expo-development-client/?url=${encodeURIComponent(`http://${input.host}:${input.port}`)}`
 }

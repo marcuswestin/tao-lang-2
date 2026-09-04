@@ -5,7 +5,11 @@ import {
   type StudioDeviceLogConsole,
   type StudioDeviceLogTimers,
 } from '../TaoRuntime-src/TR-studio-device-logs'
-import type { TaoStudioDeviceLogEntry } from '../TaoRuntime-src/TR-studio-device-protocol'
+import {
+  StudioDeviceProtocol,
+  type TaoStudioDeviceLogEntry,
+  TaoStudioDeviceProtocol,
+} from '../TaoRuntime-src/TR-studio-device-protocol'
 
 /** A timer pair a test advances by hand, so the batch window is decided rather than waited on. */
 function manualTimers(): StudioDeviceLogTimers & { run(): void } {
@@ -71,7 +75,7 @@ Describe('Studio device log mirroring', () => {
     run.restore()
   })
 
-  Test('a runaway loop drops lines and says how many rather than exhausting memory', () => {
+  Test('a runaway loop drops lines, says how many, and still fits one sealed frame', () => {
     const run = harness()
 
     for (let line = 0; line < 260; line++) {
@@ -80,9 +84,18 @@ Describe('Studio device log mirroring', () => {
     run.timers.run()
 
     const batch = run.batches[0] ?? []
-    Expect(batch.length).toBe(201)
-    Expect(batch[200]?.message).toBe('[60 device log lines dropped]')
-    Expect(batch[200]?.level).toBe('warn')
+    Expect(batch.length).toBe(TaoStudioDeviceProtocol.logBatchLimit)
+    Expect(batch[batch.length - 1]?.message).toBe('[60 device log lines dropped]')
+    Expect(batch[batch.length - 1]?.level).toBe('warn')
+
+    // The batch the runaway case produces is the one that has to survive the wire. Sending it
+    // through the real parser is the only thing that proves the two limits agree — they were
+    // separate literals, and the drop notice pushed this batch one entry past the gateway's cap,
+    // so every line was thrown away at exactly the moment the logs mattered.
+    Expect(StudioDeviceProtocol.parseDeviceMessage({ entries: batch, type: 'device.log' })).toEqual({
+      entries: batch,
+      type: 'device.log',
+    })
     run.restore()
   })
 

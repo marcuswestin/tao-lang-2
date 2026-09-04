@@ -873,10 +873,21 @@ view Main() {
       device.sendSealed({ cellId: 'cell:phone', type: 'device.selectCell' })
       await device.nextSealed()
 
+      const before = env.session.previewManifest()?.cells.find(cell => cell.cellId === 'cell:phone')?.environment
+      Expect(before).toBeDefined()
+
       device.sendSealed({ network: 'offline', type: 'device.setNetwork' })
       const offline = await nextAssignedCell(device)
+      // The condition is merged into the environment the cell is already under. Choosing Offline
+      // must not also reset its scheme and viewport, which a whole-environment reconfigure would.
       Expect(env.session.previewCellInstance(offline.identity.previewInstanceId)).toMatchObject({
-        cell: { environment: { network: { outcome: 'offline' } } },
+        cell: {
+          environment: {
+            network: { outcome: 'offline' },
+            scheme: before?.scheme,
+            viewport: before?.viewport,
+          },
+        },
       })
 
       // Choosing it again turns it off: the phone toggles a situation, it does not accumulate one.

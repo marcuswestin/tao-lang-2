@@ -10,6 +10,8 @@ export const TaoStudioDeviceProtocol = {
   helloLimitBytes: 8_192,
   /** Any sealed frame above this closes the connection. */
   frameLimitBytes: 262_144,
+  /** The most log entries one `device.log` frame may carry; the device batches to fit it. */
+  logBatchLimit: 200,
   handshakeTimeoutMs: 20_000,
   heartbeatMs: 15_000,
   name: 'tao-studio-device-v1',
@@ -351,7 +353,7 @@ const deviceMessageParsers: MessageParsers<TaoStudioDeviceDeviceMessage> = {
   },
   'device.log': value => {
     const entries = value['entries']
-    if (!Array.isArray(entries) || entries.length === 0 || entries.length > 200) {
+    if (!Array.isArray(entries) || entries.length === 0 || entries.length > TaoStudioDeviceProtocol.logBatchLimit) {
       return undefined
     }
     const parsed: TaoStudioDeviceLogEntry[] = []

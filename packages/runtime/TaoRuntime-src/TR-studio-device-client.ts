@@ -149,8 +149,6 @@ export type TaoStudioDeviceClientState = Readonly<{
   host?: string
   lastError?: TaoStudioDeviceClientError
   manifest?: TaoStudioDeviceManifest
-  /** The network condition this device last asked for, so the menu can show which one is on. */
-  network?: TaoStudioDeviceNetworkCondition
   phase: TaoStudioDeviceClientPhase
   /** When the next automatic dial is due, in the injected clock's milliseconds. */
   retryAt?: number
@@ -786,7 +784,10 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
       }
     },
     setNetwork(network) {
-      update({ network })
+      // Deliberately not recorded here. What the phone asked for is not what its cell is under:
+      // the frame is dropped while disconnected, the gateway ignores it without an assignment, and
+      // a reconfigure can be refused against a cell revision that has moved on. The menu reads the
+      // assigned cell instead, which is the only account of this that Studio has agreed to.
       sendWhenConnected({ network, type: 'device.setNetwork' })
     },
     sourceAction(action, occurrence) {

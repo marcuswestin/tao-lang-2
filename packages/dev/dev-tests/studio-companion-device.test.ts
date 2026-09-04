@@ -681,6 +681,57 @@ Describe('Studio device launcher', () => {
     Expect(device.opened).toEqual([{ hostId: PHONE_UDID, terminateExisting: true, url: EXPO_LINK }])
   })
 
+  /**
+   * Wi-Fi is the default because a session bound to it survives the cable being plugged and pulled.
+   * The cable route exists for the case the Mac cannot detect: it has Wi-Fi, the phone is not on it,
+   * and there is no network to join together. Proven on a phone with its Wi-Fi off, which reached
+   * the gateway over the link-local address.
+   */
+  Test('takes the cable when asked, and Wi-Fi when not', async () => {
+    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }], installed: { [PHONE_UDID]: true } })
+    const launcher = createStudioDeviceLauncher({
+      simulator: fakeSimulator({}),
+      device,
+      fetch: scriptedFetch(linkRedirect(EXPO_LINK)).fetchImpl,
+      lanAddresses: async () => LAN,
+    })
+
+    const auto = await launcher.open({ hostId: PHONE_UDID, metroOrigin: 'http://127.0.0.1:8081' })
+    Expect(auto.url).toBe(EXPO_LINK)
+
+    const cable = await launcher.open({
+      hostId: PHONE_UDID,
+      metroOrigin: 'http://127.0.0.1:8081',
+      route: 'cable',
+    })
+    Expect(cable.url).toBe(
+      companionDevClientUrl({ host: '169.254.37.4', port: 8081, scheme: 'taostudiocompanion' }),
+    )
+    Expect(device.opened.map(entry => entry.url)).toEqual([EXPO_LINK, cable.url])
+  })
+
+  Test('says so plainly when the cable is asked for and no cable is attached', async () => {
+    const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }], installed: { [PHONE_UDID]: true } })
+    const launcher = createStudioDeviceLauncher({
+      simulator: fakeSimulator({}),
+      device,
+      fetch: scriptedFetch(linkRedirect(EXPO_LINK)).fetchImpl,
+      // Wi-Fi only: no 169.254 interface, because nothing is plugged in.
+      lanAddresses: async () => ({
+        interfaces: [{ active: true, address: '192.168.50.107', iface: 'en0' }],
+        preferred: '192.168.50.107',
+      }),
+    })
+
+    const error = await expectHostFailure(() =>
+      launcher.open({ hostId: PHONE_UDID, metroOrigin: 'http://127.0.0.1:8081', route: 'cable' })
+    )
+    Expect(error.messageForUser).toContain('no cable link-local address')
+    // Silently falling back to Wi-Fi would be worse than failing: the phone is not on that network,
+    // so it would sit unable to load anything with nothing saying why.
+    Expect(device.opened).toEqual([])
+  })
+
   Test('refuses to open a device without the shell and names the install command', async () => {
     const device = fakeDevice({ hosts: [{ id: PHONE_UDID, name: 'roPhone' }], installed: { [PHONE_UDID]: false } })
     const launcher = createStudioDeviceLauncher({
