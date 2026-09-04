@@ -62,11 +62,13 @@ import {
   NavKindControls,
   type RuntimeHostReadChannel,
   type RuntimeNavigationCommand,
+  type TaoAppDefinition,
   type TaoNavDeclaration,
   type TaoNavDescriptor,
   type TaoNavHostSlot,
   type TaoNavHostSlotConfiguration,
   type TaoNavHostSlotContract,
+  type TaoNavigationArguments,
   type TaoNavigationValue,
   type TaoNavKind,
   type TaoNavKindProfile,
@@ -126,6 +128,7 @@ import {
   type TaoStudioStateDomainCodec,
   type TaoStudioStateLayer,
 } from './TR-studio-state'
+import { StudioSubjectHost } from './TR-studio-subject'
 import { runtimeSwitchHandler } from './TR-switch'
 import * as TRTaoProps from './TR-TaoProps'
 import { Clock, createTicker, makeUnitControls, type TaoTicker } from './TR-units'
@@ -614,6 +617,7 @@ class TR {
     DeviceHost: StudioDeviceHost,
     Environment: StudioEnvironmentControls,
     State: StudioStateControls,
+    SubjectHost: StudioSubjectHost,
   } as const
 
   /** Errors is the runtime's one error-handling surface, owned by `TR-errors.ts`. */
@@ -1057,6 +1061,10 @@ namespace TR {
   export type NavHostSlotConfiguration = TaoNavHostSlotConfiguration
   /** Presentable declares a first-class Tao ui descriptor. */
   export type Presentable = TaoPresentable
+  /** AppDefinition is the lazy app description one `TR.Navigation.App` mounts. */
+  export type AppDefinition = TaoAppDefinition
+  /** NavigationArguments binds one presentation's live argument values by parameter name. */
+  export type NavigationArguments = TaoNavigationArguments
 }
 
 // Frozen operator tables keep the generated app's hottest evaluation path allocation-free:

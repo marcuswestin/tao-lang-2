@@ -3,7 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
-import { compileDeclarationIdentity } from './declaration-identity'
+import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
 
 // A root `view` statement supplies the app's Navigator as sugar, so the source has one app shape.
 type AppPropertySource = AST.Expression | AST.ConfigurationValue | AST.AppView
@@ -112,37 +112,34 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
         )`
       : gen.noop()
   }
-      ${compileStudioSubject(options, definition)}
+      ${compileStudioSubject(options, app)}
       return <TR.AppShell>
         <TR.Navigation.AppHost app={${gen.Name(definition)}} />
       </TR.AppShell>
     }
+    ${compileStudioSubjects(options, app, definition)}
     ${gen.scopeName(app)} = ${gen.Name(definition)}
   `
 }
 
 /**
- * The emitted view lookup fails through `TR.Errors.failInvariant`: this is generated app code, not
- * compiler code, so the only Tao module in scope is `TR` from `@runtime/TR`, and `TR.Errors` is
+ * The emitted subject lookup fails through `TR.Errors.failInvariant`: this is generated app code,
+ * not compiler code, so the only Tao module in scope is `TR` from `@runtime/TR`, and `TR.Errors` is
  * where the runtime publishes its error taxonomy to a compiled program. A call through that property
  * chain returns `never` without narrowing afterwards, so the guard reads as `??` rather than an
- * `if`, which keeps the view a defined `React.ElementType` for the `createElement` below.
+ * `if`, which keeps the entry a defined factory for `TR.Studio.SubjectHost` below.
  */
-function compileStudioSubject(options: CodegenOptions, appDefinition: { name: string }): Compiled {
+function compileStudioSubject(options: CodegenOptions, app: { name: string }): Compiled {
   if (!options.studio) {
     return gen.noop()
   }
-  const views = options.studioViews ?? []
   return gen`
     const _TaoStudioScenario = TR.Studio.Environment.useScenario()
     const _TaoStudioFixture = TR.Studio.Environment.useFixture(${
     options.studioDataCatalog ? gen.scopeName({ name: '_TaoDataCatalog' }) : 'undefined'
   })
     if (_TaoStudioScenario?.kind === 'view') {
-      const _TaoStudioViews: Readonly<Record<string, React.ElementType>> = {
-        ${gen.list(views, item => gen`${gen.jsLiteral(item.id)}: ${gen.scopeName(item.view)},`)}
-      }
-      const _TaoStudioView = _TaoStudioViews[_TaoStudioScenario.subjectId]
+      const _TaoStudioSubject = ${gen.Name(studioSubjectsName(app))}[_TaoStudioScenario.subjectId]
         ?? TR.Errors.failInvariant('Tao Studio focused view is not available in the selected app scope.')
       if (!_TaoStudioFixture.ready) return null
       const _TaoStudioArgs = Object.fromEntries(
@@ -151,11 +148,72 @@ function compileStudioSubject(options: CodegenOptions, appDefinition: { name: st
           TR.Studio.Environment.Argument(value, _TaoStudioFixture.handles),
         ]),
       )
-      return <TR.AppShell>{React.createElement(_TaoStudioView, { ..._TaoStudioArgs, __tao: { app: ${
-    gen.Name(appDefinition)
-  } } })}</TR.AppShell>
+      return <TR.AppShell><TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} /></TR.AppShell>
     }
   `
+}
+
+/**
+ * One app definition per focusable view, so a `render ViewName(...)` scenario mounts its view under
+ * a navigator instead of bare.
+ *
+ * A focused view is allowed to `present`, and in the app there is always a navigator above it to
+ * present into; without one the cell died on the first tap. The shape here is the one
+ * `app Name { View Something }` already compiles to — a slot navigator holding the view — so the
+ * behavior is the app's own rather than a preview imitation of it.
+ *
+ * The entries are factories, and they sit at module scope. Factories because each one resolves a
+ * registered view, which a value built beside the app definition would try to do before the view
+ * registrations exist; module scope because the app component would otherwise rebuild every app
+ * definition in the project on every render of a cell that uses one of them.
+ */
+function compileStudioSubjects(
+  options: CodegenOptions,
+  app: AST.AppValueDeclaration,
+  appDefinition: { name: string },
+): Compiled {
+  if (!options.studio) {
+    return gen.noop()
+  }
+  const views = options.studioViews ?? []
+  return gen`
+    const ${gen.Name(studioSubjectsName(app))}: Readonly<
+      Record<string, (subjectArguments: TR.NavigationArguments) => TR.AppDefinition>
+    > = {
+      ${
+    gen.list(views, item =>
+      gen`${gen.jsLiteral(item.id)}: subjectArguments => ({
+        auxiliaries: () => ({}),
+        declaration: TR.Navigation.AppDeclaration(
+          ${gen.Name(appDefinition)}.definition.name,
+          ${compileDeclarationIdentity(app, { kind: 'studio-subject-app' })},
+        ),
+        design: () => ${gen.Name(appDefinition)}.design,
+        name: ${gen.Name(appDefinition)}.definition.name,
+        navigator: () =>
+          TR.Navigation.Configure(
+            TR.Navigation.Declaration(
+              ${gen.jsLiteral(canonicalDeclaration(item.view).name)},
+              TR.NavKind.Slot(),
+              ${compileDeclarationIdentity(item.view, { kind: 'studio-subject-nav' })},
+            ),
+            {
+              "Initial": TR.Navigation.BindView(
+                TR.Navigation.ViewReference(${compileDeclarationIdentity(item.view)}),
+                subjectArguments,
+              ),
+            },
+          ),
+        restoration: { exclusions: [], mode: 'fresh' as const, variant: ${gen.jsLiteral(app.name)} },
+      }),`)
+  }
+    }
+  `
+}
+
+/** The module-scope binding holding one app's focusable-view definitions. */
+function studioSubjectsName(app: { name: string }): { name: string } {
+  return { name: `_TaoStudioSubjects_${app.name}` }
 }
 
 type EffectiveRestorationPolicy = {
