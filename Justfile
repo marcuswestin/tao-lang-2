@@ -27,6 +27,22 @@ secrets *ARGS:
 claude-unsandboxed *ARGS:
     claude --settings "{{ justfile_directory() }}/.claude/settings.unsandboxed.json" {{ ARGS }}
 
+# Launch Claude Code in read-only planning mode
+claude-review *ARGS:
+    claude --permission-mode plan {{ ARGS }}
+
+# Launch Claude Code with opt-in Docker access for the local InstantDB stack
+claude-local-services *ARGS:
+    claude --settings "{{ justfile_directory() }}/.claude/settings.local-services.json" {{ ARGS }}
+
+# Launch Claude Code with prompted native-device commands and native build directories
+claude-native *ARGS:
+    claude --settings "{{ justfile_directory() }}/.claude/settings.native.json" {{ ARGS }}
+
+# Launch Claude Code with prompted signing/notarization tools and Xcode release directories
+claude-release *ARGS:
+    claude --settings "{{ justfile_directory() }}/.claude/settings.release.json" {{ ARGS }}
+
 # Discover and run Tao apps through the Tao CLI dev loop; optionally select one app by name
 [positional-arguments]
 dev app_path="Apps" APP="":
@@ -174,6 +190,10 @@ dead-exports:
 doctor *ARGS:
     ./dev doctor {{ ARGS }}
 
+# Report process, socket, simulator, and local-service capabilities without changing anything
+capabilities *ARGS:
+    ./dev capabilities {{ ARGS }}
+
 # Benchmark cold and steady-state language-service performance
 bench iterations="10":
     bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
@@ -205,8 +225,8 @@ clean: clean-scratch
 clean-all: clean
     rm -rf .artifacts packages/runtime-toolchain/ios packages/runtime-toolchain/android
 
-# Prepare all code for commit
-verify:
+# Bootstrap dependencies, then prepare all code for commit
+verify: deps
     ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just full-verify"
 
 # Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every automated Studio lane

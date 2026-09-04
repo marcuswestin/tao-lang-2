@@ -100,7 +100,7 @@ Describe('repository doctor', () => {
     // A conventional port on a machine running several worktrees is as likely to be a sibling
     // worktree's dev server as this one's, so the identification step comes before the kill.
     Expect(check(report, 'ports')?.remediation).toContain('another worktree')
-    Expect(check(report, 'ports')?.remediation).toContain('ps -p 4242')
+    Expect(check(report, 'ports')?.remediation).toContain('ps -o pid=,ppid=,lstart=,command= -p 4242')
     Expect(check(report, 'ports')?.remediation).toContain('kill -TERM 4242')
   })
 
@@ -112,7 +112,7 @@ Describe('repository doctor', () => {
     // A read-only diagnosis handing out `kill -TERM` for somebody else's process is the one
     // way it could do harm.
     Expect(check(report, 'ports')?.remediation).not.toContain('kill -TERM')
-    Expect(check(report, 'ports')?.remediation).toContain('ps -p 60803')
+    Expect(check(report, 'ports')?.remediation).toContain('ps -o pid=,ppid=,lstart=,command= -p 60803')
   })
 
   Test('names the other worktrees whose lanes are sharing this machine', () => {

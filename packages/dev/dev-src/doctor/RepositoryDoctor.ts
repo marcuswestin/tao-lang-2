@@ -426,10 +426,10 @@ function portChecks(facts: DoctorFacts): DoctorCheck[] {
       // A Tao process on a conventional port is as likely to belong to a sibling worktree as to
       // this one, and killing another agent's dev server is the worst outcome available here.
       remediation: ours
-        ? `It may belong to another worktree on this machine. Confirm before stopping it: ps -p ${
+        ? `It may belong to another worktree on this machine. Confirm before stopping it: ps -o pid=,ppid=,lstart=,command= -p ${
           pids.join(',')
-        } -o pid,command  # then, if it is yours: kill -TERM ${pids.join(' ')}`
-        : `Identify it before stopping anything: ps -p ${pids.join(',')} -o pid,command`,
+        }  # then, if it is yours: kill -TERM ${pids.join(' ')}`
+        : `Identify it before stopping anything: ps -o pid=,ppid=,lstart=,command= -p ${pids.join(',')}`,
       status: 'warn' as const,
     }
   })

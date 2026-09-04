@@ -5,6 +5,11 @@ import { CodexConfigGenerator } from '../dev-src/agent-config/CodexConfigGenerat
 const canonicalRules = `{
   // Canonical rules with the comments and trailing commas JSONC allows.
   "permission": {
+    "bash": {
+      "ps -o pid=,command= -p *": "allow",
+      "kill -TERM *": "allow",
+      "git status *": "allow",
+    },
     "read": {
       "~/code/tao-lang/**": "allow",
       "**/.env": "deny",
@@ -19,8 +24,10 @@ const canonicalRules = `{
       },
       "network": {
         "allowLocalBinding": true,
+        "allowUnixSockets": ["/nix/var/nix/daemon-socket/socket", "~/.local/state/watchman/test-state/sock"],
         "allowedDomains": ["registry.npmjs.org", "*.npmjs.org", "exp.host", "cache.nixos.org"],
       },
+      "excludedCommands": ["ps -o pid=,command= -p *", "kill -TERM *"],
     },
   },
 }
@@ -36,6 +43,10 @@ Describe('Codex config generation', () => {
       '*.npmjs.org',
       'exp.host',
       'cache.nixos.org',
+    ])
+    Expect(permissions.claudecode?.sandbox?.network?.allowUnixSockets).toEqual([
+      '/nix/var/nix/daemon-socket/socket',
+      '~/.local/state/watchman/test-state/sock',
     ])
   })
 
@@ -60,8 +71,29 @@ Describe('Codex config generation', () => {
     Expect(profile['filesystem']['~/code/tao-lang']).toBe('read')
     Expect(profile['filesystem']['~/.ssh/**']).toBe('deny')
     Expect(profile['network']['allow_local_binding']).toBe(true)
-    Expect(profile['network']['unix_sockets']['/var/run/docker.sock']).toBe('allow')
+    Expect(profile['network']['unix_sockets']['/nix/var/nix/daemon-socket/socket']).toBe('allow')
+    Expect(profile['network']['unix_sockets'][FS.resolvePath('.local/state/watchman/test-state/sock', FS.homeDir())])
+      .toBe('allow')
+    Expect(profile['network']['unix_sockets']['/var/run/docker.sock']).toBeUndefined()
     Expect(profile['network']['domains']['*']).toBeUndefined()
+    Expect(parsed['permissions']['tao-review']['extends']).toBe(':read-only')
+    Expect(parsed['permissions']['tao-native']['filesystem']['~/Library/Developer/CoreSimulator']).toBe('write')
+    Expect(parsed['permissions']['tao-local-services']['network']['unix_sockets']['/var/run/docker.sock'])
+      .toBe('allow')
+    Expect(
+      parsed['permissions']['tao-local-services']['network']['unix_sockets'][
+        FS.resolvePath('.docker/run/docker.sock', FS.homeDir())
+      ],
+    ).toBe('allow')
+    Expect(parsed['permissions']['tao-release']['filesystem']['~/Library/Developer/Xcode/Archives']).toBe('write')
+  })
+
+  Test('renders only approved host escapes as project-local command rules', () => {
+    const rendered = CodexConfigGenerator.renderRules(CodexConfigGenerator.parsePermissions(canonicalRules))
+
+    Expect(rendered).toContain('pattern=["ps","-o","pid=,command=","-p"]')
+    Expect(rendered).toContain('pattern=["kill","-TERM"]')
+    Expect(rendered).not.toContain('git status')
   })
 
   Test('grants both harnesses the same caches outside the worktree', () => {
@@ -94,6 +126,8 @@ Describe('Codex config generation', () => {
 
       const written = await FS.readText(FS.resolvePath('.codex/config.toml', root))
       Expect(written).toContain('default_permissions = "tao-workspace"')
+      Expect(await FS.readText(FS.resolvePath('.codex/rules/tao.rules', root)))
+        .toContain('pattern=["kill","-TERM"]')
 
       const skipped: string[] = []
       await CodexConfigGenerator.generate({
@@ -106,6 +140,7 @@ Describe('Codex config generation', () => {
 
       Expect(skipped).toEqual([
         `Skipped codexcli permissions: ${FS.resolvePath('.codex/config.toml', root)} is not writable.`,
+        `Skipped codexcli permissions: ${FS.resolvePath('.codex/rules/tao.rules', root)} is not writable.`,
       ])
     } finally {
       await FS.remove(root)
@@ -141,5 +176,10 @@ Describe('Codex config generation', () => {
     )
 
     Expect(await FS.readText(FS.resolvePath('.codex/config.toml', root))).toBe(rendered)
+    Expect(await FS.readText(FS.resolvePath('.codex/rules/tao.rules', root))).toBe(
+      CodexConfigGenerator.renderRules(
+        CodexConfigGenerator.parsePermissions(await FS.readText(FS.resolvePath('.rulesync/permissions.jsonc', root))),
+      ),
+    )
   })
 })

@@ -1,6 +1,7 @@
 import { Errors, HCI, Platform, Repo } from '@shared'
 import { AgentConfigGenerator } from './agent-config/AgentConfigGenerator'
 import { runWithCommands } from './cli/run-with-commands'
+import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { runGates } from './repository-tests/GateRunner'
 import { MergeWithMainCommand } from './repository-tests/MergeWithMain'
@@ -149,6 +150,14 @@ await runWithCommands(commands => {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
       }
+    })
+
+  commands
+    .command('capabilities')
+    .description('Report which host capabilities this agent environment can use without changing anything.')
+    .option('--json', 'Print a versioned structured report.')
+    .action(async (options: { json?: boolean } = {}) => {
+      Platform.runtimeProcess.exit(await AgentCapabilitiesCommand.run({ json: options.json === true }))
     })
 
   commands
