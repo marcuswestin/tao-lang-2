@@ -39,8 +39,9 @@ description: >-
 - `merge-with-main` defaults to a ref-preserving dry run. `--execute` enables mutation, `--yes`
   answers normal confirmation non-interactively, `--push` independently authorizes a
   non-interactive push, and `--skip-full-verify` is the only verification escape hatch. Preflight
-  intentionally requires local `main` to equal `origin/main`, and successful execution removes the
-  invoking feature worktree and invalidates its shell directory.
+  intentionally requires local `main` to equal `origin/main`. Successful execution leaves the
+  invoking feature worktree clean and detached at the archived feature tip, deletes its local
+  feature branch, and leaves worktree removal to archival of the owning task.
 - `--abort <snapshot>` restores only command-owned local state while the snapshot still matches.
   Once a snapshot says `push-started`, the remote result may be ambiguous and automatic history
   rewriting is forbidden; inspect remote `main` and `merged/*` and follow the printed recovery
