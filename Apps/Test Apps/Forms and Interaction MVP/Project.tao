@@ -1,4 +1,5 @@
 project {
    id "forms-interaction-mvp"
    name "Forms and Interaction MVP"
+   version "0.1.0"
 }

@@ -39,6 +39,9 @@ in
 
   packages = [
     nodePkg
+    # `just secrets` encrypts with age; the Secure Enclave plugin keeps the identity in hardware, so
+    # decrypting asks for a fingerprint and no passphrase exists to be stored or typed.
+    pkgs.age
     pkgs.cocoapods
     # GNU coreutils for `timeout`, which repository scripts and agents use to bound a run.
     pkgs.coreutils
@@ -47,7 +50,7 @@ in
     pkgs.just
     pkgs.ripgrep
     pkgs.watchman
-  ];
+  ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [ pkgs.age-plugin-se ];
 
   env.TAO_DEVENV = "1";
   env.LANG = "en_US.UTF-8";

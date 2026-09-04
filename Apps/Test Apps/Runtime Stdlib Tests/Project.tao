@@ -1,4 +1,5 @@
 project {
    id "runtime-stdlib-tests"
    name "Runtime Stdlib Tests"
+   version "0.1.0"
 }

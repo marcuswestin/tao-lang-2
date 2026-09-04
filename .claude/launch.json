@@ -19,6 +19,42 @@
       "name": "tao-dev",
       "url": "http://localhost:8081",
       "port": 8081
+    },
+    {
+      "name": "studio-wordflower",
+      "runtimeExecutable": "direnv",
+      "runtimeArgs": [
+        "exec",
+        ".",
+        "./dev",
+        "studio",
+        "Apps/WordFlower/1 - Current",
+        "--app",
+        "WordFlower",
+        "--port",
+        "4820",
+        "--no-browser"
+      ],
+      "port": 4820,
+      "url": "http://127.0.0.1:4820"
+    },
+    {
+      "name": "studio-hnreader",
+      "runtimeExecutable": "direnv",
+      "runtimeArgs": [
+        "exec",
+        ".",
+        "./dev",
+        "studio",
+        "Apps/HNReader",
+        "--app",
+        "HNReaderStub",
+        "--port",
+        "4830",
+        "--no-browser"
+      ],
+      "port": 4830,
+      "url": "http://127.0.0.1:4830"
     }
   ]
 }

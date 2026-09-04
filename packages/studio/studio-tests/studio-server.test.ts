@@ -10,6 +10,7 @@ import {
   StudioSourceActionConflictError,
 } from '../studio-src/StudioProjectSession'
 import {
+  bundlerMessage,
   startStudioSessionServer,
   type StudioServerDeviceGateway,
   type StudioServerOptions,
@@ -410,6 +411,19 @@ Test('Studio event sockets close cleanly when their initial handshake cannot be 
 
   Expect(sent).toEqual([])
   Expect(closes).toEqual([[1011, 'Could not initialize Studio events']])
+})
+
+Test('reduces a bundler failure to the one line that says what could not be built', () => {
+  const metroError = JSON.stringify({
+    message:
+      '\u001B[0mUnable to resolve module ./_gen_tao-app/App from /preview/index.ts: \n\nNone of these files exist:\n  * _gen_tao-app/App.tsx',
+    type: 'UnableToResolveError',
+  })
+
+  Expect(bundlerMessage(metroError)).toBe('Unable to resolve module ./_gen_tao-app/App from /preview/index.ts:')
+  // A bundler that answers in plain text, or with nothing to say, still yields something a person can read.
+  Expect(bundlerMessage('   \n  Metro crashed  \n')).toBe('Metro crashed')
+  Expect(bundlerMessage('')).toBe('The bundler reported no detail.')
 })
 
 Describe('Studio device routes', () => {

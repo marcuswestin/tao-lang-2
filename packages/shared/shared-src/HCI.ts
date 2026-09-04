@@ -270,6 +270,118 @@ export function startRawKeys(onKey: (key: string) => void, options: RawKeyOption
   }
 }
 
+/** PasteResult reports what a hidden prompt captured, so a caller can question surrounding whitespace. */
+export type SecretPrompt = { value: string; wasPasted: boolean }
+
+const PASTE_ON = '\u001b[?2004h'
+const PASTE_OFF = '\u001b[?2004l'
+const PASTE_START = '\u001b[200~'
+const PASTE_END = '\u001b[201~'
+
+/**
+ * askSecret reads a value without echoing it, for something that must not sit in scrollback.
+ *
+ * It turns on the terminal's bracketed-paste mode, which wraps pasted text in markers the terminal itself
+ * emits. That is what lets a paste submit the moment it lands instead of waiting for Return: the end marker
+ * says the paste is over, where a timer would only guess. Typed input still ends at Return, and a terminal
+ * without bracketed paste simply never sends the markers and behaves as before.
+ *
+ * It refuses rather than falls back when there is no terminal: a silent read from a pipe would take whatever
+ * arrived next as a secret, and nothing downstream could tell that from a person typing one.
+ */
+export async function askSecret(options: TextPromptOptions): Promise<SecretPrompt> {
+  if (!isInteractive(options)) {
+    throw new UserInputError(`${options.message} needs a terminal, because the value is never echoed.`)
+  }
+  const input = options.input ?? runtimeProcess.stdin
+  writeOutput(options, `${options.message} `)
+  writeOutput(options, PASTE_ON)
+  const rawMode = setInputRawMode(input, true)
+  let buffer = ''
+  let pasting = false
+  let pasted = false
+  try {
+    return await new Promise<SecretPrompt>((resolve, reject) => {
+      const finish = (result: SecretPrompt | undefined, error?: unknown) => {
+        input.off('data', onData)
+        input.off('end', onEnd)
+        input.pause()
+        if (error !== undefined) {
+          reject(error)
+          return
+        }
+        resolve(result!)
+      }
+      const onEnd = () => finish(undefined, new UserInputError('\nInput ended; nothing was stored.'))
+      const onData = (chunk: Buffer | string) => {
+        let text = String(chunk)
+        while (text !== '') {
+          if (!pasting && text.includes(PASTE_START)) {
+            const at = text.indexOf(PASTE_START)
+            buffer += text.slice(0, at)
+            text = text.slice(at + PASTE_START.length)
+            pasting = true
+            pasted = true
+            continue
+          }
+          if (pasting && text.includes(PASTE_END)) {
+            const at = text.indexOf(PASTE_END)
+            buffer += text.slice(0, at)
+            // The paste is complete, so there is nothing to wait for.
+            finish({ value: buffer, wasPasted: true })
+            return
+          }
+          if (pasting) {
+            buffer += text
+            return
+          }
+          if (text.includes('\u0003')) {
+            finish(undefined, new UserInputError('\nCancelled; nothing was stored.'))
+            return
+          }
+          const newline = text.search(/[\r\n]/u)
+          if (newline >= 0) {
+            buffer += text.slice(0, newline)
+            finish({ value: buffer, wasPasted: pasted })
+            return
+          }
+          for (const character of text) {
+            if (character === '\u007f' || character === '\b') {
+              buffer = buffer.slice(0, -1)
+            } else if (character >= ' ') {
+              buffer += character
+            }
+          }
+          text = ''
+        }
+      }
+      input.on('data', onData)
+      input.on('end', onEnd)
+      input.resume()
+    })
+  } finally {
+    writeOutput(options, PASTE_OFF)
+    if (rawMode) {
+      setInputRawMode(input, false)
+    }
+    writeOutput(options, '\n')
+  }
+}
+
+/** describeSurroundingWhitespace names what is around a value, for a prompt a person can answer. */
+export function describeSurroundingWhitespace(value: string): string | undefined {
+  if (value === value.trim() || value.trim() === '') {
+    return undefined
+  }
+  const leading = value.length - value.trimStart().length
+  const trailing = value.length - value.trimEnd().length
+  const parts = [
+    leading === 0 ? undefined : `${leading} character${leading === 1 ? '' : 's'} of leading whitespace`,
+    trailing === 0 ? undefined : `${trailing} character${trailing === 1 ? '' : 's'} of trailing whitespace`,
+  ].filter((part): part is string => part !== undefined)
+  return parts.join(' and ')
+}
+
 /**
  * withRawKeys runs `run` with a reader for one keypress at a time, then restores the terminal. Keys
  * typed between reads are queued rather than dropped, so a fast typist loses no keypress.
