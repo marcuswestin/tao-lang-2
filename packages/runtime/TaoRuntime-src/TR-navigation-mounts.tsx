@@ -577,6 +577,26 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     return isNavigation(content) && content.canGoBack
   }
 
+  /**
+   * A selection navigator draws no back chrome of its own — whatever it shows for the active item
+   * does. A stack in a tab already puts Back in its own header, and the app host adding a second
+   * one is a duplicate that lands outside the tab's screen entirely, at the top of the window.
+   *
+   * An entry presented onto the item covers that chrome, and an overlay defocuses it, so in both
+   * cases the app host owns the visible affordance again.
+   */
+  override ownsBackAffordance(): boolean {
+    if (this.historyDepth() > this.contentHistoryDepth()) {
+      return false
+    }
+    const active = this.activeItem()
+    if (active.entries.length > 1) {
+      return false
+    }
+    const content = active.definition.content
+    return isNavigation(content) && content.ownsBackAffordance()
+  }
+
   protected override contentHistoryDepth(): number {
     const active = this.activeItem()
     const nested = active.definition.content
