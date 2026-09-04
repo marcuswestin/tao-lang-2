@@ -356,6 +356,10 @@ scenarios WorkspaceRow "states" {
    locale "en"
    scenario "novel" {
       render (Workspace: Novel)
+      press #openWorkspace
+      press label "Workspace title"
+      enter "Novel Novel" into label "Workspace title"
+      press #saveWorkspace
 }  }
 
 // This focused state forces every L1 scenario seam in a real WordFlower view. `Revert` is required
