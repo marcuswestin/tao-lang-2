@@ -375,6 +375,27 @@ Describe('Studio source-action patch bus', () => {
     Expect(promoted.content).not.toContain('background danger')
   })
 
+  Test('sets one entry on a named design member without a render occurrence (semantic agent PoC)', async () => {
+    const document = await parseDocument(`
+      workspace design Theme { ink #111 card [gap 10, pad 16, radius 14] }
+      workspace design Other { card [pad 4] }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      designName: 'Theme',
+      entry: ['pad', 18],
+      kind: 'set-design-entry',
+      memberName: 'card',
+    })
+    Expect(patch.content).toContain('card [gap 10, pad 18, radius 14]')
+    Expect(patch.content).toContain('card [pad 4]')
+    await Expect(SourceActions.applyStudioPatch(document, {
+      designName: 'Theme',
+      entry: ['pad', 18],
+      kind: 'set-design-entry',
+      memberName: 'missing',
+    })).rejects.toThrow('not uniquely declared')
+  })
+
   Test('edits and forks a uniquely named current-dialect design bundle', async () => {
     const document = await parseDocument(`
       workspace design Theme { ink #111 body [fg ink, size 14] }

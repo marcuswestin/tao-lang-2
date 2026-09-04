@@ -1,6 +1,7 @@
 import { Assert, Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import { EditorView } from 'codemirror'
+import { mountStudioAgentPanel } from '../agent-chat/StudioAgentPanel'
 import type { StudioDeviceStatus } from '../device/StudioDeviceStatus'
 import type { StudioCompileCompletion } from '../StudioCompileCoordinator'
 import { type StudioDraftFile, StudioDraftSync, type StudioDraftSyncResult } from '../StudioDraftSync'
@@ -54,12 +55,15 @@ import {
   disconnectPreviews,
   handlePreviewMessage,
   postEditorSelection,
+  previewBundleNoticeFor,
+  previewNoticeFor,
   refreshCellPreviews,
   requestRuntimeCapture,
   StudioActivePreview,
   StudioJourneyRecorder,
   StudioMatrixView,
   type StudioPreviewConnection,
+  studioPreviewNotice,
   StudioPreviewSourceSync,
   StudioRuntimeData,
   type StudioRuntimeDataTable,
@@ -221,6 +225,33 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     const isCurrentJourneyOperation = (preview: StudioPreviewConnection, operation: number): boolean =>
       journeyOperations.get(preview) === operation
+
+    /**
+     * renderPreviewNotice explains a preview that cannot show the app. A failed compile leaves the last good
+     * frame on screen, which otherwise looks like the change simply did nothing.
+     */
+    let previewBundleNotice: { detail: string; heading: string } | undefined
+    function renderPreviewNotice(): void {
+      studioPreviewNotice(view.preview, previewNoticeFor(compileState) ?? previewBundleNotice)
+    }
+
+    /**
+     * checkPreviewBundle asks the server whether the preview's bundler can build the app. A bundler failure
+     * leaves an empty frame and reports nothing to the problems panel, so without this a person sees a blank
+     * preview and no reason for it. The probe reads the same bundle the preview asked for, so it is a warm
+     * read whenever the preview did start.
+     */
+    function checkPreviewBundle(): void {
+      if (config.previewUrl === undefined) {
+        return
+      }
+      void StudioApiClient.previewDiagnosis(options.signal).then(diagnosis => {
+        previewBundleNotice = previewBundleNoticeFor(diagnosis)
+        renderPreviewNotice()
+      }).catch(() => {
+        // A probe that cannot run says nothing; the compile notice still covers the failures it knows.
+      })
+    }
 
     function publishProductHostState(): void {
       const preview = activePreview.current()
@@ -590,6 +621,40 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       })
     }
     view.betaShip.addEventListener('click', betaShipListener)
+
+    let chatNames: readonly string[] = []
+    // Both agents share one floating panel; see packages/studio/studio-src/agent-chat/StudioAgentPanel.
+    mountStudioAgentPanel(root, {
+      chat: {
+        knownNames: () => chatNames,
+        openDeclaration: async name => {
+          const found = await StudioApiClient.agentChat<{ found: boolean; path?: string; line?: number }>('locate', {
+            name,
+          })
+          if (found.found && found.path !== undefined) {
+            await openFile(found.path, true)
+          }
+        },
+      },
+      poc: {
+        activeScenario: () => activePreview.current()?.cell?.scenarioId,
+        identityFor: file => currentSourceIdentity(handshake, activePreview.current(), { content: '', ...file }),
+        openFile: async path => {
+          const known = projectFiles.find(file =>
+            file.path === path || file.path === `/${path}` || file.path.endsWith(`/${path}`)
+          )
+          await openFile(known?.path ?? path, true)
+        },
+        selection: () => inspected,
+      },
+    })
+    void (async () => {
+      try {
+        chatNames = (await StudioApiClient.agentChat<{ names: string[] }>('names', {})).names
+      } catch {
+        chatNames = []
+      }
+    })()
 
     async function selectProject(): Promise<void> {
       const selected = projectChoices[Number(view.project.value)]
@@ -1448,6 +1513,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     const disconnectEvents = connectEvents(view.status, diagnostic => void openCompileDiagnostic(diagnostic), {
       onCompile(state) {
         compileState = state
+        renderPreviewNotice()
         devicePanel.setCompileState(state)
         renderDrawer()
         if (view.searchInput.value.trim() !== '') {
@@ -1499,6 +1565,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         if (config.previewUrl !== undefined) {
           void refreshCellPreviews(view.preview, previews, config.previewUrl, manifest, handshake).then(() => {
             activePreview.reconcile(wirePreview)
+            renderPreviewNotice()
+            checkPreviewBundle()
           }).catch(error => {
             view.status.dataset['state'] = 'error'
             view.status.textContent = error instanceof Error ? error.message : String(error)

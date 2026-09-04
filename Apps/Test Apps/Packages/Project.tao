@@ -1,6 +1,7 @@
 project {
    id "packages"
    name "Packages"
+   version "0.1.0"
    remote none
    license MIT
 }

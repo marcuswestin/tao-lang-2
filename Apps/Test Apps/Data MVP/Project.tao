@@ -1,4 +1,5 @@
 project {
    id "data-mvp"
    name "Data MVP"
+   version "0.1.0"
 }

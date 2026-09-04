@@ -37,6 +37,9 @@ import {
   disconnectPreviews,
   handlePreviewMessage,
   postEditorSelection,
+  previewBundleNoticeFor,
+  previewMatrixPlan,
+  previewNoticeFor,
   runtimeCaptureWithEnvironment,
   StudioActivePreview,
   StudioFixtureGenerationFeedback,
@@ -663,6 +666,44 @@ Test('Studio validates every serialized ProductHost panel payload before navigat
       name: 'journey',
     }))
   ).toThrow('valid structured payload')
+})
+
+Test('an app without scenarios keeps its whole-app preview instead of an empty matrix', () => {
+  Expect(previewMatrixPlan(3, false)).toBe('cells')
+  Expect(previewMatrixPlan(0, true)).toBe('keep-whole-app')
+  Expect(previewMatrixPlan(0, false)).toBe('create-whole-app')
+})
+
+Test('a failed compile explains itself in the preview, naming the file and line', () => {
+  Expect(previewNoticeFor({ diagnostics: [], message: 'Compiled preview revision 2.', status: 'compiled' }))
+    .toBeUndefined()
+  Expect(previewNoticeFor({
+    diagnostics: [{
+      filePath: '/workspace/Apps/Garden/@ui/Beds.tao',
+      message: 'Unknown view Bed.',
+      range: { start: { line: 41 } },
+    }],
+    message: 'Compile failed.',
+    status: 'error',
+  })).toEqual({
+    detail: 'Beds.tao:42 — Unknown view Bed.',
+    heading: 'This preview is out of date: the project did not compile.',
+  })
+  Expect(previewNoticeFor({ diagnostics: [], message: 'Metro exited.', status: 'error' })?.detail)
+    .toBe('Metro exited.')
+})
+
+Test('an app that never bundled says so, instead of leaving an empty preview unexplained', () => {
+  Expect(previewBundleNoticeFor(undefined)).toBeUndefined()
+  Expect(previewBundleNoticeFor({ status: 'ok' })).toBeUndefined()
+  // A server that cannot name a preview URL knows nothing, which is not the same as a failure.
+  Expect(previewBundleNoticeFor({ status: 'unknown' })).toBeUndefined()
+  Expect(previewBundleNoticeFor({ message: 'Unable to resolve module ./App', status: 'failed' })).toEqual({
+    detail: 'Unable to resolve module ./App — reload the preview, or restart Studio.',
+    heading: 'This preview is empty: the project compiled, but the app bundle failed to build.',
+  })
+  Expect(previewBundleNoticeFor({ message: 'connection refused', status: 'unreachable' })?.heading)
+    .toBe('This preview is empty: its app server did not answer.')
 })
 
 Test('Studio preview teardown releases observers and pending capture work', () => {

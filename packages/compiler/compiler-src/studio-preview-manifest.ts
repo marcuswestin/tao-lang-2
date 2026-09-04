@@ -250,7 +250,8 @@ function generationFieldDefault(field: AST.EntityDataField): GenerationField['de
   const value = modifier.defaultValue
   Assert.defined(value, 'validated generation field default trait has a value')
   return Switch.type(value, {
-    BooleanLiteral: value => value.value,
+    // The grammar's BooleanLiteralValue is the source word; convert it to the declared boolean.
+    BooleanLiteral: value => value.value === 'true',
     NowExpression: () => ({ kind: 'now' as const }),
     NumberLiteral: value => value.value,
     StringLiteral: value => value.value,
@@ -441,7 +442,8 @@ function fieldsOf(block: AST.FixtureFieldBlock): Readonly<Record<string, StudioP
 
 function fixtureValue(value: AST.FixtureValue): StudioPreviewFixtureValue {
   return Switch.type(value, {
-    BooleanLiteral: value => value.value,
+    // The grammar's BooleanLiteralValue is the source word; convert it to the declared boolean.
+    BooleanLiteral: value => value.value === 'true',
     FixtureValueReference: value => ({ handle: value.target.$refText, kind: 'fixture-reference' }),
     NowExpression: () => ({ kind: 'now' }),
     NumberLiteral: value => value.value,

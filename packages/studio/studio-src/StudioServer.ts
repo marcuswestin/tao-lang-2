@@ -1,5 +1,7 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
 import { CLI, Errors, Repo } from '@shared'
+import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
+import { AgentPoc } from './agent-poc/AgentPocServer'
 import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
 import type { StudioDeviceLauncher } from './device/StudioDeviceLauncher'
 import type { StudioDeviceStateEvent } from './device/StudioDeviceStatus'
@@ -30,6 +32,7 @@ import {
   type StudioSessionResource,
 } from './StudioSessionManager'
 import { StudioSketchCatalogConflictError } from './StudioSketchCatalog'
+import type { StudioTestRunner } from './StudioTestRunner'
 import { StudioWelcome } from './StudioWelcome'
 
 /** The gateway surface the loopback routes and `device-state` events need; the real gateway satisfies it. */
@@ -48,6 +51,11 @@ export type StudioServerDeviceGateway = Pick<
 >
 
 export type StudioServerOptions = {
+  /**
+   * Secrets the agent chat may use, handed over as a value rather than exported into the environment. Studio
+   * spawns a bundler, a preview runtime and a Swift helper, and every one of them inherits an environment.
+   */
+  agentSecrets?: Readonly<Record<string, string>>
   allowedOrigins?: readonly string[]
   clientAssets?: StudioClientAssetProvider
   clientReloadRevision?: () => number
@@ -256,6 +264,7 @@ export async function startStudioSessionServer(
             ...requestOptions,
             previewUrl: resource.previewUrl ?? requestOptions.previewUrl,
           },
+          resource.tests,
         )
       } catch (error) {
         return errorResponse(request, url, requestOptions, error)
@@ -592,6 +601,62 @@ function projectOpenRequest(value: unknown): StudioProjectOpenRequest {
   }
 }
 
+/** StudioPreviewDiagnosis says whether the preview's bundler can currently build the app. */
+export type StudioPreviewDiagnosis = {
+  status: 'ok' | 'failed' | 'unreachable' | 'unknown'
+  message?: string
+}
+
+/** The parameters Expo's web runtime asks for, so the probe reads the bundle the preview itself requested. */
+const PREVIEW_BUNDLE_QUERY =
+  'platform=web&dev=true&hot=false&lazy=true&transform.engine=hermes&transform.routerRoot=app&unstable_transformProfile=hermes-stable'
+
+/**
+ * previewDiagnosis asks the preview's own bundler whether it can build the app. A project whose Tao compiles
+ * can still fail here, because the bundler resolves the generated TypeScript rather than the Tao source, and
+ * that failure otherwise reaches a person only as a blank preview.
+ */
+async function previewDiagnosis(previewUrl: string | undefined): Promise<StudioPreviewDiagnosis> {
+  if (previewUrl === undefined) {
+    return { status: 'unknown' }
+  }
+  try {
+    const bundle = new URL(`/index.ts.bundle?${PREVIEW_BUNDLE_QUERY}`, previewUrl)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 30_000)
+    try {
+      // Bun and DOM publish structurally different AbortSignal declarations; the runtime object is shared.
+      const signal = controller.signal as unknown as RequestInit['signal']
+      const bundleResponse = await fetch(bundle.toString(), { signal })
+      if (bundleResponse.ok) {
+        return { status: 'ok' }
+      }
+      return { message: bundlerMessage(await bundleResponse.text()), status: 'failed' }
+    } finally {
+      clearTimeout(timer)
+    }
+  } catch (error) {
+    return { message: error instanceof Error ? error.message : String(error), status: 'unreachable' }
+  }
+}
+
+/** bundlerMessage reduces a Metro error payload to the one line that says what could not be built. */
+export function bundlerMessage(body: string): string {
+  let text = body
+  try {
+    const parsed = JSON.parse(body) as { message?: unknown }
+    if (typeof parsed.message === 'string') {
+      text = parsed.message
+    }
+  } catch {
+    // Metro can answer with plain text; the body is then already the message.
+  }
+  const lines = text.replaceAll(/\u001B\[[0-9;]*m/g, '').split('\n').map(line => line.trim()).filter(line =>
+    line !== ''
+  )
+  return lines[0] ?? 'The bundler reported no detail.'
+}
+
 async function handleRequest(
   session: StudioProjectSession,
   datasource: StudioServerDatasource,
@@ -599,6 +664,7 @@ async function handleRequest(
   request: Request,
   url: URL,
   options: StudioServerOptions,
+  tests?: StudioTestRunner,
 ): Promise<Response> {
   if (request.method === 'GET' && url.pathname === '/') {
     return htmlResponse(studioClientHtml(options))
@@ -681,6 +747,47 @@ async function handleRequest(
   if (request.method === 'POST' && url.pathname === '/api/source-action/undo') {
     return response(request, url, options, await session.undoSourceAction(await request.json()))
   }
+  if (request.method === 'POST' && url.pathname.startsWith('/api/agent-chat/stream/')) {
+    // A turn is streamed rather than awaited: the panel prints the answer as the model produces it.
+    return streamResponse(
+      request,
+      url,
+      options,
+      streamTurn(
+        session,
+        url.pathname.slice('/api/agent-chat/stream/'.length),
+        (await request.json()) as Record<string, unknown>,
+        tests,
+        options.agentSecrets,
+      ),
+    )
+  }
+  if (url.pathname.startsWith('/api/agent-chat/')) {
+    return response(
+      request,
+      url,
+      options,
+      await AgentChat.handle(
+        session,
+        url.pathname.slice('/api/agent-chat/'.length),
+        (await request.json()) as Record<string, unknown>,
+        tests,
+        options.agentSecrets,
+      ),
+    )
+  }
+  if (url.pathname.startsWith('/api/agent-poc/')) {
+    return response(
+      request,
+      url,
+      options,
+      await AgentPoc.handle(
+        session,
+        url.pathname.slice('/api/agent-poc/'.length),
+        (await request.json()) as Record<string, unknown>,
+      ),
+    )
+  }
   if (request.method === 'GET' && url.pathname === '/api/ai/availability') {
     return response(request, url, options, await fixtureGeneration.availability())
   }
@@ -690,6 +797,9 @@ async function handleRequest(
       return response(request, url, options, { error: 'Studio preview manifest is not available yet.' }, 404)
     }
     return response(request, url, options, await fixtureGeneration.generate(manifest, await request.json()))
+  }
+  if (request.method === 'GET' && url.pathname === '/api/preview/diagnosis') {
+    return response(request, url, options, await previewDiagnosis(options.previewUrl))
   }
   if (request.method === 'POST' && url.pathname === '/api/preview/instance') {
     return response(request, url, options, session.registerPreview(await request.json()))
@@ -914,6 +1024,29 @@ function response(
     headers.set('access-control-allow-methods', 'GET, POST, OPTIONS')
   }
   return new Response(status === 204 ? null : JSON.stringify(value), { headers, status })
+}
+
+/** streamResponse sends newline-delimited JSON as it is produced, with the same origin rules as `response`. */
+function streamResponse(
+  request: Request,
+  requestUrl: URL,
+  options: StudioServerOptions,
+  stream: ReadableStream<Uint8Array>,
+): Response {
+  const origin = request.headers.get('origin')
+  const headers = new Headers({
+    // No buffering anywhere in between, or the stream arrives as one block and there was no point.
+    'cache-control': 'no-store, no-transform',
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'vary': 'origin',
+    'x-accel-buffering': 'no',
+  })
+  if (origin !== null && originAllowed(request, requestUrl, options.allowedOrigins)) {
+    headers.set('access-control-allow-origin', origin)
+    headers.set('access-control-allow-headers', 'content-type')
+    headers.set('access-control-allow-methods', 'GET, POST, OPTIONS')
+  }
+  return new Response(stream, { headers, status: 200 })
 }
 
 function errorResponse(

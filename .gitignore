@@ -22,3 +22,8 @@ packages/runtime-toolchain/android
 
 packages/studio-companion-app/ios
 packages/studio-companion-app/android
+
+# Decrypted secrets, written by `just secrets`. The encrypted originals live in secrets/secrets.jsonc.
+.env.secrets
+# Local overrides kept by hand. Nothing generates this, so nothing can overwrite it.
+.env.local

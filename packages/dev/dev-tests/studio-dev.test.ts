@@ -1,6 +1,6 @@
-import { Errors, FS, Repo, Time } from '@shared'
-import type { CLI, Platform } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Errors, FS, Platform, Repo, Time } from '@shared'
+import type { CLI } from '@shared'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { StudioClientAssets } from '@studio'
 import { startStudioClientDevReload, StudioClientDevReload } from '../dev-src/studio/StudioClientDevReload'
 import { createRecentProjectStore, StudioDev } from '../dev-src/studio/StudioDev'
@@ -473,8 +473,22 @@ Describe('Studio smoke resource isolation', () => {
     Expect(assets.html({ previewUrl })).toContain(JSON.stringify({ previewUrl }))
   })
 
+  Test('tells a server source change apart from one the browser rebuild covers', () => {
+    // Only the browser bundle is rebuilt on a change. A reloaded page calling an endpoint the running server
+    // does not have yet fails confusingly, so anything the server loads has to say "restart" out loud.
+    const { isStudioServerSource } = StudioClientDevReload.testing
+
+    Expect(isStudioServerSource('packages/studio/studio-src/StudioServer.ts')).toBe(true)
+    Expect(isStudioServerSource('packages/studio/studio-src/agent-chat/AgentChatServer.ts')).toBe(true)
+    // The panel and everything under client/ are bundled into the page, so a rebuild is enough for them.
+    Expect(isStudioServerSource('packages/studio/studio-src/client/StudioApiClient.ts')).toBe(false)
+    Expect(isStudioServerSource('packages/studio/studio-src/agent-chat/StudioAgentChatPanel.ts')).toBe(false)
+    // The editor package is not the Studio server.
+    Expect(isStudioServerSource('packages/code-editor/code-editor-src/Editor.ts')).toBe(false)
+  })
+
   Test('publishes only complete rebuilt Studio browser clients', async () => {
-    let changed: (() => Promise<void>) | undefined
+    let changed: ((change: { serverSourcesChanged: boolean }) => Promise<void>) | undefined
     let closed = 0
     const errors: string[] = []
     const reload = await startStudioClientDevReload({
@@ -503,17 +517,17 @@ Describe('Studio smoke resource isolation', () => {
     })
 
     Expect(reload.revision()).toBe(0)
-    await changed!()
+    await changed!({ serverSourcesChanged: false })
     Expect(reload.revision()).toBe(1)
     Expect(await reload.clientAssets.bundle()).toBe('bundle-1')
     Expect(reload.clientAssets.html({ previewUrl: 'preview' })).toBe('html-1-preview')
 
-    await changed!()
+    await changed!({ serverSourcesChanged: false })
     Expect(errors).toEqual(['HostEnvironmentError: client does not compile yet'])
     Expect(reload.revision()).toBe(1)
     Expect(await reload.clientAssets.bundle()).toBe('bundle-1')
 
-    await changed!()
+    await changed!({ serverSourcesChanged: false })
     Expect(reload.revision()).toBe(3)
     Expect(await reload.clientAssets.bundle()).toBe('bundle-3')
     await reload.close()
@@ -644,6 +658,79 @@ Describe('Studio smoke resource isolation', () => {
     ])
   })
 
+  Test('publishes the generated app into the preview runtime before the bundler starts', async () => {
+    const runtimeRoot = await mkTestDir('studio-publish-order-')
+    const generatedApp = FS.resolvePath('_gen_tao-app/App.tsx', runtimeRoot)
+    const steps: string[] = []
+    let generatedAppWasPublished: boolean | undefined
+    try {
+      await StudioDev.testing.publishPreviewBeforeBundling({
+        async compilePreview() {
+          steps.push('compile')
+          await FS.mkdir(FS.dirname(generatedApp))
+          await FS.writeText(generatedApp, 'export default function App() {}\n')
+        },
+        isStopping: () => false,
+        async startBundler() {
+          steps.push('start')
+          generatedAppWasPublished = await FS.exists(generatedApp)
+        },
+        async waitForBundler() {
+          steps.push('wait')
+          return true
+        },
+      })
+
+      // The bundler only ever sees the files present when it crawls, so the compile must precede it.
+      Expect(generatedAppWasPublished).toBe(true)
+      Expect(steps).toEqual(['compile', 'start', 'wait'])
+    } finally {
+      await FS.remove(runtimeRoot)
+    }
+  })
+
+  Test('never starts the bundler when opening is cancelled during the first compile', async () => {
+    const steps: string[] = []
+    let stopping = false
+
+    await Expect(StudioDev.testing.publishPreviewBeforeBundling({
+      compilePreview: async () => {
+        steps.push('compile')
+        stopping = true
+      },
+      isStopping: () => stopping,
+      startBundler: async () => {
+        steps.push('start')
+      },
+      waitForBundler: async () => {
+        steps.push('wait')
+        return true
+      },
+    })).rejects.toThrow('Studio project opening was cancelled.')
+
+    Expect(steps).toEqual(['compile'])
+  })
+
+  Test('reports a cancelled open when the bundler never becomes ready', async () => {
+    const steps: string[] = []
+
+    await Expect(StudioDev.testing.publishPreviewBeforeBundling({
+      compilePreview: async () => {
+        steps.push('compile')
+      },
+      isStopping: () => false,
+      startBundler: async () => {
+        steps.push('start')
+      },
+      waitForBundler: async () => {
+        steps.push('wait')
+        return false
+      },
+    })).rejects.toThrow('Studio project opening was cancelled.')
+
+    Expect(steps).toEqual(['compile', 'start', 'wait'])
+  })
+
   Test('closes each owned project resource once even when close is requested twice', async () => {
     const cleaned: string[] = []
     const resource = StudioDev.testing.withCleanup({ previewUrl: 'http://127.0.0.1:8081' }, [
@@ -694,6 +781,38 @@ Describe('Studio smoke resource isolation', () => {
     } finally {
       await first.close()
       await second.close()
+    }
+  })
+
+  Test('keeps the bundler file map inside the preview runtime it describes', async () => {
+    const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
+    const runtime = await StudioPreviewRuntime.create(sourceRoot)
+    const previousSourceRoot = Platform.runtimeProcess.env['TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT']
+    Platform.runtimeProcess.env['TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT'] = sourceRoot
+    try {
+      // Metro keys its file map by project root, so the map of a per-session root is unreadable by
+      // every later session. Inside the root, closing the session removes it; outside, it is a
+      // couple of megabytes of permanent litter per Studio start.
+      const previewConfig = require(FS.resolvePath('metro.config.cjs', runtime.root)) as {
+        fileMapCacheDirectory?: string
+      }
+      const toolchainConfig = require(FS.resolvePath('metro.config.cjs', sourceRoot)) as {
+        fileMapCacheDirectory?: string
+      }
+
+      Expect(previewConfig.fileMapCacheDirectory).toStartWith(`${runtime.root}/`)
+      // The toolchain project is stable and reuses its map, so it keeps Metro's shared default.
+      Expect(toolchainConfig.fileMapCacheDirectory).toBe(undefined)
+
+      await runtime.close()
+      Expect(await FS.exists(runtime.root)).toBe(false)
+    } finally {
+      if (previousSourceRoot === undefined) {
+        delete Platform.runtimeProcess.env['TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT']
+      } else {
+        Platform.runtimeProcess.env['TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT'] = previousSourceRoot
+      }
+      await runtime.close()
     }
   })
 
