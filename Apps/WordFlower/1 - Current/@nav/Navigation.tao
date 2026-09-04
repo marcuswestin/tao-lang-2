@@ -1,8 +1,8 @@
-use SelectionNav, SlotNav, StackNav from @tao/nav
-use Settings, SignedOut, WorkspaceChooser, WorkspaceList from @ui
+use SelectionNav, StackNav from @tao/nav
+use Settings, WorkspaceList, WorkspaceNav from @ui
 
-// Every navigator the product mounts. The harness beside this file covers the declaration
-// spellings; these are the real ones.
+// The product's shared top-level navigators. Private navigators live beside the scenes that own
+// them, which keeps generated module dependencies one-way.
 // A configured nav declaration is a nav value: an immutable descriptor, not a mounted occurrence
 // or exposed runtime state. `StackNav` is its inferred concrete type; the `nav` head checks the
 // primitive family without erasing that more precise type.
@@ -10,18 +10,8 @@ nav HomeStack = StackNav {
    Initial WorkspaceList
 }
 
-workspace
-nav WorkspaceNav = SlotNav {
-   Initial WorkspaceChooser
-}
-
 nav SettingsStack = StackNav {
    Initial Settings
-}
-
-workspace
-nav SignedOutNav = StackNav {
-   Initial SignedOut
 }
 
 // Direct keys bind to SelectionNav's declared `@key` collection and share this configured nav's
@@ -45,3 +35,15 @@ nav WordFlowerNavigator = SelectionNav {
       Icon "gear"
       Content SettingsStack
 }  }
+
+// The preview variants hand the shell a differently configured navigator, so a preview still gets
+// the focus bar.
+workspace
+nav WordFlowerDrawerNavigator = WordFlowerNavigator with {
+   Display "drawer"
+}
+
+workspace
+nav WordFlowerTabsNavigator = WordFlowerNavigator with {
+   Display "tabs"
+}

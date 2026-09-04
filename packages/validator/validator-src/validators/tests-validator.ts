@@ -25,6 +25,7 @@ export const testValidationMessages = {
   backPlacement: 'Back steps are only allowed inside test blocks.',
   relaunchPlacement: 'Relaunch steps are only allowed inside test blocks.',
   advancePlacement: 'Advance steps are only allowed inside test blocks.',
+  narrowPlacement: 'Narrow steps are only allowed inside test blocks.',
   selector: (selector: string) =>
     `Unsupported test selector '${selector}'. Supported selectors: ${supportedSelectors.join(', ')}.`,
   inputSelector: (selector: string) =>
@@ -39,6 +40,9 @@ export const testValidationMessages = {
   navigationValueType: (actual: string) => `Navigation and toolbar test values expect text, got ${actual}.`,
   navigationValueLiteral: 'Navigation and toolbar test values must be text literals.',
   navigationVocabulary: (expected: string) => `Expected '${expected}' in this navigation test step.`,
+  interactionVocabulary: (expected: string) => `Expected '${expected}' in this interaction test step.`,
+  interactionExpectation:
+    "Expected 'target <label>', 'focus region <label>', or 'verbs <label>, ...' in this interaction test step.",
 } as const
 
 const validateRunPlacement = validateStepPlacement(testValidationMessages.runPlacement)
@@ -50,6 +54,7 @@ const validateExpectationPlacement = validateStepPlacement(testValidationMessage
 const validateBackPlacement = validateStepPlacement(testValidationMessages.backPlacement)
 const validateRelaunchPlacement = validateStepPlacement(testValidationMessages.relaunchPlacement)
 const validateAdvancePlacement = validateStepPlacement(testValidationMessages.advancePlacement)
+const validateNarrowPlacement = validateStepPlacement(testValidationMessages.narrowPlacement)
 
 /** testValidationChecks validates v0 Tao test declarations and steps. */
 export const testValidationChecks = {
@@ -57,6 +62,8 @@ export const testValidationChecks = {
   [AST.RunStep.$type]: validateRunPlacement,
   [AST.PressTextStep.$type]: [validatePressPlacement, validateSelector],
   [AST.TagPressStep.$type]: validatePressPlacement,
+  [AST.PressKeyStep.$type]: [validatePressPlacement, validatePressKeyVocabulary],
+  [AST.NarrowStep.$type]: [validateNarrowPlacement, validateNarrowVocabulary],
   [AST.PressToolbarCommandStep.$type]: [validatePressPlacement, validateNavigationVocabulary, validateNavigationValue],
   [AST.EnterTextStep.$type]: [validateEnterPlacement, validateSelector],
   [AST.TagEnterStep.$type]: validateEnterPlacement,
@@ -64,6 +71,7 @@ export const testValidationChecks = {
   [AST.TagInputValueExpectation.$type]: validateInputExpectationPlacement,
   [AST.ExpectGroupStep.$type]: validateExpectationPlacement,
   [AST.ExpectScopeStep.$type]: validateExpectationPlacement,
+  [AST.ExpectInteractionStep.$type]: [validateExpectationPlacement, validateInteractionExpectation],
   [AST.SubmitInputStep.$type]: [validateSubmitPlacement, validateSelector],
   [AST.TagSubmitStep.$type]: validateSubmitPlacement,
   [AST.SelectStep.$type]: validateSelect,
@@ -154,6 +162,9 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       PressTextStep: checkStepOrder,
       TagPressStep: checkStepOrder,
       PressToolbarCommandStep: checkStepOrder,
+      PressKeyStep: checkStepOrder,
+      NarrowStep: checkStepOrder,
+      ExpectInteractionStep: checkStepOrder,
       RunStep: () => {
         hasRun = true
       },
@@ -181,6 +192,9 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       | AST.PressTextStep
       | AST.TagPressStep
       | AST.PressToolbarCommandStep
+      | AST.PressKeyStep
+      | AST.NarrowStep
+      | AST.ExpectInteractionStep
       | AST.SubmitInputStep
       | AST.TagSubmitStep
       | AST.SelectStep
@@ -191,6 +205,27 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
     if (!hasRun) {
       ctx.error(testValidationMessages.expectationBeforeRun, step)
     }
+  }
+}
+
+function validatePressKeyVocabulary(step: AST.PressKeyStep, ctx: ValidationContext): void {
+  if (step.subject !== 'key') {
+    ctx.error(testValidationMessages.interactionVocabulary('key'), step)
+  }
+}
+
+function validateNarrowVocabulary(step: AST.NarrowStep, ctx: ValidationContext): void {
+  if (step.head !== 'narrow') {
+    ctx.error(testValidationMessages.interactionVocabulary('narrow'), step)
+  }
+}
+
+function validateInteractionExpectation(step: AST.ExpectInteractionStep, ctx: ValidationContext): void {
+  const valid = (step.subject === 'target' && step.detail === undefined && step.values.length === 1)
+    || (step.subject === 'focus' && step.detail === 'region' && step.values.length === 1)
+    || (step.subject === 'verbs' && step.detail === undefined)
+  if (!valid) {
+    ctx.error(testValidationMessages.interactionExpectation, step)
   }
 }
 

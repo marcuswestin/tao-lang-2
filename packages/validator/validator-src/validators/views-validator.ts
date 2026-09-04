@@ -6,13 +6,16 @@ import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 
 /** viewValidationMessages declares structural diagnostics for Tao view bodies. */
+/** One phrasing of the one condition: a tag and a row label both need one native root to land on. */
+const loopRowRootWording = 'exactly one unconditional direct row-root render; wrap the row in one view or layout.'
+
 const viewValidationMessages = {
   duplicateParameter: (name: string) => `Parameter '${name}' is declared more than once in this view.`,
   reservedParameter: (name: string) => `Parameter name '${name}' is reserved for generated view props.`,
   renderCount: (name: string) => `View '${name}' must declare exactly one render statement.`,
   renderLast: '`render` must be the last statement in a view body.',
   viewBody:
-    'Only supplied slots, let, state, query, action, command, slot, and render statements are allowed in view bodies.',
+    'Only supplied slots, hide, let, state, query, action, command, slot, and render statements are allowed in view bodies.',
   renderBlock:
     'Only let, render, view invocation, event, when, guard, and loop statements are allowed in render child blocks.',
   renderBlockAliasPlacement: '`let` bindings in render blocks must be declared before child view invocations.',
@@ -21,6 +24,9 @@ const viewValidationMessages = {
   loopSelectDuplicate: 'A loop may declare at most one `on select` handler.',
   loopSelectInline: '`on select` requires an inline action block.',
   renderTarget: '`render` must target a view or inject block.',
+  sceneComposed: (name: string) => `Scene '${name}' is presented, never composed. Present it, or declare it as a view.`,
+  headerlessChrome: (name: string, slot: string) =>
+    `Scene '${name}' fills Header false, so ${slot} would declare chrome nothing reads.`,
   renderInjectPlacement: '`render inject` must be the only statement in a view body.',
   foreignViewPath: 'A foreign view implementation path must name a relative TypeScript or TSX module.',
   foreignViewMissing: (path: string) => `Foreign view implementation '${path}' does not exist.`,
@@ -37,8 +43,8 @@ const viewValidationMessages = {
   duplicateRenderSlotFill: (name: string) => `Render slot '${name}' is filled more than once at this call site.`,
   tagAttachment: 'A #tag must be followed immediately by a render or loop in the same block.',
   duplicateTag: (tag: string) => `Duplicate ${tag} in the same block; a tag must be unique within its lexical block.`,
-  taggedLoopRoot:
-    'A tagged loop must contain exactly one unconditional direct row-root render; wrap the row in one view or layout.',
+  taggedLoopRoot: `A tagged loop must contain ${loopRowRootWording}`,
+  loopRowLabel: `A loop row carries no accessibility label unless the loop contains ${loopRowRootWording}`,
 } as const
 
 const reservedParameterNames = new Set(['children', 'key', 'ref', '__tao', '__taoSlots'])
@@ -48,6 +54,7 @@ export const ViewsValidator = {
   checks: {
     [AST.ViewDeclaration.$type]: validateViewDeclaration,
     [AST.CallerContentStatement.$type]: validateCallerContentPlacement,
+    [AST.ForStatement.$type]: validateLoopRowLabel,
     [AST.LoopSelectHandler.$type]: validateLoopSelectHandler,
     [AST.RenderSlotDeclaration.$type]: validateRenderSlotDeclarationPlacement,
     [AST.RenderSlotUse.$type]: validateRenderSlotUse,
@@ -55,6 +62,29 @@ export const ViewsValidator = {
   } satisfies NodeValidationChecks,
   messages: viewValidationMessages,
   validateForeignFiles: validateForeignViewFiles,
+}
+
+/**
+ * sceneSuppressesHeader reports a scene that statically opts out of header chrome with
+ * `Header false`. Only the literal counts: the slot takes an ordinary reactive expression, and a
+ * value that varies at runtime cannot make a fill dead.
+ */
+export function sceneSuppressesHeader(declaration: AST.ViewDeclaration): boolean {
+  const fill = AST.declarationSlotFillNamed(declaration, 'Header')
+  return fill?.value !== undefined && AST.isBooleanLiteral(fill.value) && fill.value.value === 'false'
+}
+
+/** validateHeaderlessChrome keeps a headerless scene from filling slots its host will never read. */
+function validateHeaderlessChrome(view: AST.ViewDeclaration, ctx: ValidationContext): void {
+  if (!sceneSuppressesHeader(view)) {
+    return
+  }
+  for (const slot of ['Title', 'Toolbar'] as const) {
+    const fill = AST.declarationSlotFillNamed(view, slot)
+    if (fill) {
+      ctx.error(viewValidationMessages.headerlessChrome(view.name, slot), fill)
+    }
+  }
 }
 
 function validateLoopSelectHandler(handler: AST.LoopSelectHandler, ctx: ValidationContext): void {
@@ -69,6 +99,24 @@ function validateLoopSelectHandler(handler: AST.LoopSelectHandler, ctx: Validati
   if (AST.loopSelectHandlers(loop).indexOf(handler) > 0) {
     ctx.error(viewValidationMessages.loopSelectDuplicate, handler)
   }
+}
+
+/**
+ * validateLoopRowLabel points out a row whose derived label has nowhere to land. A selectable row
+ * carries it on its press surface and a tagged loop already errors on the same condition, so the
+ * hint is for the untagged, non-selectable, multi-root row that renders a row-bound text or
+ * iterates a titled entity: it has a name a person would read, and the platform never hears it.
+ */
+function validateLoopRowLabel(loop: AST.ForStatement, ctx: ValidationContext): void {
+  if (AST.attachedTag(loop) || AST.loopSelectHandlers(loop).length > 0 || AST.loopRowRoot(loop)) {
+    return
+  }
+  const rowType = Type.ofValueDeclaration(loop)
+  const titled = rowType.kind === 'entity' && Type.dataEntityTitleField(rowType.entity) !== undefined
+  if (!titled && ASTUtils.outlineLoopDescriptor(loop).texts.length === 0) {
+    return
+  }
+  ctx.hint(viewValidationMessages.loopRowLabel, loop)
 }
 
 function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {
@@ -92,7 +140,7 @@ function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {
     ctx.error(viewValidationMessages.tagAttachment, tag)
     return
   }
-  if (AST.isForStatement(target) && !AST.taggedLoopRowRoot(target)) {
+  if (AST.isForStatement(target) && !AST.loopRowRoot(target)) {
     ctx.error(viewValidationMessages.taggedLoopRoot, target)
   }
 }
@@ -107,6 +155,7 @@ function validateViewDeclaration(view: AST.ViewDeclaration, ctx: ValidationConte
   validateCallerContentContract(view, ctx)
   validateRenderSlots(view, ctx)
   validateForeignView(view, ctx)
+  validateHeaderlessChrome(view, ctx)
 }
 
 function validateForeignView(view: AST.ViewDeclaration, ctx: ValidationContext): void {
@@ -187,6 +236,7 @@ function validateViewBodyBlock(block: AST.Block, ctx: ValidationContext): void {
       || AST.isActionDeclaration(statement)
       || AST.isCommandDeclaration(statement)
       || AST.isDeclarationSlotFill(statement)
+      || AST.isViewCommandExclusion(statement)
       || AST.isTagStatement(statement)
       || AST.isRenderSlotDeclaration(statement)
     if (isViewBodySetupStatement) {
@@ -279,12 +329,23 @@ function validateRender(
   if (AST.isRenderStatement(render) && render.view === undefined && render.injection === undefined) {
     ctx.error(viewValidationMessages.renderTarget, render)
   }
+  // The one fact a scene carries that a body cannot state. Diagnosing it here, at the render site,
+  // is what makes chrome nothing reads unrepresentable: a declaration that fills `Title` can never
+  // end up composed inline where no host would read it. A nav is a scene by the Prelude and is the
+  // one exception: it supplies its own chrome, so a render site may name it.
+  const target = render.view?.ref
+  const aliasTarget = AST.isViewDeclaration(target) ? AST.viewAliasTarget(target) : undefined
+  const effectiveTarget = AST.isViewDeclaration(aliasTarget) ? aliasTarget : target
+  if (AST.isViewDeclaration(effectiveTarget) && effectiveTarget.scene) {
+    const renderedName = AST.isViewDeclaration(target) ? target.name : effectiveTarget.name
+    ctx.error(viewValidationMessages.sceneComposed(renderedName), render)
+  }
   if (render.block) {
     validateRenderBlock(render.block, ctx)
-    const target = render.view?.ref
     // Content acceptance is inferred: a view accepts unnamed caller content iff its body places
-    // @@content. Slot fills carry their own placement rule and are excluded here.
-    if (target && !AST.viewPlacesCallerContent(target)) {
+    // @@content. Slot fills carry their own placement rule and are excluded here, and a nav or a
+    // parameter takes no content at all, which the navigation validator reports.
+    if (AST.isViewDeclaration(target) && !AST.viewPlacesCallerContent(target)) {
       for (const statement of render.block.statements) {
         if (
           !AST.isEventHandler(statement)

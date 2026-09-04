@@ -21,10 +21,11 @@ expressions; unit values and dimensional arithmetic; pure functions; immutable `
 named, inline, and typed foreign actions; inferred `fail` cases; `set`, compound `set`, `toggle`, and
 `do`; subject `when`; block-scoped `guard`; homogeneous list literals;
 `loop`; first-class `view` and configured `nav` values under the collapsed primitive hierarchy
-(`view` is the one renderable primitive; `nav` refines it); top-level data/query/write forms;
+(`view` is the renderable primitive, `scene is view`, and `nav is scene is view`); top-level data and
+write forms plus view-body queries;
 declaration-owned configuration; `ask`/`respond` on views declaring `responds`; the
-expression-position TypeScript boundary; prelude-declared host-facing supplied-slot fills; focused
-intent-backed commands; and transparent configurable-type aliases.
+expression-position TypeScript boundary; prelude-declared host-facing supplied-slot fills; commands
+as configured values with their own slots; and transparent configurable-type aliases.
 
 `match`, heterogeneous lists, richer collection transforms, and general concurrency policy remain
 future work. Optional item fields and non-blocking `async { ... }` are implemented as described
@@ -84,25 +85,26 @@ statements, and reports an unowned failure through the action diagnostics. The j
 and diagnostic contract is specified in [Tao Actions](Tao%20Actions.md). Async functions, `await`, and a
 broader scheduling and fork/concurrency policy remain future work.
 
-Primitive declarations may supply defaulted slots inherited by refinements. Primitive `view`
-currently supplies optional `Title` and `Toolbar`; a view body fills them as capitalized members,
-and an action supplies intent metadata in the same form. Completeness is declaration-driven: a
-defaulted slot may be omitted, while a host such as StackNav can independently require `Title` at a
-usage site. A command is a scoped binding of an intent invocation plus its declared affordance
-members, not an action body:
+Primitive declarations may supply defaulted slots inherited by refinements. Primitive `scene`
+supplies optional `Title`, `Toolbar`, and `Header`; a scene body fills them as capitalized members.
+Completeness is declaration-driven: a defaulted slot may be omitted, while a host such as StackNav
+can independently require `Title` at a usage site. `command` is its own primitive with the same
+mechanism: its members are prelude-declared slots, `Title` is the one without a default, and a
+command body also declares the slots its invocation still needs:
 
 ```tao
-view Detail(Task) {
+scene Detail(Task) {
    Title Task.Title
    state Draft = Task.Title
 
    action Save() {
-      Title "Save"
       update Task { Title: Draft }
    }
-   command SaveTask = Save() with {
+   command SaveTask() {
+      Title "Save"
       Icon "checkmark"
       Enabled Draft is not empty
+      do Save()
    }
    Toolbar { SaveTask }
    // ...
@@ -419,9 +421,10 @@ invocation validation enforces the declared content and slot contract. A foreign
 Apps, `nav`, and `datasource` values use a declaration-owned configured-value model.
 The linked declaration is the source of truth for property names and types; validation, formatting,
 and compilation do not dispatch on shipped names. A bare block constructs a descriptor, `with`
-patches its named entries and may add direct keyed entries when the declaration owns a keyed item
-contract. The descriptor retains its declaration identity across imports, aliases, and generated
-modules.
+patches its named entries, and may add or replace direct keyed entries when the declaration owns a
+keyed item contract. A keyed patch is whole-item replacement, not a deep merge, and must satisfy the
+complete keyed-item contract. The descriptor retains its declaration identity across imports,
+aliases, and generated modules.
 
 ```tao
 public

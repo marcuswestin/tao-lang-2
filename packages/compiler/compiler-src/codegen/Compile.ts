@@ -8,6 +8,7 @@ import { ExpressionsCompiler } from './app/expressions-compiler'
 import FilesCompiler from './app/files-compiler'
 import { FunctionalCoreCompiler } from './app/FunctionalCoreCompiler'
 import { InjectionsCompiler } from './app/injections-compiler'
+import { InteractionOutlineCompiler } from './app/interaction-outline-compiler'
 import InvocationsCompiler from './app/invocations-compiler'
 import { NavigationCompiler } from './app/NavigationCompiler'
 import ProjectDeclarationCompiler from './app/project-declaration-compiler'
@@ -35,6 +36,7 @@ export const Compile = {
   ...UseStatementCompiler,
   ...ProjectDeclarationCompiler,
   ...InjectionsCompiler,
+  ...InteractionOutlineCompiler,
   ...NavigationCompiler,
   ...FunctionalCoreCompiler,
   ...DataCompiler,

@@ -5,6 +5,9 @@ import * as AST from './parserASTExport'
 /** DeclarationNamespace identifies the independent declaration table a name occupies. */
 export type DeclarationNamespace = 'type' | 'value'
 
+/** RenderablePrimitive is a type family whose value may be named at a render site. */
+export type RenderablePrimitive = 'view' | 'scene' | 'nav'
+
 const resolvedUseTargets = new WeakMap<AST.UseStatement | AST.UsePackageStatement, readonly AST.Declaration[]>()
 
 /** declarationNamespace classifies declarations by the reference contexts that can resolve them. */
@@ -147,8 +150,9 @@ export function resolvedImportedDeclarations(useStatement: AST.UseStatement): AS
 
 type ArgumentListOwner =
   | AST.Render
+  | AST.AppView
   | AST.DoStatement
-  | AST.CommandDeclaration
+  | AST.CommandDoClause
   | AST.FunctionCallExpression
   | AST.ContextualPresentStatement
   | AST.ViewBinding
@@ -299,6 +303,7 @@ export function importableValueDeclarationsInFile(
   | AST.AliasDeclaration
   | AST.ActionDeclaration
   | AST.AppDeclaration
+  | AST.CommandDeclaration
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
@@ -358,6 +363,48 @@ export function commandOwningView(command: AST.CommandDeclaration): AST.ViewDecl
     : undefined
 }
 
+/** commandFillsOf returns the member fills written in one command body, in source order. */
+export function commandFillsOf(command: AST.CommandDeclaration): AST.CommandFill[] {
+  return command.block.members.filter(AST.isCommandFill)
+}
+
+/** commandDoClausesOf returns every `do` clause written in one command body. */
+export function commandDoClausesOf(command: AST.CommandDeclaration): AST.CommandDoClause[] {
+  return command.block.members.filter(AST.isCommandDoClause)
+}
+
+/** commandDoClauseOf returns the single invocation one validated command binds. */
+export function commandDoClauseOf(command: AST.CommandDeclaration): AST.CommandDoClause | undefined {
+  return commandDoClausesOf(command)[0]
+}
+
+/** entityCommandPoliciesOf returns one entity's ordered default or hidden command mentions. */
+export function entityCommandPoliciesOf(entity: AST.EntityDataDeclaration): AST.EntityCommandPolicy[] {
+  return entity.block.entries.filter(AST.isEntityCommandPolicy)
+}
+
+/** viewCommandExclusionsOf returns every command directly excluded by one view occurrence shape. */
+export function viewCommandExclusionsOf(view: AST.ViewDeclaration): AST.ViewCommandExclusion[] {
+  return view.block?.statements.filter(AST.isViewCommandExclusion) ?? []
+}
+
+/** configurationEntryName returns the member, slot or reference one configuration entry names. */
+export function configurationEntryName(entry: AST.ConfigurationEntry): string | undefined {
+  return entry.name ?? entry.label ?? entry.reference?.$refText
+}
+
+/** owningCommand returns the command declaration containing `node`, if any. */
+export function owningCommand(node: AST.Node): AST.CommandDeclaration | undefined {
+  let current: AST.Node | undefined = node
+  while (current) {
+    if (AST.isCommandDeclaration(current)) {
+      return current
+    }
+    current = current.$container
+  }
+  return undefined
+}
+
 /** askDeclarationsOwnedByActionBlock returns dialogue results introduced directly by one action block. */
 export function askDeclarationsOwnedByActionBlock(block: AST.ActionBlock): AST.AskStatement[] {
   return block.statements.filter(AST.isAskStatement)
@@ -366,6 +413,14 @@ export function askDeclarationsOwnedByActionBlock(block: AST.ActionBlock): AST.A
 /** forBindingOwnedByBlock returns the iteration binding visible inside a `for` body. */
 export function forBindingOwnedByBlock(block: AST.Block): AST.ForStatement | undefined {
   return AST.isForStatement(block.$container) ? block.$container : undefined
+}
+
+/** The traits spelled as a plain word rather than a keyword, so each word stays usable as a name. */
+export const wordTraitNames: readonly string[] = ['title']
+
+/** traitIsTitle identifies the `(title)` trait: the one text field that names a row to a person. */
+export function traitIsTitle(trait: AST.Trait): boolean {
+  return trait.word === 'title'
 }
 
 /** loopSelectHandlers returns the direct row-selection handlers declared by one loop. */
@@ -392,7 +447,7 @@ export function attachedTag(node: AST.Render | AST.ForStatement): AST.TagStateme
   return AST.isTagStatement(previous) ? previous : undefined
 }
 
-/** slotFillRootTag returns a leading tag that configures the visual root filling one frame slot. */
+/** slotFillRootTag returns a leading tag that configures the visual root filling one named render slot. */
 function slotFillRootTag(render: AST.Render): AST.TagStatement | undefined {
   const use = render.$container
   const block = render.block
@@ -411,8 +466,12 @@ export function isSlotFillRootTag(tag: AST.TagStatement): boolean {
     && slotFillRootTag(block.$container) === tag
 }
 
-/** taggedLoopRowRoot returns the sole unconditional direct row-root render required by tagged loops. */
-export function taggedLoopRowRoot(loop: AST.ForStatement): AST.Render | undefined {
+/**
+ * loopRowRoot returns the sole unconditional direct render of a loop row: the one native root a
+ * tag or a row-level accessibility label can land on. A conditional, repeated, or multi-render row
+ * has none.
+ */
+export function loopRowRoot(loop: AST.ForStatement): AST.Render | undefined {
   const renderers = loop.block.statements.filter(statement =>
     AST.isRender(statement)
     || AST.isWhenRenderStatement(statement)
@@ -430,7 +489,7 @@ export function testTagForRender(render: AST.Render): string | undefined {
   const block = render.$container
   const loop = AST.isBlock(block) && AST.isForStatement(block.$container) ? block.$container : undefined
   const loopTag = loop ? attachedTag(loop) : undefined
-  const rowTag = loop && loopTag && taggedLoopRowRoot(loop) === render ? loopTag : undefined
+  const rowTag = loop && loopTag && loopRowRoot(loop) === render ? loopTag : undefined
   const tags = [rowTag, direct, slotFill]
     .filter((tag): tag is AST.TagStatement => tag !== undefined)
     .map(tag => tag.tag.slice(1))
@@ -445,6 +504,7 @@ export function isImportableValueDeclaration(
   | AST.AliasDeclaration
   | AST.ActionDeclaration
   | AST.AppDeclaration
+  | AST.CommandDeclaration
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
@@ -453,6 +513,8 @@ export function isImportableValueDeclaration(
   return AST.isAliasDeclaration(node)
     || AST.isActionDeclaration(node)
     || AST.isAppDeclaration(node)
+    // A module-level command is an ordinary named value: it is the verb other modules reach for.
+    || (AST.isCommandDeclaration(node) && AST.isTaoFile(node.$container))
     || AST.isNavDeclaration(node)
     || AST.isDatasourceDeclaration(node)
     || AST.isDesignDeclaration(node)
@@ -487,6 +549,46 @@ export function configurationPrimitiveOf(
     return undefined
   }
   return configurationPrimitiveOfTypeExpression(declaration.type, seen)
+}
+
+/** renderablePrimitiveOfParameter resolves a parameter's effective view-family type. */
+export function renderablePrimitiveOfParameter(
+  parameter: AST.ParameterDeclaration,
+): RenderablePrimitive | undefined {
+  const type = parameter.inlineType?.type ?? parameter.type
+  return type ? renderablePrimitiveOfTypeExpression(type, new Set()) : undefined
+}
+
+function renderablePrimitiveOfTypeExpression(
+  type: AST.TypeExpression,
+  seen: Set<AST.TypeDeclaration>,
+): RenderablePrimitive | undefined {
+  const base = AST.isDerivedTypeExpression(type) ? type.base : type
+  if (AST.isPrimitiveTypeReference(base)) {
+    return base.primitive === 'view' || base.primitive === 'scene' || base.primitive === 'nav'
+      ? base.primitive
+      : undefined
+  }
+  if (!AST.isNamedTypeReference(base) || base.members.length > 0) {
+    return undefined
+  }
+  const declaration = visibleTypeDeclaration(base, base.root)
+  return declaration ? renderablePrimitiveOfTypeDeclaration(declaration, seen) : undefined
+}
+
+function renderablePrimitiveOfTypeDeclaration(
+  declaration: AST.TypeDeclaration,
+  seen: Set<AST.TypeDeclaration>,
+): RenderablePrimitive | undefined {
+  if (seen.has(declaration)) {
+    return undefined
+  }
+  seen.add(declaration)
+  const aliasTarget = declaration.aliasTarget?.member.ref
+  if (AST.isTypeDeclaration(aliasTarget)) {
+    return renderablePrimitiveOfTypeDeclaration(aliasTarget, seen)
+  }
+  return declaration.type ? renderablePrimitiveOfTypeExpression(declaration.type, seen) : undefined
 }
 
 /** configurationPropertiesOf returns the effective ordinary slots of one reusable configuration type. */

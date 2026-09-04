@@ -112,6 +112,14 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
         )`
       : gen.noop()
   }
+      ${
+    options.localDataCatalog
+      ? gen`TR.Data.UseConfigured(
+          ${gen.scopeName({ name: '_TaoLocalDataCatalog' })},
+          ${gen.scopeName({ name: '_TaoLocalDatasource' })},
+        )`
+      : gen.noop()
+  }
       ${compileStudioSubject(options, app)}
       return <TR.AppShell>
         <TR.Navigation.AppHost app={${gen.Name(definition)}} />
@@ -377,6 +385,11 @@ function applyConfigurationBlock(
   block: AST.ConfigurationBlock,
 ): void {
   for (const entry of block.entries) {
+    // `view Shell(Other)` in a variant rebinds the root view, which is the Navigator slot's sugar.
+    if (entry.rootView) {
+      configuration.set('Navigator', { patches: [], value: entry.rootView })
+      continue
+    }
     if (!entry.name || !entry.value) {
       continue
     }
@@ -434,15 +447,17 @@ function compileAppPropertySource(value: AppPropertySource): Compiled {
 }
 
 /**
- * `app X { view Y }` is sugar for mounting Y in a slot navigator. The navigator is generated inline
- * from the runtime's own slot implementation so it owns no Tao name a declaration could collide with.
+ * `app X { view Y(args) }` is sugar for mounting Y, bound to its arguments, in a slot navigator. The
+ * navigator is generated inline from the runtime's own slot implementation so it owns no Tao name a
+ * declaration could collide with. A bound argument stays live, exactly as `Initial Y(args)` binds
+ * one, which is how a shell receives the navigator it renders and a variant hands it another.
  *
  * It still carries a canonical identity, because a synthesized navigator is a real navigator on a
  * real device: without one the runtime emits no restorable descriptor and every launch silently
  * gives up on restoring where the person was.
  *
- * That identity is derived from the `app` declaration that writes the sugar, under the reserved kind
- * `app-root-view-nav`:
+ * That identity is derived from the `app` declaration that writes the sugar — the app block, or the
+ * variant whose patch rebinds the root — under the reserved kind `app-root-view-nav`:
  *
  * - It is stable. The app declaration is the sugar's authored owner — exactly one root view
  *   statement per app block — and its project, package, module path, and name are already the inputs
@@ -460,16 +475,34 @@ function compileAppPropertySource(value: AppPropertySource): Compiled {
  */
 function compileRootViewNavigator(appView: AST.AppView): Compiled {
   const view = resolveRef(appView.view)
-  const app = appView.$container.$container
-  Assert.is(app, AST.isAppDeclaration, 'a root view statement is declared by an app block')
+  const app = rootViewOwner(appView)
+  const resolved = ASTUtils.resolveArgumentBindings(view, appView)
+  Assert(resolved.diagnostics.length === 0, 'validated root view has no binding diagnostics')
+  const reference = gen`TR.Navigation.ViewReference(${compileDeclarationIdentity(view)})`
+  const initial = resolved.pairs.length === 0
+    ? reference
+    : gen`TR.Navigation.BindView(
+        ${reference},
+        { ${gen.list(resolved.pairs, Compile.BoundViewArgument)} },
+      )`
   return gen`TR.Navigation.Configure(
     TR.Navigation.Declaration(
       ${gen.jsLiteral(view.name)},
       TR.NavKind.Slot(),
       ${compileDeclarationIdentity(app, { kind: 'app-root-view-nav' })},
     ),
-    { "Initial": TR.Navigation.ViewReference(${compileDeclarationIdentity(view)}) },
+    { "Initial": ${initial} },
   )`
+}
+
+/** rootViewOwner is the app value whose block or patch writes one root view statement. */
+function rootViewOwner(appView: AST.AppView): AST.AppValueDeclaration {
+  let current: AST.Node | undefined = appView.$container
+  while (current && !AST.isAppValueDeclaration(current)) {
+    current = current.$container
+  }
+  Assert.defined(current, 'validated root view statement is owned by an app value')
+  return current
 }
 
 function rootAuxiliaryNavigators(root: AST.AppValueDeclaration): AST.AppAuxiliaryNavigator[] {

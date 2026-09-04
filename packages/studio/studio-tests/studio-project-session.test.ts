@@ -1196,7 +1196,7 @@ async function withStudioProject(
             Text("Before")
           }
         }
-        view Card(Title text, Owner Account) { render Text(Title) }
+        scene Card(Title text, Owner Account) { render Text(Title) }
         fixture Cards { Lead = create Account { Name: "Ada" } }
         scenarios Card "states" {
           fixture Cards

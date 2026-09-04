@@ -1,4 +1,4 @@
-import { ASTUtils, Packages } from '@ast-utils'
+import { ASTUtils, Packages, Type } from '@ast-utils'
 import { AST, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, Errors, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
@@ -27,6 +27,7 @@ import {
   withInlineInjectionBindings,
 } from './codegen/app/injection-plan'
 import RuntimeGen from './codegen/app/runtime-gen'
+import { LocalDataBindings } from './codegen/codegen-util'
 import {
   compileStudioPreviewManifest,
   type StudioPreviewManifest,
@@ -37,6 +38,11 @@ import { compileTestPlan, type TaoTestPlan } from './tests-compiler'
 const codeProjectRoot = '/__tao__'
 const compiledSourceOutputPathMessage = 'compiled source output path exists'
 const dataCatalogBindingName = '_TaoDataCatalog'
+// `local only` entities live in a second emitted catalog with its own connection and storage key.
+// The compiler binds it to the stdlib Local provider, which the source never names, so the owner
+// module imports that provider as a sidecar exactly as a declared datasource would.
+const localProviderStdlibPath = '@tao/data/providers/local/Local.ts'
+const localProviderExportName = 'LocalProvider'
 
 /** CompiledFile declares one generated TypeScript output file. */
 export type CompiledFile = {
@@ -52,6 +58,10 @@ type ResolvedImports = {
 
 type DataCatalogPlan = {
   entities: readonly AST.EntityDataDeclaration[]
+  /** localOnly is whether any entity carries the `local only` storage fact, which adds a catalog. */
+  localOnly: boolean
+  /** localUserPaths are the files that reference the companion catalog's bindings. */
+  localUserPaths: ReadonlySet<string>
   ownerPath: string
   userPaths: ReadonlySet<string>
 }
@@ -231,8 +241,15 @@ function compileValidatedInput(
   )
   const identityProjects = declarationIdentityProjects(validationResult.files, context)
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
-  const outputPaths = planOutputPaths(sourceFiles, entryPath, context.sourceRoot)
   const dataCatalog = planDataCatalog(sourceFiles, entryPath)
+  const outputPaths = planOutputPaths(sourceFiles, entryPath, context.sourceRoot, {
+    localDataProvider: dataCatalog?.localOnly
+      ? {
+        ownerPath: dataCatalog.ownerPath,
+        sourcePath: FS.resolvePath(localProviderStdlibPath, context.packagesContext.stdlibRoot),
+      }
+      : undefined,
+  })
   const compiledFiles = sourceFiles.flatMap(file =>
     compileSourceFile(file, {
       dataCatalog,
@@ -261,10 +278,16 @@ function compileValidatedInput(
   }
 }
 
+/** PlanOutputPathsOptions carries sidecars the compiler owns rather than a source file naming them. */
+type PlanOutputPathsOptions = {
+  localDataProvider?: { ownerPath: string; sourcePath: string }
+}
+
 function planOutputPaths(
   sourceFiles: readonly ParsedFile[],
   entryPath: string,
   sourceRoot: string,
+  options: PlanOutputPathsOptions = {},
 ): PlannedOutputs {
   // Basename buckets in moduleOutputPath can collide across distinct sources;
   // suffix deterministically instead of silently overwriting generated files.
@@ -356,6 +379,14 @@ function planOutputPaths(
         Assert.defined(foreign, 'planned foreign action has a sidecar implementation')
         return planSidecar(action, foreign.path, action.name, foreignActionBindingName(action))
       }),
+      ...(options.localDataProvider?.ownerPath === file.path
+        ? [planSidecar(
+          file.ast,
+          options.localDataProvider.sourcePath,
+          localProviderExportName,
+          LocalDataBindings.provider,
+        )]
+        : []),
     ]
     bySourcePath.set(file.path, { injections, modulePath, declarationsPath, sidecars, sidecarCopies })
   }
@@ -390,6 +421,15 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   if (dataCatalog && !ownsDataCatalog && (dataCatalog.userPaths.has(file.path) || needsStudioDataCatalog)) {
     addResolvedImport(imports, dataCatalog.ownerPath, dataCatalogBindingName)
   }
+  // The companion bindings reach further than the synced catalog's: every app root binds them,
+  // including an app that configures no Datasource of its own. Both travel together, because a
+  // catalog user reads the local schema and an app root binds its datasource.
+  const usesLocalDataCatalog = dataCatalog?.localOnly === true
+    && (ownsDataCatalog || dataCatalog.localUserPaths.has(file.path))
+  if (usesLocalDataCatalog && !ownsDataCatalog) {
+    addResolvedImport(imports, dataCatalog.ownerPath, LocalDataBindings.catalog)
+    addResolvedImport(imports, dataCatalog.ownerPath, LocalDataBindings.datasource)
+  }
   const planned = outputPaths.bySourcePath.get(file.path)
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
   const importLines = [
@@ -419,6 +459,10 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     })
   if (ownsDataCatalog) {
     exportedBindings.push({ exported: dataCatalogBindingName, binding: dataCatalogBindingName })
+    if (dataCatalog.localOnly) {
+      exportedBindings.push({ exported: LocalDataBindings.catalog, binding: LocalDataBindings.catalog })
+      exportedBindings.push({ exported: LocalDataBindings.datasource, binding: LocalDataBindings.datasource })
+    }
   }
 
   const module: CompiledFile = {
@@ -435,6 +479,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
             dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
             emitDataCatalog: ownsDataCatalog,
             importLines,
+            localDataCatalog: usesLocalDataCatalog,
             scopeBindings,
             exportedBindings,
             selectedAppDatasourceConfiguration,
@@ -804,7 +849,16 @@ function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string):
     return undefined
   }
   const ownerPath = sourceFiles.find(file => file.ast.statements.some(AST.isEntityDataDeclaration))?.path ?? entryPath
-  return { entities, ownerPath, userPaths }
+  // Both catalogs are emitted by one owner file, so a project that mixes stores still has a single
+  // module every user imports from and a single sidecar copy of the local provider. An app root
+  // binds the companion catalog whether or not it configures a Datasource, so a file that declares
+  // an app is a companion user even when it never names the catalog itself.
+  const localUserPaths = new Set(
+    sourceFiles
+      .filter(file => fileUsesDataCatalog(file) || AST.appValueDeclarationsInFile(file.ast).length > 0)
+      .map(file => file.path),
+  )
+  return { entities, localOnly: entities.some(Type.dataEntityIsLocalOnly), localUserPaths, ownerPath, userPaths }
 }
 
 function fileUsesDataCatalog(file: ParsedFile): boolean {

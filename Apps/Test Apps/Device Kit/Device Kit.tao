@@ -10,7 +10,7 @@ app DeviceKit {
       Initial MainView
 }  }
 
-view MainView() {
+scene MainView() {
    Title "Device Kit"
    state Feedback = Haptic()
    state Pasteboard = Clipboard()

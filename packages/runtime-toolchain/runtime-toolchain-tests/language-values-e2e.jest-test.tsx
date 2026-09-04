@@ -163,7 +163,7 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        workspace view Home(Title text default "Welcome home") {
+        workspace scene Home(Title text default "Welcome home") {
           Title Title
           render Text(Title)
         }
@@ -316,7 +316,7 @@ Describe('Expo runtime', () => {
 
         let Basic = Profile { Name: "Ada" }
 
-        view Home() {
+        scene Home() {
           Title "Home"
           render Stack() {
             Text("Mounted reusable app")

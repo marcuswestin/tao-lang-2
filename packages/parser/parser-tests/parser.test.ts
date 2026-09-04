@@ -18,7 +18,7 @@ Describe('parser: core language syntax', () => {
           Initial Root(Expanded: Expanded, ChangeExpanded: ChangeExpanded)
         }
       }
-      view Root(Expanded list of text, ChangeExpanded action(list of text)) {
+      scene Root(Expanded list of text, ChangeExpanded action(list of text)) {
         Title "Root"
         render Empty()
       }
@@ -98,8 +98,8 @@ Describe('parser: core language syntax', () => {
     const [_localAlias, firstChild, secondChild] = AST.statementsOf(render.block)
     Expect.Is(firstChild, AST.isViewRender)
     Expect.Is(secondChild, AST.isViewRender)
-    Expect(firstChild.view.ref?.name).toBe('Text')
-    Expect(secondChild.view.ref?.name).toBe('Text')
+    Expect(firstChild.view.$refText).toBe('Text')
+    Expect(secondChild.view.$refText).toBe('Text')
   })
 
   Test('parses named and inline control events with a scoped change payload', async () => {
@@ -466,7 +466,7 @@ Describe('parser: core language syntax', () => {
       Expect.Is(loop, AST.isForStatement)
       Expect(loop.name).toBe('Row')
       Expect(AST.attachedTag(loop)?.tag).toBe('#rows')
-      Expect(AST.testTagForRender(AST.taggedLoopRowRoot(loop)!)).toBe('rows')
+      Expect(AST.testTagForRender(AST.loopRowRoot(loop)!)).toBe('rows')
 
       const check = AST.streamAllContents(parseResult.entry.ast)
         .filter(AST.isTestDeclaration)
@@ -573,6 +573,43 @@ Describe('parser: core language syntax', () => {
     Expect.Is(loop, AST.isForStatement)
     Expect(loop.name).toBe('Draft')
     Expect(Type.ofValueDeclaration(loop).kind).toBe('entity')
+  })
+
+  Test('parses local only and keeps a module query only as a diagnostic-recovery statement', async () => {
+    const parseResult = await testParseSyntax(`
+      data Notes / Note {
+        Title text
+
+        order by Title
+      }
+      data FocusSessions / FocusSession {
+        Label text
+
+        index Label
+        local only
+      }
+      query FocusSessions as CurrentSession {
+        limit 1
+      }
+      view Board() {
+        query Notes { }
+        render Text(Notes.Count)
+      }
+      view Text(Value number) { render inject \`\`\`ts return null \`\`\` }
+    `)
+
+    Expect(parseResult.diagnostics).toEqual([])
+    const entities = parseResult.entry.ast.statements.filter(AST.isEntityDataDeclaration)
+    Expect(entities.map(entity => entity.block.entries.some(AST.isDataLocalOnly))).toEqual([false, true])
+    const moduleQuery = parseResult.entry.ast.statements.find(AST.isEntityQueryDeclaration)
+    Expect.Is(moduleQuery, AST.isEntityQueryDeclaration)
+    Expect(moduleQuery.name).toBe('CurrentSession')
+    Expect(Type.queryEntity(moduleQuery)?.singularName).toBe('FocusSession')
+    Expect(AST.isDeclaration(moduleQuery)).toBe(false)
+    Expect(AST.isTopLevelStatement(moduleQuery)).toBe(false)
+    Expect(AST.isExportableDeclaration(moduleQuery)).toBe(false)
+    Expect(AST.isEmittingRuntimeBinding(moduleQuery)).toBe(false)
+    Expect(AST.isImportableValueDeclaration(moduleQuery)).toBe(false)
   })
 
   Test('parses configured apps, view declarations, and contextual presentation', async () => {

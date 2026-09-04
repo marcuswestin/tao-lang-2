@@ -38,7 +38,7 @@ Describe('parser: decided dialect', () => {
     parses(`
       type Course is one of Breakfast, Lunch, Dinner
       data Recipes / Recipe {
-        Title text (required "Name this recipe", unique, search)
+        Title text (required "Name this recipe", unique, search, title)
         Servings number (default 4)
         ChangedAt time (default now, touch on change)
         Course (default Dinner)

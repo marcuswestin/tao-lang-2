@@ -54,6 +54,16 @@ import {
   warnDesignDivergence,
 } from './TR-errors'
 import { createHaptic, type TaoHapticKinds, type TaoHaptics } from './TR-haptic'
+import type { RuntimeCommand } from './TR-interaction'
+import { CommandCatalog, InteractionControls, type TaoCommandTable } from './TR-interaction-catalog'
+import {
+  OutlineScope,
+  type TaoOutlineLoopNode,
+  type TaoOutlineNode,
+  type TaoOutlineSnapshot,
+  useOutlineCollection,
+  useOutlineItem,
+} from './TR-interaction-outline'
 import { LayoutControls } from './TR-layout'
 import { NativeHosts } from './TR-native-hosts'
 import { NativeModules } from './TR-native-modules'
@@ -61,7 +71,6 @@ import {
   NavigationControls,
   NavKindControls,
   type RuntimeHostReadChannel,
-  type RuntimeNavigationCommand,
   type TaoAppDefinition,
   type TaoNavDeclaration,
   type TaoNavDescriptor,
@@ -260,40 +269,45 @@ class TR {
     return fn.invoke(...args) as TR.Value<T>
   }
 
-  /** ForEach renders a stable fragment for each list value. */
+  /**
+   * ForEach renders a stable fragment for each list value. The frame is the loop's diagnostics
+   * frame, and it carries the loop's outline descriptor beside its source: the collection registers
+   * itself for as long as the loop renders, and every row registers as its item.
+   */
   static ForEach(
     collection: TR.Evaluable,
     render: (value: TR.Value<any>, index: number) => React.ReactNode,
     select?: (value: TR.Value<any>, index: number) => unknown,
-    frame?: Omit<TaoRuntimeFailureFrame, 'arguments' | 'boundary'>,
+    frame?: Omit<TaoRuntimeFailureFrame, 'arguments' | 'boundary'> & { interaction?: TaoOutlineLoopNode },
   ): React.ReactNode {
     const values = collection.evaluate().jsValue
     if (!Array.isArray(values)) {
       return null
     }
-    return values.map((value, index) => {
+    const { interaction: descriptor, ...diagnosticsFrame } = frame ?? {}
+    const items = values.map((value, index) => {
       const runtimeValue = new RuntimeValue(value)
+      const itemKey = stableListKey(value, index)
       let capturedArguments: TaoRuntimeJson | undefined
       const diagnosticsArguments = () => capturedArguments ??= captureArguments({ index, value })
       return React.createElement(
         TaoErrorBoundary,
         {
-          boundaryId: `item:${frame?.source?.path ?? 'unknown'}:${frame?.source?.start ?? 0}:${
-            String(stableListKey(value, index))
-          }`,
-          frame: () => ({ ...frame, arguments: diagnosticsArguments(), boundary: 'item' as const }),
-          key: stableListKey(value, index),
+          boundaryId: `item:${frame?.source?.path ?? 'unknown'}:${frame?.source?.start ?? 0}:${String(itemKey)}`,
+          frame: () => ({ ...diagnosticsFrame, arguments: diagnosticsArguments(), boundary: 'item' as const }),
+          key: itemKey,
           stateKey: () => JSON.stringify(diagnosticsArguments()),
         },
-        React.createElement(ForEachItem, { index, render, runtimeValue, select }),
+        React.createElement(ForEachItem, { descriptor, index, itemKey, render, runtimeValue, select }),
       )
     })
+    return React.createElement(ForEachCollection, { descriptor, items })
   }
 
   /** Action creates runtime Tao actions from generated callbacks. */
   static Action<Args extends any[]>(
     body: (...args: Args) => unknown,
-    metadata: RuntimeActionMetadata<Args> = {},
+    metadata: RuntimeActionMetadata = {},
   ): TR.Action<Args> {
     return new RuntimeAction(body, metadata)
   }
@@ -339,24 +353,6 @@ class TR {
     )
   }
 
-  /** ActionTitle evaluates an intent's reactive Title for one bound command invocation. */
-  static ActionTitle<Args extends any[]>(action: TR.Action<Args>, arguments_: Args): TR.Evaluable | undefined {
-    return runtimeActionMetadata.get(action)?.title?.(...arguments_)
-  }
-
-  /** ActionDescription evaluates an intent's explanatory metadata for one invocation. */
-  static ActionDescription<Args extends any[]>(
-    action: TR.Action<Args>,
-    arguments_: Args,
-  ): TR.Evaluable | undefined {
-    return runtimeActionMetadata.get(action)?.description?.(...arguments_)
-  }
-
-  /** ActionSummary evaluates an intent's parameter sentence for one invocation. */
-  static ActionSummary<Args extends any[]>(action: TR.Action<Args>, arguments_: Args): TR.Evaluable | undefined {
-    return runtimeActionMetadata.get(action)?.summary?.(...arguments_)
-  }
-
   /** BridgedAction adapts an explicitly action-typed TypeScript export at the ordinary from boundary. */
   static BridgedAction<Args extends TR.Evaluable[]>(
     implementation: (...arguments_: any[]) => unknown,
@@ -397,8 +393,14 @@ class TR {
     )
   }
 
-  /** Do invokes a Tao action value with already-compiled runtime arguments. */
-  static Do<Args extends any[]>(action: TR.Action<Args>, ...args: Args): void | Promise<void> {
+  /**
+   * Do runs one verb inside the caller's transaction: a Tao action with its compiled arguments, or
+   * a command value that already carries the slots it needs.
+   */
+  static Do<Args extends any[]>(
+    action: { evaluate(): { jsValue: { invokeJoined(...args: Args): void | Promise<void> } } },
+    ...args: Args
+  ): void | Promise<void> {
     return action.evaluate().jsValue.invokeJoined(...args)
   }
 
@@ -558,6 +560,7 @@ class TR {
     inheritCallerProps = true,
   ): TR.TaoProps {
     const props = { ...localProps, viewDepth: (callerProps?.viewDepth ?? 1) + 1 }
+    TRTaoProps.TaoPropsControls.inheritInteractionOwner(props, callerProps)
     return inheritCallerProps ? TR.TaoProps(props, callerProps) : props
   }
 
@@ -656,6 +659,9 @@ class TR {
 
   /** Layout exposes deterministic runtime lowering for Tao layout clauses. */
   static readonly Layout = LayoutControls
+
+  /** Interaction exposes command values and the catalog of the verbs a module publishes. */
+  static readonly Interaction = InteractionControls
 
   /** Navigation exposes deterministic stack history, presentation, and back behavior. */
   static readonly Navigation = NavigationControls
@@ -804,27 +810,21 @@ class LatestActionInvocations<Args extends any[]> {
   }
 }
 
-type RuntimeActionMetadata<Args extends any[] = any[]> = {
-  description?: (...args: Args) => TR.Evaluable
-  summary?: (...args: Args) => TR.Evaluable
-  title?: (...args: Args) => TR.Evaluable
+type RuntimeActionMetadata = {
   name?: string
   /** interrupt is compiler-owned and marks a response action that may settle its suspended ask. */
   interrupt?: boolean
 }
-
-const runtimeActionMetadata = new WeakMap<object, RuntimeActionMetadata>()
 
 class RuntimeAction<Args extends any[] = any[]> {
   readonly jsValue: RuntimeActionValue<Args>
 
   constructor(
     body: (...args: Args) => unknown,
-    metadata: RuntimeActionMetadata<Args> = {},
+    metadata: RuntimeActionMetadata = {},
     runs?: 'latest',
   ) {
     this.jsValue = new RuntimeActionValue(body, metadata.name ?? 'action', runs, metadata.interrupt)
-    runtimeActionMetadata.set(this, metadata)
   }
 
   evaluate(): RuntimeAction<Args> {
@@ -881,16 +881,45 @@ function stableListKey(value: unknown, index: number): string | number {
   return index
 }
 
+/** ForEachCollection registers the loop as one outline collection and hangs its rows under it. */
+function ForEachCollection(props: {
+  descriptor: TaoOutlineLoopNode | undefined
+  items: readonly React.ReactNode[]
+}): React.ReactNode {
+  const identity = useOutlineCollection(props.descriptor)
+  return React.createElement(OutlineScope, { identity }, props.items)
+}
+
+/**
+ * ForEachItem exists for every row, selectable or not, so registration hangs here: the row joins
+ * the outline as an item, and its derived label reaches the platform through the press surface of
+ * a selectable row or, for any other row with one root, through that root's Tao props.
+ */
 function ForEachItem(props: {
+  descriptor: TaoOutlineLoopNode | undefined
   index: number
+  itemKey: number | string
   render(value: TR.Value<any>, index: number): React.ReactNode
   runtimeValue: TR.Value<any>
   select?: (value: TR.Value<any>, index: number) => unknown
 }): React.ReactNode {
+  const outline = useOutlineItem(
+    props.descriptor,
+    props.runtimeValue,
+    props.itemKey,
+    props.index,
+    props.select === undefined ? undefined : () => props.select!(props.runtimeValue, props.index),
+  )
   const content = props.render(props.runtimeValue, props.index)
-  return props.select
-    ? React.createElement(SelectableRow, { onSelect: () => props.select!(props.runtimeValue, props.index) }, content)
+  const row = props.select
+    ? React.createElement(SelectableRow, {
+      ...(outline.label === undefined ? {} : { accessibilityLabel: outline.label }),
+      capabilities: outline.capabilities,
+      ...(outline.identity === undefined ? {} : { identity: outline.identity }),
+      onSelect: () => props.select!(props.runtimeValue, props.index),
+    }, content)
     : content
+  return React.createElement(OutlineScope, { identity: outline.identity }, row)
 }
 
 namespace TR {
@@ -962,6 +991,10 @@ namespace TR {
   export type Scope = Record<string, any>
   /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
   export type TaoProps = TRTaoProps.TaoProps
+  /** OutlineNode is one mounted interaction outline node as a reader sees it. */
+  export type OutlineNode = TaoOutlineNode
+  /** OutlineSnapshot is the interaction outline as it is at one read. */
+  export type OutlineSnapshot = TaoOutlineSnapshot
   /** TaoStudioIdentity locates one concrete render occurrence in Tao source. */
   export type TaoStudioIdentity = TRTaoProps.TaoStudioIdentity
   /** StudioPreviewConfig identifies and secures one generated Studio preview bridge. */
@@ -1055,8 +1088,14 @@ namespace TR {
   export type NavigationValue = TaoNavigationValue
   /** HostReadChannel is the occurrence-local direct-view chrome publication channel. */
   export type HostReadChannel = RuntimeHostReadChannel
-  /** NavigationCommand is one occurrence-bound toolbar intent. */
-  export type NavigationCommand = RuntimeNavigationCommand
+  /** Command is one declared verb, bound or still awaiting its slots. */
+  export type Command = RuntimeCommand
+  /** CommandValue is the generated-code type of a Tao value of primitive `command`. */
+  export type CommandValue = RuntimeCommand
+  /** CommandTable is one module's emitted command catalog entry set. */
+  export type CommandTable = TaoCommandTable
+  /** Catalog is the registry of every command the running app published. */
+  export type Catalog = CommandCatalog
   /** NavHostSlotConfiguration is the normalized host-read slot payload for a nav occurrence. */
   export type NavHostSlotConfiguration = TaoNavHostSlotConfiguration
   /** Presentable declares a first-class Tao ui descriptor. */

@@ -9,7 +9,7 @@ app NativeComponents {
 
 // Every control here resolves through @tao/ui's pass-through aliases to a platform-native
 // implementation, and reports its value the same way whichever implementation is bound.
-view MainView() {
+scene MainView() {
    Title "Native Components"
    state Count = 0
    state Enabled = false

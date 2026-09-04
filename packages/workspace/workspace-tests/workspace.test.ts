@@ -25,7 +25,7 @@ Describe('directory-rooted Tao workspace pipeline', () => {
         `,
         'Packages/@cards/screens/Main.tao': `
           use Title
-          workspace view MainView() {
+          workspace scene MainView() {
             render Text(Title)
           }
           view Text(Value text) {

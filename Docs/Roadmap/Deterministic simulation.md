@@ -155,7 +155,7 @@ Nothing here asks the developer to learn QuickCheck. The inputs exist:
   `together` — every one narrows the generator. The substrate is the fixture plan: a generated
   world is generated rows through the same codec that named fixtures and captures use. (The AI
   direction already claims this: "the fixture generator _is_ the `makeSamples` analog.")
-- **The fuzzer's alphabet comes from the intent surface.** Titled actions with typed parameters
+- **The fuzzer's alphabet comes from the command catalog.** Titled commands with typed slots
   are a closed vocabulary; access rules bound who may invoke what; `as <account>` steps switch
   actors. A random journey is a random word over that alphabet — well-typed by construction.
 - **Invariants come from declarations.** Candidate derived properties, each checked after every
@@ -164,7 +164,7 @@ Nothing here asks the developer to learn QuickCheck. The inputs exist:
     gaps, especially at provider boundaries);
   - every `refuse when` and access rule refuses exactly what it declares (probe with `as`);
   - **atomicity**: under any injected write fault, no partial transaction is observable;
-  - **undo round-trip**: for any store-only intent, do → undo restores the exact snapshot (the
+  - **undo round-trip**: for any store-only command, do → undo restores the exact snapshot (the
     derived-inverse model makes this checkable with zero developer input);
   - **convergence**: two collaborators, any interleaving, `fieldwise latest` → identical final
     stores;
@@ -207,7 +207,7 @@ human judgement stays gallery-annotated, not red.
 
 - **Enumerate the effect surface.** In React, effects are unbounded userland (`useEffect`,
   `fetch`, third-party stores); no tool can list an app's holes. In Tao, time, queries, writes,
-  intents, generations, and datasources are language constructs, and foreign code is a declared
+  commands, generations, and datasources are language constructs, and foreign code is a declared
   import. The simulation fence has a parts list.
 - **Own the store.** React apps have N stores with no common snapshot codec; Swift apps have Core
   Data/SwiftData plus ad-hoc state. Tao's store is language-owned with an exact versioned codec —
@@ -215,7 +215,8 @@ human judgement stays gallery-annotated, not red.
 - **Derive the oracles.** `validate`/`required`/`refuse`/access/`runs`/derived-undo are declared
   semantics, so properties cost nothing. Swift's closest analog bolts `@Generable` onto structs;
   nothing derives invariants from it.
-- **Close the interaction alphabet.** Selectors and titled intents bound what "a user action" is;
+- **Close the interaction alphabet.** The interaction outline, selectors, and titled commands bound
+  what "a user action" is;
   a fuzzer over a React DOM has no such vocabulary.
 - **Make determinism a diagnostic.** Because the boundary is checkable, "this app is fully
   simulable" is a compiler-verifiable claim — per app, in CI. Neither platform can even state it.

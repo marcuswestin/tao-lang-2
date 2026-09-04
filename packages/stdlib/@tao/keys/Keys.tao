@@ -1,0 +1,8 @@
+// The registered shortcut modifiers. A Tao shortcut names `primary`, never a platform key: the host
+// maps `primary` to whichever chord key the platform it runs on already uses, so one authored
+// shortcut is correct on every one of them.
+//
+// A shortcut reads as its modifiers followed by one key, which is why the modifier carries its own
+// separator: `primary + "n"` is the shortcut `primary+n`, and a bare `"s"` is the key on its own.
+public
+let primary is shortcut = "primary+"

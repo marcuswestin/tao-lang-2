@@ -30,7 +30,9 @@ Describe('Tao dev app discovery and selection', () => {
       )
       await FS.writeText(
         FS.resolvePath('Test Apps/Data MVP/Data MVP.test.tao', root),
-        'test "ignored" { }',
+        `app TestOnly { view MainView }
+         test "ignored" { }
+         ${viewSource}`,
       )
 
       const projects = await discoverTaoDevProjects(root)

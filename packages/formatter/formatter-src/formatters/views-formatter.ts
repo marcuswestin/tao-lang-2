@@ -3,6 +3,11 @@ import type { FormatHandlers, NodeFormat } from '../formatting'
 
 export default {
   TagStatement() {},
+
+  ViewCommandExclusion(f) {
+    f.oneSpaceAfter('hide')
+    f.commaSpacedList()
+  },
   /** ViewDeclaration formats a `view Name parameters` header with its optional responds clause. */
   ViewDeclaration: ViewDeclaration,
 
@@ -59,7 +64,8 @@ export default {
 
   /** LayoutCondition formats the narrow postfix design condition as one readable clause. */
   LayoutCondition(f) {
-    f.oneSpaceAround('when', 'is')
+    f.oneSpaceAfter('when', 'is')
+    f.oneSpaceBefore('when', 'is')
   },
 
   /** LayoutWord is a single token with no interior formatting. */
@@ -74,7 +80,7 @@ export default {
 
 function ViewDeclaration(f: NodeFormat<AST.ViewDeclaration>): void {
   f.visibilityOnOwnLine()
-  f.oneSpaceAfter('view')
+  f.oneSpaceAfter('view', 'scene')
   f.noSpaceBefore('(')
   f.oneSpaceBefore('responds')
   f.oneSpaceAfter('responds')

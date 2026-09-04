@@ -1,5 +1,5 @@
-use Documents, Workspaces from @data
-use WorkspaceNav from @nav
+use Documents, Duplicate, Finish, Workspaces from @data
+use SlotNav from @tao/nav
 use Join from @tao/text
 use Col, Image, Panes, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
@@ -10,6 +10,11 @@ type PromptTitle is text
 type PromptMinutes is number
 
 type PromptTags is list of text
+
+workspace
+nav WorkspaceNav = SlotNav {
+   Initial WorkspaceChooser
+}
 
 // Primitive-rooted types remain scalar values and may not add supplied per-value fields that change
 // the primitive representation.
@@ -23,7 +28,7 @@ type WritingPrompt is {
 // The workspace area. Every renderable declaration is a `view`; whether one composes inline in a
 // render tree or enters the presentation tree is decided at each use site, never on the head.
 workspace
-view WorkspaceList() {
+scene WorkspaceList() {
    Title "WordFlower"
    state WorkspaceName = ""
    query Workspaces { }
@@ -89,6 +94,7 @@ view WorkspaceList() {
                #workspaces
                loop Workspaces / Workspace {
                   WorkspaceRow(Workspace)
+                  on select -> { present WorkspaceDetail(Workspace) }
 }  }  }  }  }  }
 
 // Presented above the nearest nav; overlays stack above content and are dismissible.
@@ -102,7 +108,7 @@ view WorkspaceNameNotice() {
          on press -> { dismiss }
 }  }  }
 
-view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named entity type
+scene WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named entity type
    Title Workspace.Name
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
@@ -113,14 +119,18 @@ view WorkspaceDetail(Workspace) { // a bare parameter name binds the same-named 
       where is Final
    }
    action SaveWorkspace() {
-      Title "Save workspace"
       guard WorkspaceNameDraft empty
       update Workspace {
          Name: WorkspaceNameDraft
    }  }
-   command Save = SaveWorkspace() with {
+   // A command is the discoverable verb and the action is the private procedure behind it, so the
+   // name a person reads lives on the command. This one is declared in the scene because it reads
+   // and resets that scene's own state, exactly as an `action` may.
+   command Save() {
+      Title "Save workspace"
       Icon "checkmark"
       Enabled WorkspaceNameDraft is not empty
+      do SaveWorkspace()
    }
    Toolbar { Save }
    action AddDocument() {
@@ -282,6 +292,8 @@ view WorkspaceRow(Workspace) {
 
 // One unfinished document: open it, finish it, or discard it.
 view DraftRow(Document) {
+   Commands { Finish }
+   hide Duplicate
    render Col() [card] {
       Text(Document.Title) [sectionTitle]
 
@@ -292,9 +304,10 @@ view DraftRow(Document) {
 
       #finish
       FormButton("Finish document") [buttonSecondary] {
-         on press -> { update Document {
-            Final
-         } } // boolean cases are written by name
+         // Invoking a command reads like invoking an action, so the row and any other surface that
+         // offers Finish run one declared verb rather than two copies of
+         // the write.
+         on press -> { do Finish(Document) }
       }
 
       #delete
@@ -304,6 +317,8 @@ view DraftRow(Document) {
 
 // One finished document: reopen it or discard it.
 view FinishedRow(Document) {
+   Commands { Duplicate }
+   hide Finish
    render Col() [card] {
       Text(Document.Title) [sectionTitle]
 

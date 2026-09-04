@@ -95,7 +95,7 @@ an entry here may link one when the developer workflow is also affected.
 
 - **Status:** Resolved
 - **Area:** Verification lanes
-- **Impact:** A managed shell cannot run the five Studio host lanes, but duplicating gate lists would
+- **Impact:** A managed shell cannot run the six browser and native UI host lanes, but duplicating gate lists would
   drift and could overstate coverage.
 - **Evidence:** Browser/native Studio gates require host capabilities denied by the managed sandbox;
   all other full-verification gates were measured as compatible.
@@ -103,7 +103,7 @@ an entry here may link one when the developer workflow is also affected.
 - **Proposed change:** Add gate-owned unsandboxed metadata and one shared full-verification membership
   used by both `full-verify` and `full-verify-sandbox`.
 - **Dependencies:** Implemented by `feat/verification-lanes` commit `f5705e9f`.
-- **Acceptance:** The sandbox lane passes, names exactly five skips, omits dependency installation, and
+- **Acceptance:** The sandbox lane passes, names exactly six skips, omits dependency installation, and
   never claims full verification passed.
 - **Source:** 2026-09-03 verification-lanes brief.
 
@@ -599,7 +599,7 @@ an entry here may link one when the developer workflow is also affected.
 - **Proposed change:** Preserve `_test`'s 12-worker budget, launch `_test` and `_typecheck` before
   auxiliary readers, remove the obsolete Studio-first priority, and account each mostly-waiting
   Studio smoke as one slot while retaining native `gui` exclusion and machine-wide admission.
-- **Dependencies:** Implemented on `feat/verification-lanes`; the five Studio lanes still require an
+- **Dependencies:** Implemented on `feat/verification-lanes`; the six browser and native UI lanes still require an
   unsandboxed terminal for final timing evidence.
 - **Acceptance:** Focused scheduler tests prove package-first admission and three concurrent Studio
   waits beside package work; `./agent verify` remains green; an uncontended normal-terminal

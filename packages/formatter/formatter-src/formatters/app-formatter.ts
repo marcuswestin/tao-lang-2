@@ -18,9 +18,12 @@ export default {
     f.oneSpaceBeforeProperty('value')
   },
 
-  /** AppView formats the `view MainView` entry-view statement. */
+  /** AppView formats the `view Shell(Navigator)` root-view statement and its bound arguments. */
   AppView(f) {
     f.oneSpaceAfter('view')
+    f.noSpaceBefore('(')
+    f.noSpaceAfter('(')
+    f.noSpaceBefore(')')
   },
 
   /** AppProperty formats any Prelude-owned app supplied slot generically. */

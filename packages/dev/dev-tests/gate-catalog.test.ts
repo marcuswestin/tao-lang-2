@@ -86,6 +86,7 @@ Describe('gate catalog metadata', () => {
     Expect(nodeOf('_ide-extension-build').needs).toEqual(['_parser-gen'])
     Expect(nodeOf('_fix-tao').needs).toEqual(['_parser-gen'])
     Expect(nodeOf('_full-verify-simulated').needs).toEqual(['_parser-gen'])
+    Expect(nodeOf('_full-verify-keyboard-navigation').needs).toEqual(['_parser-gen'])
   })
 
   Test('waits for the compiled WordFlower app before the test lane runs', () => {
@@ -141,6 +142,7 @@ Describe('gate catalog metadata', () => {
         '_full-verify-smoke-launch',
         '_full-verify-real-app',
         '_full-verify-simulated',
+        '_full-verify-keyboard-navigation',
         '_full-verify-native',
         '_full-verify-canary',
       ]
@@ -158,13 +160,15 @@ Describe('gate catalog metadata', () => {
     Expect(nodeOf('_full-verify-smoke-launch').resources).toBeUndefined()
     Expect(nodeOf('_full-verify-real-app').resources).toBeUndefined()
     Expect(nodeOf('_full-verify-simulated').resources).toBeUndefined()
+    Expect(nodeOf('_full-verify-keyboard-navigation').resources).toBeUndefined()
   })
 
-  Test('marks exactly the five Studio lanes as requiring an unsandboxed host', () => {
+  Test('marks exactly the six browser and native UI lanes as requiring an unsandboxed host', () => {
     const studioLanes = [
       '_full-verify-smoke-launch',
       '_full-verify-real-app',
       '_full-verify-simulated',
+      '_full-verify-keyboard-navigation',
       '_full-verify-native',
       '_full-verify-canary',
     ]

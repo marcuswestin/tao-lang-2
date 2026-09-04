@@ -1,6 +1,6 @@
-import { Describe, Test } from '@shared/test'
+import { Describe, Expect, Test } from '@shared/test'
 import { ViewsValidator } from '../validator-src/validators/views-validator'
-import { accepts, app, rejects, stubContainer, stubView } from './test-validate'
+import { accepts, app, rejects, stubContainer, stubView, testValidateCode } from './test-validate'
 
 const renderables = `${stubContainer('Stack')}${stubView('Text', 'Value text')}`
 
@@ -18,6 +18,37 @@ function selectableApp(loopBody: string, setup = ''): string {
 }
 
 Describe('validator: selectable loops', () => {
+  Test('hints that a multi-root row carries no accessibility label, and only such a row', async () => {
+    const result = await testValidateCode(`
+      use Col, Text from @tao/ui
+      app MyApp { view MainView }
+      view MainView() {
+        state Selected = ""
+        render Col() {
+          loop ["One"] / Row {
+            Text(Row)
+            Text(Row)
+          }
+          loop ["Two"] / Row {
+            Col() { Text(Row) }
+          }
+          loop ["Three"] / Row {
+            Text(Row)
+            Text(Row)
+            on select -> { set Selected = Row }
+          }
+          loop ["Four"] / Row {
+            Text("Static")
+            Text("Static")
+          }
+        }
+      }
+    `)
+    const hints = result.diagnostics.filter(diagnostic => diagnostic.severity === 'hint')
+
+    Expect(hints.map(hint => hint.message)).toEqual([ViewsValidator.messages.loopRowLabel])
+  })
+
   Test(
     'allows one inline direct handler to reference the singular row binding',
     accepts(selectableApp(`

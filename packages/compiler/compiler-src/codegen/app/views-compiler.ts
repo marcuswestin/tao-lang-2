@@ -126,6 +126,11 @@ export const ViewsCompiler = {
       ? gen.noop()
       : gen`{_ViewProps.__taoSlots?.[${gen.jsLiteral(use.slot.$refText)}] ?? null}`
   },
+
+  /** ViewCommandExclusion is compile-time surface metadata emitted by its owning view. */
+  ViewCommandExclusion(): Compiled {
+    return gen.noop()
+  },
 } as const
 
 function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOptions = {}): Compiled {
@@ -142,7 +147,12 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
   const renderIndex = statements.findIndex(AST.isRenderStatement)
   const setupStatements = renderIndex < 0 ? statements : statements.slice(0, renderIndex)
   const renderStatements = renderIndex < 0 ? [] : statements.slice(renderIndex)
-  const hostSlotFills = AST.declarationSlotFillsOf(renderable)
+  const commands = AST.commandsOf(renderable)
+  const commandTable = commands.length === 0
+    ? gen.noop()
+    : gen`TR.Interaction.UseCommands(${Compile.CommandTable(commands)})`
+  const commandSurface = compileCommandSurface(renderable)
+  const hostSlotFills = AST.declarationSlotFillsOf(renderable).filter(fill => fill.name !== 'Commands')
   const hostSlots = hostSlotFills.length > 0
     ? gen`TR.Navigation.UseHostSlots(_ViewProps.__taoHost, {
       ${gen.list(hostSlotFills, compileHostSlotFill)}
@@ -151,14 +161,34 @@ function ViewDeclaration(renderable: AST.ViewDeclaration, options: CodegenOption
   return gen`
     ${gen.scopeName(renderable)} = function ${gen.Name(renderable)}(_ViewProps: ${parameterList}) {
       TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(renderable.name)})
+      TR.Interaction.UseOccurrence(_ViewProps.__tao)
       return TR.BlockScope(_Scope, _Scope => {
         ${gen.list(AST.parametersOf(renderable), Compile.ViewParameterBinding)}
         ${gen.list(setupStatements, statement => Compile.Statement(statement, options))}
+        ${commandTable}
+        ${commandSurface}
         ${hostSlots}
         ${gen.list(renderStatements, statement => Compile.Statement(statement, options))}
       })
     }
   `
+}
+
+/** A view surface publishes promoted bound commands and explicit exclusions for this occurrence. */
+function compileCommandSurface(view: AST.ViewDeclaration): Compiled {
+  const promoted = AST.declarationSlotFillNamed(view, 'Commands')?.block?.references
+    .map(reference => reference.ref)
+    .filter(AST.isCommandDeclaration) ?? []
+  const hidden = AST.viewCommandExclusionsOf(view)
+    .flatMap(exclusion => exclusion.commands.map(reference => reference.ref).filter(AST.isCommandDeclaration))
+  if (promoted.length === 0 && hidden.length === 0) {
+    return gen.noop()
+  }
+  return gen`TR.Interaction.UseCommandSurface({
+    identity: ${compileDeclarationIdentity(view)}.canonical,
+    commands: [${gen.join(promoted, command => compileMentionedCommand(command, view))}],
+    hidden: [${gen.join(hidden, command => gen`${compileDeclarationIdentity(command)}.canonical`)}],
+  })`
 }
 
 /** A foreign component owns its native root, including applying Layout/Tag and placing content once. */
@@ -168,6 +198,7 @@ function compileForeignView(view: AST.ViewDeclaration): Compiled {
   return gen`
     ${gen.scopeName(view)} = function ${gen.Name(view)}(_ViewProps: ${parameterList}) {
       TR.AssertViewDepth(_ViewProps.__tao, ${gen.jsLiteral(view.name)})
+      TR.Interaction.UseOccurrence(_ViewProps.__tao)
       return TR.BlockScope(_Scope, _Scope => {
         ${gen.list(AST.parametersOf(view), Compile.ViewParameterBinding)}
         return <${gen.Name(implementation)}
@@ -193,10 +224,31 @@ function compileHostSlotFill(fill: AST.DeclarationSlotFill): Compiled {
   if (fill.value) {
     return gen`${gen.jsLiteral(fill.name)}: () => ${Compile.Expression(fill.value)},`
   }
+  const owner = AST.findOwningView(fill)
   const references = fill.block?.references
     .map(reference => reference.ref)
     .filter(AST.isCommandDeclaration) ?? []
   return gen`${gen.jsLiteral(fill.name)}: () => [
-    ${gen.join(references, reference => gen`${gen.scopeName(reference)}`)}
+    ${gen.join(references, reference => compileMentionedCommand(reference, owner))}
   ],`
+}
+
+/**
+ * A mention names the verb; the surface supplies the noun. Each slot the presenting declaration can
+ * fill by type is bound here, so the toolbar carries a command that is ready to invoke.
+ */
+function compileMentionedCommand(
+  command: AST.CommandDeclaration,
+  owner: AST.ViewDeclaration | undefined,
+): Compiled {
+  const fills = owner ? ASTUtils.mentionFills(command, owner).fills : undefined
+  if (!fills || fills.size === 0) {
+    return gen`${gen.scopeName(command)}`
+  }
+  return gen`TR.Interaction.Bind(${gen.scopeName(command)}, {
+    ${
+    gen.list([...fills], ([slot, parameter]) =>
+      gen`${gen.jsLiteral(slot)}: ${gen.scopeName({ name: Type.parameterName(parameter) })},`)
+  }
+  })`
 }

@@ -25,6 +25,14 @@ Describe('TR.Value', () => {
   })
 })
 
+Describe('TR generated-code surface', () => {
+  Test('retires generic deferred values and module queries without retiring deferred commands', () => {
+    Expect('Deferred' in (TR as unknown as Record<string, unknown>)).toBe(false)
+    Expect('ModuleQuery' in (TR.Data as unknown as Record<string, unknown>)).toBe(false)
+    Expect('Deferred' in TR.Interaction).toBe(true)
+  })
+})
+
 Describe('TR.Alias', () => {
   Test('wraps evaluable Tao values as aliases', () => {
     const value: TR.Value<number> = TR.Value(3)
@@ -79,19 +87,6 @@ Describe('TR.Action', () => {
 
     Expect(calls).toEqual([3])
     Expect(completion).toBeUndefined()
-  })
-
-  Test('preserves reactive intent metadata for one bound invocation', () => {
-    const action = TR.Action((_name: TR.Value<string>) => undefined, {
-      description: name => TR.Value(`Describe ${name.jsValue}`),
-      summary: name => TR.Value(`Summarize ${name.jsValue}`),
-      title: name => TR.Value(`Title ${name.jsValue}`),
-    })
-    const arguments_: [TR.Value<string>] = [TR.Value('draft')]
-
-    Expect(TR.ActionTitle(action, arguments_)?.evaluate().jsValue).toBe('Title draft')
-    Expect(TR.ActionDescription(action, arguments_)?.evaluate().jsValue).toBe('Describe draft')
-    Expect(TR.ActionSummary(action, arguments_)?.evaluate().jsValue).toBe('Summarize draft')
   })
 
   Test('unwraps bridged action arguments and forwards asynchronous completion', async () => {

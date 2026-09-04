@@ -92,6 +92,32 @@ Describe('Tao formatter data declarations', () => {
       `,
     ),
   )
+
+  Test(
+    'groups local only with the other entity storage facts and formats a recovery-parsed module query',
+    formats(
+      `
+        data FocusSessions/FocusSession{Label text
+        index Label
+        order by Label
+        local    only}
+        query FocusSessions as CurrentSession{limit 1}
+      `,
+      `
+        data FocusSessions / FocusSession {
+           Label text
+
+           index Label
+           order by Label
+           local only
+        }
+
+        query FocusSessions as CurrentSession {
+           limit 1
+        }
+      `,
+    ),
+  )
 })
 
 Describe('Tao formatter configurable declarations', () => {
@@ -168,6 +194,49 @@ Describe('Tao formatter top-level statements', () => {
               Label "Home"
               Content HomeStack
         }  }
+      `,
+    ),
+  )
+
+  Test(
+    'keeps root view arguments attached to the view name in an app and in a variant',
+    formats(
+      `
+        use StackNav from @tao/nav
+        app ShellApp { view Shell ( Center , "Primary" ) }
+        app OtherShellApp = ShellApp with { Name "Other" view Shell( Other,"Other" ) }
+        nav Center = StackNav { Initial Home }
+        nav Other = StackNav { Initial Home }
+        scene Shell(Navigator nav, Label text) { render Navigator ( ) }
+        scene Home() { Title "Home" }
+      `,
+      `
+        use StackNav from @tao/nav
+
+        app ShellApp {
+           view Shell(Center, "Primary")
+        }
+
+        app OtherShellApp = ShellApp with {
+           Name "Other"
+           view Shell(Other, "Other")
+        }
+
+        nav Center = StackNav {
+           Initial Home
+        }
+
+        nav Other = StackNav {
+           Initial Home
+        }
+
+        scene Shell(Navigator nav, Label text) {
+           render Navigator()
+        }
+
+        scene Home() {
+           Title "Home"
+        }
       `,
     ),
   )

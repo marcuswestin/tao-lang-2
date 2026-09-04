@@ -77,7 +77,7 @@ function createCommands(): Command {
     .command('dev')
     .argument('[path]', 'Tao file or directory whose runnable apps should be discovered.', '.')
     .option('--app <name>', 'Select a uniquely named app without prompting.')
-    .description('Discover and run Tao apps in the interactive development loop.')
+    .description('Discover and run Tao apps on an available Expo Metro port.')
     .action(async (path: string, options: { app?: string }) => {
       try {
         // Command implementations load lazily so completion and help paths stay fast.

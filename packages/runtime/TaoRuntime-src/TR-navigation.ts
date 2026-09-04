@@ -3,6 +3,7 @@ import { beginActionLaunch, deferTransactionCommit, suspendAcrossLaunch } from '
 import { RuntimeAssert } from './TR-assert'
 import type { TaoDesign } from './TR-design'
 import { UnexpectedBehaviorError, UserInputError } from './TR-errors'
+import { resetInteractionRuntime } from './TR-interaction-catalog'
 import { ownerOfNavigation, RuntimeAppDefinition } from './TR-navigation-app'
 import { NavigationAppHost } from './TR-navigation-app-host'
 import {
@@ -15,9 +16,6 @@ import {
 } from './TR-navigation-configuration'
 import {
   type RuntimeHostReadChannel,
-  RuntimeNavigationCommand,
-  type TaoCommandAction,
-  type TaoCommandDefinition,
   type TaoHostSlotValues,
   type TaoNavHostSlotConfiguration,
   useHostSlots,
@@ -29,6 +27,7 @@ import {
   type TaoDeclarationIdentityTuple,
 } from './TR-navigation-identity'
 import { disableNativeNavigationSurfaces } from './TR-navigation-native-hosts'
+import { NavigationOccurrence } from './TR-navigation-occurrence'
 import {
   type Evaluable,
   RuntimePresentable,
@@ -123,7 +122,7 @@ type TaoToastPresentationOptions = {
 }
 
 export type TaoNavKindProfile = 'selection' | 'slot' | 'split' | 'stack'
-export type TaoNavHostSlot = 'Title' | 'Toolbar'
+export type TaoNavHostSlot = 'Header' | 'Title' | 'Toolbar'
 export type TaoNavHostSlotContract = Readonly<{
   reads: readonly TaoNavHostSlot[]
   requires: readonly TaoNavHostSlot[]
@@ -269,19 +268,6 @@ export const NavigationControls = {
     return presentable.bind(arguments_)
   },
 
-  /** Command binds one intent invocation and its live chrome metadata to the declaring view occurrence. */
-  Command(definition: TaoCommandDefinition): RuntimeNavigationCommand {
-    return new RuntimeNavigationCommand(definition)
-  },
-
-  /** CommandReference adapts one validated reference-block action without owning the slot vocabulary. */
-  CommandReference(name: string, resolveAction: () => TaoCommandAction): RuntimeNavigationCommand {
-    const lazyAction: TaoCommandAction = {
-      evaluate: () => resolveAction().evaluate(),
-    }
-    return new RuntimeNavigationCommand({ action: lazyAction, arguments: [], name })
-  },
-
   /** UseHostSlots publishes only the fills of the directly presented generated view. */
   UseHostSlots(host: RuntimeHostReadChannel | undefined, values: TaoHostSlotValues): void {
     useHostSlots(host, values)
@@ -294,6 +280,9 @@ export const NavigationControls = {
   },
 
   AppHost: NavigationAppHost,
+
+  /** Occurrence renders a nav or a view-typed value a render site named, hosting a nav's mount. */
+  Occurrence: NavigationOccurrence,
 
   /** PresentIn presents through an explicit nav or the nearest enclosing nav in Tao props. */
   PresentIn(
@@ -463,6 +452,7 @@ export const NavigationControls = {
     beginActionLaunch()
     beginNavigationRestorationTest()
     resetNavigationRuntime()
+    resetInteractionRuntime()
   },
 
   /**
@@ -478,6 +468,7 @@ export const NavigationControls = {
     beginActionLaunch()
     await beginNavigationRestorationLaunch(options)
     resetNavigationRuntime()
+    resetInteractionRuntime()
   },
 
   endTest(): void {
@@ -494,7 +485,7 @@ function recordValue(value: unknown): Readonly<Record<string, unknown>> | undefi
 export type TaoPresentable = RuntimePresentable
 export type TaoNavigationValue = RuntimeNavigationValue
 export type TaoRuntimeApp = RuntimeAppDefinition
-export type { RuntimeHostReadChannel, RuntimeNavigationCommand, TaoNavHostSlotConfiguration }
+export type { RuntimeHostReadChannel, TaoNavHostSlotConfiguration }
 
 function resolveNavigationApp(
   taoProps: TaoProps | undefined,

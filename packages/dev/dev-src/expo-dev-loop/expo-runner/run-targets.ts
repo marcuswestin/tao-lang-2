@@ -44,7 +44,7 @@ export function createExpoTargets(
   }
 }
 
-/** ExpoTargets is the ordinary dev loop's port-8081 target session. */
+/** ExpoTargets is the fixed default target session used by explicit single-session commands. */
 export const ExpoTargets = createExpoTargets(ExpoConfig, ExpoMetro, Android)
 
 /** openAndroid asks Expo to open the current app on Android, launching an emulator when Expo can. */

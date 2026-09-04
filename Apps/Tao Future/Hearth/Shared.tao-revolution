@@ -1,6 +1,8 @@
 // The vocabulary every screen uses: the home, the safety net, the frames, the item row, capture, and the
 // one question.
 
+use primary from @tao/keys
+
 // -- Live handles ------------------------------------------------------------------------------------------
 //
 // The open home is a preference on the account, so `MyHome` is a value and the app root can be a `when`
@@ -82,18 +84,17 @@ view HearthItemRow(Item) {
 // abandoned capture never syncs to the whole home.
 
 folder
-action AddSomethingIntent() {
-   Title "Add something"
+action OpenQuickCapture() {
    present QuickCapture(MyHome) as sheet
 }
-command AddSomething = AddSomethingIntent() with {
-   Label "Add something"
+command AddSomething() {
+   Title "Add something"
    Icon "plus"
-   Key "cmd+n"
+   Key primary + "n"
+   do OpenQuickCapture()
 }
 
 view QuickCapture(Home) {
-   Title "Add something"
    draft New = HearthItem for new { CreatedBy: Me }
    query Lists from Home.Lists { }
 
@@ -137,18 +138,16 @@ view Notice(Message text) {
 // -- Find anything ---------------------------------------------------------------------------------------------
 
 folder
-action FindAnythingIntent() {
-   Title "Find anything"
-   present FindSheet() as palette
+action OpenFindSheet() {
+   present FindSheet() as sheet
 }
-command FindAnything = FindAnythingIntent() with {
-   Label "Find anything"
+command FindAnything() {
+   Title "Find anything"
    Icon "magnifyingglass"
-   Key "cmd+k"
+   do OpenFindSheet()
 }
 
 view FindSheet() {
-   Title "Find anything"
    Search Query
    query Hits from MyHome.Lists.Items {
       search Query in Title, Note, Comments.Body

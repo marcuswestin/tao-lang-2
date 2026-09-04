@@ -84,4 +84,32 @@ test "Navigation MVP" {
       expect missing text "Open the detail?"
       expect missing text "Answered workspace"
    }
+   // A scene is the way to add chrome, not a requirement for being presented. A plain view pushed
+   // on a Stack is legal, shows Back-only header chrome, and Back reaches it the same way — the
+   // reducer owns Back, not the header.
+   test "pushes a plain view with Back-only chrome" {
+      run NavigationMVPApp
+      expect navigation title "Navigation MVP"
+      press #openChromeless
+      expect text "Chromeless detail"
+      // Back-only chrome: the bar is there and carries the Back affordance, with no title of its own.
+      expect label "Back"
+      back
+      expect navigation title "Navigation MVP"
+      expect missing text "Chromeless detail"
+   }
+   // `Header false` is the explicit opt out of header chrome, for a scene that owns its whole
+   // surface. The bar goes, including the Back affordance drawn in it; Back itself does not, so
+   // the reducer still takes you home.
+   test "presents a headerless scene and still leaves by Back" {
+      run NavigationMVPApp
+      expect navigation title "Navigation MVP"
+      press #openFullBleed
+      expect text "Full bleed detail"
+      // The bar is gone, and with it the Back affordance drawn in it.
+      expect missing label "Back"
+      back
+      expect navigation title "Navigation MVP"
+      expect missing text "Full bleed detail"
+   }
 }

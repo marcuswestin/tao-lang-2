@@ -273,4 +273,17 @@ describe('Studio device host failure containment', () => {
     expect(screen.getByText('Layout bounds: on')).toBeTruthy()
     TR.setDevMode()
   })
+
+  test('keeps inspect guidance pointer-transparent without a deprecated native prop', async () => {
+    const stub = stubClient()
+    const screen = renderHost(() => createElement(Text, null, 'rendered'), stub.client)
+    await waitFor(() => expect(screen.getByTestId('tao-studio-device-badge')).toBeTruthy())
+
+    fireEvent.press(screen.getByTestId('tao-studio-device-badge'))
+    fireEvent.press(screen.getByTestId('tao-studio-device-menu-inspect'))
+    const guidance = screen.getByText('Inspect: tap anything to select its source')
+
+    expect(guidance.props['pointerEvents']).toBeUndefined()
+    expect(flatStyle(guidance.props['style'])['pointerEvents']).toBe('none')
+  })
 })

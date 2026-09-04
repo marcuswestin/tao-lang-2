@@ -51,5 +51,5 @@ export function createExpoConfig(port: number = PREFERRED_EXPO_PORT, options: Ex
   } as const
 }
 
-/** ExpoConfig preserves the single-session 8081 defaults used by the ordinary dev loop. */
+/** ExpoConfig is the fixed default session used by explicit single-session commands and tests. */
 export const ExpoConfig = createExpoConfig()

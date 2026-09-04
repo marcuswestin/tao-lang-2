@@ -45,7 +45,10 @@ TypeProperty:
     ((name=ID type=TypeReference? optional?='?'?) | name='implement')
     ('is' value=Expression)?;
 
-// The closed trailing trait list, carried by `data` declaration fields only.
+// The closed trailing trait list, carried by `data` declaration fields only. A trait spelled as a
+// plain word (`title`) is parsed as an ID and its spelling validated, so the word stays an ordinary
+// name everywhere else — a design bundle called `title` is exactly what an app declares — rather
+// than becoming a global lexer keyword.
 TraitList:
     '(' traits+=Trait (',' traits+=Trait)* ')';
 
@@ -58,7 +61,8 @@ Trait:
     | ordered?='ordered'
     | unique?='unique'
     | search?='search'
-    | device?='device';
+    | device?='device'
+    | word=ID;
 
 // Juxtaposition replaces `Name is Type`; a postfix `?` marks optionality.
 ParameterTypeDeclaration:
@@ -83,12 +87,12 @@ NamedTypeReference:
     root=ID ('.' members+=ID)*;
 
 PrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'list' | 'action' | 'design'
-    | 'view' | 'nav' | 'datasource' | 'app';
+    'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'list' | 'action' | 'shortcut'
+    | 'command' | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'app';
 
 NonListPrimitiveType returns string:
-    'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'action' | 'design'
-    | 'view' | 'nav' | 'datasource' | 'app';
+    'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'action' | 'shortcut' | 'command'
+    | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'app';
 
 ConstructablePrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'item' | 'list';

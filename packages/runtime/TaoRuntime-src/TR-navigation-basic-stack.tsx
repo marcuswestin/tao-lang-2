@@ -1,4 +1,5 @@
 import React from 'react'
+import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessibility'
 import { AppSurfaceFrame } from './TR-app-shell'
 import { mountedDesignStyle } from './TR-mounted-design'
 import { NavigationCommandButton } from './TR-navigation-command-button'
@@ -9,7 +10,7 @@ import {
 } from './TR-navigation-host-slots'
 import type { RuntimeStackNav } from './TR-navigation-mounts'
 import type { PresentableEntry } from './TR-navigation-state'
-import { NavigationLevel } from './TR-navigation-surfaces'
+import { NavigationLevel, presentedOccurrenceRegion } from './TR-navigation-surfaces'
 import { renderPresentable } from './TR-navigation-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
@@ -46,14 +47,18 @@ function BasicStackLevel(props: {
 }): React.JSX.Element {
   const slots = useHostSlotSnapshot(props.entry.host)
   const observable = !props.hidden && props.taoProps?.navigationHostActive !== false
+  const entryTaoProps = { ...props.taoProps, navigationHostActive: observable }
   useDocumentTitle(observable ? slots.title : undefined)
   const runtime = requireReactNativeRuntime()
   return React.createElement(NavigationLevel, {
     fill: true,
     hidden: props.hidden,
+    region: presentedOccurrenceRegion(props.navigation, props.entry, 'content'),
     children: React.createElement(runtime.View, {
       children: [
-        React.createElement(runtime.View, {
+        // `Header false` removes the bar, not the ability to leave: Back stays reachable through
+        // the reducer, the platform gesture, and the hardware key.
+        !slots.header ? null : React.createElement(runtime.View, {
           children: [
             observable && props.navigation.depth > 1
               ? React.cloneElement(
@@ -61,6 +66,7 @@ function BasicStackLevel(props: {
                   {
                     __tao: { ...props.taoProps, designDefault: 'NavigationChromeButton' },
                     action: { invoke: () => props.navigation.back() },
+                    semanticIdentity: `navigation:${props.navigation.name}:back`,
                     title: 'Back',
                   },
                   { nativeProps: { accessibilityLabel: 'Back', accessibilityRole: 'button' } },
@@ -87,8 +93,8 @@ function BasicStackLevel(props: {
         }),
         React.createElement(
           AppSurfaceFrame,
-          { key: 'content', taoProps: props.taoProps },
-          renderPresentable(props.entry.presentable, props.entry.arguments, props.taoProps, props.entry.host),
+          { key: 'content', taoProps: entryTaoProps },
+          renderPresentable(props.entry.presentable, props.entry.arguments, entryTaoProps, props.entry.host),
         ),
       ],
       style: [stackStyle, mountedDesignStyle(props.taoProps, 'NavigationHost')],
@@ -103,34 +109,50 @@ function BasicToolbar(props: {
 }): React.JSX.Element | null {
   const [expanded, setExpanded] = React.useState(false)
   const runtime = requireReactNativeRuntime()
+  const moreHost = React.useRef<TaoAccessibilityHost | null>(null)
+  const restoreOverflowFocus = React.useRef(false)
+  React.useEffect(() => {
+    if (expanded || !restoreOverflowFocus.current) {
+      return
+    }
+    restoreOverflowFocus.current = false
+    focusAccessibilityHost(runtime, moreHost.current)
+  }, [expanded, runtime])
   if (props.commands.length === 0) {
     return null
   }
   const direct = props.commands.slice(0, directToolbarCapacity)
   const overflow = props.commands.slice(directToolbarCapacity)
+  const closeOverflow = () => {
+    restoreOverflowFocus.current = true
+    setExpanded(false)
+  }
+  const toggleOverflow = () => expanded ? closeOverflow() : setExpanded(true)
   return React.createElement(runtime.View, {
     accessibilityRole: 'toolbar',
     children: [
       ...direct.map(command => commandButton(command, props.observable, undefined, props.taoProps)),
       overflow.length > 0
-        ? React.cloneElement(
-          Views.Pressable(
-            {
-              __tao: { ...props.taoProps, designDefault: 'NavigationChromeButton' },
-              action: { invoke: () => setExpanded(value => !value) },
-              title: 'More',
-            },
-            { nativeProps: { accessibilityLabel: 'More', accessibilityRole: 'button' } },
-          ),
-          { key: 'more' },
-        )
+        ? React.createElement(NavigationCommandButton, {
+          accessibilityState: { expanded },
+          command: {
+            enabled: props.observable,
+            identity: 'navigation:toolbar:more',
+            label: 'More',
+            invoke: toggleOverflow,
+          },
+          hostRef: moreHost,
+          key: 'more',
+          outlineIdentity: 'navigation:toolbar:more',
+          taoProps: props.taoProps,
+        })
         : null,
       expanded && overflow.length > 0
         ? React.createElement(BasicOverflowMenu, {
           commands: overflow,
           key: 'overflow',
           observable: props.observable,
-          onClose: () => setExpanded(false),
+          onClose: closeOverflow,
           taoProps: props.taoProps,
         })
         : null,
@@ -146,11 +168,15 @@ function BasicOverflowMenu(props: {
   taoProps?: TaoProps
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
+  const firstHost = React.useRef<TaoAccessibilityHost | null>(null)
+  React.useEffect(() => focusAccessibilityHost(runtime, firstHost.current), [runtime])
   const content = React.createElement(runtime.View, {
     accessibilityRole: 'menu',
+    accessibilityViewIsModal: true,
     children: props.commands.map(command =>
       React.createElement(NavigationCommandButton, {
         command: props.observable ? command : { ...command, enabled: false },
+        hostRef: command === props.commands[0] ? firstHost : undefined,
         key: command.identity,
         onInvoke: props.onClose,
         role: 'menuitem',
@@ -158,6 +184,7 @@ function BasicOverflowMenu(props: {
         testID: props.observable ? navigationCommandTestId(command.label) : undefined,
       })
     ),
+    onAccessibilityEscape: props.onClose,
     style: [overflowStyle, mountedDesignStyle(props.taoProps, 'NavigationHeader')],
   })
   if (!runtime.Modal) {

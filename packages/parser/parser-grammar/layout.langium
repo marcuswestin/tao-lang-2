@@ -12,9 +12,11 @@ LayoutEntry:
     head=LayoutTerm terms+=LayoutTerm* condition=LayoutCondition?;
 
 // `when` is a language keyword rather than an ID, so design entries need an explicit postfix
-// shape. Validation deliberately admits only the decided `when Scheme is Light|Dark` surface.
+// shape. Factoring the optional `is` tail after one LayoutWord keeps Langium lookahead inside this
+// rule: it admits both bare interaction states (`when focused`) and named conditions
+// (`when Sidebar is active`) without reserving any of those words.
 LayoutCondition:
-    'when' subject=LayoutWord 'is' value=LayoutWord;
+    'when' subject=LayoutWord ('is' value=LayoutWord)?;
 
 LayoutTerm:
     LayoutWord | LayoutNumberLiteral | LayoutColorLiteral;
