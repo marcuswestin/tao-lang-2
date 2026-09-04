@@ -13,9 +13,47 @@ import {
   iosPhysicalDevicesFromDevicectl,
   runDevicectlJson,
 } from '../dev-src/expo-dev-loop/expo-runner/physical-device'
+import { simulatorOpenFailure } from '../dev-src/expo-dev-loop/expo-runner/run-targets'
 import { handleCommandKey } from '../dev-src/expo-dev-loop/keyboard-input/CommandKeys'
 import Commands from '../dev-src/expo-dev-loop/keyboard-input/Commands'
 import Run from '../dev-src/expo-dev-loop/Run'
+
+Describe('Expo dev-loop output severity', () => {
+  Test('reads a child process line by its text, not by the stream it chose', () => {
+    // Expo announces this on stderr on every start. Painted red it reads as a broken build.
+    Expect(DevLoopTUI.devLoopOutputKind('stderr', 'Experimental Expo Autolinking module resolver is enabled.'))
+      .toBe('info')
+    Expect(DevLoopTUI.devLoopOutputKind('stderr', 'Starting Metro Bundler')).toBe('info')
+    Expect(DevLoopTUI.devLoopOutputKind('stderr', 'warning: package.json is deprecated')).toBe('warn')
+    Expect(DevLoopTUI.devLoopOutputKind('stderr', 'Error: listen EADDRINUSE: address already in use')).toBe('error')
+    Expect(DevLoopTUI.devLoopOutputKind('stderr', 'Metro bundling failed')).toBe('error')
+    Expect(DevLoopTUI.devLoopOutputKind('stdout', 'Error: this one already went to stdout')).toBe('info')
+  })
+
+  Test('turns a LaunchServices refusal into the one sentence that names a remedy', () => {
+    const stderr = [
+      'An error was encountered processing the command (domain=LSApplicationWorkspaceErrorDomain, code=115):',
+      'Simulator device failed to open exp://192.168.50.107:8081.',
+      'Underlying error (domain=LSApplicationWorkspaceErrorDomain, code=115):',
+      "\tThe operation couldn't be completed. (LSApplicationWorkspaceErrorDomain error 115)",
+    ].join('\n')
+    const message = simulatorOpenFailure('iPhone 17 Pro', 'exp://192.168.50.107:8081', { stderr })
+
+    Expect(message).toBe(
+      'iPhone 17 Pro did not open exp://192.168.50.107:8081: no app installed on it handles that URL'
+        + ' — install the development build or Expo Go there first',
+    )
+    Expect(message.includes('\n')).toBe(false)
+  })
+
+  Test('keeps an unrecognized simulator refusal readable without reprinting the whole dump', () => {
+    const message = simulatorOpenFailure('iPhone 17 Pro', 'exp://host:8081', {
+      stderr: 'An error was encountered processing the command:\n  Invalid device state\n',
+    })
+
+    Expect(message).toBe('iPhone 17 Pro did not open exp://host:8081: Invalid device state')
+  })
+})
 
 Describe('Expo dev-loop command helpers', () => {
   Test('recognizes the verify and device shortcut keys', () => {

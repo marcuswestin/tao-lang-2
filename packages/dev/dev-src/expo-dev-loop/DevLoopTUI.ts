@@ -12,7 +12,7 @@ type DevLoopControl = {
   label: string
 }
 
-type DevLoopOutputKind = 'error' | 'info' | 'warn'
+export type DevLoopOutputKind = 'error' | 'info' | 'warn'
 
 type DevLoopOutputLine = {
   kind: DevLoopOutputKind
@@ -86,6 +86,7 @@ export const DevLoopTUI = {
   clearFailure,
   dashboardLayout: devLoopDashboardLayout,
   devLoopOutputHandler,
+  devLoopOutputKind,
   logDevLoop,
   printDevLoopControls,
   recordFailure,
@@ -198,9 +199,35 @@ function writeDevLoopOutput(streamName: string, outputStream: 'stderr' | 'stdout
 
   const stream = devLoopOutputStream(streamName)
   OutputText.appendCompleteLines(stream, String(chunk), line => {
-    appendDevLoopLine(streamName, line, outputStream === 'stderr' ? 'error' : 'info')
+    appendDevLoopLine(streamName, line, devLoopOutputKind(outputStream, line))
   })
   scheduleDevLoopRender()
+}
+
+const errorLinePattern = /\berrors?\b|\bfailed\b|\bfailure\b|\bfatal\b|\bexception\b|^\s*[✖✘×]/i
+// Case-sensitive on purpose: `EADDRINUSE` is an error and `Experimental` is not, and the two differ
+// only in case once the rest of the word is allowed to be letters.
+const errnoLinePattern = /\bE[A-Z]{3,}\b/
+const warningLinePattern = /\bwarn(ing)?s?\b|\bdeprecat/i
+
+/**
+ * How one line of a child process's output reads in the dashboard.
+ *
+ * Which stream a tool chose says almost nothing about severity: Expo, Metro and bun all write
+ * ordinary progress and notices to stderr, so painting every stderr line red made the dashboard's
+ * one alarming colour mean little more than "this process is running" — and a real failure looked
+ * exactly like `Experimental Expo Autolinking module resolver is enabled.` The line's own text is
+ * what separates them. The dev loop's own failures do not come through here; `recordFailure` and
+ * `logDevLoop` name their own kind.
+ */
+export function devLoopOutputKind(outputStream: 'stderr' | 'stdout', line: string): DevLoopOutputKind {
+  if (outputStream === 'stdout') {
+    return 'info'
+  }
+  if (errorLinePattern.test(line) || errnoLinePattern.test(line)) {
+    return 'error'
+  }
+  return warningLinePattern.test(line) ? 'warn' : 'info'
 }
 
 function devLoopOutputHandler(streamName: string): (stream: 'stderr' | 'stdout', chunk: Buffer) => void {
