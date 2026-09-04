@@ -20,7 +20,12 @@ import {
   mountConfiguredNavigation,
 } from './TR-navigation-configuration'
 import type { Evaluable } from './TR-navigation-presentables'
-import { presentableRegistryVersion, resolvePresentable } from './TR-navigation-registry'
+import {
+  presentableRegistryVersion,
+  resolvePresentable,
+  unregisterNavigation,
+  unregisterNavigationApp,
+} from './TR-navigation-registry'
 import { NavigationRestorationController } from './TR-navigation-restoration'
 import type { RestorationEnvelope } from './TR-navigation-restoration'
 import type { PresentableEntry, Subscription } from './TR-navigation-state'
@@ -115,6 +120,27 @@ export class RuntimeAppDefinition implements Subscription {
   constructor(readonly definition: TaoAppDefinition) {
     this.declaration = definition.declaration ?? createAppDeclaration(definition.name)
     runtimeApps.add(this)
+  }
+
+  /**
+   * dispose forgets one app definition the process built rather than declared.
+   *
+   * The compiler emits an app definition once at generated-module scope, so a real app never calls
+   * this. Studio's focused-view cells build one per mount, and a definition that outlived its cell
+   * would still answer a process-wide reset, still contribute a lane to every runtime capture, and
+   * still hold its mounted navigation alive.
+   */
+  dispose(): void {
+    this.restoration.dispose()
+    for (const [lane, record] of [...this.navigationLaneRecords]) {
+      this.deactivateNavigationLane(lane, true)
+      for (const mount of record.mounts) {
+        unregisterNavigation(mount)
+      }
+    }
+    runtimeApps.delete(this)
+    unregisterNavigationApp(this)
+    this.listeners.clear()
   }
 
   readonly subscribe = (listener: () => void): () => void => {

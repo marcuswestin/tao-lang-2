@@ -600,6 +600,32 @@ Describe('TR.Navigation', () => {
     TR.Navigation.beginTest()
   })
 
+  Test('forgets a disposed app definition, so a preview cell leaves nothing process-wide behind', () => {
+    const home = TR.Navigation.View({ name: 'Disposable home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Disposable detail', render: () => null })
+    const stack = configuredStack('Disposable stack', home)
+    const app = TR.Navigation.App({
+      auxiliaries: () => ({}),
+      name: 'Disposable app',
+      navigator: () => stack,
+    })
+    void app.navigator
+    TR.Navigation.PresentIn(undefined, stack, detail, {})
+    Expect(app.canGoBack).toBe(true)
+
+    // A process-wide reset reaches every registered app and mount. Studio builds one app definition
+    // per focused-view cell, so a definition that stayed registered after its cell went away would
+    // keep answering resets — and captures — for a screen nobody is looking at.
+    TR.Navigation.beginTest()
+    Expect(app.canGoBack).toBe(false)
+
+    TR.Navigation.PresentIn(undefined, stack, detail, {})
+    app.dispose()
+    TR.Navigation.beginTest()
+
+    Expect(app.canGoBack).toBe(true)
+  })
+
   Test('keeps selection, toasts, and replacement out of browser history', () => {
     const home = TR.Navigation.View({ name: 'Home', render: () => null })
     const settings = TR.Navigation.View({ name: 'Settings', render: () => null })

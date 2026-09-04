@@ -142,6 +142,15 @@ export function setNavigationRestorationStorageForTests(storage: TaoKeyValueStor
 export class NavigationRestorationController {
   private attachCount = 0
   private freshLaunch = false
+  /**
+   * Which launch the live attachments belong to.
+   *
+   * A launch reset forgets them all at once, and the hosts that made them detach afterwards on
+   * their own schedule. Without this, one of those late detachments decrements a count the reset
+   * had already zeroed, and the next launch's attach reads as detached, never subscribes, and
+   * quietly persists nothing for the rest of the process.
+   */
+  private launchGeneration = 0
   private lastSerialized: string | undefined
   private loadPromise: Promise<void> | undefined
   private persistQueue: Promise<void> = Promise.resolve()
@@ -152,6 +161,12 @@ export class NavigationRestorationController {
     controllers.add(this)
   }
 
+  /** dispose drops a controller whose app is gone, so a later launch step no longer visits it. */
+  dispose(): void {
+    this.unsubscribe()
+    controllers.delete(this)
+  }
+
   /**
    * resetForLaunch returns this controller to the state a newly started process is in, without
    * touching the device it reads and writes. Forgetting the memoized load is the point: an app
@@ -160,6 +175,7 @@ export class NavigationRestorationController {
    */
   resetForLaunch(fresh: boolean): void {
     this.unsubscribe()
+    this.launchGeneration += 1
     this.attachCount = 0
     this.freshLaunch = fresh
     this.lastSerialized = undefined
@@ -187,6 +203,7 @@ export class NavigationRestorationController {
   }
 
   async attach(): Promise<() => void> {
+    const generation = this.launchGeneration
     this.attachCount += 1
     await (this.loadPromise ??= this.load())
     if (this.attachCount > 0 && this.subscriptions.length === 0 && this.policy().mode === 'automatic') {
@@ -194,7 +211,7 @@ export class NavigationRestorationController {
     }
     let active = true
     return () => {
-      if (!active) {
+      if (!active || generation !== this.launchGeneration) {
         return
       }
       active = false
@@ -583,5 +600,25 @@ function requireRestorable(navigation: TaoNavigationValue): RestorableNavigation
  * the unscoped key it has always had.
  */
 export function setNavigationPreviewScope(scope: string | undefined): void {
+  previewScope = scope
+}
+
+/**
+ * Starts the next Studio preview cell on the same device, as its own launch.
+ *
+ * Scoping the stored position per cell was necessary and not sufficient: an app definition lives at
+ * generated-module scope, so its mounted navigation and its memoized load both outlive the cell
+ * that produced them. The next cell then opened on the previous cell's stack — holding entity
+ * handles from a provider generation its own fixture had just replaced. Those screens re-offer
+ * their queries on every revision and every offer throws, which is the loop that left the phone
+ * frozen with a blank screen and a Back button.
+ *
+ * Combined with the caller's own reset of mounted navigation, this makes each cell read the store
+ * back for itself, exactly as a relaunch would.
+ */
+export function beginNavigationPreviewCell(scope: string | undefined): void {
+  for (const controller of controllers) {
+    controller.resetForLaunch(false)
+  }
   previewScope = scope
 }
