@@ -1,8 +1,7 @@
 import { Assert, Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import { EditorView } from 'codemirror'
-import { mountStudioAgentChatPanel } from '../agent-chat/StudioAgentChatPanel'
-import { mountStudioAgentPocPanel } from '../agent-poc/StudioAgentPocPanel'
+import { mountStudioAgentPanel } from '../agent-chat/StudioAgentPanel'
 import type { StudioCompileCompletion } from '../StudioCompileCoordinator'
 import { type StudioDraftFile, StudioDraftSync, type StudioDraftSyncResult } from '../StudioDraftSync'
 import {
@@ -551,16 +550,29 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     view.betaShip.addEventListener('click', betaShipListener)
 
     let chatNames: readonly string[] = []
-    // Studio agent chat: the second, freeform mode; see packages/studio/studio-src/agent-chat.
-    mountStudioAgentChatPanel(root, {
-      knownNames: () => chatNames,
-      openDeclaration: async name => {
-        const found = await StudioApiClient.agentChat<{ found: boolean; path?: string; line?: number }>('locate', {
-          name,
-        })
-        if (found.found && found.path !== undefined) {
-          await openFile(found.path, true)
-        }
+    // Both agents share one floating panel; see packages/studio/studio-src/agent-chat/StudioAgentPanel.
+    mountStudioAgentPanel(root, {
+      chat: {
+        knownNames: () => chatNames,
+        openDeclaration: async name => {
+          const found = await StudioApiClient.agentChat<{ found: boolean; path?: string; line?: number }>('locate', {
+            name,
+          })
+          if (found.found && found.path !== undefined) {
+            await openFile(found.path, true)
+          }
+        },
+      },
+      poc: {
+        activeScenario: () => activePreview.current()?.cell?.scenarioId,
+        identityFor: file => currentSourceIdentity(handshake, activePreview.current(), { content: '', ...file }),
+        openFile: async path => {
+          const known = projectFiles.find(file =>
+            file.path === path || file.path === `/${path}` || file.path.endsWith(`/${path}`)
+          )
+          await openFile(known?.path ?? path, true)
+        },
+        selection: () => inspected,
       },
     })
     void (async () => {
@@ -570,19 +582,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         chatNames = []
       }
     })()
-
-    // Semantic agent proof of concept: a throwaway overlay; see packages/studio/studio-src/agent-poc.
-    mountStudioAgentPocPanel(root, {
-      activeScenario: () => activePreview.current()?.cell?.scenarioId,
-      identityFor: file => currentSourceIdentity(handshake, activePreview.current(), { content: '', ...file }),
-      openFile: async path => {
-        const known = projectFiles.find(file =>
-          file.path === path || file.path === `/${path}` || file.path.endsWith(`/${path}`)
-        )
-        await openFile(known?.path ?? path, true)
-      },
-      selection: () => inspected,
-    })
 
     async function selectProject(): Promise<void> {
       if (!requireAllTabsSaved('Save or revert unsaved files before choosing another project.')) {

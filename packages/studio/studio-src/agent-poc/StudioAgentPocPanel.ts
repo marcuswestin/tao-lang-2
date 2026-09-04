@@ -35,17 +35,16 @@ export type StudioAgentPocPanelHooks = {
 }
 
 export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPocPanelHooks): void {
-  const panel = document.createElement('section')
+  const panel = document.createElement('div')
   panel.className = 'studio-agent-poc'
   panel.setAttribute('aria-label', 'Semantic agent proof of concept')
-  panel.style.cssText =
-    'position:fixed;right:12px;bottom:12px;width:460px;max-height:70vh;overflow:auto;background:#151a17;color:#e8ede9;border:1px solid #3a4a3f;border-radius:10px;padding:10px 12px;font:12px/1.45 ui-monospace,Menlo,monospace;z-index:9000;box-shadow:0 8px 24px rgba(0,0,0,.4)'
+  // Position, chrome and collapse belong to the shell that hosts this.
+  panel.style.cssText = 'display:block'
   panel.innerHTML = `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-      <strong style="flex:1">Local agent (PoC)</strong>
+      <span style="flex:1"></span>
       <input class="poc-view" placeholder="view (uses selection)" style="width:150px;background:#0f1411;color:#e8ede9;border:1px solid #3a4a3f;border-radius:6px;padding:3px 6px;font:inherit">
       <button class="poc-review" type="button">Review</button>
-      <button class="poc-toggle" type="button" title="Collapse">–</button>
     </div>
     <div class="poc-status" style="color:#9fb3a5">Select a render in the preview, then Review. Inference runs on-device through Apple Foundation Models.</div>
     <div style="display:flex;gap:8px;align-items:center;margin:8px 0 4px">
@@ -59,12 +58,6 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
   const body = panel.querySelector<HTMLElement>('.poc-body')!
   const viewInput = panel.querySelector<HTMLInputElement>('.poc-view')!
   const reviewButton = panel.querySelector<HTMLButtonElement>('.poc-review')!
-  const toggle = panel.querySelector<HTMLButtonElement>('.poc-toggle')!
-  toggle.addEventListener('click', () => {
-    body.hidden = !body.hidden
-    status.hidden = body.hidden
-    toggle.textContent = body.hidden ? '+' : '–'
-  })
 
   let lastCheckpoint:
     | { id: string; identity: StudioSourceActionIdentity; path: string; afterVersion: string }
