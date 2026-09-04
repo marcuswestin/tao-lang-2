@@ -108,6 +108,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
     if (Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_NATIVE'] === 'true') {
       native = await StudioNative.start({
         artifactRoot: FS.resolvePath('electrobun', artifactParent),
+        nativeHostCommand: 'studio-smoke-native',
         previewUrl: preview.url,
         projectUrl,
         probe: true,

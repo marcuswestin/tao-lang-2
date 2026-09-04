@@ -254,6 +254,22 @@ Describe('gate failure classification', () => {
     Expect(classifyFailure('error TS2345: Argument of type string is not assignable')).toBe('repository')
   })
 
+  Test('keeps native host, phase, runtime, probe, assertion, and interruption failures distinct', () => {
+    Expect(classifyFailure(
+      "Machine resource 'studio-native-host' is busy: studio-canary in /other/worktree (PID 42)",
+    )).toBe('native-host-busy')
+    Expect(classifyFailure('Hutch install timed out after 30000ms')).toBe('hutch-install-timeout')
+    Expect(classifyFailure('Hutch electrobun prepare timed out after 45000ms'))
+      .toBe('electrobun-prepare-timeout')
+    Expect(classifyFailure('Electrobun exited before writing its runtime probe result.'))
+      .toBe('native-runtime-exit')
+    Expect(classifyFailure('Timed out waiting for the Electrobun runtime probe.'))
+      .toBe('native-probe-timeout')
+    Expect(classifyFailure('(fail) native capability\nexpect(received).toBe(expected)'))
+      .toBe('test-assertion')
+    Expect(classifyFailure('', { interrupted: true })).toBe('user-interruption')
+  })
+
   Test('calls a timeout contention only when the run measured contention', () => {
     const timeout = 'error: Test "renders the board" timed out after 5000ms'
     const shared = MachineLanes.contentionReport({ cpuCount: 8, peakLanes: 2, peakLoadAverage: 20 })
@@ -265,7 +281,7 @@ Describe('gate failure classification', () => {
     Expect(classifyFailure(timeout, { contention: alone })).toBe('repository')
     Expect(classifyFailure(timeout)).toBe('repository')
     // A busy machine never excuses a wrong answer.
-    Expect(classifyFailure('expect(received).toBe(expected)', { contention: shared })).toBe('repository')
+    Expect(classifyFailure('expect(received).toBe(expected)', { contention: shared })).toBe('test-assertion')
   })
 
   Test('names the kind of failure alongside the exit status', async () => {

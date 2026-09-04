@@ -119,6 +119,7 @@ function canaryStudioDevOptions(options: {
     native: true,
     nativeArtifactRoot: FS.resolvePath('electrobun', options.artifactRoot),
     nativeHutchPath: options.hutchPath,
+    nativeHostCommand: 'studio-canary',
     nativeProbe: true,
     nativeShowWindow: false,
     projectRoot: options.projectRoot,

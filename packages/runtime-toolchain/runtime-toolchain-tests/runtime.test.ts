@@ -212,6 +212,12 @@ Describe('Tao runtime app generation', () => {
         Expect(stableRoot).toContain(
           "import { TaoApp, TaoStudioManifest, TaoStudioPublication } from './TaoStudioActivePreview'",
         )
+        // Every platform but web mounts the device host around the same app, manifest, and cell adapter.
+        Expect(stableRoot).toContain("require('react-native').Platform?.OS !== 'web'")
+        Expect(stableRoot).toContain('<TR.Studio.DeviceHost')
+        Expect(stableRoot).toContain('cellRuntime={studioCellRuntime}')
+        Expect(stableRoot).toContain('publication={TaoStudioPublication}')
+        Expect(stableRoot).toContain("TaoStudioNativeDevice || typeof window === 'undefined'")
         Expect(stableRoot).toContain("params.get('taoStudioParentOrigin')")
         Expect(stableRoot).toContain("params.get('taoStudioPreviewInstanceId')")
         Expect(stableRoot).toContain("params.get('taoStudioSessionId')")
@@ -340,11 +346,11 @@ Describe('Tao runtime app generation', () => {
     Expect(scenario?.subject.kind).toBe('view')
     Expect(taoApp).toContain('TR.Studio.Environment.useScenario()')
     Expect(taoApp).toContain(JSON.stringify(scenario?.subject.subjectId))
-    Expect(taoApp).toContain('<TR.Studio.FocusedViewHost')
-    Expect(taoApp).toContain('app={_TaoAppDefinition_WordFlower}')
-    Expect(taoApp).toContain('arguments={_TaoStudioArgs}')
-    Expect(taoApp).toContain('occurrence={_TaoStudioScenario}')
-    Expect(taoApp).toContain('view={_TaoStudioView}')
+    // The focused view mounts under a navigator of its own rather than bare, so `present` inside
+    // it — which `WorkspaceRow` does — has somewhere to go.
+    Expect(taoApp).toContain('<TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} />')
+    Expect(taoApp).toContain('TR.NavKind.Slot()')
+    Expect(taoApp).toContain('restoration: { exclusions: [], mode: \'fresh\' as const, variant: "WordFlower" }')
     Expect(stableRoot).toContain('<TR.Studio.Environment.Host cell={TaoStudioCell}>')
 
     const typecheck = await typecheckGeneratedApp(runtimePackageRoot)

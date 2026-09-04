@@ -38,13 +38,21 @@ start-local-instantdb:
 stop-local-instantdb:
     {{ LOCAL_INSTANTDB_COMPOSE }} down
 
-# Launch Tao Studio against a project folder
-studio project=".":
+# Launch Tao Studio against a project folder; HNReader by default, whose project names its DefaultApp
+studio project="Apps/HNReader":
     ./dev studio "{{ project }}"
 
 # Launch Tao Studio in its local Electrobun shell
-studio-native project=".":
+studio-native project="Apps/HNReader":
     ./dev studio-native "{{ project }}"
+
+# Install the Tao Companion development build on a connected iPhone or iPad, once per native change
+studio-companion-install device="":
+    ./dev studio-companion-install --device "{{ device }}"
+
+# Install the Tao Companion development build on an iOS simulator; no phone, pairing, or unlock needed
+studio-companion-simulator simulator="":
+    ./dev studio-companion-install --simulator "{{ simulator }}"
 
 # Run the focused Tao Studio package suite
 studio-test:
@@ -197,15 +205,15 @@ clean-all: clean
 
 # Prepare all code for commit
 verify:
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --lane verify --json .artifacts/logs/verify/summary.json --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree" "studio-smoke=slow lane; run just studio-smoke or just full-verify"
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just full-verify"
 
 # Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every automated Studio lane
 full-verify: deps
-    ./dev gates {{ FULL_VERIFY_GATES }} --lane full-verify --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree"
+    ./dev gates {{ FULL_VERIFY_GATES }} --lane full-verify
 
 # Run full-verification's sandbox-compatible gates without installing dependencies or claiming the five Studio lanes passed
 full-verify-sandbox:
-    ./dev gates {{ FULL_VERIFY_GATES }} --skip-unsandboxed --lane full-verify-sandbox --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree"
+    ./dev gates {{ FULL_VERIFY_GATES }} --skip-unsandboxed --lane full-verify-sandbox
 
 # Private
 #########

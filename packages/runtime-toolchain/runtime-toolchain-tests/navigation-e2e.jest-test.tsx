@@ -1213,8 +1213,12 @@ Describe('Expo runtime', () => {
       View: RN.View,
     })
     const itemProps: Array<Record<string, any>> = []
+    const stackProps: Array<Record<string, any>> = []
     const restoreNative = overrideNativeNavigationModuleForTest({
-      ScreenStack: props => createElement(RN.View, null, props.children),
+      ScreenStack: props => {
+        stackProps.push(props)
+        return createElement(RN.View, null, props.children)
+      },
       ScreenStackHeaderRightView: props => createElement(RN.View, { testID: 'native-right' }, props.children),
       ScreenStackItem: props => {
         itemProps.push(props)
@@ -1248,6 +1252,9 @@ Describe('Expo runtime', () => {
       Expect(itemProps.map(props => props['activityState'])).toEqual([2, 2])
       Expect(itemProps[0]?.['headerConfig'].title).toBe('Native title')
       Expect(itemProps[0]?.['headerConfig'].children).toBeDefined()
+      // A ScreenStack lays its screens out inside its own bounds: without a filling style it
+      // measures as nothing on a device and every screen under it renders empty.
+      Expect(RN.StyleSheet.flatten(stackProps[0]?.['style'])).toMatchObject({ flex: 1 })
     } finally {
       restoreNative()
       restoreRuntime.mockRestore()

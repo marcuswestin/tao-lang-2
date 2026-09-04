@@ -28,11 +28,18 @@ export type GateStatus = 'failed' | 'passed' | 'skipped'
  * output alone: `classifyFailure` needs the run's own contention report to reach it.
  */
 export type FailureKind =
+  | 'electrobun-prepare-timeout'
   | 'environment-setup'
+  | 'hutch-install-timeout'
   | 'machine-contention'
+  | 'native-host-busy'
+  | 'native-probe-timeout'
+  | 'native-runtime-exit'
   | 'optional-tooling'
   | 'repository'
   | 'sandbox-restriction'
+  | 'test-assertion'
+  | 'user-interruption'
 
 /** GateResult records one node's outcome. */
 export type GateResult = {
@@ -92,6 +99,16 @@ const FAILURE_OUTPUT_LINES = 40
 const SUMMARY_VERSION = 2
 
 const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
+  { kind: 'native-host-busy', pattern: /Machine resource 'studio-native-host' is busy/i },
+  { kind: 'hutch-install-timeout', pattern: /Hutch install timed out after/i },
+  { kind: 'electrobun-prepare-timeout', pattern: /Hutch electrobun prepare timed out after/i },
+  {
+    kind: 'native-runtime-exit',
+    pattern:
+      /(?:native runtime exited .* before (?:reporting|producing)|Electrobun exited before writing its runtime probe)/i,
+  },
+  { kind: 'native-probe-timeout', pattern: /Timed out waiting for the Electrobun runtime probe/i },
+  { kind: 'user-interruption', pattern: /\b(?:user interruption|was interrupted|interrupted before completion)\b/i },
   { kind: 'environment-setup', pattern: /pinned devenv profile is unavailable|command not found: (bun|node|just)/i },
   { kind: 'environment-setup', pattern: /^error: Cannot find (module|package)/im },
   { kind: 'optional-tooling', pattern: /\b(watchman|hutch|chrome|chromium|lsof|docker) (is )?not (installed|found)/i },
@@ -100,6 +117,10 @@ const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
   {
     kind: 'sandbox-restriction',
     pattern: /^(?!.*expect).*\b(operation not permitted|PermissionDenied|EPERM|EACCES)\b/im,
+  },
+  {
+    kind: 'test-assertion',
+    pattern: /(?:\(fail\)|AssertionError|expect\(received\)|^FAIL\s+(?!shutdown:|exit:))/im,
   },
 ]
 
@@ -123,6 +144,7 @@ const WARNING_PATTERN = /\b(warning|warn):|is declared but never referenced|depr
 /** ClassifyContext carries what the output alone cannot say: what else the machine was carrying. */
 export type ClassifyContext = {
   contention?: ContentionReport
+  interrupted?: boolean
 }
 
 /** describesTimeout reports whether a node's output says it ran out of time rather than failed. */
@@ -136,6 +158,9 @@ export function describesTimeout(output: string): boolean {
  * repository failure and must stay one.
  */
 export function classifyFailure(output: string, context: ClassifyContext = {}): FailureKind {
+  if (context.interrupted === true) {
+    return 'user-interruption'
+  }
   const signature = FAILURE_SIGNATURES.find(candidate => candidate.pattern.test(output))
   if (signature !== undefined) {
     return signature.kind
@@ -264,7 +289,12 @@ function nodeResult(
 ): GateResult {
   const exitCode = typeof state.exitCode === 'number' ? state.exitCode : undefined
   const failed = state.status === 'failed'
-  const failureKind = failed ? classifyFailure(state.fullOutput, { contention }) : undefined
+  const failureKind = failed
+    ? classifyFailure(state.fullOutput, {
+      contention,
+      interrupted: state.failure?.kind === 'interrupted',
+    })
+    : undefined
   return {
     elapsedMs: Math.round(state.elapsedMs),
     exitCode,

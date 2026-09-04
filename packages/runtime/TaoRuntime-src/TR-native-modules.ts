@@ -1,11 +1,20 @@
 import { errorMessage, HostEnvironmentError } from './TR-errors'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
 
-/** The native modules used by Tao's curated device capabilities. */
-export type NativeModuleName = 'expo-clipboard' | 'expo-haptics' | 'react-native'
+/** The native modules used by Tao's curated device capabilities and the Studio device host. */
+export type NativeModuleName =
+  | 'expo-clipboard'
+  | 'expo-constants'
+  | 'expo-haptics'
+  | 'expo-secure-store'
+  | 'react-native'
+  | 'react-native-get-random-values'
 
-/** NativeModuleLoaders is the internal module-level test seam behind the production singleton. */
-export type NativeModuleLoaders = Record<NativeModuleName, () => unknown>
+/**
+ * NativeModuleLoaders is the internal module-level test seam behind the production singleton. A
+ * module without a loader is unavailable, so a test declares only the modules it exercises.
+ */
+export type NativeModuleLoaders = Partial<Record<NativeModuleName, () => unknown>>
 
 /** TaoNativeModules is the lazy module access available to runtime capability implementations. */
 export type TaoNativeModules = {
@@ -25,7 +34,8 @@ export function createNativeModules(loaders: NativeModuleLoaders): TaoNativeModu
   const loadNativeModule = (moduleName: NativeModuleName): NativeModuleResult => {
     if (!cache.has(moduleName)) {
       try {
-        const nativeModule = loaders[moduleName]()
+        const loader = loaders[moduleName]
+        const nativeModule = loader === undefined ? {} : loader()
         cache.set(
           moduleName,
           isEmptyModule(nativeModule)
@@ -76,10 +86,29 @@ function isEmptyModule(value: unknown): boolean {
   return typeof value === 'object' && value !== null && Object.keys(value).length === 0
 }
 
+/**
+ * `react-native-get-random-values` is a side-effect polyfill that exports nothing, so requiring it
+ * yields an empty module and would read as unavailable. The installed global is the module's real
+ * value: reporting it keeps availability honest, because the module counts as loaded exactly when
+ * `crypto.getRandomValues` exists after the require.
+ */
+export function loadRandomValuesPolyfill(install: () => void = installRandomValuesPolyfill): unknown {
+  install()
+  const crypto = (globalThis as { crypto?: { getRandomValues?: unknown } }).crypto
+  return typeof crypto?.getRandomValues === 'function' ? crypto : {}
+}
+
+function installRandomValuesPolyfill(): void {
+  require('react-native-get-random-values')
+}
+
 // Metro resolves require calls statically, so each supported module must remain a literal here.
 // The loader functions keep module evaluation lazy until a capability is actually invoked.
 export const NativeModules = createNativeModules({
   'expo-clipboard': () => require('expo-clipboard'),
+  'expo-constants': () => require('expo-constants'),
   'expo-haptics': () => require('expo-haptics'),
+  'expo-secure-store': () => require('expo-secure-store'),
   'react-native': requireReactNativeRuntime,
+  'react-native-get-random-values': () => loadRandomValuesPolyfill(),
 })

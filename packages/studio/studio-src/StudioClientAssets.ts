@@ -175,7 +175,10 @@ function taoStudioBrowserPlugin(generatedAppPath: string): Bun.BunPlugin {
     '@react-native-picker/picker',
     '@react-native-segmented-control/segmented-control',
     'expo-clipboard',
+    'expo-constants',
     'expo-haptics',
+    'expo-secure-store',
+    'react-native-get-random-values',
     'react-native-screens',
   ])
   return {
@@ -189,11 +192,21 @@ function taoStudioBrowserPlugin(generatedAppPath: string): Bun.BunPlugin {
         if (optionalNativeModules.has(args.path)) {
           return { namespace: 'tao-studio-empty-native', path: args.path }
         }
+        if (args.path.startsWith('@noble/')) {
+          // The device trust primitives reach the bundle through TR.Studio.DeviceHost, which only a
+          // native device mounts; the workbench never dials the gateway, so the browser skips them.
+          return { namespace: 'tao-studio-empty-native', path: args.path }
+        }
         if (args.path === 'react-native-safe-area-context') {
           return { namespace: 'tao-studio-safe-area', path: args.path }
         }
         if (args.path === 'react-native') {
           return { path: resolveBrowserDependency('react-native-web') }
+        }
+        if (args.path === 'qrcode') {
+          // Bun.resolveSync ignores the package's browser field; the Node entry carries PNG and
+          // terminal renderers over zlib streams that only bloat the workbench bundle.
+          return { path: resolveBrowserDependency('qrcode/lib/browser.js') }
         }
         if (args.path === '@runtime/TR') {
           return { path: resolveBrowserDependency(args.path) }
@@ -629,6 +642,64 @@ button { color: inherit; font: inherit; }
 .studio-ship-progress progress { accent-color: #72a0ff; width: 100%; }
 .studio-ship-progress strong { color: #edf3ff; font-size: 15px; }
 .studio-ship-progress small { color: #9ba7bc; font-size: 11px; line-height: 1.5; }
+.studio-device {
+  background: transparent; border: 1px solid var(--studio-stroke); border-radius: 7px; color: var(--studio-text-muted);
+  font-size: 11px; padding: 5px 8px; white-space: nowrap;
+}
+.studio-device:hover { background: var(--studio-surface-hover); color: var(--studio-text); }
+.studio-device[aria-expanded="true"] { background: var(--studio-accent-surface); color: #f4f7ff; }
+.studio-device[data-state="connected"] { border-color: #3d7352; color: #ccebd6; }
+.studio-device[data-state="pairing"] { border-color: #8a6d2f; color: #ffe2a8; }
+.studio-device[data-state="behind"] { border-color: #8a4a3a; color: #ffc0b5; }
+.studio-device-popover {
+  background: var(--studio-panel); border: 1px solid var(--studio-stroke-strong); border-radius: 10px;
+  box-shadow: 0 18px 60px #000a; color: var(--studio-text); display: grid; font-size: 11px; gap: 12px;
+  max-height: calc(100vh - 72px); overflow: auto; padding: 14px; position: fixed; right: 12px; top: 58px;
+  width: min(440px, calc(100vw - 24px)); z-index: 90;
+}
+.studio-device-popover[hidden] { display: none; }
+.studio-device-section { display: grid; gap: 6px; }
+.studio-device-section h3 {
+  color: var(--studio-text-muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; margin: 0;
+  text-transform: uppercase;
+}
+.studio-device-row { align-items: center; display: grid; gap: 8px; grid-template-columns: 96px minmax(0, 1fr) auto; }
+.studio-device-row-label { color: var(--studio-text-dim); }
+.studio-device-row-value { min-width: 0; overflow-wrap: anywhere; }
+.studio-device-note { color: var(--studio-text-muted); line-height: 1.45; margin: 0; }
+.studio-device-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; }
+.studio-device-actions button, .studio-device-row button {
+  background: #1b1e25; border: 1px solid var(--studio-stroke-strong); border-radius: 6px; color: var(--studio-text);
+  cursor: pointer; font-size: 11px; padding: 4px 9px;
+}
+.studio-device-actions button:hover, .studio-device-row button:hover { background: var(--studio-surface-hover); }
+.studio-device-actions button:disabled, .studio-device-row button:disabled { cursor: default; opacity: .5; }
+.studio-device-trust { background: #315fbb !important; border-color: #5b8def !important; color: #f4f7ff !important; font-weight: 700; }
+.studio-device-revoke, .studio-device-decline { color: #ffaaa2 !important; }
+.studio-device-scenario {
+  background: #1b1e25; border: 1px solid var(--studio-stroke-strong); border-radius: 6px; color: var(--studio-text);
+  font-size: 11px; max-width: 100%; padding: 4px 6px;
+}
+.studio-device-code-block {
+  background: var(--studio-bg-deep); border: 1px solid var(--studio-stroke); border-radius: 6px; display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; overflow-wrap: anywhere; padding: 6px 8px;
+  user-select: all;
+}
+.studio-device-code {
+  display: block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 30px; font-weight: 700;
+  letter-spacing: .12em; padding: 4px 0; text-align: center;
+}
+.studio-device-countdown { color: var(--studio-text-muted); }
+.studio-device-qr-box { background: #fff; border-radius: 8px; justify-self: center; padding: 8px; width: 200px; }
+.studio-device-qr-box svg { display: block; height: auto; width: 100%; }
+.studio-device-revision[data-revision="applied"] { color: var(--studio-positive); }
+.studio-device-revision[data-revision="behind"] { color: #ffc0b5; }
+.studio-device-diagnostics { display: grid; gap: 4px; list-style: none; margin: 0; padding: 0; }
+.studio-device-diagnostic { color: #ffe2a8; }
+.studio-device-diagnostic::before { content: "⚠ "; }
+.studio-device-status { color: var(--studio-text-muted); margin: 0; }
+.studio-device-status[data-state="error"] { color: #ffaaa2; }
+.studio-device-status[hidden] { display: none; }
 
 /* Desktop workbench theme. Component rules above own layout behavior; this layer owns product hierarchy. */
 :root {

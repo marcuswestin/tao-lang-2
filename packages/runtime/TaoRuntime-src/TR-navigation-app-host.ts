@@ -1,8 +1,7 @@
 import React from 'react'
-import { AppSurfaceFrame } from './TR-app-shell'
+import { appFramePadding, AppSurfaceFrame, requireSafeAreaContext } from './TR-app-shell'
 import { DataControls } from './TR-data'
 import { TaoErrorBoundary } from './TR-error-containment'
-import type { TaoNavigationArguments, TaoPresentable } from './TR-navigation'
 import { RuntimeAppDefinition } from './TR-navigation-app'
 import { browserNavigationHistoryDriver } from './TR-navigation-browser-history'
 import {
@@ -26,59 +25,6 @@ export function NavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     },
     React.createElement(NavigationAppHostContent, props),
   )
-}
-
-/** StudioFocusedViewHost renders one view as the root of an isolated app-owned navigation lane. */
-export function StudioFocusedViewHost(props: {
-  app: RuntimeAppDefinition
-  arguments: TaoNavigationArguments
-  occurrence: unknown
-  view: TaoPresentable
-}): React.JSX.Element {
-  const lease = React.useMemo(
-    () => props.app.mountFocusedView(props.view, props.arguments),
-    [props.app, props.occurrence, props.view],
-  )
-  React.useEffect(() => lease.attach(), [lease])
-  return React.createElement(
-    TaoErrorBoundary,
-    {
-      app: props.app,
-      boundaryId: `studio-view:${props.view.definition.identity?.canonical ?? props.view.name}`,
-      frame: { boundary: 'app', declaration: props.app.definition.name },
-      stateKey: props.app.snapshot(),
-    },
-    React.createElement(MountedFocusedViewHost, { app: props.app, navigation: lease.navigation }),
-  )
-}
-
-function MountedFocusedViewHost(props: {
-  app: RuntimeAppDefinition
-  navigation: ReturnType<RuntimeAppDefinition['mountFocusedView']>['navigation']
-}): React.JSX.Element {
-  useSubscription(props.app)
-  useSubscription(props.navigation)
-  React.useSyncExternalStore(DataControls.subscribeAll, DataControls.revision, DataControls.revision)
-  useNavigationBack(props.navigation)
-  const runtime = requireReactNativeRuntime()
-  const taoProps = { app: props.app, navigationHostActive: true }
-  const toasts = props.app.renderToasts(taoProps)
-  const content = props.navigation.render(taoProps)
-  return React.createElement(runtime.View, {
-    children: [
-      props.navigation.ownsWindowSurface()
-        ? React.createElement(React.Fragment, { key: 'content' }, content)
-        : React.createElement(AppSurfaceFrame, { key: 'content', taoProps }, content),
-      React.Children.count(toasts) > 0
-        ? React.createElement(runtime.View, {
-          children: toasts,
-          key: 'app-toasts',
-          style: toastLayerStyle,
-        })
-        : null,
-    ],
-    style: navigationAppHostStyle,
-  })
 }
 
 function NavigationAppHostContent(props: { app: RuntimeAppDefinition; __tao?: TaoProps }): React.JSX.Element {
@@ -111,11 +57,12 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
   const toasts = props.app.renderToasts(appTaoProps)
   // A navigator that hands the window to a native surface gets true window bounds; every other
   // navigator renders inside the app's safe-area scroll frame, exactly as before.
+  const ownsWindow = navigator.ownsWindowSurface()
   const content = React.createElement(
     React.Fragment,
     { key: 'levels' },
     props.app.canGoBack && (focusedAuxiliary !== undefined || !navigator.ownsBackAffordance())
-      ? React.createElement(NavigationBackAffordance, { target: props.app })
+      ? React.createElement(AppBackAffordance, { inset: ownsWindow, target: props.app })
       : null,
     navigator.render(navigatorTaoProps),
     ...auxiliaries.map(auxiliary =>
@@ -127,7 +74,7 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
   )
   return React.createElement(runtime.View, {
     children: [
-      navigator.ownsWindowSurface()
+      ownsWindow
         ? content
         : React.createElement(AppSurfaceFrame, { key: 'content', taoProps: appTaoProps }, content),
       React.Children.count(toasts) > 0
@@ -140,6 +87,33 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     ],
     style: navigationAppHostStyle,
   })
+}
+
+/**
+ * The app's own Back control, inset when nothing above it is.
+ *
+ * A navigator that owns the window surface renders outside the app's safe-area frame, and this
+ * control is its sibling — so without the inset it draws in the status bar, where the notch clips
+ * it and the system takes its taps. Every other navigator renders inside `AppSurfaceFrame`, which
+ * already insets this along with the content.
+ */
+function AppBackAffordance(props: { inset: boolean; target: RuntimeAppDefinition }): React.JSX.Element {
+  const runtime = requireReactNativeRuntime()
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
+  const affordance = React.createElement(NavigationBackAffordance, { target: props.target })
+  return props.inset
+    ? React.createElement(runtime.View, {
+      children: affordance,
+      // The frame padding as well as the insets: this control is standing in for one that would
+      // otherwise sit inside `AppSurfaceFrame`, and a Back button flush against the window edge
+      // reads as a mistake next to content that is never flush against it.
+      style: {
+        paddingLeft: appFramePadding + insets.left,
+        paddingRight: appFramePadding + insets.right,
+        paddingTop: appFramePadding + insets.top,
+      },
+    })
+    : React.createElement(runtime.View, { children: affordance })
 }
 
 function useNavigationRestoration(app: RuntimeAppDefinition): boolean {
@@ -178,20 +152,6 @@ function usePlatformBack(target: RuntimeAppDefinition): void {
         clearActiveBackTarget(target)
       }
     }
-    const subscription = requireReactNativeRuntime().BackHandler?.addEventListener(
-      'hardwareBackPress',
-      () => backNavigation(target),
-    )
-    return () => {
-      subscription?.remove()
-      clearActiveBackTarget(target)
-    }
-  }, [target])
-}
-
-function useNavigationBack(target: ReturnType<RuntimeAppDefinition['mountFocusedView']>['navigation']): void {
-  React.useEffect(() => {
-    setActiveBackTarget(target)
     const subscription = requireReactNativeRuntime().BackHandler?.addEventListener(
       'hardwareBackPress',
       () => backNavigation(target),

@@ -245,3 +245,31 @@ export {
   type StudioStateSnapshot,
   studioStateSnapshotVersion,
 } from './StudioStateLibrary'
+
+export type {
+  StudioDeviceLaunchDiagnostic,
+  StudioDeviceLauncher,
+  StudioDeviceLaunchHost,
+  StudioDeviceLaunchInfo,
+  StudioDeviceLaunchOpenResult,
+} from './device/StudioDeviceLauncher'
+
+export type {
+  StudioDeviceConnection,
+  StudioDeviceConnectionState,
+  StudioDevicePairingStatus,
+  StudioDeviceStateEvent,
+  StudioDeviceStatus,
+  StudioTrustedDevice,
+} from './device/StudioDeviceStatus'
+
+export {
+  StudioDeviceGateway,
+  type StudioDeviceGatewayOptions,
+  type StudioDeviceGatewaySession,
+  type StudioDeviceGatewaySessionRef,
+  type StudioDeviceGatewaySessions,
+  type StudioDeviceStatusListener,
+} from './device/StudioDeviceGateway'
+
+export { StudioDeviceTrustStore } from './device/StudioDeviceTrustStore'

@@ -1,4 +1,4 @@
-import { Errors, FS, Platform, Time } from '@shared'
+import { CLI, Errors, FS, Platform, Time } from '@shared'
 import { randomUUID } from 'node:crypto'
 
 /** LaneRecord is the live, machine-wide accounting record for one top-level lane. */
@@ -37,7 +37,22 @@ export type MachineExclusiveLease = {
 
 /** MachineResourceLease prevents another worktree from claiming the same named host resource. */
 export type MachineResourceLease = {
+  /** The identity written to the machine-wide registry for diagnostics and safe release. */
+  readonly owner: MachineResourceOwner
   release: () => Promise<void>
+}
+
+/** MachineResourceOwner identifies the worktree operation holding one named host resource. */
+export type MachineResourceOwner = {
+  command: string
+  id: string
+  name: string
+  pid: number
+  /** OS process start identity, when the host can report it, protects against PID reuse. */
+  processStartedAt?: string
+  repositoryRoot: string
+  /** Lease acquisition time. Age alone never makes a live resource owner stale. */
+  startedAt: string
 }
 
 /** MachineLane is one top-level lane's registration and dynamic admission broker. */
@@ -71,10 +86,22 @@ export type AcquireOptions = {
 }
 
 export type ResourceOptions = {
+  /** Command or lane shown to a second worktree when this resource is busy. */
+  command?: string
   /** Injected by tests. */
   lockTimeoutMs?: number
   name: string
+  /** Injected by tests. */
+  processIdentity?: (pid: number) => Promise<ProcessIdentity>
   registryRoot?: string
+  repositoryRoot?: string
+}
+
+export type AcquireResourceOptions = ResourceOptions & {
+  command: string
+  repositoryRoot: string
+  /** Maximum bounded wait before reporting the current owner. */
+  waitTimeoutMs?: number
 }
 
 type ExclusiveRecord = {
@@ -84,11 +111,9 @@ type ExclusiveRecord = {
   startedAt: string
 }
 
-type ResourceRecord = {
-  id: string
-  name: string
-  pid: number
-  startedAt: string
+export type ProcessIdentity = {
+  evidence: 'alive' | 'gone' | 'unknown'
+  startedAt?: string
 }
 
 type MutexRecord = {
@@ -108,6 +133,21 @@ export type LaneInspection = {
 
 class RegistryLockTimeoutError extends Errors.HostEnvironmentError {}
 
+/** MachineResourceBusyError keeps native-host contention distinct from CPU-lane contention. */
+export class MachineResourceBusyError extends Errors.HostEnvironmentError {
+  readonly failureKind = 'native-host-busy'
+  readonly owner: MachineResourceOwner
+
+  constructor(owner: MachineResourceOwner) {
+    super(
+      `Machine resource '${owner.name}' is busy: ${owner.command} in ${owner.repositoryRoot} `
+        + `(PID ${owner.pid}), held since ${owner.startedAt}. Wait for that session to finish or stop it, then retry.`,
+      { details: { failureKind: 'native-host-busy', owner } },
+    )
+    this.owner = owner
+  }
+}
+
 const REGISTRY_DIRECTORY = 'tao/machine-lanes'
 const SAMPLE_INTERVAL_MS = 3_000
 const ADMISSION_POLL_MS = 25
@@ -116,6 +156,8 @@ const CONTENDED_LOAD_RATIO = 1.5
 const MAX_LEASE_AGE_MS = 6 * 60 * 60 * 1_000
 const MUTEX_ACQUIRE_TIMEOUT_MS = 30_000
 const EXCLUSIVE_TIMEOUT_MS = 5 * 60 * 1_000
+const RESOURCE_WAIT_TIMEOUT_MS = 10_000
+const RESOURCE_POLL_MS = 100
 const MUTEX_LINK = '.mutex'
 const EXCLUSIVE_PATH = '.exclusive'
 const LANE_ID_ENV_KEY = 'TAO_MACHINE_LANE_ID'
@@ -467,38 +509,68 @@ async function liveExclusive(root: string): Promise<ExclusiveRecord | undefined>
   return record
 }
 
+/**
+ * acquireResource waits briefly for a named host resource, then reports the exact owning worktree
+ * and command. Native callers use this rather than folding host contention into lane contention.
+ */
+async function acquireResource(options: AcquireResourceOptions): Promise<MachineResourceLease> {
+  const waitTimeoutMs = Math.max(0, options.waitTimeoutMs ?? RESOURCE_WAIT_TIMEOUT_MS)
+  const deadline = Time.nowMs() + waitTimeoutMs
+  while (true) {
+    const outcome = await claimResource(options)
+    if (outcome.lease !== undefined) {
+      return outcome.lease
+    }
+    if (Time.nowMs() >= deadline) {
+      throw new MachineResourceBusyError(outcome.owner)
+    }
+    await Time.sleep(Math.min(RESOURCE_POLL_MS, Math.max(1, deadline - Time.nowMs())))
+  }
+}
+
 /** tryAcquireResource atomically claims a named host resource across all worktrees. */
 async function tryAcquireResource(options: ResourceOptions): Promise<MachineResourceLease | undefined> {
+  return (await claimResource(options)).lease
+}
+
+async function claimResource(
+  options: ResourceOptions,
+): Promise<{ lease?: MachineResourceLease; owner: MachineResourceOwner }> {
   const root = options.registryRoot ?? registryRoot()
   const id = `${Platform.runtimeProcess.pid}-${randomUUID()}`
   const path = resourcePath(root, options.name)
+  const processIdentity = options.processIdentity ?? inspectProcessIdentity
+  const owner: MachineResourceOwner = {
+    command: options.command ?? options.name,
+    id,
+    name: options.name,
+    pid: Platform.runtimeProcess.pid,
+    processStartedAt: (await processIdentity(Platform.runtimeProcess.pid)).startedAt,
+    repositoryRoot: options.repositoryRoot ?? Platform.runtimeProcess.cwd(),
+    startedAt: new Date().toISOString(),
+  }
+  let existingOwner: MachineResourceOwner | undefined
   try {
     const acquired = await withRegistryLock(root, async () => {
-      const existing = await readRecord<ResourceRecord>(path)
-      if (isResourceRecord(existing) && isLive(existing)) {
+      const existing = normalizeResourceRecord(await readRecord<unknown>(path))
+      if (existing !== undefined && await resourceOwnerIsLive(existing, processIdentity)) {
+        existingOwner = existing
         return false
       }
       await FS.remove(path).catch(() => {})
-      await atomicWriteJson(
-        path,
-        {
-          id,
-          name: options.name,
-          pid: Platform.runtimeProcess.pid,
-          startedAt: new Date().toISOString(),
-        } satisfies ResourceRecord,
-      )
+      await atomicWriteJson(path, owner)
       return true
     }, options.lockTimeoutMs)
     if (!acquired) {
-      return undefined
+      return { owner: existingOwner ?? owner }
     }
   } catch (error) {
     throw new Errors.HostEnvironmentError(`Cannot coordinate machine resource '${options.name}'.`, { cause: error })
   }
 
   let released = false
-  return {
+  const lease: MachineResourceLease = {
+    owner,
     release: async () => {
       if (released) {
         return
@@ -506,7 +578,7 @@ async function tryAcquireResource(options: ResourceOptions): Promise<MachineReso
       released = true
       try {
         await withRegistryLock(root, async () => {
-          const existing = await readRecord<ResourceRecord>(path)
+          const existing = normalizeResourceRecord(await readRecord<unknown>(path))
           if (existing?.id === id) {
             await FS.remove(path)
           }
@@ -516,6 +588,7 @@ async function tryAcquireResource(options: ResourceOptions): Promise<MachineReso
       }
     },
   }
+  return { lease, owner }
 }
 
 function unregisteredLane(capacity: number): MachineLane {
@@ -713,17 +786,73 @@ function normalizeLaneRecord(
   }
 }
 
-function isResourceRecord(value: unknown): value is ResourceRecord {
+function normalizeResourceRecord(value: unknown): MachineResourceOwner | undefined {
   if (typeof value !== 'object' || value === null) {
-    return false
+    return undefined
   }
-  const record = value as Partial<ResourceRecord>
-  return typeof record.id === 'string'
+  const record = value as Partial<MachineResourceOwner>
+  const valid = typeof record.id === 'string'
     && typeof record.name === 'string'
     && Number.isInteger(record.pid)
     && (record.pid ?? 0) > 0
     && typeof record.startedAt === 'string'
     && Number.isFinite(Date.parse(record.startedAt))
+    && (record.processStartedAt === undefined || typeof record.processStartedAt === 'string')
+    && (record.command === undefined || typeof record.command === 'string')
+    && (record.repositoryRoot === undefined || typeof record.repositoryRoot === 'string')
+  if (!valid) {
+    return undefined
+  }
+  return {
+    command: record.command ?? record.name!,
+    id: record.id!,
+    name: record.name!,
+    pid: record.pid!,
+    processStartedAt: record.processStartedAt,
+    repositoryRoot: record.repositoryRoot ?? '<unknown worktree>',
+    startedAt: record.startedAt!,
+  }
+}
+
+/**
+ * resourceOwnerIsLive requires evidence that the recorded process identity disappeared or changed
+ * before pruning. Lease age is deliberately irrelevant: interactive native Studio may be validly
+ * open for many hours, and an unreadable process table is uncertainty rather than staleness.
+ */
+async function resourceOwnerIsLive(
+  owner: MachineResourceOwner,
+  inspect: (pid: number) => Promise<ProcessIdentity>,
+): Promise<boolean> {
+  const identity = await inspect(owner.pid)
+  if (identity.evidence === 'gone') {
+    return false
+  }
+  if (
+    identity.evidence === 'alive'
+    && owner.processStartedAt !== undefined
+    && identity.startedAt !== undefined
+    && owner.processStartedAt !== identity.startedAt
+  ) {
+    return false
+  }
+  return true
+}
+
+/** inspectProcessIdentity reads the OS start time that distinguishes a live PID from its reuse. */
+async function inspectProcessIdentity(pid: number): Promise<ProcessIdentity> {
+  try {
+    const result = await CLI.run('ps', { args: ['-o', 'lstart=', '-p', String(pid)], stdio: 'pipe' })
+    const startedAt = result.stdout.trim()
+    if (result.error === undefined && result.exitCode === 0 && startedAt.length > 0) {
+      return { evidence: 'alive', startedAt }
+    }
+    if (result.error === undefined && !Platform.processIsAlive(pid)) {
+      return { evidence: 'gone' }
+    }
+  } catch {
+    // Fall through to the weaker kernel liveness probe. Unknown identity must remain owned.
+  }
+  return Platform.processIsAlive(pid) ? { evidence: 'unknown' } : { evidence: 'gone' }
 }
 
 function errorCode(error: unknown): string | undefined {
@@ -744,6 +873,7 @@ export const MachineLanes = {
   EXCLUSIVE_TIMEOUT_MS,
   LANE_ID_ENV_KEY,
   acquire,
+  acquireResource,
   activeLanes,
   contentionReport,
   describeContention,

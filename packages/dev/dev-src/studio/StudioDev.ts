@@ -1,7 +1,7 @@
 /// <reference path="../expo-dev-loop/expo-runner/better-opn.d.ts" />
 
 import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation/apple-server'
-import { Errors, FS, HCI, Platform, Repo } from '@shared'
+import { Errors, FS, HCI, Platform, Repo, Time } from '@shared'
 import {
   openStudioPreviewSession,
   resolveStudioProjectRoot,
@@ -9,6 +9,8 @@ import {
   type StartedStudioServer,
   startStudioFileWatcher,
   startStudioSessionServer,
+  StudioDeviceGateway,
+  StudioDeviceTrustStore,
   type StudioPreviewSession,
   type StudioProjectOpenRequest,
   type StudioRecentProject,
@@ -17,7 +19,10 @@ import {
 } from '@studio'
 import betterOpen from 'better-opn'
 import { ExpoRunner } from '../expo-dev-loop/expo-runner/ExpoRunner'
+import { detectLanIPv4 } from '../expo-dev-loop/expo-runner/lan-host'
 import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
+import { StudioCompanionIdentity } from './StudioCompanionIdentity'
+import { createStudioDeviceLauncher } from './StudioDeviceLaunch'
 import { describeOwnProcess, openLaunchRecord, type StudioLaunchRecord } from './StudioLaunchManifest'
 import { createStudioLifecycleLog, type StudioLifecycleLog } from './StudioLifecycleLog'
 import { StudioNative } from './StudioNative'
@@ -36,6 +41,7 @@ export type StudioDevOptions = {
   native?: boolean
   nativeArtifactRoot?: string
   nativeHutchPath?: string
+  nativeHostCommand?: string
   nativeProbe?: boolean
   nativeShowWindow?: boolean
   port?: number
@@ -62,9 +68,11 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     finish = resolve
   })
   let requestedStop = false
+  const nativeAbort = new AbortController()
   const stop = (exitCode: number) => {
     if (!requestedStop) {
       requestedStop = true
+      nativeAbort.abort()
       finish?.(exitCode)
     }
   }
@@ -74,6 +82,8 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   let foundationModels: AppleFoundationModelsService | undefined
   let manager: StudioSessionManager | undefined
   let studioClientReload: StartedStudioClientDevReload | undefined
+  let deviceGateway: StudioDeviceGateway | undefined
+  let trustStore: StudioDeviceTrustStore | undefined
   const userStateRoot = options.userStateRoot ?? Repo.resolvePath('.artifacts/user/studio')
   const recentProjects = createRecentProjectStore(FS.resolvePath('recent-projects.json', userStateRoot))
   const mode = options.native === true ? 'native' : 'browser'
@@ -93,10 +103,37 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     const nativeHutchPath = options.native
       ? await StudioNative.resolveHutchExecutablePath(options.nativeHutchPath)
       : undefined
+    // The gateway starts before any project so its port can be written into every preview manifest,
+    // and it finds sessions through the manager that is created right after it.
+    trustStore = await StudioDeviceTrustStore.open(FS.resolvePath('device-trust', userStateRoot))
+    deviceGateway = await StudioDeviceGateway.start({
+      hosts: async () => [await detectLanIPv4()].filter(host => host !== 'localhost'),
+      log: line => HCI.logProcessInfo('studio-device', line),
+      sessions: {
+        get: sessionId => {
+          const resource = manager?.get(sessionId)
+          return resource === undefined
+            ? undefined
+            : { previewUrl: resource.previewUrl, session: resource.session, sessionId }
+        },
+        list: () =>
+          (manager?.list().current ?? []).flatMap(item => {
+            const resource = manager?.get(item.sessionId)
+            return resource === undefined
+              ? []
+              : [{ previewUrl: resource.previewUrl, session: resource.session, sessionId: item.sessionId }]
+          }),
+      },
+      trustStore,
+    })
+    lifecycle.record({ component: 'device-gateway', event: 'port-allocated', port: deviceGateway.port })
+    HCI.logProcessInfo('studio', `Device gateway: tao-studio-device-v1 on port ${deviceGateway.port}`)
+    const gatewayPort = deviceGateway.port
     const projects = createProjectOpeners(
       options.entryPath,
       async (request, entryPath) =>
         await openStudioProjectResource(request, {
+          deviceGatewayPort: gatewayPort,
           entryPath,
           isStopping: () => requestedStop,
           preferredExpoPort: preferredExpoPort(),
@@ -135,6 +172,8 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       clientAssets: studioClientReload?.clientAssets,
       clientReloadRevision: studioClientReload?.revision,
       compileOnStart: false,
+      deviceGateway,
+      deviceLauncher: createStudioDeviceLauncher(),
       generationProvider: foundationModels.provider,
       hostname: options.hostname,
       port: options.port,
@@ -159,11 +198,13 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
       native = await StudioNative.start({
         artifactRoot: options.nativeArtifactRoot,
         hutchPath: nativeHutchPath,
+        nativeHostCommand: options.nativeHostCommand,
         previewUrl: initialResource.previewUrl ?? 'http://127.0.0.1:1',
         // `--no-browser` also means "no extra project window" for the native shell.
         projectUrl: options.browser === false ? undefined : sessionUrl,
         probe: options.nativeProbe,
         showWindow: options.nativeShowWindow,
+        signal: nativeAbort.signal,
         studioUrl: server.url,
       })
       lifecycle.record({ component: 'native-shell', event: 'process-started' })
@@ -192,6 +233,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
           writeReadiness({
             appName: options.appName,
             artifactRoot,
+            deviceGatewayPort: deviceGateway.port,
             launchId: launch.launchId,
             lifecycleLogPath: lifecycle.path,
             manifestPath: launch.path,
@@ -235,24 +277,39 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   } finally {
     removeStopSignalHandlers()
     lifecycle?.record({ component: 'studio-server', event: 'shutdown-requested' })
-    await cleanupStudioDev([
-      () => native?.stop(),
-      () => studioClientReload?.close(),
-      () => server?.stop(),
-      () => manager?.closeAll(),
-      () => foundationModels?.stop(),
-      () =>
-        recentProjects.flush().catch(error => {
-          HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
-        }),
-      async () => {
-        // The process record is kept, not cleared: a caller checking for survivors after shutdown
-        // needs to know what this launch owned. Liveness is decided by validation, not by absence.
-        await launch?.finalize({ shutdownReason: 'studio exited' })
-        lifecycle?.record({ component: 'studio-server', event: 'manifest-finalized' })
-        await lifecycle?.close()
-      },
-    ])
+    const cleanupStartedAt = Time.nowMs()
+    if (options.native === true) {
+      HCI.logProcessInfo('studio-native', 'final cleanup: started')
+    }
+    try {
+      await cleanupStudioDev([
+        () => native?.stop(),
+        () => studioClientReload?.close(),
+        () => server?.stop(),
+        () => deviceGateway?.stop(),
+        () => manager?.closeAll(),
+        () => foundationModels?.stop(),
+        () => trustStore?.flush(),
+        () =>
+          recentProjects.flush().catch(error => {
+            HCI.logProcessError('studio', `Could not save recent projects: ${Errors.formatForLog(error)}`)
+          }),
+        async () => {
+          // The process record is kept, not cleared: a caller checking for survivors after shutdown
+          // needs to know what this launch owned. Liveness is decided by validation, not by absence.
+          await launch?.finalize({ shutdownReason: 'studio exited' })
+          lifecycle?.record({ component: 'studio-server', event: 'manifest-finalized' })
+          await lifecycle?.close()
+        },
+      ])
+    } finally {
+      if (options.native === true) {
+        HCI.logProcessInfo(
+          'studio-native',
+          `final cleanup: completed in ${Math.max(0, Math.round(Time.nowMs() - cleanupStartedAt))}ms`,
+        )
+      }
+    }
   }
 }
 
@@ -303,6 +360,8 @@ function preferredExpoPort(): number {
 export async function openStudioProjectResource(
   request: StudioProjectOpenRequest,
   options: {
+    /** The device gateway port written into the preview manifest; absent in launches without a gateway. */
+    deviceGatewayPort?: number
     entryPath: string | undefined
     isStopping: () => boolean
     logRoot?: string
@@ -321,7 +380,9 @@ export async function openStudioProjectResource(
   },
 ): Promise<StudioSessionResource> {
   const project = await resolveStudioProjectRoot(request.projectPath)
-  const expo = await ExpoRunner.createSessionWithAvailablePort(options.preferredExpoPort)
+  const expo = await ExpoRunner.createSessionWithAvailablePort(options.preferredExpoPort, {
+    scheme: StudioCompanionIdentity.scheme,
+  })
   let expoServer: ReturnType<typeof ExpoRunner.createServer> | undefined
   let previewRuntime: CreatedStudioPreviewRuntime | undefined
   let preview: StudioPreviewSession | undefined
@@ -336,7 +397,10 @@ export async function openStudioProjectResource(
     })
   try {
     const runtimeToolchainRoot = options.runtimeToolchainRoot ?? Repo.resolvePath(expo.config.RUNTIME_TOOLCHAIN_PATH)
-    previewRuntime = await StudioPreviewRuntime.create(runtimeToolchainRoot, options.previewArtifactRoot)
+    previewRuntime = await StudioPreviewRuntime.create(runtimeToolchainRoot, {
+      artifactRoot: options.previewArtifactRoot,
+      deviceGatewayPort: options.deviceGatewayPort,
+    })
     expoServer = expo.createServer(previewRuntime.root, {
       command: options.expoCommand,
       logRoot: options.logRoot,

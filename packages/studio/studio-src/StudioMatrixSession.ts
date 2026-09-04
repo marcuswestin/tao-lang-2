@@ -43,7 +43,7 @@ export class StudioMatrixConflictError extends Errors.UserInputError {
 /** StudioMatrixSession owns independent cell configuration and concurrent preview instance identity. */
 export class StudioMatrixSession {
   readonly #cells = new Map<string, StudioPreviewCell>()
-  readonly #instanceByCell = new Map<string, string>()
+  readonly #instancesByCell = new Map<string, Set<string>>()
   readonly #instances = new Map<string, StudioCellInstanceIdentity>()
   readonly #overrides = new Map<string, StudioCellOverrides>()
   readonly #states: StudioStateLibrary
@@ -123,19 +123,19 @@ export class StudioMatrixSession {
     if (identity.previewInstanceId.trim() === '') {
       throw new Errors.UserInputError('Studio preview instance id must not be empty.')
     }
-    const previousId = this.#instanceByCell.get(identity.cellId)
-    if (previousId !== undefined) {
-      this.#instances.delete(previousId)
-    }
+    // A cell may have several live renderers at once, such as the browser iframe and a paired
+    // device; each is an opaque instance, and only a reconfiguration or a new manifest ends them.
     this.#instances.set(identity.previewInstanceId, identity)
-    this.#instanceByCell.set(identity.cellId, identity.previewInstanceId)
+    const instances = this.#instancesByCell.get(identity.cellId) ?? new Set<string>()
+    instances.add(identity.previewInstanceId)
+    this.#instancesByCell.set(identity.cellId, instances)
     return this.cell(identity.cellId)
   }
 
   assertCurrentInstance(identity: StudioCellInstanceIdentity): StudioCellRuntime {
     this.#assertCellIdentity(identity)
     const current = this.#instances.get(identity.previewInstanceId)
-    if (current === undefined || this.#instanceByCell.get(identity.cellId) !== identity.previewInstanceId) {
+    if (current === undefined || !this.#instancesByCell.get(identity.cellId)?.has(identity.previewInstanceId)) {
       throw new StudioMatrixConflictError('stale-instance', 'Studio preview instance is no longer current.')
     }
     return this.cell(identity.cellId)
@@ -144,7 +144,7 @@ export class StudioMatrixSession {
   /** instance returns bootstrap configuration only for a currently registered opaque instance id. */
   instance(previewInstanceId: string): StudioCellRuntime {
     const identity = this.#instances.get(previewInstanceId)
-    if (identity === undefined || this.#instanceByCell.get(identity.cellId) !== previewInstanceId) {
+    if (identity === undefined || !this.#instancesByCell.get(identity.cellId)?.has(previewInstanceId)) {
       throw new StudioMatrixConflictError('stale-instance', 'Studio preview instance is no longer current.')
     }
     return this.cell(identity.cellId)
@@ -174,11 +174,10 @@ export class StudioMatrixSession {
       replay: request.replay,
       ...(request.stateLayers === undefined ? {} : { stateLayers: request.stateLayers }),
     })
-    const previousId = this.#instanceByCell.get(next.cellId)
-    if (previousId !== undefined) {
+    for (const previousId of this.#instancesByCell.get(next.cellId) ?? []) {
       this.#instances.delete(previousId)
     }
-    this.#instanceByCell.delete(next.cellId)
+    this.#instancesByCell.delete(next.cellId)
     return this.#runtime(next)
   }
 
@@ -188,9 +187,7 @@ export class StudioMatrixSession {
       return
     }
     this.#instances.delete(previewInstanceId)
-    if (this.#instanceByCell.get(identity.cellId) === previewInstanceId) {
-      this.#instanceByCell.delete(identity.cellId)
-    }
+    this.#instancesByCell.get(identity.cellId)?.delete(previewInstanceId)
   }
 
   #runtime(cell: StudioPreviewCell): StudioCellRuntime {

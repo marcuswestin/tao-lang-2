@@ -160,10 +160,15 @@ export async function readJson<T = unknown>(inputPath: string): Promise<T> {
   return JSON.parse(await readText(inputPath)) as T
 }
 
+/** WriteOptions carries the permission bits a new file should be created with, such as 0o600. */
+export type WriteOptions = {
+  mode?: number
+}
+
 /** writeText writes a UTF-8 file, creating parent directories. */
-export async function writeText(inputPath: string, content: string): Promise<void> {
+export async function writeText(inputPath: string, content: string, options: WriteOptions = {}): Promise<void> {
   await mkdir(dirname(inputPath))
-  await nodeFs.writeFile(inputPath, content, 'utf8')
+  await nodeFs.writeFile(inputPath, content, { encoding: 'utf8', mode: options.mode })
 }
 
 /** writeFile writes file content, creating parent directories. */
@@ -173,8 +178,8 @@ export async function writeFile(inputPath: string, content: string | Uint8Array)
 }
 
 /** writeJson writes formatted JSON, creating parent directories. */
-export async function writeJson(inputPath: string, content: unknown): Promise<void> {
-  await writeText(inputPath, `${JSON.stringify(content, null, 2)}\n`)
+export async function writeJson(inputPath: string, content: unknown, options: WriteOptions = {}): Promise<void> {
+  await writeText(inputPath, `${JSON.stringify(content, null, 2)}\n`, options)
 }
 
 /** openAppend opens a file for appending, creating parent directories. */

@@ -109,6 +109,13 @@ Describe('Tao Studio scenario runtime', () => {
     await waitFor(() => Expect(screen.queryByText('WORKSPACE DETAILS')).toBeNull())
     Expect(screen.getByTestId('openWorkspace')).toBeDefined()
     Expect(screen.getByTestId('deleteWorkspace')).toBeDefined()
+
+    // Presenting is legal in any view body, and this row does it. Mounted bare, `present` found no
+    // navigation above it and the cell died on the first tap with 'no enclosing or explicit
+    // navigation target' — on the phone, where a person is tapping rather than reading a stack.
+    fireEvent.press(screen.getByTestId('openWorkspace'))
+    await waitFor(() => Expect(screen.getByText('WORKSPACE DETAILS')).toBeDefined())
+    Expect(screen.getByTestId('saveWorkspace')).toBeDefined()
   })
 
   Test('keeps focused occurrences in isolated app-owned lanes with their app design', () => {
@@ -122,7 +129,6 @@ Describe('Tao Studio scenario runtime', () => {
           `${String(arguments_['Label']?.evaluate().jsValue)} detail`,
         ),
     })
-    let app: ReturnType<typeof TR.Navigation.App>
     const focused = TR.Navigation.View({
       name: 'Focused root',
       render: (arguments_, taoProps) => {
@@ -134,7 +140,7 @@ Describe('Tao Studio scenario runtime', () => {
           createElement(
             RN.Text,
             null,
-            taoProps?.app === app && taoProps.app.design === design ? `${label} app design` : `${label} detached`,
+            taoProps?.app?.design === design ? `${label} app design` : `${label} detached`,
           ),
           createElement(RN.Pressable, {
             accessibilityLabel: `Open ${label}`,
@@ -145,30 +151,27 @@ Describe('Tao Studio scenario runtime', () => {
         )
       },
     })
-    const appRoot = TR.Navigation.Mount(TR.Navigation.Configure(
-      TR.Navigation.Declaration('Focused occurrence app stack', TR.NavKind.Stack()),
-      { Initial: focused },
-    ))
-    app = TR.Navigation.App({
+    const subject = (arguments_: TR.NavigationArguments): TR.AppDefinition => ({
       auxiliaries: () => ({}),
       design: () => design,
       name: 'Focused occurrence app',
-      navigator: () => appRoot,
+      navigator: () =>
+        TR.Navigation.Configure(
+          TR.Navigation.Declaration('Focused occurrence slot', TR.NavKind.Slot()),
+          { Initial: TR.Navigation.BindView(focused, arguments_) },
+        ),
+      restoration: { exclusions: [], mode: 'fresh', variant: 'Focused occurrence app' },
     })
     const screen = render(createElement(
       RN.View,
       null,
-      createElement(TR.Studio.FocusedViewHost, {
-        app,
+      createElement(TR.Studio.SubjectHost, {
         arguments: { Label: TR.Value('Left') },
-        occurrence: { id: 'left' },
-        view: focused,
+        definition: subject,
       }),
-      createElement(TR.Studio.FocusedViewHost, {
-        app,
+      createElement(TR.Studio.SubjectHost, {
         arguments: { Label: TR.Value('Right') },
-        occurrence: { id: 'right' },
-        view: focused,
+        definition: subject,
       }),
     ))
 

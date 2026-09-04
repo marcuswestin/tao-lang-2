@@ -362,16 +362,15 @@ Describe('compiler: Studio render occurrences', () => {
       )
       Expect(compiled.code).toContain('TR.Studio.Environment.useScenario()')
       Expect(compiled.code).toContain('TR.Studio.Environment.useFixture(_Scope._TaoDataCatalog)')
+      // A focused view is mounted through a navigator of its own, so `present` inside it has
+      // somewhere to go — the subject entry is the app definition that navigator belongs to.
       Expect(compiled.code).toContain(
-        `${JSON.stringify(`${paths['Main.tao']}#OwnerCard`)}: TR.Navigation.ViewReference(`,
+        `${JSON.stringify(`${paths['Main.tao']}#OwnerCard`)}: subjectArguments => ({`,
       )
       Expect(compiled.code).toContain(
-        '<TR.Studio.FocusedViewHost',
+        '<TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} />',
       )
-      Expect(compiled.code).toContain('app={_TaoAppDefinition_Preview}')
-      Expect(compiled.code).toContain('arguments={_TaoStudioArgs}')
-      Expect(compiled.code).toContain('occurrence={_TaoStudioScenario}')
-      Expect(compiled.code).toContain('view={_TaoStudioView}')
+      Expect(compiled.code).toContain('restoration: { exclusions: [], mode: \'fresh\' as const, variant: "Preview" }')
 
       const production = await Workspace.compile(paths['Main.tao'])
       Expect(production.studioManifest).toBeUndefined()
