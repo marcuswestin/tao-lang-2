@@ -1,3 +1,4 @@
+import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { ContentionRetry } from '../dev-src/repository-tests/ContentionRetry'
 import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
@@ -25,22 +26,39 @@ function failedState(name: string, output: string): WorkState {
   }
 }
 
-async function runRetry(states: WorkState[], contention = contended, passing: readonly string[] = []) {
-  const location = RunArtifacts.locate({ lane: 'verify', repositoryRoot: await mkTestDir('tao-contention-retry-') })
+async function runRetry(
+  states: WorkState[],
+  contention = contended,
+  passing: readonly string[] = [],
+  retryFailureOutput = 'timed out after 5000ms again',
+) {
+  const root = await mkTestDir('tao-contention-retry-')
+  const location = RunArtifacts.locate({ lane: 'verify', repositoryRoot: root })
   await RunArtifacts.assignLogPaths(states, location)
-  const attempted: string[] = []
-  const outcome = await ContentionRetry.confirmContendedFailures({
-    contention,
-    location,
-    runNode: async state => {
-      attempted.push(state.name)
-      return passing.includes(state.name)
-        ? { exitCode: 0, output: 'ok on its own' }
-        : { exitCode: 1, output: 'timed out after 5000ms again' }
-    },
-    states,
+  const machineLane = await MachineLanes.acquire({
+    cpuCount: 8,
+    lane: 'verify',
+    registryRoot: FS.resolvePath('registry', root),
+    repositoryRoot: root,
   })
-  return { attempted, outcome }
+  const attempted: string[] = []
+  try {
+    const outcome = await ContentionRetry.confirmContendedFailures({
+      contention,
+      location,
+      machineLane,
+      runNode: async state => {
+        attempted.push(state.name)
+        return passing.includes(state.name)
+          ? { exitCode: 0, output: 'ok on its own' }
+          : { exitCode: 1, output: retryFailureOutput }
+      },
+      states,
+    })
+    return { attempted, outcome }
+  } finally {
+    await machineLane.release()
+  }
 }
 
 Describe('contended failure confirmation', () => {
@@ -56,7 +74,9 @@ Describe('contended failure confirmation', () => {
     // The run really did fail the first time. A pass that does not say so is a pass nobody can use
     // to find a real flake.
     Expect(state.reason).toBe('timed out under machine contention; passed on an isolated retry')
-    Expect(state.fullOutput).toContain('isolated retry after machine contention')
+    Expect(state.fullOutput).toBe('ok on its own')
+    Expect(state.attempts?.[0]?.fullOutput).toContain('timed out after 5000ms')
+    Expect(state.attempts?.[1]?.fullOutput).toBe('ok on its own')
   })
 
   Test('a suite that times out again on its own stays failed and says the retry confirmed it', async () => {
@@ -76,7 +96,7 @@ Describe('contended failure confirmation', () => {
     const { attempted, outcome } = await runRetry([state])
 
     Expect(attempted).toEqual([])
-    Expect(outcome).toEqual({ confirmed: [], recovered: [] })
+    Expect(outcome).toEqual({ confirmed: [], recovered: [], unconfirmed: [] })
     Expect(state.status).toBe('failed')
     Expect(state.retried).toBeUndefined()
   })
@@ -91,6 +111,19 @@ Describe('contended failure confirmation', () => {
     Expect(classifyFailure(state.fullOutput, { contention: quiet })).toBe('repository')
   })
 
+  Test('does not claim isolation when no machine-wide exclusive lease is available', async () => {
+    const state = failedState('_test', 'timed out after 5000ms')
+    const location = RunArtifacts.locate({ lane: 'verify', repositoryRoot: await mkTestDir('tao-retry-unconfirmed-') })
+
+    const outcome = await ContentionRetry.confirmContendedFailures({ contention: contended, location, states: [state] })
+
+    Expect(outcome.unconfirmed).toEqual(['_test'])
+    Expect(state.retried).toBeUndefined()
+    Expect(state.status).toBe('failed')
+    Expect(state.reason).toContain('failure is unconfirmed')
+    Expect(state.reason).not.toContain('isolated')
+  })
+
   Test('stops after a few nodes, because a lane full of timeouts is not a flake', async () => {
     const states = ['a', 'b', 'c', 'd', 'e'].map(name => failedState(name, 'timed out after 1000ms'))
 
@@ -98,6 +131,23 @@ Describe('contended failure confirmation', () => {
 
     Expect(attempted).toHaveLength(ContentionRetry.MAX_RETRIES)
     Expect(states.slice(ContentionRetry.MAX_RETRIES).every(state => state.retried === undefined)).toBe(true)
+  })
+
+  Test('classifies a deterministic retry failure without retaining the original timeout', async () => {
+    const state = failedState('_test', 'timed out after 5000ms')
+
+    await runRetry([state], contended, [], 'Expected: 3\nReceived: 4')
+    const summary = buildSummary({
+      contention: contended,
+      elapsedMs: 1_000,
+      lane: 'verify',
+      logRoot: '/repo/logs',
+      states: [state],
+    })
+
+    Expect(state.attempts?.[0]?.fullOutput).toContain('timed out')
+    Expect(state.fullOutput).not.toContain('timed out')
+    Expect(summary.gates[0]?.failureKind).toBe('repository')
   })
 
   Test('the summary names contention, the recoveries, and what never recovered', async () => {
@@ -118,6 +168,6 @@ Describe('contended failure confirmation', () => {
     Expect(summary.gates[1]?.failureKind).toBe('machine-contention')
     Expect(summary.warnings[0]).toContain('3 Tao lanes ran at once')
     Expect(summary.warnings.some(warning => warning.includes('passed only on an isolated retry'))).toBe(true)
-    Expect(summary.warnings.some(warning => warning.includes('did not recover'))).toBe(true)
+    Expect(summary.warnings.some(warning => warning.includes('failed again on an isolated retry'))).toBe(true)
   })
 })

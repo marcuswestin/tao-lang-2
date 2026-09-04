@@ -188,7 +188,10 @@ function contentionWarnings(
   }
   const warnings = [`machine contention: ${MachineLanes.describeContention(contention)}`]
   const retried = results.filter(result => result.retried === true && result.status === 'passed')
-  const stillFailing = results.filter(result => result.failureKind === 'machine-contention')
+  const confirmedFailures = results.filter(result =>
+    result.failureKind === 'machine-contention' && result.retried === true
+  )
+  const unconfirmed = results.filter(result => result.failureKind === 'machine-contention' && result.retried !== true)
   if (retried.length > 0) {
     warnings.push(
       `passed only on an isolated retry after failing under contention: ${
@@ -196,9 +199,18 @@ function contentionWarnings(
       }`,
     )
   }
-  if (stillFailing.length > 0) {
+  if (confirmedFailures.length > 0) {
     warnings.push(
-      `timed out under contention and did not recover: ${stillFailing.map(result => result.name).join(', ')}`,
+      `failed again on an isolated retry after timing out under contention: ${
+        confirmedFailures.map(result => result.name).join(', ')
+      }`,
+    )
+  }
+  if (unconfirmed.length > 0) {
+    warnings.push(
+      `timed out under contention without an exclusive confirmation: ${
+        unconfirmed.map(result => result.name).join(', ')
+      }`,
     )
   }
   return warnings

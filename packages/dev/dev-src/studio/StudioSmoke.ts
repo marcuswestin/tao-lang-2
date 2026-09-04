@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, Repo } from '@shared'
 import { type PortReservation, Ports } from '../expo-dev-loop/expo-runner/Ports'
+import { MachineLanes, type MachineResourceLease } from '../repository-tests/MachineLanes'
 
 const basePort = 42_000
 const portsPerShard = 128
@@ -22,9 +23,23 @@ export type StudioSmokeOptions = {
   workerIndex?: number
 }
 
+/** StudioSmokeReservation holds the cross-worktree claim until the smoke child exits. */
+export type StudioSmokeReservation = {
+  allocation: StudioSmokeResources
+  release: () => Promise<void>
+}
+
+type ReservationOptions = Omit<StudioSmokeOptions, 'files'> & {
+  /** Injected by focused tests; production uses the machine-wide cache registry. */
+  registryRoot?: string
+  /** Injected by focused tests so they do not depend on host port availability. */
+  portsAvailable?: (ports: readonly number[]) => Promise<boolean>
+}
+
 /** StudioSmoke owns explicit, slow Studio smoke execution outside ordinary package discovery. */
 export const StudioSmoke = {
   defaultShardIndex,
+  reserveResources,
   resources,
   run,
   shardCount,
@@ -66,42 +81,88 @@ async function run(options: StudioSmokeOptions): Promise<number> {
     throw new Errors.UserInputError('Studio smoke requires at least one explicit test file.')
   }
   await requireGeneratedParser()
-  const allocation = options.shardIndex === undefined
-    ? await freeShardAllocation(options)
-    : resources(options)
-  await FS.mkdir(allocation.artifactRoot)
-  const result = await CLI.run('bun', {
-    args: ['test', ...options.files.map(path => FS.resolvePath(path)), '--timeout=180000'],
-    env: {
-      TAO_STUDIO_SMOKE_ARTIFACT_ROOT: allocation.artifactRoot,
-      TAO_STUDIO_SMOKE_NATIVE: options.native === true ? 'true' : 'false',
-      TAO_STUDIO_SMOKE_PREVIEW_PORT: String(allocation.previewPort),
-      TAO_STUDIO_SMOKE_SERVER_PORT: String(allocation.serverPort),
-      TAO_STUDIO_TEST_SHARD_INDEX: String(allocation.shardIndex),
-      TAO_STUDIO_TEST_WORKER_INDEX: String(allocation.workerIndex),
-    },
-    stdio: 'inherit',
-  })
-  return result.error === undefined ? result.exitCode ?? 1 : 1
+  const reservation = await reserveResources(options)
+  const allocation = reservation.allocation
+  try {
+    await FS.mkdir(allocation.artifactRoot)
+    const result = await CLI.run('bun', {
+      args: ['test', ...options.files.map(path => FS.resolvePath(path)), '--timeout=180000'],
+      env: {
+        TAO_STUDIO_SMOKE_ARTIFACT_ROOT: allocation.artifactRoot,
+        TAO_STUDIO_SMOKE_NATIVE: options.native === true ? 'true' : 'false',
+        TAO_STUDIO_SMOKE_PREVIEW_PORT: String(allocation.previewPort),
+        TAO_STUDIO_SMOKE_SERVER_PORT: String(allocation.serverPort),
+        TAO_STUDIO_TEST_SHARD_INDEX: String(allocation.shardIndex),
+        TAO_STUDIO_TEST_WORKER_INDEX: String(allocation.workerIndex),
+      },
+      stdio: 'inherit',
+    })
+    return result.error === undefined ? result.exitCode ?? 1 : 1
+  } finally {
+    await reservation.release()
+  }
+}
+
+/** reserveResources claims and probes one block; the filesystem claim stays live through the run. */
+async function reserveResources(options: ReservationOptions): Promise<StudioSmokeReservation> {
+  if (options.shardIndex !== undefined) {
+    const allocation = resources(options)
+    const lease = await acquireBlockLease(allocation, options.registryRoot)
+    if (lease === undefined) {
+      throw new Errors.HostEnvironmentError(
+        `Studio smoke shard ${allocation.shardIndex}, worker ${allocation.workerIndex} is already reserved by another worktree.`,
+      )
+    }
+    if (!await (options.portsAvailable ?? portsAreFree)([allocation.serverPort, allocation.previewPort])) {
+      await lease.release()
+      throw new Errors.HostEnvironmentError(
+        `Studio smoke shard ${allocation.shardIndex}, worker ${allocation.workerIndex} has a port already in use.`,
+      )
+    }
+    return resourceReservation(allocation, lease)
+  }
+  return freeShardAllocation(options)
 }
 
 /**
  * freeShardAllocation starts at this worktree's own shard and takes the first one whose ports are
  * free, so a lane never dies on a port another worktree's lane is already serving.
  */
-async function freeShardAllocation(options: Omit<StudioSmokeOptions, 'files'>): Promise<StudioSmokeResources> {
+async function freeShardAllocation(options: ReservationOptions): Promise<StudioSmokeReservation> {
   const preferred = defaultShardIndex()
   for (let attempt = 0; attempt < shardCount; attempt += 1) {
     const allocation = resources({ ...options, shardIndex: (preferred + attempt) % shardCount })
-    if (await portsAreFree([allocation.serverPort, allocation.previewPort])) {
-      return allocation
+    const lease = await acquireBlockLease(allocation, options.registryRoot)
+    if (lease === undefined) {
+      continue
     }
+    if (await (options.portsAvailable ?? portsAreFree)([allocation.serverPort, allocation.previewPort])) {
+      return resourceReservation(allocation, lease)
+    }
+    await lease.release()
   }
   throw new Errors.HostEnvironmentError(
     `Every Studio smoke port block from ${basePort} to ${basePort + shardCount * portsPerShard - 1} is in use, `
       + 'which means this machine is already running Studio lanes in other worktrees. Wait for one to finish, '
       + 'or name a free block yourself with --shard.',
   )
+}
+
+async function acquireBlockLease(
+  allocation: StudioSmokeResources,
+  registryRoot?: string,
+): Promise<MachineResourceLease | undefined> {
+  return MachineLanes.tryAcquireResource({
+    name: `studio-smoke-ports-${allocation.serverPort}-${allocation.previewPort}`,
+    registryRoot,
+  })
+}
+
+function resourceReservation(
+  allocation: StudioSmokeResources,
+  lease: MachineResourceLease,
+): StudioSmokeReservation {
+  return { allocation, release: () => lease.release() }
 }
 
 /** portsAreFree reports whether every port in one lane's block can still be bound. */

@@ -112,7 +112,9 @@ Describe('work graph scheduling', () => {
     await run.finished
 
     Expect(run.stateOf('compile').status).toBe('failed')
+    Expect(run.stateOf('compile').failure?.kind).toBe('nonzero-exit')
     Expect(run.stateOf('test').status).toBe('skipped')
+    Expect(run.stateOf('test').failure?.kind).toBe('dependency')
     Expect(run.stateOf('test').reason).toBe('dependency failed: compile')
     Expect(run.stateOf('report').status).toBe('skipped')
     Expect(run.stateOf('report').reason).toBe('dependency failed: test')
@@ -210,9 +212,29 @@ Describe('work graph scheduling', () => {
     const { interrupted } = await run.finished
     Expect(interrupted).toBe(false)
     Expect(run.stateOf('hung-canary').reason).toBe('timed out after 20ms')
+    Expect(run.stateOf('hung-canary').failure?.kind).toBe('timeout')
     Expect(run.stateOf('report').status).toBe('skipped')
     Expect(run.stateOf('report').reason).toBe('dependency failed: hung-canary')
     Expect(run.stateOf('browser').status).toBe('passed')
+  })
+
+  Test('a child that exits zero only after cancellation still records its timeout', async () => {
+    const state = WorkGraph.createState({
+      name: 'masked-timeout',
+      run: { args: [], command: 'ignored' },
+      timeoutMs: 1,
+    })
+
+    await WorkGraph.run([state], {
+      runNode: async (_state, context) =>
+        await new Promise(resolve => {
+          context.onCancel(() => resolve({ exitCode: 0 }))
+        }),
+      watchInterrupt: () => () => {},
+    })
+
+    Expect(state.status).toBe('failed')
+    Expect(state.failure?.kind).toBe('timeout')
   })
 
   Test('an interrupt stops the running children, skips the rest, and fails the run', async () => {
@@ -230,6 +252,7 @@ Describe('work graph scheduling', () => {
     Expect(result.interrupted).toBe(true)
     Expect(run.stateOf('test').status).toBe('failed')
     Expect(run.stateOf('test').reason).toBe('interrupted')
+    Expect(run.stateOf('test').failure?.kind).toBe('interrupted')
     Expect(run.stateOf('typecheck').status).toBe('skipped')
     Expect(run.stateOf('typecheck').reason).toBe('interrupted')
     Expect(run.started).toEqual(['test'])

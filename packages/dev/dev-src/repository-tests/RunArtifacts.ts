@@ -1,4 +1,5 @@
-import { FS, Repo } from '@shared'
+import { FS, Platform, Repo } from '@shared'
+import { randomUUID } from 'node:crypto'
 import { RunTimings } from './RunTimings'
 import { WorkGraph, type WorkState } from './WorkGraph'
 
@@ -39,7 +40,8 @@ const LATEST_LINK = 'latest'
 
 /** runStamp returns the filesystem-safe timestamp a run's directory is named after. */
 function runStamp(now = new Date()): string {
-  return now.toISOString().replaceAll(/[:.]/g, '-')
+  const timestamp = now.toISOString().replaceAll(/[:.]/g, '-')
+  return `${timestamp}-${Platform.runtimeProcess.pid}-${randomUUID().slice(0, 8)}`
 }
 
 /** locate resolves where one lane's run writes, creating nothing yet. */
@@ -69,6 +71,14 @@ async function finishRun(options: FinishRunOptions): Promise<string> {
   await Promise.all(options.states.map(async state => {
     if (state.logPath !== undefined) {
       await FS.writeText(state.logPath, state.fullOutput)
+    }
+    const initialAttempt = state.attempts?.[0]
+    if (initialAttempt !== undefined) {
+      const initialPath = FS.resolvePath(
+        `${WorkGraph.nodeLabel(state.node)}.initial.log`,
+        options.location.logRoot,
+      )
+      await FS.writeText(initialPath, initialAttempt.fullOutput)
     }
   }))
   const summaryPath = FS.resolvePath(SUMMARY_FILE, options.location.logRoot)

@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import type { ContentionReport } from './MachineLanes'
+import type { ContentionReport, MachineLane } from './MachineLanes'
 import type { RunLocation } from './RunArtifacts'
 import { describesTimeout } from './RunSummary'
 import { WorkGraph, type WorkRunOptions, type WorkState } from './WorkGraph'
@@ -10,8 +10,9 @@ import { WorkGraph, type WorkRunOptions, type WorkState } from './WorkGraph'
  * was, and it is exactly what a person does by hand before believing a red lane.
  *
  * So the lane does it once, itself, and says so. The retry is deliberately narrow: only nodes whose
- * output says a clock ran out, only when the run measured contention, only a few of them, and one
- * at a time so the retry itself is not contended. A node that passes on retry is reported as
+ * structured state or test-runner output says a clock ran out, only when the run measured
+ * contention, and only a few of them. An exclusive machine lease drains other work before the
+ * confirmation. A node that passes on retry is reported as
  * `retried`, never as a plain pass — the run really did fail the first time, and a lane that hides
  * that is a lane nobody can use to find a real flake.
  */
@@ -20,6 +21,8 @@ import { WorkGraph, type WorkRunOptions, type WorkState } from './WorkGraph'
 export type RetryOptions = {
   contention: ContentionReport
   location: RunLocation
+  /** The original top-level lane, used to stop new admissions and drain peer reservations. */
+  machineLane?: MachineLane
   /** Live states from the finished run; those that recover are updated in place. */
   states: readonly WorkState[]
   /** Injected so tests observe the retry without starting real processes. */
@@ -32,6 +35,8 @@ export type RetryOutcome = {
   confirmed: readonly string[]
   /** Nodes that passed once they had the machine to themselves. */
   recovered: readonly string[]
+  /** Candidates that could not obtain a genuinely exclusive machine confirmation. */
+  unconfirmed: readonly string[]
 }
 
 /**
@@ -47,7 +52,15 @@ function candidates(states: readonly WorkState[], contention: ContentionReport):
     return []
   }
   return states
-    .filter(state => state.status === 'failed' && state.retried !== true && describesTimeout(state.fullOutput))
+    .filter(state =>
+      state.status === 'failed'
+      && state.retried !== true
+      && (
+        state.failure?.kind === 'timeout'
+        || describesTimeout(state.reason ?? '')
+        || describesTimeout(state.fullOutput)
+      )
+    )
     .slice(0, MAX_RETRIES)
 }
 
@@ -58,40 +71,75 @@ function candidates(states: readonly WorkState[], contention: ContentionReport):
 async function confirmContendedFailures(options: RetryOptions): Promise<RetryOutcome> {
   const retrying = candidates(options.states, options.contention)
   if (retrying.length === 0) {
-    return { confirmed: [], recovered: [] }
+    return { confirmed: [], recovered: [], unconfirmed: [] }
   }
 
-  const attempts = retrying.map(state => WorkGraph.createState(state.node))
-  for (const attempt of attempts) {
-    attempt.logPath = FS.resolvePath(`${WorkGraph.nodeLabel(attempt.node)}.retry.log`, options.location.logRoot)
+  const isolation = await options.machineLane?.acquireExclusive()
+  if (isolation === undefined) {
+    for (const state of retrying) {
+      state.reason =
+        'timed out under machine contention; exclusive confirmation was not obtained, so the failure is unconfirmed'
+    }
+    return { confirmed: [], recovered: [], unconfirmed: retrying.map(state => state.name) }
   }
-  // One at a time: a retry that shares the lane with the rest of a retry batch reproduces the very
-  // condition it exists to rule out.
-  await WorkGraph.run(attempts, { jobs: 1, runNode: options.runNode, watchInterrupt: () => () => {} })
 
-  const confirmed: string[] = []
-  const recovered: string[] = []
-  for (const [index, attempt] of attempts.entries()) {
-    const original = retrying[index]!
-    await writeRetryLog(attempt)
-    adoptRetry(original, attempt)
-    ;(attempt.status === 'passed' ? recovered : confirmed).push(original.name)
+  try {
+    const attempts = retrying.map(state => WorkGraph.createState(state.node))
+    for (const attempt of attempts) {
+      attempt.logPath = FS.resolvePath(`${WorkGraph.nodeLabel(attempt.node)}.retry.log`, options.location.logRoot)
+    }
+    // The exclusive lease blocks other lanes from admitting new nodes and was granted only after
+    // their existing reservations drained. jobs=1 additionally serializes this confirmation batch.
+    await WorkGraph.run(attempts, {
+      jobs: 1,
+      runNode: options.runNode,
+      slotBroker: options.machineLane,
+      watchInterrupt: () => () => {},
+    })
+
+    const confirmed: string[] = []
+    const recovered: string[] = []
+    for (const [index, attempt] of attempts.entries()) {
+      const original = retrying[index]!
+      await writeRetryLog(attempt)
+      adoptRetry(original, attempt)
+      ;(attempt.status === 'passed' ? recovered : confirmed).push(original.name)
+    }
+    return { confirmed, recovered, unconfirmed: [] }
+  } finally {
+    await isolation.release()
   }
-  return { confirmed, recovered }
 }
 
 /** adoptRetry replaces a contended failure with what the node did when it had the machine to itself. */
 function adoptRetry(original: WorkState, attempt: WorkState): void {
+  const firstAttempt = snapshotAttempt(original)
   original.retried = true
-  original.fullOutput += `\n--- isolated retry after machine contention ---\n${attempt.fullOutput}`
+  original.attempts = [...(original.attempts ?? [firstAttempt]), snapshotAttempt(attempt)]
+  // The live state is the effective result. Keeping the first attempt only in `attempts` prevents
+  // its timeout text from poisoning classification of a deterministic retry failure.
+  original.fullOutput = attempt.fullOutput
+  original.lines = [...attempt.lines]
+  original.failure = attempt.failure
+  original.exitCode = attempt.exitCode
+  original.elapsedMs += attempt.elapsedMs
   if (attempt.status === 'passed') {
     original.status = 'passed'
-    original.exitCode = attempt.exitCode
-    original.elapsedMs += attempt.elapsedMs
     original.reason = 'timed out under machine contention; passed on an isolated retry'
     return
   }
+  original.status = attempt.status
   original.reason = 'timed out under machine contention and failed again on an isolated retry'
+}
+
+function snapshotAttempt(state: WorkState) {
+  return {
+    elapsedMs: state.elapsedMs,
+    exitCode: state.exitCode,
+    failure: state.failure,
+    fullOutput: state.fullOutput,
+    status: state.status,
+  } as const
 }
 
 async function writeRetryLog(attempt: WorkState): Promise<void> {

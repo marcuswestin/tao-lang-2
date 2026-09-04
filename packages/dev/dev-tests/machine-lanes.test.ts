@@ -1,5 +1,5 @@
-import { FS, Platform } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { CLI, FS, Platform, Repo } from '@shared'
+import { Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import { type LaneRecord, MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 
 /**
@@ -44,7 +44,10 @@ Describe('machine lanes', () => {
     const lane = await MachineLanes.acquire({ lane: 'verify', registryRoot, repositoryRoot: '/here' })
 
     Expect(lane.capacity).toBe(MachineLanes.shareOf(Platform.cpuCount(), 2))
-    Expect(await leaseFiles(registryRoot)).toEqual(['1.json', `${Platform.runtimeProcess.pid}.json`].sort())
+    const leases = await leaseFiles(registryRoot)
+    Expect(leases).toContain('1.json')
+    Expect(leases.some(name => name.startsWith(`${Platform.runtimeProcess.pid}-`) && name.endsWith('.lane.json')))
+      .toBe(true)
     Expect(lane.report().peakLanes).toBe(2)
     Expect(lane.report().contended).toBe(true)
     await lane.release()
@@ -72,7 +75,7 @@ Describe('machine lanes', () => {
     Expect(await leaseFiles(registryRoot)).toEqual([])
   })
 
-  Test('a lane already inside a reserved width neither registers nor divides again', async () => {
+  Test('a nested lane does not register again, while explicit jobs is a top-level ceiling', async () => {
     const registryRoot = await mkTestDir('tao-machine-lanes-')
 
     const nested = await MachineLanes.acquire({
@@ -90,11 +93,145 @@ Describe('machine lanes', () => {
 
     Expect(nested.capacity).toBe(5)
     Expect(explicit.capacity).toBe(3)
-    // `_test` runs inside the slots `verify` already reserved for it; a lease here would make one
-    // lane look like two and halve the machine against itself.
-    Expect(await leaseFiles(registryRoot)).toEqual([])
+    // `_test` runs inside slots already reserved by verify; explicit jobs belongs to a top-level
+    // lane and must still coordinate with other worktrees.
+    Expect(await leaseFiles(registryRoot)).toHaveLength(1)
     await nested.release()
     await explicit.release()
+    Expect(await leaseFiles(registryRoot)).toEqual([])
+  })
+
+  Test('rebalances every admission when a second lane joins without oversubscribing', async () => {
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    const first = await MachineLanes.acquire({
+      cpuCount: 6,
+      lane: 'first',
+      registryRoot,
+      repositoryRoot: '/first',
+    })
+    const firstWork = await first.tryAcquire(3, false)
+    Expect(firstWork?.slots).toBe(3)
+
+    const second = await MachineLanes.acquire({
+      cpuCount: 6,
+      lane: 'second',
+      registryRoot,
+      repositoryRoot: '/second',
+    })
+    const secondWork = await second.tryAcquire(3, false)
+
+    Expect(secondWork?.slots).toBe(3)
+    // The first lane began with all six slots available, but its revised fair share is three.
+    Expect(await first.tryAcquire(1, false)).toBeUndefined()
+    const records = await MachineLanes.activeLanes(registryRoot)
+    Expect(records.reduce((sum, record) => sum + record.slots, 0)).toBe(6)
+
+    await firstWork?.release()
+    await secondWork?.release()
+    await first.release()
+    const expandedWork = await second.tryAcquire(6, false)
+    Expect(second.ceiling).toBe(6)
+    Expect(expandedWork?.slots).toBe(6)
+    await expandedWork?.release()
+    await second.release()
+  })
+
+  Test('exclusive confirmation blocks new admissions and waits for peer work to drain', async () => {
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    const first = await MachineLanes.acquire({ cpuCount: 4, lane: 'first', registryRoot, repositoryRoot: '/first' })
+    const second = await MachineLanes.acquire({ cpuCount: 4, lane: 'second', registryRoot, repositoryRoot: '/second' })
+    const peerWork = await second.tryAcquire(2, false)
+    let acquired = false
+    const exclusive = first.acquireExclusive(1_000).then(lease => {
+      acquired = lease !== undefined
+      return lease
+    })
+
+    await settle(5)
+    Expect(acquired).toBe(false)
+    Expect(await second.tryAcquire(1, false)).toBeUndefined()
+    await peerWork?.release()
+    await until(() => acquired, { description: 'exclusive confirmation to acquire after peers drain' })
+
+    await (await exclusive)?.release()
+    await first.release()
+    await second.release()
+  })
+
+  Test('coordinates simultaneous admissions from independent processes against one CPU total', async () => {
+    const root = await mkTestDir('tao-machine-lanes-processes-')
+    const registryRoot = FS.resolvePath('registry', root)
+    const beginPath = FS.resolvePath('begin', root)
+    const releasePath = FS.resolvePath('release', root)
+    const modulePath = Repo.resolvePath('packages/dev/dev-src/repository-tests/MachineLanes.ts')
+    const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+    const script = `
+      import { Errors, FS, Time } from ${JSON.stringify(sharedPath)}
+      import { MachineLanes } from ${JSON.stringify(modulePath)}
+      const root = process.env['TAO_LANE_TEST_ROOT']
+      const id = process.env['TAO_LANE_TEST_ID']
+      if (!root || !id) Errors.throwUnexpected('Missing process test input.')
+      const lane = await MachineLanes.acquire({
+        cpuCount: 4,
+        lane: id,
+        registryRoot: FS.resolvePath('registry', root),
+        repositoryRoot: root,
+      })
+      await FS.writeText(FS.resolvePath('ready-' + id, root), '')
+      while (!await FS.exists(FS.resolvePath('begin', root))) await Time.sleep(5)
+      const work = await lane.tryAcquire(4, true)
+      await FS.writeJson(FS.resolvePath('result-' + id + '.json', root), {
+        peakLanes: lane.report().peakLanes,
+        slots: work?.slots ?? 0,
+      })
+      while (!await FS.exists(FS.resolvePath('release', root))) await Time.sleep(5)
+      await work?.release()
+      await lane.release()
+    `
+    const runChild = (id: string) =>
+      CLI.run('bun', {
+        args: ['-e', script],
+        env: { TAO_LANE_TEST_ID: id, TAO_LANE_TEST_ROOT: root },
+        stdio: 'pipe',
+      })
+    try {
+      const earlyExits: CLI.CommandResult[] = []
+      const children = [runChild('first'), runChild('second')].map(child =>
+        child.then(result => {
+          earlyExits.push(result)
+          return result
+        })
+      )
+      await until(async () =>
+        earlyExits.length > 0
+        || await FS.exists(FS.resolvePath('ready-first', root))
+          && await FS.exists(FS.resolvePath('ready-second', root)), {
+        description: 'both independent lane processes to register',
+      })
+      Expect(earlyExits.map(result => `${result.stdout}${result.stderr}`)).toEqual([])
+      await FS.writeText(beginPath, '')
+      await until(async () =>
+        await FS.exists(FS.resolvePath('result-first.json', root))
+        && await FS.exists(FS.resolvePath('result-second.json', root)), {
+        description: 'both independent lane processes to reserve their shares',
+      })
+      const results = await Promise.all(
+        ['first', 'second'].map(id =>
+          FS.readJson<{ peakLanes: number; slots: number }>(FS.resolvePath(`result-${id}.json`, root))
+        ),
+      )
+
+      Expect(results.map(result => result.slots).toSorted()).toEqual([2, 2])
+      Expect(results.every(result => result.peakLanes > 1)).toBe(true)
+      Expect((await MachineLanes.activeLanes(registryRoot)).reduce((sum, record) => sum + record.slots, 0)).toBe(4)
+
+      await FS.writeText(releasePath, '')
+      const exits = await Promise.all(children)
+      Expect(exits.every(result => result.exitCode === 0)).toBe(true)
+    } finally {
+      await FS.writeText(releasePath, '').catch(() => {})
+      await FS.remove(root)
+    }
   })
 
   Test('an unreadable registry leaves the lane running at full width instead of failing', async () => {
