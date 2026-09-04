@@ -1,6 +1,6 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
 import { CLI, Errors, Repo } from '@shared'
-import { AgentChat } from './agent-chat/AgentChatServer'
+import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
 import { AgentPoc } from './agent-poc/AgentPocServer'
 import { type StudioClientAssetProvider, StudioClientAssets } from './StudioClientAssets'
 import { StudioFixtureGeneration } from './StudioFixtureGeneration'
@@ -524,6 +524,20 @@ async function handleRequest(
   if (request.method === 'POST' && url.pathname === '/api/source-action/undo') {
     return response(request, url, options, await session.undoSourceAction(await request.json()))
   }
+  if (request.method === 'POST' && url.pathname.startsWith('/api/agent-chat/stream/')) {
+    // A turn is streamed rather than awaited: the panel prints the answer as the model produces it.
+    return streamResponse(
+      request,
+      url,
+      options,
+      streamTurn(
+        session,
+        url.pathname.slice('/api/agent-chat/stream/'.length),
+        (await request.json()) as Record<string, unknown>,
+        tests,
+      ),
+    )
+  }
   if (url.pathname.startsWith('/api/agent-chat/')) {
     return response(
       request,
@@ -762,6 +776,29 @@ function response(
     headers.set('access-control-allow-methods', 'GET, POST, OPTIONS')
   }
   return new Response(status === 204 ? null : JSON.stringify(value), { headers, status })
+}
+
+/** streamResponse sends newline-delimited JSON as it is produced, with the same origin rules as `response`. */
+function streamResponse(
+  request: Request,
+  requestUrl: URL,
+  options: StudioServerOptions,
+  stream: ReadableStream<Uint8Array>,
+): Response {
+  const origin = request.headers.get('origin')
+  const headers = new Headers({
+    // No buffering anywhere in between, or the stream arrives as one block and there was no point.
+    'cache-control': 'no-store, no-transform',
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'vary': 'origin',
+    'x-accel-buffering': 'no',
+  })
+  if (origin !== null && originAllowed(request, requestUrl, options.allowedOrigins)) {
+    headers.set('access-control-allow-origin', origin)
+    headers.set('access-control-allow-headers', 'content-type')
+    headers.set('access-control-allow-methods', 'GET, POST, OPTIONS')
+  }
+  return new Response(stream, { headers, status: 200 })
 }
 
 function errorResponse(

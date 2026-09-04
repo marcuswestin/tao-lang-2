@@ -513,8 +513,22 @@ Describe('Studio smoke resource isolation', () => {
     Expect(assets.html({ previewUrl })).toContain(JSON.stringify({ previewUrl }))
   })
 
+  Test('tells a server source change apart from one the browser rebuild covers', () => {
+    // Only the browser bundle is rebuilt on a change. A reloaded page calling an endpoint the running server
+    // does not have yet fails confusingly, so anything the server loads has to say "restart" out loud.
+    const { isStudioServerSource } = StudioClientDevReload.testing
+
+    Expect(isStudioServerSource('packages/studio/studio-src/StudioServer.ts')).toBe(true)
+    Expect(isStudioServerSource('packages/studio/studio-src/agent-chat/AgentChatServer.ts')).toBe(true)
+    // The panel and everything under client/ are bundled into the page, so a rebuild is enough for them.
+    Expect(isStudioServerSource('packages/studio/studio-src/client/StudioApiClient.ts')).toBe(false)
+    Expect(isStudioServerSource('packages/studio/studio-src/agent-chat/StudioAgentChatPanel.ts')).toBe(false)
+    // The editor package is not the Studio server.
+    Expect(isStudioServerSource('packages/code-editor/code-editor-src/Editor.ts')).toBe(false)
+  })
+
   Test('publishes only complete rebuilt Studio browser clients', async () => {
-    let changed: (() => Promise<void>) | undefined
+    let changed: ((change: { serverSourcesChanged: boolean }) => Promise<void>) | undefined
     let closed = 0
     const errors: string[] = []
     const reload = await startStudioClientDevReload({
@@ -543,17 +557,17 @@ Describe('Studio smoke resource isolation', () => {
     })
 
     Expect(reload.revision()).toBe(0)
-    await changed!()
+    await changed!({ serverSourcesChanged: false })
     Expect(reload.revision()).toBe(1)
     Expect(await reload.clientAssets.bundle()).toBe('bundle-1')
     Expect(reload.clientAssets.html({ previewUrl: 'preview' })).toBe('html-1-preview')
 
-    await changed!()
+    await changed!({ serverSourcesChanged: false })
     Expect(errors).toEqual(['HostEnvironmentError: client does not compile yet'])
     Expect(reload.revision()).toBe(1)
     Expect(await reload.clientAssets.bundle()).toBe('bundle-1')
 
-    await changed!()
+    await changed!({ serverSourcesChanged: false })
     Expect(reload.revision()).toBe(3)
     Expect(await reload.clientAssets.bundle()).toBe('bundle-3')
     await reload.close()

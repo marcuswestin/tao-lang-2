@@ -4,8 +4,16 @@
 // runaway turn, the pause when a tool needs a person's approval, and the transcript that says afterwards
 // exactly which tools ran and what they returned.
 
-import { generateText, type LanguageModel, type ModelMessage, stepCountIs, type ToolSet } from 'ai'
+import { type LanguageModel, type ModelMessage, stepCountIs, streamText, type ToolSet } from 'ai'
 import type { AgentChatToolCall } from './AgentChatTools'
+
+/**
+ * What the panel is told while a turn is still running. A turn can take many seconds across several tool
+ * calls, and printing only at the end makes a working agent look like a hung one.
+ */
+export type AgentChatEvent =
+  | { type: 'text'; text: string }
+  | { type: 'tool'; name: string }
 
 export type AgentChatApproval = {
   approvalId: string
@@ -80,7 +88,7 @@ export class AgentChatSession {
     return this.#pending
   }
 
-  async send(text: string): Promise<AgentChatTurn> {
+  async send(text: string, onEvent?: (event: AgentChatEvent) => void): Promise<AgentChatTurn> {
     if (this.#pending.length > 0) {
       // A person's answer to "may I?" is not another instruction. Resolving the pause first keeps the
       // conversation honest about what it is waiting for.
@@ -95,13 +103,14 @@ export class AgentChatSession {
       }
     }
     this.#messages.push({ content: text, role: 'user' })
-    return await this.#run()
+    return await this.#run(onEvent)
   }
 
   /** respond answers every pending approval and continues the same turn. */
-  async respond(responses: readonly { approvalId: string; approved: boolean; reason?: string }[]): Promise<
-    AgentChatTurn
-  > {
+  async respond(
+    responses: readonly { approvalId: string; approved: boolean; reason?: string }[],
+    onEvent?: (event: AgentChatEvent) => void,
+  ): Promise<AgentChatTurn> {
     if (this.#pending.length === 0) {
       return {
         message: 'Nothing is waiting for approval.',
@@ -134,14 +143,14 @@ export class AgentChatSession {
       role: 'tool',
     })
     this.#pending = []
-    return await this.#run()
+    return await this.#run(onEvent)
   }
 
-  async #run(): Promise<AgentChatTurn> {
+  async #run(onEvent?: (event: AgentChatEvent) => void): Promise<AgentChatTurn> {
     const maxSteps = this.#options.maxSteps ?? DEFAULT_MAX_STEPS
     const approvalRequired = new Set(this.#options.approvalRequired ?? [])
     try {
-      const result = await generateText({
+      const result = streamText({
         instructions: this.#options.instructions,
         messages: this.#messages,
         model: this.#options.model,
@@ -162,9 +171,19 @@ export class AgentChatSession {
           },
         }),
       })
-      this.#messages.push(...result.responseMessages)
+      // The stream has to be consumed before any of the promises below settle: it is what drives the turn.
+      // Text arrives token by token, and a tool call is announced when the model asks for it rather than
+      // when the whole turn is over, so a long turn shows what it is doing while it does it.
+      for await (const part of result.fullStream) {
+        if (part.type === 'text-delta') {
+          onEvent?.({ text: part.text, type: 'text' })
+        } else if (part.type === 'tool-call') {
+          onEvent?.({ name: part.toolName, type: 'tool' })
+        }
+      }
+      this.#messages.push(...await result.responseMessages)
       const pending: AgentChatApproval[] = []
-      for (const part of result.content) {
+      for (const part of await result.content) {
         if (part.type === 'tool-approval-request' && part.isAutomatic !== true) {
           pending.push({
             approvalId: part.approvalId,
@@ -175,19 +194,20 @@ export class AgentChatSession {
         }
       }
       this.#pending = pending
-      const steps = result.steps.length
+      const steps = (await result.steps).length
       // A turn that stopped on the step ceiling with a tool call still open has not answered; saying so is
       // more useful than presenting a partial answer as a whole one.
-      const exhausted = pending.length === 0 && steps >= maxSteps && result.finishReason === 'tool-calls'
+      const exhausted = pending.length === 0 && steps >= maxSteps && await result.finishReason === 'tool-calls'
+      const usage = await result.totalUsage
       return {
         pendingApprovals: pending,
         status: pending.length > 0 ? 'needs-approval' : exhausted ? 'budget-exhausted' : 'complete',
         steps,
-        text: result.text,
+        text: await result.text,
         toolCalls: this.#options.drain?.() ?? [],
         usage: {
-          ...(result.totalUsage.inputTokens === undefined ? {} : { inputTokens: result.totalUsage.inputTokens }),
-          ...(result.totalUsage.outputTokens === undefined ? {} : { outputTokens: result.totalUsage.outputTokens }),
+          ...(usage.inputTokens === undefined ? {} : { inputTokens: usage.inputTokens }),
+          ...(usage.outputTokens === undefined ? {} : { outputTokens: usage.outputTokens }),
         },
         ...(exhausted
           ? {

@@ -5,7 +5,7 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { Workspace } from '@workspace'
-import { MockLanguageModelV3 } from 'ai/test'
+import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 import { AgentChatProvider } from '../studio-src/agent-chat/AgentChatProvider'
 import { conversationForTesting } from '../studio-src/agent-chat/AgentChatServer'
 import type { StudioProjectSession } from '../studio-src/StudioProjectSession'
@@ -22,36 +22,55 @@ view Greeting() {
 
 type Turn = { text?: string; call?: { name: string; input: unknown } }
 
+/** The provider-level stream parts this double emits, named locally so no extra dependency is declared. */
+type StreamPart =
+  | { type: 'text-start'; id: string }
+  | { type: 'text-delta'; id: string; delta: string }
+  | { type: 'text-end'; id: string }
+  | { type: 'tool-call'; toolCallId: string; toolName: string; input: string }
+  | { type: 'finish'; finishReason: { raw: undefined; unified: string }; usage: unknown }
+
+/**
+ * The loop streams, so the double has to stream too. Text arrives as several deltas rather than one blob,
+ * which is what lets a test assert that a caller sees it progressively.
+ */
 function scripted(turns: readonly Turn[]): MockLanguageModelV3 {
   let step = 0
   return new MockLanguageModelV3({
-    doGenerate: async () => {
+    doStream: async () => {
       const turn = turns[Math.min(step, turns.length - 1)]!
       step += 1
-      type Part =
-        | { type: 'text'; text: string }
-        | { type: 'tool-call'; toolCallId: string; toolName: string; input: string }
-      const content: Part[] = turn.call === undefined
-        ? [{ text: turn.text ?? '', type: 'text' }]
-        : [{
-          input: JSON.stringify(turn.call.input),
-          toolCallId: `call-${step}`,
-          toolName: turn.call.name,
-          type: 'tool-call',
-        }]
-      return {
-        content,
-        finishReason: {
-          raw: undefined,
-          unified: turn.call === undefined ? ('stop' as const) : ('tool-calls' as const),
-        },
-        usage: {
-          inputTokens: { cacheRead: undefined, cacheWrite: undefined, noCache: 1, total: 1 },
-          outputTokens: { reasoning: undefined, text: 1, total: 1 },
-          totalTokens: 2,
-        },
-        warnings: [],
+      const finishReason = {
+        raw: undefined,
+        unified: turn.call === undefined ? ('stop' as const) : ('tool-calls' as const),
       }
+      const usage = {
+        inputTokens: { cacheRead: undefined, cacheWrite: undefined, noCache: 1, total: 1 },
+        outputTokens: { reasoning: undefined, text: 1, total: 1 },
+        totalTokens: 2,
+      }
+      const parts: StreamPart[] = turn.call === undefined
+        ? [
+          { id: '0', type: 'text-start' },
+          // Word by word, so a test can tell a stream from a single delivery.
+          ...(turn.text ?? '').split(/(?<= )/).map((delta): StreamPart => ({
+            delta,
+            id: '0',
+            type: 'text-delta',
+          })),
+          { id: '0', type: 'text-end' },
+          { finishReason, type: 'finish', usage },
+        ]
+        : [
+          {
+            input: JSON.stringify(turn.call.input),
+            toolCallId: `call-${step}`,
+            toolName: turn.call.name,
+            type: 'tool-call',
+          },
+          { finishReason, type: 'finish', usage },
+        ]
+      return { stream: simulateReadableStream({ chunks: parts }) as never }
     },
   })
 }

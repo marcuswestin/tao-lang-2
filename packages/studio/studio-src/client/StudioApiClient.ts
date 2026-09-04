@@ -186,6 +186,58 @@ export const StudioApiClient = {
   agentChat: async <Result>(command: string, body: unknown): Promise<Result> =>
     await request(`/api/agent-chat/${command}`, body),
 
+  /**
+   * Runs one chat turn, reporting each newline-delimited event as it arrives and resolving with the final
+   * turn. Waiting for the whole response before printing anything makes a working agent look like a hung one.
+   */
+  agentChatStream: async <Result>(
+    command: string,
+    body: unknown,
+    onEvent: (event: { type: string; text?: string; name?: string }) => void,
+  ): Promise<Result> => {
+    const response = await fetch(studioSessionPath(`/api/agent-chat/stream/${command}`), {
+      body: JSON.stringify(body),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+    if (!response.ok || response.body === null) {
+      Errors.throwHostEnvironment(`Studio returned ${response.status} for the chat stream.`)
+    }
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffered = ''
+    let turn: Result | undefined
+    const consume = (line: string) => {
+      if (line.trim() === '') {
+        return
+      }
+      const event = JSON.parse(line) as { type: string; turn?: Result }
+      if (event.type === 'done') {
+        turn = event.turn
+      } else {
+        onEvent(event as { type: string; text?: string; name?: string })
+      }
+    }
+    while (true) {
+      const { done, value } = await reader.read()
+      buffered += decoder.decode(value, { stream: !done })
+      let newline = buffered.indexOf('\n')
+      while (newline >= 0) {
+        consume(buffered.slice(0, newline))
+        buffered = buffered.slice(newline + 1)
+        newline = buffered.indexOf('\n')
+      }
+      if (done) {
+        break
+      }
+    }
+    consume(buffered)
+    if (turn === undefined) {
+      Errors.throwHostEnvironment('The chat stream ended without a result.')
+    }
+    return turn
+  },
+
   agentPoc: async <Result>(command: string, body: unknown): Promise<Result> =>
     await request(`/api/agent-poc/${command}`, body),
   aiAvailability: async (): Promise<StudioAIAvailability> => await get('/api/ai/availability'),

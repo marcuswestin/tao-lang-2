@@ -10,7 +10,7 @@ import { authoringTools, type CodeChangeRequest } from './AgentChatAuthoring'
 import { declarationSource } from './AgentChatFacts'
 import { askInstructions, buildInstructions, scenarioInstructions } from './AgentChatInstructions'
 import { AgentChatProvider } from './AgentChatProvider'
-import { AgentChatSession, type AgentChatTurn } from './AgentChatSession'
+import { type AgentChatEvent, AgentChatSession, type AgentChatTurn } from './AgentChatSession'
 import { type AgentChatToolCall, type AgentChatWorld, readTools } from './AgentChatTools'
 import {
   type AgentChatWriteWorld,
@@ -179,7 +179,7 @@ class AgentChatConversation {
     }
   }
 
-  async send(text: string): Promise<Json> {
+  async send(text: string, onEvent?: (event: AgentChatEvent) => void): Promise<Json> {
     const model = this.#provider.model()
     if (model === undefined) {
       return { availability: this.#provider.availability(), status: 'unavailable' }
@@ -204,7 +204,7 @@ class AgentChatConversation {
     this.#world.invalidate()
     this.#requestsBeforeTurn = this.#codeChangeRequests.length
     this.#history.push({ role: 'user', text })
-    const turn = await this.#chat.send(text)
+    const turn = await this.#chat.send(text, onEvent)
     return await this.#record(turn)
   }
 
@@ -261,11 +261,14 @@ class AgentChatConversation {
     }
   }
 
-  async respond(responses: readonly { approvalId: string; approved: boolean }[]): Promise<Json> {
+  async respond(
+    responses: readonly { approvalId: string; approved: boolean }[],
+    onEvent?: (event: AgentChatEvent) => void,
+  ): Promise<Json> {
     if (this.#chat === undefined) {
       return { message: 'Nothing is waiting for approval.', status: 'complete' }
     }
-    return await this.#record(await this.#chat.respond(responses))
+    return await this.#record(await this.#chat.respond(responses, onEvent))
   }
 
   async #record(turn: AgentChatTurn): Promise<Json> {
@@ -374,6 +377,53 @@ export function conversationForTesting(
   return { handle: async (command, body, tests) => await AgentChat.handle(session, command, body, tests) }
 }
 
+/**
+ * streamTurn runs one turn and reports it as newline-delimited JSON: `text` and `tool` events while the model
+ * works, then one `done` carrying exactly the payload the non-streaming command returns. The panel therefore
+ * prints as the answer arrives and still renders approvals, verdicts and usage from a single final object.
+ */
+export function streamTurn(
+  session: StudioProjectSession,
+  command: string,
+  body: Json,
+  tests?: StudioTestRunner,
+): ReadableStream<Uint8Array> {
+  const conversation = conversationFor(session)
+  conversation.useTestRunner(tests)
+  const encoder = new TextEncoder()
+  return new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const write = (value: unknown) => controller.enqueue(encoder.encode(`${JSON.stringify(value)}\n`))
+      try {
+        const onEvent = (event: AgentChatEvent) => write(event)
+        const message = String(body['message'] ?? '').trim()
+        const result = command === 'respond'
+          ? await conversation.respond(approvalResponses(body), onEvent)
+          : message === ''
+          ? { message: 'Ask a question first.', status: 'failed' }
+          : await conversation.send(message, onEvent)
+        write({ turn: result, type: 'done' })
+      } catch (error) {
+        // A turn that fails mid-stream still has to end with something the panel can render.
+        write({
+          turn: { message: String(error instanceof Error ? error.message : error), status: 'failed' },
+          type: 'done',
+        })
+      } finally {
+        controller.close()
+      }
+    },
+  })
+}
+
+function approvalResponses(body: Json): { approvalId: string; approved: boolean }[] {
+  const responses = Array.isArray(body['responses']) ? body['responses'] : []
+  return responses.map(entry => ({
+    approvalId: String((entry as Json)['approvalId'] ?? ''),
+    approved: (entry as Json)['approved'] === true,
+  }))
+}
+
 export const AgentChat = {
   async handle(
     session: StudioProjectSession,
@@ -403,13 +453,7 @@ export const AgentChat = {
       return conversation.codeChanges
     }
     if (command === 'respond') {
-      const responses = Array.isArray(body['responses']) ? body['responses'] : []
-      return await conversation.respond(
-        responses.map(entry => ({
-          approvalId: String((entry as Json)['approvalId'] ?? ''),
-          approved: (entry as Json)['approved'] === true,
-        })),
-      )
+      return await conversation.respond(approvalResponses(body))
     }
     if (command === 'history') {
       return { history: conversation.history }

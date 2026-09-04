@@ -231,14 +231,22 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
 
   async function resume(responses: { approvalId: string; approved: boolean }[]): Promise<void> {
     send.disabled = true
-    const thinking = line('continuing…')
-    log.append(thinking)
+    const live = liveTurn()
+    live.tool('continuing')
     try {
-      show(await StudioApiClient.agentChat<TurnResult>('respond', { responses }))
+      const turn = await StudioApiClient.agentChatStream<TurnResult>('respond', { responses }, event => {
+        if (event.type === 'text' && event.text !== undefined) {
+          live.text(event.text)
+        } else if (event.type === 'tool' && event.name !== undefined) {
+          live.tool(event.name)
+        }
+      })
+      live.done()
+      show(turn)
     } catch (error) {
+      live.done()
       log.append(line(`Studio could not continue: ${String(error)}`, '#d4736b'))
     } finally {
-      thinking.remove()
       send.disabled = false
       log.scrollTop = log.scrollHeight
     }
@@ -266,6 +274,44 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       showAvailability(await StudioApiClient.agentChat<Availability>('enable', { enabled: cloud.checked }))
     })()
   })
+
+  /**
+   * A block that grows while the model is still producing. It shows the answer as it arrives and the tools as
+   * they are called, so a turn that takes many seconds looks like work rather than a hang.
+   */
+  function liveTurn(): { text: (chunk: string) => void; tool: (name: string) => void; done: () => string } {
+    const block = document.createElement('div')
+    block.style.cssText = 'border-left:2px solid #6fb38a;padding-left:8px'
+    const who = document.createElement('div')
+    who.style.cssText = 'color:#6fb38a;margin-bottom:2px'
+    who.textContent = 'agent'
+    const body = document.createElement('div')
+    body.style.whiteSpace = 'pre-wrap'
+    block.append(who, body)
+    log.append(block)
+    let text = ''
+    let working: HTMLElement | undefined
+    return {
+      done: () => {
+        working?.remove()
+        block.remove()
+        return text
+      },
+      text: chunk => {
+        working?.remove()
+        working = undefined
+        text += chunk
+        body.textContent = text
+        log.scrollTop = log.scrollHeight
+      },
+      tool: name => {
+        working?.remove()
+        working = line(`· ${name}…`, '#6b7a70')
+        block.append(working)
+        log.scrollTop = log.scrollHeight
+      },
+    }
+  }
 
   function show(turn: TurnResult): void {
     showToolCalls(turn.toolCalls ?? [])
@@ -356,15 +402,21 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     input.value = ''
     say('you', question)
     send.disabled = true
-    const thinking = line('thinking…', '#9fb3a5')
-    log.append(thinking)
-    log.scrollTop = log.scrollHeight
+    const live = liveTurn()
+    live.tool('thinking')
     try {
-      const turn = await StudioApiClient.agentChat<TurnResult>('send', { message: question })
-      thinking.remove()
+      const turn = await StudioApiClient.agentChatStream<TurnResult>('send', { message: question }, event => {
+        if (event.type === 'text' && event.text !== undefined) {
+          live.text(event.text)
+        } else if (event.type === 'tool' && event.name !== undefined) {
+          live.tool(event.name)
+        }
+      })
+      // The streamed text is replaced by the finished rendering, which links every declaration it names.
+      live.done()
       show(turn)
     } catch (error) {
-      thinking.remove()
+      live.done()
       log.append(line(`Studio could not reach the chat: ${String(error)}`, '#d4736b'))
     } finally {
       send.disabled = false
