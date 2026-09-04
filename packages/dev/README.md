@@ -33,6 +33,14 @@ is waiting and backs off its registry polling. CPU admission fails open only whe
 unavailable; exclusive confirmation and named resources fail closed because they cannot truthfully
 claim isolation without shared storage.
 
+Inside one lane, every tree-mutating preflight finishes before readers start. The long `_test` and
+`_typecheck` readers are then launched first, and measured critical-path duration orders the rest.
+There is no fixed startup sleep: once a child has started, its slot reservation already protects its
+worker budget, while a sleep would leave usable capacity idle. Full-verification's Studio smokes
+reserve one slot each because they spend most of their wall time waiting on host services; this lets
+several smokes overlap the package critical path while the `gui` resource still serializes the two
+window-server lanes.
+
 `./agent doctor` reads this registry without pruning or otherwise mutating it, and reports the load
 average beside it — the one reading that also counts work no lane registered, such as an Xcode build
 or another repository entirely.

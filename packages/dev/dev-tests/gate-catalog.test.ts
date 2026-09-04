@@ -5,10 +5,9 @@ import { runGates } from '../dev-src/repository-tests/GateRunner'
 import { WorkGraph } from '../dev-src/repository-tests/WorkGraph'
 
 /**
- * The catalog is metadata, so most of it is asserted as metadata. The three claims that are about
- * scheduling rather than data — the dependency edge, the fix barrier, and the `gui` pair — are
- * proved by running a lane through an injected runner, where a node finishes only when the test
- * lets it and an overlap cannot be missed by being lucky with a sleep.
+ * The catalog is metadata, so most of it is asserted as metadata. Claims about scheduling rather
+ * than data are proved by running a lane through an injected runner, where a node finishes only
+ * when the test lets it and an overlap cannot be missed by being lucky with a sleep.
  */
 
 const REPOSITORY_ROOT = '/repository'
@@ -19,8 +18,7 @@ function nodeOf(name: string) {
 
 /**
  * runLane records which nodes were running at the same moment. Tests that must prove two nodes can
- * overlap use a start barrier so filesystem-backed admission timing cannot let the first finish
- * before the second is admitted.
+ * overlap use a start barrier so the first cannot finish before the second is admitted.
  */
 async function runLane(gates: readonly string[], jobs: number, startBarrierCount = 0) {
   const root = await mkTestDir('tao-gate-catalog-')
@@ -131,13 +129,13 @@ Describe('gate catalog metadata', () => {
 
   Test('schedules the real ship bundle proof as a bounded slow lane', () => {
     Expect(GateCatalog.metadata('_ship-bundle-proof')).toEqual({
-      cost: GateCatalog.STUDIO_LANE_COST,
+      cost: 3,
       needs: ['_parser-gen'],
       timeoutMs: 180_000,
     })
   })
 
-  Test('starts the Studio lanes before the package gates and keeps four of them fitting at once', () => {
+  Test('starts the package critical path before one-slot Studio waits', () => {
     for (
       const name of [
         '_full-verify-smoke-launch',
@@ -147,11 +145,11 @@ Describe('gate catalog metadata', () => {
         '_full-verify-canary',
       ]
     ) {
-      Expect(nodeOf(name).cost).toBe(3)
-      Expect(nodeOf(name).priority).toBe(5)
+      Expect(nodeOf(name).cost).toBe(1)
+      Expect(nodeOf(name).priority).toBeUndefined()
     }
     Expect(nodeOf('_test').priority).toBe(4)
-    Expect(nodeOf('_typecheck').priority).toBe(3)
+    Expect(nodeOf('_typecheck').priority).toBe(4)
   })
 
   Test('gives only the two window-server lanes the gui resource', () => {
@@ -208,6 +206,44 @@ Describe('gate catalog scheduling', () => {
     Expect(started.slice(-2).toSorted()).toEqual(['_repo-lint', '_typecheck'])
     Expect(overlapped(overlaps, '_fix-dprint', '_typecheck')).toBe(false)
     Expect(overlapped(overlaps, '_fix-tao', '_repo-lint')).toBe(false)
+  })
+
+  Test('starts test and typecheck before auxiliary full-verification gates', async () => {
+    const { started } = await runLane(
+      [
+        '_full-verify-canary',
+        '_ship-bundle-proof',
+        '_typecheck',
+        '_test',
+      ],
+      GateCatalog.testCost() + 6,
+      3,
+    )
+
+    Expect(started.slice(0, 2).toSorted()).toEqual(['_test', '_typecheck'])
+    Expect(started[2]).toBe('_ship-bundle-proof')
+  })
+
+  Test('uses the slots beside package work for three Studio waits at once', async () => {
+    const { overlaps, started } = await runLane(
+      [
+        '_full-verify-smoke-launch',
+        '_full-verify-real-app',
+        '_full-verify-simulated',
+        '_full-verify-native',
+        '_typecheck',
+        '_test',
+      ],
+      GateCatalog.testCost() + 6,
+      5,
+    )
+
+    Expect(started.slice(0, 2).toSorted()).toEqual(['_test', '_typecheck'])
+    Expect(overlaps.some(names =>
+      names.includes('_test')
+      && names.includes('_typecheck')
+      && names.filter(name => name.startsWith('_full-verify-')).length === 3
+    )).toBe(true)
   })
 
   Test('keeps the gui lanes exclusive and lets the browser lane overlap either one', async () => {

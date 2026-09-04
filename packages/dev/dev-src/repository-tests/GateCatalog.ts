@@ -40,20 +40,26 @@ const DEFAULT_METADATA: GateMetadata = { cost: 1 }
 const SLOTS_BESIDE_TEST = 6
 const TAO_CHECK_COST = 2
 const TYPECHECK_COST = 3
-/** Wide enough that a Studio lane is not starved, narrow enough that four fit at once. */
-const STUDIO_LANE_COST = 3
+/**
+ * Studio smoke spends most of its wall time waiting on Metro, browser, simulator, or IPC
+ * readiness. One accounting slot lets those host waits overlap the CPU-heavy package gates; the
+ * `gui` resource below, not an inflated CPU reservation, owns the real native-host exclusion.
+ */
+const STUDIO_LANE_COST = 1
+/** The release proof runs CPU-heavy Expo exports rather than waiting on an interactive host. */
+const SHIP_BUNDLE_PROOF_COST = 3
 /** Generous against a healthy canary run; a bound against a post-report hang regressing. */
 const STUDIO_CANARY_TIMEOUT_MS = 300_000
 const SHIP_BUNDLE_PROOF_TIMEOUT_MS = 180_000
 
 /**
- * Start-order pins. Measured durations order nodes within a priority; these say which node should
- * be looked at first when several are ready at once. The Studio lanes dominate `full-verify`'s wall
- * time, and `_test` and `_typecheck` dominate every other lane's.
+ * Start-order pins. Measured durations order nodes within a priority; these make the two stable
+ * package critical-path gates start before auxiliary work once the tree-mutating preflight ends.
+ * Starting the children is sufficient: their reservations protect their worker budgets, so a
+ * fixed sleep before admitting the remaining work would only add idle time.
  */
-const STUDIO_LANE_PRIORITY = 5
 const TEST_PRIORITY = 4
-const TYPECHECK_PRIORITY = 3
+const TYPECHECK_PRIORITY = TEST_PRIORITY
 
 /**
  * testCost reserves most of the machine for `_test` while leaving `_typecheck` and `_tao-check`
@@ -72,7 +78,6 @@ function studioLane(resources?: readonly string[]): GateMetadata {
     // Every Studio lane dies on a missing `_gen_tao-parser`, and none of them may read the tree
     // while `fix` is still rewriting it; the mutates-tree barrier handles the second half.
     needs: ['_parser-gen'],
-    priority: STUDIO_LANE_PRIORITY,
     requiresUnsandboxed: true,
     resources,
   }
@@ -123,7 +128,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     [
       '_ship-bundle-proof',
       {
-        cost: STUDIO_LANE_COST,
+        cost: SHIP_BUNDLE_PROOF_COST,
         needs: ['_parser-gen'],
         timeoutMs: SHIP_BUNDLE_PROOF_TIMEOUT_MS,
       },
