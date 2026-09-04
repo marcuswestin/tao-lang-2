@@ -18,15 +18,20 @@ function nodeOf(name: string) {
 }
 
 /**
- * runLane runs a lane with every node held open until the whole ready set has started, recording
- * which nodes were running at the same moment.
+ * runLane records which nodes were running at the same moment. Tests that must prove two nodes can
+ * overlap use a start barrier so filesystem-backed admission timing cannot let the first finish
+ * before the second is admitted.
  */
-async function runLane(gates: readonly string[], jobs: number) {
+async function runLane(gates: readonly string[], jobs: number, startBarrierCount = 0) {
   const root = await mkTestDir('tao-gate-catalog-')
   try {
     const running = new Set<string>()
     const overlaps: string[][] = []
     const started: string[] = []
+    let releaseStartBarrier = () => {}
+    const startBarrier = new Promise<void>(resolve => {
+      releaseStartBarrier = resolve
+    })
     await runGates({
       gates,
       jobs,
@@ -36,7 +41,14 @@ async function runLane(gates: readonly string[], jobs: number) {
       runGate: async name => {
         started.push(name)
         running.add(name)
-        await settle(2)
+        if (startBarrierCount > 0) {
+          if (started.length >= startBarrierCount) {
+            releaseStartBarrier()
+          }
+          await startBarrier
+        } else {
+          await settle(2)
+        }
         overlaps.push([...running].toSorted())
         running.delete(name)
         return { exitCode: 0, output: '' }
@@ -198,15 +210,16 @@ Describe('gate catalog scheduling', () => {
     Expect(overlapped(overlaps, '_fix-tao', '_repo-lint')).toBe(false)
   })
 
-  Test('never runs the native shell beside the canary, and runs the browser lanes beside both', async () => {
-    // 24 slots is wider than the three lanes together, so only the `gui` resource can separate them.
-    const { overlaps } = await runLane(
-      ['_full-verify-native', '_full-verify-canary', '_full-verify-simulated'],
-      24,
-    )
+  Test('keeps the gui lanes exclusive and lets the browser lane overlap either one', async () => {
+    // Each pair fits inside 24 slots. The barrier makes allowed overlap deterministic, while the
+    // two gui nodes must still run sequentially because they hold the same resource.
+    const guiPair = await runLane(['_full-verify-native', '_full-verify-canary'], 24)
+    const nativeAndBrowser = await runLane(['_full-verify-native', '_full-verify-simulated'], 24, 2)
+    const canaryAndBrowser = await runLane(['_full-verify-canary', '_full-verify-simulated'], 24, 2)
 
-    Expect(overlapped(overlaps, '_full-verify-native', '_full-verify-canary')).toBe(false)
-    Expect(overlapped(overlaps, '_full-verify-native', '_full-verify-simulated')).toBe(true)
+    Expect(overlapped(guiPair.overlaps, '_full-verify-native', '_full-verify-canary')).toBe(false)
+    Expect(overlapped(nativeAndBrowser.overlaps, '_full-verify-native', '_full-verify-simulated')).toBe(true)
+    Expect(overlapped(canaryAndBrowser.overlaps, '_full-verify-canary', '_full-verify-simulated')).toBe(true)
   })
 })
 
