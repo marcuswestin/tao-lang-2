@@ -29,6 +29,16 @@ description = "Tao worktree: write the workspace, read the reference repo, reach
 
 [permissions.tao-workspace.filesystem]
 "~/code/tao-lang-2/.git" = "write"
+# Caches and shared state the pinned toolchain writes outside the worktree. One list serves
+# both harnesses: these are Claude Code's sandbox write paths, spelled as Codex rules.
+"~/.bun" = "write"
+"~/.cache" = "write"
+"~/.gradle" = "write"
+"~/.android" = "write"
+"~/.expo" = "write"
+"~/.hutch" = "write"
+"~/.local/state/watchman" = "write"
+"~/Library/Caches" = "write"
 # The previous repository is reference material only (see AGENTS.md).
 "~/code/tao-lang" = "read"
 "~/.aws/**" = "deny"

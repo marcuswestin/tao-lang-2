@@ -91,7 +91,8 @@ export type TaoAppDeclaration = Readonly<{
 export type TaoAppDefinition = {
   auxiliaries(): Record<string, TaoNavigationInput>
   declaration?: TaoAppDeclaration
-  design?(): TaoDesign
+  /** A definition built for a Studio cell forwards the app's design, which an app may not declare. */
+  design?(): TaoDesign | undefined
   name: string
   navigator(): TaoNavigationInput
   restoration?: TaoAppRestorationDefinition

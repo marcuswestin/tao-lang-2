@@ -6,7 +6,9 @@ import type { TaoNavigationArguments } from '../TaoRuntime-src/TR-navigation'
 import type { TaoDeclarationIdentityTuple } from '../TaoRuntime-src/TR-navigation-identity'
 import { RuntimeStackNav } from '../TaoRuntime-src/TR-navigation-mounts'
 import {
+  beginNavigationPreviewCell,
   type NavigationRestorationDiagnostic,
+  setNavigationPreviewScope,
   setNavigationRestorationStorageForTests,
   subscribeNavigationRestorationDiagnostics,
 } from '../TaoRuntime-src/TR-navigation-restoration'
@@ -60,6 +62,90 @@ Describe('navigation restoration', () => {
       Expect((second.app.navigator as RuntimeStackNav).depth).toBe(2)
       detachSecond()
     } finally {
+      restoreStorage()
+    }
+  })
+
+  /**
+   * Two Studio scenarios of one app differ by fixture, and their stored stacks hold entity handles
+   * for rows the other one does not have. On a device this is not hypothetical: one process renders
+   * every cell it is assigned and keeps real device storage between them, so an unscoped key left a
+   * scenario restoring the other's stack and failing to render at all.
+   */
+  Test("a preview scope keeps one cell from restoring another cell's stack", async () => {
+    const values = new Map<string, string>()
+    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
+    try {
+      setNavigationPreviewScope('cell:one')
+      const first = runtimeApp('main')
+      const detach = await first.app.attachRestoration()
+      first.app.present(first.app.navigator, first.detail, { Message: TR.Value('from cell one') })
+      await drainMicrotasks()
+      detach()
+
+      // The same app, a different cell: it must start where a fresh app starts.
+      setNavigationPreviewScope('cell:two')
+      const second = runtimeApp('main')
+      const detachSecond = await second.app.attachRestoration()
+      Expect((second.app.navigator as RuntimeStackNav).depth).toBe(1)
+      detachSecond()
+
+      // Returning to the first cell finds its own stack where it left it.
+      setNavigationPreviewScope('cell:one')
+      const third = runtimeApp('main')
+      const detachThird = await third.app.attachRestoration()
+      Expect((third.app.navigator as RuntimeStackNav).depth).toBe(2)
+      detachThird()
+    } finally {
+      setNavigationPreviewScope(undefined)
+      restoreStorage()
+    }
+  })
+
+  Test('starts each preview cell from the store, on the one app definition a device reuses', async () => {
+    const values = new Map<string, string>()
+    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
+    try {
+      // One app definition for every cell: the compiler emits it once at module scope, and a device
+      // is assigned cell after cell in that same process. Building a second one here would hide the
+      // defect entirely — the mounted navigation, not the stored position, is what leaked.
+      const { app, detail } = runtimeApp('main')
+
+      beginNavigationPreviewCell('cell:one')
+      const detach = await app.attachRestoration()
+      app.present(app.navigator, detail, { Message: TR.Value('from cell one') })
+      await drainMicrotasks()
+      Expect((app.navigator as RuntimeStackNav).depth).toBe(2)
+
+      // A different cell is a different launch. Its fixture replaces the provider generation the
+      // stack above holds handles from, so it has to open where a fresh app opens.
+      app.reset()
+      beginNavigationPreviewCell('cell:two')
+      const detachSecond = await app.attachRestoration()
+      Expect((app.navigator as RuntimeStackNav).depth).toBe(1)
+
+      // The late detach of a launch this one replaced must not decrement the live count. A host
+      // detaches on its own schedule, so this arrives after the relaunch; counted, it would leave
+      // the running cell unsubscribed and every later cell persisting nothing at all.
+      detach()
+      app.present(app.navigator, detail, { Message: TR.Value('recorded in cell two') })
+      await drainMicrotasks()
+      detachSecond()
+
+      app.reset()
+      beginNavigationPreviewCell('cell:two')
+      const detachThird = await app.attachRestoration()
+      Expect((app.navigator as RuntimeStackNav).depth).toBe(2)
+      detachThird()
+
+      // And the first cell still finds its own stack, which is what the scoping is for.
+      app.reset()
+      beginNavigationPreviewCell('cell:one')
+      const detachFourth = await app.attachRestoration()
+      Expect((app.navigator as RuntimeStackNav).depth).toBe(2)
+      detachFourth()
+    } finally {
+      setNavigationPreviewScope(undefined)
       restoreStorage()
     }
   })

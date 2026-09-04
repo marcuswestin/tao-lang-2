@@ -396,6 +396,8 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands).toContain('--lane full-verify')
     Expect(commands).not.toContain('--jobs 1')
     Expect(commands).not.toContain('_full-verify-simulated=temporarily quarantined')
+    Expect(commands).not.toContain('_tao-check=')
+    Expect(commands).not.toContain('_dprint-check=')
     Expect(commands).not.toContain('manual-check')
     // Each lane owns a worker index so StudioSmoke.resources() keeps their ports and roots apart.
     Expect(await justCommands('_full-verify-smoke-launch')).toContain(
@@ -432,11 +434,26 @@ Describe('agent worktree profile bootstrap', () => {
   })
 
   Test('formats the Justfile in the same lane that checks its formatting', async () => {
-    // `verify` skips `_dprint-check`, which is also where `just --fmt --check` lives. If `fix`
-    // does not format the Justfile, `verify` can pass a tree that `check` then rejects.
+    // `verify` uses fixing gates instead of `_dprint-check`, which is also where
+    // `just --fmt --check` lives. If `fix` does not format the Justfile, `verify` can pass a tree
+    // that `check` then rejects.
     Expect(await justCommands('fix')).toContain('just --fmt')
     Expect(await justCommands('_dprint-check')).toContain('just --fmt --check')
     Expect(await justCommands('check')).toContain('_dprint-check')
+  })
+
+  Test('reports only work deliberately omitted from a lane as skipped', async () => {
+    const verify = await justCommands('verify')
+    const fullVerify = await justCommands('full-verify')
+    const sandbox = await justCommands('full-verify-sandbox')
+
+    Expect(verify).toContain('--skipped "studio-smoke=slow lane; run just studio-smoke or just full-verify"')
+    for (const commands of [verify, fullVerify, sandbox]) {
+      Expect(commands).not.toContain('_tao-check=')
+      Expect(commands).not.toContain('_dprint-check=')
+    }
+    Expect(fullVerify).not.toContain('--skipped')
+    Expect(sandbox).toContain('--skip-unsandboxed')
   })
 })
 

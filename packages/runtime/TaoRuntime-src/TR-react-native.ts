@@ -6,6 +6,10 @@ export type ReactNativeRuntime = {
     sendAccessibilityEvent(host: object, eventType: 'focus'): void
   }
   ActivityIndicator: React.ComponentType<any>
+  AppState?: {
+    addEventListener(event: 'change', handler: (state: string) => void): { remove(): void }
+    currentState: string
+  }
   BackHandler?: {
     addEventListener(event: 'hardwareBackPress', handler: () => boolean): { remove(): void }
   }
@@ -14,6 +18,7 @@ export type ReactNativeRuntime = {
   }
   Image: React.ComponentType<any>
   KeyboardAvoidingView: React.ComponentType<any>
+  LogBox?: { ignoreAllLogs(ignore?: boolean): void }
   Modal?: React.ComponentType<any>
   TouchableOpacity?: any
   StatusBar?: any

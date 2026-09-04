@@ -23,6 +23,7 @@ import type { TaoNavigationValue } from './TR-navigation'
 import type { TaoRuntimeApp } from './TR-navigation'
 import { ParentDirectionContext } from './TR-parent-direction'
 import type { TaoScheme } from './TR-scheme'
+import { studioInspectRef } from './TR-studio-device-inspect'
 
 /** TaoStudioIdentity locates one concrete render occurrence in Tao source. */
 export type TaoStudioIdentity = {
@@ -410,6 +411,11 @@ function nativePropsWithStudioIdentity(
       ...existingDataSet,
       taoStudio: JSON.stringify(studio),
     },
+    // The browser canvas reads the identity above out of the DOM; a device has no DOM, so the same
+    // occurrence also gets a measurable handle. The ref is stable per occurrence and registers
+    // nothing for a node without `measureInWindow`, which is every node under react-native-web.
+    // A caller-supplied ref wins: overwriting one would break the app to inspect it.
+    ...(nativeProps['ref'] === undefined ? { ref: studioInspectRef(studio) } : {}),
   }
 }
 

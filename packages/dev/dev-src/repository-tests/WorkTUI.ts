@@ -87,6 +87,7 @@ function createReporter(options: { lane: string }): WorkReporterHandle {
         output: () => scheduleRender(),
         planned: ({ states: planned }) => start(planned),
         start: () => scheduleRender(),
+        waiting: () => scheduleRender(),
       }),
   }
 }

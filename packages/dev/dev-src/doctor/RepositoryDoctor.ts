@@ -1,9 +1,10 @@
-import { CLI, FS, Repo, Switch } from '@shared'
+import { CLI, FS, Platform, Repo, Switch } from '@shared'
 import { Ports } from '../expo-dev-loop/expo-runner/Ports'
 import {
   dependencyCompatibilityIssues,
   readDependencyFacts,
 } from '../repository-tests/DependencyCompatibility'
+import { type LaneRecord, MachineLanes } from '../repository-tests/MachineLanes'
 import { dependencyHealthError } from './DependencyHealth'
 
 /**
@@ -60,6 +61,19 @@ export type PortOccupancy = {
   purpose: string
 }
 
+/** MachineState records what else is running on this machine, which no single checkout can see. */
+export type MachineState = {
+  cpuCount: number
+  /** Registration that encloses this doctor process, excluded without hiding sibling local lanes. */
+  currentLaneId?: string
+  /** One-minute run-queue length, which counts work no Tao lane registered. */
+  loadAverage: number
+  /** Registered Tao lanes, including any this checkout is running. */
+  lanes: readonly LaneRecord[]
+  /** False when the shared registry exists but the host refused to list it. */
+  registryAvailable?: boolean
+}
+
 /** ArtifactRoot records one scratch tree's writability and size. */
 export type ArtifactRoot = {
   path: string
@@ -83,6 +97,7 @@ export type DoctorFacts = {
   generatedParserArtifacts: readonly { path: string; present: boolean }[]
   linkedWorktree: boolean
   lockfilePresent: boolean
+  machine: MachineState
   nodeModulesPresent: boolean
   nodeVersion?: string
   ports: readonly PortOccupancy[]
@@ -104,6 +119,7 @@ export function repositoryDoctorChecks(facts: DoctorFacts): DoctorCheck[] {
     dependencyInstallationCheck(facts),
     dependencyCompatibilityCheck(facts),
     watchmanCheck(facts),
+    machineLanesCheck(facts),
     parserArtifactCheck(facts),
     ...artifactRootChecks(facts),
     ...portChecks(facts),
@@ -315,6 +331,46 @@ function watchmanCheck(facts: DoctorFacts): DoctorCheck {
   return { detail: facts.watchmanVersion, name: 'watchman', status: 'pass' }
 }
 
+/**
+ * What every other check cannot see: this machine belongs to every worktree on it. A second agent
+ * running `verify` next door is the ordinary explanation for a slow lane or a timed-out test, and
+ * naming it here is what stops the next hour going into a regression that is not there.
+ */
+function machineLanesCheck(facts: DoctorFacts): DoctorCheck {
+  const { cpuCount, currentLaneId, lanes, loadAverage } = facts.machine
+  const peerLanes = currentLaneId === undefined ? lanes : lanes.filter(lane => lane.id !== currentLaneId)
+  const load = `load ${loadAverage.toFixed(1)} on ${cpuCount} CPUs`
+  if (facts.machine.registryAvailable === false) {
+    return {
+      detail: `the machine-lane registry could not be inspected (${load})`,
+      name: 'machine lanes',
+      remediation: 'Check the permissions of the per-user Tao cache before trusting parallel lane diagnostics.',
+      status: 'warn',
+    }
+  }
+  const elsewhere = peerLanes.filter(lane => lane.repositoryRoot !== facts.repositoryRoot)
+  const local = peerLanes.filter(lane => lane.repositoryRoot === facts.repositoryRoot)
+  if (peerLanes.length === 0 && loadAverage <= cpuCount * MachineLanes.CONTENDED_LOAD_RATIO) {
+    return { detail: `this checkout has the machine to itself (${load})`, name: 'machine lanes', status: 'pass' }
+  }
+  // Another worktree's root is named absolutely: relative to this one it is a chain of `..` that
+  // says nothing about which checkout is meant.
+  const others = [
+    ...local.map(lane => `${lane.lane} in this checkout`),
+    ...elsewhere.map(lane => `${lane.lane} in ${lane.repositoryRoot}`),
+  ].join(', ')
+  return {
+    detail: peerLanes.length === 0
+      ? `no other Tao lane is registered, but this machine is already busy (${load})`
+      : `${peerLanes.length} Tao lane${peerLanes.length === 1 ? '' : 's'} running (${load}): ${others}`,
+    name: 'machine lanes',
+    remediation:
+      'Lanes share the machine automatically, so this is expected while other Tao work runs. Timing-sensitive '
+      + 'suites are slower and can time out; re-run a timed-out suite on its own before treating it as a regression.',
+    status: 'warn',
+  }
+}
+
 function parserArtifactCheck(facts: DoctorFacts): DoctorCheck {
   const missing = facts.generatedParserArtifacts.filter(artifact => !artifact.present)
   if (missing.length === 0) {
@@ -367,8 +423,12 @@ function portChecks(facts: DoctorFacts): DoctorCheck[] {
     return {
       detail: `port ${occupancy.port} (${occupancy.purpose}) is held by ${owners}`,
       name: 'ports',
+      // A Tao process on a conventional port is as likely to belong to a sibling worktree as to
+      // this one, and killing another agent's dev server is the worst outcome available here.
       remediation: ours
-        ? `Stop it with: kill -TERM ${pids.join(' ')}`
+        ? `It may belong to another worktree on this machine. Confirm before stopping it: ps -p ${
+          pids.join(',')
+        } -o pid,command  # then, if it is yours: kill -TERM ${pids.join(' ')}`
         : `Identify it before stopping anything: ps -p ${pids.join(',')} -o pid,command`,
       status: 'warn' as const,
     }
@@ -383,7 +443,10 @@ function formatBytes(sizeBytes: number | undefined): string {
 }
 
 /** readDoctorFacts inspects the machine without changing it. */
-export async function readDoctorFacts(repositoryRoot = Repo.getRoot()): Promise<DoctorFacts> {
+export async function readDoctorFacts(
+  repositoryRoot = Repo.getRoot(),
+  options: { machineRegistryRoot?: string } = {},
+): Promise<DoctorFacts> {
   const [
     branch,
     linkedWorktree,
@@ -405,6 +468,14 @@ export async function readDoctorFacts(repositoryRoot = Repo.getRoot()): Promise<
     Promise.all(CONVENTIONAL_PORTS.map(readPortOccupancy)),
     readDependencyIssues(),
   ])
+  const [canonicalRepositoryRoot, laneInspection] = await Promise.all([
+    canonicalPath(repositoryRoot),
+    MachineLanes.inspectLanes(options.machineRegistryRoot, { prune: false }),
+  ])
+  const canonicalLanes = await Promise.all(laneInspection.lanes.map(async lane => ({
+    ...lane,
+    repositoryRoot: await canonicalPath(lane.repositoryRoot),
+  })))
 
   return {
     artifactRoots,
@@ -418,14 +489,25 @@ export async function readDoctorFacts(repositoryRoot = Repo.getRoot()): Promise<
     generatedParserArtifacts: await readGeneratedParserArtifacts(repositoryRoot),
     linkedWorktree,
     lockfilePresent: await FS.isFile(FS.resolvePath('bun.lock', repositoryRoot)),
+    machine: {
+      cpuCount: Platform.cpuCount(),
+      currentLaneId: Platform.runtimeProcess.env[MachineLanes.LANE_ID_ENV_KEY],
+      lanes: canonicalLanes,
+      loadAverage: Platform.loadAverage(),
+      registryAvailable: laneInspection.available,
+    },
     nodeModulesPresent: await FS.isDirectory(FS.resolvePath('node_modules', repositoryRoot)),
     nodeVersion,
     ports,
-    repositoryRoot,
+    repositoryRoot: canonicalRepositoryRoot,
     satisfies: (version, range) => Bun.semver.satisfies(version, range),
     watchmanHealthy: watchman.healthy,
     watchmanVersion: watchman.version,
   }
+}
+
+async function canonicalPath(path: string): Promise<string> {
+  return await FS.realPath(path).catch(() => FS.resolvePath(path))
 }
 
 /** Reads the output directory from Langium's own config so the two cannot drift apart. */

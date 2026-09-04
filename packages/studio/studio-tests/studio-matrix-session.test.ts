@@ -20,6 +20,27 @@ Describe('Studio matrix session', () => {
     Expect(session.instance('phone-instance').identity).toEqual(session.cell('phone').identity)
   })
 
+  Test('keeps several live instances of one cell until that cell is reconfigured', () => {
+    const session = new StudioMatrixSession(fixture())
+    const browser = instance(session, 'phone', 'browser-instance')
+    const device = instance(session, 'phone', 'device-instance')
+    session.registerInstance(browser)
+    session.registerInstance(device)
+
+    Expect(session.assertCurrentInstance(browser).cell.cellId).toBe('phone')
+    Expect(session.assertCurrentInstance(device).cell.cellId).toBe('phone')
+    Expect(session.instance('browser-instance').identity).toEqual(session.instance('device-instance').identity)
+
+    session.unregisterInstance('device-instance')
+    Expect(() => session.instance('device-instance')).toThrow('no longer current')
+    Expect(session.assertCurrentInstance(browser).cell.cellId).toBe('phone')
+
+    session.registerInstance(device)
+    session.reconfigure({ ...session.cell('phone').identity, args: { title: 'Changed' } })
+    Expect(() => session.instance('browser-instance')).toThrow('no longer current')
+    Expect(() => session.instance('device-instance')).toThrow('no longer current')
+  })
+
   Test('reconfigures one cell, resolves state layers, and rejects only its stale instance', () => {
     const session = new StudioMatrixSession(fixture())
     const phone = instance(session, 'phone', 'phone-instance')

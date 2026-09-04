@@ -1,6 +1,7 @@
 import { FS } from '@shared'
-import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import { runGates } from '../dev-src/repository-tests/GateRunner'
+import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 import { classifyFailure, formatGateSummary, gateExitCode } from '../dev-src/repository-tests/RunSummary'
 
 type GateScript = Record<string, { exitCode: number; output: string }>
@@ -13,6 +14,7 @@ async function run(gates: readonly string[], script: GateScript, extra: Record<s
       gates,
       jobs: 2,
       logRoot: FS.resolvePath('logs', root),
+      registryRoot: FS.resolvePath('registry', root),
       repositoryRoot: root,
       runGate: async (name, logPath) => {
         started.push(name)
@@ -26,6 +28,26 @@ async function run(gates: readonly string[], script: GateScript, extra: Record<s
   } finally {
     await FS.remove(root)
   }
+}
+
+/**
+ * A registry holding live leases that are not this process is what other worktrees' lanes look like
+ * from here, and it is the only input that makes a lane narrow itself and call itself contended.
+ * Process 1 is the one pid guaranteed alive and not this one.
+ */
+async function busyRegistryRoot(laneCount = 1): Promise<string> {
+  const registryRoot = await mkTestDir('tao-gate-runner-lanes-')
+  for (let index = 0; index < laneCount; index += 1) {
+    await FS.writeJson(FS.resolvePath(`neighbour-${index}.json`, registryRoot), {
+      lane: 'verify',
+      pid: 1,
+      repositoryRoot: `/another-worktree-${index}`,
+      maxSlots: 64,
+      slots: 0,
+      startedAt: new Date().toISOString(),
+    })
+  }
+  return registryRoot
 }
 
 Describe('repository gate runner', () => {
@@ -75,6 +97,26 @@ Describe('repository gate runner', () => {
     Expect(formatGateSummary(summary)).toContain('1 passed, 0 failed, 1 skipped')
   })
 
+  Test('skips every catalogued unsandboxed gate before scheduling it', async () => {
+    const hostOnly = [
+      '_full-verify-smoke-launch',
+      '_full-verify-real-app',
+      '_full-verify-simulated',
+      '_full-verify-keyboard-navigation',
+      '_full-verify-native',
+      '_full-verify-canary',
+    ]
+    const { started, summary } = await run(['_repo-lint', ...hostOnly], {}, { skipUnsandboxed: true })
+
+    Expect(started).toEqual(['_repo-lint'])
+    Expect(summary.gates.filter(gate => gate.status === 'skipped').map(gate => gate.name)).toEqual(hostOnly)
+    Expect(
+      summary.gates.filter(gate => gate.status === 'skipped').every(gate =>
+        gate.reason?.includes('requires unsandboxed host capabilities')
+      ),
+    ).toBe(true)
+  })
+
   Test('surfaces warnings a gate printed without failing on them', async () => {
     const { summary } = await run(['_ide-extension-build'], {
       '_ide-extension-build': { exitCode: 0, output: 'Warning: rule declared but never referenced' },
@@ -89,6 +131,27 @@ Describe('repository gate runner', () => {
     const { started } = await run(['a', 'b', 'c', 'd', 'e'], {})
 
     Expect(started.toSorted()).toEqual(['a', 'b', 'c', 'd', 'e'])
+  })
+
+  Test('propagates the enclosing lane identity to nested diagnostics', async () => {
+    const root = await mkTestDir('tao-gate-runner-lane-env-')
+    const registryRoot = FS.resolvePath('registry', root)
+    let laneId: string | undefined
+    try {
+      await runGates({
+        gates: ['_doctor-json'],
+        registryRoot,
+        repositoryRoot: root,
+        runGate: async (_name, _logPath, environment) => {
+          laneId = environment[MachineLanes.LANE_ID_ENV_KEY]
+          return { exitCode: 0, output: '' }
+        },
+      })
+
+      Expect(laneId).toMatch(/^\d+-[0-9a-f-]+$/u)
+    } finally {
+      await FS.remove(root)
+    }
   })
 
   Test('writes a JSON summary artifact when one is requested', async () => {
@@ -134,9 +197,11 @@ Describe('repository gate runner', () => {
 
   Test('records every gate duration in the timings store the next run plans from', async () => {
     const root = await mkTestDir('tao-gate-runner-timings-')
+    const registryRoot = await mkTestDir('tao-gate-runner-lanes-')
     try {
       await runGates({
         gates: ['_repo-lint'],
+        registryRoot,
         repositoryRoot: root,
         runGate: async () => ({ exitCode: 0, output: '' }),
       })
@@ -150,18 +215,74 @@ Describe('repository gate runner', () => {
       Expect(history).toContain('"lane":"verify"')
     } finally {
       await FS.remove(root)
+      await FS.remove(registryRoot)
+    }
+  })
+
+  Test('does not teach the timings store from failed or interrupted work', async () => {
+    const root = await mkTestDir('tao-gate-runner-failed-timings-')
+    const registryRoot = await mkTestDir('tao-gate-runner-lanes-')
+    try {
+      await runGates({
+        gates: ['_repo-lint', '_doctor-json'],
+        registryRoot,
+        repositoryRoot: root,
+        runGate: async name => ({
+          exitCode: name === '_doctor-json' ? 1 : 0,
+          output: name === '_doctor-json' ? 'interrupted before completion' : '',
+        }),
+      })
+
+      const store = await FS.readJson<{ nodes: Record<string, { samples: number }> }>(
+        FS.resolvePath('.artifacts/timings/durations.json', root),
+      )
+      Expect(store.nodes['_repo-lint']?.samples).toBe(1)
+      Expect(store.nodes['_doctor-json']).toBeUndefined()
+    } finally {
+      await FS.remove(root)
+      await FS.remove(registryRoot)
     }
   })
 })
 
 Describe('gate failure classification', () => {
-  Test('separates the four failures that need different people to act', () => {
+  Test('separates the failures that need different people to act', () => {
     Expect(classifyFailure('PermissionDenied: copy file android/.idea/migrations.xml'))
       .toBe('sandbox-restriction')
     Expect(classifyFailure("Tao's pinned devenv profile is unavailable.")).toBe('environment-setup')
     Expect(classifyFailure("error: Cannot find module 'ink'")).toBe('environment-setup')
     Expect(classifyFailure('watchman is not installed')).toBe('optional-tooling')
     Expect(classifyFailure('error TS2345: Argument of type string is not assignable')).toBe('repository')
+  })
+
+  Test('keeps native host, phase, runtime, probe, assertion, and interruption failures distinct', () => {
+    Expect(classifyFailure(
+      "Machine resource 'studio-native-host' is busy: studio-canary in /other/worktree (PID 42)",
+    )).toBe('native-host-busy')
+    Expect(classifyFailure('Hutch install timed out after 30000ms')).toBe('hutch-install-timeout')
+    Expect(classifyFailure('Hutch electrobun prepare timed out after 45000ms'))
+      .toBe('electrobun-prepare-timeout')
+    Expect(classifyFailure('Electrobun exited before writing its runtime probe result.'))
+      .toBe('native-runtime-exit')
+    Expect(classifyFailure('Timed out waiting for the Electrobun runtime probe.'))
+      .toBe('native-probe-timeout')
+    Expect(classifyFailure('(fail) native capability\nexpect(received).toBe(expected)'))
+      .toBe('test-assertion')
+    Expect(classifyFailure('', { interrupted: true })).toBe('user-interruption')
+  })
+
+  Test('calls a timeout contention only when the run measured contention', () => {
+    const timeout = 'error: Test "renders the board" timed out after 5000ms'
+    const shared = MachineLanes.contentionReport({ cpuCount: 8, peakLanes: 2, peakLoadAverage: 20 })
+    const alone = MachineLanes.contentionReport({ cpuCount: 8, peakLanes: 1, peakLoadAverage: 3 })
+
+    Expect(classifyFailure(timeout, { contention: shared })).toBe('machine-contention')
+    // On a machine this run had to itself the same timeout is the repository's problem, and calling
+    // it anything else would excuse a real regression.
+    Expect(classifyFailure(timeout, { contention: alone })).toBe('repository')
+    Expect(classifyFailure(timeout)).toBe('repository')
+    // A busy machine never excuses a wrong answer.
+    Expect(classifyFailure('expect(received).toBe(expected)', { contention: shared })).toBe('test-assertion')
   })
 
   Test('names the kind of failure alongside the exit status', async () => {
@@ -171,5 +292,94 @@ Describe('gate failure classification', () => {
 
     Expect(summary.gates[0]?.failureKind).toBe('repository')
     Expect(summary.gates[0]?.reason).toBe('exited 2 (repository)')
+  })
+})
+
+Describe('gate runner under a shared machine', () => {
+  Test('runs only as many gates at once as its share of a machine full of other lanes allows', async () => {
+    // Three neighbours plus this lane divide the injected four-CPU machine to exactly one slot each,
+    // so the assertion does not depend on how many CPUs the host running the test happens to have.
+    const registryRoot = await busyRegistryRoot(3)
+    const root = await mkTestDir('tao-gate-runner-')
+    const held = Deferred()
+    const started: string[] = []
+
+    const finished = runGates({
+      gates: ['_repo-lint', '_dprint-check', '_runtime-pack-check'],
+      logRoot: FS.resolvePath('logs', root),
+      machineCpuCount: 4,
+      registryRoot,
+      repositoryRoot: root,
+      runGate: async (name, logPath) => {
+        started.push(name)
+        await held.promise
+        await FS.writeText(logPath, '')
+        return { exitCode: 0, output: '' }
+      },
+    })
+
+    await until(() => started.length === 1, {
+      description: 'the lane to fill its share of the machine',
+    })
+    await settle(20)
+    // Without a machine-wide share the third gate would already be running: an untuned gate costs
+    // one slot and the graph would have had a whole machine of them.
+    // More live lanes than CPUs means some lanes wait and each admitted lane owns one slot; a
+    // minimum of two here would itself oversubscribe the machine.
+    Expect(started).toHaveLength(1)
+
+    held.resolve()
+    const summary = await finished
+    Expect(started).toHaveLength(3)
+    Expect(summary.status).toBe('passed')
+    await FS.remove(root)
+    await FS.remove(registryRoot)
+  })
+
+  Test('does not teach the timings store how slow a shared machine was', async () => {
+    const registryRoot = await busyRegistryRoot()
+    const root = await mkTestDir('tao-gate-runner-')
+
+    await runGates({
+      gates: ['_repo-lint'],
+      registryRoot,
+      repositoryRoot: root,
+      runGate: async () => ({ exitCode: 0, output: '' }),
+    })
+
+    // Ordering falls back to `cost` when a node has no measured history. An estimate learned from a
+    // contended run has no fallback: it mis-orders every later run in this checkout.
+    Expect(await FS.exists(FS.resolvePath('.artifacts/timings/durations.json', root))).toBe(false)
+    await FS.remove(root)
+    await FS.remove(registryRoot)
+  })
+
+  Test('re-runs a gate that timed out under contention and reports that it took a retry', async () => {
+    const registryRoot = await busyRegistryRoot()
+    const root = await mkTestDir('tao-gate-runner-')
+    let attempts = 0
+
+    const summary = await runGates({
+      gates: ['_repo-lint'],
+      logRoot: FS.resolvePath('logs', root),
+      registryRoot,
+      repositoryRoot: root,
+      runGate: async (_name, logPath) => {
+        attempts += 1
+        const result = attempts === 1
+          ? { exitCode: 1, output: 'error: Test "renders" timed out after 5000ms' }
+          : { exitCode: 0, output: 'ok' }
+        await FS.writeText(logPath, result.output)
+        return result
+      },
+    })
+
+    Expect(attempts).toBe(2)
+    Expect(summary.status).toBe('passed')
+    Expect(summary.gates[0]?.retried).toBe(true)
+    Expect(summary.gates[0]?.reason).toContain('passed on an isolated retry')
+    Expect(summary.warnings.some(warning => warning.startsWith('machine contention:'))).toBe(true)
+    await FS.remove(root)
+    await FS.remove(registryRoot)
   })
 })

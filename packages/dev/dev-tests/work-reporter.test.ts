@@ -14,7 +14,9 @@ async function quietOutput(states: readonly WorkState[]): Promise<string> {
     const reporter = WorkReporter.create({ lane: 'verify', logRoot: '/repo/.artifacts/logs/verify/now', mode: 'quiet' })
     reporter.handle({ kind: 'planned', states })
     for (const state of states) {
-      reporter.handle({ kind: 'start', state })
+      if (state.status !== 'skipped') {
+        reporter.handle({ kind: 'start', state })
+      }
       reporter.handle({ kind: 'output', output: 'a very long line of gate output\n', state })
       reporter.handle({ kind: 'complete', state })
     }
@@ -59,18 +61,32 @@ Describe('quiet reporting', () => {
     Expect(output).toContain('.artifacts/logs/verify/now')
   })
 
-  Test('never streams node output, and reports each node in one line naming its log', async () => {
+  Test('never streams node output, and reports when each runnable node starts and completes', async () => {
+    const startedAt = new Date(2026, 8, 4, 14, 3, 35).getTime()
     const output = await quietOutput([
-      nodeState('_repo-lint', { elapsedMs: 1_200, logPath: '/repo/logs/repo-lint.log', status: 'passed' }),
-      nodeState('_typecheck', { elapsedMs: 400, logPath: '/repo/logs/typecheck.log', status: 'failed' }),
+      nodeState('_repo-lint', {
+        elapsedMs: 1_200,
+        logPath: '/repo/logs/repo-lint.log',
+        startedAt,
+        status: 'passed',
+      }),
+      nodeState('_typecheck', {
+        elapsedMs: 400,
+        logPath: '/repo/logs/typecheck.log',
+        startedAt,
+        status: 'failed',
+      }),
       nodeState('_test', { reason: 'dependency failed: _typecheck', status: 'skipped' }),
     ])
 
     Expect(output).not.toContain('a very long line of gate output')
+    Expect(output).toContain('_repo-lint: started at 14:03:35')
     Expect(output).toContain('_repo-lint: passed in 1.2s — log: ')
+    Expect(output).toContain('_typecheck: started at 14:03:35')
     Expect(output).toContain('_typecheck: failed in 400ms — log: ')
+    Expect(output).not.toContain('_test: started at')
     Expect(output).toContain('_test: skipped — dependency failed: _typecheck')
-    // Header plus one line per node, and nothing else.
-    Expect(output.trimEnd().split('\n').length).toBe(4)
+    // Header, start+complete for two runnable nodes, and only completion for the skipped node.
+    Expect(output.trimEnd().split('\n').length).toBe(6)
   })
 })

@@ -3,6 +3,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { mock } from 'bun:test'
 import React from 'react'
 import { UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
+import { studioInspectRef } from '../TaoRuntime-src/TR-studio-device-inspect'
 
 const reactNativeRuntime = {
   ActivityIndicator: 'ActivityIndicator',
@@ -64,10 +65,16 @@ Describe('TR.Views explicit visual props', () => {
       React.useContext = useContext
     }
 
-    Expect(TR.VisualNativeProps(layout, 'submit')).toEqual({
+    const nativeProps = TR.VisualNativeProps(layout, 'submit')
+    Expect({ dataSet: nativeProps['dataSet'], testID: nativeProps['testID'] }).toEqual({
       dataSet: { taoStudio: JSON.stringify(occurrence) },
       testID: 'submit',
     })
+    // The identity also comes with a way to measure the node it lands on: the browser canvas reads
+    // `dataSet` back out of the DOM, and a device — which has no DOM — hit-tests the registry this
+    // ref populates. It is the same function for the same occurrence every render, or React would
+    // detach and reattach every node in the tree on each one.
+    Expect(nativeProps['ref']).toBe(studioInspectRef(occurrence))
     const button = React.createElement('Button', { testID: 'submit' })
     const root = TR.VisualNativeRoot(layout, button) as RuntimeElement
     Expect(root.type).toBe('View')

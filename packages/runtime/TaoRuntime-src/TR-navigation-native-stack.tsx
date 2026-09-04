@@ -46,7 +46,7 @@ export function NativeStackSurface(props: {
   const ScreenStack = module.ScreenStack
   return React.createElement(
     ScreenStack,
-    null,
+    { style: stackSurfaceStyle },
     props.entries.map((entry, index) =>
       React.createElement(NativeStackItem, {
         active: index === props.entries.length - 1,
@@ -225,6 +225,9 @@ function NativeOverflowMenu(props: {
     ),
   )
 }
+
+/** ScreenStack lays its screens out inside its own bounds, so it must be told to fill its parent. */
+const stackSurfaceStyle = { flex: 1 } as const
 
 const nativeMenuBackdropStyle = { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 } as const
 const nativeMenuPortalStyle = { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 } as const

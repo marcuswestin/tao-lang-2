@@ -533,6 +533,79 @@ Describe('TR.Navigation', () => {
     Expect(app.canGoBack).toBe(false)
   })
 
+  Test('lets the active tab own Back, so the app host does not draw a second one above it', () => {
+    const home = TR.Navigation.View({ name: 'Home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Detail', render: () => null })
+    const workspace = TR.Navigation.View({ name: 'Workspace', render: () => null })
+    const homeStack = configuredStack('Home stack', home)
+    const workspaceSlot = TR.Navigation.Mount(TR.Navigation.Configure(
+      TR.Navigation.Declaration('Workspace slot', TR.NavKind.Slot()),
+      { Initial: workspace },
+    ))
+    const selection = configuredSelection({
+      display: TR.Value('automatic'),
+      initial: 'home',
+      items: {
+        home: { content: homeStack, label: TR.Value('Home') },
+        workspace: { content: workspaceSlot, label: TR.Value('Workspace') },
+      },
+      name: 'Back affordance selection',
+    })
+    const app = TR.Navigation.App({
+      auxiliaries: () => ({}),
+      name: 'Back affordance app',
+      navigator: () => selection,
+    })
+    const taoProps: TR.TaoProps = { app }
+    void app.navigator
+
+    // Nothing to go back to anywhere: no chrome is claiming an affordance it would not draw.
+    Expect(selection.ownsBackAffordance()).toBe(false)
+
+    // A stack tab puts Back in its own header. The app host must not add one outside the tab.
+    TR.Navigation.PresentIn(undefined, homeStack, detail, {})
+    Expect(selection.ownsBackAffordance()).toBe(true)
+
+    // A slot tab has no chrome of its own, so the app host owns the visible affordance there.
+    TR.Navigation.Activate(taoProps, app, 'workspace')
+    TR.Navigation.PresentIn(undefined, workspaceSlot, detail, {})
+    Expect(app.canGoBack).toBe(true)
+    Expect(selection.ownsBackAffordance()).toBe(false)
+
+    // An overlay defocuses whatever chrome was drawing Back, so the app host takes it back.
+    TR.Navigation.Activate(taoProps, app, 'home')
+    Expect(selection.ownsBackAffordance()).toBe(true)
+    TR.Navigation.PresentOverlay(taoProps, selection, detail, {})
+    Expect(selection.ownsBackAffordance()).toBe(false)
+    TR.Navigation.beginTest()
+  })
+
+  Test('forgets a disposed app definition, so a preview cell leaves nothing process-wide behind', () => {
+    const home = TR.Navigation.View({ name: 'Disposable home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Disposable detail', render: () => null })
+    const stack = configuredStack('Disposable stack', home)
+    const app = TR.Navigation.App({
+      auxiliaries: () => ({}),
+      name: 'Disposable app',
+      navigator: () => stack,
+    })
+    void app.navigator
+    TR.Navigation.PresentIn(undefined, stack, detail, {})
+    Expect(app.canGoBack).toBe(true)
+
+    // A process-wide reset reaches every registered app and mount. Studio builds one app definition
+    // per focused-view cell, so a definition that stayed registered after its cell went away would
+    // keep answering resets — and captures — for a screen nobody is looking at.
+    TR.Navigation.beginTest()
+    Expect(app.canGoBack).toBe(false)
+
+    TR.Navigation.PresentIn(undefined, stack, detail, {})
+    app.dispose()
+    TR.Navigation.beginTest()
+
+    Expect(app.canGoBack).toBe(true)
+  })
+
   Test('keeps selection, toasts, and replacement out of browser history', () => {
     const home = TR.Navigation.View({ name: 'Home', render: () => null })
     const settings = TR.Navigation.View({ name: 'Settings', render: () => null })

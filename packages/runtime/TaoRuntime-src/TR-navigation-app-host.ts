@@ -1,5 +1,5 @@
 import React from 'react'
-import { AppSurfaceFrame } from './TR-app-shell'
+import { appFramePadding, AppSurfaceFrame, requireSafeAreaContext } from './TR-app-shell'
 import { DataControls } from './TR-data'
 import { TaoErrorBoundary } from './TR-error-containment'
 import { InteractionControls } from './TR-interaction-catalog'
@@ -107,11 +107,12 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     : undefined
   // A navigator that hands the window to a native surface gets true window bounds; every other
   // navigator renders inside the app's safe-area scroll frame, exactly as before.
+  const ownsWindow = navigator.ownsWindowSurface()
   const content = React.createElement(
     React.Fragment,
     { key: 'levels' },
     props.app.canGoBack && (focusedAuxiliary !== undefined || !navigator.ownsBackAffordance())
-      ? React.createElement(NavigationBackAffordance, { target: props.app })
+      ? React.createElement(AppBackAffordance, { inset: ownsWindow, target: props.app })
       : null,
     navigator.render(navigatorTaoProps),
     ...auxiliaries.map(auxiliary =>
@@ -123,7 +124,7 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
   )
   const hostProps = interactionMeasurements.bindRoot({
     children: [
-      navigator.ownsWindowSurface()
+      ownsWindow
         ? content
         : React.createElement(AppSurfaceFrame, { key: 'content', taoProps: appTaoProps }, content),
       React.Children.count(toasts) > 0
@@ -210,6 +211,33 @@ function useWebInteractionKeyboard(listener: ((event: TaoAppHostKeyEvent) => voi
     target.addEventListener('keydown', listener, true)
     return () => target.removeEventListener('keydown', listener, true)
   }, [listener])
+}
+
+/**
+ * The app's own Back control, inset when nothing above it is.
+ *
+ * A navigator that owns the window surface renders outside the app's safe-area frame, and this
+ * control is its sibling — so without the inset it draws in the status bar, where the notch clips
+ * it and the system takes its taps. Every other navigator renders inside `AppSurfaceFrame`, which
+ * already insets this along with the content.
+ */
+function AppBackAffordance(props: { inset: boolean; target: RuntimeAppDefinition }): React.JSX.Element {
+  const runtime = requireReactNativeRuntime()
+  const insets = requireSafeAreaContext().useSafeAreaInsets()
+  const affordance = React.createElement(NavigationBackAffordance, { target: props.target })
+  return props.inset
+    ? React.createElement(runtime.View, {
+      children: affordance,
+      // The frame padding as well as the insets: this control is standing in for one that would
+      // otherwise sit inside `AppSurfaceFrame`, and a Back button flush against the window edge
+      // reads as a mistake next to content that is never flush against it.
+      style: {
+        paddingLeft: appFramePadding + insets.left,
+        paddingRight: appFramePadding + insets.right,
+        paddingTop: appFramePadding + insets.top,
+      },
+    })
+    : React.createElement(runtime.View, { children: affordance })
 }
 
 function useNavigationRestoration(app: RuntimeAppDefinition): boolean {

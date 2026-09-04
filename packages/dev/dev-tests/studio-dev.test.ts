@@ -690,6 +690,32 @@ Describe('Studio smoke resource isolation', () => {
     }
   })
 
+  Test('gives the preview project the companion scheme and gateway bootstrap fact only', async () => {
+    const sourceRoot = Repo.resolvePath('packages/runtime-toolchain')
+    const runtime = await StudioPreviewRuntime.create(sourceRoot, { deviceGatewayPort: 43_210 })
+    try {
+      const source = await FS.readJson<{ expo: Record<string, unknown> }>(FS.resolvePath('app.json', sourceRoot))
+      const preview = await FS.readJson<{ expo: Record<string, unknown> }>(FS.resolvePath('app.json', runtime.root))
+      Expect(source.expo['scheme']).toBeUndefined()
+      Expect(preview.expo['scheme']).toBe('taostudiocompanion')
+      Expect(preview.expo['extra']).toEqual({
+        taoStudioDevice: { gatewayPort: 43_210, protocol: 'tao-studio-device-v1' },
+      })
+      Expect(preview.expo['slug']).toBe(source.expo['slug'])
+      Expect(JSON.stringify(preview)).not.toContain('secret')
+    } finally {
+      await runtime.close()
+    }
+    const plain = await StudioPreviewRuntime.create(sourceRoot)
+    try {
+      const preview = await FS.readJson<{ expo: Record<string, unknown> }>(FS.resolvePath('app.json', plain.root))
+      Expect(preview.expo['scheme']).toBe('taostudiocompanion')
+      Expect(preview.expo['extra']).toBeUndefined()
+    } finally {
+      await plain.close()
+    }
+  })
+
   Test('allocates deterministic disjoint artifacts and ports by run, shard, and worker', () => {
     const first = StudioSmoke.resources({ runId: 'run-17', shardIndex: 2, workerIndex: 3 })
     const same = StudioSmoke.resources({ runId: 'run-17', shardIndex: 2, workerIndex: 3 })
@@ -708,6 +734,28 @@ Describe('Studio smoke resource isolation', () => {
         otherShard.previewPort,
       ]).size,
     ).toBe(6)
+  })
+
+  Test('gives each worktree its own port block, so two checkouts never claim one port', () => {
+    const here = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2')
+    const linked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/.claude/worktrees/feature-a')
+    const otherLinked = StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2/.claude/worktrees/feature-b')
+
+    // Every lane bound 42000 upward from shard 0, so the second worktree to start a Studio lane
+    // died on a port the first one was serving.
+    Expect(new Set([here, linked, otherLinked]).size).toBe(3)
+    for (const shard of [here, linked, otherLinked]) {
+      Expect(shard).toBeGreaterThanOrEqual(0)
+      Expect(shard).toBeLessThan(StudioSmoke.shardCount)
+    }
+    Expect(StudioSmoke.defaultShardIndex('/Users/dev/tao-lang-2')).toBe(here)
+  })
+
+  Test('a lane with no explicit shard allocates from its own worktree block', () => {
+    const allocated = StudioSmoke.resources({ runId: 'run-17', workerIndex: 1 })
+
+    Expect(allocated.shardIndex).toBe(StudioSmoke.defaultShardIndex())
+    Expect(allocated.artifactRoot).toEndWith(`shard-${allocated.shardIndex}/worker-1`)
   })
 
   Test('rejects unsafe artifact ids and out-of-range lanes', () => {

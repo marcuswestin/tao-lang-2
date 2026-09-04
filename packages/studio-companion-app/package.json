@@ -1,0 +1,32 @@
+{
+  "name": "tao-studio-companion-app",
+  "private": true,
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "ios": "expo run:ios",
+    "android": "expo run:android"
+  },
+  "dependencies": {
+    "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "8.4.4",
+    "@react-native-community/netinfo": "11.4.1",
+    "@react-native-community/slider": "5.0.1",
+    "@react-native-picker/picker": "2.11.1",
+    "@react-native-segmented-control/segmented-control": "2.5.7",
+    "expo": "~54.0.37",
+    "expo-clipboard": "~8.0.8",
+    "expo-dev-client": "~6.0.21",
+    "expo-haptics": "~15.0.8",
+    "expo-secure-store": "~15.0.8",
+    "expo-updates": "~29.0.20",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-get-random-values": "1.11.0",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.0"
+  }
+}

@@ -1,14 +1,13 @@
-import { FS, Platform } from '@shared'
+import { FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, settle, Test } from '@shared/test'
 import { GateCatalog } from '../dev-src/repository-tests/GateCatalog'
 import { runGates } from '../dev-src/repository-tests/GateRunner'
 import { WorkGraph } from '../dev-src/repository-tests/WorkGraph'
 
 /**
- * The catalog is metadata, so most of it is asserted as metadata. The three claims that are about
- * scheduling rather than data — the dependency edge, the fix barrier, and the `gui` pair — are
- * proved by running a lane through an injected runner, where a node finishes only when the test
- * lets it and an overlap cannot be missed by being lucky with a sleep.
+ * The catalog is metadata, so most of it is asserted as metadata. Claims about scheduling rather
+ * than data are proved by running a lane through an injected runner, where a node finishes only
+ * when the test lets it and an overlap cannot be missed by being lucky with a sleep.
  */
 
 const REPOSITORY_ROOT = '/repository'
@@ -18,24 +17,36 @@ function nodeOf(name: string) {
 }
 
 /**
- * runLane runs a lane with every node held open until the whole ready set has started, recording
- * which nodes were running at the same moment.
+ * runLane records which nodes were running at the same moment. Tests that must prove two nodes can
+ * overlap use a start barrier so the first cannot finish before the second is admitted.
  */
-async function runLane(gates: readonly string[], jobs: number) {
+async function runLane(gates: readonly string[], jobs: number, startBarrierCount = 0) {
   const root = await mkTestDir('tao-gate-catalog-')
   try {
     const running = new Set<string>()
     const overlaps: string[][] = []
     const started: string[] = []
+    let releaseStartBarrier = () => {}
+    const startBarrier = new Promise<void>(resolve => {
+      releaseStartBarrier = resolve
+    })
     await runGates({
       gates,
       jobs,
       logRoot: FS.resolvePath('logs', root),
+      registryRoot: FS.resolvePath('registry', root),
       repositoryRoot: root,
       runGate: async name => {
         started.push(name)
         running.add(name)
-        await settle(2)
+        if (startBarrierCount > 0) {
+          if (started.length >= startBarrierCount) {
+            releaseStartBarrier()
+          }
+          await startBarrier
+        } else {
+          await settle(2)
+        }
         overlaps.push([...running].toSorted())
         running.delete(name)
         return { exitCode: 0, output: '' }
@@ -119,13 +130,13 @@ Describe('gate catalog metadata', () => {
 
   Test('schedules the real ship bundle proof as a bounded slow lane', () => {
     Expect(GateCatalog.metadata('_ship-bundle-proof')).toEqual({
-      cost: GateCatalog.STUDIO_LANE_COST,
+      cost: 3,
       needs: ['_parser-gen'],
       timeoutMs: 180_000,
     })
   })
 
-  Test('starts the slow UI lanes before package gates and keeps four of them fitting at once', () => {
+  Test('starts the package critical path before one-slot Studio waits', () => {
     for (
       const name of [
         '_full-verify-smoke-launch',
@@ -136,11 +147,11 @@ Describe('gate catalog metadata', () => {
         '_full-verify-canary',
       ]
     ) {
-      Expect(nodeOf(name).cost).toBe(3)
-      Expect(nodeOf(name).priority).toBe(5)
+      Expect(nodeOf(name).cost).toBe(1)
+      Expect(nodeOf(name).priority).toBeUndefined()
     }
     Expect(nodeOf('_test').priority).toBe(4)
-    Expect(nodeOf('_typecheck').priority).toBe(3)
+    Expect(nodeOf('_typecheck').priority).toBe(4)
   })
 
   Test('gives only the two window-server lanes the gui resource', () => {
@@ -151,9 +162,38 @@ Describe('gate catalog metadata', () => {
     Expect(nodeOf('_full-verify-simulated').resources).toBeUndefined()
     Expect(nodeOf('_full-verify-keyboard-navigation').resources).toBeUndefined()
   })
+
+  Test('marks exactly the six browser and native UI lanes as requiring an unsandboxed host', () => {
+    const studioLanes = [
+      '_full-verify-smoke-launch',
+      '_full-verify-real-app',
+      '_full-verify-simulated',
+      '_full-verify-keyboard-navigation',
+      '_full-verify-native',
+      '_full-verify-canary',
+    ]
+
+    for (const name of studioLanes) {
+      Expect(GateCatalog.metadata(name).requiresUnsandboxed).toBe(true)
+    }
+    for (const name of ['_ship-bundle-proof', '_doctor-json', 'dead-exports', '_test']) {
+      Expect(GateCatalog.metadata(name).requiresUnsandboxed).toBeUndefined()
+    }
+  })
 })
 
 Describe('gate catalog scheduling', () => {
+  Test('keeps full and sandbox verification on one identical gate membership', async () => {
+    const [full, sandbox] = await Promise.all([
+      justGateNames('full-verify'),
+      justGateNames('full-verify-sandbox'),
+    ])
+
+    Expect(full).toEqual(sandbox)
+    Expect(full).toContain('_ship-bundle-proof')
+    Expect(full).toContain('_full-verify-canary')
+  })
+
   Test('runs the generator, then the compile, then the tests', async () => {
     const { started } = await runLane(['_test', '_compile-word-flower-app', '_parser-gen'], 24)
 
@@ -172,14 +212,64 @@ Describe('gate catalog scheduling', () => {
     Expect(overlapped(overlaps, '_fix-tao', '_repo-lint')).toBe(false)
   })
 
-  Test('never runs the native shell beside the canary, and runs the browser lanes beside both', async () => {
-    // 24 slots is wider than the three lanes together, so only the `gui` resource can separate them.
-    const { overlaps } = await runLane(
-      ['_full-verify-native', '_full-verify-canary', '_full-verify-simulated'],
-      24,
+  Test('starts test and typecheck before auxiliary full-verification gates', async () => {
+    const { started } = await runLane(
+      [
+        '_full-verify-canary',
+        '_ship-bundle-proof',
+        '_typecheck',
+        '_test',
+      ],
+      GateCatalog.testCost() + 6,
+      3,
     )
 
-    Expect(overlapped(overlaps, '_full-verify-native', '_full-verify-canary')).toBe(false)
-    Expect(overlapped(overlaps, '_full-verify-native', '_full-verify-simulated')).toBe(true)
+    Expect(started.slice(0, 2).toSorted()).toEqual(['_test', '_typecheck'])
+    Expect(started[2]).toBe('_ship-bundle-proof')
+  })
+
+  Test('uses the slots beside package work for three Studio waits at once', async () => {
+    const { overlaps, started } = await runLane(
+      [
+        '_full-verify-smoke-launch',
+        '_full-verify-real-app',
+        '_full-verify-simulated',
+        '_full-verify-native',
+        '_typecheck',
+        '_test',
+      ],
+      GateCatalog.testCost() + 6,
+      5,
+    )
+
+    Expect(started.slice(0, 2).toSorted()).toEqual(['_test', '_typecheck'])
+    Expect(overlaps.some(names =>
+      names.includes('_test')
+      && names.includes('_typecheck')
+      && names.filter(name => name.startsWith('_full-verify-')).length === 3
+    )).toBe(true)
+  })
+
+  Test('keeps the gui lanes exclusive and lets the browser lane overlap either one', async () => {
+    // Each pair fits inside 24 slots. The barrier makes allowed overlap deterministic, while the
+    // two gui nodes must still run sequentially because they hold the same resource.
+    const guiPair = await runLane(['_full-verify-native', '_full-verify-canary'], 24)
+    const nativeAndBrowser = await runLane(['_full-verify-native', '_full-verify-simulated'], 24, 2)
+    const canaryAndBrowser = await runLane(['_full-verify-canary', '_full-verify-simulated'], 24, 2)
+
+    Expect(overlapped(guiPair.overlaps, '_full-verify-native', '_full-verify-canary')).toBe(false)
+    Expect(overlapped(nativeAndBrowser.overlaps, '_full-verify-native', '_full-verify-simulated')).toBe(true)
+    Expect(overlapped(canaryAndBrowser.overlaps, '_full-verify-canary', '_full-verify-simulated')).toBe(true)
   })
 })
+
+async function justGateNames(recipe: string): Promise<string[]> {
+  const result = await Bun.$`just --dry-run ${recipe}`.cwd(Repo.getRoot()).quiet().nothrow()
+  Expect(result.exitCode).toBe(0)
+  const output = `${result.stdout.toString()}${result.stderr.toString()}`
+  const gateLine = output.split('\n').find(line => line.includes('./dev gates '))
+  Expect(gateLine).toBeDefined()
+  const tokens = gateLine!.trim().split(/\s+/)
+  const optionIndex = tokens.findIndex(token => token.startsWith('--'))
+  return tokens.slice(2, optionIndex < 0 ? undefined : optionIndex)
+}

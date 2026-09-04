@@ -12,19 +12,30 @@ type AppShellProps = {
   children?: React.ReactNode
 }
 
-type SafeAreaInsets = {
+export type SafeAreaInsets = {
   readonly bottom: number
   readonly left: number
   readonly right: number
   readonly top: number
 }
 
-type SafeAreaContextModule = {
-  readonly SafeAreaProvider: React.ComponentType<{ children?: React.ReactNode }>
+export type SafeAreaContextModule = {
+  /**
+   * `SafeAreaProvider` renders nothing until it has insets, so a provider with no parent and no
+   * `initialMetrics` withholds its whole subtree for one native layout round trip. Passing
+   * `initialWindowMetrics` — the values the native side captured at startup — means the first frame
+   * renders instead of a blank one.
+   */
+  readonly initialWindowMetrics?: { frame: unknown; insets: SafeAreaInsets } | null
+  readonly SafeAreaProvider: React.ComponentType<{
+    children?: React.ReactNode
+    initialMetrics?: { frame: unknown; insets: SafeAreaInsets } | null
+  }>
   useSafeAreaInsets(): SafeAreaInsets
 }
 
-const appFramePadding = 12
+/** The inset every full-screen Tao surface keeps between its content and the window edge. */
+export const appFramePadding = 12
 
 const contentStyle = {
   flexGrow: 1,
@@ -66,7 +77,7 @@ function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContext
       null,
       appRootChildren(props.children, devMode, scheme.resolved),
     ),
-    devMode.enabled ? React.createElement(DevMenu) : null,
+    devMode.enabled && !Dev.isMenuHidden() ? React.createElement(DevMenu) : null,
   )
 }
 
@@ -133,6 +144,6 @@ function appRootChildren(children: React.ReactNode, devMode: unknown, scheme: Ta
   })
 }
 
-function requireSafeAreaContext(): SafeAreaContextModule {
+export function requireSafeAreaContext(): SafeAreaContextModule {
   return require('react-native-safe-area-context') as SafeAreaContextModule
 }
