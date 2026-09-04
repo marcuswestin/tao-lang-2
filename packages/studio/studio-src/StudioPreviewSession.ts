@@ -1,5 +1,5 @@
 import Runtime from '@runtime-toolchain'
-import { Assert, Errors, FS } from '@shared'
+import { Assert, Errors } from '@shared'
 import type {
   StudioParameterSchema,
   StudioPreviewManifestV2,
@@ -66,7 +66,7 @@ export function matrixManifest(
   const previewScenarios = compiler.scenarios.filter(scenario =>
     scenario.subject.kind !== 'app' || scenario.subject.appName === session.appName
   )
-  validatePreviewScenarios(session, previewScenarios)
+  validatePreviewScenarios(previewScenarios)
   const subjects: StudioScenarioSubject[] = [
     ...compiler.apps.map(app => ({
       appName: app.name,
@@ -166,20 +166,11 @@ export function matrixManifest(
 }
 
 function validatePreviewScenarios(
-  session: Pick<StudioProjectSession, 'appName' | 'entryPath' | 'projectRoot'>,
   scenarios: NonNullable<
     Awaited<ReturnType<typeof Runtime.generateApp>>['studioManifest']
   >['scenarios'],
 ): void {
-  const entryPath = FS.resolvePath(session.entryPath)
   for (const scenario of scenarios) {
-    if (FS.resolvePath(scenario.source.path, session.projectRoot) !== entryPath) {
-      throw new Errors.UserInputError(
-        `Tao Studio cannot preview scenario "${scenario.group} / ${scenario.name}" because it is declared outside the selected app entry file. Move the scenario into ${
-          FS.basename(entryPath)
-        } until imported scenario hosts are supported.`,
-      )
-    }
     if (scenario.subject.kind !== 'app') {
       continue
     }

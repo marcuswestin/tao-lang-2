@@ -101,25 +101,19 @@ Test(
   },
 )
 
-Test('Studio preview session rejects scenarios declared outside the selected app entry file', async () => {
-  const previewRuntimeRoot = await mkTestDir('tao-studio-imported-scenario-runtime-')
+Test('Studio preview session publishes a generated sketch scenario after creation', async () => {
+  const previewRuntimeRoot = await mkTestDir('tao-studio-sketch-preview-runtime-')
   try {
     await withTaoFiles(
-      'tao-studio-imported-scenario-project-',
+      'tao-studio-sketch-preview-project-',
       {
         'Garden.tao': `
-          use Imported from ./Imported.tao
-          app Garden { view Main }
-          view Main() { render Imported() }
-        `,
-        'Imported.tao': `
           use Text from @tao/ui
-          workspace view Imported() { render Text("Imported") }
-          fixture Empty { }
-          scenarios Imported "imported" {
-            fixture Empty
+          app Garden { view Main }
+          view Main() { render Text("Garden") }
+          scenarios Main "states" {
             device phone
-            scenario "phone" { render Imported() }
+            scenario "initial" { render Main() }
           }
         `,
       },
@@ -130,10 +124,35 @@ Test('Studio preview session rejects scenarios declared outside the selected app
           projectRoot: root,
         })
         try {
-          const compiled = await preview.session.compileInitial()
-          Expect(compiled.status).toBe('error')
-          Expect(compiled.message).toContain('declared outside the selected app entry file')
-          Expect(preview.session.previewManifest()).toBeUndefined()
+          const initial = await preview.session.compileInitial()
+          if (initial.status !== 'compiled') {
+            Errors.throwUnexpected(initial.message)
+          }
+          const created = await preview.session.applySketchAction({
+            action: {
+              height: 76,
+              id: 'sketch-1',
+              kind: 'create-sketch',
+              project: preview.session.identity().project,
+              rects: [],
+              width: 360,
+            },
+            expectedRevision: 0,
+            requestId: 'create-sketch',
+          })
+          const manifest = preview.session.previewManifest()!
+          const sketchScenario = manifest.scenarios.find(scenario => scenario.group === 'sketch')
+          const sketchSubject = manifest.subjects.find(subject => subject.subjectId === sketchScenario?.subjectId)
+
+          Expect(created.compile?.status).toBe('compiled')
+          Expect(sketchScenario?.label).toBe('draft')
+          Expect(sketchSubject).toMatchObject({ kind: 'view', viewName: 'View1' })
+          Expect(manifest.cells.some(cell => cell.scenarioId === sketchScenario?.scenarioId)).toBe(true)
+          Expect(
+            await FS.readText(
+              FS.resolvePath('_gen_tao-app/revisions/revision-2/TaoApp.tsx', previewRuntimeRoot),
+            ),
+          ).toContain("import './modules/@/studio/View1.tao'")
         } finally {
           await preview.close()
         }
@@ -143,6 +162,59 @@ Test('Studio preview session rejects scenarios declared outside the selected app
     await FS.remove(previewRuntimeRoot)
   }
 })
+
+Test(
+  'Studio preview session supports focused-view scenarios declared outside the selected app entry file',
+  async () => {
+    const previewRuntimeRoot = await mkTestDir('tao-studio-imported-scenario-runtime-')
+    try {
+      await withTaoFiles(
+        'tao-studio-imported-scenario-project-',
+        {
+          'Garden.tao': `
+          use Imported from ./Imported.tao
+          app Garden { view Main }
+          view Main() { render Imported() }
+        `,
+          'Imported.tao': `
+          use Text from @tao/ui
+          workspace view Imported() { render Text("Imported") }
+          fixture Empty { }
+          scenarios Imported "imported" {
+            fixture Empty
+            device phone
+            scenario "phone" { render Imported() }
+          }
+        `,
+        },
+        async (paths, root) => {
+          const preview = await openStudioPreviewSession({
+            entryPath: paths['Garden.tao'],
+            previewRuntimeRoot,
+            projectRoot: root,
+          })
+          try {
+            const compiled = await preview.session.compileInitial()
+            if (compiled.status !== 'compiled') {
+              Errors.throwUnexpected(compiled.message)
+            }
+            const manifest = preview.session.previewManifest()!
+            const scenario = manifest.scenarios.find(candidate => candidate.label === 'phone')
+            const subject = manifest.subjects.find(candidate => candidate.subjectId === scenario?.subjectId)
+
+            Expect(scenario?.group).toBe('imported')
+            Expect(subject).toMatchObject({ kind: 'view', viewName: 'Imported' })
+            Expect(manifest.cells.some(cell => cell.scenarioId === scenario?.scenarioId)).toBe(true)
+          } finally {
+            await preview.close()
+          }
+        },
+      )
+    } finally {
+      await FS.remove(previewRuntimeRoot)
+    }
+  },
+)
 
 Test('Studio preview session preserves compiler entity parameter semantics', async () => {
   const previewRuntimeRoot = await mkTestDir('tao-studio-entity-parameter-runtime-')

@@ -120,6 +120,12 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     return Compiler.compileValidated(validationResult, this.compilerContext(), options)
   }
 
+  /** compileFiles compiles the union of several entry graphs while keeping the first as the app entry. */
+  async compileFiles(entryFiles: readonly string[], options: CompileOptions = {}): Promise<CompileResult> {
+    const validationResult = await this.validateFiles(entryFiles)
+    return Compiler.compileValidated(validationResult, this.compilerContext(), options)
+  }
+
   /** compileTestPlan compiles v0 Tao tests for an entry file. */
   async compileTestPlan(entryFile: string, options: CompileTestPlanOptions = {}): Promise<Compiler.TestPlan> {
     const result = options.skipValidation ? await this.parse(entryFile) : await this.validate(entryFile)

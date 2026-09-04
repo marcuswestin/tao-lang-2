@@ -97,12 +97,15 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       opts.ship === undefined || opts.preview === undefined,
       'a release ship manifest is not combined with a Studio preview publication',
     )
-    const compiled = await Workspace.compile(sourcePath, {
+    const compileOptions = {
       appDatasourceConfiguration: opts.datasourceConfiguration,
       appName: opts.appName,
       studio: opts.preview !== undefined,
       validationMode: opts.validationMode,
-    })
+    }
+    const compiled = opts.preview === undefined
+      ? await Workspace.compile(sourcePath, compileOptions)
+      : await compileStudioPreview(sourcePath, opts.preview, compileOptions)
     const preview = opts.preview === undefined
       ? undefined
       : previewPublication(compiled.appNames, opts.appName, opts.preview)
@@ -149,6 +152,21 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
         }),
     }
   })
+}
+
+async function compileStudioPreview(
+  sourcePath: string,
+  preview: GeneratePreviewOptions,
+  options: Parameters<Workspace['compile']>[1],
+): Promise<Awaited<ReturnType<Workspace['compile']>>> {
+  const generatedEntries = Object.keys(preview.sourceVersions)
+    .filter(path => /^@\/studio\/.*\.tao$/u.test(path))
+    .map(path => FS.resolvePath(path, preview.project))
+  if (generatedEntries.length === 0) {
+    return await Workspace.compile(sourcePath, options)
+  }
+  const workspace = await Workspace.open(preview.project)
+  return await workspace.compileFiles([sourcePath, ...generatedEntries], options)
 }
 
 /** resetStudioPreviewSession releases one output root for a new project/app revision stream. */

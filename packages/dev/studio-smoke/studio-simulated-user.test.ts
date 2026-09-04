@@ -262,13 +262,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.dragBy('[data-tao-studio-sketch-workspace]', { x: 360, y: 76 }, { steps: 12 })
       await waitForSketchFile(browser, generatedSketchPath)
       await waitForFile(sketchCatalogPath)
-      await browser.waitFor(
-        `[...document.querySelectorAll('.studio-preview-group-label')].some(label => label.textContent === 'sketch')
-          && [...document.querySelectorAll('[data-studio-tao-scenario="true"] .studio-scenario-inspector-label')]
-            .some(label => label.textContent === 'draft')
-          && document.querySelector('[data-tao-studio-sketch]') instanceof HTMLElement`,
-        { timeoutMs: 30_000 },
-      )
+      await waitForSketchReady(browser)
       const generatedBeforeRect = await FS.readText(generatedSketchPath)
       const catalogBeforeRect = await FS.readText(sketchCatalogPath)
       const createdCatalog = smokeSketchCatalog(catalogBeforeRect)
@@ -775,6 +769,49 @@ async function waitForSketchFile(browser: StudioCdp, path: string): Promise<void
     await Time.sleep(100)
   }
   Errors.throwHostEnvironment(`Timed out waiting for Studio to write ${path} after dispatching the sketch gesture.`)
+}
+
+type SmokeSketchReadiness = Readonly<{
+  browserFailures: readonly string[]
+  groupLabels: readonly string[]
+  hostErrors: readonly string[]
+  scenarioLabels: readonly string[]
+  sketchCount: number
+  status: string
+}>
+
+async function waitForSketchReady(browser: StudioCdp): Promise<void> {
+  const deadline = Date.now() + 30_000
+  let readiness: SmokeSketchReadiness | undefined
+  while (Date.now() < deadline) {
+    readiness = await browser.evaluate<SmokeSketchReadiness>(`(() => ({
+      browserFailures: [],
+      groupLabels: [...document.querySelectorAll('.studio-preview-group-label')]
+        .map(label => label.textContent ?? ''),
+      hostErrors: [...document.querySelectorAll('[data-tao-studio-sketch-error]')]
+        .map(host => host.getAttribute('data-tao-studio-sketch-error') ?? '')
+        .filter(Boolean),
+      scenarioLabels: [...document.querySelectorAll(
+        '[data-studio-tao-scenario="true"] .studio-scenario-inspector-label',
+      )].map(label => label.textContent ?? ''),
+      sketchCount: document.querySelectorAll('[data-tao-studio-sketch]').length,
+      status: document.querySelector('.studio-status')?.textContent ?? '',
+    }))()`)
+    readiness = { ...readiness, browserFailures: browser.browserFailures().map(event => event.text) }
+    if (
+      readiness.groupLabels.includes('sketch')
+      && readiness.scenarioLabels.includes('draft')
+      && readiness.sketchCount > 0
+    ) {
+      return
+    }
+    if (readiness.hostErrors.length > 0 || readiness.browserFailures.length > 0) {
+      break
+    }
+    await Time.sleep(100)
+  }
+  await browser.captureScreenshot('studio-sketch-readiness-failure')
+  Errors.throwHostEnvironment(`Studio sketch did not become ready: ${JSON.stringify(readiness)}`)
 }
 
 async function waitForSketchRect(path: string, previousRevision: number): Promise<SmokeSketchCatalog> {

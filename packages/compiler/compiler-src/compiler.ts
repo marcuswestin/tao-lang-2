@@ -233,6 +233,18 @@ function compileValidatedInput(
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
   const outputPaths = planOutputPaths(sourceFiles, entryPath, context.sourceRoot)
   const dataCatalog = planDataCatalog(sourceFiles, entryPath)
+  const studioViews = studio
+    ? sourceFiles.flatMap(file =>
+      file.ast.statements.filter(AST.isScenarioGroupDeclaration).flatMap(group =>
+        AST.scenarioDeclarations(group).flatMap(scenario => {
+          const subject = AST.scenarioSubjectDeclaration(scenario)
+          return AST.isViewDeclaration(subject)
+            ? [{ id: `${AST.getDocument(subject).uri.fsPath}#${subject.name}`, view: subject }]
+            : []
+        })
+      )
+    )
+    : []
   const compiledFiles = sourceFiles.flatMap(file =>
     compileSourceFile(file, {
       dataCatalog,
@@ -244,6 +256,7 @@ function compileValidatedInput(
       selectedAppDatasourceConfiguration: options.appDatasourceConfiguration,
       selectedAppName: file.path === entryPath ? selectedAppName : undefined,
       studio,
+      studioViews,
     })
   )
 
@@ -375,6 +388,7 @@ type CompileSourceFileOptions = {
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppName: string | undefined
   studio: boolean
+  studioViews: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
 }
 
 function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile[] {
@@ -388,12 +402,21 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     selectedAppDatasourceConfiguration,
     selectedAppName,
     studio,
+    studioViews,
   } = options
   const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
   const ownsDataCatalog = dataCatalog?.ownerPath === file.path
   const needsStudioDataCatalog = studio && selectedAppName !== undefined && dataCatalog !== undefined
   if (dataCatalog && !ownsDataCatalog && (dataCatalog.userPaths.has(file.path) || needsStudioDataCatalog)) {
     addResolvedImport(imports, dataCatalog.ownerPath, dataCatalogBindingName)
+  }
+  if (studio && selectedAppName !== undefined) {
+    for (const item of studioViews) {
+      const ownerPath = AST.getDocument(item.view).uri.fsPath
+      if (ownerPath !== file.path && !imports.bySource.has(ownerPath)) {
+        imports.bySource.set(ownerPath, new Set())
+      }
+    }
   }
   const planned = outputPaths.bySourcePath.get(file.path)
   Assert.defined(planned, compiledSourceOutputPathMessage, { sourcePath: file.path })
@@ -447,17 +470,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
             projectRoot,
             studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
             studio,
-            studioViews: studio && selectedAppName !== undefined
-              ? file.ast.statements.filter(AST.isScenarioGroupDeclaration).flatMap(group =>
-                AST.scenarioDeclarations(group).flatMap(scenario => {
-                  const subject = AST.scenarioSubjectDeclaration(scenario)
-                  const view = AST.isViewDeclaration(subject) ? subject : undefined
-                  return view === undefined
-                    ? []
-                    : [{ id: `${AST.getDocument(view).uri.fsPath}#${view.name}`, view }]
-                })
-              )
-              : [],
+            studioViews: studio && selectedAppName !== undefined ? studioViews : [],
             viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }),
           }),
       )),
@@ -836,8 +849,11 @@ function importLinesForCompiledFile(
   return [...imports.bySource.entries()].map(([sourcePath, names]) => {
     const sourceOutputPath = outputPathBySourcePath.get(sourcePath)
     Assert.defined(sourceOutputPath, compiledSourceOutputPathMessage, { sourcePath })
-    const importedNames = Array.from(names).toSorted((left, right) => left.localeCompare(right)).join(', ')
     const importPath = relativeImportPath(currentOutputPath, sourceOutputPath)
+    if (names.size === 0) {
+      return `import '${importPath}'`
+    }
+    const importedNames = Array.from(names).toSorted((left, right) => left.localeCompare(right)).join(', ')
     return `import { ${importedNames} } from '${importPath}'`
   })
 }
