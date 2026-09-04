@@ -8,7 +8,7 @@ import type { StudioProjectSession } from '../StudioProjectSession'
 import type { StudioTestRunner } from '../StudioTestRunner'
 import { authoringTools, type CodeChangeRequest } from './AgentChatAuthoring'
 import { declarationSource } from './AgentChatFacts'
-import { askInstructions, buildInstructions, scenarioInstructions } from './AgentChatInstructions'
+import { chatInstructions, scenarioInstructions } from './AgentChatInstructions'
 import { AgentChatProvider } from './AgentChatProvider'
 import { type AgentChatEvent, AgentChatSession, type AgentChatTurn } from './AgentChatSession'
 import { type AgentChatToolCall, type AgentChatWorld, readTools } from './AgentChatTools'
@@ -87,7 +87,7 @@ class AgentChatConversation {
   #testBaseline: TestRunSummary | undefined
   #tests: StudioTestRunner | undefined
   #lastVerdict: FeatureTestVerdict | undefined
-  #mode: 'ask' | 'build' | 'scenario' = 'ask'
+  #mode: 'chat' | 'scenario' = 'chat'
   #codeChangesGranted = false
   #codeChangeRequests: CodeChangeRequest[] = []
   /** How many requests existed when this turn began, so only the new ones raise a card. */
@@ -126,14 +126,14 @@ class AgentChatConversation {
   }
 
   /** The mode decides which tools exist at all. A read-only chat has no write tool to refuse. */
-  setMode(mode: 'ask' | 'build' | 'scenario'): void {
+  setMode(mode: 'chat' | 'scenario'): void {
     if (mode !== this.#mode) {
       this.#mode = mode
       this.reset()
     }
   }
 
-  get mode(): 'ask' | 'build' | 'scenario' {
+  get mode(): 'chat' | 'scenario' {
     return this.#mode
   }
 
@@ -159,11 +159,8 @@ class AgentChatConversation {
   #toolsFor(): ToolSet {
     const record = (call: AgentChatToolCall) => this.#calls.push(call)
     const writes = this.#writeWorld()
-    if (this.#mode === 'ask') {
-      return readTools(this.#reading(), record)
-    }
     const all = writeTools(writes, this.#staged, record, this.#issuedTexts)
-    if (this.#mode === 'build') {
+    if (this.#mode === 'chat') {
       return { ...readTools(this.#reading(), record), ...all }
     }
     const landing = Object.fromEntries(
@@ -186,16 +183,10 @@ class AgentChatConversation {
     }
     if (this.#chat === undefined) {
       this.#chat = new AgentChatSession({
-        ...(this.#mode === 'ask' ? {} : {
-          approvalPolicy: call => this.#approvalPolicy(call),
-          approvalRequired: APPROVAL_REQUIRED,
-        }),
+        approvalPolicy: call => this.#approvalPolicy(call),
+        approvalRequired: APPROVAL_REQUIRED,
         drain: () => this.#calls.splice(0, this.#calls.length),
-        instructions: this.#mode === 'build'
-          ? buildInstructions
-          : this.#mode === 'scenario'
-          ? scenarioInstructions
-          : askInstructions,
+        instructions: this.#mode === 'scenario' ? scenarioInstructions : chatInstructions,
         model,
         tools: this.#toolsFor(),
       })
@@ -444,8 +435,8 @@ export const AgentChat = {
       return { status: 'reset' }
     }
     if (command === 'mode') {
-      const requested = body['mode']
-      conversation.setMode(requested === 'build' ? 'build' : requested === 'scenario' ? 'scenario' : 'ask')
+      // `ask` and `build` were separate modes before they merged; an old client may still name either.
+      conversation.setMode(body['mode'] === 'scenario' ? 'scenario' : 'chat')
       return { mode: conversation.mode }
     }
     if (command === 'grant-code-changes') {

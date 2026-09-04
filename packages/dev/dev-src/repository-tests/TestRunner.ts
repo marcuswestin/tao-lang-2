@@ -180,15 +180,29 @@ async function runTests(pattern = '', options: TestRunOptions = {}): Promise<num
       states,
     }),
   })
+  const matchedNothing = pattern.length > 0 && !TestResultSummary.ranAnyTest(states)
   TestResultSummary.printResultSummary(states, elapsedMs, {
     // A dashboard scrolled the failure away; a quiet run never showed it. Both need it repeated,
     // and an agent reading a pipe needs it short enough to act on.
     includeFailureOutput: mode !== 'lines',
     failureOutputLineLimit: mode === 'quiet' ? QUIET_FAILURE_OUTPUT_LINES : undefined,
+    matchedNothing,
     taoAppsSkipped: pattern.length > 0,
   })
   Shared.HCI.writeLine(`Summary: ${Shared.FS.displayPath(summaryPath)}`)
-  return WorkGraph.exitCodeFor(result)
+  const exitCode = WorkGraph.exitCodeFor(result)
+  // Every suite is run with --pass-with-no-tests, so a pattern that selects nothing in a package does not
+  // fail it. That is right per package and wrong for the run: a pattern matching nothing anywhere used to
+  // print "test suites ok" while testing nothing at all, which reads exactly like a green run.
+  if (exitCode === 0 && matchedNothing) {
+    Shared.HCI.writeErrorLine(
+      `\nNo test matched ${JSON.stringify(pattern)}. The argument is a test-name pattern, not a file path: `
+        + 'it is matched against the names in `Test(...)`, so pass part of a test name, or run `bun test <file>` '
+        + 'to select by file.',
+    )
+    return 1
+  }
+  return exitCode
 }
 
 function packageSuites(packageName: string, testFiles: string[], pattern: string): TestSuite[] {

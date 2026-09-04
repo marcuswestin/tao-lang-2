@@ -39,14 +39,6 @@ something that is generally true of apps.
 
 Keep it short. A person asked a question, not for a report.`
 
-/** askInstructions is the read-only mode: answer questions about the app, change nothing. */
-export const askInstructions = `${SHARED}
-${ANSWERING}
-
-In this conversation you can only look. You have no tool that changes the app, so if the person asks for a
-change, explain what you would change and which declarations it would touch, and say that applying it is a
-different mode.`
-
 /**
  * modeInstructions lets a later mode add its own rules without restating the shared ones. Every mode gets the
  * same account of what Tao is and what the model does not have.
@@ -58,9 +50,16 @@ ${ANSWERING}
 ${extra}`
 }
 
-/** buildInstructions is the mode that may change the app, through propose-then-apply and nothing else. */
-export const buildInstructions = modeInstructions(
-  `In this conversation you can change the app, in exactly two steps.
+/**
+ * chatInstructions is the ordinary conversation: answering questions and changing the app are the same
+ * conversation, because a person who asks what a view does and then asks to change it has not started a new
+ * task. Nothing lands without their approval, so the read-only mode this replaced bought nothing they were
+ * not already protected by -- it only made them repeat themselves in a fresh conversation.
+ */
+export const chatInstructions = modeInstructions(
+  `You can answer questions about this app and you can change it, in exactly two steps.
+
+Most turns are questions. Answer them from the tools and stop; do not propose a change nobody asked for.
 
 First propose. proposeFlag, proposeReword and proposeEdit each compute the real source change and show it as
 a diff; none of them writes anything. Prefer proposeFlag and proposeReword: they are lowered by Tao from the

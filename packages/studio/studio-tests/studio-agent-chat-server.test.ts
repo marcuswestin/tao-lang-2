@@ -171,15 +171,26 @@ Describe('Studio agent chat server', () => {
     Expect(turn['message']).toBe('Ask a question first.')
   })
 
-  Test('ask mode has no tool that could change the app', async () => {
-    // The model asks for a change tool by name; in this mode it does not exist, so the call cannot be made.
-    const it = chat([{ call: { input: { changeId: 'change-1' }, name: 'applyChange' } }, { text: 'I cannot.' }])
+  Test('a write still cannot land without a person, now that every conversation can write', async () => {
+    // Answering and changing are one mode now, so the approval pause is the only thing between a model that
+    // decides to write and a project that changes. It has to hold on the very first turn of a conversation.
+    const applied: { path: string; content: string }[] = []
+    const it = chat([
+      {
+        call: {
+          input: { declaration: 'Greeting', replacement: 'view Greeting() {\n   render Text("Hi")\n}' },
+          name: 'proposeEdit',
+        },
+      },
+      { call: { input: { changeId: 'change-1' }, name: 'applyChange' } },
+      { text: 'Waiting on you.' },
+    ], applied)
     await it.handle('enable', { enabled: true })
 
-    const turn = await it.handle('send', { message: 'change the greeting' }) as Record<string, unknown>
+    const turn = await it.handle('send', { message: 'say Hi instead' }) as Record<string, unknown>
 
-    // The turn ends without any write reaching the project.
-    Expect(turn['status']).not.toBe('needs-approval')
+    Expect(turn['status']).toBe('needs-approval')
+    Expect(applied).toEqual([])
   })
 
   Test('a change that was never staged is denied rather than shown as an approval card', async () => {
@@ -318,8 +329,17 @@ Describe('Studio agent chat server', () => {
     await it.handle('enable', { enabled: true })
     await it.handle('send', { message: 'first' })
 
-    await it.handle('mode', { mode: 'build' })
+    await it.handle('mode', { mode: 'scenario' })
 
     Expect((await it.handle('history', {}) as { history: unknown[] }).history).toEqual([])
+  })
+
+  Test('the modes that merged both name the one conversation that answers and changes', async () => {
+    // `ask` and `build` were separate; a client that still names either lands in the same place.
+    const it = chat([{ text: 'ok' }])
+
+    Expect((await it.handle('mode', { mode: 'ask' }) as { mode: string }).mode).toBe('chat')
+    Expect((await it.handle('mode', { mode: 'build' }) as { mode: string }).mode).toBe('chat')
+    Expect((await it.handle('mode', { mode: 'scenario' }) as { mode: string }).mode).toBe('scenario')
   })
 })

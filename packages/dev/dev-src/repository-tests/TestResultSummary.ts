@@ -24,6 +24,8 @@ type ResultSummaryOptions = {
   includeFailureOutput?: boolean
   failureOutputLineLimit?: number
   taoAppsSkipped?: boolean
+  /** True when a pattern was given and selected no test anywhere. */
+  matchedNothing?: boolean
 }
 
 const FAILURE_OUTPUT_LINE_LIMIT = 100
@@ -52,7 +54,10 @@ function printResultSummary(
   }
 
   if (failed.length === 0) {
-    Shared.HCI.writeSuccess('test suites ok\n')
+    // A run that executed no test has nothing to be ok about; the caller explains why and fails.
+    if (options.matchedNothing !== true) {
+      Shared.HCI.writeSuccess('test suites ok\n')
+    }
     return
   }
 
@@ -100,6 +105,12 @@ function printTotalSummary(states: readonly SuiteState[], elapsedMs: number, std
       `suite sum ${OutputText.formatElapsed(suiteElapsedMs)}`,
     ].join(' '),
   )
+}
+
+/** ranAnyTest says whether the run executed a single test, across every suite and both runners. */
+function ranAnyTest(states: readonly SuiteState[]): boolean {
+  const total = totalTestSummary(states)
+  return total.passed + total.failed > 0
 }
 
 function totalTestSummary(states: readonly SuiteState[]): TotalTestSummary {
@@ -218,5 +229,6 @@ export const TestResultSummary = {
   displayPath,
   failedSuites,
   printResultSummary,
+  ranAnyTest,
   suiteExitCode,
 } as const

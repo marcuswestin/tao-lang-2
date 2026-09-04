@@ -47,11 +47,10 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
   panel.style.cssText = SHELL
   panel.innerHTML = `
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-      <strong style="flex:1">Ask about this app</strong>
-      <select class="chat-mode" style="background:#0f1411;color:#e8ede9;border:1px solid #3a4a3f;border-radius:6px;padding:2px 4px;font:inherit" title="Ask can only look. Build can propose changes for you to approve.">
-        <option value="ask">ask</option>
+      <strong style="flex:1">Chat about this app</strong>
+      <select class="chat-mode" style="background:#0f1411;color:#e8ede9;border:1px solid #3a4a3f;border-radius:6px;padding:2px 4px;font:inherit" title="Chat answers questions and proposes changes you approve. Scenario sets up states and tests, and must ask before touching app code.">
+        <option value="chat">chat</option>
         <option value="scenario">scenario</option>
-        <option value="build">build</option>
       </select>
       <label style="display:flex;gap:4px;align-items:center;color:#9fb3a5" title="Send this project's declarations to a hosted model">
         <input class="chat-cloud" type="checkbox"> cloud
@@ -258,11 +257,9 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       log.replaceChildren()
       log.append(
         line(
-          mode.value === 'build'
-            ? 'Build mode: the agent can propose changes, and you approve each one before it lands.'
-            : mode.value === 'scenario'
+          mode.value === 'scenario'
             ? 'Scenario mode: the agent can add scenarios and tests. It must ask before changing app code.'
-            : 'Ask mode: the agent can only look at your app.',
+            : 'Chat mode: ask anything, and the agent can propose changes you approve before they land.',
           '#9fb3a5',
         ),
       )
