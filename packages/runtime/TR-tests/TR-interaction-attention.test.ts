@@ -81,6 +81,21 @@ Describe('TR.Interaction attention', () => {
     Expect(attention.read().mode).toBe('overview')
   })
 
+  Test('opens the region overview instead of an empty hint surface when the current region has no targets', () => {
+    const outline = new InteractionOutline()
+    const attention = new InteractionAttention(outline, new CommandCatalog())
+    register(outline, region('empty', { primary: true }))
+    register(outline, region('workspaces'))
+    register(outline, item('home', 'workspaces', 'Home'))
+    attention.revalidateOutline()
+
+    Expect(attention.read().candidates).toEqual([])
+    Expect(attention.pressKey('/')).toBe(true)
+    Expect(attention.read().mode).toBe('overview')
+    Expect(attention.pressKey('/')).toBe(true)
+    Expect(attention.read().mode).toBe('navigating')
+  })
+
   Test('dispatches prefix-free two-letter generated keys one hardware event at a time', () => {
     const outline = new InteractionOutline()
     const attention = new InteractionAttention(outline, new CommandCatalog())

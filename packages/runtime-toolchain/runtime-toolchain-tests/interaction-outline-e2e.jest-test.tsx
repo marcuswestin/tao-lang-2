@@ -1,8 +1,10 @@
 import { jest } from '@jest/globals'
 import TR from '@runtime/TR'
 import * as TaoReactNative from '@runtime/TR-react-native'
+import { SelectableRow } from '@runtime/TR-selectable-row'
 import { Describe, Expect, Test } from '@shared/test'
-import { act, fireEvent, within } from '@testing-library/react-native'
+import { act, fireEvent, render, within } from '@testing-library/react-native'
+import React from 'react'
 import * as RN from 'react-native'
 import { registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 
@@ -23,6 +25,129 @@ function nodes(kind?: TR.OutlineNode['kind']): readonly TR.OutlineNode[] {
 }
 
 Describe('interaction outline runtime', () => {
+  Test('renders a web selectable row as a group and leaves its nested controls independent', async () => {
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ActivityIndicator: RN.ActivityIndicator,
+      BackHandler: RN.BackHandler,
+      Image: RN.Image,
+      KeyboardAvoidingView: RN.KeyboardAvoidingView,
+      Modal: RN.Modal,
+      Platform: { OS: 'web' },
+      Pressable: RN.Pressable,
+      ScrollView: RN.ScrollView,
+      Switch: RN.Switch,
+      Text: RN.Text,
+      TextInput: RN.TextInput,
+      View: RN.View,
+    })
+    let selections = 0
+    try {
+      const screen = render(React.createElement(
+        SelectableRow,
+        { accessibilityLabel: 'Home', onSelect: () => selections += 1 },
+        React.createElement(
+          RN.View,
+          null,
+          React.createElement(RN.Text, null, 'Home'),
+          React.createElement(RN.Pressable, { accessibilityLabel: 'Delete workspace' }),
+        ),
+      ))
+      const row = screen.getByLabelText('Home')
+      Expect(row.type).toBe('View')
+      Expect(row.props.role).toBe('group')
+      Expect(row.props.accessibilityRole).toBeUndefined()
+
+      await act(async () => {
+        fireEvent(row, 'click', { currentTarget: row, target: { closest: () => null } })
+      })
+      Expect(selections).toBe(1)
+      await act(async () => {
+        fireEvent(row, 'click', { currentTarget: row, target: { closest: () => ({ nested: true }) } })
+      })
+      Expect(selections).toBe(1)
+      screen.unmount()
+    } finally {
+      restoreRuntime.mockRestore()
+    }
+  })
+
+  Test('claims handled browser shortcuts before the browser default without requiring app-root focus', async () => {
+    const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
+      ActivityIndicator: RN.ActivityIndicator,
+      BackHandler: RN.BackHandler,
+      Image: RN.Image,
+      KeyboardAvoidingView: RN.KeyboardAvoidingView,
+      Modal: RN.Modal,
+      Platform: { OS: 'web' },
+      Pressable: RN.Pressable,
+      ScrollView: RN.ScrollView,
+      Switch: RN.Switch,
+      Text: RN.Text,
+      TextInput: RN.TextInput,
+      View: RN.View,
+    })
+    let documentKeyDown: ((event: Record<string, unknown>) => void) | undefined
+    const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document')
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: {
+        addEventListener: (_type: string, listener: (event: Record<string, unknown>) => void) => {
+          documentKeyDown = listener
+        },
+        removeEventListener: (_type: string, listener: (event: Record<string, unknown>) => void) => {
+          if (documentKeyDown === listener) {
+            documentKeyDown = undefined
+          }
+        },
+      },
+    })
+    try {
+      await testCompileApp(
+        `
+          use Col, FormButton from @tao/ui
+          use StackNav from @tao/nav
+          app KeyApp { Name "Keys" Navigator StackNav { Initial Home } }
+          scene Home() {
+            Title "Home"
+            render Col() { FormButton("Next") { on press -> { } } }
+          }
+        `,
+        async screen => {
+          Expect(screen.queryByText('Command palette')).toBeNull()
+          let palettePrevented = false
+          let paletteStopped = false
+          const palette = {
+            key: 'k',
+            metaKey: true,
+            preventDefault: () => palettePrevented = true,
+            stopPropagation: () => paletteStopped = true,
+          }
+          await act(async () => {
+            documentKeyDown?.(palette)
+          })
+          Expect(palettePrevented).toBe(true)
+          Expect(paletteStopped).toBe(true)
+          Expect(TR.Interaction.Attention.read().mode).toBe('palette')
+          Expect(screen.getByText('Command palette')).toBeDefined()
+
+          let browserKeyPrevented = false
+          const browserKey = { key: 'F7', preventDefault: () => browserKeyPrevented = true }
+          await act(async () => {
+            documentKeyDown?.(browserKey)
+          })
+          Expect(browserKeyPrevented).toBe(false)
+        },
+      )
+    } finally {
+      if (previousDocument) {
+        Object.defineProperty(globalThis, 'document', previousDocument)
+      } else {
+        delete (globalThis as { document?: unknown }).document
+      }
+      restoreRuntime.mockRestore()
+    }
+  })
+
   Test('handles web keys from the focusable app host and prevents only handled input', async () => {
     const restoreRuntime = jest.spyOn(TaoReactNative, 'requireReactNativeRuntime').mockReturnValue({
       ActivityIndicator: RN.ActivityIndicator,

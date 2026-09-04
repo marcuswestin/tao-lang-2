@@ -50,6 +50,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
   const visible = interactionKeyboardPresence.read()
     && (attention.mode === 'hints'
       || attention.mode === 'overview'
+      || attention.mode === 'narrowing'
       || attention.mode === 'verbs'
       || attention.mode === 'palette')
   let heading: string | undefined
@@ -82,6 +83,16 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
       previous.current,
       'overview',
     )
+  } else if (visible && attention.mode === 'narrowing') {
+    heading = `Narrowing “${attention.narrowing}”`
+    rows = attention.candidates.flatMap(identity => {
+      const node = nodes.find(candidate => candidate.identity === identity)
+      const label = node?.label()
+      return !node || !label ? [] : [{ identity, label }]
+    })
+    if (rows.length === 0) {
+      rows = [{ identity: '@tao/narrowing/no-match', label: 'No matching targets' }]
+    }
   } else if (visible && attention.mode === 'verbs') {
     heading = `Actions for ${attention.targetLabel ?? 'target'}`
     rows = keyedRows(attention.verbs, explicitKeys, previous.current, 'verbs')
@@ -97,7 +108,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
     React.createElement(
       runtime.View,
       {
-        accessibilityLabel: `${displayKey(row.key)} — ${row.label}`,
+        accessibilityLabel: rowText(attention.mode, row),
         accessibilityRole: 'text',
         accessibilityState: row.enabled === false ? { disabled: true } : undefined,
         accessible: true,
@@ -119,7 +130,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
         : React.createElement(
           runtime.Text,
           { accessible: false },
-          `${displayKey(row.key)} — ${row.label}`,
+          rowText(attention.mode, row),
         ),
     )
   )
@@ -133,7 +144,6 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
       importantForAccessibility: hidden ? 'no-hide-descendants' : 'no',
       // Generated rows are keyboard affordances, not pointer controls. Let taps continue through
       // both the full-screen host and its visible descendants to the semantic control underneath.
-      pointerEvents: 'none',
       style: interactionLayerHostStyle,
       testID: 'tao-interaction-layers',
     },
@@ -185,6 +195,10 @@ function keyedRows(
 
 function displayKey(key: string | undefined): string {
   return key?.toLocaleUpperCase() ?? '—'
+}
+
+function rowText(mode: string, row: InteractionSurfaceRow): string {
+  return mode === 'narrowing' ? row.label : `${displayKey(row.key)} — ${row.label}`
 }
 
 function active(node: TaoOutlineLiveNode, nodes: readonly TaoOutlineLiveNode[]): boolean {
@@ -239,7 +253,7 @@ function anchoredStyle(bounds: TaoInteractionBounds): Record<string, number | st
 const interactionLayerHostStyle = {
   bottom: 0,
   left: 0,
-  pointerEvents: 'box-none',
+  pointerEvents: 'none',
   position: 'absolute',
   right: 0,
   top: 0,

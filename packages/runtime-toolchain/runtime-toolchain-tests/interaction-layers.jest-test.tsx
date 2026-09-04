@@ -84,7 +84,7 @@ Describe('TR.Interaction generated layers', () => {
     })
     Expect(screen.getByText('Interaction hints')).toBeDefined()
     Expect(layerHost.props.importantForAccessibility).toBe('no')
-    Expect(layerHost.props.pointerEvents).toBe('none')
+    Expect(layerHost.props.style.pointerEvents).toBe('none')
     Expect(screen.getByText('H — Home')).toBeDefined()
     Expect(screen.getByText('P — Projects')).toBeDefined()
     const projectRow = screen.getByTestId('tao-interaction-row:projects')
@@ -107,6 +107,34 @@ Describe('TR.Interaction generated layers', () => {
       TR.Interaction.PressKey('?')
     })
     Expect(screen.queryByText('Interaction hints')).toBeNull()
+    screen.unmount()
+    withdraw.forEach(dispose => dispose())
+    resetInteractionRuntime()
+  })
+
+  Test('shows typed narrowing and its matching targets instead of changing attention invisibly', async () => {
+    resetInteractionRuntime()
+    const withdraw = [
+      interactionOutline.register(region('main', 'WordFlower', true)),
+      interactionOutline.register(item('home', 'main', 'Home')),
+      interactionOutline.register(item('projects', 'main', 'Projects')),
+    ]
+    TR.Interaction.Attention.revalidateOutline()
+    const screen = render(React.createElement(InteractionLayersHost))
+
+    await act(async () => {
+      TR.Interaction.PressKey('p')
+    })
+    Expect(screen.getByText('Narrowing “p”')).toBeDefined()
+    Expect(screen.getByText('Projects')).toBeDefined()
+    Expect(screen.queryByText('Home')).toBeNull()
+
+    await act(async () => {
+      TR.Interaction.PressKey('z')
+    })
+    Expect(screen.getByText('Narrowing “pz”')).toBeDefined()
+    Expect(screen.getByText('No matching targets')).toBeDefined()
+
     screen.unmount()
     withdraw.forEach(dispose => dispose())
     resetInteractionRuntime()

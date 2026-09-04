@@ -62,8 +62,11 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
     navigationHostActive: focusedAuxiliary === undefined,
   }
   const toasts = props.app.renderToasts(appTaoProps)
-  const onKeyDown = runtime.Platform?.OS === 'web'
-    ? (event: TaoAppHostKeyEvent) => {
+  const handleKeyDown = React.useCallback(
+    (event: TaoAppHostKeyEvent) => {
+      if (event.defaultPrevented) {
+        return
+      }
       const hardwareEvent = event.nativeEvent ?? event
       // The outline deliberately stops at an injected or foreign view. Let the browser deliver keys
       // to an editable descendant that Tao does not own. Escape and Tab return to Tao attention only
@@ -88,9 +91,13 @@ function MountedNavigationAppHost(props: { app: RuntimeAppDefinition; __tao?: Ta
       )
       if (handled) {
         event.preventDefault?.()
+        event.stopPropagation?.()
       }
-    }
-    : undefined
+    },
+    [runtime.Platform?.OS],
+  )
+  const onKeyDown = runtime.Platform?.OS === 'web' ? handleKeyDown : undefined
+  useWebInteractionKeyboard(onKeyDown)
   const onPointerDown = runtime.Platform?.OS === 'web'
     ? (event: TaoAppHostPointerEvent) => {
       if (event.target === event.currentTarget) {
@@ -140,9 +147,16 @@ type TaoAppHostKeyEvent =
   & TaoHardwareKeyEvent
   & Readonly<{
     nativeEvent?: TaoHardwareKeyEvent
+    defaultPrevented?: boolean
     preventDefault?(): void
+    stopPropagation?(): void
     target?: unknown
   }>
+
+type TaoWebKeyboardTarget = Readonly<{
+  addEventListener(type: 'keydown', listener: (event: TaoAppHostKeyEvent) => void, capture: boolean): void
+  removeEventListener(type: 'keydown', listener: (event: TaoAppHostKeyEvent) => void, capture: boolean): void
+}>
 
 type TaoAppHostPointerEvent = Readonly<{
   currentTarget?: { focus?(): void }
@@ -180,6 +194,22 @@ function isEditableTarget(target: unknown): boolean {
     || tag === 'select'
     || element.getAttribute?.('role') === 'textbox'
     || editableAncestor !== null && editableAncestor !== undefined
+}
+
+/**
+ * Browser shortcuts are decided before a focusable app root sees bubbling input. Listening on the
+ * document in capture phase lets Tao claim only keys its reducer actually handles while leaving
+ * browser and editable-control defaults untouched for every unhandled key.
+ */
+function useWebInteractionKeyboard(listener: ((event: TaoAppHostKeyEvent) => void) | undefined): void {
+  React.useEffect(() => {
+    const target = (globalThis as unknown as { document?: TaoWebKeyboardTarget }).document
+    if (!listener || !target) {
+      return
+    }
+    target.addEventListener('keydown', listener, true)
+    return () => target.removeEventListener('keydown', listener, true)
+  }, [listener])
 }
 
 function useNavigationRestoration(app: RuntimeAppDefinition): boolean {

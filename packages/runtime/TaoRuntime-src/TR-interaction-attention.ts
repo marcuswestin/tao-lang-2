@@ -425,9 +425,12 @@ export class InteractionAttention {
       return true
     }
     if (key === '/' || key === '?') {
-      this.#hints = !this.#hints
+      const opening = !this.#hints && !this.#overview
+      // A blank hint card is a dead end. If the current region has no targetable controls, reveal
+      // the region overview instead so the same discovery key still offers somewhere useful to go.
+      this.#hints = opening && this.#candidates.length > 0
       this.#allocatedPrefix = undefined
-      this.#overview = false
+      this.#overview = opening && this.#candidates.length === 0
       this.#palette = false
       this.#paletteTarget = undefined
       this.emit()

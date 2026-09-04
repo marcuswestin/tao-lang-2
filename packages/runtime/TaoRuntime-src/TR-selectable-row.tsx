@@ -44,6 +44,7 @@ export function SelectableRow(props: {
     label: verb.label,
     name: accessibilityActionName(verb.identity),
   }))
+  const activate = InteractionControls.ActivateIdentity(props.identity, props.onSelect)
   const nativeProps = {
     ...(props.accessibilityLabel === undefined ? {} : { accessibilityLabel: props.accessibilityLabel }),
     ...(accessibilityActions.length === 0 ? {} : { accessibilityActions }),
@@ -61,14 +62,50 @@ export function SelectableRow(props: {
         },
       }),
     onFocus: () => InteractionControls.TargetIdentity(props.identity),
-    onPress: InteractionControls.ActivateIdentity(props.identity, props.onSelect),
+    onPress: activate,
     ref: host,
+  }
+  if (runtime.Platform?.OS === 'web') {
+    const { accessibilityRole: _accessibilityRole, accessible: _accessible, onPress: _onPress, ...webProps } =
+      nativeProps
+    const selectableProps = webSelectableRowProps(webProps, activate)
+    return React.createElement(
+      runtime.View,
+      props.identity === undefined ? selectableProps : interactionMeasurements.bind(props.identity, selectableProps),
+      props.children,
+    )
   }
   return React.createElement(
     runtime.Pressable,
     props.identity === undefined ? nativeProps : interactionMeasurements.bind(props.identity, nativeProps),
     props.children,
   )
+}
+
+type TaoWebClickEvent = Readonly<{
+  currentTarget?: unknown
+  target?: Readonly<{ closest?(selector: string): unknown }>
+}>
+
+/** A web row is a named group, not a button containing every button rendered by the row. */
+function webSelectableRowProps(
+  nativeProps: Record<string, unknown>,
+  activate: () => unknown,
+): Record<string, unknown> {
+  return {
+    ...nativeProps,
+    onClick: (event: TaoWebClickEvent) => {
+      const nestedControl = event.target?.closest?.(
+        'button, a, input, select, textarea, [contenteditable]:not([contenteditable="false"]), '
+          + '[role="button"], [role="checkbox"], [role="link"], [role="menuitem"], [role="switch"]',
+      )
+      if (nestedControl === undefined || nestedControl === null || nestedControl === event.currentTarget) {
+        activate()
+      }
+    },
+    role: 'group',
+    tabIndex: -1,
+  }
 }
 
 function accessibilityVerbs(identity: string | undefined): readonly TaoInteractionVerb[] {
