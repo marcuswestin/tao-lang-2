@@ -17,6 +17,7 @@ async function writeForeignLease(root: string, record: Partial<LaneRecord> & { p
   await FS.mkdir(root)
   await FS.writeJson(FS.resolvePath(`${record.pid}.json`, root), {
     lane: 'verify',
+    maxSlots: Platform.cpuCount(),
     repositoryRoot: '/elsewhere',
     slots: 4,
     startedAt: new Date().toISOString(),
@@ -25,14 +26,24 @@ async function writeForeignLease(root: string, record: Partial<LaneRecord> & { p
 }
 
 Describe('machine lanes', () => {
-  Test('divides the machine between the lanes running on it, never below a workable width', () => {
-    Expect(MachineLanes.shareOf(18, 1)).toBe(18)
-    Expect(MachineLanes.shareOf(18, 2)).toBe(9)
-    Expect(MachineLanes.shareOf(18, 4)).toBe(4)
-    // Ten agents on one laptop still each get enough width to overlap two suites; below that a
-    // lane's own wall time costs more than the contention it is dodging.
-    Expect(MachineLanes.shareOf(18, 40)).toBe(MachineLanes.MIN_LANE_CAPACITY)
-    Expect(MachineLanes.shareOf(2, 8)).toBe(MachineLanes.MIN_LANE_CAPACITY)
+  Test('fairly divides available CPUs and gives every registered lane a chance to admit', () => {
+    const records = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        id: String(index),
+        lane: 'verify',
+        maxSlots: 18,
+        pid: index + 1,
+        repositoryRoot: `/worktree-${index}`,
+        slots: 0,
+        startedAt: `2026-09-03T12:00:${String(index).padStart(2, '0')}.000Z`,
+      }))
+
+    Expect([...MachineLanes.fairAllocations(18, records(1)).values()]).toEqual([18])
+    Expect([...MachineLanes.fairAllocations(18, records(2)).values()]).toEqual([9, 9])
+    Expect([...MachineLanes.fairAllocations(18, records(4)).values()]).toEqual([5, 5, 4, 4])
+    // Logical shares may exceed the CPU count only in this edge case. Actual reservations remain
+    // bounded by the broker's machine-wide available-slot check.
+    Expect([...MachineLanes.fairAllocations(2, records(8)).values()]).toEqual(Array(8).fill(1))
   })
 
   Test('a second lane sees the first and takes half the machine', async () => {
@@ -43,7 +54,7 @@ Describe('machine lanes', () => {
 
     const lane = await MachineLanes.acquire({ lane: 'verify', registryRoot, repositoryRoot: '/here' })
 
-    Expect(lane.capacity).toBe(MachineLanes.shareOf(Platform.cpuCount(), 2))
+    Expect(lane.capacity).toBe(Math.ceil(Platform.cpuCount() / 2))
     const leases = await leaseFiles(registryRoot)
     Expect(leases).toContain('1.json')
     Expect(leases.some(name => name.startsWith(`${Platform.runtimeProcess.pid}-`) && name.endsWith('.lane.json')))
@@ -75,6 +86,24 @@ Describe('machine lanes', () => {
     Expect(await leaseFiles(registryRoot)).toEqual([])
   })
 
+  Test('ignores malformed live records instead of admitting NaN accounting', async () => {
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    await FS.mkdir(registryRoot)
+    const path = FS.resolvePath('invalid.json', registryRoot)
+    await FS.writeJson(path, {
+      lane: 'verify',
+      maxSlots: 4,
+      pid: Platform.runtimeProcess.pid,
+      repositoryRoot: '/elsewhere',
+      startedAt: new Date().toISOString(),
+    })
+
+    Expect(await MachineLanes.activeLanes(registryRoot, { prune: false })).toEqual([])
+    Expect(await FS.exists(path)).toBe(true)
+    Expect(await MachineLanes.activeLanes(registryRoot)).toEqual([])
+    Expect(await FS.exists(path)).toBe(false)
+  })
+
   Test('a nested lane does not register again, while explicit jobs is a top-level ceiling', async () => {
     const registryRoot = await mkTestDir('tao-machine-lanes-')
 
@@ -99,6 +128,29 @@ Describe('machine lanes', () => {
     await nested.release()
     await explicit.release()
     Expect(await leaseFiles(registryRoot)).toEqual([])
+  })
+
+  Test('a nested lane observes peer contention without registering a second time', async () => {
+    const registryRoot = await mkTestDir('tao-machine-lanes-')
+    await writeForeignLease(registryRoot, { pid: 1 })
+    const outer = await MachineLanes.acquire({
+      lane: 'verify',
+      registryRoot,
+      repositoryRoot: '/here',
+      requestedJobs: 3,
+    })
+    const nested = await MachineLanes.acquire({
+      lane: 'dev-test',
+      registryRoot,
+      repositoryRoot: '/here',
+      reservedJobs: 3,
+    })
+
+    Expect(await leaseFiles(registryRoot)).toHaveLength(2)
+    Expect(nested.report().peakLanes).toBe(2)
+    Expect(nested.report().contended).toBe(true)
+    await nested.release()
+    await outer.release()
   })
 
   Test('rebalances every admission when a second lane joins without oversubscribing', async () => {
@@ -244,6 +296,12 @@ Describe('machine lanes', () => {
     Expect(lane.capacity).toBe(Platform.cpuCount())
     Expect(lane.report().contended).toBe(false)
     await lane.release()
+  })
+
+  Test('an unreadable resource registry fails closed', async () => {
+    await Expect(
+      MachineLanes.tryAcquireResource({ name: 'studio-ports', registryRoot: '/proc/tao-machine-resource-test' }),
+    ).rejects.toThrow('Cannot coordinate machine resource')
   })
 
   Test('calls a run contended when another lane ran, or when load outran the machine', () => {

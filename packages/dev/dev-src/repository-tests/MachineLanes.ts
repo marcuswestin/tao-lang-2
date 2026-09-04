@@ -1,4 +1,4 @@
-import { FS, Platform, Time } from '@shared'
+import { Errors, FS, Platform, Time } from '@shared'
 import { randomUUID } from 'node:crypto'
 
 /** LaneRecord is the live, machine-wide accounting record for one top-level lane. */
@@ -6,11 +6,11 @@ export type LaneRecord = {
   /** Unique per acquisition: one process may own more than one lane. */
   id?: string
   lane: string
-  /** Per-lane ceiling. Missing on records written by the earlier static allocator. */
-  maxSlots?: number
+  /** Per-lane ceiling. */
+  maxSlots: number
   pid: number
   repositoryRoot: string
-  /** Slots occupied now. On a legacy record this is conservatively its whole static share. */
+  /** Slots occupied now. */
   slots: number
   startedAt: string
   updatedAt?: string
@@ -96,12 +96,12 @@ type LaneEntry = {
 }
 
 const REGISTRY_DIRECTORY = 'tao/machine-lanes'
-const MIN_LANE_CAPACITY = 2
 const SAMPLE_INTERVAL_MS = 3_000
 const ADMISSION_POLL_MS = 25
+const MAX_ADMISSION_POLL_MS = 500
 const CONTENDED_LOAD_RATIO = 1.5
 const MAX_LEASE_AGE_MS = 6 * 60 * 60 * 1_000
-const MAX_MUTEX_AGE_MS = 30_000
+const MUTEX_ACQUIRE_TIMEOUT_MS = 30_000
 const EXCLUSIVE_TIMEOUT_MS = 5 * 60 * 1_000
 const MUTEX_LINK = '.mutex'
 const EXCLUSIVE_PATH = '.exclusive'
@@ -113,9 +113,9 @@ function registryRoot(): string {
   return FS.resolvePath(REGISTRY_DIRECTORY, base)
 }
 
-/** activeLanes returns all live registrations and prunes crashed processes. */
-async function activeLanes(root = registryRoot()): Promise<LaneRecord[]> {
-  return (await activeLaneEntries(root, true)).map(entry => entry.record)
+/** activeLanes returns all live registrations, pruning crashed processes unless asked not to. */
+async function activeLanes(root = registryRoot(), options: { prune?: boolean } = {}): Promise<LaneRecord[]> {
+  return (await activeLaneEntries(root, options.prune ?? true)).map(entry => entry.record)
 }
 
 /**
@@ -123,12 +123,12 @@ async function activeLanes(root = registryRoot()): Promise<LaneRecord[]> {
  * nested run is already accounted for and therefore stays unregistered.
  */
 async function acquire(options: AcquireOptions): Promise<MachineLane> {
-  if (options.reservedJobs !== undefined) {
-    return unregisteredLane(options.reservedJobs)
-  }
-
   const root = options.registryRoot ?? registryRoot()
   const cpuCount = Math.max(1, options.cpuCount ?? Platform.cpuCount())
+  if (options.reservedJobs !== undefined) {
+    return observingUnregisteredLane(options.reservedJobs, root, cpuCount)
+  }
+
   const id = `${Platform.runtimeProcess.pid}-${randomUUID()}`
   const path = lanePath(root, id)
   const now = new Date().toISOString()
@@ -162,12 +162,11 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
   return registeredLane({ cpuCount, id, initialCapacity, initialLaneCount, path, record, root })
 }
 
-/** shareOf remains the readable equal-share estimate used by diagnostics and tests. */
-function shareOf(cpuCount: number, laneCount: number): number {
-  return Math.max(MIN_LANE_CAPACITY, Math.min(cpuCount, Math.floor(cpuCount / Math.max(1, laneCount))))
-}
-
-/** fairAllocations redistributes unused ceilings without ever allocating more than the machine. */
+/**
+ * fairAllocations redistributes unused ceilings. Every registered lane retains a logical admission
+ * floor, even when there are more lanes than CPUs; the separate global-availability check still
+ * guarantees that actual reservations never oversubscribe the machine.
+ */
 function fairAllocations(
   cpuCount: number,
   records: readonly (LaneRecord & { id: string; maxSlots: number })[],
@@ -175,8 +174,8 @@ function fairAllocations(
   const ordered = [...records].sort((left, right) =>
     left.startedAt.localeCompare(right.startedAt) || left.id.localeCompare(right.id)
   )
-  const allocations = new Map(ordered.map(record => [record.id, 0]))
-  let remaining = Math.max(0, cpuCount)
+  const allocations = new Map(ordered.map(record => [record.id, Math.min(1, record.maxSlots)]))
+  let remaining = Math.max(0, cpuCount - ordered.length)
   while (remaining > 0) {
     const eligible = ordered.filter(record => (allocations.get(record.id) ?? 0) < record.maxSlots)
     if (eligible.length === 0) {
@@ -220,6 +219,7 @@ function registeredLane(options: {
   let peakLoadAverage = Platform.loadAverage()
   let released = false
   let capacity = Math.max(1, options.initialCapacity)
+  let admissionPollMs = ADMISSION_POLL_MS
 
   const timer = setInterval(() => {
     peakLoadAverage = Math.max(peakLoadAverage, Platform.loadAverage())
@@ -286,15 +286,17 @@ function registeredLane(options: {
           return slots
         })
         if (reservation === undefined) {
+          admissionPollMs = Math.min(MAX_ADMISSION_POLL_MS, admissionPollMs * 2)
           return undefined
         }
+        admissionPollMs = ADMISSION_POLL_MS
         return slotReservation(options.root, options.id, reservation)
       } catch {
         // Coordination is advisory only when its storage is actually unavailable.
         return uncoordinatedReservation(requestedSlots)
       }
     },
-    waitForAvailability: () => Time.sleep(ADMISSION_POLL_MS),
+    waitForAvailability: () => Time.sleep(admissionPollMs),
   }
   return lane
 }
@@ -445,8 +447,8 @@ async function tryAcquireResource(options: ResourceOptions): Promise<MachineReso
     if (!acquired) {
       return undefined
     }
-  } catch {
-    return { release: async () => {} }
+  } catch (error) {
+    throw new Errors.HostEnvironmentError(`Cannot coordinate machine resource '${options.name}'.`, { cause: error })
   }
 
   let released = false
@@ -485,6 +487,36 @@ function unregisteredLane(capacity: number): MachineLane {
   }
 }
 
+async function observingUnregisteredLane(capacity: number, root: string, cpuCount: number): Promise<MachineLane> {
+  const width = Math.max(1, capacity)
+  let peakLanes = 1
+  let peakLoadAverage = Platform.loadAverage()
+  let released = false
+  const sample = async () => {
+    peakLoadAverage = Math.max(peakLoadAverage, Platform.loadAverage())
+    const lanes = await activeLanes(root)
+    peakLanes = Math.max(peakLanes, lanes.length)
+  }
+  await sample().catch(() => {})
+  const timer = setInterval(() => void sample().catch(() => {}), SAMPLE_INTERVAL_MS)
+  timer.unref?.()
+  return {
+    capacity: width,
+    ceiling: width,
+    acquireExclusive: async () => undefined,
+    report: () => contentionReport({ cpuCount, peakLanes, peakLoadAverage }),
+    release: async () => {
+      if (!released) {
+        released = true
+        clearInterval(timer)
+        await sample().catch(() => {})
+      }
+    },
+    tryAcquire: async requestedSlots => uncoordinatedReservation(requestedSlots),
+    waitForAvailability: () => Time.sleep(ADMISSION_POLL_MS),
+  }
+}
+
 function uncoordinatedReservation(slots: number): MachineSlotReservation {
   return { release: async () => {}, slots: Math.max(1, slots) }
 }
@@ -502,21 +534,20 @@ async function activeLaneEntries(root: string, prune: boolean): Promise<LaneEntr
       continue
     }
     const path = FS.resolvePath(entry, root)
-    const raw = await readRecord<LaneRecord>(path)
-    if (raw === undefined || typeof raw.pid !== 'number' || typeof raw.lane !== 'string' || !isLive(raw)) {
+    const raw = await readRecord<unknown>(path)
+    if (!isLaneRecord(raw) || !isLive(raw)) {
       if (prune) {
         await FS.remove(path).catch(() => {})
       }
       continue
     }
-    const legacy = raw.maxSlots === undefined
     lanes.push({
       path,
       record: {
         ...raw,
         id: raw.id ?? entry.replace(/\.json$/, ''),
-        maxSlots: Math.max(1, raw.maxSlots ?? Number.MAX_SAFE_INTEGER),
-        slots: Math.max(0, legacy ? raw.slots : raw.slots),
+        maxSlots: raw.maxSlots,
+        slots: raw.slots,
       },
     })
   }
@@ -535,6 +566,7 @@ async function withRegistryLock<T>(root: string, work: () => Promise<T>): Promis
       startedAt: new Date().toISOString(),
     } satisfies MutexRecord,
   )
+  const deadline = Time.nowMs() + MUTEX_ACQUIRE_TIMEOUT_MS
 
   while (true) {
     try {
@@ -549,6 +581,10 @@ async function withRegistryLock<T>(root: string, work: () => Promise<T>): Promis
       if (existing === undefined || mutexIsStale(existing)) {
         await FS.remove(linkPath).catch(() => {})
         continue
+      }
+      if (Time.nowMs() >= deadline) {
+        await FS.remove(ownerPath).catch(() => {})
+        throw new Errors.HostEnvironmentError('Timed out waiting for the machine-lane registry lock.')
       }
       await Time.sleep(ADMISSION_POLL_MS)
     }
@@ -598,7 +634,24 @@ function mutexIsStale(record: MutexRecord): boolean {
   const startedAt = Date.parse(record.startedAt)
   return !Platform.processIsAlive(record.pid)
     || !Number.isFinite(startedAt)
-    || Time.nowMs() - startedAt > MAX_MUTEX_AGE_MS
+}
+
+function isLaneRecord(value: unknown): value is LaneRecord {
+  if (typeof value !== 'object' || value === null) {
+    return false
+  }
+  const record = value as Partial<LaneRecord>
+  return Number.isInteger(record.pid)
+    && (record.pid ?? 0) > 0
+    && typeof record.lane === 'string'
+    && record.lane.length > 0
+    && typeof record.repositoryRoot === 'string'
+    && typeof record.startedAt === 'string'
+    && Number.isFinite(Date.parse(record.startedAt))
+    && Number.isFinite(record.slots)
+    && (record.slots ?? -1) >= 0
+    && Number.isFinite(record.maxSlots)
+    && (record.maxSlots ?? 0) > 0
 }
 
 function errorCode(error: unknown): string | undefined {
@@ -617,13 +670,11 @@ function resourcePath(root: string, name: string): string {
 export const MachineLanes = {
   CONTENDED_LOAD_RATIO,
   EXCLUSIVE_TIMEOUT_MS,
-  MIN_LANE_CAPACITY,
   acquire,
   activeLanes,
   contentionReport,
   describeContention,
   fairAllocations,
   registryRoot,
-  shareOf,
   tryAcquireResource,
 } as const

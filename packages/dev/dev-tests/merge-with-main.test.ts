@@ -246,6 +246,20 @@ Describe('merge-with-main', () => {
     ])
   })
 
+  Test('ignores prunable worktree records without mutating them during preflight', () => {
+    Expect(parseWorktrees([
+      'worktree /gone',
+      'HEAD old',
+      'branch refs/heads/main',
+      'prunable gitdir file points to non-existent location',
+      '',
+      'worktree /live',
+      'HEAD current',
+      'branch refs/heads/main',
+      '',
+    ].join('\n'))).toEqual([{ branch: 'main', head: 'current', path: '/live' }])
+  })
+
   Test('dry run performs only read-only git operations and ends with the exact execute command', async () => {
     const fake = fakeDependencies()
     const result = await MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies)
@@ -372,6 +386,28 @@ Describe('merge-with-main', () => {
     Expect(operations.indexOf('git merge --ff-only origin/main')).toBeGreaterThan(
       operations.findLastIndex(operation => operation === 'just full-verify'),
     )
+    Expect(fake.lines.some(line => line.includes('restarting full verification (pass 2/3)'))).toBe(true)
+  })
+
+  Test('stops after three verification restarts when remote main never stabilizes', async () => {
+    const originalMain = 'main000000000000000000000000000000000000'
+    const fake = fakeDependencies({
+      ancestorExitCodes: [0, 1, 1, 1],
+      mainHead: originalMain,
+      remoteMainHead: originalMain,
+      remoteMainSequence: [originalMain, 'main-1', 'main-2', 'main-3'],
+    })
+
+    await Expect(MergeWithMainCommand.run({
+      execute: true,
+      push: true,
+      repositoryRoot: fake.repository.featureRoot,
+      yes: true,
+    }, fake.dependencies)).rejects.toThrow('moved during 3 consecutive verification passes')
+
+    Expect(fake.calls.filter(call => call.command === 'just' && call.args[0] === 'full-verify')).toHaveLength(3)
+    Expect(fake.calls.some(call => call.args[0] === 'merge' && call.args[1] === '--squash')).toBe(false)
+    Expect(([...fake.snapshots.values()].at(-1) as MergeSnapshot).phase).toBe('failed')
   })
 
   Test('refuses a mismatched squash tree before verify or commit', async () => {
@@ -435,6 +471,17 @@ Describe('merge-with-main', () => {
     await Expect(MergeWithMainCommand.run({ abortSnapshot: snapshotPath, yes: true }, changed.dependencies))
       .rejects.toThrow('no longer matches the merge snapshot')
     Expect(changed.calls.some(call => call.args[0] === 'reset')).toBe(false)
+  })
+
+  Test('rejects merge-start flags combined with abort before reading the snapshot', async () => {
+    const fake = fakeDependencies()
+
+    await Expect(MergeWithMainCommand.run({
+      abortSnapshot: '/repo-main/.artifacts/merge/snapshot.json',
+      execute: true,
+      yes: true,
+    }, fake.dependencies)).rejects.toThrow('--abort cannot be combined')
+    Expect(fake.calls).toEqual([])
   })
 
   Test('never auto-aborts after main was pushed', async () => {

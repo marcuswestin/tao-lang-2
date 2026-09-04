@@ -188,9 +188,7 @@ function contentionWarnings(
   }
   const warnings = [`machine contention: ${MachineLanes.describeContention(contention)}`]
   const retried = results.filter(result => result.retried === true && result.status === 'passed')
-  const confirmedFailures = results.filter(result =>
-    result.failureKind === 'machine-contention' && result.retried === true
-  )
+  const confirmedFailures = results.filter(result => result.retried === true && result.status === 'failed')
   const unconfirmed = results.filter(result => result.failureKind === 'machine-contention' && result.retried !== true)
   if (retried.length > 0) {
     warnings.push(

@@ -4,6 +4,7 @@ import { CLI, Errors, FS, HCI, Repo } from '@shared'
 // has landed several merges safely; retain an explicit `--dry-run` escape hatch when doing so.
 
 const SNAPSHOT_VERSION = 1
+const MAX_STABILIZATION_PASSES = 3
 const REMOTE = 'origin'
 const MAIN_BRANCH = 'main'
 const MERGE_PHASES: readonly MergePhase[] = [
@@ -178,19 +179,24 @@ export function validateMergeMessage(source: string): string {
 
 /** Parse `git worktree list --porcelain` without depending on human-formatted columns. */
 export function parseWorktrees(source: string): Worktree[] {
-  return source.trim().split(/\n\n+/u).filter(Boolean).map(block => {
+  return source.trim().split(/\n\n+/u).filter(Boolean).flatMap(block => {
     const fields = new Map(
       block.split('\n').map(line => {
         const separator = line.indexOf(' ')
         return separator < 0 ? [line, ''] : [line.slice(0, separator), line.slice(separator + 1)]
       }),
     )
+    // A prunable record no longer names a usable checkout. Preflight is deliberately read-only,
+    // so it ignores the record and leaves cleanup to an explicit `git worktree prune`.
+    if (fields.has('prunable')) {
+      return []
+    }
     const path = fields.get('worktree')
     const head = fields.get('HEAD')
     if (!path || !head) {
       Errors.throwUnexpected('Git returned an incomplete worktree record.', { details: { block } })
     }
-    return { branch: fields.get('branch')?.replace(/^refs\/heads\//u, ''), head, path: FS.resolvePath(path) }
+    return [{ branch: fields.get('branch')?.replace(/^refs\/heads\//u, ''), head, path: FS.resolvePath(path) }]
   })
 }
 
@@ -291,6 +297,14 @@ export const MergeWithMainCommand = {
     dependencies: MergeWithMainDependencies = defaultDependencies,
   ): Promise<MergeWithMainResult> {
     if (options.abortSnapshot !== undefined) {
+      if (
+        options.execute === true
+        || options.push === true
+        || options.skipFullVerify === true
+        || options.messageFile !== undefined
+      ) {
+        Errors.throwUserInput('--abort cannot be combined with merge execution options; only --yes is applicable.')
+      }
       return await abortMerge(options, dependencies)
     }
 
@@ -338,6 +352,7 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
     'PLAN  Fetch and, if main moved, merge it into the feature branch and restart full verification.',
     "PLAN  Squash onto main, compare tree hashes, run just verify, and commit with Git's squash appendix.",
     'PLAN  Push main, archive the remote feature branch, remove its worktree, delete its local branch, and prune.',
+    'WARN  Successful execution removes the invoking feature worktree, so its current shell directory disappears.',
     `DRY RUN  No refs or worktrees changed. Execute with: ${command}`,
   ]
 }
@@ -431,7 +446,7 @@ async function stabilizeAndVerify(
   options: MergeWithMainOptions,
   dependencies: MergeWithMainDependencies,
 ): Promise<void> {
-  while (true) {
+  for (let pass = 1; pass <= MAX_STABILIZATION_PASSES; pass += 1) {
     await assertExpectedLocalState(snapshot, dependencies)
     await runChecked(dependencies, 'git', ['fetch', '--prune', REMOTE], snapshot.featureRoot, true)
     const fetchedMain = (await git(dependencies, snapshot.featureRoot, ['rev-parse', `${REMOTE}/${MAIN_BRANCH}`]))
@@ -496,6 +511,17 @@ async function stabilizeAndVerify(
       }
       return
     }
+    if (pass === MAX_STABILIZATION_PASSES) {
+      await updateSnapshotState(snapshot, 'failed', dependencies)
+      Errors.throwHostEnvironment(
+        `${REMOTE}/main moved during ${MAX_STABILIZATION_PASSES} consecutive verification passes; `
+          + 'stop and retry when main is stable.',
+      )
+    }
+    dependencies.writeLine(
+      `WARN  ${REMOTE}/main moved during verification; integrating it and restarting full verification `
+        + `(pass ${pass + 1}/${MAX_STABILIZATION_PASSES}).`,
+    )
   }
 }
 

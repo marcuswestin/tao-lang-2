@@ -234,8 +234,8 @@ Describe('gate failure classification', () => {
 
 Describe('gate runner under a shared machine', () => {
   Test('runs only as many gates at once as its share of a machine full of other lanes allows', async () => {
-    // Enough neighbours that the share is the floor on any machine, so the assertion is about the
-    // width the lane took and not about how many CPUs the test happened to run on.
+    // Three neighbours plus this lane divide the injected four-CPU machine to exactly one slot each,
+    // so the assertion does not depend on how many CPUs the host running the test happens to have.
     const registryRoot = await busyRegistryRoot(3)
     const root = await mkTestDir('tao-gate-runner-')
     const held = Deferred()

@@ -55,7 +55,7 @@ export type TestRunRequest =
   | { kind: 'file'; path: string }
   | { kind: 'full' }
   | { kind: 'name'; pattern: string }
-  | { kind: 'retry'; reference?: string }
+  | { kind: 'retry' }
 
 type PreparedRun = {
   changed?: ChangedSelection
@@ -225,6 +225,7 @@ function reportToCallbacks(event: WorkEvent, options: RunSuiteProcessesOptions):
       options.onStart?.(state)
       options.onChange()
     },
+    waiting: () => options.onChange(),
   })
 }
 
@@ -241,8 +242,8 @@ async function runTestFile(path: string, options: TestRunOptions = {}): Promise<
   return runTestRequest({ kind: 'file', path }, options)
 }
 
-async function runRetryTests(reference?: string, options: TestRunOptions = {}): Promise<number> {
-  return runTestRequest({ kind: 'retry', reference }, options)
+async function runRetryTests(options: TestRunOptions = {}): Promise<number> {
+  return runTestRequest({ kind: 'retry' }, options)
 }
 
 async function printFlakes(limit = 20, repositoryRoot = Shared.Repo.getRoot()): Promise<number> {
@@ -359,12 +360,14 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
     state.reason = `no tests matched name pattern: ${prepared.pattern}`
     state.fullOutput += `\nNo tests matched name pattern: ${prepared.pattern}\n`
   }
-  const ledger = await TestLedger.recordRun({
-    fullRun: prepared.kind === 'full' && !result.interrupted,
-    observations,
-    repositoryRoot: location.repositoryRoot,
-    startedAt: options.startedAt,
-  })
+  const ledger = result.interrupted
+    ? await TestLedger.load(location.repositoryRoot)
+    : await TestLedger.recordRun({
+      fullRun: prepared.kind === 'full',
+      observations,
+      repositoryRoot: location.repositoryRoot,
+      startedAt: options.startedAt,
+    })
 
   const elapsedMs = Date.now() - options.startedAt
   const contention = machineLane.report()
@@ -411,10 +414,11 @@ async function prepareRun(request: TestRunRequest, repositoryRoot: string): Prom
     return { files: [await testFile(request.path, repositoryRoot)], kind: 'file', pattern: '' }
   }
 
-  const changed = await TestSelection.changedSelection(request.reference, repositoryRoot)
   if (request.kind === 'changed') {
+    const changed = await TestSelection.changedSelection(request.reference, repositoryRoot)
     return { changed, kind: 'changed', pattern: '' }
   }
+  const changed = await TestSelection.changedSelection(undefined, repositoryRoot)
   const retry = await TestLedger.selectRetryFiles(await allTestFiles(repositoryRoot), repositoryRoot)
   return {
     changed,
@@ -438,9 +442,9 @@ async function observationsFor(states: readonly SuiteState[], repositoryRoot: st
         suite: state.name,
       }]
       : state.testReport === undefined
-      ? []
+      ? undefined
       : await TestReport.read(state.testReport, repositoryRoot)
-    if (state.testObservations.length === 0 && state.status === 'failed') {
+    if ((state.testObservations?.length ?? 0) === 0 && state.status === 'failed') {
       state.testObservations = (state.selectedTestFiles ?? []).map(file => ({
         durationMs: state.elapsedMs,
         file,
@@ -449,7 +453,7 @@ async function observationsFor(states: readonly SuiteState[], repositoryRoot: st
         suite: state.name,
       }))
     }
-    observations.push(...state.testObservations)
+    observations.push(...state.testObservations ?? [])
   }
   return observations
 }
@@ -549,6 +553,7 @@ function noTestsMatched(
   states: readonly SuiteState[],
 ): boolean {
   return kind === 'name'
+    && observations.length > 0
     && observations.every(observation => observation.outcome === 'skipped')
     && states.every(state => state.status === 'passed')
 }
@@ -710,17 +715,16 @@ function isPackageTestFile(packageRoot: string, path: string): boolean {
 
 /** TestRunner owns package test discovery, scheduling seeds, and the `./dev test` lane. */
 export const TestRunner = {
-  allTestFiles,
   createSuiteState,
   discoverTestSuites,
   noTestsMatched,
   printFlakes,
   printSlowest,
-  runSuiteProcesses,
   runChangedTests,
   runRetryTests,
+  runSuiteProcesses,
   runTestFile,
   runTestRequest,
   runTests,
   testFile,
-}
+} as const

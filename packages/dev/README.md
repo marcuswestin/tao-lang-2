@@ -22,15 +22,20 @@ that work:
   recorded reservations never exceed `cpuCount`.
 - A lease is removed when the lane ends, and pruned by the next lane when its process is gone.
 - A nested runner — `./dev test` inside `verify`, `tao test` inside that — is already inside the
-  width its parent reserved. It neither registers nor divides again.
+  width its parent reserved. It neither registers nor divides again, but still samples registered
+  peer lanes so contended timings are not saved as clean-machine evidence.
 - An explicit `--jobs` caps that lane but does not opt it out of machine coordination.
 
 So one worktree running `verify` on an 18-CPU machine can use 18 slots, two converge on 9 each, and
-four converge on 4 or 5 each. A new lane may briefly wait for already-running peer work to drain;
-the registry fails open only when it cannot be read or written at all.
+four converge on 4 or 5 each. If lanes outnumber CPUs, every lane retains a one-slot admission turn
+while the global reservation check still prevents oversubscription. A blocked node reports that it
+is waiting and backs off its registry polling. CPU admission fails open only when its registry is
+unavailable; exclusive confirmation and named resources fail closed because they cannot truthfully
+claim isolation without shared storage.
 
-`./agent doctor` reports what it finds there, and the load average beside it — the one reading that
-also counts work no lane registered, such as an Xcode build or another repository entirely.
+`./agent doctor` reads this registry without pruning or otherwise mutating it, and reports the load
+average beside it — the one reading that also counts work no lane registered, such as an Xcode build
+or another repository entirely.
 
 ## What a contended lane reports
 
@@ -45,13 +50,15 @@ regression. Lanes therefore sample the machine while they run and say what they 
   admissions and drains peer reservations. If exclusivity cannot be obtained within five minutes,
   the original failure remains and is explicitly unconfirmed.
 - Original and retry attempts keep separate output and classification. A passing retry remains
-  marked `retried`; a deterministic assertion on retry is a repository failure even though the
+  marked `retried` and is accepted as green gate evidence only because the exclusive run removed
+  peer-machine load; a deterministic assertion on retry is a repository failure even though the
   original attempt timed out.
 - A contended run does not write `.artifacts/timings/durations.json`. Ordering has a cold-start
   fallback; an estimate poisoned by a neighbouring worktree does not.
 
-An assertion failure is never retried, however busy the machine is, and a timeout on a machine the
-run had to itself stays a repository failure.
+A structured assertion or process-launch failure is never retried, however busy the machine is. A
+nonzero test process is eligible only when its own output contains a recognized test-framework
+timeout, and a timeout on a machine the run had to itself stays a repository failure.
 
 ## What is shared, and what to do about it
 
@@ -83,7 +90,9 @@ between a wasted afternoon and a re-run.
 - `just test-changed [ref]` delegates module-aware selection to Bun and Jest and states every suite
   it selected or skipped.
 - `just test-retry` re-runs files not green since this checkout's latest complete test run. The
-  ledger is under `.artifacts/testing`, so a new worktree starts cold and retries everything.
+  ledger is under `.artifacts/testing`, so a new worktree starts cold and retries everything. Its
+  JSONL history is compacted to a bounded recent window while retaining adjacent outcomes needed
+  for flake detection.
 - `just test` is the complete package and Tao app suite. Gates always use this complete mode and
   never consult the retry ledger.
 - `just verify` is the commit gate. `just full-verify-sandbox` runs the same full gate membership in
@@ -92,6 +101,12 @@ between a wasted afternoon and a re-run.
 
 `just test-flakes` and `just test-slowest` report ledger evidence but are not gates. Changed and retry
 runs print one advisory when their change shape or full-run history makes a complete run worthwhile.
+
+`just merge-with-main` is human-only and defaults to a non-mutating dry run. Its strict preflight
+requires the sole live `main` worktree to equal `origin/main`; a local-ahead `main` must be reconciled
+deliberately first. Successful execution removes the invoking feature worktree, so run it from a
+shell you are prepared to leave. `--abort` cannot be combined with merge-start flags, and remote-main
+movement is bounded to three verification passes before the command stops safely.
 
 ## Reading a failed lane
 

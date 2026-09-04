@@ -111,6 +111,25 @@ Describe('per-test ledger', () => {
       Expect((await FS.readText(FS.resolvePath(TestLedger.HISTORY_PATH, root))).trim().split('\n').length).toBe(2)
     })
   })
+
+  Test('compacts long histories while retaining recent unchanged-file reversals', async () => {
+    await withRepository(async root => {
+      const file = await writeTestFile(root)
+      const largeName = `group > ${'long-name-'.repeat(2_500)}`
+      for (let index = 0; index < 30; index += 1) {
+        await TestLedger.recordRun({
+          fullRun: false,
+          observations: [observation(file, index % 2 === 0 ? 'passed' : 'failed', largeName)],
+          repositoryRoot: root,
+          startedAt: index,
+        })
+      }
+
+      const history = await FS.readFile(FS.resolvePath(TestLedger.HISTORY_PATH, root))
+      Expect(history.byteLength).toBeLessThanOrEqual(1_000_000)
+      Expect((await TestLedger.flakes(root))[0]?.reversals).toBeGreaterThan(0)
+    })
+  })
 })
 
 Describe('native test result reports', () => {

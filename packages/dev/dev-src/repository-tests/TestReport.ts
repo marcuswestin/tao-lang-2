@@ -8,7 +8,7 @@ export type NativeTestReport = {
 }
 
 /** read converts a suite's native reporter file into runner-neutral per-test observations. */
-async function read(report: NativeTestReport, repositoryRoot: string): Promise<TestObservation[]> {
+async function read(report: NativeTestReport, repositoryRoot: string): Promise<TestObservation[] | undefined> {
   try {
     const source = await FS.readText(report.path)
     return report.format === 'bun-junit'
@@ -16,7 +16,7 @@ async function read(report: NativeTestReport, repositoryRoot: string): Promise<T
       : parseJestJson(source, report.suite, repositoryRoot)
   } catch {
     // A process that failed before its reporter initialized has no per-test facts to add.
-    return []
+    return undefined
   }
 }
 

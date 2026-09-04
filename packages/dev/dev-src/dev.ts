@@ -53,7 +53,7 @@ await runWithCommands(commands => {
     .option('--output <mode>', OUTPUT_OPTION_HELP)
     .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
     .action(async (pattern = '', options: TestCommandOptions = {}) => {
-      await runTestCommand(() => TestRunner.runTests(pattern, testRunOptions(options)))
+      await runExitCommand(() => TestRunner.runTests(pattern, testRunOptions(options)))
     })
 
   commands
@@ -63,7 +63,7 @@ await runWithCommands(commands => {
     .option('--output <mode>', OUTPUT_OPTION_HELP)
     .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
     .action(async (reference: string | undefined, options: TestCommandOptions = {}) => {
-      await runTestCommand(() => TestRunner.runChangedTests(reference, testRunOptions(options)))
+      await runExitCommand(() => TestRunner.runChangedTests(reference, testRunOptions(options)))
     })
 
   commands
@@ -73,7 +73,7 @@ await runWithCommands(commands => {
     .option('--output <mode>', OUTPUT_OPTION_HELP)
     .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
     .action(async (path: string, options: TestCommandOptions = {}) => {
-      await runTestCommand(() => TestRunner.runTestFile(path, testRunOptions(options)))
+      await runExitCommand(() => TestRunner.runTestFile(path, testRunOptions(options)))
     })
 
   commands
@@ -82,7 +82,7 @@ await runWithCommands(commands => {
     .option('--output <mode>', OUTPUT_OPTION_HELP)
     .option('--jobs <count>', 'Maximum number of test suites to run in parallel.')
     .action(async (options: TestCommandOptions = {}) => {
-      await runTestCommand(() => TestRunner.runRetryTests(undefined, testRunOptions(options)))
+      await runExitCommand(() => TestRunner.runRetryTests(testRunOptions(options)))
     })
 
   commands
@@ -90,7 +90,7 @@ await runWithCommands(commands => {
     .description('Report tests whose outcome flipped without their file changing.')
     .option('--limit <count>', 'Maximum tests to print.', '20')
     .action(async (options: { limit: string }) => {
-      await runReportCommand(() => TestRunner.printFlakes(parsePositiveInteger(options.limit, '--limit')))
+      await runExitCommand(() => TestRunner.printFlakes(parsePositiveInteger(options.limit, '--limit')))
     })
 
   commands
@@ -98,7 +98,7 @@ await runWithCommands(commands => {
     .description("Report the slowest tests in this checkout's ledger.")
     .option('--limit <count>', 'Maximum tests to print.', '20')
     .action(async (options: { limit: string }) => {
-      await runReportCommand(() => TestRunner.printSlowest(parsePositiveInteger(options.limit, '--limit')))
+      await runExitCommand(() => TestRunner.printSlowest(parsePositiveInteger(options.limit, '--limit')))
     })
 
   commands
@@ -428,16 +428,7 @@ function testRunOptions(options: TestCommandOptions) {
   }
 }
 
-async function runTestCommand(run: () => Promise<number>): Promise<void> {
-  try {
-    Platform.runtimeProcess.exit(await run())
-  } catch (error) {
-    HCI.writeErrorLine(Errors.formatForUser(error))
-    Platform.runtimeProcess.exit(1)
-  }
-}
-
-async function runReportCommand(run: () => Promise<number>): Promise<void> {
+async function runExitCommand(run: () => Promise<number>): Promise<void> {
   try {
     Platform.runtimeProcess.exit(await run())
   } catch (error) {

@@ -259,6 +259,57 @@ Describe('work graph scheduling', () => {
     Expect(WorkGraph.exitCodeFor(result)).toBe(1)
   })
 
+  Test('does not rewrite a child that completed successfully while an interrupt was in flight', async () => {
+    const state = WorkGraph.createState(workNode({ name: 'cleanup-aware' }))
+    let interrupt = () => {}
+    let finish = () => {}
+    const finished = WorkGraph.run([state], {
+      jobs: 1,
+      runNode: async (_state, context) =>
+        await new Promise(resolve => {
+          finish = () => resolve({ exitCode: 0 })
+          context.onCancel(finish)
+        }),
+      watchInterrupt: callback => {
+        interrupt = callback
+        return () => {}
+      },
+    })
+    await until(() => state.status === 'running', { description: 'cleanup-aware child to start' })
+
+    interrupt()
+    const result = await finished
+
+    Expect(result.interrupted).toBe(true)
+    Expect(state.status).toBe('passed')
+    Expect(state.failure).toBeUndefined()
+    Expect(WorkGraph.exitCodeFor(result)).toBe(1)
+  })
+
+  Test('reports once when a ready node is waiting for machine capacity', async () => {
+    const state = WorkGraph.createState(workNode({ name: 'capacity-waiter' }))
+    const events: string[] = []
+    let attempts = 0
+
+    await WorkGraph.run([state], {
+      jobs: 1,
+      onEvent: event => events.push(event.kind),
+      runNode: async () => ({ exitCode: 0 }),
+      slotBroker: {
+        tryAcquire: async () =>
+          ++attempts < 3
+            ? undefined
+            : { release: async () => {}, slots: 1 },
+        waitForAvailability: async () => {},
+      },
+      watchInterrupt: () => () => {},
+    })
+
+    Expect(events.filter(kind => kind === 'waiting')).toEqual(['waiting'])
+    Expect(state.status).toBe('passed')
+    Expect(state.reason).toBeUndefined()
+  })
+
   Test('reports every node exactly once, in the order the graph reached it', async () => {
     const events: string[] = []
     const states = ['a', 'b'].map(name => WorkGraph.createState(workNode({ name })))

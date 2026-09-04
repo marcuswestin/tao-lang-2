@@ -8,6 +8,9 @@ an entry here may link one when the developer workflow is also affected.
 
 - Search by ID, symptom, command, and area before adding an entry. Update the existing entry instead
   of appending a duplicate.
+- The owning agent consolidates updates once after delegated findings return; subagents do not edit
+  this shared file independently. Keep evidence concise so concurrent branches have fewer shared
+  lines to reconcile.
 - Use the next `DEVENV-NNN` ID. Record only observed problems or credible improvements with concrete
   evidence; ordinary product failures do not belong here.
 - Record: **Status**, **Area**, **Impact**, **Evidence**, **Workaround**, **Proposed change**,
@@ -30,11 +33,13 @@ an entry here may link one when the developer workflow is also affected.
 - **Evidence:** On an 18-CPU host, simultaneous lane acquisition can let both processes initially
   reserve 18 slots; later sampling changes reporting but not capacity.
 - **Workaround:** Avoid overlapping repository lanes.
-- **Proposed change:** Use atomic, dynamic machine-wide slot admission with fair per-lane ceilings.
+- **Proposed change:** Use atomic, dynamic machine-wide slot admission with fair per-lane ceilings,
+  a one-slot logical floor, bounded polling backoff, and a mutex that never evicts a live owner.
 - **Dependencies:** `feat/parallel-workflow-test-compat-6fb06b`; implemented by
   `feat/verification-lanes` commit `5512f785`.
 - **Acceptance:** A real two-process test observes at least two lanes while aggregate admitted slots
-  never exceed the injected CPU count.
+  never exceed the injected CPU count; malformed records cannot poison accounting and an overfull
+  lane set remains able to make progress.
 - **Source:** 2026-09-03 parallel-workflow review.
 
 ### DEVENV-002 — Structured timeout and retry outcomes
@@ -51,7 +56,8 @@ an entry here may link one when the developer workflow is also affected.
 - **Dependencies:** `feat/parallel-workflow-test-compat-6fb06b`; implemented by
   `feat/verification-lanes` commit `5512f785`.
 - **Acceptance:** A graph timeout is selected for confirmation, and an assertion failure on retry is
-  reported as a repository failure.
+  reported as a repository failure. A successful exclusive retry is accepted as green but remains
+  visibly retried, while a failed retry appears once with no stale manual-retry advice.
 - **Source:** 2026-09-03 parallel-workflow review.
 
 ### DEVENV-003 — Exclusive contention confirmation
@@ -78,7 +84,7 @@ an entry here may link one when the developer workflow is also affected.
 - **Evidence:** Socket reservations are released before the smoke child starts.
 - **Workaround:** Supply distinct shards manually or serialize Studio smoke runs.
 - **Proposed change:** Hold an atomic, stale-owner-aware cross-worktree block lease for the full smoke
-  process, including explicit shards.
+  process, including explicit shards, and fail closed when either the lease or port probe is unavailable.
 - **Dependencies:** Implemented by `feat/verification-lanes` commit `5512f785`; no Studio product
   changes.
 - **Acceptance:** Two processes cannot own the same shard/worker block concurrently and the lease is
@@ -126,10 +132,12 @@ an entry here may link one when the developer workflow is also affected.
 - **Evidence:** Existing timing history is per suite and Bun has no last-failed selector.
 - **Workaround:** Rerun a remembered file or the complete test lane.
 - **Proposed change:** Record Bun JUnit, Jest JSON, and a synthetic Tao Apps unit in a per-checkout
-  ledger; add changed, retry, flake, and slow-test reports.
+  ledger; add changed, retry, flake, and slow-test reports; never write an interrupted run; and bound
+  retained JSONL history without losing recent reversal evidence.
 - **Dependencies:** Implemented by `feat/verification-lanes` commit `f5705e9f`.
 - **Acceptance:** Red/full/green fixture runs select the specified files, cold state runs everything,
-  and reports are metadata-backed rather than console-scraped.
+  missing reports fall back honestly to process summaries, interrupted runs add no durable outcomes,
+  and history compaction retains recent flake evidence.
 - **Source:** 2026-09-03 verification-lanes brief.
 
 ### DEVENV-008 — Collision-proof test artifacts

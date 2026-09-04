@@ -126,8 +126,14 @@ test-slowest limit="20":
     ./dev test-slowest --limit "{{ limit }}"
 
 # Dry-run the human-only feature landing workflow; pass --execute explicitly to mutate refs
-merge-with-main *ARGS:
-    ./dev merge-with-main {{ ARGS }}
+[arg('abort', long='abort')]
+[arg('execute', long='execute', value='true')]
+[arg('message_file', long='message-file')]
+[arg('push', long='push', value='true')]
+[arg('skip_full_verify', long='skip-full-verify', value='true')]
+[arg('yes', long='yes', value='true')]
+merge-with-main execute='false' yes='false' push='false' skip_full_verify='false' message_file='' abort='':
+    ./dev merge-with-main {{ if execute == "true" { "--execute" } else { "" } }} {{ if yes == "true" { "--yes" } else { "" } }} {{ if push == "true" { "--push" } else { "" } }} {{ if skip_full_verify == "true" { "--skip-full-verify" } else { "" } }} {{ if message_file == "" { "" } else { "--message-file " + quote(message_file) } }} {{ if abort == "" { "" } else { "--abort " + quote(abort) } }}
 
 # Format code, without applying the other Tao source fixes
 fmt: _parser-gen

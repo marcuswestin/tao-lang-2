@@ -1,4 +1,4 @@
-import { CLI, FS, Repo } from '@shared'
+import { CLI, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   type DoctorFacts,
@@ -120,8 +120,22 @@ Describe('repository doctor', () => {
       machine: {
         cpuCount: 8,
         lanes: [
-          { lane: 'verify', pid: 4242, repositoryRoot: '/w', slots: 4, startedAt: '2026-09-03T12:00:00.000Z' },
-          { lane: 'dev-test', pid: 4243, repositoryRoot: '/other', slots: 4, startedAt: '2026-09-03T12:00:01.000Z' },
+          {
+            lane: 'verify',
+            maxSlots: 8,
+            pid: 4242,
+            repositoryRoot: '/w',
+            slots: 4,
+            startedAt: '2026-09-03T12:00:00.000Z',
+          },
+          {
+            lane: 'dev-test',
+            maxSlots: 8,
+            pid: 4243,
+            repositoryRoot: '/other',
+            slots: 4,
+            startedAt: '2026-09-03T12:00:01.000Z',
+          },
         ],
         loadAverage: 9,
       },
@@ -171,6 +185,29 @@ Describe('repository doctor', () => {
       await readDoctorFacts(root)
 
       Expect(await FS.listDir(root)).toEqual([])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('reads stale lane evidence without pruning the shared registry', async () => {
+    const root = await mkTestDir('tao-doctor-registry-')
+    const registryRoot = FS.resolvePath('registry', root)
+    const stalePath = FS.resolvePath('stale.json', registryRoot)
+    await FS.mkdir(registryRoot)
+    await FS.writeJson(stalePath, {
+      lane: 'verify',
+      maxSlots: 4,
+      pid: 2 ** 30,
+      repositoryRoot: root,
+      slots: 0,
+      startedAt: new Date().toISOString(),
+    })
+    try {
+      await readDoctorFacts(root, { machineRegistryRoot: registryRoot })
+
+      Expect(await FS.exists(stalePath)).toBe(true)
+      Expect(Platform.processIsAlive(2 ** 30)).toBe(false)
     } finally {
       await FS.remove(root)
     }

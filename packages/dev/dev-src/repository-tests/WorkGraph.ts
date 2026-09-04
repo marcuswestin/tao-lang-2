@@ -25,7 +25,7 @@ export type WorkFailure = {
 }
 
 /** WorkAttempt is an immutable result from one execution of a node. */
-export type WorkAttempt = {
+type WorkAttempt = {
   elapsedMs: number
   exitCode?: number | null
   failure?: WorkFailure
@@ -93,6 +93,7 @@ export type WorkState = {
 /** WorkEvent is what a run reports as it progresses; reporters consume nothing else. */
 export type WorkEvent =
   | { kind: 'planned'; states: readonly WorkState[] }
+  | { kind: 'waiting'; reason: string; state: WorkState }
   | { kind: 'start'; state: WorkState }
   | { kind: 'output'; output: string; state: WorkState }
   | { kind: 'complete'; state: WorkState }
@@ -166,6 +167,7 @@ const OUTPUT_LINE_LIMIT = 6
  */
 const COLD_START_MS_PER_SLOT = 1_000
 const INTERRUPTED_REASON = 'interrupted'
+const MACHINE_CAPACITY_REASON = 'waiting for machine capacity'
 /** How long a cancelled process gets to honor SIGTERM before it is killed outright. */
 const FORCE_KILL_GRACE_MS = 10_000
 /** Env keys the nested runners read their own worker budget from. */
@@ -272,6 +274,10 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       )
       if (options.slotBroker !== undefined && machineReservation === undefined) {
         machineBlocked = true
+        if (state.reason !== MACHINE_CAPACITY_REASON) {
+          state.reason = MACHINE_CAPACITY_REASON
+          emit({ kind: 'waiting', reason: MACHINE_CAPACITY_REASON, state })
+        }
         break
       }
       const slots = machineReservation?.slots ?? requestedSlots
@@ -303,6 +309,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       slots,
     }
     state.status = 'running'
+    state.reason = undefined
     state.startedAt = Date.now()
     emit({ kind: 'start', state })
     const timeout = state.node.timeoutMs === undefined ? undefined : setTimeout(() => {
@@ -327,7 +334,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
           appendOutput(state, `${state.fullOutput.length > 0 ? '\n' : ''}${state.reason}\n`)
         }
       }
-      if (interrupted) {
+      if (interrupted && !timedOut && state.status === 'failed') {
         state.status = 'failed'
         state.reason = INTERRUPTED_REASON
         state.failure = { kind: 'interrupted', message: INTERRUPTED_REASON }

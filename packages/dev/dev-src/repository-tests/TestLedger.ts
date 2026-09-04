@@ -29,7 +29,7 @@ export type TestLedgerStore = {
   version: 1
 }
 
-/** TestHistoryEvent is one append-only outcome used to identify outcome reversals. */
+/** TestHistoryEvent is one chronological outcome used to identify outcome reversals. */
 export type TestHistoryEvent = TestLedgerRecord & { recordedAt: string; version: 1 }
 
 export type RecordTestRunOptions = {
@@ -62,6 +62,9 @@ export type Flake = {
 
 const LEDGER_PATH = '.artifacts/testing/ledger.json'
 const HISTORY_PATH = '.artifacts/testing/history.jsonl'
+const HISTORY_MAX_BYTES = 1_000_000
+const HISTORY_TARGET_BYTES = 750_000
+const HISTORY_EVENTS_PER_TEST = 20
 const VERSION = 1 as const
 
 function empty(): TestLedgerStore {
@@ -271,24 +274,72 @@ async function appendHistory(events: readonly TestHistoryEvent[], repositoryRoot
   } finally {
     await handle.close()
   }
+  await compactHistoryIfNeeded(repositoryRoot)
 }
 
 async function readHistory(repositoryRoot: string): Promise<TestHistoryEvent[]> {
   try {
-    return (await FS.readText(historyPath(repositoryRoot)))
-      .split('\n')
-      .filter(Boolean)
-      .flatMap(line => {
-        try {
-          const value = JSON.parse(line) as Partial<TestHistoryEvent>
-          return value.version === VERSION && typeof value.id === 'string' ? [value as TestHistoryEvent] : []
-        } catch {
-          return []
-        }
-      })
+    return parseHistory(await FS.readText(historyPath(repositoryRoot)))
   } catch {
     return []
   }
+}
+
+async function compactHistoryIfNeeded(repositoryRoot: string): Promise<void> {
+  const path = historyPath(repositoryRoot)
+  let source: Uint8Array
+  try {
+    source = await FS.readFile(path)
+  } catch {
+    return
+  }
+  if (source.byteLength <= HISTORY_MAX_BYTES) {
+    return
+  }
+  const events = parseHistory(new TextDecoder().decode(source))
+  const retainedPerTest = new Map<string, number>()
+  const candidates: string[] = []
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]!
+    const retained = retainedPerTest.get(event.id) ?? 0
+    if (retained >= HISTORY_EVENTS_PER_TEST) {
+      continue
+    }
+    retainedPerTest.set(event.id, retained + 1)
+    candidates.push(`${JSON.stringify(event)}\n`)
+  }
+  const retainedLines: string[] = []
+  let retainedBytes = 0
+  for (const line of candidates) {
+    const bytes = new TextEncoder().encode(line).byteLength
+    if (retainedLines.length > 0 && retainedBytes + bytes > HISTORY_TARGET_BYTES) {
+      break
+    }
+    retainedLines.push(line)
+    retainedBytes += bytes
+  }
+  const temporaryPath = `${path}.${randomUUID()}.tmp`
+  await FS.writeText(temporaryPath, retainedLines.reverse().join(''))
+  try {
+    await FS.move(temporaryPath, path)
+  } catch (error) {
+    await FS.remove(temporaryPath).catch(() => {})
+    throw error
+  }
+}
+
+function parseHistory(source: string): TestHistoryEvent[] {
+  return source
+    .split('\n')
+    .filter(Boolean)
+    .flatMap(line => {
+      try {
+        const value = JSON.parse(line) as Partial<TestHistoryEvent>
+        return value.version === VERSION && typeof value.id === 'string' ? [value as TestHistoryEvent] : []
+      } catch {
+        return []
+      }
+    })
 }
 
 function positiveLimit(limit: number): number {
@@ -302,7 +353,6 @@ export const TestLedger = {
   VERSION,
   empty,
   flakes,
-  isSettled,
   load,
   recordRun,
   selectRetryFiles,

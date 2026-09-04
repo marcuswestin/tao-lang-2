@@ -108,6 +108,7 @@ function createLinesReporter(options: ReporterOptions): WorkReporterHandle {
           }),
         planned: ({ states }) => HCI.writeLine(headerText(options, states.length)),
         start: ({ state }) => HCI.logProcessInfo(WorkGraph.nodeLabel(state.node), 'started'),
+        waiting: ({ reason, state }) => HCI.logProcessInfo(WorkGraph.nodeLabel(state.node), reason),
       }),
   }
 }
@@ -122,6 +123,7 @@ function createQuietReporter(options: ReporterOptions): WorkReporterHandle {
         output: () => {},
         planned: ({ states }) => HCI.writeLine(headerText(options, states.length)),
         start: () => {},
+        waiting: () => {},
       }),
   }
 }

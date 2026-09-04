@@ -71,14 +71,14 @@ Describe('test runner suite scheduling', () => {
     Expect(suites.find(suite => suite.name === 'runtime-jest')?.args).toContain('--changedSince=abc123')
   })
 
-  Test('an all-green zero-test name-filter run is an aggregate failure', () => {
+  Test('a name-filter run fails only when reporter metadata proves zero tests executed', () => {
     const states = [suiteState('dev'), suiteState('runtime-jest')]
     for (const state of states) {
       state.status = 'passed'
       state.testObservations = []
     }
 
-    Expect(TestRunner.noTestsMatched('name', [], states)).toBe(true)
+    Expect(TestRunner.noTestsMatched('name', [], states)).toBe(false)
     Expect(TestRunner.noTestsMatched('name', [{
       file: 'packages/dev/dev-tests/example.test.ts',
       name: 'not selected',
@@ -156,6 +156,30 @@ Describe('test lane reporting on a shared machine', () => {
     state.reason = 'timed out under machine contention; passed on an isolated retry'
 
     Expect(await report(state)).toContain('passed on an isolated retry')
+  })
+
+  Test('uses process output counts when a native report is unavailable', async () => {
+    const state = suiteState('dev')
+    state.status = 'passed'
+    state.fullOutput = ' 3 pass\n 0 fail\n 7 expect() calls\nRan 3 tests across 1 file.\n'
+
+    const output = await report(state)
+
+    Expect(output).toContain('tests 3; pass 3; fail 0; expect 7')
+    Expect(output).not.toContain('tests 0; pass 0')
+  })
+
+  Test('does not repeat manual timeout advice after an isolated retry already ran', async () => {
+    const state = suiteState('validator')
+    state.status = 'failed'
+    state.retried = true
+    state.reason = 'timed out under machine contention and failed again on an isolated retry'
+    state.fullOutput = 'timed out after 5000ms again'
+
+    const output = await report(state)
+
+    Expect(output).toContain('failed again on an isolated retry')
+    Expect(output).not.toContain('Confirm it alone')
   })
 
   Test('says nothing at all about a machine this run had to itself', async () => {

@@ -88,7 +88,9 @@ function printContentionNote(states: readonly SuiteState[], contention: Contenti
   for (const state of retried) {
     writeLine(`- ${state.name}: ${state.reason ?? 'run again on its own after a contended timeout'}`)
   }
-  const timedOut = states.filter(state => state.status === 'failed' && describesTimeout(state.fullOutput))
+  const timedOut = states.filter(state =>
+    state.status === 'failed' && state.retried !== true && describesTimeout(state.fullOutput)
+  )
   for (const state of timedOut) {
     if (state.reason?.includes('failure is unconfirmed') === true) {
       writeLine(`- ${state.name}: ${state.reason}.`)

@@ -61,7 +61,11 @@ function defaultShardIndex(repositoryRoot = Repo.resolvePath()): number {
 }
 
 function resources(options: Omit<StudioSmokeOptions, 'files'>): StudioSmokeResources {
-  const shardIndex = nonNegativeIndex(options.shardIndex ?? defaultShardIndex(), 'Studio smoke shard index', 15)
+  const shardIndex = nonNegativeIndex(
+    options.shardIndex ?? defaultShardIndex(),
+    'Studio smoke shard index',
+    shardCount - 1,
+  )
   const workerIndex = nonNegativeIndex(options.workerIndex ?? 0, 'Studio smoke worker index', 63)
   const runId = safeRunId(options.runId)
   const lanePort = basePort + shardIndex * portsPerShard + workerIndex * portsPerWorker
@@ -178,9 +182,6 @@ async function portsAreFree(ports: readonly number[]): Promise<boolean> {
         return false
       }
     }
-    return true
-  } catch {
-    // A host that refuses to probe at all is not a reason to refuse the run; let the lane try.
     return true
   } finally {
     await Promise.all(reservations.map(reservation => reservation.release().catch(() => {})))

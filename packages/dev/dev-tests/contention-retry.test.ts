@@ -8,9 +8,9 @@ import { WorkGraph, type WorkState } from '../dev-src/repository-tests/WorkGraph
 
 /**
  * The retry exists to answer one question — was that timeout the machine or the code — so every
- * test here checks that the answer it gives is the one the run actually earned. A retry is never a
- * way to turn red into green: a node that recovers is reported as having failed and recovered, and
- * a node that fails again is reported as failed on its own merits.
+ * test here checks that the answer it gives is the one the run actually earned. A successful
+ * exclusive confirmation is valid gate evidence but remains visibly retried; a node that fails
+ * again is reported on the retry's own merits.
  */
 
 const contended = MachineLanes.contentionReport({ cpuCount: 8, peakLanes: 3, peakLoadAverage: 30 })
@@ -101,6 +101,17 @@ Describe('contended failure confirmation', () => {
     Expect(state.retried).toBeUndefined()
   })
 
+  Test('output fallback only retries a test process that exited nonzero', async () => {
+    const processError = failedState('_test', 'nested text says timed out after 5000ms')
+    processError.failure = { kind: 'process-error', message: 'spawn failed' }
+    const nonzero = failedState('_validator', 'Test timed out after 5000ms')
+    nonzero.failure = { kind: 'nonzero-exit', message: 'exited 1' }
+
+    const { attempted } = await runRetry([processError, nonzero], contended, ['_validator'])
+
+    Expect(attempted).toEqual(['_validator'])
+  })
+
   Test('a timeout on a machine this run had to itself is a repository failure and stays one', async () => {
     const state = failedState('_test', 'error: Test "renders" timed out after 5000ms')
 
@@ -148,6 +159,7 @@ Describe('contended failure confirmation', () => {
     Expect(state.attempts?.[0]?.fullOutput).toContain('timed out')
     Expect(state.fullOutput).not.toContain('timed out')
     Expect(summary.gates[0]?.failureKind).toBe('repository')
+    Expect(summary.warnings.some(warning => warning.includes('failed again on an isolated retry'))).toBe(true)
   })
 
   Test('the summary names contention, the recoveries, and what never recovered', async () => {

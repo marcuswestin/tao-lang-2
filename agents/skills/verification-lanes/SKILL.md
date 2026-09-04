@@ -27,8 +27,12 @@ description: >-
   landing through the human merge workflow.
 - Read `.artifacts/logs/<lane>/latest/summary.json` before diagnosing a red lane. A separately
   recorded retry attempt, not concatenated output, owns the final failure classification.
+- A gate that passes its machine-exclusive confirmation is green evidence, remains marked
+  `retried`, and emits a warning preserving the original timeout.
 - `just test-flakes` and `just test-slowest` are reports, not gates.
 - `just merge-with-main` is a human command. Agents prepare the branch and message file but never
   invoke, automate, or approve the command.
 - `merge-with-main` defaults to a ref-preserving dry run. Its output names the explicit execution,
-  verification-skip, and push flags; never substitute `--yes` for a less-strict choice.
+  verification-skip, and push flags; never substitute `--yes` for a less-strict choice. Preflight
+  intentionally requires local `main` to equal `origin/main`, and successful execution removes the
+  invoking feature worktree and invalidates its shell directory.

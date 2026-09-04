@@ -426,7 +426,10 @@ function formatBytes(sizeBytes: number | undefined): string {
 }
 
 /** readDoctorFacts inspects the machine without changing it. */
-export async function readDoctorFacts(repositoryRoot = Repo.getRoot()): Promise<DoctorFacts> {
+export async function readDoctorFacts(
+  repositoryRoot = Repo.getRoot(),
+  options: { machineRegistryRoot?: string } = {},
+): Promise<DoctorFacts> {
   const [
     branch,
     linkedWorktree,
@@ -448,6 +451,14 @@ export async function readDoctorFacts(repositoryRoot = Repo.getRoot()): Promise<
     Promise.all(CONVENTIONAL_PORTS.map(readPortOccupancy)),
     readDependencyIssues(),
   ])
+  const [canonicalRepositoryRoot, lanes] = await Promise.all([
+    canonicalPath(repositoryRoot),
+    MachineLanes.activeLanes(options.machineRegistryRoot, { prune: false }),
+  ])
+  const canonicalLanes = await Promise.all(lanes.map(async lane => ({
+    ...lane,
+    repositoryRoot: await canonicalPath(lane.repositoryRoot),
+  })))
 
   return {
     artifactRoots,
@@ -463,17 +474,21 @@ export async function readDoctorFacts(repositoryRoot = Repo.getRoot()): Promise<
     lockfilePresent: await FS.isFile(FS.resolvePath('bun.lock', repositoryRoot)),
     machine: {
       cpuCount: Platform.cpuCount(),
-      lanes: await MachineLanes.activeLanes(),
+      lanes: canonicalLanes,
       loadAverage: Platform.loadAverage(),
     },
     nodeModulesPresent: await FS.isDirectory(FS.resolvePath('node_modules', repositoryRoot)),
     nodeVersion,
     ports,
-    repositoryRoot,
+    repositoryRoot: canonicalRepositoryRoot,
     satisfies: (version, range) => Bun.semver.satisfies(version, range),
     watchmanHealthy: watchman.healthy,
     watchmanVersion: watchman.version,
   }
+}
+
+async function canonicalPath(path: string): Promise<string> {
+  return await FS.realPath(path).catch(() => FS.resolvePath(path))
 }
 
 /** Reads the output directory from Langium's own config so the two cannot drift apart. */

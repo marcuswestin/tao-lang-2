@@ -13,8 +13,8 @@ import { WorkGraph, type WorkRunOptions, type WorkState } from './WorkGraph'
  * structured state or test-runner output says a clock ran out, only when the run measured
  * contention, and only a few of them. An exclusive machine lease drains other work before the
  * confirmation. A node that passes on retry is reported as
- * `retried`, never as a plain pass — the run really did fail the first time, and a lane that hides
- * that is a lane nobody can use to find a real flake.
+ * `retried`, never as a plain pass. A successful exclusive confirmation is valid gate evidence,
+ * while its retained attempts and warning keep the first timeout visible for flake diagnosis.
  */
 
 /** RetryOptions describes the finished run whose contended timeouts are being confirmed. */
@@ -57,8 +57,10 @@ function candidates(states: readonly WorkState[], contention: ContentionReport):
       && state.retried !== true
       && (
         state.failure?.kind === 'timeout'
-        || describesTimeout(state.reason ?? '')
-        || describesTimeout(state.fullOutput)
+        || (
+          (state.failure === undefined || state.failure.kind === 'nonzero-exit')
+          && (describesTimeout(state.reason ?? '') || describesTimeout(state.fullOutput))
+        )
       )
     )
     .slice(0, MAX_RETRIES)
