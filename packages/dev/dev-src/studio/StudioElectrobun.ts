@@ -45,6 +45,7 @@ export type StudioElectrobunCommand = {
 export type StudioElectrobunSources = {
   config: string
   hutchConfig: string
+  hutchLock: Record<string, unknown>
   main: string
   packageJson: Record<string, unknown>
   tsconfig: Record<string, unknown>
@@ -65,6 +66,7 @@ async function create(options: StudioElectrobunOptions): Promise<StudioElectrobu
       'artifacts',
       'electrobun.config.ts',
       'hutch.config.ts',
+      'hutch.lock',
       'package.json',
       'service',
       'src',
@@ -92,6 +94,7 @@ async function create(options: StudioElectrobunOptions): Promise<StudioElectrobu
   }
   await FS.writeText(configPath, generated.config)
   await FS.writeText(FS.resolvePath('hutch.config.ts', root), generated.hutchConfig)
+  await FS.writeJson(FS.resolvePath('hutch.lock', root), generated.hutchLock)
   await FS.writeJson(FS.resolvePath('package.json', root), generated.packageJson)
   await FS.writeJson(FS.resolvePath('tsconfig.json', root), generated.tsconfig)
 
@@ -135,6 +138,7 @@ function sources(options: StudioElectrobunOptions): StudioElectrobunSources {
       version,
     }),
     hutchConfig: hutchConfigSource(),
+    hutchLock: hutchLock(),
     main: mainSource(),
     packageJson: {
       name: 'tao-studio-electrobun',
@@ -147,6 +151,59 @@ function sources(options: StudioElectrobunOptions): StudioElectrobunSources {
     },
     tsconfig: {
       extends: './.hutch/devkit/tsconfig.json',
+    },
+  }
+}
+
+/**
+ * Hutch 0.24.3's built-in resolver can fail before download even when npm serves both direct
+ * package versions. Keeping its native lock format with the generated project makes cold worktrees
+ * reproducible while `hutch install` still owns integrity verification and materialization.
+ */
+function hutchLock(): Record<string, unknown> {
+  return {
+    configVersion: 1,
+    lockfileVersion: 1,
+    packages: {
+      '@types/bun': [
+        '@types/bun@1.4.0',
+        'https://registry.npmjs.org/@types/bun/-/bun-1.4.0.tgz',
+        { dependencies: { 'bun-types': '1.4.0' } },
+        'sha512-K+lZULY23vRgK/CfTjFIV+tyifaNdSMlPh9j+6mQ/cLfpOznLyAuzgV/JQysyECpkBQLVMSyvjlr2fBUSA9wFQ==',
+      ],
+      '@types/node': [
+        '@types/node@26.4.0',
+        'https://registry.npmjs.org/@types/node/-/node-26.4.0.tgz',
+        { dependencies: { 'undici-types': '~8.3.0' } },
+        'sha512-faiGnoIrLH/V8cibOMEAZ8pMw6oXqSukl29ra4mN8GdaB2ZewzeaLj+INpV5N+Z1eKWzY+IzaIZH2EIR6YZRNQ==',
+      ],
+      'bun-types': [
+        'bun-types@1.4.0',
+        'https://registry.npmjs.org/bun-types/-/bun-types-1.4.0.tgz',
+        { dependencies: { '@types/node': '*' } },
+        'sha512-iIKw23BspnQQYd3prITOBxeUsxBHnwzX6YJfGMuNOZzeNcMmVqzIIVGRm1l69ogaPQmb4wB6BN8mA5bE9YuC5Q==',
+      ],
+      'undici-types': [
+        'undici-types@8.3.0',
+        'https://registry.npmjs.org/undici-types/-/undici-types-8.3.0.tgz',
+        {},
+        'sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==',
+      ],
+      ws: [
+        'ws@8.21.0',
+        'https://registry.npmjs.org/ws/-/ws-8.21.0.tgz',
+        {
+          optionalPeers: ['bufferutil', 'utf-8-validate'],
+          peerDependencies: { bufferutil: '^4.0.1', 'utf-8-validate': '>=5.0.2' },
+        },
+        'sha512-Vsp28b7DRcimFQvrqu2Wek3z1iYxDCWqHYB8Qsnk/S4RfaCQzPGPyBNuVjJV3cd6UiKtUtp6sNM77gWvzcCH+g==',
+      ],
+    },
+    workspaces: {
+      '': {
+        devDependencies: { '@types/bun': bunTypesVersion, ws: webSocketVersion },
+        name: 'tao-studio-electrobun',
+      },
     },
   }
 }
