@@ -369,14 +369,15 @@ and keep `HNFrontPage` for the offline and row-focused cells.
 port and a fresh gateway port each launch, and the companion derives both from the bundle it loaded,
 so a phone left running against a dead Metro shows a blank white screen, dials nothing, and logs
 nothing anywhere. Recovering it means an `openurl` with the new port. Trust already survives restarts,
-so this is discovery rather than pairing: either hold the ports stable across restarts of one project,
-or have the companion re-resolve a session it already trusts. It is the sharpest remaining edge in
-daily use.
+so this is discovery rather than pairing: either hold the ports stable across restarts of one project
+(`StudioSmoke.reserveResources` is prior art), or have the companion re-resolve a session it already
+trusts. It is the sharpest remaining edge in daily use, and it is tracked as DEVENV-020 in
+[Developer environment upgrades](../Developer%20environment%20upgrades.md).
 
 **`just studio-native` logs one transient `Unable to resolve "./_gen_tao-app/App"`.** Metro reaches
 the entry before the generated app is written, recovers on the next write, and leaves a red herring in
 the output of the command a person runs most. Ordering the first compile ahead of the Metro start
-would remove it.
+would remove it; tracked as DEVENV-037.
 
 **A replayed cell still spins.** Unchanged by this slice and reproducing in the browser canvas too;
 the next step is a stack rather than more bisection, and the likely fix is memoizing the cell runtime

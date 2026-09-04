@@ -330,9 +330,16 @@ an entry here may link one when the developer workflow is also affected.
 - **Impact:** Multiple-app selection omits the `--app` remedy, successful installation can print an
   automation-permission stack, stale companions can remain blank after Metro changes, and simulator
   failures do not clearly distinguish sandbox denial.
-- **Evidence:** Four open findings from the companion implementation review.
-- **Workaround:** Pass `--app`, run device tooling from a normal terminal, and reinstall/relaunch a stale
-  development client.
+- **Evidence:** Four open findings from the companion implementation review. The stale-companion case
+  has a cause: every Studio launch takes a fresh preview-Metro port and a fresh gateway port, and the
+  companion derives both from the bundle it loaded, so a phone left running against a dead Metro shows
+  a blank white screen, dials nothing, and logs nothing anywhere. Trust already survives restarts, so
+  this is discovery rather than pairing. `StudioSmoke.reserveResources` is prior art for holding a port
+  block. The multiple-app half is addressed on `feat/companion-app-implementation-85b689`, which reads
+  the project's `DefaultApp` instead of refusing until `--app` is passed.
+- **Workaround:** Pass `--app`, run device tooling from a normal terminal, and re-point a stale
+  development client with `xcrun simctl openurl booted "taostudiocompanion://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A<metroPort>"` from an
+  unsandboxed shell, which is faster than reinstalling.
 - **Proposed change:** Reproduce after merge, improve typed remedies, suppress handled automation errors,
   and add stale-client recovery/status.
 - **Dependencies:** Companion and Studio branches must land first.
@@ -594,3 +601,21 @@ an entry here may link one when the developer workflow is also affected.
   waits beside package work; `./agent verify` remains green; an uncontended normal-terminal
   `just full-verify` is green and improves or matches the 44.6-second baseline.
 - **Source:** 2026-09-04 verification timing review on `feat/verification-lanes`.
+
+## Studio companion slice findings
+
+### DEVENV-037 — Native Studio launch resolves the generated app before it is written
+
+- **Status:** Candidate
+- **Area:** Studio launch
+- **Impact:** The command a person runs most for device work opens with a red bundler error that is not
+  one, which trains readers to ignore the place real bundler failures appear.
+- **Evidence:** `just studio-native` logs `Unable to resolve "./_gen_tao-app/App"` once on startup and
+  recovers on the next write; Metro reaches the entry before the first compile has written the generated
+  tree.
+- **Workaround:** None needed; the message is transient and the launch succeeds.
+- **Proposed change:** Order the first compile ahead of the Metro start for the native launch path, or
+  hold the entry until the generated tree exists.
+- **Dependencies:** None.
+- **Acceptance:** A clean `just studio-native` reaches a ready preview with no unresolved-module output.
+- **Source:** 2026-09-04 companion Slice 2 work.
