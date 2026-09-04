@@ -90,8 +90,9 @@ check picks its app with `run`.
   rather than the source naming one; `present` and `back` through that synthesized navigator; the
   test `relaunch` step reopening the presented screen it left, and `relaunch fresh` opening on the
   root view and recording that as the stored position.
-- _Shell_ (`Shell.tao`): the app root as a view with arguments, `view Shell(CenterStack, "…")`, and
-  a variant that rebinds it with `with { view Shell(OtherStack, "…") }`; a nav-typed parameter
+- _Shell_ (`Shell.test.tao`): a test-only app root as a view with arguments,
+  `view Shell(CenterStack, "…")`, and a variant that rebinds it with
+  `with { view Shell(OtherStack, "…") }`; a nav-typed parameter
   rendered inside a `Col` as ordinary content, `Navigator() [fill]`; `present` and Back reaching the
   navigator the shell renders; the test `relaunch` step reading that navigator's position back and
   `relaunch fresh` opening it at its root; a conditional sibling of the navigator mounting and
@@ -104,7 +105,9 @@ chrome a sheet is hosted in, which is not assertable from a journey; arbitrary r
 multi-window layout, collapse policy, or product-specific workbench behavior; WordFlower product
 behavior.
 
-The shell journeys assert on the label the root view was bound to and on the content of the
+The complete Shell app family lives in its test sidecar because its only purpose is to drive these
+implementation journeys without adding duplicate interactive choices. The shell journeys assert on
+the label the root view was bound to and on the content of the
 navigator it renders, never on a navigation title: the synthesized root navigator is a slot and
 renders no chrome of its own. The label is what tells a variant's rebinding apart from the base
 app, and the status bar's own text is what tells an unmounted sibling from a mounted one that

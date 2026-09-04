@@ -1,4 +1,117 @@
-use OtherShellApp, SelectionShellApp, ShellApp from ./
+use SelectionNav, StackNav from @tao/nav
+use Button, Col, Text from @tao/ui
+
+project {
+   id "navigation-shell-variants"
+   name "Navigation Shell Variants"
+}
+
+// This complete harness exists only to prove that a view can be an app shell around an ordinary
+// rendered navigator. Keeping its three configurations beside their checks prevents implementation-
+// only apps from crowding the interactive picker.
+app ShellApp {
+   Name "Shell"
+   view Shell(CenterStack, "Primary shell")
+}
+
+// A variant rebinds the root: the same shell, a different navigator inside it. The label the
+// variant passes is what proves the arguments reach the view.
+app OtherShellApp = ShellApp with {
+   Name "Shell - Other"
+   view Shell(OtherStack, "Other shell")
+}
+
+// The rendered navigator may itself be a selection, and `present @key` reaches it through the
+// shell: the app asks its root, and the root reaches the navigator its view renders.
+app SelectionShellApp {
+   Name "Shell - Selection"
+   view Shell(ShellTabs, "Selection shell")
+}
+
+nav CenterStack = StackNav {
+   Initial CenterHome
+}
+
+nav OtherStack = StackNav {
+   Initial OtherHome
+}
+
+nav ShellTabs = SelectionNav {
+   Initial @first
+   Display "tabs"
+   @first {
+      Label "First"
+      Content FirstTab
+   }
+   @second {
+      Label "Second"
+      Content SecondTab
+}  }
+
+// The shell: the navigator and a status bar laid out as ordinary content. The bar is conditional on
+// view state; the navigator never is, because its history lives on its mount and a branch that
+// unmounted it would drop where the person was.
+scene Shell(Navigator nav, Label text) {
+   state ShowStatus = true
+   render Col() [fill] {
+      Text(Label)
+      Navigator() [fill]
+      when ShowStatus {
+         true -> {
+            #hideStatus
+            Button("Hide status") {
+               on press -> { set ShowStatus = false }
+            }
+            StatusBar()
+         }
+         otherwise -> {
+            #showStatus
+            Button("Show status") {
+               on press -> { set ShowStatus = true }
+}  }  }  }  }
+
+view StatusBar() {
+   render Col() {
+      Text("Shell status")
+}  }
+
+scene CenterHome() {
+   Title "Center"
+   render Col() [gap 8] {
+      Text("Center home")
+
+      #openCenterDetail
+      Button("Open center detail") {
+         on press -> { present CenterDetail() }
+}  }  }
+
+scene CenterDetail() {
+   Title "Center detail"
+   render Col() {
+      Text("Center pushed")
+}  }
+
+scene OtherHome() {
+   Title "Other"
+   render Col() {
+      Text("Other home")
+}  }
+
+scene FirstTab() {
+   Title "First"
+   render Col() [gap 8] {
+      Text("First tab")
+
+      #goSecond
+      Button("Go to second") {
+         on press -> { present @second }
+}  }  }
+
+scene SecondTab() {
+   Title "Second"
+   render Col() {
+      Text("Second tab")
+}  }
 
 test "Shell" {
    // The navigator is rendered by the shell as ordinary content, and Back still reaches it: the app

@@ -3,7 +3,6 @@ use WordFlowerDrawerNavigator, WordFlowerNavigator, WordFlowerTabsNavigator from
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
 use WordFlowerShell, WorkspaceRow from @ui
-use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
 
 // Tranche status: absorbed
 //
@@ -535,25 +534,6 @@ app WordFlowerInstantDB = WordFlower with {
    Datasource WordFlowerInstantDBStore
 }
 
-app WordFlowerNavHarness {
-   Name "WordFlower Navigation Harness"
-   Navigator HarnessNavigator
-   // An app without data omits `Datasource` entirely
-}
-
-// These four apps cross the two independent declaration sugars. Each is a complete app value with
-// the same mounted behavior: primitive head versus inferred `let`, and canonical construction versus
-// explicit `with`. The Foundation test sidecar runs all four, so every spelling must compile and work.
-app WordFlowerStackByNav {
-   Name "WordFlower Declaration Head"
-   Navigator StackByNav
-}
-
-app WordFlowerStackByNavWith = app with {
-   Name "WordFlower Declaration Head With"
-   Navigator StackByNavWith
-}
-
 fixture StudioWorkspace {
    Novel = create Workspace {
       Name: "Novel"
@@ -607,16 +587,4 @@ datasource WordFlowerInstantDBStore = InstantDB {
    AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
    ApiURI "http://localhost:9020"
    WebsocketURI "ws://localhost:9020/runtime/session"
-}
-
-folder
-let WordFlowerStackByLet = app {
-   Name "WordFlower Declaration Let"
-   Navigator StackByLet
-}
-
-folder
-let WordFlowerStackByLetWith = app with {
-   Name "WordFlower Declaration Let With"
-   Navigator StackByLetWith
 }
