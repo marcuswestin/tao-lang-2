@@ -165,6 +165,7 @@ export type TaoStudioDeviceDeviceMessage =
   | { capture: unknown; requestId: string; type: 'device.runtimeCaptured' }
   | { error: string; requestId: string; type: 'device.runtimeCaptureFailed' }
   | { level: 'error' | 'info'; message: string; type: 'device.report' }
+  | { entries: readonly TaoStudioDeviceLogEntry[]; type: 'device.log' }
   | { occurrence: TaoStudioDeviceOccurrence; type: 'device.selectSource' }
   | { network: TaoStudioDeviceNetworkCondition; type: 'device.setNetwork' }
   | {
@@ -195,6 +196,19 @@ export type TaoStudioDeviceOccurrence = {
    */
   sourceVersion: string
   start: number
+}
+
+/**
+ * One line the app printed on the phone.
+ *
+ * Batched rather than sent per line: a chatty render loop would otherwise turn every log into a
+ * sealed frame and its own round trip, and the useful unit is what happened in the last moment, not
+ * each line the instant it appeared.
+ */
+export type TaoStudioDeviceLogEntry = {
+  level: 'debug' | 'error' | 'info' | 'warn'
+  message: string
+  timestamp: number
 }
 
 /**
@@ -334,6 +348,26 @@ const deviceMessageParsers: MessageParsers<TaoStudioDeviceDeviceMessage> = {
   'device.selectSource': value => {
     const occurrence = parseOccurrence(value['occurrence'])
     return occurrence === undefined ? undefined : { occurrence, type: 'device.selectSource' }
+  },
+  'device.log': value => {
+    const entries = value['entries']
+    if (!Array.isArray(entries) || entries.length === 0 || entries.length > 200) {
+      return undefined
+    }
+    const parsed: TaoStudioDeviceLogEntry[] = []
+    for (const entry of entries) {
+      if (
+        !isObject(entry)
+        || typeof entry['message'] !== 'string'
+        || !nonNegativeInteger(entry['timestamp'])
+        || (entry['level'] !== 'debug' && entry['level'] !== 'error' && entry['level'] !== 'info'
+          && entry['level'] !== 'warn')
+      ) {
+        return undefined
+      }
+      parsed.push({ level: entry['level'], message: entry['message'], timestamp: entry['timestamp'] })
+    }
+    return { entries: parsed, type: 'device.log' }
   },
   'device.setNetwork': value =>
     value['network'] === 'normal' || value['network'] === 'offline' || value['network'] === 'slow'

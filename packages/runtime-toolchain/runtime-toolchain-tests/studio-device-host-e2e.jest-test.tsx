@@ -66,6 +66,7 @@ function stubClient(): {
         reports.push({ level, message })
       },
       selectCell() {},
+      log() {},
       selectSource() {},
       setNetwork() {},
       sourceAction: () => 'request-1',

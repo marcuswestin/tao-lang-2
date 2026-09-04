@@ -16,6 +16,7 @@ import {
   type TaoStudioDeviceDescription,
   type TaoStudioDeviceDeviceMessage,
   type TaoStudioDeviceHelloMessage,
+  type TaoStudioDeviceLogEntry,
   type TaoStudioDeviceManifest,
   type TaoStudioDeviceMoveRender,
   type TaoStudioDeviceNetworkCondition,
@@ -169,6 +170,8 @@ export type StudioDeviceClient = {
   selectCell(cellId: string): void
   /** Tells Studio which render the person tapped, so the Mac opens that source and selects it. */
   selectSource(occurrence: TaoStudioDeviceOccurrence): void
+  /** Streams a batch of console lines from the phone to Studio's output. */
+  log(entries: readonly TaoStudioDeviceLogEntry[]): void
   /** Asks Studio to put this device's cell under a named network condition. */
   setNetwork(network: TaoStudioDeviceNetworkCondition): void
   /** Asks Studio to edit the project from the device; returns the request id the result names. */
@@ -776,6 +779,11 @@ export function createStudioDeviceClient(options: StudioDeviceClientOptions): St
     },
     selectSource(occurrence) {
       sendWhenConnected({ occurrence, type: 'device.selectSource' })
+    },
+    log(entries) {
+      if (entries.length > 0) {
+        sendWhenConnected({ entries, type: 'device.log' })
+      }
     },
     setNetwork(network) {
       update({ network })

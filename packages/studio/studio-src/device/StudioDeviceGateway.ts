@@ -830,6 +830,15 @@ export class StudioDeviceGateway {
       this.#sendSealed(connection, { type: 'studio.pong' })
       return
     }
+    if (message.type === 'device.log') {
+      // Straight into Studio's own output, where a person driving Studio is already looking. The
+      // lines also still print on the phone, so a dropped connection loses the mirror, not the log.
+      const name = connection.device?.name ?? 'unknown'
+      for (const entry of message.entries) {
+        this.#log(`device ${name} ${entry.level}: ${entry.message}`)
+      }
+      return
+    }
     if (message.type === 'device.report') {
       connection.lastReport = { level: message.level, message: message.message }
       this.#log(`device ${connection.device?.name ?? 'unknown'} ${message.level}: ${message.message}`)

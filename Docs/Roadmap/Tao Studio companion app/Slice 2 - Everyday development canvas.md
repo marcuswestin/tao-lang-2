@@ -98,6 +98,24 @@ overlay takes every touch while it is on, and the app underneath is deliberately
 The result of an edit is shown on the phone. The person making the edit is looking at the device, so
 Studio's answer — applied, or refused and why — belongs on that screen and not only in Studio's log.
 
+Offline and Slow network are there too. The mechanism needed nothing new — a reconfigure carrying an
+environment already reaches the phone — so this is the phone naming a situation and Studio deciding
+whether its cell is still current. The condition is merged into the environment the cell is already
+under, so choosing Offline does not also reset its scheme and viewport.
+
+### The phone's console reaches Studio
+
+`device.log` batches console output on a short timer and the gateway writes each line into Studio's
+own output. Mirrored, not moved: the lines still print on the device, so a dropped connection costs
+the mirror and not the log. A runaway render loop is capped at 200 buffered lines and says how many
+it dropped rather than exhausting memory on the phone.
+
+Studio's Logs drawer is bound to a browser preview connection, so device lines do not appear there
+yet; that needs a decision about whether a device counts as a preview connection for panel purposes.
+Studio's terminal output is where they land today, which is already the thing that was missing:
+watching a phone previously meant watching Metro's terminal, which is not where a person driving
+Studio is looking, and is not available at all with the cable pulled.
+
 ## Proven live on the simulator
 
 - A reconfigure carrying a new environment reaches the device and re-assigns it with a live instance;
@@ -160,6 +178,43 @@ The next step is a stack, not more bisection: React attributes the loop to a `se
 whose dependency changes every render, and the generated preview root rebuilds its whole cell runtime
 object on each render, which hands a new object to every consumer below it. Memoizing that in codegen
 is the likely fix and would close the class rather than one instance.
+
+## Next in this area
+
+**Run a test command from the fan-out menu.** `POST /api/tests/run` already exists, and the menu is
+now the established place for companion-only actions, so this is a menu item and a result line rather
+than new plumbing. It is the smallest remaining piece of "the phone as a real Studio canvas".
+
+**Device lines in Studio's Logs drawer**, once it is decided whether a device is a preview connection
+for panel purposes — see above.
+
+## Three red screens on the device, and what each one is
+
+All three were reported from a phone, and none is a defect in this slice. They are recorded here
+because the companion is what made them visible.
+
+**Deleting a workspace throws.** `Query filter 'Document.Workspace' refers to missing Workspace`.
+This is deliberate and tested: `TR-data.test.ts` asserts a query filtered on a deleted relation
+handle throws, grouped with foreign and wrong-entity handles as an author error, and
+`TR-data-fills.test.ts` asserts such a throw routes to the unowned-failure seam. The red screen is
+that seam working. Whether ordinary use — deleting an entity whose screen is open — should instead
+dismiss the screen or yield an empty query is a language decision, and the runtime already has the
+concept it would need: `availability` reports `missing` for exactly this.
+
+**Open workspace in the `states:novel` scenario throws.** `Cannot present WorkspaceDetail: no
+enclosing or explicit navigation target.` That scenario renders `WorkspaceRow` as a bare view, and
+the view's button presents. A view previewed in isolation genuinely has nowhere to present into, and
+the message says so precisely. The open question is whether a view-kind cell should get an implicit
+navigation host so its navigation is previewable.
+
+**Switching scenarios on the phone throws the first error again.** This one is worth attention: it
+reproduces on a freshly launched app with no replay involved, and it is a consequence of what the
+companion is. The browser canvas gives every cell its own iframe and therefore its own JS context and
+storage; a device runs one process for every cell it is ever assigned. Persisted state is keyed by
+app declaration (`tao.persisted-state.v1:<declaration>:<name>`) with no cell in the key, so one
+scenario restores another's navigation stack — holding entity handles from a fixture that no longer
+exists. Scoping preview-persisted state to the cell would fix it, and that keying is shared with the
+browser canvas, so it is a decision rather than a local patch.
 
 ## Not attempted, and why
 

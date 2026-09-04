@@ -38,6 +38,7 @@ import {
   type StudioInspectHit,
   type StudioInspectRect,
 } from './TR-studio-device-inspect'
+import { captureStudioDeviceLogs, type StudioDeviceLogConsole } from './TR-studio-device-logs'
 import type {
   TaoStudioDeviceCellIdentity,
   TaoStudioDeviceDescription,
@@ -562,6 +563,13 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
   >(undefined)
   const [remoteHighlight, setRemoteHighlight] = React.useState<readonly StudioInspectRect[]>([])
   const identityKey = presentation.kind === 'cell' ? cellIdentityKey(presentation.assignment.identity) : undefined
+  // Mirrored for as long as this host is mounted, not only while a cell renders: the lines worth
+  // seeing most are the ones from a cell that failed to render at all.
+  React.useEffect(() =>
+    captureStudioDeviceLogs({
+      console: globalThis.console as StudioDeviceLogConsole,
+      sink: entries => client.log(entries),
+    }), [client])
   const identity = presentation.kind === 'cell' ? presentation.assignment.identity : undefined
   const appliedKey = React.useRef<string | undefined>(undefined)
   const erroredKey = React.useRef<string | undefined>(undefined)
