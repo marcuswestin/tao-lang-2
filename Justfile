@@ -61,6 +61,10 @@ studio-smoke-native test_file="packages/dev/studio-smoke/studio-simulated-user.t
 studio-proof-real-app run_id="local":
     ./dev studio-smoke --run-id "{{ run_id }}" packages/dev/studio-smoke/studio-real-app.test.ts
 
+# Export WordFlower and prove its physical keyboard path in real headless Chrome
+keyboard-navigation-smoke run_id="local":
+    ./dev studio-smoke --run-id "{{ run_id }}" --worker 4 packages/dev/studio-smoke/runtime-keyboard-navigation.test.ts
+
 # Run native Tao Studio against a deterministic project and report what it proved
 studio-canary project="Apps/HNReader" app="HNReader":
     ./dev studio-canary --project "{{ project }}" --app "{{ app }}"
@@ -166,9 +170,9 @@ clean-all: clean
 verify:
     ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --lane verify --json .artifacts/logs/verify/summary.json --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree" "studio-smoke=slow lane; run just studio-smoke or just full-verify"
 
-# Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every automated Studio lane
+# Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every slow UI lane
 full-verify: deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _ship-bundle-proof _full-verify-smoke-launch _full-verify-real-app _full-verify-simulated _full-verify-native _full-verify-canary --lane full-verify --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree"
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _ship-bundle-proof _full-verify-smoke-launch _full-verify-real-app _full-verify-simulated _full-verify-keyboard-navigation _full-verify-native _full-verify-canary --lane full-verify --skipped "_tao-check=_fix-tao ran ./tao fix over this tree, and the tao-apps suite compiles it" "_dprint-check=_fix-dprint and _fix-just-fmt formatted this tree"
 
 # Private
 #########
@@ -184,6 +188,9 @@ _full-verify-real-app:
 
 _full-verify-simulated:
     ./dev studio-smoke --run-id full-verify-simulated --worker 2 packages/dev/studio-smoke/studio-simulated-user.test.ts
+
+_full-verify-keyboard-navigation:
+    ./dev studio-smoke --run-id full-verify-keyboard-navigation --worker 4 packages/dev/studio-smoke/runtime-keyboard-navigation.test.ts
 
 _full-verify-native:
     ./dev studio-smoke --native --run-id full-verify-native --worker 3 packages/dev/studio-smoke/studio-simulated-user.test.ts

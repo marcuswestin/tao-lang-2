@@ -200,6 +200,35 @@ Describe('Studio browser CDP harness', () => {
     }
   })
 
+  Test('dispatches physical keys with platform-primary and unmodified punctuation', async () => {
+    const transport = new FakeCdpTransport()
+    transport.evaluateResults.push(true)
+    const browser = StudioCdp.testing.create(transport)
+
+    await browser.pressShortcut('k')
+    await browser.pressKey('/')
+
+    Expect(transport.calls.filter(call => call.method === 'Input.dispatchKeyEvent')).toEqual([
+      {
+        method: 'Input.dispatchKeyEvent',
+        params: { code: 'KeyK', key: 'k', modifiers: 4, type: 'rawKeyDown', windowsVirtualKeyCode: 75 },
+      },
+      {
+        method: 'Input.dispatchKeyEvent',
+        params: { code: 'KeyK', key: 'k', modifiers: 4, type: 'keyUp', windowsVirtualKeyCode: 75 },
+      },
+      {
+        method: 'Input.dispatchKeyEvent',
+        params: { code: 'Slash', key: '/', modifiers: 0, type: 'rawKeyDown', windowsVirtualKeyCode: 191 },
+      },
+      {
+        method: 'Input.dispatchKeyEvent',
+        params: { code: 'Slash', key: '/', modifiers: 0, type: 'keyUp', windowsVirtualKeyCode: 191 },
+      },
+    ])
+    await Expect(browser.pressKey('unsupported')).rejects.toThrow('browser key is unsupported')
+  })
+
   Test('collects console messages and uncaught exceptions without mixing non-failures', async () => {
     const transport = new FakeCdpTransport()
     const browser = StudioCdp.testing.create(transport)

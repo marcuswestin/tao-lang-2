@@ -386,12 +386,12 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands.slice(graph)).toContain('_parser-gen')
   })
 
-  Test('runs every automated Studio lane in the one graph without a browser quarantine', async () => {
+  Test('runs every automated browser and native lane in the one graph without a quarantine', async () => {
     const commands = await justCommands('full-verify')
 
     Expect(commands).toContain(
       '_full-verify-smoke-launch _full-verify-real-app _full-verify-simulated '
-        + '_full-verify-native _full-verify-canary',
+        + '_full-verify-keyboard-navigation _full-verify-native _full-verify-canary',
     )
     Expect(commands).toContain('--lane full-verify')
     Expect(commands).not.toContain('--jobs 1')
@@ -406,6 +406,9 @@ Describe('agent worktree profile bootstrap', () => {
     )
     Expect(await justCommands('_full-verify-simulated')).toContain(
       '--worker 2 packages/dev/studio-smoke/studio-simulated-user.test.ts',
+    )
+    Expect(await justCommands('_full-verify-keyboard-navigation')).toContain(
+      '--worker 4 packages/dev/studio-smoke/runtime-keyboard-navigation.test.ts',
     )
     Expect(await justCommands('_full-verify-native')).toContain('--native --run-id full-verify-native --worker 3')
     Expect(await justCommands('_full-verify-canary')).toContain('./dev studio-canary')

@@ -35,7 +35,7 @@ const DEFAULT_METADATA: GateMetadata = { cost: 1 }
 const SLOTS_BESIDE_TEST = 6
 const TAO_CHECK_COST = 2
 const TYPECHECK_COST = 3
-/** Wide enough that a Studio lane is not starved, narrow enough that four fit at once. */
+/** Wide enough that a slow UI lane is not starved, narrow enough that four fit at once. */
 const STUDIO_LANE_COST = 3
 /** Generous against a healthy canary run; a bound against a post-report hang regressing. */
 const STUDIO_CANARY_TIMEOUT_MS = 300_000
@@ -43,7 +43,7 @@ const SHIP_BUNDLE_PROOF_TIMEOUT_MS = 180_000
 
 /**
  * Start-order pins. Measured durations order nodes within a priority; these say which node should
- * be looked at first when several are ready at once. The Studio lanes dominate `full-verify`'s wall
+ * be looked at first when several are ready at once. The slow UI lanes dominate `full-verify`'s wall
  * time, and `_test` and `_typecheck` dominate every other lane's.
  */
 const STUDIO_LANE_PRIORITY = 5
@@ -60,11 +60,11 @@ function testCost(): number {
   return Math.max(2, Platform.cpuCount() - SLOTS_BESIDE_TEST)
 }
 
-/** studioLane is the shape every `full-verify` Studio node shares. */
+/** studioLane is the shape every `full-verify` browser or native UI node shares. */
 function studioLane(resources?: readonly string[]): GateMetadata {
   return {
     cost: STUDIO_LANE_COST,
-    // Every Studio lane dies on a missing `_gen_tao-parser`, and none of them may read the tree
+    // Every UI lane dies on a missing `_gen_tao-parser`, and none of them may read the tree
     // while `fix` is still rewriting it; the mutates-tree barrier handles the second half.
     needs: ['_parser-gen'],
     priority: STUDIO_LANE_PRIORITY,
@@ -123,11 +123,12 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       },
     ],
 
-    // The three browser lanes are parallel-safe on distinct worker indices; the native shell and
+    // The four browser lanes are parallel-safe on distinct worker indices; the native shell and
     // the canary contend on the window server, which is what `gui` names.
     ['_full-verify-smoke-launch', studioLane()],
     ['_full-verify-real-app', studioLane()],
     ['_full-verify-simulated', studioLane()],
+    ['_full-verify-keyboard-navigation', studioLane()],
     ['_full-verify-native', studioLane(['gui'])],
     // The canary once hung after printing its verdict on a launch-owned process that survived
     // shutdown; `completeNativeProbe` now stops Hutch when the probe resolves, and a healthy run
