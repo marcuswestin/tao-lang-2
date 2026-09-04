@@ -605,11 +605,14 @@ an entry here may link one when the developer workflow is also affected.
   evidence after interruption.
 - **Evidence:** A normal-terminal full verification spent 120 seconds in the native gate after
   printing `hutch install` but before `electrobun prepare complete`; a preceding run was interrupted,
-  and graph-local `gui` ownership did not coordinate other worktrees.
+  and graph-local `gui` ownership did not coordinate other worktrees. A cold acceptance worktree
+  additionally proved Hutch 0.24.3's resolver could reject the two exact direct package versions
+  while npm served both; the same install succeeded from a generated integrity-checked Hutch lock.
 - **Workaround:** Ensure other native Studio sessions have stopped and inspect the full gate log.
 - **Proposed change:** Bound and instrument each Hutch phase, stop complete owned process groups on
   every exit path, and hold an identity-checked machine-wide `studio-native-host` lease through
-  preparation, probe, and shutdown.
+  preparation, probe, and shutdown. Materialize the pinned native dependency lock so cold worktrees
+  do not depend on Hutch re-resolving already-selected versions.
 - **Dependencies:** Implemented on `feat/native-studio-verification-reliability`; host acceptance still
   requires the unsandboxed native smoke, canary, interruption/retry, cross-worktree, and full lanes.
 - **Acceptance:** Focused tests prove phase reporting, subprocess bounds and cleanup, interrupted
