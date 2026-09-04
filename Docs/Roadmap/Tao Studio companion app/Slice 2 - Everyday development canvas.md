@@ -186,35 +186,94 @@ now the established place for companion-only actions, so this is a menu item and
 than new plumbing. It is the smallest remaining piece of "the phone as a real Studio canvas".
 
 **Device lines in Studio's Logs drawer**, once it is decided whether a device is a preview connection
-for panel purposes — see above.
+for panel purposes — see above. Diagnosing the scenario-switch freeze needed those lines and they are
+only in Studio's terminal output, which is the wrong place for the one panel built to read them.
 
-## Three red screens on the device, and what each one is
+**Scenario and preview as separate declarations.** The split above is drawn at the boundary between
+what a device can be and what only a canvas can frame, and it is drawn in the runtime rather than in
+the language. Ro's proposal is to draw it in the language instead: a `scenario` owns the fixture,
+subject and steps, and one or more `preview` entries under it own the frame — screen size and the
+like — laid out horizontally in Studio. That would make the rule structural rather than a list of
+which clauses travel, and it would let one scenario be previewed at several sizes without repeating
+its fixture. It is a grammar change, so it belongs in a Revolution decision and a tranche.
 
-All three were reported from a phone, and none is a defect in this slice. They are recorded here
-because the companion is what made them visible.
+## Three red screens on the device, and what each one turned out to be
 
-**Deleting a workspace throws.** `Query filter 'Document.Workspace' refers to missing Workspace`.
-This is deliberate and tested: `TR-data.test.ts` asserts a query filtered on a deleted relation
-handle throws, grouped with foreign and wrong-entity handles as an author error, and
-`TR-data-fills.test.ts` asserts such a throw routes to the unowned-failure seam. The red screen is
-that seam working. Whether ordinary use — deleting an entity whose screen is open — should instead
-dismiss the screen or yield an empty query is a language decision, and the runtime already has the
-concept it would need: `availability` reports `missing` for exactly this.
+All three were reported from a phone. Two were real defects, one was a language question standing in
+for a missing containment, and none of them stays.
 
-**Open workspace in the `states:novel` scenario throws.** `Cannot present WorkspaceDetail: no
-enclosing or explicit navigation target.` That scenario renders `WorkspaceRow` as a bare view, and
-the view's button presents. A view previewed in isolation genuinely has nowhere to present into, and
-the message says so precisely. The open question is whether a view-kind cell should get an implicit
-navigation host so its navigation is previewable.
+**Open workspace in the `states:novel` scenario threw** `Cannot present WorkspaceDetail: no enclosing
+or explicit navigation target.` A `render ViewName(...)` cell mounted its view directly under
+`AppShell` with no navigator anywhere above it, and presenting is legal in any view body — so a row
+that opens its own screen died on the first tap. A focused view now mounts under a navigator of its
+own: the compiler emits one app definition per focusable view, whose navigator is a slot holding
+that view, which is the same shape `app Name { View Something }` already compiles to. `present` swaps
+the slot, the app host draws Back, and the design comes from the app the scenario names. It is built
+per cell and disposed with it, and its restoration is `fresh`.
 
-**Switching scenarios on the phone throws the first error again.** This one is worth attention: it
-reproduces on a freshly launched app with no replay involved, and it is a consequence of what the
-companion is. The browser canvas gives every cell its own iframe and therefore its own JS context and
-storage; a device runs one process for every cell it is ever assigned. Persisted state is keyed by
-app declaration (`tao.persisted-state.v1:<declaration>:<name>`) with no cell in the key, so one
-scenario restores another's navigation stack — holding entity handles from a fixture that no longer
-exists. Scoping preview-persisted state to the cell would fix it, and that keying is shared with the
-browser canvas, so it is a decision rather than a local patch.
+**Deleting a workspace twice threw** `Cannot delete missing Workspace 'Workspace-1'.` The throw is
+deliberate and tested; what was wrong is that a contained failure took the whole phone. LogBox is not
+a passive observer on a device: its window becomes the key window the moment anything is logged and
+keeps every touch afterwards, so one contained failure froze the badge, the tab bar and the app
+together while all three still looked alive. The device host now turns LogBox off — console output is
+mirrored to Studio, a render failure still renders the host's own failure screen — and takes the
+unowned-failure seam itself, naming the failure in a dismissible notice at the top of the screen and
+sending it to Studio. Repeats of one failure are shown once: the failures worth containing include
+the ones a live query reproduces on every revision.
+
+**Switching scenarios froze the phone.** Scoping persisted navigation to the cell (the previous fix)
+was necessary and not sufficient. An app definition lives at generated-module scope, so its _mounted_
+navigation and its memoized load both outlive the cell that produced them: the next cell opened on
+the previous cell's stack, holding entity handles from a provider generation its own fixture had just
+replaced. Those screens re-offered their queries on every revision, every offer threw
+`Entity handle 'Workspace-1' belongs to an inactive provider generation`, and React eventually gave
+up with `Maximum update depth exceeded`. What the person saw was a blank screen with a Back button
+that ignored every touch. A cell change is now a relaunch: the host resets mounted navigation and
+starts a new restoration launch under the new scope, in a layout effect, which is the one place that
+runs after the outgoing tree is unmounted and before any passive effect reads the store.
+
+The device log mirror is what found the third one, and it could only name it once mirrored errors
+carried a few stack frames rather than a message alone.
+
+## What a device loads: the scenario, not the frame
+
+A scenario declares two kinds of thing, and only one of them is about the scenario. `fixture`,
+`prepare`, the subject, `appearance` and `network` describe the run. `device phone` /
+`device tablet 1024 x 1366` describes a frame for Studio's canvas — and a phone is already a device,
+whose own size is the truth. So a device now loads the scenario and drops the one clause that can
+only ever have been a frame, rather than silently applying part of the rest.
+
+That cut the other way too. `devices:tabletDark` declares `appearance dark` and used to arrive on the
+phone in Light, because `resolveScheme` answered every native request with `fixed-light-native`. That
+boundary is real but narrower than it was written: what a native runtime cannot do is _follow the
+device's own appearance_. Nothing stops it rendering dark when a scenario asks for dark, and a
+scenario's appearance is part of the scenario. A pin now resolves to itself on native under a new
+`pinned-native` capability; only a preview cell ever pins, so a shipped app resolves exactly as
+before.
+
+The phone says what it dropped. A cell whose declared frame does not fit on this screen raises a
+dismissible notice naming both sizes, once per cell, and the scenario sheet carries the same line
+permanently for when the notice is long gone. It stays quiet when the frame does fit: no device is
+ever exactly a declared preset, and a notice on every scenario is a notice nobody reads.
+
+`locale` and `direction` are still declared and applied nowhere — not on a device and not in the
+canvas. They are in the manifest and no code reads them.
+
+## The layout a phone shows and the canvas does not
+
+`Col` and `Row` both default to `[content top stretch, fill]`, so every container grows to share its
+parent's main axis. On a device that is what happens: WordFlower's Settings hero and card each take
+half the screen, and HNReader's orange header takes two thirds of it. In Studio's browser canvas
+neither does, because React Native Web's `ScrollView` content container has no definite height for
+`flexGrow` to distribute, so the same tree measures to its content instead.
+
+Both readings are defensible and they cannot both be right. Either the `fill` default is what these
+apps should be written against — and Studio's canvas is showing a layout the phone will not produce,
+which is the more serious of the two — or a container should hug by default and `fill` should be
+asked for. It is a language decision with repo-wide blast radius, so it is recorded rather than
+taken. One unambiguous instance was fixed in the app: WordFlower's `Card` let its title claim and
+compress, because a heading beside an action does not fit at its natural width on a phone and both
+were running off the card.
 
 ## Not attempted, and why
 
