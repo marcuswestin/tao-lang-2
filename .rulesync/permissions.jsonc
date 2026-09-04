@@ -1,34 +1,80 @@
 {
   "$schema": "https://github.com/dyoshikawa/rulesync/releases/latest/download/permissions-schema.json",
   // Canonical agent permission rules for this repository. `./agent setup` renders them into
-  // .claude/settings.json (via rulesync) and .codex/config.toml (via packages/dev's
-  // CodexConfigGenerator). Edit this file, never the generated ones.
+  // .claude/settings.json (via rulesync) plus .codex/config.toml and .codex/rules/tao.rules
+  // (via packages/dev's CodexConfigGenerator). Edit this file, never the generated ones.
   "permission": {
     "bash": {
       // The repository's own workflow surface. Agents run these without asking.
       "./agent *": "allow",
       "./dev *": "allow",
+      // Browser smoke is a deliberate host escape: StudioCdp forces headless mode, a fresh
+      // tao-studio-chrome-* temporary profile, and an ephemeral DevTools port.
+      "./dev studio-smoke *": "allow",
       "./tao *": "allow",
       "just *": "allow",
+      "just studio-smoke *": "allow",
+      "just studio-proof-real-app *": "allow",
       "bun install *": "allow",
       "bun run *": "allow",
       "bun test *": "allow",
       "direnv exec . *": "allow",
       "dprint *": "allow",
-      // Local device and container tooling for the Expo and InstantDB dev loops.
-      "adb *": "allow",
-      "docker compose *": "allow",
-      "docker ps *": "allow",
-      "emulator *": "allow",
-      "xcrun simctl *": "allow",
+      // Routine inspection stays sandboxed. State-changing variants are deliberately absent.
+      "pwd": "allow",
+      "ls *": "allow",
+      "rg *": "allow",
+      "file *": "allow",
+      "stat *": "allow",
+      "readlink *": "allow",
+      "realpath *": "allow",
+      "head *": "allow",
+      "tail *": "allow",
+      "wc *": "allow",
+      "jq *": "allow",
+      "plutil -lint *": "allow",
+      "plutil -p *": "allow",
+      "uname *": "allow",
+      "sw_vers *": "allow",
+      "df *": "allow",
+      "du *": "allow",
+      "which *": "allow",
+      "git status *": "allow",
+      "git diff *": "allow",
+      "git log *": "allow",
+      "git show *": "allow",
+      "git rev-parse *": "allow",
+      "git branch --show-current": "allow",
+      "git worktree list *": "allow",
+      "git ls-files *": "allow",
+      "git remote -v": "allow",
+      "git tag --list *": "allow",
+      // The macOS sandbox denies process-table access. Keep the permitted ps output shapes fixed,
+      // while allowing agents to terminate a PID now that Ro has explicitly authorized it.
+      "ps -o comm=,lstart= -p *": "allow",
+      "ps -o pid=,ppid=,lstart=,command= -p *": "allow",
+      "ps -axo pid=,ppid=,lstart=,command=": "allow",
+      "lsof -nP -iTCP:* -sTCP:LISTEN -t": "allow",
+      "kill -0 *": "allow",
+      "/bin/kill -0 *": "allow",
+      "kill -TERM *": "allow",
+      "/bin/kill -TERM *": "allow",
+      "kill -KILL *": "allow",
+      "/bin/kill -KILL *": "allow",
+      // Read-only device discovery is automatic. Install, shell, boot, erase, and wipe operations
+      // remain approval boundaries and belong to an explicitly selected native workflow.
+      "adb devices *": "allow",
+      "adb get-state *": "allow",
+      "emulator -list-avds": "allow",
+      "xcrun simctl list *": "allow",
       // Merging runs without a prompt. Which branch lands on main, and when, is still Ro's
       // decision — an agent merges because Ro asked, not on its own initiative. Pushing is the
       // outward-facing step and is deliberately absent from this list.
       "git merge *": "allow",
       // Read-only remote queries, so agents can inspect origin. Pushing stays absent
       // above by design; the sandbox exclusion below is what lets its prompt succeed.
-      "git fetch *": "allow",
-      "git ls-remote *": "allow",
+      "git fetch origin *": "allow",
+      "git ls-remote origin *": "allow",
     },
     "read": {
       // The previous repository is reference material (see AGENTS.md).
@@ -60,17 +106,36 @@
     "sandbox": {
       "enabled": true,
       "excludedCommands": [
-        "docker *",
+        // These commands need host process or native-service access the sandbox cannot express.
+        // Every entry also has a matching allow rule above; the Codex generator derives the
+        // project-local outside-sandbox rules from that intersection.
+        "ps -o comm=,lstart= -p *",
+        "ps -o pid=,ppid=,lstart=,command= -p *",
+        "ps -axo pid=,ppid=,lstart=,command=",
+        "kill -0 *",
+        "/bin/kill -0 *",
+        "kill -TERM *",
+        "/bin/kill -TERM *",
+        "kill -KILL *",
+        "/bin/kill -KILL *",
+        "adb devices *",
+        "adb get-state *",
+        "emulator -list-avds",
+        "xcrun simctl list *",
+        // macOS may abort Chrome before DevTools starts when its process is launched inside the
+        // shell sandbox. Only the repository browser-smoke entrypoints escape; arbitrary Chrome
+        // launches and native Studio remain sandboxed or reviewed.
+        "./dev studio-smoke *",
+        "just studio-smoke *",
+        "just studio-proof-real-app *",
         "gh *",
-        "adb *",
-        "emulator *",
         // Git's github.com credential helper is `gh auth git-credential`, which reads
         // ~/.config/gh — denied below. `gh *` is excluded, but a helper spawned by git
         // inherits git's sandbox, so networked git failed with a misleading
         // "could not read Username for 'https://github.com'". Excluding these fixes fetch,
         // push, and ls-remote while the credential deny still binds every other command.
-        "git fetch *",
-        "git ls-remote *",
+        "git fetch origin *",
+        "git ls-remote origin *",
         "git push *",
         // Removing a worktree writes outside this checkout. It still prompts, which is
         // correct for a command that deletes directories.
