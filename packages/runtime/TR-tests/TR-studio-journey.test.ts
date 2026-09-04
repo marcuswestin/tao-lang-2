@@ -108,6 +108,30 @@ Describe('Studio scenario journey replay', () => {
     Expect(observed).toEqual(['pressDown', 'settled', 'pressUp', 'settled'])
   })
 
+  Test('waits for asynchronous target acquisition before dispatching', async () => {
+    const observed: string[] = []
+    let release: ((target: string) => void) | undefined
+    const pending = new Promise<string>(resolve => {
+      release = resolve
+    })
+    const adapter: TaoJourneyAdapter<string> = {
+      advance: () => {},
+      dispatch(target, event) {
+        observed.push(`${event}:${target}`)
+      },
+      find: () => pending,
+      select: () => 'selected',
+      settle: () => {},
+    }
+
+    const replay = replayTaoJourney([{ kind: 'press', selector: 'tag', target: 'later' }], adapter)
+    await Promise.resolve()
+    Expect(observed).toEqual([])
+    release!('appeared')
+    await replay
+    Expect(observed).toEqual(['press:appeared'])
+  })
+
   Test('scopes nested selected-row interactions and preserves complete input operations', async () => {
     const observed: string[] = []
     const adapter: TaoJourneyAdapter<string> = {

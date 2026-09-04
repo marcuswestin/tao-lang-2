@@ -17,16 +17,45 @@ export type TaoJourneyEvent = 'enter' | 'focus' | 'hover' | 'press' | 'pressDown
 
 export type TaoJourneyEventAdapter<Target> = Readonly<{
   dispatch(target: Target, event: TaoJourneyEvent, value?: string): void | Promise<void>
-  find(selector: TaoJourneySelector, target: string, scope?: Target): Target
+  find(selector: TaoJourneySelector, target: string, scope?: Target): Target | Promise<Target>
 }>
 
 export type TaoJourneyAdapter<Target> =
   & TaoJourneyEventAdapter<Target>
   & Readonly<{
     advance(milliseconds: number): void | Promise<void>
-    select(tag: string, index: number, scope?: Target): Target
+    select(tag: string, index: number, scope?: Target): Target | Promise<Target>
     settle(): void | Promise<void>
   }>
+
+/** A missing interaction target gets this long to appear before its journey step fails. */
+export const taoJourneyTargetTimeoutMs = 1_000
+
+const taoJourneyTargetPollIntervalMs = 16
+
+/** waitForTaoJourneyTarget retries only absence; callers remain responsible for rejecting ambiguity immediately. */
+export async function waitForTaoJourneyTarget<Target>(
+  find: () => Target | undefined,
+  timeoutMs = taoJourneyTargetTimeoutMs,
+): Promise<Target | undefined> {
+  RuntimeAssert.input(
+    Number.isFinite(timeoutMs) && timeoutMs >= 0,
+    'A Tao journey target timeout must be a non-negative number of milliseconds.',
+    { timeoutMs },
+  )
+  const deadline = Date.now() + timeoutMs
+  while (true) {
+    const target = find()
+    if (target !== undefined) {
+      return target
+    }
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) {
+      return undefined
+    }
+    await new Promise<void>(resolve => setTimeout(resolve, Math.min(taoJourneyTargetPollIntervalMs, remaining)))
+  }
+}
 
 export type TaoJourneyReplayGate = Readonly<{
   beginReplay(revision: string): boolean
@@ -100,7 +129,7 @@ export async function replayTaoJourneyStep<Target>(
       'A Tao journey can only select a positive whole-numbered row.',
       { index: step.index, tag: step.tag },
     )
-    await replayTaoJourneySteps(step.steps, adapter, adapter.select(step.tag, step.index, scope))
+    await replayTaoJourneySteps(step.steps, adapter, await adapter.select(step.tag, step.index, scope))
     return
   }
   await replayTaoJourneyEventStep(step, adapter, scope)
@@ -113,11 +142,11 @@ export async function replayTaoJourneyEventStep<Target>(
   scope?: Target,
 ): Promise<void> {
   if (step.kind === 'focus') {
-    await adapter.dispatch(adapter.find('tag', step.tag, scope), 'focus')
+    await adapter.dispatch(await adapter.find('tag', step.tag, scope), 'focus')
     return
   }
   await adapter.dispatch(
-    adapter.find(step.selector, step.target, scope),
+    await adapter.find(step.selector, step.target, scope),
     step.kind,
     step.kind === 'enter' ? step.value : undefined,
   )

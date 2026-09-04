@@ -12,6 +12,8 @@ import {
   type TaoJourneyEvent,
   type TaoJourneySelector,
   type TaoJourneyStep,
+  taoJourneyTargetTimeoutMs,
+  waitForTaoJourneyTarget,
 } from './TR-studio-journey'
 import { TaoStudioProtocolVersions } from './TR-studio-protocol'
 import type { TaoStudioIdentity } from './TR-TaoProps'
@@ -351,6 +353,7 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
 export async function replayStudioJourney(
   steps: readonly TaoJourneyStep[],
   suppliedHost?: StudioPreviewHost,
+  options: Readonly<{ targetTimeoutMs?: number }> = {},
 ): Promise<void> {
   const host = suppliedHost ?? browserPreviewHost()
   if (host === undefined || steps.length === 0) {
@@ -369,17 +372,24 @@ export async function replayStudioJourney(
       dispatch(target, event, value) {
         dispatchJourneyEvent(target, event, value)
       },
-      find(selector, target, scope) {
-        return findJourneyTarget(host, selector, target, scope)
+      async find(selector, target, scope) {
+        return await findJourneyTarget(host, selector, target, scope, options.targetTimeoutMs)
       },
-      select(tag, index, scope) {
-        const matches = findJourneyTargets(host, 'tag', tag, scope)
+      async select(tag, index, scope) {
+        let matchCount = 0
+        const selected = await waitForTaoJourneyTarget(() => {
+          const matches = findJourneyTargets(host, 'tag', tag, scope)
+          matchCount = matches.length
+          return matches[index - 1]
+        }, options.targetTimeoutMs ?? taoJourneyTargetTimeoutMs)
         RuntimeAssert.input(
-          index <= matches.length,
-          `Tao Studio journey expected row ${index} for tag '#${tag}', found ${matches.length}.`,
-          { index, matches: matches.length, tag },
+          selected !== undefined,
+          `Tao Studio journey expected row ${index} for tag '#${tag}', found ${matchCount} after waiting ${
+            options.targetTimeoutMs ?? taoJourneyTargetTimeoutMs
+          }ms.`,
+          { index, matches: matchCount, tag },
         )
-        return matches[index - 1]!
+        return selected
       },
       async settle() {
         await Promise.resolve()
@@ -394,19 +404,28 @@ export async function replayStudioJourney(
   }
 }
 
-function findJourneyTarget(
+async function findJourneyTarget(
   host: StudioPreviewHost,
   selector: TaoJourneySelector,
   target: string,
   scope?: StudioPreviewElement,
-): StudioPreviewElement {
-  const matches = findJourneyTargets(host, selector, target, scope)
+  timeoutMs = taoJourneyTargetTimeoutMs,
+): Promise<StudioPreviewElement> {
+  const match = await waitForTaoJourneyTarget(() => {
+    const matches = findJourneyTargets(host, selector, target, scope)
+    RuntimeAssert.input(
+      matches.length <= 1,
+      `Tao Studio journey expected exactly one ${selector} target '${target}', found ${matches.length}.`,
+      { selector, target },
+    )
+    return matches[0]
+  }, timeoutMs)
   RuntimeAssert.input(
-    matches.length === 1,
-    `Tao Studio journey expected exactly one ${selector} target '${target}', found ${matches.length}.`,
+    match !== undefined,
+    `Tao Studio journey expected exactly one ${selector} target '${target}', found 0 after waiting ${timeoutMs}ms.`,
     { selector, target },
   )
-  return matches[0]!
+  return match
 }
 
 function findJourneyTargets(

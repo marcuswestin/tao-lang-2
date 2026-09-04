@@ -120,6 +120,40 @@ Describe('Studio preview runtime bridge', () => {
     Expect(events).toEqual(['leaf:mouseover', 'leaf:mouseenter'])
   })
 
+  Test('waits for a missing interaction target to appear', async () => {
+    const events: string[] = []
+    const elements: StudioPreviewElement[] = []
+    const fake = previewHost(elements)
+    const replay = replayStudioJourney(
+      [{ kind: 'press', selector: 'tag', target: 'openWorkspace' }],
+      fake.host,
+      { targetTimeoutMs: 100 },
+    )
+    await new Promise<void>(resolve => setTimeout(resolve, 20))
+    elements.push({
+      dispatchEvent: event => {
+        events.push(String((event as { type?: string }).type))
+        return true
+      },
+      getAttribute: name => name === 'data-testid' ? 'openWorkspace' : null,
+      getBoundingClientRect: () => ({ height: 0, left: 0, top: 0, width: 0 }),
+    })
+
+    await replay
+
+    Expect(events).toEqual(['click'])
+  })
+
+  Test('reports the wait budget when an interaction target never appears', async () => {
+    const fake = previewHost([])
+
+    await Expect(replayStudioJourney(
+      [{ kind: 'press', selector: 'tag', target: 'missing' }],
+      fake.host,
+      { targetTimeoutMs: 1 },
+    )).rejects.toThrow("expected exactly one tag target 'missing', found 0 after waiting 1ms")
+  })
+
   Test('maps the held-pointer journey to browser phases in exact order', async () => {
     const observed: string[] = []
     const target: StudioPreviewElement = {
