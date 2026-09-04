@@ -6,10 +6,11 @@ restate rationale. It is written to hand to an implementation agent who has not 
 
 ## Revision — 2026-09-03
 
-**Status.** T1–T5, including T3½, are implemented, absorbed, and green on
-`feat/tao-keyboard-driven-apps-44b3f4`. T6 is explicitly deferred: this checkout has Expo targets
-but no tracked native iOS project or build path on which to implement and validate App Intents, the
-native menu bar, or a hardware-key bridge. T7's repository-wide reconciliation is complete. Two
+**Status.** The T1–T5 core, including T3½, is implemented, absorbed, and green on
+`feat/tao-keyboard-driven-apps-44b3f4`; the ledger at the end of this plan names every decided
+adapter, surface, and extension that remains. T6 is explicitly deferred: this checkout has Expo
+targets but no tracked native iOS project or build path on which to implement and validate App
+Intents, the native menu bar, or a hardware-key bridge. T7's repository-wide reconciliation is complete. Two
 decisions made during T1/T2 were reversed under review the same day and re-implemented; the design
 summary carries the revised text. Read it first; the historical T1/T2 implementation sketches below
 are retained as execution history, not current syntax or architecture.
@@ -342,13 +343,12 @@ all modality-neutral, all testable.
 hide Delete` — `EntityDataDeclarationBlock` in `data.langium`), the view slot `Commands list of
 command is []` and the `hide <commands>` statement — all observable here through `expect verbs`.
 Test steps through the `surface=ID` seam in `tests.langium`: `press key "<shortcut>"`, `narrow
-"<text>"` (KEY-D13 spelled it `type "…"`; `type` is the type-declaration keyword, so `narrow` is
-proposed), `expect target "<label>"`, `expect focus region "<label>"`, `expect verbs "<a>", "<b>"`;
+"<text>"` (`narrow` replaces KEY-D13's colliding `type` spelling), `expect target "<label>"`,
+`expect focus region "<label>"`, `expect verbs "<a>", "<b>"`;
 runner support in `test-runner.tsx` dispatching through the reducer, not synthetic DOM events.
-Condition vocabulary: `focused` (decided) applies to the targeted control; **the region-focus
-condition is `active`** (`when Sidebar is active`), settled by Ro. Note that `pressed`/`focused`/
-`hovered` are decided but not yet in the grammar — `LayoutCondition` is `when subject is value` and
-is validated to `Scheme is Light|Dark` alone — so T4 implements the whole condition family. Validator: duplicate shortcuts within one **static scope** — one `Toolbar`/`Commands`
+Condition vocabulary: `focused` applies to the targeted control; **the region-focus condition is
+`active`** (`when Sidebar is active`). `pressed`/`focused`/`hovered` and named-region `active` parse
+through the identifier-based layout-condition seam and are spelling-validated. Validator: duplicate shortcuts within one **static scope** — one `Toolbar`/`Commands`
 mention list, one entity's `commands` list, or the entity-slot-free set — and a warning on commands
 declaring platform editing chords.
 
@@ -363,8 +363,7 @@ Ro): arrows, Enter, Escape, Tab, Backspace, Space (narrowing word separator), `.
 unshifted hints key** — `/` on a US layout, reserved by physical key (`event.code === 'Slash'`)
 where the platform reports one and by character otherwise, with `?` accepted as the same key
 shifted — Escape with nothing to clear (overview), `primary + K` (palette — Studio's precedent);
-reserved punctuation never narrows. The runtime reserves nothing today: there is no key handling
-anywhere in `TaoRuntime-src`. `TR-interaction-keys.ts`: hardware key dispatch
+reserved punctuation never narrows. `TR-interaction-keys.ts` implements hardware-key dispatch
 beside `usePlatformBack` in `TR-navigation-app-host.ts` — web (`keydown` on the app host root via
 react-native-web's forwarded handler) and the test harness in this tranche; native hardware keys are
 a T6 deliverable. `shortcut` parsing (`primary` → meta/ctrl by platform). **Modality neutrality
@@ -398,9 +397,9 @@ including an entity command hidden by the view makes the exact `expect verbs` jo
 
 ## T5 — Generated surfaces and key allocation
 
-**Status: implemented and absorbed.** WordFlower's Tao journeys prove hints, the overview, the
+**Status: core implemented and absorbed.** WordFlower's Tao journeys prove hints, the overview, the
 target verb layer, and palette narrowing; runtime tests prove deterministic identity-stable key
-allocation and app-relative anchoring.
+allocation and app-relative anchoring. KEY-D13's contextual Help surface remains in the ledger below.
 
 **Goal.** Interaction hints, overview, verb menu, and palette render from the outline; keys for
 regions and items are allocated deterministically.
@@ -506,10 +505,42 @@ reducer, narrowing, surfaces, and the Assistant boundary.
 **Done when** `./agent verify` is green (there is no `words` recipe; `_repo-lint` and `dprint` are the prose gates) and a repository-wide search for
 each retired spelling finds only archived or explicitly historical text.
 
-## Deferred hand-offs
+## QA the landed project
 
-The authoritative list is the design summary's _Deferred and dependencies_. Implementation notes:
-nothing in T1–T5 depends on `link` (titled links become navigation commands and Apple `OpenIntent`
-when the deep-link workstream lands); keyboard reordering reuses the drag-and-drop work's ordered
-"move to position" write as ordinary commands; the loop's rows as the narrowing domain is KEY-D9's
-stage 2 behind the same read surface.
+1. Run `./agent verify` and expect every suite to pass; use `./tao test Apps` for the wider app-only lane.
+2. Run `./tao dev "Apps/WordFlower/1 - Current" --app WordFlower` and create `Home` and `Projects`.
+3. With no input engaged, type `pro`: `Projects` is targeted but does not open until Enter.
+4. Check `?` hints, neutral Escape overview, `.` row verbs, and Cmd/Ctrl+K; `dup doc` finds
+   `Duplicate document`.
+5. In a document, Enter engages the targeted input and Escape disengages without losing the target;
+   invoke one toolbar or verb command and confirm it runs once.
+6. Start a focus session, use Cmd/Ctrl+P, navigate, and relaunch; confirm the bar and session persist.
+7. With keyboard and a screen reader, focus selectable rows and confirm focus moves Tao's target
+   without selecting. Then run `./tao dev "Apps/Test Apps/Navigation" --app NavigationMVPApp` and
+   spot-check Back-only and `Header false`.
+
+## Remaining decided implementation
+
+This is the authoritative implementation ledger for unlanded parts of KEY-D1–D14 as of 2026-09-03.
+Each row stays open until a forcing Tao journey and focused runtime coverage prove it. Performance
+stages beyond these rows land only when measurement justifies them.
+
+| Work                              | Landed boundary                                                                                       | Remaining owner and proof                                                                                                                                                                                   |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pointer and touch parity          | Press, focus, hover, and selectable-row focus intake use semantic operations.                         | Add long-press/right-click → verbs, empty-region click → region focus, and drag target/drop semantics.                                                                                                      |
+| Narrowing presentation            | Mounted items and controls form the candidate set and use the decided matcher.                        | Display the typed query, subdue rather than unmount nonmatches, and cover the visual state.                                                                                                                 |
+| Verb-pending UI                   | The reducer models pending targets, store-search results, and scalar values.                          | Mount the whole-screen chooser, store-backed entity picker, and inline text/duration prompt.                                                                                                                |
+| Contextual Help                   | The outline and bindings contain its source information.                                              | Derive and mount KEY-D13's Help layer with keyboard and accessibility coverage.                                                                                                                             |
+| Virtualized targeting             | Stage one targets mounted nodes only.                                                                 | Extend KEY-D9 to off-window loop rows and scroll the chosen row into view.                                                                                                                                  |
+| No-target movement                | The reducer calls an optional scroll hook when no candidate movement applies.                         | Register scroll-container hosts, map direction to scrolling, and prove the transcript story.                                                                                                                |
+| Multi-target operations           | One target per region is implemented.                                                                 | Settle the representation through story 12, then prove bulk verbs without changing free targeting.                                                                                                          |
+| Ordered movement                  | Keyboard reordering can dispatch ordinary commands.                                                   | `Roadmap.md`'s **Implement a drag-and-drop example app** item owns the ordered `move to position` write and Move up/down commands.                                                                          |
+| Assistant, menus, and native keys | T6's portable catalog and exposure semantics are decided.                                             | T6 owns App Intents and entities, View Annotations, `NSUserActivity`, Spotlight, `OpenIntent`, `as assistant` tests, OS menus, and the native hardware-key bridge after a tracked native build path exists. |
+| Authority and links               | Exposure is allow-listed; in-app interaction is broad by default.                                     | The Authority and navigation/deep-link workstreams own command gating, titled links, and app-graph navigation.                                                                                              |
+| Datasource scoping                | `local only` is implemented through a Local companion datasource.                                     | The remote-datasource work owns broader per-entity datasource selection.                                                                                                                                    |
+| Key allocation overrides          | Deterministic runtime allocation is implemented.                                                      | Define an author override surface when a forcing collision or localization story exists.                                                                                                                    |
+| Additional scene chrome           | `Title`, `Toolbar`, and `Header false` are implemented.                                               | LANG-035 owns additional host-read scene slots.                                                                                                                                                             |
+| Accessibility projection          | Controls expose roles, names, and state; selectable rows also expose focus intake and custom actions. | The Accessible Tao apps plan owns broader screen-reader focus intake, generated labels/structure/announcements, suitable-control custom actions, alternatives, and real-device validation.                  |
+
+Studio command-palette matching is a repository integration follow-up, not a new language decision;
+the Tao Studio v2 ledger owns adoption of KEY-D9's matcher while preserving Studio ranking.

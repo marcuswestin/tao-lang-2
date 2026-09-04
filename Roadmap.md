@@ -81,11 +81,12 @@ tests written in Tao, green in Current, for every construct introduced.
 
 ## Toward v1
 
-- [ ] Make Tao apps accessible by default
+- [ ] Complete interaction and accessibility defaults
   - The implemented interaction-system foundation derives the outline, attention, names, state,
     commands, focus projection, and generated surfaces shared by keyboard and accessibility. The
     first accessibility extension makes native selectable-row focus enter Tao attention without
-    activating selection. Ranked next candidates and their implementation plans live in
+    activating selection. The keyboard plan's **Remaining decided implementation** ledger owns the
+    rest of KEY-D1–D14; ranked accessibility slices live in
     `Docs/Roadmap/Accessible Tao apps/Plan - Accessible Tao apps.md`.
 - [ ] Complete Tao Studio v2
   - The Studio v2 foundations replace Electron with Electrobun, split the browser client, add
@@ -273,6 +274,10 @@ Product and codebase backlog, unordered.
 
 ### Smaller follow-ups
 
+- Parser/validator: remove the last capitalized grammar keywords. Parse restoration's `Restore` and
+  `Exclude` through identifier seams and validate their exact spellings, preserving public source
+  syntax while allowing those names elsewhere. Update restoration fixtures and generated-grammar
+  coverage to complete the keyword rule in `packages/AGENTS.md`.
 - Formatter: keep standalone comments attached to the following top-level declaration when separating with blank lines.
 - Formatter: drop redundant `render` keywords once the language makes `render` optional in view bodies.
 - Compiler: add codegen tracing and source maps when needed.
@@ -289,9 +294,10 @@ Product and codebase backlog, unordered.
 - `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` — the first ship slice as a plan: `tao ship <App>` to TestFlight and an Android APK link over the developer's own EAS and Apple accounts, then `--update`, testers, and one host for dev and ship; its rulings for Ro and the researched lane facts beside it.
 - `Docs/Roadmap/Multiplayer sync.md` — multiplayer-sync exploration with open dialogue: the typed change-set ledger, the granular-write provider family and its conformance contract, offline queue and late-refusal semantics, fieldwise-latest convergence, presence, and the slice sequence.
 - `Docs/Roadmap/Keyboard driven apps/` — the interaction system design (KEY-D1–D14) and
-  implementation record. T1–T5 ship the outline, attention reducer, `scene`, shell view with a
-  rendered nav, configured commands, narrowing, and generated surfaces. The App Intents/native-menu
-  boundary is deferred because this checkout has no native iOS build path.
+  implementation record. The T1–T5 core ships the outline, attention reducer, `scene`, shell view
+  with a rendered nav, configured commands, mounted-node narrowing, and four generated surfaces.
+  Its plan owns the complete remaining-decision ledger, including the adapter and surface tail and
+  the App Intents/native-menu boundary deferred for lack of a native iOS build path.
 - `Docs/Roadmap/Accessible Tao apps/Plan - Accessible Tao apps.md` — the ranked accessibility
   program, mainstream assistive-technology compatibility baseline, research watchlist, and first
   selectable-row focus-intake slice.

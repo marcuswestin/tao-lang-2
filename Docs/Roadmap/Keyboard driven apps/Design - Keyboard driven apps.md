@@ -9,9 +9,10 @@ document in the repository** (Ro, 2026-09-02): a live document that disagrees �
 plan's closing documentation sweep (`Plan - Keyboard driven apps.md`, T7); `Docs/Spec/` follows
 implementation; the archive stays frozen unless Ro asks.
 
-Status: **discovery closed** (KEY-D1–D14); **T1–T5 implemented and absorbed, including T3½**
-(2026-09-03), with T6 deferred for lack of a tracked native build path and T7 complete. Two
-decisions were revised under review — the shell and the command shape, above. Deferred design
+Status: **discovery closed** (KEY-D1–D14); **the T1–T5 core is implemented and absorbed, including
+T3½** (2026-09-03). The implementation plan owns a complete ledger of decided behavior still to
+land around that core. T6 is deferred for lack of a tracked native build path and T7 is complete.
+Two decisions were revised under review — the shell and the command shape, above. Deferred design
 questions: Q14 (authority), Q18 (deep links).
 
 Note on evidence: the codebase investigation ran on 2026-09-01 against a working tree carrying the
@@ -108,9 +109,8 @@ through it.
   conformance. `Palette all` retires — the palette is always present.
 - **Unchanged**: `loop` / `on select` (activation), `Key primary + "n"`, links (deferred: a titled
   link will be a navigation command and an Apple `OpenIntent`).
-- **Test steps**: `press key "…"`, `narrow "…"` (KEY-D13 spelled it `type`, which is the
-  type-declaration keyword — rename proposed in the plan), `expect target "…"`, `expect focus region
-  "…"`, `expect verbs "…"`, through the existing step seam.
+- **Test steps**: `press key "…"` and `narrow "…"` (`narrow` replaces KEY-D13's colliding `type`
+  spelling), with target, focused-region, and verb assertions through the existing step seam.
 
 ### What is derived, never declared
 
@@ -173,11 +173,10 @@ broad by default with explicit exclusions; the OS/agent boundary is allow-listed
 
 ### Deferred and dependencies
 
-Gating (authority workstream). Titled links and app-structure navigation (deep-link workstream).
-Multi-target (story 12). The ordered "move to position" primitive (drag-and-drop example app).
-Per-entity datasource scoping for device-local sessions. Key-allocation overrides. LANG-035 scene
-slots. Apple App Intents codegen (needs the iOS native build path). Desktop and iPadOS menu bar
-(needs a desktop target).
+The implementation plan's **Remaining decided implementation** ledger is authoritative for every
+unlanded part of KEY-D1–D14. It includes authority gating, titled links and app-structure navigation,
+multi-target interaction, ordered movement, broader datasource scoping, key-allocation overrides,
+LANG-035 scene slots, App Intents, native menus and keys, and the adapter and generated-surface tail.
 
 ---
 
@@ -1325,7 +1324,7 @@ should be checked at each decision.
 > projection, and adapter-mediated focus projection (web focus and React Native accessibility focus
 > requests outward; focus enters Tao only where React Native emits it), keyboard-specific =
 > dispatch, hint layers, chords, affordances appearing after the first hardware keypress; test steps
-> `press key`, `type`, `expect target`,
+> `press key`, `narrow`, `expect target`,
 > `expect focus region`, `expect verbs` through the existing step seam, `beginTest` resetting
 > attention. Language contract: scene/view/frame/command semantics, outline node kinds and
 > provenance, attention semantics (targeting is free, engagement, modality neutrality, precedence),
@@ -1412,7 +1411,7 @@ new decision; stories 9, 15, and 16 needed KEY-D14. The findings, gaps only:
   offers the on-screen candidates first and falls back to a **store-backed picker over the entity's
   `(search)` fields** — the same query the Assistant's string resolution uses. This is not
   application search; it is argument resolution for a command the person already chose.
-- **G4 — movement in regions without targets** (story 15: a transcript). Propose: when no candidate
+- **G4 — movement in regions without targets** (story 15: a transcript). Decided (KEY-D14): when no candidate
   movement applies, movement keys scroll the focused region's scroll container. Small addition to
   KEY-D8's transitions.
 - **G5 — keyboard reordering** (stories 12, 16) needs a "move to position" write over `(ordered)`

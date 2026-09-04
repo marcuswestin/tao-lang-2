@@ -629,12 +629,12 @@ Studio-only source identity that lowers a DOM marker stays exactly as gated as b
 The attention reducer is the only owner of interaction state: focused region, remembered target,
 narrowing text, engagement, and modal focus restoration. Targeting is eager but free — a sole
 candidate becomes the target without activating it. Input engagement gives platform text editing
-precedence; Escape disengages while retaining the target. Pointer and keyboard operations dispatch
-the same semantic activation and navigation operations rather than mutating outline mounts.
+precedence; Escape disengages while retaining the target. Implemented pointer press and focus paths
+dispatch the same semantic activation and attention operations rather than mutating outline mounts.
 
 Narrowing is locale-aware, case-insensitive word-prefix subsequence matching across the mounted
-region's items and controls. Nonmatches remain mounted and subdued. A collection item owns its
-inner controls as a descended scope instead of flattening them into the surrounding order.
+region's items and controls. It does not unmount or currently restyle nonmatches. A collection item
+owns its inner controls as a descended scope instead of flattening them into the surrounding order.
 
 Hints, overview, the target's verb layer, and the command palette are generated renderings of the
 outline, attention, command bindings, and catalog. One app-host layer renders them above content as

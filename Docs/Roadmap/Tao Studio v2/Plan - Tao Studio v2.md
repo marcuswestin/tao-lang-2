@@ -96,6 +96,9 @@ validity as unverified when Apple's tools are absent rather than as passed.
 3. When Ro resumes the explicit deferrals, define fixture-through-action result/handle semantics and the
    semantic capture/replay contract before finishing authored failure-capture promotion. Do not infer these
    contracts from the current runtime implementation.
+4. Replace `StudioCommandPalette.filter`'s unordered substring matching with the interaction
+   system's locale-aware, case-insensitive, ordered word-prefix matcher while preserving Studio's
+   label-before-detail ranking. Add focused multiword and ordering tests.
 
 ## Simulated-user lane: editor ownership and the preview origin boundary
 

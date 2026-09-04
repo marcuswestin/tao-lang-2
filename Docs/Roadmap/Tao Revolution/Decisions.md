@@ -946,8 +946,11 @@ command Finish(Document) {                  // a slot is a parameter: a bare nam
   an authored app-ownership construct. At the T2 boundary the authored surfaces and dispatch still
   remained; KEY-D8–D13 below supersede that historical implementation boundary.
 
-**Amended by the keyboard-attention tranche** (implemented; `Docs/Roadmap/Keyboard driven apps/`,
-KEY-D8–D13). The deferred command surfaces and keyboard dispatch above are now implemented.
+**Amended by the keyboard-attention tranche** (`Docs/Roadmap/Keyboard driven apps/`, KEY-D8–D13).
+The core reducer, keyboard dispatch, mounted-node narrowing, verb layer, hints, overview, and palette
+are implemented. The keyboard plan's **Remaining decided implementation** ledger is authoritative
+for the adapter and surface tail; this decision section states the target contract, not that every
+part has landed.
 
 - **Attention is one runtime-owned reducer, not Tao state.** It owns the focused region, one
   remembered target and narrowing string per region, engagement, and the modal stack; modes such as
@@ -971,18 +974,19 @@ KEY-D8–D13). The deferred command surfaces and keyboard dispatch above are now
   commands, rendered inner controls, entity defaults, then other applicable commands. The first verb
   with a given visible label wins, so a verb menu never presents indistinguishable choices. Commands
   with open slots enter a pending flow that fills required slots in declaration order from mounted
-  entity targets, store search, or inline scalar input.
+  entity targets, store search, or inline scalar input. The reducer-side request model has landed;
+  the store picker and scalar-input presentation have not.
 - **Interaction conditions stay ordinary words.** `pressed`, `focused`, and `hovered` are postfix
   conditions; `when FocusBar is active` tests named region focus. These and the new Tao test phrases
   use spelling-validated identifier seams rather than adding reserved grammar keywords.
-- **Generated interaction surfaces are runtime renderings, not authored navigation** (KEY-D13). Hints,
-  overview, the target's verb menu, and the always-present command palette read the interaction
-  outline, attention snapshot, current bindings, and generated catalog. One host renders them above
-  app content as a sibling after toasts; they do not enter Back history, and hidden layers are
-  removed from accessibility traversal. Hints use cached app-relative bounds, overview lists
-  mounted regions, the verb menu preserves the command tiers above, and the palette lists every
+- **Generated interaction surfaces are runtime renderings, not authored navigation** (KEY-D13).
+  Hints, overview, the target's verb menu, the always-present command palette, and contextual Help
+  read the interaction outline, attention snapshot, current bindings, and generated catalog. One
+  host renders them above app content as a sibling after toasts; they do not enter Back history,
+  and hidden layers are removed from accessibility traversal. Hints use cached app-relative bounds,
+  overview lists mounted regions, the verb menu preserves the command tiers above, and the palette lists every
   titled command and entity while applying the same locale-aware word-prefix subsequence matcher as
-  attention.
+  attention. Help remains unimplemented.
 - **Generated keys are deterministic runtime policy** (KEY-D13). Existing identities retain their keys across
   reorders; new identities are considered in canonical identity order and receive the first free
   label-derived letter, then another distinctive label letter, then a two-letter sequence. Reducer

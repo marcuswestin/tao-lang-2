@@ -425,8 +425,8 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 // - Targeting is eager and free: moving or narrowing may commit a target, and one remaining
 //   candidate auto-targets, but only Enter/activation or a verb performs behavior. Candidates are
 //   mounted items and controls in the focused region. Narrowing is case-insensitive, locale-aware
-//   word-prefix subsequence matching over full rendered text; spaces advance to later words;
-//   nonmatches are subdued rather than unmounted
+//   word-prefix subsequence matching over full rendered text; spaces advance to later words.
+//   Narrowing does not unmount or currently restyle nonmatches
 // - Arrows move region/target attention; Enter activates or engages; Escape clears narrowing,
 //   disengages while retaining the target, ascends, or opens overview when nothing remains; Tab
 //   leaves an input for the next control; Backspace edits narrowing; Space separates word prefixes;
@@ -436,10 +436,9 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   reducer key. Platform editing chords win while engaged. Modifier chords invoke directly;
 //   bare single-letter `Key` values are accelerators only in the verb layer. Duplicate shortcuts
 //   in one static Toolbar/Commands/entity/global scope are errors; platform editing chords warn
-// - Pointer and keyboard routes share semantic operations: tap is target plus activate; focusing an
-//   input is focus-region plus target plus engage; right-click/long-press is target plus verbs;
-//   empty-space click focuses the region; hover changes only `hovered`; drag targets then performs
-//   a verb on drop; scroll changes no attention. Platform focus and reducer focus synchronize
+// - Press, focus, and hover enter the same semantic operations as keyboard routes. The remaining
+//   pointer/touch adapters — right-click/long-press verbs, empty-region focus, and drag/drop — stay
+//   in the Plan's decided-implementation ledger. Platform focus and reducer focus synchronize
 // - `pressed`, `focused`, and `hovered` are bare postfix design conditions for a control;
 //   `when FocusBar is active` is the named region-focus form. These existing words parse through
 //   `ID`/layout-word seams and are spelling-validated, not reserved as grammar keywords. `focused`
@@ -454,11 +453,10 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   dispatch reducer operations directly rather than synthetic DOM events. `beginTest` resets
 //   attention. The existing `interaction` capture becomes `{ outline, attention }`; no duplicate
 //   capture domain is registered
-// - A command with open slots enters verb-pending. Entity slots target across the mounted screen
-//   first, then a `(search)` store picker; text and duration slots use inline input; required slots
-//   are filled in declaration order. Descending reaches an item's inner controls, Escape ascends,
-//   an unmounted/collapsed region re-aims to primary content, modal regions trap and restore focus,
-//   and movement with no target scrolls the focused region
+// - A command with open slots enters reducer-owned verb-pending state. The mounted chooser,
+//   `(search)` store picker, scalar input, directional scroll fallback, and off-window loop-row
+//   targeting stay in the Plan's decided-implementation ledger. Descending reaches an item's inner
+//   controls; Escape ascends; re-aim and modal focus-stack behavior are implemented
 //
 // THE INTERACTION SYSTEM, PART FOUR: GENERATED SURFACES AND KEY ALLOCATION. This tranche renders
 // the semantic outline and attention state as the affordances a person can actually see. It adds
