@@ -799,7 +799,10 @@ async function runHutchCommand(
   const result = await runner(hutchPath, {
     args,
     cwd: projectRoot,
-    stdio: 'stream',
+    // Hutch can leave its engine holding captured output pipes after a finite
+    // command reports completion. Attach its output to the terminal so the
+    // wrapper observes the command exit instead of waiting forever for EOF.
+    stdio: ['ignore', 'inherit', 'inherit'],
   })
   if (result.error !== undefined || result.exitCode !== 0) {
     throw new Errors.CommandExecutionError(result)
