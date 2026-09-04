@@ -1,4 +1,5 @@
 project {
    id "time"
    name "Time"
+   version "0.1.0"
 }

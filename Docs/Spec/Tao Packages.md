@@ -1,7 +1,7 @@
 # Tao Project and Packages
 
 Status: partially implemented design draft. The current implementation supports local
-`project { id "..." name "..." remote none license ... }` metadata, `tao create` and project-ID
+`project { id "..." name "..." version "..." remote none license ... }` metadata, `tao create` and project-ID
 migration, `file`/`package`/`workspace`/`public`
 declaration visibility, `use ... from ...` imports for relative Tao source paths and `@tao/...`
 stdlib paths, bare same-package `use Foo`, local `@package[/subfolder]` imports through an in-memory
@@ -61,6 +61,7 @@ use Col, FormButton, Text from @tao/ui
 project {
    id "chat"
    name "Chat"
+   version "0.1.0"
    remote none
    license MIT
 }

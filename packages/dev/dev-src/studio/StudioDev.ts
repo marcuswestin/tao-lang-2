@@ -20,6 +20,7 @@ import {
 import betterOpen from 'better-opn'
 import { ExpoRunner } from '../expo-dev-loop/expo-runner/ExpoRunner'
 import { detectLanIPv4 } from '../expo-dev-loop/expo-runner/lan-host'
+import { readDecryptedSecrets } from '../secrets/SecretsFile'
 import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
 import { StudioCompanionIdentity } from './StudioCompanionIdentity'
 import { createStudioDeviceLauncher } from './StudioDeviceLaunch'
@@ -57,6 +58,7 @@ export const StudioDev = {
     completeNativeProbe,
     createProjectOpeners,
     preferredExpoPort,
+    publishPreviewBeforeBundling,
     withCleanup,
   },
 }
@@ -168,7 +170,14 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     const initial = manager.add(initialResource)
     HCI.logProcessInfo('studio', `Project: ${initial.project}`)
     studioClientReload = options.native ? undefined : await startStudioClientDevReload()
+    // Read here rather than exported into the environment: everything Studio starts inherits an environment,
+    // and only the chat needs these. `--native` takes the same path, which is why it was missing them too.
+    const agentSecrets = await readDecryptedSecrets()
+    if (agentSecrets['ANTHROPIC_API_KEY'] === undefined && process.env['ANTHROPIC_API_KEY'] === undefined) {
+      HCI.logProcessInfo('studio', 'Agent chat: no ANTHROPIC_API_KEY; run `just secrets` to decrypt one.')
+    }
     server = await startStudioSessionServer(manager, {
+      agentSecrets,
       clientAssets: studioClientReload?.clientAssets,
       clientReloadRevision: studioClientReload?.revision,
       compileOnStart: false,
@@ -357,6 +366,38 @@ function preferredExpoPort(): number {
   return 0
 }
 
+/**
+ * publishPreviewBeforeBundling compiles the first preview revision into the runtime directory and
+ * only then starts the bundler over it.
+ *
+ * The bundler's file map is one crawl taken while it boots plus a file-watcher subscription opened
+ * once that crawl has been processed. A file created between the two belongs to neither: the crawl
+ * predates it, and the subscription starts from a later clock, so the bundler denies the module
+ * exists for the rest of the process. That is exactly what the generated app was when it was
+ * compiled after the bundler started, which is how a preview could stay blank for a whole session
+ * while the project itself compiled cleanly and reported no problems.
+ *
+ * Publishing first removes the window instead of racing it: the crawl sees a populated tree, and
+ * every later revision is an ordinary edit arriving through a subscription opened long before.
+ * Nothing here needs the bundler, so the order costs no startup time; both steps were already
+ * serial.
+ */
+async function publishPreviewBeforeBundling(steps: {
+  compilePreview: () => Promise<unknown>
+  isStopping: () => boolean
+  startBundler: () => Promise<void>
+  waitForBundler: () => Promise<boolean>
+}): Promise<void> {
+  await steps.compilePreview()
+  if (steps.isStopping()) {
+    throw new Errors.UserInputError('Studio project opening was cancelled.')
+  }
+  await steps.startBundler()
+  if (!await steps.waitForBundler()) {
+    throw new Errors.UserInputError('Studio project opening was cancelled.')
+  }
+}
+
 export async function openStudioProjectResource(
   request: StudioProjectOpenRequest,
   options: {
@@ -415,15 +456,14 @@ export async function openStudioProjectResource(
       validationMode: options.validationMode,
     })
     watcher = await startStudioFileWatcher(preview.session)
-    await expoServer.start()
-    if (!await expo.waitForMetro(options.isStopping)) {
-      throw new Errors.UserInputError('Studio project opening was cancelled.')
-    }
-    await preview.session.compileInitial()
-    if (options.isStopping()) {
-      throw new Errors.UserInputError('Studio project opening was cancelled.')
-    }
     const session = preview.session
+    const bundler = expoServer
+    await publishPreviewBeforeBundling({
+      compilePreview: () => session.compileInitial(),
+      isStopping: options.isStopping,
+      startBundler: () => bundler.start(),
+      waitForBundler: () => expo.waitForMetro(options.isStopping),
+    })
     return withCleanup({
       session,
       tests,

@@ -480,6 +480,12 @@ button { color: inherit; font: inherit; }
 .studio-editor .cm-scroller { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .studio-preview { background: #fff; border-left: 1px solid #353936; min-height: 0; position: relative; }
 .studio-preview iframe { border: 0; display: block; height: 100%; width: 100%; }
+.studio-preview-notice {
+  background: #3a1f1f; border-top: 2px solid #d4736b; bottom: 0; color: #f6e3e1; display: grid; gap: 4px;
+  left: 0; padding: 10px 14px; position: absolute; right: 0; z-index: 4;
+}
+.studio-preview-notice strong { font-size: 12px; }
+.studio-preview-notice small { color: #e8c4c0; font-family: ui-monospace, Menlo, monospace; font-size: 11px; }
 .studio-preview-grid {
   align-content: start; background: #101210; display: grid; gap: 18px; height: 100%; min-width: 0;
   overflow-x: hidden; overflow-y: auto; padding: 16px;

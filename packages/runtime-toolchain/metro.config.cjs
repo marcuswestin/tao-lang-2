@@ -11,6 +11,18 @@ const runtimeToolchainNodeModules = nodeFs.realpathSync(nodePath.resolve(__dirna
 const runtimeSourceRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', 'runtime', 'TaoRuntime-src')
 const sharedCoreSourceRoot = nodePath.resolve(runtimeToolchainSourceRoot, '..', 'shared', 'shared-src', 'core')
 
+// A Studio session bundles from a fresh, disposable copy of this project, which Metro keys its file
+// map by: no later session can ever read that map back. Left in the OS temp directory it is a couple
+// of megabytes per session that nothing removes, and hundreds of megabytes describing directories
+// deleted long ago accumulate unseen. Keeping it inside the project root ties its lifetime to the
+// root's, so removing the session's runtime directory takes the map with it. The toolchain package
+// itself is a stable project whose map is reused across runs, and keeps Metro's shared default.
+if (nodePath.resolve(runtimeToolchainSourceRoot) !== __dirname) {
+  config.fileMapCacheDirectory = nodePath.resolve(__dirname, '.metro-file-map')
+  // Metro writes the map without creating its directory, and only warns when the write fails.
+  nodeFs.mkdirSync(config.fileMapCacheDirectory, { recursive: true })
+}
+
 // Worktrunk worktrees reuse the primary checkout's install through a root node_modules symlink.
 // Watching and searching the physical root makes Bun's package targets visible to Metro's file map,
 // so its own resolver can preserve platform-specific package semantics.

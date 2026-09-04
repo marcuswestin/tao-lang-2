@@ -1,4 +1,4 @@
-import { AST, Langium } from '@parser'
+import { AST, Langium, type ParseResult } from '@parser'
 import { Assert, Diagnostics, Errors, FS, Repo, TaoFiles } from '@shared'
 import SourceActions, {
   type StudioComponentKind,
@@ -415,6 +415,93 @@ export class StudioProjectSession {
 
   identity(): StudioProjectIdentity {
     return { appName: this.appName, project: this.projectRoot }
+  }
+
+  /**
+   * One entry per applied agent change, most recent last. A chat applies several changes in a conversation,
+   * and a single slot would make every change but the last one unrecoverable while still offering "undo".
+   */
+  #agentUndoStack: { path: string; content: string; sourceVersion: string }[][] = []
+
+  /**
+   * applyAgentPocFiles (semantic agent PoC) writes several files as one mutation, compiles once, and rolls every
+   * file back when the compile fails. It keeps one undo record outside the source-action checkpoint bus.
+   */
+  applyAgentPocFiles(
+    request: {
+      edits: readonly { path: string; content: string }[]
+      writeId: string
+      /**
+       * The versions the change was computed against. An agent reads a file, plans an edit, and a person
+       * approves it some time later; without this, a change made in between is silently overwritten by
+       * content that never saw it.
+       */
+      expect?: readonly { path: string; sourceVersion: string }[]
+    },
+  ): Promise<{
+    compile: StudioCompileCompletion
+    rolledBack: boolean
+  }> {
+    return this.#mutate(async () => {
+      const before = await Promise.all(request.edits.map(async edit => {
+        const current = await this.readFile(edit.path)
+        return { content: current.content, path: current.path, sourceVersion: current.sourceVersion }
+      }))
+      for (const expected of request.expect ?? []) {
+        const current = before.find(file => file.path === expected.path)
+        const version = current?.sourceVersion ?? (await this.readFile(expected.path)).sourceVersion
+        if (version !== expected.sourceVersion) {
+          throw new StudioSourceConflictError(expected.path, expected.sourceVersion, version)
+        }
+      }
+      const writes = await Promise.all(request.edits.map(async edit => ({
+        path: await this.#resolveTaoFile(edit.path),
+        sourceVersion: SourceActions.studioSourceVersion(edit.content),
+        writeId: request.writeId,
+      })))
+      await Promise.all(request.edits.map(async (edit, index) => FS.writeText(writes[index]!.path, edit.content)))
+      const compile = await this.#coordinator.noteStudioFileMutation(writes)
+      if (compile.status === 'error') {
+        await Promise.all(before.map(async file => FS.writeText(await this.#resolveTaoFile(file.path), file.content)))
+        await this.#coordinator.noteStudioFileMutation(before.map(file => ({
+          path: FS.resolvePath(file.path, this.projectRoot),
+          sourceVersion: file.sourceVersion,
+          writeId: `rollback:${request.writeId}`,
+        })))
+        for (const file of before) {
+          this.#emitFile(this.#projectFile(file.path, file.sourceVersion))
+        }
+        return { compile, rolledBack: true }
+      }
+      this.#agentUndoStack.push(before)
+      for (const [index, write] of writes.entries()) {
+        this.#emitFile(this.#projectFile(before[index]!.path, write.sourceVersion))
+      }
+      return { compile, rolledBack: false }
+    })
+  }
+
+  undoAgentPocFiles(writeId: string): Promise<{ compile: StudioCompileCompletion; restored: string[] }> {
+    return this.#mutate(async () => {
+      const before = this.#agentUndoStack[this.#agentUndoStack.length - 1]
+      Assert.input(before !== undefined, 'Nothing applied by the agent to undo.')
+      await Promise.all(before.map(async file => FS.writeText(await this.#resolveTaoFile(file.path), file.content)))
+      const compile = await this.#coordinator.noteStudioFileMutation(before.map(file => ({
+        path: FS.resolvePath(file.path, this.projectRoot),
+        sourceVersion: file.sourceVersion,
+        writeId,
+      })))
+      this.#agentUndoStack.pop()
+      for (const file of before) {
+        this.#emitFile(this.#projectFile(file.path, file.sourceVersion))
+      }
+      return { compile, restored: before.map(file => file.path) }
+    })
+  }
+
+  /** agentPocParse (semantic agent PoC) parses the selected app entry with linked cross-references. */
+  agentPocParse(): Promise<ParseResult> {
+    return this.#workspace.parse(this.entryPath)
   }
 
   compileSnapshot(): StudioCompileSnapshot {
@@ -1531,6 +1618,21 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
       kind: action.kind,
       scenarioGroupName: action['scenarioGroupName'],
       scenarioName: action['scenarioName'],
+    }
+  }
+  if (
+    action.kind === 'set-design-entry'
+    && typeof action['designName'] === 'string'
+    && typeof action['memberName'] === 'string'
+    && Array.isArray(action['entry'])
+    && action['entry'].length > 0
+    && action['entry'].every(value => typeof value === 'string' || typeof value === 'number')
+  ) {
+    return {
+      designName: action['designName'],
+      entry: action['entry'] as unknown as StudioStyleEntry,
+      kind: action.kind,
+      memberName: action['memberName'],
     }
   }
   Errors.throwUserInput(`Unsupported or invalid Studio source action: ${action.kind}`)

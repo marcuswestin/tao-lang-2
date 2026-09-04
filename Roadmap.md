@@ -97,6 +97,11 @@ tests written in Tao, green in Current, for every construct introduced.
     build, limited for internal preview builds, and rejected as an unrestricted production-code path.
     No native transport is implemented and a real-iPhone spike remains required. Exploration:
     `Docs/Roadmap/Tao Studio v1/Exploration - Native device as Studio canvas.md`.
+  - A `./dev studio` session reloads its browser client but not its server, so a page can be rebuilt from
+    sources the running server has not loaded and then call an endpoint that does not exist yet. The rebuild
+    now says so, but the split remains, and `--native` reloads nothing at all. What a real one has to preserve
+    -- the preview runtime, the session, and one revision both halves agree on -- is in
+    `Docs/Roadmap/Tao Studio v2/Exploration - Studio server hot reload.md`.
 - [ ] Make `just full-verify` pass its simulated-user lane
   - The lane was unreachable until the old `_full-verify-studio` recipe was repaired, so its browser
     assertions had never run once. Five defects behind them are fixed. The one left is that
