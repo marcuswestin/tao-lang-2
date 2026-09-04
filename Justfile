@@ -18,6 +18,10 @@ help:
 # Setup dependencies and generated agent adapters
 setup: deps _agent-config
 
+# Decrypt the repository secrets into .env.secrets; `add <KEY>`, `list`, or `setup` to manage them
+secrets *ARGS:
+    ./dev secrets {{ ARGS }}
+
 # Launch Claude Code with the Bash sandbox off; switch a running session with /sandbox
 claude-unsandboxed *ARGS:
     claude --settings "{{ justfile_directory() }}/.claude/settings.unsandboxed.json" {{ ARGS }}

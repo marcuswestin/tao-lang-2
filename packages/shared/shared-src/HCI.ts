@@ -271,6 +271,42 @@ export function startRawKeys(onKey: (key: string) => void, options: RawKeyOption
 }
 
 /**
+ * askSecret reads one line without echoing it, for a value that must not be left on screen or in scrollback.
+ * A pasted secret arrives as ordinary characters, so this reads keys rather than a line and stops at Return.
+ *
+ * It refuses rather than falls back when there is no terminal: a silent read from a pipe would take whatever
+ * arrived next as a secret, and a caller cannot tell that from a person typing one.
+ */
+export async function askSecret(options: TextPromptOptions): Promise<string> {
+  if (!isInteractive(options)) {
+    throw new UserInputError(`${options.message} needs a terminal, because the value is never echoed.`)
+  }
+  writeOutput(options, `${options.message} `)
+  const value = await withRawKeys(async readKey => {
+    let typed = ''
+    while (true) {
+      const key = await readKey()
+      if (key === RawKey.interrupt) {
+        throw new UserInputError('\nCancelled; nothing was stored.')
+      }
+      if (key === '\r' || key === '\n') {
+        return typed
+      }
+      // Backspace and delete, so a mistyped value can be corrected without seeing it.
+      if (key === '\u007f' || key === '\b') {
+        typed = typed.slice(0, -1)
+        continue
+      }
+      if (key >= ' ') {
+        typed += key
+      }
+    }
+  }, options)
+  writeOutput(options, '\n')
+  return value
+}
+
+/**
  * withRawKeys runs `run` with a reader for one keypress at a time, then restores the terminal. Keys
  * typed between reads are queued rather than dropped, so a fast typist loses no keypress.
  */

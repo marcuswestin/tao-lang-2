@@ -86,6 +86,21 @@ await runWithCommands(commands => {
     })
 
   commands
+    .command('secrets')
+    .description('Decrypt the repository secrets into .env.secrets, or add, list, or set up.')
+    .argument('[action]', 'add <KEY> [note], list, or setup. Omit to decrypt everything.')
+    .argument('[rest...]', 'Arguments for the action.')
+    .action(async (action: string | undefined, rest: string[] = []) => {
+      const { runSecrets } = await import('./secrets/SecretsCommand')
+      try {
+        Platform.runtimeProcess.exit(await runSecrets(action === undefined ? [] : [action, ...rest]))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.exit(1)
+      }
+    })
+
+  commands
     .command('agent-config')
     .description('Generate harness agent adapters and permission config from .rulesync.')
     .action(async () => {
