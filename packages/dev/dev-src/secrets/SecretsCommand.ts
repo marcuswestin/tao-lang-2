@@ -233,7 +233,7 @@ export async function setupSecrets(): Promise<number> {
   if (!existed) {
     await FS.mkdir(FS.dirname(identity))
     const created = await CLI.run('age-plugin-se', {
-      args: ['keygen', '--access-control', 'any-biometry', '--output', identity],
+      args: ['keygen', '--access-control', 'any-biometry-or-passcode', '--output', identity],
     })
     if (created.exitCode !== 0) {
       Errors.throwHostEnvironment(

@@ -348,12 +348,20 @@ class AgentChatConversation {
 
 const conversations = new WeakMap<StudioProjectSession, AgentChatConversation>()
 
-function conversationFor(session: StudioProjectSession): AgentChatConversation {
+function conversationFor(
+  session: StudioProjectSession,
+  secrets?: Readonly<Record<string, string>>,
+): AgentChatConversation {
   const existing = conversations.get(session)
   if (existing !== undefined) {
     return existing
   }
-  const created = new AgentChatConversation(session, new AgentChatProvider())
+  // The decrypted secrets are read here rather than from the process environment, so a key reaches the chat
+  // without reaching the bundler, the preview runtime, or anything else Studio starts.
+  const created = new AgentChatConversation(
+    session,
+    new AgentChatProvider(secrets === undefined ? process.env : { ...process.env, ...secrets }),
+  )
   conversations.set(session, created)
   return created
 }
@@ -378,8 +386,9 @@ export function streamTurn(
   command: string,
   body: Json,
   tests?: StudioTestRunner,
+  secrets?: Readonly<Record<string, string>>,
 ): ReadableStream<Uint8Array> {
-  const conversation = conversationFor(session)
+  const conversation = conversationFor(session, secrets)
   conversation.useTestRunner(tests)
   const encoder = new TextEncoder()
   return new ReadableStream<Uint8Array>({
@@ -421,8 +430,9 @@ export const AgentChat = {
     command: string,
     body: Json,
     tests?: StudioTestRunner,
+    secrets?: Readonly<Record<string, string>>,
   ): Promise<unknown> {
-    const conversation = conversationFor(session)
+    const conversation = conversationFor(session, secrets)
     conversation.useTestRunner(tests)
     if (command === 'availability') {
       return conversation.provider.availability()

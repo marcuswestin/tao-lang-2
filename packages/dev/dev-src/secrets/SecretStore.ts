@@ -84,26 +84,24 @@ export function parseStore(text: string): SecretStore {
   return { recipients, secrets }
 }
 
-/** formatStore writes the store back with its keys sorted, so an added secret is a clean insertion. */
+/**
+ * formatStore writes the store back with its keys sorted, so an added secret is a clean insertion.
+ *
+ * The body is ordinary two-space JSON because dprint formats this file too, and a formatter of our own with
+ * different taste would rewrite the file on every `add` and dprint would rewrite it back.
+ */
 export function formatStore(store: SecretStore): string {
-  const names = Object.keys(store.secrets).sort()
-  const entries = names.map(name => {
+  const ordered: Record<string, SecretEntry> = {}
+  for (const name of Object.keys(store.secrets).sort()) {
     const entry = store.secrets[name]!
-    const fields = [
-      `      "addedAt": ${JSON.stringify(entry.addedAt)}`,
-      ...(entry.note === undefined ? [] : [`      "note": ${JSON.stringify(entry.note)}`]),
-      ...(entry.updatedAt === undefined ? [] : [`      "updatedAt": ${JSON.stringify(entry.updatedAt)}`]),
-      `      "value": [\n${entry.value.map(line => `         ${JSON.stringify(line)}`).join(',\n')}\n      ]`,
-    ]
-    return `    ${JSON.stringify(name)}: {\n${fields.join(',\n')}\n    }`
-  })
-  return `${HEADER}{
-   "recipients": [
-${store.recipients.map(recipient => `      ${JSON.stringify(recipient)}`).join(',\n')}
-   ],
-   "secrets": ${entries.length === 0 ? '{}' : `{\n${entries.join(',\n')}\n   }`}
-}
-`
+    ordered[name] = {
+      addedAt: entry.addedAt,
+      ...(entry.note === undefined ? {} : { note: entry.note }),
+      ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
+      value: entry.value,
+    }
+  }
+  return `${HEADER}${JSON.stringify({ recipients: store.recipients, secrets: ordered }, undefined, 2)}\n`
 }
 
 /** withSecret returns a store with one secret added or replaced, keeping the date it was first added. */

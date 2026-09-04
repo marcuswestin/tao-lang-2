@@ -31,6 +31,11 @@ import type { StudioTestRunner } from './StudioTestRunner'
 import { StudioWelcome } from './StudioWelcome'
 
 export type StudioServerOptions = {
+  /**
+   * Secrets the agent chat may use, handed over as a value rather than exported into the environment. Studio
+   * spawns a bundler, a preview runtime and a Swift helper, and every one of them inherits an environment.
+   */
+  agentSecrets?: Readonly<Record<string, string>>
   allowedOrigins?: readonly string[]
   clientAssets?: StudioClientAssetProvider
   clientReloadRevision?: () => number
@@ -535,6 +540,7 @@ async function handleRequest(
         url.pathname.slice('/api/agent-chat/stream/'.length),
         (await request.json()) as Record<string, unknown>,
         tests,
+        options.agentSecrets,
       ),
     )
   }
@@ -548,6 +554,7 @@ async function handleRequest(
         url.pathname.slice('/api/agent-chat/'.length),
         (await request.json()) as Record<string, unknown>,
         tests,
+        options.agentSecrets,
       ),
     )
   }

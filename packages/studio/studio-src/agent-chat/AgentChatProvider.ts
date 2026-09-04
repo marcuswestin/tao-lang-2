@@ -66,7 +66,7 @@ export class AgentChatProvider {
         }
         : {
           reason:
-            `No ${KEY_VARIABLE} is set in the environment Studio was launched with, so no hosted model can be reached.`,
+            `No ${KEY_VARIABLE} is available. Run \`just secrets\` to decrypt it, then restart Studio; or launch Studio with it set in the environment.`,
         }),
     }
   }

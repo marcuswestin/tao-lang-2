@@ -17,6 +17,7 @@ import {
 } from '@studio'
 import betterOpen from 'better-opn'
 import { ExpoRunner } from '../expo-dev-loop/expo-runner/ExpoRunner'
+import { readDecryptedSecrets } from '../secrets/SecretsFile'
 import { type StartedStudioClientDevReload, startStudioClientDevReload } from './StudioClientDevReload'
 import { describeOwnProcess, openLaunchRecord, type StudioLaunchRecord } from './StudioLaunchManifest'
 import { createStudioLifecycleLog, type StudioLifecycleLog } from './StudioLifecycleLog'
@@ -132,7 +133,14 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     const initial = manager.add(initialResource)
     HCI.logProcessInfo('studio', `Project: ${initial.project}`)
     studioClientReload = options.native ? undefined : await startStudioClientDevReload()
+    // Read here rather than exported into the environment: everything Studio starts inherits an environment,
+    // and only the chat needs these. `--native` takes the same path, which is why it was missing them too.
+    const agentSecrets = await readDecryptedSecrets()
+    if (agentSecrets['ANTHROPIC_API_KEY'] === undefined && process.env['ANTHROPIC_API_KEY'] === undefined) {
+      HCI.logProcessInfo('studio', 'Agent chat: no ANTHROPIC_API_KEY; run `just secrets` to decrypt one.')
+    }
     server = await startStudioSessionServer(manager, {
+      agentSecrets,
       clientAssets: studioClientReload?.clientAssets,
       clientReloadRevision: studioClientReload?.revision,
       compileOnStart: false,
