@@ -31,12 +31,27 @@ export type SecretsEnvironment = {
   now: () => Date
 }
 
-/** liveEnvironment is what the command uses outside a test: real `age`, a real terminal, a real clock. */
+/**
+ * liveEnvironment is what the command uses outside a test: real `age`, a real terminal, a real clock.
+ *
+ * Surrounding whitespace is questioned rather than silently removed. A copied credential often carries a
+ * trailing newline that means nothing, but some secrets genuinely end in space, and a tool that quietly
+ * trimmed one would produce a value that fails authentication with nothing on screen to explain it.
+ */
 export function liveEnvironment(): SecretsEnvironment {
   return {
     cipher: ageCipher(),
     now: () => new Date(),
-    promptSecret: async label => await HCI.askSecret({ message: label }),
+    promptSecret: async label => {
+      const entered = await HCI.askSecret({ message: label })
+      const surrounding = HCI.describeSurroundingWhitespace(entered.value)
+      if (surrounding === undefined) {
+        return entered.value
+      }
+      HCI.writeLine(`What you ${entered.wasPasted ? 'pasted' : 'typed'} has ${surrounding}.`)
+      const trim = await HCI.askConfirm({ defaultValue: true, message: 'Remove it before storing?' })
+      return trim ? entered.value.trim() : entered.value
+    },
   }
 }
 
@@ -64,6 +79,33 @@ export async function runSecrets(args: readonly string[], environment = liveEnvi
 
 function identityFile(): string {
   return FS.resolvePath(IDENTITY_PATH.replace('~', process.env['HOME'] ?? '~'))
+}
+
+/** homePath shows a path under the home directory as `~/...`; the repository-relative form is nonsense here. */
+function homePath(path: string): string {
+  const home = process.env['HOME']
+  return home !== undefined && path.startsWith(home) ? `~${path.slice(home.length)}` : path
+}
+
+/**
+ * recipientOf reads the public key age-plugin-se records in the identity file's comments. Asking the plugin
+ * for it instead would reach into the Secure Enclave and prompt for a fingerprint, which is a strange thing
+ * to ask during setup for a value that is not secret.
+ */
+async function recipientOf(identity: string): Promise<string> {
+  const comment = /^#\s*public key:\s*(\S+)\s*$/m.exec(await FS.readText(identity))
+  if (comment !== null) {
+    return comment[1]!
+  }
+  const derived = await CLI.run('age-plugin-se', { args: ['recipients', '--input', identity] })
+  if (derived.exitCode !== 0 || derived.stdout.trim() === '') {
+    Errors.throwHostEnvironment(
+      `Could not read the recipient from ${homePath(identity)}: ${
+        derived.stderr.trim() || `exit code ${derived.exitCode ?? 'unknown'}`
+      }`,
+    )
+  }
+  return derived.stdout.trim()
 }
 
 /** ageCipher shells out to `age`; the Secure Enclave plugin is what turns decryption into a Touch ID prompt. */
@@ -132,7 +174,7 @@ export async function decryptSecrets(environment: SecretsEnvironment): Promise<n
   }
   const path = Repo.resolvePath(ENV_PATH)
   await FS.writeText(path, renderEnvFile(values, { generatedAt: environment.now() }))
-  HCI.writeSuccess(`Wrote ${values.size} ${values.size === 1 ? 'secret' : 'secrets'} to ${ENV_PATH}.`)
+  HCI.writeSuccess(`Wrote ${values.size} ${values.size === 1 ? 'secret' : 'secrets'} to ${ENV_PATH}.\n`)
   HCI.writeLine(`Anything you maintain by hand belongs in ${LOCAL_PATH}, which this never writes.`)
   return 0
 }
@@ -141,14 +183,21 @@ export async function decryptSecrets(environment: SecretsEnvironment): Promise<n
 export async function addSecret(name: string, environment: SecretsEnvironment, note?: string): Promise<number> {
   const key = requireSecretName(name)
   const store = await readStore()
-  const secret = await environment.promptSecret(`Paste the value for ${key} (input is hidden):`)
+  // Everything that can refuse this is checked before a secret is asked for. Asking someone to paste a
+  // credential and only then saying it cannot be stored wastes the one action that has to be deliberate.
+  if (store.recipients.length === 0) {
+    Errors.throwUserInput(
+      'The secret store lists no recipients, so nothing could read what you pasted. Run `just secrets setup` first.',
+    )
+  }
+  const secret = await environment.promptSecret(`Paste the value for ${key} (hidden; a paste submits itself):`)
   if (secret.trim() === '') {
     Errors.throwUserInput('No value was entered, so nothing was stored.')
   }
   const armor = await environment.cipher.encrypt(secret, store.recipients)
   await writeStore(withSecret(store, key, armor, { now: environment.now(), ...(note === undefined ? {} : { note }) }))
   const replaced = store.secrets[key] !== undefined
-  HCI.writeSuccess(`${replaced ? 'Replaced' : 'Added'} ${key} in ${STORE_PATH}.`)
+  HCI.writeSuccess(`${replaced ? 'Replaced' : 'Added'} ${key} in ${STORE_PATH}.\n`)
   HCI.writeLine(`Run \`just secrets\` to write it into ${ENV_PATH}.`)
   return 0
 }
@@ -180,34 +229,42 @@ export async function listSecrets(): Promise<number> {
  */
 export async function setupSecrets(): Promise<number> {
   const identity = identityFile()
-  if (await FS.exists(identity)) {
-    HCI.writeLine(`This machine already has a secrets identity at ${FS.displayPath(identity)}.`)
+  const existed = await FS.exists(identity)
+  if (!existed) {
+    await FS.mkdir(FS.dirname(identity))
+    const created = await CLI.run('age-plugin-se', {
+      args: ['keygen', '--access-control', 'any-biometry', '--output', identity],
+    })
+    if (created.exitCode !== 0) {
+      Errors.throwHostEnvironment(
+        `Could not create a Secure Enclave identity: ${
+          created.stderr.trim() || `exit code ${created.exitCode ?? 'unknown'}`
+        }`,
+      )
+    }
+  }
+  // Every run ends with the recipient recorded, whether or not this run created the identity. Stopping early
+  // on an existing identity left a machine whose key worked and whose store listed no one to encrypt to, and
+  // no command that would fix it.
+  const recipient = await recipientOf(identity)
+  const store = await readStore()
+  if (store.recipients.includes(recipient)) {
+    HCI.writeLine(`This machine can already read the repository's secrets. Identity: ${homePath(identity)}`)
     return 0
   }
-  await FS.mkdir(FS.dirname(identity))
-  const created = await CLI.run('age-plugin-se', {
-    args: ['keygen', '--access-control', 'any-biometry', '--output', identity],
-  })
-  if (created.exitCode !== 0) {
-    Errors.throwHostEnvironment(
-      `Could not create a Secure Enclave identity: ${
-        created.stderr.trim() || `exit code ${created.exitCode ?? 'unknown'}`
-      }`,
+  await writeStore({ ...store, recipients: [...store.recipients, recipient] })
+  HCI.writeSuccess(
+    existed
+      ? `Recorded this machine's existing identity as a recipient.\n`
+      : `This machine can now read the repository's secrets. Its key stays in the Secure Enclave.\n`,
+  )
+  HCI.writeLine(`Recipient added to ${STORE_PATH}; commit that so this machine keeps access.`)
+  if (Object.keys(store.secrets).length > 0) {
+    HCI.writeLine(
+      `The ${
+        Object.keys(store.secrets).length
+      } secret(s) already stored were encrypted without this machine. Someone who can read them must run \`just secrets add\` again for each.`,
     )
   }
-  const recipient = await CLI.run('age-plugin-se', { args: ['recipient', '--input', identity] })
-  if (recipient.exitCode !== 0 || recipient.stdout.trim() === '') {
-    Errors.throwHostEnvironment('Created an identity but could not read its recipient.')
-  }
-  const store = await readStore()
-  const line = recipient.stdout.trim()
-  if (!store.recipients.includes(line)) {
-    await writeStore({ ...store, recipients: [...store.recipients, line] })
-  }
-  HCI.writeSuccess(`This machine can now read the repository's secrets. Its identity stays in the Secure Enclave.`)
-  HCI.writeLine(`Recipient added to ${STORE_PATH}; commit that so this machine keeps access.`)
-  HCI.writeLine(
-    'Secrets added before this machine existed cannot be read by it yet: whoever can read them must re-add them.',
-  )
   return 0
 }

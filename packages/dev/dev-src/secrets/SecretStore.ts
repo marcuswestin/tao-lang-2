@@ -101,9 +101,7 @@ export function formatStore(store: SecretStore): string {
    "recipients": [
 ${store.recipients.map(recipient => `      ${JSON.stringify(recipient)}`).join(',\n')}
    ],
-   "secrets": {
-${entries.join(',\n')}
-   }
+   "secrets": ${entries.length === 0 ? '{}' : `{\n${entries.join(',\n')}\n   }`}
 }
 `
 }

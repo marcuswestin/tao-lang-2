@@ -3,6 +3,7 @@
 // `age` is not exercised here. It owns the cryptography and has its own tests; what these check is the part
 // this repository wrote — the shape of the committed file, the metadata it keeps across a replacement, and
 // the rule that the generated file is the only one this command may write.
+import { HCI } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   formatStore,
@@ -76,6 +77,14 @@ Describe('Secret store', () => {
     Expect(changedInLeft.every(line => line.includes('ALPHA') || line.includes('}'))).toBe(true)
   })
 
+  Test('a store with no secrets yet is still a file worth reading', () => {
+    // This is what `just secrets setup` commits before anything is added, so it should not look broken.
+    const text = formatStore(store())
+
+    Expect(text.includes('"secrets": {}')).toBe(true)
+    Expect(parseStore(text).secrets).toEqual({})
+  })
+
   Test('a store that is not valid JSONC is refused rather than silently emptied', () => {
     Expect(() => parseStore('{ "secrets": ')).toThrow()
     // Losing a secret to a parse slip would be discovered only when something stopped working.
@@ -113,5 +122,23 @@ Describe('Generated environment file', () => {
 
     // Single-quoted with the shell's own escape, so a reader hands back exactly what age produced.
     Expect(text.includes(`TOKEN='has '\\''quotes'\\'' and spaces #and-a-hash'`)).toBe(true)
+  })
+})
+
+Describe('Pasted secret hygiene', () => {
+  Test('says what is around a value, so the question names what was found', () => {
+    // A copied credential usually carries a trailing newline; some secrets genuinely end in a space. The
+    // difference cannot be guessed, so it is described and asked about rather than trimmed silently.
+    Expect(HCI.describeSurroundingWhitespace('sk-abc\n')).toBe('1 character of trailing whitespace')
+    Expect(HCI.describeSurroundingWhitespace('  sk-abc')).toBe('2 characters of leading whitespace')
+    Expect(HCI.describeSurroundingWhitespace(' sk-abc \n')).toBe(
+      '1 character of leading whitespace and 2 characters of trailing whitespace',
+    )
+  })
+
+  Test('a clean value raises no question at all', () => {
+    Expect(HCI.describeSurroundingWhitespace('sk-abc')).toBe(undefined)
+    // Nothing but whitespace is refused later as empty; there is no trim to offer here.
+    Expect(HCI.describeSurroundingWhitespace('   ')).toBe(undefined)
   })
 })
