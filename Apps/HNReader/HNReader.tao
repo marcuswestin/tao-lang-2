@@ -5,6 +5,7 @@ use Col, Row, ScrollView, Spinner, Text, TextMultiline from @tao/ui
 project {
    id "hnreader"
    name "HNReader"
+   DefaultApp HNReader
    remote none
    license MIT
 }

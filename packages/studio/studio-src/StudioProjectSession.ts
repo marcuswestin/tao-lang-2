@@ -398,11 +398,11 @@ export class StudioProjectSession {
   static async open(options: StudioProjectSessionOptions): Promise<StudioProjectSession> {
     const projectRoot = await requireProjectRoot(options.projectRoot)
     const workspace = await Workspace.open(projectRoot)
-    const apps = await discoverAppVariants(projectRoot, workspace)
+    const { apps, defaultAppName } = await discoverAppVariants(projectRoot, workspace)
     const requestedEntryPath = options.entryPath === undefined
       ? undefined
       : FS.relativePath(projectRoot, await resolveEntryPath(projectRoot, options.entryPath))
-    const selection = resolveAppSelection(projectRoot, apps, options.appName, requestedEntryPath)
+    const selection = resolveAppSelection(projectRoot, apps, options.appName, requestedEntryPath, defaultAppName)
     return new StudioProjectSession(
       projectRoot,
       FS.resolvePath(selection.entryPath, projectRoot),
@@ -1332,31 +1332,49 @@ async function requireProjectRoot(input: string): Promise<string> {
 async function discoverAppVariants(
   projectRoot: string,
   workspace: Workspace,
-): Promise<StudioAppVariant[]> {
+): Promise<{ apps: StudioAppVariant[]; defaultAppName?: string }> {
   const candidates = await Repo.filesUnder(projectRoot, {
     excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
     extensions: ['.tao'],
   })
   const apps: StudioAppVariant[] = []
+  let defaultAppName: string | undefined
   for (const entryPath of candidates) {
     const parsed = await workspace.parse(entryPath)
+    for (const project of parsed.entry.ast.statements.filter(AST.isProjectDeclaration)) {
+      defaultAppName ??= AST.blockStatementOf(project, { filter: AST.isProjectDefaultApp })[0]?.app.$refText
+    }
     for (const declaration of AST.appValueDeclarationsInFile(parsed.entry.ast)) {
       apps.push({ appName: declaration.name, entryPath: FS.relativePath(projectRoot, entryPath) })
     }
   }
-  return apps.toSorted((left, right) =>
-    left.appName.localeCompare(right.appName) || left.entryPath.localeCompare(right.entryPath)
-  )
+  return {
+    apps: apps.toSorted((left, right) =>
+      left.appName.localeCompare(right.appName) || left.entryPath.localeCompare(right.entryPath)
+    ),
+    ...(defaultAppName === undefined ? {} : { defaultAppName }),
+  }
 }
 
+/**
+ * Which app a project opens as, when the command line did not say.
+ *
+ * A project that declares `DefaultApp` has already answered this question for its own tooling —
+ * `tao ship` reads it — so Studio reads it too rather than refusing every multi-app project until
+ * someone repeats the answer as `--app`. An explicit request still wins, and a project without a
+ * DefaultApp still has to be told which of several apps to open.
+ */
 function resolveAppSelection(
   projectRoot: string,
   apps: readonly StudioAppVariant[],
   requestedAppName: string | undefined,
   requestedEntryPath: string | undefined,
+  defaultAppName?: string,
 ): StudioAppVariant {
+  const selected = requestedAppName
+    ?? (apps.filter(app => app.appName === defaultAppName).length === 1 ? defaultAppName : undefined)
   const matching = apps.filter(app =>
-    (requestedAppName === undefined || app.appName === requestedAppName)
+    (selected === undefined || app.appName === selected)
     && (requestedEntryPath === undefined || app.entryPath === requestedEntryPath)
   )
   if (matching.length === 0) {
