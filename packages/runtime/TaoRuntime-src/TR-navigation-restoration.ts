@@ -64,6 +64,19 @@ const diagnosticsListeners = new Set<(diagnostic: NavigationRestorationDiagnosti
  */
 const controllers = new Set<NavigationRestorationController>()
 let storageOverride: TaoKeyValueStorage | undefined
+/**
+ * Separates persisted navigation per Studio preview cell.
+ *
+ * The key is otherwise the app declaration, its variant and its data provider — none of which
+ * distinguish two scenarios of one app. That is fine for a shipped app, which only ever has one, and
+ * wrong for a preview: scenarios differ by fixture, so restoring one scenario's stack into another
+ * hands its screens entity handles for rows that do not exist there, and the cell fails to render at
+ * all until the stored stack is cleared.
+ *
+ * A device is where this bites, because one process is assigned every cell in turn and keeps real
+ * device storage between them.
+ */
+let previewScope: string | undefined
 let testStorageRestore: (() => void) | undefined
 const storageSlot = runtimeTestOverrideSlot({
   read: () => storageOverride,
@@ -388,9 +401,10 @@ export class NavigationRestorationController {
     if (provider === undefined) {
       return undefined
     }
+    const scope = previewScope === undefined ? '' : `:${encodeURIComponent(previewScope)}`
     return `tao-navigation:${encodeURIComponent(identity)}:${encodeURIComponent(policy.variant)}:${
       encodeURIComponent(provider)
-    }`
+    }${scope}`
   }
 
   private storage(): TaoKeyValueStorage {
@@ -560,4 +574,14 @@ function requireRestorable(navigation: TaoNavigationValue): RestorableNavigation
     })
   }
   return navigation as RestorableNavigation
+}
+
+/**
+ * Scopes persisted navigation to one Studio preview cell, or clears the scoping with `undefined`.
+ *
+ * Set by the Studio device host when a cell is assigned. A shipped app never calls this and keeps
+ * the unscoped key it has always had.
+ */
+export function setNavigationPreviewScope(scope: string | undefined): void {
+  previewScope = scope
 }

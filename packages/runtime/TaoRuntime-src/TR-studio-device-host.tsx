@@ -12,6 +12,7 @@ import React from 'react'
 import { requireSafeAreaContext } from './TR-app-shell'
 import { errorMessage } from './TR-errors'
 import { NativeModules } from './TR-native-modules'
+import { setNavigationPreviewScope } from './TR-navigation-restoration'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
 import {
   captureRuntime,
@@ -563,6 +564,16 @@ function ConnectedDeviceHost(props: StudioDeviceHostProps & { client: StudioDevi
   >(undefined)
   const [remoteHighlight, setRemoteHighlight] = React.useState<readonly StudioInspectRect[]>([])
   const identityKey = presentation.kind === 'cell' ? cellIdentityKey(presentation.assignment.identity) : undefined
+  // One process renders every cell this device is ever assigned, and keeps real device storage
+  // between them, so persisted navigation has to be scoped to the cell or one scenario restores
+  // another's stack — with entity handles for a fixture that scenario does not have.
+  //
+  // Set during render rather than in an effect: effects run child-first, so the cell's own
+  // restoration would have already read storage under the unscoped key by the time a parent effect
+  // could scope it. This is module state either way, and writing it is idempotent.
+  const assignedCellId = presentation.kind === 'cell' ? presentation.assignment.identity.cellId : undefined
+  setNavigationPreviewScope(assignedCellId)
+  React.useEffect(() => () => setNavigationPreviewScope(undefined), [])
   // Mirrored for as long as this host is mounted, not only while a cell renders: the lines worth
   // seeing most are the ones from a cell that failed to render at all.
   React.useEffect(() =>
