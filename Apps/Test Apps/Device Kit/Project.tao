@@ -1,4 +1,5 @@
 project {
    id "tao-test-device-kit"
    name "Device Kit"
+   version "0.1.0"
 }

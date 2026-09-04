@@ -144,8 +144,13 @@ function projectTemplate(id: string): string {
   return `project {\n   id ${value}\n   name ${value}\n   version "0.1.0"\n   DefaultApp App\n}\n\napp App { view Main }\n\nview Main() { }\n`
 }
 
+/**
+ * The same three fields `projectTemplate` writes. Metadata added to an existing directory used to carry only
+ * an id and a name, so the project it described could never ship: shipping needs a version, and the failure
+ * surfaced only at the point of shipping, long after the metadata was written.
+ */
 function projectMetadataTemplate(id: string, name: string): string {
-  return `project {\n   id ${taoString(id)}\n   name ${taoString(name)}\n}\n`
+  return `project {\n   id ${taoString(id)}\n   name ${taoString(name)}\n   version "0.1.0"\n}\n`
 }
 
 function taoString(value: string): string {

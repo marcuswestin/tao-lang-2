@@ -44,6 +44,8 @@ Describe('tao project identity commands', () => {
       Expect(FS.basename(projectPath)).toBe('Project.tao')
       Expect(await FS.readText(projectPath)).toContain('id "created-project"')
       Expect(await FS.readText(projectPath)).toContain(`name "${FS.basename(root)}"`)
+      // Shipping requires a version, so metadata written without one describes a project that cannot ship.
+      Expect(await FS.readText(projectPath)).toContain('version "0.1.0"')
     } finally {
       await FS.remove(root)
     }
