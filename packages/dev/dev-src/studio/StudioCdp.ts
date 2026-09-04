@@ -262,6 +262,16 @@ export class StudioCdp {
     requirePositiveInteger(steps, 'Studio browser drag steps')
     requireFiniteNumber(delta.x, 'Studio browser horizontal drag delta')
     requireFiniteNumber(delta.y, 'Studio browser vertical drag delta')
+    // A selector can resolve while its element remains outside a nested scroll viewport. Pointer
+    // coordinates outside Chrome's visible surface do not reach that element, so establish the
+    // same visibility precondition as click() before calculating the gesture coordinates.
+    await this.evaluate(`(() => {
+      const selector = ${JSON.stringify(selector)}
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) throw new Error('Missing drag source element: ' + selector)
+      element.scrollIntoView({ block: 'center', inline: 'center' })
+      return true
+    })()`)
     const start = await this.elementCenter(selector, 'drag source')
     await this.dispatchDrag(start, { x: start.x + delta.x, y: start.y + delta.y }, steps)
   }

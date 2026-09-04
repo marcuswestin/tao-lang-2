@@ -259,7 +259,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
         `document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`,
       )
       await browser.dragBy('[data-tao-studio-sketch-workspace]', { x: 360, y: 76 }, { steps: 12 })
-      await waitForFile(generatedSketchPath)
+      await waitForSketchFile(browser, generatedSketchPath)
       await waitForFile(sketchCatalogPath)
       await browser.waitFor(
         `[...document.querySelectorAll('.studio-preview-group-label')].some(label => label.textContent === 'sketch')
@@ -755,6 +755,25 @@ async function waitForFile(path: string): Promise<void> {
     await Time.sleep(100)
   }
   Errors.throwHostEnvironment(`Timed out waiting for Studio to write ${path}.`)
+}
+
+async function waitForSketchFile(browser: StudioCdp, path: string): Promise<void> {
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    if (await FS.isFile(path)) {
+      return
+    }
+    const error = await browser.evaluate<string>(`(() =>
+      [...document.querySelectorAll('[data-tao-studio-sketch-error]')]
+        .map(element => element.getAttribute('data-tao-studio-sketch-error') ?? '')
+        .find(Boolean) ?? ''
+    )()`)
+    if (error !== '') {
+      Errors.throwHostEnvironment(`Studio sketch creation failed: ${error}`)
+    }
+    await Time.sleep(100)
+  }
+  Errors.throwHostEnvironment(`Timed out waiting for Studio to write ${path} after dispatching the sketch gesture.`)
 }
 
 async function waitForSketchRect(path: string, previousRevision: number): Promise<SmokeSketchCatalog> {

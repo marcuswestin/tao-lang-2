@@ -165,11 +165,13 @@ Describe('Studio browser CDP harness', () => {
 
   Test('drags a resizer by an exact pointer delta', async () => {
     const transport = new FakeCdpTransport()
-    transport.evaluateResults.push({ x: 200, y: 300 })
+    transport.evaluateResults.push(true, { x: 200, y: 300 })
     const browser = StudioCdp.testing.create(transport)
 
     await browser.dragBy('[data-divider="preview"]', { x: -40, y: 0 }, { steps: 1 })
 
+    const evaluations = transport.calls.filter(call => call.method === 'Runtime.evaluate')
+    Expect(evaluations[0]?.params['expression']).toContain("scrollIntoView({ block: 'center', inline: 'center' })")
     Expect(transport.calls.filter(call => call.method === 'Input.dispatchMouseEvent')).toEqual([
       {
         method: 'Input.dispatchMouseEvent',
