@@ -8,6 +8,7 @@ import {
   StudioElectrobun,
   type StudioElectrobunProject,
 } from './StudioElectrobun'
+import { StudioHutchHome } from './StudioHutchHome'
 import {
   finalizeStudioProcessTree,
   processGroupKillSpec,
@@ -84,6 +85,7 @@ type NativeStartLifecycleOptions = {
   onProcessSignal?: typeof Platform.onProcessSignal
 }
 type PrepareElectrobunOptions = {
+  hutchHome?: string
   installTimeoutMs?: number
   log?: NativePhaseLog
   now?: () => number
@@ -177,6 +179,19 @@ async function startWithInterruption(
       }.`,
     )
   }
+  const hutchHome = await runNativePhase(
+    'isolate Hutch mutable state',
+    async () =>
+      await StudioHutchHome.prepare({
+        targetHome: Repo.resolvePath('.artifacts/user/studio-hutch-home'),
+      }),
+    phaseOptions,
+  )
+  await runNativePhase(
+    'recover stopped project locks',
+    async () => await StudioHutchHome.clearStoppedProjectLocks(artifactRoot),
+    phaseOptions,
+  )
   const project = await runNativePhase(
     'materialize Electrobun project',
     async () =>
@@ -193,7 +208,15 @@ async function startWithInterruption(
     phaseOptions,
   )
   await FS.remove(project.runtimeResultPath)
-  await prepareElectrobun(hutchPath, project.root, { signal: options.signal })
+  try {
+    await prepareElectrobun(hutchPath, project.root, { hutchHome, signal: options.signal })
+  } catch (error) {
+    await runNativePhase(
+      'failed preparation cleanup',
+      async () => await StudioHutchHome.clearStoppedProjectLocks(project.root),
+    )
+    throw error
+  }
   let finishRuntimeClose: ((result: NativeRuntimeCloseResult) => void) | undefined
   const runtimeClosed = new Promise<NativeRuntimeCloseResult>(resolve => {
     finishRuntimeClose = resolve
@@ -205,7 +228,7 @@ async function startWithInterruption(
       startStudioProcessTree(hutchPath, {
         args: ['electrobun', 'dev', '--watch'],
         cwd: project.root,
-        env: project.dev.env,
+        env: { ...project.dev.env, HUTCH_HOME: hutchHome },
         onError: error => HCI.logProcessError('studio-native', error.message),
         onOutput(stream, chunk) {
           const lines = `${outputRemainders[stream]}${chunk.toString('utf8')}`.split(/\r?\n/)
@@ -242,8 +265,10 @@ async function startWithInterruption(
     stopping ??= runNativePhase(
       'owned process tree shutdown',
       async () => await stopCommand(command, Time.sleep, waitForHutchClose),
-    ).then(() => {
+    ).then(async () => {
       HCI.logProcessInfo('studio-native', 'cleanup: all command-owned processes stopped')
+      await StudioHutchHome.clearStoppedProjectLocks(project.root)
+      HCI.logProcessInfo('studio-native', 'cleanup: stopped project Hutch locks cleared')
     }).finally(async () => {
       closeInterruptionOnce()
       await releaseNativeHostOnce()
@@ -1000,6 +1025,7 @@ async function runHutchCommand(
   const commandSpec: Parameters<StartProcessTree>[1] = {
     args,
     cwd: projectRoot,
+    env: options.hutchHome === undefined ? undefined : { HUTCH_HOME: options.hutchHome },
     onError(error) {
       spawnError = error
     },
