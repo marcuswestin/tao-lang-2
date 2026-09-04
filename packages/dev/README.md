@@ -118,11 +118,12 @@ gate's completion and log path.
 
 `just merge-with-main` is human-only and defaults to a non-mutating dry run. Its strict preflight
 requires the sole live `main` worktree to equal `origin/main`; a local-ahead `main` must be reconciled
-deliberately first. Successful execution removes the invoking feature worktree, so run it from a
-shell you are prepared to leave. `--abort` cannot be combined with merge-start flags, and remote-main
-movement is bounded to three verification passes before the command stops safely. Snapshots are
-written atomically, and `push-started` is an irreversible recovery boundary because a failed client
-may not know whether the remote accepted the push.
+deliberately first. Successful execution preserves the invoking feature worktree as a clean detached
+checkout of the archived feature tip, deletes the local feature branch, and leaves worktree removal
+to the owning task's archival. `--abort` cannot be combined with merge-start flags, and
+remote-main movement is bounded to three verification passes before the command stops safely.
+Snapshots are written atomically, and `push-started` is an irreversible recovery boundary because a
+failed client may not know whether the remote accepted the push.
 
 ## Reading a failed lane
 

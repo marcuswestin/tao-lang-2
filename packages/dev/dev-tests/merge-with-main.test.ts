@@ -13,6 +13,7 @@ type FakeRepository = {
   ancestorExitCodes?: number[]
   branch: string
   committedTree?: string
+  failDetach?: boolean
   failFeatureMerge?: boolean
   failMainPush?: boolean
   failSquash?: boolean
@@ -194,12 +195,23 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
       }
       return result(command, args, spec.cwd)
     }
+    if (joined.startsWith('switch --detach ')) {
+      if (repository.failDetach === true) {
+        return result(command, args, spec.cwd, '', 1)
+      }
+      repository.featureHead = args[2]!
+      repository.featureStatus = ''
+      repository.branch = ''
+      return result(command, args, spec.cwd)
+    }
+    if (joined === 'symbolic-ref --quiet HEAD') {
+      return result(command, args, spec.cwd, '', repository.branch === '' ? 1 : 0)
+    }
     if (joined === 'push origin main:main' && repository.failMainPush === true) {
       return result(command, args, spec.cwd, '', 1)
     }
     if (
       args[0] === 'push'
-      || joined.startsWith('worktree remove ')
       || joined === 'worktree prune'
       || joined.startsWith('branch -D ')
     ) {
@@ -356,7 +368,7 @@ Describe('merge-with-main', () => {
     Expect(noPush.snapshots.size).toBe(0)
   })
 
-  Test('executes full verification before squash, tree proof, verify, commit, push, and cleanup', async () => {
+  Test('executes verification and pushes before preserving the invoking worktree and cleaning refs', async () => {
     const fake = fakeDependencies()
     const outcome = await MergeWithMainCommand.run({
       execute: true,
@@ -379,7 +391,8 @@ Describe('merge-with-main', () => {
       `git push origin --force-with-lease=refs/heads/feat/example:${fake.repository.remoteFeatureHead}`
         + ' :refs/heads/feat/example',
     )
-    const remove = operations.indexOf('git worktree remove /repo-feature')
+    const detach = operations.indexOf(`git switch --detach ${fake.repository.featureHead}`)
+    const proveDetached = operations.indexOf('git symbolic-ref --quiet HEAD')
     const deleteBranch = operations.indexOf('git branch -D feat/example')
     const prune = operations.indexOf('git worktree prune')
 
@@ -393,13 +406,24 @@ Describe('merge-with-main', () => {
     Expect(push).toBeGreaterThan(commit)
     Expect(archive).toBeGreaterThan(push)
     Expect(deleteRemote).toBeGreaterThan(archive)
-    Expect(remove).toBeGreaterThan(deleteRemote)
-    Expect(deleteBranch).toBeGreaterThan(remove)
+    Expect(detach).toBeGreaterThan(deleteRemote)
+    Expect(proveDetached).toBeGreaterThan(detach)
+    Expect(deleteBranch).toBeGreaterThan(proveDetached)
     Expect(prune).toBeGreaterThan(deleteBranch)
+    Expect(operations.some(operation => operation.startsWith('git worktree remove '))).toBe(false)
     Expect(outcome.mode).toBe('executed')
+    Expect(outcome.lines).toEqual([
+      "PASS  Merged 'feat/example' into main and archived it as merged/example.",
+      'PASS  Preserved the clean invoking worktree at /repo-feature on detached HEAD; '
+      + 'archive its owning task when you are ready to remove it.',
+    ])
     Expect(outcome.snapshotPath).toMatch(
       /^\/repo-main\/\.artifacts\/merge\/2026-09-03T14-15-16-789Z-[0-9a-f]{8}\.json$/u,
     )
+    const completedSnapshot = [...fake.snapshots.values()][0] as MergeSnapshot
+    Expect(completedSnapshot.phase).toBe('complete')
+    Expect(completedSnapshot.currentFeatureHead).toBe(fake.repository.featureHead)
+    Expect(completedSnapshot.currentFeatureStatus).toBe('')
     Expect(fake.moves.every(move => move.fromPath.endsWith('.tmp'))).toBe(true)
     const commitMessage = [...fake.files.entries()].find(([path]) => path.endsWith('.commit-message'))?.[1]
     Expect(commitMessage).toContain('Land example\n\n- Add the example workflow.')
@@ -558,6 +582,22 @@ Describe('merge-with-main', () => {
     await Expect(MergeWithMainCommand.run({ abortSnapshot: snapshotPath, yes: true }, fake.dependencies))
       .rejects.toThrow('Refusing to rewrite pushed history')
     Expect(fake.calls.filter(call => call.args[0] === 'reset')).toHaveLength(resetCallsBeforeAbort)
+  })
+
+  Test('keeps the archived recovery boundary when preserving the worktree fails', async () => {
+    const fake = fakeDependencies({ failDetach: true })
+
+    await Expect(MergeWithMainCommand.run({
+      execute: true,
+      push: true,
+      repositoryRoot: fake.repository.featureRoot,
+      yes: true,
+    }, fake.dependencies)).rejects.toThrow(Errors.CommandExecutionError)
+
+    const snapshot = [...fake.snapshots.values()][0] as MergeSnapshot
+    Expect(snapshot.phase).toBe('archived')
+    Expect(fake.calls.some(call => call.args[0] === 'branch' && call.args[1] === '-D')).toBe(false)
+    Expect(fake.repository.branch).toBe('feat/example')
   })
 
   Test('records and aborts a failed feature integration without adopting the other worktree', async () => {
@@ -742,7 +782,14 @@ Describe('merge-with-main', () => {
       }, dependencies)
 
       Expect(outcome.mode).toBe('executed')
-      Expect(await FS.exists(featureRoot)).toBe(false)
+      Expect(await FS.exists(featureRoot)).toBe(true)
+      Expect((await gitResult(featureRoot, ['status', '--porcelain'])).stdout).toBe('')
+      Expect((await gitResult(featureRoot, ['rev-parse', 'HEAD'])).stdout.trim()).toBe(
+        (await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', 'refs/heads/merged/integration']))
+          .stdout.trim(),
+      )
+      Expect((await gitResult(featureRoot, ['symbolic-ref', '--quiet', 'HEAD'])).exitCode).toBe(1)
+      Expect((await gitResult(mainRoot, ['branch', '--list', 'feat/integration'])).stdout).toBe('')
       Expect((await gitResult(mainRoot, ['status', '--porcelain'])).stdout).toBe('')
       const mainHead = (await gitResult(mainRoot, ['rev-parse', 'HEAD'])).stdout.trim()
       Expect((await gitResult(root, ['--git-dir', remoteRoot, 'rev-parse', 'refs/heads/main'])).stdout.trim())

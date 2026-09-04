@@ -377,7 +377,7 @@ trusts. It is the sharpest remaining edge in daily use, and it is tracked as DEV
 **`just studio-native` logs one transient `Unable to resolve "./_gen_tao-app/App"`.** Metro reaches
 the entry before the generated app is written, recovers on the next write, and leaves a red herring in
 the output of the command a person runs most. Ordering the first compile ahead of the Metro start
-would remove it; tracked as DEVENV-037.
+would remove it; tracked as DEVENV-039.
 
 **A replayed cell still spins.** Unchanged by this slice and reproducing in the browser canvas too;
 the next step is a stack rather than more bisection, and the likely fix is memoizing the cell runtime
