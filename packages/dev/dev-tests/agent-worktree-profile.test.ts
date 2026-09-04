@@ -386,6 +386,16 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands.slice(graph)).toContain('_parser-gen')
   })
 
+  Test('bootstraps dependencies before verify runs its graph', async () => {
+    const commands = await justCommands('verify')
+
+    const install = commands.indexOf('bun install --frozen-lockfile')
+    const graph = commands.indexOf('./dev gates')
+    Expect(install).toBeGreaterThanOrEqual(0)
+    Expect(graph).toBeGreaterThan(install)
+    Expect(commands.slice(graph)).toContain('_parser-gen')
+  })
+
   Test('runs every automated Studio lane in the one graph without a browser quarantine', async () => {
     const commands = await justCommands('full-verify')
 

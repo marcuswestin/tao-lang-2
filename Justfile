@@ -223,8 +223,8 @@ clean: clean-scratch
 clean-all: clean
     rm -rf .artifacts packages/runtime-toolchain/ios packages/runtime-toolchain/android
 
-# Prepare all code for commit
-verify:
+# Bootstrap dependencies, then prepare all code for commit
+verify: deps
     ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just full-verify"
 
 # Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every automated Studio lane
