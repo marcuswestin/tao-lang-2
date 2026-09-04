@@ -191,12 +191,14 @@ Describe('Expo dev-loop port helpers', () => {
     Expect(selected).toBe(49_152)
   })
 
-  Test('reserves a different dev-loop port when the preferred port is occupied', async () => {
+  Test('reserves a different dev-loop port when Expo sees the preferred port as occupied', async () => {
     const blocker = createServer()
     blocker.unref()
     await new Promise<void>((resolve, reject) => {
       blocker.once('error', reject)
-      blocker.listen({ host: '127.0.0.1', port: 0 }, resolve)
+      // Expo probes a wildcard listener. On macOS, an IPv4-loopback-only probe can
+      // otherwise miss this IPv6 wildcard socket and hand Expo an occupied port.
+      blocker.listen({ port: 0 }, resolve)
     })
     const address = blocker.address()
     const blockedPort = typeof address === 'object' && address !== null ? address.port : undefined
@@ -224,7 +226,7 @@ Describe('Expo dev-loop port helpers', () => {
 
     Expect(Errors.formatForUser(normalized)).toBe(
       'This environment does not allow a local development server to bind a TCP port. '
-        + 'Run it in a terminal or development environment that permits listeners on 127.0.0.1.',
+        + 'Run it in a terminal or development environment that permits local TCP listeners.',
     )
   })
 

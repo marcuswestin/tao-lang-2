@@ -60,7 +60,9 @@ async function reservePort(port: number): Promise<PortReservation | undefined> {
         reject(normalizeReservationError(error))
       }
     })
-    server.listen({ exclusive: true, host: '127.0.0.1', port }, () => {
+    // Expo checks the wildcard host before starting Metro. Binding only 127.0.0.1 can
+    // miss an existing IPv6 wildcard listener and incorrectly select its occupied port.
+    server.listen({ exclusive: true, port }, () => {
       const address = server.address()
       const availablePort = typeof address === 'object' && address !== null ? address.port : undefined
       if (availablePort === undefined) {
@@ -90,7 +92,7 @@ function normalizeReservationError(error: Error): Error {
   if (code === 'EACCES' || code === 'EPERM') {
     return new Errors.UserInputError(
       'This environment does not allow a local development server to bind a TCP port. '
-        + 'Run it in a terminal or development environment that permits listeners on 127.0.0.1.',
+        + 'Run it in a terminal or development environment that permits local TCP listeners.',
     )
   }
   return error
