@@ -44,6 +44,9 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 - Run focused tests while working.
 - Run `./agent verify` as the final validation and before commits.
+- Read the `verification-lanes` skill when choosing between changed, retry, complete, sandbox, and
+  host-only verification. Selection lanes are iteration aids, never merge evidence, and
+  `merge-with-main` is a human-only command that agents do not invoke.
 - Several worktrees share one machine. Lanes divide its CPUs between themselves automatically, so a
   lane is slower, not oversubscribed, while another agent works. A timeout under that load is
   reported as `machine-contention`, re-run once on its own, and named in the summary's `contention`
@@ -54,6 +57,7 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 ## Developer environment feedback
 
 - During implementation, keep a task-local ledger of material developer-environment problems and credible improvement opportunities encountered in repository setup, dependencies, commands, tests, builds, generators, worktrees, permissions, performance, or diagnostics. For each item, retain the symptom and relevant command, evidence or likely cause, any workaround, and the plausible repository or host-environment improvement. Do not classify ordinary product-code failures or unsupported speculation as environment issues.
-- Keep the ledger in task context or ignored `.artifacts/` scratch state; do not add a tracked issue document unless Ro asks for one. Fix safe repository-owned workflow defects when they are within the task's authority and do not materially divert from its goal; otherwise preserve them as suggestions rather than silently expanding scope.
+- Keep the task-local ledger in task context or ignored `.artifacts/` scratch state. Fix safe repository-owned workflow defects when they are within the task's authority and do not materially divert from its goal; otherwise preserve them as suggestions rather than silently expanding scope.
+- When a task discovers a material new issue or improvement, or materially changes one already recorded, deduplicate and update `Docs/Roadmap/Developer environment upgrades.md`. Follow that document's entry format and lifecycle; do not create a second tracked issue list.
 - When work is delegated, every subagent must return its environment-ledger entries to the owning agent. The owning agent deduplicates entries across participants and carries them through compaction and final validation.
-- At the end of every implementation handoff, include a `Developer environment` summary that distinguishes issues fixed during the task, remaining repository improvement suggestions, and external or policy limitations. Give exact user steps for anything the agent could not complete, and say explicitly when no issues or suggestions were found.
+- If the durable ledger changed, mention that once in the implementation handoff with a short link; the details already live in the ledger. If nothing was added or updated, omit developer-environment commentary entirely.
