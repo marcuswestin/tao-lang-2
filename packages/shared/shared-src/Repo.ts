@@ -76,7 +76,7 @@ export async function filesUnder(inputPath: string, options: FilesUnderOptions =
   const gitSearchRoot = await realPathOrInput(root)
   const gitRoot = tryGetRoot(gitSearchRoot)
   if (gitRoot !== undefined) {
-    return gitFilesUnder(gitRoot, gitSearchRoot, options)
+    return (await gitFilesUnder(gitRoot, gitSearchRoot, options))
       .map(path => restoreInputPath(path, gitSearchRoot, root))
   }
   return await filesystemFilesUnder(root, options)
@@ -109,16 +109,21 @@ function fileUnder(path: string, options: FilesUnderOptions): string[] {
   return [path]
 }
 
-function gitFilesUnder(gitRoot: string, root: string, options: FilesUnderOptions): string[] {
+async function gitFilesUnder(gitRoot: string, root: string, options: FilesUnderOptions): Promise<string[]> {
   const relativeRoot = FS.relativePath(gitRoot, root)
   const pathspecs = pathspecsUnder(relativeRoot, filePathspecs(options))
-  return gitListFiles(gitRoot, pathspecs)
+  return (await gitListFiles(gitRoot, pathspecs))
     .filter(path => FS.pathIsWithin(path, root))
     .filter(path => fileMatchesOptions(path, FS.relativePath(root, path), options))
 }
 
-function gitListFiles(gitRoot: string, pathspecs: readonly string[]): string[] {
-  const result = CLI.mustRunSync('git', {
+/**
+ * gitListFiles asks Git for the tracked and unignored files under `pathspecs`. It runs asynchronously
+ * because Studio's request path and the LSP call it; a synchronous spawn here stalled both. A tracked
+ * file deleted in the working tree is still listed, so each path is checked for existence.
+ */
+async function gitListFiles(gitRoot: string, pathspecs: readonly string[]): Promise<string[]> {
+  const result = await CLI.mustRun('git', {
     args: [
       'ls-files',
       '--cached',
@@ -129,12 +134,12 @@ function gitListFiles(gitRoot: string, pathspecs: readonly string[]): string[] {
     ],
     cwd: gitRoot,
   })
-  return result.stdout
+  const paths = result.stdout
     .split('\n')
     .filter(Boolean)
     .map(path => FS.resolvePath(path, gitRoot))
-    .filter(FS.existsSync)
-    .sort()
+  const present = await Promise.all(paths.map(path => FS.exists(path)))
+  return paths.filter((_, index) => present[index]).sort()
 }
 
 async function filesystemFilesUnder(root: string, options: FilesUnderOptions): Promise<string[]> {
