@@ -719,23 +719,30 @@ an entry here may link one when the developer workflow is also affected.
 
 - **Status:** In progress
 - **Area:** Test reliability
-- **Impact:** The simulated Studio journey blocks otherwise green merge verification at different
-  synthetic sketch interactions, so it cannot currently serve as reliable merge evidence.
-- **Evidence:** Readiness and browser-reconciliation barriers plus the toolbar event fix moved failures
-  from Snap to the first rectangle draw. The latest normal-terminal run left the catalog at revision 1
-  with zero rectangles while the other 18 full-verification gates passed, showing that the generic CDP
-  pointer drag itself is not deterministic enough for this journey.
+- **Impact:** The simulated Studio journey blocks otherwise green merge verification at synthetic
+  sketch interactions, so it cannot yet serve as reliable merge evidence.
+- **Evidence:** Hit-test diagnostics added to the lane on 2026-09-04 showed the failures were product
+  defects, not pointer nondeterminism. The board's absolutely positioned toolbar wrapped down over the
+  76-pixel drawing surface, so the first real pointer landed on the Unsnap button; drag-one-in relied on
+  an HTML5 drag that the move gesture's `preventDefault` suppressed, so it could never start; and a
+  catalog or manifest re-render could replace a board mid-gesture. With those fixed the lane passes
+  Draw, four further draws, Snap, and reload from a normal terminal, and stalls at drag-one-in: the
+  release reaches the board and requests the one-rectangle Snap, which the server refuses with
+  `Studio Snap cannot preserve authored source for interleaved rectangle geometry` because the free
+  rectangle sits between two flowed siblings. The failing step's diagnostics record board bounds,
+  the element under the pointer, the gesture state, host errors, and a screenshot.
 - **Workaround:** The full-verification graph reports `_full-verify-simulated` as explicitly skipped;
   `just _full-verify-simulated` remains available to reproduce it, and the deterministic catalog tests
   in the same file plus the native and canary lanes remain active.
-- **Proposed change:** Replace coordinate-only synthetic sketch gestures with a deterministic browser
-  action boundary that confirms event receipt and the corresponding authoritative board generation
-  before advancing. Keep mutations single-shot rather than retrying requests that may already be live.
-- **Dependencies:** Quarantined on `feat/freehand-ui-sketching-implementation`; the product fixes and
-  synchronization diagnostics remain in place for the follow-up.
+- **Proposed change:** Let a partial Snap insert one rectangle between existing flowed siblings, or
+  route that case through the proposal endpoint, in the Snap-trust stride of the Figma-at-home plan;
+  keep every sketch step's precondition hit-tested rather than bounding-box based. Keep mutations
+  single-shot rather than retrying requests that may already be live.
+- **Dependencies:** Product fixes and lane diagnostics landed with the Figma-at-home strides plan.
 - **Acceptance:** `_full-verify-simulated` completes the Draw, Snap, Unsnap, overlap-confirmation, and
   Undo sequence in ten consecutive normal-terminal runs before it rejoins automatic full verification.
-- **Source:** 2026-09-04 normal-terminal merge verification and explicit quarantine decision.
+- **Source:** 2026-09-04 normal-terminal merge verification, the explicit quarantine decision, and the
+  2026-09-04 lane diagnostics from the Figma-at-home strides work.
 
 ### DEVENV-043 — Changed-files lane fails every package with no affected tests
 

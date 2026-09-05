@@ -256,6 +256,13 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
 
       const generatedSketchPath = FS.resolvePath('@/studio/View1.tao', projectRoot)
       const sketchCatalogPath = FS.resolvePath('.tao-project/studio/sketches.jsonc', projectRoot)
+      // A 360-pixel board needs a canvas column wider than the Design preset leaves at 1440; a
+      // designer's display gives the sketch room, and the pointer gesture below is checked against it.
+      await browser.setViewport(1_920, 1_080)
+      await browser.waitFor(
+        "document.querySelector('.studio-shell')?.getBoundingClientRect().width === window.innerWidth",
+      )
+      await enterRunPreset(browser)
       await browser.waitFor(
         `document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`,
       )
@@ -268,9 +275,24 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       const createdCatalog = smokeSketchCatalog(catalogBeforeRect)
       Expect(createdCatalog.sketches).toHaveLength(1)
       Expect(createdCatalog.sketches[0]).toMatchObject({ height: 76, name: 'View1', rects: [], width: 360 })
+      const createdSketchId = createdCatalog.sketches[0]!.id
 
-      await browser.dragBy('[data-tao-studio-sketch]', { x: 64, y: 24 }, { steps: 8 })
-      const persistedCatalog = await waitForSketchRect(sketchCatalogPath, createdCatalog.revision)
+      // The first draw is a real pointer gesture through Chrome. Mark the board first so a timeout
+      // can say whether the pointer never reached it or a re-render replaced it mid-gesture.
+      const drawingBrowser = browser
+      const boardGenerationBeforeDraw = await markSketchBoard(drawingBrowser, createdSketchId)
+      const firstDraw = { x: 64, y: 24 }
+      await expectPointerReachesBoard(drawingBrowser, createdSketchId, boardGenerationBeforeDraw, firstDraw)
+      await drawingBrowser.dragBy(`[data-tao-studio-sketch="${createdSketchId}"]`, firstDraw, { steps: 8 })
+      const persistedCatalog = await waitForSketchRect(
+        sketchCatalogPath,
+        createdCatalog.revision,
+        async () => {
+          await drawingBrowser.captureScreenshot('studio-sketch-draw-failure')
+          return await sketchBoardDiagnostics(drawingBrowser, createdSketchId, boardGenerationBeforeDraw)
+        },
+      )
+      await waitForSketchBoardRefresh(browser, createdSketchId, boardGenerationBeforeDraw)
       const persistedSketch = persistedCatalog.sketches[0]!
       const persistedRect = persistedSketch.rects[0]!
       Expect(persistedRect).toMatchObject({ height: 24, kind: 'Placeholder', width: 64 })
@@ -282,6 +304,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       )).toBe(true)
 
       await browser.goto(projectUrl)
+      await enterRunPreset(browser)
       await browser.waitFor(
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${persistedSketch.id}"]`)})
           ?.querySelector(${
@@ -353,6 +376,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(snappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
 
       await browser.goto(projectUrl)
+      await enterRunPreset(browser)
       await browser.waitFor(
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
           instanceof HTMLButtonElement
@@ -370,17 +394,19 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-gap-indicator]`)}) instanceof HTMLElement`,
         ),
       ).toBe(true)
-      await browser.drag(
-        `[data-tao-studio-sketch-rect="${persistedRect.id}"]`,
-        `[data-tao-studio-sketch="${persistedSketch.id}"]`,
-        { steps: 12 },
-      )
+      const dragOneInBrowser = browser
+      const dragOneInGeneration = await markSketchBoard(dragOneInBrowser, persistedSketch.id)
+      await dragRectOntoOwnCell(dragOneInBrowser, persistedSketch.id, persistedRect.id)
       const incrementallySnappedCatalog = await waitForSketchCatalog(
         sketchCatalogPath,
         catalog =>
           catalog.revision > reloadedSnapCatalog.revision
           && catalog.sketches[0]?.rects.length === 0
           && catalog.sketches[0]?.snapped.length === 5,
+        async () => {
+          await dragOneInBrowser.captureScreenshot('studio-sketch-drag-one-in-failure')
+          return await sketchBoardDiagnostics(dragOneInBrowser, persistedSketch.id, dragOneInGeneration)
+        },
       )
       Expect(await FS.readText(generatedSketchPath)).toContain(studioRectTag(persistedRect.id))
       await browser.waitFor(
@@ -815,7 +841,11 @@ async function waitForSketchReady(browser: StudioCdp): Promise<void> {
   Errors.throwHostEnvironment(`Studio sketch did not become ready: ${JSON.stringify(readiness)}`)
 }
 
-async function waitForSketchRect(path: string, previousRevision: number): Promise<SmokeSketchCatalog> {
+async function waitForSketchRect(
+  path: string,
+  previousRevision: number,
+  diagnose?: () => Promise<unknown>,
+): Promise<SmokeSketchCatalog> {
   const deadline = Date.now() + 20_000
   let catalog: SmokeSketchCatalog | undefined
   while (Date.now() < deadline) {
@@ -825,12 +855,187 @@ async function waitForSketchRect(path: string, previousRevision: number): Promis
     }
     await Time.sleep(100)
   }
-  Errors.throwHostEnvironment(`Timed out waiting for a persisted Studio rectangle; last=${JSON.stringify(catalog)}`)
+  const board = diagnose === undefined ? undefined : await diagnose()
+  Errors.throwHostEnvironment(
+    `Timed out waiting for a persisted Studio rectangle; board=${JSON.stringify(board)} last=${
+      JSON.stringify(catalog)
+    }`,
+  )
+}
+
+type SmokeSketchBoardDiagnostics = Readonly<{
+  bounds?: Readonly<{ height: number; left: number; top: number; width: number }>
+  centerOnBoard: boolean
+  elementAtCenter?: string
+  error?: string
+  gesture?: string
+  hostError?: string
+  proposalOpen: boolean
+  present: boolean
+  rectElements: number
+  replaced: boolean
+  status: string
+  viewport: Readonly<{ height: number; scrollX: number; scrollY: number; width: number }>
+}>
+
+/** markSketchBoard stamps the mounted board so a later read can tell whether it was replaced. */
+async function markSketchBoard(browser: StudioCdp, sketchId: string): Promise<string> {
+  return await browser.evaluate<string>(`(() => {
+    const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
+    if (!(board instanceof HTMLElement)) throw new Error('Missing Studio sketch board')
+    const generation = crypto.randomUUID()
+    board.dataset.taoStudioSmokeGeneration = generation
+    return generation
+  })()`)
+}
+
+/**
+ * The action boundary for a real pointer gesture: the board's centre must be inside the viewport
+ * and hit-test to the board itself, otherwise Chrome would deliver the drag to whatever covers it.
+ */
+async function expectPointerReachesBoard(
+  browser: StudioCdp,
+  sketchId: string,
+  generation: string,
+  delta: Readonly<{ x: number; y: number }>,
+): Promise<void> {
+  await browser.evaluate(`(() => {
+    const element = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
+    if (!(element instanceof HTMLElement)) throw new Error('Missing Studio sketch board')
+    element.scrollIntoView({ block: 'center', inline: 'center' })
+    return true
+  })()`)
+  const diagnostics = await sketchBoardDiagnostics(browser, sketchId, generation)
+  const bounds = diagnostics.bounds
+  const start = bounds === undefined
+    ? undefined
+    : { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
+  const inView = (point: Readonly<{ x: number; y: number }>): boolean =>
+    point.x >= 0 && point.y >= 0 && point.x < diagnostics.viewport.width && point.y < diagnostics.viewport.height
+  const reachable = start !== undefined
+    && inView(start)
+    && inView({ x: start.x + delta.x, y: start.y + delta.y })
+    && diagnostics.centerOnBoard
+  if (!reachable) {
+    await browser.captureScreenshot('studio-sketch-board-covered')
+    Errors.throwHostEnvironment(
+      `The Studio sketch board is not the element a pointer would reach at its centre: ${JSON.stringify(diagnostics)}`,
+    )
+  }
+}
+
+/**
+ * The Run preset gives the canvas the whole window, which is what a person sketching a phone-wide
+ * view beside its cell does with the side panes; the Design preset leaves them a narrow column.
+ */
+async function enterRunPreset(browser: StudioCdp): Promise<void> {
+  await browser.waitFor(`document.querySelector('[data-preset="run"]') instanceof HTMLButtonElement`, {
+    timeoutMs: 30_000,
+  })
+  await browser.click('[data-preset="run"]')
+  await browser.waitFor(`(() => {
+    const host = document.querySelector('.tao-studio-product-host')
+    const preview = document.querySelector('.studio-preview')
+    return host instanceof HTMLElement && host.dataset.layoutPreset === 'run'
+      && preview instanceof HTMLElement && preview.getBoundingClientRect().width > window.innerWidth * 0.6
+  })()`)
+}
+
+/**
+ * Drag-one-in with real pointer events: press on the free rectangle, move onto the sketch's own
+ * running cell, release. The board keeps pointer capture, so the release lands on it even over the
+ * cell's iframe.
+ */
+async function dragRectOntoOwnCell(browser: StudioCdp, sketchId: string, rectId: string): Promise<void> {
+  const points = await browser.evaluate<{ end: { x: number; y: number }; start: { x: number; y: number } }>(`(() => {
+    const rect = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-rect="${rectId}"]`)})
+    const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
+    if (!(rect instanceof HTMLElement) || !(board instanceof HTMLElement)) {
+      throw new Error('Missing Studio sketch drag-one-in source')
+    }
+    const row = board.closest('.studio-preview-group-cells')
+    const cell = row?.querySelector('.studio-preview-cell')
+    if (!(row instanceof HTMLElement) || !(cell instanceof HTMLElement)) {
+      throw new Error('Missing the running cell of the sketch row')
+    }
+    // Bounding boxes lie about visibility inside a scrolled row, so both ends of the gesture are
+    // chosen by hit-testing: a point counts only when the pointer would actually land there.
+    const visiblePoint = (element, accepts) => {
+      const bounds = element.getBoundingClientRect()
+      for (const fy of [0.5, 0.25, 0.75, 0.1, 0.9]) {
+        for (const fx of [0.5, 0.25, 0.75, 0.1, 0.9]) {
+          const point = { x: bounds.left + bounds.width * fx, y: bounds.top + bounds.height * fy }
+          if (point.x < 0 || point.y < 0 || point.x >= window.innerWidth || point.y >= window.innerHeight) continue
+          const hit = document.elementFromPoint(point.x, point.y)
+          if (hit !== null && accepts(hit)) return point
+        }
+      }
+      return undefined
+    }
+    board.scrollIntoView({ block: 'center', inline: 'nearest' })
+    const candidates = [row.scrollLeft, 0]
+    for (let offset = 40; offset <= row.scrollWidth; offset += 40) candidates.push(offset)
+    for (const scrollLeft of candidates) {
+      row.scrollLeft = scrollLeft
+      const start = visiblePoint(rect, hit => hit === rect || rect.contains(hit))
+      // Release over the cell's own chrome rather than its iframe so the captured release stays in
+      // this document.
+      const end = visiblePoint(
+        cell.querySelector('.studio-preview-cell-label') ?? cell,
+        hit => cell.contains(hit) && hit.tagName !== 'IFRAME',
+      )
+      if (start !== undefined && end !== undefined) return { end, start }
+    }
+    throw new Error('No row scroll position shows both the rectangle and its running cell: '
+      + JSON.stringify({ cell: cell.getBoundingClientRect(), rect: rect.getBoundingClientRect(), row: row.getBoundingClientRect() }))
+  })()`)
+  await browser.dragBetween(points.start, points.end, { steps: 12 })
+}
+
+async function sketchBoardDiagnostics(
+  browser: StudioCdp,
+  sketchId: string,
+  generation: string,
+): Promise<SmokeSketchBoardDiagnostics> {
+  return await browser.evaluate<SmokeSketchBoardDiagnostics>(`(() => {
+    const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
+    const present = board instanceof HTMLElement
+    const bounds = present ? board.getBoundingClientRect() : undefined
+    const describe = element => element === null
+      ? 'none'
+      : element.tagName.toLowerCase() + '.' + element.className + ' ' + JSON.stringify(Object.keys(element.dataset))
+    const center = bounds === undefined
+      ? undefined
+      : document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2)
+    return {
+      bounds: bounds === undefined
+        ? undefined
+        : { height: bounds.height, left: bounds.left, top: bounds.top, width: bounds.width },
+      centerOnBoard: present && center !== undefined && center !== null && board.contains(center),
+      elementAtCenter: center === undefined ? undefined : describe(center),
+      error: present ? board.dataset.taoStudioSketchError : undefined,
+      gesture: present ? board.dataset.taoStudioSketchGesture : undefined,
+      hostError: document.querySelector('[data-tao-studio-sketch-host][data-tao-studio-sketch-error]')
+        ?.getAttribute('data-tao-studio-sketch-error') ?? undefined,
+      present,
+      proposalOpen: document.querySelector('[data-tao-studio-sketch-snap-proposal]') !== null,
+      rectElements: present ? board.querySelectorAll('[data-tao-studio-sketch-rect]').length : 0,
+      replaced: !present || board.dataset.taoStudioSmokeGeneration !== ${JSON.stringify(generation)},
+      status: document.querySelector('.studio-status')?.textContent ?? '',
+      viewport: {
+        height: window.innerHeight,
+        scrollX: window.scrollX,
+        scrollY: window.scrollY,
+        width: window.innerWidth,
+      },
+    }
+  })()`)
 }
 
 async function waitForSketchCatalog(
   path: string,
   predicate: (catalog: SmokeSketchCatalog) => boolean,
+  diagnose?: () => Promise<unknown>,
 ): Promise<SmokeSketchCatalog> {
   const deadline = Date.now() + 30_000
   let catalog: SmokeSketchCatalog | undefined
@@ -841,8 +1046,11 @@ async function waitForSketchCatalog(
     }
     await Time.sleep(100)
   }
+  const board = diagnose === undefined ? undefined : await diagnose()
   Errors.throwHostEnvironment(
-    `Timed out waiting for a Studio sketch catalog transition; last=${JSON.stringify(catalog)}`,
+    `Timed out waiting for a Studio sketch catalog transition; board=${JSON.stringify(board)} last=${
+      JSON.stringify(catalog)
+    }`,
   )
 }
 
