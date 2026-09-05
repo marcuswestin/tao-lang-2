@@ -1,5 +1,5 @@
 import { StudioDeviceTrust, type TaoStudioDeviceIdentity } from '@runtime/TR-studio-device-trust'
-import { Errors, FS } from '@shared'
+import { Errors, FS, Json } from '@shared'
 import type { StudioTrustedDevice } from './StudioDeviceStatus'
 
 const identityFileName = 'studio-identity.json'
@@ -122,7 +122,7 @@ async function readIdentity(path: string): Promise<TaoStudioDeviceIdentity | und
     }
     const value = await FS.readJson(path)
     if (
-      !isRecord(value)
+      !Json.isRecord(value)
       || value['version'] !== storeVersion
       || typeof value['publicKey'] !== 'string'
       || typeof value['secretKey'] !== 'string'
@@ -143,7 +143,7 @@ async function readDevices(path: string): Promise<StudioTrustedDevice[]> {
       return []
     }
     const value = await FS.readJson(path)
-    if (!isRecord(value) || value['version'] !== storeVersion || !Array.isArray(value['devices'])) {
+    if (!Json.isRecord(value) || value['version'] !== storeVersion || !Array.isArray(value['devices'])) {
       return []
     }
     const devices: StudioTrustedDevice[] = []
@@ -161,7 +161,7 @@ async function readDevices(path: string): Promise<StudioTrustedDevice[]> {
 
 function parseTrustedDevice(value: unknown): StudioTrustedDevice | undefined {
   if (
-    !isRecord(value)
+    !Json.isRecord(value)
     || typeof value['devicePublicKey'] !== 'string'
     || !StudioDeviceTrust.validPublicKey(value['devicePublicKey'])
     || typeof value['pairedAt'] !== 'string'
@@ -172,7 +172,7 @@ function parseTrustedDevice(value: unknown): StudioTrustedDevice | undefined {
   }
   const device = value['device']
   if (
-    !isRecord(device)
+    !Json.isRecord(device)
     || typeof device['name'] !== 'string'
     || device['name'].trim() === ''
     || typeof device['model'] !== 'string'
@@ -205,8 +205,4 @@ async function writeAtomically(path: string, content: unknown): Promise<void> {
   } finally {
     await FS.remove(temporaryPath)
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

@@ -5,6 +5,7 @@ import type {
   StudioPreviewManifestV2,
 } from '../studio-src/StudioPreviewManifest'
 import type { StudioRuntimeCaptureArtifact } from '../studio-src/StudioProtocol'
+import { systemLightScheme } from './test-studio-fixtures'
 
 Describe('Studio matrix session', () => {
   Test('registers concurrent cell instances without one cell invalidating another', () => {
@@ -221,12 +222,7 @@ function fixture(revisions: { compileRevision: number; manifestRevision: string 
   const source = { kind: 'tao' as const, path: '/project/Scenarios.tao', range: { end: 20, start: 0 } }
   const environment = {
     network: { latencyMs: 0, outcome: 'normal' as const },
-    scheme: {
-      capability: 'reactive-browser' as const,
-      requested: 'system' as const,
-      resolved: 'light' as const,
-      source: 'system' as const,
-    },
+    scheme: systemLightScheme(),
     viewport: { height: 844, width: 390 },
   }
   return {

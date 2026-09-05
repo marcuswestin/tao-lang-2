@@ -19,7 +19,7 @@ export const TaoStudioDeviceProtocol = {
   version: 1,
 } as const
 
-export type TaoStudioDeviceProtocolName = typeof TaoStudioDeviceProtocol.name
+type TaoStudioDeviceProtocolName = typeof TaoStudioDeviceProtocol.name
 
 export type TaoStudioDeviceRejectCode =
   | 'bad-signature'
@@ -56,7 +56,7 @@ export type TaoStudioDeviceCellIdentity = {
   previewInstanceId: string
 }
 
-export type TaoStudioDeviceScenario = {
+type TaoStudioDeviceScenario = {
   cellId: string
   cellRevision: number
   group: string

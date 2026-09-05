@@ -150,12 +150,7 @@ async function openExpoGo(
 }
 
 async function requireCommand(command: string, missingMessage: string): Promise<void> {
-  try {
-    await CLI.mustRun('sh', { args: ['-c', `command -v ${command}`] })
-  } catch (error) {
-    if (!(error instanceof Errors.CommandExecutionError)) {
-      throw error
-    }
+  if (!await CLI.commandExists(command)) {
     Errors.throwUserInput(missingMessage)
   }
 }

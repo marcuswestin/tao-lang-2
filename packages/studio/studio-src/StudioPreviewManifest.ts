@@ -1,5 +1,6 @@
 import type { GenerationDeclaration } from '@generation'
-import { Errors } from '@shared'
+import { Errors, Json } from '@shared'
+import { cellIdentity, requireText, validateTaoSource, valueMatchesParameter } from './StudioPreviewCell'
 import type { StudioJsonObject, StudioJsonValue, StudioSourceRange } from './StudioProtocol'
 import { type StudioStateEntry, StudioStateLibrary } from './StudioStateLibrary'
 
@@ -58,7 +59,7 @@ export type StudioScenario = {
   subjectId: string
 }
 
-export type StudioFixture = {
+type StudioFixture = {
   fixtureId: string
   label: string
   plan: StudioJsonObject
@@ -162,13 +163,13 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
   }
   const subjects = uniqueBy(input.subjects, subject => subject.subjectId, 'Studio subject')
   for (const subject of subjects.values()) {
-    validateSource(subject.source, 'Studio subject source')
+    validateTaoSource(subject.source, 'Studio subject source')
     requireText(subject.kind === 'app' ? subject.appName : subject.viewName, `Studio ${subject.kind} name`)
   }
   const renders = uniqueBy(input.renders ?? [], render => render.renderId, 'Studio render')
   for (const render of renders.values()) {
     requireText(render.elementName, 'Studio render element name')
-    validateSource(render.source, 'Studio render source')
+    validateTaoSource(render.source, 'Studio render source')
     if (render.studioRectId !== undefined) {
       requireText(render.studioRectId, 'Studio render rectangle identity')
     }
@@ -188,12 +189,12 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
   }
   const fixtures = uniqueBy(input.fixtures, fixture => fixture.fixtureId, 'Studio fixture')
   for (const fixture of fixtures.values()) {
-    validateSource(fixture.source, 'Studio fixture source')
+    validateTaoSource(fixture.source, 'Studio fixture source')
     requireText(fixture.label, 'Studio fixture label')
   }
   const scenarios = uniqueBy(input.scenarios, scenario => scenario.scenarioId, 'Studio scenario')
   for (const scenario of scenarios.values()) {
-    validateSource(scenario.source, 'Studio scenario source')
+    validateTaoSource(scenario.source, 'Studio scenario source')
     requireText(scenario.group, 'Studio scenario group')
     requireText(scenario.label, 'Studio scenario label')
     if (scenario.fixtureId !== undefined && !fixtures.has(scenario.fixtureId)) {
@@ -241,7 +242,7 @@ function validateJourneySteps(steps: unknown, depth = 0): void {
 }
 
 function validateJourneyStep(step: unknown, depth: number): void {
-  if (!isRecord(step) || typeof step['kind'] !== 'string') {
+  if (!Json.isRecord(step) || typeof step['kind'] !== 'string') {
     throw new Errors.UserInputError('Studio journey step must be an object with a supported kind.')
   }
   const kind = step['kind']
@@ -299,22 +300,6 @@ function requireOnlyKeys(value: Readonly<Record<string, unknown>>, allowed: read
     throw new Errors.UserInputError(`${label} contains an unsupported field: ${unknown}`)
   }
 }
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function cellIdentity(manifest: StudioPreviewManifestV2, cell: StudioPreviewCell): StudioCellIdentity {
-  return {
-    appName: manifest.project.appName,
-    cellId: cell.cellId,
-    cellRevision: cell.cellRevision,
-    compileRevision: manifest.compileRevision,
-    manifestRevision: manifest.manifestRevision,
-    project: manifest.project.root,
-  }
-}
-
 function validateArgs(manifest: StudioPreviewManifestV2, scenarioId: string, args: StudioJsonObject): void {
   const scenario = manifest.scenarios.find(candidate => candidate.scenarioId === scenarioId)
   if (scenario === undefined) {
@@ -372,27 +357,6 @@ function validateParameter(parameter: StudioParameterSchema): void {
   }
 }
 
-function valueMatchesParameter(value: StudioJsonValue, parameter: StudioParameterSchema): boolean {
-  switch (parameter.type.kind) {
-    case 'boolean':
-      return typeof value === 'boolean'
-    case 'choice':
-      return parameter.type.values.some(candidate => Object.is(candidate, value))
-    case 'json':
-      return parameter.type.entity === undefined
-        || (typeof value === 'object' && value !== null && !Array.isArray(value))
-    case 'number':
-      return typeof value === 'number'
-        && Number.isFinite(value)
-        && (parameter.type.minimum === undefined || value >= parameter.type.minimum)
-        && (parameter.type.maximum === undefined || value <= parameter.type.maximum)
-    case 'text':
-      return typeof value === 'string'
-    case 'time':
-      return typeof value === 'string'
-  }
-}
-
 function validateEnvironment(environment: StudioCellEnvironment): void {
   if (!positiveFinite(environment.viewport.width) || !positiveFinite(environment.viewport.height)) {
     throw new Errors.UserInputError('Studio viewport dimensions must be positive finite numbers.')
@@ -425,21 +389,6 @@ function validateScheme(scheme: StudioSchemeEnvironment): void {
   }
 }
 
-function validateSource(source: StudioTaoSource, label: string): void {
-  if (source.kind !== 'tao') {
-    throw new Errors.UserInputError(`${label} must be Tao source.`)
-  }
-  requireText(source.path, `${label} path`)
-  if (
-    !Number.isSafeInteger(source.range.start)
-    || !Number.isSafeInteger(source.range.end)
-    || source.range.start < 0
-    || source.range.end < source.range.start
-  ) {
-    throw new Errors.UserInputError(`${label} range is invalid.`)
-  }
-}
-
 function uniqueBy<Value>(
   values: readonly Value[],
   id: (value: Value) => string,
@@ -464,11 +413,4 @@ function requireRevision(value: number, label: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new Errors.UserInputError(`${label} is invalid.`)
   }
-}
-
-function requireText(value: string, label: string): string {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new Errors.UserInputError(`${label} must not be empty.`)
-  }
-  return value
 }

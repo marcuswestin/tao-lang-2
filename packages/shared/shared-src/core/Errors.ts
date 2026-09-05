@@ -15,7 +15,7 @@
  */
 
 /** ProcessSignal declares a platform process signal value without depending on Node types. */
-export type ProcessSignal = string
+type ProcessSignal = string
 
 /** TaoError declares errors expected by Tao command and library code. */
 export type TaoError =
@@ -109,6 +109,15 @@ export function isTaoError(error: unknown): error is TaoError {
     || error instanceof CommandExecutionError
 }
 
+/**
+ * messageOf reads the message out of an unknown thrown value for a surface that shows it
+ * verbatim, such as a status line or an inline alert. `formatForUser` is the terminal rendering.
+ * `packages/runtime/TaoRuntime-src/TR-errors.ts` keeps `errorMessage` as its mirror.
+ */
+export function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 /** fromUnknown normalizes an unknown thrown value into a Tao error. */
 export function fromUnknown(error: unknown, details?: ErrorDetails): TaoError {
   if (isTaoError(error)) {
@@ -151,7 +160,7 @@ export function formatForUser(error: unknown): string {
 }
 
 /** DEBUG_ERRORS_ENV names the opt-in that makes every user-facing error render its diagnostics. */
-export const DEBUG_ERRORS_ENV = 'TAO_DEBUG_ERRORS'
+const DEBUG_ERRORS_ENV = 'TAO_DEBUG_ERRORS'
 
 /**
  * This module is the leaf every other shared module throws through, so it depends on nothing —

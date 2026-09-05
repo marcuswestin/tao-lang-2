@@ -12,7 +12,7 @@ type DevLoopControl = {
   label: string
 }
 
-export type DevLoopOutputKind = 'error' | 'info' | 'warn'
+type DevLoopOutputKind = 'error' | 'info' | 'warn'
 
 type DevLoopOutputLine = {
   kind: DevLoopOutputKind
@@ -220,7 +220,7 @@ const warningLinePattern = /\bwarn(ing)?s?\b|\bdeprecat/i
  * what separates them. The dev loop's own failures do not come through here; `recordFailure` and
  * `logDevLoop` name their own kind.
  */
-export function devLoopOutputKind(outputStream: 'stderr' | 'stdout', line: string): DevLoopOutputKind {
+function devLoopOutputKind(outputStream: 'stderr' | 'stdout', line: string): DevLoopOutputKind {
   if (outputStream === 'stdout') {
     return 'info'
   }

@@ -3,9 +3,9 @@
 import { CLI, Errors, Platform, Time } from '@shared'
 import betterOpen from 'better-opn'
 import { DevLoopTUI } from '../DevLoopTUI'
-import { Android, type AndroidSession } from './android'
-import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
-import { ExpoMetro, type ExpoMetroSession } from './metro'
+import type { AndroidSession } from './android'
+import type { ExpoSessionConfig } from './expo-config'
+import type { ExpoMetroSession } from './metro'
 import { openPhysicalDevice } from './physical-device'
 
 type IosSimulator = {
@@ -25,8 +25,6 @@ type ExpoTargetContext = {
   metro: ExpoMetroSession
 }
 
-export type ExpoTargetsSession = ReturnType<typeof createExpoTargets>
-
 /** createExpoTargets binds Expo runtime launchers to one Expo session. */
 export function createExpoTargets(
   config: ExpoSessionConfig,
@@ -43,9 +41,6 @@ export function createExpoTargets(
     openWeb: () => openWeb(context),
   }
 }
-
-/** ExpoTargets is the fixed default target session used by explicit single-session commands. */
-export const ExpoTargets = createExpoTargets(ExpoConfig, ExpoMetro, Android)
 
 /** openAndroid asks Expo to open the current app on Android, launching an emulator when Expo can. */
 async function openAndroid(context: ExpoTargetContext): Promise<boolean> {
@@ -151,16 +146,11 @@ async function openAvailableAndroid(context: ExpoTargetContext): Promise<boolean
   return false
 }
 
-async function commandExists(command: string): Promise<boolean> {
-  const result = await CLI.run('sh', { args: ['-c', `command -v ${command}`] })
-  return result.exitCode === 0 && result.error === undefined
-}
-
 async function ensureIosSimulator(
   config: ExpoSessionConfig,
   shouldStop: () => boolean,
 ): Promise<IosSimulator | undefined> {
-  if (!await commandExists('xcrun')) {
+  if (!await CLI.commandExists('xcrun')) {
     DevLoopTUI.logDevLoop('dev', 'xcrun not found; skipping iOS Simulator launch.')
     return undefined
   }
@@ -222,7 +212,7 @@ async function defaultIosSimulatorUdid(): Promise<string | undefined> {
 }
 
 async function openSimulatorApp(udid: string): Promise<void> {
-  if (!await commandExists('open')) {
+  if (!await CLI.commandExists('open')) {
     return
   }
   const result = await CLI.run('open', { args: ['-a', 'Simulator', '--args', '-CurrentDeviceUDID', udid] })

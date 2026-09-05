@@ -27,7 +27,7 @@ export type StudioInspectHit = {
 }
 
 /** MeasurableNode is the part of a native component reference this module depends on. */
-export type MeasurableNode = {
+type MeasurableNode = {
   measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void
 }
 
@@ -41,7 +41,7 @@ const refsByKey = new Map<string, (node: unknown) => (() => void) | void>()
 let nextHandle = 1
 
 /** Identifies one render occurrence in Tao source; two occurrences differ iff their spans differ. */
-export function inspectIdentityKey(identity: TaoStudioIdentity): string {
+function inspectIdentityKey(identity: TaoStudioIdentity): string {
   return `${identity.sourcePath}:${identity.start}:${identity.end}`
 }
 
@@ -194,7 +194,7 @@ export function resetStudioInspectRegistry(): void {
  * canvas builds the same `sourcePath:start:end` string for the anchors it sends — and the two must
  * stay identical, because Studio resolves both against the same source text.
  */
-export function studioRenderId(identity: TaoStudioIdentity): string {
+function studioRenderId(identity: TaoStudioIdentity): string {
   return inspectIdentityKey(identity)
 }
 

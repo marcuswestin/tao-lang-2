@@ -98,6 +98,9 @@
       "@generation/*": [
         "./generation/generation-src/*"
       ],
+      "@update-server/types": [
+        "./update-server/update-server-src/update-types.ts"
+      ],
       "@tao/code-editor": [
         "./code-editor/code-editor-src/CodeEditor.tsx"
       ],

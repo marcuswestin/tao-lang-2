@@ -8,7 +8,7 @@ import {
 } from './RepositoryDoctor'
 
 /** RunDoctorOptions selects the output shape; the diagnosis itself never differs. */
-export type RunDoctorOptions = {
+type RunDoctorOptions = {
   json?: boolean
 }
 
@@ -16,12 +16,12 @@ export type RunDoctorOptions = {
  * A warning is a fact about the machine, not a failure of the command, so only `fail` exits
  * nonzero. That keeps `doctor` usable as a gate without making optional tooling block work.
  */
-export function exitCodeFor(status: CheckStatus): number {
+function exitCodeFor(status: CheckStatus): number {
   return status === 'fail' ? 1 : 0
 }
 
 /** writeReport prints a gathered report in whichever shape the caller asked for. */
-export function writeReport(report: DoctorReport, options: RunDoctorOptions): void {
+function writeReport(report: DoctorReport, options: RunDoctorOptions): void {
   if (options.json === true) {
     HCI.writeLine(JSON.stringify(report, null, 2))
     return

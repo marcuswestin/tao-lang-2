@@ -1,4 +1,4 @@
-import { Errors, Time } from '@shared'
+import { Errors, Json, Time } from '@shared'
 
 export type AppStoreConnectFetch = (input: string, init?: RequestInit) => Promise<Response>
 
@@ -469,7 +469,7 @@ export class AppStoreConnectClient {
 
   async #resource<Resource>(path: string, init?: RequestInit): Promise<Resource> {
     const body = await this.#request(path, init, true)
-    if (!isObject(body) || !isObject(body['data'])) {
+    if (!Json.isRecord(body) || !Json.isRecord(body['data'])) {
       Errors.throwHostEnvironment('App Store Connect returned an invalid resource response.')
     }
     return body['data'] as Resource
@@ -481,12 +481,12 @@ export class AppStoreConnectClient {
     while (next !== undefined) {
       const pageUrl = this.#safeApiUrl(next)
       const body = await this.#request(pageUrl.href, undefined, true)
-      if (!isObject(body) || !Array.isArray(body['data'])) {
+      if (!Json.isRecord(body) || !Array.isArray(body['data'])) {
         Errors.throwHostEnvironment('App Store Connect returned an invalid list response.')
       }
       resources.push(...body['data'] as Resource[])
       const links = body['links']
-      next = isObject(links) && typeof links['next'] === 'string' ? links['next'] : undefined
+      next = Json.isRecord(links) && typeof links['next'] === 'string' ? links['next'] : undefined
     }
     return resources
   }
@@ -546,10 +546,10 @@ function requestUrl(baseUrl: URL, path: string, query: Readonly<Record<string, s
 }
 
 function appStoreConnectFailure(method: string, path: string, status: number, body: string): string {
-  const parsed = parseJson(body)
-  const errors = isObject(parsed) && Array.isArray(parsed['errors']) ? parsed['errors'] : []
+  const parsed = Json.tryParse(body)
+  const errors = Json.isRecord(parsed) && Array.isArray(parsed['errors']) ? parsed['errors'] : []
   const messages = errors.flatMap(error => {
-    if (!isObject(error)) {
+    if (!Json.isRecord(error)) {
       return []
     }
     const code = typeof error['code'] === 'string' ? ` ${error['code']}` : ''
@@ -564,22 +564,10 @@ function appStoreConnectFailure(method: string, path: string, status: number, bo
   return `App Store Connect request failed (${status}) for ${method} ${path}.${suffix}`
 }
 
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value) as unknown
-  } catch {
-    return undefined
-  }
-}
-
 function positiveMilliseconds(value: number | undefined, fallback: number, label: string): number {
   const resolved = value ?? fallback
   if (!Number.isFinite(resolved) || resolved <= 0) {
     Errors.throwUserInput(`The ${label} must be a positive number of milliseconds.`)
   }
   return resolved
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }

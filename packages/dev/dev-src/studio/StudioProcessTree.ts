@@ -128,7 +128,7 @@ export function processGroupKillSpec(
   return { args: [`-${signal.replace(/^SIG/, '')}`, '--', `-${pid}`], command: '/bin/kill' }
 }
 
-export function processGroupProbeSpec(pid: number): { args: string[]; command: string } {
+function processGroupProbeSpec(pid: number): { args: string[]; command: string } {
   return { args: ['-0', '--', `-${pid}`], command: '/bin/kill' }
 }
 

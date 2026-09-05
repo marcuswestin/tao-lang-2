@@ -25,7 +25,7 @@ export async function parseDocument(source: string): Promise<AST.Document> {
 }
 
 /** testOrganizeSource organizes Tao source and asserts the expected output and idempotency. */
-export async function testOrganizeSource(source: string, expected: string): Promise<void> {
+async function testOrganizeSource(source: string, expected: string): Promise<void> {
   const organized = await SourceActions.organizeSource(await parseDocument(source))
 
   Expect(organized).toBe(`${Text.stripIndent(expected)}\n`)
@@ -33,7 +33,7 @@ export async function testOrganizeSource(source: string, expected: string): Prom
 }
 
 /** testOrganizeSourceUnchanged asserts that organizing already-canonical Tao source produces no edit. */
-export async function testOrganizeSourceUnchanged(source: string): Promise<void> {
+async function testOrganizeSourceUnchanged(source: string): Promise<void> {
   Expect(await SourceActions.organizeSource(await parseDocument(source))).toBeUndefined()
 }
 

@@ -3,7 +3,7 @@ import { UserInputError } from './TR-errors'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-capture'
 
-export const schemeCaptureVersion = 1 as const
+const schemeCaptureVersion = 1 as const
 
 export type TaoAppearance = 'dark' | 'light' | 'system'
 export type TaoScheme = 'dark' | 'light'
@@ -28,7 +28,7 @@ export type TaoSchemeResolutionEnvironment = Readonly<{
   system: TaoScheme
 }>
 
-export type TaoSchemeProviderProps =
+type TaoSchemeProviderProps =
   & TaoSchemeRequest
   & Readonly<{
     children?: React.ReactNode

@@ -1,4 +1,4 @@
-import { AST, Parser } from '@parser'
+import { AST, Langium, Parser } from '@parser'
 import { Errors, FS, Repo, TaoFiles } from '@shared'
 
 /** StudioProjectRootResolution identifies the requested folder and the project selected for its Studio session. */
@@ -12,6 +12,7 @@ export type StudioProjectRootResolution = {
 export async function discoverStudioProjectRoots(input: string): Promise<string[]> {
   const inputRoot = await requireDirectory(input)
   const declarationCounts = new Map<string, number>()
+  const parserContext = Parser.createContext()
   const paths = await Repo.filesUnder(inputRoot, {
     excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
     extensions: ['.tao'],
@@ -19,7 +20,7 @@ export async function discoverStudioProjectRoots(input: string): Promise<string[
 
   for (const path of paths) {
     const source = await FS.readText(path)
-    const parsed = await Parser.parseCode(source, { validation: false })
+    const parsed = await Parser.parseSource(parserContext, source, { uri: Langium.URI.file(path), validation: false })
     const count = parsed.entry.ast.statements.filter(AST.isProjectDeclaration).length
     if (count > 0) {
       const owner = await FS.realPath(FS.dirname(path))

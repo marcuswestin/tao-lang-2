@@ -252,7 +252,7 @@ export function skippedResult(entry: string): GateResult {
 export function formatGateSummary(summary: GateSummary): string {
   const lines = ['', 'Verification summary:']
   for (const gate of summary.gates) {
-    const cost = gate.status === 'skipped' ? '' : ` ${formatMilliseconds(gate.elapsedMs)}`
+    const cost = gate.status === 'skipped' ? '' : ` ${OutputText.formatElapsed(gate.elapsedMs)}`
     const reason = gate.reason === undefined ? '' : ` — ${gate.reason}`
     lines.push(`- ${gate.name}: ${gate.status}${cost}${reason}`)
   }
@@ -263,7 +263,7 @@ export function formatGateSummary(summary: GateSummary): string {
     `${summary.gates.filter(gate => gate.status === 'passed').length} passed, `
       + `${summary.gates.filter(gate => gate.status === 'failed').length} failed, `
       + `${summary.gates.filter(gate => gate.status === 'skipped').length} skipped `
-      + `in ${formatMilliseconds(summary.elapsedMs)}`,
+      + `in ${OutputText.formatElapsed(summary.elapsedMs)}`,
   )
   lines.push(`Logs: ${FS.displayPath(summary.logRoot)}`)
   lines.push(`Summary: ${FS.displayPath(FS.resolvePath(RunArtifacts.SUMMARY_FILE, summary.logRoot))}`)
@@ -326,8 +326,4 @@ function collectWarnings(states: readonly WorkState[]): string[] {
 function lastLines(output: string, limit: number): string {
   const lines = output.split('\n').filter(line => line.trim().length > 0)
   return lines.slice(-limit).join('\n')
-}
-
-function formatMilliseconds(elapsedMs: number): string {
-  return elapsedMs >= 1_000 ? `${(elapsedMs / 1_000).toFixed(1)}s` : `${elapsedMs}ms`
 }

@@ -104,6 +104,3 @@ export function requirePassingPreflight(issues: readonly ShipPreflightIssue[]): 
 export function appStoreConnectKeyPath(keyId: string): string {
   return FS.resolvePath(`.appstoreconnect/private_keys/AuthKey_${keyId}.p8`, FS.homeDir())
 }
-
-export const APPLE_MEMBERSHIP_URL = 'https://developer.apple.com/account'
-export const APPLE_AGREEMENTS_URL = 'https://appstoreconnect.apple.com/business'

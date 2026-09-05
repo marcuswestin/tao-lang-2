@@ -12,7 +12,7 @@ import {
 
 /** The `./dev studio-ps`, `studio-stop`, and `studio-doctor` entry points, thin over the lifecycle module. */
 
-export type JsonOption = { json?: boolean }
+type JsonOption = { json?: boolean }
 
 async function runStudioPs(options: JsonOption = {}): Promise<number> {
   const listing = await listLaunches()

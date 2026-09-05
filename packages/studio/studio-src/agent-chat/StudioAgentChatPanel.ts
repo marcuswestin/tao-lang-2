@@ -1,3 +1,4 @@
+import { Text } from '@shared/core'
 // Studio agent chat: the hosted-model conversation inside the Agent rail panel. Plain DOM, styled by the
 // shared Studio sheet so it reads like the rest of the workbench; the point is still to make the flow
 // observable, and every card here says what the model did or wants to do.
@@ -102,7 +103,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       return wrapper
     }
     const pattern = new RegExp(
-      `\\b(${names.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
+      `\\b(${names.map(Text.escapeRegExp).join('|')})\\b`,
       'g',
     )
     let index = 0

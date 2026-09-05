@@ -10,50 +10,7 @@ import {
   type SourceActionOptions,
   sourceStatementContext,
 } from './source-actions-utils'
-import {
-  StudioActions,
-  type StudioAddSketchEntityParameterPatchRequest,
-  type StudioAppendScenarioStepsPatchRequest,
-  type StudioBindSketchFieldPatchRequest,
-  type StudioComponentKind,
-  type StudioInsertCapturedFixturePatchRequest,
-  type StudioInsertComponentPatchRequest,
-  type StudioInsertProjectViewPatchRequest,
-  type StudioInsertSeparatorPatchRequest,
-  type StudioInsertSpacerPatchRequest,
-  type StudioLayoutAlignment,
-  type StudioLayoutContentTerm,
-  type StudioLayoutEntry,
-  type StudioLayoutSizeValue,
-  type StudioLayoutSpacingSide,
-  type StudioLayoutTermValue,
-  type StudioMoveRenderPatchRequest,
-  type StudioMoveRenderRequest,
-  type StudioRenderGap,
-  type StudioRenderInspection,
-  type StudioScenarioArgumentValue,
-  type StudioSetLayoutEntryPatchRequest,
-  type StudioSetScenarioArgumentsPatchRequest,
-  type StudioSetStyleEntryPatchRequest,
-  type StudioSketchFieldPath,
-  type StudioSketchFieldPresentation,
-  type StudioSketchScenarioFixtureBinding,
-  type StudioSketchSnapContainer,
-  type StudioSketchSnapElement,
-  type StudioSketchSnapTree,
-  type StudioSnapSketchToFlowPatchRequest,
-  StudioSourceOccurrenceConflictError,
-  type StudioSourceOccurrencePrecondition,
-  type StudioSourcePatch,
-  type StudioSourcePatchRequest,
-  type StudioSourceTextEdit,
-  type StudioStyleEntry,
-  type StudioStyleLandingScope,
-  type StudioStyleProvenance,
-  type StudioToggleFlowDirectionPatchRequest,
-  type StudioWorkspaceDesignContext,
-  type StudioWrapRenderPatchRequest,
-} from './studio-actions'
+import { StudioActions } from './studio-actions'
 import { removeUnusedImportNames } from './use-actions'
 import { moveViewRendersLast } from './views-actions'
 
@@ -110,8 +67,8 @@ const SourceActions = {
   studioSourceVersion: StudioActions.sourceVersion,
 }
 
+export type { SourceActionOptions }
 export {
-  type SourceActionOptions,
   type StudioAddSketchEntityParameterPatchRequest,
   type StudioAppendScenarioStepsPatchRequest,
   type StudioBindSketchFieldPatchRequest,
@@ -153,6 +110,6 @@ export {
   type StudioToggleFlowDirectionPatchRequest,
   type StudioWorkspaceDesignContext,
   type StudioWrapRenderPatchRequest,
-}
+} from './studio-actions'
 
 export default SourceActions

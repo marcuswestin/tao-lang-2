@@ -11,9 +11,9 @@ import { CLI, FS } from '@shared'
  */
 
 /** ReleaseCheckStatus separates "checked and good" from "could not check". */
-export type ReleaseCheckStatus = 'failed' | 'passed' | 'unverified'
+type ReleaseCheckStatus = 'failed' | 'passed' | 'unverified'
 
-export type ReleaseCheck = {
+type ReleaseCheck = {
   detail: string
   name: string
   remediation?: string
@@ -62,7 +62,7 @@ export type ExternalGateResults = {
 }
 
 /** releaseChecks reports every release gate from gathered evidence. */
-export function releaseChecks(
+function releaseChecks(
   payload: PayloadInventory,
   artifacts: ArtifactInventory,
   gates: ExternalGateResults,

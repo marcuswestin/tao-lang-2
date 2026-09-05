@@ -420,7 +420,7 @@ export function capturePersistedState(): Readonly<Record<string, unknown>> {
   return Object.freeze(Object.fromEntries([...states].map(([key, state]) => [key, state.capture()])))
 }
 
-export function restorePersistedState(captured: Readonly<Record<string, unknown>>): void {
+function restorePersistedState(captured: Readonly<Record<string, unknown>>): void {
   for (const [key, capturedValue] of Object.entries(captured)) {
     pendingRestore.set(key, capturedValue)
     states.get(key)?.restore(capturedValue)

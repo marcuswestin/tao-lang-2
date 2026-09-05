@@ -366,7 +366,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
  * `cable` answers the case the Mac cannot detect: the Mac has Wi-Fi, but the phone is not on it, so
  * there is no network to join together. Nothing here can observe that, so it is a choice, not a guess.
  */
-export type StudioDeviceLaunchRoute = 'auto' | 'cable'
+type StudioDeviceLaunchRoute = 'auto' | 'cable'
 
 /** The cable address among the launch candidates: macOS assigns one only while a device is attached. */
 export function linkLocalCandidate(candidates: readonly string[]): string | undefined {
@@ -407,10 +407,10 @@ export function metroPortOf(metroOrigin: string): number {
 }
 
 /** loopbackHost is the address a simulator uses: it shares this Mac's network stack. */
-export const loopbackHost = '127.0.0.1'
+const loopbackHost = '127.0.0.1'
 
 /** simulatorHostName names a simulator by model and runtime, which is what a person picks from. */
-export function simulatorHostName(simulator: { name: string; runtime: string }): string {
+function simulatorHostName(simulator: { name: string; runtime: string }): string {
   return `${simulator.name} (${simulator.runtime} Simulator)`
 }
 

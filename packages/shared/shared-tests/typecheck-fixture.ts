@@ -1,3 +1,4 @@
+import { Json } from '@shared'
 import * as Shared from '../shared-src/shared'
 
 const Assert: typeof Shared.Assert = Shared.Assert
@@ -117,7 +118,7 @@ function isNumber(value: unknown): value is number {
 // reference passed. Without that, every type-guard and discriminated-union site has to stay a
 // hand-written `if` around a typed throw, which is what this fixture exists to prevent regressing.
 declare const guardedValue: unknown
-Assert(isRecord(guardedValue) && typeof guardedValue['id'] === 'string', 'a record carrying an id')
+Assert(Json.isRecord(guardedValue) && typeof guardedValue['id'] === 'string', 'a record carrying an id')
 const guardedId: unknown = guardedValue['id']
 void guardedId
 
@@ -125,7 +126,3 @@ declare const authoredValue: unknown
 Assert.input(Array.isArray(authoredValue), 'the rows to be a list')
 const authoredCount: number = authoredValue.length
 void authoredCount
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

@@ -10,7 +10,6 @@ let testMode = false
 const schemas = new Set<TaoDataSchema>()
 const globalListeners = new Set<() => void>()
 let globalRevision = 0
-let lastResetBackup: TaoDataCapture | undefined
 
 export type TaoDataCapture = Readonly<{
   entries: readonly Readonly<{ key: string; snapshot: string }>[]
@@ -102,7 +101,6 @@ export function canResetAllDataSchemas(): boolean {
 export async function resetAllDataSchemas(): Promise<TaoDataCapture> {
   RuntimeAssert(canResetAllDataSchemas(), 'every active datasource supports reset before a recovery reset runs')
   const backup = captureDataSchemas()
-  lastResetBackup = backup
   try {
     for (const schema of schemas) {
       await schema.resetFromRecovery()
@@ -119,10 +117,6 @@ export async function resetAllDataSchemas(): Promise<TaoDataCapture> {
     }
     throw error
   }
-}
-
-export function lastDataResetBackup(): TaoDataCapture | undefined {
-  return lastResetBackup
 }
 
 export function subscribeAll(listener: () => void): () => void {

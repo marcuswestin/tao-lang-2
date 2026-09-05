@@ -681,7 +681,7 @@ export class StudioCdp {
           return
         }
       } catch (error) {
-        last = error instanceof Error ? error.message : String(error)
+        last = Errors.messageOf(error)
       }
       await Time.sleep(100)
     }
@@ -955,15 +955,11 @@ async function findChromePath(): Promise<string> {
     return configured
   }
   for (const candidate of chromeCandidates) {
-    if (candidate.includes('/') ? await FS.isFile(candidate) : await executableOnPath(candidate)) {
+    if (candidate.includes('/') ? await FS.isFile(candidate) : await CLI.commandExists(candidate)) {
       return candidate
     }
   }
   throw new Errors.UserInputError('Studio smoke requires Chrome or Chromium; set TAO_STUDIO_CHROME_PATH.')
-}
-
-async function executableOnPath(command: string): Promise<boolean> {
-  return (await CLI.run('which', { args: [command], stdio: 'pipe' })).exitCode === 0
 }
 
 async function waitForActivePort(

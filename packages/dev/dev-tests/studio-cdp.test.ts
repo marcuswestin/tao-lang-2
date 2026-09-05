@@ -1,5 +1,5 @@
 import { FS } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   StudioCdp,
   type StudioCdpTransport,
@@ -196,7 +196,7 @@ Describe('Studio browser CDP harness', () => {
   })
 
   Test('writes screenshots beneath the configured smoke artifact root', async () => {
-    const artifactRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-cdp-', FS.tmpdir()))
+    const artifactRoot = await mkTestDir('tao-studio-cdp-')
     try {
       const transport = new FakeCdpTransport()
       const browser = StudioCdp.testing.create(transport, { artifactRoot })

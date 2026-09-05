@@ -1,4 +1,4 @@
-import { Errors } from '@shared'
+import { Errors, Json } from '@shared'
 import { createHash, randomUUID } from 'node:crypto'
 import { InMemoryUpdateStore, type UpdateStore, UpdateStoreConflictError } from './update-store'
 import type {
@@ -304,18 +304,18 @@ function validatePublicationData(data: TaoUpdatePublicationData): void {
 }
 
 function publicationEnvelope(value: unknown): { data: TaoUpdatePublicationData; protocolVersion: 1 } {
-  if (!isObject(value) || value['protocolVersion'] !== 1 || !isPublicationData(value['data'])) {
+  if (!Json.isRecord(value) || value['protocolVersion'] !== 1 || !isPublicationData(value['data'])) {
     requestError(400, 'Expected an Expo Updates protocol 1 publication envelope.')
   }
   return value as { data: TaoUpdatePublicationData; protocolVersion: 1 }
 }
 
 function isPublicationData(value: unknown): value is TaoUpdatePublicationData {
-  return isObject(value)
+  return Json.isRecord(value)
     && Array.isArray(value['assets'])
     && value['assets'].every(isExpoUpdateAsset)
     && typeof value['dataSchemaFingerprint'] === 'string'
-    && isObject(value['extra'])
+    && Json.isRecord(value['extra'])
     && isExpoUpdateAsset(value['launchAsset'])
     && (value['message'] === undefined || typeof value['message'] === 'string')
     && isStringRecord(value['metadata'])
@@ -324,7 +324,7 @@ function isPublicationData(value: unknown): value is TaoUpdatePublicationData {
 }
 
 function isExpoUpdateAsset(value: unknown): value is ExpoUpdateAsset {
-  return isObject(value)
+  return Json.isRecord(value)
     && typeof value['contentType'] === 'string'
     && (value['fileExtension'] === undefined || typeof value['fileExtension'] === 'string')
     && (value['hash'] === undefined || typeof value['hash'] === 'string')
@@ -437,12 +437,8 @@ function requireNonempty(value: string, message: string): void {
   }
 }
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
 function isStringRecord(value: unknown): value is Readonly<Record<string, string>> {
-  return isObject(value) && Object.values(value).every(item => typeof item === 'string')
+  return Json.isRecord(value) && Object.values(value).every(item => typeof item === 'string')
 }
 
 export type {

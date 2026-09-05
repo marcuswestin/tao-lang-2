@@ -1,3 +1,4 @@
+import { Json } from '@shared/core'
 import type { GenerationJsonSchema, JsonValue } from './generation-contract'
 
 export function checkGenerationSchema(
@@ -17,7 +18,7 @@ export function checkGenerationSchema(
     return issues
   }
 
-  if (schema.type === 'object' && isObject(value)) {
+  if (schema.type === 'object' && Json.isRecord(value)) {
     const properties = schema.properties ?? {}
     for (const required of schema.required ?? []) {
       if (!(required in value)) {
@@ -55,7 +56,7 @@ function matchesType(type: GenerationJsonSchema['type'], value: unknown): boolea
     return Array.isArray(value)
   }
   if (type === 'object') {
-    return isObject(value)
+    return Json.isRecord(value)
   }
   if (type === 'integer') {
     return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value)
@@ -64,10 +65,6 @@ function matchesType(type: GenerationJsonSchema['type'], value: unknown): boolea
     return typeof value === 'number' && Number.isFinite(value)
   }
   return typeof value === type
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function jsonEqual(left: JsonValue, right: unknown): boolean {

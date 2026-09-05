@@ -1,5 +1,5 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
-import { CLI, Errors, Repo } from '@shared'
+import { CLI, Errors, Json, Repo } from '@shared'
 import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
 import { AgentPoc } from './agent-poc/AgentPocServer'
 import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
@@ -439,14 +439,14 @@ async function handleDeviceRequest(
 }
 
 function devicePublicKeyRequest(value: unknown): { devicePublicKey: string } {
-  if (!isRecord(value) || typeof value['devicePublicKey'] !== 'string' || value['devicePublicKey'].trim() === '') {
+  if (!Json.isRecord(value) || typeof value['devicePublicKey'] !== 'string' || value['devicePublicKey'].trim() === '') {
     throw new Errors.UserInputError('Expected the device public key.')
   }
   return { devicePublicKey: value['devicePublicKey'] }
 }
 
 function deviceCellRequest(value: unknown): { cellId: string } {
-  if (!isRecord(value) || typeof value['cellId'] !== 'string' || value['cellId'].trim() === '') {
+  if (!Json.isRecord(value) || typeof value['cellId'] !== 'string' || value['cellId'].trim() === '') {
     throw new Errors.UserInputError('Expected a Studio cell id.')
   }
   return { cellId: value['cellId'] }
@@ -456,12 +456,12 @@ function deviceCellRequest(value: unknown): { cellId: string } {
 function deviceHighlightRequest(
   value: unknown,
 ): { end: number; ownerName?: string; sourcePath: string; sourceVersion: string; start: number } | undefined {
-  if (!isRecord(value) || value['occurrence'] === undefined) {
+  if (!Json.isRecord(value) || value['occurrence'] === undefined) {
     return undefined
   }
   const occurrence = value['occurrence']
   if (
-    !isRecord(occurrence)
+    !Json.isRecord(occurrence)
     || typeof occurrence['sourcePath'] !== 'string'
     || occurrence['sourcePath'].trim() === ''
     || typeof occurrence['sourceVersion'] !== 'string'
@@ -481,7 +481,7 @@ function deviceHighlightRequest(
 }
 
 function deviceLaunchOpenRequest(value: unknown): { hostId: string; route: 'auto' | 'cable' } {
-  if (!isRecord(value) || typeof value['hostId'] !== 'string' || value['hostId'].trim() === '') {
+  if (!Json.isRecord(value) || typeof value['hostId'] !== 'string' || value['hostId'].trim() === '') {
     throw new Errors.UserInputError('Expected the host id of the device to launch on.')
   }
   const route = value['route']
@@ -586,7 +586,7 @@ function studioSessionRoute(pathname: string): { pathname: string; sessionId: st
 }
 
 function projectOpenRequest(value: unknown): StudioProjectOpenRequest {
-  if (!isRecord(value) || typeof value['projectPath'] !== 'string') {
+  if (!Json.isRecord(value) || typeof value['projectPath'] !== 'string') {
     throw new Errors.UserInputError('Expected a project path and optional app name.')
   }
   if (
@@ -603,7 +603,7 @@ function projectOpenRequest(value: unknown): StudioProjectOpenRequest {
 }
 
 /** StudioPreviewDiagnosis says whether the preview's bundler can currently build the app. */
-export type StudioPreviewDiagnosis = {
+type StudioPreviewDiagnosis = {
   status: 'ok' | 'failed' | 'unreachable' | 'unknown'
   message?: string
 }
@@ -637,7 +637,7 @@ async function previewDiagnosis(previewUrl: string | undefined): Promise<StudioP
       clearTimeout(timer)
     }
   } catch (error) {
-    return { message: error instanceof Error ? error.message : String(error), status: 'unreachable' }
+    return { message: Errors.messageOf(error), status: 'unreachable' }
   }
 }
 
@@ -869,7 +869,7 @@ async function runBetaShip(request: StudioBetaShipRequest): Promise<void> {
 
 function inspectRenderRequest(value: unknown): { path: string; renderId: string; sourceVersion: string } {
   if (
-    !isRecord(value)
+    !Json.isRecord(value)
     || typeof value['path'] !== 'string'
     || typeof value['renderId'] !== 'string'
     || typeof value['sourceVersion'] !== 'string'
@@ -881,13 +881,14 @@ function inspectRenderRequest(value: unknown): { path: string; renderId: string;
 
 function dataFillRequest(value: unknown): StudioServerFillRequest {
   const entities = new Set(['Checkpoints', 'DesignTokens', 'Files', 'Problems', 'Scenarios', 'Screens', 'Views'])
-  if (!isRecord(value) || typeof value['entity'] !== 'string' || !entities.has(value['entity'])) {
+  if (!Json.isRecord(value) || typeof value['entity'] !== 'string' || !entities.has(value['entity'])) {
     throw new Errors.UserInputError('Expected a valid StudioServer entity fill request.')
   }
   const where = value['where']
   if (
     where !== undefined
-    && (!isRecord(where) || Object.values(where).some(item => !['boolean', 'number', 'string'].includes(typeof item)))
+    && (!Json.isRecord(where)
+      || Object.values(where).some(item => !['boolean', 'number', 'string'].includes(typeof item)))
   ) {
     throw new Errors.UserInputError('StudioServer fill filters must contain scalar values.')
   }
@@ -942,7 +943,7 @@ function requiredPreviewInstanceId(url: URL): string {
 
 function draftWriteRequest(value: unknown): StudioDraftWriteRequest {
   if (
-    !isRecord(value)
+    !Json.isRecord(value)
     || typeof value['path'] !== 'string'
     || typeof value['content'] !== 'string'
     || typeof value['sourceVersion'] !== 'string'
@@ -959,7 +960,7 @@ function draftWriteRequest(value: unknown): StudioDraftWriteRequest {
 }
 
 function createFileRequest(value: unknown): StudioCreateFileRequest {
-  if (!isRecord(value) || typeof value['path'] !== 'string' || typeof value['writeId'] !== 'string') {
+  if (!Json.isRecord(value) || typeof value['path'] !== 'string' || typeof value['writeId'] !== 'string') {
     throw new Errors.UserInputError('Expected path and writeId to create a Studio file.')
   }
   return { path: value['path'], writeId: value['writeId'] }
@@ -967,7 +968,7 @@ function createFileRequest(value: unknown): StudioCreateFileRequest {
 
 function renameFileRequest(value: unknown): StudioRenameFileRequest {
   if (
-    !isRecord(value)
+    !Json.isRecord(value)
     || typeof value['path'] !== 'string'
     || typeof value['sourceVersion'] !== 'string'
     || typeof value['targetPath'] !== 'string'
@@ -985,7 +986,7 @@ function renameFileRequest(value: unknown): StudioRenameFileRequest {
 
 function moveGeneratedSourceRequest(value: unknown): StudioMoveGeneratedSourceRequest {
   if (
-    !isRecord(value)
+    !Json.isRecord(value)
     || typeof value['path'] !== 'string'
     || typeof value['sourceVersion'] !== 'string'
     || typeof value['targetPackage'] !== 'string'
@@ -1005,7 +1006,7 @@ function moveGeneratedSourceRequest(value: unknown): StudioMoveGeneratedSourceRe
 
 function deleteFileRequest(value: unknown): StudioDeleteFileRequest {
   if (
-    !isRecord(value)
+    !Json.isRecord(value)
     || typeof value['path'] !== 'string'
     || typeof value['sourceVersion'] !== 'string'
     || typeof value['writeId'] !== 'string'
@@ -1071,7 +1072,7 @@ function errorResponse(
     : error instanceof Errors.UserInputError || error instanceof SyntaxError
     ? 400
     : 500
-  const message = error instanceof Error ? error.message : String(error)
+  const message = Errors.messageOf(error)
   const details = error instanceof StudioSourceActionConflictError
     ? {
       code: error.code,
@@ -1232,8 +1233,4 @@ function broadcast(
   for (const client of clients) {
     client.send(payload)
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

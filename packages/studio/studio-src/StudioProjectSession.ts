@@ -258,10 +258,6 @@ function rewriteGeneratedStudioImports(
     .reduce((rewritten, edit) => rewritten.slice(0, edit.start) + edit.replacement + rewritten.slice(edit.end), content)
 }
 
-export type StudioPreviewRegistration = {
-  previewInstanceId: string
-}
-
 export type StudioSourceActionResult = {
   checkpoint: {
     id: string

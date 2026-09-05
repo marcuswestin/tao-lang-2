@@ -1,7 +1,7 @@
 import { EditorState, type Transaction } from '@codemirror/state'
 import { type Command, type EditorView, keymap } from '@codemirror/view'
 import { Errors } from '@shared'
-import { Expect, Test, until } from '@shared/test'
+import { Deferred, Expect, Test, until } from '@shared/test'
 import type { StudioRenderInspection } from '@source-actions'
 import {
   StudioApiClient,
@@ -100,6 +100,7 @@ import {
   studioSourceActionVersion,
 } from '../studio-src/StudioProtocol'
 import { StudioTestOutput } from '../studio-src/StudioTestRunner'
+import { cellEnvironment } from './test-studio-fixtures'
 
 Test('Studio browser assets produce a self-contained CodeMirror client and escape injected config', async () => {
   const bundle = await StudioClientAssets.bundle({ validationMode: 'release' })
@@ -1297,7 +1298,7 @@ Test(
 )
 
 Test('Studio Data fills coalesce invalidation bursts into one latest follow-up', async () => {
-  const fills = [deferred<void>(), deferred<void>()]
+  const fills = [Deferred<void>(), Deferred<void>()]
   const published: number[] = []
   let fillCount = 0
   const coordinator = new StudioDataFillCoordinator(async isLatest => {
@@ -2121,7 +2122,7 @@ Test('Studio editor Mod-/ binding toggles Tao line comments for selected lines',
 
 Test('Studio file-open lifecycle invalidates an older async navigation before it can activate', async () => {
   const lifecycle = new StudioOpenFileLifecycle()
-  const firstLoaded = deferred<string>()
+  const firstLoaded = Deferred<string>()
   let activePath: string | undefined
 
   const open = async (path: string, loaded: Promise<string>): Promise<void> => {
@@ -2349,7 +2350,7 @@ Test('Studio editor insertion preserves indentation and selects the first requir
 })
 
 Test('Studio draft sync writes only explicit saves and advances the optimistic version serially', async () => {
-  const firstWrite = deferred<StudioDraftSyncResult>()
+  const firstWrite = Deferred<StudioDraftSyncResult>()
   const writes: StudioDraftSyncRequest[] = []
   const sync = new StudioDraftSync({
     content: 'before',
@@ -2449,7 +2450,7 @@ Test('Studio draft sync keeps the last saved version after an invalid draft', as
 })
 
 Test('Studio draft sync restores a rejected save without overwriting newer editor content', async () => {
-  const firstWrite = deferred<StudioDraftSyncResult>()
+  const firstWrite = Deferred<StudioDraftSyncResult>()
   const writes: StudioDraftSyncRequest[] = []
   const sync = new StudioDraftSync({
     content: 'before',
@@ -2491,16 +2492,6 @@ function saved(request: StudioDraftSyncRequest, sourceVersion: string): StudioDr
   }
 }
 
-function deferred<T>(): { promise: Promise<T>; reject: (reason?: unknown) => void; resolve: (value: T) => void } {
-  let reject!: (reason?: unknown) => void
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    reject = promiseReject
-    resolve = promiseResolve
-  })
-  return { promise, reject, resolve }
-}
-
 function runEditorCommand(state: EditorState, command: Command): EditorState {
   let next = state
   const target = {
@@ -2533,16 +2524,7 @@ function cell(cellId: string): StudioPreviewManifestV2['cells'][number] {
     args: {},
     cellId,
     cellRevision: 0,
-    environment: {
-      network: { latencyMs: 0, outcome: 'normal' },
-      scheme: {
-        capability: 'reactive-browser' as const,
-        requested: 'system' as const,
-        resolved: 'light' as const,
-        source: 'system' as const,
-      },
-      viewport: { height: 844, width: 390 },
-    },
+    environment: cellEnvironment(),
     scenarioId: cellId,
     stateLayers: [],
   }

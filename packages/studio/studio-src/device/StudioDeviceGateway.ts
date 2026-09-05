@@ -16,7 +16,7 @@ import {
   StudioDeviceTrustError,
   type TaoStudioDeviceSessionKeys,
 } from '@runtime/TR-studio-device-trust'
-import { Errors, FS } from '@shared'
+import { Errors, FS, Json } from '@shared'
 import type { StudioCompileSnapshot } from '../StudioCompileCoordinator'
 import { StudioPreviewManifest, type StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import type { StudioProjectSession, StudioSessionEvent } from '../StudioProjectSession'
@@ -444,7 +444,7 @@ export class StudioDeviceGateway {
     const message = StudioDeviceProtocol.parseClearMessage(parsed.value)
     if (message === undefined) {
       if (
-        isRecord(parsed.value) && parsed.value['type'] === 'device.hello'
+        Json.isRecord(parsed.value) && parsed.value['type'] === 'device.hello'
         && typeof parsed.value['protocol'] === 'string'
       ) {
         this.#reject(
@@ -1233,8 +1233,4 @@ function jsonResponse(value: unknown, status = 200): Response {
     headers: { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff' },
     status,
   })
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

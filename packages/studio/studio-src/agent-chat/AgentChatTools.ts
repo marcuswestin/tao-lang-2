@@ -18,8 +18,9 @@ import { parseChecks, viewCoverage } from './AgentChatCoverage'
 import { declarationSource, fileOutlines, improvementFacts } from './AgentChatFacts'
 import { taoGuarantees } from './AgentChatGuarantees'
 import { findSpec, specSections } from './AgentChatReference'
+import { objectSchema, refusal, TEXT } from './AgentChatSchema'
 
-export type AgentChatFile = { path: string; content: string; sourceVersion?: string }
+type AgentChatFile = { path: string; content: string; sourceVersion?: string }
 
 /** AgentChatWorld is everything the tools may touch. Nothing reaches past this. */
 export type AgentChatWorld = {
@@ -43,23 +44,6 @@ export type AgentChatToolCall = {
 }
 
 const NO_ARGS = { additionalProperties: false, properties: {}, type: 'object' } as const
-
-function objectSchema<Input>(properties: Record<string, unknown>, required: readonly string[]) {
-  return jsonSchema<Input>({ additionalProperties: false, properties, required: [...required], type: 'object' })
-}
-
-const TEXT = (description: string) => ({ description, type: 'string' })
-
-/**
- * refusal is how a tool says no. The model reads it and adapts; nothing throws, because a thrown tool is a
- * dead turn rather than a correction.
- */
-function refusal(message: string, options: { known?: readonly string[] } = {}): Record<string, unknown> {
-  return {
-    refused: message,
-    ...(options.known === undefined ? {} : { known: options.known.slice(0, 40) }),
-  }
-}
 
 function summarize(value: unknown, limit = 160): string {
   const text = typeof value === 'string' ? value : JSON.stringify(value)

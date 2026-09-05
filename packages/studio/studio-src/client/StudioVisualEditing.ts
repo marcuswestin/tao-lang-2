@@ -1,3 +1,4 @@
+import { Errors, Json } from '@shared/core'
 import { type StudioEditorSnippet, studioPaletteComponents } from '../StudioInspector'
 import type { StudioCanonicalSourceAction } from '../StudioProtocol'
 
@@ -15,7 +16,7 @@ export const StudioPaletteTransfer = {
   parse(value: string): StudioPaletteDragItem | undefined {
     try {
       const parsed = JSON.parse(value) as unknown
-      if (!isRecord(parsed) || !isEditorSnippet(parsed['snippet'])) {
+      if (!Json.isRecord(parsed) || !isEditorSnippet(parsed['snippet'])) {
         return undefined
       }
       if (
@@ -38,13 +39,13 @@ export const StudioPaletteTransfer = {
 } as const
 
 function isEditorSnippet(value: unknown): value is StudioEditorSnippet {
-  if (!isRecord(value) || typeof value['text'] !== 'string') {
+  if (!Json.isRecord(value) || typeof value['text'] !== 'string') {
     return false
   }
   const text = value['text']
   return Array.isArray(value['placeholders'])
     && value['placeholders'].every(range =>
-      isRecord(range)
+      Json.isRecord(range)
       && Number.isSafeInteger(range['start'])
       && Number.isSafeInteger(range['end'])
       && Number(range['start']) >= 0
@@ -53,15 +54,11 @@ function isEditorSnippet(value: unknown): value is StudioEditorSnippet {
     )
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 export function sourceActionLabel(action: StudioCanonicalSourceAction): string {
   return action.kind.replaceAll('-', ' ')
 }
 
 export function showSourceActionError(element: HTMLElement, error: unknown): void {
   element.dataset['state'] = 'error'
-  element.textContent = error instanceof Error ? error.message : String(error)
+  element.textContent = Errors.messageOf(error)
 }

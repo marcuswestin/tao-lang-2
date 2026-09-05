@@ -4,8 +4,6 @@ import { AppleFoundationModelsProvider } from './apple-foundation-models-provide
 import type { GenerationProvider } from './generation-contract'
 import { UnavailableGenerationProvider } from './unavailable-generation-provider'
 
-export { UnavailableGenerationProvider } from './unavailable-generation-provider'
-
 const HELPER_SOURCE = 'packages/generation/generation-native/AppleFoundationModelsServer.swift'
 const HELPER_BINARY = '.artifacts/build/foundation-models/tao-foundation-models-server'
 const SWIFT_CACHE = '.artifacts/cache/swift/foundation-models'
@@ -127,7 +125,7 @@ export async function startAppleFoundationModelsService(): Promise<AppleFoundati
     }
     await child.waitForClose()
     await child.closeOutput()
-    return unavailableService(errorMessage(error))
+    return unavailableService(Errors.messageOf(error))
   }
 }
 
@@ -136,10 +134,6 @@ function unavailableService(reason: string): AppleFoundationModelsService {
     provider: new UnavailableGenerationProvider(reason),
     async stop() {},
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 async function helperNeedsCompilation(source: string, binary: string): Promise<boolean> {

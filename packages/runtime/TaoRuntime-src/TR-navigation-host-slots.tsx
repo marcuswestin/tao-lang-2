@@ -15,7 +15,7 @@ export type TaoHostSlotSnapshot = Readonly<{
   toolbar: readonly TaoNavigationCommand[]
 }>
 
-export type TaoHostSlotValue = Evaluable | undefined | readonly RuntimeCommand[]
+type TaoHostSlotValue = Evaluable | undefined | readonly RuntimeCommand[]
 export type TaoHostSlotValues = Readonly<Record<string, (() => TaoHostSlotValue) | undefined>>
 export type TaoNavHostSlotConfiguration = Readonly<
   Record<string, Evaluable | readonly RuntimeCommand[]>
@@ -82,7 +82,7 @@ export class RuntimeHostReadChannel implements Subscription {
   }
 }
 
-export const emptyHostSlotSnapshot: TaoHostSlotSnapshot = Object.freeze({
+const emptyHostSlotSnapshot: TaoHostSlotSnapshot = Object.freeze({
   header: true,
   toolbar: Object.freeze([]),
 })

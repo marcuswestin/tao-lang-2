@@ -5,11 +5,10 @@ import type { StudioFile } from './StudioApiClient'
 export {
   type StudioDrawerTab,
   StudioPanelBounds,
-  type StudioPanelCellIdentity,
   StudioPanelModels,
 } from './StudioPanelProjection'
 
-export type StudioCommandTarget =
+type StudioCommandTarget =
   | { kind: 'command'; command: 'compile' | 'data' | 'problems' | 'reload' | 'toggle-mode' }
   | { kind: 'file'; path: string }
   | { kind: 'insert-component'; component: (typeof studioPaletteComponents)[number] }

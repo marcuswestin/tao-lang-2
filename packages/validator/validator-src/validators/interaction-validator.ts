@@ -6,7 +6,7 @@ import type { ValidationContext } from '../validation'
 const bareInteractionConditions = ['pressed', 'focused', 'hovered'] as const
 const editingShortcuts = new Set(['primary+a', 'primary+c', 'primary+v', 'primary+x', 'primary+z'])
 
-export const interactionValidationMessages = {
+const interactionValidationMessages = {
   condition: (condition: string) =>
     `Unknown interaction condition '${condition}'; expected when pressed, when focused, when hovered, when <region> is active, or when Scheme is Light|Dark.`,
   duplicateEntityPolicy: (entity: string, hidden: boolean) =>

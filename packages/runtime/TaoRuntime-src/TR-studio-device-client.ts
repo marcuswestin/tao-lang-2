@@ -92,7 +92,7 @@ export type StudioDeviceClientOptions = {
   transport: TaoStudioDeviceTransport
 }
 
-export type TaoStudioDeviceClientPhase =
+type TaoStudioDeviceClientPhase =
   | 'connected'
   | 'connecting'
   | 'disconnected'
@@ -106,7 +106,7 @@ export type TaoStudioDeviceClientPhase =
  * `storage` for a keychain failure, `transport` for a socket the platform could not open, and
  * `unsealed` for a frame that failed authentication.
  */
-export type TaoStudioDeviceClientErrorCode =
+type TaoStudioDeviceClientErrorCode =
   | TaoStudioDeviceRejectCode
   | 'closed'
   | 'heartbeat-timeout'
@@ -114,12 +114,12 @@ export type TaoStudioDeviceClientErrorCode =
   | 'transport'
   | 'unsealed'
 
-export type TaoStudioDeviceClientError = Readonly<{
+type TaoStudioDeviceClientError = Readonly<{
   code: TaoStudioDeviceClientErrorCode | string
   message: string
 }>
 
-export type TaoStudioDeviceWelcome = Readonly<{
+type TaoStudioDeviceWelcome = Readonly<{
   appName: string
   capabilities: readonly string[]
   heartbeatMs: number
@@ -852,7 +852,7 @@ function trustFailureCode(error: unknown): TaoStudioDeviceClientErrorCode {
 }
 
 /** socketHost reads the host and port a gateway URL names, for the snapshot and the overlay. */
-export function socketHost(url: string): string | undefined {
+function socketHost(url: string): string | undefined {
   const match = socketHostPattern.exec(url)
   return match === null ? undefined : `${match[1]}${match[2] ?? ''}`
 }
@@ -862,7 +862,7 @@ export function socketHost(url: string): string | undefined {
  * the handler a bare `Event`. The address the device dialed is the fact that helps, so the message
  * names it and appends whatever the platform did say.
  */
-export function unreachableStudioMessage(url: string, error: unknown): string {
+function unreachableStudioMessage(url: string, error: unknown): string {
   const detail = errorDetail(error)
   const endpoint = socketHost(url) ?? url
   return detail === undefined

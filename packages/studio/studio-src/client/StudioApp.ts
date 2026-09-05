@@ -1002,7 +1002,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       } catch (error) {
         if (isLatest()) {
           dataLoading = false
-          dataError = error instanceof Error ? error.message : String(error)
+          dataError = Errors.messageOf(error)
           renderDrawer()
         }
       }
@@ -1017,7 +1017,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         testStatus = await StudioApiClient.testStatus()
         testError = undefined
       } catch (error) {
-        testError = error instanceof Error ? error.message : String(error)
+        testError = Errors.messageOf(error)
       }
       if (drawerTab === 'Tests') {
         renderDrawer()
@@ -1037,7 +1037,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         const lastRun = await StudioApiClient.testRun()
         testStatus = { available: true, lastRun, running: false }
       } catch (error) {
-        testError = error instanceof Error ? error.message : String(error)
+        testError = Errors.messageOf(error)
         testStatus = { ...(testStatus ?? { available: true }), running: false }
       }
       if (drawerTab === 'Tests') {
@@ -1569,7 +1569,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             checkPreviewBundle()
           }).catch(error => {
             view.status.dataset['state'] = 'error'
-            view.status.textContent = error instanceof Error ? error.message : String(error)
+            view.status.textContent = Errors.messageOf(error)
           })
         }
         renderCommands()
@@ -2109,7 +2109,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     disconnectPreviews(partialPreviews)
     if (!isAbortError(error)) {
       view.status.dataset['state'] = 'error'
-      view.status.textContent = error instanceof Error ? error.message : String(error)
+      view.status.textContent = Errors.messageOf(error)
     }
     throw error
   }

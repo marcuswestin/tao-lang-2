@@ -3,7 +3,7 @@ import { resolveArgumentBindings } from './argument-bindings'
 import { commandSlots, commandStaticMemberText, commandStaticShortcut, mentionFills } from './commands'
 import { resolveDataWriteBindings } from './data-write-bindings'
 import { standardDesignElementName } from './design'
-import { canonicalDesignVisualHead, designColorHeads, designVisualHeads } from './design-visuals'
+import { canonicalDesignVisualHead, designColorHeads, designLayoutHeads, designVisualHeads } from './design-visuals'
 import { guardBranches } from './guards'
 import { injectionArgumentName } from './injections'
 import {
@@ -37,6 +37,7 @@ export const ASTUtils = {
   guardBranches,
   canonicalDesignVisualHead,
   designColorHeads,
+  designLayoutHeads,
   designVisualHeads,
   injectionArgumentName,
   layoutEntryValues,

@@ -39,11 +39,11 @@ export type StudioDevicePanelController = {
   setStatus(status: StudioDeviceStatus): void
 }
 
-export type StudioDevicePanelButtonState = 'behind' | 'connected' | 'idle' | 'pairing' | 'unavailable'
+type StudioDevicePanelButtonState = 'behind' | 'connected' | 'idle' | 'pairing' | 'unavailable'
 
-export type StudioDevicePanelRevision = 'applied' | 'behind' | 'unknown'
+type StudioDevicePanelRevision = 'applied' | 'behind' | 'unknown'
 
-export type StudioDevicePanelHost = {
+type StudioDevicePanelHost = {
   canOpen: boolean
   id: string
   installed: 'installed' | 'not installed' | 'unknown'
@@ -93,7 +93,7 @@ export type StudioDevicePanelModel = {
   url?: string
 }
 
-export type StudioDevicePanelContext = {
+type StudioDevicePanelContext = {
   compileRevision?: number
   launchUnavailable?: string
   now?: number

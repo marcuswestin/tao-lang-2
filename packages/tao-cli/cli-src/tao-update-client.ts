@@ -1,37 +1,14 @@
-import { Errors } from '@shared'
+import { Errors, Json } from '@shared'
+import type {
+  ExpoUpdateAsset,
+  ExpoUpdateManifest,
+  ExpoUpdatePlatform,
+  TaoPublishedUpdate,
+} from '@update-server/types'
 
 export type TaoUpdateFetch = (input: string, init?: RequestInit) => Promise<Response>
 
-export type ExpoUpdatePlatform = 'android' | 'ios'
-
-/** ExpoUpdateAsset follows the open Expo Updates v1 manifest asset shape. */
-export type ExpoUpdateAsset = {
-  contentType: string
-  fileExtension?: string
-  hash?: string
-  key: string
-  url: string
-}
-
-/** ExpoUpdateManifest is the application/expo+json representation understood by expo-updates. */
-export type ExpoUpdateManifest = {
-  assets: readonly ExpoUpdateAsset[]
-  createdAt: string
-  extra: Readonly<Record<string, unknown>>
-  id: string
-  launchAsset: ExpoUpdateAsset
-  metadata: Readonly<Record<string, string>>
-  runtimeVersion: string
-}
-
-export type TaoPublishedUpdate = {
-  applicationId: string
-  channel: string
-  dataSchemaFingerprint: string
-  manifest: ExpoUpdateManifest
-  message?: string
-  sourceUpdateId?: string
-}
+export type { ExpoUpdateAsset, ExpoUpdateManifest, ExpoUpdatePlatform, TaoPublishedUpdate }
 
 export type TaoUpdatePublication = {
   applicationId: string
@@ -179,7 +156,7 @@ export class TaoUpdateClient {
     if (!response.ok) {
       Errors.throwHostEnvironment(updateServiceFailure('GET', url.pathname, response.status, text))
     }
-    const manifest = parseJson(text)
+    const manifest = Json.tryParse(text)
     if (!isExpoUpdateManifest(manifest)) {
       Errors.throwHostEnvironment('The Tao update service returned an invalid Expo Updates manifest.')
     }
@@ -221,7 +198,7 @@ export class TaoUpdateClient {
     if (!response.ok) {
       Errors.throwHostEnvironment(updateServiceFailure(method, url.pathname, response.status, text))
     }
-    return parseJson(text)
+    return Json.tryParse(text)
   }
 
   #url(path: string): URL {
@@ -314,15 +291,15 @@ function channelUpdatesPath(applicationId: string, channel: string): string {
 }
 
 function updateServiceFailure(method: string, path: string, status: number, text: string): string {
-  const parsed = parseJson(text)
-  const message = isObject(parsed) && typeof parsed['message'] === 'string'
+  const parsed = Json.tryParse(text)
+  const message = Json.isRecord(parsed) && typeof parsed['message'] === 'string'
     ? `: ${JSON.stringify(parsed['message'])}`
     : ''
   return `Tao update service request failed (${status}) for ${method} ${path}${message}.`
 }
 
 function isPublishedUpdate(value: unknown): value is TaoPublishedUpdate {
-  return isObject(value)
+  return Json.isRecord(value)
     && typeof value['applicationId'] === 'string'
     && typeof value['channel'] === 'string'
     && typeof value['dataSchemaFingerprint'] === 'string'
@@ -330,7 +307,7 @@ function isPublishedUpdate(value: unknown): value is TaoPublishedUpdate {
 }
 
 function isExpoUpdateManifest(value: unknown): value is ExpoUpdateManifest {
-  return isObject(value)
+  return Json.isRecord(value)
     && typeof value['id'] === 'string'
     && typeof value['createdAt'] === 'string'
     && typeof value['runtimeVersion'] === 'string'
@@ -338,11 +315,11 @@ function isExpoUpdateManifest(value: unknown): value is ExpoUpdateManifest {
     && Array.isArray(value['assets'])
     && value['assets'].every(isExpoUpdateAsset)
     && isStringRecord(value['metadata'])
-    && isObject(value['extra'])
+    && Json.isRecord(value['extra'])
 }
 
 function isExpoUpdateAsset(value: unknown): value is ExpoUpdateAsset {
-  return isObject(value)
+  return Json.isRecord(value)
     && typeof value['key'] === 'string'
     && typeof value['contentType'] === 'string'
     && typeof value['url'] === 'string'
@@ -351,17 +328,5 @@ function isExpoUpdateAsset(value: unknown): value is ExpoUpdateAsset {
 }
 
 function isStringRecord(value: unknown): value is Record<string, string> {
-  return isObject(value) && Object.values(value).every(item => typeof item === 'string')
-}
-
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value) as unknown
-  } catch {
-    return undefined
-  }
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
+  return Json.isRecord(value) && Object.values(value).every(item => typeof item === 'string')
 }

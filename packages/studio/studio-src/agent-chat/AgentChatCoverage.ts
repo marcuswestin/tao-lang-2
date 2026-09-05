@@ -18,7 +18,7 @@ function tagOf(node: SnapshotNode | undefined): string | undefined {
 
 export type TestCheck = { suite: string; name: string; literals: readonly string[] }
 
-export type CoveredText = {
+type CoveredText = {
   text: string
   /** Names of the checks that appear to exercise this text. */
   checks: readonly string[]

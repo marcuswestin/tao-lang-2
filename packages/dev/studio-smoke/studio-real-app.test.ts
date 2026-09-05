@@ -1,5 +1,5 @@
 import { FS, Platform, Repo } from '@shared'
-import { Expect, Test } from '@shared/test'
+import { Expect, mkTestDir, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
   StudioInspector,
@@ -8,7 +8,7 @@ import {
 Test('Studio compiles, visually edits, and undoes the real HNReader app', async () => {
   const artifactRoot = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
     ?? FS.resolvePath('.artifacts/tests/studio-smoke/real-app', Repo.getRoot())
-  const projectRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-hnreader-', FS.tmpdir()))
+  const projectRoot = await mkTestDir('tao-studio-hnreader-')
   const previewRuntimeRoot = FS.resolvePath('runtime', artifactRoot)
   await FS.remove(previewRuntimeRoot)
   await FS.copyDirectory(Repo.resolvePath('Apps/HNReader'), projectRoot)

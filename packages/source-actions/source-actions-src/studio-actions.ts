@@ -325,7 +325,7 @@ export type StudioUnsnapSketchFromFlowPatchRequest = Readonly<{
  * StudioSetDesignEntryPatchRequest (semantic agent PoC) sets one entry on a named design bundle without a
  * render occurrence, so a design file that renders nothing can still take the edit.
  */
-export type StudioSetDesignEntryPatchRequest = {
+type StudioSetDesignEntryPatchRequest = {
   designName: string
   entry: StudioStyleEntry
   kind: 'set-design-entry'
@@ -2551,21 +2551,7 @@ function formatDesignEntry(entry: StudioStyleEntry): string {
   return (entry as readonly StudioLayoutTermValue[]).map(formatLayoutTermValue).join(' ')
 }
 
-const studioLayoutHeads = new Set([
-  'aligned',
-  'centered',
-  'claim',
-  'compress',
-  'content',
-  'fill',
-  'gap',
-  'height',
-  'hug',
-  'margin',
-  'pad',
-  'rigid',
-  'width',
-])
+const studioLayoutHeads = new Set<string>(ASTUtils.designLayoutHeads)
 const studioVisualHeads = new Set<string>(ASTUtils.designVisualHeads)
 
 function isStudioLayoutEntry(entry: readonly StudioLayoutTermValue[]): boolean {

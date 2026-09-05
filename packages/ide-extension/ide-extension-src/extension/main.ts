@@ -1,4 +1,4 @@
-import { FS, Platform } from '@shared'
+import { Errors, FS, Platform } from '@shared'
 import { type AST, Langium } from 'tao-parser'
 import SourceActions, { type SourceActionOptions } from 'tao-source-actions'
 import Workspace from 'tao-workspace'
@@ -93,16 +93,12 @@ async function runTaoSourceAction(command: TaoSourceActionCommand): Promise<void
       await vscode.window.showErrorMessage('Could not apply Tao source changes.')
     }
   } catch (error) {
-    await vscode.window.showErrorMessage(`Could not run Tao source action: ${errorMessage(error)}`)
+    await vscode.window.showErrorMessage(`Could not run Tao source action: ${Errors.messageOf(error)}`)
   }
 }
 
 function fullDocumentRange(document: vscode.TextDocument): vscode.Range {
   return new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length))
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function serverExecutableOptions(): ExecutableOptions {

@@ -11,6 +11,7 @@ import { lowerFeature, lowerReword, textCandidates } from '../agent-poc/FeatureP
 import { resolveTarget } from '../agent-poc/SemanticSnapshot'
 import { StudioProjectSession } from '../StudioProjectSession'
 import { declarationSource } from './AgentChatFacts'
+import { objectSchema, refusal, TEXT } from './AgentChatSchema'
 import type { AgentChatToolCall, AgentChatWorld } from './AgentChatTools'
 
 /** A change that has been computed and shown, and is waiting to be approved. */
@@ -40,16 +41,6 @@ export type AgentChatWriteWorld = AgentChatWorld & {
 }
 
 const diffOf = StudioProjectSession.testing.sourceActionProposalDiff
-
-function refusal(message: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
-  return { refused: message, ...extra }
-}
-
-function objectSchema<Input>(properties: Record<string, unknown>, required: readonly string[]) {
-  return jsonSchema<Input>({ additionalProperties: false, properties, required: [...required], type: 'object' })
-}
-
-const TEXT = (description: string) => ({ description, type: 'string' })
 
 /**
  * writeTools carry the change surface. `applyChange` and `undoLastChange` are the only two that touch the

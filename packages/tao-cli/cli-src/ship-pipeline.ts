@@ -1,7 +1,7 @@
 import { CLI, FS } from '@shared'
 import type { ShipProgressPhaseId } from './ship-progress'
 
-export type ShipAppleCredentials = {
+type ShipAppleCredentials = {
   issuerId: string
   keyId: string
   keyPath: string
