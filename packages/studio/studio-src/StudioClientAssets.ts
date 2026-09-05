@@ -474,9 +474,19 @@ button { color: inherit; font: inherit; }
 .studio-editor { min-height: 0; overflow: hidden; }
 .studio-editor .cm-editor { height: 100%; }
 .studio-editor[data-tao-editor-mounted="true"] > .cm-editor { display: none !important; }
-.studio-editor-tao-surface { height: 100%; min-height: 0; min-width: 0; }
-.studio-editor-tao-surface > [data-testid="studio-active-editor"] { height: 100%; }
+.studio-editor-tao-surface { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; }
+.studio-editor-tao-surface > [data-testid="studio-active-editor"] { flex: 1 1 auto; min-height: 0; }
 .studio-editor-tao-surface > [data-testid="studio-active-editor"] > div:first-child { height: 100%; }
+.studio-lens-bar { align-items: center; background: #1b1e1c; border-bottom: 1px solid #353936; display: flex; flex: 0 0 auto; flex-wrap: wrap; font-size: 12px; gap: 4px; padding: 4px 8px; }
+.studio-lens-bar-group { align-items: center; display: flex; gap: 2px; }
+.studio-lens-bar-divider { background: #353936; height: 16px; margin: 0 6px; width: 1px; }
+.studio-lens-preset, .studio-lens-facet, .studio-lens-refold { background: transparent; border: 1px solid transparent; border-radius: 4px; color: #a7b0a8; cursor: pointer; font: inherit; padding: 2px 7px; }
+.studio-lens-preset:hover, .studio-lens-facet:hover, .studio-lens-refold:hover { border-color: #424843; color: #e8e7e3; }
+.studio-lens-preset[aria-pressed="true"] { background: #2b3a2f; border-color: #4a6b52; color: #d9efe0; }
+.studio-lens-facet[aria-pressed="true"] { background: #292e2a; border-color: #424843; color: #e8e7e3; }
+.studio-lens-facet[aria-pressed="false"] .studio-lens-glyph { opacity: 0.45; }
+.studio-lens-glyph { display: inline-block; margin-right: 4px; }
+.studio-lens-refold { margin-left: auto; }
 .studio-editor .cm-scroller { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .studio-preview { background: #fff; border-left: 1px solid #353936; min-height: 0; position: relative; }
 .studio-preview iframe { border: 0; display: block; height: 100%; width: 100%; }
