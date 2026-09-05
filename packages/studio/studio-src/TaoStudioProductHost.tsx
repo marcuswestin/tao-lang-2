@@ -463,7 +463,7 @@ export function StudioScenarioControlGroup(
   )
 }
 
-export type StudioButtonProps =
+type StudioButtonProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     Disabled: boolean
@@ -490,7 +490,7 @@ export function StudioButton(props: StudioButtonProps): React.ReactElement {
   )
 }
 
-export type StudioChoiceProps =
+type StudioChoiceProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     Change: TaoStudioHostTextAction
@@ -559,7 +559,7 @@ export function StudioActions(
   return <div className="studio-actions" data-testid={props.Tag} style={props.Layout?.style}>{props.children}</div>
 }
 
-export type StudioSchemeNoteProps =
+type StudioSchemeNoteProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     Capability: string
@@ -593,7 +593,7 @@ export function StudioScenarioIdentity(
   )
 }
 
-export type StudioScenarioSourceProps =
+type StudioScenarioSourceProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     Cell: string
@@ -1004,7 +1004,7 @@ function projectRelativeDetail(detail: string): string {
   return root === undefined ? detail : projectRelativePath(root, detail) ?? detail
 }
 
-export type StudioSearchHitProps =
+type StudioSearchHitProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     Detail: string

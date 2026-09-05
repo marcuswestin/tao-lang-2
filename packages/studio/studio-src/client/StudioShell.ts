@@ -59,7 +59,7 @@ export const studioIconPaths = {
 
 export type StudioIconName = keyof typeof studioIconPaths
 
-export function studioIcon(name: StudioIconName, size: 'default' | 'small' = 'default'): string {
+function studioIcon(name: StudioIconName, size: 'default' | 'small' = 'default'): string {
   const sizeAttribute = size === 'small' ? ' data-size="small"' : ''
   return `<svg class="studio-icon"${sizeAttribute} viewBox="0 0 24 24" aria-hidden="true"><path d="${
     studioIconPaths[name]
