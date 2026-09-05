@@ -75,7 +75,7 @@ export const studioShellRailPanels = [
 ] as const
 
 /** Utilities sit at the bottom of the rail; they open a left panel like the contextual panels above them. */
-export const studioShellRailUtilities = [
+const studioShellRailUtilities = [
   { icon: 'spark', label: 'Agent', panel: 'agent' },
 ] as const
 
