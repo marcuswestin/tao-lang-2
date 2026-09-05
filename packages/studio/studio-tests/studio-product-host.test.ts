@@ -153,8 +153,11 @@ Test('Move to package prompts for a replacement only after a declaration conflic
   const source = await FS.readText(FS.resolvePath('../studio-src/client/StudioApp.ts', import.meta.dir))
 
   Expect(source).toContain("if (result.status === 'confirmation-required')")
-  Expect(source).toContain('const replacement = window.prompt(')
-  Expect(source.indexOf("result.status === 'confirmation-required'")).toBeLessThan(source.indexOf('window.prompt('))
+  Expect(source).toContain('const replacement = await StudioDialog.prompt(')
+  Expect(source).not.toMatch(/window\.(confirm|prompt|alert)\(/)
+  Expect(source.indexOf("result.status === 'confirmation-required'")).toBeLessThan(
+    source.indexOf('StudioDialog.prompt('),
+  )
 })
 
 Test('Tao Studio foreign file views render compact tree rows with contextual editing controls', () => {

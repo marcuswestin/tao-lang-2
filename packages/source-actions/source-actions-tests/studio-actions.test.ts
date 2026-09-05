@@ -778,11 +778,39 @@ Describe('Studio source-action patch bus', () => {
     })
 
     Expect(patch.content).toBe(source(`
+      use Stack from @tao/ui
+
       view MainView() {
          render Stack() {
             Text("First")
             Stack() [gap 8, pad 8] {
                Text("Second")
+      }  }  }
+    `))
+  })
+
+  Test('wrapping adds the container to an existing @tao/ui use statement', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            Text("First")
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'wrap-render',
+      renderId: renderId(requireRenderByText(document, 'Text("First")')),
+      wrapper: 'Stack',
+    })
+
+    Expect(patch.content).toBe(source(`
+      use Col, Stack, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            Stack() [gap 8, pad 8] {
+               Text("First")
       }  }  }
     `))
   })
@@ -800,6 +828,8 @@ Describe('Studio source-action patch bus', () => {
     })
 
     Expect(patch.content).toBe(source(`
+      use Stack from @tao/ui
+
       view MainView() {
          render Stack() [gap 8, pad 8] {
             Text("Root")

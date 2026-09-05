@@ -452,7 +452,16 @@ function taoProblemRow(row: StudioProblemPanelRow): StudioTaoProblemRow {
 }
 
 function cellSource(source: StudioPanelCellIdentity | undefined): string {
-  return source === undefined ? '' : `${source.cellId} · revision ${source.cellRevision}`
+  return source === undefined ? '' : `${cellLabel(source.cellId)} · revision ${source.cellRevision}`
+}
+
+/** A Studio cell id is `<absolute source path>#scenario:<group>:<entry>#cell`; people know it as group › entry. */
+function cellLabel(cellId: string): string {
+  const marker = cellId.lastIndexOf('#scenario:')
+  if (marker < 0) {
+    return cellId
+  }
+  return cellId.slice(marker + '#scenario:'.length).replace(/#cell$/u, '').split(':').join(' › ')
 }
 
 function jsonDisplay(value: StudioJsonValue): string {

@@ -315,7 +315,25 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
     const anchor = Math.max(0, Math.min(props.Selection.anchor, view.state.doc.length))
     const head = Math.max(0, Math.min(props.Selection.head ?? anchor, view.state.doc.length))
     if (view.state.selection.main.anchor !== anchor || view.state.selection.main.head !== head) {
-      view.dispatch({ selection: { anchor, head } })
+      // A selection the host sets is a navigation: a search hit, a screen, a token, a diagnostic, or
+      // an element picked in the preview. Bring it on screen; the person's own cursor moves never
+      // reach here because they already equal the view's selection.
+      view.dispatch({ scrollIntoView: true, selection: { anchor, head } })
+      // Scrolling to an unmeasured line can drag the view sideways; once the line is laid out, keep
+      // its first character in view so a selected line is never read from the middle.
+      view.requestMeasure({
+        read: measured => {
+          const lineStart = measured.coordsAtPos(measured.state.doc.lineAt(anchor).from)
+          const gutters = measured.dom.querySelector('.cm-gutters')
+          const contentLeft = (gutters ?? measured.scrollDOM).getBoundingClientRect()[gutters ? 'right' : 'left']
+          return lineStart === null ? 0 : Math.min(0, lineStart.left - contentLeft)
+        },
+        write: (overflow, measured) => {
+          if (overflow < 0) {
+            measured.scrollDOM.scrollLeft = Math.max(0, measured.scrollDOM.scrollLeft + overflow)
+          }
+        },
+      })
     }
   }, [props.Selection?.anchor, props.Selection?.head])
 

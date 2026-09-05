@@ -359,7 +359,7 @@ view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, 
    }
    render StudioContextPanelSurface() {
       StudioContextSummary(FilePath: ActiveFilePath, ScenarioId: ActiveScenarioId, CellId: ActiveCellId, RenderId: SelectedRenderId, ViewportWidth: ViewportWidth, ViewportHeight: ViewportHeight)
-      StudioInspectorSummary(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection)
+      StudioInspectorSummary(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Content: ActiveFileContent, Path: ActiveFilePath)
       StudioInspectorLayout(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, CanUndo: InspectorCanUndo, Apply: ApplyInspector, Undo: UndoInspector)
       StudioInspectorStyle(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
       StudioInspectorData(Inspection: InspectorInspection, Selection: InspectorSelection, ActiveCellId: ActiveCellId, ActiveCellRevision: CellRevision, ActiveScenarioId: ActiveScenarioId)
@@ -507,9 +507,9 @@ view StudioInspectorField(Label text) accepts content from ./TaoStudioProductHos
 
 view StudioInspectorUndoMarker() accepts content from ./TaoStudioProductHost.tsx
 
-view StudioInspectorSummary(CurrentSourceVersion text, Inspection text, Selection text) {
+view StudioInspectorSummary(CurrentSourceVersion text, Inspection text, Selection text, Content text, Path text) {
    render StudioInspectorSummarySurface() {
-      loop StudioInspectorSummaryLines(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection) / Line {
+      loop StudioInspectorSummaryLines(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Content: Content, Path: Path) / Line {
          Text(Line)
 }  }  }
 
@@ -621,8 +621,8 @@ function StudioInspectorStatus(Inspection text, Selection text) returns text {
    return StudioInspectorStatus(Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
 }
 
-function StudioInspectorSummaryLines(CurrentSourceVersion text, Inspection text, Selection text) returns list of text {
-   return StudioInspectorSummaryLines(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
+function StudioInspectorSummaryLines(CurrentSourceVersion text, Inspection text, Selection text, Content text, Path text) returns list of text {
+   return StudioInspectorSummaryLines(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Content: Content, Path: Path) from ./TaoStudioProductHost.tsx
 }
 
 function StudioInspectorUndoAvailable(Busy boolean, CanUndo boolean) returns boolean {
@@ -946,7 +946,7 @@ view StudioProblemRows(Rows list of StudioProblemPanelRow, Dispatch action(text,
             when Row.Path {
                empty -> { }
                otherwise -> {
-                  Text("{ Row.Path } · source { Row.SourceVersion }")
+                  Text(Row.Path)
                   when Row.HasPosition {
                      true -> { Text("Line { Row.Line + 1 }:{ Row.Column + 1 }") }
                      otherwise -> { }
@@ -991,11 +991,16 @@ view StudioDataPanelView(Data StudioDataPanel, Dispatch action(text, text)) {
 
 view StudioDataTableView(Table StudioDataPanelTable) {
    render Col() {
-      Text("{ Table.Datasource } / { Table.Entity }")
+      Text(StudioDataTableTitle(Datasource: Table.Datasource, Entity: Table.Entity))
       Text("{ Table.RetainedRowCount } of { Table.TotalRowCount } rows")
-      loop Table.Rows / Row {
-         Text(Row)
-}  }  }
+      StudioDataRows(Rows: Table.Rows)
+}  }
+
+view StudioDataRows(Rows list of text) from ./TaoStudioProductHost.tsx
+
+function StudioDataTableTitle(Datasource text, Entity text) returns text {
+   return StudioDataTableTitle(Datasource: Datasource, Entity: Entity) from ./TaoStudioProductHost.tsx
+}
 
 view StudioTestsPanelView(Tests StudioTestsPanel, Dispatch action(text, text)) {
    render Col() {
@@ -1056,11 +1061,18 @@ view StudioSearchPanel(Rows list of StudioSearchPanelRow) {
       when Rows {
          empty -> { Text("No search results.") }
          otherwise -> { loop Rows / Row {
-            StudioPanelCommand(Label: Row.Label, Command: Row.Action, Dispatch: Dispatch, Disabled: false)
-            Text("{ Row.Kind } · { Row.Detail }")
-            Text("{ Row.Path } · source { Row.SourceVersion }")
+            StudioSearchHitRow(Row: Row, Dispatch: Dispatch)
          } }
 }  }  }
+
+view StudioSearchHitRow(Row StudioSearchPanelRow, Dispatch action(text, text)) {
+   action Open() {
+      do Dispatch(Row.Action.Name, Row.Action.Payload)
+   }
+   render StudioSearchHit(Label: Row.Label, Kind: Row.Kind, Detail: Row.Detail, Path: Row.Path, Open: Open)
+}
+
+view StudioSearchHit(Label text, Kind text, Detail text, Path text, Open action()) from ./TaoStudioProductHost.tsx
 
 function StudioPanelSelected(Tab text, Panel text) returns boolean {
    return StudioPanelSelected(Tab: Tab, Panel: Panel) from ./TaoStudioProductHost.tsx

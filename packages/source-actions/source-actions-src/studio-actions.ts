@@ -2142,12 +2142,19 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** wrapRender wraps a rendered node in a Studio-owned Stack() container. */
+/**
+ * wrapRender wraps a rendered node in a Studio-owned Stack() container. The wrapper is a stdlib
+ * element like any palette insertion, so the file's `use … from @tao/ui` gains it when it is missing;
+ * otherwise the wrap compiles into "Could not resolve reference to RenderTarget named 'Stack'".
+ */
 async function wrapRender(document: AST.Document, request: StudioWrapRenderPatchRequest): Promise<string> {
   assertNoSyntaxErrors(document)
   requireLocalRenderId(document, request.renderId, 'wrap renders')
-  const render = requireRenderById(document.parseResult.value, request.renderId)
-  return await Formatter.formatCode(wrapRenderSource(document.textDocument.getText(), render, request.wrapper))
+  const file = document.parseResult.value
+  const render = requireRenderById(file, request.renderId)
+  // The wrap edits text after the use statements, so the parsed use offsets still hold afterwards.
+  const wrapped = wrapRenderSource(document.textDocument.getText(), render, request.wrapper)
+  return await Formatter.formatCode(ensureUiImport(wrapped, file, [request.wrapper]))
 }
 
 /** moveRender moves a rendered source node between sibling render positions. */
@@ -2345,10 +2352,16 @@ const studioComponentSnippets: Readonly<Record<StudioComponentKind, string>> = {
 const studioComponentKinds = new Set<StudioComponentKind>(Object.keys(studioComponentSnippets) as StudioComponentKind[])
 
 function ensureUiComponentImport(source: string, file: AST.TaoFile, component: StudioComponentKind): string {
+  return ensureUiImport(
+    source,
+    file,
+    [...new Set(studioComponentSnippets[component].includes('Text(') ? [component, 'Text'] : [component])],
+  )
+}
+
+/** ensureUiImport adds the named stdlib elements to the file's `@tao/ui` use statement, creating one if needed. */
+function ensureUiImport(source: string, file: AST.TaoFile, required: readonly string[]): string {
   const uses = file.statements.filter(AST.isUseStatement)
-  const required = [
-    ...new Set(studioComponentSnippets[component].includes('Text(') ? [component, 'Text'] : [component]),
-  ]
   const imported = new Set(uses.flatMap(statement =>
     statement.importPath === '@tao/ui'
       ? statement.importedDeclarations.map(reference => reference.$refText)
