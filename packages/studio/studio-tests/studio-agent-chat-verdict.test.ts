@@ -1,6 +1,6 @@
 // Semantic agent proof of concept: attributing a test failure to the change that caused it.
 import { Describe, Expect, Test } from '@shared/test'
-import { featureTestVerdict, firstLine, type TestRunSummary } from '../studio-src/agent-poc/FeatureVerdict'
+import { featureTestVerdict, firstLine, type TestRunSummary } from '../studio-src/agent-chat/FeatureVerdict'
 
 function run(options: Partial<TestRunSummary> = {}): TestRunSummary {
   return { failed: 0, failures: [], passed: 3, status: 'passed', ...options }
@@ -11,7 +11,7 @@ const FEED = {
   name: 'fills the front page from the feed',
 }
 
-Describe('Semantic agent PoC change verdict', () => {
+Describe('Agent change verdict', () => {
   Test('says the change held when the app still passes', () => {
     Expect(featureTestVerdict(run(), run())).toEqual({
       broke: [],

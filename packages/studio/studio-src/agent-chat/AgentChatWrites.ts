@@ -7,12 +7,12 @@
 
 import Formatter from '@formatter'
 import { jsonSchema, tool, type ToolSet } from 'ai'
-import { lowerFeature, lowerReword, textCandidates } from '../agent-poc/FeaturePlan'
-import { resolveTarget } from '../agent-poc/SemanticSnapshot'
 import { StudioProjectSession } from '../StudioProjectSession'
 import { declarationSource } from './AgentChatFacts'
 import { objectSchema, refusal, TEXT } from './AgentChatSchema'
 import type { AgentChatToolCall, AgentChatWorld } from './AgentChatTools'
+import { lowerFeature, lowerReword, textCandidates } from './FeaturePlan'
+import { resolveTarget } from './SemanticSnapshot'
 
 /** A change that has been computed and shown, and is waiting to be approved. */
 export type StagedChange = {

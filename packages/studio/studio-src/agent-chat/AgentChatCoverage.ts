@@ -8,7 +8,7 @@
 // `Text("No comments yet")`. Interpolated text cannot match whole, so its fixed fragments are compared
 // instead, and every result carries how it was decided so nothing here is mistaken for a compiler fact.
 
-import type { SemanticSnapshot, SnapshotNode } from '../agent-poc/SemanticSnapshot'
+import type { SemanticSnapshot, SnapshotNode } from './SemanticSnapshot'
 
 /** tagOf normalises a render's tag to the `#name` a test step writes, whichever form the graph stored. */
 function tagOf(node: SnapshotNode | undefined): string | undefined {

@@ -1,7 +1,6 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
 import { CLI, Errors, Json, Repo } from '@shared'
 import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
-import { AgentPoc } from './agent-poc/AgentPocServer'
 import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
 import type { StudioDeviceLauncher } from './device/StudioDeviceLauncher'
 import type { StudioDeviceStateEvent } from './device/StudioDeviceStatus'
@@ -777,18 +776,6 @@ async function handleRequest(
         (await request.json()) as Record<string, unknown>,
         tests,
         options.agentSecrets,
-      ),
-    )
-  }
-  if (url.pathname.startsWith('/api/agent-poc/')) {
-    return response(
-      request,
-      url,
-      options,
-      await AgentPoc.handle(
-        session,
-        url.pathname.slice('/api/agent-poc/'.length),
-        (await request.json()) as Record<string, unknown>,
       ),
     )
   }

@@ -1,9 +1,5 @@
 import { Describe, Expect, Test } from '@shared/test'
-import {
-  StudioPanelBounds,
-  StudioPanelProjection,
-  StudioTaoPanelProjection,
-} from '../studio-src/client/StudioPanelProjection'
+import { StudioPanelBounds, StudioPanelProjection } from '../studio-src/client/StudioPanelProjection'
 import type { StudioTestStatus } from '../studio-src/StudioTestRunner'
 
 const compile = {
@@ -28,25 +24,49 @@ Describe('Studio structured panel projection', () => {
       sourceVersions: { '/project/Main.tao': 'version:7' },
     })
 
-    Expect(panels.drawer.compile).toMatchObject({
-      appliedRevision: 4,
-      compileRevision: 5,
-      diagnosticCount: 1,
-      message: 'Compile failed',
-      status: 'error',
+    Expect(panels.Drawer.Compile).toMatchObject({
+      AppliedRevision: 4,
+      CompileRevision: 5,
+      DiagnosticCount: 1,
+      Message: 'Compile failed',
+      Status: 'error',
     })
-    Expect(panels.drawer.problems.rows).toEqual(panels.drawer.compile.diagnostics)
-    Expect(panels.drawer.problems.rows[0]).toMatchObject({
-      action: { name: 'open-diagnostic' },
-      detail: 'Unknown view',
-      label: '/project/Main.tao:3',
-      source: { path: '/project/Main.tao', sourceVersion: 'version:7' },
+    Expect(panels.Drawer.Problems.Rows).toEqual(panels.Drawer.Compile.Diagnostics)
+    Expect(panels.Drawer.Problems.Rows[0]).toMatchObject({
+      Action: { Name: 'open-diagnostic' },
+      Actionable: true,
+      Column: 3,
+      Detail: 'Unknown view',
+      HasPosition: true,
+      Label: '/project/Main.tao:3',
+      Line: 2,
+      Path: '/project/Main.tao',
+      SourceVersion: 'version:7',
     })
-    Expect(JSON.parse(panels.drawer.problems.rows[0]!.action!.payload)).toMatchObject({
+    Expect(JSON.parse(panels.Drawer.Problems.Rows[0]!.Action.Payload)).toMatchObject({
       filePath: '/project/Main.tao',
       message: 'Unknown view',
     })
-    Expect(Object.isFrozen(panels.drawer.problems.rows)).toBe(true)
+    Expect(Object.isFrozen(panels.Drawer.Problems.Rows)).toBe(true)
+  })
+
+  Test('keeps a project-wide diagnostic navigable-looking but not actionable', () => {
+    const panels = StudioPanelProjection.project({
+      ...baseInput(),
+      compile: { ...compile, diagnostics: [{ message: 'No entry app' }] },
+    })
+
+    Expect(panels.Drawer.Problems.Rows[0]).toEqual({
+      Action: { Name: 'open-diagnostic', Payload: 'null' },
+      Actionable: false,
+      Column: -1,
+      Detail: 'No entry app',
+      HasPosition: false,
+      Label: 'Project',
+      Line: -1,
+      Path: '',
+      SourceVersion: '',
+    })
   })
 
   Test('retains bounded Data rows with loading, error, and active-cell source identity', () => {
@@ -59,19 +79,21 @@ Describe('Studio structured panel projection', () => {
       dataSource: { cellId: 'cell:notes', cellRevision: 7 },
     })
 
-    Expect(panels.drawer.data).toMatchObject({
-      error: 'Refresh failed',
-      loading: true,
-      source: { cellId: 'cell:notes', cellRevision: 7 },
+    Expect(panels.Drawer.Data).toMatchObject({
+      Error: 'Refresh failed',
+      Loading: true,
+      Source: 'cell:notes · revision 7',
     })
-    Expect(panels.drawer.data.tables[0]).toMatchObject({
-      datasource: 'Notes:local',
-      entity: 'Notes',
-      retainedRowCount: StudioPanelBounds.dataRowsPerTable,
-      totalRowCount: StudioPanelBounds.dataRowsPerTable + 3,
+    Expect(panels.Drawer.Data.Tables[0]).toMatchObject({
+      Datasource: 'Notes:local',
+      Entity: 'Notes',
+      RetainedRowCount: StudioPanelBounds.dataRowsPerTable,
+      TotalRowCount: StudioPanelBounds.dataRowsPerTable + 3,
     })
-    Expect(panels.drawer.data.tables[0]!.rows).toHaveLength(StudioPanelBounds.dataRowsPerTable)
-    Expect(panels.drawer.data.refreshAction).toEqual({ name: 'refresh-data', payload: 'null' })
+    Expect(panels.Drawer.Data.Tables[0]!.Rows).toHaveLength(StudioPanelBounds.dataRowsPerTable)
+    Expect(panels.Drawer.Data.Tables[0]!.Rows[6]).toBe('{"Id":6}')
+    Expect(Object.isFrozen(panels.Drawer.Data.Tables[0]!.Rows)).toBe(true)
+    Expect(panels.Drawer.Data.RefreshAction).toEqual({ Name: 'refresh-data', Payload: 'null' })
   })
 
   Test('projects running/watch test state, bounded output, summaries, and navigable failures', () => {
@@ -98,19 +120,22 @@ Describe('Studio structured panel projection', () => {
     }
     const panels = StudioPanelProjection.project({ ...baseInput(), testStatus: status, testWatch: true })
 
-    Expect(panels.drawer.tests).toMatchObject({
-      available: true,
-      running: true,
-      summary: '2 passed · 1 failed · 42ms',
-      watch: true,
-      watchAction: { name: 'test-watch', payload: 'false' },
+    Expect(panels.Drawer.Tests).toMatchObject({
+      Available: true,
+      Running: true,
+      Summary: '2 passed · 1 failed · 42ms',
+      Watch: true,
+      WatchAction: { Name: 'test-watch', Payload: 'false' },
     })
-    Expect(panels.drawer.tests.output).toContain('characters omitted')
-    Expect(panels.drawer.tests.failures[0]).toMatchObject({
-      action: { name: 'open-test-failure' },
-      detail: 'Expected Saved',
-      label: 'Main > saves',
-      source: { column: 5, line: 12, path: '/project/Main.test.tao' },
+    Expect(panels.Drawer.Tests.Output).toContain('characters omitted')
+    Expect(panels.Drawer.Tests.Failures[0]).toMatchObject({
+      Action: { Name: 'open-test-failure' },
+      Column: 5,
+      Detail: 'Expected Saved',
+      HasPosition: true,
+      Label: 'Main > saves',
+      Line: 12,
+      Path: '/project/Main.test.tao',
     })
   })
 
@@ -122,7 +147,7 @@ Describe('Studio structured panel projection', () => {
     }))
     const panels = StudioPanelProjection.project({
       ...baseInput(),
-      logs,
+      logs: [...logs, { arguments: ['saved', { Id: 7 }], level: 'info', timestamp: 999 }],
       logSource: { cellId: 'cell:active', cellRevision: 9 },
       search: [{
         detail: 'Text("Needle")',
@@ -135,25 +160,26 @@ Describe('Studio structured panel projection', () => {
       }],
     })
 
-    Expect(panels.drawer.logs).toMatchObject({
-      retainedCount: StudioPanelBounds.logs,
-      source: { cellId: 'cell:active', cellRevision: 9 },
-      totalCount: StudioPanelBounds.logs + 2,
+    Expect(panels.Drawer.Logs).toMatchObject({
+      RetainedCount: StudioPanelBounds.logs,
+      Source: 'cell:active · revision 9',
+      TotalCount: StudioPanelBounds.logs + 3,
     })
-    Expect(panels.drawer.logs.rows[0]?.timestamp).toBe(2)
-    Expect(panels.search.rows[0]).toMatchObject({
-      action: { name: 'open-search-result' },
-      detail: 'Text("Needle")',
-      kind: 'text',
-      label: 'Main.tao:2',
-      source: {
-        end: 20,
-        path: '/project/Main.tao',
-        sourceVersion: 'version:3',
-        start: 14,
-      },
+    Expect(panels.Drawer.Logs.Rows[0]?.Timestamp).toBe(3)
+    Expect(panels.Drawer.Logs.Rows.at(-1)).toEqual({ Level: 'info', Message: 'saved {"Id":7}', Timestamp: 999 })
+    Expect(panels.Search.Rows[0]).toMatchObject({
+      Action: { Name: 'open-search-result' },
+      Column: -1,
+      Detail: 'Text("Needle")',
+      End: 20,
+      Kind: 'text',
+      Label: 'Main.tao:2',
+      Line: -1,
+      Path: '/project/Main.tao',
+      SourceVersion: 'version:3',
+      Start: 14,
     })
-    Expect(JSON.parse(panels.search.rows[0]!.action.payload)).toMatchObject({
+    Expect(JSON.parse(panels.Search.Rows[0]!.Action.Payload)).toMatchObject({
       path: '/project/Main.tao',
       sourceVersion: 'version:3',
     })
@@ -174,47 +200,17 @@ Describe('Studio structured panel projection', () => {
     ).toThrow('non-negative integer')
   })
 
-  Test('adapts validated models to structured Tao values without losing source or action identity', () => {
-    const panels = StudioPanelProjection.project({
-      ...baseInput(),
-      data: [{ datasource: 'Notes:local', entity: 'Notes', rows: [{ Id: 7, Title: 'Draft' }] }],
-      dataSource: { cellId: 'cell:notes', cellRevision: 3 },
-      logs: [{ arguments: ['saved', { Id: 7 }], level: 'info', timestamp: 42 }],
-      logSource: { cellId: 'cell:notes', cellRevision: 3 },
-      search: [{
-        detail: 'Text("Needle")',
-        end: 20,
-        kind: 'text',
-        label: 'Main.tao:2',
-        path: '/project/Main.tao',
-        sourceVersion: 'version:3',
-        start: 14,
-      }],
-      sourceVersions: { '/project/Main.tao': 'version:7' },
-    })
-    const values = StudioTaoPanelProjection.project(panels)
+  Test('empty panels wait for the first compile with nothing to show', () => {
+    const panels = StudioPanelProjection.empty()
 
-    Expect(values.Drawer.Data).toMatchObject({
-      Source: 'cell:notes · revision 3',
-      Tables: [{ Rows: ['{"Id":7,"Title":"Draft"}'] }],
+    Expect(panels.Drawer.Compile).toMatchObject({
+      DiagnosticCount: 0,
+      Message: 'Waiting for the first compile.',
+      Status: 'idle',
     })
-    Expect(values.Drawer.Logs).toMatchObject({
-      Rows: [{ Level: 'info', Message: 'saved {"Id":7}', Timestamp: 42 }],
-      Source: 'cell:notes · revision 3',
-    })
-    Expect(values.Drawer.Problems.Rows[0]).toMatchObject({
-      Action: { Name: 'open-diagnostic' },
-      Actionable: true,
-      Column: 3,
-      Line: 2,
-      Path: '/project/Main.tao',
-      SourceVersion: 'version:7',
-    })
-    Expect(JSON.parse(values.Search.Rows[0]!.Action.Payload)).toMatchObject({
-      path: '/project/Main.tao',
-      sourceVersion: 'version:3',
-    })
-    Expect(Object.isFrozen(values.Drawer.Data.Tables[0]!.Rows)).toBe(true)
+    Expect(panels.Drawer.Tab).toBe('Problems')
+    Expect(panels.Drawer.Tests.Available).toBe(false)
+    Expect(panels.Search.Rows).toEqual([])
   })
 })
 

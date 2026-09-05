@@ -5,7 +5,7 @@
 // claim, not what a model says about it.
 import { Describe, Expect, Test } from '@shared/test'
 import { declarationSource, fileOutlines, improvementFacts } from '../studio-src/agent-chat/AgentChatFacts'
-import type { SemanticSnapshot, SnapshotEdge, SnapshotNode } from '../studio-src/agent-poc/SemanticSnapshot'
+import type { SemanticSnapshot, SnapshotEdge, SnapshotNode } from '../studio-src/agent-chat/SemanticSnapshot'
 
 const PATH = 'App.tao'
 

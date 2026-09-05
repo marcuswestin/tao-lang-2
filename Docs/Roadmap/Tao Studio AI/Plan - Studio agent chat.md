@@ -153,19 +153,17 @@ required, none optional:
 
 Existing seams to reuse unchanged or nearly so:
 
-| Seam                                                                                                                    | Where                                                       | Used by                                                          |
-| ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------- |
-| Semantic snapshot and queries (`overview`, `inspect`, `trace`, `fieldStory`, `resolveTarget`, literal texts on renders) | `packages/studio/studio-src/agent-poc/SemanticSnapshot.ts`  | all stories                                                      |
-| PoC server commands, checkpointed apply, undo                                                                           | `agent-poc/AgentPocServer.ts`, `session.applyAgentPocFiles` | stories 2, 3                                                     |
-| Typed feature planner and lowering, reword guardrail                                                                    | `agent-poc/FeaturePlan.ts`                                  | story 3 as tools                                                 |
-| Before/after test verdict with duplicate-record folding                                                                 | `agent-poc/FeatureVerdict.ts`, `StudioTestRunner`           | stories 2, 3                                                     |
-| Fixture generation from entity declarations                                                                             | `StudioFixtureGeneration.ts`, `packages/generation`         | story 2                                                          |
-| Preview manifest (scenarios, fixtures, cells) and grid refresh                                                          | `StudioPreviewManifest.ts`, `/api/preview/*`                | story 2                                                          |
-| Source-action bus (versioned, undoable, conflict-checked edits)                                                         | `/api/source-action/*`                                      | stories 2, 3 (implementer's choice against `applyAgentPocFiles`) |
-| Panel mount, evidence links, diff and verdict rendering                                                                 | `agent-poc/StudioAgentPocPanel.ts`, `StudioApp.ts`          | all stories                                                      |
-| Run logs under `.artifacts/agent-poc/runs`                                                                              | `agent-poc/AgentPocRun.ts`                                  | transcript persistence pattern                                   |
+| Seam                                                                                                                    | Where                                                       | Used by                                                       |
+| ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------- |
+| Semantic snapshot and queries (`overview`, `inspect`, `trace`, `fieldStory`, `resolveTarget`, literal texts on renders) | `packages/studio/studio-src/agent-chat/SemanticSnapshot.ts` | all stories                                                   |
+| Checkpointed multi-file apply and undo                                                                                  | `session.applyAgentFiles`, `session.undoAgentFiles`         | stories 2, 3                                                  |
+| Typed feature planner and lowering, reword guardrail                                                                    | `agent-chat/FeaturePlan.ts`                                 | story 3 as tools                                              |
+| Before/after test verdict with duplicate-record folding                                                                 | `agent-chat/FeatureVerdict.ts`, `StudioTestRunner`          | stories 2, 3                                                  |
+| Fixture generation from entity declarations                                                                             | `StudioFixtureGeneration.ts`, `packages/generation`         | story 2                                                       |
+| Preview manifest (scenarios, fixtures, cells) and grid refresh                                                          | `StudioPreviewManifest.ts`, `/api/preview/*`                | story 2                                                       |
+| Source-action bus (versioned, undoable, conflict-checked edits)                                                         | `/api/source-action/*`                                      | stories 2, 3 (implementer's choice against `applyAgentFiles`) |
 
-New for this slice, suggested as `packages/studio/studio-src/agent-chat/` next to `agent-poc/`:
+New for this slice, suggested as `packages/studio/studio-src/agent-chat/`:
 
 - **The loop.** One AI SDK agent per chat session, held server-side, with the conversation as its
   state. A turn is: append the person's message, run the loop until the model stops, the budget trips,
@@ -268,7 +266,7 @@ model's answers belongs in the findings ledger, as the first PoC did.
 
 ### Phase 2 - Story 3, build a feature in chat
 
-- Add the write tools, approval, and undo. Decide between `applyAgentPocFiles` and the source-action
+- Add the write tools, approval, and undo. Decide between `applyAgentFiles` and the source-action
   bus; the bus gives conflict checking and versioning for free, the PoC path is already proven with
   undo. Either is acceptable; say which and why.
 - Expose the typed moves as tools first, `editSource` second. Measure how often the model reaches for
@@ -348,8 +346,8 @@ To be numbered into the exploration document's ledger as they are settled:
 
 ## Implementation record
 
-The slice is implemented in `packages/studio/studio-src/agent-chat/`, beside `agent-poc/` and sharing its
-snapshot, lowering, apply and verdict seams. What follows is what was built, what changed from the plan
+The slice is implemented in `packages/studio/studio-src/agent-chat/`, which now also owns the
+snapshot, lowering, apply and verdict seams the retired on-device proof of concept left behind. What follows is what was built, what changed from the plan
 above, and — most importantly — what is still unproven.
 
 ### What the phases produced
@@ -492,5 +490,5 @@ while the build instructions ordered the model to use it.
 - `resolveTarget` now resolves an entity's singular name (`Document` as well as `Documents`), which the
   exploration's own findings said was the model's weakest skill.
 - The snapshot is built once per turn rather than once per tool call, and invalidated when a change lands.
-- `applyAgentPocFiles` takes the versions a change was computed against, and the undo record is a stack. A
+- `applyAgentFiles` takes the versions a change was computed against, and the undo record is a stack. A
   conversation applies several changes; a single slot offered undo while being able to restore only the last.
