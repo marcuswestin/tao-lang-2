@@ -23,7 +23,12 @@ TestDeclaration:
 TestBlock returns Block:
     '{' statements+=(AppBlockDiagnosticStatement | NarrowStep)* '}';
 
-type CheckStep = RunStep | PressTextStep | TagPressStep | PressKeyStep | NarrowStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep;
+type CheckStep = RunStep | PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep
+    | PressKeyStep | NarrowStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep
+    | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep
+    | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep
+    | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep
+    | PressToolbarCommandStep;
 
 RunStep:
     'run' app=[AppValueDeclaration:ID];
@@ -33,6 +38,19 @@ PressTextStep:
 
 TagPressStep:
     'press' tag=TagOrHexColor;
+
+// Phase and pointer steps are ordinary test steps as well as the deliberately narrow journey
+// surface scenarios may replay. A phase press keeps the same selector family as plain `press`.
+PressPhaseStep:
+    'press' phase=('down' | 'up') (selector=TestSelector? target=STRING | tag=TagOrHexColor);
+
+HoverStep:
+    'hover' (selector=TestSelector? target=STRING | tag=TagOrHexColor);
+
+// Focus is intentionally tag-only: focus is about one stable element identity, not matching text.
+// Keep the head ID-based so `focus` remains available to `expect focus region` and ordinary names.
+FocusStep:
+    head=ID tag=TagOrHexColor;
 
 // Interaction vocabulary stays ID-headed and spelling-validated. `key`, `narrow`, `target`,
 // `focus`, `region`, and `verbs` therefore remain available as ordinary names elsewhere.

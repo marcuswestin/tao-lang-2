@@ -62,6 +62,7 @@ const listeners = new Set<() => void>()
 export const Dev = {
   /** getMode returns the current Tao runtime development mode. */
   getMode,
+  isDevelopmentBuild,
   hideMenu,
   isEnabled,
   isLayoutBoundsEnabled,
@@ -106,6 +107,10 @@ function getMode(): TaoDevModeState {
 
 function isEnabled(): boolean {
   return devMode.enabled
+}
+
+function isDevelopmentBuild(): boolean {
+  return isReactNativeDevMode()
 }
 
 function toggleLayoutBounds(): void {

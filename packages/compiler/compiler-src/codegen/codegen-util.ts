@@ -20,6 +20,7 @@ export const LocalDataBindings = {
 
 /** CodegenOptions carries explicit per-compilation generation modes through recursive emitters. */
 export type CodegenOptions = {
+  projectRoot?: string
   /** localDataCatalog is whether this project emits the companion catalog for `local only` entities. */
   localDataCatalog?: boolean
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>

@@ -36,6 +36,9 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
     'Design.tao': designFile(plan, names),
     'Scenarios.tao': scenariosFile(plan, names),
     [`${names.app}.test.tao`]: testFile(plan, names),
+    // The reserved root generated package exists from day one, committed empty, so Studio and the
+    // compiler have their folder before the first generated file lands.
+    '@/.gitkeep': '',
   }
   for (const entity of plan.entities) {
     files[`${entity.plural}/${entity.plural}.tao`] = featureFile(entity, names)

@@ -114,6 +114,42 @@ Describe('Studio server request boundary', () => {
     })
   })
 
+  Test('routes Move to package through the typed Studio file endpoint', async () => {
+    const calls: unknown[] = []
+    const session = {
+      async moveGeneratedSource(request: unknown) {
+        calls.push(request)
+        return { conflicts: [], name: 'View1', status: 'confirmation-required', targetPackage: '@views' }
+      },
+      subscribe: () => () => {},
+    } as unknown as StudioProjectSession
+    const url = new URL('http://127.0.0.1:5678/api/file/move-generated')
+    const response = await StudioServerTesting.handleRequest(
+      session,
+      {} as StudioFixtureGeneration,
+      new Request(url, {
+        body: JSON.stringify({
+          path: '@/studio/View1.tao',
+          sourceVersion: 'text-v1:source',
+          targetPackage: '@views',
+          writeId: 'move-view-1',
+        }),
+        headers: { 'content-type': 'application/json' },
+        method: 'POST',
+      }),
+      url,
+      {},
+    )
+
+    Expect(response.status).toBe(200)
+    Expect(calls).toEqual([{
+      path: '@/studio/View1.tao',
+      sourceVersion: 'text-v1:source',
+      targetPackage: '@views',
+      writeId: 'move-view-1',
+    }])
+  })
+
   Test('beta ships the active app through the injected shipping boundary', async () => {
     const ships: unknown[] = []
     const session = {

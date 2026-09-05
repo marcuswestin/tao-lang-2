@@ -19,9 +19,11 @@ const readinessLine = JSON.stringify({
 })
 
 /** A stand-in for a started Studio, so the harness is tested without Metro or a browser. */
-function fakeCommand(options: { exitsOnTerm?: boolean } = {}): CLI.StartedCommand & { killed: string[] } {
+function fakeCommand(
+  options: { exitCode?: number; exitsOnTerm?: boolean } = {},
+): CLI.StartedCommand & { killed: string[] } {
   const killed: string[] = []
-  let exitCode: number | null = null
+  let exitCode: number | null = options.exitCode ?? null
   return {
     args: [],
     closeOutput: async () => {},
@@ -150,6 +152,27 @@ Describe('Studio smoke launch', () => {
       Expect((thrown as Error).message).toContain('never reported readiness')
       Expect((thrown as Error).message).toContain('Expo exited')
       Expect(command.killed).toEqual(['SIGTERM'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('fails immediately when Studio exits before readiness', async () => {
+    const root = await mkTestDir('tao-smoke-launch-exit-')
+    try {
+      const command = fakeCommand({ exitCode: 1 })
+
+      await Expect(startStudioSmokeLaunch({
+        projectRoot: '/w/Apps/HNReader',
+        repositoryRoot: root,
+        start: (_command, _args, onOutput) => {
+          onOutput(Buffer.from('[studio]: Expo exited with code=1\n'))
+          return command
+        },
+        timeoutMs: 60_000,
+      })).rejects.toThrow('exited before reporting readiness (code=1 signal=null)')
+
+      Expect(command.killed).toEqual([])
     } finally {
       await FS.remove(root)
     }

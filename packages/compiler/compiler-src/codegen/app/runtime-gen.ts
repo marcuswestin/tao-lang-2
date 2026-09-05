@@ -10,6 +10,7 @@ type TaoFileCompileOptions = {
   localDataCatalog?: boolean
   scopeBindings?: string[]
   exportedBindings?: ReadonlyArray<{ exported: string; binding: string }>
+  projectRoot?: string
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppName?: string
   studioDataCatalog?: boolean

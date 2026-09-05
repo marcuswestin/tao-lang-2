@@ -21,7 +21,7 @@ export type StudioClientView = {
   inspector: HTMLElement
   interactionMode: HTMLButtonElement
   preview: HTMLElement
-  project: HTMLButtonElement
+  project: HTMLSelectElement
   rail: HTMLElement
   reload: HTMLButtonElement
   scenarioInspector: HTMLElement
@@ -73,7 +73,7 @@ export function studioShellMarkup(): string {
           <span class="studio-window-controls" aria-hidden="true">
             <i></i><i></i><i></i>
           </span>
-          <button class="studio-project studio-picker" type="button" title="Project picker"></button>
+          <select class="studio-project studio-picker" aria-label="Project" title="Project" disabled></select>
           <select class="studio-app-picker studio-picker" aria-label="App variant" title="App variant" disabled></select>
         </div>
         <div class="studio-toolbar-mode">
@@ -106,7 +106,7 @@ export function studioShellMarkup(): string {
           </section>
           <section class="studio-design-values studio-left-panel" data-studio-panel="tokens" hidden></section>
           <section class="studio-left-panel" data-studio-panel="screens" hidden><nav class="studio-screens" aria-label="Project screens"></nav></section>
-          <section class="studio-left-panel studio-panel-note" data-studio-panel="data" hidden>Live entity tables and refresh controls are in the Data drawer.</section>
+          <section class="studio-left-panel" data-studio-panel="data" hidden><div class="studio-data"></div></section>
           <section class="studio-left-panel studio-search-panel" data-studio-panel="search" hidden>
             <label><span>Search project</span><input class="studio-search-input" type="search" placeholder="Text or diagnostic"></label>
             <div class="studio-search-results" role="listbox"></div>
@@ -153,8 +153,10 @@ export function studioShellMarkup(): string {
         <div class="studio-command-results" role="listbox"></div>
       </section>
       <section class="studio-global-loading" hidden aria-live="assertive" aria-label="Studio is loading" role="status">
-        <span class="studio-global-loading-spinner" aria-hidden="true"></span>
-        <span><strong>Switching app…</strong><small>Please wait while Studio prepares the new preview.</small></span>
+        <div class="studio-global-loading-panel">
+          <span class="studio-global-loading-spinner" aria-hidden="true"></span>
+          <span><strong>Loading…</strong><small>Please wait while Studio prepares the project.</small></span>
+        </div>
       </section>
       <section class="studio-ship-overlay" hidden aria-live="assertive" aria-label="Beta shipping current app" role="status">
         <div class="studio-ship-progress">
@@ -193,7 +195,7 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
     inspector: requiredElement(root, '.studio-inspector-content'),
     interactionMode: requiredButton(root, '.studio-interaction-mode'),
     preview,
-    project: requiredButton(root, '.studio-project'),
+    project: requiredSelect(root, '.studio-project'),
     rail: requiredElement(root, '.studio-rail'),
     reload: requiredButton(root, '.studio-reload'),
     scenarioInspector: requiredElement(root, '.studio-scenario-inspector-content'),
@@ -202,6 +204,27 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
     status: requiredElement(root, '.studio-status'),
   }
 }
+
+export const StudioGlobalLoading = {
+  hide(element: HTMLElement): void {
+    element.hidden = true
+    element.removeAttribute('aria-busy')
+    element.closest('.studio-shell')?.removeAttribute('aria-busy')
+  },
+  show(element: HTMLElement, heading: string, detail: string): void {
+    const headingElement = element.querySelector<HTMLElement>('strong')
+    const detailElement = element.querySelector<HTMLElement>('small')
+    if (headingElement !== null) {
+      headingElement.textContent = heading
+    }
+    if (detailElement !== null) {
+      detailElement.textContent = detail
+    }
+    element.hidden = false
+    element.setAttribute('aria-busy', 'true')
+    element.closest('.studio-shell')?.setAttribute('aria-busy', 'true')
+  },
+} as const
 
 export function showOpenFile(view: StudioClientView, path: string): void {
   const label = path.split('/').at(-1) ?? path

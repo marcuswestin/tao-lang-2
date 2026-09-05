@@ -14,6 +14,7 @@ import {
   type StudioCreateFileRequest,
   type StudioDeleteFileRequest,
   type StudioDraftWriteRequest,
+  type StudioMoveGeneratedSourceRequest,
   StudioProjectSession,
   type StudioRenameFileRequest,
   type StudioSessionEvent,
@@ -30,6 +31,7 @@ import {
   type StudioSessionManager,
   type StudioSessionResource,
 } from './StudioSessionManager'
+import { StudioSketchCatalogConflictError } from './StudioSketchCatalog'
 import type { StudioTestRunner } from './StudioTestRunner'
 import { StudioWelcome } from './StudioWelcome'
 
@@ -676,6 +678,27 @@ async function handleRequest(
   if (request.method === 'GET' && url.pathname === '/api/files') {
     return response(request, url, options, { files: await session.files() })
   }
+  if (request.method === 'GET' && url.pathname === '/api/sketches') {
+    return response(request, url, options, await session.sketchCatalog())
+  }
+  if (request.method === 'POST' && url.pathname === '/api/sketches/action') {
+    return response(request, url, options, await session.applySketchAction(await request.json()))
+  }
+  if (request.method === 'POST' && url.pathname === '/api/sketches/flow/action') {
+    return response(request, url, options, await session.applySketchFlowAction(await request.json()))
+  }
+  if (request.method === 'POST' && url.pathname === '/api/sketches/snap/propose') {
+    return response(request, url, options, await session.proposeSketchSnap(await request.json()))
+  }
+  if (request.method === 'POST' && url.pathname === '/api/sketches/snap/apply') {
+    return response(request, url, options, await session.applySketchSnap(await request.json()))
+  }
+  if (request.method === 'POST' && url.pathname === '/api/sketches/snap/undo') {
+    return response(request, url, options, await session.undoSketchSnap(await request.json()))
+  }
+  if (request.method === 'POST' && url.pathname === '/api/sketches/unsnap/apply') {
+    return response(request, url, options, await session.applySketchUnsnap(await request.json()))
+  }
   if (request.method === 'GET' && url.pathname === '/api/file') {
     return response(request, url, options, await session.readFile(requiredPath(url)))
   }
@@ -684,6 +707,14 @@ async function handleRequest(
   }
   if (request.method === 'POST' && url.pathname === '/api/file/rename') {
     return response(request, url, options, await session.renameFile(renameFileRequest(await request.json())))
+  }
+  if (request.method === 'POST' && url.pathname === '/api/file/move-generated') {
+    return response(
+      request,
+      url,
+      options,
+      await session.moveGeneratedSource(moveGeneratedSourceRequest(await request.json())),
+    )
   }
   if (request.method === 'POST' && url.pathname === '/api/file/delete') {
     return response(request, url, options, await session.deleteFile(deleteFileRequest(await request.json())))
@@ -775,6 +806,9 @@ async function handleRequest(
   }
   if (request.method === 'POST' && url.pathname === '/api/preview/applied') {
     return response(request, url, options, { accepted: session.acknowledgePreview(await request.json()) })
+  }
+  if (request.method === 'POST' && url.pathname === '/api/preview/layout-measurements') {
+    return response(request, url, options, session.recordPreviewLayoutMeasurements(await request.json()))
   }
   if (request.method === 'GET' && url.pathname === '/api/preview/manifest') {
     const manifest = session.previewManifest()
@@ -940,6 +974,26 @@ function renameFileRequest(value: unknown): StudioRenameFileRequest {
   }
 }
 
+function moveGeneratedSourceRequest(value: unknown): StudioMoveGeneratedSourceRequest {
+  if (
+    !isRecord(value)
+    || typeof value['path'] !== 'string'
+    || typeof value['sourceVersion'] !== 'string'
+    || typeof value['targetPackage'] !== 'string'
+    || typeof value['writeId'] !== 'string'
+  ) {
+    throw new Errors.UserInputError(
+      'Expected path, targetPackage, sourceVersion, and writeId to move generated source.',
+    )
+  }
+  return {
+    path: value['path'],
+    sourceVersion: value['sourceVersion'],
+    targetPackage: value['targetPackage'],
+    writeId: value['writeId'],
+  }
+}
+
 function deleteFileRequest(value: unknown): StudioDeleteFileRequest {
   if (
     !isRecord(value)
@@ -1001,7 +1055,9 @@ function errorResponse(
   options: StudioServerOptions,
   error: unknown,
 ): Response {
-  const status = error instanceof StudioSourceActionConflictError || error instanceof StudioMatrixConflictError
+  const status = error instanceof StudioSourceActionConflictError
+      || error instanceof StudioMatrixConflictError
+      || error instanceof StudioSketchCatalogConflictError
     ? 409
     : error instanceof Errors.UserInputError || error instanceof SyntaxError
     ? 400
@@ -1017,6 +1073,12 @@ function errorResponse(
           expectedSourceVersion: error.expectedSourceVersion,
         }
         : {}),
+    }
+    : error instanceof StudioSketchCatalogConflictError
+    ? {
+      actualRevision: error.actualRevision,
+      code: error.code,
+      expectedRevision: error.expectedRevision,
     }
     : error instanceof StudioMatrixConflictError
     ? { code: error.code }
@@ -1071,6 +1133,7 @@ function originAuthorization(
 function previewOriginPath(pathname: string): boolean {
   return pathname === '/api/preview/instance'
     || pathname === '/api/preview/applied'
+    || pathname === '/api/preview/layout-measurements'
     || pathname === '/api/preview/cell'
     || pathname === '/api/preview/cell/bootstrap'
     || pathname === '/api/preview/cell/instance'

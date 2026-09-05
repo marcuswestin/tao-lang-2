@@ -576,15 +576,17 @@ an entry here may link one when the developer workflow is also affected.
 - **Area:** Test reliability
 - **Impact:** The sandbox full-verification lane could fail even though the performance-contract test
   only launches four fast `just --dry-run` inspections and passes immediately by itself.
-- **Evidence:** The test hit Bun's default five-second timeout while `_ship-bundle-proof` ran beside the
-  package-test node; an immediate isolated run completed in 27 milliseconds.
+- **Evidence:** The test first hit Bun's default five-second timeout while `_ship-bundle-proof` ran beside
+  the package-test node; after receiving an explicit 30-second timeout, it timed out again during a
+  normal-terminal `full-verify` while an immediate isolated run completed in 107 milliseconds.
 - **Workaround:** Re-run the focused performance-check suite after the full lane becomes quiet.
-- **Proposed change:** Give this subprocess-based contract test an explicit 30-second timeout while
-  preserving its assertions and keeping actual benchmarks outside verification.
-- **Dependencies:** Resolved on `feat/verification-lanes`; no scheduling policy changed.
-- **Acceptance:** The focused test and a subsequent `full-verify-sandbox` pass without weakening the
-  rule that only `bench` reaches the language benchmark.
-- **Source:** 2026-09-04 `full-verify-sandbox` acceptance run on `feat/verification-lanes`.
+- **Proposed change:** Replace the four nested `just --dry-run` subprocesses with a deterministic repo-lint
+  rule that follows recipe references and `{{ VARIABLE }}` gate lists while keeping actual benchmarks
+  outside verification.
+- **Dependencies:** Resolved on `feat/freehand-ui-sketching-implementation`; no scheduling policy changed.
+- **Acceptance:** Focused tests prove direct and variable-mediated benchmark reachability, `_repo-lint`
+  passes, and the full package-test lane no longer launches the nested Just inspection.
+- **Source:** 2026-09-04 `full-verify-sandbox` acceptance and 2026-09-04 normal-terminal merge verification.
 
 ### DEVENV-036 — Critical-path verification startup and host-wait concurrency
 
@@ -678,7 +680,64 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** A clean `just studio-native` reaches a ready preview with no unresolved-module output.
 - **Source:** 2026-09-04 companion Slice 2 work.
 
-### DEVENV-040 — A fresh worktree cannot run `./tao` until the parser is generated
+### DEVENV-040 — Bun dependency recovery conflicts with protected package fixtures
+
+- **Status:** Candidate
+- **Area:** Dependency installation
+- **Impact:** A stale Bun link can block every verification command, while the documented clean-install
+  recovery cannot remove a dependency tree containing a sandbox-protected fixture file.
+- **Evidence:** After merging main, `./agent verify` failed with `EEXIST: failed to link package:
+  expo-updates@29.0.20`; the prescribed `rm -rf node_modules` then stopped at Expo's
+  `e2e/fixtures/project_files/.env` with `Operation not permitted` even in the approved elevated command.
+- **Workaround:** Move the stale `node_modules` directory intact to a unique path under `/private/tmp`,
+  without reading or deleting its contents, then run `bun install --frozen-lockfile`.
+- **Proposed change:** Make the dependency workflow repair stale links idempotently, and teach its recovery
+  diagnostic to recommend an atomic move when protected third-party fixture names prevent recursive removal.
+- **Dependencies:** None.
+- **Acceptance:** A fixture reproducing the protected-path link failure recovers through the documented
+  command without reading protected content, and a second `./agent verify` dependency check is clean.
+- **Source:** 2026-09-04 freehand/main merge verification.
+
+### DEVENV-041 — Nested gate-runner tests inherit the live machine registry
+
+- **Status:** Resolved
+- **Area:** Test reliability
+- **Impact:** `./agent verify` could time out two otherwise millisecond-scale gate-runner tests, including
+  on its isolated retry, because the nested runner waited for capacity held by its enclosing lane.
+- **Evidence:** The JSON-summary and artifact-trail tests each hit their 15-second test timeout during a
+  three-lane, 32.9-load verify run, then both passed as part of the focused 221-millisecond suite when
+  no outer lane owned the shared registry.
+- **Workaround:** Run the gate-runner test file outside a repository verification lane.
+- **Proposed change:** Give every nested `runGates` fixture its own temporary machine-registry root so a
+  unit test cannot discover or wait on real repository lanes.
+- **Dependencies:** Resolved on `feat/freehand-ui-sketching-implementation`.
+- **Acceptance:** The focused gate-runner suite and `./agent verify` pass while another registered lane
+  is present; the tests that intentionally model contention continue to use their explicit fixtures.
+- **Source:** 2026-09-04 verification of the full-verify reliability fixes.
+
+### DEVENV-042 — Studio smoke observes persistence before browser reconciliation
+
+- **Status:** In progress
+- **Area:** Test reliability
+- **Impact:** The simulated Studio journey blocks otherwise green merge verification at different
+  synthetic sketch interactions, so it cannot currently serve as reliable merge evidence.
+- **Evidence:** Readiness and browser-reconciliation barriers plus the toolbar event fix moved failures
+  from Snap to the first rectangle draw. The latest normal-terminal run left the catalog at revision 1
+  with zero rectangles while the other 18 full-verification gates passed, showing that the generic CDP
+  pointer drag itself is not deterministic enough for this journey.
+- **Workaround:** The full-verification graph reports `_full-verify-simulated` as explicitly skipped;
+  `just _full-verify-simulated` remains available to reproduce it, and the deterministic catalog tests
+  in the same file plus the native and canary lanes remain active.
+- **Proposed change:** Replace coordinate-only synthetic sketch gestures with a deterministic browser
+  action boundary that confirms event receipt and the corresponding authoritative board generation
+  before advancing. Keep mutations single-shot rather than retrying requests that may already be live.
+- **Dependencies:** Quarantined on `feat/freehand-ui-sketching-implementation`; the product fixes and
+  synchronization diagnostics remain in place for the follow-up.
+- **Acceptance:** `_full-verify-simulated` completes the Draw, Snap, Unsnap, overlap-confirmation, and
+  Undo sequence in ten consecutive normal-terminal runs before it rejoins automatic full verification.
+- **Source:** 2026-09-04 normal-terminal merge verification and explicit quarantine decision.
+
+### DEVENV-043 — A fresh worktree cannot run `./tao` until the parser is generated
 
 - **Status:** Candidate
 - **Area:** Worktree setup
@@ -697,7 +756,7 @@ an entry here may link one when the developer workflow is also affected.
   without a manual generation step.
 - **Source:** 2026-09-04 `tao create` work.
 
-### DEVENV-041 — `tao test` under a Git-ignored path says "No Tao tests found" without the reason
+### DEVENV-044 — `tao test` under a Git-ignored path says "No Tao tests found" without the reason
 
 - **Status:** Candidate
 - **Area:** Diagnostics
@@ -715,7 +774,7 @@ an entry here may link one when the developer workflow is also affected.
   naming the ignore rule.
 - **Source:** 2026-09-04 `tao create` work.
 
-### DEVENV-042 — `sips` exits 13 inside the Claude Code Bash sandbox
+### DEVENV-045 — `sips` exits 13 inside the Claude Code Bash sandbox
 
 - **Status:** Candidate
 - **Area:** Sandbox
@@ -731,7 +790,7 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** `./agent capabilities` reports whether `sips` can run in the current shell.
 - **Source:** 2026-09-04 `tao create` review.
 
-### DEVENV-043 — `bun --tsconfig-override` fails for scripts outside the repository
+### DEVENV-046 — `bun --tsconfig-override` fails for scripts outside the repository
 
 - **Status:** Candidate
 - **Area:** Agent scratch tooling

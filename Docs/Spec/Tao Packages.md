@@ -4,8 +4,8 @@ Status: partially implemented design draft. The current implementation supports 
 `project { id "..." name "..." version "..." remote none license ... }` metadata, `tao create` and project-ID
 migration, `file`/`package`/`workspace`/`public`
 declaration visibility, `use ... from ...` imports for relative Tao source paths and `@tao/...`
-stdlib paths, bare same-package `use Foo`, local `@package[/subfolder]` imports through an in-memory
-workspace package index, and public self-hosted `nav` and `datasource` declarations. Import renaming,
+stdlib paths, bare same-package `use Foo`, local `@package[/subfolder]` imports, the reserved root
+`@[/subfolder]` generated package, and public self-hosted `nav` and `datasource` declarations. Import renaming,
 `requires`, external workspace installation, lockfiles, remotes, other
 CLI package commands, and package publishing remain future work.
 
@@ -50,9 +50,10 @@ compiler-known names are involved.
   images to a color palette before any model is involved.
 - The command writes the canonical layout of `Docs/Roadmap/Tao Revolution/Decisions.md` §1, as far
   as the toolchain runs it today: `App.tao` (project and app), `Data.tao`, `Chrome.tao`,
-  `Design.tao`, one folder per feature with a list and a detail scene, `Scenarios.tao`, and
-  `<App>.test.tao`. The result is formatted, validated, and its behavior tests are run before the
-  command reports success; `--skip-tests` skips only the test run.
+  `Design.tao`, one folder per feature with a list and a detail scene, `Scenarios.tao`,
+  `<App>.test.tao`, and the committed empty generated-package scaffold `@/.gitkeep`. The result is
+  formatted, validated, and its behavior tests are run before the command reports success;
+  `--skip-tests` skips only the test run.
 - The project `id` is also the directory name. `--id <id>` chooses it; otherwise it is suggested
   from the display name and confirmed at the prompt. An id is lowercase letters, digits, and
   hyphens.
@@ -158,6 +159,26 @@ Packages can make code available to other packages, and even other workspaces.
   - A declaration is referenced by its folder name, _not_ its file's name
   - A workspace root folder cannot be a `@package`
 
+### Generated project package
+
+Every Tao project reserves its root `@/` directory for committed generated Tao source. It is one
+package named exactly `@`, with one subfolder per generator. Studio owns `@/studio`, whose public
+views are imported normally, for example `use View1 from @/studio`. Existing named package spellings
+such as `@tao/ui` are unchanged. Only the project-root directory has this meaning; a nested directory
+whose literal name is `@` is an ordinary directory and remains reachable within its containing
+package.
+
+Generated source may use ordinary relative imports back into its owning project, such as
+`use Playlist from ../../Data` from `@/studio/View1.tao`. This is a narrow one-way exception: authored
+project source cannot cross into `@/` by relative path, generated source cannot cross relatively into
+another named package, and all declaration visibility rules still apply.
+
+Generated files are read-only working-tree artifacts. `tao fix`, `tao fmt`, and repository dprint
+lanes check them but never rewrite them. The owning generator temporarily enables only owner-write,
+restores mode `0444` after success or failure, and repairs that mode when it opens a project. A
+generated file begins with an ownership header; moving it to an authored package removes that
+ownership and any generator-private rectangle markers, then rewrites its `@/studio` import sites.
+
 ### Making packages available to other files
 
 - You make a declaration available to other files by declaring its visibility: `file`, `package`, `workspace`, or `public`.
@@ -195,7 +216,8 @@ Packages can make code available to other packages, and even other workspaces.
 
 ## Using available code from other packages
 
-- Packages and their subfolders can be referenced via `@<package>` and `@<package>/<subfolder>`
+- Packages and their subfolders can be referenced via `@<package>` and `@<package>/<subfolder>`;
+  generated project source uses the reserved forms `@` and `@/<subfolder>`
   - `use Foo from @<package>`
   - `use Bar from @<package>/<subfolder>`
   - `use Cat, Mat from @<package>/<subfolder1>/<subfolder2>`

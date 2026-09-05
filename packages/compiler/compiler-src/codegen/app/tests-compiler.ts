@@ -41,6 +41,18 @@ export default {
     return gen.noop()
   },
 
+  PressPhaseStep(): Compiled {
+    return gen.noop()
+  },
+
+  HoverStep(): Compiled {
+    return gen.noop()
+  },
+
+  FocusStep(): Compiled {
+    return gen.noop()
+  },
+
   /** EnterTextStep compiles to no generated app output. */
   EnterTextStep(_enter: AST.EnterTextStep): Compiled {
     return gen.noop()

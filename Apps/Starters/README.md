@@ -9,8 +9,9 @@ reproduces these folders or fails `creation-lowering.test.ts` with the first dif
 Every starter follows the canonical layout from `Docs/Roadmap/Tao Revolution/Decisions.md` §1,
 restricted to what the toolchain runs today: `App.tao` (project and app), `Data.tao` (entities),
 `Chrome.tao` (shared navigation), `Design.tao` (always written), one folder per feature with its list
-and detail scenes, `Scenarios.tao` (fixtures and Studio scenarios), and `<App>.test.tao` (behavior
-tests). Access, Rules, and Words join as their tranches land.
+and detail scenes, `Scenarios.tao` (fixtures and Studio scenarios), `<App>.test.tao` (behavior
+tests), and the committed empty generated-package scaffold `@/.gitkeep`. Access, Rules, and Words
+join as their tranches land.
 
 To change a starter, change the lowering or its reference plan, then regenerate:
 

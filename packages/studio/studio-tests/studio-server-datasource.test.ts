@@ -207,10 +207,14 @@ Test('StudioServer Tao provider replaces its complete mirror after pushed invali
         ? files
         : entity === 'DesignTokens'
         ? [{
+          DesignName: 'GardenDesign',
+          End: 24,
           Id: 'Garden.tao#design-token:ink',
+          Kind: 'token',
           Name: 'ink',
           SourcePath: 'Garden.tao',
           SourceVersion: 'one',
+          Start: 12,
           Value: '#121826',
         }]
         : entity === 'Problems'
@@ -251,10 +255,14 @@ Test('StudioServer Tao provider replaces its complete mirror after pushed invali
         DesignToken: {
           collection: 'DesignTokens',
           fields: {
+            DesignName: { kind: 'text' },
+            End: { kind: 'number' },
+            Kind: { kind: 'text' },
             Name: { kind: 'text' },
             SourcePath: { kind: 'text' },
             SourceVersion: { kind: 'text' },
             StableId: { kind: 'text', unique: true },
+            Start: { kind: 'number' },
             Value: { kind: 'text' },
           },
           inverseFields: {},
@@ -310,11 +318,15 @@ Test('StudioServer Tao provider replaces its complete mirror after pushed invali
     Source: 'compile',
   }])
   Expect(first.rows.DesignToken).toEqual([{
+    DesignName: 'GardenDesign',
+    End: 24,
     Id: 'DesignToken:Garden.tao#design-token:ink',
+    Kind: 'token',
     Name: 'ink',
     SourcePath: 'Garden.tao',
     SourceVersion: 'one',
     StableId: 'Garden.tao#design-token:ink',
+    Start: 12,
     Value: '#121826',
   }])
   Expect(first.rows.Problem).toEqual([{
