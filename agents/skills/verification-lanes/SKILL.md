@@ -21,12 +21,18 @@ description: >-
   not maintain a second trigger list in instructions.
 - Run `./agent verify` before every commit.
 - Run `./agent full-verify-sandbox` immediately before a merge when working in a managed shell. It
-  runs the full gate membership except the six explicitly host-only browser and native UI gates and
+  runs the full gate membership except the five explicitly host-only browser and native UI gates (the
+  simulated-user journey is a separate quarantine skip, not a host-only gate) and
   never proves those gates passed.
 - Run `just full-verify` from an unsandboxed normal terminal whenever Studio is in scope and before
   landing through the human merge workflow.
 - Read `.artifacts/logs/<lane>/latest/summary.json` before diagnosing a red lane. A separately
-  recorded retry attempt, not concatenated output, owns the final failure classification.
+  recorded retry attempt, not concatenated output, owns the final failure classification. A node that
+  fails again on its isolated retry is classified `repository`, not `machine-contention`. The other
+  failure kinds name their cause: `native-host-busy` (another worktree holds the native host),
+  `hutch-install-timeout`, `electrobun-prepare-timeout`, `native-probe-timeout`, `native-runtime-exit`,
+  `test-assertion`, `environment-setup`, `optional-tooling`, `sandbox-restriction`, and
+  `user-interruption`.
 - A gate that passes its machine-exclusive confirmation is green evidence, remains marked
   `retried`, and emits a warning preserving the original timeout.
 - `just test-flakes` and `just test-slowest` are reports, not gates.

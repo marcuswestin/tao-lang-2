@@ -249,6 +249,12 @@ export class StudioDeviceGateway {
     if (device === undefined) {
       Errors.throwUnexpected('A pairing device has no description.')
     }
+    // The connection is checked before the device is trusted, not after: a device that walked away
+    // between asking and being confirmed should leave no record behind, and trusting it first meant
+    // the refusal that follows left a device in the trust list nobody ever finished pairing.
+    if (connection.state !== 'pairing') {
+      Errors.throwUserInput('The device disconnected before pairing was confirmed.')
+    }
     const pairedAt = this.#now().toISOString()
     await this.#store.trust({
       device,
@@ -257,6 +263,8 @@ export class StudioDeviceGateway {
       lastSeenAt: pairedAt,
       pairedAt,
     })
+    // Checked again: the write above is awaited, and a phone that goes away during it must not be
+    // welcomed into a session over a socket that is already gone.
     if (connection.state !== 'pairing') {
       Errors.throwUserInput('The device disconnected before pairing was confirmed.')
     }
@@ -580,7 +588,7 @@ export class StudioDeviceGateway {
     }
     connection.state = 'pairing'
     this.#sendSealed(connection, { type: 'studio.pairingPending' })
-    this.#log(`device ${connection.device?.name ?? 'unknown'} is waiting for pairing confirmation`)
+    this.#log(`device ${deviceText(connection.device?.name ?? 'unknown')} is waiting for pairing confirmation`)
     this.#emit(ref.sessionId)
   }
 
@@ -603,7 +611,7 @@ export class StudioDeviceGateway {
     })
     connection.unsubscribe = ref.session.subscribe(event => this.#sessionEvent(connection, event))
     this.#repeatedOutcome = undefined
-    this.#log(`device ${connection.device?.name ?? 'unknown'} connected to ${ref.session.appName}`)
+    this.#log(`device ${deviceText(connection.device?.name ?? 'unknown')} connected to ${ref.session.appName}`)
     this.#emit(ref.sessionId)
   }
 
@@ -826,6 +834,22 @@ export class StudioDeviceGateway {
     if (ref === undefined) {
       Errors.throwUnexpected('A device message arrived on a connection without a session.')
     }
+    // Nothing a device says is acted on before a person confirmed the pairing. A ping is answered
+    // because it is the device's only way to learn the connection is alive while it waits, and it
+    // carries nothing; every other message — a log line, a report, a selection — would put an
+    // unconfirmed device's text in front of the person who is deciding whether to trust it.
+    if (connection.state !== 'connected') {
+      if (message.type === 'device.ping') {
+        this.#sendSealed(connection, { type: 'studio.pong' })
+        return
+      }
+      this.#sendSealed(connection, {
+        code: 'pairing-pending',
+        message: 'Studio has not confirmed pairing yet.',
+        type: 'studio.error',
+      })
+      return
+    }
     if (message.type === 'device.ping') {
       this.#sendSealed(connection, { type: 'studio.pong' })
       return
@@ -833,24 +857,17 @@ export class StudioDeviceGateway {
     if (message.type === 'device.log') {
       // Straight into Studio's own output, where a person driving Studio is already looking. The
       // lines also still print on the phone, so a dropped connection loses the mirror, not the log.
-      const name = connection.device?.name ?? 'unknown'
+      const name = deviceText(connection.device?.name ?? 'unknown')
       for (const entry of message.entries) {
-        this.#log(`device ${name} ${entry.level}: ${entry.message}`)
+        this.#log(`device ${name} ${entry.level}: ${deviceText(entry.message)}`)
       }
       return
     }
     if (message.type === 'device.report') {
-      connection.lastReport = { level: message.level, message: message.message }
-      this.#log(`device ${connection.device?.name ?? 'unknown'} ${message.level}: ${message.message}`)
+      const reported = deviceText(message.message)
+      connection.lastReport = { level: message.level, message: reported }
+      this.#log(`device ${deviceText(connection.device?.name ?? 'unknown')} ${message.level}: ${reported}`)
       this.#emit(ref.sessionId)
-      return
-    }
-    if (connection.state !== 'connected') {
-      this.#sendSealed(connection, {
-        code: 'pairing-pending',
-        message: 'Studio has not confirmed pairing yet.',
-        type: 'studio.error',
-      })
       return
     }
     if (message.type === 'device.selectCell') {
@@ -1157,6 +1174,20 @@ export class StudioDeviceGateway {
  * device genuinely path-free means changing the compiler's identifier scheme, which the Metro
  * bundle bakes in and the browser canvas shares — see this slice's known limitations.
  */
+/** How much of one device-supplied line Studio mirrors; a phone cannot flood the log with one report. */
+const deviceTextLimit = 500
+
+/**
+ * deviceText makes a device-supplied string safe to put on one line of Studio's log or in the
+ * popover. A device chooses its own name and writes its own log lines, so those strings can carry a
+ * newline that forges a second log entry, or an ANSI escape that repaints the terminal the person is
+ * reading Studio's output in. Every control character becomes a space and the line is bounded.
+ */
+function deviceText(value: string): string {
+  const flattened = [...value].map(character => (/\p{Cc}|\p{Cf}/u.test(character) ? ' ' : character)).join('')
+  return flattened.length > deviceTextLimit ? `${flattened.slice(0, deviceTextLimit)}…` : flattened
+}
+
 function deviceCellRuntime(runtime: unknown): unknown {
   if (typeof runtime !== 'object' || runtime === null) {
     return runtime

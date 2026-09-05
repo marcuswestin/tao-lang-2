@@ -201,6 +201,10 @@ function reportMemberValue(
   value: AST.Expression,
   ctx: ValidationContext,
 ): void {
+  // A member whose declared default is `none` (Prelude's `Key shortcut is none`) accepts `none`.
+  if (AST.isNoneLiteral(value) && !Type.propertyRequiresValue(property)) {
+    return
+  }
   const expected = Type.ofProperty(property)
   if (expected.kind === 'primitive' && expected.primitive === 'shortcut') {
     validateShortcut(value, ctx)

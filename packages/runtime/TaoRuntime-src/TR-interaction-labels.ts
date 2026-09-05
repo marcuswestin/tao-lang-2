@@ -68,7 +68,7 @@ export function matchesNarrowing(
     return true
   }
   const candidates = corpus.flatMap(text => words(text, locale))
-  const collator = new Intl.Collator(locale, { sensitivity: 'base', usage: 'search' })
+  const collator = searchCollator(locale)
   let candidateIndex = 0
   for (const prefix of prefixes) {
     let matched = false
@@ -88,18 +88,43 @@ export function matchesNarrowing(
 }
 
 function words(value: string, locale?: string): string[] {
-  const Segmenter = (Intl as typeof Intl & {
-    Segmenter?: new(
-      locale?: string,
-      options?: { granularity: 'word' },
-    ) => { segment(value: string): Iterable<{ isWordLike?: boolean; segment: string }> }
-  }).Segmenter
-  if (Segmenter) {
-    return [...new Segmenter(locale, { granularity: 'word' }).segment(value)]
+  const segmenter = wordSegmenter(locale)
+  if (segmenter) {
+    return [...segmenter.segment(value)]
       .filter(part => part.isWordLike !== false)
       .map(part => part.segment)
   }
   return value.match(/[\p{L}\p{N}]+/gu) ?? []
+}
+
+type TaoWordSegmenter = { segment(value: string): Iterable<{ isWordLike?: boolean; segment: string }> }
+
+// Narrowing rebuilds every row's word list on every keystroke. Constructing an Intl object is the
+// expensive part and its result depends only on the locale, so one instance per locale is kept for
+// the process: both are immutable, so sharing them is invisible to a caller.
+const collators = new Map<string, Intl.Collator>()
+const wordSegmenters = new Map<string, TaoWordSegmenter | undefined>()
+
+function searchCollator(locale: string | undefined): Intl.Collator {
+  const cached = collators.get(locale ?? '')
+  if (cached) {
+    return cached
+  }
+  const collator = new Intl.Collator(locale, { sensitivity: 'base', usage: 'search' })
+  collators.set(locale ?? '', collator)
+  return collator
+}
+
+function wordSegmenter(locale: string | undefined): TaoWordSegmenter | undefined {
+  if (wordSegmenters.has(locale ?? '')) {
+    return wordSegmenters.get(locale ?? '')
+  }
+  const Segmenter = (Intl as typeof Intl & {
+    Segmenter?: new(locale?: string, options?: { granularity: 'word' }) => TaoWordSegmenter
+  }).Segmenter
+  const segmenter = Segmenter ? new Segmenter(locale, { granularity: 'word' }) : undefined
+  wordSegmenters.set(locale ?? '', segmenter)
+  return segmenter
 }
 
 function readText(value: unknown, path: TaoOutlineTextPath): string | undefined {

@@ -317,7 +317,9 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   const reportRoot = Shared.FS.resolvePath('test-results', location.logRoot)
   await Shared.FS.mkdir(reportRoot)
   const suites = await discoverTestSuites(prepared.pattern, machineLane.capacity, {
-    changedReference: prepared.changed?.reference,
+    // Only a changed-files run narrows suites by the branch diff. A retry carries the ledger's own
+    // file list and must not intersect it with the diff, or it runs nothing and reports red.
+    changedReference: prepared.kind === 'changed' ? prepared.changed?.reference : undefined,
     files: prepared.files,
     includePerformance: prepared.kind !== 'changed'
       || TestSelection.selectsPerformanceChecks(prepared.changed?.changedPaths ?? []),

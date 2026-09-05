@@ -161,7 +161,8 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
   function showAvailability(state: Availability): void {
     cloud.checked = state.enabled
     cloud.disabled = !state.configured
-    status.textContent = state.reason ?? `Answering with ${state.model}. Only this app's declarations are sent.`
+    status.textContent = state.reason
+      ?? `Answering with ${state.model}. This app's declarations and, when the model looks something up, excerpts of Tao's own spec are sent.`
     status.dataset['state'] = state.enabled ? 'on' : 'off'
   }
 

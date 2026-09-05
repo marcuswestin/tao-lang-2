@@ -177,7 +177,8 @@ Describe('contended failure confirmation', () => {
 
     Expect(summary.contention?.contended).toBe(true)
     Expect(summary.gates[0]?.retried).toBe(true)
-    Expect(summary.gates[1]?.failureKind).toBe('machine-contention')
+    // The isolated retry ruled the machine out, so the second failure is the repository's.
+    Expect(summary.gates[1]?.failureKind).toBe('repository')
     Expect(summary.warnings[0]).toContain('3 Tao lanes ran at once')
     Expect(summary.warnings.some(warning => warning.includes('passed only on an isolated retry'))).toBe(true)
     Expect(summary.warnings.some(warning => warning.includes('failed again on an isolated retry'))).toBe(true)

@@ -12,6 +12,19 @@ the next slice in FS-D20's mandated order.
 
 The foundation landed on `main` as squash `13d2577c` (2026-09-04 22:20).
 
+A review of everything that landed on 2026-09-04 and 2026-09-05 followed. For this plan's surface it
+fixed: the inspector's Layout, Style, and Text drafts follow the inspected element instead of the first
+one seeded, and Set text refuses to swap a binding for `Text("")`; a sketch board recovers from a lost
+pointer capture instead of holding the render gate closed; the matrix reconciler removes departed cells
+before placing survivors, so a removal no longer detaches the sketch host mid-gesture; canvas mode keeps
+the app visible when the focused view is no longer rendered; `remove-render` refuses a `#studio_rect_`
+marker (Unsnap first) and a container's only child; `tao check` warns about a shipping `Placeholder`
+under `@/studio` too (FS-D2) while Snap's measured `width` and `height` no longer count as explorations
+there; projection order is code-point order. Still open from that review: a Snap/Unsnap rollback when
+the catalog write succeeds and the source write fails; a catalog restore that checks the revision it
+restores over; one shared `#studio_rect_` marker decoder instead of three; and whether `hover`, `down`,
+and `up` stay global keywords, which is Ro's call.
+
 Landed: L1 (ordered scenario steps, pointer phases, action stand-ins, optional fixture,
 `Placeholder`, `Spacer`), the root `@` package with Move to package, Slice 1 Draw, Slice 2 Snap with
 the transactional Unsnap and typed flow actions, the Slice 3 Feed server foundations, and the review

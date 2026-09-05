@@ -173,7 +173,10 @@ async function decryptSecrets(environment: SecretsEnvironment): Promise<number> 
     values.set(name, (await environment.cipher.decrypt(store.secrets[name]!.value.join('\n'))).trimEnd())
   }
   const path = Repo.resolvePath(ENV_PATH)
-  await FS.writeText(path, renderEnvFile(values, { generatedAt: environment.now() }))
+  // The plaintext store is owner-only. `mode` applies to a fresh file and this command rewrites an
+  // existing one every run, so the mode is asserted afterwards as well.
+  await FS.writeText(path, renderEnvFile(values, { generatedAt: environment.now() }), { mode: 0o600 })
+  await FS.chmod(path, 0o600)
   HCI.writeSuccess(`Wrote ${values.size} ${values.size === 1 ? 'secret' : 'secrets'} to ${ENV_PATH}.\n`)
   HCI.writeLine(`Anything you maintain by hand belongs in ${LOCAL_PATH}, which this never writes.`)
   return 0

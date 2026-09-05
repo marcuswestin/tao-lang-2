@@ -61,7 +61,14 @@ export function SelectableRow(props: {
           }
         },
       }),
-    onFocus: () => InteractionControls.TargetIdentity(props.identity),
+    // `focusin` bubbles on web, so a nested control's own focus arrives here as the row's. Taking
+    // attention then would move it off that control and pull DOM focus back to the row.
+    onFocus: (event?: TaoRowFocusEvent) => {
+      if (event !== undefined && event.target !== event.currentTarget) {
+        return
+      }
+      InteractionControls.TargetIdentity(props.identity)
+    },
     onPress: activate,
     ref: host,
   }
@@ -85,6 +92,12 @@ export function SelectableRow(props: {
 type TaoWebClickEvent = Readonly<{
   currentTarget?: unknown
   target?: Readonly<{ closest?(selector: string): unknown }>
+}>
+
+/** A native focus event carries neither field, so the row keeps taking attention off the platform. */
+type TaoRowFocusEvent = Readonly<{
+  currentTarget?: unknown
+  target?: unknown
 }>
 
 /** A web row is a named group, not a button containing every button rendered by the row. */

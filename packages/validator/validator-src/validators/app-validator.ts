@@ -175,6 +175,10 @@ function validateAppProperties(
       )
       continue
     }
+    // A slot whose declared default is `none` is optional, so `none` is one of its legal fills.
+    if (AST.isExpression(slot.value) && AST.isNoneLiteral(slot.value) && !Type.propertyRequiresValue(expected)) {
+      continue
+    }
     // Configuration-only nodes carry no expression type; the owning configuration validator checks those.
     const actual = AST.isExpression(slot.value) ? Type.ofExpression(slot.value) : { kind: 'unresolved' as const }
     const expectedType = Type.ofProperty(expected)

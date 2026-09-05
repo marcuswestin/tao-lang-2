@@ -731,8 +731,12 @@ function applyCanvasFocus(parent: HTMLElement): void {
   if (canvas === null) {
     return
   }
-  for (const row of canvas.querySelectorAll<HTMLElement>(':scope > [data-tao-studio-group]')) {
-    row.hidden = focused !== undefined && row.dataset['taoStudioGroupView'] !== focused
+  const rows = [...canvas.querySelectorAll<HTMLElement>(':scope > [data-tao-studio-group]')]
+  // A focused view no scenario renders any more (renamed, removed, or its file no longer compiles)
+  // leaves nothing to show alone. The app stays visible under the bar instead of the grid going blank.
+  const shown = focused !== undefined && rows.some(row => row.dataset['taoStudioGroupView'] === focused)
+  for (const row of rows) {
+    row.hidden = shown && row.dataset['taoStudioGroupView'] !== focused
   }
   const existing = canvas.querySelector<HTMLElement>(':scope > .studio-canvas-bar')
   if (focused === undefined) {
@@ -745,7 +749,9 @@ function applyCanvasFocus(parent: HTMLElement): void {
   bar.className = 'studio-canvas-bar'
   bar.dataset['taoStudioCanvasBar'] = focused
   const label = bar.querySelector<HTMLElement>(':scope > span') ?? document.createElement('span')
-  label.textContent = `Editing ${focused} on its own. Changes land in that one view definition.`
+  label.textContent = shown
+    ? `Editing ${focused} on its own. Changes land in that one view definition.`
+    : `${focused} is not rendered by any scenario right now, so the whole app is shown.`
   const back = bar.querySelector<HTMLButtonElement>(':scope > button') ?? document.createElement('button')
   back.type = 'button'
   back.textContent = 'Back to app'
@@ -755,16 +761,33 @@ function applyCanvasFocus(parent: HTMLElement): void {
   canvas.prepend(bar)
 }
 
-/** Moves keyed matrix nodes in place so retained preview iframes keep their browsing contexts. */
+/**
+ * Moves keyed matrix nodes in place so retained preview iframes keep their browsing contexts.
+ * Departed children go first, so a removal never shuffles the survivors behind it: a detach and
+ * reattach reloads an iframe and takes the pointer capture from a sketch board mid-gesture.
+ */
 function reconcileElementChildren(parent: HTMLElement, next: readonly HTMLElement[]): void {
+  const kept = new Set<Element>(next)
+  for (const child of [...parent.children]) {
+    if (!kept.has(child)) {
+      child.remove()
+    }
+  }
   for (const [index, element] of next.entries()) {
     const current = parent.children.item(index)
     if (current !== element) {
-      parent.insertBefore(element, current)
+      moveElementBefore(parent, element, current)
     }
   }
-  while (parent.children.length > next.length) {
-    parent.lastElementChild?.remove()
+}
+
+/** A reorder uses the browser's state-preserving move where it exists and falls back to insertBefore. */
+function moveElementBefore(parent: HTMLElement, element: HTMLElement, before: Element | null): void {
+  const movable = parent as HTMLElement & { moveBefore?: (node: Node, child: Node | null) => void }
+  if (typeof movable.moveBefore === 'function' && element.parentNode === parent) {
+    movable.moveBefore(element, before)
+  } else {
+    parent.insertBefore(element, before)
   }
 }
 

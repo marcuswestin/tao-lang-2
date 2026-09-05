@@ -8,10 +8,11 @@ import type {
 } from './TR-interaction-catalog'
 import { normalizeInteractionKey, type TaoAttentionKey } from './TR-interaction-keys'
 import { matchesNarrowing } from './TR-interaction-labels'
-import type {
-  InteractionOutline,
-  TaoInteractionOccurrence,
-  TaoOutlineLiveNode,
+import {
+  type InteractionOutline,
+  type TaoInteractionOccurrence,
+  type TaoOutlineLiveNode,
+  visualOrder,
 } from './TR-interaction-outline'
 
 export type { TaoAttentionKey } from './TR-interaction-keys'
@@ -369,17 +370,8 @@ export class InteractionAttention {
     if (isBareLetter(key) && this.runAllocatedKey(key)) {
       return true
     }
-    if (key.includes('+')) {
-      const verb = this.catalog.shortcut(
-        key,
-        this.node(this.targetIdentity()),
-        this.#focusRegion,
-        this.outline.liveNodes(),
-      )
-      if (verb) {
-        this.runVerb(verb)
-        return true
-      }
+    if (key.includes('+') && this.runShortcut(key)) {
+      return true
     }
     if (key === 'Escape') {
       this.escape()
@@ -490,6 +482,12 @@ export class InteractionAttention {
         this.disengage()
       }
       this.move(key === 'ArrowUp' ? -1 : 1)
+      return true
+    }
+    // A bare declared key dispatches here and nowhere earlier: every key the reducer owns has
+    // already returned above, and key allocation excludes declared keys, so a generated hint never
+    // shadows this one. What it does preempt is narrowing, which is the whole point of declaring it.
+    if (!key.includes('+') && this.runShortcut(key)) {
       return true
     }
     if (isPrintable(key) && !isReservedPunctuation(key)) {
@@ -634,6 +632,20 @@ export class InteractionAttention {
     }
     this.#overview = true
     this.emit()
+  }
+
+  private runShortcut(key: string): boolean {
+    const verb = this.catalog.shortcut(
+      key,
+      this.node(this.targetIdentity()),
+      this.#focusRegion,
+      this.outline.liveNodes(),
+    )
+    if (!verb) {
+      return false
+    }
+    this.runVerb(verb)
+    return true
   }
 
   private runVerb(verb: TaoInteractionVerb): void {
@@ -1015,7 +1027,7 @@ function isNavigationBackControl(node: TaoOutlineLiveNode): boolean {
   return typeof control === 'string' && (control === 'navigation:back' || control.endsWith(':back'))
 }
 
-function candidateNodes(scope: string, nodes: readonly TaoOutlineLiveNode[]): TaoOutlineLiveNode[] {
+function candidateNodes(scope: string, nodes: readonly TaoOutlineLiveNode[]): readonly TaoOutlineLiveNode[] {
   const children = new Map<string, TaoOutlineLiveNode[]>()
   for (const node of nodes) {
     if (node.parent) {
@@ -1041,7 +1053,9 @@ function candidateNodes(scope: string, nodes: readonly TaoOutlineLiveNode[]): Ta
     }
   }
   visit(scope)
-  return candidates
+  // Traversal follows the screen, not the mount log: a keyed reorder moves a row's box and never
+  // re-registers it, so measured candidates sort by where they are before order is read off them.
+  return visualOrder(candidates)
 }
 
 function paletteEntityIdentity(node: TaoOutlineLiveNode): string {

@@ -15,6 +15,9 @@ import { mountedDesignStyle } from './TR-mounted-design'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 
+/** One render's identity index over the mounted outline. */
+type OutlineIndex = ReadonlyMap<string, TaoOutlineLiveNode>
+
 type InteractionSurfaceRow = Readonly<{
   bounds?: TaoInteractionBounds
   enabled?: boolean
@@ -45,6 +48,9 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
 
   const attention = interactionAttention.read()
   const nodes = interactionOutline.liveNodes()
+  // One index per render. Every surface below resolves identities against it rather than scanning
+  // the mounted outline once per candidate on every keystroke.
+  const nodesByIdentity = new Map(nodes.map(node => [node.identity, node]))
   const explicitKeys = commandCatalog.explicitKeys()
   const previous = React.useRef<Record<string, TaoInteractionKeyAssignments>>({})
   const visible = interactionKeyboardPresence.read()
@@ -62,7 +68,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
     kind = 'Hint'
     rows = allocatedRows(
       attention.candidates.flatMap(identity => {
-        const node = nodes.find(candidate => candidate.identity === identity)
+        const node = nodesByIdentity.get(identity)
         const label = node?.label()
         return !node || !label ? [] : [{ bounds: node.live?.measure?.(), identity, label }]
       }),
@@ -73,11 +79,11 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
   } else if (visible && attention.mode === 'overview') {
     heading = 'Interaction overview'
     rows = allocatedRows(
-      nodes.filter(node => node.kind === 'region' && active(node, nodes)).flatMap(node => {
+      nodes.filter(node => node.kind === 'region' && active(node, nodesByIdentity)).flatMap(node => {
         const label = node.label()
         return label === undefined
           ? []
-          : [{ bounds: regionBounds(node.identity, nodes), identity: node.identity, label }]
+          : [{ bounds: regionBounds(node.identity, nodes, nodesByIdentity), identity: node.identity, label }]
       }),
       explicitKeys,
       previous.current,
@@ -86,7 +92,7 @@ export function InteractionLayersHost(props: { taoProps?: TaoProps }): React.JSX
   } else if (visible && attention.mode === 'narrowing') {
     heading = `Narrowing “${attention.narrowing}”`
     rows = attention.candidates.flatMap(identity => {
-      const node = nodes.find(candidate => candidate.identity === identity)
+      const node = nodesByIdentity.get(identity)
       const label = node?.label()
       return !node || !label ? [] : [{ identity, label }]
     })
@@ -201,20 +207,24 @@ function rowText(mode: string, row: InteractionSurfaceRow): string {
   return mode === 'narrowing' ? row.label : `${displayKey(row.key)} — ${row.label}`
 }
 
-function active(node: TaoOutlineLiveNode, nodes: readonly TaoOutlineLiveNode[]): boolean {
+function active(node: TaoOutlineLiveNode, nodesByIdentity: OutlineIndex): boolean {
   let current: TaoOutlineLiveNode | undefined = node
   while (current) {
     if (current.live?.active?.() === false) {
       return false
     }
-    current = nodes.find(candidate => candidate.identity === current?.parent)
+    current = current.parent === undefined ? undefined : nodesByIdentity.get(current.parent)
   }
   return true
 }
 
-function regionBounds(identity: string, nodes: readonly TaoOutlineLiveNode[]): TaoInteractionBounds | undefined {
+function regionBounds(
+  identity: string,
+  nodes: readonly TaoOutlineLiveNode[],
+  nodesByIdentity: OutlineIndex,
+): TaoInteractionBounds | undefined {
   const measured = nodes
-    .filter(node => node.identity === identity || descendantOf(node, identity, nodes))
+    .filter(node => node.identity === identity || descendantOf(node, identity, nodesByIdentity))
     .flatMap(node => {
       const bounds = node.live?.measure?.()
       return bounds === undefined ? [] : [bounds]
@@ -229,13 +239,13 @@ function regionBounds(identity: string, nodes: readonly TaoOutlineLiveNode[]): T
   return { height: bottom - top, width: right - left, x: left, y: top }
 }
 
-function descendantOf(node: TaoOutlineLiveNode, ancestor: string, nodes: readonly TaoOutlineLiveNode[]): boolean {
+function descendantOf(node: TaoOutlineLiveNode, ancestor: string, nodesByIdentity: OutlineIndex): boolean {
   let parent = node.parent
   while (parent) {
     if (parent === ancestor) {
       return true
     }
-    parent = nodes.find(candidate => candidate.identity === parent)?.parent
+    parent = nodesByIdentity.get(parent)?.parent
   }
   return false
 }

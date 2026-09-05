@@ -12,6 +12,7 @@ import { resolveTarget } from '../agent-poc/SemanticSnapshot'
 import { StudioProjectSession } from '../StudioProjectSession'
 import { declarationSource } from './AgentChatFacts'
 import { objectSchema, refusal, TEXT } from './AgentChatSchema'
+import { requireOnly } from './AgentChatScope'
 import type { AgentChatToolCall, AgentChatWorld } from './AgentChatTools'
 
 /** A change that has been computed and shown, and is waiting to be approved. */
@@ -185,6 +186,12 @@ export function writeTools(
               { youWrote: replacement },
             ),
           )
+        }
+        // The tool named one declaration; the edit may change nothing else. Without this gate an
+        // approved raw edit could add or remove declarations the diff alone had to catch.
+        const outOfScope = await requireOnly(before, after, [], [`${node.kind} ${node.name}`])
+        if (outOfScope !== undefined) {
+          return capture('proposeEdit', { declaration }, refusal(outOfScope))
         }
         return capture(
           'proposeEdit',

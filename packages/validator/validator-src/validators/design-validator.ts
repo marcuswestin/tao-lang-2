@@ -107,7 +107,7 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   if (
     AST.isViewDeclaration(renderedView)
     && (render.view?.$refText === 'Placeholder' || renderedView.aliasTarget !== undefined)
-    && !isNonShippingSource(render, ctx)
+    && !isTestSource(render)
   ) {
     const terminalView = renderedView.aliasTarget === undefined ? renderedView : AST.viewAliasTarget(renderedView)
     if (
@@ -124,10 +124,15 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   if (!clause) {
     return
   }
-  for (const entry of clause.entries.filter(isInlineDesignExploration)) {
-    ctx.warning(designValidationMessages.exploration(entryText(entry)), entry, {
-      code: designValidationCodes.exploration,
-    })
+  // Snap writes measured `width` and `height` into Studio-owned generated views by design (FS-D11);
+  // those inferred sizes are not explorations a person forgot to promote. A shipping Placeholder in
+  // that same tree is exactly what FS-D2 warns about, so that warning is never suppressed there.
+  if (!isStudioGeneratedSource(render, ctx)) {
+    for (const entry of clause.entries.filter(isInlineDesignExploration)) {
+      ctx.warning(designValidationMessages.exploration(entryText(entry)), entry, {
+        code: designValidationCodes.exploration,
+      })
+    }
   }
   const designEntries = clause.entries.filter(entry => !LayoutValidator.isLayoutEntry(entry))
   const sizeEntries = clause.entries.filter(requiresSizeLookup)
@@ -174,10 +179,13 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   }
 }
 
-function isNonShippingSource(render: AST.Render, ctx: ValidationContext): boolean {
-  const sourcePath = AST.getDocument(render).uri.path
+function isTestSource(render: AST.Render): boolean {
+  return Packages.isTestSourcePath(AST.getDocument(render).uri.path)
+}
+
+function isStudioGeneratedSource(render: AST.Render, ctx: ValidationContext): boolean {
   const studioGeneratedRoot = FS.resolvePath('@/studio', ctx.packagesContext.index.projectRoot)
-  return Packages.isTestSourcePath(sourcePath) || FS.pathIsWithin(sourcePath, studioGeneratedRoot)
+  return FS.pathIsWithin(AST.getDocument(render).uri.path, studioGeneratedRoot)
 }
 
 function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {

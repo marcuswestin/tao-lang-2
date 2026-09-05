@@ -267,7 +267,7 @@ const clientCss = `
   --studio-surface-active: #2a2a2a;
   --studio-surface-hover: #232323;
   --studio-text: #f4f4f4;
-  --studio-text-dim: #6b6b6b;
+  --studio-text-dim: #8a8a8a;
   --studio-text-muted: #a3a3a3;
   --studio-warning: #fbbf24;
   --studio-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", ui-sans-serif, system-ui, "Segoe UI", sans-serif;
@@ -353,7 +353,6 @@ kbd {
 .studio-switch input:checked { background: var(--studio-accent); }
 .studio-switch input:checked::after { left: 13px; }
 .studio-switch input:disabled { cursor: default; opacity: .4; }
-.studio-pill[data-state="warn"]::before { background: var(--studio-warning); }
 .studio-file-kind {
   background: var(--studio-panel-raised); border-radius: 3px; color: var(--studio-text-dim); flex: none;
   font: 600 9px/1 var(--studio-mono); letter-spacing: .02em; padding: 3px 4px; text-transform: lowercase;

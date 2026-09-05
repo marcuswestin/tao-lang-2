@@ -1,5 +1,4 @@
 import { Errors, FS } from '@shared'
-import { findTaoFiles } from './tao-files'
 
 /** InPlace groups shared Tao CLI in-place file processing types. */
 export namespace InPlace {
@@ -21,26 +20,14 @@ export namespace InPlace {
     changedIsError?: string
     write: boolean
   }
-
-  /** Operation processes one Tao file and returns its in-place result. */
-  export type Operation = (filePath: string) => Promise<Result>
 }
 
 /** inPlace owns common Tao CLI in-place file processing helpers. */
 export const inPlace = {
+  generatedRootPackageFile,
   processFile,
-  runOnTaoFiles,
   workspaceRootForPath,
 } as const
-
-/** runOnTaoFiles runs an in-place operation over every .tao file at or under `path`. */
-async function runOnTaoFiles(path: string, operation: InPlace.Operation): Promise<InPlace.Result[]> {
-  const results: InPlace.Result[] = []
-  for (const filePath of await findTaoFiles(path)) {
-    results.push(await operation(filePath))
-  }
-  return results
-}
 
 /** processFile reads a file, transforms it, and writes or checks the result. */
 async function processFile(
@@ -66,19 +53,29 @@ async function processFile(
 /** workspaceRootForPath returns the package-aware workspace root for an in-place command root. */
 async function workspaceRootForPath(path: string, options: InPlace.PathOptions = {}): Promise<string> {
   const root = FS.resolvePath(path, options.cwd)
-  const projectRoot = await containingProjectRoot(await FS.isFile(root) ? FS.dirname(root) : root)
-  if (projectRoot !== undefined) {
-    return projectRoot
-  }
+  // A generated root package owns its own tree even when no Project.tao declares it, so it must win
+  // over an ancestor project: otherwise an ancestor Project.tao makes a nested @/ tree look authored.
   const generatedProjectRoot = rootPackageOwner(root)
   if (generatedProjectRoot !== undefined) {
     return generatedProjectRoot
+  }
+  const projectRoot = await containingProjectRoot(await FS.isFile(root) ? FS.dirname(root) : root)
+  if (projectRoot !== undefined) {
+    return projectRoot
   }
   const cwd = FS.resolvePath('.', options.cwd)
   if (FS.pathIsWithin(root, cwd)) {
     return packageContainerRoot(cwd) ?? cwd
   }
   return packageAwarePathRoot(root, await FS.isFile(root))
+}
+
+/**
+ * generatedRootPackageFile reports whether a path itself sits under a reserved `@` root package.
+ * It reads only the path's own segments so an inferred workspace root cannot mask a nested `@` tree.
+ */
+function generatedRootPackageFile(path: string): boolean {
+  return rootPackageOwner(FS.resolvePath(path)) !== undefined
 }
 
 /** rootPackageOwner infers a project root from the nearest exact reserved root-package segment. */
@@ -97,6 +94,10 @@ async function containingProjectRoot(start: string): Promise<string | undefined>
   while (true) {
     if (await FS.isFile(FS.resolvePath('Project.tao', directory))) {
       return directory
+    }
+    // Stop at a repository boundary rather than adopting an unrelated Project.tao above the checkout.
+    if (await FS.exists(FS.resolvePath('.git', directory))) {
+      return undefined
     }
     const parent = FS.dirname(directory)
     if (parent === directory) {

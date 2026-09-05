@@ -13,10 +13,13 @@ import {
   StudioInspectorActionValid,
   StudioInspectorBindTextAction,
   StudioInspectorDataLines,
+  StudioInspectorDraft,
+  StudioInspectorDraftsFor,
   StudioInspectorLayoutAction,
   StudioInspectorLayoutActionValid,
   StudioInspectorLayoutDrafts,
   StudioInspectorSetTextAction,
+  StudioInspectorSetTextValid,
   StudioInspectorStyleAction,
   StudioInspectorStyleActionValid,
   StudioInspectorStyleDrafts,
@@ -30,8 +33,10 @@ import {
   StudioInspectorTextAvailable,
   StudioInspectorTextBindingLabel,
   StudioInspectorTextCandidates,
+  StudioInspectorTextDraft,
   StudioInspectorTextLiteral,
   StudioInspectorTextStatus,
+  StudioInspectorTextUpdateDraft,
   StudioInspectorUpdateDraft,
   studioNumericDraft,
   StudioPaletteRow,
@@ -522,6 +527,52 @@ Test('Tao-owned inspector Text section edits a literal and binds only offered va
   })
   Expect(StudioInspectorTextStatus(bound, selection)).toBe('Showing Story.Title.')
   Expect(StudioInspectorTextLiteral(bound)).toBe('')
+})
+
+Test('Tao-owned inspector drafts follow the inspected element instead of the first one seeded', () => {
+  const selection = inspectorSelection()
+  const inspection = inspectorInspection()
+  const other = JSON.stringify({ ...JSON.parse(inspection), renderId: '/workspace/Garden.tao:30:8' })
+
+  // Layout and Style drafts: typed values survive re-renders of the same element and reseed for another.
+  const seeded = StudioInspectorDraftsFor('layout', inspection, '{}')
+  const typed = StudioInspectorUpdateDraft(seeded, 'gap', '24')
+  Expect(StudioInspectorDraft(typed, 'gap')).toBe('24')
+  Expect(StudioInspectorDraftsFor('layout', inspection, typed)).toBe(typed)
+  Expect(StudioInspectorDraft(StudioInspectorDraftsFor('layout', other, typed), 'gap'))
+    .toBe(StudioInspectorDraft(StudioInspectorLayoutDrafts(other), 'gap'))
+  Expect(StudioInspectorDraft(StudioInspectorDraftsFor('style', other, typed), 'value')).toBe(
+    StudioInspectorDraft(StudioInspectorStyleDrafts(other), 'value'),
+  )
+  Expect(StudioInspectorDraftsFor('layout', '', typed)).toBe('{}')
+
+  // Text drafts: the literal shows until something is typed for this very element.
+  const literal = JSON.stringify({
+    ...JSON.parse(inspection),
+    text: { candidates: [], expression: '"Meta"', literal: 'Meta' },
+  })
+  Expect(StudioInspectorTextDraft(literal, '')).toBe('Meta')
+  const draft = StudioInspectorTextUpdateDraft(literal, 'Hello')
+  Expect(StudioInspectorTextDraft(literal, draft)).toBe('Hello')
+  Expect(
+    StudioInspectorTextDraft(
+      JSON.stringify({ ...JSON.parse(other), text: { candidates: [], expression: '"X"', literal: 'X' } }),
+      draft,
+    ),
+  )
+    .toBe('X')
+  Expect(StudioInspectorSetTextValid('source-1', literal, selection, false, draft)).toBe(true)
+  Expect(
+    StudioInspectorSetTextValid('source-1', literal, selection, false, StudioInspectorTextUpdateDraft(literal, '')),
+  ).toBe(true)
+
+  // A bound leaf is never replaced by an empty literal by accident.
+  const bound = JSON.stringify({ ...JSON.parse(inspection), text: { candidates: [], expression: 'Story.Title' } })
+  Expect(StudioInspectorTextDraft(bound, '')).toBe('')
+  Expect(StudioInspectorSetTextValid('source-1', bound, selection, false, '')).toBe(false)
+  Expect(
+    StudioInspectorSetTextValid('source-1', bound, selection, false, StudioInspectorTextUpdateDraft(bound, 'Title')),
+  ).toBe(true)
 })
 
 Test('Tao-owned inspector summary names the selection by project file and line, view, and element', () => {

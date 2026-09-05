@@ -524,10 +524,10 @@ view StudioInspectorLayout(CurrentSourceVersion text, Inspection text, Selection
          false -> { Text(StudioInspectorStatus(Inspection: Inspection, Selection: Selection)) }
          otherwise -> {
             loop StudioInspectorLayoutFieldIds() / FieldId {
-               StudioInspectorLayoutField(Drafts: Drafts, FieldId: FieldId, ChangeDrafts: ChangeDrafts)
+               StudioInspectorLayoutField(Drafts: StudioInspectorDraftsFor(Section: "layout", Inspection: Inspection, Drafts: Drafts), FieldId: FieldId, ChangeDrafts: ChangeDrafts)
             }
             loop StudioInspectorLayoutActionIds() / ActionId {
-               StudioInspectorLayoutCommand(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId, Apply: Apply)
+               StudioInspectorLayoutCommand(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: StudioInspectorDraftsFor(Section: "layout", Inspection: Inspection, Drafts: Drafts), Busy: Busy, ActionId: ActionId, Apply: Apply)
       }  }  }
       StudioInspectorUndoMarker() {
          StudioButton(Label: "Undo visual edit", Press: Undo, Disabled: not StudioInspectorUndoAvailable(Busy: Busy, CanUndo: CanUndo), Variant: "ghost")
@@ -557,16 +557,16 @@ view StudioInspectorStyle(CurrentSourceVersion text, Inspection text, Selection 
       set Drafts = Value
    }
    action ApplyStyle() {
-      do Apply(StudioInspectorStyleAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts), true)
+      do Apply(StudioInspectorStyleAction(Inspection: Inspection, Selection: Selection, Drafts: StudioInspectorDraftsFor(Section: "style", Inspection: Inspection, Drafts: Drafts)), true)
    }
    render StudioInspectorSection("Style") {
       when StudioInspectorReady(Inspection: Inspection, Selection: Selection) {
          false -> { Text(StudioInspectorStatus(Inspection: Inspection, Selection: Selection)) }
          otherwise -> {
             loop StudioInspectorStyleFieldIds() / FieldId {
-               StudioInspectorStyleField(Inspection: Inspection, Drafts: Drafts, FieldId: FieldId, ChangeDrafts: ChangeDrafts)
+               StudioInspectorStyleField(Inspection: Inspection, Drafts: StudioInspectorDraftsFor(Section: "style", Inspection: Inspection, Drafts: Drafts), FieldId: FieldId, ChangeDrafts: ChangeDrafts)
             }
-            StudioButton(Label: "Apply style entry", Press: ApplyStyle, Disabled: not StudioInspectorStyleActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy), Variant: "primary")
+            StudioButton(Label: "Apply style entry", Press: ApplyStyle, Disabled: not StudioInspectorStyleActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: StudioInspectorDraftsFor(Section: "style", Inspection: Inspection, Drafts: Drafts), Busy: Busy), Variant: "primary")
             loop StudioInspectorStylePromotionIds(Inspection) / PromotionId {
                StudioInspectorStylePromotion(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId, Apply: Apply)
             }
@@ -600,21 +600,23 @@ view StudioInspectorData(Inspection text, Selection text, ActiveCellId text, Act
 
 // The Text section is canvas mode's binding surface: a Text leaf's literal can be edited, or the leaf
 // pointed at any parameter, loop item, local value, or entity field visible where it renders.
+// The draft names the element it was typed for, so selecting another Text leaf shows that leaf's
+// literal rather than the previous draft; the host resolves the draft against the inspection.
 view StudioInspectorText(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Apply action(text, boolean)) {
-   state Draft = StudioInspectorTextLiteral(Inspection)
+   state Draft = ""
    action ChangeDraft(Value text) {
-      set Draft = Value
+      set Draft = StudioInspectorTextUpdateDraft(Inspection: Inspection, Value: Value)
    }
    action SetText() {
-      do Apply(StudioInspectorSetTextAction(Selection: Selection, Content: Draft), false)
+      do Apply(StudioInspectorSetTextAction(Selection: Selection, Content: StudioInspectorTextDraft(Inspection: Inspection, Draft: Draft)), false)
    }
    render StudioInspectorSection("Text") {
       Text(StudioInspectorTextStatus(Inspection: Inspection, Selection: Selection))
       when StudioInspectorTextAvailable(Inspection: Inspection, Selection: Selection) {
          false -> { }
          otherwise -> {
-            TextInput(Value: Draft, Change: ChangeDraft, Submit: SetText, Label: "Text content")
-            StudioButton(Label: "Set text", Press: SetText, Disabled: not StudioInspectorTextActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy), Variant: "primary")
+            TextInput(Value: StudioInspectorTextDraft(Inspection: Inspection, Draft: Draft), Change: ChangeDraft, Submit: SetText, Label: "Text content")
+            StudioButton(Label: "Set text", Press: SetText, Disabled: not StudioInspectorSetTextValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, Draft: Draft), Variant: "primary")
             loop StudioInspectorTextCandidates(Inspection) / Expression {
                StudioInspectorTextBinding(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, Expression: Expression, Apply: Apply)
 }  }  }  }  }
@@ -764,6 +766,22 @@ function StudioInspectorTextStatus(Inspection text, Selection text) returns text
 
 function StudioInspectorTextLiteral(Inspection text) returns text {
    return StudioInspectorTextLiteral(Inspection: Inspection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorDraftsFor(Section text, Inspection text, Drafts text) returns text {
+   return StudioInspectorDraftsFor(Section: Section, Inspection: Inspection, Drafts: Drafts) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextDraft(Inspection text, Draft text) returns text {
+   return StudioInspectorTextDraft(Inspection: Inspection, Draft: Draft) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextUpdateDraft(Inspection text, Value text) returns text {
+   return StudioInspectorTextUpdateDraft(Inspection: Inspection, Value: Value) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorSetTextValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Draft text) returns boolean {
+   return StudioInspectorSetTextValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, Draft: Draft) from ./TaoStudioProductHost.tsx
 }
 
 function StudioInspectorTextCandidates(Inspection text) returns list of text {

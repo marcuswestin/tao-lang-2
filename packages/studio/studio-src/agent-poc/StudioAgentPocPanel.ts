@@ -184,7 +184,9 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
     heading('Source proposal (ordinary Tao, formatted)')
     for (const edit of plan.edits) {
       const details = document.createElement('details')
-      details.innerHTML = `<summary>${edit.path}</summary>`
+      const editSummary = document.createElement('summary')
+      editSummary.textContent = edit.path
+      details.append(editSummary)
       const pre = document.createElement('pre')
       pre.style.cssText =
         'white-space:pre-wrap;background:#0f1411;padding:6px;border-radius:6px;max-height:220px;overflow:auto'
@@ -330,9 +332,10 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
     section('Model tool calls (progressive inquiry)')
     for (const call of result.toolCalls) {
       const details = document.createElement('details')
-      details.innerHTML = `<summary>${call.name}(${
-        JSON.stringify(call.arguments)
-      }) → ${call.resultChars} chars</summary>`
+      // Model-controlled text stays text: a tool name or argument never becomes markup in Studio's origin.
+      const callSummary = document.createElement('summary')
+      callSummary.textContent = `${call.name}(${JSON.stringify(call.arguments)}) → ${call.resultChars} chars`
+      details.append(callSummary)
       const out = document.createElement('pre')
       out.style.cssText =
         'white-space:pre-wrap;max-height:160px;overflow:auto;background:#0f1411;padding:6px;border-radius:6px'

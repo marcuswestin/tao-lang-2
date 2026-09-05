@@ -98,6 +98,52 @@ class RuntimeClock {
     this.virtualNowMs = startMs
   }
 
+  /**
+   * hold pins the clock for a scenario replay without taking the app's own timers away. Every
+   * platform timer is paused into the virtual schedule so `advance` fires it deterministically, and
+   * release re-arms whatever is still scheduled on real timers. A clock a test already holds is left
+   * to that test; the returned release then does nothing.
+   */
+  hold(): () => void {
+    if (this.virtualNowMs !== undefined) {
+      return () => {}
+    }
+    const now = Date.now()
+    this.virtualNowMs = now
+    for (const callback of this.scheduled.values()) {
+      callback.cancelPlatformTimer?.()
+      callback.cancelPlatformTimer = undefined
+      // A platform entry carries no due time; it restarts its full interval from the hold.
+      callback.dueMs = now + callback.intervalMs
+    }
+    let released = false
+    return () => {
+      if (released || this.virtualNowMs === undefined) {
+        return
+      }
+      released = true
+      const releaseAt = this.virtualNowMs
+      this.virtualNowMs = undefined
+      for (const callback of [...this.scheduled.values()]) {
+        this.rearm(callback, Math.max(0, callback.dueMs - releaseAt))
+      }
+    }
+  }
+
+  private rearm(callback: ScheduledCallback, delayMs: number): void {
+    const forget = () => this.scheduled.delete(callback.id)
+    if (callback.repeating) {
+      const timer = setInterval(callback.fire, callback.intervalMs)
+      callback.cancelPlatformTimer = () => clearInterval(timer)
+      return
+    }
+    const timer = setTimeout(() => {
+      forget()
+      callback.fire()
+    }, delayMs)
+    callback.cancelPlatformTimer = () => clearTimeout(timer)
+  }
+
   /** endTest releases the clock back to the platform and drops anything still scheduled. */
   endTest(): void {
     for (const callback of this.scheduled.values()) {

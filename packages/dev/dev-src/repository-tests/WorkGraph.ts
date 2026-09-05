@@ -235,8 +235,10 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         }
         if (admission.started === 0) {
           // Nothing runs, nothing can start: what is left needs something this run never provides.
+          // That is a defect in the catalog, not a skip, so the lane fails rather than passing green
+          // with work it never did.
           for (const state of pending.splice(0)) {
-            finishWithoutRunning(state, 'dependency cycle or unreachable dependency', emit)
+            finishWithoutRunning(state, 'dependency cycle or unreachable dependency', emit, 'failed')
           }
         }
         continue
@@ -437,8 +439,13 @@ async function waitForCommand(command: CLI.StartedCommand): Promise<WorkOutcome>
   })
 }
 
-function finishWithoutRunning(state: WorkState, reason: string, emit: (event: WorkEvent) => void): void {
-  state.status = 'skipped'
+function finishWithoutRunning(
+  state: WorkState,
+  reason: string,
+  emit: (event: WorkEvent) => void,
+  status: 'failed' | 'skipped' = 'skipped',
+): void {
+  state.status = status
   state.reason = reason
   state.failure = {
     kind: reason === INTERRUPTED_REASON ? 'interrupted' : 'dependency',

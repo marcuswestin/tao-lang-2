@@ -58,6 +58,31 @@ Describe('validator: scenes', () => {
   )
 
   Test(
+    'rejects a scene bound to a view-typed parameter of another view',
+    rejects(
+      `
+       ${stubView('Label', 'Value text')}
+       ${stubView('Column')}
+
+       scene Panel() {
+          render Label("Panel")
+       }
+
+       view Frame(Body view) {
+          render Column() {
+             Body()
+          }
+       }
+
+       view Page() {
+          render Frame(Panel)
+       }
+    `,
+      ViewsValidator.messages.sceneBoundToView('Panel', 'Body'),
+    ),
+  )
+
+  Test(
     'rejects host chrome filled on a plain view',
     rejects(
       `

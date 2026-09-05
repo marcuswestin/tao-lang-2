@@ -109,6 +109,7 @@ export type NativeHostLeaseDependencies = {
 /** StopOwnerDependencies are the seams that stop the session holding the native host. */
 export type StopOwnerDependencies = {
   launches?: typeof readLaunches
+  ownerIsLive?: typeof MachineLanes.ownerIsLive
   runner?: CommandRunner
   sleep?: Sleep
   stop?: typeof stopLaunches
@@ -364,7 +365,15 @@ async function acquireNativeHostLease(
   const acquire = dependencies.acquire ?? MachineLanes.acquireResource
   const log = dependencies.log ?? (message => HCI.logProcessInfo('studio-native', message))
   const request = async (waitTimeoutMs: number): Promise<MachineResourceLease> =>
-    await acquire({ command, name: nativeHostResourceName, repositoryRoot: Repo.getRoot(), waitTimeoutMs })
+    await acquire({
+      command,
+      // An interactive native Studio may validly hold the host all day; only process identity
+      // retires its lease.
+      maxAgeMs: Number.POSITIVE_INFINITY,
+      name: nativeHostResourceName,
+      repositoryRoot: Repo.getRoot(),
+      waitTimeoutMs,
+    })
   try {
     return await request(0)
   } catch (error) {
@@ -413,6 +422,11 @@ async function stopNativeHostOwner(
       )
     }
     return `stopped ${owner.command} launch ${launchId} in ${owner.repositoryRoot}\n${formatStopReport(report)}`
+  }
+  // The lease records the PID with its start time. A PID the OS has reused since belongs to some
+  // other process, and the person confirmed stopping the session, not whatever now wears its number.
+  if (!await (dependencies.ownerIsLive ?? MachineLanes.ownerIsLive)(owner)) {
+    return `${owner.command} (PID ${owner.pid}) in ${owner.repositoryRoot} had already ended; nothing to stop`
   }
   await terminateProcesses([owner.pid], dependencies.runner ?? CLI.run, dependencies.sleep ?? Time.sleep)
   return `stopped ${owner.command} (PID ${owner.pid}) in ${owner.repositoryRoot}`
