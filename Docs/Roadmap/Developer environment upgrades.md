@@ -677,3 +677,73 @@ an entry here may link one when the developer workflow is also affected.
 - **Dependencies:** None.
 - **Acceptance:** A clean `just studio-native` reaches a ready preview with no unresolved-module output.
 - **Source:** 2026-09-04 companion Slice 2 work.
+
+### DEVENV-040 — A fresh worktree cannot run `./tao` until the parser is generated
+
+- **Status:** Candidate
+- **Area:** Worktree setup
+- **Impact:** `./agent setup` is the documented one setup entry, yet the CLI it prepares fails on first
+  use, so an agent's first `./tao` command in a new worktree dies with a module error unrelated to its
+  task.
+- **Evidence:** In a linked worktree created 2026-09-04, `./agent setup` completed with no install
+  changes and `./tao fix Apps/Starters/Notebook` failed with `Cannot find module
+  './_gen_tao-parser/module' from packages/parser/parser-src/parserASTExport.ts`; running
+  `bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts` (the `_parser-gen` recipe) fixed it.
+- **Workaround:** Run `just _parser-gen`, or any lane that includes it, before the first `./tao` command.
+- **Proposed change:** Have `setup` run `_parser-gen` when `packages/parser/parser-src/_gen_tao-parser`
+  is missing or older than the grammar, or have `./tao` generate on demand with a one-line notice.
+- **Dependencies:** None.
+- **Acceptance:** In a fresh linked worktree, `./agent setup && ./tao check Apps/HNReader` succeeds
+  without a manual generation step.
+- **Source:** 2026-09-04 `tao create` work.
+
+### DEVENV-041 — `tao test` under a Git-ignored path says "No Tao tests found" without the reason
+
+- **Status:** Candidate
+- **Area:** Diagnostics
+- **Impact:** A project under an ignored directory looks test-less, and the person reads it as a
+  discovery bug in their project rather than an ignore rule.
+- **Evidence:** `tao create "…" --ai none --yes` run from `.artifacts/tmp/create-smoke` printed
+  `No Tao tests found under a-reading-list` although `a-reading-list/AReadingList.test.tao` existed;
+  the same command from a temp directory outside the repository found and ran the test. `findTaoFiles`
+  goes through `Repo.filesUnder`, which applies Git ignore rules inside a worktree.
+- **Workaround:** Run from a path Git does not ignore, or from outside the repository.
+- **Proposed change:** When discovery finds nothing but the directory holds `.tao` files, say that
+  Git-ignored paths are skipped and name the matching rule.
+- **Dependencies:** None.
+- **Acceptance:** `tao test` on an ignored directory that holds a `.test.tao` file prints a message
+  naming the ignore rule.
+- **Source:** 2026-09-04 `tao create` work.
+
+### DEVENV-042 — `sips` exits 13 inside the Claude Code Bash sandbox
+
+- **Status:** Candidate
+- **Area:** Sandbox
+- **Impact:** Any workflow that shells out to the system image tool — `tao create` reading a palette
+  from an image, or an agent converting a screenshot — silently yields nothing in a sandboxed shell.
+- **Evidence:** `sips -s format bmp -Z 48 <png> --out $TMPDIR/x.bmp` exits 13 with no output in the
+  sandbox and exits 0 with a valid 24-bit BMP unsandboxed (found during the `tao create` review, 2026-09-04).
+  `tao create` now reports the exit code and stderr instead of "no palette could be read".
+- **Workaround:** Run image-reading smoke tests unsandboxed.
+- **Proposed change:** Record `sips` as a host tool the sandbox blocks in `./agent capabilities`, so
+  the denial is named rather than inferred.
+- **Dependencies:** None.
+- **Acceptance:** `./agent capabilities` reports whether `sips` can run in the current shell.
+- **Source:** 2026-09-04 `tao create` review.
+
+### DEVENV-043 — `bun --tsconfig-override` fails for scripts outside the repository
+
+- **Status:** Candidate
+- **Area:** Agent scratch tooling
+- **Impact:** An agent cannot run a throwaway script from its scratchpad against the repository's path
+  aliases, so probes end up as files inside the worktree.
+- **Evidence:** `bun --tsconfig-override packages/tsconfig.base.json run <script outside the repo>` fails
+  in bun 1.3.13 with `Internal error: directory mismatch for directory ".../packages/tsconfig.base.json"`.
+- **Workaround:** Put scratch scripts under the ignored `.artifacts/tmp/` and import repository sources by
+  absolute path; remove them afterwards.
+- **Proposed change:** Document the `.artifacts/tmp/` convention for agent probes, or add a `./agent
+  probe <script>` entry that runs a script with the repository's aliases.
+- **Dependencies:** None.
+- **Acceptance:** A documented one-line way to run a scratch TypeScript file against `@shared` and
+  friends from outside the source tree.
+- **Source:** 2026-09-04 `tao create` review.

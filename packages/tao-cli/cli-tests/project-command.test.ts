@@ -1,25 +1,9 @@
-import { FS, Platform } from '@shared'
+import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
-import { createProject, setProjectId } from '../cli-src/project-command'
+import { setProjectId } from '../cli-src/project-command'
 import { withTaoFixture } from './test-cli-files'
 
 Describe('tao project identity commands', () => {
-  Test('creates a runnable project whose checked-in id and directory name agree', async () => {
-    const root = await mkTestDir('tao-create-project-')
-    const previous = Platform.runtimeProcess.cwd()
-    try {
-      Platform.runtimeProcess.chdir(root)
-      const path = await createProject('my-project')
-      Expect(FS.relativePath(await FS.realPath(root), path)).toBe('my-project/App.tao')
-      Expect(await FS.readText(path)).toBe(
-        `project {\n   id "my-project"\n   name "my-project"\n   version "0.1.0"\n   DefaultApp App\n}\n\napp App { view Main }\n\nview Main() { }\n`,
-      )
-    } finally {
-      Platform.runtimeProcess.chdir(previous)
-      await FS.remove(root)
-    }
-  })
-
   Test('adds a missing id and preserves it when repeated', async () => {
     await withTaoFixture(
       { 'App.tao': `project { name "Existing" }\n\napp App { view Main }\nview Main() { }\n` },

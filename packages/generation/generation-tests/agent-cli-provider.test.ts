@@ -1,0 +1,159 @@
+import { FS, Platform } from '@shared'
+import { Describe, Expect, Test } from '@shared/test'
+import {
+  agentChildEnv,
+  AgentCliGenerationProvider,
+  type AgentCliRunResult,
+  type AgentCliRunSpec,
+  sharedAgentCliRunner,
+} from '../generation-src/agent-cli-provider'
+import type { GenerationJsonSchema, JsonObject } from '../generation-src/generation'
+
+const schema: GenerationJsonSchema = {
+  type: 'object',
+  properties: {
+    Title: { type: 'string' },
+    Servings: { type: 'number' },
+  },
+  required: ['Title', 'Servings'],
+  additionalProperties: false,
+}
+
+type RecordedRun = { command: string; spec: AgentCliRunSpec }
+
+function ok(stdout: string): AgentCliRunResult {
+  return { exitCode: 0, stderr: '', stdout, timedOut: false }
+}
+
+Describe('agent CLI generation provider', () => {
+  Test('drives Claude Code in print mode with a JSON schema and reads its structured output', async () => {
+    const runs: RecordedRun[] = []
+    const provider = new AgentCliGenerationProvider({
+      allowWeb: true,
+      attachments: ['/pictures/shot.png', '/pictures/other.png'],
+      env: { CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli', PATH: '/usr/bin' },
+      kind: 'claude',
+      run: async (command, spec) => {
+        runs.push({ command, spec })
+        if (spec.args.includes('--version')) {
+          return ok('2.1.0 (Claude Code)\n')
+        }
+        return ok(JSON.stringify({
+          type: 'result',
+          is_error: false,
+          result: 'Done.',
+          structured_output: { Title: 'Mushroom Toast', Servings: 2 },
+        }))
+      },
+    })
+
+    Expect(await provider.availability()).toEqual({ status: 'available' })
+    const result = await provider.generate<JsonObject>(schema, [{ name: 'Mood', value: 'cozy' }], 'Create a recipe.')
+      .final
+    Expect(result).toEqual({ status: 'success', value: { Title: 'Mushroom Toast', Servings: 2 } })
+
+    const generate = runs[1]!
+    Expect(generate.command).toBe('claude')
+    Expect(generate.spec.args).toEqual([
+      '-p',
+      '--output-format',
+      'json',
+      '--json-schema',
+      JSON.stringify(schema),
+      '--no-session-persistence',
+      '--allowedTools',
+      'Read',
+      'WebFetch',
+      '--add-dir',
+      '/pictures',
+    ])
+    Expect(generate.spec.stdin).toContain('Create a recipe.')
+    Expect(generate.spec.stdin).toContain('"Mood":"cozy"')
+    Expect(generate.spec.stdin).toContain('/pictures/shot.png')
+    // The markers are present and undefined: that is what the spawn drops, where a missing key is refilled.
+    Expect(Object.hasOwn(generate.spec.env ?? {}, 'CLAUDECODE') && generate.spec.env?.['CLAUDECODE'] === undefined)
+      .toBe(true)
+    Expect(generate.spec.env?.['CLAUDE_CODE_ENTRYPOINT']).toBeUndefined()
+    Expect(generate.spec.env?.['PATH']).toBe('/usr/bin')
+  })
+
+  Test('falls back to JSON inside the text result and reports errors and timeouts honestly', async () => {
+    const answers: AgentCliRunResult[] = [
+      ok(JSON.stringify({ type: 'result', is_error: false, result: 'Here you go: {"Title":"Toast","Servings":1}' })),
+      ok(JSON.stringify({ type: 'result', is_error: true, result: 'Not logged in.' })),
+      { exitCode: null, stderr: '', stdout: '', timedOut: true },
+      ok(JSON.stringify({ type: 'result', is_error: false, result: 'No JSON for you.' })),
+    ]
+    const provider = new AgentCliGenerationProvider({ kind: 'claude', run: async () => answers.shift()! })
+
+    Expect(await provider.generate<JsonObject>(schema, [], 'Create a recipe.').final).toEqual({
+      status: 'success',
+      value: { Title: 'Toast', Servings: 1 },
+    })
+    Expect(await provider.generate<JsonObject>(schema, [], 'Create a recipe.').final).toEqual({
+      status: 'failure',
+      code: 'provider_error',
+      message: 'Not logged in.',
+    })
+    const timedOut = await provider.generate<JsonObject>(schema, [], 'Create a recipe.').final
+    Expect(timedOut.status === 'failure' && timedOut.code).toBe('cancelled')
+    Expect(await provider.generate<JsonObject>(schema, [], 'Create a recipe.').final).toEqual({
+      status: 'failure',
+      code: 'provider_error',
+      message: 'Claude Code answered without JSON.',
+    })
+  })
+
+  Test('scrubs the nested-session markers so a real child sees them unset, and enforces the timeout', async () => {
+    const env = agentChildEnv({ ...Platform.runtimeProcess.env, CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli' })
+    const run = await sharedAgentCliRunner('sh', {
+      args: ['-c', 'echo "${CLAUDECODE:-unset} ${CLAUDE_CODE_ENTRYPOINT:-unset}"'],
+      env,
+      timeoutMs: 10_000,
+    })
+    Expect(run).toEqual({ exitCode: 0, stderr: '', stdout: 'unset unset\n', timedOut: false })
+
+    const slow = await sharedAgentCliRunner('sh', { args: ['-c', 'sleep 30'], env, timeoutMs: 300 })
+    Expect(slow.timedOut).toBe(true)
+    Expect(slow.exitCode).toBeNull()
+  })
+
+  Test('drives Codex exec with an output schema file and reads the last message file', async () => {
+    const runs: RecordedRun[] = []
+    const provider = new AgentCliGenerationProvider({
+      attachments: ['/pictures/shot.png'],
+      kind: 'codex',
+      run: async (command, spec) => {
+        runs.push({ command, spec })
+        if (spec.args.includes('--version')) {
+          return ok('codex-cli 0.50.0\n')
+        }
+        const schemaPath = spec.args[spec.args.indexOf('--output-schema') + 1]!
+        Expect(JSON.parse(await FS.readText(schemaPath))).toEqual(schema)
+        const outputPath = spec.args[spec.args.indexOf('--output-last-message') + 1]!
+        await FS.writeText(outputPath, '{"Title":"Mushroom Toast","Servings":2}\n')
+        return ok('')
+      },
+    })
+
+    Expect(await provider.availability()).toEqual({ status: 'available' })
+    const result = await provider.generate<JsonObject>(schema, [{ name: 'Mood', value: 'cozy' }], 'Create a recipe.')
+      .final
+    Expect(result).toEqual({ status: 'success', value: { Title: 'Mushroom Toast', Servings: 2 } })
+
+    const generate = runs[1]!
+    Expect(generate.command).toBe('codex')
+    Expect(generate.spec.args.slice(0, 5)).toEqual([
+      'exec',
+      '--skip-git-repo-check',
+      '--sandbox',
+      'read-only',
+      '--output-schema',
+    ])
+    Expect(generate.spec.args).toContain('--image')
+    Expect(generate.spec.args).toContain('/pictures/shot.png')
+    Expect(generate.spec.args.at(-1)).toBe('-')
+    Expect(generate.spec.stdin).toContain('Create a recipe.')
+    Expect(generate.spec.cwd).toBeDefined()
+  })
+})

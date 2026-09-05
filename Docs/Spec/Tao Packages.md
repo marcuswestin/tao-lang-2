@@ -45,9 +45,27 @@ compiler-known names are involved.
 
 ## Creating a Tao Project
 
-- `tao create <id>` creates `<id>/App.tao`, using the new project's directory name as its
-  developer-supplied, checked-in project ID and initial display name.
-- For example, `tao create my-todos` creates `./my-todos/App.tao` with `id "my-todos"`.
+- `tao create "<description>"` creates a new project directory from a sentence describing the app.
+  The description may name web pages and local image files; Tao reads the pages to text and the
+  images to a color palette before any model is involved.
+- The command writes the canonical layout of `Docs/Roadmap/Tao Revolution/Decisions.md` §1, as far
+  as the toolchain runs it today: `App.tao` (project and app), `Data.tao`, `Chrome.tao`,
+  `Design.tao`, one folder per feature with a list and a detail scene, `Scenarios.tao`, and
+  `<App>.test.tao`. The result is formatted, validated, and its behavior tests are run before the
+  command reports success; `--skip-tests` skips only the test run.
+- The project `id` is also the directory name. `--id <id>` chooses it; otherwise it is suggested
+  from the display name and confirmed at the prompt. An id is lowercase letters, digits, and
+  hyphens.
+- A model may shape the plan — the app's name, entities, fields, colors, and sample rows — but never
+  writes Tao: Tao validates the plan and decides every placement. Lanes are tried in order and the
+  first one the person accepts is used: an installed Claude Code or Codex CLI, a listening Ollama,
+  then Apple's on-device model. `--ai <lane>` picks one, `--ai none` writes the plain starter, and
+  `--yes` accepts the first lane, the suggested id, and the plan without asking. Without a terminal
+  to ask, no lane is used unless `--yes` or `--ai` chooses one.
+- `Apps/Starters/` holds the exact output for the reference plans; `Apps/Starters/README.md` owns
+  that contract.
+- For example, `tao create "A notebook for short notes I can pin" --ai none --yes` creates
+  `./a-notebook-for/` with `id "a-notebook-for"`, and `--id notebook` names it `./notebook/`.
 
 ### Creating a Tao app
 
@@ -108,7 +126,8 @@ scene ThreadUi(Message) {
 ```
 
 The project `id` is an opaque, immutable value chosen by the developer and checked into the project
-declaration. `tao create <id>` uses its new directory name as the ID. For an existing directory,
+declaration. `tao create` writes it as the new directory's name, from `--id` or the confirmed
+suggestion. For an existing directory,
 `tao project id <id> [path]` creates `Project.tao`; when metadata already exists it adds the missing
 ID, and repeating the same value preserves it. The ID travels with clones and published artifacts
 and does not change when the project moves, gains a remote, or advances to another commit. A fork

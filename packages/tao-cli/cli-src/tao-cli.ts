@@ -41,13 +41,25 @@ function createCommands(): Command {
 
   commands
     .command('create')
-    .argument('<id>', 'Checked-in project id and new directory name.')
-    .description('Create a new Tao project with an immutable project id.')
-    .action(async (id: string) => {
+    .argument('<description>', 'What the app is, in a sentence. URLs and image paths in it are read.')
+    .option('--id <id>', 'Checked-in project id and directory name. Suggested from the name when omitted.')
+    .option('--yes', 'Accept the suggested id, the plan, and the first available AI lane without asking.')
+    .option('--ai <lane>', 'How to shape the plan: auto, claude, codex, ollama, apple, or none.', 'auto')
+    .option('--skip-tests', "Skip running the new project's tests after creating it.")
+    .description('Create a new Tao project from a description.')
+    .action(async (description: string, options: { ai: string; id?: string; skipTests?: boolean; yes?: boolean }) => {
       try {
-        const { createProject } = await import('./project-command')
-        const appPath = await createProject(id)
-        HCI.writeSuccess(`Created ${FS.displayPath(appPath)}\n`)
+        const { createAiOptions, runCreate } = await import('./create/create-command')
+        const ai = createAiOptions.find(candidate => candidate === options.ai)
+        if (ai === undefined) {
+          Errors.throwUserInput(`--ai must be one of ${createAiOptions.join(', ')}, not '${options.ai}'.`)
+        }
+        await runCreate(description, {
+          ai,
+          ...(options.id === undefined ? {} : { id: options.id }),
+          ...(options.skipTests === true ? { runTests: false } : {}),
+          ...(options.yes === true ? { yes: true } : {}),
+        })
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)

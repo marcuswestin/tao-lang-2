@@ -292,7 +292,9 @@ Old Tao repo lessons:
 ## Deferred Decisions
 
 - Exact declaration syntax for recipe variants and state-specific entries.
-- Whether `tao create` writes a first `design` declaration into the scaffolded app.
+- ~~Whether `tao create` writes a first `design` declaration into the scaffolded app.~~ Decided
+  2026-09-04: it does. Every created project has a `Design.tao` with a palette, element defaults,
+  and the bundles its scenes apply; see `Apps/Starters/README.md`.
 - Whether `tao design init` is separate from project creation.
 - The `tao.design.lock` schema.
 - Visual screenshot artifact naming and retention.

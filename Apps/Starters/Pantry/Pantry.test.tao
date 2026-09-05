@@ -1,0 +1,47 @@
+use Pantry from ./
+
+test "Pantry" {
+   test "adds a ingredient, opens it, and renames it" {
+      run Pantry
+
+      expect text "No ingredients yet"
+      enter "Olive oil" into #ingredientName
+      press #addIngredient
+      expect missing text "No ingredients yet"
+      select #ingredients[1] {
+         expect text "Olive oil"
+         press #openIngredient
+      }
+      expect navigation title "Olive oil"
+      enter "Olive oil (updated)" into #ingredientNameDraft
+      press #saveIngredient
+      expect navigation title "Olive oil (updated)"
+      back
+      expect text "Olive oil (updated)"
+   }
+   test "adds a recipe, opens it, and renames it" {
+      run Pantry
+      press "Recipes"
+      expect text "No recipes yet"
+      enter "Tomato pasta" into #recipeTitle
+      press #addRecipe
+      expect missing text "No recipes yet"
+      select #recipes[1] {
+         expect text "Tomato pasta"
+         press #openRecipe
+      }
+      expect navigation title "Tomato pasta"
+      enter "Tomato pasta (updated)" into #recipeTitleDraft
+      press #saveRecipe
+      expect navigation title "Tomato pasta (updated)"
+      back
+      expect text "Tomato pasta (updated)"
+   }
+   test "keeps ingredients across a relaunch" {
+      run Pantry
+      enter "Olive oil" into #ingredientName
+      press #addIngredient
+      relaunch
+      expect text "Olive oil"
+   }
+}

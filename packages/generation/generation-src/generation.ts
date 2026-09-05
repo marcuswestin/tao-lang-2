@@ -28,6 +28,13 @@ export type {
   JsonValue,
 } from './generation-contract'
 export { checkGenerationSchema } from './json-schema'
+export {
+  DEFAULT_OLLAMA_URL,
+  listOllamaModels,
+  type ListOllamaModelsOptions,
+  OllamaGenerationProvider,
+  type OllamaGenerationProviderOptions,
+} from './ollama-provider'
 export { compileGenerationSchema } from './schema-compiler'
 export {
   type RecordedGenerationCall,

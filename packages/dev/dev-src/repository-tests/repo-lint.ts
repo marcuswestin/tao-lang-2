@@ -390,16 +390,22 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
   const issues: string[] = []
   issues.push(...wordFlowerDirectoryIssues(await readWordFlowerDirectory(repoRoot)))
 
-  const testAppsPath = FS.resolvePath('Apps/Test Apps', repoRoot)
-  const readmePath = FS.resolvePath('README.md', testAppsPath)
-  const appNames: string[] = []
-  for (const name of await FS.listDir(testAppsPath)) {
-    if (!name.startsWith('.') && await FS.isDirectory(FS.resolvePath(name, testAppsPath))) {
-      appNames.push(name)
+  // Test apps and starters each document every folder in their README, one `## <Name>` entry per app.
+  for (const collection of ['Apps/Test Apps', 'Apps/Starters']) {
+    const collectionPath = FS.resolvePath(collection, repoRoot)
+    if (!(await FS.isDirectory(collectionPath))) {
+      continue
     }
+    const readmePath = FS.resolvePath('README.md', collectionPath)
+    const appNames: string[] = []
+    for (const name of await FS.listDir(collectionPath)) {
+      if (!name.startsWith('.') && await FS.isDirectory(FS.resolvePath(name, collectionPath))) {
+        appNames.push(name)
+      }
+    }
+    const missingEntries = missingTestAppReadmeEntries(appNames, await FS.readText(readmePath))
+    issues.push(...missingEntries.map(name => `${readmePath} needs a \`## ${name}\` entry.`))
   }
-  const missingEntries = missingTestAppReadmeEntries(appNames, await FS.readText(readmePath))
-  issues.push(...missingEntries.map(name => `${readmePath} needs a \`## ${name}\` entry.`))
 
   const packageFiles: SourceFile[] = []
   for await (

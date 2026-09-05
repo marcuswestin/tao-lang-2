@@ -74,7 +74,8 @@ configures the app's provider; Local's
 storage identity is specified in `Tao Data.md`. App auxiliaries remain valid for genuine
 app-specific hosts such as windows. Overlays and toasts never require auxiliary hosts.
 
-Every project has one checked-in opaque `id`. `tao create <id>` creates it and
+Every project has one checked-in opaque `id`. `tao create` writes it (from `--id` or a confirmed
+suggestion) and
 `tao project id <id> [path]` adds missing metadata; `--replace` deliberately makes a fork independent
 and severs persisted-state compatibility. A missing ID is a diagnostic, never a path-, repository-,
 lockfile-, or process-derived fallback. Two dependencies with the same project ID but different

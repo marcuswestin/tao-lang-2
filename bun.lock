@@ -286,6 +286,7 @@
         "tao-ast-utils": "workspace:*",
         "tao-dev": "workspace:*",
         "tao-formatter": "workspace:*",
+        "tao-generation": "workspace:*",
         "tao-parser": "workspace:*",
         "tao-runtime-toolchain": "workspace:*",
         "tao-shared": "workspace:*",
