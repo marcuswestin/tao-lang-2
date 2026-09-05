@@ -7,10 +7,13 @@ import {
 } from '../studio-src/client/StudioMatrixView'
 import { StudioSketchGeometry } from '../studio-src/client/StudioSketchGeometry'
 import {
+  StudioSketchBoardInput,
   StudioSketchChanges,
+  StudioSketchDragOneIn,
   StudioSketchFlowControls,
   StudioSketchOuterDrawing,
   StudioSketchProposal,
+  StudioSketchRenderGate,
   StudioSketchSelection,
 } from '../studio-src/client/StudioSketchView'
 import type {
@@ -455,3 +458,47 @@ function testRects(): readonly StudioSketchRect[] {
     { content: 'Front', height: 20, id: 'front', kind: 'Text', width: 20, x: 40, y: 10 },
   ]
 }
+
+Test('Studio sketch render gate holds re-renders while a gesture is in flight and flushes the latest one', () => {
+  const idle = StudioSketchRenderGate.initial()
+  const first = [testSketch()]
+  Expect(StudioSketchRenderGate.request(idle, first, 'source-1')).toEqual({ render: true, state: idle })
+
+  let gate = StudioSketchRenderGate.begin(idle)
+  const held = StudioSketchRenderGate.request(gate, first, 'source-2')
+  Expect(held.render).toBe(false)
+  gate = held.state
+  const second = [{ ...testSketch(), rects: [] }]
+  const later = StudioSketchRenderGate.request(gate, second)
+  Expect(later.render).toBe(false)
+  gate = later.state
+
+  // A nested gesture (a resize handle inside a captured board) keeps the hold until both end.
+  gate = StudioSketchRenderGate.begin(gate)
+  const inner = StudioSketchRenderGate.end(gate)
+  Expect(inner.flush).toBeUndefined()
+  const outer = StudioSketchRenderGate.end(inner.state)
+  Expect(outer.flush).toEqual({ sketches: second, sourceVersion: 'source-2' })
+  Expect(outer.state).toEqual(idle)
+  Expect(StudioSketchRenderGate.end(idle).flush).toBeUndefined()
+})
+
+Test('Studio sketch board pointerdown begins a gesture only for a free primary pointer on the canvas', () => {
+  const canvas = { inToolbar: false, onHandle: false, primary: true }
+  Expect(StudioSketchBoardInput.beginsGesture(canvas)).toBe(true)
+  Expect(StudioSketchBoardInput.beginsGesture({ ...canvas, inToolbar: true })).toBe(false)
+  Expect(StudioSketchBoardInput.beginsGesture({ ...canvas, onHandle: true })).toBe(false)
+  Expect(StudioSketchBoardInput.beginsGesture({ ...canvas, primary: false })).toBe(false)
+  Expect(StudioSketchBoardInput.beginsGesture({ ...canvas, activePointer: 7 })).toBe(false)
+})
+
+Test('Studio drag-one-in snaps only a plain move released outside the board over the running cell', () => {
+  const size = { height: 76, width: 360 }
+  const outside = { x: 420, y: 30 }
+  Expect(StudioSketchDragOneIn.outcome({ duplicate: false, overCell: true, point: outside, size })).toBe('snap')
+  Expect(StudioSketchDragOneIn.outcome({ duplicate: false, overCell: false, point: outside, size })).toBe('move')
+  Expect(StudioSketchDragOneIn.outcome({ duplicate: true, overCell: true, point: outside, size })).toBe('move')
+  Expect(StudioSketchDragOneIn.outcome({ duplicate: false, overCell: true, point: { x: 100, y: 30 }, size })).toBe(
+    'move',
+  )
+})
