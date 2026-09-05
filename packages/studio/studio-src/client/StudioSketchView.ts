@@ -93,7 +93,7 @@ export type StudioSketchViewOptions = Readonly<{
   sourceVersion?: string
 }>
 
-export type StudioSketchViewSnapRequest = Readonly<{
+type StudioSketchViewSnapRequest = Readonly<{
   checkpointId: string
   confirmedProposalVersion?: string
   rectIds: readonly string[]
@@ -108,7 +108,7 @@ export type StudioSketchViewFlowActionRequest = Readonly<{
   sourceVersion: string
 }>
 
-export type StudioSketchViewUndoRequest = Readonly<{
+type StudioSketchViewUndoRequest = Readonly<{
   checkpointId: string
   sourceVersion: string
 }>
@@ -120,7 +120,7 @@ type StudioSketchSnapUiState = {
   sourceVersion?: string
 }
 
-export type StudioSketchViewUnsnapRequest = Readonly<{
+type StudioSketchViewUnsnapRequest = Readonly<{
   checkpointId: string
   rectIds: readonly string[]
   sketchId: string

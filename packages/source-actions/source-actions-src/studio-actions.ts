@@ -166,7 +166,7 @@ export type StudioRenderInspection = {
 }
 
 /** StudioTextBindingCandidate is one value a text leaf may bind to, visible at that render. */
-export type StudioTextBindingCandidate = Readonly<{
+type StudioTextBindingCandidate = Readonly<{
   expression: string
   type: 'enum' | 'number' | 'text'
 }>
@@ -176,7 +176,7 @@ export type StudioTextBindingCandidate = Readonly<{
  * its literal when it is a plain string, and every parameter, loop item, local value, or entity field
  * in scope that the leaf could show instead.
  */
-export type StudioTextInspection = Readonly<{
+type StudioTextInspection = Readonly<{
   candidates: readonly StudioTextBindingCandidate[]
   expression: string
   literal?: string
@@ -216,23 +216,23 @@ export type StudioWrapRenderPatchRequest = {
   wrapper: StudioWrapRenderContainer
 }
 
-export type StudioWrapRenderContainer = 'Col' | 'Row' | 'Stack'
+type StudioWrapRenderContainer = 'Col' | 'Row' | 'Stack'
 
 /** StudioRemoveRenderPatchRequest removes one direct child render together with its attached tag. */
-export type StudioRemoveRenderPatchRequest = Readonly<{
+type StudioRemoveRenderPatchRequest = Readonly<{
   kind: 'remove-render'
   renderId: string
 }>
 
 /** StudioSetTextContentPatchRequest replaces a text leaf's first argument with a string literal. */
-export type StudioSetTextContentPatchRequest = Readonly<{
+type StudioSetTextContentPatchRequest = Readonly<{
   content: string
   kind: 'set-text-content'
   renderId: string
 }>
 
 /** StudioBindTextPatchRequest points a text leaf's first argument at a value visible at that render. */
-export type StudioBindTextPatchRequest = Readonly<{
+type StudioBindTextPatchRequest = Readonly<{
   expression: string
   kind: 'bind-text'
   renderId: string
@@ -254,7 +254,7 @@ export type StudioSetScenarioArgumentsPatchRequest = {
   scenarioName: string
 }
 
-export type StudioRecordedScenarioStep =
+type StudioRecordedScenarioStep =
   | Readonly<{
     kind: 'press' | 'submit'
     selector: 'label' | 'placeholder' | 'tag' | 'text'
@@ -353,7 +353,7 @@ export type StudioSnapSketchToFlowPatchRequest = Readonly<{
 }>
 
 /** Structured-only request for removing selected Studio-owned leaves from a generated sketch view. */
-export type StudioUnsnapSketchFromFlowPatchRequest = Readonly<{
+type StudioUnsnapSketchFromFlowPatchRequest = Readonly<{
   fallback: Readonly<{ height: number; label: string; width: number }>
   kind: 'unsnap-sketch-from-flow'
   rectIds: readonly string[]

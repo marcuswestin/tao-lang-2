@@ -30,7 +30,7 @@ export type StudioParameterSchema = {
     | { kind: 'time' }
 }
 
-export type StudioScenarioStep =
+type StudioScenarioStep =
   | { kind: 'advance'; milliseconds: number }
   | { kind: 'focus'; tag: string }
   | {

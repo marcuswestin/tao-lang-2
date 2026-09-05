@@ -9,7 +9,7 @@ export function nowMs(): number {
 }
 
 /** PollUntilOptions bounds a `pollUntil` wait; `now` and `sleep` are injectable so tests can drive the clock. */
-export type PollUntilOptions = {
+type PollUntilOptions = {
   intervalMs: number
   timeoutMs: number
   now?: () => number

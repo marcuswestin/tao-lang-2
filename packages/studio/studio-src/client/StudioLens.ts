@@ -7,7 +7,7 @@
 
 export type StudioLensFacet = 'structure' | 'layout' | 'behavior' | 'data' | 'wiring' | 'tests' | 'comments'
 
-export type StudioLensFacetDefinition = Readonly<{
+type StudioLensFacetDefinition = Readonly<{
   glyph: string
   hint: string
   label: string

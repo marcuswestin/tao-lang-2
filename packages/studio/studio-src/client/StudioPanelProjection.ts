@@ -15,7 +15,7 @@ export const StudioPanelBounds = {
   testOutputCharacters: 40_000,
 } as const
 
-export type StudioPanelCellIdentity = Readonly<{ cellId: string; cellRevision: number }>
+type StudioPanelCellIdentity = Readonly<{ cellId: string; cellRevision: number }>
 
 type StudioPanelActionName =
   | 'capture-fixture'

@@ -1223,7 +1223,7 @@ function isJourneySubmitKey(event: StudioPreviewPointerEvent, element: StudioPre
 }
 
 /** recordedJourneyTarget chooses only selectors the Tao journey runtime can resolve uniquely later. */
-export function recordedJourneyTarget(
+function recordedJourneyTarget(
   host: StudioPreviewHost,
   startingElement: StudioPreviewElement,
 ): StudioRecordedJourneyTarget | undefined {

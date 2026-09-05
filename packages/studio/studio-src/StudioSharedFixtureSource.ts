@@ -16,7 +16,7 @@ export type StudioSharedFixturePromotion = Readonly<{
   name: string
 }>
 
-export type StudioSharedFixtureHandle = Readonly<{
+type StudioSharedFixtureHandle = Readonly<{
   handle: string
   kind: 'fixture-reference'
 }>

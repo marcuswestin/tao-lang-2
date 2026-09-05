@@ -256,7 +256,7 @@ export type StudioPreviewLayoutMeasurementsMessage = {
   type: 'preview-layout-measurements'
 }
 
-export type StudioRecordedJourneySelector = 'label' | 'placeholder' | 'tag' | 'text'
+type StudioRecordedJourneySelector = 'label' | 'placeholder' | 'tag' | 'text'
 
 export type StudioRecordedJourneyStep =
   | Readonly<{
@@ -309,14 +309,14 @@ export type StudioPreviewJourneyRecordingStateMessage = {
 }
 
 /** Runtime-owned completion signals keep visual review from capturing before a journey settles. */
-export type StudioPreviewJourneyReplaySettledMessage = {
+type StudioPreviewJourneyReplaySettledMessage = {
   channel: typeof studioProtocolChannel
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   type: 'preview-journey-replay-settled'
 }
 
-export type StudioPreviewJourneyReplayFailedMessage = {
+type StudioPreviewJourneyReplayFailedMessage = {
   channel: typeof studioProtocolChannel
   error: string
   identity: StudioPreviewIdentity

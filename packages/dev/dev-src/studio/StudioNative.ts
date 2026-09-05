@@ -98,7 +98,7 @@ type NativeStartLifecycleOptions = {
 }
 
 /** NativeHostLeaseDependencies are the seams a test replaces to drive the busy-host prompt without a terminal or a victim. */
-export type NativeHostLeaseDependencies = {
+type NativeHostLeaseDependencies = {
   acquire?: typeof MachineLanes.acquireResource
   askConfirm?: (message: string) => Promise<boolean>
   isInteractive?: () => boolean
@@ -107,7 +107,7 @@ export type NativeHostLeaseDependencies = {
 }
 
 /** StopOwnerDependencies are the seams that stop the session holding the native host. */
-export type StopOwnerDependencies = {
+type StopOwnerDependencies = {
   launches?: typeof readLaunches
   runner?: CommandRunner
   sleep?: Sleep

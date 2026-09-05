@@ -29,7 +29,7 @@ export type CreationPalette = {
   accent: string
 }
 
-export type CreationSampleValue = boolean | number | string
+type CreationSampleValue = boolean | number | string
 export type CreationSampleRow = Record<string, CreationSampleValue>
 
 /**

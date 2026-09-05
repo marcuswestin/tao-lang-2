@@ -3,7 +3,7 @@ import { Assert, Errors, FS } from '@shared'
 export const studioSketchCatalogFormatVersion = 1 as const
 export const studioSketchCatalogRelativePath = '.tao-project/studio/sketches.jsonc'
 
-export type StudioSketchFieldBinding = Readonly<{
+type StudioSketchFieldBinding = Readonly<{
   parameter: string
   path: string
   presentation: Readonly<{
@@ -242,10 +242,6 @@ export class StudioSketchCatalog {
     this.#mutationLane = result.then(() => undefined, () => undefined)
     return result
   }
-}
-
-export function serializeStudioSketchCatalog(catalog: StudioSketchCatalogSnapshot): string {
-  return serializeCatalog(validateCatalog(catalog))
 }
 
 function emptyCatalog(): StudioSketchCatalogSnapshot {

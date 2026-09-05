@@ -25,7 +25,7 @@ export type BindingDiagnostic<Candidate, Target> =
   | { kind: 'missing'; target: Target }
 
 /** BindingState is the mutable middle of a resolution, handed to a domain's `afterNamedBinding`. */
-export type BindingState<Candidate, Target> = {
+type BindingState<Candidate, Target> = {
   remainingCandidates: Set<Candidate>
   remainingTargets: Set<Target>
   bind(candidate: Candidate, target: Target): void

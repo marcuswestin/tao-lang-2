@@ -25,7 +25,7 @@ export function studioRenderIdentity(render: AST.Render, projectRoot: string): {
 }
 
 /** studioRectIdForRender decodes the source-safe UTF-16 hex payload emitted by Snap. */
-export function studioRectIdForRender(render: AST.Render, projectRoot: string): string | undefined {
+function studioRectIdForRender(render: AST.Render, projectRoot: string): string | undefined {
   const document = AST.getDocument(render)
   const studioRoot = FS.resolvePath('@/studio', projectRoot)
   if (
