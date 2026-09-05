@@ -98,7 +98,7 @@ type NativeStartLifecycleOptions = {
 }
 
 /** NativeHostLeaseDependencies are the seams a test replaces to drive the busy-host prompt without a terminal or a victim. */
-export type NativeHostLeaseDependencies = {
+type NativeHostLeaseDependencies = {
   acquire?: typeof MachineLanes.acquireResource
   askConfirm?: (message: string) => Promise<boolean>
   isInteractive?: () => boolean
@@ -107,7 +107,7 @@ export type NativeHostLeaseDependencies = {
 }
 
 /** StopOwnerDependencies are the seams that stop the session holding the native host. */
-export type StopOwnerDependencies = {
+type StopOwnerDependencies = {
   launches?: typeof readLaunches
   ownerIsLive?: typeof MachineLanes.ownerIsLive
   runner?: CommandRunner
@@ -414,7 +414,7 @@ async function stopNativeHostOwner(
     const report = await (dependencies.stop ?? stopLaunches)({ launchId, repositoryRoot: owner.repositoryRoot })
     const outcome = report.outcomes[0]
     if (outcome === undefined || outcome.outcome === 'refused') {
-      throw new Errors.HostEnvironmentError(
+      Errors.throwHostEnvironment(
         `Could not stop the Studio launch holding the native host (${launchId})${
           outcome?.reason === undefined ? '' : `: ${outcome.reason}`
         }`,
@@ -483,7 +483,7 @@ async function stopExistingNativeDevelopmentProcesses(
 ): Promise<number> {
   const result = await runner('/usr/sbin/lsof', { args: ['-nP', '-d', 'cwd', '-Fpcn'] })
   if (result.exitCode !== 0 && result.stdout.trim() === '') {
-    throw new Errors.HostEnvironmentError(
+    Errors.throwHostEnvironment(
       `Could not inspect existing native Studio processes: ${result.stderr.trim() || 'lsof failed'}`,
     )
   }
@@ -550,7 +550,7 @@ async function runningProcessIds(processIds: readonly number[], runner: CommandR
 
 function assertNativeProcessesSignalable(result: CLI.CommandResult, processIds: readonly number[]): void {
   if (result.exitCode !== 0 && /operation not permitted/i.test(result.stderr)) {
-    throw new Errors.HostEnvironmentError(
+    Errors.throwHostEnvironment(
       `Existing native Studio processes could not be stopped (${processIds.join(', ')}). Close Tao Studio and retry.`,
     )
   }
@@ -601,7 +601,7 @@ async function packageApp(options: StudioNativePackageOptions): Promise<Packaged
   })
   const testCommandOutput = testCommandBundle.outputs[0]
   if (!testCommandBundle.success || testCommandOutput === undefined) {
-    throw new Errors.UnexpectedBehaviorError(
+    Errors.throwUnexpected(
       `Could not bundle the packaged Studio test command: ${testCommandBundle.logs.map(log => log.message).join('\n')}`,
     )
   }
@@ -651,7 +651,7 @@ async function stageStudioPackagedServiceBundle(serviceBundlePath: string): Prom
   })
   const serviceBundle = bundle.outputs[0]
   if (!bundle.success || serviceBundle === undefined) {
-    throw new Errors.UnexpectedBehaviorError(
+    Errors.throwUnexpected(
       `Could not bundle the packaged Studio service: ${bundle.logs.map(log => log.message).join('\n')}`,
     )
   }
@@ -710,7 +710,7 @@ function verifyReleaseArtifacts(artifactPaths: readonly string[], channel: 'cana
       : 'platform installer',
   ].filter((value): value is string => value !== undefined)
   if (missing.length > 0) {
-    throw new Errors.UnexpectedBehaviorError(
+    Errors.throwUnexpected(
       `Electrobun completed without required release artifacts: ${missing.join(', ')}.`,
     )
   }
@@ -739,7 +739,7 @@ async function materializeStudioServicePayload(
     const name = pending.shift()!
     const root = packageRoots.get(name)
     if (root === undefined) {
-      throw new Errors.UnexpectedBehaviorError(`Studio service payload requires missing workspace package ${name}.`)
+      Errors.throwUnexpected(`Studio service payload requires missing workspace package ${name}.`)
     }
     const packageJson = await FS.readJson<Record<string, unknown>>(FS.resolvePath('package.json', root))
     for (const dependencies of [packageJson['dependencies'], packageJson['peerDependencies']]) {
@@ -780,7 +780,7 @@ async function materializeStudioServicePayload(
     const actualInventory = await dependencyInventory(payloadRoot)
     const verificationInventory = await dependencyInventory(verificationRoot)
     if (JSON.stringify(actualInventory) !== JSON.stringify(verificationInventory)) {
-      throw new Errors.UnexpectedBehaviorError(
+      Errors.throwUnexpected(
         'Two clean Studio service payload materializations produced different dependency inventories.',
       )
     }
@@ -794,7 +794,7 @@ async function materializeStudioServicePayload(
 async function stageStudioClientBundle(path: string): Promise<void> {
   const source = portableStudioClientBundle(await StudioClientAssets.bundle({ validationMode: 'release' }))
   if (source.trim() === '') {
-    throw new Errors.UnexpectedBehaviorError('Studio browser bundling produced an empty artifact.')
+    Errors.throwUnexpected('Studio browser bundling produced an empty artifact.')
   }
   await FS.writeText(path, source)
 }
@@ -815,13 +815,13 @@ async function materializeStudioNodeRuntime(
 ): Promise<void> {
   const requestedNode = FS.resolvePath(sourceNodePath)
   if (!await FS.isFile(requestedNode)) {
-    throw new Errors.UserInputError(`Studio packaging Node executable was not found: ${sourceNodePath}`)
+    Errors.throwUserInput(`Studio packaging Node executable was not found: ${sourceNodePath}`)
   }
   const sourceNode = await FS.realPath(requestedNode)
   const architecture = await runChecked('lipo', ['-archs', sourceNode], undefined, runner)
   const requiredArchitecture = process.arch === 'arm64' ? 'arm64' : process.arch === 'x64' ? 'x86_64' : process.arch
   if (!architecture.stdout.trim().split(/\s+/).includes(requiredArchitecture)) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Studio packaging Node does not contain the build-host ${requiredArchitecture} architecture.`,
     )
   }
@@ -871,21 +871,21 @@ async function materializeStudioNodeRuntime(
       && !dependency.startsWith('/usr/lib/')
     )
     if (hostBoundDependency !== undefined) {
-      throw new Errors.UserInputError(
+      Errors.throwUserInput(
         `Studio packaging Node retains a host-bound Mach-O dependency (${hostBoundDependency}). `
           + 'Supply a standalone Node executable or a Nix Node whose closure can be relocated.',
       )
     }
     const targetArchitectures = await runChecked('lipo', ['-archs', target], undefined, runner)
     if (!targetArchitectures.stdout.trim().split(/\s+/).includes(requiredArchitecture)) {
-      throw new Errors.UnexpectedBehaviorError(
+      Errors.throwUnexpected(
         `Relocated Studio Node dependency does not contain ${requiredArchitecture}: ${target}`,
       )
     }
   }
   const version = await runChecked(targetNode, ['--version'], payloadRoot, runner)
   if (!/^v\d+\.\d+\.\d+\s*$/.test(version.stdout)) {
-    throw new Errors.UnexpectedBehaviorError('Relocated Studio Node did not report a valid version.')
+    Errors.throwUnexpected('Relocated Studio Node did not report a valid version.')
   }
 }
 
@@ -1010,7 +1010,7 @@ async function materializePayloadSymlinks(payloadRoot: string): Promise<void> {
       await FS.move(temporaryPath, symlink.path)
     }
   }
-  throw new Errors.UnexpectedBehaviorError('Studio service payload symlinks did not converge while materializing.')
+  Errors.throwUnexpected('Studio service payload symlinks did not converge while materializing.')
 }
 
 async function validateStudioServicePayload(payloadRoot: string): Promise<void> {
@@ -1026,18 +1026,18 @@ async function validateStudioServicePayload(payloadRoot: string): Promise<void> 
   ]
   for (const relativePath of required) {
     if (!await FS.isFile(FS.resolvePath(relativePath, payloadRoot))) {
-      throw new Errors.UnexpectedBehaviorError(`Studio service payload is missing ${relativePath}.`)
+      Errors.throwUnexpected(`Studio service payload is missing ${relativePath}.`)
     }
   }
   const repositoryRoot = Repo.getRoot()
   for await (const path of FS.walk(payloadRoot, { includeDirectories: true, includeHidden: true })) {
     if (await FS.realPath(path) !== FS.resolvePath(path)) {
-      throw new Errors.UnexpectedBehaviorError(`Studio service payload contains a symlink: ${path}`)
+      Errors.throwUnexpected(`Studio service payload contains a symlink: ${path}`)
     }
     if (await FS.isFile(path) && ['.json', '.js', '.ts', '.cjs', '.mjs', '.map'].includes(FS.extname(path))) {
       const content = await FS.readText(path)
       if (content.includes(repositoryRoot)) {
-        throw new Errors.UnexpectedBehaviorError(`Studio service payload contains an absolute repository path: ${path}`)
+        Errors.throwUnexpected(`Studio service payload contains an absolute repository path: ${path}`)
       }
     }
   }
@@ -1153,7 +1153,7 @@ async function runHutchCommand(
   try {
     command = (options.startCommand ?? startStudioProcessTree)(hutchPath, commandSpec)
   } catch (error) {
-    throw new Errors.HostEnvironmentError(
+    Errors.throwHostEnvironment(
       `Could not start ${args.join(' ')} in ${projectRoot}.`,
       { cause: error, details: { command: hutchPath, phase: args.join(' '), projectRoot } },
     )
@@ -1174,7 +1174,7 @@ async function runHutchCommand(
       ? `was interrupted after ${elapsedMs}ms`
       : `timed out after ${options.timeoutMs}ms (elapsed ${elapsedMs}ms)`
     const diagnostic = output === '' ? '(no Hutch output)' : output
-    throw new Errors.HostEnvironmentError(
+    Errors.throwHostEnvironment(
       `Hutch ${args.join(' ')} ${action} in ${projectRoot}.\nRelevant output:\n${diagnostic}`,
       {
         cause: cleanupError,
@@ -1253,7 +1253,7 @@ async function stopProcessTreeBoundedly(
     ])
     if (!completed) {
       command.kill('SIGKILL')
-      throw new Errors.HostEnvironmentError('Hutch process-tree cleanup did not complete within 5000ms.')
+      Errors.throwHostEnvironment('Hutch process-tree cleanup did not complete within 5000ms.')
     }
   } finally {
     if (timeout !== undefined) {
@@ -1291,7 +1291,7 @@ async function runNativePhase<Value>(
 
 function throwIfNativeInterrupted(signal: AbortSignal | undefined, phase: string, projectRoot?: string): void {
   if (signal?.aborted === true) {
-    throw new Errors.HostEnvironmentError(
+    Errors.throwHostEnvironment(
       `Native Studio was interrupted before ${phase}${projectRoot === undefined ? '' : ` in ${projectRoot}`}.`,
       { details: { failureKind: 'user-interruption', phase, projectRoot } },
     )
@@ -1326,25 +1326,27 @@ async function waitForProbeResult(
   sleep: (milliseconds: number) => Promise<void> = Time.sleep,
   signal?: AbortSignal,
 ): Promise<StudioNativeProbeResult> {
-  const deadline = Date.now() + probeTimeoutMs
-  while (Date.now() < deadline) {
+  const result = await Time.pollUntil(async () => {
     throwIfNativeInterrupted(signal, 'runtime probe')
     if (await FS.isFile(resultPath)) {
       return probeResult(await FS.readJson(resultPath))
     }
     if (command.exitCode !== null || command.signalCode !== null) {
-      throw new Errors.HostEnvironmentError('Electrobun exited before writing its runtime probe result.')
+      Errors.throwHostEnvironment('Electrobun exited before writing its runtime probe result.')
     }
-    await sleep(100)
+    return undefined
+  }, { intervalMs: 100, sleep, timeoutMs: probeTimeoutMs })
+  if (result !== undefined) {
+    return result
   }
-  throw new Errors.HostEnvironmentError('Timed out waiting for the Electrobun runtime probe.')
+  Errors.throwHostEnvironment('Timed out waiting for the Electrobun runtime probe.')
 }
 
 function probeResult(value: unknown): StudioNativeProbeResult {
   if (
     !Json.isRecord(value) || typeof value['passed'] !== 'boolean' || !Json.isRecord(value['capabilities'])
   ) {
-    throw new Errors.UnexpectedBehaviorError('Electrobun wrote an invalid runtime probe result.')
+    Errors.throwUnexpected('Electrobun wrote an invalid runtime probe result.')
   }
   const capabilities: StudioNativeProbeResult['capabilities'] = {}
   for (const [name, result] of Object.entries(value['capabilities'])) {
@@ -1352,7 +1354,7 @@ function probeResult(value: unknown): StudioNativeProbeResult {
       !Json.isRecord(result) || typeof result['passed'] !== 'boolean'
       || (result['message'] !== undefined && typeof result['message'] !== 'string')
     ) {
-      throw new Errors.UnexpectedBehaviorError('Electrobun wrote an invalid runtime probe capability.')
+      Errors.throwUnexpected('Electrobun wrote an invalid runtime probe capability.')
     }
     capabilities[name] = { message: result['message'], passed: result['passed'] }
   }
@@ -1364,10 +1366,10 @@ function requiredHttpsUrl(value: string): URL {
   try {
     url = new URL(value)
   } catch {
-    throw new Errors.UserInputError('Studio release base URL must be a valid HTTPS URL.')
+    Errors.throwUserInput('Studio release base URL must be a valid HTTPS URL.')
   }
   if (url.protocol !== 'https:') {
-    throw new Errors.UserInputError('Studio release base URL must be a valid HTTPS URL.')
+    Errors.throwUserInput('Studio release base URL must be a valid HTTPS URL.')
   }
   return url
 }

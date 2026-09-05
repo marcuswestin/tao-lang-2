@@ -1,4 +1,4 @@
-import { Errors } from '@shared'
+import { Errors, Http } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   AppStoreConnectClient,
@@ -16,11 +16,11 @@ type RecordedRequest = {
 Describe('App Store Connect client', () => {
   Test('derives the Team ID from paginated bundle identifier seedIds', async () => {
     const recorded = recordedFetch([
-      jsonResponse({
+      Http.jsonResponse({
         data: [],
         links: { next: 'https://api.appstoreconnect.apple.com/v1/bundleIds?cursor=next' },
       }),
-      jsonResponse({
+      Http.jsonResponse({
         data: [resource('bundleIds', 'bundle-1', {
           identifier: 'com.example.wordflower',
           seedId: 'TEAM123456',
@@ -45,7 +45,7 @@ Describe('App Store Connect client', () => {
   })
 
   Test('registers an iOS bundle identifier when Xcode has not already created it', async () => {
-    const recorded = recordedFetch([jsonResponse({
+    const recorded = recordedFetch([Http.jsonResponse({
       data: resource('bundleIds', 'bundle-1', {
         identifier: 'com.example.wordflower',
         name: 'WordFlower',
@@ -89,7 +89,7 @@ Describe('App Store Connect client', () => {
       primaryLocale: 'en-US',
       sku: 'wordflower',
     })
-    const recorded = recordedFetch([jsonResponse({ data: [app] })])
+    const recorded = recordedFetch([Http.jsonResponse({ data: [app] })])
 
     Expect(await clientWith(recorded.fetch).apps('com.example.wordflower')).toEqual([app])
     Expect(recorded.requests[0]?.url).toBe(
@@ -108,8 +108,8 @@ Describe('App Store Connect client', () => {
       },
     }
     const recorded = recordedFetch([
-      jsonResponse({ data: [build('PROCESSING')] }),
-      jsonResponse({ data: [build('VALID')] }),
+      Http.jsonResponse({ data: [build('PROCESSING')] }),
+      Http.jsonResponse({ data: [build('VALID')] }),
     ])
 
     const result = await clientWith(recorded.fetch, clock).waitForProcessedBuild({
@@ -129,22 +129,22 @@ Describe('App Store Connect client', () => {
 
   Test('creates and attaches an App Store version before submitting modern review resources', async () => {
     const recorded = recordedFetch([
-      jsonResponse({ data: [] }),
-      jsonResponse({
+      Http.jsonResponse({ data: [] }),
+      Http.jsonResponse({
         data: resource('appStoreVersions', 'version-1', {
           platform: 'IOS',
           versionString: '1.2.3',
         }),
       }),
       new Response(undefined, { status: 204 }),
-      jsonResponse({
+      Http.jsonResponse({
         data: resource('reviewSubmissions', 'review-1', {
           platform: 'IOS',
           submitted: false,
         }),
       }),
-      jsonResponse({ data: resource('reviewSubmissionItems', 'item-1', {}) }),
-      jsonResponse({
+      Http.jsonResponse({ data: resource('reviewSubmissionItems', 'item-1', {}) }),
+      Http.jsonResponse({
         data: resource('reviewSubmissions', 'review-1', {
           platform: 'IOS',
           state: 'READY_FOR_REVIEW',
@@ -202,38 +202,38 @@ Describe('App Store Connect client', () => {
 
   Test('drives recorded TestFlight groups, testers, localizations, review, and team invitations', async () => {
     const recorded = recordedFetch([
-      jsonResponse({ data: [] }),
-      jsonResponse({
+      Http.jsonResponse({ data: [] }),
+      Http.jsonResponse({
         data: resource('betaGroups', 'external-1', {
           isInternalGroup: false,
           name: 'Tao External',
         }),
       }),
-      jsonResponse({ data: [] }),
-      jsonResponse({ data: resource('betaTesters', 'tester-1', { email: 'friend@example.com' }) }),
+      Http.jsonResponse({ data: [] }),
+      Http.jsonResponse({ data: resource('betaTesters', 'tester-1', { email: 'friend@example.com' }) }),
       new Response(undefined, { status: 204 }),
-      jsonResponse({ data: [] }),
-      jsonResponse({
+      Http.jsonResponse({ data: [] }),
+      Http.jsonResponse({
         data: resource('betaBuildLocalizations', 'build-loc-1', {
           locale: 'en-US',
           whatsNew: 'A quieter editor.',
         }),
       }),
-      jsonResponse({ data: [] }),
-      jsonResponse({
+      Http.jsonResponse({ data: [] }),
+      Http.jsonResponse({
         data: resource('betaAppLocalizations', 'app-loc-1', {
           feedbackEmail: 'maker@example.com',
           locale: 'en-US',
         }),
       }),
-      jsonResponse({ data: [] }),
-      jsonResponse({
+      Http.jsonResponse({ data: [] }),
+      Http.jsonResponse({
         data: resource('betaAppReviewSubmissions', 'beta-review-1', {
           betaReviewState: 'WAITING_FOR_REVIEW',
         }),
       }),
-      jsonResponse({ data: [] }),
-      jsonResponse({
+      Http.jsonResponse({ data: [] }),
+      Http.jsonResponse({
         data: resource('userInvitations', 'invite-1', {
           allAppsVisible: false,
           email: 'teammate@example.com',
@@ -307,8 +307,8 @@ Describe('App Store Connect client', () => {
     const tester = resource('betaTesters', 'tester-1', { email: 'friend@example.com' })
     const group = resource('betaGroups', 'external-1', { isInternalGroup: false, name: 'Tao External' })
     const recorded = recordedFetch([
-      jsonResponse({ data: [tester] }),
-      jsonResponse({ data: [group] }),
+      Http.jsonResponse({ data: [tester] }),
+      Http.jsonResponse({ data: [group] }),
     ])
 
     Expect(await clientWith(recorded.fetch).ensureBetaTester('friend@example.com', 'external-1')).toEqual(tester)
@@ -321,8 +321,8 @@ Describe('App Store Connect client', () => {
   Test('adds an existing beta tester when it is not yet in the requested group', async () => {
     const tester = resource('betaTesters', 'tester-1', { email: 'friend@example.com' })
     const recorded = recordedFetch([
-      jsonResponse({ data: [tester] }),
-      jsonResponse({ data: [] }),
+      Http.jsonResponse({ data: [tester] }),
+      Http.jsonResponse({ data: [] }),
       new Response(undefined, { status: 204 }),
     ])
 
@@ -338,9 +338,9 @@ Describe('App Store Connect client', () => {
     const disabled = resource('buildBetaDetails', 'build-detail-1', { autoNotifyEnabled: false })
     const enabled = resource('buildBetaDetails', 'build-detail-1', { autoNotifyEnabled: true })
     const recorded = recordedFetch([
-      jsonResponse({ data: disabled }),
-      jsonResponse({ data: enabled }),
-      jsonResponse({ data: enabled }),
+      Http.jsonResponse({ data: disabled }),
+      Http.jsonResponse({ data: enabled }),
+      Http.jsonResponse({ data: enabled }),
     ])
     const client = clientWith(recorded.fetch)
 
@@ -371,8 +371,8 @@ Describe('App Store Connect client', () => {
       locale: 'en-US',
     })
     const recorded = recordedFetch([
-      jsonResponse({ data: [existing] }),
-      jsonResponse({ data: updated }),
+      Http.jsonResponse({ data: [existing] }),
+      Http.jsonResponse({ data: updated }),
     ])
 
     Expect(
@@ -395,7 +395,7 @@ Describe('App Store Connect client', () => {
   })
 
   Test('quotes Apple errors without exposing authorization material', async () => {
-    const recorded = recordedFetch([jsonResponse({
+    const recorded = recordedFetch([Http.jsonResponse({
       errors: [{
         code: 'REQUIRED_AGREEMENTS_MISSING_OR_EXPIRED',
         detail: 'A required agreement is missing or has expired.',
@@ -441,10 +441,6 @@ function recordedFetch(responses: readonly Response[]): {
     },
     requests,
   }
-}
-
-function jsonResponse(value: unknown, status = 200): Response {
-  return new Response(JSON.stringify(value), { status })
 }
 
 function resource(type: string, id: string, attributes: Record<string, unknown>): unknown {

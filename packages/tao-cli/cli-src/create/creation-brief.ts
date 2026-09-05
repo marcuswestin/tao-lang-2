@@ -3,7 +3,7 @@ import { formatHex, luminance, saturation } from './creation-colors'
 import { type CreationPalette, DEFAULT_PALETTE } from './creation-plan'
 
 /** CreationSource is one reference the description pointed at: a web page or a local image. */
-export type CreationSource =
+type CreationSource =
   | { kind: 'image'; path: string; palette?: CreationPalette; error?: string }
   | { kind: 'url'; url: string; title?: string; text?: string; error?: string }
 

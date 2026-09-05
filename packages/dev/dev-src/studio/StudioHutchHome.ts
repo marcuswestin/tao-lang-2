@@ -25,12 +25,12 @@ async function prepare(options: PrepareStudioHutchHomeOptions): Promise<string> 
   const sourceHome = FS.resolvePath(options.sourceHome ?? defaultSourceHome())
   const targetHome = FS.resolvePath(options.targetHome)
   if (sourceHome === targetHome) {
-    throw new Errors.HostEnvironmentError(
+    Errors.throwHostEnvironment(
       `Tao Studio's isolated Hutch home must differ from the source Hutch home: ${sourceHome}.`,
     )
   }
   if (!await FS.isDirectory(sourceHome)) {
-    throw new Errors.HostEnvironmentError(`The Hutch home to isolate does not exist: ${sourceHome}.`)
+    Errors.throwHostEnvironment(`The Hutch home to isolate does not exist: ${sourceHome}.`)
   }
 
   const metadata = await readMetadata(targetHome)
@@ -63,7 +63,7 @@ async function prepare(options: PrepareStudioHutchHomeOptions): Promise<string> 
     return targetHome
   } catch (error) {
     await FS.remove(temporaryHome).catch(() => {})
-    throw new Errors.HostEnvironmentError(
+    Errors.throwHostEnvironment(
       `Could not prepare Tao Studio's isolated Hutch home at ${targetHome}.`,
       { cause: error, details: { sourceHome, targetHome } },
     )

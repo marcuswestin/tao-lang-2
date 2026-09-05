@@ -511,7 +511,7 @@ async function applySketchFlowAction(
   })
 }
 
-export async function applySketchSnap(
+async function applySketchSnap(
   state: StudioSketchSnapMutationState,
   request: Readonly<{
     checkpointId: string
@@ -870,7 +870,7 @@ export function disconnectPreviews(
 }
 
 /** Any preview-lifecycle boundary makes a browser-local recording unsafe to save. */
-export function invalidatePreviewJourneyRecording(preview: StudioPreviewConnection): void {
+function invalidatePreviewJourneyRecording(preview: StudioPreviewConnection): void {
   if (preview.journeyRecordingTimeout !== undefined) {
     clearTimeout(preview.journeyRecordingTimeout)
     preview.journeyRecordingTimeout = undefined

@@ -49,8 +49,11 @@ export function validateUseStatements(file: AST.TaoFile, ctx: ValidationContext)
   )
   const referencedNames = ASTUtils.referencedNames(file)
   const previouslyImportedNames = new Set<string>()
-  const workspaceFiles = uniqueWorkspaceFiles(ctx.workspaceFiles)
-  const workspaceFilePaths = new Set(workspaceFiles.map(workspaceFilePath))
+  const workspaceFiles = ctx.memo('use-validator.workspaceFiles', () => uniqueWorkspaceFiles(ctx.workspaceFiles))
+  const workspaceFilePaths = ctx.memo(
+    'use-validator.workspaceFilePaths',
+    () => new Set(workspaceFiles.map(workspaceFilePath)),
+  )
   for (const useStatement of useStatements) {
     reportDuplicateImports(useStatement, ctx)
     reportUnusedImports(useStatement, ctx, referencedNames)
@@ -262,28 +265,34 @@ function declarationsInFile(file: AST.TaoFile): DeclarationRecord[] {
     }))
 }
 
+/** visibleDeclarationsByFolder indexes every visible declaration by folder, then by name. */
+function visibleDeclarationsByFolder(ctx: ValidationContext): Map<string, Map<string, VisibleDeclarationRecord[]>> {
+  const declarationsByFolder = new Map<string, Map<string, VisibleDeclarationRecord[]>>()
+  for (const file of uniqueWorkspaceFiles(ctx.workspaceFiles)) {
+    const document = AST.getDocument(file)
+    const folderPath = FS.dirname(document.uri.path)
+    const declarationsByName = declarationsByFolder.get(folderPath) ?? new Map<string, VisibleDeclarationRecord[]>()
+    declarationsByFolder.set(folderPath, declarationsByName)
+    for (const declaration of file.statements.filter(AST.isDeclaration)) {
+      if (Packages.visibilityOf(declaration) === undefined) {
+        continue
+      }
+      const key = AST.declarationKey(declaration)
+      const records = declarationsByName.get(key) ?? []
+      records.push({ declaration, document, folderPath })
+      declarationsByName.set(key, records)
+    }
+  }
+  return declarationsByFolder
+}
+
 /** validateVisibleDeclarations validates repeated visible declaration names in each loaded folder. */
 export function validateVisibleDeclarations(
   ctx: ValidationContext,
   targetFile?: AST.TaoFile,
 ): void {
-  const declarationsByFolder = new Map<string, Map<string, VisibleDeclarationRecord[]>>()
+  const declarationsByFolder = ctx.memo('use-validator.declarationsByFolder', () => visibleDeclarationsByFolder(ctx))
   const targetDocument = targetFile ? AST.getDocument(targetFile) : undefined
-  for (const file of uniqueWorkspaceFiles(ctx.workspaceFiles)) {
-    const document = AST.getDocument(file)
-    const folderPath = FS.dirname(document.uri.path)
-    const visibleDeclarations = file.statements
-      .filter(AST.isDeclaration)
-      .filter(declaration => Packages.visibilityOf(declaration) !== undefined)
-    const declarationsByName = declarationsByFolder.get(folderPath) ?? new Map()
-    declarationsByFolder.set(folderPath, declarationsByName)
-
-    for (const declaration of visibleDeclarations) {
-      const records = declarationsByName.get(AST.declarationKey(declaration)) ?? []
-      records.push({ declaration, document, folderPath })
-      declarationsByName.set(AST.declarationKey(declaration), records)
-    }
-  }
 
   for (const declarationsByName of declarationsByFolder.values()) {
     for (const records of declarationsByName.values()) {

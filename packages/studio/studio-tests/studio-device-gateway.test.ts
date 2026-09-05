@@ -1001,7 +1001,7 @@ async function openProject(
     async compile(request) {
       if (compile.failNext) {
         compile.failNext = false
-        throw new Errors.UserInputError(`Compile of revision ${request.compileRevision} failed on purpose.`)
+        Errors.throwUserInput(`Compile of revision ${request.compileRevision} failed on purpose.`)
       }
       session?.setMatrixManifest(manifestFor(session, request.compileRevision, cells))
     },

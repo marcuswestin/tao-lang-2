@@ -41,17 +41,23 @@ export async function mkTestDir(prefix: string): Promise<string> {
   return await FS.mkTmpDir(FS.resolvePath(prefix, FS.tmpdir()))
 }
 
+/** WithTaoFilesOptions: `verbatim` writes sources as given, with no indent stripping and no synthesized project. */
+export type WithTaoFilesOptions = {
+  verbatim?: boolean
+}
+
 /** withTaoFiles creates temporary Tao source files for a test and removes them afterward. */
 export async function withTaoFiles<const Files extends Record<string, string>>(
   prefix: string,
   files: Files,
   testFunction: (paths: { [Path in keyof Files]: string }, rootDir: string) => Promise<void> | void,
+  options: WithTaoFilesOptions = {},
 ): Promise<void> {
   const rootDir = await mkTestDir(prefix)
   const paths = {} as { [Path in keyof Files]: string }
 
   try {
-    if (!Object.values(files).some(source => /\bproject\s*\{/u.test(source))) {
+    if (!options.verbatim && !Object.values(files).some(source => /\bproject\s*\{/u.test(source))) {
       const projectId = `tao-temporary-test-project-${++temporaryProjectSequence}`
       await FS.writeText(
         FS.resolvePath('Project.tao', rootDir),
@@ -62,7 +68,7 @@ export async function withTaoFiles<const Files extends Record<string, string>>(
       const source = files[relativePath]
       Assert.defined(source, 'Tao test fixture source exists', { relativePath })
       const path = FS.resolvePath(relativePath, rootDir)
-      await FS.writeText(path, Text.stripIndent(source))
+      await FS.writeText(path, options.verbatim ? source : Text.stripIndent(source))
       paths[relativePath] = path
     }
 

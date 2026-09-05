@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { ActionsValidator, reportActionBindingDiagnostic } from './ActionsValidator'
+import { primitiveSlots } from './workspace-index'
 
 /**
  * The one registered shortcut modifier. `primary` is the platform's own chord key, which is the
@@ -124,7 +125,7 @@ function validateCommand(command: AST.CommandDeclaration, ctx: ValidationContext
 
 /** commandMemberContract returns the member vocabulary the Prelude declares for a command. */
 function commandMemberContract(ctx: ValidationContext): readonly AST.TypeProperty[] {
-  return AST.primitiveSlots(ctx.workspaceFiles, 'command')
+  return primitiveSlots(ctx, 'command')
 }
 
 /** commandIsWellPlaced accepts the two homes a command has: a module, or one view body. */

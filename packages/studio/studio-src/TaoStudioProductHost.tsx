@@ -28,9 +28,9 @@ import {
 } from './client/StudioEditor'
 import { StudioLens, type StudioLensFacet } from './client/StudioLens'
 import {
-  type StudioTaoDrawerPanelModel,
-  StudioTaoPanelProjection,
-  type StudioTaoSearchRow,
+  type StudioDrawerPanelModel,
+  StudioPanelProjection,
+  type StudioSearchPanelRow,
 } from './client/StudioPanelProjection'
 import {
   type StudioScenarioControlModel,
@@ -133,20 +133,20 @@ type StudioStateSlotProps = Readonly<{
 }>
 
 type StudioDrawerSlotProps = Readonly<{
-  Compile?: TR.Value<StudioTaoDrawerPanelModel['Compile']>
-  Data?: TR.Value<StudioTaoDrawerPanelModel['Data']>
-  Logs?: TR.Value<StudioTaoDrawerPanelModel['Logs']>
-  Problems?: TR.Value<StudioTaoDrawerPanelModel['Problems']>
+  Compile?: TR.Value<StudioDrawerPanelModel['Compile']>
+  Data?: TR.Value<StudioDrawerPanelModel['Data']>
+  Logs?: TR.Value<StudioDrawerPanelModel['Logs']>
+  Problems?: TR.Value<StudioDrawerPanelModel['Problems']>
   Tab?: TR.Value<string>
-  Tests?: TR.Value<StudioTaoDrawerPanelModel['Tests']>
+  Tests?: TR.Value<StudioDrawerPanelModel['Tests']>
 }>
 
 type StudioDataSlotProps = Readonly<{
-  Data?: TR.Value<StudioTaoDrawerPanelModel['Data']>
+  Data?: TR.Value<StudioDrawerPanelModel['Data']>
 }>
 
 type StudioSearchSlotProps = Readonly<{
-  Rows?: TR.Value<readonly StudioTaoSearchRow[]>
+  Rows?: TR.Value<readonly StudioSearchPanelRow[]>
 }>
 
 /** ProductHostBoundary is the single foreign seam between Tao-owned navigation and the product workbench. */
@@ -255,9 +255,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
   const activeFile = hostState.activeFile
   const activeCell = hostState.activeCell
   const selectedRender = hostState.selectedRender
-  const panelValues = hostState.panels === undefined
-    ? StudioTaoPanelProjection.empty()
-    : StudioTaoPanelProjection.project(hostState.panels)
+  const panelValues = hostState.panels ?? StudioPanelProjection.empty()
   const refreshedInspector = React.isValidElement<StudioContextPanelSlotProps>(inspector)
     ? React.cloneElement(inspector, {
       key: [

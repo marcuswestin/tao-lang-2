@@ -48,7 +48,7 @@ export async function resolveStudioProjectRoot(input: string): Promise<StudioPro
   const listedCandidates = candidates.length === 0
     ? '  (none)'
     : candidates.map(candidate => `  ${candidate}`).join('\n')
-  throw new Errors.UserInputError(
+  Errors.throwUserInput(
     `Studio needs one project root under ${inputRoot}.\nCandidates:\n${listedCandidates}\nPass one project root to ./dev studio.`,
   )
 }
@@ -56,7 +56,7 @@ export async function resolveStudioProjectRoot(input: string): Promise<StudioPro
 async function requireDirectory(input: string): Promise<string> {
   const resolved = FS.resolvePath(input)
   if (!await FS.isDirectory(resolved)) {
-    throw new Errors.UserInputError(`Studio project folder does not exist: ${resolved}`)
+    Errors.throwUserInput(`Studio project folder does not exist: ${resolved}`)
   }
   return await FS.realPath(resolved)
 }

@@ -30,7 +30,7 @@ export type StudioParameterSchema = {
     | { kind: 'time' }
 }
 
-export type StudioScenarioStep =
+type StudioScenarioStep =
   | { kind: 'advance'; milliseconds: number }
   | { kind: 'focus'; tag: string }
   | {
@@ -151,7 +151,7 @@ export const StudioPreviewManifest = {
 
 function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
   if (input.version !== studioPreviewManifestVersion) {
-    throw new Errors.UserInputError(`Unsupported Studio preview manifest version: ${input.version}`)
+    Errors.throwUserInput(`Unsupported Studio preview manifest version: ${input.version}`)
   }
   requireText(input.manifestRevision, 'Studio manifest revision')
   requireRevision(input.compileRevision, 'Studio compile revision')
@@ -159,7 +159,7 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
   requireText(input.project.entryPath, 'Studio project entry path')
   requireText(input.project.root, 'Studio project root')
   if (input.capabilities.scheme !== 'reactive-browser') {
-    throw new Errors.UserInputError('Studio browser previews require the reactive Scheme capability.')
+    Errors.throwUserInput('Studio browser previews require the reactive Scheme capability.')
   }
   const subjects = uniqueBy(input.subjects, subject => subject.subjectId, 'Studio subject')
   for (const subject of subjects.values()) {
@@ -176,7 +176,7 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
   }
   for (const [subjectId, parameters] of Object.entries(input.parametersBySubject)) {
     if (!subjects.has(subjectId)) {
-      throw new Errors.UserInputError(`Studio parameters target an unknown subject: ${subjectId}`)
+      Errors.throwUserInput(`Studio parameters target an unknown subject: ${subjectId}`)
     }
     uniqueBy(parameters, parameter => parameter.parameterId, `Studio parameter for ${subjectId}`)
     for (const parameter of parameters) {
@@ -198,11 +198,11 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
     requireText(scenario.group, 'Studio scenario group')
     requireText(scenario.label, 'Studio scenario label')
     if (scenario.fixtureId !== undefined && !fixtures.has(scenario.fixtureId)) {
-      throw new Errors.UserInputError(`Studio scenario targets an unknown fixture: ${scenario.fixtureId}`)
+      Errors.throwUserInput(`Studio scenario targets an unknown fixture: ${scenario.fixtureId}`)
     }
     const subject = subjects.get(scenario.subjectId)
     if (subject === undefined) {
-      throw new Errors.UserInputError(`Studio scenario targets an unknown subject: ${scenario.subjectId}`)
+      Errors.throwUserInput(`Studio scenario targets an unknown subject: ${scenario.subjectId}`)
     }
     validateArgsForSubject(input, subject.subjectId, scenario.args)
     library.resolve(scenario.stateLayers)
@@ -213,7 +213,7 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
     requireRevision(cell.cellRevision, 'Studio cell revision')
     const scenario = scenarios.get(cell.scenarioId)
     if (scenario === undefined) {
-      throw new Errors.UserInputError(`Studio cell targets an unknown scenario: ${cell.scenarioId}`)
+      Errors.throwUserInput(`Studio cell targets an unknown scenario: ${cell.scenarioId}`)
     }
     validateArgsForSubject(input, scenario.subjectId, cell.args)
     validateEnvironment(cell.environment)
@@ -231,10 +231,10 @@ function validateJourneySteps(steps: unknown, depth = 0): void {
     return
   }
   if (!Array.isArray(steps)) {
-    throw new Errors.UserInputError('Studio journey steps must be an array.')
+    Errors.throwUserInput('Studio journey steps must be an array.')
   }
   if (depth > 64) {
-    throw new Errors.UserInputError('Studio journey steps are nested too deeply.')
+    Errors.throwUserInput('Studio journey steps are nested too deeply.')
   }
   for (const step of steps) {
     validateJourneyStep(step, depth)
@@ -243,13 +243,13 @@ function validateJourneySteps(steps: unknown, depth = 0): void {
 
 function validateJourneyStep(step: unknown, depth: number): void {
   if (!Json.isRecord(step) || typeof step['kind'] !== 'string') {
-    throw new Errors.UserInputError('Studio journey step must be an object with a supported kind.')
+    Errors.throwUserInput('Studio journey step must be an object with a supported kind.')
   }
   const kind = step['kind']
   if (kind === 'advance') {
     requireOnlyKeys(step, ['kind', 'milliseconds'], 'Studio journey advance')
     if (!Number.isSafeInteger(step['milliseconds']) || (step['milliseconds'] as number) < 0) {
-      throw new Errors.UserInputError('Studio journey advance must be a non-negative whole number of milliseconds.')
+      Errors.throwUserInput('Studio journey advance must be a non-negative whole number of milliseconds.')
     }
     return
   }
@@ -262,10 +262,10 @@ function validateJourneyStep(step: unknown, depth: number): void {
     requireOnlyKeys(step, ['index', 'kind', 'steps', 'tag'], 'Studio journey select')
     requireText(step['tag'] as string, 'Studio journey select tag')
     if (!Number.isSafeInteger(step['index']) || (step['index'] as number) < 1) {
-      throw new Errors.UserInputError('Studio journey select index must be a positive whole number.')
+      Errors.throwUserInput('Studio journey select index must be a positive whole number.')
     }
     if (!Array.isArray(step['steps'])) {
-      throw new Errors.UserInputError('Studio journey select steps must be an array.')
+      Errors.throwUserInput('Studio journey select steps must be an array.')
     }
     validateJourneySteps(step['steps'], depth + 1)
     return
@@ -275,7 +275,7 @@ function validateJourneyStep(step: unknown, depth: number): void {
     validateJourneySelector(step['selector'], kind)
     requireText(step['target'] as string, 'Studio journey enter target')
     if (typeof step['value'] !== 'string') {
-      throw new Errors.UserInputError('Studio journey enter value must be text.')
+      Errors.throwUserInput('Studio journey enter value must be text.')
     }
     return
   }
@@ -285,25 +285,25 @@ function validateJourneyStep(step: unknown, depth: number): void {
     requireText(step['target'] as string, `Studio journey ${kind} target`)
     return
   }
-  throw new Errors.UserInputError(`Unsupported Studio journey step kind: ${kind}`)
+  Errors.throwUserInput(`Unsupported Studio journey step kind: ${kind}`)
 }
 
 function validateJourneySelector(value: unknown, kind: string): void {
   if (value !== 'label' && value !== 'placeholder' && value !== 'tag' && value !== 'text') {
-    throw new Errors.UserInputError(`Studio journey ${kind} selector is invalid.`)
+    Errors.throwUserInput(`Studio journey ${kind} selector is invalid.`)
   }
 }
 
 function requireOnlyKeys(value: Readonly<Record<string, unknown>>, allowed: readonly string[], label: string): void {
   const unknown = Object.keys(value).find(key => !allowed.includes(key))
   if (unknown !== undefined) {
-    throw new Errors.UserInputError(`${label} contains an unsupported field: ${unknown}`)
+    Errors.throwUserInput(`${label} contains an unsupported field: ${unknown}`)
   }
 }
 function validateArgs(manifest: StudioPreviewManifestV2, scenarioId: string, args: StudioJsonObject): void {
   const scenario = manifest.scenarios.find(candidate => candidate.scenarioId === scenarioId)
   if (scenario === undefined) {
-    throw new Errors.UserInputError(`Studio scenario does not exist: ${scenarioId}`)
+    Errors.throwUserInput(`Studio scenario does not exist: ${scenarioId}`)
   }
   validateArgsForSubject(manifest, scenario.subjectId, args)
 }
@@ -313,14 +313,14 @@ function validateArgsForSubject(manifest: StudioPreviewManifestV2, subjectId: st
   const parameterById = new Map(parameters.map(parameter => [parameter.parameterId, parameter]))
   for (const key of Object.keys(args)) {
     if (!parameterById.has(key)) {
-      throw new Errors.UserInputError(`Studio argument is not declared by ${subjectId}: ${key}`)
+      Errors.throwUserInput(`Studio argument is not declared by ${subjectId}: ${key}`)
     }
   }
   for (const parameter of parameters) {
     const value = args[parameter.parameterId]
     if (value === undefined) {
       if (parameter.required && parameter.defaultValue === undefined) {
-        throw new Errors.UserInputError(`Studio argument is required: ${parameter.parameterId}`)
+        Errors.throwUserInput(`Studio argument is required: ${parameter.parameterId}`)
       }
       continue
     }
@@ -328,7 +328,7 @@ function validateArgsForSubject(manifest: StudioPreviewManifestV2, subjectId: st
       const expected = parameter.type.kind === 'json' && parameter.type.entity !== undefined
         ? `entity ${parameter.type.entity}`
         : parameter.type.kind
-      throw new Errors.UserInputError(`Studio argument ${parameter.parameterId} does not match ${expected}.`)
+      Errors.throwUserInput(`Studio argument ${parameter.parameterId} does not match ${expected}.`)
     }
   }
 }
@@ -337,10 +337,10 @@ function validateParameter(parameter: StudioParameterSchema): void {
   requireText(parameter.parameterId, 'Studio parameter id')
   requireText(parameter.label, 'Studio parameter label')
   if (parameter.defaultValue !== undefined && !valueMatchesParameter(parameter.defaultValue, parameter)) {
-    throw new Errors.UserInputError(`Studio parameter default does not match ${parameter.parameterId}.`)
+    Errors.throwUserInput(`Studio parameter default does not match ${parameter.parameterId}.`)
   }
   if (parameter.type.kind === 'choice' && parameter.type.values.length === 0) {
-    throw new Errors.UserInputError(`Studio choice parameter has no values: ${parameter.parameterId}`)
+    Errors.throwUserInput(`Studio choice parameter has no values: ${parameter.parameterId}`)
   }
   if (parameter.type.kind === 'json' && parameter.type.entity !== undefined) {
     requireText(parameter.type.entity, `Studio entity parameter type for ${parameter.parameterId}`)
@@ -348,27 +348,27 @@ function validateParameter(parameter: StudioParameterSchema): void {
   if (parameter.type.kind === 'number') {
     for (const value of [parameter.type.minimum, parameter.type.maximum, parameter.type.step]) {
       if (value !== undefined && !Number.isFinite(value)) {
-        throw new Errors.UserInputError(`Studio numeric parameter is not finite: ${parameter.parameterId}`)
+        Errors.throwUserInput(`Studio numeric parameter is not finite: ${parameter.parameterId}`)
       }
     }
     if (parameter.type.step !== undefined && parameter.type.step <= 0) {
-      throw new Errors.UserInputError(`Studio numeric parameter step must be positive: ${parameter.parameterId}`)
+      Errors.throwUserInput(`Studio numeric parameter step must be positive: ${parameter.parameterId}`)
     }
   }
 }
 
 function validateEnvironment(environment: StudioCellEnvironment): void {
   if (!positiveFinite(environment.viewport.width) || !positiveFinite(environment.viewport.height)) {
-    throw new Errors.UserInputError('Studio viewport dimensions must be positive finite numbers.')
+    Errors.throwUserInput('Studio viewport dimensions must be positive finite numbers.')
   }
   if (!Number.isSafeInteger(environment.network.latencyMs) || environment.network.latencyMs < 0) {
-    throw new Errors.UserInputError('Studio network latency must be a non-negative integer.')
+    Errors.throwUserInput('Studio network latency must be a non-negative integer.')
   }
   if (environment.network.outcome === 'error' && environment.network.error === undefined) {
-    throw new Errors.UserInputError('Studio error simulation requires an explicit error.')
+    Errors.throwUserInput('Studio error simulation requires an explicit error.')
   }
   if (environment.network.outcome !== 'error' && environment.network.error !== undefined) {
-    throw new Errors.UserInputError('Studio network errors are only valid for error simulation.')
+    Errors.throwUserInput('Studio network errors are only valid for error simulation.')
   }
   validateScheme(environment.scheme)
 }
@@ -385,7 +385,7 @@ function validateScheme(scheme: StudioSchemeEnvironment): void {
     || (scheme.source === 'native-fixed' && scheme.capability !== 'fixed-light-native')
     || (scheme.capability === 'fixed-light-native' && (scheme.resolved !== 'light' || scheme.source !== 'native-fixed'))
   ) {
-    throw new Errors.UserInputError('Studio Scheme must record a valid request, resolution, source, and capability.')
+    Errors.throwUserInput('Studio Scheme must record a valid request, resolution, source, and capability.')
   }
 }
 
@@ -398,7 +398,7 @@ function uniqueBy<Value>(
   for (const value of values) {
     const key = requireText(id(value), `${label} id`)
     if (result.has(key)) {
-      throw new Errors.UserInputError(`${label} id is duplicated: ${key}`)
+      Errors.throwUserInput(`${label} id is duplicated: ${key}`)
     }
     result.set(key, value)
   }
@@ -411,6 +411,6 @@ function positiveFinite(value: number): boolean {
 
 function requireRevision(value: number, label: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
-    throw new Errors.UserInputError(`${label} is invalid.`)
+    Errors.throwUserInput(`${label} is invalid.`)
   }
 }

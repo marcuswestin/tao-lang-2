@@ -4,7 +4,7 @@ import { AST, type ParsedFile } from '@parser'
 import { Assert, Switch } from '@shared'
 import { studioRenderIdentity } from './studio-render-identity'
 
-export type StudioPreviewParameterKind =
+type StudioPreviewParameterKind =
   | 'boolean'
   | 'choice'
   | 'entity'
@@ -13,7 +13,7 @@ export type StudioPreviewParameterKind =
   | 'time'
   | 'unsupported'
 
-export type StudioPreviewParameterSchema = {
+type StudioPreviewParameterSchema = {
   choices?: readonly string[]
   entity?: string
   kind: StudioPreviewParameterKind
@@ -22,7 +22,7 @@ export type StudioPreviewParameterSchema = {
   typeName: string
 }
 
-export type StudioPreviewViewManifest = {
+type StudioPreviewViewManifest = {
   id: string
   name: string
   parameters: readonly StudioPreviewParameterSchema[]
@@ -33,20 +33,20 @@ export type StudioPreviewViewManifest = {
   }
 }
 
-export type StudioPreviewSource = {
+type StudioPreviewSource = {
   end: number
   path: string
   start: number
 }
 
-export type StudioPreviewFixtureValue =
+type StudioPreviewFixtureValue =
   | boolean
   | number
   | string
   | { kind: 'now' }
   | { handle: string; kind: 'fixture-reference' }
 
-export type StudioPreviewScenarioArgument =
+type StudioPreviewScenarioArgument =
   | StudioPreviewFixtureValue
   | { kind: 'action-stand-in'; parameter: string }
 
@@ -55,7 +55,7 @@ type StudioPreviewPointerTarget = {
   target: string
 }
 
-export type StudioPreviewScenarioStep =
+type StudioPreviewScenarioStep =
   | (StudioPreviewPointerTarget & { kind: 'press' })
   | (StudioPreviewPointerTarget & { kind: 'pressDown' })
   | (StudioPreviewPointerTarget & { kind: 'pressUp' })
@@ -66,7 +66,7 @@ export type StudioPreviewScenarioStep =
   | { kind: 'focus'; tag: string }
   | { kind: 'advance'; milliseconds: number }
 
-export type StudioPreviewFixtureManifest = {
+type StudioPreviewFixtureManifest = {
   accounts: readonly {
     fields: Readonly<Record<string, StudioPreviewFixtureValue>>
     name: string
@@ -86,7 +86,7 @@ export type StudioPreviewFixtureManifest = {
   source: StudioPreviewSource
 }
 
-export type StudioPreviewScenarioManifest = {
+type StudioPreviewScenarioManifest = {
   environment: {
     appearance?: 'dark' | 'light'
     device: { height: number; preset: 'laptop' | 'phone' | 'tablet'; width: number }
@@ -135,7 +135,7 @@ export type StudioPreviewManifest = {
   views: readonly StudioPreviewViewManifest[]
 }
 
-export type StudioPreviewRenderManifest = {
+type StudioPreviewRenderManifest = {
   elementName: string
   renderId: string
   source: StudioPreviewSource

@@ -28,15 +28,15 @@ export async function selectTaoDevApp(
 ): Promise<TaoDevSelectionResult> {
   const apps = projects.flatMap(project => project.apps)
   if (apps.length === 0) {
-    throw new Errors.UserInputError('No runnable Tao apps found under the target path.')
+    Errors.throwUserInput('No runnable Tao apps found under the target path.')
   }
   if (apps.length > MAX_APP_CHOICES) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Found ${apps.length} runnable Tao apps, but the single-key selector supports ${MAX_APP_CHOICES}. Narrow the dev target path.`,
     )
   }
   if (!HCI.isInteractive(options)) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Multiple runnable Tao apps were found: ${apps.map(app => app.appName).join(', ')}. Select one with --app.`,
     )
   }

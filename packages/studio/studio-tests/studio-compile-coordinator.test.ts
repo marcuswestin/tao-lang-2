@@ -207,7 +207,7 @@ Describe('Studio compile coordinator', () => {
     const coordinator = new StudioCompileCoordinator({
       appName: 'Garden',
       async compile() {
-        throw new Errors.UnexpectedBehaviorError('Tao source is not valid yet.', {
+        Errors.throwUnexpected('Tao source is not valid yet.', {
           details: {
             diagnostics: [{
               filePath: '/workspace/garden/Card.tao',

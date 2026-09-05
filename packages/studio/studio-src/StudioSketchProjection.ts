@@ -8,7 +8,7 @@ export type StudioSketchProjectionPad = Readonly<{
   top: number
 }>
 
-export type StudioSketchProjectionElement = Readonly<{
+type StudioSketchProjectionElement = Readonly<{
   claim?: 1
   height: number | 'fill' | 'hug'
   id: string
@@ -17,7 +17,7 @@ export type StudioSketchProjectionElement = Readonly<{
   width: number | 'fill' | 'hug'
 }>
 
-export type StudioSketchProjectionContainer = Readonly<{
+type StudioSketchProjectionContainer = Readonly<{
   children: readonly StudioSketchProjectionNode[]
   claim?: 1
   direction: 'Col' | 'Row'

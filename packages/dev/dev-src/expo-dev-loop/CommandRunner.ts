@@ -26,7 +26,7 @@ function endCommand(): void {
 /** assertCommandRunning requires an exclusive dev-loop command to own the current operation. */
 function assertCommandRunning(operation: string): void {
   if (!commandRunning) {
-    throw new Errors.UnexpectedBehaviorError(`${operation} requires an active dev-loop command.`)
+    Errors.throwUnexpected(`${operation} requires an active dev-loop command.`)
   }
 }
 

@@ -16,7 +16,7 @@ import {
   StudioDeviceTrustError,
   type TaoStudioDeviceSessionKeys,
 } from '@runtime/TR-studio-device-trust'
-import { Errors, FS, Json } from '@shared'
+import { Errors, FS, Http, Json } from '@shared'
 import type { StudioCompileSnapshot } from '../StudioCompileCoordinator'
 import { StudioPreviewManifest, type StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import type { StudioProjectSession, StudioSessionEvent } from '../StudioProjectSession'
@@ -393,15 +393,15 @@ export class StudioDeviceGateway {
   #fetch(request: Request, server: Bun.Server<SocketData>): Response | undefined {
     const url = new URL(request.url)
     if (url.pathname === '/device/probe' && request.method === 'GET') {
-      return jsonResponse({ protocol: TaoStudioDeviceProtocol.name })
+      return Http.jsonResponse({ protocol: TaoStudioDeviceProtocol.name })
     }
     if (url.pathname === '/device') {
       const connection: Connection = { receiveSeq: 1, sendSeq: 0, state: 'hello' }
       return server.upgrade(request, { data: { connection } })
         ? undefined
-        : jsonResponse({ error: 'Expected a WebSocket upgrade.' }, 426)
+        : Http.jsonResponse({ error: 'Expected a WebSocket upgrade.' }, 426)
     }
-    return jsonResponse({ error: 'Not found.' }, 404)
+    return Http.jsonResponse({ error: 'Not found.' }, 404)
   }
 
   #open(socket: Socket): void {
@@ -1257,11 +1257,4 @@ function previewPort(previewUrl: string | undefined): number | undefined {
   } catch {
     return undefined
   }
-}
-
-function jsonResponse(value: unknown, status = 200): Response {
-  return new Response(JSON.stringify(value), {
-    headers: { 'content-type': 'application/json; charset=utf-8', 'x-content-type-options': 'nosniff' },
-    status,
-  })
 }

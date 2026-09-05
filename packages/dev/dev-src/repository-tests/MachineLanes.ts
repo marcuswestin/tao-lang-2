@@ -576,7 +576,7 @@ async function claimResource(
       return { owner: existingOwner ?? owner }
     }
   } catch (error) {
-    throw new Errors.HostEnvironmentError(`Cannot coordinate machine resource '${options.name}'.`, { cause: error })
+    Errors.throwHostEnvironment(`Cannot coordinate machine resource '${options.name}'.`, { cause: error })
   }
 
   let released = false

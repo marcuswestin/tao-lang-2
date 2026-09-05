@@ -312,6 +312,31 @@ Describe('repo lint conventions', () => {
     ])
   })
 
+  Test('reports a Tao error constructed only to be thrown', () => {
+    // Assembled so this file's own lines do not spell the construct the rule forbids.
+    const source = `function run() {\n  ${['throw', 'new'].join(' ')} Errors.UserInputError('Pick a Tao file.')\n}`
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.constructedThrow,
+      [{ path: 'packages/studio/studio-src/StudioNew.ts', source }],
+      [],
+    )).toEqual([
+      'packages/studio/studio-src/StudioNew.ts:2 constructs a Tao error only to throw it; call'
+      + ' `Errors.throwUserInput(...)`, `Errors.throwUnexpected(...)`, or `Errors.throwHostEnvironment(...)` instead,'
+      + ' which also narrow control flow.',
+    ])
+  })
+
+  Test('leaves the runtime and its tests to their own error vocabulary', () => {
+    const source = `${
+      ['throw', 'new'].join(' ')
+    } UnexpectedBehaviorError('design resolution must not mount navigation')`
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.constructedThrow,
+      [{ path: 'packages/runtime/TR-tests/TR-views.test.ts', source }],
+      [],
+    )).toEqual([])
+  })
+
   Test('reports a bun:test import outside the allowlist', () => {
     Expect(conventionRuleIssues(
       CONVENTION_RULES.bunTestImport,

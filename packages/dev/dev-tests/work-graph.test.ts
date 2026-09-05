@@ -367,7 +367,7 @@ Describe('work graph scheduling', () => {
         tryAcquire: async () => {
           admissions += 1
           if (admissions === 2) {
-            throw new Errors.HostEnvironmentError('registry lock timed out')
+            Errors.throwHostEnvironment('registry lock timed out')
           }
           return { release: async () => {}, slots: 1 }
         },

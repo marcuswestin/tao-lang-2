@@ -67,7 +67,7 @@ async function firstExistingCommit(
       return result.stdout.trim()
     }
   }
-  throw new Errors.HostEnvironmentError("Cannot resolve origin/main or local main for 'test-changed'.")
+  Errors.throwHostEnvironment("Cannot resolve origin/main or local main for 'test-changed'.")
 }
 
 async function resolveCommit(reference: string, repositoryRoot: string, run: GitRunner): Promise<string> {

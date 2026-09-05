@@ -157,7 +157,7 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
 Test('Tao Studio ProductHost injects structured panel values without section-level render adapters', async () => {
   const source = await FS.readText(FS.resolvePath('../studio-src/TaoStudioProductHost.tsx', import.meta.dir))
 
-  Expect(source).toContain('StudioTaoPanelProjection.project(hostState.panels)')
+  Expect(source).toContain('hostState.panels ?? StudioPanelProjection.empty()')
   Expect(source).toContain('Compile: TR.Value(panelValues.Drawer.Compile)')
   Expect(source).toContain('Rows: TR.Value(panelValues.Search.Rows)')
   Expect(source).not.toContain('export function StudioDrawerPanelSurface')

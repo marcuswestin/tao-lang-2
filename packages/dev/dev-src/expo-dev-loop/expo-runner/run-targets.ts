@@ -247,17 +247,11 @@ async function waitForIosSimulatorBoot(
   udid: string,
   shouldStop: () => boolean,
 ): Promise<boolean> {
-  const deadline = Date.now() + config.IOS_BOOT_TIMEOUT_MS
-  while (!shouldStop() && Date.now() < deadline) {
-    const booted = (await listIosSimulators()).find(simulator =>
-      simulator.udid === udid && simulator.state === 'Booted'
-    )
-    if (booted) {
-      return true
-    }
-    await Time.sleep(config.IOS_BOOT_POLL_MS)
-  }
-  return false
+  const booted = await Time.pollUntil(
+    async () => (await listIosSimulators()).some(simulator => simulator.udid === udid && simulator.state === 'Booted'),
+    { intervalMs: config.IOS_BOOT_POLL_MS, stop: shouldStop, timeoutMs: config.IOS_BOOT_TIMEOUT_MS },
+  )
+  return booted === true
 }
 
 function parseJson<T>(text: string): T | undefined {
