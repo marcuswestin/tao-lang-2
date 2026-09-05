@@ -367,7 +367,6 @@ kbd {
   font: 600 9px/1 var(--studio-mono); letter-spacing: .02em; padding: 3px 4px; text-transform: lowercase;
 }
 .studio-file-kind[data-kind="tao"] { background: var(--studio-accent-soft); color: var(--studio-accent-strong); }
-.studio-count { background: var(--studio-panel-raised); border-radius: 8px; color: var(--studio-text-dim); font: 500 10px/1 var(--studio-mono); padding: 3px 5px; }
 .studio-section { border-top: 1px solid var(--studio-stroke); }
 .studio-section > summary {
   align-items: center; color: var(--studio-text); cursor: pointer; display: flex; font-size: 11.5px; font-weight: 600; gap: 6px;
@@ -379,7 +378,6 @@ kbd {
   margin: -2px 3px 0 1px; transform: rotate(-45deg); transition: transform 120ms ease; width: 5px;
 }
 .studio-section[open] > summary::before { margin-top: -4px; transform: rotate(45deg); }
-.studio-section > summary .studio-section-note { color: var(--studio-text-dim); font-size: 11px; font-weight: 400; margin-left: auto; }
 .studio-section-body { display: grid; gap: 6px; padding: 0 12px 12px; }
 .studio-section-body > .studio-button, .studio-inspector-controls > .studio-button, .studio-section-body > .studio-preview-cell-replay-load { justify-self: start; }
 .studio-section-body > .studio-preview-cell-replay-load { cursor: pointer; display: inline-flex; font-size: 11.5px; height: 24px; }
@@ -597,7 +595,7 @@ kbd {
 .studio-palette-button[data-tao-studio-project-view] { border-style: dashed; }
 .studio-palette-button:hover:not(:disabled) { background: var(--studio-surface-hover); }
 .studio-palette-button:disabled { cursor: default; opacity: .45; }
-.studio-palette-empty, .studio-inspector-empty, .studio-panel-note { color: var(--studio-text-dim); font-size: 12px; }
+.studio-panel-note { color: var(--studio-text-dim); font-size: 12px; }
 .studio-panel-note { padding: 12px; }
 .studio-screens, .studio-search-panel { display: grid; gap: 6px; padding: 8px; }
 .studio-screen-item, .studio-search-result {
@@ -635,10 +633,10 @@ kbd {
 .studio-editor-tao-surface > [data-testid="studio-active-editor"] > div:first-child { height: 100%; }
 .studio-editor .cm-scroller { font: 12.5px/1.6 var(--studio-mono); }
 /* The syntax lens bar sits above the editor: fold presets and facets as quiet toggles. */
-.studio-lens-bar { align-items: center; background: var(--studio-panel); border-bottom: 1px solid var(--studio-stroke); display: flex; flex: 0 0 auto; flex-wrap: wrap; font-size: 11.5px; gap: 4px; padding: 4px 8px; }
+.studio-lens-bar { align-items: center; background: var(--studio-panel); border-bottom: 1px solid var(--studio-stroke); display: flex; flex: 0 0 auto; flex-wrap: wrap; font-size: 11px; gap: 2px 4px; min-height: 28px; padding: 2px 6px; }
 .studio-lens-bar-group { align-items: center; display: flex; gap: 2px; }
 .studio-lens-bar-divider { background: var(--studio-stroke-strong); height: 16px; margin: 0 6px; width: 1px; }
-.studio-lens-preset, .studio-lens-facet, .studio-lens-refold { background: transparent; border: 1px solid transparent; border-radius: var(--studio-radius); color: var(--studio-text-muted); cursor: pointer; font: inherit; font-weight: 500; padding: 2px 7px; }
+.studio-lens-preset, .studio-lens-facet, .studio-lens-refold { background: transparent; border: 1px solid transparent; border-radius: var(--studio-radius); color: var(--studio-text-muted); cursor: pointer; font: inherit; font-weight: 500; line-height: 1.3; padding: 1px 6px; white-space: nowrap; }
 .studio-lens-preset:hover, .studio-lens-facet:hover, .studio-lens-refold:hover { background: var(--studio-surface-hover); color: var(--studio-text); }
 .studio-lens-preset[aria-pressed="true"] { background: var(--studio-surface-active); box-shadow: 0 0 0 1px var(--studio-stroke-strong); color: var(--studio-text); }
 .studio-lens-facet[aria-pressed="true"] { background: var(--studio-surface-active); color: var(--studio-text); }
@@ -724,10 +722,6 @@ kbd {
 
 /* ---------- data rail panel ---------- */
 .studio-data { color: var(--studio-text-muted); padding: 8px 12px 12px; }
-.studio-data .studio-data-table { display: block; overflow-x: auto; }
-.studio-data-table { border-collapse: collapse; font: 11px var(--studio-mono); width: 100%; }
-.studio-data-table th, .studio-data-table td { border: 1px solid var(--studio-stroke); max-width: 360px; overflow: hidden; padding: 5px 7px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
-.studio-data-table th { color: var(--studio-text); }
 
 /* ---------- freehand sketches ---------- */
 [data-tao-studio-sketch-host] { flex: none; }
