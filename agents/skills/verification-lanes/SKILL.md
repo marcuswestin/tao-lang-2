@@ -31,7 +31,11 @@ description: >-
   `retried`, and emits a warning preserving the original timeout.
 - `just test-flakes` and `just test-slowest` are reports, not gates.
 - `just merge-with-main` is a human command. Agents prepare the branch and message file but never
-  invoke, automate, or approve the command.
+  invoke, automate, or approve the command. Ro runs `just merge-with-main --execute --push --yes`;
+  those are `just` long flags, not `execute=true` positional assignments.
+- Write or update the message every time a branch becomes merge-ready, including when later commits
+  change what the branch does. The command fails with `Merge message file does not exist` when the
+  file is missing, so a branch handed over without it is not ready.
 - Put its message at `.artifacts/merge/<full-feature-branch>.msg` unless passing `--message-file`.
   Write a summary of at most 72 characters, one blank line, then one or more contiguous `- ...`
   bullets. Do not add Git's squash appendix or any automated-author attribution; the command

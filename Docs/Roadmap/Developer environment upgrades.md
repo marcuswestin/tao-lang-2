@@ -677,3 +677,24 @@ an entry here may link one when the developer workflow is also affected.
 - **Dependencies:** None.
 - **Acceptance:** A clean `just studio-native` reaches a ready preview with no unresolved-module output.
 - **Source:** 2026-09-04 companion Slice 2 work.
+
+### DEVENV-040 — `test-retry` intersects the retry ledger with the branch diff
+
+- **Status:** Candidate
+- **Area:** Test selection
+- **Impact:** The command AGENTS.md prescribes for re-running a contention timeout fails whenever the
+  branch changed no test files, so a green retry is unreachable and a contended lane looks red.
+- **Evidence:** After a `dev` suite timeout, `./agent test-retry` printed
+  `--changed: 5 changed files, but no test files are affected`, ran 0 tests, reported
+  `test result report unavailable`, and exited 1; `./agent test-file
+  packages/dev/dev-tests/gate-runner.test.ts` then passed 19/19. `TestRunner.runSuites` passes
+  `changedReference: prepared.changed?.reference` for every kind, but a `retry` run only populates
+  `prepared.changed` to compute its advisory line, so bun receives `--changed` alongside the ledger's
+  file list.
+- **Workaround:** Re-run the not-green file directly with `./agent test-file <path>`.
+- **Proposed change:** Pass `changedReference` only when `prepared.kind === 'changed'`, and make a
+  retry that selects no runnable test exit 0 with its honesty line rather than a missing report.
+- **Dependencies:** None.
+- **Acceptance:** A retry whose ledger files are untouched by the branch diff re-runs those files and
+  exits 0 when they pass.
+- **Source:** 2026-09-04 Studio beta merge-instruction work.
