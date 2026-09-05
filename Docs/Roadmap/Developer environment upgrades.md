@@ -696,3 +696,21 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** A new linked worktree reaches a ready Studio session after `./agent setup` and
   `./dev studio Apps/HNReader` alone.
 - **Source:** 2026-09-04 Studio visual design work.
+
+### DEVENV-041 — `test-retry` selects changed files instead of the files that were not green
+
+- **Status:** Candidate
+- **Area:** Verification retry
+- **Impact:** The command the summary points at after a contended timeout cannot confirm the timeout: it
+  runs zero tests and reports a failure, so the person still has to find and run the file by hand.
+- **Evidence:** After `./agent verify` reported `dev: timed out under machine contention; exclusive
+  confirmation was not obtained`, `./agent test-retry` ran the dev suite with `--changed`, printed
+  `13 changed files, but no test files are affected`, ran 0 tests, and exited 1. Running
+  `./agent test-file packages/dev/dev-tests/gate-runner.test.ts` passed 19 of 19 in 281ms.
+- **Workaround:** Run the timed-out file with `./agent test-file <path>`.
+- **Proposed change:** Have the retry lane pass the exact files recorded as not green to the suite
+  runner, and treat a selection that matches no test file as a selection error rather than a run.
+- **Dependencies:** None.
+- **Acceptance:** After a contended timeout, `./agent test-retry` runs the timed-out files exclusively
+  and reports their result.
+- **Source:** 2026-09-04 Studio visual design merge preparation.
