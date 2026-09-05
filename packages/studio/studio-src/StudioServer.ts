@@ -853,10 +853,15 @@ async function shipBeta(session: StudioProjectSession, ship: StudioBetaShip): Pr
   }
 }
 
+/** betaShipArguments passes --ignore-git because Studio ships the edits in the session, not a committed tree. */
+function betaShipArguments(request: StudioBetaShipRequest): string[] {
+  return ['ship', request.entryPath, '--app', request.appName, '--beta', '--yes', '--ignore-git']
+}
+
 async function runBetaShip(request: StudioBetaShipRequest): Promise<void> {
   const repositoryRoot = Repo.getRoot(request.projectRoot)
   await CLI.mustRun(Repo.resolvePath('tao', repositoryRoot), {
-    args: ['ship', request.entryPath, '--app', request.appName, '--beta', '--yes'],
+    args: betaShipArguments(request),
     cwd: repositoryRoot,
     prefixedOutput: { processName: `ship ${request.appName}` },
   })
@@ -1162,6 +1167,7 @@ function forbiddenResponse(message: string): Response {
 }
 
 export const StudioServerTesting = {
+  betaShipArguments,
   errorResponse,
   handleDeviceRequest,
   handleRequest: handleRequestForTesting,
