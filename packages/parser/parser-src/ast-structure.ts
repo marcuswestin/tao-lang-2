@@ -264,6 +264,11 @@ export function streamAllContents(node: AST.Node): AST.Node[] {
   return Langium.AstUtils.streamAllContents(node).toArray()
 }
 
+/** streamContents returns the direct AST children of `node` in property order. */
+export function streamContents(node: AST.Node): AST.Node[] {
+  return Langium.AstUtils.streamContents(node).toArray()
+}
+
 /** streamReferences returns every cross-reference declared directly by `node`. */
 export function streamReferences(node: AST.Node): ReturnType<typeof Langium.AstUtils.streamReferences> {
   return Langium.AstUtils.streamReferences(node)
