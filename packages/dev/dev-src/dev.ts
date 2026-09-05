@@ -358,7 +358,9 @@ await runWithCommands(commands => {
 
   commands
     .command('studio-native')
-    .description('Launch Tao Studio in its local Electrobun shell.')
+    .description(
+      'Launch Tao Studio in its local Electrobun shell. When another session holds the native host, offers to stop it and proceed.',
+    )
     .argument('[project]', 'Tao project folder.', '.')
     .option('--entry <path>', 'Entry Tao file within the selected project.')
     .option('--app <name>', 'App declaration within the selected project.')
