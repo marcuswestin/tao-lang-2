@@ -63,6 +63,15 @@ export {
 } from './StudioHighlight'
 
 export {
+  type StudioLanguageAnalysis,
+  type StudioLensCollapse,
+  type StudioLensMap,
+  type StudioLensNode,
+  type StudioLensRange,
+  StudioSyntaxLens,
+} from './StudioSyntaxLens'
+
+export {
   type StudioClientAssetProvider,
   StudioClientAssets,
   type StudioClientBundleMode,
