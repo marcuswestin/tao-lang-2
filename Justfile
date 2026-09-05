@@ -315,8 +315,11 @@ _dprint-check:
 _repo-lint:
     bun run packages/dev/dev-src/repository-tests/repo-lint.ts
 
+# TypeScript 7's native compiler, installed under the `typescript-native` npm alias: the same
+# build takes ~2s where `typescript` 5.9 takes ~17s. `typescript` itself stays at 5.9 because the
+# editor's tsserver and `bunx tsc` still need its JavaScript API, which 7.0 does not ship.
 _typecheck:
-    bunx tsc --build packages/*/tsconfig.json
+    bun node_modules/typescript-native/bin/tsc --build packages/*/tsconfig.json
 
 _test PATTERN="":
     bun run packages/dev/dev-src/dev.ts test "{{ PATTERN }}"
