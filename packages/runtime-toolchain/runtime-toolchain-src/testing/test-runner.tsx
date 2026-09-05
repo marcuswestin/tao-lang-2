@@ -6,7 +6,7 @@ import {
   type TaoJourneyEventAdapter,
   type TaoJourneyStep,
 } from '@runtime/TR-studio-journey'
-import { Errors, Switch } from '@shared/core'
+import { Errors, Switch, Text } from '@shared/core'
 import { act, fireEvent, within } from '@testing-library/react-native'
 import { renderCompiledApp } from './render-app'
 import type { RuntimeApp } from './RuntimeApp'
@@ -64,7 +64,7 @@ async function runCheck(suiteName: string, check: TestCompiler.Check): Promise<v
     // failing journey. The message keeps `Tao check failed:` because that substring is the contract
     // both Studio runners and this package's own tests match on.
     throw new TaoCheckFailure(
-      `Tao check failed: ${suiteName} > ${check.name}\n${formatSource(check.source)}\n${formatError(error)}`,
+      `Tao check failed: ${suiteName} > ${check.name}\n${formatSource(check.source)}\n${Errors.messageOf(error)}`,
     )
   } finally {
     app?.screen.unmount()
@@ -558,7 +558,7 @@ function querySelector(
     // concrete native root. Generated testIDs encode those identities as
     // whitespace-delimited tokens, so either Tao tag remains independently
     // addressable without introducing a layout-changing wrapper.
-    const pattern = new RegExp(`(?:^|\\s)${escapeRegExp(target)}(?:\\s|$)`)
+    const pattern = new RegExp(`(?:^|\\s)${Text.escapeRegExp(target)}(?:\\s|$)`)
     const matches = queries.queryAllByTestId(pattern)
     if (scope && pattern.test(String(scope.props.testID ?? '')) && !matches.includes(scope)) {
       return [scope, ...matches]
@@ -601,10 +601,6 @@ function accessibleAncestorWithLabel(scope: TestInstance | undefined, label: str
     current = current.parent ?? undefined
   }
   return undefined
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 function requireSingleTag(
@@ -661,8 +657,4 @@ function formatSource(source: TestCompiler.Source): string {
   const range = source.range
   const line = range === undefined ? '' : `:${range.start.line + 1}:${range.start.character + 1}`
   return `Source: ${source.filePath}${line}`
-}
-
-function formatError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

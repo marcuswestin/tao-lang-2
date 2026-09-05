@@ -1,5 +1,5 @@
 import { AST, Parser } from '@parser'
-import { CLI, Errors, FS, Repo } from '@shared'
+import { CLI, Errors, FS, Json, Repo } from '@shared'
 import { shipInputHash } from './ship-model'
 
 type CommandRunner = typeof CLI.run
@@ -23,7 +23,7 @@ export async function runtimeFingerprint(runtimeRoot: string, runner: CommandRun
   } catch (error) {
     Errors.throwHostEnvironment('Expo returned an invalid runtime fingerprint response.', { cause: error })
   }
-  if (!isObject(body) || typeof body['hash'] !== 'string' || body['hash'].length === 0) {
+  if (!Json.isRecord(body) || typeof body['hash'] !== 'string' || body['hash'].length === 0) {
     Errors.throwHostEnvironment('Expo returned a runtime fingerprint response without a hash.')
   }
   return body['hash']
@@ -50,8 +50,4 @@ export async function dataSchemaFingerprint(projectRoot: string): Promise<string
     const byPath = left.path.localeCompare(right.path)
     return byPath === 0 ? left.source.localeCompare(right.source) : byPath
   }))
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }

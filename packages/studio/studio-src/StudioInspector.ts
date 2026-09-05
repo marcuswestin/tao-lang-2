@@ -1,5 +1,6 @@
 import { Assert } from '@shared/core'
 import type {
+  StudioComponentKind,
   StudioLayoutAlignment,
   StudioLayoutContentTerm,
   StudioLayoutEntry,
@@ -32,20 +33,20 @@ export type StudioInspectorSelection = {
   renderId: string
 }
 
-export type StudioLayoutDimensionModel =
+type StudioLayoutDimensionModel =
   | { mode: 'fill' }
   | { mode: 'fixed'; value: StudioLayoutSizeValue }
   | { mode: 'unset' }
 
-export type StudioLayoutGrowthModel =
+type StudioLayoutGrowthModel =
   | { mode: 'claim'; value: number }
   | { mode: 'fill' | 'hug' | 'unset' }
 
-export type StudioLayoutAlignmentModel =
+type StudioLayoutAlignmentModel =
   | { mode: 'aligned'; value: StudioLayoutAlignment }
   | { mode: 'centered' | 'fill' | 'unset' }
 
-export type StudioLayoutInspectorModel = {
+type StudioLayoutInspectorModel = {
   alignment: StudioLayoutAlignmentModel
   content?: readonly StudioLayoutContentTerm[]
   gap?: StudioLayoutSizeValue
@@ -87,30 +88,7 @@ export const studioStyleProperties: readonly Readonly<{
 
 export type StudioPaletteComponent = {
   category: 'Container' | 'Element'
-  component:
-    | 'Box'
-    | 'Button'
-    | 'Checkbox'
-    | 'Col'
-    | 'DatePicker'
-    | 'FormButton'
-    | 'Image'
-    | 'Number'
-    | 'Panes'
-    | 'Picker'
-    | 'Progress'
-    | 'Row'
-    | 'ScrollView'
-    | 'SegmentedControl'
-    | 'Slider'
-    | 'Spinner'
-    | 'Stack'
-    | 'Switch'
-    | 'Text'
-    | 'TextFrame'
-    | 'TextInput'
-    | 'TextMultiline'
-    | 'WrappingRow'
+  component: StudioComponentKind
   label: string
   snippet: StudioEditorSnippet
 }

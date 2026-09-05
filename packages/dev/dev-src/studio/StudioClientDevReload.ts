@@ -5,7 +5,7 @@ import { watch } from 'chokidar'
 type StudioClientChangeListener = (change: StudioClientChange) => Promise<void>
 
 /** What changed, so a rebuild can say when rebuilding is not enough. */
-export type StudioClientChange = { serverSourcesChanged: boolean }
+type StudioClientChange = { serverSourcesChanged: boolean }
 
 export type StudioClientDevReloadOptions = {
   loadAssets?: (attempt: number) => Promise<StudioClientAssetProvider>

@@ -1,16 +1,14 @@
 import { FS } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
-  bunTestImportIssues,
+  CONVENTION_RULES,
+  conventionRuleIssues,
   crossPackageSourceImportIssues,
   devLazyStudioImportIssues,
   duplicateDescribeTitleIssues,
   justRecipeIssues,
   langiumImportIssues,
   missingTestAppReadmeEntries,
-  nativeSwitchIssues,
-  rawThrowIssues,
-  rejectedRawErrorIssues,
   repoLintIssues,
   wordFlowerDirectoryIssues,
 } from '../dev-src/repository-tests/repo-lint'
@@ -73,7 +71,8 @@ _bench-check:
 
   Test('reports a raw Error handed to a promise rejection', () => {
     const source = `function run(reject: (e: unknown) => void) {\n  reject(${'new Error'}('nope'))\n}`
-    Expect(rejectedRawErrorIssues(
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.rejectedRawError,
       [{ path: 'packages/studio/studio-src/StudioNew.ts', source }],
       [],
     )).toEqual([
@@ -83,7 +82,8 @@ _bench-check:
   })
 
   Test('reports a rejection allowlist entry that no longer rejects raw', () => {
-    Expect(rejectedRawErrorIssues(
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.rejectedRawError,
       [{ path: 'packages/studio/studio-src/Clean.ts', source: 'export const clean = 1\n' }],
       ['packages/studio/studio-src/Clean.ts'],
     )).toEqual([
@@ -187,7 +187,7 @@ _bench-check:
   })
 
   Test('rejects hidden file divergence in an absorbed repository tranche', async () => {
-    const root = await FS.mkTmpDir(FS.resolvePath('tao-repo-lint-', FS.tmpdir()))
+    const root = await mkTestDir('tao-repo-lint-')
     try {
       await FS.writeText(
         FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root),
@@ -285,7 +285,8 @@ _bench-check:
 
 Describe('repo lint conventions', () => {
   Test('reports a native switch outside the allowlist', () => {
-    Expect(nativeSwitchIssues(
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.nativeSwitch,
       [{ path: 'packages/studio/studio-src/Dispatch.ts', source: 'function run() {\n  switch (kind) {\n  }\n}' }],
       ['packages/studio/studio-src/Allowed.ts'],
     )).toEqual([
@@ -294,14 +295,16 @@ Describe('repo lint conventions', () => {
   })
 
   Test('accepts a native switch in an allowlisted file', () => {
-    Expect(nativeSwitchIssues(
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.nativeSwitch,
       [{ path: 'packages/studio/studio-src/Dispatch.ts', source: 'function run() {\n  switch (kind) {\n  }\n}' }],
       ['packages/studio/studio-src/Dispatch.ts'],
     )).toEqual([])
   })
 
   Test('reports an allowlisted file that no longer uses a native switch', () => {
-    Expect(nativeSwitchIssues(
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.nativeSwitch,
       [{ path: 'packages/studio/studio-src/Dispatch.ts', source: 'const run = Switch.kind(action, {})' }],
       ['packages/studio/studio-src/Dispatch.ts'],
     )).toEqual([
@@ -310,7 +313,8 @@ Describe('repo lint conventions', () => {
   })
 
   Test('reports a bun:test import outside the allowlist', () => {
-    Expect(bunTestImportIssues(
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.bunTestImport,
       [{ path: 'packages/runtime/TR-tests/TR-new.test.ts', source: importFrom('bun:test') }],
       ['packages/shared/shared-src/testing/Test-Bun.ts'],
     )).toEqual([
@@ -319,14 +323,16 @@ Describe('repo lint conventions', () => {
   })
 
   Test('accepts a bun:test import in an allowlisted file', () => {
-    Expect(bunTestImportIssues(
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.bunTestImport,
       [{ path: 'packages/shared/shared-src/testing/Test-Bun.ts', source: importFrom('bun:test') }],
       ['packages/shared/shared-src/testing/Test-Bun.ts'],
     )).toEqual([])
   })
 
   Test('reports a raw Error throw outside the allowlist', () => {
-    Expect(rawThrowIssues(
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.rawThrow,
       [{ path: 'packages/studio/studio-src/StudioNew.ts', source: `function run() {\n  ${rawThrow('nope')}\n}` }],
       ['packages/studio/studio-src/Allowed.ts'],
     )).toEqual([
@@ -337,14 +343,16 @@ Describe('repo lint conventions', () => {
   })
 
   Test('accepts a raw Error throw in an allowlisted file', () => {
-    Expect(rawThrowIssues(
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.rawThrow,
       [{ path: 'packages/runtime/TaoRuntime-src/TR-data.ts', source: rawThrow('runtime invariant') }],
       ['packages/runtime/TaoRuntime-src/TR-data.ts'],
     )).toEqual([])
   })
 
   Test('reports an allowlisted file that no longer throws a raw Error', () => {
-    Expect(rawThrowIssues(
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.rawThrow,
       [{ path: 'packages/studio/studio-src/StudioSwept.ts', source: "Errors.throwUserInput('Pick a Tao file.')" }],
       ['packages/studio/studio-src/StudioSwept.ts'],
     )).toEqual([

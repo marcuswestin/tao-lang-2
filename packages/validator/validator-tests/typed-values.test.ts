@@ -1,6 +1,6 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, promptTagsApp, Test } from '@shared/test'
 import { AliasesValidator } from '../validator-src/validators/aliases-validator'
 import { configuredItemValidationMessages } from '../validator-src/validators/configured-item-validator'
 import { FunctionsValidator } from '../validator-src/validators/functions-validator'
@@ -129,36 +129,3 @@ Describe('validator: typed values', () => {
     ),
   )
 })
-
-function promptTagsApp(): string {
-  return `
-    type PromptTitle is text
-    type PromptMinutes is number
-    type PromptTags is list of text
-    type WritingPrompt is {
-      PromptTitle,
-      PromptMinutes,
-      PromptTags,
-    }
-
-    let StarterTags = PromptTags ["daily", "warmup"]
-    let StarterPrompt = WritingPrompt {
-      PromptTitle: "Morning pages"
-      PromptMinutes: 10
-      StarterTags
-    }
-
-    function Join(Values list of text, Separator text) returns text {
-      return Join(Values, Separator) from ./Join.ts
-    }
-
-    app TypedTags { view Main }
-    view Main() { render TagSummary(StarterPrompt.PromptTags) }
-    view TagSummary(Tags PromptTags) {
-      let Positional = Join(Tags, Separator: ", ")
-      let Labeled = Join(Values: Tags, Separator: ", ")
-      render Text("{ Positional } / { Labeled }")
-    }
-    ${stubView('Text', 'Value text')}
-  `
-}

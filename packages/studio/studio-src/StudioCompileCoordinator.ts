@@ -1,13 +1,15 @@
-import { Assert } from '@shared/core'
+import { Assert, Errors } from '@shared/core'
 import type { StudioPreviewAppliedMessage, StudioProjectIdentity } from './StudioProtocol'
+
+export type StudioDiagnosticRange = {
+  end: { character: number; line: number }
+  start: { character: number; line: number }
+}
 
 export type StudioCompileDiagnostic = {
   filePath?: string
   message: string
-  range?: {
-    end: { character: number; line: number }
-    start: { character: number; line: number }
-  }
+  range?: StudioDiagnosticRange
 }
 
 export type StudioCompileCause = 'initial' | 'studio-write' | 'watch'
@@ -297,7 +299,7 @@ export class StudioCompileCoordinator {
     } catch (error) {
       this.#status = 'error'
       this.#diagnostics = compileDiagnostics(error)
-      this.#message = error instanceof Error ? error.message : String(error)
+      this.#message = Errors.messageOf(error)
     }
     const completion: StudioCompileCompletion = {
       causes: request.causes,

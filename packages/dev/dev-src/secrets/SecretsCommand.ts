@@ -38,7 +38,7 @@ export type SecretsEnvironment = {
  * trailing newline that means nothing, but some secrets genuinely end in space, and a tool that quietly
  * trimmed one would produce a value that fails authentication with nothing on screen to explain it.
  */
-export function liveEnvironment(): SecretsEnvironment {
+function liveEnvironment(): SecretsEnvironment {
   return {
     cipher: ageCipher(),
     now: () => new Date(),
@@ -109,7 +109,7 @@ async function recipientOf(identity: string): Promise<string> {
 }
 
 /** ageCipher shells out to `age`; the Secure Enclave plugin is what turns decryption into a Touch ID prompt. */
-export function ageCipher(): Cipher {
+function ageCipher(): Cipher {
   return {
     decrypt: async armor => {
       const identity = identityFile()
@@ -159,7 +159,7 @@ async function writeStore(store: SecretStore): Promise<void> {
 }
 
 /** decrypt writes every secret into the generated environment file, replacing it wholesale. */
-export async function decryptSecrets(environment: SecretsEnvironment): Promise<number> {
+async function decryptSecrets(environment: SecretsEnvironment): Promise<number> {
   const store = await readStore()
   const names = Object.keys(store.secrets)
   if (names.length === 0) {
@@ -180,7 +180,7 @@ export async function decryptSecrets(environment: SecretsEnvironment): Promise<n
 }
 
 /** add encrypts one pasted secret into the store, without echoing it or writing it anywhere in the clear. */
-export async function addSecret(name: string, environment: SecretsEnvironment, note?: string): Promise<number> {
+async function addSecret(name: string, environment: SecretsEnvironment, note?: string): Promise<number> {
   const key = requireSecretName(name)
   const store = await readStore()
   // Everything that can refuse this is checked before a secret is asked for. Asking someone to paste a
@@ -203,7 +203,7 @@ export async function addSecret(name: string, environment: SecretsEnvironment, n
 }
 
 /** list says what is stored without decrypting anything, which is the common question. */
-export async function listSecrets(): Promise<number> {
+async function listSecrets(): Promise<number> {
   const store = await readStore()
   const names = Object.keys(store.secrets).sort()
   if (names.length === 0) {
@@ -227,7 +227,7 @@ export async function listSecrets(): Promise<number> {
  * setup creates the machine's identity in the Secure Enclave and records its recipient. It is the one step a
  * person runs per machine; every worktree afterwards only needs `just secrets`.
  */
-export async function setupSecrets(): Promise<number> {
+async function setupSecrets(): Promise<number> {
   const identity = identityFile()
   const existed = await FS.exists(identity)
   if (!existed) {

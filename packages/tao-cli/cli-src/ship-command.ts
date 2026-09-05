@@ -43,7 +43,7 @@ export type ShipCommandOptions = {
   yes?: boolean
 }
 
-export const DEFAULT_SHIP_NAMESPACE = 'dev.tao-lang'
+const DEFAULT_SHIP_NAMESPACE = 'dev.tao-lang'
 
 export type PreparedShip = {
   actions: string[]
@@ -101,7 +101,7 @@ export async function runShipCommand(
   return 'shipped'
 }
 
-export async function prepareShip(
+async function prepareShip(
   targetPath: string,
   options: ShipCommandOptions,
   dependencies: ShipCommandDependencies = {},

@@ -267,7 +267,7 @@ export function companionSimulatorNameFromArgument(argument: string): string {
 }
 
 /** noSimulatorError names the fix when nothing in the simulator list matches. */
-export function noSimulatorError(query: string, simulators: readonly CompanionSimulator[]): Errors.UserInputError {
+function noSimulatorError(query: string, simulators: readonly CompanionSimulator[]): Errors.UserInputError {
   return new Errors.UserInputError([
     simulators.length === 0
       ? 'This Mac has no available iOS simulator. Install an iOS runtime in Xcode > Settings > Components, then retry.'

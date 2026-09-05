@@ -311,21 +311,7 @@ function effectiveWeightedRigidClaim(entries: readonly AST.LayoutEntry[]): Weigh
     : undefined
 }
 
-const layoutHeads = [
-  'aligned',
-  'centered',
-  'claim',
-  'compress',
-  'content',
-  'fill',
-  'gap',
-  'height',
-  'hug',
-  'margin',
-  'pad',
-  'rigid',
-  'width',
-] as const
+const layoutHeads = ASTUtils.designLayoutHeads
 
 const reservedDesignSizeTerms = new Set<string>([
   ...layoutHeads,

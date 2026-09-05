@@ -27,7 +27,7 @@ export type StudioSourceIdentity = {
 }
 
 /** StudioSourceOccurrenceIdentity is the compiler-owned semantic precondition for one source occurrence. */
-export type StudioSourceOccurrenceIdentity = {
+type StudioSourceOccurrenceIdentity = {
   nodeKind: string
   renderOwner?: string
 }
@@ -143,7 +143,7 @@ export type StudioFixturePlan = Readonly<{
   }>[]
 }>
 
-export type StudioPreviewFixtureCapturedMessage = {
+type StudioPreviewFixtureCapturedMessage = {
   channel: typeof studioProtocolChannel
   fixture: StudioFixturePlan
   identity: StudioPreviewIdentity
@@ -152,7 +152,7 @@ export type StudioPreviewFixtureCapturedMessage = {
   type: 'preview-fixture-captured'
 }
 
-export type StudioPreviewFixtureCaptureFailedMessage = {
+type StudioPreviewFixtureCaptureFailedMessage = {
   channel: typeof studioProtocolChannel
   error: string
   identity: StudioPreviewIdentity
@@ -200,7 +200,7 @@ export type StudioPreviewRuntimeFailureMessage = {
   type: 'preview-runtime-failure'
 }
 
-export type StudioPreviewRuntimeCapturedMessage = {
+type StudioPreviewRuntimeCapturedMessage = {
   capture: StudioRuntimeCaptureArtifact
   channel: typeof studioProtocolChannel
   identity: StudioPreviewIdentity
@@ -209,7 +209,7 @@ export type StudioPreviewRuntimeCapturedMessage = {
   type: 'preview-runtime-captured'
 }
 
-export type StudioPreviewRuntimeCaptureFailedMessage = {
+type StudioPreviewRuntimeCaptureFailedMessage = {
   channel: typeof studioProtocolChannel
   error: string
   identity: StudioPreviewIdentity
@@ -218,7 +218,7 @@ export type StudioPreviewRuntimeCaptureFailedMessage = {
   type: 'preview-runtime-capture-failed'
 }
 
-export type StudioPreviewLogMessage = {
+type StudioPreviewLogMessage = {
   arguments: readonly StudioJsonValue[]
   channel: typeof studioProtocolChannel
   identity: StudioPreviewIdentity
@@ -228,7 +228,7 @@ export type StudioPreviewLogMessage = {
   type: 'preview-console'
 }
 
-export type StudioPreviewSchemeMessage = {
+type StudioPreviewSchemeMessage = {
   channel: typeof studioProtocolChannel
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion

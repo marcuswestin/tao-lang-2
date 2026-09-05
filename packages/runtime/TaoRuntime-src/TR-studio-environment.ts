@@ -21,14 +21,14 @@ export type TaoStudioSchemeConfig = Readonly<{
 }>
 
 /** TaoStudioFillFailure injects one declared failure at the configured matching fill occurrence. */
-export type TaoStudioFillFailure = Readonly<{
+type TaoStudioFillFailure = Readonly<{
   entity?: string
   message: string
   occurrence?: number
 }>
 
 /** TaoStudioNetworkEnvironment controls only the remote fill half of the current provider protocol. */
-export type TaoStudioNetworkEnvironment = Readonly<{
+type TaoStudioNetworkEnvironment = Readonly<{
   failures?: readonly TaoStudioFillFailure[]
   latencyMs?: number
   mode: 'offline' | 'online'

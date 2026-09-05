@@ -25,7 +25,6 @@ import { registerRuntimeCaptureDomain, type TaoRuntimeJson } from './TR-runtime-
 import { StudioEnvironmentControls } from './TR-studio-environment'
 
 export { testProvider } from './TR-data-provider'
-export { configurationValuesEqual, evaluatedDatasourceConfiguration } from './TR-data-schema'
 
 type DataPrimitive = 'boolean' | 'number' | 'text' | 'time'
 type RelationDeleteBehavior = 'cascade' | 'restrict'

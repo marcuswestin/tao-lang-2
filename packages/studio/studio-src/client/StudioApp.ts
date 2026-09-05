@@ -1022,7 +1022,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       } catch (error) {
         if (isLatest()) {
           dataLoading = false
-          dataError = error instanceof Error ? error.message : String(error)
+          dataError = Errors.messageOf(error)
           renderDrawer()
         }
       }
@@ -1037,7 +1037,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         testStatus = await StudioApiClient.testStatus()
         testError = undefined
       } catch (error) {
-        testError = error instanceof Error ? error.message : String(error)
+        testError = Errors.messageOf(error)
       }
       if (drawerTab === 'Tests') {
         renderDrawer()
@@ -1057,7 +1057,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         const lastRun = await StudioApiClient.testRun()
         testStatus = { available: true, lastRun, running: false }
       } catch (error) {
-        testError = error instanceof Error ? error.message : String(error)
+        testError = Errors.messageOf(error)
         testStatus = { ...(testStatus ?? { available: true }), running: false }
       }
       if (drawerTab === 'Tests') {
@@ -1615,7 +1615,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             checkPreviewBundle()
           }).catch(error => {
             view.status.dataset['state'] = 'error'
-            view.status.textContent = error instanceof Error ? error.message : String(error)
+            view.status.textContent = Errors.messageOf(error)
           })
         }
         renderCommands()
@@ -1626,6 +1626,50 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       onSketchCatalog(catalog) {
         StudioMatrixView.renderSketches(view.preview, handshake.identity.project, catalog)
       },
+    })
+    /**
+     * Canvas mode: the selected element's owning view is shown alone when the project already renders
+     * that view in a focused scenario group, and every edit then lands in that one definition.
+     */
+    function focusableView(): string | undefined {
+      const owner = inspected?.identity.occurrence?.renderOwner
+      if (owner === undefined) {
+        return undefined
+      }
+      const escaped = owner.replace(/"/g, '\\"')
+      return view.preview.querySelector(`[data-tao-studio-group-view="${escaped}"]`) === null ? undefined : owner
+    }
+    function updateCanvasFocus(): void {
+      const focused = StudioMatrixView.focusedView(view.preview)
+      const candidate = focusableView()
+      if (focused !== undefined) {
+        view.canvasFocus.hidden = false
+        view.canvasFocus.textContent = 'Back to app'
+        view.canvasFocus.dataset['state'] = 'focused'
+        return
+      }
+      delete view.canvasFocus.dataset['state']
+      view.canvasFocus.hidden = candidate === undefined
+      view.canvasFocus.textContent = candidate === undefined ? 'Focus view' : `Focus ${candidate}`
+    }
+    function leaveCanvasFocus(): void {
+      StudioMatrixView.focusView(view.preview, undefined, leaveCanvasFocus)
+      updateCanvasFocus()
+    }
+    view.canvasFocus.addEventListener('click', () => {
+      if (StudioMatrixView.focusedView(view.preview) !== undefined) {
+        leaveCanvasFocus()
+        return
+      }
+      const candidate = focusableView()
+      if (candidate === undefined) {
+        view.status.dataset['state'] = 'error'
+        view.status.textContent =
+          'Select an element whose view has a focused scenario group before entering canvas mode.'
+        return
+      }
+      StudioMatrixView.focusView(view.preview, candidate, leaveCanvasFocus)
+      updateCanvasFocus()
     })
     view.reload.addEventListener('click', () => {
       if (previews.length > 0) {
@@ -1665,6 +1709,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             inspected = selection
             selectSourceInEditor(selection)
             publishProductHostState()
+            updateCanvasFocus()
             void inspectSelection(selection)
             void highlightOnDevice(selection)
           },
@@ -2169,7 +2214,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     disconnectPreviews(partialPreviews)
     if (!isAbortError(error)) {
       view.status.dataset['state'] = 'error'
-      view.status.textContent = error instanceof Error ? error.message : String(error)
+      view.status.textContent = Errors.messageOf(error)
     }
     throw error
   }

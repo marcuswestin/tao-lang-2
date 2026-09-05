@@ -2000,6 +2000,148 @@ async function generatedSketchDocument(): Promise<AST.Document> {
   `)
 }
 
+Describe('Studio canvas-mode source actions', () => {
+  Test('inspection offers text-binding candidates from parameters, entity fields, and loop items', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      data Stories / Story {
+         Title text
+         Score number
+         Author text
+         Summary text?
+      }
+
+      view StoryRow(Story, Caption text) {
+         render Col() [gap 4] {
+            Text("Meta") [meta]
+            Text(Story.Title)
+      }  }
+    `)
+    const meta = SourceActions.inspectStudioRender(document, renderId(requireRenderByText(document, 'Meta')))
+    Expect(meta.text).toEqual({
+      candidates: [
+        { expression: 'Caption', type: 'text' },
+        { expression: 'Story.Author', type: 'text' },
+        { expression: 'Story.Score', type: 'number' },
+        { expression: 'Story.Title', type: 'text' },
+      ],
+      expression: '"Meta"',
+      literal: 'Meta',
+    })
+    const bound = SourceActions.inspectStudioRender(document, renderId(requireRenderByText(document, 'Story.Title')))
+    Expect(bound.text?.expression).toBe('Story.Title')
+    Expect(bound.text?.literal).toBeUndefined()
+    const container = SourceActions.inspectStudioRender(document, renderId(requireRenderByText(document, 'Col()')))
+    Expect(container.text).toBeUndefined()
+  })
+
+  Test('bind-text points a text leaf at a visible value and interpolates a number', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      data Stories / Story {
+         Title text
+         Score number
+      }
+
+      view StoryRow(Story) {
+         render Col() [gap 4] {
+            Text("Meta") [meta]
+            Text("Points")
+      }  }
+    `)
+    const title = await SourceActions.applyStudioPatch(document, {
+      expression: 'Story.Title',
+      kind: 'bind-text',
+      renderId: renderId(requireRenderByText(document, 'Meta')),
+    })
+    Expect(title.content).toContain('Text(Story.Title) [meta]')
+    const score = await SourceActions.applyStudioPatch(document, {
+      expression: 'Story.Score',
+      kind: 'bind-text',
+      renderId: renderId(requireRenderByText(document, 'Points')),
+    })
+    Expect(score.content).toContain('Text("{ Story.Score }")')
+    await Expect(SourceActions.applyStudioPatch(document, {
+      expression: 'Story.Missing',
+      kind: 'bind-text',
+      renderId: renderId(requireRenderByText(document, 'Meta')),
+    })).rejects.toThrow('not visible at this render')
+    await Expect(SourceActions.applyStudioPatch(document, {
+      expression: 'Story.Title',
+      kind: 'bind-text',
+      renderId: renderId(requireRenderByText(document, 'Col()')),
+    })).rejects.toThrow('Text or TextMultiline leaf')
+  })
+
+  Test('set-text-content rewrites only the literal and keeps layout and named arguments', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            Text("Old", Lines: 1) [meta]
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      content: 'New "quoted" text',
+      kind: 'set-text-content',
+      renderId: renderId(requireRenderByText(document, 'Old')),
+    })
+    Expect(patch.content).toContain('Text("New \\"quoted\\" text", Lines: 1) [meta]')
+  })
+
+  Test('remove-render deletes a direct child with its tag and refuses the root render', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            Text("First")
+            #second
+            Text("Second")
+            Text("Third")
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'remove-render',
+      renderId: renderId(requireRenderByText(document, 'Second')),
+    })
+    Expect(patch.content).toBe(source(`
+      use Col, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            Text("First")
+            Text("Third")
+      }  }
+    `))
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'remove-render',
+      renderId: renderId(requireRenderByText(document, 'Col()')),
+    })).rejects.toThrow('root render stays')
+  })
+
+  Test('wrap-render accepts Row and Col and imports the wrapper it introduces', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            Text("First")
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'wrap-render',
+      renderId: renderId(requireRenderByText(document, 'First')),
+      wrapper: 'Row',
+    })
+    Expect(patch.content).toContain('use Col, Row, Text from @tao/ui')
+    Expect(patch.content).toContain('Row() [gap 8, pad 8] {')
+  })
+})
+
 function source(text: string): string {
   return `${Text.stripIndent(text)}\n`
 }

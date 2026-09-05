@@ -9,10 +9,14 @@ import {
   productHostStyle,
   StudioInspectorAction,
   StudioInspectorActionIds,
+  StudioInspectorActionLabel,
+  StudioInspectorActionValid,
+  StudioInspectorBindTextAction,
   StudioInspectorDataLines,
   StudioInspectorLayoutAction,
   StudioInspectorLayoutActionValid,
   StudioInspectorLayoutDrafts,
+  StudioInspectorSetTextAction,
   StudioInspectorStyleAction,
   StudioInspectorStyleActionValid,
   StudioInspectorStyleDrafts,
@@ -21,6 +25,12 @@ import {
   StudioInspectorStylePromotionAction,
   StudioInspectorStylePromotionIds,
   StudioInspectorStylePromotionLabel,
+  StudioInspectorTextActionValid,
+  StudioInspectorTextAvailable,
+  StudioInspectorTextBindingLabel,
+  StudioInspectorTextCandidates,
+  StudioInspectorTextLiteral,
+  StudioInspectorTextStatus,
   StudioInspectorUpdateDraft,
   studioNumericDraft,
   StudioPaletteRow,
@@ -443,12 +453,74 @@ Test('Tao-owned inspector Data and Actions expose only the published active sele
   Expect(lines).toContain('Binding metadata: not published for this render.')
   Expect(lines).toContain('Datasource context: cell cell-phone revision 4.')
   Expect(lines).toContain('Entity tables are available in the Data panel.')
-  Expect(StudioInspectorActionIds(inspection, selection)).toEqual(['wrap-stack'])
+  Expect(StudioInspectorActionIds(inspection, selection)).toEqual([
+    'wrap-row',
+    'wrap-col',
+    'wrap-stack',
+    'remove-element',
+  ])
+  Expect(StudioInspectorActionLabel('wrap-col')).toBe('Wrap in Col')
+  Expect(JSON.parse(StudioInspectorAction(selection, 'wrap-row'))).toEqual({
+    kind: 'wrap-render',
+    renderId: '/workspace/Garden.tao:20:42',
+    wrapper: 'Row',
+  })
+  Expect(JSON.parse(StudioInspectorAction(selection, 'remove-element'))).toEqual({
+    kind: 'remove-render',
+    renderId: '/workspace/Garden.tao:20:42',
+  })
+  Expect(StudioInspectorActionValid('source-1', inspection, selection, false, 'remove-element')).toBe(true)
+  Expect(StudioInspectorActionValid('source-1', inspection, selection, false, 'unknown')).toBe(false)
+  Expect(StudioInspectorTextAvailable(inspection, selection)).toBe(false)
+  Expect(StudioInspectorTextStatus(inspection, selection)).toContain('not a Text leaf')
   Expect(JSON.parse(StudioInspectorAction(selection, 'wrap-stack'))).toEqual({
     kind: 'wrap-render',
     renderId: '/workspace/Garden.tao:20:42',
     wrapper: 'Stack',
   })
+})
+
+Test('Tao-owned inspector Text section edits a literal and binds only offered values', () => {
+  const selection = inspectorSelection()
+  const inspection = JSON.stringify({
+    ...JSON.parse(inspectorInspection()),
+    text: {
+      candidates: [
+        { expression: 'Caption', type: 'text' },
+        { expression: 'Story.Score', type: 'number' },
+      ],
+      expression: '"Meta"',
+      literal: 'Meta',
+    },
+  })
+
+  Expect(StudioInspectorTextAvailable(inspection, selection)).toBe(true)
+  Expect(StudioInspectorTextStatus(inspection, selection)).toBe('Showing a literal.')
+  Expect(StudioInspectorTextLiteral(inspection)).toBe('Meta')
+  Expect(StudioInspectorTextCandidates(inspection)).toEqual(['Caption', 'Story.Score'])
+  Expect(StudioInspectorTextBindingLabel(inspection, 'Caption')).toBe('Bind to Caption')
+  Expect(StudioInspectorTextBindingLabel(inspection, 'Story.Score')).toBe('Bind to Story.Score (number)')
+  Expect(StudioInspectorTextActionValid('source-1', inspection, selection, false)).toBe(true)
+  Expect(StudioInspectorTextActionValid('source-2', inspection, selection, false)).toBe(false)
+  Expect(StudioInspectorTextActionValid('source-1', inspection, selection, true)).toBe(false)
+  Expect(JSON.parse(StudioInspectorSetTextAction(selection, 'Hello'))).toEqual({
+    content: 'Hello',
+    kind: 'set-text-content',
+    renderId: '/workspace/Garden.tao:20:42',
+  })
+  Expect(JSON.parse(StudioInspectorBindTextAction(selection, 'Story.Score'))).toEqual({
+    expression: 'Story.Score',
+    kind: 'bind-text',
+    renderId: '/workspace/Garden.tao:20:42',
+  })
+  const lines = StudioInspectorDataLines(inspection, selection, 'cell-phone', 4, 'scenario-card')
+  Expect(lines).toContain('Text bindings: 2 values in scope; bind one in the Text section.')
+  const bound = JSON.stringify({
+    ...JSON.parse(inspection),
+    text: { candidates: [], expression: 'Story.Title' },
+  })
+  Expect(StudioInspectorTextStatus(bound, selection)).toBe('Showing Story.Title.')
+  Expect(StudioInspectorTextLiteral(bound)).toBe('')
 })
 
 function inspectorSelection(): string {

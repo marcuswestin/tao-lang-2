@@ -1,7 +1,7 @@
 import { Errors, FS, HCI, Platform, Switch } from '@shared'
 
 /** CompletionShell names the shells whose startup files `tao completion install` can edit. */
-export type CompletionShell = 'bash' | 'fish' | 'zsh'
+type CompletionShell = 'bash' | 'fish' | 'zsh'
 
 /** CompletionInstallOptions configures which shell the hook is installed for. */
 export type CompletionInstallOptions = {

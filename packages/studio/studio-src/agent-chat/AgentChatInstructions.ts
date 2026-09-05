@@ -43,7 +43,7 @@ Keep it short. A person asked a question, not for a report.`
  * modeInstructions lets a later mode add its own rules without restating the shared ones. Every mode gets the
  * same account of what Tao is and what the model does not have.
  */
-export function modeInstructions(extra: string): string {
+function modeInstructions(extra: string): string {
   return `${SHARED}
 ${ANSWERING}
 

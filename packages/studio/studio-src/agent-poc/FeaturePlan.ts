@@ -12,7 +12,7 @@ import { type SemanticSnapshot, type SnapshotNode, type SnapshotText } from './S
 type Json = Record<string, unknown>
 
 /** The change kinds this PoC can lower. `other` is an honest refusal, not a failure. */
-export type FeatureKind = 'add-flag' | 'reword-text' | 'other'
+type FeatureKind = 'add-flag' | 'reword-text' | 'other'
 
 export type FeatureShape = {
   featureName: string
@@ -32,7 +32,7 @@ export type RewordShape = {
   textHandle: string
 }
 
-export type PlanStep = {
+type PlanStep = {
   file: string
   action: string
   decidedBy: 'model' | 'tao' | 'poc-hard-coded'
@@ -41,7 +41,7 @@ export type PlanStep = {
   note?: string
 }
 
-export type FeatureEdit = { path: string; before: string; after: string }
+type FeatureEdit = { path: string; before: string; after: string }
 
 export type FeaturePlan = {
   kind: FeatureKind
@@ -138,7 +138,7 @@ function unquote(text: string): string {
 
 // ---- Packets -------------------------------------------------------------------------------------
 
-export function featurePacket(snapshot: SemanticSnapshot): Json {
+function featurePacket(snapshot: SemanticSnapshot): Json {
   const entities = [...snapshot.nodes.values()].filter(n => n.kind === 'entity')
   return {
     app: snapshot.appName,
@@ -160,7 +160,7 @@ export function featurePacket(snapshot: SemanticSnapshot): Json {
   }
 }
 
-export function rewordPacket(candidates: TextCandidate[]): Json {
+function rewordPacket(candidates: TextCandidate[]): Json {
   return { texts: candidates.map(c => `${c.handle} (${c.view}): ${c.text}`) }
 }
 

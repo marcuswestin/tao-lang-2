@@ -229,7 +229,7 @@ Product and codebase backlog, unordered.
       on the only path a client can reach. What is missing is the affordance: the tree offers the
       action and the server refuses it, instead of not offering it.
     - **Roughly two dozen raw `Error`s handed to a promise rejection.** `repo-lint` now ratchets them
-      through `rejectedRawErrorIssues` per file rather than per count, so a new rejection inside an
+      through `CONVENTION_RULES.rejectedRawError` per file rather than per count, so a new rejection inside an
       already-listed file still passes; the ratchet stops the set of files growing, not the number of
       sites. Most reach a Tao author exactly as a throw would, though three of the twelve are test
       fixtures and do not. Heaviest in

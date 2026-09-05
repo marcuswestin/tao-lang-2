@@ -1,4 +1,5 @@
 import { Errors } from '@shared'
+import { requireText, validateTaoSource } from './StudioPreviewCell'
 import type { StudioTaoSource } from './StudioPreviewManifest'
 import type { StudioJsonValue } from './StudioProtocol'
 
@@ -170,21 +171,6 @@ function validateEntry(entry: StudioStateEntry, supportedDomains: ReadonlySet<st
   }
 }
 
-function validateTaoSource(source: StudioTaoSource, label: string): void {
-  if (source.kind !== 'tao') {
-    throw new Errors.UserInputError(`${label} must be Tao source.`)
-  }
-  requireText(source.path, `${label} path`)
-  if (
-    !Number.isSafeInteger(source.range.start)
-    || !Number.isSafeInteger(source.range.end)
-    || source.range.start < 0
-    || source.range.end < source.range.start
-  ) {
-    throw new Errors.UserInputError(`${label} range is invalid.`)
-  }
-}
-
 function isJsonValue(value: unknown): value is StudioJsonValue {
   if (value === null || typeof value === 'boolean' || typeof value === 'string') {
     return true
@@ -202,11 +188,4 @@ function isJsonValue(value: unknown): value is StudioJsonValue {
 
 function requireIdentifier(value: string): string {
   return requireText(value, 'Studio identifier')
-}
-
-function requireText(value: string, label: string): string {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new Errors.UserInputError(`${label} must not be empty.`)
-  }
-  return value
 }

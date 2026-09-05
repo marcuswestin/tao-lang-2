@@ -12,22 +12,6 @@ export type ShipIdentityInput = {
   namespace: string
 }
 
-export type ShipManifest = {
-  appName: string
-  buildNumber: string
-  bundleIdentifier: string
-  channel: string
-  commit: string
-  dirty: boolean
-  name: string
-  projectId: string
-  runtimeFingerprint?: string
-  updateUrl?: string
-  usesNonExemptEncryption: false
-  variant?: string
-  version: ShipVersion
-}
-
 /** parseShipVersion accepts SemVer's three numeric core components and nothing Apple cannot consume. */
 export function parseShipVersion(value: string): ShipVersion | undefined {
   if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(value)) {

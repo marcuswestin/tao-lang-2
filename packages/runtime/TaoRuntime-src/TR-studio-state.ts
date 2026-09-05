@@ -7,8 +7,8 @@ import {
 
 export const studioStateArtifactVersion = 1 as const
 
-export type TaoStudioJsonObject = { readonly [key: string]: TaoStudioJsonValue }
-export type TaoStudioJsonValue =
+type TaoStudioJsonObject = { readonly [key: string]: TaoStudioJsonValue }
+type TaoStudioJsonValue =
   | boolean
   | null
   | number
@@ -16,7 +16,7 @@ export type TaoStudioJsonValue =
   | string
   | TaoStudioJsonObject
 
-export type TaoStudioStateDomainPayload = Readonly<{
+type TaoStudioStateDomainPayload = Readonly<{
   domain: string
   state: TaoStudioJsonValue
   version: number
@@ -32,7 +32,7 @@ export type TaoStudioStateLayer = Readonly<{
   name: string
 }>
 
-export type TaoStudioStateComposeContext = Readonly<{
+type TaoStudioStateComposeContext = Readonly<{
   incomingLayer: string
   previousLayers: readonly string[]
 }>
@@ -170,7 +170,7 @@ export class TaoStudioStateCodecRegistry {
 }
 
 /** StudioDataStateCodec composes exact provider snapshots without silently choosing a conflicting store. */
-export const StudioDataStateCodec: TaoStudioStateDomainCodec<TaoStudioStateSeed> = {
+const StudioDataStateCodec: TaoStudioStateDomainCodec<TaoStudioStateSeed> = {
   compose(current, incoming) {
     const snapshots: Record<string, string> = { ...current.snapshots }
     for (const [storageKey, snapshot] of Object.entries(incoming.snapshots)) {

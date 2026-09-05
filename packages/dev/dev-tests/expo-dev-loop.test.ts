@@ -153,7 +153,7 @@ Describe('Expo dev-loop command helpers', () => {
   })
 
   Test('stops the complete Expo subprocess tree when Metro outlives its launcher', async () => {
-    const root = await FS.mkTmpDir(FS.resolvePath('tao-expo-process-tree-', FS.tmpdir()))
+    const root = await mkTestDir('tao-expo-process-tree-')
     const descendantPidPath = FS.resolvePath('descendant.pid', root)
     const shellScript = [
       '(trap "" TERM; while :; do sleep 1; done) &',

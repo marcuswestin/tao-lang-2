@@ -7,7 +7,7 @@ import { OutlineScope, type TaoOutlineProvenance, useOutlineNode } from './TR-in
  * first three kinds; the compiler describes the sibling subtree, whose mounted roots coalesce under
  * one owner occurrence without adding a wrapper or layout node.
  */
-export type TaoOutlineRegionKind = 'occurrence' | 'selection-item' | 'split-pane'
+type TaoOutlineRegionKind = 'occurrence' | 'selection-item' | 'split-pane'
 
 /** TaoOutlinePresentation is how a presented occurrence reached the screen. */
 export type TaoOutlinePresentation = 'ask' | 'content' | 'overlay' | 'sheet'
@@ -23,7 +23,7 @@ export type TaoOutlineRegion = Readonly<{
 }>
 
 /** useOutlineRegion registers one mounted region and returns the identity its content hangs under. */
-export function useOutlineRegion(region: TaoOutlineRegion | undefined): string | undefined {
+function useOutlineRegion(region: TaoOutlineRegion | undefined): string | undefined {
   return useOutlineNode(
     region
       ? {

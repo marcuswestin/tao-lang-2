@@ -54,7 +54,7 @@ export async function openStudioPreviewSession(
 }
 
 /** matrixManifest adapts compiler-owned Tao source metadata into the versioned Studio cell contract. */
-export function matrixManifest(
+function matrixManifest(
   session: Pick<StudioProjectSession, 'appName' | 'entryPath' | 'projectRoot'>,
   generated: Awaited<ReturnType<typeof Runtime.generateApp>>,
   compileRevision: number,

@@ -11,11 +11,11 @@ import { CLI, FS, HCI, Platform, Repo } from '@shared'
 const LAUNCH_DIRECTORY = '.artifacts/user/studio/launches'
 
 /** The manifest schema version. A manifest carrying anything else is read but never acted on. */
-export const STUDIO_LAUNCH_MANIFEST_VERSION = 1
+const STUDIO_LAUNCH_MANIFEST_VERSION = 1
 
-export type StudioLaunchMode = 'browser' | 'native' | 'packaged' | 'smoke'
+type StudioLaunchMode = 'browser' | 'native' | 'packaged' | 'smoke'
 
-export type StudioLaunchState = 'failed' | 'ready' | 'starting' | 'stopped' | 'stopping'
+type StudioLaunchState = 'failed' | 'ready' | 'starting' | 'stopped' | 'stopping'
 
 /**
  * One process this launch owns. `command` and `startedAt` come from the process table when the
@@ -74,7 +74,7 @@ export type StoredLaunch = {
  * `unknown` into `gone` is what makes a stop delete the record of a launch that is still running;
  * collapsing it into `alive` is what makes a stop signal a stranger. Both have happened here.
  */
-export type ProcessEvidence = 'alive' | 'gone' | 'unknown'
+type ProcessEvidence = 'alive' | 'gone' | 'unknown'
 
 /**
  * ProcessFact is what the live machine says about one recorded process id. `command` and
@@ -120,7 +120,7 @@ export function launchDirectory(repositoryRoot = Repo.getRoot()): string {
 }
 
 /** createLaunchId returns a sortable, collision-free identifier for one launch. */
-export function createLaunchId(mode: StudioLaunchMode): string {
+function createLaunchId(mode: StudioLaunchMode): string {
   return `${mode}-${Bun.randomUUIDv7()}`
 }
 
@@ -377,12 +377,12 @@ export function isSameProcess(recorded: StudioLaunchProcess, fact: ProcessFact):
 }
 
 /** sameCommand compares command strings by basename, so `/opt/bin/bun` matches `bun`. */
-export function sameCommand(left: string, right: string): boolean {
+function sameCommand(left: string, right: string): boolean {
   return FS.basename(left) === FS.basename(right)
 }
 
 /** recordedPorts returns the ports a manifest claims, in a stable order. */
-export function recordedPorts(manifest: StudioLaunchManifest): number[] {
+function recordedPorts(manifest: StudioLaunchManifest): number[] {
   return [manifest.studioPort, manifest.previewPort]
     .filter((port): port is number => typeof port === 'number' && port > 0)
 }

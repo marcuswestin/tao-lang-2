@@ -1,4 +1,4 @@
-import { FS, Repo } from '@shared'
+import { FS, Json, Repo } from '@shared'
 import { StudioCompanionIdentity } from './StudioCompanionIdentity'
 
 const runtimeFiles = [
@@ -12,7 +12,7 @@ export type CreatedStudioPreviewRuntime = {
   root: string
 }
 
-export type StudioPreviewRuntimeOptions = {
+type StudioPreviewRuntimeOptions = {
   artifactRoot?: string
   /** The tao-studio-device-v1 gateway port a companion build should dial after loading this bundle. */
   deviceGatewayPort?: number
@@ -59,8 +59,8 @@ function previewAppConfig(
   appConfig: Record<string, unknown>,
   options: Pick<StudioPreviewRuntimeOptions, 'deviceGatewayPort'>,
 ): Record<string, unknown> {
-  const expo = isRecord(appConfig['expo']) ? appConfig['expo'] : {}
-  const extra = isRecord(expo['extra']) ? expo['extra'] : {}
+  const expo = Json.isRecord(appConfig['expo']) ? appConfig['expo'] : {}
+  const extra = Json.isRecord(expo['extra']) ? expo['extra'] : {}
   return {
     ...appConfig,
     expo: {
@@ -74,8 +74,4 @@ function previewAppConfig(
       }),
     },
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

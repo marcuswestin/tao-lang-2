@@ -2,7 +2,7 @@ import { errorMessage, HostEnvironmentError } from './TR-errors'
 import { type ReactNativeRuntime, requireReactNativeRuntime } from './TR-react-native'
 
 /** The native modules used by Tao's curated device capabilities and the Studio device host. */
-export type NativeModuleName =
+type NativeModuleName =
   | 'expo-clipboard'
   | 'expo-constants'
   | 'expo-haptics'

@@ -3,7 +3,7 @@ import { type CapabilityReport, readAgentCapabilities } from './AgentCapabilitie
 
 type RunCapabilitiesOptions = { json?: boolean }
 
-export function writeCapabilities(report: CapabilityReport, options: RunCapabilitiesOptions): void {
+function writeCapabilities(report: CapabilityReport, options: RunCapabilitiesOptions): void {
   if (options.json === true) {
     HCI.writeLine(JSON.stringify(report, null, 2))
     return

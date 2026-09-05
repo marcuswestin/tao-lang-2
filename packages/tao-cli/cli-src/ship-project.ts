@@ -1,5 +1,5 @@
 import Formatter from '@formatter'
-import { AST, Parser } from '@parser'
+import { AST, Langium, Parser } from '@parser'
 import { Errors, FS, Repo } from '@shared'
 import { Workspace } from '@workspace'
 import type { ShipVersion } from './ship-model'
@@ -32,12 +32,17 @@ export async function discoverShipProject(targetPath: string): Promise<ShipProje
     Errors.throwUserInput(`No file or directory found at ${target}`)
   }
   let directory = await FS.isFile(target) ? FS.dirname(target) : target
+  // One parser context serves the whole climb; each parse would otherwise build the grammar again.
+  const parserContext = Parser.createContext()
   while (true) {
     const candidates = (await Repo.filesUnder(directory, { extensions: ['.tao'] }))
       .filter(path => FS.dirname(path) === directory)
     const projectFiles: Array<{ path: string; project: AST.ProjectDeclaration }> = []
     for (const path of candidates) {
-      const parsed = await Parser.parseCode(await FS.readText(path), { validation: false })
+      const parsed = await Parser.parseSource(parserContext, await FS.readText(path), {
+        uri: Langium.URI.file(path),
+        validation: false,
+      })
       for (const project of parsed.entry.ast.statements.filter(AST.isProjectDeclaration)) {
         projectFiles.push({ path, project })
       }
@@ -78,11 +83,12 @@ async function readShipProject(
   }
   const defaultApp = statements.find(AST.isProjectDefaultApp)?.app.$refText
   const apps: ShipProjectApp[] = []
+  const workspace = await Workspace.open(root)
   for (const path of await Repo.filesUnder(root, { extensions: ['.tao'] })) {
     if (path.endsWith('.test.tao')) {
       continue
     }
-    const parsed = await Workspace.parse(path)
+    const parsed = await workspace.parse(path)
     const source = await FS.readText(path)
     for (const declaration of AST.appValueDeclarationsInFile(parsed.entry.ast)) {
       const declarationSource = declaration.$cstNode?.text ?? ''

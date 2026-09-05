@@ -258,10 +258,6 @@ function rewriteGeneratedStudioImports(
     .reduce((rewritten, edit) => rewritten.slice(0, edit.start) + edit.replacement + rewritten.slice(edit.end), content)
 }
 
-export type StudioPreviewRegistration = {
-  previewInstanceId: string
-}
-
 export type StudioSourceActionResult = {
   checkpoint: {
     id: string
@@ -3143,8 +3139,29 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
       renderId: action['renderId'],
     }
   }
-  if (action.kind === 'wrap-render' && typeof action['renderId'] === 'string' && action['wrapper'] === 'Stack') {
+  if (
+    action.kind === 'wrap-render'
+    && typeof action['renderId'] === 'string'
+    && (action['wrapper'] === 'Col' || action['wrapper'] === 'Row' || action['wrapper'] === 'Stack')
+  ) {
     return { kind: action.kind, renderId: action['renderId'], wrapper: action['wrapper'] }
+  }
+  if (action.kind === 'remove-render' && typeof action['renderId'] === 'string') {
+    return { kind: action.kind, renderId: action['renderId'] }
+  }
+  if (
+    action.kind === 'set-text-content'
+    && typeof action['renderId'] === 'string'
+    && typeof action['content'] === 'string'
+  ) {
+    return { content: action['content'], kind: action.kind, renderId: action['renderId'] }
+  }
+  if (
+    action.kind === 'bind-text'
+    && typeof action['renderId'] === 'string'
+    && typeof action['expression'] === 'string'
+  ) {
+    return { expression: action['expression'], kind: action.kind, renderId: action['renderId'] }
   }
   if (
     action.kind === 'set-style-entry'
@@ -3203,6 +3220,9 @@ function requireSourceActionPreconditions(
     || request.kind === 'set-layout-entry'
     || request.kind === 'set-style-entry'
     || request.kind === 'wrap-render'
+    || request.kind === 'remove-render'
+    || request.kind === 'set-text-content'
+    || request.kind === 'bind-text'
     || (request.kind === 'insert-component' || request.kind === 'insert-project-view')
       && (request.beforeId !== undefined || request.afterId !== undefined)
   Assert.input(

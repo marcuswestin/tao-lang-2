@@ -34,7 +34,7 @@ const SIGNING_ENV_VARS = [
 ] as const
 
 /** The versions the generated Electrobun project pins; a mismatch changes what `dev` produces. */
-export const PINNED_NATIVE_VERSIONS = {
+const PINNED_NATIVE_VERSIONS = {
   cottontail: '0.5.0',
   electrobun: '2.0.2-beta.12',
   hutch: '0.24.3',
@@ -54,7 +54,7 @@ export type StudioDoctorReport = {
 }
 
 /** LaunchSummary is what the Studio checks need to know about recorded launches. */
-export type LaunchSummary = {
+type LaunchSummary = {
   foreignPorts: readonly number[]
   live: number
   stale: number
@@ -87,7 +87,7 @@ export type StudioDoctorFacts = {
 }
 
 /** studioDoctorChecks diagnoses Studio from a gathered snapshot, without touching the machine. */
-export function studioDoctorChecks(facts: StudioDoctorFacts): DoctorCheck[] {
+function studioDoctorChecks(facts: StudioDoctorFacts): DoctorCheck[] {
   return [
     reactSingletonCheck(facts),
     studioSourceCheck(facts),
@@ -371,19 +371,8 @@ async function findChrome(): Promise<{ configured: boolean; path: string } | und
       return { configured: false, path: candidate }
     }
   }
-  const discovered = await findExecutable('google-chrome') ?? await findExecutable('chromium')
+  const discovered = await CLI.commandPath('google-chrome') ?? await CLI.commandPath('chromium')
   return discovered === undefined ? undefined : { configured: false, path: discovered }
-}
-
-async function findExecutable(name: string): Promise<string | undefined> {
-  const result = await CLI.run('command', { args: ['-v', name] })
-  if (result.error !== undefined || result.exitCode !== 0) {
-    const which = await CLI.run('which', { args: [name] })
-    const path = which.stdout.trim()
-    return which.error === undefined && which.exitCode === 0 && path !== '' ? path : undefined
-  }
-  const path = result.stdout.trim()
-  return path === '' ? undefined : path
 }
 
 async function readToolVersion(

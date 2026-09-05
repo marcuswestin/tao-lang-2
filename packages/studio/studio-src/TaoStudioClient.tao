@@ -363,6 +363,7 @@ view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, 
       StudioInspectorLayout(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, CanUndo: InspectorCanUndo, Apply: ApplyInspector, Undo: UndoInspector)
       StudioInspectorStyle(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
       StudioInspectorData(Inspection: InspectorInspection, Selection: InspectorSelection, ActiveCellId: ActiveCellId, ActiveCellRevision: CellRevision, ActiveScenarioId: ActiveScenarioId)
+      StudioInspectorText(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
       StudioInspectorActions(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
 }  }
 
@@ -597,6 +598,34 @@ view StudioInspectorData(Inspection text, Selection text, ActiveCellId text, Act
          Text(Line)
 }  }  }
 
+// The Text section is canvas mode's binding surface: a Text leaf's literal can be edited, or the leaf
+// pointed at any parameter, loop item, local value, or entity field visible where it renders.
+view StudioInspectorText(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Apply action(text, boolean)) {
+   state Draft = StudioInspectorTextLiteral(Inspection)
+   action ChangeDraft(Value text) {
+      set Draft = Value
+   }
+   action SetText() {
+      do Apply(StudioInspectorSetTextAction(Selection: Selection, Content: Draft), false)
+   }
+   render StudioInspectorSection("Text") {
+      Text(StudioInspectorTextStatus(Inspection: Inspection, Selection: Selection))
+      when StudioInspectorTextAvailable(Inspection: Inspection, Selection: Selection) {
+         false -> { }
+         otherwise -> {
+            TextInput(Value: Draft, Change: ChangeDraft, Submit: SetText, Label: "Text content")
+            StudioButton(Label: "Set text", Press: SetText, Disabled: not StudioInspectorTextActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy), Variant: "primary")
+            loop StudioInspectorTextCandidates(Inspection) / Expression {
+               StudioInspectorTextBinding(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, Expression: Expression, Apply: Apply)
+}  }  }  }  }
+
+view StudioInspectorTextBinding(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Expression text, Apply action(text, boolean)) {
+   action Bind() {
+      do Apply(StudioInspectorBindTextAction(Selection: Selection, Expression: Expression), false)
+   }
+   render StudioButton(Label: StudioInspectorTextBindingLabel(Inspection: Inspection, Expression: Expression), Press: Bind, Disabled: not StudioInspectorTextActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy), Variant: "secondary")
+}
+
 view StudioInspectorActions(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Apply action(text, boolean)) {
    render StudioInspectorSection("Actions") {
       when StudioInspectorReady(Inspection: Inspection, Selection: Selection) {
@@ -723,6 +752,38 @@ function StudioInspectorStyleNotes(Inspection text) returns list of text {
 
 function StudioInspectorDataLines(Inspection text, Selection text, ActiveCellId text, ActiveCellRevision number, ActiveScenarioId text) returns list of text {
    return StudioInspectorDataLines(Inspection: Inspection, Selection: Selection, ActiveCellId: ActiveCellId, ActiveCellRevision: ActiveCellRevision, ActiveScenarioId: ActiveScenarioId) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextAvailable(Inspection text, Selection text) returns boolean {
+   return StudioInspectorTextAvailable(Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextStatus(Inspection text, Selection text) returns text {
+   return StudioInspectorTextStatus(Inspection: Inspection, Selection: Selection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextLiteral(Inspection text) returns text {
+   return StudioInspectorTextLiteral(Inspection: Inspection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextCandidates(Inspection text) returns list of text {
+   return StudioInspectorTextCandidates(Inspection: Inspection) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextBindingLabel(Inspection text, Expression text) returns text {
+   return StudioInspectorTextBindingLabel(Inspection: Inspection, Expression: Expression) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorTextActionValid(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean) returns boolean {
+   return StudioInspectorTextActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorSetTextAction(Selection text, Content text) returns text {
+   return StudioInspectorSetTextAction(Selection: Selection, Content: Content) from ./TaoStudioProductHost.tsx
+}
+
+function StudioInspectorBindTextAction(Selection text, Expression text) returns text {
+   return StudioInspectorBindTextAction(Selection: Selection, Expression: Expression) from ./TaoStudioProductHost.tsx
 }
 
 function StudioInspectorActionIds(Inspection text, Selection text) returns list of text {

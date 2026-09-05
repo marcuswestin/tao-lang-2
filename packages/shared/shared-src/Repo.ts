@@ -6,13 +6,13 @@ import { runtimeProcess } from './Platform'
 const rootByCwd = new Map<string, string>()
 
 /** FilesUnderOptions configures repo-aware file discovery. */
-export type FilesUnderOptions = {
+type FilesUnderOptions = {
   excludeDirectoryNames?: readonly string[]
   extensions?: readonly string[]
 }
 
 /** DirectoriesUnderOptions configures repo-aware directory discovery. */
-export type DirectoriesUnderOptions = {
+type DirectoriesUnderOptions = {
   namePrefix?: string
 }
 

@@ -1,13 +1,14 @@
-import { Assert, Errors } from '@shared/core'
+import { Assert, Errors, Json } from '@shared/core'
 import { EditorView } from 'codemirror'
 import type { StudioDraftFile } from '../StudioDraftSync'
 import { StudioInspector, type StudioInspectorSelection } from '../StudioInspector'
-import {
-  type StudioCellEnvironment,
-  type StudioCellIdentity,
-  type StudioParameterSchema,
-  type StudioPreviewCell,
-  type StudioPreviewManifestV2,
+import { cellIdentity } from '../StudioPreviewCell'
+import type {
+  StudioCellEnvironment,
+  StudioCellIdentity,
+  StudioParameterSchema,
+  StudioPreviewCell,
+  StudioPreviewManifestV2,
 } from '../StudioPreviewManifest'
 import type {
   StudioSketchFlowActionRequest,
@@ -55,17 +56,19 @@ import {
   type StudioSketchViewFlowActionRequest,
 } from './StudioSketchView'
 
-export type StudioMatrixCell<Item> = {
+type StudioMatrixCell<Item> = {
   id: string
   item: Item
 }
 
-export type StudioMatrixGroup<Item> = {
+type StudioMatrixGroup<Item> = {
   cells: readonly StudioMatrixCell<Item>[]
   id: string
   label: string
   sketchSourceVersion?: string
   sketchView?: string
+  /** The one view every scenario in the group focuses, when the group is a focused-view group. */
+  subjectView?: string
 }
 
 export type StudioMatrixGroupLayout = {
@@ -90,6 +93,26 @@ export const StudioMatrixLayout = {
       groups.set(id, group)
     }
     return [...groups.values()]
+  },
+  /** subjectView names the view a scenario group focuses when every entry renders that same view. */
+  subjectView(
+    manifest: Pick<StudioPreviewManifestV2, 'scenarios' | 'subjects'>,
+    groupId: string,
+  ): string | undefined {
+    const subjects = new Map(manifest.subjects.map(subject => [subject.subjectId, subject]))
+    const viewNames = new Set(
+      manifest.scenarios
+        .filter(scenario => StudioScenarioControls.groupId(scenario.source.path, scenario.group) === groupId)
+        .map(scenario => {
+          const subject = subjects.get(scenario.subjectId)
+          return subject?.kind === 'view' ? subject.viewName : undefined
+        }),
+    )
+    return viewNames.size === 1 ? [...viewNames][0] : undefined
+  },
+  /** focusable says whether canvas mode can focus a view: some group renders that view alone. */
+  focusable(groups: readonly Pick<StudioMatrixGroup<unknown>, 'subjectView'>[], viewName: string): boolean {
+    return groups.some(group => group.subjectView === viewName)
   },
   reconcile(previous: readonly string[], next: readonly string[]): {
     added: readonly string[]
@@ -172,6 +195,12 @@ export const StudioMatrixView = {
   },
   reconcile: reconcileMatrix,
   renderSketches: renderMatrixSketches,
+  /** focusView enters or leaves canvas mode for one view; `exit` runs when the bar's Back is pressed. */
+  focusView: focusCanvasView,
+  /** focusedView reports the view canvas mode currently shows alone, if any. */
+  focusedView(parent: HTMLElement): string | undefined {
+    return canvasFocus.get(parent)
+  },
 } as const
 
 export type StudioReviewCellMetadata = Readonly<{
@@ -624,6 +653,11 @@ function reconcileMatrix<Item>(
     const row = rows.get(group.id) ?? document.createElement('section')
     row.className = 'studio-preview-group'
     row.dataset['taoStudioGroup'] = group.id
+    if (group.subjectView === undefined) {
+      delete row.dataset['taoStudioGroupView']
+    } else {
+      row.dataset['taoStudioGroupView'] = group.subjectView
+    }
     const heading = row.querySelector<HTMLElement>(':scope > .studio-preview-group-label')
       ?? document.createElement('h2')
     heading.className = 'studio-preview-group-label'
@@ -667,6 +701,58 @@ function reconcileMatrix<Item>(
   if (!parent.contains(canvas)) {
     parent.replaceChildren(canvas)
   }
+  applyCanvasFocus(parent)
+}
+
+const canvasFocus = new WeakMap<HTMLElement, string>()
+
+/**
+ * Canvas mode shows one view alone: every scenario group that does not focus that view is hidden,
+ * and a bar above the grid names the view and offers the way back. Cells stay mounted, so the app's
+ * own previews keep their state while the person works on the one definition.
+ */
+function focusCanvasView(parent: HTMLElement, viewName: string | undefined, exit: () => void): void {
+  if (viewName === undefined) {
+    canvasFocus.delete(parent)
+  } else {
+    canvasFocus.set(parent, viewName)
+  }
+  parent.dataset['taoStudioCanvasExit'] = 'true'
+  canvasExits.set(parent, exit)
+  applyCanvasFocus(parent)
+}
+
+const canvasExits = new WeakMap<HTMLElement, () => void>()
+
+function applyCanvasFocus(parent: HTMLElement): void {
+  const focused = canvasFocus.get(parent)
+  const document = parent.ownerDocument
+  const canvas = parent.querySelector<HTMLElement>(':scope > .studio-preview-grid')
+  if (canvas === null) {
+    return
+  }
+  for (const row of canvas.querySelectorAll<HTMLElement>(':scope > [data-tao-studio-group]')) {
+    row.hidden = focused !== undefined && row.dataset['taoStudioGroupView'] !== focused
+  }
+  const existing = canvas.querySelector<HTMLElement>(':scope > .studio-canvas-bar')
+  if (focused === undefined) {
+    existing?.remove()
+    delete parent.dataset['taoStudioCanvasFocus']
+    return
+  }
+  parent.dataset['taoStudioCanvasFocus'] = focused
+  const bar = existing ?? document.createElement('div')
+  bar.className = 'studio-canvas-bar'
+  bar.dataset['taoStudioCanvasBar'] = focused
+  const label = bar.querySelector<HTMLElement>(':scope > span') ?? document.createElement('span')
+  label.textContent = `Editing ${focused} on its own. Changes land in that one view definition.`
+  const back = bar.querySelector<HTMLButtonElement>(':scope > button') ?? document.createElement('button')
+  back.type = 'button'
+  back.textContent = 'Back to app'
+  back.dataset['taoStudioCanvasBack'] = 'true'
+  back.onclick = () => canvasExits.get(parent)?.()
+  bar.replaceChildren(label, back)
+  canvas.prepend(bar)
 }
 
 /** Moves keyed matrix nodes in place so retained preview iframes keep their browsing contexts. */
@@ -824,7 +910,7 @@ export type StudioRuntimeDataTable = Readonly<{
 export const StudioRuntimeData = {
   tables(capture: StudioRuntimeCaptureArtifact | undefined): readonly StudioRuntimeDataTable[] {
     const value = capture?.domains.find(domain => domain.domain === 'data' && domain.version === 1)?.value
-    if (!isRecord(value) || !Array.isArray(value['entries'])) {
+    if (!Json.isRecord(value) || !Array.isArray(value['entries'])) {
       return []
     }
     return value['entries'].flatMap(entry => runtimeDataEntryTables(entry))
@@ -1080,6 +1166,10 @@ function connectionGroups(
     }),
     id: group.id,
     label: group.label,
+    ...(() => {
+      const subjectView = StudioMatrixLayout.subjectView(manifest, group.id)
+      return subjectView === undefined ? {} : { subjectView }
+    })(),
     ...(() => {
       if (group.label !== 'sketch') {
         return {}
@@ -1403,7 +1493,7 @@ function renderCellPreview(
     void navigator.clipboard.readText().then(replayText).catch(error => {
       pasteReplay.disabled = false
       status.dataset['state'] = 'error'
-      status.textContent = error instanceof Error ? error.message : String(error)
+      status.textContent = Errors.messageOf(error)
     })
   })
   replayFailure.addEventListener('click', () => {
@@ -1422,7 +1512,7 @@ function renderCellPreview(
     void connection.replayRuntimeCapture?.(replay.value).catch(error => {
       replayFailure.disabled = false
       status.dataset['state'] = 'error'
-      status.textContent = error instanceof Error ? error.message : String(error)
+      status.textContent = Errors.messageOf(error)
     })
   })
   replayFile.addEventListener('change', () => {
@@ -1436,7 +1526,7 @@ function renderCellPreview(
     void file.text().then(replayText).catch(error => {
       loadReplay.disabled = false
       status.dataset['state'] = 'error'
-      status.textContent = error instanceof Error ? error.message : String(error)
+      status.textContent = Errors.messageOf(error)
     })
   })
 
@@ -1470,7 +1560,7 @@ function renderCellPreview(
       } catch (error) {
         apply.disabled = false
         status.dataset['state'] = 'error'
-        status.textContent = error instanceof Error ? error.message : String(error)
+        status.textContent = Errors.messageOf(error)
       }
     })()
   })
@@ -1506,7 +1596,7 @@ function renderCellPreview(
       error => {
         promote.disabled = false
         status.dataset['state'] = 'error'
-        status.textContent = error instanceof Error ? error.message : String(error)
+        status.textContent = Errors.messageOf(error)
       },
     )
   })
@@ -1581,7 +1671,7 @@ function renderCellPreview(
       connection.generation = undefined
       generate.disabled = false
       status.dataset['state'] = 'error'
-      status.textContent = error instanceof Error ? error.message : String(error)
+      status.textContent = Errors.messageOf(error)
     })
   })
   connection.captureFixture = fixtureName =>
@@ -1631,7 +1721,7 @@ function renderCellPreview(
     }, error => {
       capture.disabled = false
       status.dataset['state'] = 'error'
-      status.textContent = error instanceof Error ? error.message : String(error)
+      status.textContent = Errors.messageOf(error)
     })
   })
 
@@ -1671,7 +1761,7 @@ async function configureGenerationAvailability(button: HTMLButtonElement): Promi
   } catch (error) {
     button.textContent = 'AI unavailable'
     button.disabled = true
-    button.title = error instanceof Error ? error.message : String(error)
+    button.title = Errors.messageOf(error)
   }
 }
 
@@ -1709,7 +1799,7 @@ function readScenarioDraft(
       viewport: readViewport(),
     })
   } catch (error) {
-    return { issues: [error instanceof Error ? error.message : String(error)], ok: false }
+    return { issues: [Errors.messageOf(error)], ok: false }
   }
 }
 
@@ -2111,7 +2201,10 @@ function runtimeCaptureEnvironment(capture: StudioRuntimeCaptureArtifact): Studi
 }
 
 function isStudioCellEnvironment(value: unknown): value is StudioCellEnvironment {
-  if (!isRecord(value) || !isRecord(value['network']) || !isRecord(value['scheme']) || !isRecord(value['viewport'])) {
+  if (
+    !Json.isRecord(value) || !Json.isRecord(value['network']) || !Json.isRecord(value['scheme'])
+    || !Json.isRecord(value['viewport'])
+  ) {
     return false
   }
   const network = value['network']
@@ -2122,7 +2215,7 @@ function isStudioCellEnvironment(value: unknown): value is StudioCellEnvironment
   return Number.isSafeInteger(network['latencyMs'])
     && Number(network['latencyMs']) >= 0
     && (outcome === 'error' || outcome === 'normal' || outcome === 'offline')
-    && (outcome === 'error' ? isRecord(error) && typeof error['message'] === 'string' : error === undefined)
+    && (outcome === 'error' ? Json.isRecord(error) && typeof error['message'] === 'string' : error === undefined)
     && isStudioSchemeEnvironment(scheme)
     && typeof viewport['width'] === 'number'
     && Number.isFinite(viewport['width'])
@@ -2134,7 +2227,7 @@ function isStudioCellEnvironment(value: unknown): value is StudioCellEnvironment
 }
 
 function isStudioSchemeEnvironment(value: unknown): value is StudioCellEnvironment['scheme'] {
-  if (!isRecord(value)) {
+  if (!Json.isRecord(value)) {
     return false
   }
   const capability = value['capability']
@@ -2150,10 +2243,6 @@ function isStudioSchemeEnvironment(value: unknown): value is StudioCellEnvironme
     && !(source === 'scenario' && requested === 'system')
     && !(source === 'native-fixed' && capability !== 'fixed-light-native')
     && !(capability === 'fixed-light-native' && (resolved !== 'light' || source !== 'native-fixed'))
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function showRuntimeFailure(
@@ -2188,7 +2277,7 @@ function showRuntimeFailure(
     void openSource().catch(error => {
       source.disabled = false
       status.dataset['state'] = 'error'
-      status.textContent = error instanceof Error ? error.message : String(error)
+      status.textContent = Errors.messageOf(error)
     })
   })
   actions.append(source, status)
@@ -2494,13 +2583,13 @@ export function requestRuntimeCapture(
 }
 
 function runtimeDataEntryTables(value: StudioJsonValue): readonly StudioRuntimeDataTable[] {
-  if (!isRecord(value) || typeof value['key'] !== 'string' || typeof value['snapshot'] !== 'string') {
+  if (!Json.isRecord(value) || typeof value['key'] !== 'string' || typeof value['snapshot'] !== 'string') {
     return []
   }
   const key = value['key']
   try {
     const snapshot = JSON.parse(value['snapshot']) as unknown
-    if (!isRecord(snapshot) || !isRecord(snapshot['rows'])) {
+    if (!Json.isRecord(snapshot) || !Json.isRecord(snapshot['rows'])) {
       return []
     }
     return Object.entries(snapshot['rows']).flatMap(([entity, rows]) =>
@@ -2514,7 +2603,7 @@ function runtimeDataEntryTables(value: StudioJsonValue): readonly StudioRuntimeD
 }
 
 function isStudioJsonObject(value: unknown): value is StudioJsonObject {
-  return isRecord(value) && Object.values(value).every(isStudioJsonValue)
+  return Json.isRecord(value) && Object.values(value).every(isStudioJsonValue)
 }
 
 function isStudioJsonValue(value: unknown): value is StudioJsonValue {
@@ -2788,15 +2877,4 @@ export async function refreshCellPreviews(
     preview.refresh = (preview.refresh ?? Promise.resolve()).catch(() => {}).then(refresh)
     await preview.refresh
   }))
-}
-
-function cellIdentity(manifest: StudioPreviewManifestV2, cell: StudioPreviewCell): StudioCellIdentity {
-  return {
-    appName: manifest.project.appName,
-    cellId: cell.cellId,
-    cellRevision: cell.cellRevision,
-    compileRevision: manifest.compileRevision,
-    manifestRevision: manifest.manifestRevision,
-    project: manifest.project.root,
-  }
 }

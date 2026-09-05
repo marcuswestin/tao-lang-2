@@ -1,3 +1,4 @@
+import { Errors } from '@shared/core'
 import type {
   GenerationFailure,
   GenerationInput,
@@ -44,7 +45,7 @@ export async function validateGeneratedDraft<Value extends JsonValue>(
         validationIssues.push(...outcome)
       }
     } catch (error) {
-      validationIssues.push(`${rule.name}: ${errorMessage(error)}`)
+      validationIssues.push(`${rule.name}: ${Errors.messageOf(error)}`)
     }
   }
   if (validationIssues.length > 0) {
@@ -82,7 +83,7 @@ async function gateFinal<Value extends JsonValue>(
     await options.accept(gated.value)
     return gated
   } catch (error) {
-    return failure('accept_failed', `The generated draft could not be accepted: ${errorMessage(error)}`)
+    return failure('accept_failed', `The generated draft could not be accepted: ${Errors.messageOf(error)}`)
   }
 }
 
@@ -92,8 +93,4 @@ function failure(
   issues?: readonly string[],
 ): GenerationFailure {
   return { status: 'failure', code, message, issues }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

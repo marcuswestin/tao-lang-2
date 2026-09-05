@@ -1,7 +1,7 @@
 // Semantic agent proof of concept: drives the on-device Swift helper with the snapshot as its tools.
 // Throwaway orchestration; nothing here is a provider abstraction or an agent runtime.
 import { CLI, Errors, FS, Repo } from '@shared'
-import { fieldStory, inspect, overview, resolveTarget, type SemanticSnapshot, trace } from './SemanticSnapshot'
+import { inspect, overview, resolveTarget, type SemanticSnapshot, trace } from './SemanticSnapshot'
 
 const HELPER_SOURCE = 'packages/studio/studio-src/agent-poc/AgentHelper.swift'
 const HELPER_BINARY = '.artifacts/build/agent-poc/agent-helper'
@@ -10,8 +10,8 @@ const RUN_LOG_DIR = '.artifacts/agent-poc/runs'
 
 type Json = Record<string, unknown>
 
-export type AgentToolSpec = { name: string; description: string; schema: Json }
-export type AgentToolCall = { name: string; arguments: Json; resultChars: number; result: string }
+type AgentToolSpec = { name: string; description: string; schema: Json }
+type AgentToolCall = { name: string; arguments: Json; resultChars: number; result: string }
 export type AgentJob = {
   instructions: string
   prompt: string
@@ -34,7 +34,7 @@ export type AgentRunResult = {
   helper: string
 }
 
-export async function ensureHelper(): Promise<string> {
+async function ensureHelper(): Promise<string> {
   const binary = Repo.resolvePath(HELPER_BINARY)
   const source = Repo.resolvePath(HELPER_SOURCE)
   const moduleCache = Repo.resolvePath(SWIFT_CACHE)
@@ -159,7 +159,7 @@ async function logRun(job: AgentJob, result: AgentRunResult): Promise<void> {
 
 // ---- The review journey --------------------------------------------------------------------------
 
-export const semanticTools = (snapshot: SemanticSnapshot): { tools: AgentToolSpec[]; call: AgentJob['call'] } => ({
+const semanticTools = (snapshot: SemanticSnapshot): { tools: AgentToolSpec[]; call: AgentJob['call'] } => ({
   call: async (name, args) => {
     const target = String(args['target'] ?? '')
     if (name === 'overview') {
@@ -206,7 +206,7 @@ export const semanticTools = (snapshot: SemanticSnapshot): { tools: AgentToolSpe
   ],
 })
 
-export const reviewOutputSchema: Json = {
+const reviewOutputSchema: Json = {
   properties: {
     findings: {
       description: 'Up to three observations about the reviewed view.',
@@ -376,5 +376,3 @@ export async function askQuestion(
     ],
   })
 }
-
-export { fieldStory }

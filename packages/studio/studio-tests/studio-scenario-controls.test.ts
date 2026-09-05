@@ -2,6 +2,7 @@ import { Errors } from '@shared'
 import { Expect, Test } from '@shared/test'
 import { StudioScenarioControls } from '../studio-src/client/StudioScenarioControls'
 import type { StudioCellIdentity, StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
+import { systemLightScheme } from './test-studio-fixtures'
 
 Test('Studio scenario controls serialize exact group, entry, cell, environment, layers, and failure identity', () => {
   const manifest = scenarioManifest()
@@ -232,12 +233,7 @@ function scenarioManifest(): StudioPreviewManifestV2 {
       cellRevision: 3,
       environment: {
         network: { latencyMs: 25, outcome: 'normal' },
-        scheme: {
-          capability: 'reactive-browser' as const,
-          requested: 'system' as const,
-          resolved: 'light' as const,
-          source: 'system' as const,
-        },
+        scheme: systemLightScheme(),
         viewport: { height: 844, presetId: 'phone', width: 390 },
       },
       scenarioId: 'scenario-novel',

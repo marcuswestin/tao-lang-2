@@ -1,8 +1,8 @@
-import { Errors, FS } from '@shared'
+import { Errors, FS, Json, Text } from '@shared'
 
-export type ShipLockStatus = 'accepted' | 'suggested'
+type ShipLockStatus = 'accepted' | 'suggested'
 
-export type ShipLockProvenance = {
+type ShipLockProvenance = {
   at: string
   command: 'tao ship'
   version: number
@@ -66,11 +66,11 @@ export async function readProjectLock(projectRoot: string): Promise<TaoProjectLo
   }
   let parsed: unknown
   try {
-    parsed = JSON.parse(stripJsonc(await FS.readText(path)))
+    parsed = JSON.parse(Text.stripJsonc(await FS.readText(path)))
   } catch (error) {
     Errors.throwUserInput(`Tao project lock at ${path} is not valid JSONC: ${String(error)}`)
   }
-  if (!isObject(parsed) || parsed['schemaVersion'] !== 1) {
+  if (!Json.isRecord(parsed) || parsed['schemaVersion'] !== 1) {
     Errors.throwUserInput(`Tao project lock at ${path} must declare schemaVersion 1.`)
   }
   return parsed as TaoProjectLock
@@ -83,7 +83,7 @@ export async function writeProjectLock(projectRoot: string, lock: TaoProjectLock
   return path
 }
 
-export function shipLockEntry(lock: TaoProjectLock, identity: string): ShipLockEntry | undefined {
+function shipLockEntry(lock: TaoProjectLock, identity: string): ShipLockEntry | undefined {
   return lock.ship?.apps[identity]
 }
 
@@ -124,51 +124,4 @@ export function promoteShipEntry(entry: ShipLockEntry): ShipLockEntry {
   }
   const { suggested, ...rest } = entry
   return { ...rest, accepted: suggested, status: 'accepted' }
-}
-
-function stripJsonc(source: string): string {
-  let result = ''
-  let inString = false
-  let escaped = false
-  for (let index = 0; index < source.length; index += 1) {
-    const current = source[index]!
-    const next = source[index + 1]
-    if (inString) {
-      result += current
-      if (escaped) {
-        escaped = false
-      } else if (current === '\\') {
-        escaped = true
-      } else if (current === '"') {
-        inString = false
-      }
-      continue
-    }
-    if (current === '"') {
-      inString = true
-      result += current
-      continue
-    }
-    if (current === '/' && next === '/') {
-      while (index < source.length && source[index] !== '\n') {
-        index += 1
-      }
-      result += '\n'
-      continue
-    }
-    if (current === '/' && next === '*') {
-      index += 2
-      while (index < source.length && !(source[index] === '*' && source[index + 1] === '/')) {
-        index += 1
-      }
-      index += 1
-      continue
-    }
-    result += current
-  }
-  return result.replace(/,\s*([}\]])/gu, '$1')
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }

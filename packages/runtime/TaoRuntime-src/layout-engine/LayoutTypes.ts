@@ -59,8 +59,7 @@ export type TaoLayoutEntryOfHead<HeadT extends TaoLayoutEntryHead> = Extract<
   TaoLayoutEntry,
   readonly [HeadT, ...unknown[]]
 >
-export type TaoLayoutTermValue = TaoLayoutEntry[number]
-export type TaoLayoutStyleValue = number | string
+type TaoLayoutStyleValue = number | string
 export type TaoResolvedLayoutStyle = Record<string, TaoLayoutStyleValue>
 export type TaoLayout = {
   entries: readonly TaoLayoutEntry[]

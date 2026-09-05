@@ -26,7 +26,7 @@ const RUN_ROOT_NAME = /^run-(\d+)-[0-9a-z]/
 const CATEGORY_NAME = /^[a-z][a-z0-9-]*$/
 
 /** TestRunRootOptions locates the runtime package whose generated run roots are in play. */
-export type TestRunRootOptions = {
+type TestRunRootOptions = {
   runtimePackageRoot?: string
 }
 

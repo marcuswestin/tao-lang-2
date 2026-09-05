@@ -1,6 +1,6 @@
 import { CLI, Platform, Repo } from '@shared'
 
-export type CapabilityStatus = 'available' | 'denied' | 'unavailable'
+type CapabilityStatus = 'available' | 'denied' | 'unavailable'
 
 export type CapabilityCheck = {
   command: string

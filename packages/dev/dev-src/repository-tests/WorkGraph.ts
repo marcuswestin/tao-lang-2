@@ -1,4 +1,4 @@
-import { CLI, FS, Platform } from '@shared'
+import { CLI, Errors, FS, Platform } from '@shared'
 import { OutputText } from '../cli/OutputText'
 
 /**
@@ -373,7 +373,7 @@ async function executeNode(
     state.exitCode = outcome.error === undefined ? outcome.exitCode : null
     state.status = outcome.error === undefined && outcome.exitCode === 0 ? 'passed' : 'failed'
     if (outcome.error !== undefined) {
-      const message = errorMessage(outcome.error)
+      const message = Errors.messageOf(outcome.error)
       state.failure = { kind: 'process-error', message }
       appendOutput(state, message)
     } else if (outcome.exitCode !== 0) {
@@ -383,7 +383,7 @@ async function executeNode(
     state.elapsedMs = elapsedMs(state)
     state.exitCode = null
     state.status = 'failed'
-    const message = errorMessage(error)
+    const message = Errors.messageOf(error)
     state.failure = { kind: 'process-error', message }
     appendOutput(state, message)
   }
@@ -588,10 +588,6 @@ function appendOutput(state: WorkState, output: string): void {
 
 function elapsedMs(state: WorkState): number {
   return state.startedAt === undefined ? 0 : Date.now() - state.startedAt
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function formatTimeout(timeoutMs: number): string {

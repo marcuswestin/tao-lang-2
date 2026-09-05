@@ -4,5 +4,3 @@ import { FS } from '@shared'
 export const Stdlib = {
   rootPath: process.env['TAO_STDLIB_ROOT'] ?? FS.resolvePath('..', import.meta.dirname),
 } as const
-
-export default Stdlib
