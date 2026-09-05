@@ -7,12 +7,20 @@ import type {
   StudioStyleEntry,
   StudioStyleLandingScope,
 } from '@source-actions'
-import { CodeEditor, type CodeEditorDrop, type CodeEditorLsp } from '@tao/code-editor'
+import {
+  CodeEditor,
+  type CodeEditorDrop,
+  type CodeEditorLensFacet,
+  type CodeEditorLensMap,
+  type CodeEditorLensProps,
+  type CodeEditorLsp,
+} from '@tao/code-editor'
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { StudioApiClient } from './client/StudioApiClient'
 import { mountStudio } from './client/StudioApp'
 import { fileUri, sanitizeLspHtml, StudioEditorInsertion } from './client/StudioEditor'
+import { StudioLens, type StudioLensFacet } from './client/StudioLens'
 import {
   type StudioTaoDrawerPanelModel,
   StudioTaoPanelProjection,
@@ -716,8 +724,110 @@ const studioViewportPresets: Readonly<Record<string, Readonly<{ height: number; 
   tablet: { height: 1_180, width: 820 },
 }
 
+// The editor asks for colors and for the lens map in the same tick, so one request serves both.
+let lastAnalysis: { content: string; result: ReturnType<typeof StudioApiClient.highlight> } | undefined
+
+function analyzeTaoSource(content: string): ReturnType<typeof StudioApiClient.highlight> {
+  if (lastAnalysis?.content !== content) {
+    lastAnalysis = { content, result: StudioApiClient.highlight(content) }
+  }
+  return lastAnalysis.result
+}
+
 async function highlightTaoSource(content: string) {
-  return (await StudioApiClient.highlight(content)).tokens
+  return (await analyzeTaoSource(content)).tokens
+}
+
+async function lensTaoSource(content: string): Promise<CodeEditorLensMap> {
+  return (await analyzeTaoSource(content)).lens ?? { complete: false, nodes: [] }
+}
+
+const studioLensEditorFacets: readonly CodeEditorLensFacet[] = StudioLens.facets.map(facet => ({
+  glyph: facet.glyph,
+  label: facet.label,
+  name: facet.name,
+}))
+
+function studioLensStorage(): Storage | undefined {
+  try {
+    return typeof localStorage === 'undefined' ? undefined : localStorage
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * isStudioLensCycleShortcut recognises Shift+Alt+L, which steps through the lens presets. The physical
+ * key is checked first because Option+Shift+L types a different character on macOS; the letter is the
+ * fallback for synthetic events that carry no key code.
+ */
+export function isStudioLensCycleShortcut(
+  event: Pick<KeyboardEvent, 'altKey' | 'code' | 'ctrlKey' | 'key' | 'metaKey' | 'shiftKey'>,
+): boolean {
+  return event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey
+    && (event.code === 'KeyL' || event.key.toLowerCase() === 'l')
+}
+
+export type StudioLensBarProps = Readonly<{
+  active: readonly StudioLensFacet[]
+  onChange: (active: readonly StudioLensFacet[]) => void
+  onRefold: () => void
+}>
+
+/** StudioLensBar is the editor's lens control: presets for a way of working, facets to fine-tune, and re-fold. */
+export function StudioLensBar(props: StudioLensBarProps): React.ReactElement {
+  const preset = StudioLens.presetFor(props.active)
+  return (
+    <div
+      className="studio-lens-bar"
+      data-testid="studio-lens-bar"
+      data-preset={preset?.id ?? 'custom'}
+      role="toolbar"
+      aria-label="Syntax lens"
+    >
+      <span className="studio-lens-bar-group" role="group" aria-label="Lens presets">
+        {StudioLens.presets.map(candidate => (
+          <button
+            aria-pressed={candidate.id === preset?.id}
+            className="studio-lens-preset"
+            data-testid={`studio-lens-preset-${candidate.id}`}
+            key={candidate.id}
+            onClick={() => props.onChange(candidate.facets)}
+            title={`Show ${candidate.facets.length === 0 ? 'declaration heads only' : candidate.facets.join(', ')}`}
+            type="button"
+          >
+            {candidate.label}
+          </button>
+        ))}
+      </span>
+      <span className="studio-lens-bar-divider" aria-hidden="true" />
+      <span className="studio-lens-bar-group" role="group" aria-label="Lens facets">
+        {StudioLens.facets.map(facet => (
+          <button
+            aria-pressed={props.active.includes(facet.name)}
+            className="studio-lens-facet"
+            data-testid={`studio-lens-facet-${facet.name}`}
+            key={facet.name}
+            onClick={() => props.onChange(StudioLens.toggle(props.active, facet.name))}
+            title={facet.hint}
+            type="button"
+          >
+            <span className="studio-lens-glyph" aria-hidden="true">{facet.glyph}</span>
+            {facet.label}
+          </button>
+        ))}
+      </span>
+      <button
+        className="studio-lens-refold"
+        data-testid="studio-lens-refold"
+        onClick={props.onRefold}
+        title="Fold everything peeked open again (Shift+Alt+L cycles presets)"
+        type="button"
+      >
+        Re-fold
+      </button>
+    </div>
+  )
 }
 
 /** StudioEditorSurface is the Tao-mounted CodeEditor boundary over the host's revisioned active tab. */
@@ -729,6 +839,28 @@ export function StudioEditorSurface(): React.ReactElement {
   )
   const file = state.activeFile
   const lsp = useStudioEditorLsp(file?.path, state.projectRoot)
+  // The lens is one global preference: it follows the person across files and projects.
+  const [lensActive, setLensActive] = React.useState<readonly StudioLensFacet[]>(() =>
+    StudioLens.load(studioLensStorage())
+  )
+  const [lensRefold, setLensRefold] = React.useState(0)
+  const changeLens = React.useCallback((next: readonly StudioLensFacet[]) => {
+    setLensActive(next)
+    StudioLens.save(studioLensStorage(), next)
+  }, [])
+  const refoldLens = React.useCallback(() => setLensRefold(revision => revision + 1), [])
+  const lensProps = React.useMemo<CodeEditorLensProps>(() => ({
+    active: lensActive,
+    classify: lensTaoSource,
+    facets: studioLensEditorFacets,
+    refoldRevision: lensRefold,
+  }), [lensActive, lensRefold])
+  const onLensKeyDown = React.useCallback((event: React.KeyboardEvent) => {
+    if (isStudioLensCycleShortcut(event)) {
+      event.preventDefault()
+      changeLens(StudioLens.cycle(lensActive))
+    }
+  }, [changeLens, lensActive])
   const change = React.useMemo(() =>
     ({
       invoke(value: TR.Value<string>) {
@@ -769,14 +901,17 @@ export function StudioEditorSurface(): React.ReactElement {
       data-active-scenario={state.activeCell?.scenarioId}
       data-selected-render={state.selectedRender?.renderId}
       data-state-revision={state.revision}
+      onKeyDown={onLensKeyDown}
       ref={wrapper}
     >
+      <StudioLensBar active={lensActive} onChange={changeLens} onRefold={refoldLens} />
       <CodeEditor
         Change={change}
         Content={file.content}
         Drop={paletteDrop}
         Highlight={highlightTaoSource}
         Layout={{ style: editorSurfaceStyle }}
+        Lens={lensProps}
         Lsp={lsp}
         Selection={{ anchor: file.selectionAnchor, head: file.selectionHead }}
         SelectionChange={selection => requestStudioProductHostSelectActiveFile(selection.anchor, selection.head)}

@@ -31,6 +31,7 @@ let highlighterPromise: Promise<HighlighterCore> | undefined
 /** StudioHighlight applies the IDE's generated TextMate grammar through server-side Shiki. */
 export const StudioHighlight = {
   highlight,
+  request: highlightRequest,
   testing: {
     tokenize,
   },

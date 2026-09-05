@@ -630,10 +630,21 @@ kbd {
 .studio-editor { background: var(--studio-bg); min-height: 0; overflow: hidden; }
 .studio-editor .cm-editor { background: var(--studio-bg); height: 100%; }
 .studio-editor[data-tao-editor-mounted="true"] > .cm-editor { display: none !important; }
-.studio-editor-tao-surface { height: 100%; min-height: 0; min-width: 0; }
-.studio-editor-tao-surface > [data-testid="studio-active-editor"] { height: 100%; }
+.studio-editor-tao-surface { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; }
+.studio-editor-tao-surface > [data-testid="studio-active-editor"] { flex: 1 1 auto; min-height: 0; }
 .studio-editor-tao-surface > [data-testid="studio-active-editor"] > div:first-child { height: 100%; }
 .studio-editor .cm-scroller { font: 12.5px/1.6 var(--studio-mono); }
+/* The syntax lens bar sits above the editor: fold presets and facets as quiet toggles. */
+.studio-lens-bar { align-items: center; background: var(--studio-panel); border-bottom: 1px solid var(--studio-stroke); display: flex; flex: 0 0 auto; flex-wrap: wrap; font-size: 11.5px; gap: 4px; padding: 4px 8px; }
+.studio-lens-bar-group { align-items: center; display: flex; gap: 2px; }
+.studio-lens-bar-divider { background: var(--studio-stroke-strong); height: 16px; margin: 0 6px; width: 1px; }
+.studio-lens-preset, .studio-lens-facet, .studio-lens-refold { background: transparent; border: 1px solid transparent; border-radius: var(--studio-radius); color: var(--studio-text-muted); cursor: pointer; font: inherit; font-weight: 500; padding: 2px 7px; }
+.studio-lens-preset:hover, .studio-lens-facet:hover, .studio-lens-refold:hover { background: var(--studio-surface-hover); color: var(--studio-text); }
+.studio-lens-preset[aria-pressed="true"] { background: var(--studio-surface-active); box-shadow: 0 0 0 1px var(--studio-stroke-strong); color: var(--studio-text); }
+.studio-lens-facet[aria-pressed="true"] { background: var(--studio-surface-active); color: var(--studio-text); }
+.studio-lens-facet[aria-pressed="false"] .studio-lens-glyph { opacity: .45; }
+.studio-lens-glyph { display: inline-block; margin-right: 4px; }
+.studio-lens-refold { margin-left: auto; }
 .studio-editor .cm-gutters { background: var(--studio-bg); border-right: 1px solid var(--studio-stroke); color: var(--studio-text-dim); }
 .studio-editor .cm-activeLine, .studio-editor .cm-activeLineGutter { background: rgba(255, 255, 255, .04); }
 .studio-editor .cm-activeLineGutter { color: var(--studio-text-muted); }

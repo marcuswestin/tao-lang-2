@@ -737,7 +737,29 @@ an entry here may link one when the developer workflow is also affected.
   Undo sequence in ten consecutive normal-terminal runs before it rejoins automatic full verification.
 - **Source:** 2026-09-04 normal-terminal merge verification and explicit quarantine decision.
 
-### DEVENV-043 — A fresh linked worktree cannot launch Studio until the parser is generated
+### DEVENV-043 — Changed-files lane fails every package with no affected tests
+
+- **Status:** Candidate
+- **Area:** Verification lanes
+- **Impact:** `just test-changed`, the documented ordinary iteration lane, reports red whenever a change
+  touches a subset of packages, so its summary cannot be read at a glance and the real failures hide
+  among sixteen spurious ones.
+- **Evidence:** With 19 changed files in `parser`, `code-editor`, and `studio`, every other bun suite
+  printed `--changed: 19 changed files, but no test files are affected` and `Ran 0 tests`, exited 0
+  under `--pass-with-no-tests`, wrote no junit file, and the runner then recorded `test result report
+  unavailable` and turned the pass into a failure (`.artifacts/logs/dev-test/2026-09-05T01-34-12-827Z-*`).
+  `./agent test-retry` after a contended `_test` timeout took the same path: the dev suite ran with
+  `--changed`, found no affected test files, ran 0 tests, and reported the retry as failed, so it could
+  not confirm the timeout; `./agent test-file packages/dev/dev-tests/gate-runner.test.ts` passed 19 of 19.
+- **Workaround:** Run `just test-file <path>` per touched suite, and `./agent verify` for the full run.
+- **Proposed change:** Treat a zero-test run under `--changed` as passed with no observations when the
+  process exited 0, or drop suites whose packages have no changed files before spawning them.
+- **Dependencies:** None.
+- **Acceptance:** A change confined to one package leaves `just test-changed` green with only that
+  package's suites reported.
+- **Source:** 2026-09-04 Studio syntax lens work.
+
+### DEVENV-044 — A fresh linked worktree cannot launch Studio until the parser is generated
 
 - **Status:** Candidate
 - **Area:** Worktree setup
@@ -755,21 +777,3 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** A new linked worktree reaches a ready Studio session after `./agent setup` and
   `./dev studio Apps/HNReader` alone.
 - **Source:** 2026-09-04 Studio visual design work.
-
-### DEVENV-044 — `test-retry` selects changed files instead of the files that were not green
-
-- **Status:** Candidate
-- **Area:** Verification retry
-- **Impact:** The command the summary points at after a contended timeout cannot confirm the timeout: it
-  runs zero tests and reports a failure, so the person still has to find and run the file by hand.
-- **Evidence:** After `./agent verify` reported `dev: timed out under machine contention; exclusive
-  confirmation was not obtained`, `./agent test-retry` ran the dev suite with `--changed`, printed
-  `13 changed files, but no test files are affected`, ran 0 tests, and exited 1. Running
-  `./agent test-file packages/dev/dev-tests/gate-runner.test.ts` passed 19 of 19 in 281ms.
-- **Workaround:** Run the timed-out file with `./agent test-file <path>`.
-- **Proposed change:** Have the retry lane pass the exact files recorded as not green to the suite
-  runner, and treat a selection that matches no test file as a selection error rather than a run.
-- **Dependencies:** None.
-- **Acceptance:** After a contended timeout, `./agent test-retry` runs the timed-out files exclusively
-  and reports their result.
-- **Source:** 2026-09-04 Studio visual design merge preparation.
