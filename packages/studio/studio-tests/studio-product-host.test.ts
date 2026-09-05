@@ -77,7 +77,17 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).not.toContain('StackNav')
   Expect(source).not.toContain('Title "Tao Studio"')
   Expect(source).not.toContain('FormButton(')
-  Expect(source).toContain('use Button, Checkbox, Col, Picker, Text, TextInput from @tao/ui')
+  Expect(source).toContain('use Checkbox, Col, Text, TextInput from @tao/ui')
+  Expect(source).not.toMatch(/\bButton\(/)
+  Expect(source).not.toMatch(/\bPicker\(/)
+  Expect(source).toContain(
+    'view StudioButton(Label text, Press action(), Disabled boolean, Variant text) from ./TaoStudioProductHost.tsx',
+  )
+  Expect(source).toContain(
+    'view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from ./TaoStudioProductHost.tsx',
+  )
+  Expect(source).toContain('@environment StudioEnvironmentPanel(')
+  Expect(source).toContain('view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPresetId text')
   Expect(source).toContain('view StudioScenarioEnvironment(')
   Expect(source).not.toContain('view StudioScenarioEnvironmentControls(')
   Expect(source).toContain('state Drafts = StudioScenarioArgumentDrafts(State)')
@@ -110,7 +120,7 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).toContain('view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text')
   Expect(source).toContain('FilePath: ActiveFilePath')
   Expect(source).toContain(
-    'accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @editor, @inspector',
+    'accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @environment, @editor, @inspector',
   )
   Expect(source).toContain(
     '@scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")',
@@ -170,7 +180,8 @@ Test('Tao Studio foreign file views render compact tree rows with contextual edi
   Expect(property(surface, 'data-studio-files-surface')).toBe('compact')
   Expect(textContent(surface)).toBe('Project tree')
   Expect(property(create, 'data-studio-file-create')).toBe('compact')
-  Expect(property(elementWith(create, 'aria-label', 'New Tao file path'), 'style')).toMatchObject({ height: 24 })
+  Expect(property(elementWith(create, 'aria-label', 'New Tao file path'), 'className')).toBe('studio-input')
+  Expect(property(elementWith(create, 'aria-label', 'Create file'), 'className')).toBe('studio-icon-button')
   Expect(property(elementWith(folder, 'aria-expanded', true), 'aria-expanded')).toBe(true)
   Expect(textContent(folder)).toContain('Nested file')
   Expect(property(compact, 'data-studio-tree-file')).toBe('Folder/Roadmap.tao')

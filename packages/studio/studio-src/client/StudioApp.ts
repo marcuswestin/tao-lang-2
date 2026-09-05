@@ -623,7 +623,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     view.betaShip.addEventListener('click', betaShipListener)
 
     let chatNames: readonly string[] = []
-    // Both agents share one floating panel; see packages/studio/studio-src/agent-chat/StudioAgentPanel.
+    // Both agents share one rail panel; see packages/studio/studio-src/agent-chat/StudioAgentPanel.
     mountStudioAgentPanel(root, {
       chat: {
         knownNames: () => chatNames,

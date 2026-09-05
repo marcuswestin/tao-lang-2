@@ -2,7 +2,7 @@
 // the live StudioServer datasource. The compiled root owns the Files and editor workbench slots;
 // the host publishes versioned browser-local selection state into the external editor boundary.
 use SlotNav from @tao/nav
-use Button, Checkbox, Col, Picker, Text, TextInput from @tao/ui
+use Checkbox, Col, Text, TextInput from @tao/ui
 
 // File contents remain editor buffers and never appear in Files or any related entity.
 app TaoStudioFiles {
@@ -19,9 +19,9 @@ app TaoStudioFiles {
 }
 
 design StudioDesign {
-   panel #171a20
-   ink #d7dce4
-   line #394251
+   panel #090909
+   ink #f4f4f4
+   line #363636
    sizes {
       controlGap 4.px
    }
@@ -30,8 +30,6 @@ design StudioDesign {
    }
    Text [ink ink]
    TextInput [background panel, border line, ink ink]
-   Button [background panel, border line, ink ink]
-   Picker [background panel, border line, ink ink]
 }
 
 type StudioServer is datasource with {
@@ -352,7 +350,24 @@ view DesignTokensPanel() {
          DesignTokenRow(DesignToken)
 }  }  }
 
-view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, ActiveFileContent text, ActiveFileVersion text, SelectionAnchor number, SelectionHead number, SelectedRenderId text, SelectedRenderPath text, SelectedRenderVersion text, ActiveCellId text, CellRevision number, ActiveScenarioId text, ViewportPresetId text, ViewportWidth number, ViewportHeight number, NetworkOutcome text, NetworkLatencyMs number, NetworkErrorMessage text, NetworkErrorStatus number, SchemeRequested text, SchemeResolved text, SchemeSource text, SchemeCapability text, InspectorBusy boolean, InspectorCanUndo boolean, InspectorInspection text, InspectorSelection text) {
+view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, ActiveFileContent text, ActiveFileVersion text, SelectionAnchor number, SelectionHead number, SelectedRenderId text, SelectedRenderPath text, SelectedRenderVersion text, ActiveCellId text, CellRevision number, ActiveScenarioId text, ViewportWidth number, ViewportHeight number, InspectorBusy boolean, InspectorCanUndo boolean, InspectorInspection text, InspectorSelection text) {
+   action ApplyInspector(Action text, Proposed boolean) {
+      do ApplyInspectorAction(Action, Proposed)
+   }
+   action UndoInspector() {
+      do UndoInspectorAction()
+   }
+   render StudioContextPanelSurface() {
+      StudioContextSummary(FilePath: ActiveFilePath, ScenarioId: ActiveScenarioId, CellId: ActiveCellId, RenderId: SelectedRenderId, ViewportWidth: ViewportWidth, ViewportHeight: ViewportHeight)
+      StudioInspectorSummary(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection)
+      StudioInspectorLayout(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, CanUndo: InspectorCanUndo, Apply: ApplyInspector, Undo: UndoInspector)
+      StudioInspectorStyle(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
+      StudioInspectorData(Inspection: InspectorInspection, Selection: InspectorSelection, ActiveCellId: ActiveCellId, ActiveCellRevision: CellRevision, ActiveScenarioId: ActiveScenarioId)
+      StudioInspectorActions(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
+}  }
+
+// The active cell's environment is edited in one place, the Scenario pane, and this view owns the drafts.
+view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPresetId text, ViewportWidth number, ViewportHeight number, NetworkOutcome text, NetworkLatencyMs number, NetworkErrorMessage text, NetworkErrorStatus number, SchemeRequested text, SchemeResolved text, SchemeSource text, SchemeCapability text) {
    state Preset = ViewportPresetId
    state Width = ViewportWidth
    state Height = ViewportHeight
@@ -406,24 +421,11 @@ view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, 
    action ApplyEnvironment() {
       do ApplyActiveCellEnvironment(CellId: ActiveCellId, CellRevision: CellRevision, Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus)
    }
-   action ApplyInspector(Action text, Proposed boolean) {
-      do ApplyInspectorAction(Action, Proposed)
-   }
-   action UndoInspector() {
-      do UndoInspectorAction()
-   }
-   render StudioContextPanelSurface() {
-      StudioContextSummary(FilePath: ActiveFilePath, ScenarioId: ActiveScenarioId, CellId: ActiveCellId, RenderId: SelectedRenderId, ViewportWidth: ViewportWidth, ViewportHeight: ViewportHeight)
+   render Col() {
       when ActiveCellId {
          empty -> { }
          otherwise -> { StudioScenarioEnvironment(Preset: Preset, Width: Width, Height: Height, Network: Network, Latency: Latency, ErrorMessage: ErrorMessage, ErrorStatus: ErrorStatus, WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, SchemeRequested: SchemeRequested, SchemeResolved: SchemeResolved, SchemeSource: SchemeSource, SchemeCapability: SchemeCapability, ChangePreset: ChangePreset, ChangeWidth: ChangeWidth, ChangeHeight: ChangeHeight, ChangeNetwork: ChangeNetwork, ChangeLatency: ChangeLatency, ChangeErrorMessage: ChangeErrorMessage, ChangeErrorStatus: ChangeErrorStatus, ChangeWidthValid: ChangeWidthValid, ChangeHeightValid: ChangeHeightValid, ChangeLatencyValid: ChangeLatencyValid, ChangeErrorStatusValid: ChangeErrorStatusValid, Apply: ApplyEnvironment) }
-      }
-      StudioInspectorSummary(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection)
-      StudioInspectorLayout(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, CanUndo: InspectorCanUndo, Apply: ApplyInspector, Undo: UndoInspector)
-      StudioInspectorStyle(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
-      StudioInspectorData(Inspection: InspectorInspection, Selection: InspectorSelection, ActiveCellId: ActiveCellId, ActiveCellRevision: CellRevision, ActiveScenarioId: ActiveScenarioId)
-      StudioInspectorActions(CurrentSourceVersion: ActiveFileVersion, Inspection: InspectorInspection, Selection: InspectorSelection, Busy: InspectorBusy, Apply: ApplyInspector)
-}  }
+}  }  }
 
 view StudioContextPanelSurface() accepts content from ./TaoStudioProductHost.tsx
 
@@ -448,30 +450,54 @@ function StudioNetworkShowsError(Network text) returns boolean {
 view StudioScenarioEnvironment(Preset text, Width number, Height number, Network text, Latency number, ErrorMessage text, ErrorStatus number, WidthValid boolean, HeightValid boolean, LatencyValid boolean, ErrorStatusValid boolean, SchemeRequested text, SchemeResolved text, SchemeSource text, SchemeCapability text, ChangePreset action(text), ChangeWidth action(number), ChangeHeight action(number), ChangeNetwork action(text), ChangeLatency action(number), ChangeErrorMessage action(text), ChangeErrorStatus action(number), ChangeWidthValid action(boolean), ChangeHeightValid action(boolean), ChangeLatencyValid action(boolean), ChangeErrorStatusValid action(boolean), Apply action()) {
    action SubmitErrorMessage() { }
    render StudioScenarioControlGroup("Environment") {
-      Picker(Value: Preset, Change: ChangePreset, Options: ["phone", "tablet", "laptop", "custom"], Label: "Device")
-      StudioNumericInput(Label: "Width", Value: Width, Minimum: 1, Maximum: 0, Integer: false, Change: ChangeWidth, ChangeValid: ChangeWidthValid)
-      StudioNumericInput(Label: "Height", Value: Height, Minimum: 1, Maximum: 0, Integer: false, Change: ChangeHeight, ChangeValid: ChangeHeightValid)
-      Picker(Value: Network, Change: ChangeNetwork, Options: ["normal", "offline", "error"], Label: "Network")
+      StudioInspectorField("Device") {
+         StudioSegmented(Value: Preset, Change: ChangePreset, Options: ["phone", "tablet", "laptop", "custom"], Label: "Device")
+      }
+      StudioInspectorRow("Size") {
+         StudioNumericInput(Label: "Width", Value: Width, Minimum: 1, Maximum: 0, Integer: false, Change: ChangeWidth, ChangeValid: ChangeWidthValid)
+         StudioNumericInput(Label: "Height", Value: Height, Minimum: 1, Maximum: 0, Integer: false, Change: ChangeHeight, ChangeValid: ChangeHeightValid)
+      }
+      StudioInspectorField("Network") {
+         StudioSegmented(Value: Network, Change: ChangeNetwork, Options: ["normal", "offline", "error"], Label: "Network")
+      }
       StudioNumericInput(Label: "Latency ms", Value: Latency, Minimum: 0, Maximum: 0, Integer: false, Change: ChangeLatency, ChangeValid: ChangeLatencyValid)
       when StudioNetworkShowsError(Network) {
          true -> {
-            TextInput(Value: ErrorMessage, Change: ChangeErrorMessage, Submit: SubmitErrorMessage, Label: "Error")
+            StudioInspectorField("Error") {
+               TextInput(Value: ErrorMessage, Change: ChangeErrorMessage, Submit: SubmitErrorMessage, Label: "Error")
+            }
             StudioNumericInput(Label: "Status", Value: ErrorStatus, Minimum: 100, Maximum: 599, Integer: true, Change: ChangeErrorStatus, ChangeValid: ChangeErrorStatusValid)
          }
          otherwise -> { }
       }
-      Text("Scheme requested: { SchemeRequested }")
-      Text("Scheme resolved: { SchemeResolved }")
-      Text("Scheme source: { SchemeSource }")
-      Text("Scheme capability: { SchemeCapability }")
-      Button("Apply & remount", Apply, Disabled: not StudioEnvironmentValid(WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, Network: Network, ErrorMessage: ErrorMessage))
-}  }
+      StudioSchemeNote(Requested: SchemeRequested, Resolved: SchemeResolved, Source: SchemeSource, Capability: SchemeCapability)
+      StudioActions() {
+         StudioButton(Label: "Apply & remount", Press: Apply, Disabled: not StudioEnvironmentValid(WidthValid: WidthValid, HeightValid: HeightValid, LatencyValid: LatencyValid, ErrorStatusValid: ErrorStatusValid, Network: Network, ErrorMessage: ErrorMessage), Variant: "primary")
+}  }  }
 
 view StudioScenarioControlGroup(Title text) accepts content from ./TaoStudioProductHost.tsx
 
 view StudioScenarioInspectorLabel(Label text) from ./TaoStudioProductHost.tsx
 
 view StudioNumericInput(Label text, Value number, Minimum number, Maximum number, Integer boolean, Change action(number), ChangeValid action(boolean)) from ./TaoStudioProductHost.tsx
+
+// The workbench controls. Tao owns every value, action, and enabled state; the host renders them on the
+// shared Studio sheet so the Tao-rendered panels and the shell share one vocabulary.
+view StudioButton(Label text, Press action(), Disabled boolean, Variant text) from ./TaoStudioProductHost.tsx
+
+view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from ./TaoStudioProductHost.tsx
+
+view StudioChoice(Value text, Change action(text), Options list of text, Label text) from ./TaoStudioProductHost.tsx
+
+view StudioInspectorRow(Label text) accepts content from ./TaoStudioProductHost.tsx
+
+view StudioActions() accepts content from ./TaoStudioProductHost.tsx
+
+view StudioSchemeNote(Requested text, Resolved text, Source text, Capability text) from ./TaoStudioProductHost.tsx
+
+view StudioScenarioIdentity() accepts content from ./TaoStudioProductHost.tsx
+
+view StudioScenarioSource(Group text, Subject text, Cell text) from ./TaoStudioProductHost.tsx
 
 view StudioInspectorSection(Title text) accepts content from ./TaoStudioProductHost.tsx
 
@@ -503,7 +529,7 @@ view StudioInspectorLayout(CurrentSourceVersion text, Inspection text, Selection
                StudioInspectorLayoutCommand(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId, Apply: Apply)
       }  }  }
       StudioInspectorUndoMarker() {
-         Button("Undo visual edit", Undo, Disabled: not StudioInspectorUndoAvailable(Busy: Busy, CanUndo: CanUndo))
+         StudioButton(Label: "Undo visual edit", Press: Undo, Disabled: not StudioInspectorUndoAvailable(Busy: Busy, CanUndo: CanUndo), Variant: "ghost")
 }  }  }
 
 view StudioInspectorLayoutField(Drafts text, FieldId text, ChangeDrafts action(text)) {
@@ -513,7 +539,7 @@ view StudioInspectorLayoutField(Drafts text, FieldId text, ChangeDrafts action(t
    action Submit() { }
    render StudioInspectorField(StudioInspectorLayoutFieldLabel(FieldId)) {
       when StudioInspectorLayoutFieldUsesPicker(FieldId) {
-         true -> { Picker(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Options: StudioInspectorLayoutFieldOptions(FieldId), Label: StudioInspectorLayoutFieldLabel(FieldId)) }
+         true -> { StudioChoice(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Options: StudioInspectorLayoutFieldOptions(FieldId), Label: StudioInspectorLayoutFieldLabel(FieldId)) }
          otherwise -> { TextInput(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Submit: Submit, Label: StudioInspectorLayoutFieldLabel(FieldId)) }
 }  }  }
 
@@ -521,7 +547,7 @@ view StudioInspectorLayoutCommand(CurrentSourceVersion text, Inspection text, Se
    action Invoke() {
       do Apply(StudioInspectorLayoutAction(Inspection: Inspection, Selection: Selection, Drafts: Drafts, ActionId: ActionId), false)
    }
-   render Button(StudioInspectorLayoutActionLabel(ActionId), Invoke, Disabled: not StudioInspectorLayoutActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId))
+   render StudioButton(Label: StudioInspectorLayoutActionLabel(ActionId), Press: Invoke, Disabled: not StudioInspectorLayoutActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy, ActionId: ActionId), Variant: "secondary")
 }
 
 view StudioInspectorStyle(CurrentSourceVersion text, Inspection text, Selection text, Busy boolean, Apply action(text, boolean)) {
@@ -539,7 +565,7 @@ view StudioInspectorStyle(CurrentSourceVersion text, Inspection text, Selection 
             loop StudioInspectorStyleFieldIds() / FieldId {
                StudioInspectorStyleField(Inspection: Inspection, Drafts: Drafts, FieldId: FieldId, ChangeDrafts: ChangeDrafts)
             }
-            Button("Apply style entry", ApplyStyle, Disabled: not StudioInspectorStyleActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy))
+            StudioButton(Label: "Apply style entry", Press: ApplyStyle, Disabled: not StudioInspectorStyleActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Drafts: Drafts, Busy: Busy), Variant: "primary")
             loop StudioInspectorStylePromotionIds(Inspection) / PromotionId {
                StudioInspectorStylePromotion(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId, Apply: Apply)
             }
@@ -554,7 +580,7 @@ view StudioInspectorStyleField(Inspection text, Drafts text, FieldId text, Chang
    action Submit() { }
    render StudioInspectorField(StudioInspectorStyleFieldLabel(FieldId)) {
       when StudioInspectorStyleFieldUsesPicker(FieldId) {
-         true -> { Picker(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Options: StudioInspectorStyleFieldOptions(Inspection: Inspection, FieldId: FieldId), Label: StudioInspectorStyleFieldLabel(FieldId)) }
+         true -> { StudioChoice(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Options: StudioInspectorStyleFieldOptions(Inspection: Inspection, FieldId: FieldId), Label: StudioInspectorStyleFieldLabel(FieldId)) }
          otherwise -> { TextInput(Value: StudioInspectorDraft(Drafts: Drafts, FieldId: FieldId), Change: Change, Submit: Submit, Label: StudioInspectorStyleFieldLabel(FieldId)) }
 }  }  }
 
@@ -562,7 +588,7 @@ view StudioInspectorStylePromotion(CurrentSourceVersion text, Inspection text, S
    action Promote() {
       do Apply(StudioInspectorStylePromotionAction(Inspection: Inspection, Selection: Selection, PromotionId: PromotionId), true)
    }
-   render Button(StudioInspectorStylePromotionLabel(Inspection: Inspection, PromotionId: PromotionId), Promote, Disabled: not StudioInspectorStylePromotionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId))
+   render StudioButton(Label: StudioInspectorStylePromotionLabel(Inspection: Inspection, PromotionId: PromotionId), Press: Promote, Disabled: not StudioInspectorStylePromotionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, PromotionId: PromotionId), Variant: "secondary")
 }
 
 view StudioInspectorData(Inspection text, Selection text, ActiveCellId text, ActiveCellRevision number, ActiveScenarioId text) {
@@ -584,7 +610,7 @@ view StudioInspectorActionCommand(CurrentSourceVersion text, Inspection text, Se
    action Invoke() {
       do Apply(StudioInspectorAction(Selection: Selection, ActionId: ActionId), false)
    }
-   render Button(StudioInspectorActionLabel(ActionId), Invoke, Disabled: not StudioInspectorActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, ActionId: ActionId))
+   render StudioButton(Label: StudioInspectorActionLabel(ActionId), Press: Invoke, Disabled: not StudioInspectorActionValid(CurrentSourceVersion: CurrentSourceVersion, Inspection: Inspection, Selection: Selection, Busy: Busy, ActionId: ActionId), Variant: "secondary")
 }
 
 function StudioInspectorReady(Inspection text, Selection text) returns boolean {
@@ -904,7 +930,7 @@ view StudioPanelCommand(Label text, Command StudioPanelAction, Dispatch action(t
    action Invoke() {
       do Dispatch(Command.Name, Command.Payload)
    }
-   render Button(Label, Invoke, Disabled: Disabled)
+   render StudioButton(Label: Label, Press: Invoke, Disabled: Disabled, Variant: "secondary")
 }
 
 view StudioProblemRows(Rows list of StudioProblemPanelRow, Dispatch action(text, text)) {
@@ -1085,10 +1111,10 @@ view StudioScenarioPanel(State text, JourneyRecording text, JourneyRecordable bo
       when StudioScenarioAvailable(State) {
          false -> { Text("Select a scenario preview cell to edit its arguments.") }
          otherwise -> {
-            StudioScenarioInspectorLabel(Label: StudioScenarioEntryLabel(State))
-            StudioScenarioInspectorLabel(Label: StudioScenarioGroupLabel(State))
-            StudioScenarioInspectorLabel(Label: StudioScenarioSubjectId(State))
-            StudioScenarioInspectorLabel(Label: StudioScenarioCellIdentity(State))
+            StudioScenarioIdentity() {
+               StudioScenarioInspectorLabel(Label: StudioScenarioEntryLabel(State))
+               StudioScenarioSource(Group: StudioScenarioGroupLabel(State), Subject: StudioScenarioSubjectId(State), Cell: StudioScenarioCellIdentity(State))
+            }
             StudioScenarioControlGroup("View arguments") {
                when StudioScenarioArgumentIds(State) {
                   empty -> { Text("This scenario has no view arguments.") }
@@ -1097,34 +1123,39 @@ view StudioScenarioPanel(State text, JourneyRecording text, JourneyRecordable bo
                   } }
                }
                Text(StudioScenarioArgumentIssues(State: State, Drafts: Drafts))
-            }
-            StudioScenarioControlGroup("Captured state layers") {
+               StudioActions() {
+                  StudioButton(Label: "Apply & remount", Press: ApplyArguments, Disabled: not StudioScenarioArgumentsValid(State: State, Drafts: Drafts), Variant: "primary")
+                  StudioButton(Label: "Save to scenario", Press: SaveArguments, Disabled: not StudioScenarioArgumentsValid(State: State, Drafts: Drafts), Variant: "secondary")
+            }  }
+            StudioScenarioControlGroup("Captured state") {
                when StudioScenarioCapturedLayers(State) {
                   empty -> { Text("None") }
                   otherwise -> { loop StudioScenarioCapturedLayers(State) / Layer {
                      Text(Layer)
                   } }
-            }  }
-            StudioScenarioControlGroup("Actions") {
-               Button("Apply & remount", ApplyArguments, Disabled: not StudioScenarioArgumentsValid(State: State, Drafts: Drafts))
-               Button("Save to scenario", SaveArguments, Disabled: not StudioScenarioArgumentsValid(State: State, Drafts: Drafts))
-               TextInput(Value: FixtureName, Change: ChangeFixtureName, Submit: SubmitFixtureName, Label: "Captured fixture name", Placeholder: "CapturedState")
-               Button("Capture fixture", CaptureFixture, Disabled: not StudioScenarioFixtureNameValid(FixtureName))
-               Button("Replay captured state", ReplayFailure, Disabled: not StudioScenarioFailureAvailable(State))
+               }
+               StudioInspectorField("Fixture") {
+                  TextInput(Value: FixtureName, Change: ChangeFixtureName, Submit: SubmitFixtureName, Label: "Captured fixture name", Placeholder: "CapturedState")
+               }
+               StudioActions() {
+                  StudioButton(Label: "Capture fixture", Press: CaptureFixture, Disabled: not StudioScenarioFixtureNameValid(FixtureName), Variant: "secondary")
+                  StudioButton(Label: "Replay captured state", Press: ReplayFailure, Disabled: not StudioScenarioFailureAvailable(State), Variant: "ghost")
+               }
                StudioFailureCaptureInput(Replay: ReplayCapture)
             }
             StudioScenarioControlGroup("Record interaction") {
                Checkbox(Value: RetainSensitiveText, Change: ChangeRetainSensitiveText, Label: "Retain sensitive text", Disabled: StudioScenarioJourneyAvailable(JourneyRecording) or StudioScenarioJourneyBusy(JourneyRecording))
-               Button(StudioScenarioJourneyButtonLabel(JourneyRecording), ToggleJourneyRecording, Disabled: not StudioScenarioJourneyActive(JourneyRecording) and not StudioScenarioJourneyCanRecord(State: State, Recording: JourneyRecording, Ready: JourneyRecordable))
+               StudioButton(Label: StudioScenarioJourneyButtonLabel(JourneyRecording), Press: ToggleJourneyRecording, Disabled: not StudioScenarioJourneyActive(JourneyRecording) and not StudioScenarioJourneyCanRecord(State: State, Recording: JourneyRecording, Ready: JourneyRecordable), Variant: "primary")
                when StudioScenarioJourneyAvailable(JourneyRecording) {
                   true -> {
                      loop StudioScenarioJourneyLines(JourneyRecording) / Line {
                         Text(Line)
                      }
                      Text(StudioScenarioJourneyStatus(JourneyRecording))
-                     Button("Save steps to scenario", SaveJourney, Disabled: not StudioScenarioJourneyCanSave(JourneyRecording))
-                     Button("Discard", DiscardJourney, Disabled: StudioScenarioJourneyBusy(JourneyRecording))
-                  }
+                     StudioActions() {
+                        StudioButton(Label: "Save steps to scenario", Press: SaveJourney, Disabled: not StudioScenarioJourneyCanSave(JourneyRecording), Variant: "secondary")
+                        StudioButton(Label: "Discard", Press: DiscardJourney, Disabled: StudioScenarioJourneyBusy(JourneyRecording), Variant: "ghost")
+                  }  }
                   otherwise -> { }
 }  }  }  }  }  }
 
@@ -1135,9 +1166,9 @@ view StudioScenarioArgument(State text, Drafts text, ParameterId text, ChangeDra
       do ChangeDrafts(StudioScenarioUpdateArgumentDraft(Drafts: Drafts, ParameterId: ParameterId, Value: Value))
    }
    action Submit() { }
-   render Col() {
+   render StudioInspectorField(StudioScenarioArgumentLabel(State: State, ParameterId: ParameterId)) {
       when StudioScenarioArgumentUsesPicker(State: State, ParameterId: ParameterId) {
-         true -> { Picker(Value: StudioScenarioArgumentDraft(Drafts: Drafts, ParameterId: ParameterId), Change: Change, Options: StudioScenarioArgumentOptions(State: State, ParameterId: ParameterId), Label: StudioScenarioArgumentLabel(State: State, ParameterId: ParameterId)) }
+         true -> { StudioChoice(Value: StudioScenarioArgumentDraft(Drafts: Drafts, ParameterId: ParameterId), Change: Change, Options: StudioScenarioArgumentOptions(State: State, ParameterId: ParameterId), Label: StudioScenarioArgumentLabel(State: State, ParameterId: ParameterId)) }
          otherwise -> { TextInput(Value: StudioScenarioArgumentDraft(Drafts: Drafts, ParameterId: ParameterId), Change: Change, Submit: Submit, Label: StudioScenarioArgumentLabel(State: State, ParameterId: ParameterId)) }
 }  }  }
 
@@ -1278,8 +1309,9 @@ view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
       @search StudioSearchPanel([])
       @drawer StudioDrawerPanel(Tab: "Problems", Compile: InitialCompilePanel, Problems: InitialProblemsPanel, Data: InitialDataPanel, Tests: InitialTestsPanel, Logs: InitialLogsPanel)
       @scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")
+      @environment StudioEnvironmentPanel(ActiveCellId: "", CellRevision: 0, ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser")
       @editor StudioEditorSurface()
-      @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", ActiveCellId: "", CellRevision: 0, ActiveScenarioId: "", ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser", InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null")
+      @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", ActiveCellId: "", CellRevision: 0, ActiveScenarioId: "", ViewportWidth: 0, ViewportHeight: 0, InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null")
 }  }
 
-view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @editor, @inspector from ./TaoStudioProductHost.tsx
+view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @environment, @editor, @inspector from ./TaoStudioProductHost.tsx

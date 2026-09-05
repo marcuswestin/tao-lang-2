@@ -38,18 +38,16 @@ export function mountStudioAgentPocPanel(root: HTMLElement, hooks: StudioAgentPo
   const panel = document.createElement('div')
   panel.className = 'studio-agent-poc'
   panel.setAttribute('aria-label', 'Semantic agent proof of concept')
-  // Position, chrome and collapse belong to the shell that hosts this.
-  panel.style.cssText = 'display:block'
+  // Position, chrome and collapse belong to the shell that hosts this; the shared sheet styles the controls.
   panel.innerHTML = `
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-      <span style="flex:1"></span>
-      <input class="poc-view" placeholder="view (uses selection)" style="width:150px;background:#0f1411;color:#e8ede9;border:1px solid #3a4a3f;border-radius:6px;padding:3px 6px;font:inherit">
-      <button class="poc-review" type="button">Review</button>
+    <div class="studio-agent-poc-row">
+      <input class="poc-view studio-input" placeholder="view (uses selection)" aria-label="View to review">
+      <button class="poc-review studio-button" data-size="small" data-variant="secondary" type="button">Review</button>
     </div>
-    <div class="poc-status" style="color:#9fb3a5">Select a render in the preview, then Review. Inference runs on-device through Apple Foundation Models.</div>
-    <div style="display:flex;gap:8px;align-items:center;margin:8px 0 4px">
-      <input class="poc-feature" placeholder="describe a feature, e.g. let people archive documents" style="flex:1;background:#0f1411;color:#e8ede9;border:1px solid #3a4a3f;border-radius:6px;padding:3px 6px;font:inherit">
-      <button class="poc-plan" type="button">Plan feature</button>
+    <div class="poc-status">Select a render in the preview, then Review. Inference runs on-device through Apple Foundation Models.</div>
+    <div class="studio-agent-poc-row">
+      <input class="poc-feature studio-input" placeholder="describe a feature, e.g. let people archive documents" aria-label="Feature to plan">
+      <button class="poc-plan studio-button" data-size="small" data-variant="secondary" type="button">Plan feature</button>
     </div>
     <div class="poc-body"></div>
   `

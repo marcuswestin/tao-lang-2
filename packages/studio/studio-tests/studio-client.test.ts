@@ -200,7 +200,10 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).not.toContain('taoStudioArgs')
   Expect(bundle).not.toContain('taoStudioState')
   Expect(bundle).not.toContain('sourceMappingURL=data:')
-  Expect(html).toContain('--studio-accent: #5b8def')
+  Expect(html).toContain('--studio-accent: #ff6a1f')
+  Expect(html).toContain('.studio-segmented')
+  Expect(html).toContain('.studio-button[data-variant="primary"]')
+  Expect(html).not.toMatch(/#5b8def|#315fbb|#2196f3/i)
   Expect(html).toContain('<div id="tao-studio-viewport"></div>')
   Expect(html).toContain('position: fixed !important')
   Expect(html).toContain('height: auto !important')
@@ -860,6 +863,19 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
   for (const item of studioShellRailPanels) {
     Expect(markup).toContain(`data-panel="${item.panel}"`)
   }
+  Expect(markup).toContain('data-panel="agent"')
+  Expect(markup).toContain('data-studio-panel="agent"')
+  Expect(markup).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u)
+  Expect(markup.match(/<svg class="studio-icon"/g)?.length ?? 0).toBeGreaterThanOrEqual(
+    studioShellRailPanels.length + 1,
+  )
+  Expect(markup).toContain('studio-inspector-tao-environment')
+  Expect(markup.indexOf('studio-scenario-inspector-content')).toBeLessThan(
+    markup.indexOf('studio-inspector-tao-environment'),
+  )
+  Expect(markup.indexOf('studio-inspector-tao-environment')).toBeLessThan(
+    markup.indexOf('studio-inspector-tao-context'),
+  )
   Expect(markup).toContain('studio-toolbar-context')
   Expect(markup).toContain('studio-toolbar-mode')
   Expect(markup).toContain('studio-toolbar-actions')
