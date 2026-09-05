@@ -43,7 +43,9 @@ description: >-
 - `merge-with-main` defaults to a ref-preserving dry run. `--execute` enables mutation, `--yes`
   answers normal confirmation non-interactively, `--push` independently authorizes a
   non-interactive push, and `--skip-full-verify` is the only verification escape hatch. Preflight
-  intentionally requires local `main` to equal `origin/main`. Successful execution leaves the
+  intentionally requires local `main` to equal `origin/main`. A remote feature branch that is behind
+  the worktree is pushed forward during execution; only one holding commits the worktree lacks stops
+  the landing. Successful execution leaves the
   invoking feature worktree clean and detached at the archived feature tip, deletes its local
   feature branch, and leaves worktree removal to archival of the owning task.
 - `--abort <snapshot>` restores only command-owned local state while the snapshot still matches.

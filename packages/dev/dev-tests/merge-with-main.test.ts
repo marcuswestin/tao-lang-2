@@ -430,6 +430,49 @@ Describe('merge-with-main', () => {
     Expect(commitMessage).toContain('Squashed commit of the following:')
   })
 
+  Test('pushes a behind remote feature branch forward instead of refusing to land', async () => {
+    const fake = fakeDependencies({ remoteFeatureHead: 'stale00000000000000000000000000000000000' })
+
+    const dryRun = await MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies)
+    Expect(dryRun.lines).toContain("PLAN  Push 'feat/example' to origin, whose branch is behind this worktree.")
+
+    const outcome = await MergeWithMainCommand.run({
+      execute: true,
+      push: true,
+      repositoryRoot: fake.repository.featureRoot,
+      yes: true,
+    }, fake.dependencies)
+
+    const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
+    const catchUp = operations.indexOf(
+      'git push origin --force-with-lease=refs/heads/feat/example:stale00000000000000000000000000000000000'
+        + ' feat/example:refs/heads/feat/example',
+    )
+    const fullVerify = operations.indexOf('just full-verify')
+    // The archive deletion leases against the head this push created, not the stale head it replaced.
+    const deleteRemote = operations.indexOf(
+      `git push origin --force-with-lease=refs/heads/feat/example:${fake.repository.featureHead}`
+        + ' :refs/heads/feat/example',
+    )
+
+    Expect(catchUp).toBeGreaterThan(0)
+    Expect(fullVerify).toBeGreaterThan(catchUp)
+    Expect(deleteRemote).toBeGreaterThan(fullVerify)
+    Expect(outcome.mode).toBe('executed')
+  })
+
+  Test('refuses to land when the remote feature branch holds commits this worktree lacks', async () => {
+    const fake = fakeDependencies({
+      ancestorExitCodes: [1],
+      remoteFeatureHead: 'ahead000000000000000000000000000000000000',
+    })
+
+    await Expect(
+      MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies),
+    ).rejects.toThrow('is not contained in this worktree')
+    Expect(fake.calls.some(call => call.args[0] === 'push')).toBe(false)
+  })
+
   Test('keeps verification output durable when merge execution has no terminal', async () => {
     const fake = fakeDependencies()
     fake.dependencies.isInteractive = () => false
