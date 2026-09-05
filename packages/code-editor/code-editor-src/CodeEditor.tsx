@@ -319,22 +319,30 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
       // an element picked in the preview. Bring it on screen; the person's own cursor moves never
       // reach here because they already equal the view's selection.
       view.dispatch({ scrollIntoView: true, selection: { anchor, head } })
-      // Scrolling to an unmeasured line can drag the view sideways; once the line is laid out, keep
-      // its first character in view so a selected line is never read from the middle.
-      view.requestMeasure({
-        read: measured => {
-          const lineStart = measured.coordsAtPos(measured.state.doc.lineAt(anchor).from)
-          const gutters = measured.dom.querySelector('.cm-gutters')
-          const contentLeft = (gutters ?? measured.scrollDOM).getBoundingClientRect()[gutters ? 'right' : 'left']
-          return lineStart === null ? 0 : Math.min(0, lineStart.left - contentLeft)
-        },
-        write: (overflow, measured) => {
-          if (overflow < 0) {
-            measured.scrollDOM.scrollLeft = Math.max(0, measured.scrollDOM.scrollLeft + overflow)
-          }
-        },
+      // CodeMirror scrolls the selection's end into view on its next frame, which in a narrow editor
+      // drags a long selection sideways until its start is hidden. Correct on the frame after that:
+      // keep the line's first character in view so a selected line is never read from the middle.
+      const frame = requestAnimationFrame(() => {
+        if (editor.current !== view) {
+          return
+        }
+        view.requestMeasure({
+          read: measured => {
+            const lineStart = measured.coordsAtPos(measured.state.doc.lineAt(anchor).from)
+            const gutters = measured.dom.querySelector('.cm-gutters')
+            const contentLeft = (gutters ?? measured.scrollDOM).getBoundingClientRect()[gutters ? 'right' : 'left']
+            return lineStart === null ? 0 : Math.min(0, lineStart.left - contentLeft)
+          },
+          write: (overflow, measured) => {
+            if (overflow < 0) {
+              measured.scrollDOM.scrollLeft = Math.max(0, measured.scrollDOM.scrollLeft + overflow)
+            }
+          },
+        })
       })
+      return () => cancelAnimationFrame(frame)
     }
+    return undefined
   }, [props.Selection?.anchor, props.Selection?.head])
 
   const native = TR.VisualNativeProps(props.Layout, props.Tag)
