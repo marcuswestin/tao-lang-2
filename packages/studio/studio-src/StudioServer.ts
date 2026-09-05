@@ -30,6 +30,7 @@ import {
   type StudioSessionManager,
   type StudioSessionResource,
 } from './StudioSessionManager'
+import { type StudioLanguageAnalysis, StudioSyntaxLens } from './StudioSyntaxLens'
 import type { StudioTestRunner } from './StudioTestRunner'
 import { StudioWelcome } from './StudioWelcome'
 
@@ -695,7 +696,10 @@ async function handleRequest(
     return response(request, url, options, await datasource.fill(dataFillRequest(await request.json())))
   }
   if (request.method === 'POST' && url.pathname === '/api/language/highlight') {
-    return response(request, url, options, await StudioHighlight.highlight(await request.json()))
+    const input: unknown = await request.json()
+    const [highlight, lens] = await Promise.all([StudioHighlight.highlight(input), StudioSyntaxLens.classify(input)])
+    const analysis: StudioLanguageAnalysis = { ...highlight, lens }
+    return response(request, url, options, analysis)
   }
   if (request.method === 'POST' && url.pathname === '/api/ship/beta') {
     await shipBeta(session, options.shipBeta ?? runBetaShip)
