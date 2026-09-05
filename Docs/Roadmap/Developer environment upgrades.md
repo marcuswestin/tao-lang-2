@@ -677,3 +677,74 @@ an entry here may link one when the developer workflow is also affected.
 - **Dependencies:** None.
 - **Acceptance:** A clean `just studio-native` reaches a ready preview with no unresolved-module output.
 - **Source:** 2026-09-04 companion Slice 2 work.
+
+### DEVENV-040 — Typecheck gate runs 19 projects serially on the legacy compiler
+
+- **Status:** Resolved
+- **Area:** Verification performance
+- **Impact:** `_typecheck` is the longest verify gate after `_test` (27.7s in the latest lane, 17.2s
+  uncontended) although the work parallelizes and a native compiler is released.
+- **Evidence:** 2026-09-04, linked worktree, after `_parser-gen`: `bunx tsc --build packages/*/tsconfig.json`
+  17.2s wall (24.7s CPU); one `tsc -p --noEmit` per package concurrently 5.8s wall; `tsgo -p --noEmit`
+  (`@typescript/native-preview` 7.0.0-dev) concurrently 1.3s wall, exit 0 and zero diagnostics for all
+  19 projects. TypeScript 7.0.2 is npm `latest`; `rg` finds no `typescript` API import under `packages/`;
+  every project already sets `rootDir`, `types`, and `moduleResolution: bundler`.
+- **Workaround:** None; the gate is correct, only serial.
+- **Proposed change:** Install TypeScript 7 under the `typescript-native` npm alias and run
+  `_typecheck` and the runtime-toolchain generated-app typecheck through it, leaving `typescript` 5.9
+  in place for the editor's tsserver and `bunx tsc`. Done on `feat/dev-speed-optimization-cbf7e5`:
+  `just _typecheck` 1.7s uncontended; TypeScript 7 also passes the generated runtime app with the
+  test's exact tsconfig.
+- **Dependencies:** TypeScript 7 ships no programmatic API until 7.1, so `typescript` cannot move to 7
+  while `.vscode/settings.json` points the editor at `node_modules/typescript/lib`; revisit when 7.1
+  ships and fold the alias back into one dependency.
+- **Acceptance:** `./agent verify` green with `_typecheck` under 5s uncontended; `just check` membership
+  unchanged. Met 2026-09-04: `_typecheck` 2.2s inside a green, contended `verify` (33.9s lane).
+- **Source:** 2026-09-04 development-speed review.
+
+### DEVENV-041 — Agent shell habits route routine commands through harness review
+
+- **Status:** In progress
+- **Area:** Agent harness performance
+- **Impact:** In Claude Code auto mode, every Bash call outside a narrow allow rule or the built-in
+  read-only set waits about two seconds for the permission classifier; in Codex, every escalated action
+  waits about three seconds for the auto-review model. The commands paying this are mostly routine.
+- **Evidence:** 114 Claude Code sessions in this repository, 17,461 Bash calls: 10,266 begin with `cd`
+  and 550 with `export PATH=…`; `export PATH… && <read-only command>` median 2.5s against 0.0–0.1s for
+  the same command bare; `cat > file <<EOF` median 2.2s, `python3 -` heredocs 2.1s, `mkdir`/`cp`/`rm`
+  1.9s, while `Edit` tool calls are approved instantly; 117 tool results were sandbox denials
+  (`direnv exec .`, `bun install`). Codex: 962 auto-review turns, median 2.9s, 95% approved, dominated
+  by `apply_patch` and `request_permissions`; 91 sandbox denials.
+- **Workaround:** Agents already prefer `rg`, `ls`, and `git` forms that skip review. AGENTS.md tells
+  sandboxed shells to prepend the profile bin themselves, which is what produces the `export PATH` prefix.
+- **Proposed change:** Done on `feat/dev-speed-optimization-cbf7e5`: the SessionStart hook now runs
+  `packages/dev/dev-src/cli/agent-session-start.zsh`, which runs `./agent setup` and, when Claude Code
+  hands it `CLAUDE_ENV_FILE`, exports `.devenv/profile/bin` onto every later Bash tool command's PATH;
+  `.rulesync/permissions.jsonc` sets `env.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and allows
+  `cd *`; AGENTS.md tells agents not to prefix `cd` or `export PATH` and to change files with the
+  harness edit tool. The Codex patch reviews turned out to come from patches into a `/private/tmp`
+  clone outside the workspace roots, so the `tao-workspace` profile is unchanged; work in the
+  worktree instead.
+- **Dependencies:** `.rulesync/permissions.jsonc`, `.rulesync/hooks.jsonc`, and `just _agent-config`
+  own the generated settings. `CLAUDE_ENV_FILE` support is in Claude Code 2.1.220 (the installed CLI)
+  and later.
+- **Acceptance:** In new sessions the median duration of `cd`- or `export`-prefixed read-only commands
+  equals the bare command's; a fresh worktree session shows no `direnv exec` sandbox denial.
+- **Source:** 2026-09-04 development-speed review of Claude Code and Codex transcripts.
+
+### DEVENV-042 — The tao-apps suite is one 22-second process on the test critical path
+
+- **Status:** Candidate
+- **Area:** Test performance
+- **Impact:** `_test` wall time (29.5s) is set by `tao-apps`, a single Jest process that runs all 26 Tao
+  behavior test files after a serial validate and compile phase.
+- **Evidence:** 2026-09-04 verify lane: `tao-apps` 21.7s (Jest phase 15.1s, validate with 8 workers plus
+  compile about 6s); next longest suites `runtime-toolchain` 13.9s, `runtime-jest` 12.6s, `studio` 12.2s;
+  suite sum 104s on 18 CPUs.
+- **Workaround:** `just test-changed` skips tao-apps when no `Apps/` or `.tao` file changed.
+- **Proposed change:** Shard the Tao behavior tests across two or three Jest processes, or cache compiled
+  apps between runs so only changed apps recompile.
+- **Dependencies:** DEVENV-034 (Bun worker pool) is a separate question; revisit the `tao-apps` `cost: 8`
+  reservation after sharding.
+- **Acceptance:** `_test` wall under 20s uncontended with the same test inventory.
+- **Source:** 2026-09-04 development-speed review.
