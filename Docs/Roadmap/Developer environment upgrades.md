@@ -714,3 +714,24 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** The focused gate-runner suite and `./agent verify` pass while another registered lane
   is present; the tests that intentionally model contention continue to use their explicit fixtures.
 - **Source:** 2026-09-04 verification of the full-verify reliability fixes.
+
+### DEVENV-042 — Studio smoke observes persistence before browser reconciliation
+
+- **Status:** In progress
+- **Area:** Test reliability
+- **Impact:** The simulated Studio journey can block a merge after the catalog write succeeds because
+  its next Snap interaction reaches an optimistic sketch board that has not yet been replaced by the
+  server-authoritative render.
+- **Evidence:** A normal-terminal full verification reached catalog revision 6 with all five expected
+  free rectangles, then timed out waiting for Snap without another transition. The smoke waiter had
+  observed only the persisted JSON file; the browser-side `onRectChange` promise settles and replaces
+  the board afterward.
+- **Workaround:** Re-run the host-only simulated lane; the race is timing-dependent.
+- **Proposed change:** Mark the board that dispatched each synthetic draw and wait for that exact node
+  to be replaced before selecting or snapping rectangles. Do not retry Snap because the first request
+  may already be in flight and source-action checkpoints are intentionally not idempotent by accident.
+- **Dependencies:** Implemented on `feat/freehand-ui-sketching-implementation`; final acceptance needs
+  the normal-terminal browser lane because Chrome aborts before DevTools in the managed command host.
+- **Acceptance:** `_full-verify-simulated` completes the Draw, Snap, Unsnap, overlap-confirmation, and
+  Undo sequence without a catalog-transition timeout.
+- **Source:** 2026-09-04 normal-terminal merge verification.

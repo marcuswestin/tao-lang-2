@@ -307,12 +307,13 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       let drawCatalog = persistedCatalog
       const playlistRectIds: string[] = []
       for (const rectangle of playlistRects) {
-        await drawSketchRectangle(browser, persistedSketch.id, rectangle)
+        const boardGeneration = await drawSketchRectangle(browser, persistedSketch.id, rectangle)
         drawCatalog = await waitForSketchCatalog(
           sketchCatalogPath,
           catalog =>
             catalog.revision > drawCatalog.revision && catalog.sketches[0]?.rects.length === playlistRectIds.length + 2,
         )
+        await waitForSketchBoardRefresh(browser, persistedSketch.id, boardGeneration)
         playlistRectIds.push(drawCatalog.sketches[0]!.rects.at(-1)!.id)
       }
       for (const rectId of playlistRectIds.slice(0, -1)) {
@@ -439,17 +440,23 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(await FS.readText(generatedSketchPath)).toContain(`Placeholder("View1")`)
 
       const firstOverlap = { height: 30, width: 40, x: 200, y: 4 }
-      await drawSketchRectangle(browser, persistedSketch.id, firstOverlap)
+      const firstOverlapGeneration = await drawSketchRectangle(browser, persistedSketch.id, firstOverlap)
       const overlapOne = await waitForSketchCatalog(
         sketchCatalogPath,
         catalog => catalog.revision > fullyUnsnappedCatalog.revision && catalog.sketches[0]?.rects.length === 6,
       )
+      await waitForSketchBoardRefresh(browser, persistedSketch.id, firstOverlapGeneration)
       const firstOverlapId = overlapOne.sketches[0]!.rects.at(-1)!.id
-      await drawSketchRectangle(browser, persistedSketch.id, { height: 20, width: -30, x: 250, y: 14 })
+      const secondOverlapGeneration = await drawSketchRectangle(
+        browser,
+        persistedSketch.id,
+        { height: 20, width: -30, x: 250, y: 14 },
+      )
       const overlapTwo = await waitForSketchCatalog(
         sketchCatalogPath,
         catalog => catalog.revision > overlapOne.revision && catalog.sketches[0]?.rects.length === 7,
       )
+      await waitForSketchBoardRefresh(browser, persistedSketch.id, secondOverlapGeneration)
       const secondOverlapId = overlapTwo.sketches[0]!.rects.at(-1)!.id
       await shiftSelectSketchRectangle(browser, persistedSketch.id, firstOverlapId)
       const beforeOverlapSource = await FS.readText(generatedSketchPath)
@@ -843,10 +850,12 @@ async function drawSketchRectangle(
   browser: StudioCdp,
   sketchId: string,
   rectangle: Readonly<{ height: number; width: number; x: number; y: number }>,
-): Promise<void> {
-  await browser.evaluate(`(() => {
+): Promise<string> {
+  return await browser.evaluate<string>(`(() => {
     const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
     if (!(board instanceof HTMLElement)) throw new Error('Missing Studio sketch board')
+    const generation = crypto.randomUUID()
+    board.dataset.taoStudioSmokeGeneration = generation
     const bounds = board.getBoundingClientRect()
     const pointerId = 71
     const event = (type, x, y) => new PointerEvent(type, {
@@ -870,6 +879,14 @@ async function drawSketchRectangle(
       board.setPointerCapture = capture
       board.releasePointerCapture = release
     }
+    return generation
+  })()`)
+}
+
+async function waitForSketchBoardRefresh(browser: StudioCdp, sketchId: string, generation: string): Promise<void> {
+  await browser.waitFor(`(() => {
+    const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
+    return board instanceof HTMLElement && board.dataset.taoStudioSmokeGeneration !== ${JSON.stringify(generation)}
   })()`)
 }
 
