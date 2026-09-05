@@ -753,7 +753,11 @@ an entry here may link one when the developer workflow is also affected.
   not confirm the timeout; `./agent test-file packages/dev/dev-tests/gate-runner.test.ts` passed 19 of 19.
 - **Workaround:** Run `just test-file <path>` per touched suite, and `./agent verify` for the full run.
 - **Proposed change:** Treat a zero-test run under `--changed` as passed with no observations when the
-  process exited 0, or drop suites whose packages have no changed files before spawning them.
+  process exited 0, or drop suites whose packages have no changed files before spawning them. For the
+  retry path the narrower cause is that `TestRunner.runSuites` passes `changedReference:
+  prepared.changed?.reference` for every kind, while a `retry` run populates `prepared.changed` only to
+  compute its advisory line; passing it solely when `prepared.kind === 'changed'` keeps a retry on the
+  ledger's own file list.
 - **Dependencies:** None.
 - **Acceptance:** A change confined to one package leaves `just test-changed` green with only that
   package's suites reported.

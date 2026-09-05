@@ -87,6 +87,7 @@ export type MergeSnapshot = {
 export type MergePreflight = {
   branch: string
   branchHead: string
+  featurePushRequired: boolean
   featureRoot: string
   mainHead: string
   mainRoot: string
@@ -255,9 +256,23 @@ export async function inspectMergePreflight(
       `The main worktree is not at ${REMOTE}/main (${shortSha(remoteMainHead)}); refresh it before merging.`,
     )
   }
+  // A remote feature branch left behind by earlier commits is the ordinary case, not an obstacle:
+  // execution pushes it forward. Only a remote holding commits this worktree lacks must stop the
+  // landing, because the squash would silently drop them.
   const remoteFeatureHead = remoteRefs.get(branch)
+  let featurePushRequired = false
   if (remoteFeatureHead !== undefined && remoteFeatureHead !== branchHead) {
-    Errors.throwUserInput(`Remote branch '${branch}' does not match this worktree's HEAD.`)
+    const contained = await dependencies.run('git', {
+      args: ['merge-base', '--is-ancestor', remoteFeatureHead, branchHead],
+      cwd: featureRoot,
+    })
+    if (contained.exitCode !== 0) {
+      Errors.throwUserInput(
+        `${REMOTE}/${branch} (${shortSha(remoteFeatureHead)}) is not contained in this worktree's HEAD; `
+          + 'fetch and reconcile it before landing the branch.',
+      )
+    }
+    featurePushRequired = true
   }
   const remoteMergedHead = remoteRefs.get(`merged/${branch.slice(5)}`)
   if (remoteMergedHead !== undefined) {
@@ -283,6 +298,7 @@ export async function inspectMergePreflight(
   return {
     branch,
     branchHead,
+    featurePushRequired,
     featureRoot,
     mainHead,
     mainRoot,
@@ -327,6 +343,7 @@ export const MergeWithMainCommand = {
       `PASS  Safety snapshot: ${snapshot.snapshotPath}`,
     ])
 
+    await catchUpRemoteFeature(snapshot, preflight, dependencies)
     await stabilizeAndVerify(snapshot, options, dependencies)
     await squashAndVerify(snapshot, dependencies)
     await commitSquash(snapshot, preflight.message, dependencies)
@@ -353,6 +370,9 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
     `PASS  Remote '${REMOTE}' is reachable.`,
     ...preflight.warnings.map(warning => `WARN  ${warning}`),
     'PLAN  Write a safety snapshot before moving any ref.',
+    ...(preflight.featurePushRequired
+      ? [`PLAN  Push '${preflight.branch}' to ${REMOTE}, whose branch is behind this worktree.`]
+      : []),
     options.skipFullVerify === true
       ? 'PLAN  Skip full verification because --skip-full-verify was explicit.'
       : 'PLAN  Run just full-verify on the feature branch.',
@@ -446,6 +466,35 @@ async function createSnapshot(
   }
   await persistSnapshot(snapshot, dependencies)
   return snapshot
+}
+
+/** Carry a behind remote feature branch up to this worktree so a stale remote never blocks landing. */
+async function catchUpRemoteFeature(
+  snapshot: MergeSnapshot,
+  preflight: MergePreflight,
+  dependencies: MergeWithMainDependencies,
+): Promise<void> {
+  if (!preflight.featurePushRequired || snapshot.remoteFeatureHead === undefined) {
+    return
+  }
+  const pushed = snapshot.currentFeatureHead
+  await runChecked(
+    dependencies,
+    'git',
+    [
+      'push',
+      REMOTE,
+      `--force-with-lease=refs/heads/${snapshot.branch}:${snapshot.remoteFeatureHead}`,
+      `${snapshot.branch}:refs/heads/${snapshot.branch}`,
+    ],
+    snapshot.featureRoot,
+    true,
+  )
+  // The archive step deletes this branch under a lease, so the lease must name what is on the
+  // remote now rather than the head observed before this push.
+  snapshot.remoteFeatureHead = pushed
+  await persistSnapshot(snapshot, dependencies)
+  writeLines(dependencies, [`PASS  Pushed '${snapshot.branch}' to ${REMOTE} at ${shortSha(pushed)}.`])
 }
 
 async function stabilizeAndVerify(
