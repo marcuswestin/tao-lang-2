@@ -1,4 +1,3 @@
-import { CLI, Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   type LanguagePerformanceReport,
@@ -19,20 +18,6 @@ Describe('language performance reporting', () => {
     Expect(() => parseIterations('0')).toThrow('Performance iterations must be a positive integer')
     Expect(() => parseIterations('1.5')).toThrow('Performance iterations must be a positive integer')
   })
-
-  Test('runs the benchmark only from `bench`, never alongside a check or verify gate', async () => {
-    // A benchmark that shares a machine with the other gates measures contention, not the
-    // language service, so no verification lane may reach it however it is structured. The
-    // regression guard these checks provide runs in every test lane instead, as the
-    // `performance-checks` suite the test runner discovers (`test-runner.test.ts`).
-    Expect(await justCommands('bench')).toContain('language-performance.ts')
-
-    for (const lane of ['check', 'verify', 'full-verify']) {
-      const laneCommands = await justCommands(lane)
-      Expect(laneCommands).not.toContain('bench')
-      Expect(laneCommands).not.toContain('language-performance')
-    }
-  }, 30_000)
 
   Test('renders fixture metadata, latency percentiles, and aggregate timing', () => {
     const report: LanguagePerformanceReport = {
@@ -60,10 +45,3 @@ Describe('language performance reporting', () => {
     Expect(output).toContain('wall 1.2s, measured sum 1.1s')
   })
 })
-
-/** justCommands returns the commands a lane would run, so the assertion is about behavior. */
-async function justCommands(name: string): Promise<string> {
-  const result = await CLI.run('just', { args: ['--dry-run', name], cwd: Repo.getRoot() })
-  Expect(result.exitCode).toBe(0)
-  return `${result.stdout}${result.stderr}`
-}

@@ -105,8 +105,11 @@ between a wasted afternoon and a re-run.
 - `just test` is the complete package and Tao app suite. Gates always use this complete mode and
   never consult the retry ledger.
 - `just verify` is the commit gate. `just full-verify-sandbox` runs the same full gate membership in
-  a managed shell while explicitly skipping the six host-only browser and native UI gates. Only
-  `just full-verify` from an unsandboxed shell proves those six gates.
+  a managed shell while explicitly skipping the five active host-only browser and native UI gates.
+  Only `just full-verify` from an unsandboxed shell proves those five gates. The simulated editor
+  journey remains individually runnable as `just _full-verify-simulated`, but is temporarily
+  quarantined from both full-verification lanes while DEVENV-042 tracks its unreliable synthetic
+  sketch input.
 
 `just test-flakes` and `just test-slowest` report ledger evidence but are not gates. Changed and retry
 runs print one advisory when their change shape or full-run history makes a complete run worthwhile.

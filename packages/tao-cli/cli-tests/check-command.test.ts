@@ -21,6 +21,48 @@ Describe('tao check', () => {
     })
   })
 
+  Test('reports shipping warnings for authored Placeholder renders but exempts Studio generated source', async () => {
+    await withTaoFixture({
+      '@/studio/View1.tao':
+        'use Placeholder from @tao/ui\n\npublic\nview View1() {\n   render Placeholder("View1")\n}\n',
+      'App.tao': 'use Placeholder from @tao/ui\n\nview Main() {\n   render Placeholder("Main")\n}\n',
+      'Placeholder.test.tao':
+        'use Placeholder from @tao/ui\n\nview TestDraft() {\n   render Placeholder("Test draft")\n}\n',
+    }, async rootDir => {
+      const results = await runCheck(rootDir)
+      const authored = results.find(result => FS.basename(result.path) === 'App.tao')
+      const generated = results.find(result => FS.basename(result.path) === 'View1.tao')
+      const testSource = results.find(result => FS.basename(result.path) === 'Placeholder.test.tao')
+
+      Expect(authored?.warnings).toHaveLength(1)
+      Expect(authored?.warnings?.[0]).toContain('Placeholder ships as an empty box in release.')
+      Expect(generated?.warnings).toBeUndefined()
+      Expect(testSource?.warnings).toBeUndefined()
+      Expect(statusByFile(results, rootDir)).toEqual({
+        '@/studio/View1.tao': 'unchanged',
+        'App.tao': 'unchanged',
+        'Placeholder.test.tao': 'unchanged',
+      })
+    })
+  })
+
+  Test('validates nested Tao projects with their own generated-root ownership', async () => {
+    await withTaoFixture({
+      'Nested/Project.tao': 'project {\n   id "nested-check"\n   name "Nested check"\n}\n',
+      'Nested/@/studio/View1.tao':
+        'use Placeholder from @tao/ui\n\npublic\nview View1() {\n   render Placeholder("Generated")\n}\n',
+      'Nested/Authored.tao': 'use Placeholder from @tao/ui\n\nview Main() {\n   render Placeholder("Authored")\n}\n',
+    }, async rootDir => {
+      const results = await runCheck(rootDir)
+      const generated = results.find(result => result.path.endsWith('/@/studio/View1.tao'))
+      const authored = results.find(result => result.path.endsWith('/Authored.tao'))
+
+      Expect(generated?.warnings).toBeUndefined()
+      Expect(authored?.warnings).toHaveLength(1)
+      Expect(authored?.warnings?.[0]).toContain('Placeholder ships as an empty box in release.')
+    })
+  })
+
   Test('reports drift without writing', async () => {
     await withTaoFixture({
       'drift.tao': 'view   MainView() { }',

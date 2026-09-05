@@ -145,6 +145,16 @@ export async function modifiedTimeMs(inputPath: string): Promise<number> {
   return (await nodeFs.stat(inputPath)).mtimeMs
 }
 
+/** fileMode reads the portable permission bits for a filesystem entry. */
+export async function fileMode(inputPath: string): Promise<number> {
+  return (await nodeFs.stat(inputPath)).mode & 0o777
+}
+
+/** chmod replaces the permission bits for a filesystem entry. */
+export async function chmod(inputPath: string, mode: number): Promise<void> {
+  await nodeFs.chmod(inputPath, mode)
+}
+
 /** readJson reads and parses a JSON file. */
 export async function readJson<T = unknown>(inputPath: string): Promise<T> {
   return JSON.parse(await readText(inputPath)) as T

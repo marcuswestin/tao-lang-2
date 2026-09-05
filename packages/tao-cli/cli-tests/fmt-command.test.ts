@@ -71,4 +71,41 @@ Describe('tao fmt', () => {
       Expect(await FS.readText(path)).toBe('app MyApp {\n   view MainView\n}\n\nview MainView() { }\n')
     })
   })
+
+  Test('checks an explicitly named generated file without rewriting it', async () => {
+    const generated = 'view   Generated() { }'
+    await withTaoFixture({
+      'Project.tao': 'project { id "generated-fmt" name "Generated fmt" }\n',
+      '@/studio/Generated.tao': generated,
+    }, async rootDir => {
+      const path = FS.resolvePath('@/studio/Generated.tao', rootDir)
+      const results = await runFmt(path)
+
+      Expect(results).toEqual([{
+        error: 'Generated source under @/ is not canonical; regenerate it instead of rewriting it.',
+        path,
+        status: 'error',
+      }])
+      Expect(await FS.readText(path)).toBe(generated)
+    })
+  })
+
+  Test('protects generated roots owned by nested Tao projects during repository-wide formatting', async () => {
+    const generated = 'view   Generated() { }'
+    await withTaoFixture({
+      'Nested/Project.tao': 'project {\n   id "nested-fmt"\n   name "Nested fmt"\n}\n',
+      'Nested/@/studio/Generated.tao': generated,
+      'Nested/Authored.tao': 'view   Authored() { }',
+    }, async rootDir => {
+      const results = await runFmt(rootDir)
+
+      Expect(statusByFile(results, rootDir)).toEqual({
+        'Nested/@/studio/Generated.tao': 'error',
+        'Nested/Authored.tao': 'changed',
+        'Nested/Project.tao': 'unchanged',
+      })
+      Expect(await FS.readText(FS.resolvePath('Nested/@/studio/Generated.tao', rootDir))).toBe(generated)
+      Expect(await FS.readText(FS.resolvePath('Nested/Authored.tao', rootDir))).toBe('view Authored() { }\n')
+    })
+  })
 })

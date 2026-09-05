@@ -9,19 +9,30 @@ import {
   type StudioPreviewCell,
   type StudioPreviewManifestV2,
 } from '../StudioPreviewManifest'
+import type {
+  StudioSketchFlowActionRequest,
+  StudioSketchSnapRequest,
+  StudioSketchSnapUndoRequest,
+  StudioSketchUnsnapRequest,
+} from '../StudioProjectSession'
 import {
   type StudioFixturePlan,
   type StudioFixtureValue,
   type StudioJsonObject,
   type StudioJsonValue,
+  type StudioPreviewIdentity,
+  type StudioPreviewJourneyRecordingStateMessage,
+  type StudioPreviewJourneyStepRecordedMessage,
   type StudioPreviewRuntimeUpdateMessage,
   StudioProtocol,
   studioProtocolChannel,
   studioProtocolVersion,
+  type StudioRecordedJourneyStep,
   type StudioRuntimeCaptureArtifact,
   type StudioSourceActionEnvelope,
   type StudioSourceActionIdentity,
 } from '../StudioProtocol'
+import type { StudioSketch, StudioSketchCatalogAction, StudioSketchCatalogSnapshot } from '../StudioSketchCatalog'
 import {
   StudioApiClient,
   StudioApiError,
@@ -36,6 +47,12 @@ import {
   type StudioScenarioDraft,
   type StudioScenarioResult,
 } from './StudioScenarioControls'
+import {
+  type MountedStudioSketchView,
+  type StudioSketchRectChange,
+  StudioSketchView,
+  type StudioSketchViewFlowActionRequest,
+} from './StudioSketchView'
 
 export type StudioMatrixCell<Item> = {
   id: string
@@ -46,6 +63,8 @@ export type StudioMatrixGroup<Item> = {
   cells: readonly StudioMatrixCell<Item>[]
   id: string
   label: string
+  sketchSourceVersion?: string
+  sketchView?: string
 }
 
 export type StudioMatrixGroupLayout = {
@@ -151,13 +170,448 @@ export const StudioMatrixView = {
     reconcileMatrix(parent, groups, render)
   },
   reconcile: reconcileMatrix,
+  renderSketches: renderMatrixSketches,
 } as const
+
+export type StudioReviewCellMetadata = Readonly<{
+  environment: string
+  group: string
+  key: string
+  label: string
+  renderInputs: string
+}>
+
+function canonicalReviewJson(value: unknown): string {
+  const normalize = (input: unknown): unknown =>
+    Array.isArray(input)
+      ? input.map(normalize)
+      : input !== null && typeof input === 'object'
+      ? Object.fromEntries(
+        Object.entries(input).sort(([left], [right]) => left.localeCompare(right)).map(
+          ([key, entry]) => [key, normalize(entry)],
+        ),
+      )
+      : input
+  return JSON.stringify(normalize(value))
+}
+
+/** Stable browser markers let review tooling capture cells without understanding Studio internals. */
+export const StudioReviewDom = {
+  appliedReady(journeyReplayStatus: StudioPreviewConnection['journeyReplayStatus']): boolean {
+    return journeyReplayStatus === undefined || journeyReplayStatus === 'settled'
+  },
+  cell(
+    manifest: StudioPreviewManifestV2,
+    cell: StudioPreviewCell,
+  ): StudioReviewCellMetadata | undefined {
+    const scenario = manifest.scenarios.find(candidate => candidate.scenarioId === cell.scenarioId)
+    if (scenario === undefined) {
+      return undefined
+    }
+    const sourcePath = projectRelativePath(manifest.project.root, scenario.source.path)
+    if (sourcePath === undefined) {
+      return undefined
+    }
+    const environment = canonicalReviewJson({
+      network: cell.environment.network,
+      scheme: cell.environment.scheme,
+      viewport: cell.environment.viewport,
+    })
+    const renderInputs = canonicalReviewJson({
+      arguments: cell.args,
+      fixtureId: scenario.fixtureId ?? null,
+      prepare: scenario.prepare,
+      stateLayers: cell.stateLayers,
+      steps: scenario.steps ?? [],
+    })
+    return {
+      environment,
+      group: scenario.group,
+      key: JSON.stringify([sourcePath, scenario.group, scenario.label, renderInputs, environment]),
+      label: scenario.label,
+      renderInputs,
+    }
+  },
+  manifest(manifest: StudioPreviewManifestV2): string {
+    const sourceVersions = Object.fromEntries(
+      Object.entries(manifest.sourceVersions)
+        .flatMap(([path, version]) => {
+          const relative = projectRelativePath(manifest.project.root, path)
+          return relative === undefined ? [] : [[relative, version] as const]
+        })
+        .sort(([left], [right]) => left.localeCompare(right)),
+    )
+    return JSON.stringify({
+      appName: manifest.project.appName,
+      compileRevision: manifest.compileRevision,
+      entryPath: projectRelativePath(manifest.project.root, manifest.project.entryPath)
+        ?? manifest.project.entryPath,
+      manifestRevision: manifest.manifestRevision,
+      sourceVersions,
+    })
+  },
+  status(frame: HTMLElement, status: 'failed' | 'pending' | 'ready', error?: string): void {
+    frame.dataset['taoReviewStatus'] = status
+    if (error === undefined) {
+      delete frame.dataset['taoReviewError']
+    } else {
+      frame.dataset['taoReviewError'] = error
+    }
+  },
+} as const
+
+export type StudioJourneyRecordingDraft = Readonly<{
+  captureSensitiveText: boolean
+  id: string
+  sequence: number
+  sourceIdentity: string
+  status: 'invalidated' | 'recording' | 'starting' | 'stopped'
+  steps: readonly StudioRecordedJourneyStep[]
+}>
+
+export const StudioJourneyRecorder = {
+  canStart(preview: StudioPreviewConnection): boolean {
+    const identity = preview.cellIdentity
+    const appliedRevision = preview.appliedRevision
+    return identity !== undefined
+      && preview.iframe.contentWindow !== null
+      && preview.suspended !== true
+      && appliedRevision !== undefined
+      && appliedRevision >= identity.compileRevision
+      && (preview.expectedRevision === undefined || appliedRevision >= preview.expectedRevision)
+      && StudioReviewDom.appliedReady(preview.journeyReplayStatus)
+  },
+  formatStep(step: StudioRecordedJourneyStep): string {
+    if (step.kind === 'unresolved') {
+      return `${step.action}: unresolved — ${step.reason}`
+    }
+    const target = step.selector === 'tag'
+      ? `#${step.target}`
+      : step.selector === 'text'
+      ? JSON.stringify(step.target)
+      : `${step.selector} ${JSON.stringify(step.target)}`
+    return step.kind === 'enter'
+      ? `enter ${step.redacted ? '<redacted>' : JSON.stringify(step.value)} into ${target}`
+      : `${step.kind} ${target}`
+  },
+  receive(
+    draft: StudioJourneyRecordingDraft,
+    message: StudioPreviewJourneyRecordingStateMessage | StudioPreviewJourneyStepRecordedMessage,
+  ): StudioJourneyRecordingDraft {
+    if (message.recordingId !== draft.id) {
+      return draft
+    }
+    if (message.type === 'preview-journey-recording-state') {
+      if (message.sequence < draft.sequence || draft.status === 'invalidated') {
+        return draft
+      }
+      if (message.sequence > draft.sequence) {
+        return { ...draft, status: 'invalidated' }
+      }
+      if (draft.status === 'stopped' && message.status !== 'invalidated') {
+        return draft
+      }
+      return { ...draft, status: message.status }
+    }
+    if (message.sequence <= draft.sequence) {
+      return draft
+    }
+    if (message.sequence !== draft.sequence + 1 || draft.status !== 'recording' || draft.steps.length >= 100) {
+      return { ...draft, status: 'invalidated' }
+    }
+    return { ...draft, sequence: message.sequence, steps: [...draft.steps, message.step] }
+  },
+  invalidate(draft: StudioJourneyRecordingDraft): StudioJourneyRecordingDraft {
+    return draft.status === 'invalidated' ? draft : { ...draft, status: 'invalidated' }
+  },
+} as const
+
+const mountedSketches = new WeakMap<HTMLElement, MountedMatrixSketches>()
+
+type MountedMatrixSketches = {
+  catalog: StudioSketchCatalogSnapshot
+  mounts: Map<HTMLElement, MountedStudioSketchView>
+  mutationLane: StudioSketchMutationLane
+  project: string
+}
+
+export type StudioSketchSnapMutationState = {
+  catalog: StudioSketchCatalogSnapshot
+  mutationLane: StudioSketchMutationLane
+}
+
+export const StudioSketchSnapRequests = {
+  flow(
+    request: StudioSketchViewFlowActionRequest,
+    expectedCatalogRevision: number,
+    requestId: string,
+  ): StudioSketchFlowActionRequest {
+    return { ...request, expectedCatalogRevision, requestId }
+  },
+  snap(
+    request: Readonly<{
+      checkpointId: string
+      confirmedProposalVersion?: string
+      rectIds: readonly string[]
+      sketchId: string
+      sourceVersion: string
+    }>,
+    expectedCatalogRevision: number,
+    requestId: string,
+  ): StudioSketchSnapRequest {
+    return { ...request, expectedCatalogRevision, requestId }
+  },
+  undo(
+    request: Readonly<{ checkpointId: string; sourceVersion: string }>,
+    expectedCatalogRevision: number,
+    requestId: string,
+  ): StudioSketchSnapUndoRequest {
+    return { ...request, expectedCatalogRevision, requestId }
+  },
+  unsnap(
+    request: Readonly<{
+      checkpointId: string
+      rectIds: readonly string[]
+      sketchId: string
+      sourceVersion: string
+    }>,
+    expectedCatalogRevision: number,
+    requestId: string,
+  ): StudioSketchUnsnapRequest {
+    return { ...request, expectedCatalogRevision, requestId }
+  },
+} as const
+
+function renderMatrixSketches(
+  parent: HTMLElement,
+  project: string,
+  catalog: StudioSketchCatalogSnapshot,
+): void {
+  const state = mountedSketches.get(parent) ?? {
+    catalog,
+    mounts: new Map(),
+    mutationLane: new StudioSketchMutationLane(),
+    project,
+  }
+  state.catalog = catalog
+  state.project = project
+  mountedSketches.set(parent, state)
+  const hosts = [...parent.querySelectorAll<HTMLElement>('[data-tao-studio-sketch-host]')]
+  for (const [host, mount] of state.mounts) {
+    if (!hosts.includes(host)) {
+      mount.dispose()
+      state.mounts.delete(host)
+    }
+  }
+  const assignments = new Map<HTMLElement, StudioSketch[]>()
+  const matched = new Set<string>()
+  for (const host of hosts) {
+    const view = host.dataset['taoStudioSketchView']
+    const sketches = catalog.sketches.filter(sketch => sketch.view === view)
+    sketches.forEach(sketch => matched.add(sketch.id))
+    assignments.set(host, sketches)
+  }
+  const fallback = hosts[0]
+  if (fallback !== undefined) {
+    assignments.set(fallback, [
+      ...(assignments.get(fallback) ?? []),
+      ...catalog.sketches.filter(sketch => !matched.has(sketch.id)),
+    ])
+  }
+  for (const host of hosts) {
+    const sketches = assignments.get(host) ?? []
+    const active = host === fallback || sketches.length > 0
+    host.toggleAttribute('data-tao-studio-sketch-create-surface', host === fallback)
+    let mount = state.mounts.get(host)
+    if (!active) {
+      mount?.dispose()
+      state.mounts.delete(host)
+      continue
+    }
+    if (mount === undefined) {
+      mount = StudioSketchView.mount(host, {
+        onCreateSketch: async size => {
+          const result = await applySketchAction(state, {
+            ...size,
+            id: crypto.randomUUID(),
+            kind: 'create-sketch',
+            project: state.project,
+            rects: [],
+          })
+          delete host.dataset['taoStudioSketchError']
+          renderMatrixSketches(parent, state.project, result.catalog)
+        },
+        onError: error => {
+          host.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
+        },
+        onFlowAction: async request => await applySketchFlowAction(state, request),
+        onRectChange: async change => {
+          const result = await applySketchAction(state, sketchAction(change))
+          delete host.dataset['taoStudioSketchError']
+          return result.catalog.sketches
+        },
+        onSnap: async request => await applySketchSnap(state, request),
+        onUnsnap: async request => await applySketchUnsnap(state, request),
+        onUndoSnap: async request => await undoSketchSnap(state, request),
+        sketches,
+        sourceVersion: host.dataset['taoStudioSketchSourceVersion'],
+      })
+      state.mounts.set(host, mount)
+    } else {
+      mount.render(sketches, host.dataset['taoStudioSketchSourceVersion'])
+    }
+  }
+}
+
+export type StudioSketchSnapApi = Pick<
+  typeof StudioApiClient,
+  'sketchSnapApply' | 'sketchSnapProposal' | 'sketchUnsnapApply' | 'undoSketchSnap'
+>
+
+async function applySketchFlowAction(
+  state: MountedMatrixSketches,
+  request: StudioSketchViewFlowActionRequest,
+): Promise<Awaited<ReturnType<typeof StudioApiClient.sketchFlowAction>>> {
+  return await state.mutationLane.run(async () => {
+    const applied = await StudioApiClient.sketchFlowAction(
+      StudioSketchSnapRequests.flow(request, state.catalog.revision, crypto.randomUUID()),
+    )
+    state.catalog = applied.catalog
+    return applied
+  })
+}
+
+export async function applySketchSnap(
+  state: StudioSketchSnapMutationState,
+  request: Readonly<{
+    checkpointId: string
+    confirmedProposalVersion?: string
+    rectIds: readonly string[]
+    sketchId: string
+    sourceVersion: string
+  }>,
+): Promise<
+  | Awaited<ReturnType<typeof StudioApiClient.sketchSnapApply>>
+  | Awaited<ReturnType<typeof StudioApiClient.sketchSnapProposal>>
+> {
+  return await applySketchSnapWith(state, request, StudioApiClient, () => crypto.randomUUID())
+}
+
+export async function applySketchSnapWith(
+  state: StudioSketchSnapMutationState,
+  request: Readonly<{
+    checkpointId: string
+    confirmedProposalVersion?: string
+    rectIds: readonly string[]
+    sketchId: string
+    sourceVersion: string
+  }>,
+  api: StudioSketchSnapApi,
+  requestId: () => string,
+): Promise<
+  | Awaited<ReturnType<typeof StudioApiClient.sketchSnapApply>>
+  | Awaited<ReturnType<typeof StudioApiClient.sketchSnapProposal>>
+> {
+  return await state.mutationLane.run(async () => {
+    const base = StudioSketchSnapRequests.snap(request, state.catalog.revision, requestId())
+    if (request.confirmedProposalVersion !== undefined) {
+      const applied = await api.sketchSnapApply({
+        ...base,
+        confirmedProposalVersion: request.confirmedProposalVersion,
+      })
+      state.catalog = applied.catalog
+      return applied
+    }
+    const proposal = await api.sketchSnapProposal(base)
+    if (proposal.needsConfirmation) {
+      return proposal
+    }
+    const applied = await api.sketchSnapApply(base)
+    state.catalog = applied.catalog
+    return applied
+  })
+}
+
+async function applySketchUnsnap(
+  state: MountedMatrixSketches,
+  request: Readonly<{
+    checkpointId: string
+    rectIds: readonly string[]
+    sketchId: string
+    sourceVersion: string
+  }>,
+): Promise<Awaited<ReturnType<typeof StudioApiClient.sketchUnsnapApply>>> {
+  return await state.mutationLane.run(async () => {
+    const applied = await StudioApiClient.sketchUnsnapApply(
+      StudioSketchSnapRequests.unsnap(request, state.catalog.revision, crypto.randomUUID()),
+    )
+    state.catalog = applied.catalog
+    return applied
+  })
+}
+
+async function undoSketchSnap(
+  state: MountedMatrixSketches,
+  request: Readonly<{ checkpointId: string; sourceVersion: string }>,
+): Promise<Awaited<ReturnType<typeof StudioApiClient.undoSketchSnap>>> {
+  return await state.mutationLane.run(async () => {
+    const undone = await StudioApiClient.undoSketchSnap(
+      StudioSketchSnapRequests.undo(request, state.catalog.revision, crypto.randomUUID()),
+    )
+    state.catalog = undone.catalog
+    return undone
+  })
+}
+
+async function applySketchAction(
+  state: MountedMatrixSketches,
+  action: StudioSketchCatalogAction,
+): Promise<Awaited<ReturnType<typeof StudioApiClient.sketchAction>>> {
+  return await state.mutationLane.run(async () => {
+    const result = await StudioApiClient.sketchAction({
+      action,
+      expectedRevision: state.catalog.revision,
+      requestId: crypto.randomUUID(),
+    })
+    state.catalog = result.catalog
+    return result
+  })
+}
+
+export class StudioSketchMutationLane {
+  #lane: Promise<void> = Promise.resolve()
+
+  run<Result>(mutation: () => Promise<Result>): Promise<Result> {
+    const result = this.#lane.then(mutation, mutation)
+    this.#lane = result.then(() => undefined, () => undefined)
+    return result
+  }
+}
+
+function sketchAction(change: StudioSketchRectChange): StudioSketchCatalogAction {
+  if (change.kind === 'add') {
+    return { kind: 'add-rect', rect: change.rect, sketchId: change.sketchId }
+  }
+  if (change.kind === 'duplicate') {
+    Assert.input(change.sourceRectId, 'A duplicated Studio rectangle requires its source identity.')
+    return {
+      id: change.rect.id,
+      kind: 'duplicate-rect',
+      rectId: change.sourceRectId,
+      sketchId: change.sketchId,
+      x: change.rect.x,
+      y: change.rect.y,
+    }
+  }
+  return { kind: 'update-rect', rect: change.rect, rectId: change.rect.id, sketchId: change.sketchId }
+}
 
 function reconcileMatrix<Item>(
   parent: HTMLElement,
   groups: readonly StudioMatrixGroup<Item>[],
   render: (frame: HTMLElement, item: Item) => void,
 ): void {
+  const document = parent.ownerDocument
   const canvas = parent.querySelector<HTMLElement>(':scope > .studio-preview-grid') ?? document.createElement('div')
   canvas.className = 'studio-preview-grid'
   canvas.dataset['taoStudioCanvas'] = 'true'
@@ -187,7 +641,24 @@ function reconcileMatrix<Item>(
       render(frame, cell.item)
       return frame
     })
-    reconcileElementChildren(cells, nextFrames)
+    const sketchHost = cells.querySelector<HTMLElement>(':scope > [data-tao-studio-sketch-host]')
+      ?? document.createElement('section')
+    if (sketchHost.dataset['taoStudioSketchHost'] === undefined) {
+      sketchHost.dataset['taoStudioSketchHost'] = group.id
+      sketchHost.style.flex = '0 0 auto'
+      sketchHost.style.overflow = 'visible'
+    }
+    if (group.sketchView === undefined) {
+      delete sketchHost.dataset['taoStudioSketchView']
+    } else {
+      sketchHost.dataset['taoStudioSketchView'] = group.sketchView
+    }
+    if (group.sketchSourceVersion === undefined) {
+      delete sketchHost.dataset['taoStudioSketchSourceVersion']
+    } else {
+      sketchHost.dataset['taoStudioSketchSourceVersion'] = group.sketchSourceVersion
+    }
+    reconcileElementChildren(cells, [...nextFrames, sketchHost])
     reconcileElementChildren(row, [heading, cells])
     return row
   })
@@ -236,6 +707,9 @@ export type StudioPreviewConnection = {
   reconfigureEnvironment?: (environment: StudioCellEnvironment) => Promise<void>
   reconfigureArguments?: (args: StudioJsonObject) => Promise<void>
   refresh?: Promise<void>
+  journeyRecording?: StudioJourneyRecordingDraft
+  journeyRecordingTimeout?: ReturnType<typeof setTimeout>
+  journeyReplayStatus?: 'failed' | 'pending' | 'settled'
   revisionTimeout?: ReturnType<typeof setTimeout>
   replayRuntimeCapture?: (capture: StudioRuntimeCaptureArtifact) => Promise<void>
   runtimeCaptureRequest?: {
@@ -249,6 +723,7 @@ export type StudioPreviewConnection = {
   scenarioModel?: StudioScenarioControlModel
   scenarioControls?: HTMLFormElement
   scenarioLabel?: string
+  setInteractionMode?: (mode: StudioInteractionMode) => void
   changed?: () => void
   sourceSyncDisconnect?: () => void
   suspended?: boolean
@@ -261,6 +736,7 @@ export function disconnectPreviews(
   reason = 'The Tao Studio preview was disconnected.',
 ): void {
   for (const preview of previews) {
+    invalidatePreviewJourneyRecording(preview)
     if (preview.revisionTimeout !== undefined) {
       clearTimeout(preview.revisionTimeout)
       preview.revisionTimeout = undefined
@@ -281,6 +757,42 @@ export function disconnectPreviews(
     preview.sourceSyncDisconnect = undefined
     preview.iframe.src = 'about:blank'
   }
+}
+
+/** Any preview-lifecycle boundary makes a browser-local recording unsafe to save. */
+export function invalidatePreviewJourneyRecording(preview: StudioPreviewConnection): void {
+  if (preview.journeyRecordingTimeout !== undefined) {
+    clearTimeout(preview.journeyRecordingTimeout)
+    preview.journeyRecordingTimeout = undefined
+  }
+  if (preview.journeyRecording === undefined) {
+    return
+  }
+  const invalidated = StudioJourneyRecorder.invalidate(preview.journeyRecording)
+  if (invalidated === preview.journeyRecording) {
+    return
+  }
+  preview.journeyRecording = invalidated
+  preview.changed?.()
+}
+
+/** Recording starts only after the exact preview acknowledges the request. */
+export function awaitPreviewJourneyRecordingAcknowledgement(
+  preview: StudioPreviewConnection,
+  recordingId: string,
+  timeoutMs = 5_000,
+): void {
+  if (preview.journeyRecordingTimeout !== undefined) {
+    clearTimeout(preview.journeyRecordingTimeout)
+  }
+  preview.journeyRecordingTimeout = setTimeout(() => {
+    preview.journeyRecordingTimeout = undefined
+    const draft = preview.journeyRecording
+    if (draft?.id === recordingId && draft.status === 'starting') {
+      preview.journeyRecording = StudioJourneyRecorder.invalidate(draft)
+      preview.changed?.()
+    }
+  }, timeoutMs)
 }
 
 /** StudioPreviewSourceSync keeps source identity available across an iframe's initial load and reloads. */
@@ -437,6 +949,11 @@ export async function connectPreviews(
         renderCellPreview(frame, connection, previewUrl, manifest)
       },
     )
+    const canvas = parent.querySelector<HTMLElement>(':scope > .studio-preview-grid')
+    if (canvas !== null) {
+      canvas.dataset['taoReviewManifest'] = StudioReviewDom.manifest(manifest)
+    }
+    StudioMatrixView.renderSketches(parent, handshake.identity.project, handshake.sketchCatalog)
     return connections
   }
   return [await connectWholeAppPreview(parent, previewUrl, origin, handshake, signal)]
@@ -554,6 +1071,7 @@ function connectionGroups(
       connection.cell === undefined ? [] : [[connection.cell.cellId, connection] as const]
     ),
   )
+  const subjects = new Map(manifest.subjects.map(subject => [subject.subjectId, subject]))
   return StudioMatrixLayout.groups(manifest).map(group => ({
     cells: group.cellIds.flatMap(cellId => {
       const connection = connectionsByCell.get(cellId)
@@ -561,6 +1079,28 @@ function connectionGroups(
     }),
     id: group.id,
     label: group.label,
+    ...(() => {
+      if (group.label !== 'sketch') {
+        return {}
+      }
+      const scenarios = manifest.scenarios.filter(scenario =>
+        StudioScenarioControls.groupId(scenario.source.path, scenario.group) === group.id
+      )
+      const viewNames = new Set(scenarios.flatMap(scenario => {
+        const subject = subjects.get(scenario.subjectId)
+        return subject?.kind === 'view' ? [subject.viewName] : []
+      }))
+      const sketchView = viewNames.size === 1 ? [...viewNames][0] : undefined
+      const sourceVersions = new Set(scenarios.flatMap(scenario => {
+        const sourceVersion = manifest.sourceVersions[scenario.source.path]
+        return sourceVersion === undefined ? [] : [sourceVersion]
+      }))
+      const sketchSourceVersion = sourceVersions.size === 1 ? [...sourceVersions][0] : undefined
+      return {
+        ...(sketchSourceVersion === undefined ? {} : { sketchSourceVersion }),
+        ...(sketchView === undefined ? {} : { sketchView }),
+      }
+    })(),
   }))
 }
 
@@ -618,7 +1158,11 @@ export function configureInteractionMode(
     }
   }
   for (const preview of previews) {
-    preview.iframe.addEventListener('load', () => postInteractionMode(preview, handshake))
+    preview.setInteractionMode = setMode
+    preview.iframe.addEventListener('load', () => {
+      invalidatePreviewJourneyRecording(preview)
+      postInteractionMode(preview, handshake)
+    })
   }
   button.addEventListener('click', () => setMode(button.dataset['mode'] === 'edit' ? 'run' : 'edit'))
   setMode('edit')
@@ -668,6 +1212,7 @@ function renderCellPreview(
   const cell = connection.cell!
   frame.style.width = `${Math.max(320, cell.environment.viewport.width)}px`
   const scenario = manifest.scenarios.find(candidate => candidate.scenarioId === cell.scenarioId)
+  connection.journeyReplayStatus = (scenario?.steps?.length ?? 0) > 0 ? 'pending' : undefined
   const subjectParameters = manifest.parametersBySubject[scenario?.subjectId ?? ''] ?? []
   const modeled = StudioScenarioControls.fromManifest({
     cell,
@@ -678,6 +1223,21 @@ function renderCellPreview(
   })
   const scenarioModel = modeled.ok ? modeled.value : undefined
   connection.scenarioModel = scenarioModel
+  const review = StudioReviewDom.cell(manifest, cell)
+  if (review === undefined) {
+    delete frame.dataset['taoReviewKey']
+    delete frame.dataset['taoReviewLabel']
+    delete frame.dataset['taoReviewGroup']
+    delete frame.dataset['taoReviewEnvironment']
+    delete frame.dataset['taoReviewRenderInputs']
+  } else {
+    frame.dataset['taoReviewKey'] = review.key
+    frame.dataset['taoReviewLabel'] = review.label
+    frame.dataset['taoReviewGroup'] = review.group
+    frame.dataset['taoReviewEnvironment'] = review.environment
+    frame.dataset['taoReviewRenderInputs'] = review.renderInputs
+  }
+  StudioReviewDom.status(frame, 'pending')
   const label = document.createElement('header')
   label.className = 'studio-preview-cell-label'
   label.textContent = scenario?.label ?? cell.scenarioId
@@ -761,8 +1321,22 @@ function renderCellPreview(
     replayFile,
     status,
   )
-  form.append(argumentControls.element, viewportControls.element, networkControls.element, schemeControls, actions)
+  form.append(
+    argumentControls.element,
+    viewportControls.element,
+    networkControls.element,
+    schemeControls,
+    actions,
+  )
   connection.scenarioControls = form
+
+  const sourceIdentity = JSON.stringify(scenarioModel?.sourceIdentity) ?? ''
+  if (
+    connection.journeyRecording !== undefined
+    && connection.journeyRecording.sourceIdentity !== sourceIdentity
+  ) {
+    invalidatePreviewJourneyRecording(connection)
+  }
 
   const viewport = document.createElement('div')
   viewport.className = 'studio-preview-cell-viewport'
@@ -1419,6 +1993,7 @@ function observePreviewVisibility(frame: HTMLElement, connection: StudioPreviewC
     )
     const transition = StudioPreviewSuspension.transition(connection.suspended === true, visible)
     if (transition === 'suspend') {
+      invalidatePreviewJourneyRecording(connection)
       connection.suspendedSource = connection.iframe.src
       connection.suspended = true
       connection.iframe.src = 'about:blank'
@@ -1437,6 +2012,7 @@ function observePreviewVisibility(frame: HTMLElement, connection: StudioPreviewC
 }
 
 function setPreviewSource(connection: StudioPreviewConnection, source: string): void {
+  invalidatePreviewJourneyRecording(connection)
   if (connection.suspended === true) {
     connection.suspendedSource = source
   } else {
@@ -1474,6 +2050,7 @@ function schedulePreviewRevisionFallback(connection: StudioPreviewConnection): v
     }
     const source = connection.iframe.src
     if (source !== '' && source !== 'about:blank') {
+      invalidatePreviewJourneyRecording(connection)
       connection.iframe.src = source
     }
   }, 750)
@@ -1637,6 +2214,21 @@ async function openRuntimeFailureSource(
   opened.editor.focus()
 }
 
+function matchesExactPreviewCellIdentity(
+  preview: StudioPreviewConnection,
+  identity: StudioPreviewIdentity,
+): boolean {
+  const expected = preview.cellIdentity
+  return expected !== undefined
+    && identity.appName === expected.appName
+    && identity.project === expected.project
+    && identity.previewInstanceId === preview.previewInstanceId
+    && identity.cellId === expected.cellId
+    && identity.cellRevision === expected.cellRevision
+    && identity.compileRevision === expected.compileRevision
+    && identity.manifestRevision === expected.manifestRevision
+}
+
 export async function handlePreviewMessage(
   event: MessageEvent,
   preview: StudioPreviewConnection,
@@ -1665,6 +2257,51 @@ export async function handlePreviewMessage(
       timestamp: message.timestamp,
     }].slice(-500)
     actions.changed?.()
+    return
+  }
+  if (
+    message.type === 'preview-journey-step-recorded'
+    || message.type === 'preview-journey-recording-state'
+  ) {
+    const draft = preview.journeyRecording
+    if (draft === undefined || draft.id !== message.recordingId) {
+      return
+    }
+    if (!matchesExactPreviewCellIdentity(preview, message.identity)) {
+      invalidatePreviewJourneyRecording(preview)
+      actions.changed?.()
+      return
+    }
+    preview.journeyRecording = StudioJourneyRecorder.receive(draft, message)
+    if (
+      preview.journeyRecording.status !== 'starting'
+      && preview.journeyRecordingTimeout !== undefined
+    ) {
+      clearTimeout(preview.journeyRecordingTimeout)
+      preview.journeyRecordingTimeout = undefined
+    }
+    actions.changed?.()
+    return
+  }
+  if (
+    message.type === 'preview-journey-replay-settled'
+    || message.type === 'preview-journey-replay-failed'
+  ) {
+    if (!matchesExactPreviewCellIdentity(preview, message.identity)) {
+      return
+    }
+    preview.journeyReplayStatus = message.type === 'preview-journey-replay-settled' ? 'settled' : 'failed'
+    if (preview.frame !== undefined) {
+      if (message.type === 'preview-journey-replay-settled') {
+        StudioReviewDom.status(preview.frame, 'ready')
+      } else {
+        StudioReviewDom.status(preview.frame, 'failed', message.error)
+      }
+    }
+    return
+  }
+  if (message.type === 'preview-layout-measurements') {
+    await StudioApiClient.previewLayoutMeasurements(message)
     return
   }
   if (message.type === 'preview-scheme-changed') {
@@ -1714,6 +2351,9 @@ export async function handlePreviewMessage(
         preview.revisionTimeout = undefined
       }
     }
+    if (preview.frame !== undefined && StudioReviewDom.appliedReady(preview.journeyReplayStatus)) {
+      StudioReviewDom.status(preview.frame, 'ready')
+    }
     await StudioApiClient.previewApplied(message)
     return
   }
@@ -1735,6 +2375,9 @@ export async function handlePreviewMessage(
       preview.cell?.environment,
     )
     preview.runtimeFailure = capture
+    if (preview.frame !== undefined) {
+      StudioReviewDom.status(preview.frame, 'failed', capture.failure?.error.message ?? 'Runtime failure')
+    }
     preview.frame?.scrollIntoView({ block: 'center' })
     showRuntimeFailure(preview, capture, () => openRuntimeFailureSource(capture, handshake, openFile))
     preview.changed?.()
@@ -2023,6 +2666,7 @@ export async function refreshCellPreviews(
     previews.flatMap(preview => preview.cell === undefined ? [] : [[preview.cell.cellId, preview] as const]),
   )
   const interactionMode = previews[0]?.interactionMode ?? 'edit'
+  const setInteractionMode = previews[0]?.setInteractionMode
   const nextConnections = await Promise.all(manifest.cells.map(async cell => {
     const previous = previousByCell.get(cell.cellId)
     if (previous !== undefined) {
@@ -2030,7 +2674,11 @@ export async function refreshCellPreviews(
     }
     const connection = await connectCellPreview(previewUrl, origin, handshake, manifest, cell)
     connection.interactionMode = interactionMode
-    connection.iframe.addEventListener('load', () => postInteractionMode(connection, handshake))
+    connection.setInteractionMode = setInteractionMode
+    connection.iframe.addEventListener('load', () => {
+      invalidatePreviewJourneyRecording(connection)
+      postInteractionMode(connection, handshake)
+    })
     return connection
   }))
   const nextIds = new Set(manifest.cells.map(cell => cell.cellId))
@@ -2045,6 +2693,14 @@ export async function refreshCellPreviews(
     connection.frame = frame
     renderCellPreview(frame, connection, previewUrl, manifest)
   })
+  const canvas = parent.querySelector<HTMLElement>(':scope > .studio-preview-grid')
+  if (canvas !== null) {
+    canvas.dataset['taoReviewManifest'] = StudioReviewDom.manifest(manifest)
+  }
+  const sketchState = mountedSketches.get(parent)
+  if (sketchState !== undefined) {
+    renderMatrixSketches(parent, sketchState.project, sketchState.catalog)
+  }
 
   await Promise.all(nextConnections.map(async preview => {
     const cell = manifest.cells.find(candidate => candidate.cellId === preview.cell!.cellId)!

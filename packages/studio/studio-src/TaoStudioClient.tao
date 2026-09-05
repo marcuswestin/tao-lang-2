@@ -2,7 +2,7 @@
 // the live StudioServer datasource. The compiled root owns the Files and editor workbench slots;
 // the host publishes versioned browser-local selection state into the external editor boundary.
 use SlotNav from @tao/nav
-use Button, Col, Picker, Text, TextInput from @tao/ui
+use Button, Checkbox, Col, Picker, Text, TextInput from @tao/ui
 
 // File contents remain editor buffers and never appear in Files or any related entity.
 app TaoStudioFiles {
@@ -19,12 +19,19 @@ app TaoStudioFiles {
 }
 
 design StudioDesign {
+   panel #171a20
+   ink #d7dce4
+   line #394251
    sizes {
       controlGap 4.px
    }
    styles {
       designTokenRow [gap controlGap]
    }
+   Text [ink ink]
+   TextInput [background panel, border line, ink ink]
+   Button [background panel, border line, ink ink]
+   Picker [background panel, border line, ink ink]
 }
 
 type StudioServer is datasource with {
@@ -114,9 +121,13 @@ action CreateFile(Path text) fails Conflict "This file changed under this edit."
 
 action RenameFile(Path text, SourceVersion text, TargetPath text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
 
+action MoveGeneratedSource(Path text, SourceVersion text, TargetPackage text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
+
 action DeleteFile(Path text, SourceVersion text) fails Conflict "This file changed under this edit." from ./TaoStudioProductHost.tsx
 
 action OpenFile(Path text) from ./TaoStudioProductHost.tsx
+
+action OpenSource(Path text, SourceVersion text, Start number) from ./TaoStudioProductHost.tsx
 
 action InsertComponent(Name text) from ./TaoStudioProductHost.tsx
 
@@ -194,6 +205,8 @@ view FileRow(File) {
    state RenamePath = File.Path
    state Renaming = false
    state ConfirmDelete = false
+   state Moving = false
+   state TargetPackage = ""
    action Open() {
       do OpenFile(File.Path)
    }
@@ -202,6 +215,7 @@ view FileRow(File) {
    }
    action BeginRename() {
       set ConfirmDelete = false
+      set Moving = false
       set Renaming = true
    }
    action CancelRename() {
@@ -214,6 +228,7 @@ view FileRow(File) {
    }
    action BeginDelete() {
       set Renaming = false
+      set Moving = false
       set ConfirmDelete = true
    }
    action CancelDelete() {
@@ -222,10 +237,22 @@ view FileRow(File) {
    action Delete() {
       do DeleteFile(Path: File.Path, SourceVersion: File.Version)
    }
-   render TreeFileRow(Name: File.Name, Path: File.Path, Dirty: File.Dirty, DiagnosticCount: File.DiagnosticCount, RenamePath: RenamePath, Renaming: Renaming, ConfirmDelete: ConfirmDelete, Open: Open, ChangeRenamePath: ChangeRenamePath, BeginRename: BeginRename, CancelRename: CancelRename, Rename: Rename, BeginDelete: BeginDelete, CancelDelete: CancelDelete, Delete: Delete)
+   action BeginMove() {
+      set ConfirmDelete = false
+      set Renaming = false
+      set Moving = true
+   }
+   action ChangeTargetPackage(Value text) {
+      set TargetPackage = Value
+   }
+   action Move() {
+      do MoveGeneratedSource(Path: File.Path, SourceVersion: File.Version, TargetPackage: TargetPackage)
+      set Moving = false
+   }
+   render TreeFileRow(Name: File.Name, Path: File.Path, Dirty: File.Dirty, DiagnosticCount: File.DiagnosticCount, RenamePath: RenamePath, Renaming: Renaming, ConfirmDelete: ConfirmDelete, Moving: Moving, TargetPackage: TargetPackage, Open: Open, ChangeRenamePath: ChangeRenamePath, BeginRename: BeginRename, CancelRename: CancelRename, Rename: Rename, BeginDelete: BeginDelete, CancelDelete: CancelDelete, Delete: Delete, BeginMove: BeginMove, ChangeTargetPackage: ChangeTargetPackage, Move: Move)
 }
 
-view TreeFileRow(Name text, Path text, Dirty boolean, DiagnosticCount number, RenamePath text, Renaming boolean, ConfirmDelete boolean, Open action(), ChangeRenamePath action(text), BeginRename action(), CancelRename action(), Rename action(), BeginDelete action(), CancelDelete action(), Delete action()) from ./TaoStudioProductHost.tsx
+view TreeFileRow(Name text, Path text, Dirty boolean, DiagnosticCount number, RenamePath text, Renaming boolean, ConfirmDelete boolean, Moving boolean, TargetPackage text, Open action(), ChangeRenamePath action(text), BeginRename action(), CancelRename action(), Rename action(), BeginDelete action(), CancelDelete action(), Delete action(), BeginMove action(), ChangeTargetPackage action(text), Move action()) from ./TaoStudioProductHost.tsx
 
 view StudioEditorSurface() from ./TaoStudioProductHost.tsx
 
@@ -270,10 +297,10 @@ view ComponentsPanel() {
 }  }
 
 view ProjectViewRow(View) {
-   action Insert() {
-      do InsertProjectView(View.Name)
+   action Open() {
+      do OpenScreen(View.StableId)
    }
-   render StudioPaletteRow(Label: View.Name, Detail: View.SourcePath, Kind: "project-view", Name: View.Name, Insert: Insert)
+   render StudioSourceRow(Label: View.Name, Detail: View.SourcePath, Open: Open)
 }
 
 view ProjectViewsPanel() {
@@ -307,7 +334,7 @@ view ScreensPanel() {
 
 view DesignTokenRow(DesignToken) {
    action Open() {
-      do OpenFile(DesignToken.SourcePath)
+      do OpenSource(Path: DesignToken.SourcePath, SourceVersion: DesignToken.SourceVersion, Start: DesignToken.Start)
    }
    render Col() [designTokenRow] {
       Text(DesignToken.Kind)
@@ -865,6 +892,14 @@ view StudioDrawerPanel(Tab text, Compile StudioCompilePanel, Problems StudioProb
          otherwise -> { }
 }  }  }
 
+view StudioDataRailPanel(Data StudioDataPanel) {
+   action Dispatch(Name text, Payload text) {
+      do ProductPanelAction(Name: Name, Payload: Payload)
+   }
+   render StudioPanelSurface("Data") {
+      StudioDataPanelView(Data: Data, Dispatch: Dispatch)
+}  }
+
 view StudioPanelCommand(Label text, Command StudioPanelAction, Dispatch action(text, text), Disabled boolean) {
    action Invoke() {
       do Dispatch(Command.Name, Command.Payload)
@@ -1005,9 +1040,10 @@ function StudioPanelSelected(Tab text, Panel text) returns boolean {
    return StudioPanelSelected(Tab: Tab, Panel: Panel) from ./TaoStudioProductHost.tsx
 }
 
-view StudioScenarioPanel(State text, ResolvedAppearance text) {
+view StudioScenarioPanel(State text, JourneyRecording text, JourneyRecordable boolean, ResolvedAppearance text) {
    state Drafts = StudioScenarioArgumentDrafts(State)
    state FixtureName = "CapturedState"
+   state RetainSensitiveText = false
    action Dispatch(Name text, Payload text) {
       do ProductPanelAction(Name: Name, Payload: Payload)
    }
@@ -1032,6 +1068,18 @@ view StudioScenarioPanel(State text, ResolvedAppearance text) {
    }
    action ReplayCapture(Capture text) {
       do Dispatch(Name: "scenario-replay-capture", Payload: StudioScenarioReplayPayload(State: State, Capture: Capture))
+   }
+   action ChangeRetainSensitiveText(Value boolean) {
+      set RetainSensitiveText = Value
+   }
+   action ToggleJourneyRecording() {
+      do Dispatch(Name: StudioScenarioJourneyCommand(JourneyRecording), Payload: StudioScenarioJourneyPayload(State: State, CaptureSensitiveText: RetainSensitiveText))
+   }
+   action SaveJourney() {
+      do Dispatch(Name: "scenario-save-journey", Payload: StudioScenarioJourneyPayload(State: State, CaptureSensitiveText: RetainSensitiveText))
+   }
+   action DiscardJourney() {
+      do Dispatch(Name: "scenario-discard-journey", Payload: StudioScenarioJourneyPayload(State: State, CaptureSensitiveText: RetainSensitiveText))
    }
    render StudioScenarioPanelSurface(StudioScenarioAvailable(State)) {
       when StudioScenarioAvailable(State) {
@@ -1064,7 +1112,21 @@ view StudioScenarioPanel(State text, ResolvedAppearance text) {
                Button("Capture fixture", CaptureFixture, Disabled: not StudioScenarioFixtureNameValid(FixtureName))
                Button("Replay captured state", ReplayFailure, Disabled: not StudioScenarioFailureAvailable(State))
                StudioFailureCaptureInput(Replay: ReplayCapture)
-}  }  }  }  }
+            }
+            StudioScenarioControlGroup("Record interaction") {
+               Checkbox(Value: RetainSensitiveText, Change: ChangeRetainSensitiveText, Label: "Retain sensitive text", Disabled: StudioScenarioJourneyAvailable(JourneyRecording) or StudioScenarioJourneyBusy(JourneyRecording))
+               Button(StudioScenarioJourneyButtonLabel(JourneyRecording), ToggleJourneyRecording, Disabled: not StudioScenarioJourneyActive(JourneyRecording) and not StudioScenarioJourneyCanRecord(State: State, Recording: JourneyRecording, Ready: JourneyRecordable))
+               when StudioScenarioJourneyAvailable(JourneyRecording) {
+                  true -> {
+                     loop StudioScenarioJourneyLines(JourneyRecording) / Line {
+                        Text(Line)
+                     }
+                     Text(StudioScenarioJourneyStatus(JourneyRecording))
+                     Button("Save steps to scenario", SaveJourney, Disabled: not StudioScenarioJourneyCanSave(JourneyRecording))
+                     Button("Discard", DiscardJourney, Disabled: StudioScenarioJourneyBusy(JourneyRecording))
+                  }
+                  otherwise -> { }
+}  }  }  }  }  }
 
 view StudioScenarioPanelSurface(Available boolean) accepts content from ./TaoStudioProductHost.tsx
 
@@ -1113,6 +1175,46 @@ function StudioScenarioCapturedLayers(State text) returns list of text {
 
 function StudioScenarioFailureAvailable(State text) returns boolean {
    return StudioScenarioFailureAvailable(State) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioJourneyActive(Recording text) returns boolean {
+   return StudioScenarioJourneyActive(Recording) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioJourneyAvailable(Recording text) returns boolean {
+   return StudioScenarioJourneyAvailable(Recording) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioJourneyBusy(Recording text) returns boolean {
+   return StudioScenarioJourneyBusy(Recording) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioJourneyCommand(Recording text) returns text {
+   return StudioScenarioJourneyCommand(Recording) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioJourneyCanRecord(State text, Recording text, Ready boolean) returns boolean {
+   return StudioScenarioJourneyCanRecord(State: State, Recording: Recording, Ready: Ready) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioJourneyCanSave(Recording text) returns boolean {
+   return StudioScenarioJourneyCanSave(Recording) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioJourneyButtonLabel(Recording text) returns text {
+   return StudioScenarioJourneyButtonLabel(Recording) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioJourneyLines(Recording text) returns list of text {
+   return StudioScenarioJourneyLines(Recording) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioJourneyStatus(Recording text) returns text {
+   return StudioScenarioJourneyStatus(Recording) from ./TaoStudioProductHost.tsx
+}
+
+function StudioScenarioJourneyPayload(State text, CaptureSensitiveText boolean) returns text {
+   return StudioScenarioJourneyPayload(State: State, CaptureSensitiveText: CaptureSensitiveText) from ./TaoStudioProductHost.tsx
 }
 
 function StudioScenarioFixtureNameValid(FixtureName text) returns boolean {
@@ -1172,11 +1274,12 @@ view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
       @projectViews ProjectViewsPanel()
       @screens ScreensPanel()
       @tokens DesignTokensPanel()
+      @data StudioDataRailPanel(InitialDataPanel)
       @search StudioSearchPanel([])
       @drawer StudioDrawerPanel(Tab: "Problems", Compile: InitialCompilePanel, Problems: InitialProblemsPanel, Data: InitialDataPanel, Tests: InitialTestsPanel, Logs: InitialLogsPanel)
-      @scenario StudioScenarioPanel(State: "null", ResolvedAppearance: "light")
+      @scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")
       @editor StudioEditorSurface()
       @inspector StudioContextPanel(Revision: 0, ProjectRoot: "", ActiveFilePath: "", ActiveFileContent: "", ActiveFileVersion: "", SelectionAnchor: 0, SelectionHead: 0, SelectedRenderId: "", SelectedRenderPath: "", SelectedRenderVersion: "", ActiveCellId: "", CellRevision: 0, ActiveScenarioId: "", ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser", InspectorBusy: false, InspectorCanUndo: false, InspectorInspection: "null", InspectorSelection: "null")
 }  }
 
-view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @search, @drawer, @scenario, @editor, @inspector from ./TaoStudioProductHost.tsx
+view ProductHostBoundary() accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @editor, @inspector from ./TaoStudioProductHost.tsx

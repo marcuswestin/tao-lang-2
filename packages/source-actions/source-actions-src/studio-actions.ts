@@ -1,8 +1,8 @@
-import { ASTUtils } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import Formatter from '@formatter'
 import { AST } from '@parser'
 import { Errors, Switch } from '@shared'
-import { assertNoSyntaxErrors } from './source-actions-utils'
+import { assertNoSyntaxErrors, parseSourceText } from './source-actions-utils'
 
 export type StudioComponentKind =
   | 'Box'
@@ -15,12 +15,14 @@ export type StudioComponentKind =
   | 'Number'
   | 'Panes'
   | 'Picker'
+  | 'Placeholder'
   | 'Progress'
   | 'Row'
   | 'ScrollView'
   | 'SegmentedControl'
   | 'Slider'
   | 'Spinner'
+  | 'Spacer'
   | 'Stack'
   | 'Switch'
   | 'Text'
@@ -42,13 +44,50 @@ export type StudioInsertComponentPatchRequest = {
   kind: 'insert-component'
 }
 
-/** StudioInsertProjectViewPatchRequest inserts a zero-argument project view invocation into a Tao render block. */
+/** StudioInsertProjectViewPatchRequest inserts a project view with parser-resolved lexical bindings. */
 export type StudioInsertProjectViewPatchRequest = {
   afterId?: string
   beforeId?: string
+  bindings?: Readonly<Record<string, string>>
   kind: 'insert-project-view'
   viewName: string
 }
+
+export type StudioSketchScenarioFixtureBinding = Readonly<{
+  fixtureHandle: string
+  scenarioName: string
+}>
+
+/** Adds one entity parameter and fixture-backed argument to every entry of a generated sketch group. */
+export type StudioAddSketchEntityParameterPatchRequest = Readonly<{
+  entity: Readonly<{
+    declarationName: string
+    importPath: string
+    parameterName: string
+  }>
+  fixtureName: string
+  kind: 'add-sketch-entity-parameter'
+  scenarioArguments: readonly StudioSketchScenarioFixtureBinding[]
+  scenarioGroupName: string
+  viewName: string
+}>
+
+export type StudioSketchFieldPath = readonly [string, ...string[]]
+
+export type StudioSketchFieldPresentation =
+  | Readonly<{ kind: 'image'; labelFieldPath?: StudioSketchFieldPath }>
+  | Readonly<{ kind: 'text'; prefix?: string; suffix?: string }>
+
+/** Rebinds one tagged snapped leaf from placeholder content to a typed entity field path. */
+export type StudioBindSketchFieldPatchRequest = Readonly<{
+  fieldPath: StudioSketchFieldPath
+  kind: 'bind-sketch-field'
+  parameterName: string
+  presentation: StudioSketchFieldPresentation
+  rectId: string
+  renderId: string
+  viewName: string
+}>
 
 export type StudioLayoutAlignment = 'baseline' | 'bottom' | 'center' | 'left' | 'right' | 'top'
 export type StudioLayoutContentTerm = StudioLayoutAlignment | 'spread' | 'spread-balanced' | 'spread-inset' | 'stretch'
@@ -175,6 +214,27 @@ export type StudioSetScenarioArgumentsPatchRequest = {
   scenarioName: string
 }
 
+export type StudioRecordedScenarioStep =
+  | Readonly<{
+    kind: 'press' | 'submit'
+    selector: 'label' | 'placeholder' | 'tag' | 'text'
+    target: string
+  }>
+  | Readonly<{
+    kind: 'enter'
+    selector: 'label' | 'placeholder' | 'tag' | 'text'
+    target: string
+    value: string
+  }>
+
+/** Appends reviewed semantic interactions to one exact authored scenario. */
+export type StudioAppendScenarioStepsPatchRequest = {
+  kind: 'append-scenario-steps'
+  scenarioGroupName: string
+  scenarioName: string
+  steps: readonly StudioRecordedScenarioStep[]
+}
+
 /** StudioInsertCapturedFixturePatchRequest accepts a reviewed runtime-data capture into Tao source. */
 export type StudioInsertCapturedFixturePatchRequest = {
   fixtureName: string
@@ -201,6 +261,66 @@ export type StudioMoveRenderPatchRequest = StudioMoveRenderRequest & {
   kind: 'move-render'
 }
 
+/** Toggles the nearest Row/Col owning one stable leaf render. */
+export type StudioToggleFlowDirectionPatchRequest = Readonly<{
+  kind: 'toggle-flow-direction'
+  renderId: string
+}>
+
+/** Inserts a one-pixel cross-axis separator after a stable leaf render. */
+export type StudioInsertSeparatorPatchRequest = Readonly<{
+  afterId: string
+  beforeId?: string
+  kind: 'insert-separator'
+}>
+
+/** Inserts a Spacer between adjacent leaves and assigns their proportional claims. */
+export type StudioInsertSpacerPatchRequest = Readonly<{
+  afterId: string
+  beforeId: string
+  kind: 'insert-spacer'
+  ratio: readonly [number, number]
+}>
+
+export type StudioSketchSnapElement = Readonly<{
+  arguments: readonly string[]
+  component: 'Image' | 'Placeholder' | 'Text'
+  content?: string
+  layout: readonly StudioLayoutEntry[]
+  rectId: string
+  type: 'element'
+}>
+
+export type StudioSketchSnapContainer = Readonly<{
+  children: readonly StudioSketchSnapTree[]
+  direction: 'Col' | 'Row'
+  layout: readonly StudioLayoutEntry[]
+  type: 'container'
+}>
+
+export type StudioSketchSnapTree = StudioSketchSnapContainer | StudioSketchSnapElement
+
+/** Structured-only request for replacing one generated public sketch view's render tree. */
+export type StudioSnapSketchToFlowPatchRequest = Readonly<{
+  expectedCatalogRevision: number
+  kind: 'snap-sketch-to-flow'
+  mergeDirection: 'Col' | 'Row'
+  mergePosition: 'after' | 'before'
+  rectIds: readonly string[]
+  sketchId: string
+  tree: StudioSketchSnapTree
+  viewName: string
+}>
+
+/** Structured-only request for removing selected Studio-owned leaves from a generated sketch view. */
+export type StudioUnsnapSketchFromFlowPatchRequest = Readonly<{
+  fallback: Readonly<{ height: number; label: string; width: number }>
+  kind: 'unsnap-sketch-from-flow'
+  rectIds: readonly string[]
+  sketchId: string
+  viewName: string
+}>
+
 /**
  * StudioSetDesignEntryPatchRequest (semantic agent PoC) sets one entry on a named design bundle without a
  * render occurrence, so a design file that renders nothing can still take the edit.
@@ -214,13 +334,21 @@ export type StudioSetDesignEntryPatchRequest = {
 
 /** StudioSourcePatchRequest declares one semantic visual source mutation from Studio. */
 export type StudioSourcePatchRequest =
+  | StudioAddSketchEntityParameterPatchRequest
+  | StudioAppendScenarioStepsPatchRequest
+  | StudioBindSketchFieldPatchRequest
   | StudioInsertCapturedFixturePatchRequest
   | StudioSetDesignEntryPatchRequest
   | StudioInsertComponentPatchRequest
   | StudioInsertProjectViewPatchRequest
+  | StudioInsertSeparatorPatchRequest
+  | StudioInsertSpacerPatchRequest
   | StudioSetLayoutEntryPatchRequest
   | StudioSetStyleEntryPatchRequest
   | StudioSetScenarioArgumentsPatchRequest
+  | StudioSnapSketchToFlowPatchRequest
+  | StudioToggleFlowDirectionPatchRequest
+  | StudioUnsnapSketchFromFlowPatchRequest
   | StudioWrapRenderPatchRequest
   | StudioMoveRenderPatchRequest
 
@@ -241,16 +369,23 @@ export type StudioSourcePatch = {
 
 /** StudioActions exposes source transforms used by Tao Studio visual editing. */
 export const StudioActions = {
+  addSketchEntityParameter,
+  appendScenarioSteps,
   applyPatch,
+  bindSketchField,
   insertCapturedFixture,
   insertComponent,
   insertProjectView,
+  insertSeparator,
+  insertSpacer,
   inspectRender,
   moveRender,
   setLayoutEntry,
   setScenarioArguments,
+  snapSketchToFlow,
   setStyleEntry,
   sourceVersion: contentVersion,
+  toggleFlowDirection,
   wrapRender,
 } as const
 
@@ -277,16 +412,89 @@ async function applyPatchContent(
 ): Promise<string> {
   validateOccurrencePrecondition(document, request, context.occurrence)
   return await Switch.kind(request, {
+    'add-sketch-entity-parameter': async action => await addSketchEntityParameter(document, action, context),
+    'append-scenario-steps': async action => await appendScenarioSteps(document, action),
+    'bind-sketch-field': async action => await bindSketchField(document, action),
     'insert-captured-fixture': async action => await insertCapturedFixture(document, action),
     'insert-component': async action => await insertComponent(document, action.component, action),
-    'insert-project-view': async action => await insertProjectView(document, action.viewName, action),
+    'insert-project-view': async action => await insertProjectView(document, action),
+    'insert-separator': async action => await insertSeparator(document, action),
+    'insert-spacer': async action => await insertSpacer(document, action),
     'move-render': async action => await moveRender(document, action),
     'set-design-entry': async action => await setDesignEntry(document, action),
     'set-layout-entry': async action => await setLayoutEntry(document, action),
     'set-scenario-arguments': async action => await setScenarioArguments(document, action),
     'set-style-entry': async action => await setStyleEntry(document, action, context),
+    'snap-sketch-to-flow': async action => await snapSketchToFlow(document, action),
+    'toggle-flow-direction': async action => await toggleFlowDirection(document, action),
+    'unsnap-sketch-from-flow': async action => await unsnapSketchFromFlow(document, action),
     'wrap-render': async action => await wrapRender(document, action),
   })
+}
+
+async function appendScenarioSteps(
+  document: AST.Document,
+  request: StudioAppendScenarioStepsPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireScenarioIdentity(request.scenarioGroupName, request.scenarioName)
+  if (!Array.isArray(request.steps) || request.steps.length === 0 || request.steps.length > 100) {
+    throw new Errors.UserInputError('Studio journey recording must contain between 1 and 100 interactions.')
+  }
+  const groups = document.parseResult.value.statements
+    .filter(AST.isScenarioGroupDeclaration)
+    .filter(group => group.name === request.scenarioGroupName)
+  const scenarios = groups.flatMap(group => AST.scenarioDeclarations(group))
+    .filter(scenario => scenario.name === request.scenarioName)
+  if (groups.length !== 1 || scenarios.length !== 1 || scenarios[0]?.block.$cstNode === undefined) {
+    throw new Errors.UserInputError(
+      `Studio scenario is not uniquely declared in this source file: ${request.scenarioGroupName} / ${request.scenarioName}`,
+    )
+  }
+  const steps = request.steps.map(recordedScenarioStepSource)
+  const source = document.textDocument.getText()
+  const offset = scenarios[0].block.$cstNode.end - 1
+  return await formatAndReparse(
+    document,
+    applySourceEdits(source, [{
+      end: offset,
+      replacement: `\n${steps.join('\n')}\n`,
+      start: offset,
+    }]),
+  )
+}
+
+function recordedScenarioStepSource(step: StudioRecordedScenarioStep): string {
+  requireExactKeys(
+    step,
+    step.kind === 'enter' ? ['kind', 'selector', 'target', 'value'] : ['kind', 'selector', 'target'],
+    'Recorded scenario step',
+  )
+  if (step.kind !== 'press' && step.kind !== 'submit' && step.kind !== 'enter') {
+    throw new Errors.UserInputError('Studio journey recording contains an unsupported interaction.')
+  }
+  if (!['label', 'placeholder', 'tag', 'text'].includes(step.selector) || step.target.trim() === '') {
+    throw new Errors.UserInputError('Studio journey recording contains an invalid semantic target.')
+  }
+  const target = step.selector === 'tag'
+    ? recordedScenarioTag(step.target)
+    : `${step.selector} ${taoStringLiteral(step.target)}`
+  return step.kind === 'enter'
+    ? `enter ${taoStringLiteral(step.value)} into ${target}`
+    : `${step.kind} ${target}`
+}
+
+function recordedScenarioTag(value: string): string {
+  if (!/^[A-Za-z0-9_]+$/.test(value)) {
+    throw new Errors.UserInputError(`Studio journey recording tag is invalid: ${value}`)
+  }
+  return `#${value}`
+}
+
+function requireScenarioIdentity(group: string, scenario: string): void {
+  if (group.trim() === '' || scenario.trim() === '' || /[\u0000-\u001f\u007f]/u.test(group + scenario)) {
+    throw new Errors.UserInputError('Studio journey recording scenario identity is invalid.')
+  }
 }
 
 function validateOccurrencePrecondition(
@@ -324,16 +532,366 @@ function validateOccurrencePrecondition(
 
 function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | undefined {
   return Switch.kind(request, {
+    'add-sketch-entity-parameter': () => undefined,
+    'append-scenario-steps': () => undefined,
+    'bind-sketch-field': action => action.renderId,
     'insert-captured-fixture': () => undefined,
     'insert-component': action => action.beforeId ?? action.afterId,
     'insert-project-view': action => action.beforeId ?? action.afterId,
+    'insert-separator': action => action.afterId,
+    'insert-spacer': action => action.afterId,
     'move-render': action => action.draggedId,
     'set-design-entry': () => undefined,
     'set-layout-entry': action => action.renderId,
     'set-scenario-arguments': () => undefined,
     'set-style-entry': action => action.renderId,
+    'snap-sketch-to-flow': () => undefined,
+    'toggle-flow-direction': action => action.renderId,
+    'unsnap-sketch-from-flow': () => undefined,
     'wrap-render': action => action.renderId,
   })
+}
+
+async function addSketchEntityParameter(
+  document: AST.Document,
+  request: StudioAddSketchEntityParameterPatchRequest,
+  context: StudioWorkspaceDesignContext = {},
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  validateAddSketchEntityParameterRequest(request)
+  const file = document.parseResult.value
+  const view = uniqueGeneratedSketchView(file, request.viewName)
+  const groups = file.statements.filter(AST.isScenarioGroupDeclaration)
+    .filter(group => group.name === request.scenarioGroupName && group.subject?.ref === view)
+  if (groups.length !== 1) {
+    throw new Errors.UserInputError(
+      `Studio entity binding requires one owned sketch scenario group: ${request.scenarioGroupName}`,
+    )
+  }
+  const group = groups[0]!
+  const fixture = file.statements.filter(AST.isFixtureDeclaration)
+    .filter(candidate => candidate.name === request.fixtureName)
+  if (fixture.length !== 1) {
+    throw new Errors.UserInputError(
+      `Studio sketch fixture is not uniquely declared in this source file: ${request.fixtureName}`,
+    )
+  }
+  const entities = [
+    ...new Set(
+      (context.files ?? [file]).flatMap(candidate => candidate.statements.filter(AST.isEntityDataDeclaration)),
+    ),
+  ].filter(candidate =>
+    candidate.name === request.entity.declarationName && candidate.singularName === request.entity.parameterName
+  )
+  if (entities.length > 1) {
+    throw new Errors.UserInputError(
+      `Studio sketch entity is not uniquely declared: ${request.entity.declarationName} / ${request.entity.parameterName}`,
+    )
+  }
+  const entity = entities[0]
+  if (AST.parametersOf(view).some(parameter => Type.parameterName(parameter) === request.entity.parameterName)) {
+    throw new Errors.UserInputError(`Studio sketch view already declares parameter ${request.entity.parameterName}.`)
+  }
+  const scenarios = AST.scenarioDeclarations(group)
+  const handles = new Map(request.scenarioArguments.map(binding => [binding.scenarioName, binding.fixtureHandle]))
+  if (
+    handles.size !== request.scenarioArguments.length
+    || scenarios.length !== handles.size
+    || scenarios.some(scenario => !handles.has(scenario.name))
+  ) {
+    throw new Errors.UserInputError(
+      'Studio entity binding must supply one fixture handle for every sketch scenario entry.',
+    )
+  }
+  const fixtureValues = new Map(AST.fixtureValueDeclarations(fixture[0]!).map(value => [value.name, value]))
+  for (const binding of request.scenarioArguments) {
+    const value = fixtureValues.get(binding.fixtureHandle)
+    if (
+      !AST.isFixtureCreateBinding(value)
+      || value.entity.$refText !== request.entity.parameterName
+      || (entity !== undefined && value.entity.ref !== undefined && value.entity.ref !== entity)
+    ) {
+      throw new Errors.UserInputError(
+        `Studio fixture handle ${binding.fixtureHandle} does not create ${request.entity.parameterName}.`,
+      )
+    }
+  }
+  for (const scenario of scenarios) {
+    const effectiveFixture = AST.effectiveScenarioClause(scenario, AST.isScenarioFixtureClause)
+    if (effectiveFixture !== undefined && effectiveFixture.fixture.ref !== fixture[0]) {
+      throw new Errors.UserInputError(`Studio scenario ${scenario.name} already uses another fixture.`)
+    }
+  }
+
+  const source = document.textDocument.getText()
+  const parameterList = view.parameterList?.$cstNode
+  if (parameterList === undefined) {
+    throw new Errors.UserInputError(`Studio sketch view has no editable parameter list: ${request.viewName}`)
+  }
+  const parameterSources = AST.parametersOf(view).map(parameter => parameter.$cstNode!.text)
+  const edits: SourceEdit[] = [{
+    end: parameterList.end,
+    replacement: `(${[...parameterSources, request.entity.parameterName].join(', ')})`,
+    start: parameterList.offset,
+  }]
+  if (group.block.entries.every(entry => !AST.isScenarioFixtureClause(entry))) {
+    const offset = group.block.$cstNode!.offset + 1
+    edits.push({ end: offset, replacement: `\nfixture ${request.fixtureName}`, start: offset })
+  }
+  for (const scenario of scenarios) {
+    const ownRender = scenario.block.entries.find(AST.isScenarioRenderClause)
+    const effectiveRender = AST.effectiveScenarioSubjectClause(scenario)
+    if (effectiveRender !== undefined && !AST.isScenarioRenderClause(effectiveRender)) {
+      throw new Errors.UserInputError(`Studio sketch scenario ${scenario.name} does not render a view.`)
+    }
+    const arguments_ = effectiveRender?.argumentList?.arguments ?? []
+    if (arguments_.some(argument => argument.label === request.entity.parameterName)) {
+      throw new Errors.UserInputError(
+        `Studio sketch scenario ${scenario.name} already supplies ${request.entity.parameterName}.`,
+      )
+    }
+    const argumentSource = [
+      ...arguments_.map(argument => argument.$cstNode!.text),
+      `${request.entity.parameterName}: ${handles.get(scenario.name)!}`,
+    ].join(', ')
+    const replacement = scenarioRenderSource(scenario, view, argumentSource)
+    if (ownRender?.$cstNode !== undefined) {
+      edits.push({ end: ownRender.$cstNode.end, replacement, start: ownRender.$cstNode.offset })
+    } else {
+      const firstStepOffset = scenario.block.steps[0]?.$cstNode?.offset
+      const offset = firstStepOffset ?? scenario.block.$cstNode!.end - 1
+      edits.push({
+        end: offset,
+        replacement: `${firstStepOffset === undefined ? '\n' : ''}${replacement}\n`,
+        start: offset,
+      })
+    }
+  }
+  const changed = applySourceEdits(source, edits)
+  const imported = ensureNamedImport(
+    changed,
+    file,
+    request.entity.declarationName,
+    request.entity.importPath,
+  )
+  return await formatAndReparse(document, imported)
+}
+
+async function bindSketchField(
+  document: AST.Document,
+  request: StudioBindSketchFieldPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  validateBindSketchFieldRequest(request)
+  requireLocalRenderId(document, request.renderId, 'bind sketch fields')
+  const file = document.parseResult.value
+  const view = uniqueGeneratedSketchView(file, request.viewName)
+  const render = requireRenderById(file, request.renderId)
+  if (
+    !AST.isRender(render)
+    || (AST.isRenderStatement(render) && render.injection !== undefined)
+    || render.block !== undefined
+    || AST.findOwningView(render) !== view
+    || render.$cstNode === undefined
+  ) {
+    throw new Errors.UserInputError('Studio field binding requires one leaf in the generated sketch view.')
+  }
+  if (AST.attachedTag(render)?.tag !== `#studio_rect_${encodedTag(request.rectId)}`) {
+    throw new Errors.UserInputError(`Studio field binding target does not match rectangle ${request.rectId}.`)
+  }
+  const parameter = AST.parametersOf(view)
+    .find(candidate => Type.parameterName(candidate) === request.parameterName)
+  if (parameter === undefined) {
+    throw new Errors.UserInputError(`Studio sketch parameter does not exist: ${request.parameterName}`)
+  }
+  const field = resolveSketchFieldPath(parameter, request.fieldPath)
+  const expression = [request.parameterName, ...request.fieldPath].join('.')
+  let component: 'Image' | 'Text'
+  let invocation: string
+  if (request.presentation.kind === 'image') {
+    requireTextField(field, request.fieldPath, 'image source')
+    const label = request.presentation.labelFieldPath === undefined
+      ? undefined
+      : resolveSketchFieldPath(parameter, request.presentation.labelFieldPath)
+    if (request.presentation.labelFieldPath !== undefined) {
+      requireTextField(label!, request.presentation.labelFieldPath, 'image label')
+    }
+    component = 'Image'
+    invocation = `Image(${expression}${
+      request.presentation.labelFieldPath === undefined
+        ? ''
+        : `, Label: ${[request.parameterName, ...request.presentation.labelFieldPath].join('.')}`
+    })`
+  } else {
+    if (field.kind !== 'primitive' && field.kind !== 'enum') {
+      throw new Errors.UserInputError(`Studio text binding cannot render field path ${request.fieldPath.join('.')}.`)
+    }
+    component = 'Text'
+    invocation = field.kind === 'primitive'
+        && field.primitive === 'text'
+        && request.presentation.prefix === undefined
+        && request.presentation.suffix === undefined
+      ? `Text(${expression})`
+      : `Text(${interpolatedFieldSource(expression, request.presentation.prefix, request.presentation.suffix)})`
+  }
+  const layout = render.layoutClause?.$cstNode?.text
+  const source = applySourceEdits(document.textDocument.getText(), [{
+    end: render.$cstNode.end,
+    replacement: `${AST.isRenderStatement(render) ? 'render ' : ''}${invocation}${
+      layout === undefined ? '' : ` ${layout}`
+    }`,
+    start: render.$cstNode.offset,
+  }])
+  return await formatAndReparse(document, ensureUiComponentImport(source, file, component))
+}
+
+function validateAddSketchEntityParameterRequest(request: StudioAddSketchEntityParameterPatchRequest): void {
+  requireExactKeys(
+    request,
+    ['entity', 'fixtureName', 'kind', 'scenarioArguments', 'scenarioGroupName', 'viewName'],
+    'Add sketch entity parameter request',
+  )
+  requireExactKeys(request.entity, ['declarationName', 'importPath', 'parameterName'], 'Sketch entity reference')
+  requireIdentifier(request.viewName, 'sketch view')
+  requireIdentifier(request.entity.declarationName, 'entity declaration')
+  requireIdentifier(request.entity.parameterName, 'entity parameter')
+  requireIdentifier(request.fixtureName, 'sketch fixture')
+  if (request.scenarioGroupName.length === 0 || /[\u0000-\u001f\u007f]/u.test(request.scenarioGroupName)) {
+    throw new Errors.UserInputError('Studio sketch scenario group name is invalid.')
+  }
+  if (
+    !/^(?:\.\.?\/)+(?:[A-Za-z_][A-Za-z0-9_-]*)(?:\/[A-Za-z_][A-Za-z0-9_-]*)*(?:\.tao)?$/.test(
+      request.entity.importPath,
+    )
+  ) {
+    throw new Errors.UserInputError(`Studio entity import path is invalid: ${request.entity.importPath}`)
+  }
+  if (!Array.isArray(request.scenarioArguments) || request.scenarioArguments.length === 0) {
+    throw new Errors.UserInputError('Studio entity binding requires sketch scenario arguments.')
+  }
+  for (const binding of request.scenarioArguments) {
+    requireExactKeys(binding, ['fixtureHandle', 'scenarioName'], 'Sketch scenario fixture binding')
+    requireIdentifier(binding.fixtureHandle, 'fixture handle')
+    if (binding.scenarioName.length === 0 || /[\u0000-\u001f\u007f]/u.test(binding.scenarioName)) {
+      throw new Errors.UserInputError('Studio sketch scenario name is invalid.')
+    }
+  }
+}
+
+function validateBindSketchFieldRequest(request: StudioBindSketchFieldPatchRequest): void {
+  requireExactKeys(
+    request,
+    ['fieldPath', 'kind', 'parameterName', 'presentation', 'rectId', 'renderId', 'viewName'],
+    'Bind sketch field request',
+  )
+  requireIdentifier(request.viewName, 'sketch view')
+  requireIdentifier(request.parameterName, 'sketch parameter')
+  if (request.rectId.length === 0) {
+    throw new Errors.UserInputError('Studio field binding rectangle identity must be nonempty.')
+  }
+  validateFieldPath(request.fieldPath, 'field')
+  if (request.presentation.kind === 'image') {
+    requireExactKeys(request.presentation, ['kind', 'labelFieldPath'], 'Sketch image presentation')
+    if (request.presentation.labelFieldPath !== undefined) {
+      validateFieldPath(request.presentation.labelFieldPath, 'image label')
+    }
+  } else if (request.presentation.kind === 'text') {
+    requireExactKeys(request.presentation, ['kind', 'prefix', 'suffix'], 'Sketch text presentation')
+    for (const value of [request.presentation.prefix, request.presentation.suffix]) {
+      if (value !== undefined && /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value)) {
+        throw new Errors.UserInputError('Studio text binding affixes contain unsupported control characters.')
+      }
+    }
+  } else {
+    throw new Errors.UserInputError('Studio sketch field presentation is invalid.')
+  }
+}
+
+function validateFieldPath(path: readonly string[], label: string): void {
+  if (!Array.isArray(path) || path.length === 0) {
+    throw new Errors.UserInputError(`Studio ${label} path must contain at least one field.`)
+  }
+  path.forEach(segment => requireIdentifier(segment, `${label} path segment`))
+}
+
+function uniqueGeneratedSketchView(file: AST.TaoFile, viewName: string): AST.ViewDeclaration {
+  const views = file.statements.filter(AST.isViewDeclaration).filter(view => view.name === viewName)
+  const view = views.length === 1 ? views[0] : undefined
+  if (
+    view === undefined || view.visibility !== 'public' || view.block === undefined
+    || !/^View[1-9][0-9]*$/.test(viewName)
+  ) {
+    throw new Errors.UserInputError(`Studio entity binding requires one generated public ViewN: ${viewName}`)
+  }
+  return view
+}
+
+function resolveSketchFieldPath(parameter: AST.ParameterDeclaration, path: readonly string[]) {
+  let type = Type.ofParameter(parameter)
+  for (const [index, segment] of path.entries()) {
+    if (type.kind === 'list' && segment === 'Count' && index === path.length - 1) {
+      return { kind: 'primitive' as const, primitive: 'number' as const }
+    }
+    if (type.kind !== 'entity') {
+      throw new Errors.UserInputError(`Studio field path cannot traverse ${path.slice(0, index).join('.') || 'value'}.`)
+    }
+    const field = Type.dataFields(type.entity).find(candidate => candidate.name === segment)
+    if (field === undefined) {
+      throw new Errors.UserInputError(`Studio entity ${type.entity.singularName} has no field ${segment}.`)
+    }
+    if (field.optional) {
+      throw new Errors.UserInputError(`Studio field path cannot bind optional field ${segment} without a fallback.`)
+    }
+    type = Type.dataFieldType(field)
+  }
+  return type
+}
+
+function requireTextField(
+  field: ReturnType<typeof resolveSketchFieldPath>,
+  path: readonly string[],
+  label: string,
+): void {
+  if (field.kind !== 'primitive' || field.primitive !== 'text') {
+    throw new Errors.UserInputError(`Studio ${label} must be a text field: ${path.join('.')}`)
+  }
+}
+
+function interpolatedFieldSource(expression: string, prefix = '', suffix = ''): string {
+  const escapedPrefix = taoStringLiteral(prefix).slice(1, -1)
+  const escapedSuffix = taoStringLiteral(suffix).slice(1, -1)
+  return `"${escapedPrefix}{ ${expression} }${escapedSuffix}"`
+}
+
+function ensureNamedImport(
+  source: string,
+  file: AST.TaoFile,
+  declarationName: string,
+  importPath: string,
+): string {
+  const use = file.statements.filter(AST.isUseStatement).find(statement => statement.importPath === importPath)
+  if (use?.$cstNode !== undefined) {
+    const imported = use.importedDeclarations.map(reference => reference.$refText)
+    return imported.includes(declarationName)
+      ? source
+      : applySourceEdits(source, [{
+        end: use.$cstNode.end,
+        replacement: `use ${[...new Set([...imported, declarationName])].toSorted().join(', ')} from ${importPath}`,
+        start: use.$cstNode.offset,
+      }])
+  }
+  const offset = file.statements[0]?.$cstNode?.offset ?? 0
+  return applySourceEdits(source, [{
+    end: offset,
+    replacement: `use ${declarationName} from ${importPath}\n\n`,
+    start: offset,
+  }])
+}
+
+async function formatAndReparse(document: AST.Document, source: string): Promise<string> {
+  const formatted = await Formatter.formatCode(source)
+  assertNoSyntaxErrors(await parseSourceText(document, formatted))
+  return formatted
 }
 
 async function insertCapturedFixture(
@@ -432,10 +990,12 @@ async function setScenarioArguments(
     }
   }
   if (additions.length > 0) {
+    const firstStepOffset = scenario.block.steps[0]?.$cstNode?.offset
+    const insertionOffset = firstStepOffset ?? scenario.block.$cstNode.end - 1
     edits.push({
-      end: scenario.block.$cstNode.end - 1,
-      replacement: `\n${additions.join('\n')}\n`,
-      start: scenario.block.$cstNode.end - 1,
+      end: insertionOffset,
+      replacement: `${firstStepOffset === undefined ? '\n' : ''}${additions.join('\n')}\n`,
+      start: insertionOffset,
     })
   }
   const content = applySourceEdits(source, edits)
@@ -530,16 +1090,166 @@ async function insertViewRender(
   return await Formatter.formatCode(insertStudioSnippetAtGap(document, insertion, gap))
 }
 
-/** insertProjectView inserts a zero-argument project view invocation into the first render block. */
+/** insertProjectView binds required parameters from the exact target gap's lexical scope. */
 async function insertProjectView(
   document: AST.Document,
-  viewName: string,
-  gap: StudioRenderGap = {},
+  request: StudioInsertProjectViewPatchRequest,
 ): Promise<string> {
   assertNoSyntaxErrors(document)
-  const target = studioInsertionRender(document.parseResult.value)
-  requireInsertableProjectView(document.parseResult.value, viewName, AST.findOwningView(target)?.name)
-  return await insertViewRender(document, `${viewName}()`, gap)
+  validateInsertProjectViewRequest(request)
+  const target = studioInsertionTarget(document, request)
+  const view = requireInsertableProjectView(
+    document.parseResult.value,
+    request.viewName,
+    AST.findOwningView(target.block)?.name,
+  )
+  const arguments_ = projectViewArguments(
+    view,
+    visibleInsertionValues(target.block, target.offset),
+    request.bindings ?? {},
+  )
+  return await insertViewRender(document, `${request.viewName}(${arguments_})`, request)
+}
+
+/** toggleFlowDirection changes the nearest Row/Col that directly or transitively owns a leaf render. */
+async function toggleFlowDirection(
+  document: AST.Document,
+  request: StudioToggleFlowDirectionPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireLocalRenderId(document, request.renderId, 'toggle flow direction for renders')
+  const leaf = requireLeafRenderById(document.parseResult.value, request.renderId)
+  const owner = nearestFlowOwner(leaf)
+  const reference = owner.view!.$refNode
+  if (reference === undefined) {
+    throw new Errors.UserInputError('Cannot toggle a flow container without source coordinates.')
+  }
+  const direction: 'Col' | 'Row' = flowDirection(owner) === 'Row' ? 'Col' : 'Row'
+  const source = applySourceEdits(document.textDocument.getText(), [{
+    end: reference.end,
+    replacement: direction,
+    start: reference.offset,
+  }])
+  return await Formatter.formatCode(ensureUiComponentImport(source, document.parseResult.value, direction))
+}
+
+/** insertSeparator inserts the current-dialect Box separator for the owning flow direction. */
+async function insertSeparator(
+  document: AST.Document,
+  request: StudioInsertSeparatorPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  const siblings = requireFlowSiblings(document, request.afterId, request.beforeId)
+  const direction = flowDirection(siblings.owner)
+  const snippet = direction === 'Row' ? 'Box() [width 1, height fill]' : 'Box() [width fill, height 1]'
+  const inserted = insertStudioSnippetAtGap(document, snippet, request)
+  return await Formatter.formatCode(ensureUiComponentImport(inserted, document.parseResult.value, 'Box'))
+}
+
+/** insertSpacer inserts one Spacer and applies a deterministic two-sided claim ratio. */
+async function insertSpacer(
+  document: AST.Document,
+  request: StudioInsertSpacerPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  const ratio = requireClaimRatio(request.ratio)
+  const siblings = requireFlowSiblings(document, request.afterId, request.beforeId)
+  const source = document.textDocument.getText()
+  const slices = blockStatementSlices(source, siblings.block)
+  const insertEdit = studioSnippetInsertionEdit(source, slices, request, 'Spacer()')
+  const edits = [
+    ...setRenderLayoutEntryEdits(source, siblings.after, `claim ${ratio[0]}`),
+    ...setRenderLayoutEntryEdits(source, siblings.before!, `claim ${ratio[1]}`),
+    insertEdit,
+  ]
+  const inserted = applySourceEdits(source, edits)
+  return await Formatter.formatCode(ensureUiComponentImport(inserted, document.parseResult.value, 'Spacer'))
+}
+
+function requireClaimRatio(value: readonly [number, number]): readonly [number, number] {
+  if (
+    !Array.isArray(value)
+    || value.length !== 2
+    || value.some(weight => !Number.isSafeInteger(weight) || weight < 1 || weight > 100)
+  ) {
+    throw new Errors.UserInputError('Studio Spacer claim ratio must contain two integers from 1 through 100.')
+  }
+  return value
+}
+
+type FlowSiblings = {
+  after: AST.ViewRender
+  before?: AST.ViewRender
+  block: AST.Block
+  owner: FlowOwner
+}
+
+function requireFlowSiblings(
+  document: AST.Document,
+  afterId: string,
+  beforeId: string | undefined,
+): FlowSiblings {
+  requireLocalRenderId(document, afterId, 'edit flow siblings')
+  if (beforeId !== undefined) {
+    requireLocalRenderId(document, beforeId, 'edit flow siblings')
+  }
+  const after = requireLeafRenderById(document.parseResult.value, afterId)
+  const before = beforeId === undefined ? undefined : requireLeafRenderById(document.parseResult.value, beforeId)
+  if (!AST.isBlock(after.$container) || (before !== undefined && before.$container !== after.$container)) {
+    throw new Errors.UserInputError('Studio flow edits require direct leaf siblings in the same container.')
+  }
+  const block = after.$container
+  const owner = block.$container
+  if (!isFlowOwner(owner)) {
+    throw new Errors.UserInputError('Studio flow edits require leaf siblings owned by a Row or Col.')
+  }
+  if (
+    AST.findOwningView(after) === undefined
+    || (before !== undefined && AST.findOwningView(before) !== AST.findOwningView(after))
+  ) {
+    throw new Errors.UserInputError('Studio flow edits require render expressions in the same view definition.')
+  }
+  if (before !== undefined) {
+    const slices = blockStatementSlices(document.textDocument.getText(), block)
+    insertionTargetIndex(slices, { afterId, beforeId })
+  }
+  return { after, ...(before === undefined ? {} : { before }), block, owner }
+}
+
+function requireLeafRenderById(file: AST.TaoFile, id: string): AST.ViewRender {
+  const render = requireRenderById(file, id)
+  if (!AST.isViewRender(render) || render.block !== undefined || !AST.isBlock(render.$container)) {
+    throw new Errors.UserInputError(`Studio flow edit target is no longer a direct leaf render: ${id}`)
+  }
+  return render
+}
+
+type FlowOwner = AST.RenderStatement | AST.ViewRender
+
+function flowDirection(render: FlowOwner): 'Col' | 'Row' {
+  const direction = render.view?.$refText
+  if (direction !== 'Row' && direction !== 'Col') {
+    throw new Errors.UnexpectedBehaviorError('Expected a validated Studio Row or Col flow owner.')
+  }
+  return direction
+}
+
+function isFlowOwner(value: unknown): value is FlowOwner {
+  return (AST.isViewRender(value) || AST.isRenderStatement(value))
+    && (value.view?.$refText === 'Row' || value.view?.$refText === 'Col')
+}
+
+function nearestFlowOwner(render: AST.ViewRender): FlowOwner {
+  let candidate: unknown = render.$container
+  while (candidate !== undefined) {
+    if (isFlowOwner(candidate)) {
+      return candidate
+    }
+    candidate = typeof candidate === 'object' && candidate !== null && '$container' in candidate
+      ? candidate.$container
+      : undefined
+  }
+  throw new Errors.UserInputError('Studio direction toggle requires a leaf owned by a Row or Col.')
 }
 
 /** setLayoutEntry sets or replaces one layout entry on a rendered node. */
@@ -1091,6 +1801,347 @@ function removeLayoutClauseEntryEdit(source: string, render: AST.Render, entry: 
 const colorEntryHeads = new Set<string>(ASTUtils.designColorHeads)
 const cssHexColor = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
 
+/** Adds a validated structured Snap tree without rebuilding an existing snapped render tree. */
+async function snapSketchToFlow(
+  document: AST.Document,
+  request: StudioSnapSketchToFlowPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  validateSnapRequest(request)
+  const views = document.parseResult.value.statements.filter(AST.isViewDeclaration)
+    .filter(view => view.name === request.viewName)
+  const view = views.length === 1 ? views[0] : undefined
+  if (view === undefined || view.visibility !== 'public' || view.block === undefined) {
+    throw new Errors.UserInputError(`Studio Snap requires one generated public view: ${request.viewName}`)
+  }
+  const owners = document.parseResult.value.statements.filter(AST.isScenarioGroupDeclaration)
+    .filter(group => group.name === 'sketch' && group.subject?.ref === view)
+  if (owners.length !== 1) {
+    throw new Errors.UserInputError(
+      `Studio Snap view is not owned by one generated sketch scenario: ${request.viewName}`,
+    )
+  }
+  const renders = view.block.statements.filter(AST.isRenderStatement)
+  if (renders.length !== 1 || renders[0]?.$cstNode === undefined) {
+    throw new Errors.UserInputError(`Studio Snap requires one direct render tree in ${request.viewName}.`)
+  }
+  const leafIds: string[] = []
+  const components = new Set<string>()
+  const nodeSource = snapNodeSource(request.tree, '', leafIds, components)
+  if (leafIds.length !== request.rectIds.length || leafIds.some((id, index) => id !== request.rectIds[index])) {
+    throw new Errors.UserInputError('Studio Snap rectangle identities do not match the structured tree.')
+  }
+  const source = document.textDocument.getText()
+  const root = renders[0]!
+  const rootCst = root.$cstNode!
+  const existing = AST.streamAllContents(view).filter(AST.isRender)
+    .filter(render => AST.attachedTag(render)?.tag.startsWith('#studio_rect_'))
+  const requestedTags = new Set(request.rectIds.map(id => `#studio_rect_${encodedTag(id)}`))
+  if (existing.some(render => requestedTags.has(AST.attachedTag(render)!.tag))) {
+    throw new Errors.UserInputError('Studio Snap cannot add a rectangle that is already snapped.')
+  }
+  const edits: SourceEdit[] = []
+  if (existing.length === 0) {
+    const replacement = request.tree.type === 'element'
+      ? nodeSource.replace('\n', '\nrender ')
+      : `render ${nodeSource}`
+    edits.push({ end: rootCst.end, replacement, start: rootCst.offset })
+  } else if (root.block !== undefined && root.view?.$refText === request.mergeDirection) {
+    const indentation = `${lineIndentAt(source, rootCst.offset)}   `
+    if (request.mergePosition === 'before') {
+      const offset = blockOpenBraceOffset(source, root.block)
+      edits.push({
+        end: offset,
+        replacement: `\n${indentSnippet(nodeSource, indentation)}`,
+        start: offset,
+      })
+    } else {
+      const offset = blockCloseBraceOffset(source, root.block)
+      edits.push({
+        end: offset,
+        replacement: `\n${indentSnippet(nodeSource, indentation)}`,
+        start: offset,
+      })
+    }
+  } else {
+    const rootTag = AST.attachedTag(root)
+    const rootStart = rootTag?.tag.startsWith('#studio_rect_') && rootTag.$cstNode !== undefined
+      ? rootTag.$cstNode.offset
+      : rootCst.offset
+    const indentation = lineIndentAt(source, rootCst.offset)
+    const childIndentation = `${indentation}   `
+    const invocationSource = source.slice(rootCst.offset, rootCst.end)
+      .replace(/^\s*render\s+/, '')
+      .trim()
+    const tagSource = rootStart === rootCst.offset
+      ? ''
+      : `${source.slice(rootStart, rootCst.offset).trim()}\n`
+    const existingSource = `${tagSource}${invocationSource}`
+    const children = request.mergePosition === 'before'
+      ? `${indentSnippet(nodeSource, childIndentation)}\n${indentSnippet(existingSource, childIndentation)}`
+      : `${indentSnippet(existingSource, childIndentation)}\n${indentSnippet(nodeSource, childIndentation)}`
+    edits.push({
+      end: rootCst.end,
+      replacement: `render ${request.mergeDirection}() {\n${children}\n${indentation}}`,
+      start: rootStart,
+    })
+  }
+  const required = [...components].toSorted()
+  const uses = document.parseResult.value.statements.filter(AST.isUseStatement)
+  const uiUse = uses.find(statement => statement.importPath === '@tao/ui')
+  const imported = new Set(uiUse?.importedDeclarations.map(reference => reference.$refText) ?? [])
+  if (required.some(component => !imported.has(component))) {
+    if (uiUse?.$cstNode !== undefined) {
+      edits.push({
+        end: uiUse.$cstNode.end,
+        replacement: `use ${[...new Set([...imported, ...required])].toSorted().join(', ')} from @tao/ui`,
+        start: uiUse.$cstNode.offset,
+      })
+    } else {
+      const offset = document.parseResult.value.statements[0]?.$cstNode?.offset ?? 0
+      edits.push({ end: offset, replacement: `use ${required.join(', ')} from @tao/ui\n\n`, start: offset })
+    }
+  }
+  return await Formatter.formatCode(applySourceEdits(source, edits))
+}
+
+/** Removes only selected Studio-owned leaves, preserving the rest of the view and source file. */
+async function unsnapSketchFromFlow(
+  document: AST.Document,
+  request: StudioUnsnapSketchFromFlowPatchRequest,
+): Promise<string> {
+  assertNoSyntaxErrors(document)
+  validateUnsnapRequest(request)
+  const file = document.parseResult.value
+  const views = file.statements.filter(AST.isViewDeclaration).filter(view => view.name === request.viewName)
+  const view = views.length === 1 ? views[0] : undefined
+  if (view === undefined || view.visibility !== 'public' || view.block === undefined) {
+    throw new Errors.UserInputError(`Studio Unsnap requires one generated public view: ${request.viewName}`)
+  }
+  const owners = file.statements.filter(AST.isScenarioGroupDeclaration)
+    .filter(group => group.name === 'sketch' && group.subject?.ref === view)
+  if (owners.length !== 1) {
+    throw new Errors.UserInputError(
+      `Studio Unsnap view is not owned by one generated sketch scenario: ${request.viewName}`,
+    )
+  }
+  const roots = view.block.statements.filter(AST.isRenderStatement)
+  const root = roots.length === 1 ? roots[0] : undefined
+  if (root?.$cstNode === undefined) {
+    throw new Errors.UserInputError(`Studio Unsnap requires one direct render tree in ${request.viewName}.`)
+  }
+  const selectedTags = new Map(request.rectIds.map(id => [`#studio_rect_${encodedTag(id)}`, id]))
+  const marked = AST.streamAllContents(view).filter(AST.isRender)
+    .map(render => ({ render, tag: AST.attachedTag(render) }))
+    .filter(item => item.tag?.tag.startsWith('#studio_rect_'))
+  const selected = marked.filter(item => selectedTags.has(item.tag!.tag))
+  if (selected.length !== request.rectIds.length) {
+    throw new Errors.UserInputError('Studio Unsnap could not find every selected rectangle in the current source.')
+  }
+  const source = document.textDocument.getText()
+  const selectedRenders = new Set(selected.map(item => item.render))
+  const survivingLeaves = AST.streamAllContents(view).filter(AST.isRender)
+    .filter(render => render.block === undefined && !selectedRenders.has(render))
+  if (survivingLeaves.length === 0) {
+    const rootTag = AST.attachedTag(root)
+    const start = rootTag?.tag.startsWith('#studio_rect_') && rootTag.$cstNode !== undefined
+      ? rootTag.$cstNode.offset
+      : root.$cstNode.offset
+    const replacement = `render Placeholder(${
+      taoStringLiteral(request.fallback.label)
+    }) [width ${request.fallback.width}, height ${request.fallback.height}]`
+    return await formatAndReparse(
+      document,
+      ensureUiComponentImport(
+        applySourceEdits(source, [{ end: root.$cstNode.end, replacement, start }]),
+        file,
+        'Placeholder',
+      ),
+    )
+  }
+  const edits = selected.map(({ render }) => {
+    if (!AST.isViewRender(render) || !AST.isBlock(render.$container)) {
+      throw new Errors.UserInputError('Studio Unsnap can only remove a selected leaf inside the generated render tree.')
+    }
+    const slice = blockStatementSlices(source, render.$container).find(candidate => candidate.statement === render)
+    if (slice === undefined) {
+      throw new Errors.UserInputError('Studio Unsnap could not locate the selected leaf source.')
+    }
+    return { end: slice.end, replacement: '', start: slice.start }
+  })
+  return await formatAndReparse(document, applySourceEdits(source, edits))
+}
+
+function validateSnapRequest(request: StudioSnapSketchToFlowPatchRequest): void {
+  requireExactKeys(
+    request,
+    [
+      'expectedCatalogRevision',
+      'kind',
+      'mergeDirection',
+      'mergePosition',
+      'rectIds',
+      'sketchId',
+      'tree',
+      'viewName',
+    ],
+    'Snap request',
+  )
+  if (!Number.isSafeInteger(request.expectedCatalogRevision) || request.expectedCatalogRevision < 0) {
+    throw new Errors.UserInputError('Studio Snap catalog revision must be a nonnegative integer.')
+  }
+  if (
+    typeof request.viewName !== 'string'
+    || !/^View[1-9][0-9]*$/.test(request.viewName)
+    || typeof request.sketchId !== 'string'
+    || request.sketchId.length === 0
+  ) {
+    throw new Errors.UserInputError('Studio Snap requires a generated ViewN and sketch identity.')
+  }
+  if (request.mergeDirection !== 'Col' && request.mergeDirection !== 'Row') {
+    throw new Errors.UserInputError('Studio Snap merge direction is invalid.')
+  }
+  if (request.mergePosition !== 'after' && request.mergePosition !== 'before') {
+    throw new Errors.UserInputError('Studio Snap merge position is invalid.')
+  }
+  if (!Array.isArray(request.rectIds) || request.rectIds.some(id => typeof id !== 'string' || id.length === 0)) {
+    throw new Errors.UserInputError('Studio Snap rectangle identities must be nonempty strings.')
+  }
+  validateSnapNode(request.tree, new Set(), 0)
+}
+
+function validateUnsnapRequest(request: StudioUnsnapSketchFromFlowPatchRequest): void {
+  requireExactKeys(request, ['fallback', 'kind', 'rectIds', 'sketchId', 'viewName'], 'Unsnap request')
+  if (!isObject(request.fallback)) {
+    throw new Errors.UserInputError('Studio Unsnap fallback is invalid.')
+  }
+  requireExactKeys(request.fallback, ['height', 'label', 'width'], 'Unsnap fallback')
+  if (
+    typeof request.viewName !== 'string'
+    || !/^View[1-9][0-9]*$/.test(request.viewName)
+    || typeof request.sketchId !== 'string'
+    || request.sketchId.length === 0
+    || typeof request.fallback.label !== 'string'
+    || request.fallback.label.length === 0
+  ) {
+    throw new Errors.UserInputError('Studio Unsnap requires a generated ViewN and sketch identity.')
+  }
+  if (
+    !Array.isArray(request.rectIds)
+    || request.rectIds.length === 0
+    || request.rectIds.some(id => typeof id !== 'string' || id.length === 0)
+    || new Set(request.rectIds).size !== request.rectIds.length
+  ) {
+    throw new Errors.UserInputError('Studio Unsnap rectangle identities must be unique nonempty strings.')
+  }
+  if (
+    !Number.isFinite(request.fallback.width)
+    || request.fallback.width <= 0
+    || !Number.isFinite(request.fallback.height)
+    || request.fallback.height <= 0
+  ) {
+    throw new Errors.UserInputError('Studio Unsnap fallback dimensions must be positive and finite.')
+  }
+}
+
+function validateSnapNode(node: StudioSketchSnapTree, seen: Set<string>, depth: number): void {
+  if (depth > 64 || !isObject(node)) {
+    throw new Errors.UserInputError('Studio Snap tree is invalid or too deeply nested.')
+  }
+  if (node.type === 'container') {
+    requireExactKeys(node, ['children', 'direction', 'layout', 'type'], 'Snap container')
+    if (
+      (node.direction !== 'Row' && node.direction !== 'Col') || !Array.isArray(node.children)
+      || node.children.length === 0
+    ) {
+      throw new Errors.UserInputError('Studio Snap container direction and children are invalid.')
+    }
+    validateSnapLayout(node.layout, new Set(['gap', 'pad', 'claim']), 'container')
+    node.children.forEach(child => validateSnapNode(child, seen, depth + 1))
+    return
+  }
+  if (node.type !== 'element') {
+    throw new Errors.UserInputError('Studio Snap node kind is invalid.')
+  }
+  requireExactKeys(node, ['arguments', 'component', 'content', 'layout', 'rectId', 'type'], 'Snap element')
+  if (!['Image', 'Placeholder', 'Text'].includes(node.component)) {
+    throw new Errors.UserInputError(`Studio Snap component is unsupported: ${String(node.component)}`)
+  }
+  if (!Array.isArray(node.arguments) || node.arguments.length !== 1 || typeof node.arguments[0] !== 'string') {
+    throw new Errors.UserInputError('Studio Snap elements require one text argument.')
+  }
+  if (typeof node.rectId !== 'string' || node.rectId.length === 0 || seen.has(node.rectId)) {
+    throw new Errors.UserInputError(`Studio Snap rectangle identity is invalid or duplicated: ${String(node.rectId)}`)
+  }
+  if (node.content !== undefined && typeof node.content !== 'string') {
+    throw new Errors.UserInputError('Studio Snap element metadata must be text.')
+  }
+  seen.add(node.rectId)
+  validateSnapLayout(node.layout, new Set(['width', 'height', 'hug', 'claim']), 'element')
+}
+
+function validateSnapLayout(layout: readonly StudioLayoutEntry[], allowed: ReadonlySet<string>, owner: string): void {
+  if (!Array.isArray(layout)) {
+    throw new Errors.UserInputError(`Studio Snap ${owner} layout must be an array.`)
+  }
+  const heads = new Set<string>()
+  for (const raw of layout) {
+    const entry = requireSupportedLayoutEntry(raw)
+    const head = entry[0]
+    if (!allowed.has(head) || heads.has(head)) {
+      throw new Errors.UserInputError(`Studio Snap ${owner} layout entry is invalid or duplicated: ${head}`)
+    }
+    if (head === 'claim' && (entry.length !== 2 || entry[1] !== 1)) {
+      throw new Errors.UserInputError('Studio Snap claim must be exactly 1.')
+    }
+    heads.add(head)
+  }
+}
+
+function snapNodeSource(
+  node: StudioSketchSnapTree,
+  indentation: string,
+  leafIds: string[],
+  components: Set<string>,
+): string {
+  if (node.type === 'element') {
+    leafIds.push(node.rectId)
+    components.add(node.component)
+    return `#studio_rect_${encodedTag(node.rectId)}\n${indentation}${node.component}(${
+      node.arguments.map(taoStringLiteral).join(', ')
+    })${snapLayoutSource(node.layout)}`
+  }
+  components.add(node.direction)
+  const childIndent = `${indentation}   `
+  const children = node.children.map(child =>
+    `${childIndent}${snapNodeSource(child, childIndent, leafIds, components)}`
+  )
+    .join('\n')
+  return `${node.direction}()${snapLayoutSource(node.layout)} {\n${children}\n${indentation}}`
+}
+
+function snapLayoutSource(layout: readonly StudioLayoutEntry[]): string {
+  return layout.length === 0 ? '' : ` [${layout.map(formatLayoutEntry).join(', ')}]`
+}
+
+function encodedTag(value: string): string {
+  let encoded = ''
+  for (let index = 0; index < value.length; index += 1) {
+    encoded += value.charCodeAt(index).toString(16).padStart(4, '0')
+  }
+  return encoded
+}
+
+function requireExactKeys(value: object, allowed: readonly string[], label: string): void {
+  if (Object.keys(value).some(key => !allowed.includes(key))) {
+    throw new Errors.UserInputError(`${label} contains unsupported fields.`)
+  }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 /** wrapRender wraps a rendered node in a Studio-owned Stack() container. */
 async function wrapRender(document: AST.Document, request: StudioWrapRenderPatchRequest): Promise<string> {
   assertNoSyntaxErrors(document)
@@ -1117,17 +2168,150 @@ async function moveRender(document: AST.Document, request: StudioMoveRenderReque
   )
 }
 
-function requireInsertableProjectView(file: AST.TaoFile, viewName: string, targetViewName: string | undefined): void {
-  const view = file.statements.filter(AST.isViewDeclaration).find(candidate => candidate.name === viewName)
-  if (view === undefined) {
-    throw new Errors.UserInputError(`Project view is not declared in this source file: ${viewName}`)
+function validateInsertProjectViewRequest(request: StudioInsertProjectViewPatchRequest): void {
+  requireExactKeys(request, ['afterId', 'beforeId', 'bindings', 'kind', 'viewName'], 'Insert project view request')
+  requireIdentifier(request.viewName, 'project view')
+  if (request.bindings === undefined) {
+    return
   }
-  if (AST.parametersOf(view).length > 0) {
-    throw new Errors.UserInputError(`Cannot insert parameterized project view without arguments: ${viewName}`)
+  if (!isObject(request.bindings)) {
+    throw new Errors.UserInputError('Studio project-view lexical bindings must be an object.')
+  }
+  for (const [parameterName, valueName] of Object.entries(request.bindings)) {
+    requireIdentifier(parameterName, 'project-view parameter')
+    if (typeof valueName !== 'string') {
+      throw new Errors.UserInputError(`Studio lexical binding for ${parameterName} must name a value.`)
+    }
+    requireIdentifier(valueName, 'lexical binding')
+  }
+}
+
+function requireInsertableProjectView(
+  file: AST.TaoFile,
+  viewName: string,
+  targetViewName: string | undefined,
+): AST.ViewDeclaration {
+  const views = file.statements.filter(AST.isViewDeclaration).filter(candidate => candidate.name === viewName)
+  const view = views.length === 1 ? views[0] : undefined
+  if (view === undefined) {
+    throw new Errors.UserInputError(
+      views.length === 0
+        ? `Project view is not declared in this source file: ${viewName}`
+        : `Project view is not uniquely declared in this source file: ${viewName}`,
+    )
   }
   if (viewName === targetViewName) {
     throw new Errors.UserInputError(`Cannot insert project view ${viewName} into its own render block.`)
   }
+  return view
+}
+
+type StudioLexicalValue =
+  | AST.ParameterDeclaration
+  | AST.ForStatement
+  | ReturnType<typeof AST.valueDeclarationsOwnedByBlock>[number]
+
+function visibleInsertionValues(block: AST.Block, insertionOffset: number): ReadonlyMap<string, StudioLexicalValue> {
+  const values = new Map<string, StudioLexicalValue>()
+  const blocks = [block, ...AST.ancestorBlocks(block)]
+  for (const candidateBlock of blocks) {
+    const local = AST.valueDeclarationsOwnedByBlock(candidateBlock)
+      .filter(declaration => (declaration.$cstNode?.offset ?? Number.MAX_SAFE_INTEGER) < insertionOffset)
+      .toSorted((left, right) => (right.$cstNode?.offset ?? 0) - (left.$cstNode?.offset ?? 0))
+    for (const declaration of local) {
+      addVisibleInsertionValue(values, declaration)
+    }
+    const loop = AST.forBindingOwnedByBlock(candidateBlock)
+    if (loop !== undefined) {
+      addVisibleInsertionValue(values, loop)
+    }
+  }
+  const owner = AST.findOwningView(block)
+  for (const parameter of owner === undefined ? [] : AST.parametersOf(owner)) {
+    addVisibleInsertionValue(values, parameter)
+  }
+  return values
+}
+
+function addVisibleInsertionValue(values: Map<string, StudioLexicalValue>, declaration: StudioLexicalValue): void {
+  const name = Type.declarationName(declaration)
+  if (!values.has(name)) {
+    values.set(name, declaration)
+  }
+}
+
+function projectViewArguments(
+  view: AST.ViewDeclaration,
+  visible: ReadonlyMap<string, StudioLexicalValue>,
+  requested: Readonly<Record<string, string>>,
+): string {
+  const parameters = AST.parametersOf(view)
+  const parametersByName = new Map(parameters.map(parameter => [Type.parameterName(parameter), parameter]))
+  const bindings = new Map<string, string>()
+  for (const [parameterName, valueName] of Object.entries(requested)) {
+    const parameter = parametersByName.get(parameterName)
+    if (parameter === undefined) {
+      throw new Errors.UserInputError(`Project view ${view.name} has no parameter named ${parameterName}.`)
+    }
+    const value = visible.get(valueName)
+    if (value === undefined) {
+      throw new Errors.UserInputError(`Lexical value ${valueName} is not visible at the project-view insertion gap.`)
+    }
+    if (!typesExactlyMatch(parameter, value)) {
+      throw new Errors.UserInputError(
+        `Lexical value ${valueName} does not exactly match project-view parameter ${parameterName}.`,
+      )
+    }
+    bindings.set(parameterName, valueName)
+  }
+
+  const required = parameters.filter(parameter =>
+    parameter.defaultValue === undefined && !bindings.has(Type.parameterName(parameter))
+  )
+  const unresolved: string[] = []
+  const ambiguous: string[] = []
+  const requiredTypeCounts = new Map<string, number>()
+  for (const parameter of required) {
+    const key = Type.identityKey(Type.ofParameter(parameter))
+    if (key !== undefined) {
+      requiredTypeCounts.set(key, (requiredTypeCounts.get(key) ?? 0) + 1)
+    }
+  }
+  for (const parameter of required) {
+    const parameterName = Type.parameterName(parameter)
+    const key = Type.identityKey(Type.ofParameter(parameter))
+    if (key === undefined) {
+      unresolved.push(parameterName)
+      continue
+    }
+    const candidates = [...visible.entries()].filter(([, value]) =>
+      Type.identityKey(Type.ofValueDeclaration(value)) === key
+    )
+    if (candidates.length === 0) {
+      unresolved.push(parameterName)
+    } else if (candidates.length > 1 || (requiredTypeCounts.get(key) ?? 0) > 1) {
+      ambiguous.push(parameterName)
+    } else {
+      bindings.set(parameterName, candidates[0]![0])
+    }
+  }
+  if (unresolved.length > 0 || ambiguous.length > 0) {
+    const details = [
+      ...(unresolved.length === 0 ? [] : [`unresolved required parameters: ${unresolved.join(', ')}`]),
+      ...(ambiguous.length === 0 ? [] : [`ambiguous required parameters: ${ambiguous.join(', ')}`]),
+    ].join('; ')
+    throw new Errors.UserInputError(`Cannot insert parameterized project view ${view.name}; ${details}.`)
+  }
+  return parameters.flatMap(parameter => {
+    const parameterName = Type.parameterName(parameter)
+    const valueName = bindings.get(parameterName)
+    return valueName === undefined ? [] : [`${parameterName}: ${valueName}`]
+  }).join(', ')
+}
+
+function typesExactlyMatch(parameter: AST.ParameterDeclaration, value: StudioLexicalValue): boolean {
+  const expected = Type.identityKey(Type.ofParameter(parameter))
+  return expected !== undefined && expected === Type.identityKey(Type.ofValueDeclaration(value))
 }
 
 const studioComponentSnippets: Readonly<Record<StudioComponentKind, string>> = {
@@ -1141,6 +2325,7 @@ const studioComponentSnippets: Readonly<Record<StudioComponentKind, string>> = {
   Number: 'Number(0)',
   Panes: 'Panes() {\n   Text("New pane")\n}',
   Picker: 'Picker(Value: "First", Options: ["First", "Second"], Label: "Picker") {\n   on change -> Value { }\n}',
+  Placeholder: 'Placeholder("Unfinished content") [width 120, height 80]',
   Progress: 'Progress(0)',
   Row: 'Row() [gap 8] {\n   Text("New row")\n}',
   ScrollView: 'ScrollView() {\n   Text("Scrollable content")\n}',
@@ -1148,6 +2333,7 @@ const studioComponentSnippets: Readonly<Record<StudioComponentKind, string>> = {
     'SegmentedControl(Value: "First", Options: ["First", "Second"], Label: "Options") {\n   on change -> Value { }\n}',
   Slider: 'Slider(Value: 0, Label: "Slider") {\n   on change -> Value { }\n}',
   Spinner: 'Spinner()',
+  Spacer: 'Spacer()',
   Stack: 'Stack() [gap 8, pad 8] {\n   Text("Nested text")\n}',
   Switch: 'Switch(Value: false, Label: "Switch") {\n   on change -> Value { }\n}',
   Text: 'Text("New text")',
@@ -1277,19 +2463,31 @@ function requireRenderById(file: AST.TaoFile, id: string): AST.Render {
 }
 
 function setRenderLayoutEntrySource(source: string, render: AST.Render, entry: string): string {
+  return applySourceEdits(source, setRenderLayoutEntryEdits(source, render, entry))
+}
+
+function setRenderLayoutEntryEdits(source: string, render: AST.Render, entry: string): readonly SourceEdit[] {
   const layoutClause = render.layoutClause
   if (layoutClause === undefined) {
     const insertionOffset = renderLayoutInsertionOffset(render)
-    return applySourceEdits(source, [{
+    return [{
       end: insertionOffset,
       replacement: ` [${entry}]`,
       start: insertionOffset,
-    }])
+    }]
   }
-  return setLayoutClauseEntrySource(source, layoutClause, entry)
+  return setLayoutClauseEntryEdits(source, layoutClause, entry)
 }
 
 function setLayoutClauseEntrySource(source: string, layoutClause: AST.LayoutClause, entry: string): string {
+  return applySourceEdits(source, setLayoutClauseEntryEdits(source, layoutClause, entry))
+}
+
+function setLayoutClauseEntryEdits(
+  source: string,
+  layoutClause: AST.LayoutClause,
+  entry: string,
+): readonly SourceEdit[] {
   const slot = layoutEntrySlot(entry.split(/\s+/))
   const existingIndex = layoutClause.entries.findLastIndex(candidate =>
     layoutEntrySlot(ASTUtils.layoutEntryValues(candidate)) === slot
@@ -1300,7 +2498,7 @@ function setLayoutClauseEntrySource(source: string, layoutClause: AST.LayoutClau
       const nextEntry = layoutClause.entries[existingIndex + 1]!
       const closeBracket = source.lastIndexOf(']', layoutClause.$cstNode!.end - 1)
       const insertionOffset = closeBracket === -1 ? layoutClause.$cstNode!.end : closeBracket
-      return applySourceEdits(source, [{
+      return [{
         end: nextEntry.$cstNode!.offset,
         replacement: '',
         start: existingEntry.$cstNode!.offset,
@@ -1308,21 +2506,21 @@ function setLayoutClauseEntrySource(source: string, layoutClause: AST.LayoutClau
         end: insertionOffset,
         replacement: `, ${entry}`,
         start: insertionOffset,
-      }])
+      }]
     }
-    return applySourceEdits(source, [{
+    return [{
       end: existingEntry.$cstNode!.end,
       replacement: entry,
       start: existingEntry.$cstNode!.offset,
-    }])
+    }]
   }
   const closeBracket = source.lastIndexOf(']', layoutClause.$cstNode!.end - 1)
   const insertionOffset = closeBracket === -1 ? layoutClause.$cstNode!.end : closeBracket
-  return applySourceEdits(source, [{
+  return [{
     end: insertionOffset,
     replacement: layoutClause.entries.length === 0 ? entry : `, ${entry}`,
     start: insertionOffset,
-  }])
+  }]
 }
 
 function layoutEntrySlot(values: readonly StudioLayoutTermValue[]): string {
@@ -1854,14 +3052,13 @@ function studioComponentInsertionOffset(file: AST.TaoFile, text: string): number
   return blockCloseBraceOffset(text, studioInsertionRender(file).block)
 }
 
-function insertStudioSnippetAtGap(document: AST.Document, snippet: string, gap: StudioRenderGap): string {
+type StudioInsertionTarget = Readonly<{ block: AST.Block; offset: number }>
+
+function studioInsertionTarget(document: AST.Document, gap: StudioRenderGap): StudioInsertionTarget {
   const source = document.textDocument.getText()
   if (gap.afterId === undefined && gap.beforeId === undefined) {
-    return insertStudioComponentSnippet(
-      source,
-      studioComponentInsertionOffset(document.parseResult.value, source),
-      snippet,
-    )
+    const block = studioInsertionRender(document.parseResult.value).block
+    return { block, offset: blockCloseBraceOffset(source, block) }
   }
   if (gap.afterId !== undefined) {
     requireLocalRenderId(document, gap.afterId, 'insert renders')
@@ -1884,12 +3081,36 @@ function insertStudioSnippetAtGap(document: AST.Document, snippet: string, gap: 
   }
   const block = targetStatement.$container
   const slices = blockStatementSlices(source, block)
+  const edit = studioSnippetInsertionEdit(source, slices, gap, '')
+  return { block, offset: edit.start }
+}
+
+function insertStudioSnippetAtGap(document: AST.Document, snippet: string, gap: StudioRenderGap): string {
+  const source = document.textDocument.getText()
+  if (gap.afterId === undefined && gap.beforeId === undefined) {
+    return insertStudioComponentSnippet(
+      source,
+      studioComponentInsertionOffset(document.parseResult.value, source),
+      snippet,
+    )
+  }
+  const { block } = studioInsertionTarget(document, gap)
+  const slices = blockStatementSlices(source, block)
+  return applySourceEdits(source, [studioSnippetInsertionEdit(source, slices, gap, snippet)])
+}
+
+function studioSnippetInsertionEdit(
+  source: string,
+  slices: BlockStatementSlice[],
+  gap: StudioRenderGap,
+  snippet: string,
+): SourceEdit {
   const insertIndex = insertionTargetIndex(slices, gap)
   const target = slices[insertIndex] ?? slices[slices.length - 1]!
   const indent = lineIndentAt(source, target.start)
   const inserted = `${indentSnippet(snippet, indent)}\n`
   const offset = insertIndex === slices.length ? target.end : target.start
-  return applySourceEdits(source, [{ end: offset, replacement: inserted, start: offset }])
+  return { end: offset, replacement: inserted, start: offset }
 }
 
 function insertionTargetIndex(slices: BlockStatementSlice[], gap: StudioRenderGap): number {
@@ -1919,6 +3140,12 @@ function blockCloseBraceOffset(text: string, block: AST.Block): number {
   const blockEnd = block.$cstNode!.end
   const closeOffset = text.lastIndexOf('}', blockEnd - 1)
   return closeOffset === -1 ? blockEnd : closeOffset
+}
+
+function blockOpenBraceOffset(text: string, block: AST.Block): number {
+  const blockStart = block.$cstNode!.offset
+  const openOffset = text.indexOf('{', blockStart)
+  return openOffset === -1 ? blockStart : openOffset + 1
 }
 
 function insertStudioComponentSnippet(source: string, offset: number, snippet: string): string {

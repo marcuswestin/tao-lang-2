@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 540" width="880" height="540" font-family="ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+  <rect width="880" height="540" fill="#ffffff"/>
+  <text x="40" y="34" font-weight="700" fill="#222" font-size="14">One definition, several cells — a variant is a scenario entry, never a copy</text>
+
+  <!-- cell 1 -->
+  <text x="40" y="70" fill="#444" font-weight="600">"default"</text>
+  <text x="40" y="86" fill="#777" font-size="11">Label: "Play"</text>
+  <rect x="40" y="96" width="240" height="100" fill="#fff" stroke="#222" stroke-width="1.5"/>
+  <rect x="80" y="126" width="160" height="40" rx="8" fill="#2b2b2b"/>
+  <text x="160" y="151" text-anchor="middle" fill="#fff" font-weight="600" font-size="14">Play</text>
+
+  <!-- option-drag arrow -->
+  <path d="M290,146 C330,146 330,146 350,146" fill="none" stroke="#c0392b" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="320" y="132" text-anchor="middle" fill="#c0392b" font-size="11" font-weight="600">⌥-drag</text>
+
+  <!-- cell 2 -->
+  <text x="360" y="70" fill="#444" font-weight="600">"disabled"</text>
+  <text x="360" y="86" fill="#777" font-size="11">Label: "Play", Disabled: yes  ← generated</text>
+  <rect x="360" y="96" width="240" height="100" fill="#fff" stroke="#222" stroke-width="1.5"/>
+  <rect x="400" y="126" width="160" height="40" rx="8" fill="#d9d9d9"/>
+  <text x="480" y="151" text-anchor="middle" fill="#8a8a8a" font-weight="600" font-size="14">Play</text>
+
+  <path d="M610,146 C650,146 650,146 670,146" fill="none" stroke="#c0392b" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="640" y="132" text-anchor="middle" fill="#c0392b" font-size="11" font-weight="600">⌥-drag</text>
+
+  <!-- cell 3 -->
+  <text x="680" y="70" fill="#444" font-weight="600">"busy"</text>
+  <text x="680" y="86" fill="#777" font-size="11">Label: "Play", Busy: yes  ← generated</text>
+  <rect x="680" y="96" width="180" height="100" fill="#fff" stroke="#222" stroke-width="1.5"/>
+  <rect x="700" y="126" width="140" height="40" rx="8" fill="#2b2b2b"/>
+  <circle cx="740" cy="146" r="8" fill="none" stroke="#fff" stroke-width="2" stroke-dasharray="20 6"/>
+  <text x="790" y="151" text-anchor="middle" fill="#fff" font-weight="600" font-size="14">Play</text>
+
+  <!-- what was generated -->
+  <text x="40" y="228" font-weight="600" fill="#444">How the copy chose its values</text>
+  <g fill="#333" font-size="11">
+    <text x="40" y="248">· yes / no parameter → the other pole (Disabled: yes)</text>
+    <text x="40" y="266">· one of A, B, C → the next unused case</text>
+    <text x="40" y="284">· text → short, then long, then empty</text>
+    <text x="40" y="302">· number → 0, a typical value, a large one</text>
+    <text x="40" y="320">· entity → the next fixture row, or a generated one</text>
+    <text x="40" y="338">· "Expand all states" adds every unvisited case at once</text>
+  </g>
+
+  <!-- scenario source -->
+  <rect x="360" y="216" width="500" height="146" rx="6" fill="#f7f7f7" stroke="#bbb"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#222">
+    <text x="370" y="236">view PrimaryButton(Label text, Press action,</text>
+    <text x="370" y="252">   Disabled yes / no default no, Busy yes / no default no)</text>
+    <text x="370" y="278">scenarios PrimaryButton "states" {</text>
+    <text x="370" y="294">   device phone  // omitted Press gets a logging stand-in</text>
+    <text x="370" y="310">   scenario "default"  { render (Label: "Play") }</text>
+    <text x="370" y="326">   scenario "disabled" { render (Label: "Play", Disabled: yes) }</text>
+    <text x="370" y="342">   scenario "busy"     { render (Label: "Play", Busy: yes) }</text>
+    <text x="370" y="358">}</text>
+  </g>
+
+  <!-- persistent editing mode -->
+  <text x="40" y="386" font-weight="600" fill="#444">Editing inside the "disabled" cell · Editing: this state</text>
+  <rect x="40" y="396" width="400" height="120" rx="8" fill="#fff" stroke="#333"/>
+  <text x="56" y="420" fill="#222">Persistent mode for this cell</text>
+  <g fill="#222" font-size="12">
+    <circle cx="66" cy="442" r="6" fill="none" stroke="#333"/><circle cx="66" cy="442" r="3" fill="#c0392b"/><text x="80" y="446" font-weight="600">this state — write `when Disabled`</text>
+    <circle cx="66" cy="464" r="6" fill="none" stroke="#333"/><text x="80" y="468">all states — update the unconditional entry</text>
+    <text x="56" y="490">Condition terms: Disabled  ×</text>
+  </g>
+  <text x="56" y="510" fill="#666" font-size="11">The mode persists; no per-edit prompt appears.</text>
+
+  <rect x="460" y="396" width="400" height="120" rx="6" fill="#f7f7f7" stroke="#bbb"/>
+  <text x="470" y="416" fill="#555" font-size="11">Result, in the view's render tree:</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#222">
+    <text x="470" y="440">Button(Label, Disabled: Disabled)</text>
+    <text x="470" y="456">   [primary, busy when Busy,</text>
+    <text x="470" y="472">    background muted when Disabled,</text>
+    <text x="470" y="488">    ink inkMuted when Disabled]</text>
+  </g>
+  <text x="470" y="510" fill="#666" font-size="11">A difference between cells is a `when` clause on one tree, never a second tree.</text>
+</svg>

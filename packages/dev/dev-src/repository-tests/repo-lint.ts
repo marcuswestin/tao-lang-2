@@ -83,6 +83,70 @@ export function missingTestAppReadmeEntries(appNames: readonly string[], readme:
   return [...appNames].sort().filter(name => !headings.has(name))
 }
 
+/** justRecipeIssues keeps the language benchmark out of correctness gates without spawning nested Just processes. */
+export function justRecipeIssues(source: string): string[] {
+  const recipes = justRecipeDefinitions(source)
+  const variables = justVariables(source)
+  const issues: string[] = []
+  const benchmark = recipes.get('bench')
+  if (benchmark === undefined || !benchmark.includes('language-performance.ts')) {
+    issues.push("Justfile recipe 'bench' must run the language performance benchmark.")
+  }
+  for (const lane of ['check', 'verify', 'full-verify']) {
+    if (!recipes.has(lane)) {
+      issues.push(`Justfile must declare recipe '${lane}'.`)
+      continue
+    }
+    const closure = justRecipeClosure(lane, recipes, variables)
+    if (/\blanguage-performance(?:\.ts)?\b|\bbench\b/.test(closure)) {
+      issues.push(`Justfile recipe '${lane}' must not invoke the language performance benchmark.`)
+    }
+  }
+  return issues
+}
+
+function justRecipeDefinitions(source: string): Map<string, string> {
+  const lines = source.split('\n')
+  const recipes = new Map<string, string>()
+  for (let index = 0; index < lines.length; index++) {
+    const match = lines[index]!.match(/^([a-z_][a-z0-9_-]*)(?:\s+[^:]*)?:/i)
+    if (match === null || /^[A-Z0-9_]+$/.test(match[1]!)) {
+      continue
+    }
+    const body = [lines[index]!]
+    while (index + 1 < lines.length && /^\s/.test(lines[index + 1]!)) {
+      body.push(lines[++index]!)
+    }
+    recipes.set(match[1]!, body.filter(line => !line.trimStart().startsWith('#')).join('\n'))
+  }
+  return recipes
+}
+
+function justVariables(source: string): ReadonlyMap<string, string> {
+  return new Map([...source.matchAll(/^([A-Z][A-Z0-9_]*)\s*:=\s*(.*)$/gm)].map(match => [match[1]!, match[2]!]))
+}
+
+function justRecipeClosure(
+  name: string,
+  recipes: ReadonlyMap<string, string>,
+  variables: ReadonlyMap<string, string>,
+  visited = new Set<string>(),
+): string {
+  if (visited.has(name)) {
+    return ''
+  }
+  visited.add(name)
+  const definition = recipes.get(name) ?? ''
+  const expanded = definition.replace(
+    /\{\{\s*([A-Z][A-Z0-9_]*)\s*\}\}/g,
+    (_, variable: string) => variables.get(variable) ?? '',
+  )
+  const referenced = [...expanded.matchAll(/\b([a-z_][a-z0-9_-]*)\b/gi)]
+    .map(match => match[1]!)
+    .filter(recipe => recipes.has(recipe))
+  return [expanded, ...referenced.map(recipe => justRecipeClosure(recipe, recipes, variables, visited))].join('\n')
+}
+
 /** duplicateDescribeTitleIssues finds static Describe titles reused across test files. */
 export function duplicateDescribeTitleIssues(files: readonly SourceFile[]): string[] {
   const pathsByTitle = new Map<string, Set<string>>()
@@ -389,6 +453,7 @@ function importTargetPath(fromPath: string, specifier: string): string {
 export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[]> {
   const issues: string[] = []
   issues.push(...wordFlowerDirectoryIssues(await readWordFlowerDirectory(repoRoot)))
+  issues.push(...justRecipeIssues(await FS.readText(FS.resolvePath('Justfile', repoRoot))))
 
   const testAppsPath = FS.resolvePath('Apps/Test Apps', repoRoot)
   const readmePath = FS.resolvePath('README.md', testAppsPath)

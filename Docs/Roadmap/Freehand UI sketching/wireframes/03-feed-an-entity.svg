@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 520" width="880" height="520" font-family="ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+  <rect width="880" height="520" fill="#ffffff"/>
+  <!-- data panel -->
+  <rect x="30" y="40" width="190" height="300" rx="6" fill="#f4f4f4" stroke="#bbb"/>
+  <text x="42" y="62" font-weight="600" fill="#444">Data</text>
+  <text x="42" y="82" fill="#666" font-size="11">entities in this project</text>
+  <g fill="#fff" stroke="#333">
+    <rect x="42" y="94" width="166" height="26" rx="13"/>
+    <rect x="42" y="128" width="166" height="26" rx="13"/>
+    <rect x="42" y="162" width="166" height="26" rx="13"/>
+  </g>
+  <g fill="#222">
+    <text x="56" y="111">Playlists / Playlist</text>
+    <text x="56" y="145">Tracks / Track</text>
+    <text x="56" y="179">Accounts / Account</text>
+  </g>
+  <text x="42" y="214" fill="#666" font-size="11">example rows</text>
+  <g fill="#333" font-size="11">
+    <text x="42" y="232">◉ fixture Sketches</text>
+    <text x="42" y="250">○ generated (seed 7)</text>
+    <text x="42" y="268">○ live: local store</text>
+    <text x="42" y="286">○ library: Edge cases</text>
+  </g>
+
+  <!-- drag arrow entity -> sketch -->
+  <path d="M210,107 C300,107 330,150 350,150" fill="none" stroke="#c0392b" stroke-width="2" marker-end="url(#arrow)"/>
+  <circle cx="270" cy="118" r="9" fill="#c0392b"/><text x="270" y="122" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">1</text>
+
+  <!-- sketch -->
+  <text x="350" y="128" fill="#444" font-weight="600">PlaylistRow(Playlist) · sketch · "first"</text>
+  <rect x="350" y="138" width="360" height="76" fill="#fff" stroke="#222" stroke-width="1.5"/>
+  <!-- cover bound -->
+  <rect x="362" y="150" width="52" height="52" rx="4" fill="#d8d8d8" stroke="#333"/>
+  <path d="M368,196 L384,176 L396,190 L404,182 L410,196 Z" fill="#9a9a9a"/>
+  <circle cx="400" cy="160" r="4" fill="#9a9a9a"/>
+  <!-- title bound -->
+  <text x="428" y="166" fill="#222" font-weight="600">Chill Vibes</text>
+  <rect x="428" y="178" width="120" height="12" fill="#f3f3f3" stroke="#333" stroke-dasharray="4 3"/>
+  <rect x="650" y="168" width="44" height="16" fill="#f3f3f3" stroke="#333" stroke-dasharray="4 3"/>
+
+  <!-- field chips -->
+  <text x="730" y="128" fill="#444" font-weight="600">fields of Playlist</text>
+  <g stroke="#333">
+    <rect x="730" y="138" width="120" height="22" rx="11" fill="#e4e4e4"/>
+    <rect x="730" y="166" width="120" height="22" rx="11" fill="#e4e4e4"/>
+    <rect x="730" y="194" width="120" height="22" rx="11" fill="#fff"/>
+    <rect x="730" y="222" width="120" height="22" rx="11" fill="#fff"/>
+    <rect x="730" y="250" width="120" height="22" rx="11" fill="#fff"/>
+  </g>
+  <g fill="#222" font-size="11">
+    <text x="742" y="153" fill="#777">✓ Cover · image</text>
+    <text x="742" y="181" fill="#777">✓ Title · text</text>
+    <text x="742" y="209">Duration · duration</text>
+    <text x="742" y="237">Tracks.Count · number</text>
+    <text x="742" y="265">Owner.Name · text</text>
+  </g>
+  <path d="M730,205 C700,205 690,184 694,176" fill="none" stroke="#c0392b" stroke-width="2" marker-end="url(#arrow)"/>
+  <circle cx="716" cy="212" r="9" fill="#c0392b"/><text x="716" y="216" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">2</text>
+  <text x="730" y="292" fill="#666" font-size="10">drop on a box: bind it</text>
+  <text x="730" y="308" fill="#666" font-size="10">drop on empty sketch: new element</text>
+  <text x="730" y="324" fill="#666" font-size="10">the field type picks the element</text>
+
+  <!-- source -->
+  <rect x="350" y="236" width="360" height="200" rx="6" fill="#f7f7f7" stroke="#bbb"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#222">
+    <text x="360" y="256">public view PlaylistRow(Playlist) {</text>
+    <text x="360" y="272">   render Row [pad 12, gap 14, content left center] {</text>
+    <text x="360" y="288">      Image(Playlist.Cover, Description: Playlist.Title)</text>
+    <text x="360" y="304">         [width 52, height 52, radius sm]</text>
+    <text x="360" y="320">      Col [gap 10, claim 1] {</text>
+    <text x="360" y="336">         Text(Playlist.Title) [body]</text>
+    <text x="360" y="352">         Placeholder("Tracks") [height 12, width 120]</text>
+    <text x="360" y="368">      }</text>
+    <text x="360" y="384">      Placeholder("Duration") [width 44, height 16]</text>
+    <text x="360" y="400">   }</text>
+    <text x="360" y="416">}</text>
+  </g>
+  <circle cx="336" cy="256" r="9" fill="#c0392b"/><text x="336" y="260" text-anchor="middle" fill="#fff" font-size="11" font-weight="700">3</text>
+
+  <rect x="350" y="446" width="360" height="56" rx="6" fill="#f7f7f7" stroke="#bbb"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#222">
+    <text x="360" y="466">scenarios PlaylistRow "sketches" {</text>
+    <text x="360" y="482">   fixture Sketches; device phone</text>
+    <text x="360" y="498">   scenario "first" { render (Playlist: ChillVibes) } }</text>
+  </g>
+  <g fill="#333" font-size="11">
+    <text x="30" y="370" font-weight="600">1</text><text x="42" y="370">the entity becomes the view's parameter</text>
+    <text x="30" y="388" font-weight="600">2</text><text x="42" y="388">fields wait beside the sketch as chips</text>
+    <text x="30" y="406" font-weight="600">3</text><text x="42" y="406">every drop is one source action;</text>
+    <text x="42" y="422">the cell renders the fixture row</text>
+    <text x="30" y="452" fill="#666">Remaining placeholders stay `Placeholder`</text>
+    <text x="30" y="468" fill="#666">until bound, retyped, or deleted.</text>
+  </g>
+</svg>

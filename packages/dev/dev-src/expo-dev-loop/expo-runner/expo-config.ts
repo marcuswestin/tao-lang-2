@@ -1,4 +1,7 @@
+import { Repo } from '@shared'
+
 const WEB_BROWSER_APP_NAME = 'Google Chrome'
+const EXPO_HOME_PATH = '.artifacts/cache/expo'
 export const PREFERRED_EXPO_PORT = 8081
 
 export type ExpoPlatform = 'android' | 'ios' | 'web'
@@ -39,6 +42,7 @@ export function createExpoConfig(port: number = PREFERRED_EXPO_PORT, options: Ex
       BROWSER: WEB_BROWSER_APP_NAME,
       EXPO_NO_TELEMETRY: '1',
       OPEN_MATCH_HOST_ONLY: 'true',
+      __UNSAFE_EXPO_HOME_DIRECTORY: Repo.resolvePath(EXPO_HOME_PATH),
     },
     EXPO_START_POLL_MS: 1_000,
     EXPO_START_TIMEOUT_MS: 60_000,

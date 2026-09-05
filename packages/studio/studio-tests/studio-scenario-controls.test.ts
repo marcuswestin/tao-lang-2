@@ -138,6 +138,64 @@ Test('Studio scenario intents preserve revisions in one canonical save, fixture 
   })
 })
 
+Test('Studio scenario controls authenticate recording and refuse to save redacted inputs', () => {
+  const model = scenarioModel()
+  const start = StudioScenarioControls.recordingRequest(model, 'recording-1', true)
+  const save = StudioScenarioControls.appendRecordedStepsAction(model, [
+    { kind: 'press', selector: 'tag', target: 'edit' },
+    { kind: 'enter', redacted: false, selector: 'label', target: 'Title', value: 'A draft' },
+    { kind: 'submit', selector: 'label', target: 'Title' },
+  ], 'save-recording-1')
+  const redacted = StudioScenarioControls.appendRecordedStepsAction(model, [
+    { kind: 'enter', redacted: true, selector: 'label', target: 'Password', value: '' },
+  ], 'save-recording-2')
+  const unresolved = StudioScenarioControls.appendRecordedStepsAction(model, [{
+    action: 'press',
+    kind: 'unresolved',
+    reason: 'No unique Tao tag, accessibility label, placeholder, or visible text identifies this target.',
+  }], 'save-recording-3')
+
+  Expect(start).toMatchObject({
+    ok: true,
+    value: {
+      active: true,
+      identity: {
+        cellId: 'cell-novel',
+        cellRevision: 3,
+        compileRevision: 7,
+        manifestRevision: 'manifest-7',
+        previewInstanceId: 'preview-8',
+      },
+      recordingId: 'recording-1',
+      type: 'set-journey-recording',
+    },
+  })
+  Expect(save).toMatchObject({
+    ok: true,
+    value: {
+      action: {
+        kind: 'append-scenario-steps',
+        scenarioGroupName: 'states',
+        scenarioName: 'novel',
+        steps: [
+          { kind: 'press', selector: 'tag', target: 'edit' },
+          { kind: 'enter', selector: 'label', target: 'Title', value: 'A draft' },
+          { kind: 'submit', selector: 'label', target: 'Title' },
+        ],
+      },
+      checkpoint: { id: 'scenario-journey:save-recording-1', phase: 'single' },
+    },
+  })
+  Expect(redacted).toEqual({
+    issues: ['Replace or explicitly retain every redacted input before saving the journey.'],
+    ok: false,
+  })
+  Expect(unresolved).toEqual({
+    issues: ['Resolve or remove every interaction without a unique semantic target before saving the journey.'],
+    ok: false,
+  })
+})
+
 function scenarioModel(failureReplay = undefined as ReturnType<typeof runtimeFailure> | undefined) {
   const manifest = scenarioManifest()
   const modeled = StudioScenarioControls.fromManifest({

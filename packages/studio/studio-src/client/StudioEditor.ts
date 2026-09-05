@@ -81,6 +81,17 @@ export const StudioDiagnosticNavigation = {
   },
 } as const
 
+/** Selects the complete source line containing a declaration's parser-owned start offset. */
+export const StudioDefinitionNavigation = {
+  selection(
+    document: { length: number; lineAt(position: number): { from: number; to: number } },
+    start: number,
+  ): { anchor: number; head: number } {
+    const line = document.lineAt(Math.min(document.length, Math.max(0, start)))
+    return { anchor: line.from, head: line.to }
+  },
+} as const
+
 /** StudioEditorInsertion preserves Tao snippet indentation and selects its first required placeholder. */
 export const StudioEditorInsertion = {
   transaction(

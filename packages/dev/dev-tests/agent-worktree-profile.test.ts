@@ -396,16 +396,19 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands.slice(graph)).toContain('_parser-gen')
   })
 
-  Test('runs every automated browser and native lane in the one graph without a quarantine', async () => {
+  Test('runs every stable browser and native lane while reporting the simulated journey quarantine', async () => {
     const commands = await justCommands('full-verify')
 
     Expect(commands).toContain(
-      '_full-verify-smoke-launch _full-verify-real-app _full-verify-simulated '
-        + '_full-verify-keyboard-navigation _full-verify-native _full-verify-canary',
+      '_full-verify-smoke-launch _full-verify-real-app _full-verify-keyboard-navigation '
+        + '_full-verify-native _full-verify-canary',
     )
     Expect(commands).toContain('--lane full-verify')
     Expect(commands).not.toContain('--jobs 1')
-    Expect(commands).not.toContain('_full-verify-simulated=temporarily quarantined')
+    Expect(commands).toContain(
+      '--skipped "_full-verify-simulated=temporarily quarantined; '
+        + 'run just _full-verify-simulated to reproduce"',
+    )
     Expect(commands).not.toContain('_tao-check=')
     Expect(commands).not.toContain('_dprint-check=')
     Expect(commands).not.toContain('manual-check')
@@ -434,13 +437,25 @@ Describe('agent worktree profile bootstrap', () => {
   })
 
   Test('never runs dprint with the incremental cache that would live in a home directory', async () => {
-    for (const lane of ['fix', 'fmt', '_dprint-check']) {
+    for (const lane of ['fix', 'fmt', '_fix-dprint', '_dprint-check']) {
       const dprintCommands = (await justCommands(lane)).split('\n')
         .filter(line => line.trimStart().startsWith('dprint '))
       Expect(dprintCommands.every(command => command.includes('--incremental=false'))).toBe(true)
     }
     // And the checking gate, which `check` runs, uses the same flag.
     Expect(await justCommands('_dprint-check')).toContain('dprint check --incremental=false')
+  })
+
+  Test('checks generated root-package files without letting fix lanes rewrite them', async () => {
+    for (const lane of ['fix', 'fmt', '_fix-dprint']) {
+      const commands = await justCommands(lane)
+      Expect(commands).toContain(
+        'dprint fmt --incremental=false --excludes "@/" "**/@/**"',
+      )
+      Expect(commands).toContain(
+        'dprint check --incremental=false --allow-no-files "@/**/*" "**/@/**/*"',
+      )
+    }
   })
 
   Test('formats the Justfile in the same lane that checks its formatting', async () => {
@@ -462,8 +477,15 @@ Describe('agent worktree profile bootstrap', () => {
       Expect(commands).not.toContain('_tao-check=')
       Expect(commands).not.toContain('_dprint-check=')
     }
-    Expect(fullVerify).not.toContain('--skipped')
+    Expect(fullVerify).toContain(
+      '--skipped "_full-verify-simulated=temporarily quarantined; '
+        + 'run just _full-verify-simulated to reproduce"',
+    )
     Expect(sandbox).toContain('--skip-unsandboxed')
+    Expect(sandbox).toContain(
+      '--skipped "_full-verify-simulated=temporarily quarantined; '
+        + 'run just _full-verify-simulated to reproduce"',
+    )
   })
 })
 

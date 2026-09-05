@@ -6,6 +6,49 @@ import { Workspace } from '@workspace'
 import { testParseCode, testParseSyntax } from './test-parse'
 
 Describe('minimal Tao parser', () => {
+  Test('links an explicitly imported fixture and its row handles from a scenario file', async () => {
+    await withTaoFiles(
+      'tao-parser-imported-fixture-',
+      {
+        'Main.tao': `
+          use Sketches from ./Sketches
+          use Playlists from ./Data
+
+          view PlaylistRow(Playlist) { }
+          scenarios PlaylistRow "sketch" {
+            fixture Sketches
+            scenario "draft" { render (Playlist: ChillVibes) }
+          }
+        `,
+        'Data.tao': `public data Playlists / Playlist { Title text }`,
+        'Sketches.tao': `
+          use Playlists from ./Data
+          public fixture Sketches {
+            ChillVibes = create Playlist { Title: "Chill Vibes" }
+          }
+        `,
+      },
+      async (paths, rootDir) => {
+        const workspace = await Workspace.open(rootDir)
+        const result = await workspace.parse(paths['Main.tao']!)
+
+        Expect(result.diagnostics).toEqual([])
+        const fixtureFile = result.files.find(file => file.path === paths['Sketches.tao'])
+        const fixture = fixtureFile?.ast.statements.find(AST.isFixtureDeclaration)
+        const group = result.entry.ast.statements.find(AST.isScenarioGroupDeclaration)
+        const scenario = group?.block.entries.find(AST.isScenarioDeclaration)
+        Expect.Is(fixture, AST.isFixtureDeclaration)
+        Expect.Is(group, AST.isScenarioGroupDeclaration)
+        Expect.Is(scenario, AST.isScenarioDeclaration)
+        Expect(group.block.entries.find(AST.isScenarioFixtureClause)?.fixture.ref).toBe(fixture)
+        const render = scenario.block.entries.find(AST.isScenarioRenderClause)
+        const value = render?.argumentList?.arguments[0]?.value
+        Expect.Is(value, AST.isFixtureValueReference)
+        Expect(value.target.ref?.name).toBe('ChillVibes')
+      },
+    )
+  })
+
   Test('links imported custom configurable declarations without shipped-name tables', async () => {
     await withTaoFiles(
       'tao-parser-custom-configurable-',
@@ -247,15 +290,21 @@ Describe('minimal Tao parser', () => {
 
   Test('parses local package import paths', async () => {
     const parseResult = await testParseSyntax(`
+      use RootView from @
+      use GeneratedView from @/studio
       use Text from @bar
       use Label from @bar/forms
     `)
 
     Expect(parseResult.entry.document.parseResult.lexerErrors).toEqual([])
     Expect(parseResult.entry.document.parseResult.parserErrors).toEqual([])
-    const [packageUse, subfolderUse] = parseResult.entry.ast.statements
+    const [rootUse, generatedUse, packageUse, subfolderUse] = parseResult.entry.ast.statements
+    Expect.Is(rootUse, AST.isUseStatement)
+    Expect.Is(generatedUse, AST.isUseStatement)
     Expect.Is(packageUse, AST.isUseStatement)
     Expect.Is(subfolderUse, AST.isUseStatement)
+    Expect(rootUse.importPath).toBe('@')
+    Expect(generatedUse.importPath).toBe('@/studio')
     Expect(packageUse.importPath).toBe('@bar')
     Expect(subfolderUse.importPath).toBe('@bar/forms')
   })

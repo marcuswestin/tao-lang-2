@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 520" width="880" height="520" font-family="ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+  <rect width="880" height="520" fill="#ffffff"/>
+  <!-- LEFT: free -->
+  <text x="40" y="40" font-weight="700" fill="#222" font-size="14">Free — placed by hand, nothing flows</text>
+  <text x="40" y="58" fill="#666">every free box is a Rect row in the Studio catalog; siblings do not affect each other</text>
+  <rect x="40" y="80" width="360" height="76" fill="#fff" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <g stroke="#333" stroke-dasharray="4 3" fill="#f3f3f3">
+    <rect x="52" y="92" width="52" height="52"/>
+    <rect x="118" y="96" width="180" height="14"/>
+    <rect x="118" y="120" width="120" height="12"/>
+    <rect x="340" y="110" width="44" height="16"/>
+  </g>
+  <g fill="#c0392b" font-size="10">
+    <text x="52" y="90">x 12 · y 12</text>
+    <text x="118" y="94">x 78 · y 16</text>
+    <text x="118" y="146">x 78 · y 40</text>
+    <text x="340" y="108">x 300 · y 30</text>
+  </g>
+  <rect x="40" y="176" width="360" height="126" rx="6" fill="#f7f7f7" stroke="#bbb"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="8" fill="#222">
+    <text x="50" y="196">.tao-project/studio/sketches.jsonc</text>
+    <text x="50" y="212">{ x: 12,  y: 12, width: 52,  height: 52, kind: "Placeholder" }</text>
+    <text x="50" y="228">{ x: 78,  y: 16, width: 180, height: 14, kind: "Text" }</text>
+    <text x="50" y="244">{ x: 78,  y: 40, width: 120, height: 12, kind: "Text" }</text>
+    <text x="50" y="260">{ x: 300, y: 30, width: 44,  height: 16, kind: "Text" }</text>
+    <text x="50" y="276">free geometry is Studio data, never product Tao</text>
+  </g>
+  <text x="40" y="330" fill="#333" font-size="11">Only snapped flow enters the app; a shipping unbound Placeholder is empty and warns.</text>
+
+  <!-- arrows -->
+  <line x1="410" y1="118" x2="470" y2="118" stroke="#c0392b" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="440" y="106" text-anchor="middle" fill="#c0392b" font-size="11" font-weight="600">snap</text>
+  <line x1="470" y1="140" x2="410" y2="140" stroke="#888" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="440" y="156" text-anchor="middle" fill="#888" font-size="11">unsnap</text>
+
+  <!-- RIGHT: flow -->
+  <text x="480" y="40" font-weight="700" fill="#222" font-size="14">Flow — the same boxes, laid out by the language</text>
+  <text x="480" y="58" fill="#666">direction, gap, padding, and sizing are inferred from where the boxes were</text>
+  <rect x="480" y="80" width="360" height="76" fill="#fff" stroke="#222" stroke-width="1.5"/>
+  <g stroke="#333" fill="#e9e9e9">
+    <rect x="492" y="92" width="52" height="52"/>
+    <rect x="558" y="96" width="180" height="14"/>
+    <rect x="558" y="120" width="120" height="12"/>
+    <rect x="784" y="110" width="44" height="16"/>
+  </g>
+  <!-- gap markers -->
+  <g stroke="#c0392b" stroke-width="1">
+    <line x1="544" y1="160" x2="558" y2="160"/><line x1="544" y1="156" x2="544" y2="164"/><line x1="558" y1="156" x2="558" y2="164"/>
+    <line x1="738" y1="160" x2="784" y2="160"/><line x1="738" y1="156" x2="738" y2="164"/><line x1="784" y1="156" x2="784" y2="164"/>
+  </g>
+  <text x="551" y="173" text-anchor="middle" fill="#c0392b" font-size="10">gap 14</text>
+  <text x="761" y="173" text-anchor="middle" fill="#c0392b" font-size="10">claim 1 absorbs the rest</text>
+
+  <rect x="480" y="186" width="360" height="146" rx="6" fill="#f7f7f7" stroke="#bbb"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#222">
+    <text x="490" y="206">render Row [pad 12, gap 14, content left center] {</text>
+    <text x="490" y="222">   Placeholder("Cover art") [width 52, height 52]</text>
+    <text x="490" y="238">   Col [gap 10, claim 1] {</text>
+    <text x="490" y="254">      Placeholder("Title") [height 14]</text>
+    <text x="490" y="270">      Placeholder("Tracks") [height 12, width 120]</text>
+    <text x="490" y="286">   }</text>
+    <text x="490" y="302">   Placeholder("Duration") [width 44, height 16]</text>
+    <text x="490" y="318">}</text>
+  </g>
+
+  <!-- inferred tree -->
+  <text x="480" y="362" font-weight="600" fill="#444">Inferred tree</text>
+  <g fill="#222" font-size="11">
+    <rect x="480" y="372" width="60" height="20" rx="4" fill="#fff" stroke="#333"/><text x="510" y="386" text-anchor="middle">Row</text>
+    <rect x="570" y="372" width="80" height="20" rx="4" fill="#fff" stroke="#333"/><text x="610" y="386" text-anchor="middle">Placeholder</text>
+    <rect x="570" y="400" width="60" height="20" rx="4" fill="#fff" stroke="#333"/><text x="600" y="414" text-anchor="middle">Col</text>
+    <rect x="660" y="400" width="80" height="20" rx="4" fill="#fff" stroke="#333"/><text x="700" y="414" text-anchor="middle">Placeholder</text>
+    <rect x="660" y="428" width="80" height="20" rx="4" fill="#fff" stroke="#333"/><text x="700" y="442" text-anchor="middle">Placeholder</text>
+    <rect x="570" y="456" width="80" height="20" rx="4" fill="#fff" stroke="#333"/><text x="610" y="470" text-anchor="middle">Placeholder</text>
+  </g>
+  <g stroke="#666" fill="none">
+    <path d="M540,382 H555 V382 H570"/>
+    <path d="M555,382 V466 H570"/>
+    <path d="M555,410 H570"/>
+    <path d="M630,410 H645 V438 H660"/>
+    <path d="M645,410 H660"/>
+  </g>
+  <text x="40" y="380" font-weight="600" fill="#444">Inference rules (first cut)</text>
+  <g fill="#333" font-size="11">
+    <text x="40" y="400">· one axis separates the boxes cleanly → that is the container's direction</text>
+    <text x="40" y="418">· boxes stacked inside one lane → a nested container in the other direction</text>
+    <text x="40" y="436">· the median distance between neighbours → gap; distance to the sketch edge → pad</text>
+    <text x="40" y="454">· a box touching both edges → fill; the widest gap on the main axis → claim 1 on its neighbour</text>
+    <text x="40" y="472">· a box that was drawn to a size keeps it as width/height; text and images hug by default</text>
+    <text x="40" y="496" fill="#666">Unsnap returns to the retained catalog position; unmatched nodes fall back to measured layout.</text>
+  </g>
+</svg>

@@ -1,3 +1,4 @@
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
@@ -7,6 +8,104 @@ const tsFence = '```ts'
 const fence = '```'
 
 Describe('compiler: Studio render occurrences', () => {
+  Test('publishes an imported shared fixture without a runtime import binding', async () => {
+    await withTaoFiles('tao-studio-shared-fixture-', {
+      'Data.tao': `public data Playlists / Playlist { Title text }`,
+      'Main.tao': `
+        use Playlists from ./Data
+        use Sketches from ./Sketches
+        app Preview { view Main }
+        view Main() { render Native() }
+        view Native() { render inject ${tsFence} return null ${fence} }
+        view PlaylistRow(Playlist) { render Native() }
+        scenarios PlaylistRow "sketch" {
+          fixture Sketches
+          device phone
+          scenario "draft" { render (Playlist: ChillVibes) }
+        }
+      `,
+      'Sketches.tao': `
+        use Playlists from ./Data
+        public fixture Sketches {
+          ChillVibes = create Playlist { Title: "Chill Vibes" }
+        }
+      `,
+    }, async paths => {
+      const compiled = await Workspace.compile(paths['Main.tao'], { studio: true })
+
+      Expect(compiled.studioManifest?.fixtures).toHaveLength(1)
+      Expect(compiled.studioManifest?.fixtures[0]).toMatchObject({
+        creates: [{ entity: 'Playlist', fields: { Title: 'Chill Vibes' }, name: 'ChillVibes' }],
+        name: 'Sketches',
+        source: { path: paths['Sketches.tao'] },
+      })
+      Expect(compiled.studioManifest?.scenarios[0]).toMatchObject({
+        fixtureId: compiled.studioManifest?.fixtures[0]?.id,
+        subject: {
+          arguments: { Playlist: { handle: 'ChillVibes', kind: 'fixture-reference' } },
+          kind: 'view',
+          viewName: 'PlaylistRow',
+        },
+      })
+      Expect(compiled.code).not.toContain('Sketches as')
+    })
+  })
+
+  Test('publishes empty-store journey steps and distinct omitted-action stand-ins', async () => {
+    await withTaoFiles('tao-studio-scenario-journey-', {
+      'Main.tao': `
+        app Preview { view Main }
+        view Main() { render Native() }
+        view SavedToast(Revert action()) { render Native() }
+        view Native() { render inject ${tsFence} return null ${fence} }
+
+        scenarios SavedToast "states" {
+          device phone
+          scenario "held" {
+            render ()
+            press down label "Revert"
+            advance 600.ms
+            press up #revertSave
+            hover placeholder "Revert save"
+            focus #revertSave
+            press #revertSave
+            enter "Tao" into label "Name"
+            submit #name
+            select #rows[2] { press text "Open" }
+          }
+        }
+      `,
+    }, async paths => {
+      const manifest = (await Workspace.compile(paths['Main.tao'], { studio: true })).studioManifest
+
+      const scenario = manifest?.scenarios[0]
+      Expect(scenario?.fixtureId).toBeUndefined()
+      Expect(scenario).toMatchObject({
+        steps: [
+          { kind: 'pressDown', selector: 'label', target: 'Revert' },
+          { kind: 'advance', milliseconds: 600 },
+          { kind: 'pressUp', selector: 'tag', target: 'revertSave' },
+          { kind: 'hover', selector: 'placeholder', target: 'Revert save' },
+          { kind: 'focus', tag: 'revertSave' },
+          { kind: 'press', selector: 'tag', target: 'revertSave' },
+          { kind: 'enter', selector: 'label', target: 'Name', value: 'Tao' },
+          { kind: 'submit', selector: 'tag', target: 'name' },
+          {
+            index: 2,
+            kind: 'select',
+            steps: [{ kind: 'press', selector: 'text', target: 'Open' }],
+            tag: 'rows',
+          },
+        ],
+        subject: {
+          arguments: { Revert: { kind: 'action-stand-in', parameter: 'Revert' } },
+          kind: 'view',
+          viewName: 'SavedToast',
+        },
+      })
+    })
+  })
+
   Test('adds version-bound occurrence metadata without replacing existing Tao props behavior', async () => {
     await withTaoFiles('tao-studio-render-occurrences-', {
       'Main.tao': `
@@ -57,6 +156,96 @@ Describe('compiler: Studio render occurrences', () => {
       const production = await Workspace.compile(paths['Main.tao'], { appName: 'Second' })
       Expect(production.code).not.toContain('studio:')
       Expect(production.code).not.toContain(paths['Main.tao'])
+    })
+  })
+
+  Test('publishes Snap rectangle identity in the render inventory and generated occurrence metadata', async () => {
+    await withTaoFiles('tao-studio-render-inventory-', {
+      'App.tao': `
+        use Main from @/studio
+        app Preview { view Main }
+      `,
+      '@/studio/Main.tao': `
+        // Studio-written generated source. Read-only until moved to a package.
+
+        use Text from @tao/ui
+        public view Main() {
+          #studio_rect_006100720074
+          render Text("Hello")
+        }
+      `,
+    }, async paths => {
+      const compiled = await Workspace.compile(paths['App.tao'], { studio: true })
+      const generated = compiled.validation.files.find(file => file.path === paths['@/studio/Main.tao'])!.ast
+      const render = [...AST.streamAllContents(generated).filter(AST.isRender)][0]!
+      const source = render.$cstNode!
+
+      Expect(compiled.studioManifest?.renders).toEqual([{
+        elementName: 'Text',
+        renderId: `${paths['@/studio/Main.tao']}:${source.offset}:${source.end}`,
+        source: { end: source.end, path: paths['@/studio/Main.tao'], start: source.offset },
+        studioRectId: 'art',
+      }])
+    })
+  })
+
+  Test('does not publish spoofed Studio rectangle markers from authored source', async () => {
+    await withTaoFiles('tao-studio-render-spoof-', {
+      'Main.tao': `
+        use Text from @tao/ui
+        app Preview { view Main }
+        view Main() {
+          #studio_rect_006100720074
+          render Text("Hello")
+        }
+      `,
+    }, async paths => {
+      const compiled = await Workspace.compile(paths['Main.tao'], { studio: true })
+
+      Expect(compiled.studioManifest?.renders[0]).not.toHaveProperty('studioRectId')
+      Expect(compact(compiled.code)).not.toContain('studioRectId: "art"')
+    })
+  })
+
+  Test('does not authenticate a nested authored @/studio path as the project generated root', async () => {
+    await withTaoFiles('tao-studio-render-nested-spoof-', {
+      'Main.tao': `
+        use Text from @tao/ui
+        use Generated from @/studio
+        use Spoof from ./Authored/@/studio
+        app Preview { view Main }
+        view Main() { render Text("Hello") }
+      `,
+      '@/studio/Generated.tao': `
+        // Studio-written generated source. Read-only until moved to a package.
+
+        use Text from @tao/ui
+        public view Generated() {
+          #studio_rect_00670065006e00750069006e0065
+          render Text("Generated")
+        }
+      `,
+      'Authored/@/studio/Spoof.tao': `
+        // Studio-written generated source. Read-only until moved to a package.
+
+        use Text from @tao/ui
+        public view Spoof() {
+          #studio_rect_00730070006f006f0066
+          render Text("Spoof")
+        }
+      `,
+    }, async paths => {
+      const compiled = await Workspace.compile(paths['Main.tao'], { studio: true })
+      const generated = compiled.studioManifest?.renders.find(render =>
+        render.source.path === paths['@/studio/Generated.tao']
+      )
+      const spoof = compiled.studioManifest?.renders.find(render =>
+        render.source.path === paths['Authored/@/studio/Spoof.tao']
+      )
+
+      Expect(generated?.studioRectId).toBe('genuine')
+      Expect(spoof).toBeDefined()
+      Expect(spoof).not.toHaveProperty('studioRectId')
     })
   })
 
@@ -122,7 +311,7 @@ Describe('compiler: Studio render occurrences', () => {
         { kind: 'boolean', name: 'Enabled', required: true, typeName: 'boolean' },
         { choices: ['Neutral', 'Good'], kind: 'choice', name: 'Tone', required: true, typeName: 'Tone' },
         { kind: 'time', name: 'ChangedAt', required: true, typeName: 'time' },
-        { kind: 'unsupported', name: 'Owner', required: true, typeName: 'Account' },
+        { entity: 'Account', kind: 'entity', name: 'Owner', required: true, typeName: 'Account' },
         { kind: 'number', name: 'Count', required: false, typeName: 'number' },
       ])
       Expect(manifest?.views.find(view => view.name === 'Detail')?.source.path).toBe(paths['More.tao'])
@@ -319,11 +508,13 @@ function requireRender(
 function studioOccurrence(render: AST.Render, sourcePath: string): string {
   const cstNode = render.$cstNode
   Assert.defined(cstNode, 'render source coordinates')
+  const elementName = ASTUtils.standardDesignElementName(render)
   return `studio: {
     sourcePath: ${JSON.stringify(sourcePath)},
     start: ${cstNode.offset},
     end: ${cstNode.end},
     kind: 'render',
+    ${elementName === undefined ? '' : `elementName: ${JSON.stringify(elementName)},`}
     ownerName: ${JSON.stringify(AST.findOwningView(render)?.name)},
   }`
 }
