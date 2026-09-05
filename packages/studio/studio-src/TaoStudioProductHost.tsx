@@ -1151,6 +1151,9 @@ export function StudioInspectorUndoMarker(
 
 type StudioInspectorDraftMap = Readonly<Record<string, string>>
 
+/** The draft-map key naming the render a set of inspector drafts was typed for. */
+const draftOwnerKey = '$for'
+
 const inspectorLayoutFieldIds = [
   'gap',
   'padding',
@@ -1668,6 +1671,54 @@ export function StudioInspectorTextActionValid(
     && selected !== undefined
     && selected.identity.sourceVersion === currentSourceVersion
     && studioInspectorText(inspection, selection) !== undefined
+}
+
+/**
+ * Drafts belong to the element they were typed for. A Tao view seeds its drafts state once, when
+ * it mounts, so a draft map records the render it was seeded from and gives way to a fresh seed the
+ * moment the inspected element changes; otherwise a gap typed for one element would be offered, and
+ * applied, to the next one selected.
+ */
+export function StudioInspectorDraftsFor(section: string, inspection: string, drafts: string): string {
+  const parsed = studioInspectorInspection(inspection)
+  if (parsed !== undefined && studioInspectorDraftMap(drafts)[draftOwnerKey] === parsed.renderId) {
+    return drafts
+  }
+  const seed = section === 'style' ? StudioInspectorStyleDrafts(inspection) : StudioInspectorLayoutDrafts(inspection)
+  return parsed === undefined
+    ? seed
+    : JSON.stringify({ ...studioInspectorDraftMap(seed), [draftOwnerKey]: parsed.renderId })
+}
+
+/** The Text section's draft: what was typed for this element, or the element's literal until then. */
+export function StudioInspectorTextDraft(inspection: string, draft: string): string {
+  const parsed = studioInspectorInspection(inspection)
+  const current = studioInspectorDraftMap(draft)
+  return parsed !== undefined && current[draftOwnerKey] === parsed.renderId
+    ? current['value'] ?? ''
+    : StudioInspectorTextLiteral(inspection)
+}
+
+export function StudioInspectorTextUpdateDraft(inspection: string, value: string): string {
+  return JSON.stringify({ [draftOwnerKey]: studioInspectorInspection(inspection)?.renderId ?? '', value })
+}
+
+/**
+ * A literal may be replaced with anything, including nothing. A bound leaf shows an empty draft,
+ * and setting that would silently swap the binding for `Text("")`, so it waits for typed content.
+ */
+export function StudioInspectorSetTextValid(
+  currentSourceVersion: string,
+  inspection: string,
+  selection: string,
+  busy: boolean,
+  draft: string,
+): boolean {
+  if (!StudioInspectorTextActionValid(currentSourceVersion, inspection, selection, busy)) {
+    return false
+  }
+  return studioInspectorText(inspection, selection)?.literal !== undefined
+    || StudioInspectorTextDraft(inspection, draft) !== ''
 }
 
 export function StudioInspectorSetTextAction(selection: string, content: string): string {

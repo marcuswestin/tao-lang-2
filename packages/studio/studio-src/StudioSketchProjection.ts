@@ -109,7 +109,7 @@ function container(
   ambiguous: boolean,
 ): Built {
   const ordered = [...children].sort((left, right) =>
-    compareBounds(left.bounds, right.bounds, axis) || firstId(left.node).localeCompare(firstId(right.node))
+    compareBounds(left.bounds, right.bounds, axis) || compareIds(firstId(left.node), firstId(right.node))
   )
   const distances = ordered.slice(1).map((child, index) =>
     start(child.bounds, axis) - end(ordered[index]!.bounds, axis)
@@ -200,7 +200,12 @@ function forcedAxis(rects: readonly StudioSketchRect[]): Axis {
 function compareRects(left: StudioSketchRect, right: StudioSketchRect, axis: Axis): number {
   const primary = axis === 'x' ? left.x - right.x : left.y - right.y
   const secondary = axis === 'x' ? left.y - right.y : left.x - right.x
-  return primary || secondary || left.id.localeCompare(right.id)
+  return primary || secondary || compareIds(left.id, right.id)
+}
+
+/** Code-point order, so the same sketch projects to the same source on every machine and locale. */
+function compareIds(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0
 }
 
 function compareBounds(left: Bounds, right: Bounds, axis: Axis): number {

@@ -2,7 +2,7 @@ import { Diagnostics } from '@shared'
 import { Describe, Expect, stubView, Test } from '@shared/test'
 import { InteractionValidator } from '../validator-src/validators/interaction-validator'
 import { testValidationMessages } from '../validator-src/validators/tests-validator'
-import { accepts, rejects, testValidateCode } from './test-validate'
+import { accepts, rejects, stubContainer, testValidateCode } from './test-validate'
 
 const leaf = stubView('Leaf')
 const messages = InteractionValidator.messages
@@ -32,6 +32,7 @@ Describe('validator: interaction attention', () => {
       command Finish(Document) { Title "Finish" Key "f" do Run() }
       command Duplicate(Document) { Title "Duplicate" Key "d" do Run() }
       command Delete(Document) { Title "Delete" Key "x" do Run() }
+      view Sidebar() { render Leaf() }
       view Row(Document) {
         Commands { Finish, Duplicate }
         hide Delete
@@ -39,6 +40,31 @@ Describe('validator: interaction attention', () => {
           rigid when Sidebar is active, centered when Scheme is Dark]
       }
     `),
+  )
+
+  Test(
+    'accepts an active-region condition naming a #tag and rejects one naming nothing visible',
+    async () => {
+      await accepts(`
+        ${leaf}
+        ${stubContainer('Panel')}
+        view Home() {
+          render Panel() {
+            #Sidebar
+            Leaf()
+            Leaf() [rigid when Sidebar is active]
+          }
+        }
+      `)()
+      await rejects(
+        `
+          ${leaf}
+          view Sidebar() { render Leaf() }
+          view Home() { render Leaf() [rigid when Sidebarr is active] }
+        `,
+        messages.unknownRegion('Sidebarr'),
+      )()
+    },
   )
 
   Test(

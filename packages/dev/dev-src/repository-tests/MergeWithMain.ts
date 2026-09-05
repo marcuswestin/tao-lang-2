@@ -385,7 +385,12 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
 }
 
 function executionCommand(options: MergeWithMainOptions): string {
-  const parts = ['./dev', 'merge-with-main', '--execute']
+  // The printed command is the one a non-interactive shell can run, so it carries the confirmation
+  // flag; `--push` stays the operator's explicit choice and is added only when this run asked for it.
+  const parts = ['./dev', 'merge-with-main', '--execute', '--yes']
+  if (options.push === true) {
+    parts.push('--push')
+  }
   if (options.skipFullVerify === true) {
     parts.push('--skip-full-verify')
   }

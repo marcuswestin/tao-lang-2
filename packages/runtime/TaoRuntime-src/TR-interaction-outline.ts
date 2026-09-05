@@ -298,6 +298,26 @@ export type TaoOutlineLiveNode =
     order: number
   }>
 
+/**
+ * visualOrder puts nodes in the order a person reads them — down the screen, then across it. A
+ * keyed reorder moves a row's box without re-registering the row, so registration order alone would
+ * traverse a reordered list in the order it first mounted. Registration order stays the tiebreak
+ * between boxes that start at the same point, and stays the whole answer while any node is
+ * unmeasured: a partially measured list has no visual order to read.
+ */
+export function visualOrder(nodes: readonly TaoOutlineLiveNode[]): readonly TaoOutlineLiveNode[] {
+  const measured = nodes.map((node, registration) => ({ bounds: node.live?.measure?.(), node, registration }))
+  const anchored = measured.flatMap(entry => entry.bounds === undefined ? [] : [{ ...entry, bounds: entry.bounds }])
+  if (anchored.length !== measured.length) {
+    return nodes
+  }
+  return anchored
+    .sort((left, right) =>
+      left.bounds.y - right.bounds.y || left.bounds.x - right.bounds.x || left.registration - right.registration
+    )
+    .map(entry => entry.node)
+}
+
 /** TaoOutlineRowRoot is what a loop row hands the native root that renders it. */
 export type TaoOutlineRowRoot = Readonly<{ label: string }>
 

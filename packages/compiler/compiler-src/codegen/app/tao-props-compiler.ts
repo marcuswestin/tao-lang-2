@@ -1,7 +1,7 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { studioRenderIdentity } from '../../studio-render-identity'
+import { studioRectMarkerPrefix, studioRenderIdentity } from '../../studio-render-identity'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 
@@ -16,7 +16,7 @@ export const TaoPropsCompiler = {
     const designDefault = elementName === undefined ? undefined : gen`${gen.jsLiteral(elementName)}`
     // Every view occurrence takes the same defaults; layout comes only from the call site's clauses.
     const layout = gen`undefined`
-    const testTag = AST.testTagForRender(render)
+    const testTag = publicTestTagForRender(render)
     const studio = options.studio === true ? compileStudioRenderOccurrence(render, options.projectRoot) : undefined
     const fields: TaoPropsFields = {
       designDefault,
@@ -66,6 +66,16 @@ function compileTaoPropsObject(fields: TaoPropsFields): Compiled {
   }${fields.studio ? gen`, studio: ${fields.studio}` : ''}${
     fields.interaction ? gen`, interaction: ${fields.interaction}` : ''
   } }`
+}
+
+/**
+ * publicTestTagForRender drops Snap's private `#studio_rect_…` marker from the shipped test tag.
+ * The marker names a Studio rectangle, not a testable element, and every build — release included —
+ * emits `testTag` as the element's public testID, so only `studioRectId` may carry the marker.
+ */
+function publicTestTagForRender(render: AST.Render): string | undefined {
+  const tags = AST.testTagForRender(render)?.split(' ').filter(tag => !tag.startsWith(studioRectMarkerPrefix)) ?? []
+  return tags.length > 0 ? tags.join(' ') : undefined
 }
 
 /** compileStudioRenderOccurrence emits one version-bound source locator for a rendered occurrence. */

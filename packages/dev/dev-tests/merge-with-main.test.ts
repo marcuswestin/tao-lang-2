@@ -331,7 +331,7 @@ Describe('merge-with-main', () => {
     ])
     Expect(fake.calls.some(call => ['fetch', 'merge', 'commit', 'push', 'reset'].includes(call.args[0]!))).toBe(false)
     Expect(fake.lines.at(-1)).toBe(
-      'DRY RUN  No refs or worktrees changed. Execute with: ./dev merge-with-main --execute',
+      'DRY RUN  No refs or worktrees changed. Execute with: ./dev merge-with-main --execute --yes',
     )
     Expect(fake.snapshots.size).toBe(0)
   })

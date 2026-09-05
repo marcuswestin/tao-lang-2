@@ -2036,6 +2036,38 @@ Describe('Studio canvas-mode source actions', () => {
     Expect(container.text).toBeUndefined()
   })
 
+  Test('text-binding candidates carry the enclosing loop item and stop at the render statement', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view LabelList(Caption text) {
+         render Col() [gap 4] {
+            let Before = "before"
+            loop ["Inbox", "Today"] / Label {
+               Text("Meta") [meta]
+               let After = "after"
+               Text(After)
+      }  }  }
+    `)
+    const meta = SourceActions.inspectStudioRender(document, renderId(requireRenderByText(document, 'Meta')))
+    Expect(meta.text?.candidates).toEqual([
+      { expression: 'Before', type: 'text' },
+      { expression: 'Caption', type: 'text' },
+      { expression: 'Label', type: 'text' },
+    ])
+    await Expect(SourceActions.applyStudioPatch(document, {
+      expression: 'After',
+      kind: 'bind-text',
+      renderId: renderId(requireRenderByText(document, 'Meta')),
+    })).rejects.toThrow('not visible at this render')
+    const bound = await SourceActions.applyStudioPatch(document, {
+      expression: 'Label',
+      kind: 'bind-text',
+      renderId: renderId(requireRenderByText(document, 'Meta')),
+    })
+    Expect(bound.content).toContain('Text(Label) [meta]')
+  })
+
   Test('bind-text points a text leaf at a visible value and interpolates a number', async () => {
     const document = await parseDocument(`
       use Col, Text from @tao/ui
@@ -2121,6 +2153,39 @@ Describe('Studio canvas-mode source actions', () => {
       kind: 'remove-render',
       renderId: renderId(requireRenderByText(document, 'Col()')),
     })).rejects.toThrow('root render stays')
+  })
+
+  Test("remove-render keeps a snapped render and a container's only child", async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            #studio_rect_00720031
+            Text("Snapped")
+            Text("Plain")
+      }  }
+
+      view SoloView() {
+         render Col() {
+            Text("Only")
+      }  }
+    `)
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'remove-render',
+      renderId: renderId(requireRenderByText(document, 'Snapped')),
+    })).rejects.toThrow('Unsnap the sketch first')
+    await Expect(SourceActions.applyStudioPatch(document, {
+      kind: 'remove-render',
+      renderId: renderId(requireRenderByText(document, 'Only')),
+    })).rejects.toThrow("container's only child")
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'remove-render',
+      renderId: renderId(requireRenderByText(document, 'Plain')),
+    })
+    Expect(patch.content).toContain('#studio_rect_00720031')
+    Expect(patch.content).toContain('Text("Snapped")')
+    Expect(patch.content).not.toContain('Text("Plain")')
   })
 
   Test('wrap-render accepts Row and Col and imports the wrapper it introduces', async () => {

@@ -1,4 +1,4 @@
-import { Assert, Errors, FS } from '@shared'
+import { Assert, Errors, FS, Json } from '@shared'
 
 export const studioSketchCatalogFormatVersion = 1 as const
 export const studioSketchCatalogRelativePath = '.tao-project/studio/sketches.jsonc'
@@ -439,11 +439,11 @@ function requireSnappedRectIndex(sketch: StudioSketch, id: string): number {
 }
 
 function validateRequest(request: StudioSketchCatalogRequest): void {
-  Assert.input(isRecord(request), 'Studio sketch request must be an object.')
+  Assert.input(Json.isRecord(request), 'Studio sketch request must be an object.')
   requireOnlyKeys(request, ['action', 'expectedRevision', 'requestId'], 'request')
   requireNonEmptyString(request.requestId, 'requestId')
   requireNonNegativeInteger(request.expectedRevision, 'expectedRevision')
-  Assert.input(isRecord(request.action), 'Studio sketch action must be an object.')
+  Assert.input(Json.isRecord(request.action), 'Studio sketch action must be an object.')
   validateAction(request.action)
 }
 
@@ -536,12 +536,12 @@ function parseCatalog(content: string): StudioSketchCatalogSnapshot {
   } catch {
     Errors.throwUserInput(`Studio sketch catalog is malformed JSONC: ${studioSketchCatalogRelativePath}`)
   }
-  Assert.input(isRecord(parsed), 'Studio sketch catalog must contain an object.')
+  Assert.input(Json.isRecord(parsed), 'Studio sketch catalog must contain an object.')
   return validateCatalog(parsed)
 }
 
 function validateCatalog(value: unknown): StudioSketchCatalogSnapshot {
-  Assert.input(isRecord(value), 'Studio sketch catalog must contain an object.')
+  Assert.input(Json.isRecord(value), 'Studio sketch catalog must contain an object.')
   requireOnlyKeys(value, ['formatVersion', 'nextViewNumber', 'revision', 'sketches'], 'catalog')
   Assert.input(
     value['formatVersion'] === studioSketchCatalogFormatVersion,
@@ -568,7 +568,7 @@ function validateCatalog(value: unknown): StudioSketchCatalogSnapshot {
 }
 
 function validateSketch(value: unknown, index: number): StudioSketch {
-  Assert.input(isRecord(value), `Studio sketch at index ${index} must be an object.`)
+  Assert.input(Json.isRecord(value), `Studio sketch at index ${index} must be an object.`)
   requireOnlyKeys(
     value,
     ['height', 'id', 'name', 'project', 'rectOrder', 'rects', 'snapped', 'view', 'width'],
@@ -618,7 +618,7 @@ function validateSketchFields(
 }
 
 function validateSnappedRect(value: unknown, field: string): StudioSnappedRect {
-  Assert.input(isRecord(value), `Studio snapped rectangle ${field} must be an object.`)
+  Assert.input(Json.isRecord(value), `Studio snapped rectangle ${field} must be an object.`)
   requireOnlyKeys(value, ['rect', 'target'], field)
   const rect = validateRect(value['rect'], `${field}.rect`)
   const target = validateRenderTarget(value['target'], `${field}.target`)
@@ -630,7 +630,7 @@ function validateSnappedRect(value: unknown, field: string): StudioSnappedRect {
 }
 
 function validateRenderTarget(value: unknown, field: string): StudioSketchRenderTarget {
-  Assert.input(isRecord(value), `Studio sketch render target ${field} must be an object.`)
+  Assert.input(Json.isRecord(value), `Studio sketch render target ${field} must be an object.`)
   requireOnlyKeys(
     value,
     ['elementName', 'path', 'renderId', 'sourceVersion', 'studioRectId', 'view'],
@@ -647,7 +647,7 @@ function validateRenderTarget(value: unknown, field: string): StudioSketchRender
 }
 
 function validateRect(value: unknown, field: string): StudioSketchRect {
-  Assert.input(isRecord(value), `Studio rectangle ${field} must be an object.`)
+  Assert.input(Json.isRecord(value), `Studio rectangle ${field} must be an object.`)
   requireOnlyKeys(value, ['content', 'fieldBinding', 'height', 'id', 'kind', 'width', 'x', 'y'], field)
   const id = requireNonEmptyString(value['id'], `${field}.id`)
   const x = requireNonNegativeFinite(value['x'], `${field}.x`)
@@ -672,12 +672,12 @@ function validateRect(value: unknown, field: string): StudioSketchRect {
 }
 
 function validateFieldBinding(value: unknown, field: string): StudioSketchFieldBinding {
-  Assert.input(isRecord(value), `Studio sketch ${field} must be an object.`)
+  Assert.input(Json.isRecord(value), `Studio sketch ${field} must be an object.`)
   requireOnlyKeys(value, ['parameter', 'path', 'presentation'], field)
   const parameter = requireIdentifier(value['parameter'], `${field}.parameter`)
   const path = requirePath(value['path'], `${field}.path`)
   const presentationValue = value['presentation']
-  Assert.input(isRecord(presentationValue), `Studio sketch ${field}.presentation must be an object.`)
+  Assert.input(Json.isRecord(presentationValue), `Studio sketch ${field}.presentation must be an object.`)
   requireOnlyKeys(presentationValue, ['kind', 'label'], `${field}.presentation`)
   Assert.input(
     presentationValue['kind'] === 'text' || presentationValue['kind'] === 'image',
@@ -686,7 +686,7 @@ function validateFieldBinding(value: unknown, field: string): StudioSketchFieldB
   const labelValue = presentationValue['label']
   let label: StudioSketchFieldBinding['presentation']['label']
   if (labelValue !== undefined) {
-    Assert.input(isRecord(labelValue), `Studio sketch ${field}.presentation.label must be an object.`)
+    Assert.input(Json.isRecord(labelValue), `Studio sketch ${field}.presentation.label must be an object.`)
     requireOnlyKeys(labelValue, ['path', 'prefix', 'suffix'], `${field}.presentation.label`)
     label = {
       path: requirePath(labelValue['path'], `${field}.presentation.label.path`),
@@ -797,10 +797,6 @@ function requirePositiveFinite(value: unknown, field: string): number {
     `Studio sketch ${field} must be positive.`,
   )
   return value
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** Removes JSONC comments and commas immediately before a closing object or array token. */

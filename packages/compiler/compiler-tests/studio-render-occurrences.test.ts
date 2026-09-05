@@ -189,6 +189,34 @@ Describe('compiler: Studio render occurrences', () => {
     })
   })
 
+  Test('keeps a Snap rectangle marker out of the test tag a release build ships', async () => {
+    await withTaoFiles('tao-studio-render-marker-test-tag-', {
+      'App.tao': `
+        use Main from @/studio
+        app Preview { view Main }
+      `,
+      '@/studio/Main.tao': `
+        // Studio-written generated source. Read-only until moved to a package.
+
+        use Text from @tao/ui
+        public view Main() {
+          #studio_rect_006100720074
+          render Text("Hello")
+        }
+      `,
+    }, async paths => {
+      const moduleCode = (compiled: Awaited<ReturnType<typeof Workspace.compile>>): string =>
+        compiled.files.find(file => file.sourcePath === paths['@/studio/Main.tao'])!.code
+      const release = moduleCode(await Workspace.compile(paths['App.tao']))
+      const studio = moduleCode(await Workspace.compile(paths['App.tao'], { studio: true }))
+
+      Expect(release).not.toContain('testTag')
+      Expect(release).not.toContain('studio_rect_')
+      Expect(studio).not.toContain('testTag')
+      Expect(compact(studio)).toContain('studioRectId: "art"')
+    })
+  })
+
   Test('does not publish spoofed Studio rectangle markers from authored source', async () => {
     await withTaoFiles('tao-studio-render-spoof-', {
       'Main.tao': `

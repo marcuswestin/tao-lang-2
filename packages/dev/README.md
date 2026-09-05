@@ -71,14 +71,15 @@ timeout, and a timeout on a machine the run had to itself stays a repository fai
 
 ## What is shared, and what to do about it
 
-| Shared thing                              | How it is handled                                                                                     |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| CPUs                                      | Atomically admitted across registered lanes; see above                                                |
-| `studio-smoke` ports (42000+)             | Sharded, probed, and held by a cross-worktree block lease for the whole smoke process                 |
-| Expo Metro 8081                           | `Ports` falls back to an ephemeral port; the kill prompt warns it may be a neighbour's                |
-| Local InstantDB (9020, 3000)              | One Docker stack for the whole machine, by design — `just stop-local-instantdb` stops it for everyone |
-| Bun's package cache, Watchman, `~/.hutch` | Shared and concurrency-safe in practice; `./agent doctor` reports Watchman's health                   |
-| The window server, Simulator, emulator    | Not arbitrated across worktrees                                                                       |
+| Shared thing                           | How it is handled                                                                                         |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| CPUs                                   | Atomically admitted across registered lanes; see above                                                    |
+| `studio-smoke` ports (42000+)          | Sharded, probed, and held by a cross-worktree block lease for the whole smoke process                     |
+| Expo Metro 8081                        | `Ports` falls back to an ephemeral port; the kill prompt warns it may be a neighbour's                    |
+| Local InstantDB (9020, 3000)           | One Docker stack for the whole machine, by design — `just stop-local-instantdb` stops it for everyone     |
+| Bun's package cache, Watchman          | Shared and concurrency-safe in practice; `./agent doctor` reports Watchman's health                       |
+| `~/.hutch`                             | Read only; each worktree clones Hutch's mutable registry into its own `.artifacts/user/studio-hutch-home` |
+| The window server, Simulator, emulator | Not arbitrated across worktrees                                                                           |
 
 `./tao test` invoked directly is the one runner outside this: it is the published product CLI, and
 it sizes itself to `cpuCount` unless `TAO_TEST_JOBS` is set. Inside `check`, `verify`, and
@@ -87,10 +88,13 @@ it sizes itself to `cpuCount` unless `TAO_TEST_JOBS` is set. Inside `check`, `ve
 doing.
 
 The window-server row is the honest gap. `full-verify`'s native Studio and canary lanes hold a `gui` resource
-so they never overlap **inside one run**, but nothing stops a second worktree from starting its own.
-Two concurrent `full-verify` runs on one machine will interfere; run them one at a time. When it
-happens anyway, the lanes time out and the contention report names why, which is the difference
-between a wasted afternoon and a re-run.
+so they never overlap **inside one run**, and across worktrees the machine-wide `studio-native-host`
+lease lets exactly one native Studio session run at a time. A second worktree's native lane does not
+wait or time out: it fails at once with the `native-host-busy` failure kind, naming the worktree and
+command that hold the host, so the summary says why before any minute is spent. Only interactive
+`just studio-native` offers to take the host over. If the registry lock under
+`~/.cache/tao/machine-lanes` is ever wedged by a holder that died, every lane on the machine fails
+with a registry-lock timeout; `rm -rf ~/.cache/tao/machine-lanes` resets it.
 
 ## Choosing a lane
 
@@ -119,7 +123,8 @@ gates use the same live dashboard as a direct `just full-verify` or `just verify
 merge keeps the durable report: it prints the local start time for each admitted gate before that
 gate's completion and log path.
 
-`just merge-with-main` is human-only and defaults to a non-mutating dry run. Its strict preflight
+`just merge-with-main` runs only when Ro asks for it in the current request, never on an agent's own
+initiative, and defaults to a non-mutating dry run. Its strict preflight
 requires the sole live `main` worktree to equal `origin/main`; a local-ahead `main` must be reconciled
 deliberately first. A remote feature branch left behind by later local commits is pushed forward as
 the first mutation instead of refusing the landing; a remote holding commits the worktree lacks still

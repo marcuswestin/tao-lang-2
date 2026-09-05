@@ -1,8 +1,8 @@
 # Follow-ups - Declaration Model Spike
 
 Live record of declaration-model work that is still unbuilt. The settled model lives in
-`Implementation - Declaration model spike - Claude.md`; undecided language questions live in
-`Open questions - Declaration model spike - Claude.md`. This file owns only what is decided but
+`Implementation - Declaration model spike.md`; undecided language questions live in
+`Open questions - Declaration model spike.md`. This file owns only what is decided but
 unfinished.
 
 The two build slices (`Now 1 Unified declaration slots`, `Now 2 Sidecar TypeScript implementations`)

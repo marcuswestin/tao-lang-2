@@ -719,7 +719,7 @@ boundary without publishing blank cells or silently substituting the selected ap
 A physical iPhone or iPad renders one cell through the Tao Companion development build
 (`packages/studio-companion-app`, an Expo dev client with a fixed bundle id and scheme). Every Studio launch
 starts one `tao-studio-device-v1` gateway beside the loopback server, bound to every interface on an
-ephemeral port and carrying only pairing, project/app identity, scenario bootstrap, revision state, and
+ephemeral port and carrying pairing, project/app identity, scenario bootstrap, revision state, and
 device reports; the loopback server, its Host validation, and the per-project Metro are unchanged. The
 generated preview root mounts `TR.Studio.DeviceHost` on native platforms and the browser bridge on the web,
 so one compilation and one Metro file graph drive both canvases. Trust is an authenticated X25519 exchange
@@ -730,5 +730,8 @@ cell it selects, acknowledges the exact compile revision it rendered, and follow
 browser cell. The workbench **Device** popover opens the installed shell through Expo's dev-client link (with a
 QR and copyable URL), runs pairing, shows compile versus applied revisions, switches scenarios, and revokes
 trust. The protocol, threat model, and message set are in
-`Docs/Roadmap/Tao Studio companion app/Slice 1 - Device protocol and trust.md`; Bonjour discovery, the Tao
-relay, beta delivery, and device-originated source actions remain roadmap work.
+`Docs/Roadmap/Tao Studio companion app/Slice 1 - Device protocol and trust.md`. After pairing is
+confirmed, a device may send `device.selectCell`, `device.selectSource`, `device.setNetwork`,
+`device.sourceAction` (validated and applied with the same identity tuple as a browser request),
+`device.applied`, `device.log`, `device.report`, and runtime-capture results; before confirmation only
+`device.ping` is answered. Bonjour discovery, the Tao relay, and beta delivery remain roadmap work.

@@ -472,14 +472,20 @@ export const StudioSketchView = {
       }
     }
     workspace.addEventListener('pointerup', finishOuter)
-    workspace.addEventListener('pointercancel', event => {
+    const cancelOuter = (event: PointerEvent): void => {
       if (event.pointerId !== outerGesture?.pointerId) {
         return
       }
       outerGesture = StudioSketchOuterDrawing.cancel(outerGesture, event.pointerId)
-      workspace.releasePointerCapture?.(event.pointerId)
+      try {
+        workspace.releasePointerCapture?.(event.pointerId)
+      } catch {
+        // The capture was already gone.
+      }
       delete workspace.dataset['taoStudioSketchDrawing']
-    })
+    }
+    workspace.addEventListener('pointercancel', cancelOuter)
+    workspace.addEventListener('lostpointercapture', cancelOuter)
     host.append(workspace)
     render(sketches)
     return {
@@ -543,9 +549,18 @@ function renderSketch(
     board.dataset['taoStudioSketchGesture'] = state.gesture?.kind ?? 'gesture'
     gestureLock.begin()
   }
+  // Idempotent: a pointerup releases, and the lostpointercapture that follows must not end the
+  // gesture lock a second time or release a pointer that already belongs to the next gesture.
   const releasePointer = (pointerId: number): void => {
+    if (activePointer !== pointerId) {
+      return
+    }
     activePointer = undefined
-    board.releasePointerCapture?.(pointerId)
+    try {
+      board.releasePointerCapture?.(pointerId)
+    } catch {
+      // The capture was already gone; the browser dropped it before this ran.
+    }
     delete board.dataset['taoStudioSketchGesture']
     gestureLock.end()
   }
@@ -890,7 +905,11 @@ function renderSketch(
     }
     paint()
   })
-  board.addEventListener('pointercancel', event => {
+  // The browser cancels a gesture outright, or silently takes the capture away when the board is
+  // moved in the DOM or another element captures the pointer. Either way the pointerup never
+  // arrives, so both end the gesture; otherwise the gesture lock would hold the render gate closed
+  // until the next successful gesture.
+  const cancelGesture = (event: PointerEvent): void => {
     if (event.pointerId !== activePointer) {
       return
     }
@@ -898,7 +917,9 @@ function renderSketch(
     duplicateSourceId = undefined
     paint()
     releasePointer(event.pointerId)
-  })
+  }
+  board.addEventListener('pointercancel', cancelGesture)
+  board.addEventListener('lostpointercapture', cancelGesture)
   board.addEventListener('pointerup', event => {
     if (event.pointerId !== activePointer) {
       return

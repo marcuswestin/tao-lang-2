@@ -10,6 +10,7 @@ import { jsonSchema, tool, type ToolSet } from 'ai'
 import { StudioProjectSession } from '../StudioProjectSession'
 import { declarationSource } from './AgentChatFacts'
 import { objectSchema, refusal, TEXT } from './AgentChatSchema'
+import { requireOnly } from './AgentChatScope'
 import type { AgentChatToolCall, AgentChatWorld } from './AgentChatTools'
 import { lowerFeature, lowerReword, textCandidates } from './FeaturePlan'
 import { resolveTarget } from './SemanticSnapshot'
@@ -185,6 +186,12 @@ export function writeTools(
               { youWrote: replacement },
             ),
           )
+        }
+        // The tool named one declaration; the edit may change nothing else. Without this gate an
+        // approved raw edit could add or remove declarations the diff alone had to catch.
+        const outOfScope = await requireOnly(before, after, [], [`${node.kind} ${node.name}`])
+        if (outOfScope !== undefined) {
+          return capture('proposeEdit', { declaration }, refusal(outOfScope))
         }
         return capture(
           'proposeEdit',

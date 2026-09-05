@@ -1479,7 +1479,11 @@ async function bindText(document: AST.Document, request: StudioBindTextPatchRequ
   }]))
 }
 
-/** removeRender deletes one direct child render statement and the tag attached to it. */
+/**
+ * removeRender deletes one direct child render statement and the tag attached to it. A render a
+ * sketch snapped in, and the last child of a container, stay: the first owns Unsnap's marker and the
+ * second would leave an empty block behind.
+ */
 async function removeRender(document: AST.Document, request: StudioRemoveRenderPatchRequest): Promise<string> {
   assertNoSyntaxErrors(document)
   requireExactKeys(request, ['kind', 'renderId'], 'Remove render request')
@@ -1493,6 +1497,18 @@ async function removeRender(document: AST.Document, request: StudioRemoveRenderP
   const source = document.textDocument.getText()
   const slices = blockStatementSlices(source, block)
   const tag = AST.attachedTag(render)
+  // A `#studio_rect_` tag is the private marker that ties this render back to its sketch rectangle.
+  // Deleting the render would take the marker with it and leave Unsnap with nothing to undo.
+  if (tag?.tag.startsWith('#studio_rect_') === true) {
+    throw new Errors.UserInputError(
+      'Studio cannot remove a render snapped in from a sketch; Unsnap the sketch first.',
+    )
+  }
+  if (block.statements.every(candidate => candidate === statement || candidate === tag)) {
+    throw new Errors.UserInputError(
+      "Studio cannot remove a container's only child; remove the container instead.",
+    )
+  }
   const removed = slices.filter(slice =>
     slice.statement === statement || (tag !== undefined && slice.statement === tag)
   )

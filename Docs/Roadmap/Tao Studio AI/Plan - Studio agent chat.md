@@ -7,9 +7,10 @@ Studio-supplied tools until a request is satisfied. It stands alongside
 SAI-D028), the open questions (through SAI-Q045), and the findings from the first four journeys. New
 decisions and questions raised by this slice continue those ledgers in that document.
 
-Like its predecessor, this plan does not amend `Docs/Roadmap/Tao Revolution/Decisions.md`, does not
-define a supported Studio or compiler API, and does not authorize merging the implementation into
-`main`. Ro decides language semantics, roadmap priority, and product behavior; the implementing agent
+Like its predecessor, this plan does not amend `Docs/Roadmap/Tao Revolution/Decisions.md` and does
+not define a supported Studio or compiler API. The implementation landed on `main` on 2026-09-04 as
+a proof of concept behind the Agent rail panel; it remains disposable, and nothing else in the
+repository may depend on its modules or routes. Ro decides language semantics, roadmap priority, and product behavior; the implementing agent
 decides everything else here from repository evidence and its own judgment.
 
 ## Why a second approach, and why it coexists with the first

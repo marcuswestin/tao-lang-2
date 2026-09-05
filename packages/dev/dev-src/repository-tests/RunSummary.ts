@@ -289,9 +289,11 @@ function nodeResult(
 ): GateResult {
   const exitCode = typeof state.exitCode === 'number' ? state.exitCode : undefined
   const failed = state.status === 'failed'
+  // A node that failed again on its isolated retry has had the machine ruled out for it, so the
+  // contention this run recorded no longer explains its failure.
   const failureKind = failed
     ? classifyFailure(state.fullOutput, {
-      contention,
+      contention: state.retried === true ? undefined : contention,
       interrupted: state.failure?.kind === 'interrupted',
     })
     : undefined
