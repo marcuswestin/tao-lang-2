@@ -775,7 +775,6 @@ type SmokeSketchReadiness = Readonly<{
   browserFailures: readonly string[]
   groupLabels: readonly string[]
   hostErrors: readonly string[]
-  scenarioLabels: readonly string[]
   sketchCount: number
   status: string
 }>
@@ -791,18 +790,13 @@ async function waitForSketchReady(browser: StudioCdp): Promise<void> {
       hostErrors: [...document.querySelectorAll('[data-tao-studio-sketch-error]')]
         .map(host => host.getAttribute('data-tao-studio-sketch-error') ?? '')
         .filter(Boolean),
-      scenarioLabels: [...document.querySelectorAll(
-        '[data-studio-tao-scenario="true"] .studio-scenario-inspector-label',
-      )].map(label => label.textContent ?? ''),
       sketchCount: document.querySelectorAll('[data-tao-studio-sketch]').length,
       status: document.querySelector('.studio-status')?.textContent ?? '',
     }))()`)
     readiness = { ...readiness, browserFailures: browser.browserFailures().map(event => event.text) }
-    if (
-      readiness.groupLabels.includes('sketch')
-      && readiness.scenarioLabels.includes('draft')
-      && readiness.sketchCount > 0
-    ) {
+    // Generated sketch boards live beside scenario cells, not inside one. Their readiness contract
+    // is the sketch matrix group plus its mounted board; scenario-inspector copy is unrelated.
+    if (readiness.groupLabels.includes('sketch') && readiness.sketchCount > 0) {
       return
     }
     if (readiness.hostErrors.length > 0 || readiness.browserFailures.length > 0) {

@@ -576,15 +576,17 @@ an entry here may link one when the developer workflow is also affected.
 - **Area:** Test reliability
 - **Impact:** The sandbox full-verification lane could fail even though the performance-contract test
   only launches four fast `just --dry-run` inspections and passes immediately by itself.
-- **Evidence:** The test hit Bun's default five-second timeout while `_ship-bundle-proof` ran beside the
-  package-test node; an immediate isolated run completed in 27 milliseconds.
+- **Evidence:** The test first hit Bun's default five-second timeout while `_ship-bundle-proof` ran beside
+  the package-test node; after receiving an explicit 30-second timeout, it timed out again during a
+  normal-terminal `full-verify` while an immediate isolated run completed in 107 milliseconds.
 - **Workaround:** Re-run the focused performance-check suite after the full lane becomes quiet.
-- **Proposed change:** Give this subprocess-based contract test an explicit 30-second timeout while
-  preserving its assertions and keeping actual benchmarks outside verification.
-- **Dependencies:** Resolved on `feat/verification-lanes`; no scheduling policy changed.
-- **Acceptance:** The focused test and a subsequent `full-verify-sandbox` pass without weakening the
-  rule that only `bench` reaches the language benchmark.
-- **Source:** 2026-09-04 `full-verify-sandbox` acceptance run on `feat/verification-lanes`.
+- **Proposed change:** Replace the four nested `just --dry-run` subprocesses with a deterministic repo-lint
+  rule that follows recipe references and `{{ VARIABLE }}` gate lists while keeping actual benchmarks
+  outside verification.
+- **Dependencies:** Resolved on `feat/freehand-ui-sketching-implementation`; no scheduling policy changed.
+- **Acceptance:** Focused tests prove direct and variable-mediated benchmark reachability, `_repo-lint`
+  passes, and the full package-test lane no longer launches the nested Just inspection.
+- **Source:** 2026-09-04 `full-verify-sandbox` acceptance and 2026-09-04 normal-terminal merge verification.
 
 ### DEVENV-036 — Critical-path verification startup and host-wait concurrency
 
@@ -695,3 +697,20 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** A fixture reproducing the protected-path link failure recovers through the documented
   command without reading protected content, and a second `./agent verify` dependency check is clean.
 - **Source:** 2026-09-04 freehand/main merge verification.
+
+### DEVENV-041 — Nested gate-runner tests inherit the live machine registry
+
+- **Status:** Resolved
+- **Area:** Test reliability
+- **Impact:** `./agent verify` could time out two otherwise millisecond-scale gate-runner tests, including
+  on its isolated retry, because the nested runner waited for capacity held by its enclosing lane.
+- **Evidence:** The JSON-summary and artifact-trail tests each hit their 15-second test timeout during a
+  three-lane, 32.9-load verify run, then both passed as part of the focused 221-millisecond suite when
+  no outer lane owned the shared registry.
+- **Workaround:** Run the gate-runner test file outside a repository verification lane.
+- **Proposed change:** Give every nested `runGates` fixture its own temporary machine-registry root so a
+  unit test cannot discover or wait on real repository lanes.
+- **Dependencies:** Resolved on `feat/freehand-ui-sketching-implementation`.
+- **Acceptance:** The focused gate-runner suite and `./agent verify` pass while another registered lane
+  is present; the tests that intentionally model contention continue to use their explicit fixtures.
+- **Source:** 2026-09-04 verification of the full-verify reliability fixes.
