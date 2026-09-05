@@ -19,7 +19,13 @@ import React from 'react'
 import { createPortal } from 'react-dom'
 import { StudioApiClient } from './client/StudioApiClient'
 import { mountStudio } from './client/StudioApp'
-import { fileUri, projectRelativePath, sanitizeLspHtml, StudioEditorInsertion } from './client/StudioEditor'
+import {
+  fileUri,
+  projectRelativePath,
+  sanitizeLspHtml,
+  studioCellLabel,
+  StudioEditorInsertion,
+} from './client/StudioEditor'
 import { StudioLens, type StudioLensFacet } from './client/StudioLens'
 import {
   type StudioTaoDrawerPanelModel,
@@ -424,7 +430,7 @@ export function StudioScenarioInspectorLabel(
 
 /** Compact presentation-only adapter; Tao owns the StudioContext query and supplied values. */
 export function StudioContextSummary(props: StudioContextSummaryProps): React.ReactElement {
-  const scenario = compactIdentity(props.ScenarioId) || 'No active scenario'
+  const scenario = studioCellLabel(props.ScenarioId) || 'No active scenario'
   return (
     <div className="studio-context-summary" data-active-cell={props.CellId} data-testid={props.Tag}>
       <strong title={props.FilePath}>{props.FilePath || 'No open file'}</strong>
@@ -1099,17 +1105,7 @@ export function StudioDataRows(
 
 /** A data table is named by its entity and datasource; the declaration tuple behind the datasource stays internal. */
 export function StudioDataTableTitle(datasource: string, entity: string): string {
-  let source = datasource
-  try {
-    const parsed = JSON.parse(datasource) as unknown
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      const last = parsed[parsed.length - 1]
-      source = typeof last === 'string' ? last : datasource
-    }
-  } catch {
-    // A plain datasource name is shown as it is.
-  }
-  return `${entity} · ${source}`
+  return `${entity} · ${datasource}`
 }
 
 export function StudioInspectorSection(
@@ -2661,11 +2657,6 @@ const editorSurfaceStyle = {
   minHeight: 0,
   minWidth: 0,
 } satisfies React.CSSProperties
-
-function compactIdentity(value: string): string {
-  const marker = value.lastIndexOf('#scenario:')
-  return marker < 0 ? value : value.slice(marker + '#scenario:'.length).replaceAll(':', ' · ')
-}
 
 // Tao apps require a navigator and safe app frame. Studio is already a complete desktop shell, so
 // its sole product boundary owns the viewport instead of inheriting mobile padding or scroll chrome.

@@ -38,14 +38,46 @@ export const StudioDialog = {
   },
 } as const
 
+/** Where keyboard focus sits when a key arrives, as far as the dialog's own keys are concerned. */
+export type StudioDialogFocus = 'cancel' | 'confirm' | 'elsewhere' | 'input'
+
+export type StudioDialogKeyAction = 'accept' | 'cancel'
+
+/**
+ * StudioDialogKeys decides what a key does in an open dialog. Escape always cancels. Enter activates
+ * the focused button, so Enter on Cancel cancels instead of applying; away from the buttons it
+ * confirms a confirm dialog and submits a prompt from its input.
+ */
+export const StudioDialogKeys = {
+  action(key: string, focus: StudioDialogFocus, kind: 'confirm' | 'prompt'): StudioDialogKeyAction | undefined {
+    if (key === 'Escape') {
+      return 'cancel'
+    }
+    if (key !== 'Enter') {
+      return undefined
+    }
+    if (focus === 'cancel') {
+      return 'cancel'
+    }
+    if (kind === 'prompt') {
+      return focus === 'input' || focus === 'confirm' ? 'accept' : undefined
+    }
+    return 'accept'
+  },
+} as const
+
 type DialogRequest =
   | (StudioConfirmOptions & { kind: 'confirm' })
   | (StudioPromptOptions & { kind: 'prompt' })
 
-let current: HTMLElement | undefined
+type OpenDialog = Readonly<{ backdrop: HTMLElement; cancel: () => void }>
+
+let current: OpenDialog | undefined
 
 function open(request: DialogRequest): Promise<string | undefined> {
-  current?.remove()
+  // A dialog opening over another answers the first as cancelled: its flow resumes with "no" instead
+  // of waiting forever, and its key handling stops instead of eating Enter and Escape for the session.
+  current?.cancel()
   return new Promise(resolve => {
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : undefined
     const backdrop = document.createElement('div')
@@ -91,9 +123,10 @@ function open(request: DialogRequest): Promise<string | undefined> {
     actions.append(cancel, confirm)
     dialog.append(actions)
     backdrop.append(dialog)
+    const focusable: readonly HTMLElement[] = input === undefined ? [cancel, confirm] : [input, cancel, confirm]
 
     const finish = (answer: string | undefined): void => {
-      if (current !== backdrop) {
+      if (current?.backdrop !== backdrop) {
         return
       }
       current = undefined
@@ -103,15 +136,31 @@ function open(request: DialogRequest): Promise<string | undefined> {
       resolve(answer)
     }
     const accept = (): void => finish(input === undefined ? '' : input.value)
+    const focusOf = (): StudioDialogFocus => {
+      const active = document.activeElement
+      return active === input ? 'input' : active === cancel ? 'cancel' : active === confirm ? 'confirm' : 'elsewhere'
+    }
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') {
+      if (event.key === 'Tab') {
+        // The dialog is modal: Tab cycles its own controls instead of wandering into the shell behind it.
+        const index = focusable.findIndex(element => element === document.activeElement)
+        const last = focusable.length - 1
+        const next = event.shiftKey ? (index <= 0 ? last : index - 1) : (index < 0 || index === last ? 0 : index + 1)
         event.preventDefault()
         event.stopPropagation()
-        finish(undefined)
-      } else if (event.key === 'Enter' && (input === undefined || document.activeElement === input)) {
-        event.preventDefault()
-        event.stopPropagation()
+        focusable[next]?.focus()
+        return
+      }
+      const action = StudioDialogKeys.action(event.key, focusOf(), request.kind)
+      if (action === undefined) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      if (action === 'accept') {
         accept()
+      } else {
+        finish(undefined)
       }
     }
     cancel.addEventListener('click', () => finish(undefined))
@@ -123,7 +172,7 @@ function open(request: DialogRequest): Promise<string | undefined> {
     })
     document.addEventListener('keydown', onKeyDown, true)
 
-    current = backdrop
+    current = { backdrop, cancel: () => finish(undefined) }
     ;(document.querySelector('.studio-shell') ?? document.body).append(backdrop)
     ;(input ?? confirm).focus()
     input?.select()

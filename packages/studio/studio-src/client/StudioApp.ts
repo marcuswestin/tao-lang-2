@@ -1674,15 +1674,24 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     view.reload.addEventListener('click', () => {
       if (previews.length > 0) {
         let pending = previews.length
+        let restored = false
+        const restore = (): void => {
+          if (!restored) {
+            restored = true
+            updateStatus(view.status, compileState, diagnostic => void openCompileDiagnostic(diagnostic))
+          }
+        }
         for (const connection of previews) {
           connection.iframe.addEventListener('load', () => {
             pending -= 1
             if (pending === 0) {
-              updateStatus(view.status, compileState, diagnostic => void openCompileDiagnostic(diagnostic))
+              restore()
             }
           }, { once: true })
           connection.iframe.src = connection.iframe.src
         }
+        // A frame the manifest replaces mid-reload never fires that load; the status still comes back.
+        setTimeout(restore, 10_000)
         view.status.textContent = 'Reloading preview…'
       }
     })

@@ -25,6 +25,7 @@ import {
   StudioInspectorStylePromotionAction,
   StudioInspectorStylePromotionIds,
   StudioInspectorStylePromotionLabel,
+  StudioInspectorSummaryLines,
   StudioInspectorTextActionValid,
   StudioInspectorTextAvailable,
   StudioInspectorTextBindingLabel,
@@ -521,6 +522,19 @@ Test('Tao-owned inspector Text section edits a literal and binds only offered va
   })
   Expect(StudioInspectorTextStatus(bound, selection)).toBe('Showing Story.Title.')
   Expect(StudioInspectorTextLiteral(bound)).toBe('')
+})
+
+Test('Tao-owned inspector summary names the selection by project file and line, view, and element', () => {
+  const content = 'use Text from @tao/ui\n\nview Main() {\n   render Text("Hi")\n}\n'
+  Expect(StudioInspectorSummaryLines('source-1', inspectorInspection(), inspectorSelection(), content, 'Garden.tao'))
+    .toEqual(['Source: Garden.tao:1–4', 'View: Main', 'Element: Text'])
+  // Another open file, or a stale preview, still names the file and says the line waits for the refresh.
+  Expect(StudioInspectorSummaryLines('source-1', inspectorInspection(), inspectorSelection(), content, 'Other.tao'))
+    .toEqual(['Source: Garden.tao', 'View: Main', 'Element: Text'])
+  Expect(StudioInspectorSummaryLines('source-2', inspectorInspection(), inspectorSelection(), content, 'Garden.tao'))
+    .toEqual(['Source: Garden.tao', 'Waiting for the refreshed preview', 'View: Main', 'Element: Text'])
+  Expect(StudioInspectorSummaryLines('source-1', '', '', content, 'Garden.tao'))
+    .toEqual(['Select a rendered element in the preview.'])
 })
 
 function inspectorSelection(): string {
