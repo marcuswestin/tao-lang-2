@@ -120,9 +120,9 @@ gate's completion and log path.
 requires the sole live `main` worktree to equal `origin/main`; a local-ahead `main` must be reconciled
 deliberately first. A remote feature branch left behind by later local commits is pushed forward as
 the first mutation instead of refusing the landing; a remote holding commits the worktree lacks still
-stops preflight, because the squash would drop them. Successful execution preserves the invoking feature worktree as a clean detached
-checkout of the archived feature tip, deletes the local feature branch, and leaves worktree removal
-to the owning task's archival. `--abort` cannot be combined with merge-start flags, and
+stops preflight, because the squash would drop them. Successful execution preserves the invoking
+feature worktree as a clean detached checkout of the archived feature tip, deletes the local feature
+branch, and leaves worktree removal to the owning task's archival. `--abort` cannot be combined with merge-start flags, and
 remote-main movement is bounded to three verification passes before the command stops safely.
 Snapshots are written atomically, and `push-started` is an irreversible recovery boundary because a
 failed client may not know whether the remote accepted the push.

@@ -57,7 +57,8 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Run `./agent verify` as the final validation and before commits.
 - Read the `verification-lanes` skill when choosing between changed, retry, complete, sandbox, and
   host-only verification. Selection lanes are iteration aids, never merge evidence, and
-  `merge-with-main` is a human-only command that agents do not invoke.
+  `merge-with-main` is never an agent's own initiative: run it only when Ro asks for that merge in
+  the current request.
 - Before reporting a branch ready to merge, write or update its merge message at
   `.artifacts/merge/<branch>.msg`; the `verification-lanes` skill owns its format. A branch is not
   merge-ready without it, and the human command Ro then runs is
