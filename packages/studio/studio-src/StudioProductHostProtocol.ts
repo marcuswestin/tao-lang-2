@@ -16,9 +16,11 @@ export type StudioProductHostActions = Readonly<{
   deleteFile: (path: string, sourceVersion: string) => Promise<void>
   insertComponent: (component: string) => void
   insertProjectView: (viewName: string) => void
+  moveGeneratedSource: (path: string, sourceVersion: string, targetPackage: string) => Promise<void>
   applyInspectorAction: (action: StudioCanonicalSourceAction, proposed: boolean) => Promise<void>
   openFile: (path: string) => Promise<void>
   openScreen: (subjectId: string) => Promise<void>
+  openSource: (path: string, sourceVersion: string, start: number) => Promise<void>
   productPanelAction: (name: string, payload: string) => Promise<void>
   renameFile: (path: string, sourceVersion: string, targetPath: string) => Promise<void>
   selectActiveFile: (anchor: number, head: number) => void
@@ -51,6 +53,8 @@ export type StudioProductHostState = Readonly<{
     networkErrorStatus?: number
     networkLatencyMs: number
     networkOutcome: StudioProductHostEnvironment['network']['outcome']
+    journeyRecordable: boolean
+    journeyRecording: string
     scenarioModel: string
     scenarioId: string
     schemeCapability: 'fixed-light-native' | 'reactive-browser'
@@ -96,8 +100,10 @@ type StudioProductHostRequest =
   | Readonly<{ kind: 'delete-file'; path: string; sourceVersion: string }>
   | Readonly<{ component: string; kind: 'insert-component' }>
   | Readonly<{ kind: 'insert-project-view'; viewName: string }>
+  | Readonly<{ kind: 'move-generated-source'; path: string; sourceVersion: string; targetPackage: string }>
   | Readonly<{ kind: 'open-file'; path: string }>
   | Readonly<{ kind: 'open-screen'; subjectId: string }>
+  | Readonly<{ kind: 'open-source'; path: string; sourceVersion: string; start: number }>
   | Readonly<{ kind: 'product-panel-action'; name: string; payload: string }>
   | Readonly<{ kind: 'rename-file'; path: string; sourceVersion: string; targetPath: string }>
   | Readonly<{ kind: 'undo-inspector-action' }>
@@ -206,6 +212,29 @@ export async function requestStudioProductHostOpenFile(path: string): Promise<vo
   await request({ kind: 'open-file', path })
 }
 
+export async function requestStudioProductHostOpenSource(
+  path: string,
+  sourceVersion: string,
+  start: number,
+): Promise<void> {
+  assertNonEmptyProductHostIdentity(path, 'source path')
+  Assert.input(path.endsWith('.tao') && !path.includes('\\'), 'Tao Studio source navigation requires a Tao file path.')
+  assertSourceVersion(sourceVersion)
+  Assert.input(Number.isInteger(start) && start >= 0, 'Tao Studio source navigation requires a valid offset.')
+  await request({ kind: 'open-source', path, sourceVersion, start })
+}
+
+export async function requestStudioProductHostMoveGeneratedSource(
+  path: string,
+  sourceVersion: string,
+  targetPackage: string,
+): Promise<void> {
+  assertStudioProductHostPath(path)
+  assertSourceVersion(sourceVersion)
+  Assert.input(targetPackage.trim() !== '', 'Move to package requires a target package.')
+  await requestFileAction({ kind: 'move-generated-source', path, sourceVersion, targetPackage })
+}
+
 export async function requestStudioProductHostInsertComponent(component: string): Promise<void> {
   assertNonEmptyProductHostIdentity(component, 'component')
   await request({ component, kind: 'insert-component' })
@@ -301,11 +330,17 @@ async function execute(actions: StudioProductHostActions, action: StudioProductH
     case 'insert-project-view':
       actions.insertProjectView(action.viewName)
       return
+    case 'move-generated-source':
+      await actions.moveGeneratedSource(action.path, action.sourceVersion, action.targetPackage)
+      return
     case 'open-file':
       await actions.openFile(action.path)
       return
     case 'open-screen':
       await actions.openScreen(action.subjectId)
+      return
+    case 'open-source':
+      await actions.openSource(action.path, action.sourceVersion, action.start)
       return
     case 'product-panel-action':
       await actions.productPanelAction(action.name, action.payload)

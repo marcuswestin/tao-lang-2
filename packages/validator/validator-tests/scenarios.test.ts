@@ -1,5 +1,6 @@
 import { Describe, Test } from '@shared/test'
 import { scenarioValidationMessages } from '../validator-src/validators/scenarios-validator'
+import { testValidationMessages } from '../validator-src/validators/tests-validator'
 import { accepts, fence, rejects, tsFence } from './test-validate'
 
 const storyFixture = `
@@ -71,6 +72,131 @@ Describe('validator: fixtures and scenarios', () => {
         scenario "only" { run Preview }
       }
     `),
+  )
+
+  Test(
+    'accepts an empty-store focused scenario with an omitted required action and ordered pointer steps',
+    accepts(`
+      view SavedToast(Revert action()) {
+        render inject Revert ${tsFence} return null ${fence}
+      }
+      scenarios SavedToast "states" {
+        device phone
+        scenario "held" {
+          render ()
+          press down #revertSave
+          advance 600.ms
+          press up #revertSave
+          hover #revertSave
+          focus #revertSave
+        }
+      }
+    `),
+  )
+
+  Test(
+    'still requires every omitted non-action render parameter',
+    rejects(
+      `
+        view SavedToast(Label text, Revert action()) {
+          render inject Revert ${tsFence} return null ${fence}
+        }
+        scenarios SavedToast "states" {
+          device phone
+          scenario "missing label" { render () }
+        }
+      `,
+      scenarioValidationMessages.renderMissingArgument('SavedToast', 'Label'),
+    ),
+  )
+
+  Test(
+    'requires a fixture only when a scenario references a handle or prepares fixture data',
+    rejects(
+      `
+        data Stories / Story { Title text }
+        fixture StoriesFixture { Lead = create Story { Title: "Lead" } }
+        view StoryRow(Story) { render inject ${tsFence} return null ${fence} }
+        scenarios StoryRow "states" {
+          device phone
+          scenario "handle" { render (Story: Lead) }
+          scenario "prepare" {
+            render (Story: Lead)
+            prepare { update Lead { Title: "Prepared" } }
+          }
+        }
+      `,
+      scenarioValidationMessages.fixtureRequired('states / handle'),
+      scenarioValidationMessages.fixtureRequired('states / prepare'),
+    ),
+  )
+
+  Test(
+    'allows an explicitly empty prepare delta without a fixture',
+    accepts(`
+      view EmptyState() {
+        render inject ${tsFence} return null ${fence}
+      }
+      scenarios EmptyState "states" {
+        device phone
+        scenario "empty delta" {
+          render ()
+          prepare { }
+        }
+      }
+    `),
+  )
+
+  Test(
+    'reports fixture declarations nested in a view body',
+    rejects(
+      `
+        view Main() {
+          fixture Nested { }
+        }
+      `,
+      scenarioValidationMessages.fixturePlacement,
+    ),
+  )
+
+  Test(
+    'rejects assertions nested inside a scenario row selection',
+    rejects(
+      `
+        view Rows() { render inject ${tsFence} return null ${fence} }
+        scenarios Rows "states" {
+          device phone
+          scenario "invalid selected state" {
+            render ()
+            select #rows[1] {
+              expect text "Not a replay operation"
+            }
+          }
+        }
+      `,
+      testValidationMessages.scenarioSelectBlock,
+    ),
+  )
+
+  Test(
+    'rejects assertions nested inside nested scenario row selections',
+    rejects(
+      `
+        view Rows() { render inject ${tsFence} return null ${fence} }
+        scenarios Rows "states" {
+          device phone
+          scenario "invalid deeply selected state" {
+            render ()
+            select #sections[1] {
+              select #rows[1] {
+                expect text "Not a replay operation"
+              }
+            }
+          }
+        }
+      `,
+      testValidationMessages.scenarioSelectBlock,
+    ),
   )
 
   Test(

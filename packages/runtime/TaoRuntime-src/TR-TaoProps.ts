@@ -27,11 +27,13 @@ import { studioInspectRef } from './TR-studio-device-inspect'
 
 /** TaoStudioIdentity locates one concrete render occurrence in Tao source. */
 export type TaoStudioIdentity = {
+  elementName?: string
   end: number
   kind: 'render'
   ownerName?: string
   sourcePath: string
   start: number
+  studioRectId?: string
 }
 
 /**

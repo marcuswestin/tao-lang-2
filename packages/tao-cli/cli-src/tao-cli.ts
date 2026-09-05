@@ -41,13 +41,25 @@ function createCommands(): Command {
 
   commands
     .command('create')
-    .argument('<id>', 'Checked-in project id and new directory name.')
-    .description('Create a new Tao project with an immutable project id.')
-    .action(async (id: string) => {
+    .argument('<description>', 'What the app is, in a sentence. URLs and image paths in it are read.')
+    .option('--id <id>', 'Checked-in project id and directory name. Suggested from the name when omitted.')
+    .option('--yes', 'Accept the suggested id, the plan, and the first available AI lane without asking.')
+    .option('--ai <lane>', 'How to shape the plan: auto, claude, codex, ollama, apple, or none.', 'auto')
+    .option('--skip-tests', "Skip running the new project's tests after creating it.")
+    .description('Create a new Tao project from a description.')
+    .action(async (description: string, options: { ai: string; id?: string; skipTests?: boolean; yes?: boolean }) => {
       try {
-        const { createProject } = await import('./project-command')
-        const appPath = await createProject(id)
-        HCI.writeSuccess(`Created ${FS.displayPath(appPath)}\n`)
+        const { createAiOptions, runCreate } = await import('./create/create-command')
+        const ai = createAiOptions.find(candidate => candidate === options.ai)
+        if (ai === undefined) {
+          Errors.throwUserInput(`--ai must be one of ${createAiOptions.join(', ')}, not '${options.ai}'.`)
+        }
+        await runCreate(description, {
+          ai,
+          ...(options.id === undefined ? {} : { id: options.id }),
+          ...(options.skipTests === true ? { runTests: false } : {}),
+          ...(options.yes === true ? { yes: true } : {}),
+        })
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)
@@ -83,6 +95,32 @@ function createCommands(): Command {
         // Command implementations load lazily so completion and help paths stay fast.
         const { runTaoDev } = await import('./dev-command')
         Platform.runtimeProcess.setExitCode(await runTaoDev(path, { appName: options.app }))
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
+    .command('review')
+    .argument('[path]', 'Tao project directory to capture in Studio.', '.')
+    .option('--app <name>', 'Select a named app within the project.')
+    .option('--against <review>', 'Compare with an earlier review.json manifest.')
+    .option('--output <directory>', 'Write the immutable review artifact to this new directory.')
+    .description('Capture every Studio scenario as a portable web visual review.')
+    .action(async (path: string, options: { against?: string; app?: string; output?: string }) => {
+      try {
+        const { runStudioReview } = await import('tao-dev/studio-review')
+        const result = await runStudioReview(path, {
+          against: options.against,
+          appName: options.app,
+          artifactRoot: options.output,
+        })
+        const counts = Object.entries(result.statusCounts)
+          .filter(([, count]) => count > 0)
+          .map(([status, count]) => `${count} ${status}`)
+          .join(', ')
+        HCI.writeSuccess(`Captured Tao visual review: ${FS.displayPath(result.reportPath)} (${counts})\n`)
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.setExitCode(1)
@@ -184,7 +222,7 @@ function createCommands(): Command {
   commands
     .command('check')
     .argument('[paths...]', 'Tao files or directories to check. Defaults to the current directory.')
-    .description('Check .tao files for the full canonical source form without writing.')
+    .description('Check canonical Tao source and report validation warnings without writing.')
     .action(async (paths: string[]) => {
       const { runCheck } = await import('./source-commands')
       await runInPlaceCommand(paths, runCheck, {
@@ -286,8 +324,12 @@ async function runInPlaceCommand(
     }
     const changed = results.filter(result => result.status === 'changed')
     const errored = results.filter(result => result.status === 'error')
+    const warnings = results.flatMap(result => result.warnings ?? [])
 
     writeChangedResults(changed, labels)
+    for (const warning of warnings) {
+      HCI.logProcessWarn(labels.failedVerb, warning)
+    }
     for (const result of errored) {
       HCI.writeErrorLine(`Failed to ${labels.failedVerb} ${FS.displayPath(result.path)}: ${result.error}`)
     }
@@ -297,7 +339,10 @@ async function runInPlaceCommand(
     }
 
     const unchangedCount = results.length - changed.length - errored.length
-    const summary = `${changed.length} ${labels.changed}, ${unchangedCount} unchanged`
+    const warningSummary = warnings.length === 0
+      ? ''
+      : ', ' + String(warnings.length) + ' warning' + (warnings.length === 1 ? '' : 's')
+    const summary = `${changed.length} ${labels.changed}, ${unchangedCount} unchanged` + warningSummary
     const shouldFail = errored.length > 0 || labels.failOnChanged && changed.length > 0
     if (shouldFail) {
       HCI.writeErrorLine(`${summary}${errored.length > 0 ? `, ${errored.length} failed` : ''}`)

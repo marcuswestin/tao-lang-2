@@ -110,7 +110,7 @@ Describe('parser: diagnostics', () => {
   })
 
   Test('reports lexer errors separately from parser errors', async () => {
-    const source = 'app MyApp { view MyView } @ view MyView() { }'
+    const source = 'app MyApp { view MyView } $ view MyView() { }'
     lexCodeWithErrors(source)
     const parseResult = await parseCodeWithErrors(source)
 

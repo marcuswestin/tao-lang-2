@@ -11,6 +11,7 @@ export type StudioProcessTree =
 
 export type StudioProcessTreeSpec = Pick<CLI.CommandSpec, 'args' | 'cwd' | 'env' | 'onOutput'> & {
   onError?: (error: Error) => void
+  stdio?: Platform.SpawnOptions['stdio']
 }
 
 export type WaitForStudioProcessTreeClose = () => Promise<CLI.CommandCloseResult>
@@ -24,7 +25,7 @@ export function startStudioProcessTree(command: string, spec: StudioProcessTreeS
     cwd: spec.cwd,
     detached: true,
     env: spec.env,
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: spec.stdio ?? ['ignore', 'pipe', 'pipe'],
   })
   child.stdout?.on('data', chunk => spec.onOutput?.('stdout', Buffer.from(chunk)))
   child.stderr?.on('data', chunk => spec.onOutput?.('stderr', Buffer.from(chunk)))

@@ -1,0 +1,29 @@
+use Notebook from ./
+
+test "Notebook" {
+   test "adds a note, opens it, and renames it" {
+      run Notebook
+
+      expect text "No notes yet"
+      enter "Groceries" into #noteTitle
+      press #addNote
+      expect missing text "No notes yet"
+      select #notes[1] {
+         expect text "Groceries"
+         press #openNote
+      }
+      expect navigation title "Groceries"
+      enter "Groceries (updated)" into #noteTitleDraft
+      press #saveNote
+      expect navigation title "Groceries (updated)"
+      back
+      expect text "Groceries (updated)"
+   }
+   test "keeps notes across a relaunch" {
+      run Notebook
+      enter "Groceries" into #noteTitle
+      press #addNote
+      relaunch
+      expect text "Groceries"
+   }
+}

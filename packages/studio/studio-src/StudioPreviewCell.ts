@@ -1,4 +1,4 @@
-import { Errors, Switch } from '@shared/core'
+import { Errors, Json, Switch } from '@shared/core'
 import type {
   StudioCellIdentity,
   StudioParameterSchema,
@@ -31,7 +31,7 @@ export function valueMatchesParameter(value: StudioJsonValue, parameter: StudioP
   return Switch.kind(parameter.type, {
     boolean: () => typeof value === 'boolean',
     choice: type => type.values.some(candidate => Object.is(candidate, value)),
-    json: () => true,
+    json: type => type.entity === undefined || Json.isRecord(value),
     number: type =>
       typeof value === 'number'
       && Number.isFinite(value)

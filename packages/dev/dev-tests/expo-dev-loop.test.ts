@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Time } from '@shared'
+import { CLI, Errors, FS, Repo, Time } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withCapturedOutput } from '@shared/test'
 import { createServer } from 'node:net'
 import { OutputText } from '../dev-src/cli/OutputText'
@@ -215,6 +215,7 @@ Describe('Expo dev-loop port helpers', () => {
       '--port',
       '49152',
     ])
+    Expect(config.EXPO_START_ENV.__UNSAFE_EXPO_HOME_DIRECTORY).toBe(Repo.resolvePath('.artifacts/cache/expo'))
   })
 
   Test('prefers 8081 when it is free', async () => {

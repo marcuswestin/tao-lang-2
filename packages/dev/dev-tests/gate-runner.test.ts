@@ -161,6 +161,7 @@ Describe('repository gate runner', () => {
         gates: ['_repo-lint'],
         jsonPath: 'summary.json',
         logRoot: FS.resolvePath('logs', root),
+        registryRoot: FS.resolvePath('registry', root),
         repositoryRoot: root,
         runGate: async () => ({ exitCode: 0, output: '' }),
       })
@@ -179,6 +180,7 @@ Describe('repository gate runner', () => {
       const summary = await runGates({
         gates: ['_repo-lint'],
         lane: 'check',
+        registryRoot: FS.resolvePath('registry', root),
         repositoryRoot: root,
         runGate: async () => ({ exitCode: 0, output: 'lint ok\n' }),
       })

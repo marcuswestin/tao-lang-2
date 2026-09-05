@@ -1,5 +1,6 @@
 import { CLI, Errors, FS, Platform, Time } from '@shared'
 import { Buffer } from 'node:buffer'
+import { createHash } from 'node:crypto'
 
 type CdpResponse = {
   error?: { message: string }
@@ -43,6 +44,20 @@ export type StudioCdpBrowserEvent = {
   timestamp?: number
 }
 
+/** StudioCdpRendererFingerprint records the browser facts that make two captures comparable. */
+export type StudioCdpRendererFingerprint = {
+  colorGamut: 'p3' | 'srgb' | 'unknown'
+  deviceScaleFactor: number
+  fontFingerprint: string
+  jsVersion: string
+  locale: string
+  platform: string
+  product: string
+  protocolVersion: string
+  timezone: string
+  userAgent: string
+}
+
 type Point = {
   x: number
   y: number
@@ -75,6 +90,7 @@ export type BrowserConsoleEntry = {
 }
 
 export class StudioCdp {
+  private captureSequence = 0
   private readonly collectedBrowserEvents: StudioCdpBrowserEvent[] = []
   private readonly unsubscribeBrowserEvents: Array<() => void>
   private closed = false
@@ -253,6 +269,16 @@ export class StudioCdp {
     requirePositiveInteger(steps, 'Studio browser drag steps')
     requireFiniteNumber(delta.x, 'Studio browser horizontal drag delta')
     requireFiniteNumber(delta.y, 'Studio browser vertical drag delta')
+    // A selector can resolve while its element remains outside a nested scroll viewport. Pointer
+    // coordinates outside Chrome's visible surface do not reach that element, so establish the
+    // same visibility precondition as click() before calculating the gesture coordinates.
+    await this.evaluate(`(() => {
+      const selector = ${JSON.stringify(selector)}
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) throw new Error('Missing drag source element: ' + selector)
+      element.scrollIntoView({ block: 'center', inline: 'center' })
+      return true
+    })()`)
     const start = await this.elementCenter(selector, 'drag source')
     await this.dispatchDrag(start, { x: start.x + delta.x, y: start.y + delta.y }, steps)
   }
@@ -371,6 +397,194 @@ export class StudioCdp {
     const screenshot = await this.client.send<{ data: string }>('Page.captureScreenshot', { format: 'png' })
     await FS.writeFile(path, Buffer.from(screenshot.data, 'base64'))
     return path
+  }
+
+  /** Captures exactly one DOM element after fonts and two paint frames have settled. */
+  async captureElementScreenshotAt(path: string, selector: string): Promise<string> {
+    const captureToken = `tao-cdp-capture-${this.captureSequence++}`
+    let previewFrameUrl: string | undefined
+    // Raw `Error`: this expression executes in Chrome and cannot import Tao's error taxonomy.
+    try {
+      previewFrameUrl = await this.evaluate<string | undefined>(`(() => {
+        const element = document.querySelector(${JSON.stringify(selector)})
+        const frame = element?.querySelector('iframe')
+        return frame instanceof HTMLIFrameElement ? frame.src : undefined
+      })()`)
+      if (previewFrameUrl !== undefined) {
+        await this.evaluateInFrame(
+          previewFrameUrl,
+          `(async () => {
+          const captureToken = ${JSON.stringify(captureToken)}
+          const freeze = document.createElement('style')
+          freeze.dataset.taoCdpFrameFreeze = captureToken
+          freeze.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}'
+          document.head.append(freeze)
+          if (document.fonts?.ready !== undefined) await document.fonts.ready
+          await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+          return true
+        })()`,
+        )
+      }
+      const clip = await this.evaluate<{
+        height: number
+        width: number
+        x: number
+        y: number
+      }>(`(async () => {
+      const selector = ${JSON.stringify(selector)}
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) throw new Error('Missing screenshot element: ' + selector)
+      element.scrollIntoView({ block: 'center', inline: 'center' })
+      const captureToken = ${JSON.stringify(captureToken)}
+      const freeze = document.createElement('style')
+      freeze.dataset.taoCdpFreeze = captureToken
+      freeze.textContent = '*,*::before,*::after{animation:none!important;transition:none!important;caret-color:transparent!important;scroll-behavior:auto!important}'
+      document.head.append(freeze)
+      if (document.fonts?.ready !== undefined) await document.fonts.ready
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      const restoreProperty = '__taoCdpCaptureStyle_' + captureToken
+      for (let current = element; current instanceof HTMLElement; current = current.parentElement) {
+        current[restoreProperty] = current.getAttribute('style')
+        current.style.setProperty('overflow', 'visible', 'important')
+        current.style.setProperty('contain', 'none', 'important')
+        current.style.setProperty('clip', 'auto', 'important')
+        current.style.setProperty('clip-path', 'none', 'important')
+        if (current !== element) current.style.setProperty('transform', 'none', 'important')
+      }
+      element.dataset.taoCdpCapture = captureToken
+      element.style.setProperty('position', 'fixed', 'important')
+      element.style.setProperty('inset', '0 auto auto 0', 'important')
+      element.style.setProperty('margin', '0', 'important')
+      element.style.setProperty('max-width', 'none', 'important')
+      element.style.setProperty('max-height', 'none', 'important')
+      element.style.setProperty('transform', 'none', 'important')
+      element.style.setProperty('z-index', '2147483647', 'important')
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      const rect = element.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) throw new Error('Screenshot element has no visible area: ' + selector)
+      return {
+        height: rect.height,
+        width: rect.width,
+        x: rect.left + window.scrollX,
+        y: rect.top + window.scrollY,
+      }
+    })()`)
+      const screenshot = await this.client.send<{ data: string }>('Page.captureScreenshot', {
+        captureBeyondViewport: true,
+        clip: { ...clip, scale: 1 },
+        format: 'png',
+        fromSurface: true,
+      })
+      await FS.writeFile(path, Buffer.from(screenshot.data, 'base64'))
+      return path
+    } finally {
+      const outerCleanup = this.evaluate(`(() => {
+        const captureToken = ${JSON.stringify(captureToken)}
+        document.querySelector('style[data-tao-cdp-freeze="' + captureToken + '"]')?.remove()
+        const element = document.querySelector('[data-tao-cdp-capture="' + captureToken + '"]')
+        if (!(element instanceof HTMLElement)) return false
+        const restoreProperty = '__taoCdpCaptureStyle_' + captureToken
+        for (let current = element; current instanceof HTMLElement; current = current.parentElement) {
+          const original = current[restoreProperty]
+          if (original === null) current.removeAttribute('style')
+          else if (typeof original === 'string') current.setAttribute('style', original)
+          delete current[restoreProperty]
+        }
+        delete element.dataset.taoCdpCapture
+        return true
+      })()`)
+      const frameCleanup = previewFrameUrl === undefined
+        ? Promise.resolve()
+        : this.evaluateInFrame(
+          previewFrameUrl,
+          `(() => {
+          document.querySelector('style[data-tao-cdp-frame-freeze="${captureToken}"]')?.remove()
+          return true
+        })()`,
+        ).catch(() => undefined)
+      const [outerResult] = await Promise.allSettled([outerCleanup, frameCleanup])
+      if (outerResult.status === 'rejected') {
+        throw outerResult.reason
+      }
+    }
+  }
+
+  /** Returns the stable browser identity recorded beside visual-review evidence. */
+  async rendererFingerprint(): Promise<StudioCdpRendererFingerprint> {
+    const browser = await this.client.send<{
+      jsVersion?: string
+      product?: string
+      protocolVersion?: string
+      userAgent?: string
+    }>('Browser.getVersion')
+    const page = await this.evaluate<{
+      colorGamut: 'p3' | 'srgb' | 'unknown'
+      deviceScaleFactor: number
+      fontFingerprint: string
+      locale: string
+      platform: string
+      timezone: string
+    }>(`(async () => {
+      if (document.fonts?.ready !== undefined) await document.fonts.ready
+      return {
+      colorGamut: matchMedia('(color-gamut: p3)').matches ? 'p3' : matchMedia('(color-gamut: srgb)').matches ? 'srgb' : 'unknown',
+      deviceScaleFactor: window.devicePixelRatio,
+      fontFingerprint: JSON.stringify(document.fonts === undefined ? [] : [...document.fonts].map(font => [font.family, font.style, font.weight, font.stretch, font.status]).sort()),
+      locale: navigator.language,
+      platform: navigator.platform,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'unknown',
+      }
+    })()`)
+    const tree = await this.client.send<{ frameTree: FrameTree }>('Page.getFrameTree')
+    const frameFingerprints: Array<readonly [string, string]> = []
+    for (const frame of childFrames(tree.frameTree)) {
+      const world = await this.client.send<{ executionContextId: number }>('Page.createIsolatedWorld', {
+        frameId: frame.id,
+        grantUniveralAccess: true,
+        worldName: 'tao-studio-review-fingerprint',
+      })
+      const fingerprint = await this.evaluateInContext<string>(
+        `(async () => {
+        if (document.fonts?.ready !== undefined) await document.fonts.ready
+        const canvas = document.createElement('canvas')
+        canvas.width = 512
+        canvas.height = 128
+        const context = canvas.getContext('2d')
+        const sample = 'Tao AaBb 0123 → fi Ω'
+        if (context !== null) {
+          context.fillStyle = '#000'
+          for (const [index, font] of ['16px system-ui','16px sans-serif','16px serif','16px monospace'].entries()) {
+            context.font = font
+            context.fillText(sample, 4, 22 + index * 28)
+          }
+        }
+        return JSON.stringify({
+          fonts: document.fonts === undefined ? [] : [...document.fonts].map(font => [font.family, font.style, font.weight, font.stretch, font.status]).sort(),
+          glyphs: canvas.toDataURL(),
+        })
+      })()`,
+        world.executionContextId,
+      )
+      frameFingerprints.push([frame.url, fingerprint])
+    }
+    const fontFingerprint = frameFingerprints.length === 0
+      ? page.fontFingerprint
+      : createHash('sha256').update(JSON.stringify([
+        page.fontFingerprint,
+        ...frameFingerprints.sort(([left], [right]) => left.localeCompare(right)),
+      ])).digest('hex')
+    return {
+      colorGamut: page.colorGamut,
+      deviceScaleFactor: page.deviceScaleFactor,
+      fontFingerprint,
+      jsVersion: browser.jsVersion ?? 'unknown',
+      locale: page.locale,
+      platform: page.platform,
+      product: browser.product ?? 'unknown',
+      protocolVersion: browser.protocolVersion ?? 'unknown',
+      timezone: page.timezone,
+      userAgent: browser.userAgent ?? 'unknown',
+    }
   }
 
   browserEvents(): readonly StudioCdpBrowserEvent[] {
@@ -804,4 +1018,8 @@ function findFrameId(tree: FrameTree, urlPrefix: string): string | undefined {
     }
   }
   return undefined
+}
+
+function childFrames(tree: FrameTree): readonly FrameTree['frame'][] {
+  return (tree.childFrames ?? []).flatMap(child => [child.frame, ...childFrames(child)])
 }

@@ -1,5 +1,5 @@
 import Runtime from '@runtime-toolchain'
-import { Assert, Errors, FS } from '@shared'
+import { Assert, Errors } from '@shared'
 import type {
   StudioParameterSchema,
   StudioPreviewManifestV2,
@@ -66,7 +66,7 @@ function matrixManifest(
   const previewScenarios = compiler.scenarios.filter(scenario =>
     scenario.subject.kind !== 'app' || scenario.subject.appName === session.appName
   )
-  validatePreviewScenarios(session, previewScenarios)
+  validatePreviewScenarios(previewScenarios)
   const subjects: StudioScenarioSubject[] = [
     ...compiler.apps.map(app => ({
       appName: app.name,
@@ -99,13 +99,14 @@ function matrixManifest(
     args: scenario.subject.kind === 'view'
       ? jsonObject(scenario.subject.arguments)
       : {},
-    fixtureId: scenario.fixtureId,
+    ...(scenario.fixtureId === undefined ? {} : { fixtureId: scenario.fixtureId }),
     group: scenario.group,
     label: scenario.name,
     prepare: scenario.prepare.map(update => jsonObject(update)),
     scenarioId: scenario.id,
     source: taoSource(scenario.source),
     stateLayers: [],
+    steps: scenario.steps,
     subjectId: scenario.subject.subjectId,
   }))
   return {
@@ -152,6 +153,10 @@ function matrixManifest(
       entryPath: session.entryPath,
       root: session.projectRoot,
     },
+    renders: compiler.renders.map(render => ({
+      ...render,
+      source: taoSource(render.source),
+    })),
     scenarios,
     sourceVersions: publication.sourceVersions,
     states: [],
@@ -161,20 +166,11 @@ function matrixManifest(
 }
 
 function validatePreviewScenarios(
-  session: Pick<StudioProjectSession, 'appName' | 'entryPath' | 'projectRoot'>,
   scenarios: NonNullable<
     Awaited<ReturnType<typeof Runtime.generateApp>>['studioManifest']
   >['scenarios'],
 ): void {
-  const entryPath = FS.resolvePath(session.entryPath)
   for (const scenario of scenarios) {
-    if (FS.resolvePath(scenario.source.path, session.projectRoot) !== entryPath) {
-      throw new Errors.UserInputError(
-        `Tao Studio cannot preview scenario "${scenario.group} / ${scenario.name}" because it is declared outside the selected app entry file. Move the scenario into ${
-          FS.basename(entryPath)
-        } until imported scenario hosts are supported.`,
-      )
-    }
     if (scenario.subject.kind !== 'app') {
       continue
     }
@@ -193,6 +189,9 @@ function parameterType(
 ): StudioParameterSchema['type'] {
   if (parameter.kind === 'choice') {
     return { kind: 'choice', values: parameter.choices ?? [] }
+  }
+  if (parameter.kind === 'entity') {
+    return { entity: parameter.entity ?? parameter.typeName, kind: 'json' }
   }
   if (parameter.kind === 'unsupported') {
     return { kind: 'json' }

@@ -1,3 +1,4 @@
+import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   StudioPreviewManifest,
@@ -64,6 +65,118 @@ Describe('Studio preview manifest', () => {
     const legacy = fixture()
     ;(legacy as { version: number }).version = 1
     Expect(() => StudioPreviewManifest.define(legacy)).toThrow('Unsupported Studio preview manifest version: 1')
+  })
+
+  Test('accepts a fixtureless scenario and preserves its ordered journey prefix', () => {
+    const base = fixture()
+    const [first, second] = base.scenarios
+    const { fixtureId: _firstFixture, ...fixturelessFirst } = first!
+    const { fixtureId: _secondFixture, ...fixturelessSecond } = second!
+    const input: StudioPreviewManifestV2 = {
+      ...base,
+      fixtures: [],
+      scenarios: [{
+        ...fixturelessFirst,
+        steps: [
+          { kind: 'pressDown', selector: 'tag', target: 'revertSave' },
+          { kind: 'advance', milliseconds: 600 },
+          { kind: 'pressUp', selector: 'tag', target: 'revertSave' },
+          { kind: 'hover', selector: 'tag', target: 'revertSave' },
+          { kind: 'focus', tag: 'revertSave' },
+          { kind: 'press', selector: 'text', target: 'Save' },
+          { kind: 'enter', selector: 'placeholder', target: 'Name', value: '' },
+          { kind: 'submit', selector: 'label', target: 'Profile' },
+          {
+            index: 1,
+            kind: 'select',
+            steps: [{ kind: 'press', selector: 'tag', target: 'open' }],
+            tag: 'row',
+          },
+        ],
+      }, fixturelessSecond],
+    }
+
+    const defined = StudioPreviewManifest.define(input)
+
+    Expect(defined.scenarios[0]?.fixtureId).toBeUndefined()
+    Expect(defined.scenarios[0]?.steps?.map(step => step.kind)).toEqual([
+      'pressDown',
+      'advance',
+      'pressUp',
+      'hover',
+      'focus',
+      'press',
+      'enter',
+      'submit',
+      'select',
+    ])
+  })
+
+  Test('rejects malformed journey variants, selectors, values, fields, and nested steps as user input', () => {
+    const malformed: readonly (readonly [unknown, string])[] = [
+      [{ not: 'an array' }, 'steps must be an array'],
+      [[null], 'object with a supported kind'],
+      [[{}], 'object with a supported kind'],
+      [[{ kind: 'tap', selector: 'tag', target: 'save' }], 'Unsupported Studio journey step kind: tap'],
+      [[{ kind: 'advance', milliseconds: 1.5 }], 'non-negative whole number'],
+      [[{ kind: 'focus', tag: '' }], 'focus tag must not be empty'],
+      [[{ kind: 'press', selector: 'role', target: 'save' }], 'press selector is invalid'],
+      [[{ kind: 'enter', selector: 'tag', target: 'name', value: 42 }], 'enter value must be text'],
+      [[{ extra: true, kind: 'submit', selector: 'tag', target: 'form' }], 'unsupported field: extra'],
+      [[{ index: 0, kind: 'select', steps: [], tag: 'row' }], 'positive whole number'],
+      [[{ index: 1, kind: 'select', steps: {}, tag: 'row' }], 'steps must be an array'],
+      [[
+        { index: 1, kind: 'select', steps: [{ kind: 'tap', selector: 'tag', target: 'save' }], tag: 'row' },
+      ], 'Unsupported Studio journey step kind: tap'],
+    ]
+
+    for (const [steps, message] of malformed) {
+      const manifest = fixture()
+      ;(manifest.scenarios[0] as unknown as { steps: unknown }).steps = steps
+
+      let failure: unknown
+      try {
+        StudioPreviewManifest.define(manifest)
+      } catch (error) {
+        failure = error
+      }
+      Expect(failure).toBeInstanceOf(Errors.UserInputError)
+      Expect((failure as Error).message).toContain(message)
+    }
+  })
+
+  Test('preserves entity parameter identity and requires an object argument', () => {
+    const base = fixture()
+    const manifest: StudioPreviewManifestV2 = {
+      ...base,
+      cells: base.cells.map((cell, index) =>
+        index === 0 ? { ...cell, args: { ...cell.args, owner: { id: 'account-1' } } } : cell
+      ),
+      parametersBySubject: {
+        ...base.parametersBySubject,
+        card: [
+          ...base.parametersBySubject['card']!,
+          { label: 'Owner', parameterId: 'owner', required: true, type: { entity: 'Account', kind: 'json' } },
+        ],
+      },
+      scenarios: base.scenarios.map((scenario, index) =>
+        index === 0
+          ? { ...scenario, args: { ...scenario.args, owner: { handle: 'Lead', kind: 'fixture-reference' } } }
+          : scenario
+      ),
+    }
+
+    const defined = StudioPreviewManifest.define(manifest)
+
+    Expect(defined.parametersBySubject['card']?.[1]?.type).toEqual({ entity: 'Account', kind: 'json' })
+
+    const invalid = {
+      ...manifest,
+      cells: manifest.cells.map((cell, index) =>
+        index === 0 ? { ...cell, args: { ...cell.args, owner: 'account-1' } } : cell
+      ),
+    }
+    Expect(() => StudioPreviewManifest.define(invalid)).toThrow('does not match entity Account')
   })
 })
 

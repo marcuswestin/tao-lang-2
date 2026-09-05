@@ -69,10 +69,15 @@ const SourceActions = {
 
 export type { SourceActionOptions }
 export {
+  type StudioAddSketchEntityParameterPatchRequest,
+  type StudioAppendScenarioStepsPatchRequest,
+  type StudioBindSketchFieldPatchRequest,
   type StudioComponentKind,
   type StudioInsertCapturedFixturePatchRequest,
   type StudioInsertComponentPatchRequest,
   type StudioInsertProjectViewPatchRequest,
+  type StudioInsertSeparatorPatchRequest,
+  type StudioInsertSpacerPatchRequest,
   type StudioLayoutAlignment,
   type StudioLayoutContentTerm,
   type StudioLayoutEntry,
@@ -87,6 +92,13 @@ export {
   type StudioSetLayoutEntryPatchRequest,
   type StudioSetScenarioArgumentsPatchRequest,
   type StudioSetStyleEntryPatchRequest,
+  type StudioSketchFieldPath,
+  type StudioSketchFieldPresentation,
+  type StudioSketchScenarioFixtureBinding,
+  type StudioSketchSnapContainer,
+  type StudioSketchSnapElement,
+  type StudioSketchSnapTree,
+  type StudioSnapSketchToFlowPatchRequest,
   StudioSourceOccurrenceConflictError,
   type StudioSourceOccurrencePrecondition,
   type StudioSourcePatch,
@@ -95,6 +107,7 @@ export {
   type StudioStyleEntry,
   type StudioStyleLandingScope,
   type StudioStyleProvenance,
+  type StudioToggleFlowDirectionPatchRequest,
   type StudioWorkspaceDesignContext,
   type StudioWrapRenderPatchRequest,
 } from './studio-actions'

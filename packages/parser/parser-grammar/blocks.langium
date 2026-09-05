@@ -69,23 +69,23 @@ DeclarationSlotReferenceBlock:
 // bare visual/slot uses. Keep every other broad statement parseable in an app body for a semantic
 // placement diagnostic, while leaving those inherently overlapping bare forms to visual blocks.
 AppBlockDiagnosticStatement:
-    Declaration | EntityQueryDeclaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioGroupDeclaration | RunStep | PressTextStep | TagPressStep | PressKeyStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep | StateDeclaration | Injection | TagStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
+    Declaration | EntityQueryDeclaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration | RunStep | PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep | PressKeyStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep | StateDeclaration | Injection | TagStatement | RenderStatement | RenderSlotDeclaration | EventHandler | LoopSelectHandler | WhenRenderStatement | GuardRenderStatement | IfRenderStatement | ForStatement | AsyncActionStatement;
 
 // EntityQueryDeclaration remains in the broad diagnostic statement rule so a query written at file
 // level parses far enough for the validator to explain the unsupported shape. It is deliberately
 // absent from every declaration/export/runtime-binding union: queries are local view statements.
 Declaration:
-    PrimitiveDeclaration | AppDeclaration | ViewDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration | DesignDeclaration;
+    PrimitiveDeclaration | AppDeclaration | ViewDeclaration | AliasDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | EntityDataDeclaration | NavDeclaration | DatasourceDeclaration | DesignDeclaration | FixtureDeclaration;
 
 // File statements are the declarations accepted directly by Tao source files.
-type FileStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioGroupDeclaration;
-type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | FixtureDeclaration | ScenarioGroupDeclaration;
+type FileStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration;
+type TopLevelStatement = Declaration | ProjectDeclaration | UseStatement | UsePackageStatement | TestDeclaration | ScenarioGroupDeclaration;
 // View statements are the declarations and render sites accepted by view/layout bodies.
 ViewStatement returns Statement:
     ParsedStatement | DeclarationSlotFill;
 type Statement = AppBlockDiagnosticStatement | ViewRender | RenderSlotUse | CallerContentStatement | CommandDeclaration | DeclarationSlotFill | ViewCommandExclusion | NarrowStep;
 type NamedDeclaration = Declaration | ParameterDeclaration | StateDeclaration | EntityQueryDeclaration | ForStatement | CasePayload | EntityDataField | CaseSetCase | AskStatement;
-type ExportableDeclaration = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;
+type ExportableDeclaration = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration | FixtureDeclaration;
 type EmittingRuntimeBinding = AliasDeclaration | AppDeclaration | PrimitiveValueDeclaration | ViewDeclaration | TypeDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration | EntityDataDeclaration | DesignDeclaration;
 type ParameterizedDeclaration = ViewDeclaration | ActionDeclaration | CommandDeclaration | FunctionDeclaration;
 type BlockStatementOwner = AppDeclaration | ProjectDeclaration | ViewDeclaration | Render | ActionDeclaration | ActionExpression | ForStatement;

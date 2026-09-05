@@ -82,6 +82,15 @@ export type ParseResult = {
   diagnostics: readonly Diagnostic[]
 }
 
+/** SyntaxParse declares a parse without linking: the AST, its comments, and how many errors the parse recovered from. */
+export type SyntaxParse = {
+  ast: AST.TaoFile
+  comments: readonly AST.SyntaxRange[]
+  errors: number
+}
+
+let syntaxContext: ParserContext | undefined
+
 /** Parser exposes lexing and parsing functions for Tao source files and source strings. */
 export const Parser = {
   /** createContext creates parser stage services. */
@@ -116,6 +125,17 @@ export const Parser = {
     )
     const documents = await loadReachableDocuments(context, entryDocument)
     return await buildDocuments(context.services, entryDocument, documents, options)
+  },
+
+  /** parseSyntax parses Tao source text into an AST without loading imports or linking references. */
+  parseSyntax(code: string, context?: ParserContext): SyntaxParse {
+    syntaxContext ??= Parser.createContext()
+    const result = (context ?? syntaxContext).services.language.parser.LangiumParser.parse<AST.TaoFile>(code)
+    return {
+      ast: result.value,
+      comments: AST.commentRanges(result.value),
+      errors: result.lexerErrors.length + result.parserErrors.length,
+    }
   },
 
   /** parseCode parses Tao source code using a standalone parser context. */

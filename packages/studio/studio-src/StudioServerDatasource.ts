@@ -76,7 +76,7 @@ export type StudioServerViewRow = {
 }
 
 export type StudioServerScenarioRow = {
-  FixtureId: string
+  FixtureId?: string
   Group: string
   Id: string
   Name: string
@@ -408,7 +408,7 @@ function isProjectView(
 
 function scenarioRows(manifest: StudioPreviewManifestV2): StudioServerScenarioRow[] {
   return manifest.scenarios.map(scenario => ({
-    FixtureId: scenario.fixtureId,
+    ...(scenario.fixtureId === undefined ? {} : { FixtureId: scenario.fixtureId }),
     Group: scenario.group,
     Id: scenario.scenarioId,
     Name: scenario.label,

@@ -10,6 +10,7 @@ import type {
   GenerationRun,
   JsonValue,
 } from './generation-contract'
+import { generationPrompt } from './generation-prompt'
 import { checkGenerationSchema } from './json-schema'
 
 type FoundationModelsEvent =
@@ -228,14 +229,6 @@ function isFailureCode(value: unknown): value is GenerationFailure['code'] {
     'scripted_failure',
     'validation_failed',
   ].includes(value)
-}
-
-function generationPrompt(inputs: readonly GenerationInput[], guide: string): string {
-  return [
-    guide,
-    'Generate one value matching the supplied schema from these explicitly provided inputs:',
-    JSON.stringify(Object.fromEntries(inputs.map(input => [input.name, input.value]))),
-  ].join('\n\n')
 }
 
 async function responseMessage(response: Response, signal: AbortSignal): Promise<string> {

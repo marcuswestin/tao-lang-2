@@ -14,6 +14,7 @@ local.properties
 
 .artifacts
 _gen_*
+**/.tao-project/studio/sketches.jsonc.*.tmp
 
 .expo
 packages/runtime-toolchain/ios

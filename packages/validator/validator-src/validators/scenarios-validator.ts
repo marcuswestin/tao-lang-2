@@ -22,6 +22,8 @@ export const scenarioValidationMessages = {
   duplicateClause: (scenario: string, clause: string) => `Scenario '${scenario}' declares '${clause}' more than once.`,
   missingClause: (scenario: string, clause: string) =>
     `Scenario '${scenario}' must declare exactly one '${clause}' clause.`,
+  fixtureRequired: (scenario: string) =>
+    `Scenario '${scenario}' must declare a fixture when its arguments or prepare block reference fixture handles.`,
   subjectCount: (scenario: string) =>
     `Scenario '${scenario}' must declare exactly one subject: either 'run' or 'render'.`,
   subjectKind: (scenario: string, kind: 'run' | 'render') =>
@@ -121,8 +123,11 @@ function validateScenario(scenario: AST.ScenarioDeclaration, ctx: ValidationCont
   const identity = `${group.name} / ${scenario.name}`
   validateClauseSet(identity, scenario.block.entries, ctx)
   validateClauseContents(scenario.block.entries, ctx)
-  requireEffectiveClause(scenario, identity, 'fixture', AST.isScenarioFixtureClause, ctx)
   requireEffectiveClause(scenario, identity, 'device', AST.isScenarioDeviceClause, ctx)
+
+  if (!AST.effectiveScenarioClause(scenario, AST.isScenarioFixtureClause) && scenarioRequiresFixture(scenario)) {
+    ctx.error(scenarioValidationMessages.fixtureRequired(identity), scenario)
+  }
 
   const subjectClause = AST.effectiveScenarioSubjectClause(scenario)
   const subject = AST.scenarioSubjectDeclaration(scenario)
@@ -222,10 +227,31 @@ function validateScenarioRender(
   }
   for (const parameter of parameters) {
     const name = Type.parameterName(parameter)
-    if (!supplied.has(name) && !parameter.optional && !parameter.defaultValue) {
+    const type = Type.ofParameter(parameter)
+    const omittedRequiredAction = type.kind === 'primitive' && type.primitive === 'action'
+    if (!supplied.has(name) && !parameter.optional && !parameter.defaultValue && !omittedRequiredAction) {
       ctx.error(scenarioValidationMessages.renderMissingArgument(view.name, name), render ?? view)
     }
   }
+}
+
+function scenarioRequiresFixture(scenario: AST.ScenarioDeclaration): boolean {
+  const prepare = AST.effectiveScenarioClause(scenario, AST.isScenarioPrepareClause)
+  // Every currently supported prepare statement targets a fixture handle. An empty prepare block
+  // is still meaningful as an explicitly empty data delta and therefore needs no fixture.
+  if ((prepare?.block.statements.length ?? 0) > 0) {
+    return true
+  }
+  const subject = AST.effectiveScenarioSubjectClause(scenario)
+  const arguments_ = AST.isScenarioRenderClause(subject)
+    ? subject.argumentList?.arguments
+    : AST.isScenarioRunClause(subject)
+    ? subject.argumentList?.arguments
+    : undefined
+  return (arguments_ ?? []).some(argument =>
+    AST.isFixtureValueReference(argument.value)
+    || AST.streamAllContents(argument.value).some(AST.isFixtureValueReference)
+  )
 }
 
 function validateFields(

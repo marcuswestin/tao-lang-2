@@ -37,6 +37,9 @@ export class StudioFixtureGeneration {
     if (scenario === undefined) {
       throw new Errors.UserInputError(`Studio scenario does not exist: ${scenarioId}`)
     }
+    if (scenario.fixtureId === undefined) {
+      return failed('validation_failed', 'The Studio scenario has no fixture to generate.')
+    }
     const fixture = manifest.fixtures.find(candidate => candidate.fixtureId === scenario.fixtureId)
     if (fixture === undefined) {
       throw new Errors.UserInputError(`Studio scenario fixture does not exist: ${scenario.fixtureId}`)

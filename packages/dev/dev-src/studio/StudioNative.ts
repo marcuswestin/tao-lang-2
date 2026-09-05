@@ -3,12 +3,19 @@ import { StudioClientAssets } from '@studio'
 import { Workspace } from '@workspace'
 import { createHash } from 'node:crypto'
 import { delimiter as pathDelimiter } from 'node:path'
-import { MachineLanes, type MachineResourceLease } from '../repository-tests/MachineLanes'
+import {
+  MachineLanes,
+  MachineResourceBusyError,
+  type MachineResourceLease,
+  type MachineResourceOwner,
+} from '../repository-tests/MachineLanes'
 import {
   StudioElectrobun,
   type StudioElectrobunProject,
 } from './StudioElectrobun'
 import { StudioHutchHome } from './StudioHutchHome'
+import { readLaunches } from './StudioLaunchManifest'
+import { formatStopReport, stopLaunches } from './StudioLifecycle'
 import {
   finalizeStudioProcessTree,
   processGroupKillSpec,
@@ -29,6 +36,10 @@ const defaultAppName = 'Tao Studio'
 const defaultBundleIdentifier = 'dev.tao-lang.studio'
 const defaultHutchCommand = 'hutch'
 const hutchInstallUrl = 'https://hutch.blackboard.sh/hutch/install.sh'
+const nativeHostResourceName = 'studio-native-host'
+// After the holder is told to stop, its lease is released by its own shutdown or pruned once the
+// process is gone; either way the retry only has to outlast an orderly Studio shutdown.
+const nativeHostTakeoverWaitMs = 10_000
 
 type StudioNativeOptions = {
   artifactRoot?: string
@@ -82,7 +93,25 @@ type Sleep = (milliseconds: number) => Promise<void>
 type NativePhaseLog = (message: string) => void
 type StartProcessTree = typeof startStudioProcessTree
 type NativeStartLifecycleOptions = {
+  nativeHost?: NativeHostLeaseDependencies
   onProcessSignal?: typeof Platform.onProcessSignal
+}
+
+/** NativeHostLeaseDependencies are the seams a test replaces to drive the busy-host prompt without a terminal or a victim. */
+export type NativeHostLeaseDependencies = {
+  acquire?: typeof MachineLanes.acquireResource
+  askConfirm?: (message: string) => Promise<boolean>
+  isInteractive?: () => boolean
+  log?: NativePhaseLog
+  stopOwner?: (owner: MachineResourceOwner) => Promise<string>
+}
+
+/** StopOwnerDependencies are the seams that stop the session holding the native host. */
+export type StopOwnerDependencies = {
+  launches?: typeof readLaunches
+  runner?: CommandRunner
+  sleep?: Sleep
+  stop?: typeof stopLaunches
 }
 type PrepareElectrobunOptions = {
   hutchHome?: string
@@ -106,6 +135,7 @@ export const StudioNative = {
   resolveHutchExecutablePath,
   start,
   testing: {
+    acquireNativeHostLease,
     installedHutchExecutablePath,
     installStudioServicePayload,
     createNativeInterruption,
@@ -122,6 +152,7 @@ export const StudioNative = {
     stageStudioPackagedServiceBundle,
     stopExistingNativeDevelopmentProcesses,
     stopCommand,
+    stopNativeHostOwner,
     validateStudioRelease,
     waitForProbeResult,
   },
@@ -138,12 +169,7 @@ async function start(
     nativeHostLease = await runNativePhase(
       'native host lease',
       async () =>
-        await MachineLanes.acquireResource({
-          command: options.nativeHostCommand ?? 'studio-native',
-          name: 'studio-native-host',
-          repositoryRoot: Repo.getRoot(),
-          waitTimeoutMs: 0,
-        }),
+        await acquireNativeHostLease(options.nativeHostCommand ?? 'studio-native', lifecycleOptions.nativeHost),
       { signal: interruption.signal },
     )
     return await startWithInterruption(
@@ -326,6 +352,72 @@ async function startWithInterruption(
   }
 }
 
+/**
+ * acquireNativeHostLease claims the one native host on this machine. When another session holds it
+ * and a person is at the terminal, the person is asked whether to stop that session and proceed;
+ * a pipe or a script gets the busy error unchanged, because nothing is killed on a default answer.
+ */
+async function acquireNativeHostLease(
+  command: string,
+  dependencies: NativeHostLeaseDependencies = {},
+): Promise<MachineResourceLease> {
+  const acquire = dependencies.acquire ?? MachineLanes.acquireResource
+  const log = dependencies.log ?? (message => HCI.logProcessInfo('studio-native', message))
+  const request = async (waitTimeoutMs: number): Promise<MachineResourceLease> =>
+    await acquire({ command, name: nativeHostResourceName, repositoryRoot: Repo.getRoot(), waitTimeoutMs })
+  try {
+    return await request(0)
+  } catch (error) {
+    if (!(error instanceof MachineResourceBusyError) || !(dependencies.isInteractive ?? HCI.isInteractive)()) {
+      throw error
+    }
+    const owner = error.owner
+    log(
+      `native host is held by ${owner.command} in ${owner.repositoryRoot} (PID ${owner.pid}), since ${owner.startedAt}`,
+    )
+    const askConfirm = dependencies.askConfirm
+      ?? (async (message: string) => await HCI.askConfirm({ defaultValue: true, message }))
+    if (!await askConfirm('Stop that session and take the native host?')) {
+      throw error
+    }
+    log(await (dependencies.stopOwner ?? stopNativeHostOwner)(owner))
+    return await request(nativeHostTakeoverWaitMs)
+  }
+}
+
+/**
+ * stopNativeHostOwner ends the session holding the native host. A holder that recorded a Studio
+ * launch is stopped through that launch, which takes its Metro, Studio server, and shell down with
+ * it; a holder no launch records is signalled directly.
+ */
+async function stopNativeHostOwner(
+  owner: MachineResourceOwner,
+  dependencies: StopOwnerDependencies = {},
+): Promise<string> {
+  const launches = await (dependencies.launches ?? readLaunches)(owner.repositoryRoot)
+  const launch = launches.find(candidate =>
+    candidate.supported
+    && (candidate.manifest.ownerPid === owner.pid
+      || candidate.manifest.processes.some(process => process.pid === owner.pid))
+  )
+  if (launch !== undefined) {
+    const launchId = launch.manifest.launchId
+    const report = await (dependencies.stop ?? stopLaunches)({ launchId, repositoryRoot: owner.repositoryRoot })
+    const outcome = report.outcomes[0]
+    if (outcome === undefined || outcome.outcome === 'refused') {
+      throw new Errors.HostEnvironmentError(
+        `Could not stop the Studio launch holding the native host (${launchId})${
+          outcome?.reason === undefined ? '' : `: ${outcome.reason}`
+        }`,
+        { details: { failureKind: 'native-host-takeover-refused', launchId, owner } },
+      )
+    }
+    return `stopped ${owner.command} launch ${launchId} in ${owner.repositoryRoot}\n${formatStopReport(report)}`
+  }
+  await terminateProcesses([owner.pid], dependencies.runner ?? CLI.run, dependencies.sleep ?? Time.sleep)
+  return `stopped ${owner.command} (PID ${owner.pid}) in ${owner.repositoryRoot}`
+}
+
 async function releaseNativeHostLease(lease: MachineResourceLease | undefined): Promise<void> {
   if (lease === undefined) {
     return
@@ -385,7 +477,12 @@ async function stopExistingNativeDevelopmentProcesses(
   if (processIds.length === 0) {
     return 0
   }
+  await terminateProcesses(processIds, runner, sleep)
+  return processIds.length
+}
 
+/** terminateProcesses asks each process to exit, waits a few seconds, and kills whatever ignored the request. */
+async function terminateProcesses(processIds: readonly number[], runner: CommandRunner, sleep: Sleep): Promise<void> {
   const terminated = await runner('/bin/kill', { args: ['-TERM', ...processIds.map(String)] })
   assertNativeProcessesSignalable(terminated, processIds)
   let remaining = processIds
@@ -399,7 +496,6 @@ async function stopExistingNativeDevelopmentProcesses(
     const killed = await runner('/bin/kill', { args: ['-KILL', ...remaining.map(String)] })
     assertNativeProcessesSignalable(killed, remaining)
   }
-  return processIds.length
 }
 
 function nativeDevelopmentProcessIds(output: string, artifactRoot: string): number[] {
@@ -1008,7 +1104,15 @@ async function runHutchCommand(
 ): Promise<void> {
   throwIfNativeInterrupted(options.signal, args.join(' '), projectRoot)
   if (options.runner !== undefined) {
-    const result = await options.runner(hutchPath, { args, cwd: projectRoot, stdio: 'stream' })
+    const result = await options.runner(hutchPath, {
+      args,
+      cwd: projectRoot,
+      env: options.hutchHome === undefined ? undefined : { HUTCH_HOME: options.hutchHome },
+      // Hutch can leave its engine holding captured output pipes after a finite command reports
+      // completion. Let the finite command inherit terminal output so completion does not wait on
+      // a descendant that still owns those pipes.
+      stdio: ['ignore', 'inherit', 'inherit'],
+    })
     if (result.error !== undefined || result.exitCode !== 0) {
       throw new Errors.CommandExecutionError(result)
     }
@@ -1021,6 +1125,8 @@ async function runHutchCommand(
   const commandSpec: Parameters<StartProcessTree>[1] = {
     args,
     cwd: projectRoot,
+    // Preserve the same no-captured-pipe lifecycle when the bounded process-tree runner is used.
+    stdio: ['ignore', 'inherit', 'inherit'],
     env: options.hutchHome === undefined ? undefined : { HUTCH_HOME: options.hutchHome },
     onError(error) {
       spawnError = error

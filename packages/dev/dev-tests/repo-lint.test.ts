@@ -6,6 +6,7 @@ import {
   crossPackageSourceImportIssues,
   devLazyStudioImportIssues,
   duplicateDescribeTitleIssues,
+  justRecipeIssues,
   langiumImportIssues,
   missingTestAppReadmeEntries,
   repoLintIssues,
@@ -14,8 +15,60 @@ import {
 
 const absorbed = '// Tranche status: absorbed'
 const open = '// Tranche status: open'
+const healthyJustfile = `
+bench:
+    bun run language-performance.ts
+check:
+    ./dev gates _test
+verify:
+    ./dev gates _test
+full-verify:
+    ./dev gates _test
+_test:
+    ./dev test
+`
 
 Describe('repo lint contracts', () => {
+  Test('keeps the language benchmark in bench and out of correctness gates', () => {
+    Expect(justRecipeIssues(`
+FULL_VERIFY_GATES := "_test _native"
+bench iterations="10":
+    bun run packages/dev/dev-src/performance/language-performance.ts "{{ iterations }}"
+check:
+    ./dev gates _test
+verify: deps
+    ./dev gates _test
+full-verify: deps
+    ./dev gates {{ FULL_VERIFY_GATES }}
+_test:
+    ./dev test
+_native:
+    ./dev studio-smoke
+deps:
+    bun install
+`)).toEqual([])
+  })
+
+  Test('reports a benchmark reached through a verification gate variable and recipe', () => {
+    Expect(justRecipeIssues(`
+FULL_VERIFY_GATES := "_test _bench-check"
+bench:
+    bun run language-performance.ts
+check:
+    ./dev gates _test
+verify:
+    ./dev gates _test
+full-verify:
+    ./dev gates {{ FULL_VERIFY_GATES }}
+_test:
+    ./dev test
+_bench-check:
+    just bench
+`)).toEqual([
+      "Justfile recipe 'full-verify' must not invoke the language performance benchmark.",
+    ])
+  })
+
   Test('reports a raw Error handed to a promise rejection', () => {
     const source = `function run(reject: (e: unknown) => void) {\n  reject(${'new Error'}('nope'))\n}`
     Expect(conventionRuleIssues(
@@ -153,6 +206,7 @@ Describe('repo lint contracts', () => {
         Buffer.from([0x81]),
       )
       await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
+      await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
       await FS.mkdir(FS.resolvePath('packages', root))
 
       Expect(await repoLintIssues(root)).toEqual([
