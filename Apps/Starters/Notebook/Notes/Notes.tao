@@ -1,0 +1,130 @@
+use Checkbox, Col, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use FormButton from @tao/ui/basic
+use Notes from ..
+
+// The notes feature: the list a person lands on, one row of it, and the detail of one note.
+package
+scene NoteList() {
+   Title "Notes"
+   state NewTitle = ""
+   query Notes { }
+   action AddNote() {
+      guard NewTitle empty
+      create Note {
+         Title: NewTitle
+      }
+      set NewTitle = ""
+   }
+   command NewNote() {
+      Title "Add note"
+      Icon "plus"
+      Enabled NewTitle is not empty
+      do AddNote()
+   }
+   Toolbar { NewNote }
+   render ScrollView() [screen] {
+      Col() [column] {
+         Col() [panel] {
+            Text("NEW NOTE") [eyebrow]
+
+            #noteTitle
+            TextInput(Value: NewTitle, Label: "Title", Placeholder: "New note title") {
+               on submit AddNote
+            }
+
+            #addNote
+            FormButton("Add note", Disabled: NewTitle is empty) {
+               on press AddNote
+         }  }
+         guard Notes {
+            loading -> { Spinner() }
+            error -> Message {
+               Text("Notes could not be loaded") [sectionTitle]
+               TextMultiline(Message) [body]
+         }  }
+         guard Notes empty -> { Col() [panel] {
+            Text("No notes yet") [sectionTitle]
+            TextMultiline("Add the first one above.") [body]
+         } }
+
+         #notes
+         loop Notes / Note {
+            NoteRow(Note)
+            on select -> { present NoteDetail(Note) }
+}  }  }  }
+
+// One note in the list.
+package
+view NoteRow(Note) {
+   render Col() [card] {
+      if Note.Pinned is Pinned {
+         Text("PINNED") [eyebrow]
+      }
+      Text(Note.Title) [sectionTitle]
+      Text(Note.Body) [caption]
+
+      #openNote
+      FormButton("Open") [buttonSecondary] {
+         on press -> { present NoteDetail(Note) }
+}  }  }
+
+// One note: edit its fields or delete it.
+package
+scene NoteDetail(Note) {
+   Title Note.Title
+   state TitleDraft = Note.Title
+   state BodyDraft = Note.Body
+   action SaveNote() {
+      guard TitleDraft empty
+      update Note {
+         Title: TitleDraft
+         Body: BodyDraft
+   }  }
+   action SetPinned(Value boolean) {
+      update Note {
+         Pinned: Value
+   }  }
+   action DeleteNote() {
+      delete Note
+      dismiss
+   }
+   command SaveNoteCommand() {
+      Title "Save note"
+      Icon "checkmark"
+      Enabled TitleDraft is not empty
+      do SaveNote()
+   }
+   Toolbar { SaveNoteCommand }
+   render ScrollView() [screen] {
+      Col() [column, panel] {
+         Text("NOTE") [eyebrow]
+         guard Note {
+            loading -> { Spinner() }
+            missing -> { TextMultiline("This note no longer exists.") [body] }
+            error -> Message { TextMultiline("The note could not be loaded: { Message }") [body] }
+         }
+
+         #noteTitleDraft
+         TextInput(Value: TitleDraft, Label: "Title", Placeholder: "Title") {
+            on submit SaveNote
+         }
+
+         #noteBodyDraft
+         TextInput(Value: BodyDraft, Label: "Body", Placeholder: "Body") {
+            on submit SaveNote
+         }
+
+         #notePinned
+         Checkbox(Value: Note.Pinned is Pinned, Label: "Pinned") {
+            on change SetPinned
+         }
+
+         #saveNote
+         FormButton("Save note", Disabled: TitleDraft is empty) {
+            on press SaveNote
+         }
+
+         #deleteNote
+         FormButton("Delete note") [buttonDanger] {
+            on press DeleteNote
+}  }  }  }

@@ -1,0 +1,72 @@
+use Ingredients, Pantry, Recipes from ./
+use IngredientRow from ./Ingredients
+use RecipeRow from ./Recipes
+
+// Deterministic data for Studio previews and the device matrix.
+fixture Sample {
+   OliveOil = create Ingredient {
+      Name: "Olive oil"
+      Quantity: 1
+      InStock: true
+   }
+   Eggs = create Ingredient {
+      Name: "Eggs"
+      Quantity: 6
+      InStock: true
+   }
+   Basil = create Ingredient {
+      Name: "Basil"
+      Quantity: 0
+   }
+   TomatoPasta = create Recipe {
+      Title: "Tomato pasta"
+      Steps: "Boil pasta, warm the sauce, toss with basil."
+      Minutes: 25
+      Favorite: true
+   }
+   Omelette = create Recipe {
+      Title: "Omelette"
+      Steps: "Whisk eggs, cook slowly, fold."
+      Minutes: 10
+}  }
+
+scenarios Pantry "devices" {
+   fixture Sample
+   scenario "phone" {
+      device phone
+      appearance light
+      network online
+      locale "en"
+   }
+   scenario "tabletDark" {
+      device tablet 1024 x 1366
+      appearance dark
+      network online
+      locale "en"
+}  }
+
+scenarios IngredientRow "ingredients states" {
+   fixture Sample
+   device phone
+   appearance light
+   network online
+   locale "en"
+   scenario "oliveOil" {
+      render (Ingredient: OliveOil)
+   }
+   scenario "eggs" {
+      render (Ingredient: Eggs)
+}  }
+
+scenarios RecipeRow "recipes states" {
+   fixture Sample
+   device phone
+   appearance light
+   network online
+   locale "en"
+   scenario "tomatoPasta" {
+      render (Recipe: TomatoPasta)
+   }
+   scenario "omelette" {
+      render (Recipe: Omelette)
+}  }
