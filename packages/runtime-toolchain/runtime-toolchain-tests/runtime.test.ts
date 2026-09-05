@@ -808,8 +808,10 @@ async function typecheckGeneratedApp(
     exclude: [`${generatedRoot}/current`],
     include: [`${generatedRoot}/**/*.ts`, `${generatedRoot}/**/*.tsx`],
   })
-  return await CLI.run(Repo.resolvePath('node_modules/.bin/tsc'), {
-    args: ['--project', typecheckConfig],
+  // TypeScript 7's native compiler (the `typescript-native` alias, as `just _typecheck` uses):
+  // the same check takes well under a second where `typescript` 5.9 takes about three.
+  return await CLI.run('bun', {
+    args: [Repo.resolvePath('node_modules/typescript-native/bin/tsc'), '--project', typecheckConfig],
   })
 }
 

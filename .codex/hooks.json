@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./agent setup > /dev/null"
+            "command": "./packages/dev/dev-src/cli/agent-session-start.zsh > /dev/null"
           }
         ]
       }
