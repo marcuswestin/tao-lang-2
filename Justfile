@@ -63,7 +63,7 @@ stop-local-instantdb:
 studio project="Apps/HNReader":
     ./dev studio "{{ project }}"
 
-# Launch Tao Studio in its local Electrobun shell
+# Launch Tao Studio in its local Electrobun shell; offers to stop another session holding the native host
 studio-native project="Apps/HNReader":
     ./dev studio-native "{{ project }}"
 

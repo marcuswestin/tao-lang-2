@@ -444,6 +444,35 @@ versioned ephemeral buffer and selection into Tao. The adopted named-slot declar
 `accepts content slots @name from ./Sidecar.tsx`; the sidecar receives one `Slots` record keyed by those
 declared names.
 
+## Syntax lenses
+
+The Studio editor folds Tao by meaning rather than by line. A lens is a set of syntax facets the
+person wants to see; everything outside the set collapses while the document itself is untouched, so
+saving, formatting, the language server, and preview compilation never notice. The facets are
+Structure (views, render trees, slots, render control flow), Layout (layout clauses and design
+declarations), Behavior (event handlers, actions, commands, functions), Data (state, queries,
+bindings, types, data declarations), Wiring (imports, app configuration, injected TypeScript), Tests
+(tests, fixtures, scenarios, tags), and Comments. Presets name the sets that match a way of working:
+Compose shows Structure; Style shows Structure and Layout; Trace shows Behavior and Data; Data shows
+Data; Outline shows nothing but declaration heads; All is the plain editor. The lens is one global
+preference kept in browser storage, and Shift+Alt+L steps through the presets.
+
+The server classifies the active document into facet-tagged ranges alongside its highlight tokens,
+using a parse without linking so a file that does not resolve still folds. The editor projects that
+tree against the active facets: a node is shown when its facet is on or when something shown lives
+inside it, which keeps the path down to a handler visible in Trace. A hidden declaration, layout
+clause, or handler keeps its head and turns its body into a facet glyph, so `[padding, gapSmall]`
+reads `[▦]`, `on press -> { ... }` reads `on press ➜`, and `action Save() { ... }` reads
+`action Save() ➜`. Hidden render statements, one-line data declarations, imports, tags, and comments
+vanish. Whole hidden lines collapse into runs; a run that swallowed more than a single line leaves a
+faint `⋯` marker, a run of one-liners leaves nothing. A parse that recovered from errors keeps the
+previous projection, mapped through the edits since, until the file parses again.
+
+Clicking a glyph or run marker peeks that whole subtree open; a lens change or Re-fold closes every
+peek. The caret is never left inside hidden text: navigation from a preview element, a diagnostic, or
+a search peeks the region open, and hidden spans are atomic for cursor motion. Copy still takes the
+full text of a selection, hidden parts included.
+
 ## Action failures, scheduling, and containment
 
 A native action declares an expected failure with `fail Case "sentence"`; its failure cases are inferred
