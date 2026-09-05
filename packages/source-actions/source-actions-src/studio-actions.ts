@@ -1500,12 +1500,12 @@ async function removeRender(document: AST.Document, request: StudioRemoveRenderP
   // A `#studio_rect_` tag is the private marker that ties this render back to its sketch rectangle.
   // Deleting the render would take the marker with it and leave Unsnap with nothing to undo.
   if (tag?.tag.startsWith('#studio_rect_') === true) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       'Studio cannot remove a render snapped in from a sketch; Unsnap the sketch first.',
     )
   }
   if (block.statements.every(candidate => candidate === statement || candidate === tag)) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       "Studio cannot remove a container's only child; remove the container instead.",
     )
   }
