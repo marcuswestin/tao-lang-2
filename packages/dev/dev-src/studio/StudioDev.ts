@@ -390,11 +390,11 @@ async function publishPreviewBeforeBundling(steps: {
 }): Promise<void> {
   await steps.compilePreview()
   if (steps.isStopping()) {
-    throw new Errors.UserInputError('Studio project opening was cancelled.')
+    Errors.throwUserInput('Studio project opening was cancelled.')
   }
   await steps.startBundler()
   if (!await steps.waitForBundler()) {
-    throw new Errors.UserInputError('Studio project opening was cancelled.')
+    Errors.throwUserInput('Studio project opening was cancelled.')
   }
 }
 

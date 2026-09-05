@@ -175,7 +175,7 @@ function validatePreviewScenarios(
       continue
     }
     if (scenario.subject.destination !== undefined) {
-      throw new Errors.UserInputError(
+      Errors.throwUserInput(
         `Tao Studio cannot run ${scenario.subject.appName} at destination ${scenario.subject.destination} yet. Remove the destination until destination routing is supported.`,
       )
     }

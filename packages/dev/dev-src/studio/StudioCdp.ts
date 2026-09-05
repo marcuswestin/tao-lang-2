@@ -388,12 +388,12 @@ export class StudioCdp {
     const artifactRoot = this.options.artifactRoot
       ?? Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
     if (artifactRoot === undefined || artifactRoot.length === 0) {
-      throw new Errors.UserInputError(
+      Errors.throwUserInput(
         'Studio browser screenshots require TAO_STUDIO_SMOKE_ARTIFACT_ROOT.',
       )
     }
     if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(name)) {
-      throw new Errors.UserInputError(
+      Errors.throwUserInput(
         'Studio browser screenshot names must use only letters, numbers, dots, underscores, or dashes.',
       )
     }
@@ -760,7 +760,7 @@ function chromeKeyDetails(key: string): { code: string; key: string; windowsVirt
   if (/^[0-9]$/u.test(key)) {
     return { code: `Digit${key}`, key, windowsVirtualKeyCode: key.charCodeAt(0) }
   }
-  throw new Errors.UserInputError(`Studio browser key is unsupported: ${JSON.stringify(key)}`)
+  Errors.throwUserInput(`Studio browser key is unsupported: ${JSON.stringify(key)}`)
 }
 
 const chromeNamedKeys: Readonly<Record<string, { code: string; windowsVirtualKeyCode: number }>> = {
@@ -907,13 +907,13 @@ async function configure(client: StudioCdpTransport): Promise<void> {
 
 function requirePositiveInteger(value: number, label: string): void {
   if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new Errors.UserInputError(`${label} must be a positive integer.`)
+    Errors.throwUserInput(`${label} must be a positive integer.`)
   }
 }
 
 function requireFiniteNumber(value: number, label: string): void {
   if (!Number.isFinite(value)) {
-    throw new Errors.UserInputError(`${label} must be finite.`)
+    Errors.throwUserInput(`${label} must be finite.`)
   }
 }
 
@@ -959,7 +959,7 @@ async function findChromePath(): Promise<string> {
       return candidate
     }
   }
-  throw new Errors.UserInputError('Studio smoke requires Chrome or Chromium; set TAO_STUDIO_CHROME_PATH.')
+  Errors.throwUserInput('Studio smoke requires Chrome or Chromium; set TAO_STUDIO_CHROME_PATH.')
 }
 
 async function waitForActivePort(

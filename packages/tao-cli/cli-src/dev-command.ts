@@ -63,7 +63,7 @@ async function initialSelection(
   const projects = await discoverTaoDevProjects(target)
   const apps = projects.flatMap(project => project.apps)
   if (apps.length === 0) {
-    throw new Errors.UserInputError(`No runnable Tao apps found under ${target}.`)
+    Errors.throwUserInput(`No runnable Tao apps found under ${target}.`)
   }
   if (options.appName !== undefined) {
     return { kind: 'selected', app: resolveNamedApp(apps, options.appName) }

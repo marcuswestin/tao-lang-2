@@ -72,11 +72,11 @@ function canonicalImports(
     requireIdentifier(entry.collection, 'entity collection')
     requireIdentifier(entry.entity, 'entity')
     if (!/^(?:\.\.?(?:\/|$))/.test(entry.source) || /[\r\n]/.test(entry.source)) {
-      throw new Errors.UserInputError(`Studio shared fixture import must be project-relative: ${entry.source}`)
+      Errors.throwUserInput(`Studio shared fixture import must be project-relative: ${entry.source}`)
     }
     const previous = byCollection.get(entry.collection)
     if (previous !== undefined && (previous.entity !== entry.entity || previous.source !== entry.source)) {
-      throw new Errors.UserInputError(`Studio shared fixture import conflicts for ${entry.collection}.`)
+      Errors.throwUserInput(`Studio shared fixture import conflicts for ${entry.collection}.`)
     }
     byCollection.set(entry.collection, entry)
   }
@@ -95,7 +95,7 @@ function canonicalPromotions(
     requireIdentifier(promotion.name, 'fixture row')
     requireIdentifier(promotion.entity, 'fixture row entity')
     if (!importedEntities.has(promotion.entity)) {
-      throw new Errors.UserInputError(`Studio shared fixture has no import metadata for ${promotion.entity}.`)
+      Errors.throwUserInput(`Studio shared fixture has no import metadata for ${promotion.entity}.`)
     }
     const canonical = {
       ...promotion,
@@ -109,7 +109,7 @@ function canonicalPromotions(
     }
     const previous = byName.get(canonical.name)
     if (previous !== undefined && !samePromotion(previous, canonical)) {
-      throw new Errors.UserInputError(`Studio fixture row already has different content: ${canonical.name}`)
+      Errors.throwUserInput(`Studio fixture row already has different content: ${canonical.name}`)
     }
     byName.set(canonical.name, canonical)
   }
@@ -126,7 +126,7 @@ function orderPromotions(
   for (const promotion of promotions) {
     for (const dependency of promotionDependencies(promotion)) {
       if (!availableHandles.has(dependency)) {
-        throw new Errors.UserInputError(
+        Errors.throwUserInput(
           `Studio fixture row ${promotion.name} references an unknown fixture handle: ${dependency}`,
         )
       }
@@ -148,7 +148,7 @@ function orderPromotions(
       .map(([name]) => name)
       .toSorted()
     if (ready.length === 0) {
-      throw new Errors.UserInputError(
+      Errors.throwUserInput(
         `Studio fixture row dependencies form a cycle: ${[...pending.keys()].toSorted().join(', ')}`,
       )
     }
@@ -193,7 +193,7 @@ async function addMissingImports(
       use.importedDeclarations.some(declaration => declaration.$refText === entry.collection)
     )
     if (matchingName.some(use => use.importPath !== entry.source)) {
-      throw new Errors.UserInputError(`Studio shared fixture import conflicts for ${entry.collection}.`)
+      Errors.throwUserInput(`Studio shared fixture import conflicts for ${entry.collection}.`)
     }
     if (matchingName.length === 0) {
       missing.push(entry)
@@ -220,7 +220,7 @@ async function addMissingPromotions(
       continue
     }
     if (!AST.isFixtureCreateBinding(existing) || !sameExistingPromotion(existing, promotion)) {
-      throw new Errors.UserInputError(`Studio fixture row already has different content: ${promotion.name}`)
+      Errors.throwUserInput(`Studio fixture row already has different content: ${promotion.name}`)
     }
   }
   if (additions.length === 0) {
@@ -228,7 +228,7 @@ async function addMissingPromotions(
   }
   const block = fixture.block.$cstNode
   if (block === undefined) {
-    throw new Errors.UserInputError('Studio fixture Sketches has no editable source range.')
+    Errors.throwUserInput('Studio fixture Sketches has no editable source range.')
   }
   const offset = block.end - 1
   const insertion = `${additions.map(promotionSource).join('\n')}\n`
@@ -316,7 +316,7 @@ function fixtureValueSource(value: StudioFixtureValue): string {
 
 function requireFixtureValue(value: StudioFixtureValue): void {
   if (typeof value === 'number' && !Number.isFinite(value)) {
-    throw new Errors.UserInputError('Studio fixture numbers must be finite.')
+    Errors.throwUserInput('Studio fixture numbers must be finite.')
   }
   if (typeof value === 'object' && value.kind === 'fixture-reference') {
     requireIdentifier(value.handle, 'fixture reference')
@@ -354,7 +354,7 @@ async function parseSource(source: string): Promise<AST.Document> {
   const document = (await Parser.parseCode(source, { validation: false })).entry.document
   const error = document.parseResult.lexerErrors[0]?.message ?? document.parseResult.parserErrors[0]?.message
   if (error !== undefined) {
-    throw new Errors.UserInputError(`Studio shared fixture source is invalid Tao: ${error}`)
+    Errors.throwUserInput(`Studio shared fixture source is invalid Tao: ${error}`)
   }
   return document
 }
@@ -364,13 +364,13 @@ function requireSketchesFixture(document: AST.Document): AST.FixtureDeclaration 
     .filter(AST.isFixtureDeclaration)
     .filter(fixture => fixture.name === 'Sketches')
   if (fixtures.length !== 1 || fixtures[0]!.visibility !== 'public') {
-    throw new Errors.UserInputError('Studio shared fixture source must declare exactly one public fixture Sketches.')
+    Errors.throwUserInput('Studio shared fixture source must declare exactly one public fixture Sketches.')
   }
   return fixtures[0]!
 }
 
 function requireIdentifier(value: string, label: string): void {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
-    throw new Errors.UserInputError(`Studio shared ${label} name is invalid: ${value}`)
+    Errors.throwUserInput(`Studio shared ${label} name is invalid: ${value}`)
   }
 }

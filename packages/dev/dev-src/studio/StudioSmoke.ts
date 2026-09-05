@@ -82,7 +82,7 @@ function resources(options: Omit<StudioSmokeOptions, 'files'>): StudioSmokeResou
 
 async function run(options: StudioSmokeOptions): Promise<number> {
   if (options.files.length === 0) {
-    throw new Errors.UserInputError('Studio smoke requires at least one explicit test file.')
+    Errors.throwUserInput('Studio smoke requires at least one explicit test file.')
   }
   await requireGeneratedParser()
   const reservation = await reserveResources(options)
@@ -113,14 +113,14 @@ async function reserveResources(options: ReservationOptions): Promise<StudioSmok
     const allocation = resources(options)
     const lease = await acquireBlockLease(allocation, options.registryRoot)
     if (lease === undefined) {
-      throw new Errors.HostEnvironmentError(
+      Errors.throwHostEnvironment(
         `Studio smoke shard ${allocation.shardIndex}, worker ${allocation.workerIndex} is already reserved by another worktree.`,
       )
     }
     let retained = false
     try {
       if (!await (options.portsAvailable ?? portsAreFree)([allocation.serverPort, allocation.previewPort])) {
-        throw new Errors.HostEnvironmentError(
+        Errors.throwHostEnvironment(
           `Studio smoke shard ${allocation.shardIndex}, worker ${allocation.workerIndex} has a port already in use.`,
         )
       }
@@ -159,7 +159,7 @@ async function freeShardAllocation(options: ReservationOptions): Promise<StudioS
       }
     }
   }
-  throw new Errors.HostEnvironmentError(
+  Errors.throwHostEnvironment(
     `Every Studio smoke port block from ${basePort} to ${basePort + shardCount * portsPerShard - 1} is in use, `
       + 'which means this machine is already running Studio lanes in other worktrees. Wait for one to finish, '
       + 'or name a free block yourself with --shard.',
@@ -210,7 +210,7 @@ async function portsAreFree(ports: readonly number[]): Promise<boolean> {
 async function requireGeneratedParser(): Promise<void> {
   const generated = Repo.resolvePath('packages/parser/parser-src/_gen_tao-parser')
   if (!await FS.exists(generated)) {
-    throw new Errors.HostEnvironmentError(
+    Errors.throwHostEnvironment(
       'The generated Tao parser is missing, so no smoke lane can start. Run `just fix` (or '
         + '`bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts`) in this worktree first.',
     )
@@ -221,7 +221,7 @@ function nonNegativeIndex(value: number, label: string, maximum: number): number
   if (Number.isInteger(value) && value >= 0 && value <= maximum) {
     return value
   }
-  throw new Errors.UserInputError(`${label} must be an integer from 0 through ${maximum}.`)
+  Errors.throwUserInput(`${label} must be an integer from 0 through ${maximum}.`)
 }
 
 function safeRunId(value: string): string {
@@ -229,5 +229,5 @@ function safeRunId(value: string): string {
   if (runId.length > 0 && /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(runId)) {
     return runId
   }
-  throw new Errors.UserInputError('Studio smoke run id must use only letters, numbers, dots, underscores, or dashes.')
+  Errors.throwUserInput('Studio smoke run id must use only letters, numbers, dots, underscores, or dashes.')
 }

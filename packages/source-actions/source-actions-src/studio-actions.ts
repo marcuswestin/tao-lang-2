@@ -488,7 +488,7 @@ async function appendScenarioSteps(
   assertNoSyntaxErrors(document)
   requireScenarioIdentity(request.scenarioGroupName, request.scenarioName)
   if (!Array.isArray(request.steps) || request.steps.length === 0 || request.steps.length > 100) {
-    throw new Errors.UserInputError('Studio journey recording must contain between 1 and 100 interactions.')
+    Errors.throwUserInput('Studio journey recording must contain between 1 and 100 interactions.')
   }
   const groups = document.parseResult.value.statements
     .filter(AST.isScenarioGroupDeclaration)
@@ -496,7 +496,7 @@ async function appendScenarioSteps(
   const scenarios = groups.flatMap(group => AST.scenarioDeclarations(group))
     .filter(scenario => scenario.name === request.scenarioName)
   if (groups.length !== 1 || scenarios.length !== 1 || scenarios[0]?.block.$cstNode === undefined) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Studio scenario is not uniquely declared in this source file: ${request.scenarioGroupName} / ${request.scenarioName}`,
     )
   }
@@ -520,10 +520,10 @@ function recordedScenarioStepSource(step: StudioRecordedScenarioStep): string {
     'Recorded scenario step',
   )
   if (step.kind !== 'press' && step.kind !== 'submit' && step.kind !== 'enter') {
-    throw new Errors.UserInputError('Studio journey recording contains an unsupported interaction.')
+    Errors.throwUserInput('Studio journey recording contains an unsupported interaction.')
   }
   if (!['label', 'placeholder', 'tag', 'text'].includes(step.selector) || step.target.trim() === '') {
-    throw new Errors.UserInputError('Studio journey recording contains an invalid semantic target.')
+    Errors.throwUserInput('Studio journey recording contains an invalid semantic target.')
   }
   const target = step.selector === 'tag'
     ? recordedScenarioTag(step.target)
@@ -535,14 +535,14 @@ function recordedScenarioStepSource(step: StudioRecordedScenarioStep): string {
 
 function recordedScenarioTag(value: string): string {
   if (!/^[A-Za-z0-9_]+$/.test(value)) {
-    throw new Errors.UserInputError(`Studio journey recording tag is invalid: ${value}`)
+    Errors.throwUserInput(`Studio journey recording tag is invalid: ${value}`)
   }
   return `#${value}`
 }
 
 function requireScenarioIdentity(group: string, scenario: string): void {
   if (group.trim() === '' || scenario.trim() === '' || /[\u0000-\u001f\u007f]/u.test(group + scenario)) {
-    throw new Errors.UserInputError('Studio journey recording scenario identity is invalid.')
+    Errors.throwUserInput('Studio journey recording scenario identity is invalid.')
   }
 }
 
@@ -556,7 +556,7 @@ function validateOccurrencePrecondition(
   }
   const targetId = occurrenceTargetRenderId(request)
   if (targetId === undefined) {
-    throw new Errors.UserInputError(`Studio source action does not target a render occurrence: ${request.kind}`)
+    Errors.throwUserInput(`Studio source action does not target a render occurrence: ${request.kind}`)
   }
   const render = requireRenderById(document.parseResult.value, targetId)
   const actualNodeKind = 'render'
@@ -616,7 +616,7 @@ async function addSketchEntityParameter(
   const groups = file.statements.filter(AST.isScenarioGroupDeclaration)
     .filter(group => group.name === request.scenarioGroupName && group.subject?.ref === view)
   if (groups.length !== 1) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Studio entity binding requires one owned sketch scenario group: ${request.scenarioGroupName}`,
     )
   }
@@ -624,7 +624,7 @@ async function addSketchEntityParameter(
   const fixture = file.statements.filter(AST.isFixtureDeclaration)
     .filter(candidate => candidate.name === request.fixtureName)
   if (fixture.length !== 1) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Studio sketch fixture is not uniquely declared in this source file: ${request.fixtureName}`,
     )
   }
@@ -636,13 +636,13 @@ async function addSketchEntityParameter(
     candidate.name === request.entity.declarationName && candidate.singularName === request.entity.parameterName
   )
   if (entities.length > 1) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Studio sketch entity is not uniquely declared: ${request.entity.declarationName} / ${request.entity.parameterName}`,
     )
   }
   const entity = entities[0]
   if (AST.parametersOf(view).some(parameter => Type.parameterName(parameter) === request.entity.parameterName)) {
-    throw new Errors.UserInputError(`Studio sketch view already declares parameter ${request.entity.parameterName}.`)
+    Errors.throwUserInput(`Studio sketch view already declares parameter ${request.entity.parameterName}.`)
   }
   const scenarios = AST.scenarioDeclarations(group)
   const handles = new Map(request.scenarioArguments.map(binding => [binding.scenarioName, binding.fixtureHandle]))
@@ -651,7 +651,7 @@ async function addSketchEntityParameter(
     || scenarios.length !== handles.size
     || scenarios.some(scenario => !handles.has(scenario.name))
   ) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       'Studio entity binding must supply one fixture handle for every sketch scenario entry.',
     )
   }
@@ -663,7 +663,7 @@ async function addSketchEntityParameter(
       || value.entity.$refText !== request.entity.parameterName
       || (entity !== undefined && value.entity.ref !== undefined && value.entity.ref !== entity)
     ) {
-      throw new Errors.UserInputError(
+      Errors.throwUserInput(
         `Studio fixture handle ${binding.fixtureHandle} does not create ${request.entity.parameterName}.`,
       )
     }
@@ -671,14 +671,14 @@ async function addSketchEntityParameter(
   for (const scenario of scenarios) {
     const effectiveFixture = AST.effectiveScenarioClause(scenario, AST.isScenarioFixtureClause)
     if (effectiveFixture !== undefined && effectiveFixture.fixture.ref !== fixture[0]) {
-      throw new Errors.UserInputError(`Studio scenario ${scenario.name} already uses another fixture.`)
+      Errors.throwUserInput(`Studio scenario ${scenario.name} already uses another fixture.`)
     }
   }
 
   const source = document.textDocument.getText()
   const parameterList = view.parameterList?.$cstNode
   if (parameterList === undefined) {
-    throw new Errors.UserInputError(`Studio sketch view has no editable parameter list: ${request.viewName}`)
+    Errors.throwUserInput(`Studio sketch view has no editable parameter list: ${request.viewName}`)
   }
   const parameterSources = AST.parametersOf(view).map(parameter => parameter.$cstNode!.text)
   const edits: SourceEdit[] = [{
@@ -694,11 +694,11 @@ async function addSketchEntityParameter(
     const ownRender = scenario.block.entries.find(AST.isScenarioRenderClause)
     const effectiveRender = AST.effectiveScenarioSubjectClause(scenario)
     if (effectiveRender !== undefined && !AST.isScenarioRenderClause(effectiveRender)) {
-      throw new Errors.UserInputError(`Studio sketch scenario ${scenario.name} does not render a view.`)
+      Errors.throwUserInput(`Studio sketch scenario ${scenario.name} does not render a view.`)
     }
     const arguments_ = effectiveRender?.argumentList?.arguments ?? []
     if (arguments_.some(argument => argument.label === request.entity.parameterName)) {
-      throw new Errors.UserInputError(
+      Errors.throwUserInput(
         `Studio sketch scenario ${scenario.name} already supplies ${request.entity.parameterName}.`,
       )
     }
@@ -746,15 +746,15 @@ async function bindSketchField(
     || AST.findOwningView(render) !== view
     || render.$cstNode === undefined
   ) {
-    throw new Errors.UserInputError('Studio field binding requires one leaf in the generated sketch view.')
+    Errors.throwUserInput('Studio field binding requires one leaf in the generated sketch view.')
   }
   if (AST.attachedTag(render)?.tag !== `#studio_rect_${encodedTag(request.rectId)}`) {
-    throw new Errors.UserInputError(`Studio field binding target does not match rectangle ${request.rectId}.`)
+    Errors.throwUserInput(`Studio field binding target does not match rectangle ${request.rectId}.`)
   }
   const parameter = AST.parametersOf(view)
     .find(candidate => Type.parameterName(candidate) === request.parameterName)
   if (parameter === undefined) {
-    throw new Errors.UserInputError(`Studio sketch parameter does not exist: ${request.parameterName}`)
+    Errors.throwUserInput(`Studio sketch parameter does not exist: ${request.parameterName}`)
   }
   const field = resolveSketchFieldPath(parameter, request.fieldPath)
   const expression = [request.parameterName, ...request.fieldPath].join('.')
@@ -776,7 +776,7 @@ async function bindSketchField(
     })`
   } else {
     if (field.kind !== 'primitive' && field.kind !== 'enum') {
-      throw new Errors.UserInputError(`Studio text binding cannot render field path ${request.fieldPath.join('.')}.`)
+      Errors.throwUserInput(`Studio text binding cannot render field path ${request.fieldPath.join('.')}.`)
     }
     component = 'Text'
     invocation = field.kind === 'primitive'
@@ -809,23 +809,23 @@ function validateAddSketchEntityParameterRequest(request: StudioAddSketchEntityP
   requireIdentifier(request.entity.parameterName, 'entity parameter')
   requireIdentifier(request.fixtureName, 'sketch fixture')
   if (request.scenarioGroupName.length === 0 || /[\u0000-\u001f\u007f]/u.test(request.scenarioGroupName)) {
-    throw new Errors.UserInputError('Studio sketch scenario group name is invalid.')
+    Errors.throwUserInput('Studio sketch scenario group name is invalid.')
   }
   if (
     !/^(?:\.\.?\/)+(?:[A-Za-z_][A-Za-z0-9_-]*)(?:\/[A-Za-z_][A-Za-z0-9_-]*)*(?:\.tao)?$/.test(
       request.entity.importPath,
     )
   ) {
-    throw new Errors.UserInputError(`Studio entity import path is invalid: ${request.entity.importPath}`)
+    Errors.throwUserInput(`Studio entity import path is invalid: ${request.entity.importPath}`)
   }
   if (!Array.isArray(request.scenarioArguments) || request.scenarioArguments.length === 0) {
-    throw new Errors.UserInputError('Studio entity binding requires sketch scenario arguments.')
+    Errors.throwUserInput('Studio entity binding requires sketch scenario arguments.')
   }
   for (const binding of request.scenarioArguments) {
     requireExactKeys(binding, ['fixtureHandle', 'scenarioName'], 'Sketch scenario fixture binding')
     requireIdentifier(binding.fixtureHandle, 'fixture handle')
     if (binding.scenarioName.length === 0 || /[\u0000-\u001f\u007f]/u.test(binding.scenarioName)) {
-      throw new Errors.UserInputError('Studio sketch scenario name is invalid.')
+      Errors.throwUserInput('Studio sketch scenario name is invalid.')
     }
   }
 }
@@ -839,7 +839,7 @@ function validateBindSketchFieldRequest(request: StudioBindSketchFieldPatchReque
   requireIdentifier(request.viewName, 'sketch view')
   requireIdentifier(request.parameterName, 'sketch parameter')
   if (request.rectId.length === 0) {
-    throw new Errors.UserInputError('Studio field binding rectangle identity must be nonempty.')
+    Errors.throwUserInput('Studio field binding rectangle identity must be nonempty.')
   }
   validateFieldPath(request.fieldPath, 'field')
   if (request.presentation.kind === 'image') {
@@ -851,17 +851,17 @@ function validateBindSketchFieldRequest(request: StudioBindSketchFieldPatchReque
     requireExactKeys(request.presentation, ['kind', 'prefix', 'suffix'], 'Sketch text presentation')
     for (const value of [request.presentation.prefix, request.presentation.suffix]) {
       if (value !== undefined && /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value)) {
-        throw new Errors.UserInputError('Studio text binding affixes contain unsupported control characters.')
+        Errors.throwUserInput('Studio text binding affixes contain unsupported control characters.')
       }
     }
   } else {
-    throw new Errors.UserInputError('Studio sketch field presentation is invalid.')
+    Errors.throwUserInput('Studio sketch field presentation is invalid.')
   }
 }
 
 function validateFieldPath(path: readonly string[], label: string): void {
   if (!Array.isArray(path) || path.length === 0) {
-    throw new Errors.UserInputError(`Studio ${label} path must contain at least one field.`)
+    Errors.throwUserInput(`Studio ${label} path must contain at least one field.`)
   }
   path.forEach(segment => requireIdentifier(segment, `${label} path segment`))
 }
@@ -873,7 +873,7 @@ function uniqueGeneratedSketchView(file: AST.TaoFile, viewName: string): AST.Vie
     view === undefined || view.visibility !== 'public' || view.block === undefined
     || !/^View[1-9][0-9]*$/.test(viewName)
   ) {
-    throw new Errors.UserInputError(`Studio entity binding requires one generated public ViewN: ${viewName}`)
+    Errors.throwUserInput(`Studio entity binding requires one generated public ViewN: ${viewName}`)
   }
   return view
 }
@@ -885,14 +885,14 @@ function resolveSketchFieldPath(parameter: AST.ParameterDeclaration, path: reado
       return { kind: 'primitive' as const, primitive: 'number' as const }
     }
     if (type.kind !== 'entity') {
-      throw new Errors.UserInputError(`Studio field path cannot traverse ${path.slice(0, index).join('.') || 'value'}.`)
+      Errors.throwUserInput(`Studio field path cannot traverse ${path.slice(0, index).join('.') || 'value'}.`)
     }
     const field = Type.dataFields(type.entity).find(candidate => candidate.name === segment)
     if (field === undefined) {
-      throw new Errors.UserInputError(`Studio entity ${type.entity.singularName} has no field ${segment}.`)
+      Errors.throwUserInput(`Studio entity ${type.entity.singularName} has no field ${segment}.`)
     }
     if (field.optional) {
-      throw new Errors.UserInputError(`Studio field path cannot bind optional field ${segment} without a fallback.`)
+      Errors.throwUserInput(`Studio field path cannot bind optional field ${segment} without a fallback.`)
     }
     type = Type.dataFieldType(field)
   }
@@ -905,7 +905,7 @@ function requireTextField(
   label: string,
 ): void {
   if (field.kind !== 'primitive' || field.primitive !== 'text') {
-    throw new Errors.UserInputError(`Studio ${label} must be a text field: ${path.join('.')}`)
+    Errors.throwUserInput(`Studio ${label} must be a text field: ${path.join('.')}`)
   }
 }
 
@@ -957,7 +957,7 @@ async function insertCapturedFixture(
       AST.isFixtureDeclaration(statement) && statement.name === request.fixtureName
     )
   ) {
-    throw new Errors.UserInputError(`Tao fixture already exists: ${request.fixtureName}`)
+    Errors.throwUserInput(`Tao fixture already exists: ${request.fixtureName}`)
   }
   const entries = [
     ...request.plan.accounts.map(account => {
@@ -985,7 +985,7 @@ function fixtureFieldsSource(fields: Readonly<Record<string, StudioScenarioArgum
 
 function requireIdentifier(value: string, label: string): void {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value)) {
-    throw new Errors.UserInputError(`Studio ${label} name is invalid: ${value}`)
+    Errors.throwUserInput(`Studio ${label} name is invalid: ${value}`)
   }
 }
 
@@ -1001,7 +1001,7 @@ async function setScenarioArguments(
   const scenarios = groups.flatMap(group => AST.scenarioDeclarations(group))
     .filter(scenario => scenario.name === request.scenarioName)
   if (groups.length !== 1 || scenarios.length !== 1) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Studio scenario is not uniquely declared in this source file: ${request.scenarioGroupName} / ${request.scenarioName}`,
     )
   }
@@ -1010,7 +1010,7 @@ async function setScenarioArguments(
   const ownRender = scenario.block.entries.find(AST.isScenarioRenderClause)
   const ownAppearance = scenario.block.entries.find(AST.isScenarioAppearanceClause)
   if (!AST.isViewDeclaration(subject) || scenario.block.$cstNode === undefined) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Studio can only promote arguments into a focused render scenario: ${request.scenarioGroupName} / ${request.scenarioName}`,
     )
   }
@@ -1075,7 +1075,7 @@ function scenarioArgumentSource(value: StudioScenarioArgumentValue): string {
   }
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
-      throw new Errors.UserInputError('Studio scenario numbers must be finite.')
+      Errors.throwUserInput('Studio scenario numbers must be finite.')
     }
     return String(value)
   }
@@ -1086,7 +1086,7 @@ function scenarioArgumentSource(value: StudioScenarioArgumentValue): string {
     return 'now'
   }
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(value.handle)) {
-    throw new Errors.UserInputError(`Studio fixture handle is invalid: ${value.handle}`)
+    Errors.throwUserInput(`Studio fixture handle is invalid: ${value.handle}`)
   }
   return value.handle
 }
@@ -1127,7 +1127,7 @@ async function insertComponent(
 ): Promise<string> {
   assertNoSyntaxErrors(document)
   if (!studioComponentKinds.has(component)) {
-    throw new Errors.UserInputError(`Unsupported Studio palette component: ${String(component)}`)
+    Errors.throwUserInput(`Unsupported Studio palette component: ${String(component)}`)
   }
   const insertion = studioComponentSnippets[component]
   const inserted = insertStudioSnippetAtGap(document, insertion, gap)
@@ -1174,7 +1174,7 @@ async function toggleFlowDirection(
   const owner = nearestFlowOwner(leaf)
   const reference = owner.view!.$refNode
   if (reference === undefined) {
-    throw new Errors.UserInputError('Cannot toggle a flow container without source coordinates.')
+    Errors.throwUserInput('Cannot toggle a flow container without source coordinates.')
   }
   const direction: 'Col' | 'Row' = flowDirection(owner) === 'Row' ? 'Col' : 'Row'
   const source = applySourceEdits(document.textDocument.getText(), [{
@@ -1224,7 +1224,7 @@ function requireClaimRatio(value: readonly [number, number]): readonly [number, 
     || value.length !== 2
     || value.some(weight => !Number.isSafeInteger(weight) || weight < 1 || weight > 100)
   ) {
-    throw new Errors.UserInputError('Studio Spacer claim ratio must contain two integers from 1 through 100.')
+    Errors.throwUserInput('Studio Spacer claim ratio must contain two integers from 1 through 100.')
   }
   return value
 }
@@ -1248,18 +1248,18 @@ function requireFlowSiblings(
   const after = requireLeafRenderById(document.parseResult.value, afterId)
   const before = beforeId === undefined ? undefined : requireLeafRenderById(document.parseResult.value, beforeId)
   if (!AST.isBlock(after.$container) || (before !== undefined && before.$container !== after.$container)) {
-    throw new Errors.UserInputError('Studio flow edits require direct leaf siblings in the same container.')
+    Errors.throwUserInput('Studio flow edits require direct leaf siblings in the same container.')
   }
   const block = after.$container
   const owner = block.$container
   if (!isFlowOwner(owner)) {
-    throw new Errors.UserInputError('Studio flow edits require leaf siblings owned by a Row or Col.')
+    Errors.throwUserInput('Studio flow edits require leaf siblings owned by a Row or Col.')
   }
   if (
     AST.findOwningView(after) === undefined
     || (before !== undefined && AST.findOwningView(before) !== AST.findOwningView(after))
   ) {
-    throw new Errors.UserInputError('Studio flow edits require render expressions in the same view definition.')
+    Errors.throwUserInput('Studio flow edits require render expressions in the same view definition.')
   }
   if (before !== undefined) {
     const slices = blockStatementSlices(document.textDocument.getText(), block)
@@ -1271,7 +1271,7 @@ function requireFlowSiblings(
 function requireLeafRenderById(file: AST.TaoFile, id: string): AST.ViewRender {
   const render = requireRenderById(file, id)
   if (!AST.isViewRender(render) || render.block !== undefined || !AST.isBlock(render.$container)) {
-    throw new Errors.UserInputError(`Studio flow edit target is no longer a direct leaf render: ${id}`)
+    Errors.throwUserInput(`Studio flow edit target is no longer a direct leaf render: ${id}`)
   }
   return render
 }
@@ -1281,7 +1281,7 @@ type FlowOwner = AST.RenderStatement | AST.ViewRender
 function flowDirection(render: FlowOwner): 'Col' | 'Row' {
   const direction = render.view?.$refText
   if (direction !== 'Row' && direction !== 'Col') {
-    throw new Errors.UnexpectedBehaviorError('Expected a validated Studio Row or Col flow owner.')
+    Errors.throwUnexpected('Expected a validated Studio Row or Col flow owner.')
   }
   return direction
 }
@@ -1301,7 +1301,7 @@ function nearestFlowOwner(render: AST.ViewRender): FlowOwner {
       ? candidate.$container
       : undefined
   }
-  throw new Errors.UserInputError('Studio direction toggle requires a leaf owned by a Row or Col.')
+  Errors.throwUserInput('Studio direction toggle requires a leaf owned by a Row or Col.')
 }
 
 /** setLayoutEntry sets or replaces one layout entry on a rendered node. */
@@ -1311,7 +1311,7 @@ async function setLayoutEntry(document: AST.Document, request: StudioSetLayoutEn
   const entry = formatLayoutEntry(requireSupportedLayoutEntry(request.entry))
   const render = requireRenderById(document.parseResult.value, request.renderId)
   if (AST.isRenderStatement(render) && render.injection !== undefined) {
-    throw new Errors.UserInputError('Cannot add a Tao layout clause to an injected root render.')
+    Errors.throwUserInput('Cannot add a Tao layout clause to an injected root render.')
   }
   requireCompatibleLayoutEntry(render, layoutEntryHead(entry))
   return await Formatter.formatCode(setRenderLayoutEntrySource(document.textDocument.getText(), render, entry))
@@ -1374,7 +1374,7 @@ function textLeaf(render: AST.Render): StudioTextLeaf | undefined {
 function requireTextLeaf(file: AST.TaoFile, renderId: string, operation: string): StudioTextLeaf {
   const leaf = textLeaf(requireRenderById(file, renderId))
   if (leaf === undefined) {
-    throw new Errors.UserInputError(`Studio can ${operation} only on a Text or TextMultiline leaf with a value.`)
+    Errors.throwUserInput(`Studio can ${operation} only on a Text or TextMultiline leaf with a value.`)
   }
   return leaf
 }
@@ -1451,7 +1451,7 @@ async function setTextContent(document: AST.Document, request: StudioSetTextCont
   assertNoSyntaxErrors(document)
   requireExactKeys(request, ['content', 'kind', 'renderId'], 'Set text content request')
   if (typeof request.content !== 'string') {
-    throw new Errors.UserInputError('Studio text content must be a string.')
+    Errors.throwUserInput('Studio text content must be a string.')
   }
   requireLocalRenderId(document, request.renderId, 'set text content')
   const leaf = requireTextLeaf(document.parseResult.value, request.renderId, 'set text content')
@@ -1470,7 +1470,7 @@ async function bindText(document: AST.Document, request: StudioBindTextPatchRequ
   const leaf = requireTextLeaf(document.parseResult.value, request.renderId, 'bind text')
   const candidate = textBindingCandidates(leaf.render).find(entry => entry.expression === request.expression)
   if (candidate === undefined) {
-    throw new Errors.UserInputError(`Studio text binding is not visible at this render: ${request.expression}`)
+    Errors.throwUserInput(`Studio text binding is not visible at this render: ${request.expression}`)
   }
   return await Formatter.formatCode(applySourceEdits(document.textDocument.getText(), [{
     end: leaf.argument.$cstNode!.end,
@@ -1487,7 +1487,7 @@ async function removeRender(document: AST.Document, request: StudioRemoveRenderP
   const render = requireRenderById(document.parseResult.value, request.renderId)
   const statement = directViewRenderStatement(render)
   if (statement === undefined || !AST.isBlock(statement.$container)) {
-    throw new Errors.UserInputError('Studio can remove only a direct child render; the root render stays.')
+    Errors.throwUserInput('Studio can remove only a direct child render; the root render stays.')
   }
   const block = statement.$container
   const source = document.textDocument.getText()
@@ -1579,7 +1579,7 @@ async function setStyleEntry(
     requireIdentifier(bundleName, 'style bundle')
     const bundles = designSpecMembers(design).filter(bundle => bundle.name === bundleName)
     if (bundles.length !== 1) {
-      throw new Errors.UserInputError(`Studio style bundle is not uniquely declared in this source file: ${bundleName}`)
+      Errors.throwUserInput(`Studio style bundle is not uniquely declared in this source file: ${bundleName}`)
     }
     return await Formatter.formatCode(
       setLayoutClauseEntrySource(document.textDocument.getText(), bundles[0]!.spec, entry),
@@ -1602,11 +1602,11 @@ async function setDesignEntry(document: AST.Document, request: StudioSetDesignEn
   const designs = AST.streamAllContents(document.parseResult.value).filter(AST.isDesignDeclaration)
     .filter(design => design.name === request.designName)
   if (designs.length !== 1) {
-    throw new Errors.UserInputError(`Design is not uniquely declared in this source file: ${request.designName}`)
+    Errors.throwUserInput(`Design is not uniquely declared in this source file: ${request.designName}`)
   }
   const members = designSpecMembers(designs[0]!).filter(member => member.name === request.memberName)
   if (members.length !== 1) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Design member is not uniquely declared in ${request.designName}: ${request.memberName}`,
     )
   }
@@ -1619,7 +1619,7 @@ async function setDesignEntry(document: AST.Document, request: StudioSetDesignEn
   if (existing !== undefined) {
     const current = ASTUtils.layoutEntryValues(existing).join(' ')
     if (current === entry) {
-      throw new Errors.UserInputError(
+      Errors.throwUserInput(
         `Design member ${request.memberName} already has ${entry}; the requested change is a no-op.`,
       )
     }
@@ -1658,11 +1658,11 @@ function requireEditableSelectedDesign(
 ): AST.DesignDeclaration {
   const design = selectedDesign(files)
   if (design === undefined) {
-    throw new Errors.UserInputError('Studio design landing requires one uniquely selected design declaration.')
+    Errors.throwUserInput('Studio design landing requires one uniquely selected design declaration.')
   }
   const ownerPath = AST.getDocument(design).uri.fsPath
   if (ownerPath !== document.uri.fsPath) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Studio cannot write imported design ${design.name} from this file; open its owning source file: ${ownerPath}`,
     )
   }
@@ -1679,7 +1679,7 @@ async function forkStyleBundle(
   requireIdentifier(landing.bundleName, 'style bundle')
   const bundles = designSpecMembers(design).filter(bundle => bundle.name === landing.bundleName)
   if (bundles.length !== 1) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Studio style bundle is not uniquely declared in this source file: ${landing.bundleName}`,
     )
   }
@@ -1689,7 +1689,7 @@ async function forkStyleBundle(
     : landing.forkName
   requireIdentifier(forkName, 'forked style bundle')
   if (names.has(forkName)) {
-    throw new Errors.UserInputError(`Studio design member already exists: ${forkName}`)
+    Errors.throwUserInput(`Studio design member already exists: ${forkName}`)
   }
   const source = document.textDocument.getText()
   const base = bundles[0]!
@@ -1708,7 +1708,7 @@ async function forkStyleBundle(
     return values.length === 1 && values[0] === landing.bundleName
   })
   if (bundleReference?.$cstNode === undefined) {
-    throw new Errors.UserInputError(`Selected render no longer applies style bundle ${landing.bundleName}.`)
+    Errors.throwUserInput(`Selected render no longer applies style bundle ${landing.bundleName}.`)
   }
   const inlineExploration = render.layoutClause?.entries.findLast(candidate =>
     candidate !== bundleReference && layoutEntrySlot(ASTUtils.layoutEntryValues(candidate)) === slot
@@ -1736,12 +1736,12 @@ async function setElementDefault(
 ): Promise<string> {
   requireIdentifier(elementName, 'element default')
   if (ASTUtils.standardDesignElementName(render) !== elementName) {
-    throw new Errors.UserInputError(`Selected render is not the standard Tao element ${elementName}.`)
+    Errors.throwUserInput(`Selected render is not the standard Tao element ${elementName}.`)
   }
   const source = document.textDocument.getText()
   const defaults = designSpecMembers(design).filter(bundle => bundle.name === elementName)
   if (defaults.length > 1) {
-    throw new Errors.UserInputError(`Studio element default is not uniquely declared: ${elementName}`)
+    Errors.throwUserInput(`Studio element default is not uniquely declared: ${elementName}`)
   }
   const designEdit = defaults[0] === undefined
     ? preferredStyleInsertionEdit(source, design, `${elementName} [${entry}]`)
@@ -1761,7 +1761,7 @@ async function setColorToken(
   requireIdentifier(tokenName, 'color token')
   const [head, value, ...rest] = values
   if (!colorEntryHeads.has(head) || typeof value !== 'string' || !cssHexColor.test(value) || rest.length > 0) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       'Current Tao design tokens can only promote raw background, bg, border, fg, or ink colors.',
     )
   }
@@ -1770,7 +1770,7 @@ async function setColorToken(
   if (colorBlocks.length > 0 || designUsesStructuredSurface(design)) {
     const entries = colorBlocks.flatMap(block => block.entries).filter(candidate => candidate.name === tokenName)
     if (entries.length > 1) {
-      throw new Errors.UserInputError(`Studio color token is not uniquely declared: ${tokenName}`)
+      Errors.throwUserInput(`Studio color token is not uniquely declared: ${tokenName}`)
     }
     const tokenEdit = entries[0]?.$cstNode === undefined
       ? colorBlocks[0] === undefined
@@ -1793,7 +1793,7 @@ async function setColorToken(
   }
   const tokens = design.block.members.filter(AST.isDesignToken).filter(token => token.name === tokenName)
   if (tokens.length > 1) {
-    throw new Errors.UserInputError(`Studio color token is not uniquely declared: ${tokenName}`)
+    Errors.throwUserInput(`Studio color token is not uniquely declared: ${tokenName}`)
   }
   const tokenEdit = tokens[0]?.$cstNode === undefined
     ? designMemberInsertionEdit(source, design, `${tokenName} ${value}`)
@@ -1827,7 +1827,7 @@ async function setSizeToken(
   const [head, ...terms] = values
   const numberIndices = terms.flatMap((term, index) => typeof term === 'number' ? [index] : [])
   if (!sizeTokenHeads.has(head) || numberIndices.length !== 1 || Number(terms[numberIndices[0]!]) <= 0) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       'Studio size promotion requires one positive numeric typography, spacing, radius, width, or height value.',
     )
   }
@@ -1838,7 +1838,7 @@ async function setSizeToken(
   const sizes = sizeBlocks.flatMap(block => block.entries).filter(candidate => candidate.name === tokenName)
   const conflicts = designValueNames(design)
   if (sizes.length > 1 || (sizes.length === 0 && conflicts.has(tokenName))) {
-    throw new Errors.UserInputError(`Studio size token is not uniquely available: ${tokenName}`)
+    Errors.throwUserInput(`Studio size token is not uniquely available: ${tokenName}`)
   }
   const sizeEdit = sizes[0]?.$cstNode === undefined
     ? sizeBlocks[0] === undefined
@@ -1868,7 +1868,7 @@ function requireRenderEntryByHead(render: AST.Render, head: StudioLayoutTermValu
     layoutEntrySlot(ASTUtils.layoutEntryValues(candidate)) === slot
   )
   if (entry?.$cstNode === undefined) {
-    throw new Errors.UserInputError(`Selected render no longer has inline design exploration '${head}'.`)
+    Errors.throwUserInput(`Selected render no longer has inline design exploration '${head}'.`)
   }
   return entry
 }
@@ -1943,7 +1943,7 @@ function preferredStyleInsertionEdit(source: string, design: AST.DesignDeclarati
 function typedBlockEntryInsertionEdit(source: string, block: AST.Node, entry: string): SourceEdit {
   const cstNode = block.$cstNode
   if (cstNode === undefined) {
-    throw new Errors.UserInputError('Cannot edit a structured design block without source coordinates.')
+    Errors.throwUserInput('Cannot edit a structured design block without source coordinates.')
   }
   const closeBrace = source.lastIndexOf('}', cstNode.end - 1)
   const insertionOffset = closeBrace === -1 ? cstNode.end : closeBrace
@@ -1953,7 +1953,7 @@ function typedBlockEntryInsertionEdit(source: string, block: AST.Node, entry: st
 function designMemberInsertionEdit(source: string, design: AST.DesignDeclaration, member: string): SourceEdit {
   const cstNode = design.$cstNode
   if (cstNode === undefined) {
-    throw new Errors.UserInputError('Cannot edit a design declaration without source coordinates.')
+    Errors.throwUserInput('Cannot edit a design declaration without source coordinates.')
   }
   const closeBrace = source.lastIndexOf('}', cstNode.end - 1)
   const insertionOffset = closeBrace === -1 ? cstNode.end : closeBrace
@@ -2012,24 +2012,24 @@ async function snapSketchToFlow(
     .filter(view => view.name === request.viewName)
   const view = views.length === 1 ? views[0] : undefined
   if (view === undefined || view.visibility !== 'public' || view.block === undefined) {
-    throw new Errors.UserInputError(`Studio Snap requires one generated public view: ${request.viewName}`)
+    Errors.throwUserInput(`Studio Snap requires one generated public view: ${request.viewName}`)
   }
   const owners = document.parseResult.value.statements.filter(AST.isScenarioGroupDeclaration)
     .filter(group => group.name === 'sketch' && group.subject?.ref === view)
   if (owners.length !== 1) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Studio Snap view is not owned by one generated sketch scenario: ${request.viewName}`,
     )
   }
   const renders = view.block.statements.filter(AST.isRenderStatement)
   if (renders.length !== 1 || renders[0]?.$cstNode === undefined) {
-    throw new Errors.UserInputError(`Studio Snap requires one direct render tree in ${request.viewName}.`)
+    Errors.throwUserInput(`Studio Snap requires one direct render tree in ${request.viewName}.`)
   }
   const leafIds: string[] = []
   const components = new Set<string>()
   const nodeSource = snapNodeSource(request.tree, '', leafIds, components)
   if (leafIds.length !== request.rectIds.length || leafIds.some((id, index) => id !== request.rectIds[index])) {
-    throw new Errors.UserInputError('Studio Snap rectangle identities do not match the structured tree.')
+    Errors.throwUserInput('Studio Snap rectangle identities do not match the structured tree.')
   }
   const source = document.textDocument.getText()
   const root = renders[0]!
@@ -2038,7 +2038,7 @@ async function snapSketchToFlow(
     .filter(render => AST.attachedTag(render)?.tag.startsWith('#studio_rect_'))
   const requestedTags = new Set(request.rectIds.map(id => `#studio_rect_${encodedTag(id)}`))
   if (existing.some(render => requestedTags.has(AST.attachedTag(render)!.tag))) {
-    throw new Errors.UserInputError('Studio Snap cannot add a rectangle that is already snapped.')
+    Errors.throwUserInput('Studio Snap cannot add a rectangle that is already snapped.')
   }
   const edits: SourceEdit[] = []
   if (existing.length === 0) {
@@ -2116,19 +2116,19 @@ async function unsnapSketchFromFlow(
   const views = file.statements.filter(AST.isViewDeclaration).filter(view => view.name === request.viewName)
   const view = views.length === 1 ? views[0] : undefined
   if (view === undefined || view.visibility !== 'public' || view.block === undefined) {
-    throw new Errors.UserInputError(`Studio Unsnap requires one generated public view: ${request.viewName}`)
+    Errors.throwUserInput(`Studio Unsnap requires one generated public view: ${request.viewName}`)
   }
   const owners = file.statements.filter(AST.isScenarioGroupDeclaration)
     .filter(group => group.name === 'sketch' && group.subject?.ref === view)
   if (owners.length !== 1) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Studio Unsnap view is not owned by one generated sketch scenario: ${request.viewName}`,
     )
   }
   const roots = view.block.statements.filter(AST.isRenderStatement)
   const root = roots.length === 1 ? roots[0] : undefined
   if (root?.$cstNode === undefined) {
-    throw new Errors.UserInputError(`Studio Unsnap requires one direct render tree in ${request.viewName}.`)
+    Errors.throwUserInput(`Studio Unsnap requires one direct render tree in ${request.viewName}.`)
   }
   const selectedTags = new Map(request.rectIds.map(id => [`#studio_rect_${encodedTag(id)}`, id]))
   const marked = AST.streamAllContents(view).filter(AST.isRender)
@@ -2136,7 +2136,7 @@ async function unsnapSketchFromFlow(
     .filter(item => item.tag?.tag.startsWith('#studio_rect_'))
   const selected = marked.filter(item => selectedTags.has(item.tag!.tag))
   if (selected.length !== request.rectIds.length) {
-    throw new Errors.UserInputError('Studio Unsnap could not find every selected rectangle in the current source.')
+    Errors.throwUserInput('Studio Unsnap could not find every selected rectangle in the current source.')
   }
   const source = document.textDocument.getText()
   const selectedRenders = new Set(selected.map(item => item.render))
@@ -2161,11 +2161,11 @@ async function unsnapSketchFromFlow(
   }
   const edits = selected.map(({ render }) => {
     if (!AST.isViewRender(render) || !AST.isBlock(render.$container)) {
-      throw new Errors.UserInputError('Studio Unsnap can only remove a selected leaf inside the generated render tree.')
+      Errors.throwUserInput('Studio Unsnap can only remove a selected leaf inside the generated render tree.')
     }
     const slice = blockStatementSlices(source, render.$container).find(candidate => candidate.statement === render)
     if (slice === undefined) {
-      throw new Errors.UserInputError('Studio Unsnap could not locate the selected leaf source.')
+      Errors.throwUserInput('Studio Unsnap could not locate the selected leaf source.')
     }
     return { end: slice.end, replacement: '', start: slice.start }
   })
@@ -2188,7 +2188,7 @@ function validateSnapRequest(request: StudioSnapSketchToFlowPatchRequest): void 
     'Snap request',
   )
   if (!Number.isSafeInteger(request.expectedCatalogRevision) || request.expectedCatalogRevision < 0) {
-    throw new Errors.UserInputError('Studio Snap catalog revision must be a nonnegative integer.')
+    Errors.throwUserInput('Studio Snap catalog revision must be a nonnegative integer.')
   }
   if (
     typeof request.viewName !== 'string'
@@ -2196,16 +2196,16 @@ function validateSnapRequest(request: StudioSnapSketchToFlowPatchRequest): void 
     || typeof request.sketchId !== 'string'
     || request.sketchId.length === 0
   ) {
-    throw new Errors.UserInputError('Studio Snap requires a generated ViewN and sketch identity.')
+    Errors.throwUserInput('Studio Snap requires a generated ViewN and sketch identity.')
   }
   if (request.mergeDirection !== 'Col' && request.mergeDirection !== 'Row') {
-    throw new Errors.UserInputError('Studio Snap merge direction is invalid.')
+    Errors.throwUserInput('Studio Snap merge direction is invalid.')
   }
   if (request.mergePosition !== 'after' && request.mergePosition !== 'before') {
-    throw new Errors.UserInputError('Studio Snap merge position is invalid.')
+    Errors.throwUserInput('Studio Snap merge position is invalid.')
   }
   if (!Array.isArray(request.rectIds) || request.rectIds.some(id => typeof id !== 'string' || id.length === 0)) {
-    throw new Errors.UserInputError('Studio Snap rectangle identities must be nonempty strings.')
+    Errors.throwUserInput('Studio Snap rectangle identities must be nonempty strings.')
   }
   validateSnapNode(request.tree, new Set(), 0)
 }
@@ -2213,7 +2213,7 @@ function validateSnapRequest(request: StudioSnapSketchToFlowPatchRequest): void 
 function validateUnsnapRequest(request: StudioUnsnapSketchFromFlowPatchRequest): void {
   requireExactKeys(request, ['fallback', 'kind', 'rectIds', 'sketchId', 'viewName'], 'Unsnap request')
   if (!isObject(request.fallback)) {
-    throw new Errors.UserInputError('Studio Unsnap fallback is invalid.')
+    Errors.throwUserInput('Studio Unsnap fallback is invalid.')
   }
   requireExactKeys(request.fallback, ['height', 'label', 'width'], 'Unsnap fallback')
   if (
@@ -2224,7 +2224,7 @@ function validateUnsnapRequest(request: StudioUnsnapSketchFromFlowPatchRequest):
     || typeof request.fallback.label !== 'string'
     || request.fallback.label.length === 0
   ) {
-    throw new Errors.UserInputError('Studio Unsnap requires a generated ViewN and sketch identity.')
+    Errors.throwUserInput('Studio Unsnap requires a generated ViewN and sketch identity.')
   }
   if (
     !Array.isArray(request.rectIds)
@@ -2232,7 +2232,7 @@ function validateUnsnapRequest(request: StudioUnsnapSketchFromFlowPatchRequest):
     || request.rectIds.some(id => typeof id !== 'string' || id.length === 0)
     || new Set(request.rectIds).size !== request.rectIds.length
   ) {
-    throw new Errors.UserInputError('Studio Unsnap rectangle identities must be unique nonempty strings.')
+    Errors.throwUserInput('Studio Unsnap rectangle identities must be unique nonempty strings.')
   }
   if (
     !Number.isFinite(request.fallback.width)
@@ -2240,13 +2240,13 @@ function validateUnsnapRequest(request: StudioUnsnapSketchFromFlowPatchRequest):
     || !Number.isFinite(request.fallback.height)
     || request.fallback.height <= 0
   ) {
-    throw new Errors.UserInputError('Studio Unsnap fallback dimensions must be positive and finite.')
+    Errors.throwUserInput('Studio Unsnap fallback dimensions must be positive and finite.')
   }
 }
 
 function validateSnapNode(node: StudioSketchSnapTree, seen: Set<string>, depth: number): void {
   if (depth > 64 || !isObject(node)) {
-    throw new Errors.UserInputError('Studio Snap tree is invalid or too deeply nested.')
+    Errors.throwUserInput('Studio Snap tree is invalid or too deeply nested.')
   }
   if (node.type === 'container') {
     requireExactKeys(node, ['children', 'direction', 'layout', 'type'], 'Snap container')
@@ -2254,27 +2254,27 @@ function validateSnapNode(node: StudioSketchSnapTree, seen: Set<string>, depth: 
       (node.direction !== 'Row' && node.direction !== 'Col') || !Array.isArray(node.children)
       || node.children.length === 0
     ) {
-      throw new Errors.UserInputError('Studio Snap container direction and children are invalid.')
+      Errors.throwUserInput('Studio Snap container direction and children are invalid.')
     }
     validateSnapLayout(node.layout, new Set(['gap', 'pad', 'claim']), 'container')
     node.children.forEach(child => validateSnapNode(child, seen, depth + 1))
     return
   }
   if (node.type !== 'element') {
-    throw new Errors.UserInputError('Studio Snap node kind is invalid.')
+    Errors.throwUserInput('Studio Snap node kind is invalid.')
   }
   requireExactKeys(node, ['arguments', 'component', 'content', 'layout', 'rectId', 'type'], 'Snap element')
   if (!['Image', 'Placeholder', 'Text'].includes(node.component)) {
-    throw new Errors.UserInputError(`Studio Snap component is unsupported: ${String(node.component)}`)
+    Errors.throwUserInput(`Studio Snap component is unsupported: ${String(node.component)}`)
   }
   if (!Array.isArray(node.arguments) || node.arguments.length !== 1 || typeof node.arguments[0] !== 'string') {
-    throw new Errors.UserInputError('Studio Snap elements require one text argument.')
+    Errors.throwUserInput('Studio Snap elements require one text argument.')
   }
   if (typeof node.rectId !== 'string' || node.rectId.length === 0 || seen.has(node.rectId)) {
-    throw new Errors.UserInputError(`Studio Snap rectangle identity is invalid or duplicated: ${String(node.rectId)}`)
+    Errors.throwUserInput(`Studio Snap rectangle identity is invalid or duplicated: ${String(node.rectId)}`)
   }
   if (node.content !== undefined && typeof node.content !== 'string') {
-    throw new Errors.UserInputError('Studio Snap element metadata must be text.')
+    Errors.throwUserInput('Studio Snap element metadata must be text.')
   }
   seen.add(node.rectId)
   validateSnapLayout(node.layout, new Set(['width', 'height', 'hug', 'claim']), 'element')
@@ -2282,17 +2282,17 @@ function validateSnapNode(node: StudioSketchSnapTree, seen: Set<string>, depth: 
 
 function validateSnapLayout(layout: readonly StudioLayoutEntry[], allowed: ReadonlySet<string>, owner: string): void {
   if (!Array.isArray(layout)) {
-    throw new Errors.UserInputError(`Studio Snap ${owner} layout must be an array.`)
+    Errors.throwUserInput(`Studio Snap ${owner} layout must be an array.`)
   }
   const heads = new Set<string>()
   for (const raw of layout) {
     const entry = requireSupportedLayoutEntry(raw)
     const head = entry[0]
     if (!allowed.has(head) || heads.has(head)) {
-      throw new Errors.UserInputError(`Studio Snap ${owner} layout entry is invalid or duplicated: ${head}`)
+      Errors.throwUserInput(`Studio Snap ${owner} layout entry is invalid or duplicated: ${head}`)
     }
     if (head === 'claim' && (entry.length !== 2 || entry[1] !== 1)) {
-      throw new Errors.UserInputError('Studio Snap claim must be exactly 1.')
+      Errors.throwUserInput('Studio Snap claim must be exactly 1.')
     }
     heads.add(head)
   }
@@ -2334,7 +2334,7 @@ function encodedTag(value: string): string {
 
 function requireExactKeys(value: object, allowed: readonly string[], label: string): void {
   if (Object.keys(value).some(key => !allowed.includes(key))) {
-    throw new Errors.UserInputError(`${label} contains unsupported fields.`)
+    Errors.throwUserInput(`${label} contains unsupported fields.`)
   }
 }
 
@@ -2351,7 +2351,7 @@ async function wrapRender(document: AST.Document, request: StudioWrapRenderPatch
   assertNoSyntaxErrors(document)
   requireLocalRenderId(document, request.renderId, 'wrap renders')
   if (request.wrapper !== 'Col' && request.wrapper !== 'Row' && request.wrapper !== 'Stack') {
-    throw new Errors.UserInputError(`Unsupported Studio wrapper: ${String(request.wrapper)}`)
+    Errors.throwUserInput(`Unsupported Studio wrapper: ${String(request.wrapper)}`)
   }
   const file = document.parseResult.value
   const render = requireRenderById(file, request.renderId)
@@ -2367,7 +2367,7 @@ async function moveRender(document: AST.Document, request: StudioMoveRenderReque
   assertNoSyntaxErrors(document)
   requireLocalRenderId(document, request.draggedId, 'move render expressions')
   if (request.afterId === undefined && request.beforeId === undefined) {
-    throw new Errors.UserInputError('A render move requires at least one drop-gap anchor.')
+    Errors.throwUserInput('A render move requires at least one drop-gap anchor.')
   }
   if (request.afterId !== undefined) {
     requireLocalRenderId(document, request.afterId, 'move render expressions')
@@ -2387,12 +2387,12 @@ function validateInsertProjectViewRequest(request: StudioInsertProjectViewPatchR
     return
   }
   if (!isObject(request.bindings)) {
-    throw new Errors.UserInputError('Studio project-view lexical bindings must be an object.')
+    Errors.throwUserInput('Studio project-view lexical bindings must be an object.')
   }
   for (const [parameterName, valueName] of Object.entries(request.bindings)) {
     requireIdentifier(parameterName, 'project-view parameter')
     if (typeof valueName !== 'string') {
-      throw new Errors.UserInputError(`Studio lexical binding for ${parameterName} must name a value.`)
+      Errors.throwUserInput(`Studio lexical binding for ${parameterName} must name a value.`)
     }
     requireIdentifier(valueName, 'lexical binding')
   }
@@ -2406,14 +2406,14 @@ function requireInsertableProjectView(
   const views = file.statements.filter(AST.isViewDeclaration).filter(candidate => candidate.name === viewName)
   const view = views.length === 1 ? views[0] : undefined
   if (view === undefined) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       views.length === 0
         ? `Project view is not declared in this source file: ${viewName}`
         : `Project view is not uniquely declared in this source file: ${viewName}`,
     )
   }
   if (viewName === targetViewName) {
-    throw new Errors.UserInputError(`Cannot insert project view ${viewName} into its own render block.`)
+    Errors.throwUserInput(`Cannot insert project view ${viewName} into its own render block.`)
   }
   return view
 }
@@ -2463,14 +2463,14 @@ function projectViewArguments(
   for (const [parameterName, valueName] of Object.entries(requested)) {
     const parameter = parametersByName.get(parameterName)
     if (parameter === undefined) {
-      throw new Errors.UserInputError(`Project view ${view.name} has no parameter named ${parameterName}.`)
+      Errors.throwUserInput(`Project view ${view.name} has no parameter named ${parameterName}.`)
     }
     const value = visible.get(valueName)
     if (value === undefined) {
-      throw new Errors.UserInputError(`Lexical value ${valueName} is not visible at the project-view insertion gap.`)
+      Errors.throwUserInput(`Lexical value ${valueName} is not visible at the project-view insertion gap.`)
     }
     if (!typesExactlyMatch(parameter, value)) {
-      throw new Errors.UserInputError(
+      Errors.throwUserInput(
         `Lexical value ${valueName} does not exactly match project-view parameter ${parameterName}.`,
       )
     }
@@ -2512,7 +2512,7 @@ function projectViewArguments(
       ...(unresolved.length === 0 ? [] : [`unresolved required parameters: ${unresolved.join(', ')}`]),
       ...(ambiguous.length === 0 ? [] : [`ambiguous required parameters: ${ambiguous.join(', ')}`]),
     ].join('; ')
-    throw new Errors.UserInputError(`Cannot insert parameterized project view ${view.name}; ${details}.`)
+    Errors.throwUserInput(`Cannot insert parameterized project view ${view.name}; ${details}.`)
   }
   return parameters.flatMap(parameter => {
     const parameterName = Type.parameterName(parameter)
@@ -2624,7 +2624,7 @@ function parseRenderId(value: string): RenderId {
     || start < 0
     || end < start
   ) {
-    throw new Errors.UserInputError(`Invalid render id: ${value}`)
+    Errors.throwUserInput(`Invalid render id: ${value}`)
   }
   return { end, sourcePath, start }
 }
@@ -2632,7 +2632,7 @@ function parseRenderId(value: string): RenderId {
 function requireLocalRenderId(document: AST.Document, value: string, operation: string): RenderId {
   const renderId = parseRenderId(value)
   if (renderId.sourcePath !== document.uri.fsPath) {
-    throw new Errors.UserInputError(`Can only ${operation} inside the edited Tao source file.`)
+    Errors.throwUserInput(`Can only ${operation} inside the edited Tao source file.`)
   }
   return renderId
 }
@@ -2647,7 +2647,7 @@ function moveRenderSource(source: string, file: AST.TaoFile, request: StudioMove
     || (after !== undefined && AST.findOwningView(after) !== owner)
     || (before !== undefined && AST.findOwningView(before) !== owner)
   ) {
-    throw new Errors.UserInputError('Can only move between render expressions in the same view definition.')
+    Errors.throwUserInput('Can only move between render expressions in the same view definition.')
   }
   const draggedStatement = directViewRenderStatement(dragged)
   const afterStatement = after === undefined ? undefined : directViewRenderStatement(after)
@@ -2661,7 +2661,7 @@ function moveRenderSource(source: string, file: AST.TaoFile, request: StudioMove
     || (afterStatement !== undefined && afterStatement.$container !== targetStatement.$container)
     || (beforeStatement !== undefined && beforeStatement.$container !== targetStatement.$container)
   ) {
-    throw new Errors.UserInputError('Can only move direct child view renders between render blocks.')
+    Errors.throwUserInput('Can only move direct child view renders between render blocks.')
   }
   return moveRenderBetweenBlocksSource(source, draggedStatement.$container, targetStatement.$container, request)
 }
@@ -2675,7 +2675,7 @@ function requireRenderById(file: AST.TaoFile, id: string): AST.Render {
     .filter(AST.isRender)
     .find(candidate => renderIdFor(candidate) === id)
   if (render === undefined) {
-    throw new Errors.UserInputError(`Render expression no longer exists: ${id}`)
+    Errors.throwUserInput(`Render expression no longer exists: ${id}`)
   }
   return render
 }
@@ -2753,18 +2753,18 @@ function layoutEntrySlot(values: readonly StudioLayoutTermValue[]): string {
 
 function formatStyleEntry(entry: StudioStyleEntry): string {
   if (!Array.isArray(entry) || entry.length === 0 || typeof entry[0] !== 'string') {
-    throw new Errors.UserInputError(`Invalid Studio style entry: ${formatLayoutValues(entry)}`)
+    Errors.throwUserInput(`Invalid Studio style entry: ${formatLayoutValues(entry)}`)
   }
   const values = entry as readonly StudioLayoutTermValue[]
   if (isStudioLayoutEntry(values)) {
-    throw new Errors.UserInputError(`Studio style entry targets a layout clause: ${formatLayoutValues(entry)}`)
+    Errors.throwUserInput(`Studio style entry targets a layout clause: ${formatLayoutValues(entry)}`)
   }
   return values.map(formatLayoutTermValue).join(' ')
 }
 
 function formatDesignEntry(entry: StudioStyleEntry): string {
   if (!Array.isArray(entry) || entry.length === 0 || typeof entry[0] !== 'string') {
-    throw new Errors.UserInputError(`Invalid Studio design entry: ${formatLayoutValues(entry)}`)
+    Errors.throwUserInput(`Invalid Studio design entry: ${formatLayoutValues(entry)}`)
   }
   return (entry as readonly StudioLayoutTermValue[]).map(formatLayoutTermValue).join(' ')
 }
@@ -2792,12 +2792,12 @@ function renderLayoutInsertionOffset(render: AST.Render): number {
 function wrapRenderSource(source: string, render: AST.Render, wrapper: StudioWrapRenderContainer): string {
   const cstNode = render.$cstNode
   if (cstNode === undefined) {
-    throw new Errors.UserInputError('Cannot wrap a render without source coordinates.')
+    Errors.throwUserInput('Cannot wrap a render without source coordinates.')
   }
   const indent = lineIndentAt(source, cstNode.offset)
   const childIndent = `${indent}   `
   if (AST.isRenderStatement(render) && render.injection !== undefined) {
-    throw new Errors.UserInputError('Cannot wrap an injected root render.')
+    Errors.throwUserInput('Cannot wrap an injected root render.')
   }
   const selectedSource = source.slice(cstNode.offset, cstNode.end).trimEnd()
   const childSource = AST.isRenderStatement(render)
@@ -2814,14 +2814,14 @@ function wrapRenderSource(source: string, render: AST.Render, wrapper: StudioWra
 function layoutEntryHead(entry: string): StudioLayoutTermValue {
   const head = entry.split(/\s+/, 1)[0]
   if (head === undefined || head === '') {
-    throw new Errors.UserInputError('Layout entry must have a head term.')
+    Errors.throwUserInput('Layout entry must have a head term.')
   }
   return head
 }
 
 function formatLayoutEntry(values: StudioLayoutEntry): string {
   if (values.length === 0) {
-    throw new Errors.UserInputError('Layout entry cannot be empty.')
+    Errors.throwUserInput('Layout entry cannot be empty.')
   }
   return values.map(formatLayoutTermValue).join(' ')
 }
@@ -2863,7 +2863,7 @@ function requireSupportedLayoutEntry(values: StudioLayoutEntry): StudioLayoutEnt
     requireSpacingLayoutEntry(values)
     return values
   }
-  throw new Errors.UserInputError(`Unsupported Studio layout entry: ${formatLayoutValues(values)}`)
+  Errors.throwUserInput(`Unsupported Studio layout entry: ${formatLayoutValues(values)}`)
 }
 
 const alignmentTerms = new Set<StudioLayoutAlignment>(['baseline', 'bottom', 'center', 'left', 'right', 'top'])
@@ -2974,7 +2974,7 @@ function requirePositiveLayoutNumber(
 ): void {
   const value = values[index]
   if (typeof value === 'number' && !Number.isFinite(value)) {
-    throw new Errors.UserInputError('Layout number must be finite.')
+    Errors.throwUserInput('Layout number must be finite.')
   }
   if (values.length !== expectedLength || typeof value !== 'number' || value <= 0) {
     throw invalidLayoutEntry(values)
@@ -2988,7 +2988,7 @@ function requirePositiveLayoutSize(
 ): void {
   const value = values[index]
   if (typeof value === 'number' && !Number.isFinite(value)) {
-    throw new Errors.UserInputError('Layout number must be finite.')
+    Errors.throwUserInput('Layout number must be finite.')
   }
   if (values.length !== expectedLength || !isPositiveLayoutSize(value)) {
     throw invalidLayoutEntry(values)
@@ -3021,14 +3021,14 @@ function requireCompatibleLayoutEntry(render: AST.Render, nextHead: StudioLayout
   const growth = heads.findLast(head => head === 'claim' || head === 'fill' || head === 'hug')
   const shrink = heads.findLast(head => head === 'compress' || head === 'rigid')
   if (growth === 'claim' && shrink === 'rigid') {
-    throw new Errors.UserInputError("Studio layout action would leave incompatible 'claim' and 'rigid' entries.")
+    Errors.throwUserInput("Studio layout action would leave incompatible 'claim' and 'rigid' entries.")
   }
 }
 
 function formatLayoutTermValue(value: StudioLayoutTermValue): string {
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) {
-      throw new Errors.UserInputError('Layout number must be finite.')
+      Errors.throwUserInput('Layout number must be finite.')
     }
     return String(value)
   }
@@ -3038,7 +3038,7 @@ function formatLayoutTermValue(value: StudioLayoutTermValue): string {
   if (cssHexColor.test(value)) {
     return value
   }
-  throw new Errors.UserInputError(`Invalid layout word: ${value}`)
+  Errors.throwUserInput(`Invalid layout word: ${value}`)
 }
 
 const designValuePath = /^[A-Za-z_]\w*(?:\.(?:[A-Za-z_]\w*|\d+))*$/
@@ -3059,19 +3059,19 @@ function moveRenderBetweenBlocksSource(
   const targetSlices = draggedBlock === targetBlock ? draggedSlices : blockStatementSlices(source, targetBlock)
   const draggedIndex = renderStatementIndex(draggedSlices, request.draggedId)
   if (draggedIndex === -1) {
-    throw new Errors.UserInputError('Dragged render is not a direct block statement.')
+    Errors.throwUserInput('Dragged render is not a direct block statement.')
   }
   const draggedSlice = draggedSlices[draggedIndex]!
   if (draggedBlock === targetBlock) {
     return moveRenderInsideBlockSource(source, draggedBlock, draggedSlices, draggedIndex, request)
   }
   if (sliceContainsBlock(draggedSlice, targetBlock)) {
-    throw new Errors.UserInputError('Cannot move a render expression into its own contents.')
+    Errors.throwUserInput('Cannot move a render expression into its own contents.')
   }
   const removeEdit = removeStatementEdit(source, draggedBlock, draggedSlices, draggedIndex)
   const insertEdit = insertStatementEdit(source, targetBlock, targetSlices, draggedSlice.source, request)
   if (sourceEditsOverlap(removeEdit, insertEdit)) {
-    throw new Errors.UserInputError('Cannot move render expressions across overlapping block edits.')
+    Errors.throwUserInput('Cannot move render expressions across overlapping block edits.')
   }
   return applySourceEdits(source, [removeEdit, insertEdit])
 }
@@ -3127,31 +3127,31 @@ function requireOrderedTargetIndex(slices: BlockStatementSlice[], request: Studi
   const afterIndex = request.afterId === undefined ? undefined : renderStatementIndex(slices, request.afterId)
   const beforeIndex = request.beforeId === undefined ? undefined : renderStatementIndex(slices, request.beforeId)
   if (afterIndex === -1 || beforeIndex === -1) {
-    throw new Errors.UserInputError('Drop target is no longer between the requested render expressions.')
+    Errors.throwUserInput('Drop target is no longer between the requested render expressions.')
   }
   if (afterIndex !== undefined && beforeIndex !== undefined) {
     if (beforeIndex !== afterIndex + 1) {
-      throw new Errors.UserInputError('Drop-gap anchors are no longer adjacent render expressions.')
+      Errors.throwUserInput('Drop-gap anchors are no longer adjacent render expressions.')
     }
     return beforeIndex
   }
   if (beforeIndex !== undefined) {
     if (beforeIndex !== 0) {
-      throw new Errors.UserInputError('A before-only drop anchor must be the first render expression.')
+      Errors.throwUserInput('A before-only drop anchor must be the first render expression.')
     }
     return 0
   }
   if (afterIndex !== undefined) {
     if (afterIndex !== slices.length - 1) {
-      throw new Errors.UserInputError('An after-only drop anchor must be the last render expression.')
+      Errors.throwUserInput('An after-only drop anchor must be the last render expression.')
     }
     return slices.length
   }
-  throw new Errors.UserInputError('A render move requires at least one drop-gap anchor.')
+  Errors.throwUserInput('A render move requires at least one drop-gap anchor.')
 }
 
 function throwEmptyMoveTarget(): never {
-  throw new Errors.UserInputError('Cannot move a render into an empty target block without an anchor.')
+  Errors.throwUserInput('Cannot move a render into an empty target block without an anchor.')
 }
 
 function replaceBlockStatementsEdit(
@@ -3281,7 +3281,7 @@ function studioInsertionTarget(document: AST.Document, gap: StudioRenderGap): St
     || (afterStatement !== undefined && afterStatement.$container !== targetStatement.$container)
     || (beforeStatement !== undefined && beforeStatement.$container !== targetStatement.$container)
   ) {
-    throw new Errors.UserInputError('Can only insert into a drop gap between direct child view renders.')
+    Errors.throwUserInput('Can only insert into a drop gap between direct child view renders.')
   }
   const block = targetStatement.$container
   const slices = blockStatementSlices(source, block)
@@ -3321,10 +3321,10 @@ function insertionTargetIndex(slices: BlockStatementSlice[], gap: StudioRenderGa
   const afterIndex = gap.afterId === undefined ? undefined : renderStatementIndex(slices, gap.afterId)
   const beforeIndex = gap.beforeId === undefined ? undefined : renderStatementIndex(slices, gap.beforeId)
   if (afterIndex === -1 || beforeIndex === -1) {
-    throw new Errors.UserInputError('Drop target is no longer between the requested render expressions.')
+    Errors.throwUserInput('Drop target is no longer between the requested render expressions.')
   }
   if (afterIndex !== undefined && beforeIndex !== undefined && beforeIndex !== afterIndex + 1) {
-    throw new Errors.UserInputError('Drop-gap anchors are no longer adjacent render expressions.')
+    Errors.throwUserInput('Drop-gap anchors are no longer adjacent render expressions.')
   }
   return beforeIndex ?? (afterIndex === undefined ? slices.length : afterIndex + 1)
 }
@@ -3335,7 +3335,7 @@ function studioInsertionRender(file: AST.TaoFile): AST.Render & { block: AST.Blo
     .filter(candidate => candidate.block !== undefined)
     .sort((left, right) => left.$cstNode!.offset - right.$cstNode!.offset)[0]
   if (render?.block === undefined) {
-    throw new Errors.UserInputError('No render block found for Studio component insertion.')
+    Errors.throwUserInput('No render block found for Studio component insertion.')
   }
   return render as AST.Render & { block: AST.Block }
 }

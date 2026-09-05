@@ -127,7 +127,7 @@ async function recompileAndReload(
     shouldRunParserGen: true,
   })
   if (!compiled) {
-    throw new Errors.UserInputError('Reload skipped because compile failed.')
+    Errors.throwUserInput('Reload skipped because compile failed.')
   }
   await expo.reloadExpoApps()
 }

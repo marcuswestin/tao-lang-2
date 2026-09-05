@@ -230,6 +230,20 @@ const RAW_THROW_ALLOWLIST = [
  * spells the throw with escapes, and the message says "throws a raw `Error`" rather than quoting
  * the construct it forbids.
  */
+/**
+ * The three leaf modules construct the classes because they are the helpers everyone else calls;
+ * everywhere else a Tao error is thrown through `Errors.throw*`, which returns `never` and narrows.
+ * `packages/runtime` keeps its own `TR-errors` vocabulary and is outside this rule.
+ */
+const CONSTRUCTED_THROW_ALLOWLIST = [
+  'packages/shared/shared-src/core/Assert.ts',
+  'packages/shared/shared-src/core/Errors.ts',
+  'packages/shared/shared-src/core/Switch_TypeSafe.ts',
+]
+
+const CONSTRUCTED_THROW_DETAIL = 'constructs a Tao error only to throw it; call `Errors.throwUserInput(...)`,'
+  + ' `Errors.throwUnexpected(...)`, or `Errors.throwHostEnvironment(...)` instead, which also narrow control flow.'
+
 const RAW_THROW_DETAIL = 'throws a raw `Error`; use `Assert(...)` for invariants, `Assert.input(...)`'
   + " or `Errors.throwUserInput(...)` for the author's mistakes, and `Errors.throwHostEnvironment(...)`"
   + ' for host and environment failures.'
@@ -258,6 +272,8 @@ const REJECTED_RAW_ERROR_DETAIL = 'rejects with a raw `Error`; reach for the sam
   + ' would use, since a rejection reaches the reader the same way.'
 
 const NATIVE_SWITCH_PATTERN = /^[ \t]*switch[ \t]*\(/gm
+const CONSTRUCTED_THROW_PATTERN =
+  /\bthrow\s+new\s+(?:Errors\.)?(?:UserInput|UnexpectedBehavior|HostEnvironment)Error\s*\(/g
 const RAW_THROW_PATTERN = /\bthrow\s+new\s+Error\s*\(/g
 const REJECTED_RAW_ERROR_PATTERN = /(?:reject|rejectPendingLoad|fail)\??\.?\(?\s*\(?\s*new\s+Error\s*\(/g
 const BUN_TEST_IMPORT_PATTERN = /\bfrom\s*['"]bun:test['"]/g
@@ -275,6 +291,8 @@ type ConventionMatch = {
 export type ConventionRule = {
   allowlist: readonly string[]
   detail: string
+  /** Path prefixes the rule does not apply to at all, as opposed to files still allowed an exception. */
+  excludePathPrefixes?: readonly string[]
   pattern: RegExp
   staleDetail: string
 }
@@ -285,6 +303,13 @@ export type ConventionRule = {
  * entry is told.
  */
 export const CONVENTION_RULES = {
+  constructedThrow: {
+    allowlist: CONSTRUCTED_THROW_ALLOWLIST,
+    detail: CONSTRUCTED_THROW_DETAIL,
+    excludePathPrefixes: ['packages/runtime/'],
+    pattern: CONSTRUCTED_THROW_PATTERN,
+    staleDetail: 'no longer constructs a Tao error to throw it; drop its repo lint allowlist entry.',
+  },
   bunTestImport: {
     allowlist: BUN_TEST_IMPORT_ALLOWLIST,
     detail: 'imports `bun:test`; use `@shared/test` instead.',
@@ -317,7 +342,8 @@ export function conventionRuleIssues(
   files: readonly SourceFile[],
   allowlist: readonly string[] = rule.allowlist,
 ): string[] {
-  return conventionIssues(files, conventionMatches(files, rule.pattern, rule.detail), allowlist, rule.staleDetail)
+  const scanned = files.filter(file => !rule.excludePathPrefixes?.some(prefix => file.path.startsWith(prefix)))
+  return conventionIssues(scanned, conventionMatches(scanned, rule.pattern, rule.detail), allowlist, rule.staleDetail)
 }
 
 /** langiumImportIssues reports Langium imports outside the parser package. */

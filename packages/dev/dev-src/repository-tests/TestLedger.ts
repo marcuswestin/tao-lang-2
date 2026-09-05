@@ -156,7 +156,7 @@ async function acquireLedgerLease(repositoryRoot: string): Promise<MachineResour
   if (lease !== undefined) {
     return lease
   }
-  throw new Errors.HostEnvironmentError('Timed out waiting for another test command to finish updating the ledger.')
+  Errors.throwHostEnvironment('Timed out waiting for another test command to finish updating the ledger.')
 }
 
 /** selectRetryFiles selects whole files while settlement remains a per-test fact. */

@@ -54,7 +54,7 @@ export class StudioStateLibrary {
     for (const entry of entries) {
       validateEntry(entry, this.#supportedDomains)
       if (this.#entries.has(entry.stateId)) {
-        throw new Errors.UserInputError(`Studio state id is duplicated: ${entry.stateId}`)
+        Errors.throwUserInput(`Studio state id is duplicated: ${entry.stateId}`)
       }
       this.#entries.set(entry.stateId, entry)
     }
@@ -152,7 +152,7 @@ function validateEntry(entry: StudioStateEntry, supportedDomains: ReadonlySet<st
   requireText(entry.revision, 'Studio state revision')
   validateTaoSource(entry.source, 'Studio state source')
   if (entry.snapshot.version !== studioStateSnapshotVersion) {
-    throw new Errors.UserInputError(`Unsupported Studio state snapshot version: ${entry.snapshot.version}`)
+    Errors.throwUserInput(`Unsupported Studio state snapshot version: ${entry.snapshot.version}`)
   }
   for (const layer of entry.layers) {
     requireIdentifier(layer)
@@ -160,13 +160,13 @@ function validateEntry(entry: StudioStateEntry, supportedDomains: ReadonlySet<st
   for (const [domain, snapshot] of Object.entries(entry.snapshot.domains)) {
     requireIdentifier(domain)
     if (!supportedDomains.has(domain)) {
-      throw new Errors.UserInputError(`Studio state domain is not supported by this runtime: ${domain}`)
+      Errors.throwUserInput(`Studio state domain is not supported by this runtime: ${domain}`)
     }
     if (!Number.isSafeInteger(snapshot.codecVersion) || snapshot.codecVersion < 1) {
-      throw new Errors.UserInputError(`Studio state domain ${domain} needs a positive codec version.`)
+      Errors.throwUserInput(`Studio state domain ${domain} needs a positive codec version.`)
     }
     if (!isJsonValue(snapshot.value)) {
-      throw new Errors.UserInputError(`Studio state domain ${domain} contains unsupported runtime data.`)
+      Errors.throwUserInput(`Studio state domain ${domain} contains unsupported runtime data.`)
     }
   }
 }
