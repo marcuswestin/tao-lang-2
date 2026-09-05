@@ -724,11 +724,11 @@ function reviewImage(path: string | undefined, alt: string, side: 'after' | 'bef
 }
 
 function escapeHtml(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
 }
 
 function escapeAttribute(value: string): string {
-  return escapeHtml(value).replaceAll('"', '&quot;').replaceAll("'", '&#39;')
+  return escapeHtml(value).replaceAll("'", '&#39;')
 }
 
 export const StudioReview = {

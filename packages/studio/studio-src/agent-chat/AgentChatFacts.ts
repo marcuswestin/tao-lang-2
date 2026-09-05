@@ -5,7 +5,7 @@
 // scenario covers, an action nothing invokes, a field nothing reads, a token nothing uses. Every fact carries
 // the evidence that produced it, so an answer can cite it and a person can open the source and disagree.
 
-import type { SemanticSnapshot, SnapshotNode } from '../agent-poc/SemanticSnapshot'
+import type { SemanticSnapshot, SnapshotNode } from './SemanticSnapshot'
 
 export type AgentChatFact = {
   /** A short machine-readable class, so the panel and the tests can group facts without parsing prose. */

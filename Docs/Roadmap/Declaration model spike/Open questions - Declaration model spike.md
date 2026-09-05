@@ -2,7 +2,7 @@
 
 Live decision record. Q1–Q6 and Q11 are resolved by the absorbed WordFlower contracts; later entries
 remain open unless explicitly marked otherwise. The settled base is also recorded in
-`Implementation - Declaration model spike - Claude.md`.
+`Implementation - Declaration model spike.md`.
 
 Each entry states the question, the options, what it blocks, and a recommendation where there is one.
 A recommendation is a starting position for the dialogue, not a decision. Do not implement against

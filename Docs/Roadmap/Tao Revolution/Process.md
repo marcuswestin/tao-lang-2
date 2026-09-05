@@ -51,8 +51,8 @@ document owns the _program-level_ process only; the tranche mechanics — the fo
 
 ## The sequence
 
-Steps 0–1 are this branch and the next piece of work; later steps each become roadmap items and
-tranches as they are reached.
+Steps 0 and 1 are complete; steps 2 onward each become roadmap items and tranches as they are
+reached.
 
 The interaction-system program has shipped and absorbed T1–T5 (including the T3½ cleanup): scenes
 and the shell view, device-local data, configured commands and their generated catalog, the
@@ -64,13 +64,14 @@ path. The language-level `Assistant` design remains future contract, not impleme
 - **Step 0 — encode the program (this branch).** Decisions, process, and coverage documents in
   `Docs/Roadmap/Tao Revolution/`; the four-design analysis archived; the future apps seeded in
   `Apps/Tao Future/` from design D's demos, pre-consolidation.
-- **Step 1 — the dialect-migration tranche.** The _Migrations from what ships today_ section of
-  `Decisions.md` is the checklist: `enum` → `type … is one of`, leading `optional` → postfix `?`,
-  `Name is Type` → juxtaposition in parameter lists, `implement inject …` → `provider X from
-  ./X.ts`, named exports only, text-or-`#tag` test selectors. Mechanical but broad: it
-  touches `1 - Current`, `2 - Next`, `Docs/Spec/`, the parser/validator/formatter/compiler, and every
-  test. Run through Next as an ordinary tranche. After it, everything written anywhere is written
-  once, in the final dialect.
+- **Step 1 — the dialect-migration tranche.** Closed 2026-09-04
+  (`Docs/Roadmap/Archive/Dialect migration tranche/`). The _Migrations from what ships today_
+  section of `Decisions.md` was the checklist: `enum` → `type … is one of`, leading `optional` →
+  postfix `?`, `Name is Type` → juxtaposition in parameter lists, `implement inject …` → `provider X
+  from ./X.ts`, named exports only, text-or-`#tag` test selectors. Mechanical but broad: it touched
+  `1 - Current`, `2 - Next`, `Docs/Spec/`, the parser/validator/formatter/compiler, and every test,
+  run through Next as an ordinary tranche. After it, everything written anywhere is written once, in
+  the final dialect.
 - **Step 2 — rewrite `4 - Revolution`.** Replace WordFlower's Revolution tier with the same app
   expressed in the decided dialect, using `Decisions.md` as the rationale and the Tao Future apps
   as sibling references. This is where "Revolution contains everything decided" becomes spec-code.

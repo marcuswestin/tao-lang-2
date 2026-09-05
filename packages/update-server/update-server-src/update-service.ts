@@ -1,4 +1,4 @@
-import { Errors, Json } from '@shared'
+import { Errors, Http, Json } from '@shared'
 import { createHash, randomUUID } from 'node:crypto'
 import { InMemoryUpdateStore, type UpdateStore, UpdateStoreConflictError } from './update-store'
 import type {
@@ -94,7 +94,7 @@ async function routeRequest(request: Request, context: RouteContext): Promise<Re
       return await publishUpdate(request, context, updates[0]!, updates[1]!)
     }
     if (request.method === 'GET') {
-      return jsonResponse({
+      return Http.jsonResponse({
         updates: [...await context.store.history(updates[0]!, updates[1]!)].reverse()
           .map(update => update.publication),
       })
@@ -153,7 +153,7 @@ async function uploadAsset(
     url: new URL(path, context.baseUrl).href,
   }
   const result = await context.store.putAsset(asset)
-  return jsonResponse(publicAsset(asset), result === 'created' ? 201 : 200)
+  return Http.jsonResponse(publicAsset(asset), result === 'created' ? 201 : 200)
 }
 
 async function publishUpdate(
@@ -195,7 +195,7 @@ async function publishUpdate(
     ...(data.sourceUpdateId === undefined ? {} : { sourceUpdateId: data.sourceUpdateId }),
   }
   await context.store.putUpdate({ platform, publication })
-  return jsonResponse(publication, 201)
+  return Http.jsonResponse(publication, 201)
 }
 
 async function readUpdate(
@@ -207,7 +207,7 @@ async function readUpdate(
   const update = await store.update(applicationId, channel, updateId)
   return update === undefined
     ? errorResponse(404, `Update '${updateId}' was not found in this channel.`)
-    : jsonResponse(update.publication)
+    : Http.jsonResponse(update.publication)
 }
 
 async function readManifest(request: Request, store: UpdateStore, applicationId: string): Promise<Response> {
@@ -416,15 +416,8 @@ function methodNotAllowed(allow: string): Response {
   })
 }
 
-function jsonResponse(value: unknown, status = 200): Response {
-  return new Response(JSON.stringify(value), {
-    headers: { 'content-type': 'application/json; charset=utf-8' },
-    status,
-  })
-}
-
 function errorResponse(status: number, message: string): Response {
-  return jsonResponse({ message }, status)
+  return Http.jsonResponse({ message }, status)
 }
 
 function requestError(status: number, message: string): never {

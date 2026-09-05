@@ -1,18 +1,11 @@
-// Semantic agent proof of concept: "add a feature by describing it".
-//
-// The model first says which kind of change the request asks for, then chooses that kind's shape (which
-// entity, which words, which view). Tao decides every placement from the semantic snapshot and lowers the
-// shape into formatted source edits. A request outside the kinds this PoC lowers is answered honestly
-// rather than forced into one. Nothing here is a production change model.
+// Feature lowering: the model chooses a shape (which entity, which words, which view) and Tao decides
+// every placement from the semantic snapshot, lowering the shape into formatted source edits. The
+// agent-chat write tools call these; nothing here is a production change model.
 import Formatter from '@formatter'
 import { Errors } from '@shared'
-import { type AgentRunResult, runAgentJob } from './AgentPocRun'
 import { type SemanticSnapshot, type SnapshotNode, type SnapshotText } from './SemanticSnapshot'
 
 type Json = Record<string, unknown>
-
-/** The change kinds this PoC can lower. `other` is an honest refusal, not a failure. */
-type FeatureKind = 'add-flag' | 'reword-text' | 'other'
 
 export type FeatureShape = {
   featureName: string
@@ -43,16 +36,12 @@ type PlanStep = {
 
 type FeatureEdit = { path: string; before: string; after: string }
 
-export type FeaturePlan = {
-  kind: FeatureKind
-  shape: Json
+type Edit = { start: number; end: number; replacement: string }
+
+/** FeatureLowering is what a lowering hands back: the steps it decided and the edits that realise them. */
+export type FeatureLowering = {
   steps: PlanStep[]
   edits: FeatureEdit[]
-  packet: Json
-  model: AgentRunResult
-  problems: string[]
-  /** Set when the request is outside what this PoC lowers: what was asked, and what it can do instead. */
-  explanation?: string
 }
 
 type ReadFile = (path: string) => Promise<string>
@@ -136,266 +125,6 @@ function unquote(text: string): string {
   return /^".*"$/s.test(text) ? text.slice(1, -1) : text
 }
 
-// ---- Packets -------------------------------------------------------------------------------------
-
-function featurePacket(snapshot: SemanticSnapshot): Json {
-  const entities = [...snapshot.nodes.values()].filter(n => n.kind === 'entity')
-  return {
-    app: snapshot.appName,
-    entities: entities.map(n =>
-      `${n.name}/${String(detail(n)['singular'])}: ${
-        (detail(n)['fields'] as { name: string; type: string }[]).map(f => `${f.name} ${f.type}`).join(', ')
-      }`
-    ),
-    viewsByEntity: entities.map(entity => ({
-      entity: entity.name,
-      views: [...snapshot.nodes.values()].filter(n =>
-        n.kind === 'view' && (detail(n)['parameters'] as string[]).some(p => p.includes(`(entity ${entity.name})`))
-      ).map(n => n.name),
-    })),
-    existingPatterns: analogies(snapshot),
-    scenarioGroups: [
-      ...new Set([...snapshot.nodes.values()].filter(n => n.kind === 'scenario').map(n => String(detail(n)['group']))),
-    ],
-  }
-}
-
-function rewordPacket(candidates: TextCandidate[]): Json {
-  return { texts: candidates.map(c => `${c.handle} (${c.view}): ${c.text}`) }
-}
-
-// ---- Planning ------------------------------------------------------------------------------------
-
-const KIND_MENU = [
-  'add-flag: add a new yes/no field to an entity and a checkbox that turns it on and off.',
-  'reword-text: change the wording, or the order of the parts, of text a view already shows on screen.',
-  'other: anything else — new screens, navigation, queries, layout, styling, deleting things.',
-].join('\n')
-
-export async function planFeature(
-  snapshot: SemanticSnapshot,
-  request: string,
-  readFile: ReadFile,
-): Promise<FeaturePlan> {
-  const classification = await runAgentJob({
-    call: async () => 'no tools',
-    instructions:
-      'You sort a feature request for a Tao app into exactly one kind of change. Choose the kind that matches what the request literally asks for. Do not force a request into a kind that does not fit; choose "other" instead.',
-    maxToolCalls: 0,
-    outputSchema: {
-      properties: {
-        kind: { enum: ['add-flag', 'reword-text', 'other'], type: 'string' },
-        reason: { description: 'One short sentence', type: 'string' },
-      },
-      required: ['kind', 'reason'],
-      type: 'object',
-    },
-    prompt: `Feature request: ${request}\n\nKinds:\n${KIND_MENU}`,
-    tools: [],
-  })
-  const chosen = (classification.value as { kind?: FeatureKind; reason?: string } | undefined) ?? {}
-  const kind = chosen.kind ?? 'other'
-  if (classification.status !== 'ok') {
-    return {
-      edits: [],
-      kind: 'other',
-      model: classification,
-      packet: {},
-      problems: [classification.message ?? 'model failure'],
-      shape: {},
-      steps: [],
-    }
-  }
-  if (kind === 'reword-text') {
-    return await planReword(snapshot, request, readFile, chosen.reason)
-  }
-  if (kind === 'other') {
-    return {
-      edits: [],
-      explanation: `The model read this as: ${
-        chosen.reason ?? 'a change outside the supported kinds'
-      }\nThis proof of concept lowers two kinds of change:\n${KIND_MENU}\nRephrase the request as one of those, or take it to the source.`,
-      kind,
-      model: classification,
-      packet: { kinds: KIND_MENU },
-      problems: [],
-      shape: chosen as Json,
-      steps: [],
-    }
-  }
-  return await planFlag(snapshot, request, readFile)
-}
-
-async function planFlag(snapshot: SemanticSnapshot, request: string, readFile: ReadFile): Promise<FeaturePlan> {
-  const packet = featurePacket(snapshot)
-  const entityNames = [...snapshot.nodes.values()].filter(n => n.kind === 'entity').map(n => n.name)
-  const viewNames = [...snapshot.nodes.values()].filter(n => n.kind === 'view').map(n => n.name)
-  const model = await runAgentJob({
-    call: async () => 'no tools',
-    instructions: [
-      'You turn a one-line feature request for a Tao app into a typed feature shape. Tao will place and write the code; you only choose the shape.',
-      'Pick the entity the feature belongs to, a new CapitalizedFieldName not already in that entity, the field kind (yes/no for a flag), a short human label, the view that should present it (one that takes the entity, preferably where a similar field is presented), and a short lowercase scenario name.',
-    ].join(' '),
-    maxToolCalls: 0,
-    outputSchema: {
-      properties: {
-        featureName: { description: 'Two or three words', type: 'string' },
-        entity: { enum: entityNames, type: 'string' },
-        fieldName: { description: 'New capitalized identifier, e.g. Archived', type: 'string' },
-        fieldKind: { enum: ['yes/no', 'text', 'number'], type: 'string' },
-        label: { description: 'Label shown next to the control, e.g. Archived', type: 'string' },
-        presentIn: { enum: viewNames, type: 'string' },
-        scenarioName: { description: 'lowercase, one word, e.g. archived', type: 'string' },
-        summary: { description: 'One sentence saying what the feature does', type: 'string' },
-      },
-      required: ['featureName', 'entity', 'fieldName', 'fieldKind', 'label', 'presentIn', 'scenarioName', 'summary'],
-      type: 'object',
-    },
-    prompt: `Feature request: ${request}\n\nProject facts:\n${JSON.stringify(packet)}`,
-    tools: [],
-  })
-  const problems: string[] = []
-  const shape = model.value as FeatureShape | undefined
-  if (model.status !== 'ok' || shape === undefined) {
-    return {
-      edits: [],
-      kind: 'add-flag',
-      model,
-      packet,
-      problems: [model.message ?? 'model failure'],
-      shape: (shape ?? emptyShape()) as unknown as Json,
-      steps: [],
-    }
-  }
-  const lowered = await lowerFeature(snapshot, shape, readFile, problems)
-  return { ...lowered, kind: 'add-flag', model, packet, problems, shape: shape as unknown as Json }
-}
-
-async function planReword(
-  snapshot: SemanticSnapshot,
-  request: string,
-  readFile: ReadFile,
-  reason: string | undefined,
-): Promise<FeaturePlan> {
-  const candidates = textCandidates(snapshot)
-  const packet = rewordPacket(candidates)
-  if (candidates.length === 0) {
-    return {
-      edits: [],
-      explanation: 'This app renders no literal text, so there is nothing to reword.',
-      kind: 'reword-text',
-      model: {
-        elapsedMs: 0,
-        helper: '',
-        notes: [],
-        promptChars: 0,
-        status: 'ok',
-        toolCalls: [],
-        toolResultChars: 0,
-        transcript: [],
-      },
-      packet,
-      problems: [],
-      shape: {},
-      steps: [],
-    }
-  }
-  // Two small turns beat one large one on a 4k-token on-device model: asked to choose and rewrite at once
-  // it tends to echo the list it was given. Picking first means the rewriting turn sees a single line.
-  const picked = await runAgentJob({
-    call: async () => 'no tools',
-    instructions: "You choose which line of text on screen a request is about. Answer with that line's handle only.",
-    maxToolCalls: 0,
-    outputSchema: {
-      properties: {
-        reason: { description: 'One short sentence', type: 'string' },
-        textHandle: { enum: candidates.map(c => c.handle), type: 'string' },
-      },
-      required: ['reason', 'textHandle'],
-      type: 'object',
-    },
-    prompt: `Request: ${request}${reason === undefined ? '' : `\nRead as: ${reason}`}\n\nLines on screen:\n${
-      candidates.map(c => `${c.handle} (${c.view}): ${c.text}`).join('\n')
-    }`,
-    tools: [],
-  })
-  const choice = (picked.value as { textHandle?: string } | undefined)?.textHandle
-  const target = candidates.find(c => c.handle === choice)
-  if (picked.status !== 'ok' || target === undefined) {
-    return {
-      edits: [],
-      kind: 'reword-text',
-      model: picked,
-      packet,
-      problems: [picked.message ?? `the model chose ${String(choice)}, which is not a line this app shows`],
-      shape: {},
-      steps: [],
-    }
-  }
-  const placeholders = interpolationsIn(target.text)
-  const model = await runAgentJob({
-    call: async () => 'no tools',
-    instructions: [
-      'You rewrite one line of text that an app shows on screen. Write the new line and nothing else.',
-      'Every { ... } placeholder is a live value. Keep each placeholder exactly as written, character for character. You may put them in a different order and change the ordinary words around them. Never invent a placeholder.',
-    ].join(' '),
-    maxToolCalls: 0,
-    outputSchema: {
-      properties: {
-        featureName: { description: 'Two or three words naming the change', type: 'string' },
-        newText: { description: 'The rewritten line, without surrounding quotes', type: 'string' },
-        summary: { description: 'One sentence saying what changes on screen', type: 'string' },
-      },
-      required: ['featureName', 'newText', 'summary'],
-      type: 'object',
-    },
-    prompt: `Request: ${request}\n\nThe line to rewrite, shown by ${target.view}:\n${unquote(target.text)}${
-      placeholders.length === 0
-        ? ''
-        : `\n\nIts placeholders, all of which must appear in your answer unless the request says to remove one:\n${
-          placeholders.map(p => `{ ${p} }`).join('\n')
-        }`
-    }`,
-    tools: [],
-  })
-  const problems: string[] = []
-  const written = model.value as { featureName?: string; newText?: string; summary?: string } | undefined
-  if (model.status !== 'ok' || written?.newText === undefined) {
-    return {
-      edits: [],
-      kind: 'reword-text',
-      model,
-      packet,
-      problems: [model.message ?? 'model failure'],
-      shape: {},
-      steps: [],
-    }
-  }
-  const shape: RewordShape = {
-    featureName: written.featureName ?? 'Reword',
-    newText: written.newText,
-    summary: written.summary ?? '',
-    textHandle: target.handle,
-  }
-  const lowered = await lowerReword(snapshot, candidates, shape, readFile, problems)
-  return { ...lowered, kind: 'reword-text', model, packet, problems, shape: shape as unknown as Json }
-}
-
-function emptyShape(): FeatureShape {
-  return {
-    entity: '',
-    featureName: '',
-    fieldKind: 'yes/no',
-    fieldName: '',
-    label: '',
-    presentIn: '',
-    scenarioName: '',
-    summary: '',
-  }
-}
-
-type Edit = { start: number; end: number; replacement: string }
-
 function applyEdits(source: string, edits: Edit[]): string {
   // Applying back to front keeps earlier offsets valid, but only while the ranges are disjoint. Two edits
   // that share a start offset — an inserted import line and a replaced `use` line on the same first line —
@@ -446,7 +175,7 @@ export async function lowerReword(
   shape: RewordShape,
   readFile: ReadFile,
   problems: string[],
-): Promise<Pick<FeaturePlan, 'steps' | 'edits'>> {
+): Promise<FeatureLowering> {
   const steps: PlanStep[] = []
   const edits: FeatureEdit[] = []
   const target = candidates.find(c => c.handle === shape.textHandle)
@@ -514,14 +243,14 @@ export async function lowerFeature(
   shape: FeatureShape,
   readFile: ReadFile,
   problems: string[],
-): Promise<Pick<FeaturePlan, 'steps' | 'edits'>> {
+): Promise<FeatureLowering> {
   const steps: PlanStep[] = []
   // An app may declare its entity, its view, and its entry in one file, so every placement is collected as
   // a range edit against that file's original text and the file is rewritten once. Producing one whole-file
   // edit per placement would silently drop all but the last.
   const pending = new Map<string, Edit[]>()
   const stage = (path: string, ...list: Edit[]) => pending.set(path, [...(pending.get(path) ?? []), ...list])
-  const materialize = async (): Promise<Pick<FeaturePlan, 'steps' | 'edits'>> => {
+  const materialize = async (): Promise<FeatureLowering> => {
     const edits: FeatureEdit[] = []
     for (const [path, list] of pending) {
       const before = await readFile(path)

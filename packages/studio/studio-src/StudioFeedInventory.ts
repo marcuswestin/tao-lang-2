@@ -17,7 +17,7 @@ export type StudioFeedInventorySource =
   | Readonly<{ declaration: EntityGenerationDeclaration; kind: 'generated'; seed: string }>
   | Readonly<{ entity: string; kind: 'library' | 'live'; rows: readonly StudioFeedInventoryRow[] }>
 
-export type StudioFeedInventoryItem = Readonly<{
+type StudioFeedInventoryItem = Readonly<{
   entity: string
   fields: StudioJsonObject
   id: StudioFeedItemId

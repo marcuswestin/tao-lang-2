@@ -774,12 +774,3 @@ function truncate(value: Json, budget: number): Json {
   }
   return { ...trimmed, truncated: true }
 }
-
-export function snapshotToJson(snapshot: SemanticSnapshot): Json {
-  return {
-    app: snapshot.appName,
-    edges: snapshot.edges,
-    nodes: [...snapshot.nodes.values()],
-    diagnostics: snapshot.diagnostics.map(d => ({ file: d.filePath, message: d.message, severity: d.severity })),
-  }
-}

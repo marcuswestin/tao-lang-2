@@ -1,5 +1,5 @@
 import { FS, Platform, Text } from '@shared'
-import { mkTestDir } from '@shared/test'
+import { withTaoFiles } from '@shared/test'
 import { Writable } from 'node:stream'
 import type { InPlace } from '../cli-src/in-place-files'
 import { runTaoCli } from '../cli-src/tao-cli'
@@ -64,20 +64,12 @@ export const packageAwareCliPathCases: readonly PackageAwareCliPathCase[] = [
   },
 ]
 
-/** withTaoFixture writes a temp directory of files, runs the tests, and cleans up. */
+/** withTaoFixture writes the given files verbatim into a temp directory: the CLI sees exactly what the test wrote. */
 export async function withTaoFixture(
   files: Record<string, string>,
   testsFunction: (rootDir: string) => Promise<void>,
 ): Promise<void> {
-  const rootDir = await mkTestDir('tao-cli-test')
-  try {
-    for (const [relativePath, source] of Object.entries(files)) {
-      await FS.writeText(FS.resolvePath(relativePath, rootDir), source)
-    }
-    await testsFunction(rootDir)
-  } finally {
-    await FS.remove(rootDir)
-  }
+  await withTaoFiles('tao-cli-test', files, (_paths, rootDir) => testsFunction(rootDir), { verbatim: true })
 }
 
 /** statusByFile maps in-place results to root-relative paths for assertions. */

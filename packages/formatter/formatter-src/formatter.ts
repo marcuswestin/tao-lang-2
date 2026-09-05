@@ -13,12 +13,38 @@ export type FormatterSession = {
 
 /** formatCode formats Tao source code and returns the formatted text. */
 async function formatCode(code: string): Promise<string> {
-  return await Formatter.createSession().formatCode(code)
+  return await sharedSession().formatCode(code)
 }
 
 /** formatFile formats the Tao file at `path` and returns the formatted text without writing it. */
 async function formatFile(path: string): Promise<string> {
-  return await Formatter.createSession().formatFile(path)
+  return await sharedSession().formatFile(path)
+}
+
+let processSession: FormatterSession | undefined
+
+/**
+ * sharedSession is the one parser context every ad-hoc format call in this process reuses. Building a
+ * context means building the grammar, so a session per call made `tao fix` and every Studio source
+ * action pay that price per file. The session's document store holds one synthetic document per
+ * parse, so calls run one at a time on it; a caller formatting many sources in a batch may still
+ * hold its own `createSession()`.
+ */
+function sharedSession(): FormatterSession {
+  if (processSession === undefined) {
+    const session = createSession()
+    let queue: Promise<unknown> = Promise.resolve()
+    const serialized = <T>(work: () => Promise<T>): Promise<T> => {
+      const next = queue.then(work, work)
+      queue = next.catch(() => undefined)
+      return next
+    }
+    processSession = {
+      formatCode: code => serialized(() => session.formatCode(code)),
+      formatFile: path => serialized(() => session.formatFile(path)),
+    }
+  }
+  return processSession
 }
 
 /** createSession creates a reusable formatter context for batch formatting. */

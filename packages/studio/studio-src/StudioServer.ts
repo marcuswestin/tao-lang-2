@@ -1,7 +1,6 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
 import { CLI, Errors, Json, Repo } from '@shared'
 import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
-import { AgentPoc } from './agent-poc/AgentPocServer'
 import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
 import type { StudioDeviceLauncher } from './device/StudioDeviceLauncher'
 import type { StudioDeviceStateEvent } from './device/StudioDeviceStatus'
@@ -440,14 +439,14 @@ async function handleDeviceRequest(
 
 function devicePublicKeyRequest(value: unknown): { devicePublicKey: string } {
   if (!Json.isRecord(value) || typeof value['devicePublicKey'] !== 'string' || value['devicePublicKey'].trim() === '') {
-    throw new Errors.UserInputError('Expected the device public key.')
+    Errors.throwUserInput('Expected the device public key.')
   }
   return { devicePublicKey: value['devicePublicKey'] }
 }
 
 function deviceCellRequest(value: unknown): { cellId: string } {
   if (!Json.isRecord(value) || typeof value['cellId'] !== 'string' || value['cellId'].trim() === '') {
-    throw new Errors.UserInputError('Expected a Studio cell id.')
+    Errors.throwUserInput('Expected a Studio cell id.')
   }
   return { cellId: value['cellId'] }
 }
@@ -469,7 +468,7 @@ function deviceHighlightRequest(
     || !Number.isSafeInteger(occurrence['start'])
     || !Number.isSafeInteger(occurrence['end'])
   ) {
-    throw new Errors.UserInputError('Expected a Tao source occurrence to highlight.')
+    Errors.throwUserInput('Expected a Tao source occurrence to highlight.')
   }
   return {
     end: occurrence['end'] as number,
@@ -482,11 +481,11 @@ function deviceHighlightRequest(
 
 function deviceLaunchOpenRequest(value: unknown): { hostId: string; route: 'auto' | 'cable' } {
   if (!Json.isRecord(value) || typeof value['hostId'] !== 'string' || value['hostId'].trim() === '') {
-    throw new Errors.UserInputError('Expected the host id of the device to launch on.')
+    Errors.throwUserInput('Expected the host id of the device to launch on.')
   }
   const route = value['route']
   if (route !== undefined && route !== 'auto' && route !== 'cable') {
-    throw new Errors.UserInputError("Expected the launch route to be 'auto' or 'cable'.")
+    Errors.throwUserInput("Expected the launch route to be 'auto' or 'cable'.")
   }
   return { hostId: value['hostId'], route: route ?? 'auto' }
 }
@@ -587,13 +586,13 @@ function studioSessionRoute(pathname: string): { pathname: string; sessionId: st
 
 function projectOpenRequest(value: unknown): StudioProjectOpenRequest {
   if (!Json.isRecord(value) || typeof value['projectPath'] !== 'string') {
-    throw new Errors.UserInputError('Expected a project path and optional app name.')
+    Errors.throwUserInput('Expected a project path and optional app name.')
   }
   if (
     (value['appName'] !== undefined && typeof value['appName'] !== 'string')
     || (value['entryPath'] !== undefined && typeof value['entryPath'] !== 'string')
   ) {
-    throw new Errors.UserInputError('Expected a project path and optional app name.')
+    Errors.throwUserInput('Expected a project path and optional app name.')
   }
   return {
     ...(value['appName'] === undefined ? {} : { appName: value['appName'] }),
@@ -780,18 +779,6 @@ async function handleRequest(
       ),
     )
   }
-  if (url.pathname.startsWith('/api/agent-poc/')) {
-    return response(
-      request,
-      url,
-      options,
-      await AgentPoc.handle(
-        session,
-        url.pathname.slice('/api/agent-poc/'.length),
-        (await request.json()) as Record<string, unknown>,
-      ),
-    )
-  }
   if (request.method === 'GET' && url.pathname === '/api/ai/availability') {
     return response(request, url, options, await fixtureGeneration.availability())
   }
@@ -838,7 +825,7 @@ async function handleRequest(
 async function shipBeta(session: StudioProjectSession, ship: StudioBetaShip): Promise<void> {
   const key = `${session.projectRoot}\n${session.appName}`
   if (runningBetaShips.has(key)) {
-    throw new Errors.UserInputError(`A beta ship is already running for ${session.appName}.`)
+    Errors.throwUserInput(`A beta ship is already running for ${session.appName}.`)
   }
   const running = ship({
     appName: session.appName,
@@ -874,7 +861,7 @@ function inspectRenderRequest(value: unknown): { path: string; renderId: string;
     || typeof value['renderId'] !== 'string'
     || typeof value['sourceVersion'] !== 'string'
   ) {
-    throw new Errors.UserInputError('Expected a source path, version, and render id to inspect.')
+    Errors.throwUserInput('Expected a source path, version, and render id to inspect.')
   }
   return { path: value['path'], renderId: value['renderId'], sourceVersion: value['sourceVersion'] }
 }
@@ -882,7 +869,7 @@ function inspectRenderRequest(value: unknown): { path: string; renderId: string;
 function dataFillRequest(value: unknown): StudioServerFillRequest {
   const entities = new Set(['Checkpoints', 'DesignTokens', 'Files', 'Problems', 'Scenarios', 'Screens', 'Views'])
   if (!Json.isRecord(value) || typeof value['entity'] !== 'string' || !entities.has(value['entity'])) {
-    throw new Errors.UserInputError('Expected a valid StudioServer entity fill request.')
+    Errors.throwUserInput('Expected a valid StudioServer entity fill request.')
   }
   const where = value['where']
   if (
@@ -890,7 +877,7 @@ function dataFillRequest(value: unknown): StudioServerFillRequest {
     && (!Json.isRecord(where)
       || Object.values(where).some(item => !['boolean', 'number', 'string'].includes(typeof item)))
   ) {
-    throw new Errors.UserInputError('StudioServer fill filters must contain scalar values.')
+    Errors.throwUserInput('StudioServer fill filters must contain scalar values.')
   }
   return {
     entity: value['entity'] as StudioServerFillRequest['entity'],
@@ -920,7 +907,7 @@ function javascriptResponse(javascript: string): Response {
 function requiredPath(url: URL): string {
   const path = url.searchParams.get('path')
   if (path === null || path.trim().length === 0) {
-    throw new Errors.UserInputError('Missing Studio file path.')
+    Errors.throwUserInput('Missing Studio file path.')
   }
   return path
 }
@@ -928,7 +915,7 @@ function requiredPath(url: URL): string {
 function requiredCellId(url: URL): string {
   const cellId = url.searchParams.get('cellId')
   if (cellId === null || cellId.trim().length === 0) {
-    throw new Errors.UserInputError('Missing Studio cell id.')
+    Errors.throwUserInput('Missing Studio cell id.')
   }
   return cellId
 }
@@ -936,7 +923,7 @@ function requiredCellId(url: URL): string {
 function requiredPreviewInstanceId(url: URL): string {
   const previewInstanceId = url.searchParams.get('previewInstanceId')
   if (previewInstanceId === null || previewInstanceId.trim().length === 0) {
-    throw new Errors.UserInputError('Missing Studio preview instance id.')
+    Errors.throwUserInput('Missing Studio preview instance id.')
   }
   return previewInstanceId
 }
@@ -949,7 +936,7 @@ function draftWriteRequest(value: unknown): StudioDraftWriteRequest {
     || typeof value['sourceVersion'] !== 'string'
     || typeof value['writeId'] !== 'string'
   ) {
-    throw new Errors.UserInputError('Expected path, content, sourceVersion, and writeId for a Studio draft.')
+    Errors.throwUserInput('Expected path, content, sourceVersion, and writeId for a Studio draft.')
   }
   return {
     content: value['content'],
@@ -961,7 +948,7 @@ function draftWriteRequest(value: unknown): StudioDraftWriteRequest {
 
 function createFileRequest(value: unknown): StudioCreateFileRequest {
   if (!Json.isRecord(value) || typeof value['path'] !== 'string' || typeof value['writeId'] !== 'string') {
-    throw new Errors.UserInputError('Expected path and writeId to create a Studio file.')
+    Errors.throwUserInput('Expected path and writeId to create a Studio file.')
   }
   return { path: value['path'], writeId: value['writeId'] }
 }
@@ -974,7 +961,7 @@ function renameFileRequest(value: unknown): StudioRenameFileRequest {
     || typeof value['targetPath'] !== 'string'
     || typeof value['writeId'] !== 'string'
   ) {
-    throw new Errors.UserInputError('Expected path, targetPath, sourceVersion, and writeId to rename a Studio file.')
+    Errors.throwUserInput('Expected path, targetPath, sourceVersion, and writeId to rename a Studio file.')
   }
   return {
     path: value['path'],
@@ -992,7 +979,7 @@ function moveGeneratedSourceRequest(value: unknown): StudioMoveGeneratedSourceRe
     || typeof value['targetPackage'] !== 'string'
     || typeof value['writeId'] !== 'string'
   ) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       'Expected path, targetPackage, sourceVersion, and writeId to move generated source.',
     )
   }
@@ -1011,7 +998,7 @@ function deleteFileRequest(value: unknown): StudioDeleteFileRequest {
     || typeof value['sourceVersion'] !== 'string'
     || typeof value['writeId'] !== 'string'
   ) {
-    throw new Errors.UserInputError('Expected path, sourceVersion, and writeId to delete a Studio file.')
+    Errors.throwUserInput('Expected path, sourceVersion, and writeId to delete a Studio file.')
   }
   return { path: value['path'], sourceVersion: value['sourceVersion'], writeId: value['writeId'] }
 }

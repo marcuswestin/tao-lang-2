@@ -86,7 +86,7 @@ Describe('Studio isolated Hutch home', () => {
           attempt += 1
           await FS.copyDirectory(source, target)
           if (attempt === 1) {
-            throw new Errors.UnexpectedBehaviorError('Simulated interrupted copy.')
+            Errors.throwUnexpected('Simulated interrupted copy.')
           }
         },
         sourceHome,

@@ -213,6 +213,7 @@ Describe('native host takeover', () => {
 
     const message = await StudioNative.testing.stopNativeHostOwner(holder, {
       launches: async () => [launchRecord({ ownerPid: 1, processes: [] })],
+      ownerIsLive: async () => true,
       runner,
       sleep: async () => {},
     })
@@ -221,5 +222,17 @@ Describe('native host takeover', () => {
     Expect(commands[0]).toEqual(['/bin/kill', '-TERM', '46359'])
     Expect(commands.some(command => command[1] === '-KILL')).toBe(false)
     Expect(probes).toBe(3)
+  })
+
+  Test('signals nothing when the holder no longer runs under the PID its lease recorded', async () => {
+    const message = await StudioNative.testing.stopNativeHostOwner(holder, {
+      launches: async () => [],
+      ownerIsLive: async () => false,
+      runner: async () => Errors.throwUnexpected('Expected: no process signalled once the holder has ended.'),
+    })
+
+    Expect(message).toBe(
+      'studio-native (PID 46359) in /worktrees/studio-visual-design had already ended; nothing to stop',
+    )
   })
 })

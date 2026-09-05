@@ -68,6 +68,7 @@ Describe('compiler: interaction attention', () => {
         render Text("Focus session") [fill when focused, hug when Sidebar is active,
           compress when Scheme is Dark]
       }
+      view Sidebar() { render Text("Sidebar") }
       view StatusBar() { render Text("Focus session") }
     `)
 

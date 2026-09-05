@@ -5,7 +5,7 @@ import { authoringTools, type CodeChangeRequest } from '../studio-src/agent-chat
 import { parseChecks, viewCoverage } from '../studio-src/agent-chat/AgentChatCoverage'
 import { taoGuarantees } from '../studio-src/agent-chat/AgentChatGuarantees'
 import type { AgentChatWriteWorld } from '../studio-src/agent-chat/AgentChatWrites'
-import type { SemanticSnapshot, SnapshotNode } from '../studio-src/agent-poc/SemanticSnapshot'
+import type { SemanticSnapshot, SnapshotNode } from '../studio-src/agent-chat/SemanticSnapshot'
 
 const PATH = 'App.tao'
 const TEST_PATH = 'App.test.tao'

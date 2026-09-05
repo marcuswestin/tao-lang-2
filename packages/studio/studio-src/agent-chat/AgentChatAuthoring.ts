@@ -9,11 +9,11 @@ import { Text } from '@shared/core'
 
 import Formatter from '@formatter'
 import { jsonSchema, tool, type ToolSet } from 'ai'
-import { resolveTarget } from '../agent-poc/SemanticSnapshot'
 import { LIST, objectSchema, refusal, TEXT } from './AgentChatSchema'
 import { requireOnly } from './AgentChatScope'
 import type { AgentChatToolCall } from './AgentChatTools'
 import type { AgentChatWriteWorld } from './AgentChatWrites'
+import { resolveTarget } from './SemanticSnapshot'
 
 export type CodeChangeRequest = { reason: string; missing: string }
 

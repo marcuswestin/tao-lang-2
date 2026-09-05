@@ -2,8 +2,6 @@
 
 import { FS, Repo } from '@shared'
 import type { ToolSet } from 'ai'
-import { type FeatureTestVerdict, featureTestVerdict, type TestRunSummary } from '../agent-poc/FeatureVerdict'
-import { buildSemanticSnapshot, resolveTarget, type SemanticSnapshot } from '../agent-poc/SemanticSnapshot'
 import type { StudioProjectSession } from '../StudioProjectSession'
 import type { StudioTestRunner } from '../StudioTestRunner'
 import { authoringTools, type CodeChangeRequest } from './AgentChatAuthoring'
@@ -19,6 +17,8 @@ import {
   type StagedChange,
   writeTools,
 } from './AgentChatWrites'
+import { type FeatureTestVerdict, featureTestVerdict, type TestRunSummary } from './FeatureVerdict'
+import { buildSemanticSnapshot, resolveTarget, type SemanticSnapshot } from './SemanticSnapshot'
 
 type Json = Record<string, unknown>
 
@@ -63,7 +63,7 @@ function worldFor(session: StudioProjectSession): AgentChatWorld & { invalidate:
     },
     snapshot: async () => {
       snapshot ??= (async () => {
-        const parsed = await session.agentPocParse()
+        const parsed = await session.agentParse()
         return buildSemanticSnapshot(session.projectRoot, session.appName, parsed.files, parsed.diagnostics)
       })()
       return await snapshot
@@ -219,7 +219,7 @@ class AgentChatConversation {
     return {
       ...this.#reading(),
       apply: async change => {
-        const result = await this.#session.applyAgentPocFiles({
+        const result = await this.#session.applyAgentFiles({
           edits: change.edits.map(edit => ({ content: edit.after, path: edit.path })),
           expect: change.expect,
           writeId: crypto.randomUUID(),
@@ -245,7 +245,7 @@ class AgentChatConversation {
         return this.#lastVerdict
       },
       undo: async () => {
-        const result = await this.#session.undoAgentPocFiles(crypto.randomUUID())
+        const result = await this.#session.undoAgentFiles(crypto.randomUUID())
         this.#world.invalidate()
         return { message: result.compile.message, restored: result.restored, status: result.compile.status }
       },

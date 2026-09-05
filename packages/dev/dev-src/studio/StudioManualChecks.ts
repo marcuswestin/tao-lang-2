@@ -46,7 +46,7 @@ async function run(
   dependencies: StudioManualCheckDependencies = systemDependencies,
 ): Promise<number> {
   if (!dependencies.isInteractive()) {
-    throw new Errors.UserInputError('Studio manual checks require an interactive terminal and desktop session.')
+    Errors.throwUserInput('Studio manual checks require an interactive terminal and desktop session.')
   }
   const repositoryRoot = Repo.getRoot()
   const artifactRoot = FS.resolvePath(

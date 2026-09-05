@@ -2,6 +2,7 @@ import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
+import { primitiveSlots } from './workspace-index'
 
 export const declarationSlotValidationMessages = {
   placement: 'Supplied slots are allowed only as direct members of a view or named action body.',
@@ -28,7 +29,7 @@ function validateDeclarationSlotFill(fill: AST.DeclarationSlotFill, ctx: Validat
     return
   }
   const kind = AST.isViewDeclaration(owner) ? (owner.scene ? 'scene' : 'view') : 'action'
-  const contract = AST.primitiveSlots(ctx.workspaceFiles, kind)
+  const contract = primitiveSlots(ctx, kind)
   const property = contract.find(candidate => candidate.name === fill.name)
   if (!property) {
     ctx.error(declarationSlotValidationMessages.unknown(kind, fill.name), fill)

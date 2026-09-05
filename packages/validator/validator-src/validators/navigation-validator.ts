@@ -176,10 +176,19 @@ function navRenderSites(
   ctx: ValidationContext,
 ): AST.Render[] {
   if (target.kind === 'nav') {
-    return ctx.workspaceFiles
-      .flatMap(file => [...AST.streamAllContents(file)])
-      .filter(AST.isRender)
-      .filter(candidate => candidate.view?.ref === target.declaration)
+    const rendersByView = ctx.memo('navigation-validator.rendersByView', () => {
+      const index = new Map<AST.Node, AST.Render[]>()
+      for (
+        const candidate of ctx.workspaceFiles.flatMap(file => [...AST.streamAllContents(file)]).filter(AST.isRender)
+      ) {
+        const rendered = candidate.view?.ref
+        if (rendered !== undefined) {
+          index.set(rendered, [...(index.get(rendered) ?? []), candidate])
+        }
+      }
+      return index
+    })
+    return rendersByView.get(target.declaration) ?? []
   }
   const owner = AST.findOwningView(render)
   if (target.kind !== 'parameter' || !owner) {
@@ -545,7 +554,7 @@ function validatePresentedViewTitle(
   }
   if (!presentation.target) {
     const owner = AST.findOwningView(presentation)
-    const reachability = stackReachability(ctx.workspaceFiles)
+    const reachability = ctx.memo('navigation-validator.stackReachability', () => stackReachability(ctx.workspaceFiles))
     if (
       owner
       && reachability.pushContexts.has(canonicalView(owner))

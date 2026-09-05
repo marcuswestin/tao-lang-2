@@ -9,8 +9,8 @@ import {
   lowerReword,
   type RewordShape,
   textCandidates,
-} from '../studio-src/agent-poc/FeaturePlan'
-import type { SemanticSnapshot, SnapshotNode } from '../studio-src/agent-poc/SemanticSnapshot'
+} from '../studio-src/agent-chat/FeaturePlan'
+import type { SemanticSnapshot, SnapshotNode } from '../studio-src/agent-chat/SemanticSnapshot'
 
 const PATH = 'App.tao'
 
@@ -132,7 +132,7 @@ const FLAG_SHAPE: FeatureShape = {
   summary: 'x',
 }
 
-Describe('Semantic agent PoC feature planning', () => {
+Describe('Agent feature lowering', () => {
   Test('lists every literal a view renders as a rewordable candidate', () => {
     const candidates = textCandidates(snapshot())
 

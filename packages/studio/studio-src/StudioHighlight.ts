@@ -74,10 +74,10 @@ function highlightRequest(input: unknown): StudioHighlightRequest {
     || !('content' in input)
     || typeof input.content !== 'string'
   ) {
-    throw new Errors.UserInputError('Expected Tao source content for Studio highlighting.')
+    Errors.throwUserInput('Expected Tao source content for Studio highlighting.')
   }
   if (input.content.length > maximumHighlightLength) {
-    throw new Errors.UserInputError(`Studio highlighting is limited to ${maximumHighlightLength} characters.`)
+    Errors.throwUserInput(`Studio highlighting is limited to ${maximumHighlightLength} characters.`)
   }
   return { content: input.content }
 }

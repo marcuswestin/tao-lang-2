@@ -25,6 +25,8 @@ const viewValidationMessages = {
   loopSelectInline: '`on select` requires an inline action block.',
   renderTarget: '`render` must target a view or inject block.',
   sceneComposed: (name: string) => `Scene '${name}' is presented, never composed. Present it, or declare it as a view.`,
+  sceneBoundToView: (scene: string, parameter: string) =>
+    `Scene '${scene}' cannot be bound to view parameter '${parameter}'; a view renders it inline where no host reads its chrome.`,
   headerlessChrome: (name: string, slot: string) =>
     `Scene '${name}' fills Header false, so ${slot} would declare chrome nothing reads.`,
   renderInjectPlacement: '`render inject` must be the only statement in a view body.',
@@ -339,6 +341,24 @@ function validateRender(
   if (AST.isViewDeclaration(effectiveTarget) && effectiveTarget.scene) {
     const renderedName = AST.isViewDeclaration(target) ? target.name : effectiveTarget.name
     ctx.error(viewValidationMessages.sceneComposed(renderedName), render)
+  }
+  // The same fact through a parameter: a scene handed to a `view`-typed slot is rendered inline by
+  // the receiving view, so it is refused where it is bound rather than escaping the rule above.
+  if (AST.isViewDeclaration(effectiveTarget) && !effectiveTarget.scene) {
+    for (const pair of ASTUtils.resolveArgumentBindings(effectiveTarget, render).pairs) {
+      const expected = Type.ofParameter(pair.parameter)
+      const value = pair.argument.value
+      if (expected.kind !== 'primitive' || expected.primitive !== 'view' || !AST.isValueReference(value)) {
+        continue
+      }
+      const bound = value.target.ref
+      if (AST.isViewDeclaration(bound) && bound.scene) {
+        ctx.error(
+          viewValidationMessages.sceneBoundToView(bound.name, Type.parameterName(pair.parameter)),
+          pair.argument,
+        )
+      }
+    }
   }
   if (render.block) {
     validateRenderBlock(render.block, ctx)

@@ -45,7 +45,7 @@ export function valueMatchesParameter(value: StudioJsonValue, parameter: StudioP
 /** validateTaoSource rejects a source anchor that is not a well-formed Tao range. */
 export function validateTaoSource(source: StudioTaoSource, label: string): void {
   if (source.kind !== 'tao') {
-    throw new Errors.UserInputError(`${label} must be Tao source.`)
+    Errors.throwUserInput(`${label} must be Tao source.`)
   }
   requireText(source.path, `${label} path`)
   if (
@@ -54,14 +54,14 @@ export function validateTaoSource(source: StudioTaoSource, label: string): void 
     || source.range.start < 0
     || source.range.end < source.range.start
   ) {
-    throw new Errors.UserInputError(`${label} range is invalid.`)
+    Errors.throwUserInput(`${label} range is invalid.`)
   }
 }
 
 /** requireText rejects an empty or blank string where a label, path, or id is required. */
 export function requireText(value: string, label: string): string {
   if (typeof value !== 'string' || value.trim() === '') {
-    throw new Errors.UserInputError(`${label} must not be empty.`)
+    Errors.throwUserInput(`${label} must not be empty.`)
   }
   return value
 }

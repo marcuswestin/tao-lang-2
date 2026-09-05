@@ -88,7 +88,7 @@ export class StudioSessionManager {
 
   async open(request: StudioProjectOpenRequest): Promise<StudioCurrentSession> {
     if (this.#openProject === undefined) {
-      throw new Errors.UserInputError('Opening projects is not available from this Studio server.')
+      Errors.throwUserInput('Opening projects is not available from this Studio server.')
     }
     validateOpenRequest(request)
     return this.add(await this.#openProject(request))
@@ -118,7 +118,7 @@ export class StudioSessionManager {
   require(sessionId: string): StudioSessionResource {
     const resource = this.get(sessionId)
     if (resource === undefined) {
-      throw new Errors.UserInputError('Studio session is not open.')
+      Errors.throwUserInput('Studio session is not open.')
     }
     return resource
   }
@@ -232,6 +232,6 @@ function validateOpenRequest(request: StudioProjectOpenRequest): void {
     || (request.entryPath !== undefined
       && (typeof request.entryPath !== 'string' || request.entryPath.trim().length === 0))
   ) {
-    throw new Errors.UserInputError('Expected a project path and optional app name and entry path.')
+    Errors.throwUserInput('Expected a project path and optional app name and entry path.')
   }
 }

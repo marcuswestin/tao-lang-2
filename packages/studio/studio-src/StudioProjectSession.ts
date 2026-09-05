@@ -671,10 +671,10 @@ export class StudioProjectSession {
   #agentUndoStack: { path: string; content: string; sourceVersion: string }[][] = []
 
   /**
-   * applyAgentPocFiles (semantic agent PoC) writes several files as one mutation, compiles once, and rolls every
+   * applyAgentFiles writes several files as one mutation, compiles once, and rolls every
    * file back when the compile fails. It keeps one undo record outside the source-action checkpoint bus.
    */
-  applyAgentPocFiles(
+  applyAgentFiles(
     request: {
       edits: readonly { path: string; content: string }[]
       writeId: string
@@ -728,7 +728,7 @@ export class StudioProjectSession {
     })
   }
 
-  undoAgentPocFiles(writeId: string): Promise<{ compile: StudioCompileCompletion; restored: string[] }> {
+  undoAgentFiles(writeId: string): Promise<{ compile: StudioCompileCompletion; restored: string[] }> {
     return this.#mutate(async () => {
       const before = this.#agentUndoStack[this.#agentUndoStack.length - 1]
       Assert.input(before !== undefined, 'Nothing applied by the agent to undo.')
@@ -746,8 +746,8 @@ export class StudioProjectSession {
     })
   }
 
-  /** agentPocParse (semantic agent PoC) parses the selected app entry with linked cross-references. */
-  agentPocParse(): Promise<ParseResult> {
+  /** agentParse parses the selected app entry with linked cross-references. */
+  agentParse(): Promise<ParseResult> {
     return this.#workspace.parse(this.entryPath)
   }
 
@@ -3500,22 +3500,18 @@ export type StudioSourceActionConflictDetails = {
 }
 
 /** StudioSourceActionConflictError carries stable, UI-safe conflict details across the Studio server boundary. */
-export class StudioSourceActionConflictError extends Error {
-  override readonly name: string = 'StudioSourceActionConflictError'
-
+export class StudioSourceActionConflictError extends Errors.UserInputError {
   constructor(
     readonly code: StudioSourceActionConflictCode,
     message: string,
-    readonly details: StudioSourceActionConflictDetails,
+    override readonly details: StudioSourceActionConflictDetails,
   ) {
-    super(message)
+    super(message, details)
   }
 }
 
 /** StudioSourceConflictError reports optimistic source-version mismatches as HTTP 409 at the server boundary. */
 export class StudioSourceConflictError extends StudioSourceActionConflictError {
-  override readonly name = 'StudioSourceConflictError'
-
   constructor(
     readonly path: string,
     readonly expectedSourceVersion: string,

@@ -700,7 +700,7 @@ Describe('Studio sketch session protocol', () => {
         Expect(await FS.isFile(FS.resolvePath('@/studio/View1.tao', root))).toBe(true)
       }, () => {
         if (fail) {
-          throw new Errors.UserInputError('Generated preview is invalid.')
+          Errors.throwUserInput('Generated preview is invalid.')
         }
       })
     },

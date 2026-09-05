@@ -1,4 +1,4 @@
-import { Errors } from '@shared'
+import { Errors, Http } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   assertUpdateCompatibility,
@@ -40,7 +40,7 @@ Describe('Tao expo-updates service client', () => {
 
   Test('publishes a release bundle through the Tao management endpoint', async () => {
     const published = publication('update-2', '2026-09-02T16:00:00.000Z')
-    const recorded = recordedFetch([jsonResponse(published)])
+    const recorded = recordedFetch([Http.jsonResponse(published)])
     const client = updateClient(recorded.fetch)
 
     Expect(
@@ -99,7 +99,7 @@ Describe('Tao expo-updates service client', () => {
       key: 'launch',
       url: 'https://updates.tao-lang.dev/assets/launch-hash.js',
     }
-    const recorded = recordedFetch([jsonResponse(uploaded)])
+    const recorded = recordedFetch([Http.jsonResponse(uploaded)])
 
     Expect(
       await updateClient(recorded.fetch).uploadAsset({
@@ -130,7 +130,7 @@ Describe('Tao expo-updates service client', () => {
       ...publication('update-3', '2026-09-02T17:00:00.000Z'),
       sourceUpdateId: 'update-1',
     }
-    const recorded = recordedFetch([jsonResponse(earlier), jsonResponse(rollback)])
+    const recorded = recordedFetch([Http.jsonResponse(earlier), Http.jsonResponse(rollback)])
     const client = updateClient(recorded.fetch)
 
     Expect(
@@ -303,8 +303,4 @@ function recordedFetch(responses: readonly Response[]): {
     },
     requests,
   }
-}
-
-function jsonResponse(value: unknown, status = 200): Response {
-  return new Response(JSON.stringify(value), { status })
 }

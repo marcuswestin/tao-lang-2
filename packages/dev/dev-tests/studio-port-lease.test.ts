@@ -50,7 +50,7 @@ Describe('Studio smoke port leases', () => {
       await Expect(StudioSmoke.reserveResources({
         ...options,
         portsAvailable: async () => {
-          throw new Errors.HostEnvironmentError('bind probe unavailable')
+          Errors.throwHostEnvironment('bind probe unavailable')
         },
       })).rejects.toThrow('bind probe unavailable')
 
