@@ -163,6 +163,7 @@ async function prepareShip(
     keyId: accepted?.keyId,
     localDatasourceEndpoint: app.hasLocalDatasourceEndpoint,
     releaseDatasourceConfiguration: accepted?.datasourceConfiguration,
+    usesDevDatasource: app.usesDevDatasource,
   })
   return {
     actions,

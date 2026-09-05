@@ -112,6 +112,31 @@ advertises actually answers, so a caller that sees it can open that address imme
 manifest reaches `ready` at the same moment and for the same reason; a launch whose page never
 answers is recorded `failed` and stops, rather than idling in a state that reads as usable.
 
+## Dev data
+
+An app that configures `Datasource Dev` (`Docs/Spec/Tao Data.md`, _The Dev datasource_) keeps its
+rows on this machine, not on the device. Every Studio launch and every `tao dev` run starts one
+**dev data server** (`tao-dev-data-v1`) beside Metro on an ephemeral port — Studio logs it as
+`Dev data: tao-dev-data-v1 on port <port>` and `--json` carries it as `devDataPort`; `tao dev`
+prints it with the Metro port. Each project Studio opens gets its own app key in its preview
+manifest, so several projects share one server without sharing rows.
+
+- **Where the rows are:** `.artifacts/user/dev-data/<app key>/<storage key>.json`, one complete
+  snapshot per file. The app key is the app name plus a digest of its project root, the same from
+  Studio and from `tao dev`. Delete a directory to start that app clean; the next connection
+  serves an empty snapshot.
+- **Which devices sync:** everything running that app's development build against this dev
+  server — the Studio canvas, a browser tab opened on Metro's URL, simulators, and a paired phone.
+  A build finds the server through the host its bundle loaded from plus the port in its Expo
+  manifest (`expo.extra.taoDevData`), so a phone that reaches Metro reaches the data server too.
+- **Schema edits:** when a stored snapshot no longer parses under the new schema, the first client
+  to load it resets the stream and every peer receives the empty snapshot. A device still running
+  the old bundle then writes old-shaped rows, which a new-schema peer reports as a recoverable sync
+  failure until Fast Refresh catches it up.
+- **Stopping Studio** keeps the files; only the sockets close. Apps left running show a sync
+  failure and reconnect on their own when the next dev server starts on the same port, or after a
+  reload when it does not.
+
 ## Ports
 
 | Port      | Owner                         | Notes                                                  |

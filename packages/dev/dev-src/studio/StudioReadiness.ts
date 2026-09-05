@@ -15,6 +15,8 @@ const READY_POLL_MS = 100
 export type StudioReadiness = {
   appName?: string
   artifactRoot: string
+  /** The tao-dev-data-v1 port a preview's `Dev` datasource dials; absent when no dev data server started. */
+  devDataPort?: number
   /** The tao-studio-device-v1 gateway port a companion build dials; absent when no gateway started. */
   deviceGatewayPort?: number
   launchId: string

@@ -403,6 +403,74 @@ Describe('TR.Data provider foundation', () => {
     Expect(rows.Error).toContain('entity collections do not match')
   })
 
+  Test('resets a disposable store itself when its starting snapshot no longer parses', async () => {
+    let stored: string | undefined = '{"formatVersion":1,"schemaVersion":1,"nextId":2,"rows":{}}'
+    let resets = 0
+    const connection: TaoDataConnection = {
+      automaticReset: true,
+      load: () => stored,
+      reset: () => {
+        resets += 1
+        stored = undefined
+      },
+      save: value => {
+        stored = value
+      },
+    }
+    const schema = TR.Data.Schema(noteDefinition, connection)
+    await TR.Data.Settle(schema)
+    await flushMicrotasks()
+    await TR.Data.Settle(schema)
+
+    Expect(resets).toBe(1)
+    const rows = schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }
+    Expect(rows).toHaveLength(0)
+    Expect(rows.Error).toBe('')
+
+    TR.Data.Create(schema, 'Note', { Title: TR.Value('Fresh') })
+    await TR.Data.Settle(schema)
+    Expect(stored).toContain('Fresh')
+  })
+
+  Test('spends one automatic reset per corrupt load and then reports the failure', async () => {
+    const corrupt = '{"formatVersion":1,"schemaVersion":1,"nextId":2,"rows":{}}'
+    let resets = 0
+    const connection: TaoDataConnection = {
+      automaticReset: true,
+      load: () => corrupt,
+      reset: () => {
+        resets += 1
+      },
+      save: () => {},
+    }
+    const schema = TR.Data.Schema(noteDefinition, connection)
+    await TR.Data.Settle(schema)
+    await flushMicrotasks()
+    await TR.Data.Settle(schema)
+
+    Expect(resets).toBe(1)
+    const rows = schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }
+    Expect(rows.Error).toContain('entity collections do not match')
+  })
+
+  Test('never resets a corrupt store that did not opt into automatic reset', async () => {
+    let resets = 0
+    const connection: TaoDataConnection = {
+      load: () => '{"formatVersion":1,"schemaVersion":1,"nextId":2,"rows":{}}',
+      reset: () => {
+        resets += 1
+      },
+      save: () => {},
+    }
+    const schema = TR.Data.Schema(noteDefinition, connection)
+    await TR.Data.Settle(schema)
+    await flushMicrotasks()
+
+    Expect(resets).toBe(0)
+    const rows = schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }
+    Expect(rows.Error).toContain('entity collections do not match')
+  })
+
   Test('rejects persisted duplicate identifiers before handles can let rows', async () => {
     const duplicateRows = JSON.stringify({
       formatVersion: 1,

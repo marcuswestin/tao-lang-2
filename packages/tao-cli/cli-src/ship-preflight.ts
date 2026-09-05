@@ -16,6 +16,8 @@ export type ShipPreflightInput = {
   keyId?: string
   localDatasourceEndpoint?: boolean
   releaseDatasourceConfiguration?: Readonly<Record<string, string>>
+  /** The app configures the development-only `Dev` datasource; a build of it has no data anywhere. */
+  usesDevDatasource?: boolean
 }
 
 type CommandRunner = typeof CLI.run
@@ -84,6 +86,13 @@ export async function inspectShipPreflight(
       kind: 'user',
       message:
         'The selected app uses a localhost datasource. Accept a hosted datasource configuration before shipping.',
+    })
+  }
+  if (input.usesDevDatasource) {
+    issues.push({
+      kind: 'user',
+      message:
+        'The selected app uses the Dev datasource, which only works beside a running Tao dev server. Ship an app variant with a shippable datasource instead.',
     })
   }
   return issues

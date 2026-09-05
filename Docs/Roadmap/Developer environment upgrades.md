@@ -948,3 +948,26 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** A documented one-line way to run a scratch TypeScript file against `@shared` and
   friends from outside the source tree.
 - **Source:** 2026-09-04 `tao create` review.
+
+### DEVENV-053 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial
+
+- **Status:** Candidate
+- **Area:** Package tests
+- **Impact:** Under the dev suite's `--concurrent` flag, a test that stops a `Bun.serve` with
+  `stop(true)` while another test's same-process `WebSocket` client is mid-dial to a different
+  server leaves that dial without an `open`, `error`, or `close` event, so the second test hangs to
+  its timeout. The lane reports it as a test assertion, not contention, and it reproduces only with
+  several server tests in one file.
+- **Evidence:** `bun test --concurrent packages/dev/dev-tests/dev-data.test.ts` on bun 1.3.13 hung the
+  sync and conformance tests 12 of 12 runs until the client bounded its dials; a socket trace showed
+  the dial coinciding with another test's `close 1006 Connection ended`. Serial runs and a scratch
+  script with the same steps never reproduced it.
+- **Workaround:** Bound every in-process dial and redial when it neither opens nor fails, as the
+  `Dev` datasource client now does; or keep tests that stop a server with a live client in files
+  that do not also dial other servers.
+- **Proposed change:** A shared test helper for `Bun.serve`-backed tests that stops servers only
+  after their own clients closed, or a note in the test-quality skill naming this hazard.
+- **Dependencies:** None.
+- **Acceptance:** A test file with several servers and clients passes under `--concurrent` without
+  each client needing its own dial bound.
+- **Source:** 2026-09-05 Dev datasource implementation.

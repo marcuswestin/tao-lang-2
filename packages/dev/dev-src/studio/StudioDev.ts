@@ -18,6 +18,8 @@ import {
   type StudioSessionResource,
 } from '@studio'
 import betterOpen from 'better-opn'
+import { DEV_DATA_ROOT_PATH, devDataAppKey, devDataManifest } from '../dev-data/DevDataBootstrap'
+import { DevDataServer } from '../dev-data/DevDataServer'
 import { ExpoRunner } from '../expo-dev-loop/expo-runner/ExpoRunner'
 import { detectLanIPv4 } from '../expo-dev-loop/expo-runner/lan-host'
 import { readDecryptedSecrets } from '../secrets/SecretsFile'
@@ -47,6 +49,8 @@ export type StudioDevOptions = {
   nativeShowWindow?: boolean
   port?: number
   projectRoot: string
+  /** Where the dev data server persists app snapshots; defaults to the repository's user artifacts. */
+  devDataRoot?: string
   userStateRoot?: string
 }
 
@@ -85,6 +89,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
   let manager: StudioSessionManager | undefined
   let studioClientReload: StartedStudioClientDevReload | undefined
   let deviceGateway: StudioDeviceGateway | undefined
+  let devDataServer: DevDataServer | undefined
   let trustStore: StudioDeviceTrustStore | undefined
   const userStateRoot = options.userStateRoot ?? Repo.resolvePath('.artifacts/user/studio')
   const recentProjects = createRecentProjectStore(FS.resolvePath('recent-projects.json', userStateRoot))
@@ -131,10 +136,19 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     lifecycle.record({ component: 'device-gateway', event: 'port-allocated', port: deviceGateway.port })
     HCI.logProcessInfo('studio', `Device gateway: tao-studio-device-v1 on port ${deviceGateway.port}`)
     const gatewayPort = deviceGateway.port
+    // One dev data server serves every project this Studio opens; each project's preview manifest
+    // names its own app key, so the projects' `Dev` datasources never share a stream.
+    devDataServer = await DevDataServer.start({
+      log: line => HCI.logProcessInfo('studio-data', line),
+      rootDir: options.devDataRoot ?? Repo.resolvePath(DEV_DATA_ROOT_PATH),
+    })
+    HCI.logProcessInfo('studio', `Dev data: tao-dev-data-v1 on port ${devDataServer.port}`)
+    const devDataPort = devDataServer.port
     const projects = createProjectOpeners(
       options.entryPath,
       async (request, entryPath) =>
         await openStudioProjectResource(request, {
+          devDataPort,
           deviceGatewayPort: gatewayPort,
           entryPath,
           isStopping: () => requestedStop,
@@ -242,6 +256,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
           writeReadiness({
             appName: options.appName,
             artifactRoot,
+            devDataPort: devDataServer.port,
             deviceGatewayPort: deviceGateway.port,
             launchId: launch.launchId,
             lifecycleLogPath: lifecycle.path,
@@ -296,6 +311,7 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
         () => studioClientReload?.close(),
         () => server?.stop(),
         () => deviceGateway?.stop(),
+        () => devDataServer?.stop(),
         () => manager?.closeAll(),
         () => foundationModels?.stop(),
         () => trustStore?.flush(),
@@ -401,6 +417,8 @@ async function publishPreviewBeforeBundling(steps: {
 export async function openStudioProjectResource(
   request: StudioProjectOpenRequest,
   options: {
+    /** The dev data server port written into the preview manifest; absent in launches without one. */
+    devDataPort?: number
     /** The device gateway port written into the preview manifest; absent in launches without a gateway. */
     deviceGatewayPort?: number
     entryPath: string | undefined
@@ -457,6 +475,13 @@ export async function openStudioProjectResource(
     })
     watcher = await startStudioFileWatcher(preview.session)
     const session = preview.session
+    if (options.devDataPort !== undefined) {
+      // The app key needs the session's resolved app name, and Metro has not started yet, so the
+      // manifest still takes the fact before any bundle is served.
+      await previewRuntime.configure({
+        devData: devDataManifest(options.devDataPort, devDataAppKey(project.projectRoot, session.appName)),
+      })
+    }
     const bundler = expoServer
     await publishPreviewBeforeBundling({
       compilePreview: () => session.compileInitial(),
