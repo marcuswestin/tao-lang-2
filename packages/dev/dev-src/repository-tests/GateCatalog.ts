@@ -71,6 +71,21 @@ function testCost(): number {
   return Math.max(2, Platform.cpuCount() - SLOTS_BESIDE_TEST)
 }
 
+/** testGate is the shape the complete and changed-files test gates share. */
+function testGate(): GateMetadata {
+  return {
+    // `just _test` hides the nested runner behind a recipe name, so the graph cannot infer the
+    // budget key from the command it starts. Naming it here is what makes `cost` an enforced
+    // bound on `./dev test` rather than a reservation it ignores.
+    budgetEnvKeys: [WorkGraph.BUDGET_ENV_KEYS.devTest],
+    cost: testCost(),
+    // The tao-apps suite runs against the compiled WordFlower app, and a stale generated app is
+    // worse than a slow one.
+    needs: ['_compile-word-flower-app'],
+    priority: TEST_PRIORITY,
+  }
+}
+
 /** studioLane is the shape every `full-verify` browser or native UI node shares. */
 function studioLane(resources?: readonly string[]): GateMetadata {
   return {
@@ -104,20 +119,10 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ['_ide-extension-build', { needs: ['_parser-gen'] }],
     ['_tao-check', { cost: TAO_CHECK_COST, needs: ['_parser-gen'] }],
     ['_typecheck', { cost: TYPECHECK_COST, priority: TYPECHECK_PRIORITY }],
-    [
-      '_test',
-      {
-        // `just _test` hides the nested runner behind a recipe name, so the graph cannot infer the
-        // budget key from the command it starts. Naming it here is what makes `cost` an enforced
-        // bound on `./dev test` rather than a reservation it ignores.
-        budgetEnvKeys: [WorkGraph.BUDGET_ENV_KEYS.devTest],
-        cost: testCost(),
-        // The tao-apps suite runs against the compiled WordFlower app, and a stale generated app is
-        // worse than a slow one.
-        needs: ['_compile-word-flower-app'],
-        priority: TEST_PRIORITY,
-      },
-    ],
+    ['_test', testGate()],
+    // The changed-files selection of the same runner, for `verify --changed`. It reserves the same
+    // width because a change in `shared` still selects every suite.
+    ['_test-changed', testGate()],
 
     // Sub-second gates that read the tree and nothing else.
     ['_dprint-check', {}],

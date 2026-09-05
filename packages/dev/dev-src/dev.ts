@@ -4,6 +4,7 @@ import { runWithCommands } from './cli/run-with-commands'
 import { AgentCapabilitiesCommand } from './doctor/AgentCapabilitiesCommand'
 import { RepositoryDoctorCommand } from './doctor/RepositoryDoctorCommand'
 import { runGates } from './repository-tests/GateRunner'
+import { GreenTree } from './repository-tests/GreenTree'
 import { MergeWithMainCommand } from './repository-tests/MergeWithMain'
 import { formatGateSummary, gateExitCode } from './repository-tests/RunSummary'
 import { TestRunner } from './repository-tests/TestRunner'
@@ -23,6 +24,8 @@ type TestCommandOptions = {
 }
 
 type GatesCommandOptions = {
+  fresh?: boolean
+  greenTree?: string[]
   jobs?: string
   json?: string
   lane?: string
@@ -112,9 +115,17 @@ await runWithCommands(commands => {
     .option('--output <mode>', OUTPUT_OPTION_HELP)
     .option('--skip-unsandboxed', 'Skip gates whose catalog metadata requires an unsandboxed host.')
     .option('--skipped <entry...>', 'Gates deliberately not run in this lane, as name=reason.')
+    .option(
+      '--green-tree <lanes...>',
+      'Skip the run when the tree is already recorded green under any of these lanes; record this run under the first.',
+    )
+    .option('--fresh', 'Ignore recorded green trees and run every gate.')
     .action(async (gates: string[], options: GatesCommandOptions = {}) => {
       const summary = await runGates({
         gates,
+        greenTree: options.greenTree === undefined || options.greenTree.length === 0
+          ? undefined
+          : { fresh: options.fresh === true, lanes: options.greenTree },
         jobs: parseOptionalPositiveInteger(options.jobs, '--jobs'),
         jsonPath: options.json,
         lane: options.lane,
@@ -122,6 +133,10 @@ await runWithCommands(commands => {
         skipUnsandboxed: options.skipUnsandboxed === true,
         skipped: options.skipped,
       })
+      if (summary.greenTree !== undefined) {
+        HCI.writeSuccess(`${GreenTree.describe(summary.lane, summary.greenTree)}\n`)
+        Platform.runtimeProcess.exit(0)
+      }
       HCI.writeLine(formatGateSummary(summary))
       Platform.runtimeProcess.exit(gateExitCode(summary))
     })

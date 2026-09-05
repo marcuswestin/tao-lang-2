@@ -232,17 +232,22 @@ clean: clean-scratch
 clean-all: clean
     rm -rf .artifacts packages/runtime-toolchain/ios packages/runtime-toolchain/android
 
-# Bootstrap dependencies, then prepare all code for commit
-verify: deps
-    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just full-verify"
+# Verify the tree; pick a scope: --changed (iteration: the suites the branch diff reaches) or --complete (the commit and merge gate); --fresh ignores a recorded green tree
+[arg('changed', long='changed', value='true')]
+[arg('complete', long='complete', value='true')]
+[arg('fresh', long='fresh', value='true')]
+verify changed='false' complete='false' fresh='false':
+    {{ if complete == "true" { "just _verify-complete " + fresh } else if changed == "true" { "just _verify-changed " + fresh } else { "just _verify-scope-menu" } }}
 
 # Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every slow UI lane
-full-verify: deps
-    ./dev gates {{ FULL_VERIFY_GATES }} --lane full-verify --skipped "{{ FULL_VERIFY_SKIPPED }}"
+[arg('fresh', long='fresh', value='true')]
+full-verify fresh='false': deps
+    ./dev gates {{ FULL_VERIFY_GATES }} --lane full-verify --skipped "{{ FULL_VERIFY_SKIPPED }}" --green-tree full-verify {{ if fresh == "true" { "--fresh" } else { "" } }}
 
 # Run full-verification's sandbox-compatible gates without installing dependencies or claiming its five active UI lanes passed
-full-verify-sandbox:
-    ./dev gates {{ FULL_VERIFY_GATES }} --skip-unsandboxed --lane full-verify-sandbox --skipped "{{ FULL_VERIFY_SKIPPED }}"
+[arg('fresh', long='fresh', value='true')]
+full-verify-sandbox fresh='false':
+    ./dev gates {{ FULL_VERIFY_GATES }} --skip-unsandboxed --lane full-verify-sandbox --skipped "{{ FULL_VERIFY_SKIPPED }}" --green-tree full-verify-sandbox full-verify {{ if fresh == "true" { "--fresh" } else { "" } }}
 
 # Private
 #########
@@ -323,6 +328,26 @@ _typecheck:
 
 _test PATTERN="":
     bun run packages/dev/dev-src/dev.ts test "{{ PATTERN }}"
+
+# The suites the branch diff reaches, as the `verify --changed` graph runs them
+_test-changed:
+    bun run packages/dev/dev-src/dev.ts test-changed
+
+# `verify` without a scope: name the choices and refuse, so the complete lane is a decision, not a default
+_verify-scope-menu:
+    echo "verify needs a scope:" >&2
+    echo "  just verify --changed    fix, typecheck, lint, and the test suites the branch diff reaches; the iteration lane" >&2
+    echo "  just verify --complete   the same gates over every test suite; the gate before a commit and before the merge" >&2
+    echo "  add --fresh to either to ignore a recorded green tree and run everything again" >&2
+    exit 1
+
+# The two verify scopes share every gate but the test gate. Each lane records the tree it proved
+# green under its own name and stands on a record from any lane whose gates contain its own.
+_verify-changed fresh='false': deps
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test-changed _runtime-pack-check --lane verify-changed --json .artifacts/logs/verify-changed/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just full-verify" --green-tree verify-changed verify full-verify-sandbox full-verify {{ if fresh == "true" { "--fresh" } else { "" } }}
+
+_verify-complete fresh='false': deps
+    ./dev gates _fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check --lane verify --json .artifacts/logs/verify/summary.json --skipped "studio-smoke=slow lane; run just studio-smoke or just full-verify" --green-tree verify full-verify-sandbox full-verify {{ if fresh == "true" { "--fresh" } else { "" } }}
 
 _android-emulator:
     bun run packages/dev/dev-src/dev.ts android-emulator

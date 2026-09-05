@@ -70,6 +70,8 @@ export type GateSummary = {
   /** The first failing node, which is the one to act on. */
   firstFailure?: { logPath?: string; name: string; output: string }
   gates: readonly GateResult[]
+  /** The earlier green run this one stood on instead of running; every gate is then `skipped`. */
+  greenTree?: { at: string; lane: string; logRoot: string; treeHash: string }
   /** The lane this run belongs to, which is also its artifact directory. */
   lane: string
   logRoot: string

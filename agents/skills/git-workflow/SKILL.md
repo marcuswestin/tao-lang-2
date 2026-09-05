@@ -73,7 +73,7 @@ appendix; `git log <base>..<head>` reproduces it when composing a message by han
 
 Require a clean, validated feature branch with its merge message written or refreshed at
 `.artifacts/merge/<branch>.msg`; the `verification-lanes` skill owns that file's format and the human
-`just merge-with-main --execute --push --yes` invocation. Run `./agent verify` before and after the
+`just merge-with-main --execute --push --yes` invocation. Run `./agent verify --complete` before and after the
 merge commit. Archive completed roadmap task folders before it, never after.
 
 Refresh `main`, merge current `main` back into the feature branch, validate and push again, then

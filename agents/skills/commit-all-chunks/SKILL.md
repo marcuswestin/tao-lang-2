@@ -8,7 +8,7 @@ description: >-
 
 - Do not change file contents. Ask before fixing anything discovered during commit preparation.
 - Inspect staged and unstaged state and preserve the user's intended index boundaries where possible.
-- Run `./agent verify` before the first commit.
+- Run `./agent verify --complete` before the first commit.
 - Choose the smallest self-contained remaining chunk, stage only that chunk, commit it, and repeat.
 - Use a concise summary followed by one bullet per line with no blank lines between bullets.
 - Do not rerun full validation between commits unless a command changed files after the validated state.

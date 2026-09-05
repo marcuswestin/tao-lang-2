@@ -6,8 +6,19 @@ description: >-
 
 # Verification Lanes
 
-- Use `just test-changed` for ordinary iteration; pass a ref only when the branch base is not the
-  default merge base with `origin/main` or local `main`.
+- `verify` has two scopes and refuses to run without one. `./agent verify --changed` is the
+  iteration lane: the fix, typecheck, and lint gates plus the test suites the branch diff reaches.
+  `./agent verify --complete` runs the same gates over every suite and is the gate before a commit
+  that goes to review and before the merge. A work-in-progress commit may stand on `--changed`.
+- The changed scope selects whole suites from the workspace import graph: a package source change
+  selects that package and every package importing it, a test file selects its own suite, an app
+  change runs the Tao behavior tests under that app, and a path no rule owns widens the run to
+  everything and says which path did it. It prints what it selected, why, and what it skipped.
+- Every verification lane records the tree it proved green. Running the same lane, or a lane it
+  contains, on a byte-identical tree prints the earlier run's evidence and stops instead of running;
+  add `--fresh` to run anyway. A red or interrupted run records nothing.
+- Use `just test-changed` for the test suites alone, without the fix and typecheck gates; pass a
+  ref only when the branch base is not the default merge base with `origin/main` or local `main`.
 - Use `just test-retry` after a red complete run. It selects files, not individual test names, and
   always prints how much green coverage it omitted.
 - Use `just test "name"` for one name-filtered test and `just test-file <path>` for one exact Bun or
@@ -15,11 +26,10 @@ description: >-
 - Use `just test` for the complete package and Tao app suite. It establishes the per-checkout
   ledger's full-run boundary whether green or red.
 - A new worktree has a cold `.artifacts/testing/ledger.json`; retry therefore selects everything.
-- `test-changed` and `test-retry` are iteration aids, never merge evidence. Repository gates never
-  consult the ledger.
+- `test-changed`, `verify --changed`, and `test-retry` are iteration aids, never merge evidence.
+  Repository gates never consult the ledger.
 - The runner detects when changed or retry work deserves a complete pass and prints the reason; do
   not maintain a second trigger list in instructions.
-- Run `./agent verify` before every commit.
 - Run `./agent full-verify-sandbox` immediately before a merge when working in a managed shell. It
   runs the full gate membership except the five explicitly host-only browser and native UI gates (the
   simulated-user journey is a separate quarantine skip, not a host-only gate) and
