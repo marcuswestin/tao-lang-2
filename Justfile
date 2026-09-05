@@ -7,7 +7,8 @@ BUN_TMP_DIR := justfile_directory() + "/.artifacts/tmp/bun"
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/config/local-instantdb"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
-FULL_VERIFY_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _ship-bundle-proof _full-verify-smoke-launch _full-verify-real-app _full-verify-simulated _full-verify-keyboard-navigation _full-verify-native _full-verify-canary"
+FULL_VERIFY_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _ship-bundle-proof _full-verify-smoke-launch _full-verify-real-app _full-verify-keyboard-navigation _full-verify-native _full-verify-canary"
+FULL_VERIFY_SKIPPED := "_full-verify-simulated=temporarily quarantined; run just _full-verify-simulated to reproduce"
 
 # Print available recipes
 help:
@@ -237,11 +238,11 @@ verify: deps
 
 # Bootstrap dependencies, then run one graph of everything: verify, doctor, dead-exports, and every slow UI lane
 full-verify: deps
-    ./dev gates {{ FULL_VERIFY_GATES }} --lane full-verify
+    ./dev gates {{ FULL_VERIFY_GATES }} --lane full-verify --skipped "{{ FULL_VERIFY_SKIPPED }}"
 
-# Run full-verification's sandbox-compatible gates without installing dependencies or claiming the six UI lanes passed
+# Run full-verification's sandbox-compatible gates without installing dependencies or claiming its five active UI lanes passed
 full-verify-sandbox:
-    ./dev gates {{ FULL_VERIFY_GATES }} --skip-unsandboxed --lane full-verify-sandbox
+    ./dev gates {{ FULL_VERIFY_GATES }} --skip-unsandboxed --lane full-verify-sandbox --skipped "{{ FULL_VERIFY_SKIPPED }}"
 
 # Private
 #########

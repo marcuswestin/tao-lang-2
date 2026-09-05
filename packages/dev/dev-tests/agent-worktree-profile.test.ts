@@ -396,16 +396,19 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands.slice(graph)).toContain('_parser-gen')
   })
 
-  Test('runs every automated browser and native lane in the one graph without a quarantine', async () => {
+  Test('runs every stable browser and native lane while reporting the simulated journey quarantine', async () => {
     const commands = await justCommands('full-verify')
 
     Expect(commands).toContain(
-      '_full-verify-smoke-launch _full-verify-real-app _full-verify-simulated '
-        + '_full-verify-keyboard-navigation _full-verify-native _full-verify-canary',
+      '_full-verify-smoke-launch _full-verify-real-app _full-verify-keyboard-navigation '
+        + '_full-verify-native _full-verify-canary',
     )
     Expect(commands).toContain('--lane full-verify')
     Expect(commands).not.toContain('--jobs 1')
-    Expect(commands).not.toContain('_full-verify-simulated=temporarily quarantined')
+    Expect(commands).toContain(
+      '--skipped "_full-verify-simulated=temporarily quarantined; '
+        + 'run just _full-verify-simulated to reproduce"',
+    )
     Expect(commands).not.toContain('_tao-check=')
     Expect(commands).not.toContain('_dprint-check=')
     Expect(commands).not.toContain('manual-check')
@@ -474,8 +477,15 @@ Describe('agent worktree profile bootstrap', () => {
       Expect(commands).not.toContain('_tao-check=')
       Expect(commands).not.toContain('_dprint-check=')
     }
-    Expect(fullVerify).not.toContain('--skipped')
+    Expect(fullVerify).toContain(
+      '--skipped "_full-verify-simulated=temporarily quarantined; '
+        + 'run just _full-verify-simulated to reproduce"',
+    )
     Expect(sandbox).toContain('--skip-unsandboxed')
+    Expect(sandbox).toContain(
+      '--skipped "_full-verify-simulated=temporarily quarantined; '
+        + 'run just _full-verify-simulated to reproduce"',
+    )
   })
 })
 

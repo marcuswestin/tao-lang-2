@@ -719,19 +719,20 @@ an entry here may link one when the developer workflow is also affected.
 
 - **Status:** In progress
 - **Area:** Test reliability
-- **Impact:** The simulated Studio journey blocks a merge at its first Snap, and the visible enabled
-  toolbar control also cannot be activated with an ordinary pointer click.
-- **Evidence:** Two normal-terminal full verifications reached catalog revision 6 with all five expected
-  free rectangles, then timed out without a Snap transition. The second run proved the browser had
-  reconciled its authoritative board first. `renderSketch` handled every board `pointerdown` except a
-  resize handle as a geometry gesture, including toolbar descendants, and called `preventDefault()`
-  before the button could receive its click.
-- **Workaround:** Focus and activate the control without a pointer.
-- **Proposed change:** Keep the authoritative-board barrier after synthetic draws, and make the board
-  gesture handler ignore every event originating in its toolbar so buttons, selects, and sliders retain
-  their native interactions. Do not retry Snap because a request may already be in flight.
-- **Dependencies:** Implemented on `feat/freehand-ui-sketching-implementation`; final acceptance needs
-  the normal-terminal browser lane because Chrome aborts before DevTools in the managed command host.
+- **Impact:** The simulated Studio journey blocks otherwise green merge verification at different
+  synthetic sketch interactions, so it cannot currently serve as reliable merge evidence.
+- **Evidence:** Readiness and browser-reconciliation barriers plus the toolbar event fix moved failures
+  from Snap to the first rectangle draw. The latest normal-terminal run left the catalog at revision 1
+  with zero rectangles while the other 18 full-verification gates passed, showing that the generic CDP
+  pointer drag itself is not deterministic enough for this journey.
+- **Workaround:** The full-verification graph reports `_full-verify-simulated` as explicitly skipped;
+  `just _full-verify-simulated` remains available to reproduce it, and the deterministic catalog tests
+  in the same file plus the native and canary lanes remain active.
+- **Proposed change:** Replace coordinate-only synthetic sketch gestures with a deterministic browser
+  action boundary that confirms event receipt and the corresponding authoritative board generation
+  before advancing. Keep mutations single-shot rather than retrying requests that may already be live.
+- **Dependencies:** Quarantined on `feat/freehand-ui-sketching-implementation`; the product fixes and
+  synchronization diagnostics remain in place for the follow-up.
 - **Acceptance:** `_full-verify-simulated` completes the Draw, Snap, Unsnap, overlap-confirmation, and
-  Undo sequence without a catalog-transition timeout.
-- **Source:** 2026-09-04 normal-terminal merge verification.
+  Undo sequence in ten consecutive normal-terminal runs before it rejoins automatic full verification.
+- **Source:** 2026-09-04 normal-terminal merge verification and explicit quarantine decision.
