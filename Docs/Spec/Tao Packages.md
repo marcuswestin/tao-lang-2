@@ -4,8 +4,8 @@ Status: partially implemented design draft. The current implementation supports 
 `project { id "..." name "..." version "..." remote none license ... }` metadata, `tao create` and project-ID
 migration, `file`/`package`/`workspace`/`public`
 declaration visibility, `use ... from ...` imports for relative Tao source paths and `@tao/...`
-stdlib paths, bare same-package `use Foo`, local `@package[/subfolder]` imports through an in-memory
-workspace package index, and public self-hosted `nav` and `datasource` declarations. Import renaming,
+stdlib paths, bare same-package `use Foo`, local `@package[/subfolder]` imports, the reserved root
+`@[/subfolder]` generated package, and public self-hosted `nav` and `datasource` declarations. Import renaming,
 `requires`, external workspace installation, lockfiles, remotes, other
 CLI package commands, and package publishing remain future work.
 
@@ -45,8 +45,9 @@ compiler-known names are involved.
 
 ## Creating a Tao Project
 
-- `tao create <id>` creates `<id>/App.tao`, using the new project's directory name as its
-  developer-supplied, checked-in project ID and initial display name.
+- `tao create <id>` creates `<id>/App.tao` and the committed empty generated-package scaffold
+  `<id>/@/.gitkeep`, using the new project's directory name as its developer-supplied, checked-in
+  project ID and initial display name.
 - For example, `tao create my-todos` creates `./my-todos/App.tao` with `id "my-todos"`.
 
 ### Creating a Tao app
@@ -139,6 +140,26 @@ Packages can make code available to other packages, and even other workspaces.
   - A declaration is referenced by its folder name, _not_ its file's name
   - A workspace root folder cannot be a `@package`
 
+### Generated project package
+
+Every Tao project reserves its root `@/` directory for committed generated Tao source. It is one
+package named exactly `@`, with one subfolder per generator. Studio owns `@/studio`, whose public
+views are imported normally, for example `use View1 from @/studio`. Existing named package spellings
+such as `@tao/ui` are unchanged. Only the project-root directory has this meaning; a nested directory
+whose literal name is `@` is an ordinary directory and remains reachable within its containing
+package.
+
+Generated source may use ordinary relative imports back into its owning project, such as
+`use Playlist from ../../Data` from `@/studio/View1.tao`. This is a narrow one-way exception: authored
+project source cannot cross into `@/` by relative path, generated source cannot cross relatively into
+another named package, and all declaration visibility rules still apply.
+
+Generated files are read-only working-tree artifacts. `tao fix`, `tao fmt`, and repository dprint
+lanes check them but never rewrite them. The owning generator temporarily enables only owner-write,
+restores mode `0444` after success or failure, and repairs that mode when it opens a project. A
+generated file begins with an ownership header; moving it to an authored package removes that
+ownership and any generator-private rectangle markers, then rewrites its `@/studio` import sites.
+
 ### Making packages available to other files
 
 - You make a declaration available to other files by declaring its visibility: `file`, `package`, `workspace`, or `public`.
@@ -176,7 +197,8 @@ Packages can make code available to other packages, and even other workspaces.
 
 ## Using available code from other packages
 
-- Packages and their subfolders can be referenced via `@<package>` and `@<package>/<subfolder>`
+- Packages and their subfolders can be referenced via `@<package>` and `@<package>/<subfolder>`;
+  generated project source uses the reserved forms `@` and `@/<subfolder>`
   - `use Foo from @<package>`
   - `use Bar from @<package>/<subfolder>`
   - `use Cat, Mat from @<package>/<subfolder1>/<subfolder2>`

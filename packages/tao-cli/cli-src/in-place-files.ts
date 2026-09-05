@@ -8,6 +8,7 @@ export namespace InPlace {
     path: string
     status: 'changed' | 'unchanged' | 'error'
     error?: string
+    warnings?: readonly string[]
   }
 
   /** PathOptions configures path resolution for in-place Tao file commands. */
@@ -17,6 +18,7 @@ export namespace InPlace {
 
   /** ProcessOptions configures how an in-place file transform applies its output. */
   export type ProcessOptions = {
+    changedIsError?: string
     write: boolean
   }
 
@@ -49,7 +51,13 @@ async function processFile(
   try {
     const before = await FS.readText(path)
     const after = await transform(before)
-    return options.write ? await writeWhenChanged(path, before, after) : compareOnly(path, before, after)
+    if (options.write) {
+      return await writeWhenChanged(path, before, after)
+    }
+    if (options.changedIsError !== undefined && after !== before) {
+      return { path, status: 'error', error: options.changedIsError }
+    }
+    return compareOnly(path, before, after)
   } catch (error) {
     return inPlaceError(path, error)
   }
@@ -58,11 +66,44 @@ async function processFile(
 /** workspaceRootForPath returns the package-aware workspace root for an in-place command root. */
 async function workspaceRootForPath(path: string, options: InPlace.PathOptions = {}): Promise<string> {
   const root = FS.resolvePath(path, options.cwd)
+  const projectRoot = await containingProjectRoot(await FS.isFile(root) ? FS.dirname(root) : root)
+  if (projectRoot !== undefined) {
+    return projectRoot
+  }
+  const generatedProjectRoot = rootPackageOwner(root)
+  if (generatedProjectRoot !== undefined) {
+    return generatedProjectRoot
+  }
   const cwd = FS.resolvePath('.', options.cwd)
   if (FS.pathIsWithin(root, cwd)) {
     return packageContainerRoot(cwd) ?? cwd
   }
   return packageAwarePathRoot(root, await FS.isFile(root))
+}
+
+/** rootPackageOwner infers a project root from the nearest exact reserved root-package segment. */
+function rootPackageOwner(path: string): string | undefined {
+  const parts = FS.slashPath(path).split('/')
+  for (let index = parts.length - 1; index >= 0; index--) {
+    if (parts[index] === '@') {
+      return FS.resolvePath(parts.slice(0, index).join('/'))
+    }
+  }
+  return undefined
+}
+
+async function containingProjectRoot(start: string): Promise<string | undefined> {
+  let directory = start
+  while (true) {
+    if (await FS.isFile(FS.resolvePath('Project.tao', directory))) {
+      return directory
+    }
+    const parent = FS.dirname(directory)
+    if (parent === directory) {
+      return undefined
+    }
+    directory = parent
+  }
 }
 
 /** compareOnly reports whether `after` differs from `before` without writing the file. */

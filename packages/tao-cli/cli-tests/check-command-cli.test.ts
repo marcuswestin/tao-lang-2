@@ -13,6 +13,18 @@ Describe('tao check CLI', () => {
     })
   })
 
+  Test('prints validator warnings without turning them into check failures', async () => {
+    await withTaoFixture({
+      'App.tao': 'use Placeholder from @tao/ui\n\nview Main() {\n   render Placeholder("Main")\n}\n',
+    }, async rootDir => {
+      const result = await runTaoCliForTest(['check', rootDir])
+
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stderr).toContain('Placeholder ships as an empty box in release.')
+      Expect(result.stdout).toContain('0 noncanonical, 1 unchanged, 1 warning')
+    })
+  })
+
   Test('exits nonzero and reports noncanonical files', async () => {
     await withTaoFixture({
       'drift.tao': 'view   MainView() { }',

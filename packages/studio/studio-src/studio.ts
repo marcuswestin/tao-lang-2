@@ -12,6 +12,11 @@ export {
   type StudioWrite,
   type StudioWriteAcknowledgement,
 } from './StudioCompileCoordinator'
+export {
+  studioGeneratedSourceHeader,
+  StudioGeneratedSources,
+  type StudioGeneratedSourceWriter,
+} from './StudioGeneratedSources'
 
 export {
   type StudioCanonicalSourceAction,
@@ -22,6 +27,8 @@ export {
   type StudioMessageExpectation,
   type StudioPreviewAppliedMessage,
   type StudioPreviewIdentity,
+  type StudioPreviewLayoutMeasurement,
+  type StudioPreviewLayoutMeasurementsMessage,
   type StudioPreviewRuntimeFailureMessage,
   type StudioPreviewSourceIdentity,
   type StudioPreviewSourceMessage,
@@ -116,6 +123,8 @@ export {
   type StudioDraftWriteRequest,
   type StudioDraftWriteResult,
   type StudioFileDraftState,
+  type StudioMoveGeneratedSourceRequest,
+  type StudioMoveGeneratedSourceResult,
   type StudioProjectFile,
   type StudioProjectFileContent,
   StudioProjectSession,
@@ -124,10 +133,33 @@ export {
   type StudioRenameFileResult,
   type StudioSessionEvent,
   type StudioSessionHandshake,
+  type StudioSketchActionResult,
+  type StudioSketchFlowAction,
+  type StudioSketchFlowActionRequest,
+  type StudioSketchSnapApplyResult,
+  type StudioSketchSnapRequest,
+  type StudioSketchSnapUndoRequest,
+  type StudioSketchSnapUndoResult,
+  type StudioSketchUnsnapRequest,
   type StudioSourceActionResult,
   type StudioSourceActionUndoResult,
   StudioSourceConflictError,
 } from './StudioProjectSession'
+
+export {
+  type StudioSketch,
+  StudioSketchCatalog,
+  type StudioSketchCatalogAction,
+  StudioSketchCatalogConflictError,
+  studioSketchCatalogFormatVersion,
+  studioSketchCatalogRelativePath,
+  type StudioSketchCatalogRequest,
+  type StudioSketchCatalogResult,
+  type StudioSketchCatalogSnapshot,
+  type StudioSketchRect,
+} from './StudioSketchCatalog'
+
+export { StudioSketchSource, type StudioSketchSourceInput } from './StudioSketchSource'
 
 export {
   type StudioServerCheckpointRow,
@@ -197,6 +229,7 @@ export {
   StudioPreviewManifest,
   type StudioPreviewManifestV2,
   studioPreviewManifestVersion,
+  type StudioRenderInventoryEntry,
   type StudioScenario,
   type StudioScenarioSubject,
   type StudioSchemeEnvironment,

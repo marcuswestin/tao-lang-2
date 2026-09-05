@@ -306,9 +306,14 @@ Describe('Studio native wrapper foundation', () => {
   })
 
   Test('installs and prepares the generated project through the selected Hutch launcher', async () => {
-    const calls: Array<{ args: readonly string[] | undefined; command: string; cwd: string | undefined }> = []
+    const calls: Array<{
+      args: readonly string[] | undefined
+      command: string
+      cwd: string | undefined
+      stdio: CLI.CommandSpec['stdio']
+    }> = []
     await StudioNative.testing.prepareElectrobun('/tools/hutch', '/workspace/native', async (command, spec) => {
-      calls.push({ args: spec.args, command, cwd: spec.cwd })
+      calls.push({ args: spec.args, command, cwd: spec.cwd, stdio: spec.stdio })
       return commandResult(command, spec, 0)
     })
 
@@ -317,11 +322,13 @@ Describe('Studio native wrapper foundation', () => {
         args: ['install'],
         command: '/tools/hutch',
         cwd: '/workspace/native',
+        stdio: ['ignore', 'inherit', 'inherit'],
       },
       {
         args: ['electrobun', 'prepare'],
         command: '/tools/hutch',
         cwd: '/workspace/native',
+        stdio: ['ignore', 'inherit', 'inherit'],
       },
     ])
   })

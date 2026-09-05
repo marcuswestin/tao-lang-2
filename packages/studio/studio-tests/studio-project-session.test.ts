@@ -54,6 +54,209 @@ Test('Studio project session resolves one current Tao app and serves contained v
   })
 })
 
+Test('Studio project open repairs generated Studio sources to read-only mode', async () => {
+  await withTaoFiles('tao-studio-generated-open-', {
+    '@/studio/View1.tao': 'public view View1() { }\n',
+    'Garden.tao': 'app Garden { view Main }\nview Main() { }\n',
+  }, async (paths, root) => {
+    await FS.chmod(paths['@/studio/View1.tao'], 0o644)
+
+    await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+
+    Expect(await FS.fileMode(paths['@/studio/View1.tao'])).toBe(0o444)
+  })
+})
+
+Test('Move to package renames generated source and rewrites every language import site', async () => {
+  const compiles: Array<readonly { path: string; sourceVersion?: string }[]> = []
+  await withTaoFiles('tao-studio-move-generated-', {
+    '@/studio/View1.tao':
+      `${'// Studio-written generated source. Read-only until moved to a package.'}\n\npublic view View1() { }\n`,
+    '@/studio/Other.tao': 'public view Other() { }\n',
+    '@views/Existing.tao': 'public view Existing() { }\n',
+    'Garden.tao': `
+      use View1, Other from @/studio
+      use Existing from @views
+      app Garden { view Main }
+      view Main() { render View1() }
+    `,
+    'Nested.tao': `
+      use View1 from @/studio
+      workspace view Nested() { render View1() }
+    `,
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile(request) {
+        compiles.push(request.changes)
+      },
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    const generated = await session.readFile('@/studio/View1.tao')
+    const result = await session.moveGeneratedSource({
+      path: generated.path,
+      sourceVersion: generated.sourceVersion,
+      targetPackage: ' @views ',
+      writeId: 'move-view-1',
+    })
+
+    Expect(result.status).toBe('moved')
+    if (result.status !== 'moved') {
+      return
+    }
+    Expect(result.previousPath).toBe('@/studio/View1.tao')
+    Expect(result.file.path).toBe('@views/View1.tao')
+    Expect(result.file.content).not.toContain('Studio-written generated source')
+    Expect(await FS.fileMode(FS.resolvePath(result.file.path, root))).toBe(0o644)
+    Expect(await FS.exists(paths['@/studio/View1.tao'])).toBe(false)
+    Expect(await FS.readText(paths['Garden.tao'])).toContain('use Other from @/studio')
+    Expect(await FS.readText(paths['Garden.tao'])).toContain('use Existing, View1 from @views')
+    Expect(await FS.readText(paths['Nested.tao'])).toContain('use View1 from @views')
+    Expect(result.rewritten.map(file => file.path).toSorted()).toEqual(['Garden.tao', 'Nested.tao'])
+    Expect(compiles).toHaveLength(1)
+    Expect(compiles[0]?.map(change => FS.relativePath(session.projectRoot, change.path)).toSorted()).toEqual([
+      '@/studio/View1.tao',
+      '@views/View1.tao',
+      'Garden.tao',
+      'Nested.tao',
+    ])
+  })
+})
+
+Test('Move to package retires the catalog sketch after source and compile succeed', async () => {
+  await withTaoFiles('tao-studio-move-retires-sketch-', {
+    '@views/Existing.tao': 'public view Existing() { }\n',
+    'Garden.tao': 'app Garden { view Main }\nview Main() { }\n',
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    const created = await session.applySketchAction({
+      action: {
+        height: 80,
+        id: 'move-sketch',
+        kind: 'create-sketch',
+        project: await FS.realPath(root),
+        rects: [{ content: 'Card', height: 40, id: 'card', kind: 'Text', width: 80, x: 10, y: 10 }],
+        width: 200,
+      },
+      expectedRevision: 0,
+      requestId: 'create-move-sketch',
+    })
+    const generated = await session.readFile('@/studio/View1.tao')
+
+    const result = await session.moveGeneratedSource({
+      path: generated.path,
+      sourceVersion: generated.sourceVersion,
+      targetPackage: '@views',
+      writeId: 'move-retire-sketch',
+    })
+
+    Expect(result.status).toBe('moved')
+    Expect((await session.sketchCatalog()).sketches).toEqual([])
+    Expect((await session.sketchCatalog()).revision).toBe(created.catalog.revision + 1)
+    Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(true)
+    Expect(await FS.exists(FS.resolvePath('@/studio/View1.tao', root))).toBe(false)
+  })
+})
+
+Test('Move to package restores source, imports, catalog, and compile state after compile failure', async () => {
+  let failMoveCompile = false
+  const compiles: Array<readonly { path: string; sourceVersion?: string }[]> = []
+  await withTaoFiles('tao-studio-move-rollback-', {
+    '@views/Existing.tao': 'public view Existing() { }\n',
+    'Garden.tao': 'use View1 from @/studio\napp Garden { view Main }\nview Main() { render View1() }\n',
+    'Nested.tao': 'use View1 from @/studio\nworkspace view Nested() { render View1() }\n',
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile(request) {
+        compiles.push(request.changes)
+        if (failMoveCompile) {
+          failMoveCompile = false
+          Errors.throwUserInput('Moved source does not compile.')
+        }
+      },
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    await session.applySketchAction({
+      action: {
+        height: 80,
+        id: 'move-sketch',
+        kind: 'create-sketch',
+        project: await FS.realPath(root),
+        rects: [{ content: 'Card', height: 40, id: 'card', kind: 'Text', width: 80, x: 10, y: 10 }],
+        width: 200,
+      },
+      expectedRevision: 0,
+      requestId: 'create-move-rollback-sketch',
+    })
+    const beforeFile = await session.readFile('@/studio/View1.tao')
+    const beforeCatalog = await session.sketchCatalog()
+    const beforeGarden = await FS.readText(paths['Garden.tao'])
+    const beforeNested = await FS.readText(paths['Nested.tao'])
+    failMoveCompile = true
+
+    await Expect(session.moveGeneratedSource({
+      path: beforeFile.path,
+      sourceVersion: beforeFile.sourceVersion,
+      targetPackage: '@views',
+      writeId: 'move-rollback-sketch',
+    })).rejects.toThrow('authored Tao source failed to compile')
+
+    Expect(await session.readFile('@/studio/View1.tao')).toEqual(beforeFile)
+    Expect(await FS.readText(paths['Garden.tao'])).toBe(beforeGarden)
+    Expect(await FS.readText(paths['Nested.tao'])).toBe(beforeNested)
+    Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
+    Expect(await FS.fileMode(FS.resolvePath('@/studio/View1.tao', root))).toBe(0o444)
+    Expect(await session.sketchCatalog()).toEqual(beforeCatalog)
+    Expect(session.compileSnapshot().status).toBe('compiled')
+    Expect(compiles).toHaveLength(3)
+  })
+})
+
+Test('Move to package requests a different destination only when the target package declares the name', async () => {
+  let compileCount = 0
+  await withTaoFiles('tao-studio-move-generated-conflict-', {
+    '@/studio/View1.tao':
+      `${'// Studio-written generated source. Read-only until moved to a package.'}\n\npublic view View1() { }\n`,
+    '@views/Existing.tao': 'public view View1() { }\n',
+    'Garden.tao': 'use View1 from @/studio\napp Garden { view View1 }\n',
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {
+        compileCount += 1
+      },
+      entryPath: paths['Garden.tao'],
+      projectRoot: root,
+    })
+    const generated = await session.readFile('@/studio/View1.tao')
+    const request = {
+      path: generated.path,
+      sourceVersion: generated.sourceVersion,
+      targetPackage: '@views',
+      writeId: 'move-conflicting-view',
+    }
+    const conflict = await session.moveGeneratedSource(request)
+
+    Expect(conflict).toEqual({
+      conflicts: ['@views/Existing.tao'],
+      name: 'View1',
+      status: 'confirmation-required',
+      targetPackage: '@views',
+    })
+    Expect(compileCount).toBe(0)
+    Expect(await FS.exists(paths['@/studio/View1.tao'])).toBe(true)
+    Expect(await FS.exists(FS.resolvePath('@views/View1.tao', root))).toBe(false)
+  })
+})
+
 Test('Studio project session publishes every project app variant with a safe relative entry path', async () => {
   await withTaoFiles('tao-studio-app-variants-', {
     'First.tao': 'app First { view Main }\napp FirstCompact = First with { }\nview Main() { }\n',
@@ -685,6 +888,60 @@ Test('Studio promotes matrix arguments into the Tao-authored scenario through th
   })
 })
 
+Test('Studio proposes, applies, and undoes a recorded journey as one scenario checkpoint', async () => {
+  await withStudioProject(async session => {
+    const cell = await registerScenarioCell(session, 'journey-preview')
+    const envelope = {
+      action: {
+        kind: 'append-scenario-steps',
+        scenarioGroupName: 'states',
+        scenarioName: 'lead',
+        steps: [
+          { kind: 'press', selector: 'tag', target: 'edit' },
+          { kind: 'enter', selector: 'label', target: 'Title', value: 'Saved' },
+          { kind: 'submit', selector: 'label', target: 'Title' },
+        ],
+      },
+      channel: studioProtocolChannel,
+      checkpoint: { id: 'scenario-journey', phase: 'single' },
+      identity: {
+        ...cell.identity,
+        path: cell.file.path,
+        previewInstanceId: 'journey-preview',
+        scenarioId: cell.scenarioId,
+        sourceVersion: cell.file.sourceVersion,
+      },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'scenario-journey-request',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action',
+    } as const
+
+    const proposed = await session.proposeSourceAction(envelope)
+    Expect(proposed.diff).toContain('+      press #edit')
+    Expect(await session.readFile(cell.file.path)).toMatchObject({ content: cell.file.content })
+
+    const applied = await session.applySourceAction(envelope)
+    Expect(applied.content).toContain([
+      'press #edit',
+      'enter "Saved" into label "Title"',
+      'submit label "Title"',
+    ].join('\n      '))
+    Expect(applied.checkpoint).toEqual({ id: 'scenario-journey', status: 'committed' })
+
+    const undone = await session.undoSourceAction({
+      channel: studioProtocolChannel,
+      checkpointId: 'scenario-journey',
+      identity: { ...envelope.identity, sourceVersion: applied.sourceVersion },
+      protocolVersion: studioProtocolVersion,
+      requestId: 'scenario-journey-undo',
+      sourceActionVersion: studioSourceActionVersion,
+      type: 'source-action-undo',
+    })
+    Expect(undone.content).toBe(cell.file.content)
+  })
+})
+
 Test('Studio rejects a scenario action that names a different scenario than its cell identity', async () => {
   await withStudioProject(async session => {
     const cell = await registerScenarioCell(session, 'scenario-mismatch-preview')
@@ -1052,6 +1309,12 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
         entryPath: 'Garden.tao',
         root: session.projectRoot,
       },
+      renders: [{
+        elementName: 'Text',
+        renderId: `${session.projectRoot}/Garden.tao:1:2`,
+        source: { kind: 'tao' as const, path: `${session.projectRoot}/Garden.tao`, range: { end: 2, start: 1 } },
+        studioRectId: 'title',
+      }],
       scenarios: [{
         args: {},
         fixtureId: 'fixture:base',
@@ -1076,6 +1339,28 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
     session.setMatrixManifest(manifest)
     const identity = StudioPreviewManifest.cellIdentity(manifest, cell)
     const registered = session.registerCellPreview({ ...identity, previewInstanceId: 'cell-preview-1' })
+    const layoutMessage = {
+      channel: studioProtocolChannel,
+      identity: { ...registered.identity, previewInstanceId: 'cell-preview-1' },
+      measurements: [{
+        elementName: 'Text',
+        rect: { height: 30, width: 80, x: 12, y: 18 },
+        renderId: `${session.projectRoot}/Garden.tao:1:2`,
+        studioRectId: 'title',
+      }],
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-layout-measurements',
+    } as const
+    Expect(session.recordPreviewLayoutMeasurements(layoutMessage)).toEqual({ accepted: true })
+    Expect(session.previewLayoutMeasurement(
+      { ...registered.identity, previewInstanceId: 'cell-preview-1' },
+      `${session.projectRoot}/Garden.tao:1:2`,
+    )).toMatchObject({ studioRectId: 'title' })
+    Expect(session.measuredUnsnapRect(
+      { ...registered.identity, previewInstanceId: 'cell-preview-1' },
+      `${session.projectRoot}/Garden.tao:1:2`,
+      { height: 40, width: 60 },
+    )).toEqual({ height: 30, id: 'title', kind: 'Text', width: 60, x: 0, y: 10 })
     const file = await session.readFile('Garden.tao')
     const cellSourceAction = {
       action: { component: 'Text', kind: 'insert-component' },
@@ -1128,6 +1413,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
       replay,
     })
     session.registerCellPreview({ ...next.identity, previewInstanceId: 'cell-preview-2' })
+    Expect(() => session.recordPreviewLayoutMeasurements(layoutMessage)).toThrow('stale configuration revision')
     const events: StudioSessionEvent[] = []
     const unsubscribe = session.subscribe(event => events.push(event))
     session.setMatrixManifest({

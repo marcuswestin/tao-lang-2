@@ -18,6 +18,8 @@ export const testValidationMessages = {
     `Only run, press, enter, submit, back, and expect statements are allowed in test '${name}'.`,
   runPlacement: 'Run steps are only allowed inside test blocks.',
   pressPlacement: 'Press steps are only allowed inside test blocks.',
+  hoverPlacement: 'Hover steps are only allowed inside test blocks.',
+  focusPlacement: 'Focus steps are only allowed inside test blocks.',
   enterPlacement: 'Enter steps are only allowed inside test blocks.',
   inputExpectationPlacement: 'Input expectations are only allowed inside test blocks.',
   submitPlacement: 'Submit steps are only allowed inside test blocks.',
@@ -36,6 +38,7 @@ export const testValidationMessages = {
   runTarget: (name: string) => `Run target '${name}' must be an app.`,
   selectIndex: 'Tagged loop row selection uses a 1-based index greater than zero.',
   selectBlock: 'A select block may contain test steps but cannot start another app.',
+  scenarioSelectBlock: 'A scenario select block may contain only replayable interaction steps.',
   relaunchInSelect: 'A select block cannot relaunch the app; a relaunch replaces every row the selection resolves.',
   navigationValueType: (actual: string) => `Navigation and toolbar test values expect text, got ${actual}.`,
   navigationValueLiteral: 'Navigation and toolbar test values must be text literals.',
@@ -47,6 +50,8 @@ export const testValidationMessages = {
 
 const validateRunPlacement = validateStepPlacement(testValidationMessages.runPlacement)
 const validatePressPlacement = validateStepPlacement(testValidationMessages.pressPlacement)
+const validateHoverPlacement = validateStepPlacement(testValidationMessages.hoverPlacement)
+const validateFocusPlacement = validateStepPlacement(testValidationMessages.focusPlacement)
 const validateEnterPlacement = validateStepPlacement(testValidationMessages.enterPlacement)
 const validateInputExpectationPlacement = validateStepPlacement(testValidationMessages.inputExpectationPlacement)
 const validateSubmitPlacement = validateStepPlacement(testValidationMessages.submitPlacement)
@@ -62,6 +67,9 @@ export const testValidationChecks = {
   [AST.RunStep.$type]: validateRunPlacement,
   [AST.PressTextStep.$type]: [validatePressPlacement, validateSelector],
   [AST.TagPressStep.$type]: validatePressPlacement,
+  [AST.PressPhaseStep.$type]: [validatePressPlacement, validatePointerSelector],
+  [AST.HoverStep.$type]: [validateHoverPlacement, validatePointerSelector],
+  [AST.FocusStep.$type]: [validateFocusPlacement, validateFocusVocabulary],
   [AST.PressKeyStep.$type]: [validatePressPlacement, validatePressKeyVocabulary],
   [AST.NarrowStep.$type]: [validateNarrowPlacement, validateNarrowVocabulary],
   [AST.PressToolbarCommandStep.$type]: [validatePressPlacement, validateNavigationVocabulary, validateNavigationValue],
@@ -161,6 +169,9 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       ExpectScopeStep: checkStepOrder,
       PressTextStep: checkStepOrder,
       TagPressStep: checkStepOrder,
+      PressPhaseStep: checkStepOrder,
+      HoverStep: checkStepOrder,
+      FocusStep: checkStepOrder,
       PressToolbarCommandStep: checkStepOrder,
       PressKeyStep: checkStepOrder,
       NarrowStep: checkStepOrder,
@@ -191,6 +202,9 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       | AST.ExpectScopeStep
       | AST.PressTextStep
       | AST.TagPressStep
+      | AST.PressPhaseStep
+      | AST.HoverStep
+      | AST.FocusStep
       | AST.PressToolbarCommandStep
       | AST.PressKeyStep
       | AST.NarrowStep
@@ -217,6 +231,12 @@ function validatePressKeyVocabulary(step: AST.PressKeyStep, ctx: ValidationConte
 function validateNarrowVocabulary(step: AST.NarrowStep, ctx: ValidationContext): void {
   if (step.head !== 'narrow') {
     ctx.error(testValidationMessages.interactionVocabulary('narrow'), step)
+  }
+}
+
+function validateFocusVocabulary(step: AST.FocusStep, ctx: ValidationContext): void {
+  if (step.head !== 'focus') {
+    ctx.error(testValidationMessages.interactionVocabulary('focus'), step)
   }
 }
 
@@ -273,6 +293,9 @@ function validateSelect(select: AST.SelectStep, ctx: ValidationContext): void {
     if (!AST.isCheckStep(statement) || AST.isRunStep(statement)) {
       ctx.error(testValidationMessages.selectBlock, statement)
     }
+    if (AST.findOwningScenario(select) && AST.isCheckStep(statement) && !AST.isScenarioStep(statement)) {
+      ctx.error(testValidationMessages.scenarioSelectBlock, statement)
+    }
   }
 }
 
@@ -303,6 +326,14 @@ function validateInputSelector(step: AST.ExpectInputValueStep, ctx: ValidationCo
   }
 }
 
+function validatePointerSelector(step: AST.PressPhaseStep | AST.HoverStep, ctx: ValidationContext): void {
+  if (
+    step.selector !== undefined && !supportedSelectors.includes(step.selector as (typeof supportedSelectors)[number])
+  ) {
+    ctx.error(testValidationMessages.selector(step.selector), step)
+  }
+}
+
 function validateStepPlacement(message: string): NodeValidationCheck<AST.CheckStep> {
   return (statement, ctx) => {
     if (statementNeedsStepPlacementDiagnostic(statement)) {
@@ -318,5 +349,8 @@ function blockOwner(node: AST.Node): AST.Node | undefined {
 
 function statementNeedsStepPlacementDiagnostic(statement: AST.CheckStep): boolean {
   const owner = blockOwner(statement)
+  if (AST.isScenarioBlock(statement.$container) && AST.isScenarioStep(statement)) {
+    return false
+  }
   return !AST.isTestDeclaration(owner) && !AST.isSelectStep(owner)
 }

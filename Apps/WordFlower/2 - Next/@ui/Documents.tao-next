@@ -1,6 +1,6 @@
 use Documents, Finish, Paragraphs from @data
 use CountWords from @tao/text
-use Checkbox, Col, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use Checkbox, Col, Panes, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 
 // Shared values, types, and the typed-injection escape hatch.
@@ -150,9 +150,12 @@ view DocumentEditor(Document) {
                TextMultiline(Paragraph.Text) [body]
 }  }  }  }  }
 
+workspace
 view SavedToast(Revert action()) {
    render Row() [gapMedium] {
+      Text("✓") [width 20, height 20]
       TextMultiline("Saved") [body]
+      Spacer()
 
       #revertSave
       FormButton("Revert") [buttonSecondary] {

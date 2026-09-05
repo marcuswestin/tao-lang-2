@@ -242,6 +242,18 @@ function compileValidatedInput(
   const identityProjects = declarationIdentityProjects(validationResult.files, context)
   const sourceByPath = new Map(sourceFiles.map(file => [file.path, file]))
   const dataCatalog = planDataCatalog(sourceFiles, entryPath)
+  const studioViews = studio
+    ? sourceFiles.flatMap(file =>
+      file.ast.statements.filter(AST.isScenarioGroupDeclaration).flatMap(group =>
+        AST.scenarioDeclarations(group).flatMap(scenario => {
+          const subject = AST.scenarioSubjectDeclaration(scenario)
+          return AST.isViewDeclaration(subject)
+            ? [{ id: `${AST.getDocument(subject).uri.fsPath}#${subject.name}`, view: subject }]
+            : []
+        })
+      )
+    )
+    : []
   const outputPaths = planOutputPaths(sourceFiles, entryPath, context.sourceRoot, {
     localDataProvider: dataCatalog?.localOnly
       ? {
@@ -257,13 +269,17 @@ function compileValidatedInput(
       outputPaths,
       packagesContext: context.packagesContext,
       identityProjects,
+      projectRoot: context.sourceRoot,
       selectedAppDatasourceConfiguration: options.appDatasourceConfiguration,
       selectedAppName: file.path === entryPath ? selectedAppName : undefined,
       studio,
+      studioViews,
     })
   )
 
-  const studioManifest = studio ? compileStudioPreviewManifest(sourceFiles, selectedAppName) : undefined
+  const studioManifest = studio
+    ? compileStudioPreviewManifest(sourceFiles, selectedAppName, context.sourceRoot)
+    : undefined
   if (studioManifest !== undefined) {
     compiledFiles.push({
       code: studioPreviewManifestModule(studioManifest),
@@ -399,9 +415,11 @@ type CompileSourceFileOptions = {
   outputPaths: PlannedOutputs
   packagesContext: Packages.Context
   identityProjects: readonly DeclarationIdentityProject[]
+  projectRoot: string
   selectedAppDatasourceConfiguration?: Readonly<Record<string, string>>
   selectedAppName: string | undefined
   studio: boolean
+  studioViews: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
 }
 
 function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile[] {
@@ -411,15 +429,25 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     outputPaths,
     packagesContext,
     identityProjects,
+    projectRoot,
     selectedAppDatasourceConfiguration,
     selectedAppName,
     studio,
+    studioViews,
   } = options
   const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
   const ownsDataCatalog = dataCatalog?.ownerPath === file.path
   const needsStudioDataCatalog = studio && selectedAppName !== undefined && dataCatalog !== undefined
   if (dataCatalog && !ownsDataCatalog && (dataCatalog.userPaths.has(file.path) || needsStudioDataCatalog)) {
     addResolvedImport(imports, dataCatalog.ownerPath, dataCatalogBindingName)
+  }
+  if (studio && selectedAppName !== undefined) {
+    for (const item of studioViews) {
+      const ownerPath = AST.getDocument(item.view).uri.fsPath
+      if (ownerPath !== file.path && !imports.bySource.has(ownerPath)) {
+        imports.bySource.set(ownerPath, new Set())
+      }
+    }
   }
   // The companion bindings reach further than the synced catalog's: every app root binds them,
   // including an app that configures no Datasource of its own. Both travel together, because a
@@ -484,19 +512,10 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
             exportedBindings,
             selectedAppDatasourceConfiguration,
             selectedAppName,
+            projectRoot,
             studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
             studio,
-            studioViews: studio && selectedAppName !== undefined
-              ? file.ast.statements.filter(AST.isScenarioGroupDeclaration).flatMap(group =>
-                AST.scenarioDeclarations(group).flatMap(scenario => {
-                  const subject = AST.scenarioSubjectDeclaration(scenario)
-                  const view = AST.isViewDeclaration(subject) ? subject : undefined
-                  return view === undefined
-                    ? []
-                    : [{ id: `${AST.getDocument(view).uri.fsPath}#${view.name}`, view }]
-                })
-              )
-              : [],
+            studioViews: studio && selectedAppName !== undefined ? studioViews : [],
             viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }),
           }),
       )),
@@ -884,8 +903,11 @@ function importLinesForCompiledFile(
   return [...imports.bySource.entries()].map(([sourcePath, names]) => {
     const sourceOutputPath = outputPathBySourcePath.get(sourcePath)
     Assert.defined(sourceOutputPath, compiledSourceOutputPathMessage, { sourcePath })
-    const importedNames = Array.from(names).toSorted((left, right) => left.localeCompare(right)).join(', ')
     const importPath = relativeImportPath(currentOutputPath, sourceOutputPath)
+    if (names.size === 0) {
+      return `import '${importPath}'`
+    }
+    const importedNames = Array.from(names).toSorted((left, right) => left.localeCompare(right)).join(', ')
     return `import { ${importedNames} } from '${importPath}'`
   })
 }

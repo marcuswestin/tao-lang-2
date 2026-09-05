@@ -97,12 +97,15 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
       opts.ship === undefined || opts.preview === undefined,
       'a release ship manifest is not combined with a Studio preview publication',
     )
-    const compiled = await Workspace.compile(sourcePath, {
+    const compileOptions = {
       appDatasourceConfiguration: opts.datasourceConfiguration,
       appName: opts.appName,
       studio: opts.preview !== undefined,
       validationMode: opts.validationMode,
-    })
+    }
+    const compiled = opts.preview === undefined
+      ? await Workspace.compile(sourcePath, compileOptions)
+      : await compileStudioPreview(sourcePath, opts.preview, compileOptions)
     const preview = opts.preview === undefined
       ? undefined
       : previewPublication(compiled.appNames, opts.appName, opts.preview)
@@ -149,6 +152,21 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
         }),
     }
   })
+}
+
+async function compileStudioPreview(
+  sourcePath: string,
+  preview: GeneratePreviewOptions,
+  options: Parameters<Workspace['compile']>[1],
+): Promise<Awaited<ReturnType<Workspace['compile']>>> {
+  const generatedEntries = Object.keys(preview.sourceVersions)
+    .filter(path => /^@\/studio\/.*\.tao$/u.test(path))
+    .map(path => FS.resolvePath(path, preview.project))
+  if (generatedEntries.length === 0) {
+    return await Workspace.compile(sourcePath, options)
+  }
+  const workspace = await Workspace.open(preview.project)
+  return await workspace.compileFiles([sourcePath, ...generatedEntries], options)
 }
 
 /** resetStudioPreviewSession releases one output root for a new project/app revision stream. */
@@ -458,7 +476,9 @@ function StudioPreviewContent({ cell, config }: any) {
 function studioCellRuntime(runtime: any, manifest: any) {
   const scenario = manifest.scenarios.find((candidate: any) => candidate.id === runtime.cell.scenarioId)
   if (scenario === undefined) TR.Errors.failInvariant('Tao Studio scenario bootstrap is stale.')
-  const fixture = manifest.fixtures.find((candidate: any) => candidate.id === scenario.fixtureId)
+  const fixture = scenario.fixtureId === undefined
+    ? { accounts: [], creates: [] }
+    : manifest.fixtures.find((candidate: any) => candidate.id === scenario.fixtureId)
   if (fixture === undefined) TR.Errors.failInvariant('Tao Studio fixture bootstrap is stale.')
   const dataState = runtime.resolvedState?.snapshot?.domains?.data?.value
   const replayScheme = runtime.replay?.domains?.find((domain: any) => domain?.domain === 'scheme')?.value
@@ -489,6 +509,7 @@ function studioCellRuntime(runtime: any, manifest: any) {
       arguments: runtime.cell.args,
       kind: scenario.subject.kind,
       prepare: scenario.prepare,
+      steps: scenario.steps,
       subjectId: scenario.subject.subjectId,
     },
     ...(dataState === undefined ? {} : { seed: dataState }),

@@ -65,7 +65,7 @@ export async function startStudioSmokeLaunch(
 
   let readiness: StudioReadiness | undefined
   try {
-    readiness = await waitForReadiness(() => output, options.timeoutMs ?? READY_TIMEOUT_MS)
+    readiness = await waitForReadiness(command, () => output, options.timeoutMs ?? READY_TIMEOUT_MS)
   } catch (error) {
     await stop()
     throw error
@@ -92,12 +92,24 @@ export function readinessFromOutput(output: string): StudioReadiness | undefined
   return undefined
 }
 
-async function waitForReadiness(output: () => string, timeoutMs: number): Promise<StudioReadiness> {
+async function waitForReadiness(
+  command: CLI.StartedCommand,
+  output: () => string,
+  timeoutMs: number,
+): Promise<StudioReadiness> {
   const attempts = Math.max(1, Math.ceil(timeoutMs / READY_POLL_MS))
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const readiness = readinessFromOutput(output())
     if (readiness !== undefined) {
       return readiness
+    }
+    if (command.exitCode !== null || command.signalCode !== null || command.error !== undefined) {
+      const completion = command.error === undefined
+        ? `code=${String(command.exitCode)} signal=${String(command.signalCode)}`
+        : `spawn error=${command.error.message}`
+      throw new Errors.UnexpectedBehaviorError(
+        `Tao Studio exited before reporting readiness (${completion}). Output:\n${output()}`,
+      )
     }
     await Bun.sleep(READY_POLL_MS)
   }

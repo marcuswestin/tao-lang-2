@@ -124,6 +124,11 @@ Describe('validator: aliases and invocations', () => {
         aliasMessages.duplicateName('MyApp'),
       ],
       ['rejects views that duplicate app names', app('', 'view MyApp() { }'), aliasMessages.duplicateName('MyApp')],
+      [
+        'rejects fixtures that duplicate view names in the importable declaration namespace',
+        app('', 'fixture MainView { }'),
+        aliasMessages.duplicateName('MainView'),
+      ],
     ] as const
   ) {
     Test(title, rejects(source, message))
