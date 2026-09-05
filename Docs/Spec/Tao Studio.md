@@ -426,6 +426,36 @@ the generated header and private Studio rectangle markers, restores normal writa
 with the same name in the target package returns a conflict for the client to resolve before any
 mutation; all nonconflicting moves proceed without an extra confirmation.
 
+### Canvas mode
+
+Canvas mode edits one view definition on its own. With an element selected in a running cell, the
+toolbar's **Focus view** button is enabled when the element's owning view already has a focused
+`scenarios` group, and pressing it hides every group that does not render that view alone, leaving
+that view's cells and a bar that names the view and offers **Back to app**. Cells stay mounted, so the
+app's previews keep their state. Selection inside a focused cell edits the owning view's source, and
+because each cell is a scenario entry over one definition, every occurrence in the app updates at
+once. A view without a focused scenario group cannot be focused yet; adding a `scenarios View` entry
+is the way in.
+
+Inside canvas mode the inspector carries the content edits Figma users expect. The Actions section
+wraps the selected element in a `Row`, `Col`, or `Stack` (`wrap-render`, which also imports the
+wrapper) and removes a direct child render together with its attached tag (`remove-render`; the root
+render stays). The palette still inserts `Row`, `Col`, and `Text` at the selected gap. The Text
+section appears for a `Text` or `TextMultiline` leaf: the inspection publishes the leaf's current
+argument source, its literal when it is a plain string, and the values it could show instead, and
+the section edits the literal (`set-text-content`, which rewrites only the first argument and keeps
+named arguments and the layout clause) or binds the leaf to one offered value (`bind-text`).
+
+Binding candidates are computed from the source at the render: the owning view's parameters, loop
+items and local values visible at that statement, and, for entity-typed values, every non-optional
+scalar field one level deep. A text value binds as `Text(Path)`; numbers and case values are
+interpolated as `Text("{ Path }")`. Optional fields, deeper relations, collections, app state, and
+imports are not offered. `bind-text` refuses any expression the inspection did not offer, so the
+client cannot write a path the source does not have.
+
+These actions carry the ordinary render-occurrence identity and the same proposal, checkpoint, and
+undo path as every other visual edit; the server admits them only with that identity.
+
 ## Foreign views and code editor
 
 A Tao view may name a TypeScript or TSX sidecar with `from`. The compiler imports the named component,

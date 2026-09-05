@@ -162,7 +162,25 @@ export type StudioRenderInspection = {
   renderId: string
   styleEntries: readonly StudioStyleEntry[]
   styleProvenance: readonly StudioStyleProvenance[]
+  text?: StudioTextInspection
 }
+
+/** StudioTextBindingCandidate is one value a text leaf may bind to, visible at that render. */
+export type StudioTextBindingCandidate = Readonly<{
+  expression: string
+  type: 'enum' | 'number' | 'text'
+}>
+
+/**
+ * StudioTextInspection describes a Text or TextMultiline leaf's first argument: its current source,
+ * its literal when it is a plain string, and every parameter, loop item, local value, or entity field
+ * in scope that the leaf could show instead.
+ */
+export type StudioTextInspection = Readonly<{
+  candidates: readonly StudioTextBindingCandidate[]
+  expression: string
+  literal?: string
+}>
 
 export type StudioWorkspaceDesignContext = {
   files?: readonly AST.TaoFile[]
@@ -195,8 +213,30 @@ export class StudioSourceOccurrenceConflictError extends Errors.UserInputError {
 export type StudioWrapRenderPatchRequest = {
   kind: 'wrap-render'
   renderId: string
-  wrapper: 'Stack'
+  wrapper: StudioWrapRenderContainer
 }
+
+export type StudioWrapRenderContainer = 'Col' | 'Row' | 'Stack'
+
+/** StudioRemoveRenderPatchRequest removes one direct child render together with its attached tag. */
+export type StudioRemoveRenderPatchRequest = Readonly<{
+  kind: 'remove-render'
+  renderId: string
+}>
+
+/** StudioSetTextContentPatchRequest replaces a text leaf's first argument with a string literal. */
+export type StudioSetTextContentPatchRequest = Readonly<{
+  content: string
+  kind: 'set-text-content'
+  renderId: string
+}>
+
+/** StudioBindTextPatchRequest points a text leaf's first argument at a value visible at that render. */
+export type StudioBindTextPatchRequest = Readonly<{
+  expression: string
+  kind: 'bind-text'
+  renderId: string
+}>
 
 export type StudioScenarioArgumentValue =
   | boolean
@@ -351,6 +391,9 @@ export type StudioSourcePatchRequest =
   | StudioUnsnapSketchFromFlowPatchRequest
   | StudioWrapRenderPatchRequest
   | StudioMoveRenderPatchRequest
+  | StudioRemoveRenderPatchRequest
+  | StudioSetTextContentPatchRequest
+  | StudioBindTextPatchRequest
 
 /** StudioSourceTextEdit describes one exact text replacement produced by a Studio source action. */
 export type StudioSourceTextEdit = {
@@ -373,6 +416,7 @@ export const StudioActions = {
   appendScenarioSteps,
   applyPatch,
   bindSketchField,
+  bindText,
   insertCapturedFixture,
   insertComponent,
   insertProjectView,
@@ -380,10 +424,12 @@ export const StudioActions = {
   insertSpacer,
   inspectRender,
   moveRender,
+  removeRender,
   setLayoutEntry,
   setScenarioArguments,
   snapSketchToFlow,
   setStyleEntry,
+  setTextContent,
   sourceVersion: contentVersion,
   toggleFlowDirection,
   wrapRender,
@@ -415,16 +461,19 @@ async function applyPatchContent(
     'add-sketch-entity-parameter': async action => await addSketchEntityParameter(document, action, context),
     'append-scenario-steps': async action => await appendScenarioSteps(document, action),
     'bind-sketch-field': async action => await bindSketchField(document, action),
+    'bind-text': async action => await bindText(document, action),
     'insert-captured-fixture': async action => await insertCapturedFixture(document, action),
     'insert-component': async action => await insertComponent(document, action.component, action),
     'insert-project-view': async action => await insertProjectView(document, action),
     'insert-separator': async action => await insertSeparator(document, action),
     'insert-spacer': async action => await insertSpacer(document, action),
     'move-render': async action => await moveRender(document, action),
+    'remove-render': async action => await removeRender(document, action),
     'set-design-entry': async action => await setDesignEntry(document, action),
     'set-layout-entry': async action => await setLayoutEntry(document, action),
     'set-scenario-arguments': async action => await setScenarioArguments(document, action),
     'set-style-entry': async action => await setStyleEntry(document, action, context),
+    'set-text-content': async action => await setTextContent(document, action),
     'snap-sketch-to-flow': async action => await snapSketchToFlow(document, action),
     'toggle-flow-direction': async action => await toggleFlowDirection(document, action),
     'unsnap-sketch-from-flow': async action => await unsnapSketchFromFlow(document, action),
@@ -535,16 +584,19 @@ function occurrenceTargetRenderId(request: StudioSourcePatchRequest): string | u
     'add-sketch-entity-parameter': () => undefined,
     'append-scenario-steps': () => undefined,
     'bind-sketch-field': action => action.renderId,
+    'bind-text': action => action.renderId,
     'insert-captured-fixture': () => undefined,
     'insert-component': action => action.beforeId ?? action.afterId,
     'insert-project-view': action => action.beforeId ?? action.afterId,
     'insert-separator': action => action.afterId,
     'insert-spacer': action => action.afterId,
     'move-render': action => action.draggedId,
+    'remove-render': action => action.renderId,
     'set-design-entry': () => undefined,
     'set-layout-entry': action => action.renderId,
     'set-scenario-arguments': () => undefined,
     'set-style-entry': action => action.renderId,
+    'set-text-content': action => action.renderId,
     'snap-sketch-to-flow': () => undefined,
     'toggle-flow-direction': action => action.renderId,
     'unsnap-sketch-from-flow': () => undefined,
@@ -1299,7 +1351,155 @@ function inspectRender(
     renderId,
     styleEntries,
     styleProvenance: styleEntries.map(entry => styleProvenance(files, document, design, entry)),
+    ...(() => {
+      const text = textInspection(document, render)
+      return text === undefined ? {} : { text }
+    })(),
   }
+}
+
+const studioTextLeafNames: ReadonlySet<string> = new Set(['Text', 'TextMultiline'])
+
+type StudioTextLeaf = Readonly<{ argument: AST.Argument; render: AST.Render }>
+
+/** textLeaf recognizes a Text or TextMultiline render whose first positional argument can be edited. */
+function textLeaf(render: AST.Render): StudioTextLeaf | undefined {
+  if (!studioTextLeafNames.has(render.view?.$refText ?? '') || render.block !== undefined) {
+    return undefined
+  }
+  const argument = render.argumentList?.arguments.find(candidate => candidate.label === undefined)
+  return argument?.$cstNode === undefined ? undefined : { argument, render }
+}
+
+function requireTextLeaf(file: AST.TaoFile, renderId: string, operation: string): StudioTextLeaf {
+  const leaf = textLeaf(requireRenderById(file, renderId))
+  if (leaf === undefined) {
+    throw new Errors.UserInputError(`Studio can ${operation} only on a Text or TextMultiline leaf with a value.`)
+  }
+  return leaf
+}
+
+function textInspection(document: AST.Document, render: AST.Render): StudioTextInspection | undefined {
+  const leaf = textLeaf(render)
+  if (leaf === undefined) {
+    return undefined
+  }
+  const expression = document.textDocument.getText().slice(leaf.argument.$cstNode!.offset, leaf.argument.$cstNode!.end)
+  const literal = /^"([^"{}\\]*)"$/.exec(expression)?.[1]
+  return {
+    candidates: textBindingCandidates(render),
+    expression,
+    ...(literal === undefined ? {} : { literal }),
+  }
+}
+
+/** visibleRenderValues lists the lexical values a render may read, root renders seeing only parameters. */
+function visibleRenderValues(render: AST.Render): ReadonlyMap<string, StudioLexicalValue> {
+  const statement = directViewRenderStatement(render)
+  if (statement !== undefined && AST.isBlock(statement.$container)) {
+    return visibleInsertionValues(statement.$container, statement.$cstNode?.offset ?? 0)
+  }
+  const values = new Map<string, StudioLexicalValue>()
+  const owner = AST.findOwningView(render)
+  for (const parameter of owner === undefined ? [] : AST.parametersOf(owner)) {
+    addVisibleInsertionValue(values, parameter)
+  }
+  return values
+}
+
+function textCandidateType(type: ASTUtils.TaoType): StudioTextBindingCandidate['type'] | undefined {
+  if (type.kind === 'enum') {
+    return 'enum'
+  }
+  if (type.kind === 'primitive' && (type.primitive === 'text' || type.primitive === 'number')) {
+    return type.primitive
+  }
+  return undefined
+}
+
+/**
+ * textBindingCandidates lists every scalar value and every non-optional scalar entity field, one level
+ * deep, that a text leaf could show. Deeper relations and collections wait for a richer picker.
+ */
+function textBindingCandidates(render: AST.Render): readonly StudioTextBindingCandidate[] {
+  const candidates: StudioTextBindingCandidate[] = []
+  for (const [name, declaration] of visibleRenderValues(render)) {
+    const type = Type.ofValueDeclaration(declaration)
+    const scalar = textCandidateType(type)
+    if (scalar !== undefined) {
+      candidates.push({ expression: name, type: scalar })
+      continue
+    }
+    if (type.kind !== 'entity') {
+      continue
+    }
+    for (const field of Type.dataFields(type.entity)) {
+      if (field.optional) {
+        continue
+      }
+      const fieldType = textCandidateType(Type.dataFieldType(field))
+      if (fieldType !== undefined) {
+        candidates.push({ expression: `${name}.${field.name}`, type: fieldType })
+      }
+    }
+  }
+  return candidates.toSorted((left, right) => left.expression.localeCompare(right.expression))
+}
+
+/** setTextContent replaces a text leaf's value with a string literal and keeps its other arguments. */
+async function setTextContent(document: AST.Document, request: StudioSetTextContentPatchRequest): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireExactKeys(request, ['content', 'kind', 'renderId'], 'Set text content request')
+  if (typeof request.content !== 'string') {
+    throw new Errors.UserInputError('Studio text content must be a string.')
+  }
+  requireLocalRenderId(document, request.renderId, 'set text content')
+  const leaf = requireTextLeaf(document.parseResult.value, request.renderId, 'set text content')
+  return await Formatter.formatCode(applySourceEdits(document.textDocument.getText(), [{
+    end: leaf.argument.$cstNode!.end,
+    replacement: taoStringLiteral(request.content),
+    start: leaf.argument.$cstNode!.offset,
+  }]))
+}
+
+/** bindText points a text leaf at one of the values inspection offered for it, interpolating non-text. */
+async function bindText(document: AST.Document, request: StudioBindTextPatchRequest): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireExactKeys(request, ['expression', 'kind', 'renderId'], 'Bind text request')
+  requireLocalRenderId(document, request.renderId, 'bind text')
+  const leaf = requireTextLeaf(document.parseResult.value, request.renderId, 'bind text')
+  const candidate = textBindingCandidates(leaf.render).find(entry => entry.expression === request.expression)
+  if (candidate === undefined) {
+    throw new Errors.UserInputError(`Studio text binding is not visible at this render: ${request.expression}`)
+  }
+  return await Formatter.formatCode(applySourceEdits(document.textDocument.getText(), [{
+    end: leaf.argument.$cstNode!.end,
+    replacement: candidate.type === 'text' ? candidate.expression : `"{ ${candidate.expression} }"`,
+    start: leaf.argument.$cstNode!.offset,
+  }]))
+}
+
+/** removeRender deletes one direct child render statement and the tag attached to it. */
+async function removeRender(document: AST.Document, request: StudioRemoveRenderPatchRequest): Promise<string> {
+  assertNoSyntaxErrors(document)
+  requireExactKeys(request, ['kind', 'renderId'], 'Remove render request')
+  requireLocalRenderId(document, request.renderId, 'remove renders')
+  const render = requireRenderById(document.parseResult.value, request.renderId)
+  const statement = directViewRenderStatement(render)
+  if (statement === undefined || !AST.isBlock(statement.$container)) {
+    throw new Errors.UserInputError('Studio can remove only a direct child render; the root render stays.')
+  }
+  const block = statement.$container
+  const source = document.textDocument.getText()
+  const slices = blockStatementSlices(source, block)
+  const tag = AST.attachedTag(render)
+  const removed = slices.filter(slice =>
+    slice.statement === statement || (tag !== undefined && slice.statement === tag)
+  )
+  return await Formatter.formatCode(applySourceEdits(
+    source,
+    removed.map(slice => ({ end: slice.end, replacement: '', start: slice.start })),
+  ))
 }
 
 function styleProvenance(
@@ -2146,8 +2346,16 @@ function isObject(value: unknown): value is Record<string, unknown> {
 async function wrapRender(document: AST.Document, request: StudioWrapRenderPatchRequest): Promise<string> {
   assertNoSyntaxErrors(document)
   requireLocalRenderId(document, request.renderId, 'wrap renders')
-  const render = requireRenderById(document.parseResult.value, request.renderId)
-  return await Formatter.formatCode(wrapRenderSource(document.textDocument.getText(), render, request.wrapper))
+  if (request.wrapper !== 'Col' && request.wrapper !== 'Row' && request.wrapper !== 'Stack') {
+    throw new Errors.UserInputError(`Unsupported Studio wrapper: ${String(request.wrapper)}`)
+  }
+  const file = document.parseResult.value
+  const render = requireRenderById(file, request.renderId)
+  return await Formatter.formatCode(ensureUiNamesImported(
+    wrapRenderSource(document.textDocument.getText(), render, request.wrapper),
+    file,
+    [request.wrapper],
+  ))
 }
 
 /** moveRender moves a rendered source node between sibling render positions. */
@@ -2345,10 +2553,16 @@ const studioComponentSnippets: Readonly<Record<StudioComponentKind, string>> = {
 const studioComponentKinds = new Set<StudioComponentKind>(Object.keys(studioComponentSnippets) as StudioComponentKind[])
 
 function ensureUiComponentImport(source: string, file: AST.TaoFile, component: StudioComponentKind): string {
+  return ensureUiNamesImported(
+    source,
+    file,
+    [...new Set(studioComponentSnippets[component].includes('Text(') ? [component, 'Text'] : [component])],
+  )
+}
+
+/** ensureUiNamesImported adds the named `@tao/ui` declarations to the file's import when missing. */
+function ensureUiNamesImported(source: string, file: AST.TaoFile, required: readonly string[]): string {
   const uses = file.statements.filter(AST.isUseStatement)
-  const required = [
-    ...new Set(studioComponentSnippets[component].includes('Text(') ? [component, 'Text'] : [component]),
-  ]
   const imported = new Set(uses.flatMap(statement =>
     statement.importPath === '@tao/ui'
       ? statement.importedDeclarations.map(reference => reference.$refText)
@@ -2571,7 +2785,7 @@ function renderLayoutInsertionOffset(render: AST.Render): number {
   return render.block?.$cstNode?.offset ?? render.$cstNode!.end
 }
 
-function wrapRenderSource(source: string, render: AST.Render, wrapper: 'Stack'): string {
+function wrapRenderSource(source: string, render: AST.Render, wrapper: StudioWrapRenderContainer): string {
   const cstNode = render.$cstNode
   if (cstNode === undefined) {
     throw new Errors.UserInputError('Cannot wrap a render without source coordinates.')

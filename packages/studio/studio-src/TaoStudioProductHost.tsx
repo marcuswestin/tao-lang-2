@@ -1442,7 +1442,9 @@ export function StudioInspectorDataLines(
   return [
     `Selected view: ${selected.identity.occurrence?.renderOwner ?? 'not published'}`,
     `Selected element: ${parsed?.elementName ?? selected.identity.occurrence?.nodeKind ?? 'not published'}`,
-    'Binding metadata: not published for this render.',
+    parsed?.text === undefined
+      ? 'Binding metadata: not published for this render.'
+      : `Text bindings: ${parsed.text.candidates.length} values in scope; bind one in the Text section.`,
     activeCellId === ''
       ? 'Datasource context: no active preview cell.'
       : `Datasource context: cell ${activeCellId} revision ${activeCellRevision}.`,
@@ -1451,12 +1453,20 @@ export function StudioInspectorDataLines(
   ]
 }
 
+/** Inspector actions that act on the selected render as a whole; each lowers to one source action. */
+const studioInspectorActions: Readonly<Record<string, Readonly<{ action: Record<string, unknown>; label: string }>>> = {
+  'remove-element': { action: { kind: 'remove-render' }, label: 'Remove element' },
+  'wrap-col': { action: { kind: 'wrap-render', wrapper: 'Col' }, label: 'Wrap in Col' },
+  'wrap-row': { action: { kind: 'wrap-render', wrapper: 'Row' }, label: 'Wrap in Row' },
+  'wrap-stack': { action: { kind: 'wrap-render', wrapper: 'Stack' }, label: 'Wrap in Stack' },
+}
+
 export function StudioInspectorActionIds(inspection: string, selection: string): string[] {
-  return StudioInspectorReady(inspection, selection) ? ['wrap-stack'] : []
+  return StudioInspectorReady(inspection, selection) ? ['wrap-row', 'wrap-col', 'wrap-stack', 'remove-element'] : []
 }
 
 export function StudioInspectorActionLabel(actionId: string): string {
-  return actionId === 'wrap-stack' ? 'Wrap in Stack' : actionId
+  return studioInspectorActions[actionId]?.label ?? actionId
 }
 
 export function StudioInspectorActionValid(
@@ -1467,7 +1477,7 @@ export function StudioInspectorActionValid(
   actionId: string,
 ): boolean {
   const selected = studioInspectorSelection(selection)
-  return actionId === 'wrap-stack'
+  return studioInspectorActions[actionId] !== undefined
     && !busy
     && StudioInspectorReady(inspection, selection)
     && selected !== undefined
@@ -1476,10 +1486,81 @@ export function StudioInspectorActionValid(
 
 export function StudioInspectorAction(selection: string, actionId: string): string {
   const selected = studioInspectorSelection(selection)
-  if (selected === undefined || actionId !== 'wrap-stack') {
+  const definition = studioInspectorActions[actionId]
+  if (selected === undefined || definition === undefined) {
     Errors.throwUserInput('The selected element does not expose that Studio action.')
   }
-  return JSON.stringify({ kind: 'wrap-render', renderId: selected.renderId, wrapper: 'Stack' })
+  return JSON.stringify({ ...definition.action, renderId: selected.renderId })
+}
+
+/** The Text section: edit a text leaf's literal or point it at a value visible where it renders. */
+function studioInspectorText(inspection: string, selection: string): StudioRenderInspection['text'] {
+  const selected = studioInspectorSelection(selection)
+  const parsed = studioInspectorInspection(inspection)
+  return selected !== undefined && parsed?.renderId === selected.renderId ? parsed.text : undefined
+}
+
+export function StudioInspectorTextAvailable(inspection: string, selection: string): boolean {
+  return studioInspectorText(inspection, selection) !== undefined
+}
+
+export function StudioInspectorTextStatus(inspection: string, selection: string): string {
+  const selected = studioInspectorSelection(selection)
+  if (selected === undefined) {
+    return 'Select a Text element to edit its content or bind it to a value.'
+  }
+  const text = studioInspectorText(inspection, selection)
+  return text === undefined
+    ? 'The selected element is not a Text leaf; select a Text or TextMultiline to edit its content.'
+    : text.literal === undefined
+    ? `Showing ${text.expression}.`
+    : 'Showing a literal.'
+}
+
+export function StudioInspectorTextLiteral(inspection: string): string {
+  return studioInspectorInspection(inspection)?.text?.literal ?? ''
+}
+
+export function StudioInspectorTextCandidates(inspection: string): string[] {
+  return (studioInspectorInspection(inspection)?.text?.candidates ?? []).map(candidate => candidate.expression)
+}
+
+export function StudioInspectorTextBindingLabel(inspection: string, expression: string): string {
+  const candidate = studioInspectorInspection(inspection)?.text?.candidates.find(entry =>
+    entry.expression === expression
+  )
+  return candidate === undefined || candidate.type === 'text'
+    ? `Bind to ${expression}`
+    : `Bind to ${expression} (${candidate.type})`
+}
+
+export function StudioInspectorTextActionValid(
+  currentSourceVersion: string,
+  inspection: string,
+  selection: string,
+  busy: boolean,
+): boolean {
+  const selected = studioInspectorSelection(selection)
+  return !busy
+    && selected !== undefined
+    && selected.identity.sourceVersion === currentSourceVersion
+    && studioInspectorText(inspection, selection) !== undefined
+}
+
+export function StudioInspectorSetTextAction(selection: string, content: string): string {
+  const selected = studioInspectorSelection(selection)
+  if (selected === undefined) {
+    Errors.throwUserInput('Select a Text element before setting its content.')
+  }
+  return JSON.stringify({ content, kind: 'set-text-content', renderId: selected.renderId })
+}
+
+export function StudioInspectorBindTextAction(selection: string, expression: string): string {
+  const selected = studioInspectorSelection(selection)
+  if (selected === undefined) {
+    Errors.throwUserInput('Select a Text element before binding it.')
+  }
+  return JSON.stringify({ expression, kind: 'bind-text', renderId: selected.renderId })
 }
 
 function studioInspectorInspection(value: string): StudioRenderInspection | undefined {

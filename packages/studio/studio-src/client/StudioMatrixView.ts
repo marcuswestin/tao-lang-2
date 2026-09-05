@@ -66,6 +66,8 @@ type StudioMatrixGroup<Item> = {
   label: string
   sketchSourceVersion?: string
   sketchView?: string
+  /** The one view every scenario in the group focuses, when the group is a focused-view group. */
+  subjectView?: string
 }
 
 export type StudioMatrixGroupLayout = {
@@ -90,6 +92,26 @@ export const StudioMatrixLayout = {
       groups.set(id, group)
     }
     return [...groups.values()]
+  },
+  /** subjectView names the view a scenario group focuses when every entry renders that same view. */
+  subjectView(
+    manifest: Pick<StudioPreviewManifestV2, 'scenarios' | 'subjects'>,
+    groupId: string,
+  ): string | undefined {
+    const subjects = new Map(manifest.subjects.map(subject => [subject.subjectId, subject]))
+    const viewNames = new Set(
+      manifest.scenarios
+        .filter(scenario => StudioScenarioControls.groupId(scenario.source.path, scenario.group) === groupId)
+        .map(scenario => {
+          const subject = subjects.get(scenario.subjectId)
+          return subject?.kind === 'view' ? subject.viewName : undefined
+        }),
+    )
+    return viewNames.size === 1 ? [...viewNames][0] : undefined
+  },
+  /** focusable says whether canvas mode can focus a view: some group renders that view alone. */
+  focusable(groups: readonly Pick<StudioMatrixGroup<unknown>, 'subjectView'>[], viewName: string): boolean {
+    return groups.some(group => group.subjectView === viewName)
   },
   reconcile(previous: readonly string[], next: readonly string[]): {
     added: readonly string[]
@@ -172,6 +194,12 @@ export const StudioMatrixView = {
   },
   reconcile: reconcileMatrix,
   renderSketches: renderMatrixSketches,
+  /** focusView enters or leaves canvas mode for one view; `exit` runs when the bar's Back is pressed. */
+  focusView: focusCanvasView,
+  /** focusedView reports the view canvas mode currently shows alone, if any. */
+  focusedView(parent: HTMLElement): string | undefined {
+    return canvasFocus.get(parent)
+  },
 } as const
 
 export type StudioReviewCellMetadata = Readonly<{
@@ -624,6 +652,11 @@ function reconcileMatrix<Item>(
     const row = rows.get(group.id) ?? document.createElement('section')
     row.className = 'studio-preview-group'
     row.dataset['taoStudioGroup'] = group.id
+    if (group.subjectView === undefined) {
+      delete row.dataset['taoStudioGroupView']
+    } else {
+      row.dataset['taoStudioGroupView'] = group.subjectView
+    }
     const heading = row.querySelector<HTMLElement>(':scope > .studio-preview-group-label')
       ?? document.createElement('h2')
     heading.className = 'studio-preview-group-label'
@@ -667,6 +700,58 @@ function reconcileMatrix<Item>(
   if (!parent.contains(canvas)) {
     parent.replaceChildren(canvas)
   }
+  applyCanvasFocus(parent)
+}
+
+const canvasFocus = new WeakMap<HTMLElement, string>()
+
+/**
+ * Canvas mode shows one view alone: every scenario group that does not focus that view is hidden,
+ * and a bar above the grid names the view and offers the way back. Cells stay mounted, so the app's
+ * own previews keep their state while the person works on the one definition.
+ */
+function focusCanvasView(parent: HTMLElement, viewName: string | undefined, exit: () => void): void {
+  if (viewName === undefined) {
+    canvasFocus.delete(parent)
+  } else {
+    canvasFocus.set(parent, viewName)
+  }
+  parent.dataset['taoStudioCanvasExit'] = 'true'
+  canvasExits.set(parent, exit)
+  applyCanvasFocus(parent)
+}
+
+const canvasExits = new WeakMap<HTMLElement, () => void>()
+
+function applyCanvasFocus(parent: HTMLElement): void {
+  const focused = canvasFocus.get(parent)
+  const document = parent.ownerDocument
+  const canvas = parent.querySelector<HTMLElement>(':scope > .studio-preview-grid')
+  if (canvas === null) {
+    return
+  }
+  for (const row of canvas.querySelectorAll<HTMLElement>(':scope > [data-tao-studio-group]')) {
+    row.hidden = focused !== undefined && row.dataset['taoStudioGroupView'] !== focused
+  }
+  const existing = canvas.querySelector<HTMLElement>(':scope > .studio-canvas-bar')
+  if (focused === undefined) {
+    existing?.remove()
+    delete parent.dataset['taoStudioCanvasFocus']
+    return
+  }
+  parent.dataset['taoStudioCanvasFocus'] = focused
+  const bar = existing ?? document.createElement('div')
+  bar.className = 'studio-canvas-bar'
+  bar.dataset['taoStudioCanvasBar'] = focused
+  const label = bar.querySelector<HTMLElement>(':scope > span') ?? document.createElement('span')
+  label.textContent = `Editing ${focused} on its own. Changes land in that one view definition.`
+  const back = bar.querySelector<HTMLButtonElement>(':scope > button') ?? document.createElement('button')
+  back.type = 'button'
+  back.textContent = 'Back to app'
+  back.dataset['taoStudioCanvasBack'] = 'true'
+  back.onclick = () => canvasExits.get(parent)?.()
+  bar.replaceChildren(label, back)
+  canvas.prepend(bar)
 }
 
 /** Moves keyed matrix nodes in place so retained preview iframes keep their browsing contexts. */
@@ -1080,6 +1165,10 @@ function connectionGroups(
     }),
     id: group.id,
     label: group.label,
+    ...(() => {
+      const subjectView = StudioMatrixLayout.subjectView(manifest, group.id)
+      return subjectView === undefined ? {} : { subjectView }
+    })(),
     ...(() => {
       if (group.label !== 'sketch') {
         return {}

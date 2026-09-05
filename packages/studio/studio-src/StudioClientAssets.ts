@@ -450,7 +450,7 @@ kbd {
   text-align: left; text-overflow: ellipsis; white-space: nowrap;
 }
 .studio-status-diagnostic:hover { text-decoration: underline; text-underline-offset: 3px; }
-.studio-device, .studio-interaction-mode, .studio-reload, .studio-beta-ship {
+.studio-device, .studio-interaction-mode, .studio-reload, .studio-beta-ship, .studio-canvas-focus {
   align-items: center; background: transparent; border: 1px solid transparent; border-radius: var(--studio-radius);
   color: var(--studio-text-muted); cursor: pointer; display: inline-flex; font-weight: 500; gap: 6px; height: 26px; padding: 0 9px; white-space: nowrap;
 }
@@ -717,6 +717,9 @@ kbd {
 
 /* ---------- freehand sketches ---------- */
 [data-tao-studio-sketch-host] { flex: none; }
+.studio-canvas-bar { align-items: center; background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px; display: flex; gap: 12px; justify-content: space-between; padding: 8px 12px; }
+.studio-canvas-bar span { color: var(--studio-text-muted); font-size: 12px; }
+.studio-canvas-focus[data-state="focused"] { background: #343a35; color: #f0f2ef; }
 [data-tao-studio-sketch-workspace] { align-items: flex-start; border: 1px dashed var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); cursor: crosshair; position: relative; }
 [data-tao-studio-sketch-create-surface] [data-tao-studio-sketch-workspace]::before { color: var(--studio-text-dim); content: "Drag empty space to draw a view"; font-size: 11px; left: 10px; pointer-events: none; position: absolute; top: 6px; }
 [data-tao-studio-sketch] { background: #f8f9fb; border: 1px solid #8792a3; border-radius: 8px; box-shadow: 0 10px 28px rgba(0, 0, 0, .5); color: #242a33; }

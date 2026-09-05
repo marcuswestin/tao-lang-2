@@ -19,6 +19,7 @@ export type StudioClientView = {
   betaShip: HTMLButtonElement
   globalLoading: HTMLElement
   inspector: HTMLElement
+  canvasFocus: HTMLButtonElement
   interactionMode: HTMLButtonElement
   preview: HTMLElement
   project: HTMLSelectElement
@@ -123,6 +124,7 @@ export function studioShellMarkup(): string {
         </div>
         <div class="studio-toolbar-actions">
           <span class="studio-status" role="status">Connecting…</span>
+          <button class="studio-canvas-focus" type="button" hidden title="Show the selected element's view on its own and edit only that view">Focus view</button>
           <button class="studio-device" type="button" aria-haspopup="dialog" aria-expanded="false" title="Physical device">${
     studioIcon('phone', 'small')
   }Device</button>
@@ -230,6 +232,7 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
     commandInput: requiredInput(root, '.studio-command-overlay input'),
     commandOverlay: requiredElement(root, '.studio-command-overlay'),
     commandResults: requiredElement(root, '.studio-command-results'),
+    canvasFocus: requiredButton(root, '.studio-canvas-focus'),
     device: requiredButton(root, '.studio-device'),
     devicePopover: requiredElement(root, '.studio-device-popover'),
     drawerContent: requiredElement(root, '.studio-drawer-content'),

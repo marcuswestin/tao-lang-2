@@ -194,6 +194,28 @@ only where an existing action's behaviour is exercised.
 
 **Size.** M. **Depends on.** Stride 1b (the tool model owns the space key).
 
+## Canvas mode proof of concept
+
+**Landed 2026-09-04**, ahead of strides 1 and 2, as the first end-to-end taste of editing an existing
+view the way a Figma user edits a component: select an element in the running app, press **Focus
+view**, and the owning view stands alone with its scenario cells while the app's other groups hide.
+Every edit lands in that one definition and shows in every occurrence.
+
+- Entry reuses the view's existing focused `scenarios` group (decision A, first branch); a view
+  without one is not focusable yet. Creating a `draft` entry on demand and taking the instance's
+  arguments from item provenance (FS-D15) remain open.
+- Content edits are flow edits (decision B): the palette inserts `Row`, `Col`, and `Text` at the
+  selected gap; the inspector wraps in `Row`, `Col`, or `Stack` and removes a child. Free rectangles
+  inside authored views stay out, per FS-D12.
+- Binding is the inspector's Text section (decision C, inspector half): edit the literal or bind the
+  leaf to a parameter, loop item, local value, or one-level entity field the source makes visible.
+  Chips dragged onto the preview wait for stride 2d's on-preview gestures.
+- New source actions (decision D): `remove-render`, `set-text-content`, `bind-text`, and `wrap-render`
+  for `Row` and `Col`; `inspectRender` publishes the text leaf's expression, literal, and candidates.
+- Forcing app (decision E): HNReader's `StoryRow`, which already has the `rows` scenario group.
+
+`Docs/Spec/Tao Studio.md` carries the executable contract under "Canvas mode".
+
 ## After these strides
 
 FS-D20's order continues unchanged: L2, Slice 4 Variants, L3, Slice 5 Tao-rendered canvas, Slice 6

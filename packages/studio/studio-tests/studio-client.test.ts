@@ -61,6 +61,7 @@ import {
   StudioPanelModels,
 } from '../studio-src/client/StudioProductPanels'
 import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
+import { StudioScenarioControls } from '../studio-src/client/StudioScenarioControls'
 import {
   StudioGlobalLoading,
   StudioPaneMinimums,
@@ -1347,6 +1348,34 @@ Test('Studio matrix groups cells by source order and diffs keyed reconciliation 
     removed: ['removed'],
     retained: ['novel'],
   })
+})
+
+Test('Studio canvas mode focuses only a group whose every scenario renders one view', () => {
+  const scenarios = [
+    { ...scenario('novel', 'states', '/Garden.tao'), subjectId: 'view:StoryRow' },
+    { ...scenario('long', 'states', '/Garden.tao'), subjectId: 'view:StoryRow' },
+    { ...scenario('phone', 'devices', '/Garden.tao'), subjectId: 'app:Garden' },
+    { ...scenario('mixed-a', 'mixed', '/Garden.tao'), subjectId: 'view:StoryRow' },
+    { ...scenario('mixed-b', 'mixed', '/Garden.tao'), subjectId: 'view:CommentRow' },
+  ]
+  const manifest = {
+    scenarios,
+    subjects: [
+      { appName: 'Garden', kind: 'app', subjectId: 'app:Garden' },
+      { kind: 'view', subjectId: 'view:StoryRow', viewName: 'StoryRow' },
+      { kind: 'view', subjectId: 'view:CommentRow', viewName: 'CommentRow' },
+    ],
+  } as unknown as Pick<StudioPreviewManifestV2, 'scenarios' | 'subjects'>
+  const groupId = (group: string): string => StudioScenarioControls.groupId('/Garden.tao', group)
+
+  Expect(StudioMatrixLayout.subjectView(manifest, groupId('states'))).toBe('StoryRow')
+  Expect(StudioMatrixLayout.subjectView(manifest, groupId('devices'))).toBeUndefined()
+  Expect(StudioMatrixLayout.subjectView(manifest, groupId('mixed'))).toBeUndefined()
+  const groups = ['states', 'devices', 'mixed'].map(group => ({
+    subjectView: StudioMatrixLayout.subjectView(manifest, groupId(group)),
+  }))
+  Expect(StudioMatrixLayout.focusable(groups, 'StoryRow')).toBe(true)
+  Expect(StudioMatrixLayout.focusable(groups, 'CommentRow')).toBe(false)
 })
 
 Test('Studio review DOM publishes portable scenario identity and deterministic renderer metadata', () => {
