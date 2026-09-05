@@ -1312,8 +1312,7 @@ async function waitForProbeResult(
   sleep: (milliseconds: number) => Promise<void> = Time.sleep,
   signal?: AbortSignal,
 ): Promise<StudioNativeProbeResult> {
-  const deadline = Date.now() + probeTimeoutMs
-  while (Date.now() < deadline) {
+  const result = await Time.pollUntil(async () => {
     throwIfNativeInterrupted(signal, 'runtime probe')
     if (await FS.isFile(resultPath)) {
       return probeResult(await FS.readJson(resultPath))
@@ -1321,7 +1320,10 @@ async function waitForProbeResult(
     if (command.exitCode !== null || command.signalCode !== null) {
       throw new Errors.HostEnvironmentError('Electrobun exited before writing its runtime probe result.')
     }
-    await sleep(100)
+    return undefined
+  }, { intervalMs: 100, sleep, timeoutMs: probeTimeoutMs })
+  if (result !== undefined) {
+    return result
   }
   throw new Errors.HostEnvironmentError('Timed out waiting for the Electrobun runtime probe.')
 }

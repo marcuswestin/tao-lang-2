@@ -148,14 +148,13 @@ async function recordRunUnlocked(
 }
 
 async function acquireLedgerLease(repositoryRoot: string): Promise<MachineResourceLease> {
-  const deadline = Time.nowMs() + LEDGER_LOCK_TIMEOUT_MS
   const registryRoot = FS.resolvePath('.artifacts/testing/transaction-lock', repositoryRoot)
-  while (Time.nowMs() <= deadline) {
-    const lease = await MachineLanes.tryAcquireResource({ name: 'test-ledger', registryRoot })
-    if (lease !== undefined) {
-      return lease
-    }
-    await Time.sleep(25)
+  const lease = await Time.pollUntil(
+    () => MachineLanes.tryAcquireResource({ name: 'test-ledger', registryRoot }),
+    { intervalMs: 25, timeoutMs: LEDGER_LOCK_TIMEOUT_MS },
+  )
+  if (lease !== undefined) {
+    return lease
   }
   throw new Errors.HostEnvironmentError('Timed out waiting for another test command to finish updating the ledger.')
 }

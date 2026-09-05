@@ -51,20 +51,19 @@ export type ProbeOptions = {
  */
 export async function waitForReadyUrl(url: string, options: ProbeOptions = {}): Promise<boolean> {
   const fetchUrl = options.fetchUrl ?? defaultFetch
-  const sleep = options.sleep ?? Time.sleep
   const pollMs = options.pollMs ?? READY_POLL_MS
-  const timeoutMs = options.timeoutMs ?? READY_TIMEOUT_MS
   // A wall-clock deadline, not an attempt count: a server that accepts the connection and never
   // answers would otherwise hold this open forever, and the launch's Ctrl+C handler with it.
-  const deadline = (options.now ?? Time.nowMs)() + timeoutMs
-  const now = options.now ?? Time.nowMs
-  while (now() < deadline) {
-    if ((await fetchUrl(url, pollMs * 2).catch(() => ({ ok: false }))).ok) {
-      return true
-    }
-    await sleep(pollMs)
-  }
-  return false
+  const ready = await Time.pollUntil(
+    async () => (await fetchUrl(url, pollMs * 2).catch(() => ({ ok: false }))).ok,
+    {
+      intervalMs: pollMs,
+      timeoutMs: options.timeoutMs ?? READY_TIMEOUT_MS,
+      ...(options.now === undefined ? {} : { now: options.now }),
+      ...(options.sleep === undefined ? {} : { sleep: options.sleep }),
+    },
+  )
+  return ready === true
 }
 
 async function defaultFetch(url: string, timeoutMs: number): Promise<{ ok: boolean }> {

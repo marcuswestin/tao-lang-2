@@ -247,16 +247,14 @@ async function startEmulator(avdName: string, logPath: string): Promise<void> {
 }
 
 async function waitForBootedEmulator(logPath: string): Promise<void> {
-  const deadline = Date.now() + EMULATOR_BOOT_TIMEOUT_MS
-  while (Date.now() < deadline) {
-    const serial = await findRunningEmulator()
-    if (serial && await isEmulatorBooted(serial)) {
-      DevLoopTUI.logDevLoop('dev', `Android emulator ${serial} is booted.`)
-      return
-    }
-    await Time.sleep(EMULATOR_BOOT_POLL_MS)
+  const serial = await Time.pollUntil(async () => {
+    const candidate = await findRunningEmulator()
+    return candidate && await isEmulatorBooted(candidate) ? candidate : undefined
+  }, { intervalMs: EMULATOR_BOOT_POLL_MS, timeoutMs: EMULATOR_BOOT_TIMEOUT_MS })
+  if (serial !== undefined) {
+    DevLoopTUI.logDevLoop('dev', `Android emulator ${serial} is booted.`)
+    return
   }
-
   Errors.throwUserInput(`Android emulator did not finish booting. Check ${logPath}.`)
 }
 
