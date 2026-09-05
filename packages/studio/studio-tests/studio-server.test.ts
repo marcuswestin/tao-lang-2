@@ -179,6 +179,14 @@ Describe('Studio server request boundary', () => {
     }])
   })
 
+  Test('the default beta ship ignores a dirty Git tree', () => {
+    Expect(StudioServerTesting.betaShipArguments({
+      appName: 'Garden',
+      entryPath: '/projects/Garden/Garden.tao',
+      projectRoot: '/projects/Garden',
+    })).toEqual(['ship', '/projects/Garden/Garden.tao', '--app', 'Garden', '--beta', '--yes', '--ignore-git'])
+  })
+
   Test('returns the server-canonical source-action proposal without applying it', async () => {
     const requests: unknown[] = []
     const proposal = {
