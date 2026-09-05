@@ -59,7 +59,7 @@ export const studioIconPaths = {
 
 export type StudioIconName = keyof typeof studioIconPaths
 
-export function studioIcon(name: StudioIconName, size: 'default' | 'small' = 'default'): string {
+function studioIcon(name: StudioIconName, size: 'default' | 'small' = 'default'): string {
   const sizeAttribute = size === 'small' ? ' data-size="small"' : ''
   return `<svg class="studio-icon"${sizeAttribute} viewBox="0 0 24 24" aria-hidden="true"><path d="${
     studioIconPaths[name]
@@ -274,9 +274,10 @@ export const StudioGlobalLoading = {
   },
 } as const
 
-export function showOpenFile(view: StudioClientView, path: string): void {
+/** The breadcrumb is the file, then whatever trail the selection supplies; nothing is invented. */
+export function showOpenFile(view: StudioClientView, path: string, trail: readonly string[] = []): void {
   const label = path.split('/').at(-1) ?? path
-  view.breadcrumbs.replaceChildren(...[label, 'view', 'render'].flatMap((part, index) => {
+  view.breadcrumbs.replaceChildren(...[label, ...trail].flatMap((part, index) => {
     const item = document.createElement('span')
     item.textContent = part
     if (index === 0) {

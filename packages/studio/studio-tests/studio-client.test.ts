@@ -18,6 +18,7 @@ import {
 } from '../studio-src/client/StudioApp'
 import {
   isStudioSaveShortcut,
+  studioCellLabel,
   StudioCodeEditor,
   StudioDefinitionNavigation,
   StudioDiagnosticNavigation,
@@ -1067,6 +1068,43 @@ Test('Studio live Data tables decode runtime datasource snapshots without provid
     { datasource: 'Notes:local', entity: 'Notes', rows: [{ Id: '1', Title: 'Hello' }] },
     { datasource: 'Notes:local', entity: 'Tags', rows: [] },
   ])
+})
+
+Test('Studio runtime data names a captured datasource by its declared name, not its identity tuple', () => {
+  const snapshot = JSON.stringify({
+    rows: { Story: [{ Id: 'Story-1', Title: 'Show HN' }] },
+    schemaVersion: 1,
+  })
+  // The runtime keys an entry by its schema identity — the canonical declaration tuple, the storage
+  // key, and the schema name, JSON-encoded — plus the occurrence index.
+  const canonical = JSON.stringify([
+    'tao.declaration',
+    1,
+    'hnreader',
+    '@workspace',
+    'HNReader',
+    'datasource',
+    'StubSource',
+  ])
+  const identity = JSON.stringify([canonical, 'Data', 'Data'])
+  const tables = StudioRuntimeData.tables({
+    capturedAt: 42,
+    domains: [{ domain: 'data', value: { entries: [{ key: JSON.stringify([identity, 0]), snapshot }] }, version: 1 }],
+    version: 1,
+  })
+
+  Expect(tables).toEqual([{
+    datasource: 'StubSource · Data',
+    entity: 'Story',
+    rows: [{ Id: 'Story-1', Title: 'Show HN' }],
+  }])
+})
+
+Test('Studio cell ids read as group › entry with the manifest encoding undone', () => {
+  Expect(studioCellLabel('/workspace/Garden.tao#scenario:rows:leading#cell')).toBe('rows › leading')
+  Expect(studioCellLabel('/workspace/Garden.tao#scenario:Main%20group:Long%20titles')).toBe('Main group › Long titles')
+  Expect(studioCellLabel('')).toBe('')
+  Expect(studioCellLabel('not a cell id')).toBe('not a cell id')
 })
 
 Test('Studio Tao test output becomes structured results with navigable failures', () => {

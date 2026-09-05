@@ -2342,7 +2342,11 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-/** wrapRender wraps a rendered node in a Studio-owned Stack() container. */
+/**
+ * wrapRender wraps a rendered node in a Studio-owned Stack() container. The wrapper is a stdlib
+ * element like any palette insertion, so the file's `use … from @tao/ui` gains it when it is missing;
+ * otherwise the wrap compiles into "Could not resolve reference to RenderTarget named 'Stack'".
+ */
 async function wrapRender(document: AST.Document, request: StudioWrapRenderPatchRequest): Promise<string> {
   assertNoSyntaxErrors(document)
   requireLocalRenderId(document, request.renderId, 'wrap renders')

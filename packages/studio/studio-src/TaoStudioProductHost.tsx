@@ -19,7 +19,13 @@ import React from 'react'
 import { createPortal } from 'react-dom'
 import { StudioApiClient } from './client/StudioApiClient'
 import { mountStudio } from './client/StudioApp'
-import { fileUri, sanitizeLspHtml, StudioEditorInsertion } from './client/StudioEditor'
+import {
+  fileUri,
+  projectRelativePath,
+  sanitizeLspHtml,
+  studioCellLabel,
+  StudioEditorInsertion,
+} from './client/StudioEditor'
 import { StudioLens, type StudioLensFacet } from './client/StudioLens'
 import {
   type StudioTaoDrawerPanelModel,
@@ -424,7 +430,7 @@ export function StudioScenarioInspectorLabel(
 
 /** Compact presentation-only adapter; Tao owns the StudioContext query and supplied values. */
 export function StudioContextSummary(props: StudioContextSummaryProps): React.ReactElement {
-  const scenario = compactIdentity(props.ScenarioId) || 'No active scenario'
+  const scenario = studioCellLabel(props.ScenarioId) || 'No active scenario'
   return (
     <div className="studio-context-summary" data-active-cell={props.CellId} data-testid={props.Tag}>
       <strong title={props.FilePath}>{props.FilePath || 'No open file'}</strong>
@@ -463,7 +469,7 @@ export function StudioScenarioControlGroup(
   )
 }
 
-export type StudioButtonProps =
+type StudioButtonProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     Disabled: boolean
@@ -490,7 +496,7 @@ export function StudioButton(props: StudioButtonProps): React.ReactElement {
   )
 }
 
-export type StudioChoiceProps =
+type StudioChoiceProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     Change: TaoStudioHostTextAction
@@ -559,7 +565,7 @@ export function StudioActions(
   return <div className="studio-actions" data-testid={props.Tag} style={props.Layout?.style}>{props.children}</div>
 }
 
-export type StudioSchemeNoteProps =
+type StudioSchemeNoteProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     Capability: string
@@ -593,7 +599,7 @@ export function StudioScenarioIdentity(
   )
 }
 
-export type StudioScenarioSourceProps =
+type StudioScenarioSourceProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     Cell: string
@@ -993,9 +999,113 @@ export function StudioSourceRow(props: StudioSourceRowProps): React.ReactElement
       type="button"
     >
       <strong>{props.Label}</strong>
-      <span>{props.Detail}</span>
+      <span>{projectRelativeDetail(props.Detail)}</span>
     </button>
   )
+}
+
+/** Paths under the open project read relative to it; anything else is shown as given. */
+function projectRelativeDetail(detail: string): string {
+  const root = studioProductHostState().projectRoot
+  return root === undefined ? detail : projectRelativePath(root, detail) ?? detail
+}
+
+type StudioSearchHitProps =
+  & TaoStudioHostVisualProps
+  & Readonly<{
+    Detail: string
+    Kind: string
+    Label: string
+    Open: TaoStudioHostAction
+    Path: string
+  }>
+
+/** A search hit is a row: where it is, what matched, and only that. */
+export function StudioSearchHit(props: StudioSearchHitProps): React.ReactElement {
+  const separator = props.Label.lastIndexOf(':')
+  const file = separator < 0 ? props.Label : props.Label.slice(0, separator)
+  const line = separator < 0 ? '' : props.Label.slice(separator + 1)
+  return (
+    <button
+      className="studio-search-hit"
+      data-testid={props.Tag}
+      onClick={() => void props.Open.invoke()}
+      style={props.Layout?.style}
+      title={projectRelativeDetail(props.Path)}
+      type="button"
+    >
+      <span className="studio-search-hit-line">
+        {file}
+        {line === '' ? undefined : (
+          <>
+            · line <b>{line}</b>
+          </>
+        )}
+        {props.Kind === 'text' ? undefined : <span className="studio-search-hit-kind">· {props.Kind}</span>}
+      </span>
+      <span className="studio-search-hit-text">{props.Detail}</span>
+    </button>
+  )
+}
+
+/**
+ * Entity rows arrive serialized: objects keyed by field, or tuples. A table keeps the columns lined up
+ * across rows, with the field names as the header when the rows carry them.
+ */
+export function StudioDataRows(
+  props: TaoStudioHostVisualProps & Readonly<{ Rows: readonly string[] }>,
+): React.ReactElement {
+  const parsed = props.Rows.map(row => {
+    try {
+      return JSON.parse(row) as unknown
+    } catch {
+      return row
+    }
+  })
+  const columns: string[] = []
+  for (const row of parsed) {
+    if (row !== null && typeof row === 'object' && !Array.isArray(row)) {
+      for (const key of Object.keys(row)) {
+        if (!columns.includes(key)) {
+          columns.push(key)
+        }
+      }
+    }
+  }
+  const cellText = (cell: unknown): string =>
+    typeof cell === 'string' ? cell : cell === undefined ? '' : JSON.stringify(cell)
+  const rows = parsed.map(row =>
+    Array.isArray(row)
+      ? row.map(cellText)
+      : row !== null && typeof row === 'object'
+      ? columns.map(column => cellText((row as Record<string, unknown>)[column]))
+      : [typeof row === 'string' ? row : JSON.stringify(row)]
+  )
+  const width = Math.max(columns.length, rows.reduce((widest, cells) => Math.max(widest, cells.length), 0))
+  return (
+    <table className="studio-data-table" data-testid={props.Tag} style={props.Layout?.style}>
+      {columns.length === 0 ? undefined : (
+        <thead>
+          <tr>{columns.map(column => <th key={column}>{column}</th>)}</tr>
+        </thead>
+      )}
+      <tbody>
+        {rows.map((cells, rowIndex) => (
+          <tr key={rowIndex}>
+            {Array.from(
+              { length: width },
+              (_, column) => <td key={column} title={cells[column] ?? ''}>{cells[column] ?? ''}</td>,
+            )}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+/** A data table is named by its entity and datasource; the declaration tuple behind the datasource stays internal. */
+export function StudioDataTableTitle(datasource: string, entity: string): string {
+  return `${entity} · ${datasource}`
 }
 
 export function StudioInspectorSection(
@@ -1117,10 +1227,16 @@ export function StudioInspectorStatus(inspection: string, selection: string): st
     : ''
 }
 
+/**
+ * The selection summary in words a person uses: the file and lines, the owning view, the element,
+ * and whether the preview that produced it is current. Byte ranges and render ids stay internal.
+ */
 export function StudioInspectorSummaryLines(
   currentSourceVersion: string,
   inspection: string,
   selection: string,
+  activeContent = '',
+  activePath = '',
 ): string[] {
   const selected = studioInspectorSelection(selection)
   if (selected === undefined) {
@@ -1129,17 +1245,26 @@ export function StudioInspectorSummaryLines(
   const candidate = studioInspectorInspection(inspection)
   const parsed = candidate?.renderId === selected.renderId ? candidate : undefined
   const occurrence = selected.identity.occurrence
+  const path = projectRelativePath(selected.identity.project, selected.identity.path) ?? selected.identity.path
+  const lines = path === activePath && selected.identity.sourceVersion === currentSourceVersion
+    ? sourceLineRange(activeContent, selected.range)
+    : ''
   return [
-    `Source: ${selected.identity.path}`,
-    `Range: ${selected.range.start}–${selected.range.end}`,
-    `Version: ${
-      selected.identity.sourceVersion === currentSourceVersion ? 'Current' : 'Waiting for refreshed preview'
-    }`,
-    `Render: ${selected.renderId}`,
+    `Source: ${path}${lines}`,
+    ...(selected.identity.sourceVersion === currentSourceVersion ? [] : ['Waiting for the refreshed preview']),
     ...(occurrence?.renderOwner === undefined ? [] : [`View: ${occurrence.renderOwner}`]),
-    ...(occurrence?.nodeKind === undefined ? [] : [`Node kind: ${occurrence.nodeKind}`]),
     ...(parsed?.elementName === undefined ? [] : [`Element: ${parsed.elementName}`]),
   ]
+}
+
+function sourceLineRange(content: string, range: Readonly<{ end: number; start: number }>): string {
+  if (content === '' || range.end > content.length || range.start > range.end) {
+    return ''
+  }
+  const lineAt = (offset: number): number => content.slice(0, offset).split('\n').length
+  const start = lineAt(range.start)
+  const end = lineAt(Math.max(range.start, range.end - 1))
+  return start === end ? `:${start}` : `:${start}–${end}`
 }
 
 export function StudioInspectorUndoAvailable(busy: boolean, canUndo: boolean): boolean {
@@ -2532,11 +2657,6 @@ const editorSurfaceStyle = {
   minHeight: 0,
   minWidth: 0,
 } satisfies React.CSSProperties
-
-function compactIdentity(value: string): string {
-  const marker = value.lastIndexOf('#scenario:')
-  return marker < 0 ? value : value.slice(marker + '#scenario:'.length).replaceAll(':', ' · ')
-}
 
 // Tao apps require a navigator and safe app frame. Studio is already a complete desktop shell, so
 // its sole product boundary owns the viewport instead of inheriting mobile padding or scroll chrome.

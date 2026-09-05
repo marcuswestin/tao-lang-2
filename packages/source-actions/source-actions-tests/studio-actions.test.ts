@@ -789,6 +789,32 @@ Describe('Studio source-action patch bus', () => {
     `))
   })
 
+  Test('wrapping adds the container to an existing @tao/ui use statement', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            Text("First")
+      }  }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, {
+      kind: 'wrap-render',
+      renderId: renderId(requireRenderByText(document, 'Text("First")')),
+      wrapper: 'Stack',
+    })
+
+    Expect(patch.content).toBe(source(`
+      use Col, Stack, Text from @tao/ui
+
+      view MainView() {
+         render Col() {
+            Stack() [gap 8, pad 8] {
+               Text("First")
+      }  }  }
+    `))
+  })
+
   Test('wraps a root render without dropping its required render keyword', async () => {
     const document = await parseDocument(`
       view MainView() {

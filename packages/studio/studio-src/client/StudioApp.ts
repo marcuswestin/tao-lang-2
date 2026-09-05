@@ -34,6 +34,7 @@ import {
   type StudioFile,
 } from './StudioApiClient'
 import { createStudioDevicePanel, StudioDevicePanelModel } from './StudioDevicePanel'
+import { StudioDialog } from './StudioDialog'
 import {
   absoluteSourcePath,
   isStudioSaveShortcut,
@@ -151,6 +152,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
 
   const config = window.TaoStudioConfig ?? {}
   const view = createStudioShell(root, config)
+  // The tabs' EditorViews are document models; the editor a person sees is the one Tao mounts.
+  const focusVisibleEditor = (): void => root.querySelector<HTMLElement>('.studio-editor .cm-content')?.focus()
   const partialOpenTabs = new Map<string, StudioOpenEditorTab>()
   let partialPreviews: Awaited<ReturnType<typeof connectPreviews>> = []
   let partialDevicePanel: ReturnType<typeof createStudioDevicePanel> | undefined
@@ -799,7 +802,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         effects: EditorView.scrollIntoView(selection.anchor, { y: 'center' }),
         selection,
       })
-      opened.editor.focus()
+      focusVisibleEditor()
     }
 
     async function openScreen(item: StudioScreenItem): Promise<void> {
@@ -824,7 +827,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         effects: EditorView.scrollIntoView(selection.anchor, { y: 'center' }),
         selection,
       })
-      opened.editor.focus()
+      focusVisibleEditor()
     }
 
     async function openSource(path: string, sourceVersion: string, start: number): Promise<void> {
@@ -844,7 +847,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         effects: EditorView.scrollIntoView(selection.anchor, { y: 'center' }),
         selection,
       })
-      opened.editor.focus()
+      focusVisibleEditor()
     }
 
     async function openSearchResult(result: StudioSearchResult): Promise<void> {
@@ -870,7 +873,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         effects: EditorView.scrollIntoView(selection.anchor, { y: 'center' }),
         selection,
       })
-      opened.editor.focus()
+      focusVisibleEditor()
     }
 
     async function searchProject(): Promise<void> {
@@ -953,6 +956,23 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     // shell never fills these containers, so publishing state is the whole job.
     function renderInspector(): void {
       publishProductHostState()
+      if (activePath !== undefined) {
+        showOpenFile(view, activePath, breadcrumbTrail())
+      }
+    }
+
+    /** The breadcrumb names what is selected in the active file: the owning view, then the element. */
+    function breadcrumbTrail(): readonly string[] {
+      if (inspected === undefined || activePath === undefined) {
+        return []
+      }
+      const path = projectRelativePath(handshake.identity.project, inspected.identity.path) ?? inspected.identity.path
+      if (path !== activePath) {
+        return []
+      }
+      const owner = inspected.identity.occurrence?.renderOwner
+      const element = inspection?.renderId === inspected.renderId ? inspection.elementName : undefined
+      return [...(owner === undefined ? [] : [`view ${owner}`]), ...(element === undefined ? [] : [element])]
     }
 
     function renderDrawer(): void {
@@ -1057,7 +1077,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         effects: EditorView.scrollIntoView(position, { y: 'center' }),
         selection: { anchor: position },
       })
-      opened.editor.focus()
+      focusVisibleEditor()
     }
 
     void loadTestStatus()
@@ -1072,6 +1092,26 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       }
       preview.frame?.scrollIntoView({ block: 'center' })
       input.focus()
+    }
+
+    /**
+     * Selecting an element in the preview selects its source in the editor, the other half of
+     * "click both ways". The model tab publishes the selection and the visible editor scrolls to it;
+     * a preview built from older source is left alone because its ranges no longer line up.
+     */
+    function selectSourceInEditor(selection: StudioInspectorSelection): void {
+      if (editor === undefined || activeFile === undefined) {
+        return
+      }
+      const path = projectRelativePath(handshake.identity.project, selection.identity.path) ?? selection.identity.path
+      if (path !== activeFile.path || selection.identity.sourceVersion !== activeFile.sourceVersion) {
+        return
+      }
+      const length = editor.state.doc.length
+      if (selection.range.start > length || selection.range.end > length) {
+        return
+      }
+      editor.dispatch({ selection: { anchor: selection.range.start, head: selection.range.end } })
     }
 
     async function inspectSelection(selection: StudioInspectorSelection): Promise<void> {
@@ -1113,7 +1153,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         && (projectView.snippet.placeholders.length > 0 || projectView.sourcePath !== activeSourcePath)
       ) {
         insertEditorSnippet(editor, projectView.snippet, editor.state.selection.main.head)
-        editor.focus()
+        focusVisibleEditor()
         return
       }
       const identity = currentSourceIdentity(handshake, activePreview.current(), activeFile)
@@ -1192,7 +1232,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       view.status.textContent = 'Preparing a canonical source proposal…'
       try {
         const proposal = await StudioApiClient.sourceActionProposal(envelope)
-        if (!window.confirm(`Apply this shared style edit?\n\n${proposal.diff}`)) {
+        const confirmed = await StudioDialog.confirm({
+          confirmLabel: 'Apply edit',
+          detail: 'This style is shared, so the change lands everywhere it is used.',
+          diff: proposal.diff,
+          title: 'Apply this shared style edit?',
+        })
+        if (!confirmed) {
           view.status.dataset['state'] = 'idle'
           view.status.textContent = 'Style edit was not applied.'
           return
@@ -1627,9 +1673,25 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     })
     view.reload.addEventListener('click', () => {
       if (previews.length > 0) {
+        let pending = previews.length
+        let restored = false
+        const restore = (): void => {
+          if (!restored) {
+            restored = true
+            updateStatus(view.status, compileState, diagnostic => void openCompileDiagnostic(diagnostic))
+          }
+        }
         for (const connection of previews) {
+          connection.iframe.addEventListener('load', () => {
+            pending -= 1
+            if (pending === 0) {
+              restore()
+            }
+          }, { once: true })
           connection.iframe.src = connection.iframe.src
         }
+        // A frame the manifest replaces mid-reload never fires that load; the status still comes back.
+        setTimeout(restore, 10_000)
         view.status.textContent = 'Reloading preview…'
       }
     })
@@ -1654,6 +1716,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           },
           inspect(selection) {
             inspected = selection
+            selectSourceInEditor(selection)
             publishProductHostState()
             updateCanvasFocus()
             void inspectSelection(selection)
@@ -1835,13 +1898,14 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             writeId: `move-generated-${crypto.randomUUID()}`,
           })
           if (result.status === 'confirmation-required') {
-            const replacement = window.prompt(
-              `${result.targetPackage} already declares ${result.name} in ${
-                result.conflicts.join(', ')
-              }. Choose a different package.`,
-              targetPackage,
-            )
-            if (replacement === null) {
+            const replacement = await StudioDialog.prompt({
+              confirmLabel: 'Move',
+              detail: `${result.targetPackage} already declares ${result.name} in ${result.conflicts.join(', ')}.`,
+              initialValue: targetPackage,
+              placeholder: '@views',
+              title: 'Choose a different package',
+            })
+            if (replacement === undefined) {
               return
             }
             targetPackage = replacement
@@ -2022,7 +2086,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
               ) {
                 return
               }
-              if (!window.confirm(`Save these recorded Tao steps?\n\n${proposal.diff}`)) {
+              const confirmed = await StudioDialog.confirm({
+                confirmLabel: 'Save steps',
+                diff: proposal.diff,
+                title: 'Save these recorded steps to the scenario?',
+              })
+              if (!confirmed) {
                 return
               }
               const applied = await applySourceAction(action.value)

@@ -3,6 +3,7 @@ import { StudioPanelPayloads } from '../StudioPanelPayloads'
 import type { StudioJsonObject, StudioJsonValue } from '../StudioProtocol'
 import type { StudioTestFailure, StudioTestStatus } from '../StudioTestRunner'
 import type { StudioCompileDiagnostic, StudioCompileState } from './StudioApiClient'
+import { studioCellLabel } from './StudioEditor'
 import type { StudioRuntimeDataTable, StudioRuntimeLog } from './StudioMatrixView'
 import type { StudioSearchResult } from './StudioRailPanels'
 
@@ -452,7 +453,7 @@ function taoProblemRow(row: StudioProblemPanelRow): StudioTaoProblemRow {
 }
 
 function cellSource(source: StudioPanelCellIdentity | undefined): string {
-  return source === undefined ? '' : `${source.cellId} · revision ${source.cellRevision}`
+  return source === undefined ? '' : `${studioCellLabel(source.cellId)} · revision ${source.cellRevision}`
 }
 
 function jsonDisplay(value: StudioJsonValue): string {

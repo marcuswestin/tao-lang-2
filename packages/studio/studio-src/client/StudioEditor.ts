@@ -133,6 +133,27 @@ export function projectRelativePath(project: string, sourcePath: string): string
   return sourcePath.startsWith(prefix) ? sourcePath.slice(prefix.length) : undefined
 }
 
+/**
+ * A Studio scenario or cell id is `<absolute source path>#scenario:<group>:<entry>`, optionally
+ * followed by `#cell`, with both names URI-encoded by the preview manifest. People know the cell as
+ * "group › entry"; anything that is not such an id is shown as it is.
+ */
+export function studioCellLabel(id: string): string {
+  const marker = id.lastIndexOf('#scenario:')
+  if (marker < 0) {
+    return id
+  }
+  return id.slice(marker + '#scenario:'.length).replace(/#cell$/u, '').split(':').map(decodeName).join(' › ')
+}
+
+function decodeName(name: string): string {
+  try {
+    return decodeURIComponent(name)
+  } catch {
+    return name
+  }
+}
+
 /** Accepts canonical absolute identities and project-relative identities without navigating outside the project. */
 function projectSourcePath(project: string, sourcePath: string): string | undefined {
   const relative = projectRelativePath(project, sourcePath)

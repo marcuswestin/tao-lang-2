@@ -41,6 +41,7 @@ import {
   type StudioCellRuntimeResponse,
   type StudioHandshake,
 } from './StudioApiClient'
+import { StudioDialog } from './StudioDialog'
 import { absoluteSourcePath, projectRelativePath, StudioSourceNavigation } from './StudioEditor'
 import {
   type StudioScenarioControlModel,
@@ -1643,7 +1644,12 @@ function renderCellPreview(
       })
       status.textContent = 'Validating canonical Tao source…'
       const proposal = await StudioApiClient.sourceActionProposal(envelope)
-      if (!window.confirm(`Save this generated Tao fixture?\n\n${proposal.diff}`)) {
+      const confirmed = await StudioDialog.confirm({
+        confirmLabel: 'Save fixture',
+        diff: proposal.diff,
+        title: 'Save this generated Tao fixture?',
+      })
+      if (!confirmed) {
         connection.generation = undefined
         generate.disabled = false
         status.dataset['state'] = 'idle'
@@ -2503,7 +2509,12 @@ export async function handlePreviewMessage(
       capture.reject(error instanceof Error ? error : new Error(String(error)))
       return
     }
-    if (!window.confirm(`Save this captured Tao fixture?\n\n${proposal.diff}`)) {
+    const confirmed = await StudioDialog.confirm({
+      confirmLabel: 'Save fixture',
+      diff: proposal.diff,
+      title: 'Save this captured Tao fixture?',
+    })
+    if (!confirmed) {
       capture.resolve('cancelled')
       return
     }
@@ -2611,7 +2622,8 @@ function runtimeDatasourceLabel(key: string): string {
       try {
         const identity = JSON.parse(parsed[0]) as unknown
         if (Array.isArray(identity) && identity.length > 0) {
-          return identity.map(String).join(' · ')
+          const parts = identity.map(readableIdentityPart)
+          return parts.filter((part, index) => index === 0 || part !== parts[index - 1]).join(' · ')
         }
       } catch {
         // Unconfigured and test datasource identities are already readable text.
@@ -2622,6 +2634,32 @@ function runtimeDatasourceLabel(key: string): string {
     // A provider-owned opaque key remains safe display text.
   }
   return key
+}
+
+/**
+ * readableIdentityPart names a canonical declaration identity by its declared name. The identity
+ * tuple (`["tao.declaration", 1, "hnreader", "@workspace", "HNReader", "datasource", "StubSource"]`)
+ * is an address for machines; the person reading the Data panel wants `StubSource`.
+ */
+function readableIdentityPart(part: unknown): string {
+  const canonical = (() => {
+    if (Array.isArray(part)) {
+      return part
+    }
+    if (typeof part !== 'string') {
+      return undefined
+    }
+    try {
+      const parsed = JSON.parse(part) as unknown
+      return Array.isArray(parsed) ? parsed : undefined
+    } catch {
+      return undefined
+    }
+  })()
+  if (canonical !== undefined && canonical.length > 0 && canonical[0] === 'tao.declaration') {
+    return String(canonical[canonical.length - 1])
+  }
+  return typeof part === 'string' ? part : String(part)
 }
 
 function fixtureProposalSource(name: string, plan: StudioFixturePlan): string {
