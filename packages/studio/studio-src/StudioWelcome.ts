@@ -39,15 +39,17 @@ export const StudioWelcome = {
   <meta name="color-scheme" content="dark light">
   <title>Welcome to Tao Studio</title>
   <style>
-    :root { color: #e8e7e3; background: #171918; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; }
+    :root { color: #f4f4f4; background: #0f0f0f; font: 14px/1.5 -apple-system, BlinkMacSystemFont, ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     body { margin: 0; padding: 48px; }
     main { margin: 0 auto; max-width: 760px; }
-    h1 { font-size: 28px; margin: 0 0 36px; }
-    h2 { color: #aeb5ae; font-size: 12px; letter-spacing: .1em; margin-top: 30px; text-transform: uppercase; }
+    h1 { align-items: center; display: flex; font-size: 26px; font-weight: 600; gap: 12px; letter-spacing: -.01em; margin: 0 0 36px; }
+    h1::before { align-items: center; background: #f4f4f4; border-radius: 8px; color: #0f0f0f; content: "T"; display: inline-flex; font-size: 17px; font-weight: 700; height: 30px; justify-content: center; width: 30px; }
+    h2 { color: #6b6b6b; font-size: 11px; font-weight: 600; letter-spacing: .08em; margin-top: 30px; text-transform: uppercase; }
     ul { display: grid; gap: 8px; list-style: none; padding: 0; }
-    li, a, button { background: #202321; border: 1px solid #353936; border-radius: 8px; color: inherit; display: grid; padding: 12px 14px; text-align: left; text-decoration: none; width: 100%; }
-    a:hover, button:hover { background: #2b302c; cursor: pointer; }
-    span, .empty { color: #8f9790; font-size: 12px; overflow-wrap: anywhere; }
+    li, a, button { background: #151515; border: 1px solid #262626; border-radius: 7px; color: inherit; display: grid; font: inherit; padding: 12px 14px; text-align: left; text-decoration: none; width: 100%; }
+    a:hover, button:hover { border-color: #ff6a1f; cursor: pointer; }
+    strong { font-weight: 600; }
+    span, .empty { color: #a3a3a3; font-size: 12px; overflow-wrap: anywhere; }
   </style>
 </head>
 <body><main><h1>Tao Studio</h1><section id="current"><h2>Open projects</h2>${current}</section><section id="recent"><h2>Recent projects</h2>${recent}</section></main>
@@ -98,17 +100,18 @@ export const StudioWelcome = {
   <meta name="color-scheme" content="dark light">
   <title>Project session unavailable — Tao Studio</title>
   <style>
-    :root { color: #e8e7e3; background: #171918; font: 14px/1.5 ui-sans-serif, system-ui, sans-serif; }
+    :root { color: #f4f4f4; background: #0f0f0f; font: 14px/1.5 -apple-system, BlinkMacSystemFont, ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
     body { align-items: center; display: grid; margin: 0; min-height: 100vh; padding: 32px; }
-    main { background: #202321; border: 1px solid #353936; border-radius: 12px; box-sizing: border-box; margin: 0 auto; max-width: 620px; padding: 32px; width: 100%; }
-    .eyebrow { color: #e58b83; font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
-    h1 { font-size: 26px; margin: 8px 0 12px; }
-    p { color: #b4bbb5; margin: 0 0 24px; }
+    main { background: #151515; border: 1px solid #262626; border-radius: 10px; box-sizing: border-box; margin: 0 auto; max-width: 620px; padding: 32px; width: 100%; }
+    .eyebrow { color: #ff8a4c; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { font-size: 24px; font-weight: 600; letter-spacing: -.01em; margin: 8px 0 12px; }
+    p { color: #a3a3a3; margin: 0 0 24px; }
     .actions { display: flex; flex-wrap: wrap; gap: 10px; }
-    a, button { background: #2b302c; border: 1px solid #454b46; border-radius: 7px; color: inherit; font: inherit; font-weight: 650; padding: 9px 14px; text-decoration: none; }
-    a { background: #315d45; border-color: #467b5e; }
-    a:hover, button:hover { filter: brightness(1.12); cursor: pointer; }
-    small { color: #858d86; display: block; margin-top: 22px; }
+    a, button { background: #1e1e1e; border: 1px solid #363636; border-radius: 5px; color: inherit; font: inherit; font-weight: 500; padding: 8px 14px; text-decoration: none; }
+    a { background: #ff6a1f; border-color: transparent; color: #140800; font-weight: 600; }
+    a:hover { background: #ff8a4c; cursor: pointer; }
+    button:hover { background: #232323; cursor: pointer; }
+    small { color: #6b6b6b; display: block; margin-top: 22px; }
   </style>
 </head>
 <body><main>

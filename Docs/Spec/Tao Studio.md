@@ -511,8 +511,11 @@ ephemeral. The Navigation test app's Resizable Split journey exercises the combi
 runtime tests cover persistence edge cases, the depth cap, and resize gestures.
 
 The browser client implements the target frame: project toolbar, Design/Code/Run presets, command palette,
-icon rail, persisted resizable and collapsible left/right/bottom panes, CodeMirror editor with breadcrumbs,
-scrolling scenario canvas, four-context inspector, and bottom drawer. The command palette indexes files,
+icon rail with the agent as a rail panel, persisted resizable and collapsible left/right/bottom panes,
+CodeMirror editor with breadcrumbs, scrolling scenario canvas, a one-column inspector whose Scenario pane
+holds the scenario's arguments, environment, and captured state above the four-context Selection pane, and
+bottom drawer. One token sheet in the client stylesheet styles the shell, the Tao-rendered panels (through
+host-owned button, segmented, choice, and section views), and the agent panel. The command palette indexes files,
 project views, grouped scenarios, commands, and component/view insertions. The component palette uses the
 stdlib catalog plus compiler-manifest project views; drag to canvas emits position-aware source actions,
 and drag to editor inserts formatted snippets with required-parameter placeholders selected for editing.

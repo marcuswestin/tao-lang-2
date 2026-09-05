@@ -748,6 +748,9 @@ an entry here may link one when the developer workflow is also affected.
   printed `--changed: 19 changed files, but no test files are affected` and `Ran 0 tests`, exited 0
   under `--pass-with-no-tests`, wrote no junit file, and the runner then recorded `test result report
   unavailable` and turned the pass into a failure (`.artifacts/logs/dev-test/2026-09-05T01-34-12-827Z-*`).
+  `./agent test-retry` after a contended `_test` timeout took the same path: the dev suite ran with
+  `--changed`, found no affected test files, ran 0 tests, and reported the retry as failed, so it could
+  not confirm the timeout; `./agent test-file packages/dev/dev-tests/gate-runner.test.ts` passed 19 of 19.
 - **Workaround:** Run `just test-file <path>` per touched suite, and `./agent verify` for the full run.
 - **Proposed change:** Treat a zero-test run under `--changed` as passed with no observations when the
   process exited 0, or drop suites whose packages have no changed files before spawning them.
@@ -846,7 +849,26 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** Two concurrent `just ship-bundle-proof` runs in different worktrees both pass.
 - **Source:** 2026-09-04 development-speed landing run.
 
-### DEVENV-048 — A fresh worktree cannot run `./tao` until the parser is generated
+### DEVENV-048 — A fresh linked worktree cannot launch Studio until the parser is generated
+
+- **Status:** Candidate
+- **Area:** Worktree setup
+- **Impact:** The one setup entry leaves a new worktree unable to run the product; the first Studio launch
+  fails with a module error that reads like a broken checkout rather than a missing step.
+- **Evidence:** In a new `.claude/worktrees/` checkout, `./agent setup` ran only `bun install`; `./dev studio
+  Apps/HNReader` then exited with `Cannot find module './_gen_tao-parser/module'` until
+  `bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts` (the `_parser-gen` gate) had run.
+  `direnv allow` was also needed first, and it must run from an unsandboxed shell because the allow file
+  lives under `~/.local/share/direnv`.
+- **Workaround:** Run `just _parser-gen` after `./agent setup` in a new worktree.
+- **Proposed change:** Make `setup` depend on `_parser-gen`, or have `./dev studio` generate the parser
+  when the generated tree is missing.
+- **Dependencies:** None.
+- **Acceptance:** A new linked worktree reaches a ready Studio session after `./agent setup` and
+  `./dev studio Apps/HNReader` alone.
+- **Source:** 2026-09-04 Studio visual design work.
+
+### DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated
 
 - **Status:** Candidate
 - **Area:** Worktree setup
@@ -865,7 +887,7 @@ an entry here may link one when the developer workflow is also affected.
   without a manual generation step.
 - **Source:** 2026-09-04 `tao create` work.
 
-### DEVENV-049 — `tao test` under a Git-ignored path says "No Tao tests found" without the reason
+### DEVENV-050 — `tao test` under a Git-ignored path says "No Tao tests found" without the reason
 
 - **Status:** Candidate
 - **Area:** Diagnostics
@@ -883,7 +905,7 @@ an entry here may link one when the developer workflow is also affected.
   naming the ignore rule.
 - **Source:** 2026-09-04 `tao create` work.
 
-### DEVENV-050 — `sips` exits 13 inside the Claude Code Bash sandbox
+### DEVENV-051 — `sips` exits 13 inside the Claude Code Bash sandbox
 
 - **Status:** Candidate
 - **Area:** Sandbox
@@ -899,7 +921,7 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** `./agent capabilities` reports whether `sips` can run in the current shell.
 - **Source:** 2026-09-04 `tao create` review.
 
-### DEVENV-051 — `bun --tsconfig-override` fails for scripts outside the repository
+### DEVENV-052 — `bun --tsconfig-override` fails for scripts outside the repository
 
 - **Status:** Candidate
 - **Area:** Agent scratch tooling
