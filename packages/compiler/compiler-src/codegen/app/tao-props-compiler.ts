@@ -18,56 +18,54 @@ export const TaoPropsCompiler = {
     const layout = gen`undefined`
     const testTag = AST.testTagForRender(render)
     const studio = options.studio === true ? compileStudioRenderOccurrence(render, options.projectRoot) : undefined
+    const fields: TaoPropsFields = {
+      designDefault,
+      designSource,
+      designSpec,
+      interaction: Compile.OutlineRenderInteraction(render),
+      layout,
+      studio,
+      testTag,
+    }
     return Switch.type(render, {
-      RenderStatement: renderStatement =>
-        compileTaoPropsForRenderStatement(
-          layout,
-          designSpec,
-          designSource,
-          designDefault,
-          testTag,
-          studio,
-          renderStatement,
-        ),
-      ViewRender: () => compileTaoPropsForViewRender(layout, designSpec, designSource, designDefault, testTag, studio),
+      RenderStatement: renderStatement => compileTaoPropsForRenderStatement(fields, renderStatement),
+      ViewRender: () => compileTaoPropsForViewRender(fields),
     })
   },
 } as const
 
-function compileTaoPropsForRenderStatement(
-  layout: Compiled,
-  designSpec: Compiled,
-  designSource: Compiled | undefined,
-  designDefault: Compiled | undefined,
-  testTag: string | undefined,
-  studio: Compiled | undefined,
-  render: AST.RenderStatement,
-): Compiled {
+type TaoPropsFields = {
+  designDefault: Compiled | undefined
+  designSource: Compiled | undefined
+  designSpec: Compiled
+  /** interaction is the occurrence's outline metadata: the control it is, the row root it renders. */
+  interaction: Compiled | undefined
+  layout: Compiled
+  studio: Compiled | undefined
+  testTag: string | undefined
+}
+
+function compileTaoPropsForRenderStatement(fields: TaoPropsFields, render: AST.RenderStatement): Compiled {
   const inheritsCallerProps = AST.isBlock(render.$container)
     && AST.isViewDeclaration(render.$container.$container)
   // Nested `render` statements must still advance the generated-view depth. They intentionally
   // omit the full caller-props chain, matching ViewRender, because only a view's root inherits it.
   const callerProps = gen`, _ViewProps.__tao${inheritsCallerProps ? gen`` : gen`, false`}`
-  return gen` __tao={TR.ViewTaoProps({ ...TR.TaoContext(_ViewProps.__tao), layout: ${layout}, designSpec: ${designSpec}${
-    designSource ? gen`, designSource: ${designSource}` : ''
-  }${designDefault ? gen`, designDefault: ${designDefault}` : ''}${
-    testTag ? gen`, testTag: ${gen.jsLiteral(testTag)}` : ''
-  }${studio ? gen`, studio: ${studio}` : ''} }${callerProps})}`
+  return gen` __tao={TR.ViewTaoProps(${compileTaoPropsObject(fields)}${callerProps})}`
 }
 
-function compileTaoPropsForViewRender(
-  layout: Compiled,
-  designSpec: Compiled,
-  designSource: Compiled | undefined,
-  designDefault: Compiled | undefined,
-  testTag: string | undefined,
-  studio: Compiled | undefined,
-): Compiled {
-  return gen` __tao={TR.ViewTaoProps({ ...TR.TaoContext(_ViewProps.__tao), layout: ${layout}, designSpec: ${designSpec}${
-    designSource ? gen`, designSource: ${designSource}` : ''
-  }${designDefault ? gen`, designDefault: ${designDefault}` : ''}${
-    testTag ? gen`, testTag: ${gen.jsLiteral(testTag)}` : ''
-  }${studio ? gen`, studio: ${studio}` : ''} }, _ViewProps.__tao, false)}`
+function compileTaoPropsForViewRender(fields: TaoPropsFields): Compiled {
+  return gen` __tao={TR.ViewTaoProps(${compileTaoPropsObject(fields)}, _ViewProps.__tao, false)}`
+}
+
+function compileTaoPropsObject(fields: TaoPropsFields): Compiled {
+  return gen`{ ...TR.TaoContext(_ViewProps.__tao), layout: ${fields.layout}, designSpec: ${fields.designSpec}${
+    fields.designSource ? gen`, designSource: ${fields.designSource}` : ''
+  }${fields.designDefault ? gen`, designDefault: ${fields.designDefault}` : ''}${
+    fields.testTag ? gen`, testTag: ${gen.jsLiteral(fields.testTag)}` : ''
+  }${fields.studio ? gen`, studio: ${fields.studio}` : ''}${
+    fields.interaction ? gen`, interaction: ${fields.interaction}` : ''
+  } }`
 }
 
 /** compileStudioRenderOccurrence emits one version-bound source locator for a rendered occurrence. */

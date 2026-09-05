@@ -186,7 +186,7 @@ Describe('Tao AST invocation resolution', () => {
       type Base is text
       type Name is Base
       type Title is Base
-      view MainView() {
+      scene MainView() {
         render Pair(Name "Ada", Title "Grace")
       }
       view Pair(Base) { }

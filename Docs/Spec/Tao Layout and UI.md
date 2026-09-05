@@ -2,8 +2,8 @@
 
 Status: authoritative intended design. This document describes where Tao layout is going, not only what this repo implements today.
 
-Current implementation status: this repo has the single `view` declaration kind, explicit `render`
-roots, unnamed `@@content`, optional single-fill named render slots, runtime-backed controls and
+Current implementation status: this repo has one renderable view family, with `scene is view` and
+`nav is scene is view`, explicit `render` roots, unnamed `@@content`, optional single-fill named render slots, runtime-backed controls and
 containers, private `#tag` test metadata, and bracketed clauses for `content`, `claim`, `gap`,
 `pad`, `margin`, `width`, `height`, `fill`, `hug`, `compress`, `rigid`, `aligned`, and `centered`.
 It also implements `width max`, adaptive `Panes`, and the first flat-token design terms and named
@@ -27,22 +27,23 @@ Visual entries describe appearance in the same brackets:
 
 `Row() [content spread center, background black, border white, radius 2, shadow gray]`
 
-### The One View Kind
+### The View Family
 
-Tao has a single renderable declaration kind: `view`. A screen, a reusable leaf, a
-content-accepting wrapper, and a modal that answers with a typed value are all `view`
-declarations. Nothing about a view's role is written on its head; every distinction is inferred
-from the body or chosen at the call site:
+Tao has one renderable family rooted at `view`. A reusable leaf, a content-accepting wrapper, and a
+modal that answers with a typed value are plain `view` declarations. A directly presented surface
+that supplies host-facing description is a `scene`; `scene is view`, so it shares the same body
+grammar while carrying the one composition restriction described below:
 
 - A view accepts unnamed caller content iff its body places `@@content` — in its render tree, or by
   naming the `@@content` channel in its `render inject` list. Passing child content to a view that
   places no `@@content` is a validation error.
 - A view offers named render slots iff its body declares them with `@name = empty`.
 - A view answers `ask` iff its head declares `responds <Type>`.
-- A view describes itself to a host iff it fills a supplied host-facing slot such as `Title` or
-  `Toolbar`. Those slots are declared on primitive `view` in the prelude, and their values are
-  ordinary reactive expressions over the occurrence's parameters, reads, and state. Which host
-  reads or requires them is inferred from the placement, never declared on the view.
+- A `scene` describes itself to a host by filling a supplied host-facing slot such as `Title` or
+  `Toolbar`. `scene is view`: it uses the same body grammar, but is presented rather than composed.
+  Those slots are declared on primitive `scene` in the prelude, and their values are ordinary
+  reactive expressions over the occurrence's parameters, reads, and state. Which host reads or
+  requires them is inferred from the placement, never declared on the scene.
 - How a view appears — composed inline, presented as an overlay, sheet, or toast, presented into a
   nav, or asked for a response — is a property of each call site, never of the declaration. See
   `Tao Presentation and Navigation.md`.
@@ -51,18 +52,18 @@ One body grammar covers every view: supplied-slot fills, state, entity queries, 
 aliases, tags, render-slot declarations, and one trailing `render` are legal in any view body, so a stateful
 content-accepting wrapper (a collapsible section) is an ordinary view.
 
-Host-facing slots are distinct from render slots. `Title Book.Title` supplies a value for the host
-that directly presents the view; `Toolbar { Save }` supplies focused commands for host-owned chrome.
+Host-facing slots are distinct from render slots. On a scene, `Title Book.Title` supplies a value
+for the host that directly presents it; `Toolbar { Save }` supplies focused commands for host-owned chrome.
 Neither inserts a render node, and neither bubbles from a descendant. By contrast, `@actions =
 empty` declares caller-provided content and places it inside the view's own render tree. See
 `Tao Presentation and Navigation.md` for the fixed host read/require matrix and toolbar behavior.
 
-In the type system, `view` is the one renderable primitive, and `nav` refines it
-(`primitive nav is view`). A `nav` is a package-configured presentation kind that binds its
-runtime behavior through `nav <Export> from <path>`; it is not a render-bearing declaration and
-cannot be embedded as an ordinary render child. A configured nav may be mounted as an app
-navigator, a genuine app auxiliary, or content of another nav — anywhere a view-typed
-configuration slot accepts it.
+In the type system, `view` is the one renderable primitive, `scene is view`, and
+`nav is scene is view`. A `nav` is a package-configured presentation kind that binds its runtime
+behavior through `nav <Export> from <path>` rather than a render-bearing product declaration. A
+configured nav may be the app root, content of another nav, or ordinary rendered content in a shell
+view. A rendered nav is held by the nearest host and obeys the at-most-once, never-in-a-loop, and
+never-conditional invariants that protect its mounted history.
 
 There is deliberately no arrangement-only category: a wrapper that only positions caller content
 and one that owns content around it are indistinguishable to the language. A view occurrence takes
@@ -574,6 +575,78 @@ Row() [content spread center, compress] {
    Button("Edit", Edit)
 }
 ```
+
+### Accessible Names And The Interaction Outline
+
+The runtime keeps a derived, read-only model of the running app — the interaction outline — for
+accessibility projection, generated interaction surfaces, and tests. Nothing declares an outline
+node; every one is derived from the ordinary structure of the app:
+
+- a `loop` is a **collection**, and each of its rows an **item** whose identity is the row's stable
+  key;
+- a render whose block binds `Press` or `Submit`, or a loop row with `on select`, is an **action
+  control**; a render that binds `Value:` with an explicit or automatic `Change` is an **input
+  control**;
+- a presented occurrence (a pushed scene or view, an overlay, a sheet, an asked view), a selection
+  item, and a split pane are **regions**. The non-nav sibling subtree of a view that renders a nav
+  is one further region: the compiler describes it and the runtime coalesces its mounted roots
+  without adding a wrapper or layout node.
+
+A row's label is derived by one static ranking, shared by the outline, selectable-row accessibility
+projection, and every later reader: the first unconditional `Text`, `TextFrame`, or
+`TextMultiline` in the row subtree whose `Value` is a member path on the row binder, preferring the
+entity's `(title)` field when the row renders it. Descent follows a bound parameter one level into a
+rendered row view (`WorkspaceRow(Workspace)`). A `when`, `if`, or `guard` branch, a nested loop, a
+function-wrapped value (`Text(DocumentLabel(Document.Title))`), and an interpolation
+(`Text("{ Story.Rank }.")`) are opaque and pass to the next candidate. When nothing ranks, the label
+is the `(title)` field read at runtime, then the row's own text, then the entity and its handle, then
+the binder and position.
+
+The derived label is always interaction-outline metadata. A selectable row also carries it as the
+accessible name of the press surface the runtime wraps around the row. A non-selectable row with one
+unconditional root does not project the row label onto that structural root: doing so would not make
+the root a real accessibility element, while making it one would hide interactive descendants.
+Visible text and controls remain platform-readable in their ordinary traversal. A row with several
+roots likewise has no root-level label projection. Regions carry their name — a presented
+occurrence's live `Title`, a selection item's `Label`, a pane's key — as a named group. A journey's
+`expect label "…"` asserts the derived outline label; for a selectable row, that same value is the
+press surface's platform accessible name. When the platform focuses that surface, Tao targets the
+same outline item and its containing region without running `on select`; pressing it still performs
+selection once through the shared activation path. Directly invokable commands applicable to a
+selectable row are also exposed through the platform's custom accessibility-action menu. This
+focus-intake contract applies to host focus events React Native exposes; it does not claim to observe
+a screen-reader virtual cursor movement the host does not report.
+
+Existence is always registered, and the primary label is always evaluated so the outline has stable
+item metadata and selectable rows can expose it synchronously. Everything else — the row's full text
+corpus and change notifications — is evaluated only while a reader is attached:
+`TR.Interaction.Outline` is read on demand and subscribed to with the same snapshot-and-subscribe
+shape as every other runtime channel, publishing a new revision only when what a reader would see
+has changed. Provenance rides two
+tiers, the entity and handle per item and the loop and entity per collection, and is never a test
+selector. The outline joins the check and launch boundaries beside the navigation reset and is
+captured as plain JSON under the `interaction` domain. The compiler emits each module's static
+descriptors as one table beside its bridge module; the runtime registers them at mount, and the
+Studio-only source identity that lowers a DOM marker stays exactly as gated as before.
+
+### Attention, narrowing, and generated surfaces
+
+The attention reducer is the only owner of interaction state: focused region, remembered target,
+narrowing text, engagement, and modal focus restoration. Targeting is eager but free — a sole
+candidate becomes the target without activating it. Input engagement gives platform text editing
+precedence; Escape disengages while retaining the target. Implemented pointer press and focus paths
+dispatch the same semantic activation and attention operations rather than mutating outline mounts.
+
+Narrowing is locale-aware, case-insensitive word-prefix subsequence matching across the mounted
+region's items and controls. It does not unmount or currently restyle nonmatches. A collection item
+owns its inner controls as a descended scope instead of flattening them into the surrounding order.
+
+Hints, overview, the target's verb layer, and the command palette are generated renderings of the
+outline, attention, command bindings, and catalog. One app-host layer renders them above content as
+a sibling after toasts, outside navigation history and Back. Hidden layers set
+`accessibilityElementsHidden`; visible affordances use cached app-relative bounds and never measure
+synchronously when opened. `Hint` and `Overview` are ordinary design element defaults. Keyboard
+affordances remain absent until the first hardware-key dispatch.
 
 ### Things Still Being Designed
 

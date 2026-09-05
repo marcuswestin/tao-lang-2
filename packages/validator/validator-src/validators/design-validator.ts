@@ -120,7 +120,7 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   // authored product source. Alias renders are the only other calls that can terminate at it.
   const renderedView = render.view?.ref
   if (
-    renderedView !== undefined
+    AST.isViewDeclaration(renderedView)
     && (render.view?.$refText === 'Placeholder' || renderedView.aliasTarget !== undefined)
     && !isNonShippingSource(render, ctx)
   ) {
@@ -655,22 +655,21 @@ function entryText(entry: AST.LayoutEntry): string {
   return ASTUtils.layoutEntryValues(entry).join(' ')
 }
 
-/** Scheme conditions are deliberately narrow: an exact postfix on one visual entry. */
+/** Decided design conditions are exact postfixes; their words remain IDs and are validated elsewhere. */
 function conditionedVisualValues(entry: AST.LayoutEntry): readonly (number | string)[] | undefined {
   const values = ASTUtils.layoutEntryValues(entry)
-  const when = values.indexOf('when')
-  if (when < 0) {
+  const condition = entry.condition
+  if (!condition) {
     return values
   }
-  const condition = values.slice(when)
-  if (
-    condition.length !== 4
-    || condition[0] !== 'when'
-    || condition[1] !== 'Scheme'
-    || condition[2] !== 'is'
-    || (condition[3] !== 'Dark' && condition[3] !== 'Light')
-  ) {
+  const subject = String(ASTUtils.layoutTermValue(condition.subject))
+  const expected = condition.value && String(ASTUtils.layoutTermValue(condition.value))
+  const valid = expected === undefined
+    ? ['pressed', 'focused', 'hovered'].includes(subject)
+    : (subject === 'Scheme' && (expected === 'Dark' || expected === 'Light'))
+      || expected === 'active'
+  if (!valid) {
     return undefined
   }
-  return values.slice(0, when)
+  return values.slice(0, -(expected === undefined ? 2 : 4))
 }

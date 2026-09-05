@@ -14,6 +14,11 @@ entry ViewsGrammarEntrypoint:
 TagStatement:
     tag=TagOrHexColor;
 
+// A view may exclude entity-default verbs from this occurrence's surface. The command remains in
+// the catalog and may still be promoted explicitly through `Commands { ... }`.
+ViewCommandExclusion:
+    'hide' commands+=[CommandDeclaration:ID] (',' commands+=[CommandDeclaration:ID])*;
+
 // The one renderable declaration kind. A view either declares its own parameters and body —
 // optionally promising a typed answer with `responds` — or passes through to a package member:
 // `public view Button = native.Button`. The alias publishes the target under this name; its
@@ -21,8 +26,13 @@ TagStatement:
 // caller content iff it places `@@content`, and offers named render slots iff it declares them.
 // A foreign view declares the same interface in its head because there is no Tao body to infer:
 // `view Native(Value text) accepts content slots @header from ./Native.tsx`.
+//
+// `scene` is the same declaration with one added fact a body cannot state: it is presented, never
+// composed. That is why it is a keyword here rather than a separate rule — a scene IS a view, as
+// the Prelude's `scene is view` says, so everything that accepts a view accepts a scene and only
+// the render site turns one away.
 ViewDeclaration:
-    visibility=DeclarationVisibility? 'view' name=ID
+    visibility=DeclarationVisibility? (scene?='scene' | 'view') name=ID
     (parameterList=ParameterList ('responds' response=[TypeDeclaration:ID])?
         (block=ViewBlock | foreign=ForeignViewImplementation)
         | '=' aliasTarget=PackageMemberReference);
@@ -56,12 +66,19 @@ RenderSlotUse:
 CallerContentStatement:
     {infer CallerContentStatement} '@@content';
 
+// A render site names a view declaration, a nav declaration, or a parameter of the owning view whose
+// type is `view`, `scene`, or `nav`. `nav is scene is view`, so everything that renders a view renders a
+// nav: a shell is ordinary layout holding its navigator, and a nav-typed parameter is how one shell
+// serves every configured navigator. A nav or a parameter renders as the value it was bound to, so it
+// takes no arguments, content, or events of its own; the validator diagnoses those at the render site.
+type RenderTarget = ViewDeclaration | NavDeclaration | ParameterDeclaration;
+
 RenderStatement:
     'render' (injection=Injection layoutClause=LayoutClause?
-        | view=[ViewDeclaration:ID] '(' argumentList=ArgumentList? ')' layoutClause=LayoutClause? block=Block?);
+        | view=[RenderTarget:ID] '(' argumentList=ArgumentList? ')' layoutClause=LayoutClause? block=Block?);
 
 ViewRender:
-    view=[ViewDeclaration:ID] '(' argumentList=ArgumentList? ')' layoutClause=LayoutClause? block=Block?;
+    view=[RenderTarget:ID] '(' argumentList=ArgumentList? ')' layoutClause=LayoutClause? block=Block?;
 
 EventHandler:
     'on' event=EventName (action=ValueReference | '->' payload=CasePayload? block=ActionBlock);

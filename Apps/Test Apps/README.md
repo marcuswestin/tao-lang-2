@@ -57,8 +57,9 @@ without erasing compatible coverage:
 ## Navigation
 
 Exercise the navigation layer: the native stack, the portable basic kit, platform sheet and overlay
-presentation, the split surface, and the root-view app form. Five `app` declarations share the
-folder, one per source file, and each check picks its app with `run`.
+presentation, the split surface, the root-view app form, and the shell that renders a navigator as
+ordinary content. Eight `app` declarations share the folder, one or more per source file, and each
+check picks its app with `run`.
 
 **Belongs here:**
 
@@ -73,7 +74,7 @@ folder, one per source file, and each check picks its app with `run`.
   left suspended when the app is quit, where the action that was waiting never resumes into the
   launch that replaces it.
 - _Basic kit_ (`Basic Navigation.tao`): `StackNav` from `@tao/nav/basic`, with the same required
-  `Title` and optional `Toolbar` slots as native StackNav; intent-title label defaulting; host
+  `Title` and optional `Toolbar` slots as native StackNav; command-title label defaulting; host
   command invocation; deterministic basic chrome assertions.
 - _Sheets and overlays_ (`Sheet Presentation.tao`): `present X as sheet`, the platform's own modal
   presentation; `present X as overlay` from inside one; dismissing from inside with `dismiss`;
@@ -89,12 +90,30 @@ folder, one per source file, and each check picks its app with `run`.
   rather than the source naming one; `present` and `back` through that synthesized navigator; the
   test `relaunch` step reopening the presented screen it left, and `relaunch fresh` opening on the
   root view and recording that as the stored position.
+- _Shell_ (`Shell.test.tao`): a test-only app root as a view with arguments,
+  `view Shell(CenterStack, "…")`, and a variant that rebinds it with
+  `with { view Shell(OtherStack, "…") }`; a nav-typed parameter
+  rendered inside a `Col` as ordinary content, `Navigator() [fill]`; `present` and Back reaching the
+  navigator the shell renders; the test `relaunch` step reading that navigator's position back and
+  `relaunch fresh` opening it at its root; a conditional sibling of the navigator mounting and
+  unmounting while the navigator's position is untouched; and `present @key` reaching a rendered
+  `SelectionNav` through the shell.
 
-**Does not belong here:** selection, toasts, windows, routes, or transition policy; split,
+**Does not belong here:** toasts, windows, routes, or transition policy; split,
 target-resolution, and argument diagnostics; native adapter appearance or transitions; the platform
 chrome a sheet is hosted in, which is not assertable from a journey; arbitrary row/column resizing,
 multi-window layout, collapse policy, or product-specific workbench behavior; WordFlower product
 behavior.
+
+The complete Shell app family lives in its test sidecar because its only purpose is to drive these
+implementation journeys without adding duplicate interactive choices. The shell journeys assert on
+the label the root view was bound to and on the content of the
+navigator it renders, never on a navigation title: the synthesized root navigator is a slot and
+renders no chrome of its own. The label is what tells a variant's rebinding apart from the base
+app, and the status bar's own text is what tells an unmounted sibling from a mounted one that
+renders nothing. The runtime's own suite in `packages/runtime/TR-tests/` proves the mechanism the
+journeys stand on: a rendered navigator mounts once on the occurrence that hosts it, that host
+routes Back and activation to it, and it restores by its own identity when it attaches.
 
 The split journey never drags a divider: the Tao test language has no `resize` step, and resize
 interaction is the adapter's. `relaunch` proves that device-local `(persist)` state outlives the
@@ -126,6 +145,23 @@ Exercise the provider-neutral data catalog and an app-configured isolated Memory
 **Belongs here:** top-level `data Plural / Singular` declarations with field modifiers, `index`, and declaration-level `order by`; boolean case fields; relations with cascade lifetime, spelled `Tasks (owned)`; `Datasource Memory { }` on the app; reactive `query` values with filtering and ordering; `guard` over query `loading` and `error -> Message` cases; strict action-owned `create`, live-handle `update` and `delete`; relationship cleanup, empty and populated transitions, and stored rows surviving a `relaunch`. Query status is proved through `guard` cases in the app, not through a test step: the test language has no `data` step.
 
 **Does not belong here:** remote providers, credentials, auth, permissions, sync, pagination, or aggregation; navigation or WordFlower product behavior; schema, query, and write diagnostics.
+
+## Local Data
+
+Exercise the entity-level `local only` storage fact. One `app` declaration and one datasource
+variant share the folder — `LocalData` over a `Local` datasource and `LocalDataMemory` over `Memory`
+— with the catalog in the folder's `@data` package.
+
+**Belongs here:** `local only` as a trailing entity-level storage fact beside `order by`; a focus
+session row operating and surviving `relaunch` in the Memory harness; and an integration smoke test
+that both ordinary and local-only entity APIs work when the same program runs as a Memory-datasource
+variant. Those journeys cannot distinguish the two memory-backed connections. Compiler tests prove
+that ordinary and local-only entities route to separate emitted catalogs regardless of the
+configured `Datasource`.
+
+**Does not belong here:** the storage-boundary relation diagnostic and duplicate-`local only`
+diagnostic, which are package tests; the emitted two-catalog shape, which is a compiler test; remote
+providers, sync, or credentials; navigation beyond the app's root stack.
 
 ## Language Core
 

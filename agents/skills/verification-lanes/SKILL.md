@@ -21,8 +21,8 @@ description: >-
   not maintain a second trigger list in instructions.
 - Run `./agent verify` before every commit.
 - Run `./agent full-verify-sandbox` immediately before a merge when working in a managed shell. It
-  runs the full gate membership except the five explicitly host-only Studio gates and never proves
-  those gates passed.
+  runs the full gate membership except the six explicitly host-only browser and native UI gates and
+  never proves those gates passed.
 - Run `just full-verify` from an unsandboxed normal terminal whenever Studio is in scope and before
   landing through the human merge workflow.
 - Read `.artifacts/logs/<lane>/latest/summary.json` before diagnosing a red lane. A separately

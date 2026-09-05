@@ -1,7 +1,7 @@
 // The data catalog used by the app's Local datasource.
 workspace
 data Workspaces / Workspace { // the plural collection, then the singular entity it stores
-   Name text
+   Name text (title) // the one field that names a workspace to a person
    // Modifiers take values: `now` is a runtime default sampled separately for each create.
    CreatedAt time (default now)
    Pinned yes / no // without an explicit default, a yes/no field defaults to no
@@ -13,7 +13,7 @@ data Workspaces / Workspace { // the plural collection, then the singular entity
 
 workspace
 data Documents / Document {
-   Title text
+   Title text (title)
    Body text (default "")
    Final yes / Draft no // an optional no-case alias name
    Public yes / Private no (default Public) // an explicit default may select either case
@@ -23,6 +23,9 @@ data Documents / Document {
 
    index CreatedAt
    order by CreatedAt
+
+   commands Finish, Duplicate
+   commands hide Delete
 }
 
 workspace
@@ -33,4 +36,57 @@ data Paragraphs / Paragraph {
 
    index Ordering
    order by Ordering
+}
+
+// A focused writing session. `local only` is an entity-level storage fact, beside `index` and
+// `order by`: this entity lives in the device store whatever datasource the app configures, so the
+// synced variant never syncs it. Holding the session as data rather than as view state is what lets
+// it survive navigation and relaunch, and lets each consumer query it locally.
+workspace
+data FocusSessions / FocusSession {
+   EndsAt time // absolute, so a running session survives relaunch correctly
+   PausedAt time (default now) // read only while paused; resuming re-anchors EndsAt from it
+   Paused yes / Running no
+
+   local only
+}
+
+// Entity commands live with the entity policy they participate in, so the data package never
+// imports the UI package that renders them. `Finish` and `Duplicate` are the ordered defaults;
+// destructive deletion is available only where a view explicitly lists it.
+workspace
+command Finish(Document) {
+   Title "Finish document"
+   Description "Moves a document out of drafts and into the archive."
+   Summary "Finish { Document.Title }"
+   Icon "checkmark.circle"
+   Key "f"
+   Enabled Document.Final is Draft
+   do -> { update Document {
+      Final
+   } }
+}
+
+workspace
+command Duplicate(Document) {
+   Title "Duplicate document"
+   Description "Makes a new draft beside this document."
+   Summary "Duplicate { Document.Title }"
+   Icon "doc.on.doc"
+   Key "d"
+   do -> { create Document {
+      Title: "{ Document.Title } copy"
+      Body: Document.Body
+      Document.Workspace
+   } }
+}
+
+workspace
+command Delete(Document) {
+   Title "Delete document"
+   Description "Permanently removes this document."
+   Summary "Delete { Document.Title }"
+   Icon "trash"
+   Key "x"
+   do -> { delete Document }
 }

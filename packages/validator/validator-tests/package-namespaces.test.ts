@@ -1,5 +1,6 @@
 import { Describe, Expect, Test } from '@shared/test'
 import { usePackageValidationMessages } from '../validator-src/validators/use-package-validator'
+import { ViewsValidator } from '../validator-src/validators/views-validator'
 import { type ValidatedFiles, validationErrorMessages, withValidatedFiles } from './test-validate'
 
 type TaoFiles = Record<string, string>
@@ -118,6 +119,39 @@ Describe('validator: package namespaces and view aliases', () => {
         '@widgets/Widgets.tao': widgetsPackage,
       },
       usePackageValidationMessages.aliasTargetKind('Mine', 'Slug'),
+    ),
+  )
+
+  Test(
+    'preserves scene composition semantics through a view alias chain',
+    rejectsFiles(
+      {
+        'Main.tao': `
+          use package @middle
+
+          app Aliases { view Main }
+          view Main() {
+            render Published()
+          }
+          view Published = middle.Middle
+        `,
+        '@middle/Middle.tao': `
+          use package @widgets
+
+          public
+          view Middle = widgets.Home
+        `,
+        '@widgets/Widgets.tao': `
+          use Text from @tao/ui
+
+          public
+          scene Home() {
+            Title "Home"
+            render Text("Home")
+          }
+        `,
+      },
+      ViewsValidator.messages.sceneComposed('Published'),
     ),
   )
 

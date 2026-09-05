@@ -2,13 +2,8 @@
 
 phrase WeekTitle(Day date) = "Week of { Day.Short }"
 
-view WeekScreen() {
+scene WeekScreen() {
    Title WeekTitle(WeekStart)
-   command AddSomething = AddSomethingIntent() with {
-      Label "Add something"
-      Icon "plus"
-      Key "cmd+n"
-   }
    Toolbar { AddSomething ThisWeek }
    state WeekStart = StartOfWeek(today in MyHome.TimeZone)
    query Planned from MyHome.Lists.Items {
@@ -21,13 +16,13 @@ view WeekScreen() {
       order by CreatedAt desc
    }
 
-   action ThisWeekIntent() {
-      Title "This week"
+   action ReturnToThisWeek() {
       set WeekStart = StartOfWeek(today in MyHome.TimeZone)
    }
-   command ThisWeek = ThisWeekIntent() with {
-      Label "This week"
+   command ThisWeek() {
+      Title "This week"
       Icon "calendar"
+      do ReturnToThisWeek()
    }
 
    render ScrollView [screen] {

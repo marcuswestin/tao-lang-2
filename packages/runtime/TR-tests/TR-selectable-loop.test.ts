@@ -19,43 +19,35 @@ const { default: TR } = await import('@runtime/TR')
 type RuntimeElement = React.ReactElement<Record<string, unknown>>
 
 Describe('TR.ForEach selectable rows', () => {
-  Test('wraps selectable content in one accessible pressable without moving its test ID', () => {
+  Test('hands every row to one item element with its selection callback and stable key', () => {
     const selections: string[] = []
     const content = React.createElement('RowRoot', { testID: 'rows' }, 'One')
-    const rows = TR.ForEach(
-      TR.Value(['One']),
-      () => content,
-      value => selections.push(value.jsValue),
-    ) as RuntimeElement[]
+    const select = (value: { jsValue: string }) => selections.push(value.jsValue)
+    const collection = TR.ForEach(TR.Value(['One']), () => content, select) as RuntimeElement
 
-    const containedItem = rows[0]!.props['children'] as RuntimeElement
-    const selectableRow = (containedItem.type as (props: Record<string, unknown>) => RuntimeElement)(
-      containedItem.props,
-    )
-    const wrapper = (selectableRow.type as (props: Record<string, unknown>) => RuntimeElement)(
-      selectableRow.props,
-    )
+    const rows = collection.props['items'] as RuntimeElement[]
+    Expect(rows).toHaveLength(1)
+    const item = rows[0]!.props['children'] as RuntimeElement
+    const itemProps = item.props as { itemKey: unknown; runtimeValue: { jsValue: unknown }; select?: unknown }
 
-    Expect(wrapper.type).toBe('Pressable')
-    Expect(wrapper.props['accessible']).toBe(true)
-    Expect(wrapper.props['accessibilityRole']).toBe('button')
-    Expect(wrapper.props['testID']).toBeUndefined()
-    Expect(wrapper.props['children']).toBe(content)
-    Expect(content.props['testID']).toBe('rows')
-
-    const onPress = wrapper.props['onPress'] as () => void
-    onPress()
-    Expect(selections).toEqual(['One'])
+    Expect(rows[0]!.key).toBe('0')
+    Expect(itemProps.itemKey).toBe(0)
+    Expect(itemProps.runtimeValue.jsValue).toBe('One')
+    Expect(itemProps.select).toBe(select)
+    // The row's press surface and its accessible name are proved where the row actually mounts:
+    // the selectable-loop and interaction-outline runtime suites render it.
+    Expect(selections).toEqual([])
   })
 
-  Test('returns non-selectable content directly under the keyed fragment', () => {
+  Test('leaves a non-selectable row without a selection callback', () => {
     const content = React.createElement('RowRoot', { testID: 'rows' }, 'Static')
-    const rows = TR.ForEach(TR.Value(['Static']), () => content) as RuntimeElement[]
+    const collection = TR.ForEach(TR.Value(['Static']), () => content) as RuntimeElement
 
-    const containedItem = rows[0]!.props['children'] as RuntimeElement
-    const rendered = (containedItem.type as (props: Record<string, unknown>) => RuntimeElement)(containedItem.props)
+    const rows = collection.props['items'] as RuntimeElement[]
+    const item = rows[0]!.props['children'] as RuntimeElement
 
-    Expect(rendered).toBe(content)
+    Expect((item.props as { select?: unknown }).select).toBeUndefined()
+    Expect((item.props as { render: unknown }).render).toBeDefined()
   })
 
   Test('does not capture healthy list-item arguments before a failure', () => {

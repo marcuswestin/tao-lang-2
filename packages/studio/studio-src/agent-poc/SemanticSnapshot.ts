@@ -398,9 +398,12 @@ export function buildSemanticSnapshot(
       for (const render of AST.streamAllContents(view).filter(AST.isRender)) {
         const l = loc(render)
         const renderId = `render:${l.path}:${l.start}:${l.end}`
-        const target = render.view?.ref
-        const targetPath = target === undefined ? undefined : rel(AST.getDocument(target).uri.fsPath)
-        const isProjectView = target !== undefined && targetPath !== undefined && !targetPath.startsWith('..')
+        const target = ASTUtils.resolveRenderTarget(render)
+        const targetName = target === undefined ? undefined : ASTUtils.renderTargetName(target)
+        const targetPath = target?.kind === 'view' ? rel(AST.getDocument(target.view).uri.fsPath) : undefined
+        const isProjectView = target?.kind === 'view'
+          && targetPath !== undefined
+          && !targetPath.startsWith('..')
         const layout = (render.layoutClause?.entries ?? []).map(entry => ASTUtils.layoutEntryValues(entry))
         const tag = AST.testTagForRender(render)
         const texts = literalTexts(render)
@@ -409,28 +412,28 @@ export function buildSemanticSnapshot(
             ...(tag === undefined ? {} : { tag: `#${tag}` }),
             layout: layout.map(values => values.join(' ')),
             owner: view.name,
-            target: target?.name ?? (AST.isRenderStatement(render) && render.injection !== undefined ? 'inject' : '?'),
+            target: targetName ?? (AST.isRenderStatement(render) && render.injection !== undefined ? 'inject' : '?'),
             ...(texts.length === 0 ? {} : { texts }),
           },
           id: renderId,
           kind: 'render',
-          name: `${target?.name ?? 'inject'}${tag === undefined ? '' : ` #${tag}`}`,
+          name: `${targetName ?? 'inject'}${tag === undefined ? '' : ` #${tag}`}`,
           ...l,
         })
-        if (target !== undefined) {
+        if (target?.kind === 'view') {
           if (isProjectView) {
             edge({
               evidence: src(render),
               from: viewId,
               origin: 'compiler',
               rel: 'renders',
-              to: `view:${target.name}`,
+              to: `view:${target.view.name}`,
               via: 'render resolves the view reference',
             })
           } else {
-            const elementId = `element:${target.name}`
+            const elementId = `element:${target.view.name}`
             if (!snapshot.nodes.has(elementId)) {
-              add({ id: elementId, kind: 'element', name: target.name })
+              add({ id: elementId, kind: 'element', name: target.view.name })
             }
             edge({
               evidence: src(render),

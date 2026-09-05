@@ -67,6 +67,13 @@ type StudioCdpOptions = {
   artifactRoot?: string
 }
 
+type StudioCdpKeyOptions = {
+  alt?: boolean
+  control?: boolean
+  primary?: boolean
+  shift?: boolean
+}
+
 const chromeCandidates = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
@@ -613,11 +620,20 @@ export class StudioCdp {
   }
 
   async pressShortcut(key: string): Promise<void> {
-    const isMac = await this.evaluate<boolean>("navigator.platform.toLowerCase().includes('mac')")
-    const code = `Key${key.toUpperCase()}`
-    const modifiers = isMac ? 4 : 2
-    const windowsVirtualKeyCode = key.toUpperCase().charCodeAt(0)
-    const params = { code, key, modifiers, windowsVirtualKeyCode }
+    await this.pressKey(key, { primary: true })
+  }
+
+  /** pressKey sends the same physical key events Chrome receives from a keyboard. */
+  async pressKey(key: string, options: StudioCdpKeyOptions = {}): Promise<void> {
+    const primaryModifier = options.primary === true
+      ? await this.evaluate<boolean>("navigator.platform.toLowerCase().includes('mac')") ? 4 : 2
+      : 0
+    const details = chromeKeyDetails(key)
+    const modifiers = primaryModifier
+      | (options.alt === true ? 1 : 0)
+      | (options.control === true ? 2 : 0)
+      | (options.shift === true ? 8 : 0)
+    const params = { ...details, modifiers }
     await this.client.send('Input.dispatchKeyEvent', { ...params, type: 'rawKeyDown' })
     await this.client.send('Input.dispatchKeyEvent', { ...params, type: 'keyUp' })
   }
@@ -715,6 +731,35 @@ export class StudioCdp {
       text,
     }, details['timestamp']))
   }
+}
+
+function chromeKeyDetails(key: string): { code: string; key: string; windowsVirtualKeyCode: number } {
+  const named = chromeNamedKeys[key]
+  if (named !== undefined) {
+    return { ...named, key }
+  }
+  if (/^[a-z]$/iu.test(key)) {
+    const upper = key.toUpperCase()
+    return { code: `Key${upper}`, key, windowsVirtualKeyCode: upper.charCodeAt(0) }
+  }
+  if (/^[0-9]$/u.test(key)) {
+    return { code: `Digit${key}`, key, windowsVirtualKeyCode: key.charCodeAt(0) }
+  }
+  throw new Errors.UserInputError(`Studio browser key is unsupported: ${JSON.stringify(key)}`)
+}
+
+const chromeNamedKeys: Readonly<Record<string, { code: string; windowsVirtualKeyCode: number }>> = {
+  ' ': { code: 'Space', windowsVirtualKeyCode: 32 },
+  '.': { code: 'Period', windowsVirtualKeyCode: 190 },
+  '/': { code: 'Slash', windowsVirtualKeyCode: 191 },
+  ArrowDown: { code: 'ArrowDown', windowsVirtualKeyCode: 40 },
+  ArrowLeft: { code: 'ArrowLeft', windowsVirtualKeyCode: 37 },
+  ArrowRight: { code: 'ArrowRight', windowsVirtualKeyCode: 39 },
+  ArrowUp: { code: 'ArrowUp', windowsVirtualKeyCode: 38 },
+  Backspace: { code: 'Backspace', windowsVirtualKeyCode: 8 },
+  Enter: { code: 'Enter', windowsVirtualKeyCode: 13 },
+  Escape: { code: 'Escape', windowsVirtualKeyCode: 27 },
+  Tab: { code: 'Tab', windowsVirtualKeyCode: 9 },
 }
 
 class CdpClient implements StudioCdpTransport {

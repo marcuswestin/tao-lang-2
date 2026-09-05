@@ -95,7 +95,7 @@ an entry here may link one when the developer workflow is also affected.
 
 - **Status:** Resolved
 - **Area:** Verification lanes
-- **Impact:** A managed shell cannot run the five Studio host lanes, but duplicating gate lists would
+- **Impact:** A managed shell cannot run the six browser and native UI host lanes, but duplicating gate lists would
   drift and could overstate coverage.
 - **Evidence:** Browser/native Studio gates require host capabilities denied by the managed sandbox;
   all other full-verification gates were measured as compatible.
@@ -103,7 +103,7 @@ an entry here may link one when the developer workflow is also affected.
 - **Proposed change:** Add gate-owned unsandboxed metadata and one shared full-verification membership
   used by both `full-verify` and `full-verify-sandbox`.
 - **Dependencies:** Implemented by `feat/verification-lanes` commit `f5705e9f`.
-- **Acceptance:** The sandbox lane passes, names exactly five skips, omits dependency installation, and
+- **Acceptance:** The sandbox lane passes, names exactly six skips, omits dependency installation, and
   never claims full verification passed.
 - **Source:** 2026-09-03 verification-lanes brief.
 
@@ -599,7 +599,7 @@ an entry here may link one when the developer workflow is also affected.
 - **Proposed change:** Preserve `_test`'s 12-worker budget, launch `_test` and `_typecheck` before
   auxiliary readers, remove the obsolete Studio-first priority, and account each mostly-waiting
   Studio smoke as one slot while retaining native `gui` exclusion and machine-wide admission.
-- **Dependencies:** Implemented on `feat/verification-lanes`; the five Studio lanes still require an
+- **Dependencies:** Implemented on `feat/verification-lanes`; the six browser and native UI lanes still require an
   unsandboxed terminal for final timing evidence.
 - **Acceptance:** Focused scheduler tests prove package-first admission and three concurrent Studio
   waits beside package work; `./agent verify` remains green; an uncontended normal-terminal
@@ -677,3 +677,21 @@ an entry here may link one when the developer workflow is also affected.
 - **Dependencies:** None.
 - **Acceptance:** A clean `just studio-native` reaches a ready preview with no unresolved-module output.
 - **Source:** 2026-09-04 companion Slice 2 work.
+
+### DEVENV-040 — Bun dependency recovery conflicts with protected package fixtures
+
+- **Status:** Candidate
+- **Area:** Dependency installation
+- **Impact:** A stale Bun link can block every verification command, while the documented clean-install
+  recovery cannot remove a dependency tree containing a sandbox-protected fixture file.
+- **Evidence:** After merging main, `./agent verify` failed with `EEXIST: failed to link package:
+  expo-updates@29.0.20`; the prescribed `rm -rf node_modules` then stopped at Expo's
+  `e2e/fixtures/project_files/.env` with `Operation not permitted` even in the approved elevated command.
+- **Workaround:** Move the stale `node_modules` directory intact to a unique path under `/private/tmp`,
+  without reading or deleting its contents, then run `bun install --frozen-lockfile`.
+- **Proposed change:** Make the dependency workflow repair stale links idempotently, and teach its recovery
+  diagnostic to recommend an atomic move when protected third-party fixture names prevent recursive removal.
+- **Dependencies:** None.
+- **Acceptance:** A fixture reproducing the protected-path link failure recovers through the documented
+  command without reading protected content, and a second `./agent verify` dependency check is clean.
+- **Source:** 2026-09-04 freehand/main merge verification.

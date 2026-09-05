@@ -232,8 +232,8 @@ describe('runtime failure containment and Studio capture', () => {
         app WithinLimit { Name "Within" Navigator StackNav { Initial WithinRoot } }
         app BeyondLimit { Name "Beyond" Navigator StackNav { Initial BeyondRoot } }
 
-        view WithinRoot() { Title "Within" render Recursive(253) }
-        view BeyondRoot() { Title "Beyond" render Recursive(254) }
+        scene WithinRoot() { Title "Within" render Recursive(253) }
+        scene BeyondRoot() { Title "Beyond" render Recursive(254) }
 
         view Recursive(Depth number) {
           render Frame(Depth) {

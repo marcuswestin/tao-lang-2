@@ -44,7 +44,7 @@ test "Hearth" {
 
    check "capture from anywhere is a draft until it is added" on phone with PineStreet {
       run Hearth
-      press key "cmd+n"
+      press key "primary+n"
       expect dialogue "Add something"
       choose "Things to do" in field "List"
       enter "Fix the gate latch" into #captureTitle

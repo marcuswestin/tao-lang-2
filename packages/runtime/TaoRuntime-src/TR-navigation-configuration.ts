@@ -1,5 +1,6 @@
 import { RuntimeAssert } from './TR-assert'
 import { UserInputError } from './TR-errors'
+import { RuntimeCommand } from './TR-interaction'
 import type {
   TaoAppDeclaration,
   TaoConfiguredNavigation,
@@ -9,7 +10,6 @@ import type {
   TaoNavigationValue,
   TaoPresentable,
 } from './TR-navigation'
-import { RuntimeNavigationCommand } from './TR-navigation-host-slots'
 import { canonicalDescriptor, type TaoDeclarationIdentity } from './TR-navigation-identity'
 import type { Evaluable } from './TR-navigation-presentables'
 import { registerNavigation } from './TR-navigation-registry'
@@ -184,7 +184,7 @@ function normalizedHostSlots(configured: TaoConfiguredNavigation): Record<string
     if (value && typeof (value as Evaluable).evaluate === 'function') {
       return [[name, value] as const]
     }
-    if (Array.isArray(value) && value.every(item => item instanceof RuntimeNavigationCommand)) {
+    if (Array.isArray(value) && value.every(item => item instanceof RuntimeCommand)) {
       return [[name, Object.freeze([...value])] as const]
     }
     return []

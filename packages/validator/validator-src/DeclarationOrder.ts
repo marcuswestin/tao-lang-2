@@ -94,7 +94,12 @@ function isViewOwnedValueDeclaration(declaration: AST.ValueDeclaration): boolean
   return AST.findOwningView(declaration) !== undefined
 }
 
-/** allowsForwardActionReference returns true for action-body references to actions declared later. */
+/**
+ * allowsForwardActionReference returns true for action-body references to actions declared later,
+ * and for a command's own body: a command declares what it will run rather than running it, so the
+ * private procedure behind a verb may be written under the verb that names it.
+ */
 function allowsForwardActionReference(declaration: AST.ValueDeclaration, use: AST.Node): boolean {
-  return AST.isActionDeclaration(declaration) && AST.findOwningActionBlock(use) !== undefined
+  return AST.isActionDeclaration(declaration)
+    && (AST.findOwningActionBlock(use) !== undefined || AST.owningCommand(use) !== undefined)
 }

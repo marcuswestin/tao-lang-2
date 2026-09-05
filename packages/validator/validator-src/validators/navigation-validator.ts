@@ -4,6 +4,7 @@ import { Switch } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { configuredValueValidationMessages } from './configured-values-validator'
+import { sceneSuppressesHeader } from './views-validator'
 
 /** navigationValidationMessages declares configured navigation diagnostics. */
 export const navigationValidationMessages = {
@@ -32,6 +33,8 @@ export const navigationValidationMessages = {
   presentationContext: 'Contextual presentation is allowed only inside a view declaration.',
   toastContext: 'Toast presentation is allowed only inside a view declaration.',
   toastTarget: 'Toast presentation is app-level and does not accept `in`.',
+  toastOptionName: (actual: string, expected: string) =>
+    `Toast presentation option '${actual}' is unknown; expected '${expected}'.`,
   toastKeyType: (actual: string) => `Toast Key expects text, got ${actual}.`,
   toastDurationType: (actual: string) => `Toast Duration expects duration, got ${actual}.`,
   toastDurationNegative: 'Toast Duration cannot be negative.',
@@ -46,9 +49,18 @@ export const navigationValidationMessages = {
   replaceNavigator: (actual: string) => `Replacement expects nav, got ${actual}.`,
   unknownAuxiliary: (app: string, key: string) => `App ${app} has no auxiliary navigator named '@${key}'.`,
   missingHostTitle: (view: string) =>
-    `View '${view}' must fill Title when used as a statically known StackNav destination.`,
+    `Scene '${view}' must fill Title when used as a statically known StackNav destination.`,
   missingNavHostTitle: (nav: string) =>
     `Navigation '${nav}' must configure Title when used as a statically known StackNav destination.`,
+  valueRenderArguments: (name: string) =>
+    `Render of ${name} takes no arguments: a nav or a parameter renders as the value it was bound to.`,
+  valueRenderContent: (name: string) =>
+    `Render of ${name} takes no caller content or events: a nav or a parameter renders as the value it was bound to.`,
+  navRenderedInLoop: (name: string) =>
+    `Navigation ${name} cannot render inside a loop: a nav's history lives on its one mount.`,
+  navRenderedConditionally: (name: string) =>
+    `Navigation ${name} cannot render inside a conditional branch: a branch that unmounted it would drop where the person was.`,
+  navRenderedTwice: (name: string) => `Navigation ${name} renders more than once; a nav renders at most once.`,
 } as const
 
 /** navigationValidationChecks validates configured navigation and presentation calls. */
@@ -56,6 +68,7 @@ export const navigationValidationChecks = {
   [AST.ContextualPresentStatement.$type]: validateContextualPresentation,
   [AST.ViewBinding.$type]: validateViewBinding,
   [AST.ConfigurationEntry.$type]: validateStackInitialTitle,
+  [AST.Render.$type]: validateRenderedValue,
   [AST.DismissStatement.$type]: (dismiss, ctx) => {
     if (!AST.findOwningView(dismiss)) {
       ctx.error(navigationValidationMessages.dismissContext, dismiss)
@@ -96,8 +109,85 @@ function validateViewBinding(binding: AST.ViewBinding, ctx: ValidationContext): 
   }
   const resolved = ASTUtils.resolveArgumentBindings(view, binding)
   for (const diagnostic of resolved.diagnostics) {
-    reportBindingDiagnostic(view, diagnostic, binding, ctx)
+    reportPresentationBindingDiagnostic(view, diagnostic, binding, ctx)
   }
+}
+
+/**
+ * validateRenderedValue holds a render site that names a nav or a parameter to the rules a rendered
+ * value needs. The value renders as it was bound, so the site passes nothing into it. A nav also
+ * keeps its history on its one mount, so it renders at most once, never in a loop, and never in a
+ * conditional branch — all diagnosed here, at the render site, because the declaration is not wrong.
+ */
+function validateRenderedValue(render: AST.Render, ctx: ValidationContext): void {
+  const target = ASTUtils.resolveRenderTarget(render)
+  if (!target || target.kind === 'view') {
+    return
+  }
+  const name = ASTUtils.renderTargetName(target)
+  if (AST.argumentsOf(render).length > 0) {
+    ctx.error(navigationValidationMessages.valueRenderArguments(name), render)
+  }
+  if (render.block && render.block.statements.length > 0) {
+    ctx.error(navigationValidationMessages.valueRenderContent(name), render)
+  }
+  if (!ASTUtils.renderTargetIsNav(target)) {
+    return
+  }
+  const placement = renderPlacement(render)
+  if (placement.loop) {
+    ctx.error(navigationValidationMessages.navRenderedInLoop(name), render)
+  }
+  if (placement.conditional) {
+    ctx.error(navigationValidationMessages.navRenderedConditionally(name), render)
+  }
+  if (navRenderSites(render, target, ctx).length > 1) {
+    ctx.error(navigationValidationMessages.navRenderedTwice(name), render)
+  }
+}
+
+/** renderPlacement reports the loops and conditional branches between a render site and its view. */
+function renderPlacement(render: AST.Render): { conditional: boolean; loop: boolean } {
+  const placement = { conditional: false, loop: false }
+  let current: AST.Node | undefined = render.$container
+  while (current && !AST.isViewDeclaration(current)) {
+    if (AST.isForStatement(current)) {
+      placement.loop = true
+    }
+    if (
+      AST.isWhenRenderBranch(current) || AST.isWhenRenderOtherwise(current) || AST.isIfRenderStatement(current)
+      || AST.isGuardRenderBranch(current)
+    ) {
+      placement.conditional = true
+    }
+    current = current.$container
+  }
+  return placement
+}
+
+/**
+ * navRenderSites lists every render site of one nav target. A nav declaration counts across the
+ * workspace, because two views rendering it would be two mounts of one history; a nav-typed
+ * parameter counts within the view that declares it.
+ */
+function navRenderSites(
+  render: AST.Render,
+  target: ASTUtils.RenderTarget,
+  ctx: ValidationContext,
+): AST.Render[] {
+  if (target.kind === 'nav') {
+    return ctx.workspaceFiles
+      .flatMap(file => [...AST.streamAllContents(file)])
+      .filter(AST.isRender)
+      .filter(candidate => candidate.view?.ref === target.declaration)
+  }
+  const owner = AST.findOwningView(render)
+  if (target.kind !== 'parameter' || !owner) {
+    return [render]
+  }
+  return [...AST.streamAllContents(owner)]
+    .filter(AST.isRender)
+    .filter(candidate => candidate.view?.ref === target.parameter)
 }
 
 type EffectiveNavigatorConfiguration = {
@@ -503,7 +593,7 @@ function stackReachability(files: readonly AST.TaoFile[]): StackReachability {
       if (AST.isRender(node)) {
         const owner = AST.findOwningView(node)
         const rendered = node.view?.ref
-        if (owner && rendered && pushContexts.has(canonicalView(owner))) {
+        if (owner && AST.isViewDeclaration(rendered) && pushContexts.has(canonicalView(owner))) {
           const destination = canonicalView(rendered)
           if (!pushContexts.has(destination)) {
             pushContexts.add(destination)
@@ -575,6 +665,12 @@ function reportMissingHostTitle(
   ctx: ValidationContext,
 ): void {
   const declaration = canonicalView(view)
+  // A plain view is legal here and shows Back-only header chrome: a scene is the way to ADD chrome,
+  // not a requirement for presentation. Only a scene, which can fill Title, is held to filling it —
+  // and not one that has suppressed its header, where a title would be chrome nothing reads.
+  if (!declaration.scene || sceneSuppressesHeader(declaration)) {
+    return
+  }
   if (!AST.declarationSlotFillNamed(declaration, 'Title')) {
     ctx.error(navigationValidationMessages.missingHostTitle(view.name), node)
   }
@@ -629,6 +725,14 @@ function validatePresentationMode(
     ctx.error(navigationValidationMessages.toastTarget, presentation.target)
   }
   if (toast) {
+    // The option names are ordinary words, so their spelling is checked here rather than by the
+    // lexer. That is what keeps `Key` and `Duration` usable as member names elsewhere.
+    if (toast.keyName !== 'Key') {
+      ctx.error(navigationValidationMessages.toastOptionName(toast.keyName, 'Key'), toast)
+    }
+    if (toast.durationName !== 'Duration') {
+      ctx.error(navigationValidationMessages.toastOptionName(toast.durationName, 'Duration'), toast)
+    }
     const keyType = Type.ofExpression(toast.key)
     if (keyType.kind !== 'unresolved' && !Type.isAssignable(keyType, { kind: 'primitive', primitive: 'text' })) {
       ctx.error(navigationValidationMessages.toastKeyType(Type.displayName(keyType)), toast.key)
@@ -654,7 +758,7 @@ function validatePresentationArguments(
   if (view) {
     const resolved = ASTUtils.resolveArgumentBindings(view, presentation)
     for (const diagnostic of resolved.diagnostics) {
-      reportBindingDiagnostic(view, diagnostic, presentation, ctx)
+      reportPresentationBindingDiagnostic(view, diagnostic, presentation, ctx)
     }
     if (presentation.mode?.kind !== 'toast') {
       for (const { argument, parameter } of resolved.pairs) {
@@ -716,10 +820,15 @@ function negativeNumberLiteral(expression: AST.Expression): boolean {
   return AST.isNumberLiteral(operand)
 }
 
-function reportBindingDiagnostic(
+/**
+ * reportPresentationBindingDiagnostic reports one argument-binding diagnostic against a presented
+ * view: a `present`, a configured `Initial` or `Content` binding, or the app root view, which the
+ * synthesized navigator presents exactly as `Initial` would.
+ */
+export function reportPresentationBindingDiagnostic(
   view: AST.ViewDeclaration,
   diagnostic: ASTUtils.ArgumentBindingDiagnostic,
-  presentation: AST.ContextualPresentStatement | AST.ViewBinding,
+  presentation: AST.Node,
   ctx: ValidationContext,
 ): void {
   Switch.kind(diagnostic, {

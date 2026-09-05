@@ -2,6 +2,9 @@ import type React from 'react'
 
 /** ReactNativeRuntime declares the RN component set used by Tao runtime rendering. */
 export type ReactNativeRuntime = {
+  AccessibilityInfo?: {
+    sendAccessibilityEvent(host: object, eventType: 'focus'): void
+  }
   ActivityIndicator: React.ComponentType<any>
   AppState?: {
     addEventListener(event: 'change', handler: (state: string) => void): { remove(): void }

@@ -90,17 +90,23 @@ test "WordFlower full target" {
          press #openDocument
       }
       press #startFocus
+      // The bar lives in the shell, not in the editor that started the session, so the countdown
+      // belongs to the app. Asserting on the bar's own static label rather than on the session it
+      // shows is what separates an unmounted bar from one that is present but rendering nothing.
       expect text "25:00"
+      expect text "Focus session"
       advance 1.s
       expect text "24:59"
       press #pauseFocus
       advance 5.min
-      expect text "24:59" // paused: the tick is stopped, so the reading is frozen
+      expect text "24:59" // paused: the reading is anchored to the moment it stopped
       press #resumeFocus
       advance 1.min
-      expect text "23:59" // resumed: the paused time was not lost
+      expect text "23:59" // resumed: the paused minutes were not lost
+      // Stopping deletes the row, so the shell's condition is empty again and the bar goes with it.
       press #stopFocus
       expect missing text "23:59"
+      expect missing text "Focus session"
    }
 
    test "preserves workspace and document CRUD through lifecycle states" {
@@ -152,6 +158,119 @@ test "WordFlower full target" {
       }
       press #resetSignedOut
       expect text "Signed out"
+   }
+}
+
+// T4's test vocabulary drives the semantic attention reducer directly. These journeys remain in
+// the full MVP sketch so later product breadth cannot silently regress the settled keyboard model.
+test "WordFlower keyboard attention" {
+   test "narrows and activates a workspace without Back disturbing attention" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      submit #workspaceName
+      enter "Projects" into #workspaceName
+      submit #workspaceName
+
+      narrow "pro"
+      expect focus region "WordFlower"
+      expect target "Projects"
+      back
+      expect focus region "WordFlower"
+      expect target "Projects"
+      press key "Enter"
+      expect navigation title "Projects"
+   }
+
+   test "shows stable generated hints only on demand" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      submit #workspaceName
+      enter "Projects" into #workspaceName
+      submit #workspaceName
+      expect missing text "H — Home"
+      press key "?"
+      expect {
+         text "Interaction hints"
+         text "H — Home"
+         text "P — Projects"
+      }
+      press key "?"
+      expect missing text "Interaction hints"
+   }
+
+   test "engages the editor and invokes the focus bar chord" {
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] { press #openWorkspace }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] { press #openDocument }
+
+      narrow "document title"
+      expect target "Document title"
+      press key "Enter"
+      enter "Opening" into #documentTitle
+      press key "Escape"
+      expect target "Document title"
+
+      press #startFocus
+      press key "primary+p"
+      expect text "Resume"
+   }
+
+   test "surfaces only the promoted document verb and runs its accelerator" {
+      run WordFlower
+      enter "Novel" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] { press #openWorkspace }
+      enter "Chapter one" into #newDocumentTitle
+      submit #newDocumentTitle
+
+      narrow "chapter one"
+      expect target "Chapter one"
+      press key "."
+      expect verbs "Finish document", "Open document", "Delete document"
+      expect {
+         text "Actions for Chapter one"
+         text "F — Finish document"
+      }
+      press key "f"
+      expect text "No drafts"
+   }
+
+   test "opens and narrows the generated command palette" {
+      run WordFlower
+      expect missing text "Command palette"
+      press key "primary+k"
+      expect {
+         text "Command palette"
+         text "Duplicate document"
+      }
+      narrow "dup doc"
+      expect target "Duplicate document"
+   }
+
+   test "opens an overview of the navigator and persistent focus region" {
+      run WordFlower
+      enter "Home" into #workspaceName
+      submit #workspaceName
+      select #workspaces[1] { press #openWorkspace }
+      enter "Morning pages" into #newDocumentTitle
+      submit #newDocumentTitle
+      select #documents[1] { press #openDocument }
+      press #startFocus
+      back
+      back
+      expect missing text "Interaction overview"
+      press key "Escape"
+      expect {
+         text "Interaction overview"
+         text "W — WordFlower"
+         // `f` is the explicit Finish-document accelerator, so allocation advances through the
+         // label instead of shadowing it.
+         text "O — Focus session"
+      }
    }
 }
 

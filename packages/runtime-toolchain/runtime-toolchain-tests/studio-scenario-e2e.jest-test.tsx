@@ -208,7 +208,7 @@ Describe('Tao Studio scenario runtime', () => {
           Datasource Memory { }
         }
 
-        view Main() { Title "Main" render Text("Main") }
+        scene Main() { Title "Main" render Text("Main") }
 
         fixture StudioWorkspace {
           Novel = create Workspace { Name: "Novel" }

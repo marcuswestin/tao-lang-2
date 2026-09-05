@@ -32,6 +32,11 @@ export default {
     return gen.noop()
   },
 
+  /** PressKeyStep compiles only into test-plan IR. */
+  PressKeyStep(_press: AST.PressKeyStep): Compiled {
+    return gen.noop()
+  },
+
   TagPressStep(): Compiled {
     return gen.noop()
   },
@@ -67,6 +72,16 @@ export default {
   },
 
   SelectStep(): Compiled {
+    return gen.noop()
+  },
+
+  /** NarrowStep compiles only into test-plan IR. */
+  NarrowStep(_narrow: AST.NarrowStep): Compiled {
+    return gen.noop()
+  },
+
+  /** ExpectInteractionStep compiles only into test-plan IR. */
+  ExpectInteractionStep(_expectation: AST.ExpectInteractionStep): Compiled {
     return gen.noop()
   },
 

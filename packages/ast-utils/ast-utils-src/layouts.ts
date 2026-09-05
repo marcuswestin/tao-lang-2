@@ -9,7 +9,11 @@ export function layoutEntryValues(entry: AST.LayoutEntry): TaoLayoutTermValue[] 
     ...[entry.head, ...entry.terms].map(layoutTermValue),
     ...(entry.condition === undefined
       ? []
-      : ['when', layoutTermValue(entry.condition.subject), 'is', layoutTermValue(entry.condition.value)]),
+      : [
+        'when',
+        layoutTermValue(entry.condition.subject),
+        ...(entry.condition.value === undefined ? [] : ['is', layoutTermValue(entry.condition.value)]),
+      ]),
   ]
 }
 

@@ -13,7 +13,7 @@ app LayoutAndAppShell {
 let PageTitle = "Layout and app shell"
 let BodyCopy = "This screen should sit inside the default Tao app shell."
 
-view MainView() {
+scene MainView() {
    Title PageTitle
    action Noop() { }
    render Col() [fill, content top stretch, gap 12, pad 16] {

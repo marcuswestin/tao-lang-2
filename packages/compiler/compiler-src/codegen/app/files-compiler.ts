@@ -24,6 +24,7 @@ export default {
       ?.map(({ exported, binding }) => `export const ${exported} = _Scope.${binding}`)
       .join('\n') ?? ''
     const apps = AST.appValueDeclarationsInFile(taoFile)
+    const moduleCommands = taoFile.statements.filter(AST.isCommandDeclaration)
     const dataEntities = opts.dataEntities ?? taoFile.statements.filter(AST.isEntityDataDeclaration)
     const hasRuntimeStatements = taoFile.statements.some(statement =>
       AST.isEmittingRuntimeBinding(statement)
@@ -50,8 +51,14 @@ export default {
       ${gen.textLines(viewRegistrations)}
 
       ${(opts.emitDataCatalog ?? dataEntities.length > 0) ? Compile.DataCatalog(dataEntities) : gen.noop()}
+      ${Compile.OutlineTable(taoFile)}
 
       ${gen.list(taoFile.statements, statement => Compile.Statement(statement, opts), { newLines: 2 })}
+      ${
+      moduleCommands.length === 0
+        ? gen.noop()
+        : gen`TR.Interaction.RegisterCommands(${Compile.CommandTable(moduleCommands)})`
+    }
       ${registry}
       ${gen.textLines(exportLines)}
       ${gen.textLines(configurationTypes)}

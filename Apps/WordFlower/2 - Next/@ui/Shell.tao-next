@@ -1,10 +1,28 @@
-use SignedOutNav from @nav
+use FocusSessions from @data
+use StackNav from @tao/nav
 use Col, Row, Text, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
 
+// The shell: the navigator and the focus bar, laid out as ordinary content. A nav renders like any
+// other view -- `nav is scene is view` -- so persistent chrome around navigated content is a `Col`,
+// not a navigation kind. The navigator arrives as a parameter, which is how one shell serves every
+// preview variant. The bar is conditional on the data; the navigator never is, because its history
+// lives on its mount and a branch that unmounted it would drop where the person was.
+workspace
+scene WordFlowerShell(Navigator nav) {
+   query FocusSessions as CurrentSession {
+      limit 1
+   }
+   render Col() [fill] {
+      Navigator() [fill]
+      when CurrentSession {
+         empty -> { }
+         otherwise -> { FocusBar() }
+}  }  }
+
 // The screens the app shell mounts directly.
 workspace
-view Settings() {
+scene Settings() {
    Title "Settings"
    render Scroller() [screen] {
       Col() [readableWidth, centeredLayout, gapWide] {
@@ -24,11 +42,15 @@ view Settings() {
 }  }  }  }  }
 
 workspace
-view SignedOut() {
+scene SignedOut() {
    Title "Signed out"
    render Col() [screen, centeredLayout] {
       Text("Signed out") [title]
 }  }
+
+nav SignedOutNav = StackNav {
+   Initial SignedOut
+}
 
 // `is` narrows, `=` binds. An ascribed binding keeps the `let` column while naming the type it must
 // satisfy; `ParagraphGoal` above demonstrates the equivalent inferred form without the constraint.

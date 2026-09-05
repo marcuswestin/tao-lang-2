@@ -1,9 +1,8 @@
 use Workspaces from @data
-use WordFlowerNavigator from @nav
+use WordFlowerDrawerNavigator, WordFlowerNavigator, WordFlowerTabsNavigator from @nav
 use InstantDB from @tao/data/providers/instantdb
 use Local from @tao/data/providers/local
-use SavedToast, WorkspaceRow from @ui
-use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith from ./
+use SavedToast, WordFlowerShell, WorkspaceRow from @ui
 
 // Tranche status: absorbed
 //
@@ -258,7 +257,10 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   `Toolbar` remains optional. `SlotNav`, `SelectionNav`, `SplitNav`, and sheet, root, menu, and toast
 //   presentations read neither slot. Missing required fills are diagnosed at the placement, because
 //   the view itself remains valid in a host that does not require them
-// - An `action` or `transaction` is an intent when it supplies `Title`; no `intent` keyword exists.
+// - [Superseded by the interaction system tranche. `Title`, `Description`, and `Summary` moved off
+//   `primitive action` onto `primitive command`; a command became a standalone configured value with
+//   its own slots, and `intent` retired as a word. See Decisions §8.] An `action` or `transaction` is
+//   an intent when it supplies `Title`; no `intent` keyword exists.
 //   A `command` is a focused reference to an intent, never a second behavior body. It may supply
 //   `Label`, `Icon`, `Key`, and boolean `Enabled`; each takes an ordinary reactive expression and
 //   `Label` defaults to the intent's `Title`. A command
@@ -286,6 +288,228 @@ use HarnessNavigator, StackByLet, StackByLetWith, StackByNav, StackByNavWith fro
 //   `expect navigation title "WordFlower"` asserts the directly presented title,
 //   `expect toolbar command "Save workspace" enabled|disabled` asserts a visible command state, and
 //   `press toolbar command "Save workspace"` invokes that command through the host surface
+//
+// THE INTERACTION SYSTEM, PART ONE: SCENES, THE FRAME, AND COMMANDS. This tranche lands the two
+// independent halves the interaction system rests on (`Docs/Roadmap/Keyboard driven apps/
+// Design - Keyboard driven apps.md`, KEY-D1-D14; `Plan - Keyboard driven apps.md`, T1 and T2).
+// They are one tranche because they migrate the same screens: T1 turns presented views into scenes
+// and T2 rewrites their commands, so each WordFlower file moves once.
+//
+// The forcing features are WordFlower's persistent focus bar and its workspace save command.
+//
+// This tranche decides:
+// - `scene is view`: the one home for host-facing chrome. `Title`, `Toolbar`, and `Header` are
+//   supplied slots on `scene` alone, so a `view` that is only ever composed cannot declare chrome
+//   that nothing reads. A scene is presented, never composed inline, diagnosed at the render site.
+//   A plain view may still be pushed or presented anywhere and shows Back-only header chrome; a
+//   scene pushed on a StackNav or presented `as window` must fill `Title`; sheets read neither
+//   `Title` nor `Toolbar`.
+//   `nav is scene`
+// - `Header` is the explicit opt out of header chrome: `Header false` on a scene suppresses the
+//   header bar entirely, for a screen that owns its full surface. Back still works through the
+//   reducer, the gesture, and the hardware key -- only the bar is gone. A scene with a literal
+//   `Header false` may not fill `Title` or `Toolbar`, because that chrome would be dead, and it is
+//   exempt from the pushed-scene `Title` requirement
+// - [Superseded by the revised shell decision below.] The frame is a fifth nav kind: `FrameNav`,
+//   fixed chrome edges around a navigated center.
+//   Its slots are `@top`, `@bottom`, `@left`, `@right`, and `@center`, holding views or navs.
+//   `left` and `right` are the language's existing layout terms and reverse with the locale exactly
+//   as they do in a layout clause. Horizontal bars win the corners: `@top` and `@bottom` span the
+//   full width and `@left`/`@right` occupy the space between them. Each slot takes a `Label`, a
+//   `Content`, and an optional `Size` -- one dimension, because the edge already fixes the axis, so
+//   the meaningless one is unwritable. Absent `Size` means content-derived
+// - The empty-slot rule is semantic, never measured: a slot whose `Content` evaluates to `none`
+//   reserves no space. That makes the focus bar's presence a reactive property of the data rather
+//   than a layout accident. Bars never take Back; the frame routes Back to `@center`. SplitNav
+//   keeps its own job -- navigational peers that progress and fold -- and a frame edge is fixed
+//   chrome
+// - `local only` is an entity-level storage fact, a third trailing group entry beside `index` and
+//   `order by`: the entity lives in the device store whatever datasource the app configures, so a
+//   synced variant never syncs it. It is the narrow form of per-entity datasource scoping
+// - [Superseded by Interaction Cleanup below.] A `query` may be declared at module level: an
+//   app-lifetime reactive read of the store, and an
+//   ordinary value. A nav is configuration, so there is no view between the shell frame and the
+//   store; without this the frame could not ask whether a focus session is running
+// - `command` is a configured value, in the `app`/`nav`/`design` family, and the only discoverable
+//   verb. Its parameters are slots, its metadata members are `Title` (static), `Description`,
+//   `Summary`, `Label` (reactive, defaulting to `Title`), `Icon`, `Key`, and `Enabled`, and its
+//   behavior is exactly one `do` of a named or inline action. It is declared at module level or in
+//   a view body, the same rule as `action`, and a view-body command closes over that view
+// - `action` is private: it loses `Title`, `Description`, and `Summary`, and is never surfaced.
+//   "An action is an intent" is retired, and so is `command X = Action(args) with { ... }`
+// - Inside a command block, juxtaposition declares a slot and a name with a value fills a member --
+//   the same namespace rule Decisions section 2 already uses. `Document` alone is a slot taking its
+//   same-named type; `Track Document` is a named slot; `Title "Delete"` is a fill. A name in both
+//   the type and value namespaces asks for the explicit `Name: value` form
+// - `Value with { ... }` fills a command's slots and may override `Label`, `Icon`, `Key`, and
+//   `Enabled`, never `Title`; `do <command> with { ... }` invokes one, and `do` on an unfilled slot
+//   is a diagnostic
+// - `shortcut` is the value type of `Key`. `key` was taken -- it is the slot-key type in
+//   `SelectionNav { Initial key }`. `primary + "n"` is a shortcut, and a bare string in `Key`
+//   position is a shortcut literal. Only the platform-abstract `primary` modifier exists; naming a
+//   platform's own modifier is a diagnostic
+// - `Toolbar` is `list of command` and moves to `scene` with `Title`. Every module publishes a
+//   catalog of its commands, which is what makes "every command whose slots this target can fill"
+//   answerable at all -- the verb universe the later tranches read
+//
+// THE INTERACTION SYSTEM, PART ONE, REVISED: THE SHELL IS A VIEW, AND A COMMAND HAS PARAMETERS. Two
+// decisions the first part implemented are reversed after review (`Docs/Roadmap/Keyboard driven
+// apps/Open - Shell composition and member syntax.md`). Both make the language smaller.
+//
+// This tranche decides:
+// - A render site may name a nav. `nav is scene is view`, and the grammar now agrees: everything
+//   that renders a view renders a nav, so a shell is ordinary layout -- a `Col` holding the
+//   navigator and a bar -- and `FrameNav` retires with nothing replacing it. A rendered nav still
+//   owns its occurrences, Back, restoration, and chrome; only where it sits in the tree changes
+// - Three invariants keep a rendered nav honest, all diagnosed at the render site: a nav renders at
+//   most once, never inside a loop, and never inside a conditional branch -- its history lives on its
+//   mount, so a branch that unmounts it would silently drop where the person was
+// - The app root is a view with arguments: `view WordFlowerShell(WordFlowerNavigator)`. A view-typed
+//   or nav-typed parameter renders like any other view, which is how one shell serves every preview
+//   variant without three copies of the bar
+// - The `@name` sigil belongs to named render slots -- content a caller passes into a view that lays
+//   it out and owns the interaction. A frame's edges were never that, which is the other reason the
+//   frame goes
+// - A command declares its slots in a parameter list, exactly as an action does:
+//   `command Finish(Document) { ... }`. The block then holds only member fills and one `do`, so
+//   juxtaposition means one thing inside it -- bind -- and the two ambiguities the first part had
+//   to legislate around dissolve: `command Like(Track Song)` renames a typed slot, and
+//   `Enabled CanSave` is a value again with no `:` escape hatch
+// - `do Finish(Document)` invokes a command, mirroring `do SaveWorkspace()`; `Finish with { Document }`
+//   derives a command value with a slot filled, for surfaces and menus. `do X with { }` retires as
+//   redundant
+//
+// THE INTERACTION SYSTEM, PART TWO: THE OUTLINE AND `(title)`. The runtime now keeps a derived,
+// read-only model of the running app -- regions, collections, their items, action controls, input
+// controls -- each with identity, a label, and provenance, and accessibility is its first reader
+// (`Design - Keyboard driven apps.md`, KEY-D2, D4, D5, D6; `Plan`, T3).
+//
+// Almost nothing here is declared. The one construct is a trait; everything else is derived from
+// the ordinary structure of the app, which is the whole point.
+//
+// This tranche decides:
+// - `(title)` is a data-field trait: the one field that names an entity to a person, for the
+//   palette, the OS, and the fallback row label. At most one per entity, and only on `text`
+// - An item's label is derived, one computation shared with accessibility: the first
+//   unconditional `Text` in the row whose value is a member path on the row -- preferring the
+//   `(title)` field when the row renders it -- then the `(title)` field read at runtime, then the
+//   entity's name and handle. A function-wrapped path is opaque and passes to the next candidate.
+//   A selectable row carries that label to the platform; a journey may `expect label` it
+// - Node kinds are derived from wiring, never marked: a `loop` is a collection and each row an
+//   item; a render binding `Press` or `Submit`, or a row with `on select`, is an action control;
+//   a render binding `Value` with `Change` is an input control. Regions are structural: selection
+//   items, split panes, and presented occurrences. The non-nav content of a view that renders a
+//   nav is not yet a region; the attention tranche below decides and adds that region
+// - Existence is always registered; the label is always on, because accessibility needs it
+//   synchronously; everything else evaluates only while a consumer is attached
+// - Provenance rides two tiers -- entity and handle per item, loop and entity per collection --
+//   and is never a test selector
+//
+// INTERACTION CLEANUP. The shell's move into an ordinary scene left three general mechanisms without
+// a forcing feature (`Design - Keyboard driven apps.md`; `Plan`, T3½).
+//
+// This tranche decides:
+// - A module-level `query` is not a declaration in the language today. The parser recognizes that
+//   shape only so the validator can explain that it is not supported, could be added, and has no
+//   strict technical obstacle; it creates no export, declaration, or runtime binding. Each scene or
+//   view that needs the value owns an ordinary local query instead, as the three `CurrentSession`
+//   reads below demonstrate
+// - A `when` used as a configuration value compiles directly as its value expression. The generic
+//   `TR.Deferred` wrapper retires; `TR.Interaction.Deferred` is a separate interaction-runtime
+//   mechanism and remains
+// - A direct keyed entry in a configured-value patch replaces the whole item and must be complete.
+//   Special deep merging of partial keyed frame slots retires with the frame
+// - Absence unification in `commonType`, union-to-union assignability, and property-position `with`
+//   remain as general improvements
+//
+// THE INTERACTION SYSTEM, PART THREE: ATTENTION, KEYBOARD DISPATCH, NARROWING, AND SURFACING.
+// This tranche makes the read-only outline operable without giving any consumer a mutation path
+// through it (`Design - Keyboard driven apps.md`, KEY-D8-D13; `Plan`, T4).
+//
+// This tranche decides:
+// - One runtime-owned attention reducer holds region focus, one remembered target per region,
+//   narrowing text and candidates, engagement, and the modal focus stack. Navigating, narrowing,
+//   engaged, verb-pending, overview, and hints are derived modes, never stored Tao state. Attention
+//   is reset between launches and tests and is neither settable nor restored
+// - The public outline remains snapshots only. Mounted nodes additionally give the reducer a
+//   private live channel for activation, native focus/engagement, geometry, render order, and the
+//   actual row value needed to bind an entity command. Provenance remains read-only metadata and is
+//   never used as a selector or mutation handle. Generated descriptors stay in generated modules
+//   and are passed into handwritten `TR.Interaction`; nothing generated attaches to `TR`
+// - Regions are presented occurrences, selection items, split panes, and -- settled here -- the
+//   non-nav sibling subtree of a view that renders a nav. The compiler emits one descriptor for
+//   that subtree and its roots coalesce under one ref-counted runtime registration; no wrapper or
+//   layout node is added. This is required because WordFlower's focus-bar controls otherwise have
+//   no region, contradicting modality-neutral focus, narrowing, overview, and re-aim. The sibling
+//   region is named by its first derived label (`Focus session` here); the rendered nav keeps its
+//   own region
+// - Targeting is eager and free: moving or narrowing may commit a target, and one remaining
+//   candidate auto-targets, but only Enter/activation or a verb performs behavior. Candidates are
+//   mounted items and controls in the focused region. Narrowing is case-insensitive, locale-aware
+//   word-prefix subsequence matching over full rendered text; spaces advance to later words.
+//   Narrowing does not unmount or currently restyle nonmatches
+// - Arrows move region/target attention; Enter activates or engages; Escape clears narrowing,
+//   disengages while retaining the target, ascends, or opens overview when nothing remains; Tab
+//   leaves an input for the next control; Backspace edits narrowing; Space separates word prefixes;
+//   `.` opens verbs; the unshifted hints physical key is `Slash` (`/` on US layouts, `?` accepted
+//   shifted); `primary+K` opens the palette. Reserved punctuation never narrows
+// - Precedence is engaged input, modal occurrence, targeted item, focused scene, app-wide command,
+//   reducer key. Platform editing chords win while engaged. Modifier chords invoke directly;
+//   bare single-letter `Key` values are accelerators only in the verb layer. Duplicate shortcuts
+//   in one static Toolbar/Commands/entity/global scope are errors; platform editing chords warn
+// - Press, focus, and hover enter the same semantic operations as keyboard routes. The remaining
+//   pointer/touch adapters — right-click/long-press verbs, empty-region focus, and drag/drop — stay
+//   in the Plan's decided-implementation ledger. Platform focus and reducer focus synchronize
+// - `pressed`, `focused`, and `hovered` are bare postfix design conditions for a control;
+//   `when FocusBar is active` is the named region-focus form. These existing words parse through
+//   `ID`/layout-word seams and are spelling-validated, not reserved as grammar keywords. `focused`
+//   means the target control in every modality; `active` means the currently focused region
+// - An entity data block orders default verbs with `commands A, B` and withholds a command using
+//   `commands hide C`. Any view may promote commands through its `Commands { ... }` supplied slot
+//   and exclude inherited defaults with `hide C`. Verb order is view Commands, rendered inner
+//   controls, entity defaults, then the remaining applicable catalog alphabetically. Repeated
+//   visible labels fold onto the first verb in that priority order
+// - `press key "..."`, `narrow "..."`, `expect target "..."`, `expect focus region "..."`, and
+//   `expect verbs "...", "..."` extend tests through ID-headed, spelling-validated seams. They
+//   dispatch reducer operations directly rather than synthetic DOM events. `beginTest` resets
+//   attention. The existing `interaction` capture becomes `{ outline, attention }`; no duplicate
+//   capture domain is registered
+// - A command with open slots enters reducer-owned verb-pending state. The mounted chooser,
+//   `(search)` store picker, scalar input, directional scroll fallback, and off-window loop-row
+//   targeting stay in the Plan's decided-implementation ledger. Descending reaches an item's inner
+//   controls; Escape ascends; re-aim and modal focus-stack behavior are implemented
+//
+// THE INTERACTION SYSTEM, PART FOUR: GENERATED SURFACES AND KEY ALLOCATION. This tranche renders
+// the semantic outline and attention state as the affordances a person can actually see. It adds
+// no language grammar: these layers are runtime policy, and `Hint` and `Overview` are ordinary
+// element defaults in the mounted design (`Design - Keyboard driven apps.md`, KEY-D13; `Plan`, T5).
+//
+// This tranche decides:
+// - The app host mounts one interaction-layer host above app content as a sibling after the toast
+//   layer. Hints, overview, the verb menu, and the palette are pure renderings of outline snapshots,
+//   attention snapshots, and current command bindings. They never enter navigation history, and a
+//   hidden layer sets `accessibilityElementsHidden` so it is absent from accessibility traversal
+// - `TR-interaction-layers.tsx` owns those renderings. Hints anchor to the last cached app-relative
+//   bounds of controls and items and stretch across region bounds; overview lists the mounted
+//   regions; the verb menu preserves the reducer's tiers and shows both active accelerators and
+//   shadowed shortcuts; the palette lists every titled command and entity in the generated catalog
+//   and narrows labels with the same locale-aware word-prefix subsequence matcher as attention.
+//   A shared measurement registrar supplies app-relative bounds to the outline and every layer;
+//   opening a surface never performs synchronous measurement or changes layout
+// - `TR-interaction-allocation.ts` owns key allocation as pure runtime policy. It preserves an
+//   identity's previous assignment while that identity remains present, considers new identities
+//   in canonical identity order so render reordering cannot reshuffle keys, segments labels for the
+//   active locale, and tries the first free label letter, then the next distinctive label-derived
+//   letter, then deterministic two-letter sequences. Reducer keys and explicit command shortcuts
+//   or accelerators are excluded, so generated affordances never shadow authored or system behavior
+// - The first hardware-key dispatch records keyboard presence; before that, keyboard affordances
+//   are not rendered. `press key` exercises the same dispatch seam in a test. The hints key toggles
+//   hints, Escape with nothing left to clear opens overview, `.` opens the target's verb menu, and
+//   `primary+K` opens the always-present palette
+// - Generated surface copy is stable and visible: headings are `Interaction hints`, `Interaction
+//   overview`, `Actions for <target>`, and `Command palette`; allocated rows expose an uppercase key
+//   and label as `<KEY> — <label>`. These strings let product journeys prove that a layer exists
+//   only after its key, rather than vacuously asserting text already supplied by app content
 project {
    id "wordflower"
    name "WordFlower"
@@ -295,52 +519,32 @@ project {
    license MIT
 }
 
-// An app mounts navs, it does not render content directly. Overlay and toast hosting are universal
-// capabilities, so no app declares them.
+// The app is rooted in a view: the shell, which lays the navigator and the focus bar out as ordinary
+// content. Tao mounts a navigator around a view root, so nothing here names one. Overlay and toast
+// hosting are universal capabilities, so no app declares them.
 app WordFlower {
    Name "WordFlower"
    Design WordFlowerDesign
-   Navigator WordFlowerNavigator
+   view WordFlowerShell(WordFlowerNavigator)
    Datasource DeviceStore // offline-first: the device owns the writing; sync is a variant
 }
 
 app WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
-   Navigator with { // patches the app's own navigator instead of replacing it
-      Display "drawer"
-}  }
+   view WordFlowerShell(WordFlowerDrawerNavigator) // the same shell, a different navigator in it
+}
 
 // The explicit dark preview mounts a complete dark design and keeps the portable tab surface on
 // every target, so the preview does not depend on the host operating system's current appearance.
 app WordFlowerDark = WordFlower with {
    Name "WordFlower - Dark"
    Design WordFlowerDarkDesign
-   Navigator with {
-      Display "tabs"
-}  }
+   view WordFlowerShell(WordFlowerTabsNavigator)
+}
 
 app WordFlowerInstantDB = WordFlower with {
    Name "WordFlower - InstantDB"
    Datasource WordFlowerInstantDBStore
-}
-
-app WordFlowerNavHarness {
-   Name "WordFlower Navigation Harness"
-   Navigator HarnessNavigator
-   // An app without data omits `Datasource` entirely
-}
-
-// These four apps cross the two independent declaration sugars. Each is a complete app value with
-// the same mounted behavior: primitive head versus inferred `let`, and canonical construction versus
-// explicit `with`. The Foundation test sidecar runs all four, so every spelling must compile and work.
-app WordFlowerStackByNav {
-   Name "WordFlower Declaration Head"
-   Navigator StackByNav
-}
-
-app WordFlowerStackByNavWith = app with {
-   Name "WordFlower Declaration Head With"
-   Navigator StackByNavWith
 }
 
 fixture StudioWorkspace {
@@ -414,16 +618,4 @@ datasource WordFlowerInstantDBStore = InstantDB {
    AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
    ApiURI "http://localhost:9020"
    WebsocketURI "ws://localhost:9020/runtime/session"
-}
-
-folder
-let WordFlowerStackByLet = app {
-   Name "WordFlower Declaration Let"
-   Navigator StackByLet
-}
-
-folder
-let WordFlowerStackByLetWith = app with {
-   Name "WordFlower Declaration Let With"
-   Navigator StackByLetWith
 }

@@ -331,10 +331,10 @@ design AppTheme {
 app HabitTracker {
    Name "Habit Tracker"
    Design AppTheme
-   Navigator StackNav {
-      Initial MainView
-   }
+   Navigator HabitStack
 }
+
+nav HabitStack = StackNav { Initial MainView }
 ```
 
 The capability is named `design`, selected by an app as `Design <Name>`; see the decided entry under Open Questions. A general app-capability bundle remains deferred under `LANG-003`.

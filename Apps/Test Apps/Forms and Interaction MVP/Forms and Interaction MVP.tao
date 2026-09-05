@@ -11,7 +11,7 @@ function SubmittedLabel(Title text) returns text {
    return "Submitted: { Title }"
 }
 
-view MainView() {
+scene MainView() {
    Title "Forms and Interaction MVP"
    state Draft = ""
    state Submitted = ""

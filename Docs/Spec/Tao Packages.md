@@ -75,13 +75,15 @@ data Messages / Message {
 
 app ChatApp {
    Name "Chat"
-   Navigator StackNav { Initial ThreadListUi }
+   Navigator ChatStack
    Datasource Local {
       StorageKey "ChatData"
    }
 }
 
-view ThreadListUi() {
+nav ChatStack = StackNav { Initial ThreadListUi }
+
+scene ThreadListUi() {
    Title "Threads"
    query Messages { }
 
@@ -95,7 +97,7 @@ view ThreadListUi() {
    }
 }
 
-view ThreadUi(Message) {
+scene ThreadUi(Message) {
    Title Message.Text
    render Col() {
       Text(Message.Text)
@@ -124,7 +126,8 @@ canonical identity of each declaration; consumers read that identity and never r
 
 The top-level data declaration supplies singular and plural values. The UI presents first-class
 view values; bare `@tao/nav` selects the native kit, so `StackNav` owns the corresponding native
-transition and reads each directly presented view's reactive `Title` and optional `Toolbar`.
+transition and reads a directly presented scene's reactive `Title` and optional `Toolbar`; a plain
+view receives Back-only chrome.
 
 ## Using packages and publishing projects
 
@@ -430,5 +433,5 @@ the declaration object across module boundaries and import traversal order.
   }
   ```
 
-- Packages may export configured navigation, data, design, asset, permission, localization, and other capability values. The app imports and selects only properties supported by its typed app surface. The current app contract has required `Name` and `Navigator`, an optional `Datasource`, and keyed auxiliary nav entries only for genuine app-specific hosts such as windows. Every nav hosts its own overlays, and toasts are app-level transient presentation, so neither is modeled as an auxiliary. See `Tao Presentation and Navigation.md`.
+- Packages may export configured navigation, data, design, asset, permission, localization, and other capability values. The app imports and selects only properties supported by its typed app surface. The current primitive app contract requires `Name` and the internal `Navigator nav`; authored `view Root(args)` is sugar that fills `Navigator` with a synthesized SlotNav, while direct `Navigator` remains legal for navigation-root and legacy/test apps. `Datasource` is optional, and keyed auxiliary nav entries exist only for genuine app-specific hosts such as windows. Every nav hosts its own overlays, and toasts are app-level transient presentation, so neither is modeled as an auxiliary. See `Tao Presentation and Navigation.md`.
 - A general app-capability bundle and ambient `app.*` access model are not part of the current contract. Their ownership and lookup semantics remain deferred under `LANG-003` in `Docs/Roadmap/Deferred Tao language decisions.md`.

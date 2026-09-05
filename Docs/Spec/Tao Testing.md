@@ -93,6 +93,12 @@ expect missing text "Loading…"
 expect input label "Workspace name" value "Home"
 ```
 
+A loop row's label is derived by the interaction outline (see _Accessible names and the interaction
+outline_ in `Tao Layout and UI.md`), so `expect label "Chapter one"` inside
+`select #drafts[1] { … }` asserts that outline metadata. A selectable row projects the same label as
+the accessible name of its press surface. For a non-selectable row, this assertion does not imply a
+row-level platform traversal stop; visible descendant text remains platform-readable.
+
 Actions and input-value assertions require exactly one match. Positive text/label/placeholder
 expectations require at least one; `missing` requires none. Text is exact and case-sensitive after
 trimming outer whitespace and collapsing internal whitespace.
@@ -142,6 +148,8 @@ Executable steps run in source order:
 - `press down` and `press up` deliver only their respective press phase, and `hover` delivers pointer
   entry; each accepts the same exact text, label, placeholder, or `#tag` selector family as `press`;
 - `focus #tag` focuses one tagged native control and is intentionally tag-only;
+- `press key "Key"` dispatches one normalized interaction key through the app's attention reducer;
+- `narrow "words"` appends those words to the focused region's narrowing text;
 - `press toolbar command "Label"` invokes one enabled command in the focused host toolbar;
 - `back` dispatches the same root-safe app reducer as the visible Back affordance and platform
   hardware Back;
@@ -150,6 +158,8 @@ Executable steps run in source order:
 - `expect` and `expect missing` inspect the current rendered tree;
 - `expect navigation title "Title"` observes the focused host's user-visible title, and
   `expect toolbar command "Label" enabled|disabled` observes one focused toolbar control;
+- `expect target "Label"`, `expect focus region "Label"`, and `expect verbs "A", "B"` inspect the
+  reducer's user-visible attention projection and require exact labels and verb order;
 - grouped and tag-scoped expectations run as one plan step;
 - `select #tag[N] { ... }` supplies a dynamically re-resolved row scope;
 - `advance <duration>` moves the held clock, described below.
@@ -187,6 +197,19 @@ failure rather than a silent no-op.
 
 Each event runs inside React's `act` boundary so synchronous Tao state, data, and navigation updates
 settle before the next step. Assertions do not currently poll or sleep.
+
+Keyboard-attention steps drive the semantic reducer directly rather than synthesizing platform DOM
+or native events. `press key` fails when no layer handles the normalized key. `narrow` follows the
+same locale-aware word-prefix subsequence matching as product input; it targets a sole remaining
+candidate without activating it. Attention starts fresh for every check. The `interaction` capture
+contains both immutable `outline` and `attention` snapshots; tests do not receive a mutation handle.
+
+Generated interaction layers are ordinary rendered output for text assertions. `press key "?"`
+toggles hints, `press key "."` opens the target's verb layer, `press key "primary+k"` opens the
+command palette, and Escape with no narrower operation left opens the region overview. Journeys
+assert stable headings (`Interaction hints`, `Actions for …`, `Command palette`, `Interaction
+overview`) and generated `<KEY> — <label>` rows, so a missing runtime layer cannot pass through app
+copy alone. Keyboard presence is recorded through the same `press key` dispatch seam.
 
 Behavior checks use one deterministic navigation rule: the test runtime disables optional native
 host surfaces and renders the native kind through its synchronous basic surface. Product source can

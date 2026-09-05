@@ -5,28 +5,30 @@
 // because the person beside you may be editing the same stop — which is why drafts carry a `conflict`
 // outcome at all.
 
+use primary from @tao/keys
+
 view NoStopSelected() {
    render EmptyState(Icon: "signpost.right", Title: "Pick a stop", Body: "Its details open here, beside the day.")
 }
 
 // -- One day ---------------------------------------------------------------------------------------------------
 
-view DayPlan(Day) {
+scene DayPlan(Day) {
    Title if Day.Title is empty then Day.Date.Long else Day.Title
    Toolbar { AddStop }
    query DayStops from Day.Stops { }
 
-   action AddStopIntent() runs single {
-      Title "Add a stop"
+   action CreateStop() runs single {
       // Visibility follows permission to create a Stop in Day.Stops, resolved by the store.
       let Stop = ask NewStopSheet(Day)
       stop if Stop is none
       reveal StopDetails(Stop) in @details
    }
-   command AddStop = AddStopIntent() with {
-      Label "Add a stop"
+   command AddStop() {
+      Title "Add a stop"
       Icon "plus"
-      Key "cmd+n"
+      Key primary + "n"
+      do CreateStop()
    }
 
    render ScrollView [screen] {
@@ -90,15 +92,14 @@ file view NewStopSheet(Day) responds Stop {
 // the screen — so walking away loses nothing and there is no discard-changes dialogue. If a co-traveler
 // changed the stop meanwhile, `save` answers `conflict` and the choice is a person's, field by field.
 
-view StopDetails(Stop) {
+scene StopDetails(Stop) {
    Title Stop.Title
    Toolbar { SaveStop ToggleVisited DeleteStop }
    draft Mine = Stop from Stop
    presence Others on Stop
    query Attached from Stop.Attachments { }
 
-   action SaveStopIntent() runs single {
-      Title "Save"
+   action SaveStopChanges() runs single {
       when save Mine {
                saved -> present Notice("Saved") as toast (Key: "stop")
                // Offline is not failure: the draft commits locally and syncs when the connection returns.
@@ -106,34 +107,36 @@ view StopDetails(Stop) {
                conflict -> present ResolveStopConflict(Mine) as sheet
       }
    }
-   command SaveStop = SaveStopIntent() with {
-      Label "Save"
+   command SaveStop() {
+      Title "Save"
       Icon "checkmark"
-      Key "cmd+s"
+      Key primary + "s"
       Enabled Mine changed
+      do SaveStopChanges()
    }
-   action ToggleVisitedIntent() {
-      Title "Toggle visited"
+   action ToggleVisitedState() {
       // Visibility follows permission to change Stop, resolved by the store.
       // Visited is a fact about the road, not part of the edit: it writes through directly and never
       // waits on the draft.
       toggle Stop.Visited
    }
-   command ToggleVisited = ToggleVisitedIntent() with {
+   command ToggleVisited() {
+      Title "Toggle visited"
       Label if Stop is Visited then "Mark as planned" else "Mark as visited"
       Icon "checkmark.circle"
+      do ToggleVisitedState()
    }
-   action DeleteStopIntent() runs single {
-      Title "Delete stop"
+   action ConfirmDeleteStop() runs single {
       // Store-derived delete permission controls visibility. The delete effect and explicit
-      // confirmation carry the destructive intent; the command adds no separate role marker.
+      // confirmation carry destructive behavior; the command adds no separate role marker.
       stop unless ask Confirm("Delete { Stop.Title }?", Body: "It leaves the day for everyone.", Verb: "Delete")
       delete Stop
       dismiss
    }
-   command DeleteStop = DeleteStopIntent() with {
-      Label "Delete stop"
+   command DeleteStop() {
+      Title "Delete stop"
       Icon "trash"
+      do ConfirmDeleteStop()
    }
    action Attach(Chosen file) runs parallel {
       create Attachment in Stop.Attachments { File: Chosen, AddedBy: Me }
@@ -184,7 +187,6 @@ view StopDetails(Stop) {
 // takes theirs into the draft field by field. It reads the row live, so a third edit mid-decision updates
 // the comparison in place; saving again runs the same outcomes.
 file view ResolveStopConflict(Mine draft of Stop) {
-   Title "Someone else changed this stop"
    action Resolve() runs single {
       when save Mine {
          saved -> { dismiss; present Notice("Saved") as toast (Key: "stop") }
@@ -204,7 +206,7 @@ file view ResolveStopConflict(Mine draft of Stop) {
 
 // -- Today ------------------------------------------------------------------------------------------------------
 
-view TodayScreen() {
+scene TodayScreen() {
    Title "Today"
    render ScrollView [screen] {
       guard Me signed out -> { Text("Sign in to see today's plan.") [body]; SignInPanel }

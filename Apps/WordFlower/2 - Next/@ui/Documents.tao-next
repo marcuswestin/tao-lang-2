@@ -1,4 +1,4 @@
-use Documents, Paragraphs from @data
+use Documents, Finish, Paragraphs from @data
 use CountWords from @tao/text
 use Checkbox, Col, Panes, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use FormButton from @tao/ui/basic
@@ -11,8 +11,9 @@ type ConfirmResult is one of Confirmed
 // The document area: an availability-guarded entry, the editor itself, and the close conversation.
 // The presented entry guards entity availability; the editor below assumes an available document.
 workspace
-view DocumentScreen(Document) {
+scene DocumentScreen(Document) {
    Title Document.Title
+   Toolbar { Finish }
    render Col() [grow] {
       guard Document {
          loading -> { Spinner() }
@@ -107,7 +108,7 @@ view DocumentEditor(Document) {
             WordCountLabel(BodyDraft)
 
             #focusSession
-            FocusSession()
+            FocusStarter()
 
             #markFinal
             Checkbox(Value: Document.Final is Final, Label: "Final") {

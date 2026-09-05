@@ -87,6 +87,41 @@ type TaoTestFocusStep = {
   source: TaoTestSourceLocation
 }
 
+/** TaoTestPressKeyStep dispatches one normalized keyboard chord. */
+type TaoTestPressKeyStep = {
+  key: string
+  kind: 'pressKey'
+  source: TaoTestSourceLocation
+}
+
+/** TaoTestNarrowStep enters text into the active command-search field. */
+type TaoTestNarrowStep = {
+  kind: 'narrow'
+  source: TaoTestSourceLocation
+  text: string
+}
+
+/** TaoTestTargetExpectation asserts the active command target label. */
+type TaoTestTargetExpectation = {
+  kind: 'expectTarget'
+  label: string
+  source: TaoTestSourceLocation
+}
+
+/** TaoTestFocusRegionExpectation asserts the active focus-region label. */
+type TaoTestFocusRegionExpectation = {
+  kind: 'expectFocusRegion'
+  label: string
+  source: TaoTestSourceLocation
+}
+
+/** TaoTestVerbsExpectation asserts the visible command verb labels in order. */
+type TaoTestVerbsExpectation = {
+  kind: 'expectVerbs'
+  labels: string[]
+  source: TaoTestSourceLocation
+}
+
 /** TaoTestEnterStep declares text entry into one selected input. */
 type TaoTestEnterStep = {
   kind: 'enter'
@@ -171,6 +206,11 @@ type TaoTestStep =
   | TaoTestPressPhaseStep
   | TaoTestHoverStep
   | TaoTestFocusStep
+  | TaoTestPressKeyStep
+  | TaoTestNarrowStep
+  | TaoTestTargetExpectation
+  | TaoTestFocusRegionExpectation
+  | TaoTestVerbsExpectation
   | TaoTestToolbarCommandExpectation
   | TaoTestToolbarCommandPress
   | TaoTestRelaunchStep
@@ -308,6 +348,11 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
       source: sourceLocation(step),
       tag: tagName(step.tag),
     }),
+    PressKeyStep: step => ({
+      key: step.value,
+      kind: 'pressKey',
+      source: sourceLocation(step),
+    }),
     PressToolbarCommandStep: step => ({
       kind: 'pressToolbarCommand',
       label: literalText(step.value),
@@ -320,6 +365,12 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
       source: sourceLocation(step),
     }),
     SelectStep: compileSelectStep,
+    NarrowStep: step => ({
+      kind: 'narrow',
+      source: sourceLocation(step),
+      text: step.value,
+    }),
+    ExpectInteractionStep: compileInteractionExpectation,
     SubmitInputStep: compileSubmitInputStep,
     TagSubmitStep: step => ({
       kind: 'submit',
@@ -335,6 +386,30 @@ function compileStep(step: Exclude<AST.CheckStep, AST.RunStep>): TaoTestStep {
       source: sourceLocation(step),
     }),
   })
+}
+
+function compileInteractionExpectation(
+  step: AST.ExpectInteractionStep,
+): TaoTestTargetExpectation | TaoTestFocusRegionExpectation | TaoTestVerbsExpectation {
+  if (step.subject === 'target') {
+    return {
+      kind: 'expectTarget',
+      label: step.values[0] ?? '',
+      source: sourceLocation(step),
+    }
+  }
+  if (step.subject === 'focus') {
+    return {
+      kind: 'expectFocusRegion',
+      label: step.values[0] ?? '',
+      source: sourceLocation(step),
+    }
+  }
+  return {
+    kind: 'expectVerbs',
+    labels: [...step.values],
+    source: sourceLocation(step),
+  }
 }
 
 function literalText(expression: AST.Expression): string {

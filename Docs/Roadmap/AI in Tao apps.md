@@ -12,7 +12,8 @@ AI enters an app from three directions, and they want different language surface
 1. **The app as a tool** — an outside assistant (Siri, a phone-level agent, an MCP client) reads
    the app's nouns and runs its verbs. **This half is decided**: `Assistant { … }` is a closed
    projection of nouns, verbs, and searches; on iOS it compiles to App Intents, elsewhere to a
-   tool schema. One block, every assistant.
+   tool schema. One block, every assistant. Its implementation is deferred until Tao has a tracked
+   native iOS build path; T1–T5 ship only the in-app interaction consumers.
 2. **AI as a capability inside the app** — the app calls a model to generate, classify, extract,
    converse, and act. This is the open half, and the bulk of this document.
 3. **AI building the app** — Studio agents writing Tao. Out of scope here, except for one
@@ -82,7 +83,7 @@ for every guarantee the rest of Tao already makes.
   graded, statistical evals — and validates the two-tier model Tao should follow (see Testing
   and evals).
 - **Agent-run-as-one-undo-step is targeted** (see Agents below): default, zero developer work,
-  derived by grouping an intent invocation's writes. Dependency: the derived-undo tranche.
+  derived by grouping a command invocation's writes. Dependency: the derived-undo tranche.
 - **Keywords for universal verbs; reified schemas at the boundary for the long tail.** Tao stays
   reflection-free. A sidecar declared `returns Recipe` receives a generated codec
   (`returns.decode(json)`) so any TS library gets typed decoding without type-as-argument
@@ -207,7 +208,7 @@ Plan = generate MealPlan {
 ## Agents
 
 The agentic case — the model reads, decides, and acts toward a goal — composes from parts the
-language already has: **intents are the tools** (a titled action is a tool definition), **access
+language already has: **commands are the tools** (a titled command is a tool definition), **access
 rules are the sandbox** (the agent acts as `Me`, never more), and the allow-list is the
 `Assistant` block turned inward:
 
@@ -222,7 +223,7 @@ agent Planner {
 ```
 
 **Targeted now: one agent run is one undo step, by default.** The decided undo model derives
-every store write's inverse; the runtime dispatches the agent's intent invocations, so grouping
+every store write's inverse; the runtime dispatches the agent's command invocations, so grouping
 their writes into one undo unit requires no developer work — "undo that" after "plan my week"
 un-plans the week. This is the single most trust-building feature of the section. Dependency:
 derived undo is decided but unimplemented, so its tranche becomes a prerequisite on the AI path.

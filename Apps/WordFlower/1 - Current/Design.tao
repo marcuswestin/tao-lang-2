@@ -67,13 +67,15 @@ design WordFlowerDesign {
    styles {
       AppSurface [background schemeCanvas]
       schemeCard [background schemeCanvas, ink schemeInk, radius designMd, pad designMd, gap designSm]
+      Hint [background accentStrong, ink onAccent, radius designSm, pad designSm, weight 700]
+      Overview [background surfaceRaised, ink schemeInk, border line, radius designMd, pad designMd, gap designSm]
    }
 
    // Capitalized bundles are defaults for linked stdlib elements. The navigation bundles are
    // consumed by Tao's portable/web host so product chrome and content use one mounted design.
    Text [ink ink, ink inkDark when Scheme is Dark]
    TextInput [background surfaceRaised, background surfaceRaisedDark when Scheme is Dark, border line, border lineDark when Scheme is Dark, ink ink, ink inkDark when Scheme is Dark, radius 12, size 16]
-   FormButton [bg accentStrong, fg onAccent, radius 12, weight 700]
+   FormButton [bg accentStrong, bg accent when pressed, border accentStrong when focused, fg onAccent, fg ink when hovered, radius 12, weight 700]
    Checkbox [fg ink]
    Progress [bg line, fg accent, radius 999]
    NavigationHost [background canvas, background canvasDark when Scheme is Dark]
@@ -152,6 +154,10 @@ design WordFlowerDarkDesign {
    NavigationChromeButton [pad 8, radius 8, fg accentStrong, weight 600]
    ModalSurface [bg surfaceRaised, border line]
    ToastSurface [bg surfaceRaised, border line, fg ink]
+   styles {
+      Hint [background accentStrong, ink onAccent, radius 8, pad 8, weight 700]
+      Overview [background surfaceRaised, ink ink, border line, radius 12, pad 12, gap 8]
+   }
    screen [fill, content top stretch, pad 24, bg canvas]
    hero [gap 8, pad 24, radius 20, bg accentSoft, border line]
    display [size 40, line 46, weight 700, fg ink]

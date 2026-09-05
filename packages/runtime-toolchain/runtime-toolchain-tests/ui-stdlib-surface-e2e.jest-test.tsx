@@ -1,3 +1,4 @@
+import TR from '@runtime/TR'
 import { Repo } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { fireEvent } from '@testing-library/react-native'
@@ -55,5 +56,16 @@ Describe('Expo runtime UI stdlib surfaces', () => {
     ExpectScreen(screen).toHaveText('Checkbox: checked')
     Expect(screen.getByTestId('completed').props.accessibilityState).toMatchObject({ checked: true })
     ExpectScreen(screen).toHaveText('Save')
+  })
+
+  Test('exposes one accessible native Switch label while keeping its visible text', async () => {
+    const appPath = Repo.resolvePath('Apps/Test Apps/Native Components/Native Components.tao')
+    const screen = await compileAndRenderApp(appPath)
+
+    Expect(screen.getAllByLabelText('Enabled')).toHaveLength(1)
+    Expect(screen.getByText('Enabled').props.accessible).toBe(false)
+    Expect(
+      TR.Interaction.Outline.read().nodes.some(node => node.kind === 'input' && node.label === 'Enabled'),
+    ).toBe(true)
   })
 })

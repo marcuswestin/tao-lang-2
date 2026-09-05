@@ -328,7 +328,7 @@ Describe('validator: minimal design', () => {
       workspace design Dark { surface #000 panel [bg surface] }
       app LightApp { Name "Light" Navigator StackNav { Initial Main } Design Light }
       app DarkApp { Name "Dark" Navigator StackNav { Initial Main } Design Dark }
-      view Main() { Title "Main" render Surface() [panel] }
+      scene Main() { Title "Main" render Surface() [panel] }
       ${surfaceView}
     `),
   )
@@ -388,7 +388,7 @@ function designApp(design: string, body: string): string {
     use StackNav from @tao/nav
     ${design}
     app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
-    view Main() { Title "Main" ${body} }
+    scene Main() { Title "Main" ${body} }
     ${surfaceView}
   `
 }

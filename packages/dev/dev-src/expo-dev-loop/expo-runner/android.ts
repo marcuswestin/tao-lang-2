@@ -36,7 +36,7 @@ export function createAndroid(config: ExpoSessionConfig, metro: ExpoMetroSession
   }
 }
 
-/** Android is the ordinary dev loop's port-8081 Android session. */
+/** Android is the fixed default Android session used by explicit single-session commands. */
 export const Android = createAndroid(ExpoConfig, ExpoMetro)
 
 async function ensureEmulator(): Promise<void> {

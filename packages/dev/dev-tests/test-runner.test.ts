@@ -16,6 +16,14 @@ Describe('test runner suite scheduling', () => {
     Expect(devSuite?.args).toContain('--test-name-pattern=one package only')
   })
 
+  Test('gives concurrent process-heavy developer tests a contention-safe timeout', async () => {
+    const suites = await TestRunner.discoverTestSuites()
+    const devSuite = suites.find(suite => suite.name === 'dev')
+
+    Expect(devSuite?.args).toContain('--concurrent')
+    Expect(devSuite?.args).toContain('--timeout=15000')
+  })
+
   Test('runs performance checks as a dashboard suite', async () => {
     const suites = await TestRunner.discoverTestSuites()
     const performanceSuite = suites.find(suite => suite.name === 'performance-checks')

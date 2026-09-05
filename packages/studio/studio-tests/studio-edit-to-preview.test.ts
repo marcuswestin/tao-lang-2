@@ -24,7 +24,7 @@ const projectSource = (sentinel: string) => `
   use Text from @tao/ui
   app Garden { view Main }
   view Main() { render Text("${sentinel}") }
-  view Card(Title text) { render Text(Title) }
+  scene Card(Title text) { render Text(Title) }
   fixture Empty { }
   scenarios Main "application" {
     fixture Empty

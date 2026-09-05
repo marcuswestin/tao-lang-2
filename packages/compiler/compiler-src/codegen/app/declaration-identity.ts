@@ -65,6 +65,19 @@ export function compileDeclarationIdentity(
   })`
 }
 
+/** declarationModuleName returns the owner-relative module one declaration was written in. */
+export function declarationModuleName(declaration: AST.Declaration): string {
+  const context = activeContext
+  Assert.defined(context, 'declaration identity context is active')
+  const filePath = AST.getDocument(canonicalDeclaration(declaration)).uri.path
+  const project = context.projects
+    .filter(candidate => FS.pathIsWithin(filePath, candidate.root))
+    .toSorted((left, right) => right.root.length - left.root.length)[0]
+  Assert.defined(project, 'declaration belongs to a project with checked-in identity', { filePath })
+  const { modulePath, packageId } = ownerRelativeLocation(project.root, filePath)
+  return `${packageId}/${modulePath}`
+}
+
 /** canonicalDeclaration follows lexical view aliases and app variants to their authored owner. */
 export function canonicalDeclaration(declaration: AST.Declaration): AST.Declaration {
   if (AST.isViewDeclaration(declaration) && declaration.aliasTarget) {

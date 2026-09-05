@@ -1,11 +1,15 @@
 import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
+import { RuntimeAssert } from '../TaoRuntime-src/TR-assert'
+import { memoryKeyValueStorage } from '../TaoRuntime-src/TR-data-provider'
 import { UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
 import type {
   BrowserNavigationHistoryDriver,
   BrowserNavigationPosition,
 } from '../TaoRuntime-src/TR-navigation-browser-history'
 import { RuntimeHostReadChannel } from '../TaoRuntime-src/TR-navigation-host-slots'
+import type { TaoDeclarationIdentityTuple } from '../TaoRuntime-src/TR-navigation-identity'
+import { setNavigationRestorationStorageForTests } from '../TaoRuntime-src/TR-navigation-restoration'
 import { configuredStack } from './TR-navigation-test-fixtures'
 
 function browserHistoryHarness() {
@@ -210,43 +214,19 @@ Describe('TR.Navigation', () => {
     Expect(kind.back(first)).toBe(true)
   })
 
-  Test('normalizes bound command metadata without discarding icon or intent title', () => {
-    let invoked = 0
-    const action = TR.Action(() => {
-      invoked += 1
-    }, { title: () => TR.Value('Save document') })
-    const command = TR.Navigation.Command({
-      action,
-      arguments: [],
-      enabled: () => TR.Value(false),
-      icon: () => TR.Value('checkmark'),
-      intentTitle: () => TR.ActionTitle(action, []),
-      name: 'Save',
-    })
-
-    const hostCommand = command.read()
-    Expect(hostCommand.label).toBe('Save document')
-    Expect(hostCommand.icon).toBe('checkmark')
-    Expect(hostCommand.enabled).toBe(false)
-    command.evaluate().jsValue.invoke()
-    Expect(invoked).toBe(1)
-  })
-
   Test('refreshes visually stable command closures independently of duplicate shortcut keys', () => {
     const invoked: string[] = []
     const command = (name: string, value: string) =>
-      TR.Navigation.Command({
-        action: TR.Action(() => invoked.push(value)),
-        arguments: [],
-        key: () => TR.Value('command-k'),
-        label: () => TR.Value(name),
+      TR.Interaction.Command({
+        action: () => TR.Action(() => invoked.push(value)),
+        members: { Key: () => TR.Value('primary+k'), Label: () => TR.Value(name) },
         name,
       }).read()
     const channel = new RuntimeHostReadChannel()
-    channel.publish({ toolbar: [command('First', 'old-first'), command('Second', 'old-second')] })
+    channel.publish({ header: true, toolbar: [command('First', 'old-first'), command('Second', 'old-second')] })
     const stableSnapshot = channel.read()
 
-    channel.publish({ toolbar: [command('First', 'new-first'), command('Second', 'new-second')] })
+    channel.publish({ header: true, toolbar: [command('First', 'new-first'), command('Second', 'new-second')] })
     stableSnapshot.toolbar[0]?.invoke()
     stableSnapshot.toolbar[1]?.invoke()
     Expect(invoked).toEqual(['new-first', 'new-second'])
@@ -884,13 +864,18 @@ Describe('TR.Navigation', () => {
 
     const declaration = TR.Navigation.Declaration('Configured selection', TR.NavKind.Selection())
     const configured = TR.Navigation.Configure(declaration, {
-      '@home': { Content: home, Label: TR.Value('Home') },
+      '@home': { Content: home, Icon: TR.Value('house'), Label: TR.Value('Home') },
       Display: TR.Value('tabs'),
       Initial: TR.Value('@home'),
     })
     const configuredWithOther = TR.Navigation.Patch(configured, {
       '@other': { Content: detail, Label: TR.Value('Other') },
     })
+    const configuredWithReplacement = TR.Navigation.Patch(configured, {
+      '@home': { Content: detail, Label: TR.Value('Replacement') },
+    })
+    Expect((configured.config['@home'] as Record<string, unknown>)['Icon']).toBeDefined()
+    Expect((configuredWithReplacement.config['@home'] as Record<string, unknown>)['Icon']).toBeUndefined()
     const app = TR.Navigation.App({
       name: 'Configured selection app',
       navigator: () => configuredWithOther,
@@ -1046,4 +1031,134 @@ Describe('TR.Navigation', () => {
     Expect(namedNavigatorLoads).toBe(0)
     Expect(namedAuxiliaryLoads).toBe(0)
   })
+
+  // A navigator a view renders mounts once on the occurrence that hosts it, and that mount is what
+  // Back and activation reach: the host's content is a view rather than a slot, so the navigator
+  // keeps its own history wherever the view puts it.
+  Test('hosts a rendered navigator once and routes Back and activation through it', () => {
+    const home = TR.Navigation.View({ name: 'Hosted home', render: () => null })
+    const detail = TR.Navigation.View({ name: 'Hosted detail', render: () => null })
+    const shell = TR.Navigation.View({ name: 'Shell', render: () => null })
+    const tabs = TR.Navigation.Configure(
+      TR.Navigation.Declaration('Hosted tabs', TR.NavKind.Selection()),
+      {
+        Display: { evaluate: () => ({ jsValue: 'tabs' }) },
+        Initial: { evaluate: () => ({ jsValue: '@home' }) },
+        '@home': {
+          Content: configuredStack('Hosted home stack', home),
+          Label: { evaluate: () => ({ jsValue: 'Home' }) },
+        },
+        '@settings': { Content: detail, Label: { evaluate: () => ({ jsValue: 'Settings' }) } },
+      },
+    )
+    const host = configuredSlot('Hosted shell', shell)
+    let created = 0
+    const create = () => {
+      created += 1
+      return TR.Navigation.Mount(tabs)
+    }
+    const mount = host.hostNavigation(tabs, create)
+    Expect(host.hostNavigation(tabs, create)).toBe(mount)
+    Expect(created).toBe(1)
+
+    // Until a view renders the navigator it is not on screen, so the host does not reach it.
+    mount.present(detail, {})
+    Expect(host.canGoBack).toBe(false)
+    const detach = host.attachHostedNavigation(mount, true)
+    const detachInactive = host.attachHostedNavigation(mount, false)
+    Expect(host.canGoBack).toBe(true)
+    Expect(host.back()).toBe(true)
+    Expect(host.canGoBack).toBe(false)
+    Expect(host.activate('settings')).toBe(true)
+    Expect(host.activate('missing')).toBe(false)
+    detachInactive()
+
+    // The host's own content goes before the navigator inside it.
+    host.present(detail, {})
+    mount.present(detail, {})
+    Expect(host.back()).toBe(true)
+    Expect(mount.canGoBack).toBe(true)
+    Expect(host.back()).toBe(true)
+    Expect(mount.canGoBack).toBe(false)
+    detach()
+    mount.present(detail, {})
+    Expect(host.canGoBack).toBe(false)
+
+    const inactive = host.attachHostedNavigation(mount, false)
+    const visible = host.attachHostedNavigation(mount, true)
+    visible()
+    Expect(host.activate('home')).toBe(false)
+    inactive()
+  })
+
+  // The host snapshots a hosted navigator by that navigator's own descriptor identity and restores
+  // it when a view attaches it, because the app restores before its first render puts a view on
+  // screen and a view is the only thing that renders a hosted navigator.
+  Test('restores a hosted navigator by its own identity when it attaches after a launch boundary', async () => {
+    const values = new Map<string, string>()
+    const restoreStorage = setNavigationRestorationStorageForTests(memoryKeyValueStorage(values))
+    try {
+      const first = hostedRestorationApp('hosted')
+      const detach = await first.app.attachRestoration()
+      const mount = hostRenderedNavigator(first)
+      mount.present(first.detail, {})
+      mount.present(first.detail, {})
+      await Promise.resolve()
+      await Promise.resolve()
+      await new Promise<void>(resolve => queueMicrotask(resolve))
+      detach()
+
+      const second = hostedRestorationApp('hosted')
+      const detachSecond = await second.app.attachRestoration()
+      const restored = hostRenderedNavigator(second)
+      Expect(stackDepth(restored)).toBe(3)
+      Expect(second.app.back()).toBe(true)
+      Expect(stackDepth(restored)).toBe(2)
+      detachSecond()
+    } finally {
+      restoreStorage()
+    }
+  })
 })
+
+/** hostedRestorationApp builds an app rooted in a view that renders one navigator inside it. */
+function hostedRestorationApp(variant: string) {
+  const identity = (kind: string, name: string) =>
+    TR.Navigation.Identity([
+      'tao.declaration',
+      1,
+      'hosted-restoration-test',
+      '@workspace',
+      'App',
+      kind,
+      name,
+    ] as TaoDeclarationIdentityTuple)
+  const home = TR.Navigation.View({ identity: identity('view', 'Home'), name: 'Home', render: () => null })
+  const detail = TR.Navigation.View({ identity: identity('view', 'Detail'), name: 'Detail', render: () => null })
+  const shell = TR.Navigation.View({ identity: identity('view', 'Shell'), name: 'Shell', render: () => null })
+  const root = TR.Navigation.Declaration('Root', TR.NavKind.Slot(), identity('app-root-view-nav', 'ShellApp'))
+  const rendered = TR.Navigation.Declaration('Rendered', TR.NavKind.Stack(), identity('nav', 'Rendered'))
+  const app = TR.Navigation.App({
+    auxiliaries: () => ({}),
+    declaration: TR.Navigation.AppDeclaration('ShellApp', identity('app', 'ShellApp')),
+    name: 'ShellApp',
+    navigator: () => TR.Navigation.Configure(root, { Initial: shell }),
+    restoration: { exclusions: [], mode: 'automatic', variant },
+  })
+  return { app, detail, rendered: TR.Navigation.Configure(rendered, { Initial: home }) }
+}
+
+type HostedRestorationApp = ReturnType<typeof hostedRestorationApp>
+
+/** hostRenderedNavigator does what a render site does: host the navigator on the root and attach it. */
+function hostRenderedNavigator(fixture: HostedRestorationApp): TR.NavigationValue {
+  const host = fixture.app.navigator
+  const mount = host.hostNavigation(fixture.rendered, () => fixture.app.hostNavigation(host, fixture.rendered))
+  host.attachHostedNavigation(mount, true)
+  return mount
+}
+
+function stackDepth(navigation: TR.NavigationValue): number {
+  RuntimeAssert.input(navigation.kind === 'stack', 'a hosted stack reports its depth')
+  return (navigation as TR.NavigationValue & { depth: number }).depth
+}

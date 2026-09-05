@@ -44,7 +44,7 @@ export function createExpoMetro(config: ExpoSessionConfig) {
   }
 }
 
-/** ExpoMetro is the ordinary dev loop's port-8081 Metro session. */
+/** ExpoMetro is the fixed default Metro session used by explicit single-session commands. */
 export const ExpoMetro = createExpoMetro(ExpoConfig)
 
 /** reloadExpoApps asks Metro to reload connected Expo runtimes. */

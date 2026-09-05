@@ -5,6 +5,99 @@ import { registerRuntimeE2ELifecycle, testCompileApp } from './test-compile-app'
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime', () => {
+  Test('runs keyboard attention steps directly through the reducer', async () => {
+    await withTaoFiles(
+      'tao-runtime-attention-test-plan-',
+      {
+        'Main.test.tao': `
+          use AttentionApp from ./
+          test "Attention" {
+            test "targets and opens verbs" {
+              run AttentionApp
+              narrow "draft"
+              expect focus region "Home"
+              expect target "Draft document"
+              press key "."
+              expect verbs "Save"
+            }
+          }
+        `,
+        'Main.tao': `
+          use StackNav from @tao/nav
+          use Col, FormButton from @tao/ui
+          app AttentionApp { Name "Attention" Navigator StackNav { Initial Home } }
+          scene Home() {
+            Title "Home"
+            action DoNothing() { }
+            command Save() { Title "Save" do DoNothing() }
+            Commands { Save }
+            render Col() {
+              FormButton("Draft document") { on press DoNothing }
+            }
+          }
+        `,
+      },
+      async paths => {
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
+  Test('reports exact keyboard attention assertion failures', async () => {
+    await withTaoFiles(
+      'tao-runtime-attention-errors-',
+      {
+        'Focus.test.tao': `
+          use AttentionApp from ./Main
+          test "Attention" { test "focus mismatch" {
+            run AttentionApp
+            expect focus region "Elsewhere"
+          } }
+        `,
+        'Main.tao': `
+          use StackNav from @tao/nav
+          use Col, FormButton from @tao/ui
+          app AttentionApp { Name "Attention" Navigator StackNav { Initial Home } }
+          scene Home() {
+            Title "Home"
+            action DoNothing() { }
+            command Save() { Title "Save" do DoNothing() }
+            Commands { Save }
+            render Col() { FormButton("Draft document") { on press DoNothing } }
+          }
+        `,
+        'Target.test.tao': `
+          use AttentionApp from ./Main
+          test "Attention" { test "target mismatch" {
+            run AttentionApp
+            narrow "draft"
+            expect target "Other document"
+          } }
+        `,
+        'Verbs.test.tao': `
+          use AttentionApp from ./Main
+          test "Attention" { test "verbs mismatch" {
+            run AttentionApp
+            narrow "draft"
+            press key "."
+            expect verbs "Archive"
+          } }
+        `,
+      },
+      async paths => {
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Focus.test.tao']!)).rejects.toThrow(
+          /expect focus region "Elsewhere" expected interaction focus region "Elsewhere", got "Home"/,
+        )
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Target.test.tao']!)).rejects.toThrow(
+          /expect target "Other document" expected interaction target "Other document", got "Draft document"/,
+        )
+        await Expect(RuntimeTesting.runTaoTestPlan(paths['Verbs.test.tao']!)).rejects.toThrow(
+          /expect verbs "Archive" expected interaction verbs \["Archive"\], got \["Save"\]/,
+        )
+      },
+    )
+  })
+
   Test('runs Tao text expectations with duplicate rendered text', async () => {
     await withTaoFiles(
       'tao-runtime-test-plan-',
@@ -258,7 +351,7 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        view Home() {
+        scene Home() {
           Title "Home"
           state Status = "Ready"
           action AskForConfirmation() {
@@ -346,11 +439,15 @@ Describe('Expo runtime', () => {
             Navigator StackNav { Initial Home }
           }
 
-          view Home() {
+          scene Home() {
             state CanSave = false
             Title "Home"
-            action SaveDocument() { Title "Save" }
-            command Save = SaveDocument() with { Enabled CanSave }
+            action SaveDocument() { }
+            command Save() {
+              Title "Save"
+              Enabled CanSave
+              do SaveDocument()
+            }
             Toolbar { Save }
             render Text("Home")
           }
@@ -475,7 +572,7 @@ Describe('Expo runtime', () => {
           Datasource Memory { }
         }
 
-        view Main() {
+        scene Main() {
           Title "Main"
           state Draft = ""
           state Status = "Waiting"
@@ -505,6 +602,45 @@ Describe('Expo runtime', () => {
           }
         }
       `,
+      },
+      async paths => {
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
+  Test('resolves a selected non-selectable row by its loop tag rather than its collection label', async () => {
+    await withTaoFiles(
+      'tao-runtime-tagged-row-outline-',
+      {
+        'Main.test.tao': `
+          use TaggedRowsApp from ./
+
+          test "Tagged row labels" {
+            test "reads the selected row outline label" {
+              run TaggedRowsApp
+              select #rows[2] {
+                expect label "Chapter two"
+              }
+            }
+          }
+        `,
+        'Main.tao': `
+          use Col, Text from @tao/ui
+
+          let Workspaces = ["Chapter one", "Chapter two"]
+
+          app TaggedRowsApp { view Main }
+
+          view Main() {
+            render Col() {
+              #rows
+              loop Workspaces / Workspace {
+                Col() { Text(Workspace) }
+              }
+            }
+          }
+        `,
       },
       async paths => {
         await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
@@ -572,7 +708,7 @@ Describe('Expo runtime', () => {
           Navigator StackNav { Initial Home }
         }
 
-        workspace view Home() {
+        workspace scene Home() {
           Title "Home"
           action Open() { present Detail() }
           render Stack(){
@@ -581,7 +717,7 @@ Describe('Expo runtime', () => {
           }
         }
 
-        workspace view Detail() {
+        workspace scene Detail() {
           Title "Detail"
           render Text("Detail")
         }
