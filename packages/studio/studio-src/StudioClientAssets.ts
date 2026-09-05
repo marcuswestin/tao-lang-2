@@ -499,6 +499,25 @@ button { color: inherit; font: inherit; }
   overscroll-behavior-x: contain; padding: 2px 2px 10px; scroll-snap-type: x proximity;
 }
 .studio-preview-group-cells > .studio-preview-cell { scroll-snap-align: start; }
+[data-tao-studio-sketch-host] { flex: none; }
+[data-tao-studio-sketch-workspace] { align-items: flex-start; border: 1px dashed var(--studio-stroke); border-radius: 10px; cursor: crosshair; position: relative; }
+[data-tao-studio-sketch-create-surface] [data-tao-studio-sketch-workspace]::before { color: var(--studio-text-muted); content: "Drag empty space to draw a view"; font-size: 10px; left: 10px; pointer-events: none; position: absolute; top: 6px; }
+[data-tao-studio-sketch] { background: #f8f9fb; border: 1px solid #8792a3; border-radius: 8px; box-shadow: 0 10px 28px #0007; color: #242a33; }
+[data-tao-studio-sketch-rect] { background: #dce6f5; border: 1px solid #7693bc; box-sizing: border-box; cursor: move; overflow: visible; }
+[data-tao-studio-sketch-rect-kind="Text"] { background: transparent; border-color: #9ca8b8; }
+[data-tao-studio-sketch-rect][data-selected="true"] { outline: 2px solid #4b91ff; outline-offset: 1px; }
+[data-tao-studio-sketch-handle] { background: #fff; border: 1px solid #397ee8; border-radius: 50%; height: 8px; padding: 0; position: absolute; width: 8px; }
+[data-tao-studio-sketch-handle="north-west"] { cursor: nwse-resize; left: -5px; top: -5px; }
+[data-tao-studio-sketch-handle="north"] { cursor: ns-resize; left: calc(50% - 4px); top: -5px; }
+[data-tao-studio-sketch-handle="north-east"] { cursor: nesw-resize; right: -5px; top: -5px; }
+[data-tao-studio-sketch-handle="east"] { cursor: ew-resize; right: -5px; top: calc(50% - 4px); }
+[data-tao-studio-sketch-handle="south-east"] { bottom: -5px; cursor: nwse-resize; right: -5px; }
+[data-tao-studio-sketch-handle="south"] { bottom: -5px; cursor: ns-resize; left: calc(50% - 4px); }
+[data-tao-studio-sketch-handle="south-west"] { bottom: -5px; cursor: nesw-resize; left: -5px; }
+[data-tao-studio-sketch-handle="west"] { cursor: ew-resize; left: -5px; top: calc(50% - 4px); }
+[data-tao-studio-sketch-inspector] { background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px; cursor: default; display: grid; gap: 6px; padding: 8px; }
+[data-tao-studio-sketch-inspector][hidden] { display: none; }
+[data-tao-studio-sketch-inspector] input, [data-tao-studio-sketch-inspector] select { background: #101319; border: 1px solid #3a4352; border-radius: 4px; color: #dce2ec; min-width: 0; padding: 5px 6px; }
 .studio-preview-cell { display: grid; flex: none; gap: 8px; justify-items: start; min-width: 0; }
 .studio-preview-cell[aria-current="true"] > .studio-preview-cell-label { color: #f3c969; }
 .studio-preview-cell:focus-visible { outline: 2px solid #f3c969; outline-offset: 5px; }
@@ -564,7 +583,7 @@ button { color: inherit; font: inherit; }
   min-width: 110px; padding: 4px 6px;
 }
 .studio-preview-cell-apply:disabled, .studio-preview-cell-promote:disabled,
-.studio-preview-cell-capture:disabled, .studio-preview-cell-generate:disabled { cursor: wait; opacity: .55; }
+.studio-preview-cell-capture:disabled, .studio-preview-cell-generate:disabled { cursor: default; opacity: .55; }
 .studio-preview-cell-status { color: #91a096; font-size: 10px; overflow-wrap: anywhere; }
 .studio-preview-cell-status[data-state="error"] { color: #ff9c8c; }
 .studio-scenario-inspector { border-bottom: 1px solid #353936; margin: -2px -2px 10px; padding: 0 2px 12px; }
@@ -594,12 +613,16 @@ button { color: inherit; font: inherit; }
 .studio-inspector-accordion-content { border-top: 1px solid #353936; padding: 8px; }
 .studio-empty { color: #8f9790; display: grid; height: 100%; padding: 24px; place-items: center; text-align: center; }
 .studio-global-loading {
-  align-items: center; background: #131722f2; border: 1px solid #4f6590; border-radius: 10px; box-shadow: 0 18px 70px #000c;
-  display: flex; gap: 12px; left: 50%; min-width: 300px; padding: 14px 16px; position: fixed; top: 72px;
-  transform: translateX(-50%); z-index: 30;
+  -webkit-backdrop-filter: grayscale(1) brightness(.52); align-items: center;
+  backdrop-filter: grayscale(1) brightness(.52); background: #10131bbb; display: grid;
+  inset: 0; justify-items: center; padding: 24px; position: fixed; z-index: 60;
 }
 .studio-global-loading[hidden] { display: none; }
-.studio-global-loading > span:last-child { display: grid; gap: 2px; }
+.studio-global-loading-panel {
+  align-items: center; background: #171b25f5; border: 1px solid #4f6590; border-radius: 12px;
+  box-shadow: 0 20px 80px #000d; display: flex; gap: 14px; max-width: 420px; min-width: 300px; padding: 18px 20px;
+}
+.studio-global-loading-panel > span:last-child { display: grid; gap: 3px; }
 .studio-global-loading strong { color: #edf3ff; font-size: 12px; }
 .studio-global-loading small { color: #8f9aad; font-size: 10px; }
 .studio-global-loading-spinner {
@@ -731,7 +754,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .studio-window-controls { align-items: center; display: flex; flex: none; gap: 8px; margin: 0 8px 0 3px; }
 .studio-window-controls i { background: #69717d; border-radius: 50%; display: block; height: 10px; width: 10px; }
 .studio-picker { color: var(--studio-text-muted); }
-.studio-project { color: var(--studio-text); font-weight: 650; padding: 5px 6px; }
+.studio-project { background: #181b22; border: 0; color: var(--studio-text); font-weight: 650; padding: 4px 22px 4px 6px; }
 .studio-project:hover, .studio-app-picker:hover { color: #fff; }
 .studio-app-picker { background: #181b22; border-left: 1px solid var(--studio-stroke); padding: 4px 22px 4px 10px; }
 .studio-layout-presets { background: var(--studio-bg-deep); border-color: var(--studio-stroke); border-radius: 8px; padding: 3px; }
@@ -859,6 +882,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   background: var(--studio-accent-surface); color: #f0f5ff;
 }
 .studio-drawer-content { color: var(--studio-text-muted); padding: 10px 13px; }
+.studio-data { color: var(--studio-text-muted); padding: 10px 12px; }
+.studio-data .studio-data-table { display: block; overflow-x: auto; }
 .studio-drawer-content dt, .studio-drawer-content dd { border-bottom-color: #242a32; }
 .studio-drawer-row { border-radius: 5px; color: #e7a8a1; padding: 6px 8px; }
 .studio-drawer-row:hover:not(:disabled) { background: var(--studio-surface-hover); }

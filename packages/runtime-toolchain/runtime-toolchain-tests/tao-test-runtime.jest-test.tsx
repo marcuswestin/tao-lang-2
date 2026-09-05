@@ -193,6 +193,77 @@ Describe('Expo runtime', () => {
     )
   })
 
+  Test('delivers press phases, hover, and focus without collapsing them into a press', async () => {
+    await withTaoFiles(
+      'tao-runtime-pointer-phase-test-plan-',
+      {
+        'Main.test.tao': `
+        use PointerPhaseApp from ./
+
+        test "Pointer phases" {
+          test "delivers each phase" {
+            run PointerPhaseApp
+            expect text "idle"
+            press down #target
+            expect text "down"
+            advance 600.ms
+            expect text "down"
+            press up #target
+            expect text "up"
+            hover #target
+            expect text "hover"
+            focus #target
+            expect text "focus"
+            press #target
+            expect text "pressed"
+          }
+        }
+      `,
+        'Main.tao': `
+        app PointerPhaseApp { view MainView }
+        view MainView() {
+          state Phase = "idle"
+          action SetPhase(Value text) { set Phase = Value }
+          render Stack() {
+            #target
+            PointerTarget(SetPhase)
+            Text(Phase)
+          }
+        }
+        view Stack() {
+          render inject Content @@content, Layout @@layout, Tag @@tag \`\`\`ts
+            return TR.Views.View({ children: Content, layout: Layout, tag: Tag })
+          \`\`\`
+        }
+        view PointerTarget(Change action(text)) {
+          render inject Change, Layout @@layout, Tag @@tag \`\`\`ts
+            return (
+              <RN.Pressable
+                {...TR.VisualNativeProps(Layout, Tag)}
+                onFocus={() => Change.invoke(TR.Value("focus"))}
+                onHoverIn={() => Change.invoke(TR.Value("hover"))}
+                onPress={() => Change.invoke(TR.Value("pressed"))}
+                onPressIn={() => Change.invoke(TR.Value("down"))}
+                onPressOut={() => Change.invoke(TR.Value("up"))}
+              >
+                <RN.Text>Target</RN.Text>
+              </RN.Pressable>
+            )
+          \`\`\`
+        }
+        view Text(Value text) {
+          render inject Value \`\`\`ts
+            return <RN.Text>{Value}</RN.Text>
+          \`\`\`
+        }
+      `,
+      },
+      async paths => {
+        await RuntimeTesting.runTaoTestPlan(paths['Main.test.tao']!)
+      },
+    )
+  })
+
   Test('waits for guard fallthrough before running the next Tao test step', async () => {
     await withTaoFiles(
       'tao-runtime-async-action-test-plan-',

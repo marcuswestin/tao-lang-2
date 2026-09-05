@@ -23,21 +23,38 @@ export type StudioParameterSchema = {
   type:
     | { kind: 'boolean' }
     | { kind: 'choice'; values: readonly (boolean | number | string)[] }
-    | { kind: 'json' }
+    | { entity?: string; kind: 'json' }
     | { kind: 'number'; maximum?: number; minimum?: number; step?: number }
     | { kind: 'text' }
     | { kind: 'time' }
 }
 
+export type StudioScenarioStep =
+  | { kind: 'advance'; milliseconds: number }
+  | { kind: 'focus'; tag: string }
+  | {
+    kind: 'enter'
+    selector: 'label' | 'placeholder' | 'tag' | 'text'
+    target: string
+    value: string
+  }
+  | {
+    kind: 'hover' | 'press' | 'pressDown' | 'pressUp' | 'submit'
+    selector: 'label' | 'placeholder' | 'tag' | 'text'
+    target: string
+  }
+  | { index: number; kind: 'select'; steps: readonly StudioScenarioStep[]; tag: string }
+
 export type StudioScenario = {
   args: StudioJsonObject
-  fixtureId: string
+  fixtureId?: string
   group: string
   label: string
   prepare: readonly StudioJsonObject[]
   scenarioId: string
   source: StudioTaoSource
   stateLayers: readonly string[]
+  steps?: readonly StudioScenarioStep[]
   subjectId: string
 }
 
@@ -94,11 +111,20 @@ export type StudioPreviewManifestV2 = {
   manifestRevision: string
   parametersBySubject: Readonly<Record<string, readonly StudioParameterSchema[]>>
   project: { appName: string; entryPath: string; root: string }
+  /** renders is compiler-published when available; older v2 manifests remain readable. */
+  renders?: readonly StudioRenderInventoryEntry[]
   scenarios: readonly StudioScenario[]
   sourceVersions: Readonly<Record<string, string>>
   states: readonly StudioStateEntry[]
   subjects: readonly StudioScenarioSubject[]
   version: typeof studioPreviewManifestVersion
+}
+
+export type StudioRenderInventoryEntry = {
+  elementName: string
+  renderId: string
+  source: StudioTaoSource
+  studioRectId?: string
 }
 
 export type StudioCellIdentity = {
@@ -139,6 +165,14 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
     validateSource(subject.source, 'Studio subject source')
     requireText(subject.kind === 'app' ? subject.appName : subject.viewName, `Studio ${subject.kind} name`)
   }
+  const renders = uniqueBy(input.renders ?? [], render => render.renderId, 'Studio render')
+  for (const render of renders.values()) {
+    requireText(render.elementName, 'Studio render element name')
+    validateSource(render.source, 'Studio render source')
+    if (render.studioRectId !== undefined) {
+      requireText(render.studioRectId, 'Studio render rectangle identity')
+    }
+  }
   for (const [subjectId, parameters] of Object.entries(input.parametersBySubject)) {
     if (!subjects.has(subjectId)) {
       throw new Errors.UserInputError(`Studio parameters target an unknown subject: ${subjectId}`)
@@ -162,7 +196,7 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
     validateSource(scenario.source, 'Studio scenario source')
     requireText(scenario.group, 'Studio scenario group')
     requireText(scenario.label, 'Studio scenario label')
-    if (!fixtures.has(scenario.fixtureId)) {
+    if (scenario.fixtureId !== undefined && !fixtures.has(scenario.fixtureId)) {
       throw new Errors.UserInputError(`Studio scenario targets an unknown fixture: ${scenario.fixtureId}`)
     }
     const subject = subjects.get(scenario.subjectId)
@@ -171,6 +205,7 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
     }
     validateArgsForSubject(input, subject.subjectId, scenario.args)
     library.resolve(scenario.stateLayers)
+    validateJourneySteps(scenario.steps)
   }
   uniqueBy(input.cells, cell => cell.cellId, 'Studio cell')
   for (const cell of input.cells) {
@@ -188,6 +223,85 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
     requireText(version, `Studio source version for ${path}`)
   }
   return input
+}
+
+function validateJourneySteps(steps: unknown, depth = 0): void {
+  if (steps === undefined) {
+    return
+  }
+  if (!Array.isArray(steps)) {
+    throw new Errors.UserInputError('Studio journey steps must be an array.')
+  }
+  if (depth > 64) {
+    throw new Errors.UserInputError('Studio journey steps are nested too deeply.')
+  }
+  for (const step of steps) {
+    validateJourneyStep(step, depth)
+  }
+}
+
+function validateJourneyStep(step: unknown, depth: number): void {
+  if (!isRecord(step) || typeof step['kind'] !== 'string') {
+    throw new Errors.UserInputError('Studio journey step must be an object with a supported kind.')
+  }
+  const kind = step['kind']
+  if (kind === 'advance') {
+    requireOnlyKeys(step, ['kind', 'milliseconds'], 'Studio journey advance')
+    if (!Number.isSafeInteger(step['milliseconds']) || (step['milliseconds'] as number) < 0) {
+      throw new Errors.UserInputError('Studio journey advance must be a non-negative whole number of milliseconds.')
+    }
+    return
+  }
+  if (kind === 'focus') {
+    requireOnlyKeys(step, ['kind', 'tag'], 'Studio journey focus')
+    requireText(step['tag'] as string, 'Studio journey focus tag')
+    return
+  }
+  if (kind === 'select') {
+    requireOnlyKeys(step, ['index', 'kind', 'steps', 'tag'], 'Studio journey select')
+    requireText(step['tag'] as string, 'Studio journey select tag')
+    if (!Number.isSafeInteger(step['index']) || (step['index'] as number) < 1) {
+      throw new Errors.UserInputError('Studio journey select index must be a positive whole number.')
+    }
+    if (!Array.isArray(step['steps'])) {
+      throw new Errors.UserInputError('Studio journey select steps must be an array.')
+    }
+    validateJourneySteps(step['steps'], depth + 1)
+    return
+  }
+  if (kind === 'enter') {
+    requireOnlyKeys(step, ['kind', 'selector', 'target', 'value'], 'Studio journey enter')
+    validateJourneySelector(step['selector'], kind)
+    requireText(step['target'] as string, 'Studio journey enter target')
+    if (typeof step['value'] !== 'string') {
+      throw new Errors.UserInputError('Studio journey enter value must be text.')
+    }
+    return
+  }
+  if (['hover', 'press', 'pressDown', 'pressUp', 'submit'].includes(kind)) {
+    requireOnlyKeys(step, ['kind', 'selector', 'target'], `Studio journey ${kind}`)
+    validateJourneySelector(step['selector'], kind)
+    requireText(step['target'] as string, `Studio journey ${kind} target`)
+    return
+  }
+  throw new Errors.UserInputError(`Unsupported Studio journey step kind: ${kind}`)
+}
+
+function validateJourneySelector(value: unknown, kind: string): void {
+  if (value !== 'label' && value !== 'placeholder' && value !== 'tag' && value !== 'text') {
+    throw new Errors.UserInputError(`Studio journey ${kind} selector is invalid.`)
+  }
+}
+
+function requireOnlyKeys(value: Readonly<Record<string, unknown>>, allowed: readonly string[], label: string): void {
+  const unknown = Object.keys(value).find(key => !allowed.includes(key))
+  if (unknown !== undefined) {
+    throw new Errors.UserInputError(`${label} contains an unsupported field: ${unknown}`)
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function cellIdentity(manifest: StudioPreviewManifestV2, cell: StudioPreviewCell): StudioCellIdentity {
@@ -226,7 +340,10 @@ function validateArgsForSubject(manifest: StudioPreviewManifestV2, subjectId: st
       continue
     }
     if (!valueMatchesParameter(value, parameter)) {
-      throw new Errors.UserInputError(`Studio argument ${parameter.parameterId} does not match ${parameter.type.kind}.`)
+      const expected = parameter.type.kind === 'json' && parameter.type.entity !== undefined
+        ? `entity ${parameter.type.entity}`
+        : parameter.type.kind
+      throw new Errors.UserInputError(`Studio argument ${parameter.parameterId} does not match ${expected}.`)
     }
   }
 }
@@ -239,6 +356,9 @@ function validateParameter(parameter: StudioParameterSchema): void {
   }
   if (parameter.type.kind === 'choice' && parameter.type.values.length === 0) {
     throw new Errors.UserInputError(`Studio choice parameter has no values: ${parameter.parameterId}`)
+  }
+  if (parameter.type.kind === 'json' && parameter.type.entity !== undefined) {
+    requireText(parameter.type.entity, `Studio entity parameter type for ${parameter.parameterId}`)
   }
   if (parameter.type.kind === 'number') {
     for (const value of [parameter.type.minimum, parameter.type.maximum, parameter.type.step]) {
@@ -259,7 +379,8 @@ function valueMatchesParameter(value: StudioJsonValue, parameter: StudioParamete
     case 'choice':
       return parameter.type.values.some(candidate => Object.is(candidate, value))
     case 'json':
-      return true
+      return parameter.type.entity === undefined
+        || (typeof value === 'object' && value !== null && !Array.isArray(value))
     case 'number':
       return typeof value === 'number'
         && Number.isFinite(value)

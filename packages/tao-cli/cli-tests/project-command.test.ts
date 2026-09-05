@@ -14,6 +14,7 @@ Describe('tao project identity commands', () => {
       Expect(await FS.readText(path)).toBe(
         `project {\n   id "my-project"\n   name "my-project"\n   version "0.1.0"\n   DefaultApp App\n}\n\napp App { view Main }\n\nview Main() { }\n`,
       )
+      Expect(await FS.readText(FS.resolvePath('my-project/@/.gitkeep', root))).toBe('')
     } finally {
       Platform.runtimeProcess.chdir(previous)
       await FS.remove(root)

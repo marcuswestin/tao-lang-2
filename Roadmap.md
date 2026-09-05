@@ -83,6 +83,10 @@ tests written in Tao, green in Current, for every construct introduced.
 
 ## Toward v1
 
+- [ ] Complete freehand UI sketching in Tao Studio
+  - The implemented foundation covers scenarios, the generated root `@` package, and drawing and
+    snapping free rectangles. The FS-D1–FS-D20 design and the ordered remaining data, variant,
+    Tao-rendering, focus-in, and companion slices live in `Docs/Roadmap/Freehand UI sketching/`.
 - [ ] Complete interaction and accessibility defaults
   - The implemented interaction-system foundation derives the outline, attention, names, state,
     commands, focus projection, and generated surfaces shared by keyboard and accessibility. The
@@ -316,6 +320,11 @@ Product and codebase backlog, unordered.
 - `Docs/Roadmap/Tao ship.md` — ship exploration with open dialogue: the derived publish pipeline (build/sign/submit/OTA), variants as environments, the derived hosted runtime, the schema-migration option space, deploy configuration, error reports and analytics in production, and the commercial shape.
 - `Docs/Roadmap/Tao ship/Plan - Beta distribution in one command.md` — the first ship slice as a plan: `tao ship <App>` to TestFlight and an Android APK link over the developer's own EAS and Apple accounts, then `--update`, testers, and one host for dev and ship; its rulings for Ro and the researched lane facts beside it.
 - `Docs/Roadmap/Multiplayer sync.md` — multiplayer-sync exploration with open dialogue: the typed change-set ledger, the granular-write provider family and its conformance contract, offline queue and late-refusal semantics, fieldwise-latest convergence, presence, and the slice sequence.
+- `Docs/Roadmap/Freehand UI sketching/` — FS-D1–FS-D20 design record, reconciled product stories and
+  hand-authored wireframes, requirement prompt, and ordered implementation plan for Studio-owned
+  free rectangles, generated `@/studio` views, snapping to Tao flow, data, variants, focus-in, and
+  the PencilKit-backed companion; its approved review-and-refinement follow-on covers interaction
+  recording, prompted scenario expansion, collaborative visual review, and design conformity.
 - `Docs/Roadmap/Keyboard driven apps/` — the interaction system design (KEY-D1–D14) and
   implementation record. The T1–T5 core ships the outline, attention reducer, `scene`, shell view
   with a rendered nav, configured commands, mounted-node narrowing, and four generated surfaces.

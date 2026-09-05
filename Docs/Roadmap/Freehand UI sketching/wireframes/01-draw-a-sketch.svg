@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 470" width="880" height="470" font-family="ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+  <rect width="880" height="470" fill="#ffffff"/>
+  <!-- Studio chrome -->
+  <rect x="10" y="10" width="860" height="450" rx="8" fill="#fafafa" stroke="#999"/>
+  <rect x="10" y="10" width="860" height="34" rx="8" fill="#eeeeee" stroke="#999"/>
+  <text x="26" y="32" font-weight="600" fill="#222">Tao Studio — Playlists</text>
+  <rect x="330" y="17" width="60" height="20" rx="10" fill="#ffffff" stroke="#888"/><text x="360" y="31" text-anchor="middle" fill="#222">Design</text>
+  <rect x="396" y="17" width="52" height="20" rx="10" fill="#e4e4e4" stroke="#888"/><text x="422" y="31" text-anchor="middle" fill="#555">Code</text>
+  <rect x="454" y="17" width="48" height="20" rx="10" fill="#e4e4e4" stroke="#888"/><text x="478" y="31" text-anchor="middle" fill="#555">Run</text>
+  <!-- rail -->
+  <rect x="10" y="44" width="40" height="416" fill="#f0f0f0" stroke="#bbb"/>
+  <g fill="#bbb"><rect x="21" y="60" width="18" height="18" rx="3"/><rect x="21" y="90" width="18" height="18" rx="3"/><rect x="21" y="120" width="18" height="18" rx="3"/><rect x="21" y="150" width="18" height="18" rx="3"/></g>
+  <!-- inspector -->
+  <rect x="690" y="44" width="180" height="416" fill="#f4f4f4" stroke="#bbb"/>
+  <text x="702" y="66" font-weight="600" fill="#444">Inspector</text>
+  <text x="702" y="90" fill="#666">Layout</text>
+  <text x="702" y="108" fill="#666">Style</text>
+  <text x="702" y="126" fill="#666">Data</text>
+  <text x="702" y="144" fill="#666">Actions</text>
+  <text x="702" y="176" fill="#444" font-weight="600">Selected</text>
+  <text x="702" y="194" fill="#666">new sketch</text>
+  <text x="702" y="212" fill="#666">width 360  height 76</text>
+  <text x="702" y="230" fill="#666">name: View1</text>
+  <rect x="702" y="242" width="150" height="20" rx="4" fill="#fff" stroke="#999"/>
+  <text x="710" y="256" fill="#999">rename to PlaylistRow…</text>
+
+  <!-- app cell (phone) -->
+  <text x="110" y="70" fill="#444" font-weight="600">Playlists · phone · scenario "full"</text>
+  <rect x="110" y="80" width="220" height="360" rx="18" fill="#fff" stroke="#222" stroke-width="1.5"/>
+  <rect x="120" y="96" width="200" height="30" fill="#f2f2f2"/>
+  <text x="130" y="116" font-weight="600" fill="#222">Playlists</text>
+  <g stroke="#333" fill="#e6e6e6">
+    <rect x="124" y="140" width="40" height="40" rx="4"/>
+    <rect x="124" y="196" width="40" height="40" rx="4"/>
+    <rect x="124" y="252" width="40" height="40" rx="4"/>
+    <rect x="124" y="308" width="40" height="40" rx="4"/>
+  </g>
+  <g fill="#222">
+    <text x="174" y="155">Chill Vibes</text><text x="174" y="172" fill="#777" font-size="11">32 tracks · 2 h 05</text>
+    <text x="174" y="211">Morning Run</text><text x="174" y="228" fill="#777" font-size="11">18 tracks · 1 h 10</text>
+    <text x="174" y="267">Deep Focus</text><text x="174" y="284" fill="#777" font-size="11">40 tracks · 3 h 20</text>
+    <text x="174" y="323">Road Trip</text><text x="174" y="340" fill="#777" font-size="11">57 tracks · 4 h 02</text>
+  </g>
+
+  <!-- the freehand sketch being drawn -->
+  <text x="400" y="128" fill="#444" font-weight="600">View1 · sketch</text>
+  <rect x="400" y="138" width="270" height="76" fill="#fff" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <g stroke="#c0392b" stroke-width="1.5">
+    <line x1="664" y1="206" x2="676" y2="206"/>
+    <line x1="670" y1="200" x2="670" y2="212"/>
+  </g>
+  <rect x="600" y="222" width="70" height="18" rx="3" fill="#c0392b"/>
+  <text x="635" y="235" text-anchor="middle" fill="#fff" font-size="11">360 × 76</text>
+
+  <!-- source written -->
+  <rect x="400" y="262" width="270" height="150" rx="6" fill="#f7f7f7" stroke="#bbb"/>
+  <text x="410" y="280" fill="#555" font-size="11">Studio writes one generated view file and a catalog row:</text>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" fill="#222">
+    <text x="410" y="300">// @/studio/View1.tao · Studio-written</text>
+    <text x="410" y="316">public view View1() {</text>
+    <text x="410" y="332">   render Placeholder("View1") [width 360, height 76]</text>
+    <text x="410" y="348">}</text>
+    <text x="410" y="356">scenarios View1 "sketches" {</text>
+    <text x="410" y="372">   device phone</text>
+    <text x="410" y="388">   scenario "first" { render () }</text>
+    <text x="410" y="404">}</text>
+  </g>
+
+  <!-- callouts -->
+  <g font-weight="700" fill="#fff" font-size="11">
+    <circle cx="96" cy="70" r="9" fill="#c0392b"/><text x="96" y="74" text-anchor="middle">1</text>
+    <circle cx="386" cy="128" r="9" fill="#c0392b"/><text x="386" y="132" text-anchor="middle">2</text>
+    <circle cx="386" cy="272" r="9" fill="#c0392b"/><text x="386" y="276" text-anchor="middle">3</text>
+  </g>
+  <g fill="#333" font-size="11">
+    <text x="60" y="456">1 app cell · 2 draw a sketch · 3 generated view is Tao; free geometry is committed Studio data</text>
+  </g>
+</svg>

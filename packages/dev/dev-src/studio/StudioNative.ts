@@ -1012,7 +1012,15 @@ async function runHutchCommand(
 ): Promise<void> {
   throwIfNativeInterrupted(options.signal, args.join(' '), projectRoot)
   if (options.runner !== undefined) {
-    const result = await options.runner(hutchPath, { args, cwd: projectRoot, stdio: 'stream' })
+    const result = await options.runner(hutchPath, {
+      args,
+      cwd: projectRoot,
+      env: options.hutchHome === undefined ? undefined : { HUTCH_HOME: options.hutchHome },
+      // Hutch can leave its engine holding captured output pipes after a finite command reports
+      // completion. Let the finite command inherit terminal output so completion does not wait on
+      // a descendant that still owns those pipes.
+      stdio: ['ignore', 'inherit', 'inherit'],
+    })
     if (result.error !== undefined || result.exitCode !== 0) {
       throw new Errors.CommandExecutionError(result)
     }
@@ -1025,6 +1033,8 @@ async function runHutchCommand(
   const commandSpec: Parameters<StartProcessTree>[1] = {
     args,
     cwd: projectRoot,
+    // Preserve the same no-captured-pipe lifecycle when the bounded process-tree runner is used.
+    stdio: ['ignore', 'inherit', 'inherit'],
     env: options.hutchHome === undefined ? undefined : { HUTCH_HOME: options.hutchHome },
     onError(error) {
       spawnError = error

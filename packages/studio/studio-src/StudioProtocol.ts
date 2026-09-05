@@ -241,12 +241,101 @@ export type StudioPreviewSchemeMessage = {
   type: 'preview-scheme-changed'
 }
 
+export type StudioPreviewLayoutMeasurement = {
+  elementName: string
+  rect: Readonly<{ height: number; width: number; x: number; y: number }>
+  renderId: string
+  studioRectId?: string
+}
+
+export type StudioPreviewLayoutMeasurementsMessage = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  measurements: readonly StudioPreviewLayoutMeasurement[]
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-layout-measurements'
+}
+
+export type StudioRecordedJourneySelector = 'label' | 'placeholder' | 'tag' | 'text'
+
+export type StudioRecordedJourneyStep =
+  | Readonly<{
+    kind: 'press' | 'submit'
+    selector: StudioRecordedJourneySelector
+    target: string
+  }>
+  | Readonly<{
+    kind: 'enter'
+    redacted: boolean
+    selector: StudioRecordedJourneySelector
+    target: string
+    value: string
+  }>
+  | Readonly<{
+    action: 'enter' | 'press' | 'submit'
+    kind: 'unresolved'
+    reason: 'No unique Tao tag, accessibility label, placeholder, or visible text identifies this target.'
+  }>
+
+/** Exact-cell command for starting or stopping a browser-local semantic journey recording. */
+export type StudioJourneyRecordingControlMessage = {
+  active: boolean
+  captureSensitiveText?: boolean
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  recordingId: string
+  type: 'set-journey-recording'
+}
+
+export type StudioPreviewJourneyStepRecordedMessage = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  recordingId: string
+  sequence: number
+  step: StudioRecordedJourneyStep
+  type: 'preview-journey-step-recorded'
+}
+
+export type StudioPreviewJourneyRecordingStateMessage = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  recordingId: string
+  sequence: number
+  status: 'invalidated' | 'recording' | 'stopped'
+  type: 'preview-journey-recording-state'
+}
+
+/** Runtime-owned completion signals keep visual review from capturing before a journey settles. */
+export type StudioPreviewJourneyReplaySettledMessage = {
+  channel: typeof studioProtocolChannel
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-journey-replay-settled'
+}
+
+export type StudioPreviewJourneyReplayFailedMessage = {
+  channel: typeof studioProtocolChannel
+  error: string
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-journey-replay-failed'
+}
+
 export type StudioWindowMessage =
   | StudioHighlightSourceMessage
+  | StudioJourneyRecordingControlMessage
   | StudioPreviewAppliedMessage
   | StudioPreviewFixtureCapturedMessage
   | StudioPreviewFixtureCaptureFailedMessage
   | StudioPreviewLogMessage
+  | StudioPreviewLayoutMeasurementsMessage
+  | StudioPreviewJourneyRecordingStateMessage
+  | StudioPreviewJourneyReplayFailedMessage
+  | StudioPreviewJourneyReplaySettledMessage
+  | StudioPreviewJourneyStepRecordedMessage
   | StudioPreviewRuntimeCapturedMessage
   | StudioPreviewRuntimeCaptureFailedMessage
   | StudioPreviewRuntimeFailureMessage
@@ -350,6 +439,24 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
   if (value['type'] === 'preview-scheme-changed') {
     return parsePreviewScheme(value)
   }
+  if (value['type'] === 'preview-layout-measurements') {
+    return parsePreviewLayoutMeasurements(value)
+  }
+  if (value['type'] === 'set-journey-recording') {
+    return parseJourneyRecordingControl(value)
+  }
+  if (value['type'] === 'preview-journey-step-recorded') {
+    return parsePreviewJourneyStepRecorded(value)
+  }
+  if (value['type'] === 'preview-journey-recording-state') {
+    return parsePreviewJourneyRecordingState(value)
+  }
+  if (value['type'] === 'preview-journey-replay-settled') {
+    return parsePreviewJourneyReplaySettled(value)
+  }
+  if (value['type'] === 'preview-journey-replay-failed') {
+    return parsePreviewJourneyReplayFailed(value)
+  }
   if (value['type'] === 'source-action') {
     return parseSourceActionEnvelope(value)
   }
@@ -357,6 +464,193 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
     return parseSourceActionUndoEnvelope(value)
   }
   return undefined
+}
+
+function parseJourneyRecordingControl(value: StudioJsonObject): StudioJourneyRecordingControlMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  if (
+    identity === undefined
+    || identity.cellId === undefined
+    || typeof value['active'] !== 'boolean'
+    || !boundedText(value['recordingId'], 256)
+    || (value['captureSensitiveText'] !== undefined && typeof value['captureSensitiveText'] !== 'boolean')
+  ) {
+    return undefined
+  }
+  return {
+    active: value['active'],
+    ...(value['captureSensitiveText'] === undefined
+      ? {}
+      : { captureSensitiveText: value['captureSensitiveText'] as boolean }),
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    recordingId: value['recordingId'],
+    type: 'set-journey-recording',
+  }
+}
+
+function parsePreviewJourneyStepRecorded(
+  value: StudioJsonObject,
+): StudioPreviewJourneyStepRecordedMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const sequence = nonNegativeInteger(value['sequence'])
+  const step = parseRecordedJourneyStep(value['step'])
+  if (
+    identity === undefined || identity.cellId === undefined || sequence === undefined || sequence === 0
+    || step === undefined
+    || !boundedText(value['recordingId'], 256)
+  ) {
+    return undefined
+  }
+  return {
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    recordingId: value['recordingId'],
+    sequence,
+    step,
+    type: 'preview-journey-step-recorded',
+  }
+}
+
+function parsePreviewJourneyRecordingState(
+  value: StudioJsonObject,
+): StudioPreviewJourneyRecordingStateMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const sequence = nonNegativeInteger(value['sequence'])
+  const status = value['status']
+  if (
+    identity === undefined
+    || identity.cellId === undefined
+    || sequence === undefined
+    || !boundedText(value['recordingId'], 256)
+    || (status !== 'invalidated' && status !== 'recording' && status !== 'stopped')
+  ) {
+    return undefined
+  }
+  return {
+    channel: studioProtocolChannel,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    recordingId: value['recordingId'],
+    sequence,
+    status,
+    type: 'preview-journey-recording-state',
+  }
+}
+
+function parsePreviewJourneyReplaySettled(
+  value: StudioJsonObject,
+): StudioPreviewJourneyReplaySettledMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  return identity?.cellId === undefined
+    ? undefined
+    : {
+      channel: studioProtocolChannel,
+      identity,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-journey-replay-settled',
+    }
+}
+
+function parsePreviewJourneyReplayFailed(
+  value: StudioJsonObject,
+): StudioPreviewJourneyReplayFailedMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  return identity?.cellId === undefined || !boundedText(value['error'], 4_096)
+    ? undefined
+    : {
+      channel: studioProtocolChannel,
+      error: value['error'],
+      identity,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-journey-replay-failed',
+    }
+}
+
+function parseRecordedJourneyStep(value: unknown): StudioRecordedJourneyStep | undefined {
+  if (!isObject(value)) {
+    return undefined
+  }
+  if (value['kind'] === 'unresolved') {
+    const action = value['action']
+    const reason = value['reason']
+    return (action === 'enter' || action === 'press' || action === 'submit')
+        && reason === 'No unique Tao tag, accessibility label, placeholder, or visible text identifies this target.'
+        && Object.keys(value).length === 3
+      ? { action, kind: 'unresolved', reason }
+      : undefined
+  }
+  if (!boundedText(value['target'], 1_024)) {
+    return undefined
+  }
+  const selector = value['selector']
+  if (selector !== 'label' && selector !== 'placeholder' && selector !== 'tag' && selector !== 'text') {
+    return undefined
+  }
+  if (value['kind'] === 'press' || value['kind'] === 'submit') {
+    return Object.keys(value).length === 3
+      ? { kind: value['kind'], selector, target: value['target'] }
+      : undefined
+  }
+  return value['kind'] === 'enter'
+      && typeof value['value'] === 'string'
+      && value['value'].length <= 16_384
+      && typeof value['redacted'] === 'boolean'
+      && Object.keys(value).length === 5
+    ? { kind: 'enter', redacted: value['redacted'], selector, target: value['target'], value: value['value'] }
+    : undefined
+}
+
+function parsePreviewLayoutMeasurements(
+  value: StudioJsonObject,
+): StudioPreviewLayoutMeasurementsMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const rawMeasurements = value['measurements']
+  if (identity === undefined || !Array.isArray(rawMeasurements)) {
+    return undefined
+  }
+  const measurements: StudioPreviewLayoutMeasurement[] = []
+  const renderIds = new Set<string>()
+  for (const raw of rawMeasurements) {
+    if (!isObject(raw) || !nonEmptyString(raw['renderId']) || !nonEmptyString(raw['elementName'])) {
+      return undefined
+    }
+    if (raw['studioRectId'] !== undefined && !nonEmptyString(raw['studioRectId'])) {
+      return undefined
+    }
+    const rect = raw['rect']
+    if (!isObject(rect)) {
+      return undefined
+    }
+    const coordinates = ['height', 'width', 'x', 'y'] as const
+    if (
+      coordinates.some(coordinate =>
+        typeof rect[coordinate] !== 'number' || !Number.isFinite(rect[coordinate]) || rect[coordinate] < 0
+      ) || renderIds.has(raw['renderId'])
+    ) {
+      return undefined
+    }
+    renderIds.add(raw['renderId'])
+    const height = rect['height'] as number
+    const width = rect['width'] as number
+    const x = rect['x'] as number
+    const y = rect['y'] as number
+    measurements.push({
+      elementName: raw['elementName'],
+      rect: { height, width, x, y },
+      renderId: raw['renderId'],
+      ...(raw['studioRectId'] === undefined ? {} : { studioRectId: raw['studioRectId'] }),
+    })
+  }
+  return {
+    channel: studioProtocolChannel,
+    identity,
+    measurements,
+    protocolVersion: studioProtocolVersion,
+    type: 'preview-layout-measurements',
+  }
 }
 
 function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage | undefined {
@@ -898,6 +1192,10 @@ function optionalString(value: unknown): value is string | undefined {
 
 function nonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function boundedText(value: unknown, maximumLength: number): value is string {
+  return nonEmptyString(value) && value.length <= maximumLength
 }
 
 function isObject(value: unknown): value is StudioJsonObject {

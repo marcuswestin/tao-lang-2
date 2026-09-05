@@ -1,7 +1,7 @@
 use InstantDB from @tao/data/providers/instantdb
 use DynamicSelectionNav, Occurrence, SelectionNav, SlotNav, SplitNav, StackNav from @tao/nav
 use CountWords, Join from @tao/text
-use Checkbox, Col, FormButton, Icon, Image, Panes, Progress, Row, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use Checkbox, Col, FormButton, Icon, Image, Panes, Placeholder, Progress, Row, ScrollView, Spacer, Spinner, Text, TextInput, TextMultiline from @tao/ui
 use Editor as ProseEditor from @prose // imports may be renamed locally
 use every, Interval from @tao/time
 
@@ -862,6 +862,8 @@ view DocumentEditor(Document) {
    state ParagraphText = ""
    state DetachedParagraphText = ""
    state SaveCount = 0
+   state PreviousTitle = Document.Title
+   state PreviousBody = Document.Body
    query Paragraphs from Document.Paragraphs { }
    action SetBodyDraft(Value text) {
       set BodyDraft = Value
@@ -871,13 +873,22 @@ view DocumentEditor(Document) {
    }
    action SaveDocument() {
       guard TitleDraft empty
+      set PreviousTitle = Document.Title
+      set PreviousBody = Document.Body
       update Document {
          Title: TitleDraft
          Body: BodyDraft
       }
       set SaveCount += 1
       // A keyed toast replaces the same key instead of stacking. Duration is a number of seconds.
-      present SavedToast() as toast (Key: "document-saved", Duration: 3.s)
+      present SavedToast(Revert: -> {
+         update Document {
+            Title: PreviousTitle
+            Body: PreviousBody
+         }
+         set TitleDraft = PreviousTitle
+         set BodyDraft = PreviousBody
+      }) as toast (Key: "document-saved", Duration: 3.s)
    }
    action AddParagraph() {
       guard ParagraphText empty
@@ -1073,9 +1084,28 @@ view FocusSessionControls(FocusSession) {
          on press -> { delete FocusSession }
 }  }  }
 
-view SavedToast() {
-   render Text("Saved")
+view SavedToast(Revert action()) {
+   render Row() [gap sm] {
+      Placeholder("Saved status icon") [width 20, height 20]
+      Text("Saved") [type body]
+      Spacer()
+      #revertSave
+      FormButton("Revert") { on press Revert }
+   }
 }
+
+// Fixtureless focused scenarios begin from an empty store. Required actions may be omitted only
+// here; Studio supplies an isolated logging stand-in and replays these steps in order.
+scenarios SavedToast "interaction" {
+   device phone
+   scenario "held" {
+      render ()
+      press down #revertSave
+      advance 600.ms
+      press up #revertSave
+      hover #revertSave
+      focus #revertSave
+}  }
 
 // A view with `responds T` is presented for a typed answer; `ask` resumes with the response or none.
 view ConfirmCloseDialogue(Document) responds ConfirmResult {
