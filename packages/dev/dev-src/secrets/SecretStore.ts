@@ -17,7 +17,7 @@ export type Cipher = {
   decrypt: (armor: string) => Promise<string>
 }
 
-export type SecretEntry = {
+type SecretEntry = {
   /** When this value was first added, so a stale credential is visible without decrypting anything. */
   addedAt: string
   /** When it was last replaced, absent until it has been. */

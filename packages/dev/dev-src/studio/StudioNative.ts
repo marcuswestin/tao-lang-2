@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { CLI, Errors, FS, HCI, Json, Platform, Repo, Text, Time } from '@shared'
 import { StudioClientAssets } from '@studio'
 import { Workspace } from '@workspace'
 import { createHash } from 'node:crypto'
@@ -30,7 +30,7 @@ const defaultBundleIdentifier = 'dev.tao-lang.studio'
 const defaultHutchCommand = 'hutch'
 const hutchInstallUrl = 'https://hutch.blackboard.sh/hutch/install.sh'
 
-export type StudioNativeOptions = {
+type StudioNativeOptions = {
   artifactRoot?: string
   hutchPath?: string
   /** Operation recorded in the machine-wide native-host lease. */
@@ -56,7 +56,7 @@ export type StartedStudioNative = {
   waitForProbe(): Promise<StudioNativeProbeResult>
 }
 
-export type StudioNativePackageOptions = {
+type StudioNativePackageOptions = {
   appName?: string
   bundleIdentifier?: string
   channel?: 'canary' | 'stable'
@@ -67,7 +67,7 @@ export type StudioNativePackageOptions = {
   version?: string
 }
 
-export type PackagedStudioNative = {
+type PackagedStudioNative = {
   artifactPaths: readonly string[]
   artifactsRoot: string
   channel: 'canary' | 'stable'
@@ -633,7 +633,7 @@ async function materializeStudioServicePayload(
     }
     const packageJson = await FS.readJson<Record<string, unknown>>(FS.resolvePath('package.json', root))
     for (const dependencies of [packageJson['dependencies'], packageJson['peerDependencies']]) {
-      if (!isRecord(dependencies)) {
+      if (!Json.isRecord(dependencies)) {
         continue
       }
       for (const [dependency, version] of Object.entries(dependencies)) {
@@ -692,14 +692,10 @@ async function stageStudioClientBundle(path: string): Promise<void> {
 function portableStudioClientBundle(source: string): string {
   const repositoryPrefix = `${FS.slashPath(Repo.getRoot()).replace(/\/$/, '')}/`
   const sourcePathPrefix = new RegExp(
-    `(source\\s*:\\s*\\{\\s*path\\s*:\\s*["'])${escapeRegularExpression(repositoryPrefix)}`,
+    `(source\\s*:\\s*\\{\\s*path\\s*:\\s*["'])${Text.escapeRegExp(repositoryPrefix)}`,
     'g',
   )
   return source.replace(sourcePathPrefix, (_match, property: string) => property)
-}
-
-function escapeRegularExpression(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 async function materializeStudioNodeRuntime(
@@ -1226,14 +1222,14 @@ async function waitForProbeResult(
 
 function probeResult(value: unknown): StudioNativeProbeResult {
   if (
-    !isRecord(value) || typeof value['passed'] !== 'boolean' || !isRecord(value['capabilities'])
+    !Json.isRecord(value) || typeof value['passed'] !== 'boolean' || !Json.isRecord(value['capabilities'])
   ) {
     throw new Errors.UnexpectedBehaviorError('Electrobun wrote an invalid runtime probe result.')
   }
   const capabilities: StudioNativeProbeResult['capabilities'] = {}
   for (const [name, result] of Object.entries(value['capabilities'])) {
     if (
-      !isRecord(result) || typeof result['passed'] !== 'boolean'
+      !Json.isRecord(result) || typeof result['passed'] !== 'boolean'
       || (result['message'] !== undefined && typeof result['message'] !== 'string')
     ) {
       throw new Errors.UnexpectedBehaviorError('Electrobun wrote an invalid runtime probe capability.')
@@ -1274,8 +1270,4 @@ function finalizeCommand(command: StoppableCommand): WaitForNativeClose {
     const result = await waitForResult()
     return result.exitCode ?? (result.signal === 'SIGINT' ? 130 : 0)
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

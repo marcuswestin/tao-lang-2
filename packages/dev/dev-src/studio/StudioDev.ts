@@ -1,7 +1,7 @@
 /// <reference path="../expo-dev-loop/expo-runner/better-opn.d.ts" />
 
 import { type AppleFoundationModelsService, startAppleFoundationModelsService } from '@generation/apple-server'
-import { Errors, FS, HCI, Platform, Repo, Time } from '@shared'
+import { Errors, FS, HCI, Json, Platform, Repo, Time } from '@shared'
 import {
   openStudioPreviewSession,
   resolveStudioProjectRoot,
@@ -534,7 +534,7 @@ export function createRecentProjectStore(path: string): RecentProjectStore {
           return []
         }
         const value = await FS.readJson(path)
-        if (!isRecord(value) || value['version'] !== 1 || !Array.isArray(value['recent'])) {
+        if (!Json.isRecord(value) || value['version'] !== 1 || !Array.isArray(value['recent'])) {
           return []
         }
         return value['recent'].filter(isRecentProject).slice(0, 12)
@@ -561,17 +561,13 @@ export function createRecentProjectStore(path: string): RecentProjectStore {
 }
 
 function isRecentProject(value: unknown): value is StudioRecentProject {
-  return isRecord(value)
+  return Json.isRecord(value)
     && typeof value['appName'] === 'string'
     && value['appName'].trim() !== ''
     && typeof value['project'] === 'string'
     && value['project'].trim() !== ''
     && typeof value['lastOpenedAt'] === 'string'
     && !Number.isNaN(Date.parse(value['lastOpenedAt']))
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 async function cleanupStudioDev(cleanups: ReadonlyArray<() => unknown | Promise<unknown>>): Promise<void> {

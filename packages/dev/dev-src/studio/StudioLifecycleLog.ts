@@ -8,7 +8,7 @@ import { FS, HCI, Time } from '@shared'
  */
 
 /** The lifecycle events every Studio launch reports, in the order they normally occur. */
-export type StudioLifecycleEvent =
+type StudioLifecycleEvent =
   | 'launch-requested'
   | 'process-started'
   | 'port-allocated'
@@ -29,7 +29,7 @@ export type StudioLifecycleEvent =
   | 'orphan-detected'
 
 /** The parts of a launch a record can be attributed to. */
-export type StudioComponent =
+type StudioComponent =
   | 'browser-smoke'
   | 'device-gateway'
   | 'metro'

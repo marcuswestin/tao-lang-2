@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Repo, Time } from '@shared'
+import { CLI, Errors, Repo, Time } from '@shared'
 import {
   isSameProcess,
   type OwnershipProbes,
@@ -26,7 +26,7 @@ const TERM_POLLS = 60
 const KILL_POLLS = 20
 
 /** LaunchRow is one line of `studio ps`, live and stale launches alike. */
-export type LaunchRow = {
+type LaunchRow = {
   appName?: string
   launchId: string
   mode: string
@@ -51,7 +51,7 @@ export type LaunchListing = {
 }
 
 /** StopOutcome records what stopping one launch actually did. */
-export type StopOutcome = {
+type StopOutcome = {
   cleanup: StudioCleanupResult
   launchId: string
   manifestRemoved: boolean
@@ -66,7 +66,7 @@ export type StopReport = {
 }
 
 /** Signaller sends one signal to one process group, so tests can observe it without killing. */
-export type Signaller = (signal: 'SIGKILL' | 'SIGTERM', pids: readonly number[]) => Promise<void>
+type Signaller = (signal: 'SIGKILL' | 'SIGTERM', pids: readonly number[]) => Promise<void>
 
 export type LifecycleDependencies = {
   now?: () => string
@@ -358,9 +358,4 @@ const systemSignaller: Signaller = async (signal, pids) => {
   })
   // A process that is not a group leader is signalled directly as a fallback.
   await CLI.run('/bin/kill', { args: [`-${signal.replace(/^SIG/, '')}`, '--', ...pids.map(String)] })
-}
-
-/** launchManifestPath resolves one launch's manifest path for reporting. */
-export function launchManifestPath(stored: StoredLaunch): string {
-  return FS.displayPath(stored.path)
 }

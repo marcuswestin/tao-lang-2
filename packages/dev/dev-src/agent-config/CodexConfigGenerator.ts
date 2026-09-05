@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { FS, Text } from '@shared'
 
 /**
  * Codex CLI's permission profile is generated here rather than by rulesync: rulesync's Codex
@@ -33,7 +33,7 @@ const NATIVE_WRITE_PATHS = [
 const RELEASE_WRITE_PATHS = ['~/Library/Developer/Xcode/Archives'] as const
 
 /** CanonicalPermissions is the subset of `.rulesync/permissions.jsonc` this renderer reads. */
-export type CanonicalPermissions = {
+type CanonicalPermissions = {
   claudecode?: {
     sandbox?: {
       excludedCommands?: readonly string[]
@@ -79,12 +79,12 @@ async function generateCodexConfig(options: GenerateCodexConfigOptions): Promise
 }
 
 /** parsePermissions reads the canonical JSONC rules, whose comments JSON itself rejects. */
-export function parsePermissions(source: string): CanonicalPermissions {
-  return JSON.parse(stripJsonc(source)) as CanonicalPermissions
+function parsePermissions(source: string): CanonicalPermissions {
+  return JSON.parse(Text.stripJsonc(source)) as CanonicalPermissions
 }
 
 /** renderCodexConfig renders the whole `.codex/config.toml` from canonical permission rules. */
-export function renderCodexConfig(permissions: CanonicalPermissions): string {
+function renderCodexConfig(permissions: CanonicalPermissions): string {
   const read = permissions.permission?.read ?? {}
   const allowWrite = permissions.claudecode?.sandbox?.filesystem?.allowWrite ?? []
   const network = permissions.claudecode?.sandbox?.network ?? {}
@@ -147,7 +147,7 @@ export function renderCodexConfig(permissions: CanonicalPermissions): string {
 }
 
 /** renderCodexRules emits only commands both auto-approved and explicitly excluded from Claude's sandbox. */
-export function renderCodexRules(permissions: CanonicalPermissions): string {
+function renderCodexRules(permissions: CanonicalPermissions): string {
   const allowed = Object.entries(permissions.permission?.bash ?? {})
     .filter(([, action]) => action === 'allow')
     .map(([pattern]) => pattern)
@@ -176,7 +176,7 @@ export function renderCodexRules(permissions: CanonicalPermissions): string {
  * the apex and a `*.` wildcard as two entries. Collapsing them keeps one allowlist authoritative:
  * a bare host already covered by a wildcard apex is dropped rather than emitted twice.
  */
-export function codexDomains(allowedDomains: readonly string[]): string[] {
+function codexDomains(allowedDomains: readonly string[]): string[] {
   const wildcardApexes = allowedDomains
     .filter(domain => domain.startsWith('*.'))
     .map(domain => domain.slice(2))
@@ -321,46 +321,6 @@ function workspaceRules(read: Record<string, string>, action: string): string[] 
   return Object.entries(read)
     .filter(([pattern, value]) => !pattern.startsWith('~') && value === action)
     .map(([pattern]) => pattern)
-}
-
-/** stripJsonc removes the comments and trailing commas JSONC allows and JSON.parse rejects. */
-export function stripJsonc(source: string): string {
-  let output = ''
-  let index = 0
-  let inString = false
-  while (index < source.length) {
-    const character = source[index]!
-    if (inString) {
-      output += character
-      if (character === '\\') {
-        output += source[index + 1] ?? ''
-        index += 2
-        continue
-      }
-      inString = character !== '"'
-      index += 1
-      continue
-    }
-    if (character === '"') {
-      inString = true
-      output += character
-      index += 1
-      continue
-    }
-    if (character === '/' && source[index + 1] === '/') {
-      const lineEnd = source.indexOf('\n', index)
-      index = lineEnd === -1 ? source.length : lineEnd
-      continue
-    }
-    if (character === '/' && source[index + 1] === '*') {
-      const blockEnd = source.indexOf('*/', index + 2)
-      index = blockEnd === -1 ? source.length : blockEnd + 2
-      continue
-    }
-    output += character
-    index += 1
-  }
-  return output.replace(/,(\s*[}\]])/g, '$1')
 }
 
 function quote(value: string): string {

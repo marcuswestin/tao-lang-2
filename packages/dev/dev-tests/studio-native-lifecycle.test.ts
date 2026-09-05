@@ -1,6 +1,6 @@
 import { CLI, Errors, FS } from '@shared'
 import type { Platform } from '@shared'
-import { Deferred, Describe, Expect, settle, Test, until } from '@shared/test'
+import { Deferred, Describe, Expect, mkTestDir, settle, Test, until } from '@shared/test'
 import { StudioNative } from '../dev-src/studio/StudioNative'
 import { startStudioProcessTree, type StudioProcessTree } from '../dev-src/studio/StudioProcessTree'
 
@@ -114,7 +114,7 @@ Describe('Studio native bounded lifecycle', () => {
   })
 
   Test('timeout cancellation reaches a descendant in the detached process group', async () => {
-    const root = await FS.mkTmpDir(FS.resolvePath('tao-hutch-process-tree-', FS.tmpdir()))
+    const root = await mkTestDir('tao-hutch-process-tree-')
     const descendantPath = FS.resolvePath('descendant.pid', root)
     try {
       const run = StudioNative.testing.prepareElectrobun('/tools/hutch', root, {

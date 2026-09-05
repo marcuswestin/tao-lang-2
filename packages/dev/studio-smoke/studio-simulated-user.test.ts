@@ -1,5 +1,5 @@
 import { Errors, FS, Platform, Time } from '@shared'
-import { Expect, Test } from '@shared/test'
+import { Expect, mkTestDir, Test } from '@shared/test'
 import {
   openStudioPreviewSession,
   startStudioSessionServer,
@@ -45,7 +45,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
   await FS.mkdir(artifactParent)
   // The smoke artifact root normally lives under the repository's ignored `.artifacts` tree.
   // Project discovery intentionally honors Git ignores, so keep the synthetic project outside it.
-  const projectRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-simulated-user-', FS.tmpdir()))
+  const projectRoot = await mkTestDir('tao-studio-simulated-user-')
   const sourcePath = FS.resolvePath('Smoke.tao', projectRoot)
   let browser: StudioCdp | undefined
   let native: StartedStudioNative | undefined
@@ -476,7 +476,7 @@ async function clickPreviewAndWaitForState(
         await Time.sleep(100)
       }
     } catch (error) {
-      last = error instanceof Error ? error.message : String(error)
+      last = Errors.messageOf(error)
     }
   }
   Errors.throwHostEnvironment(
@@ -498,7 +498,7 @@ async function clickPreviewUntilSource(
     try {
       await browser.clickInFrame(previewUrl, selector)
     } catch (error) {
-      lastStatus = error instanceof Error ? error.message : String(error)
+      lastStatus = Errors.messageOf(error)
     }
     const attemptDeadline = Math.min(deadline, Date.now() + 5_000)
     while (Date.now() < attemptDeadline) {
@@ -536,7 +536,7 @@ async function waitForPreviewSourceIdentity(browser: StudioCdp, previewUrl: stri
         return
       }
     } catch (error) {
-      last = error instanceof Error ? error.message : String(error)
+      last = Errors.messageOf(error)
     }
     await Time.sleep(100)
   }

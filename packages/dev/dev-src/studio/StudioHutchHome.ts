@@ -10,7 +10,7 @@ type HutchHomeMetadata = {
 
 type CopyHome = (sourceHome: string, targetHome: string) => Promise<void>
 
-export type PrepareStudioHutchHomeOptions = {
+type PrepareStudioHutchHomeOptions = {
   copyHome?: CopyHome
   sourceHome?: string
   targetHome: string

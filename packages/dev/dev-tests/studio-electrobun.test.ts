@@ -1,5 +1,5 @@
 import { Errors, FS } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { StudioElectrobun } from '../dev-src/studio/StudioElectrobun'
 
 const options = {
@@ -101,7 +101,7 @@ function executeBrowserProbe(options: {
 
 Describe('Studio Electrobun project', () => {
   Test('generates a direct-Hutch Bun application that builds without Hutch', async () => {
-    const outputRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-electrobun-build-', FS.tmpdir()))
+    const outputRoot = await mkTestDir('tao-studio-electrobun-build-')
     const generated = StudioElectrobun.sources(options)
 
     Expect(generated.config).toContain("mainProcess: 'bun'")
@@ -251,7 +251,7 @@ Describe('Studio Electrobun project', () => {
   })
 
   Test('materializes a clean executable project and exact Hutch commands', async () => {
-    const outputRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-electrobun-', FS.tmpdir()))
+    const outputRoot = await mkTestDir('tao-studio-electrobun-')
     try {
       const unrelatedPath = FS.resolvePath('keep.txt', outputRoot)
       const stalePayloadPath = FS.resolvePath('service/payload/stale.txt', outputRoot)

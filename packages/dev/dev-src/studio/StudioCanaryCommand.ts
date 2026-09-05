@@ -21,7 +21,7 @@ import {
 
 /** The `./dev studio-canary` and `./dev studio-release-check` entry points. */
 
-export type CanaryOptions = {
+type CanaryOptions = {
   /** The app to open. A project with several apps is not deterministic without one. */
   appName?: string
   artifactRoot?: string
@@ -147,7 +147,7 @@ async function canaryBlockedReason(): Promise<string | undefined> {
   return undefined
 }
 
-export type ReleaseCheckOptions = {
+type ReleaseCheckOptions = {
   allowUnverified?: boolean
   appPath?: string
   /** The directory the build wrote its artifacts into. Its contents are read, not described. */

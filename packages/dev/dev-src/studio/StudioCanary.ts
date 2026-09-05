@@ -45,7 +45,7 @@ export function resolveCanaryTarget(
   }
 }
 
-export type CanaryStatus = 'blocked' | 'failed' | 'passed'
+type CanaryStatus = 'blocked' | 'failed' | 'passed'
 
 /** CanaryReport is the versioned result one canary run produces. */
 export type CanaryReport = {

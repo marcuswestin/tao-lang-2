@@ -1,4 +1,4 @@
-import { Errors, FS, Repo, Time } from '@shared'
+import { Errors, FS, Json, Repo, Time } from '@shared'
 import { createHash, randomUUID } from 'node:crypto'
 import { MachineLanes, type MachineResourceLease } from './MachineLanes'
 
@@ -398,7 +398,7 @@ function positiveLimit(limit: number): number {
 }
 
 function isLedgerStore(value: unknown): value is TestLedgerStore {
-  if (!isPlainRecord(value) || value['version'] !== VERSION || !isPlainRecord(value['tests'])) {
+  if (!Json.isRecord(value) || value['version'] !== VERSION || !Json.isRecord(value['tests'])) {
     return false
   }
   if (value['lastFullRunStartedAt'] !== undefined && !isTimestamp(value['lastFullRunStartedAt'])) {
@@ -408,7 +408,7 @@ function isLedgerStore(value: unknown): value is TestLedgerStore {
 }
 
 function isLedgerRecord(value: unknown): value is TestLedgerRecord {
-  if (!isPlainRecord(value)) {
+  if (!Json.isRecord(value)) {
     return false
   }
   return typeof value['id'] === 'string'
@@ -425,7 +425,7 @@ function isLedgerRecord(value: unknown): value is TestLedgerRecord {
 }
 
 function isHistoryEvent(value: unknown): value is TestHistoryEvent {
-  return isPlainRecord(value)
+  return Json.isRecord(value)
     && value['version'] === VERSION
     && isTimestamp(value['recordedAt'])
     && isLedgerRecord(value)
@@ -433,10 +433,6 @@ function isHistoryEvent(value: unknown): value is TestHistoryEvent {
 
 function isTimestamp(value: unknown): value is string {
   return typeof value === 'string' && Number.isFinite(Date.parse(value))
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /** TestLedger owns durable per-test state, retry selection, and history-backed reports. */

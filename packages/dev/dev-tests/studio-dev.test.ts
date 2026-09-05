@@ -70,7 +70,7 @@ Describe('Studio native wrapper foundation', () => {
   })
 
   Test('builds a nonempty Studio browser artifact for the native payload', async () => {
-    const root = await FS.mkTmpDir(FS.resolvePath('tao-studio-browser-bundle-', FS.tmpdir()))
+    const root = await mkTestDir('tao-studio-browser-bundle-')
     const path = FS.resolvePath('studio.js', root)
     try {
       await StudioNative.testing.stageStudioClientBundle(path)
@@ -100,7 +100,7 @@ Describe('Studio native wrapper foundation', () => {
   })
 
   Test('builds the packaged Studio service with the prebuilt browser asset boundary', async () => {
-    const root = await FS.mkTmpDir(FS.resolvePath('tao-studio-service-bundle-', FS.tmpdir()))
+    const root = await mkTestDir('tao-studio-service-bundle-')
     const path = FS.resolvePath('service.js', root)
     try {
       await StudioNative.testing.stageStudioPackagedServiceBundle(path)
@@ -123,7 +123,7 @@ Describe('Studio native wrapper foundation', () => {
   })
 
   Test('recognizes an explicit Hutch executable instead of accepting a missing candidate', async () => {
-    const packageRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-electrobun-', FS.tmpdir()))
+    const packageRoot = await mkTestDir('tao-studio-electrobun-')
     try {
       const executablePath = FS.resolvePath('hutch', packageRoot)
       await Expect(StudioNative.testing.installedHutchExecutablePath([executablePath])).resolves.toBe(undefined)
@@ -139,7 +139,7 @@ Describe('Studio native wrapper foundation', () => {
   })
 
   Test('resolves Hutch from PATH before the installer home fallback', async () => {
-    const root = await FS.mkTmpDir(FS.resolvePath('tao-studio-hutch-resolution-', FS.tmpdir()))
+    const root = await mkTestDir('tao-studio-hutch-resolution-')
     const pathRoot = FS.resolvePath('path-bin', root)
     const homeRoot = FS.resolvePath('home', root)
     const pathHutch = FS.resolvePath('hutch', pathRoot)
@@ -160,7 +160,7 @@ Describe('Studio native wrapper foundation', () => {
   })
 
   Test('uses an installed Hutch launcher before a refreshed shell PATH is available', async () => {
-    const homeRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-hutch-home-', FS.tmpdir()))
+    const homeRoot = await mkTestDir('tao-studio-hutch-home-')
     const homeHutch = FS.resolvePath('.hutch/bin/hutch', homeRoot)
     try {
       await FS.mkdir(FS.dirname(homeHutch))
@@ -176,7 +176,7 @@ Describe('Studio native wrapper foundation', () => {
   })
 
   Test('gives exact Hutch installation and browser fallback guidance when the launcher is absent', async () => {
-    const homeRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-no-hutch-', FS.tmpdir()))
+    const homeRoot = await mkTestDir('tao-studio-no-hutch-')
     try {
       await Expect(StudioNative.testing.resolveHutchExecutablePath('hutch', {
         homeDirectory: homeRoot,
@@ -190,7 +190,7 @@ Describe('Studio native wrapper foundation', () => {
   })
 
   Test('rejects a missing explicit Hutch path with the resolved location', async () => {
-    const root = await FS.mkTmpDir(FS.resolvePath('tao-studio-explicit-hutch-', FS.tmpdir()))
+    const root = await mkTestDir('tao-studio-explicit-hutch-')
     const missing = FS.resolvePath('missing-hutch', root)
     try {
       await Expect(StudioNative.testing.resolveHutchExecutablePath(missing)).rejects.toThrow(
@@ -202,7 +202,7 @@ Describe('Studio native wrapper foundation', () => {
   })
 
   Test('preflights Hutch before generating native artifacts', async () => {
-    const root = await FS.mkTmpDir(FS.resolvePath('tao-studio-native-preflight-', FS.tmpdir()))
+    const root = await mkTestDir('tao-studio-native-preflight-')
     const artifactRoot = FS.resolvePath('native-artifacts', root)
     const missingHutch = FS.resolvePath('missing-hutch', root)
     try {
@@ -335,7 +335,7 @@ Describe('Studio native wrapper foundation', () => {
   })
 
   Test('reads and validates the native shell runtime probe result', async () => {
-    const outputRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-probe-', FS.tmpdir()))
+    const outputRoot = await mkTestDir('tao-studio-probe-')
     const resultPath = FS.resolvePath('result.json', outputRoot)
     try {
       await FS.writeJson(resultPath, {
@@ -429,7 +429,7 @@ Describe('Studio native wrapper foundation', () => {
   })
 
   Test('installs the packaged service closure from the frozen repository lock', async () => {
-    const payloadRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-payload-', FS.tmpdir()))
+    const payloadRoot = await mkTestDir('tao-studio-payload-')
     const calls: Array<{ args: readonly string[] | undefined; command: string; cwd: string | undefined }> = []
     try {
       await StudioNative.testing.installStudioServicePayload(payloadRoot, async (command, spec) => {
@@ -599,7 +599,7 @@ Describe('Studio smoke resource isolation', () => {
   })
 
   Test('persists and reloads validated recent projects in device-local Studio state', async () => {
-    const stateRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-state-', FS.tmpdir()))
+    const stateRoot = await mkTestDir('tao-studio-state-')
     const statePath = FS.resolvePath('recent-projects.json', stateRoot)
     const store = createRecentProjectStore(statePath)
     const recent = [
@@ -619,7 +619,7 @@ Describe('Studio smoke resource isolation', () => {
   })
 
   Test('ignores malformed or unsupported recent-project state', async () => {
-    const stateRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-state-', FS.tmpdir()))
+    const stateRoot = await mkTestDir('tao-studio-state-')
     const statePath = FS.resolvePath('recent-projects.json', stateRoot)
     const store = createRecentProjectStore(statePath)
     try {

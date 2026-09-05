@@ -20,7 +20,7 @@ const SUPPORTED_NODE_MAJOR = 24
 const SUPPORTED_BUN_RANGE = '>=1.3.0'
 
 /** Ports Tao conventionally occupies, so an occupied one is reported with its owner. */
-export const CONVENTIONAL_PORTS = [
+const CONVENTIONAL_PORTS = [
   { port: 8081, purpose: 'Expo Metro' },
   { port: 9020, purpose: 'local InstantDB' },
   { port: 3000, purpose: 'local InstantDB dashboard' },
@@ -55,14 +55,14 @@ export type DoctorReport = {
 }
 
 /** PortOccupancy records what, if anything, holds one conventional port. */
-export type PortOccupancy = {
+type PortOccupancy = {
   listeners?: readonly { command: string; pid: number }[]
   port: number
   purpose: string
 }
 
 /** MachineState records what else is running on this machine, which no single checkout can see. */
-export type MachineState = {
+type MachineState = {
   cpuCount: number
   /** Registration that encloses this doctor process, excluded without hiding sibling local lanes. */
   currentLaneId?: string
@@ -75,7 +75,7 @@ export type MachineState = {
 }
 
 /** ArtifactRoot records one scratch tree's writability and size. */
-export type ArtifactRoot = {
+type ArtifactRoot = {
   path: string
   present: boolean
   sizeBytes?: number

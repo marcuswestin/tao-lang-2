@@ -7,7 +7,7 @@ const portsPerShard = 128
 const portsPerWorker = 2
 const shardCount = 16
 
-export type StudioSmokeResources = {
+type StudioSmokeResources = {
   artifactRoot: string
   previewPort: number
   serverPort: number
@@ -15,7 +15,7 @@ export type StudioSmokeResources = {
   workerIndex: number
 }
 
-export type StudioSmokeOptions = {
+type StudioSmokeOptions = {
   files: readonly string[]
   native?: boolean
   runId: string
@@ -24,7 +24,7 @@ export type StudioSmokeOptions = {
 }
 
 /** StudioSmokeReservation holds the cross-worktree claim until the smoke child exits. */
-export type StudioSmokeReservation = {
+type StudioSmokeReservation = {
   allocation: StudioSmokeResources
   release: () => Promise<void>
 }

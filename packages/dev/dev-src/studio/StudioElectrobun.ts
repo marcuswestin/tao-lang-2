@@ -7,7 +7,7 @@ const electrobunVersion = '2.0.2-beta.12'
 const bunTypesVersion = '1.4.0'
 const webSocketVersion = '8.21.0'
 
-export type StudioElectrobunOptions = {
+type StudioElectrobunOptions = {
   appName?: string
   bundleIdentifier?: string
   outputRoot: string
@@ -35,14 +35,14 @@ export type StudioElectrobunProject = {
   sync: StudioElectrobunCommand
 }
 
-export type StudioElectrobunCommand = {
+type StudioElectrobunCommand = {
   args: readonly string[]
   command: 'hutch'
   cwd: string
   env?: Readonly<Record<string, string>>
 }
 
-export type StudioElectrobunSources = {
+type StudioElectrobunSources = {
   config: string
   hutchConfig: string
   hutchLock: Record<string, unknown>

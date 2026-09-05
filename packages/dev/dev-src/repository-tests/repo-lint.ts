@@ -113,10 +113,7 @@ export function duplicateDescribeTitleIssues(files: readonly SourceFile[]): stri
 
 /** Studio kind dispatches that predate the shared `Switch` helper; convert them to close this list. */
 const NATIVE_SWITCH_ALLOWLIST = [
-  // Three `kind` dispatches in studio; the repository convention is the shared `Switch`.
-  'packages/studio/studio-src/StudioPreviewManifest.ts',
   'packages/studio/studio-src/StudioProductHostProtocol.ts',
-  'packages/studio/studio-src/client/StudioScenarioControls.ts',
 ]
 
 /**
@@ -210,60 +207,53 @@ type ConventionMatch = {
   path: string
 }
 
-/** nativeSwitchIssues reports native `switch` statements outside the files still allowed one. */
-export function nativeSwitchIssues(
-  files: readonly SourceFile[],
-  allowlist: readonly string[] = NATIVE_SWITCH_ALLOWLIST,
-): string[] {
-  return conventionIssues(
-    files,
-    conventionMatches(
-      files,
-      NATIVE_SWITCH_PATTERN,
-      'uses a native `switch`; dispatch with `Switch` from `@shared` instead.',
-    ),
-    allowlist,
-    'no longer uses a native `switch`; drop its repo lint allowlist entry.',
-  )
+/** ConventionRule is one pattern-and-allowlist convention over package source. */
+export type ConventionRule = {
+  allowlist: readonly string[]
+  detail: string
+  pattern: RegExp
+  staleDetail: string
 }
 
-/** bunTestImportIssues reports `bun:test` imports outside the files still allowed one. */
-export function bunTestImportIssues(
-  files: readonly SourceFile[],
-  allowlist: readonly string[] = BUN_TEST_IMPORT_ALLOWLIST,
-): string[] {
-  return conventionIssues(
-    files,
-    conventionMatches(files, BUN_TEST_IMPORT_PATTERN, 'imports `bun:test`; use `@shared/test` instead.'),
-    allowlist,
-    'no longer imports `bun:test`; drop its repo lint allowlist entry.',
-  )
-}
+/**
+ * CONVENTION_RULES is the table `repoLintIssues` walks. Adding a convention is one entry here: the
+ * pattern, what an offending line is told, the files still allowed one, and what a stale allowlist
+ * entry is told.
+ */
+export const CONVENTION_RULES = {
+  bunTestImport: {
+    allowlist: BUN_TEST_IMPORT_ALLOWLIST,
+    detail: 'imports `bun:test`; use `@shared/test` instead.',
+    pattern: BUN_TEST_IMPORT_PATTERN,
+    staleDetail: 'no longer imports `bun:test`; drop its repo lint allowlist entry.',
+  },
+  nativeSwitch: {
+    allowlist: NATIVE_SWITCH_ALLOWLIST,
+    detail: 'uses a native `switch`; dispatch with `Switch` from `@shared` instead.',
+    pattern: NATIVE_SWITCH_PATTERN,
+    staleDetail: 'no longer uses a native `switch`; drop its repo lint allowlist entry.',
+  },
+  rawThrow: {
+    allowlist: RAW_THROW_ALLOWLIST,
+    detail: RAW_THROW_DETAIL,
+    pattern: RAW_THROW_PATTERN,
+    staleDetail: 'no longer throws a raw `Error`; drop its repo lint allowlist entry.',
+  },
+  rejectedRawError: {
+    allowlist: REJECTED_RAW_ERROR_ALLOWLIST,
+    detail: REJECTED_RAW_ERROR_DETAIL,
+    pattern: REJECTED_RAW_ERROR_PATTERN,
+    staleDetail: 'no longer rejects with a raw `Error`; drop its repo lint allowlist entry.',
+  },
+} as const satisfies Record<string, ConventionRule>
 
-/** rawThrowIssues reports raw `Error` throws outside the files still allowed one. */
-export function rawThrowIssues(
+/** conventionRuleIssues reports one rule's offending lines and its stale allowlist entries. */
+export function conventionRuleIssues(
+  rule: ConventionRule,
   files: readonly SourceFile[],
-  allowlist: readonly string[] = RAW_THROW_ALLOWLIST,
+  allowlist: readonly string[] = rule.allowlist,
 ): string[] {
-  return conventionIssues(
-    files,
-    conventionMatches(files, RAW_THROW_PATTERN, RAW_THROW_DETAIL),
-    allowlist,
-    'no longer throws a raw `Error`; drop its repo lint allowlist entry.',
-  )
-}
-
-/** rejectedRawErrorIssues reports raw `Error`s handed to a promise rejection. */
-export function rejectedRawErrorIssues(
-  files: readonly SourceFile[],
-  allowlist: readonly string[] = REJECTED_RAW_ERROR_ALLOWLIST,
-): string[] {
-  return conventionIssues(
-    files,
-    conventionMatches(files, REJECTED_RAW_ERROR_PATTERN, REJECTED_RAW_ERROR_DETAIL),
-    allowlist,
-    'no longer rejects with a raw `Error`; drop its repo lint allowlist entry.',
-  )
+  return conventionIssues(files, conventionMatches(files, rule.pattern, rule.detail), allowlist, rule.staleDetail)
 }
 
 /** langiumImportIssues reports Langium imports outside the parser package. */
@@ -411,10 +401,9 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
     packageFiles.push({ path: FS.relativePath(repoRoot, path), source: await FS.readText(path) })
   }
   issues.push(...duplicateDescribeTitleIssues(packageFiles.filter(file => file.path.endsWith('.test.ts'))))
-  issues.push(...nativeSwitchIssues(packageFiles))
-  issues.push(...bunTestImportIssues(packageFiles))
-  issues.push(...rawThrowIssues(packageFiles))
-  issues.push(...rejectedRawErrorIssues(packageFiles))
+  for (const rule of Object.values(CONVENTION_RULES)) {
+    issues.push(...conventionRuleIssues(rule, packageFiles))
+  }
   issues.push(...langiumImportIssues(packageFiles))
   issues.push(...crossPackageSourceImportIssues(packageFiles))
   issues.push(...devLazyStudioImportIssues(packageFiles))
