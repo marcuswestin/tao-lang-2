@@ -406,7 +406,7 @@ verify membership plus the doctor (whose node log is the versioned `--json` repo
 (`StudioSmoke.resources()` gives each its own ports and artifact root), and the native shell
 (worker 3) and canary serialized on a `gui` resource so they never overlap each other while the
 browser lanes run beside them. The simulated-user browser lane is quarantined from the graph with
-its reason in the rollup while its palette-to-preview drop is repaired; `just _full-verify-simulated`
+its reason in the rollup while DEVENV-042 tracks its synthetic sketch gestures; `just _full-verify-simulated`
 runs it directly on worker 2. A failing lane no longer hides the lanes after it — every lane
 appears in the one rollup with its own log. `just studio-smoke`, `just studio-smoke-native`,
 `just studio-proof-real-app`, and `just studio-canary` remain the standalone entry points, and the

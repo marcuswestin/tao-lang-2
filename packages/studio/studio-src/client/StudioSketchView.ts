@@ -195,6 +195,89 @@ export const StudioSketchProposal = {
   },
 } as const
 
+export type StudioSketchRenderGateState = Readonly<{
+  activeGestures: number
+  deferred?: Readonly<{ sketches: readonly StudioSketch[]; sourceVersion?: string }>
+}>
+
+/**
+ * StudioSketchRenderGate keeps a catalog or manifest re-render from replacing a board while a
+ * pointer gesture is in flight on it. Replacing the board would drop the captured pointer and lose
+ * the gesture, so the latest render request is held and flushed when the last gesture ends.
+ */
+export const StudioSketchRenderGate = {
+  begin(state: StudioSketchRenderGateState): StudioSketchRenderGateState {
+    return { ...state, activeGestures: state.activeGestures + 1 }
+  },
+  end(state: StudioSketchRenderGateState): Readonly<{
+    flush?: Readonly<{ sketches: readonly StudioSketch[]; sourceVersion?: string }>
+    state: StudioSketchRenderGateState
+  }> {
+    const activeGestures = Math.max(0, state.activeGestures - 1)
+    if (activeGestures > 0 || state.deferred === undefined) {
+      return { state: { ...state, activeGestures } }
+    }
+    return { flush: state.deferred, state: { activeGestures } }
+  },
+  initial(): StudioSketchRenderGateState {
+    return { activeGestures: 0 }
+  },
+  request(
+    state: StudioSketchRenderGateState,
+    sketches: readonly StudioSketch[],
+    sourceVersion?: string,
+  ): Readonly<{ render: boolean; state: StudioSketchRenderGateState }> {
+    if (state.activeGestures === 0) {
+      return { render: true, state }
+    }
+    const version = sourceVersion ?? state.deferred?.sourceVersion
+    return {
+      render: false,
+      state: { ...state, deferred: { sketches, ...(version === undefined ? {} : { sourceVersion: version }) } },
+    }
+  },
+} as const
+
+export type StudioSketchBoardPointer = Readonly<{
+  activePointer?: number
+  inToolbar: boolean
+  onHandle: boolean
+  primary: boolean
+}>
+
+/**
+ * StudioSketchBoardInput decides whether a board pointerdown begins a geometry gesture. Toolbar
+ * controls and resize handles keep their own native or dedicated handling; a second pointer while
+ * one is captured is ignored so a stray touch cannot complete another gesture.
+ */
+export const StudioSketchBoardInput = {
+  beginsGesture(pointer: StudioSketchBoardPointer): boolean {
+    return pointer.activePointer === undefined && pointer.primary && !pointer.inToolbar && !pointer.onHandle
+  },
+} as const
+
+export type StudioSketchMoveRelease = Readonly<{
+  duplicate: boolean
+  overCell: boolean
+  point: StudioSketchPoint
+  size: Readonly<{ height: number; width: number }>
+}>
+
+/**
+ * StudioSketchDragOneIn decides what releasing a moved rectangle means. Inside the board the move
+ * stands; released over the sketch's own running cell, the rectangle is snapped into that view's
+ * flow instead and its free geometry is restored (FS-D11's drag-one-in). Duplicates never snap.
+ */
+export const StudioSketchDragOneIn = {
+  outcome(release: StudioSketchMoveRelease): 'move' | 'snap' {
+    const inside = release.point.x >= 0
+      && release.point.y >= 0
+      && release.point.x <= release.size.width
+      && release.point.y <= release.size.height
+    return !inside && release.overCell && !release.duplicate ? 'snap' : 'move'
+  },
+} as const
+
 export type MountedStudioSketchView = Readonly<{
   dispose(): void
   render(sketches: readonly StudioSketch[], sourceVersion?: string): void
@@ -267,6 +350,19 @@ export const StudioSketchView = {
     const snapStates = new Map<string, StudioSketchSnapUiState>()
     let selected: Readonly<{ rectId: string; rectIds: ReadonlySet<string>; sketchId: string }> | undefined
     let outerGesture: StudioSketchOuterGesture | undefined
+    let gate = StudioSketchRenderGate.initial()
+    const gestureLock: StudioSketchGestureLock = {
+      begin() {
+        gate = StudioSketchRenderGate.begin(gate)
+      },
+      end() {
+        const result = StudioSketchRenderGate.end(gate)
+        gate = result.state
+        if (result.flush !== undefined) {
+          renderNow(result.flush.sketches, result.flush.sourceVersion)
+        }
+      },
+    }
 
     const applyChange = (change: StudioSketchRectChange): void => {
       sketches = StudioSketchChanges.settle(sketches, change)
@@ -298,6 +394,13 @@ export const StudioSketchView = {
     }
 
     const render = (nextSketches: readonly StudioSketch[], nextSourceVersion?: string): void => {
+      const decision = StudioSketchRenderGate.request(gate, nextSketches, nextSourceVersion)
+      gate = decision.state
+      if (decision.render) {
+        renderNow(nextSketches, nextSourceVersion)
+      }
+    }
+    const renderNow = (nextSketches: readonly StudioSketch[], nextSourceVersion?: string): void => {
       sketches = nextSketches
       currentSourceVersion = nextSourceVersion ?? currentSourceVersion
       if (selected !== undefined) {
@@ -328,6 +431,8 @@ export const StudioSketchView = {
           options.onUnsnap,
           options.onUndoSnap,
           (authoritative, version) => render(authoritative, version),
+          gestureLock,
+          options.onError,
         )
       )
       workspace.replaceChildren(...boards, inspector)
@@ -386,6 +491,11 @@ export const StudioSketchView = {
   },
 } as const
 
+type StudioSketchGestureLock = Readonly<{
+  begin(): void
+  end(): void
+}>
+
 function renderSketch(
   document: Document,
   sketch: StudioSketch,
@@ -398,7 +508,18 @@ function renderSketch(
   onUnsnap: StudioSketchViewOptions['onUnsnap'],
   onUndoSnap: StudioSketchViewOptions['onUndoSnap'],
   renderAuthoritative: (sketches: readonly StudioSketch[], sourceVersion: string) => void,
+  gestureLock: StudioSketchGestureLock,
+  onError: StudioSketchViewOptions['onError'],
 ): HTMLElement {
+  // The frame stacks the toolbar above the board and the proposal below it. Nothing but rectangles
+  // may sit inside the board: an absolutely positioned toolbar once wrapped down over it and the
+  // pointer landed on Unsnap instead of the drawing surface.
+  const frame = document.createElement('section')
+  frame.dataset['taoStudioSketchFrame'] = sketch.id
+  frame.style.alignItems = 'flex-start'
+  frame.style.display = 'flex'
+  frame.style.flexDirection = 'column'
+  frame.style.gap = '6px'
   const board = document.createElement('section')
   board.dataset['taoStudioSketch'] = sketch.id
   board.style.height = `${sketch.height}px`
@@ -407,9 +528,27 @@ function renderSketch(
   board.style.width = `${sketch.width}px`
   let activePointer: number | undefined
   let duplicateSourceId: string | undefined
-  let draggingRectId: string | undefined
   let busy = false
+  /** A failure is shown on the board and reported to the host, which outlives a re-rendered board. */
+  const reportError = (error: unknown): void => {
+    board.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
+    onError?.(error)
+  }
   let state: StudioSketchGeometryState = StudioSketchGeometry.initial(sketch.rects)
+  // The in-flight gesture is published on the board so a person, a stylesheet, or a browser lane
+  // can see that the pointer reached it before any catalog write is expected.
+  const capturePointer = (pointerId: number): void => {
+    activePointer = pointerId
+    board.setPointerCapture?.(pointerId)
+    board.dataset['taoStudioSketchGesture'] = state.gesture?.kind ?? 'gesture'
+    gestureLock.begin()
+  }
+  const releasePointer = (pointerId: number): void => {
+    activePointer = undefined
+    board.releasePointerCapture?.(pointerId)
+    delete board.dataset['taoStudioSketchGesture']
+    gestureLock.end()
+  }
   if (selection()?.sketchId === sketch.id) {
     state = { ...state, selectedId: selection()?.rectId }
   }
@@ -417,24 +556,22 @@ function renderSketch(
     const selectedIds = selection()?.sketchId === sketch.id
       ? selection()?.rectIds ?? new Set<string>()
       : new Set<string>()
-    const children = state.rects.map(rect =>
-      rectElement(document, rect, selectedIds.has(rect.id), beginResize, event => {
-        draggingRectId = rect.id
-        event.dataTransfer?.setData('text/plain', rect.id)
-        gapIndicator.hidden = false
-      })
-    )
-    board.replaceChildren(
-      toolbar,
-      gapIndicator,
-      ...children,
-      ...(snapState.pending === undefined ? [] : [proposalElement()]),
-    )
+    const children = state.rects.map(rect => rectElement(document, rect, selectedIds.has(rect.id), beginResize))
+    board.replaceChildren(gapIndicator, ...children)
+    // The toolbar and board stay attached; re-inserting the board would momentarily disconnect the
+    // element holding pointer capture. Only the proposal comes and goes.
+    frame.querySelector(':scope > [data-tao-studio-sketch-snap-proposal]')?.remove()
+    if (snapState.pending !== undefined) {
+      frame.append(proposalElement())
+    }
   }
   const toolbar = document.createElement('nav')
   toolbar.dataset['taoStudioSketchSnapControls'] = sketch.id
-  toolbar.style.position = 'absolute'
-  toolbar.style.top = '-32px'
+  toolbar.style.alignItems = 'center'
+  toolbar.style.display = 'flex'
+  toolbar.style.flexWrap = 'wrap'
+  toolbar.style.gap = '4px'
+  toolbar.style.maxWidth = `${Math.max(sketch.width, 360)}px`
   const snap = document.createElement('button')
   snap.textContent = 'Snap'
   snap.dataset['taoStudioSketchSnap'] = sketch.id
@@ -490,10 +627,24 @@ function renderSketch(
   snapped.addEventListener('change', updateFlowControls)
   updateFlowControls()
   toolbar.append(snap, undo, snapped, unsnap, direction, separator, spacerLabel)
+  frame.append(toolbar, board)
   const gapIndicator = document.createElement('div')
   gapIndicator.dataset['taoStudioSketchGapIndicator'] = 'true'
-  gapIndicator.textContent = 'Drop to Snap selected rectangle into flow'
+  gapIndicator.textContent = 'Release over the running cell to Snap this rectangle into its flow'
   gapIndicator.hidden = true
+  /** The sketch's running cell is a sibling of the sketch host inside the same matrix row. */
+  const overOwnCell = (event: PointerEvent): boolean => {
+    const row = board.closest('.studio-preview-group-cells')
+    const target = document.elementFromPoint(event.clientX, event.clientY)
+    const cell = target?.closest('.studio-preview-cell') ?? null
+    return cell !== null && row !== null && row.contains(cell)
+  }
+  const moveRelease = (event: PointerEvent): StudioSketchMoveRelease => ({
+    duplicate: duplicateSourceId !== undefined,
+    overCell: overOwnCell(event),
+    point: point(event),
+    size: { height: sketch.height, width: sketch.width },
+  })
   const requestSnap = async (rectIds: readonly string[], confirmedProposalVersion?: string): Promise<void> => {
     if (onSnap === undefined || snapState.sourceVersion === undefined || rectIds.length === 0 || busy) {
       return
@@ -522,7 +673,7 @@ function renderSketch(
         paint()
       }
     } catch (error) {
-      board.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
+      reportError(error)
     } finally {
       busy = false
       snap.disabled = false
@@ -545,7 +696,7 @@ function renderSketch(
       snapState.sourceVersion = result.file.sourceVersion
       renderAuthoritative(result.catalog.sketches, result.file.sourceVersion)
     } catch (error) {
-      board.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
+      reportError(error)
     } finally {
       busy = false
       updateFlowControls()
@@ -607,7 +758,7 @@ function renderSketch(
       },
       error => {
         undo.disabled = false
-        board.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
+        reportError(error)
       },
     ).finally(() => {
       busy = false
@@ -636,7 +787,7 @@ function renderSketch(
       renderAuthoritative(result.catalog.sketches, result.file.sourceVersion)
     }, error => {
       unsnap.disabled = false
-      board.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
+      reportError(error)
     }).finally(() => {
       busy = false
     })
@@ -680,15 +831,18 @@ function renderSketch(
     if (state.gesture === undefined) {
       return
     }
-    activePointer = event.pointerId
-    board.setPointerCapture?.(event.pointerId)
+    capturePointer(event.pointerId)
     event.preventDefault()
   }
   board.addEventListener('pointerdown', event => {
-    if (activePointer !== undefined || !primaryPointer(event) || toolbar.contains(event.target as Node | null)) {
-      return
-    }
-    if ((event.target as HTMLElement).dataset['taoStudioSketchHandle']) {
+    const target = event.target as HTMLElement | null
+    const begins = StudioSketchBoardInput.beginsGesture({
+      ...(activePointer === undefined ? {} : { activePointer }),
+      inToolbar: toolbar.contains(target),
+      onHandle: target?.dataset?.['taoStudioSketchHandle'] !== undefined,
+      primary: primaryPointer(event),
+    })
+    if (!begins) {
       return
     }
     const location = point(event)
@@ -717,8 +871,7 @@ function renderSketch(
     if (state.gesture === undefined) {
       return
     }
-    activePointer = event.pointerId
-    board.setPointerCapture?.(event.pointerId)
+    capturePointer(event.pointerId)
     event.preventDefault()
     paint()
   })
@@ -726,7 +879,15 @@ function renderSketch(
     if (state.gesture === undefined || event.pointerId !== activePointer) {
       return
     }
+    const moving = state.gesture.kind === 'move'
     state = StudioSketchGeometry.updatePointer(state, point(event))
+    const landing = moving && StudioSketchDragOneIn.outcome(moveRelease(event)) === 'snap'
+    gapIndicator.hidden = !landing
+    if (landing) {
+      gapIndicator.dataset['state'] = 'landing'
+    } else {
+      delete gapIndicator.dataset['state']
+    }
     paint()
   })
   board.addEventListener('pointercancel', event => {
@@ -734,10 +895,9 @@ function renderSketch(
       return
     }
     state = StudioSketchGeometry.cancelPointer(state)
-    activePointer = undefined
     duplicateSourceId = undefined
-    board.releasePointerCapture?.(event.pointerId)
     paint()
+    releasePointer(event.pointerId)
   })
   board.addEventListener('pointerup', event => {
     if (event.pointerId !== activePointer) {
@@ -745,11 +905,24 @@ function renderSketch(
     }
     const gesture = state.gesture
     if (gesture === undefined) {
+      releasePointer(event.pointerId)
+      return
+    }
+    gapIndicator.hidden = true
+    delete gapIndicator.dataset['state']
+    if (gesture.kind === 'move' && StudioSketchDragOneIn.outcome(moveRelease(event)) === 'snap') {
+      // Drag-one-in: the free geometry stays where it was and the rectangle joins the flow.
+      state = StudioSketchGeometry.cancelPointer(state)
+      duplicateSourceId = undefined
+      releasePointer(event.pointerId)
+      paint()
+      void requestSnap([gesture.id])
       return
     }
     state = StudioSketchGeometry.endPointer(state, point(event))
-    activePointer = undefined
-    board.releasePointerCapture?.(event.pointerId)
+    // Release before committing: a render deferred during the gesture flushes first, and the
+    // optimistic change then settles on top of that authoritative catalog.
+    releasePointer(event.pointerId)
     const rect = state.rects.find(candidate => candidate.id === state.selectedId)
     if (rect !== undefined) {
       const kind = gesture.kind === 'draw'
@@ -769,36 +942,8 @@ function renderSketch(
     duplicateSourceId = undefined
     paint()
   })
-  board.addEventListener('dragover', event => {
-    if (draggingRectId === undefined) {
-      return
-    }
-    event.preventDefault()
-    gapIndicator.hidden = false
-    gapIndicator.dataset['state'] = 'landing'
-  })
-  board.addEventListener('dragleave', () => {
-    gapIndicator.hidden = true
-    delete gapIndicator.dataset['state']
-  })
-  board.addEventListener('drop', event => {
-    if (draggingRectId === undefined) {
-      return
-    }
-    event.preventDefault()
-    const rectId = draggingRectId
-    draggingRectId = undefined
-    gapIndicator.hidden = true
-    delete gapIndicator.dataset['state']
-    void requestSnap([rectId])
-  })
-  board.addEventListener('dragend', () => {
-    draggingRectId = undefined
-    gapIndicator.hidden = true
-    delete gapIndicator.dataset['state']
-  })
   paint()
-  return board
+  return frame
 }
 
 function primaryPointer(event: PointerEvent): boolean {
@@ -815,7 +960,6 @@ function rectElement(
   rect: StudioSketchRect,
   selected: boolean,
   beginResize: (event: PointerEvent, handle: StudioSketchResizeHandle) => void,
-  beginDrag: (event: DragEvent) => void,
 ): HTMLElement {
   const element = document.createElement('div')
   element.dataset['taoStudioSketchRect'] = rect.id
@@ -826,8 +970,6 @@ function rectElement(
   element.style.top = `${rect.y}px`
   element.style.width = `${rect.width}px`
   element.textContent = rect.content ?? rect.kind
-  element.draggable = true
-  element.addEventListener('dragstart', beginDrag)
   if (selected) {
     element.dataset['selected'] = 'true'
     for (const handle of handles) {

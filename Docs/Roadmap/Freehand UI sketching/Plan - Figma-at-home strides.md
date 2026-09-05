@@ -63,16 +63,23 @@ inference.
 **Goal.** Every later stride adds gestures; none of them can claim browser evidence while the only
 browser lane for sketching is quarantined. Make that lane deterministic and bring it back.
 
-- Replace coordinate-only synthetic drags in `studio-simulated-user.test.ts` with a browser action
-  boundary that confirms each pointer event reached the board and waits for the authoritative board
-  generation the catalog echo produces before the next step. Keep mutations single-shot.
-- Run the lane ten consecutive times from an ordinary Terminal, then remove the `FULL_VERIFY_SKIPPED`
-  quarantine, restore the `agent-worktree-profile` expectation, and close the ledger entry.
-- Add the toolbar-click regression (the board handler ignoring events from its toolbar) to the jsdom
-  sketch view tests so the bug that blocked a mouse Snap cannot return.
-- Confirm native and canary from the Terminal as part of the same pass.
+**Done (2026-09-04).** Hit-test diagnostics in the lane showed the failures were product defects:
+the toolbar covered the drawing surface, drag-one-in depended on an HTML5 drag the move gesture
+suppressed, and a re-render could replace a board mid-gesture. All three are fixed with pure
+helpers and unit tests: the toolbar and proposal live in a frame around the board, drag-one-in is a
+pointer gesture released over the sketch's running cell, and renders are held while a gesture is in
+flight. The lane now passes Draw, four further draws, Snap, and reload in a normal terminal, runs
+the sketch section in the Run preset at a designer-sized viewport, and records board state, the
+element under the pointer, host errors, and a screenshot on every sketch timeout.
 
-**Size.** S–M. **Depends on.** Nothing.
+**Open.** Drag-one-in in the real browser: the release reaches the board and requests a
+one-rectangle Snap, which the server refuses because the rectangle sits between two flowed siblings
+(`Studio Snap cannot preserve authored source for interleaved rectangle geometry`). Stride 2 owns
+inserting into an existing flow or routing it through the proposal. Then ten consecutive green
+runs, remove the `FULL_VERIFY_SKIPPED` quarantine, restore the `agent-worktree-profile` expectation,
+and close DEVENV-042. Confirm native and canary from the Terminal in the same pass.
+
+**Size.** S–M remaining. **Depends on.** Nothing.
 
 ## Stride 1 — Reflexes on the sketch
 
