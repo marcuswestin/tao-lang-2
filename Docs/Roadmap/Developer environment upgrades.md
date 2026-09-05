@@ -737,7 +737,26 @@ an entry here may link one when the developer workflow is also affected.
   Undo sequence in ten consecutive normal-terminal runs before it rejoins automatic full verification.
 - **Source:** 2026-09-04 normal-terminal merge verification and explicit quarantine decision.
 
-### DEVENV-043 — Typecheck gate runs 19 projects serially on the legacy compiler
+### DEVENV-043 — Changed-files lane fails every package with no affected tests
+
+- **Status:** Candidate
+- **Area:** Verification lanes
+- **Impact:** `just test-changed`, the documented ordinary iteration lane, reports red whenever a change
+  touches a subset of packages, so its summary cannot be read at a glance and the real failures hide
+  among sixteen spurious ones.
+- **Evidence:** With 19 changed files in `parser`, `code-editor`, and `studio`, every other bun suite
+  printed `--changed: 19 changed files, but no test files are affected` and `Ran 0 tests`, exited 0
+  under `--pass-with-no-tests`, wrote no junit file, and the runner then recorded `test result report
+  unavailable` and turned the pass into a failure (`.artifacts/logs/dev-test/2026-09-05T01-34-12-827Z-*`).
+- **Workaround:** Run `just test-file <path>` per touched suite, and `./agent verify` for the full run.
+- **Proposed change:** Treat a zero-test run under `--changed` as passed with no observations when the
+  process exited 0, or drop suites whose packages have no changed files before spawning them.
+- **Dependencies:** None.
+- **Acceptance:** A change confined to one package leaves `just test-changed` green with only that
+  package's suites reported.
+- **Source:** 2026-09-04 Studio syntax lens work.
+
+### DEVENV-044 — Typecheck gate runs 19 projects serially on the legacy compiler
 
 - **Status:** Resolved
 - **Area:** Verification performance
@@ -761,7 +780,7 @@ an entry here may link one when the developer workflow is also affected.
   unchanged. Met 2026-09-04: `_typecheck` 2.2s inside a green, contended `verify` (33.9s lane).
 - **Source:** 2026-09-04 development-speed review.
 
-### DEVENV-044 — Agent shell habits route routine commands through harness review
+### DEVENV-045 — Agent shell habits route routine commands through harness review
 
 - **Status:** In progress
 - **Area:** Agent harness performance
@@ -791,7 +810,7 @@ an entry here may link one when the developer workflow is also affected.
   equals the bare command's; a fresh worktree session shows no `direnv exec` sandbox denial.
 - **Source:** 2026-09-04 development-speed review of Claude Code and Codex transcripts.
 
-### DEVENV-045 — The tao-apps suite is one 22-second process on the test critical path
+### DEVENV-046 — The tao-apps suite is one 22-second process on the test critical path
 
 - **Status:** Candidate
 - **Area:** Test performance

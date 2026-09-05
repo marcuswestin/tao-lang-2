@@ -5,7 +5,6 @@ import type { StudioDeviceLaunchInfo, StudioDeviceLaunchOpenResult } from '../de
 import type { StudioDeviceStateEvent, StudioDeviceStatus } from '../device/StudioDeviceStatus'
 import type { StudioCompileCompletion } from '../StudioCompileCoordinator'
 import type { StudioDraftFile, StudioDraftSyncRequest, StudioDraftSyncResult } from '../StudioDraftSync'
-import type { StudioLanguageHighlight } from '../StudioHighlight'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import type {
   StudioAppVariant,
@@ -33,6 +32,7 @@ import type {
   StudioSketchCatalogRequest,
   StudioSketchCatalogSnapshot,
 } from '../StudioSketchCatalog'
+import type { StudioLanguageAnalysis } from '../StudioSyntaxLens'
 import type { StudioTestRun, StudioTestStatus } from '../StudioTestRunner'
 
 export type StudioCompileDiagnostic = {
@@ -306,7 +306,7 @@ export const StudioApiClient = {
   generateFixture: async (scenarioId: string): Promise<StudioGeneratedFixtureResult> =>
     await request('/api/ai/fixture', { scenarioId }),
   handshake: async (signal?: AbortSignal): Promise<StudioHandshake> => await get('/api/protocol', signal),
-  highlight: async (content: string): Promise<StudioLanguageHighlight> =>
+  highlight: async (content: string): Promise<StudioLanguageAnalysis> =>
     await request('/api/language/highlight', { content }),
   inspectRender: async (
     body: { path: string; renderId: string; sourceVersion: string },

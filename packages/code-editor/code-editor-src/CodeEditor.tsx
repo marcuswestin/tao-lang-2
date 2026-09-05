@@ -4,6 +4,17 @@ import { Decoration, type DecorationSet, EditorView } from '@codemirror/view'
 import { basicSetup } from 'codemirror'
 import React from 'react'
 import TR from 'tao-runtime/TR'
+import { CodeEditorLens, type CodeEditorLensConfig, type CodeEditorLensMap } from './CodeEditorLens'
+
+export {
+  CodeEditorLens,
+  type CodeEditorLensConfig,
+  type CodeEditorLensFacet,
+  type CodeEditorLensMap,
+  type CodeEditorLensNode,
+  type CodeEditorLensRange,
+  type CodeEditorLensSpan,
+} from './CodeEditorLens'
 
 /** CodeEditorLsp connects one editor document to Studio's existing JSON-over-WebSocket LSP transport. */
 export type CodeEditorLsp = {
@@ -37,12 +48,25 @@ export type CodeEditorDrop = Readonly<{
     | undefined
 }>
 
+/**
+ * A syntax lens: `classify` maps document content to facet-tagged nodes, `facets` names every
+ * facet with its glyph, `active` lists the facets currently shown, and bumping `refoldRevision`
+ * closes everything the person peeked open.
+ */
+export type CodeEditorLensProps =
+  & CodeEditorLensConfig
+  & Readonly<{
+    classify: (content: string) => Promise<CodeEditorLensMap>
+    refoldRevision?: number
+  }>
+
 export type CodeEditorProps = {
   Change: TR.ActionValue<[TR.Value<string>]>
   Content: string
   Drop?: CodeEditorDrop
   Highlight?: (content: string) => Promise<readonly CodeEditorHighlightToken[]>
   Layout?: TR.TaoVisualLayout
+  Lens?: CodeEditorLensProps
   Lsp?: CodeEditorLsp
   Selection?: Readonly<{ anchor: number; head?: number }>
   SelectionChange?: (selection: Readonly<{ anchor: number; head: number }>) => void
@@ -74,6 +98,7 @@ const codeEditorHighlightField = StateField.define<DecorationSet>({
 export const codeEditorBaseExtensions: readonly Extension[] = [
   basicSetup,
   codeEditorHighlightField,
+  CodeEditorLens.extension,
   EditorState.languageData.of(() => [{ commentTokens: { line: '//' } }]),
   EditorView.theme({
     '.cm-content': { caretColor: '#f8fafc' },
@@ -96,11 +121,13 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
   const content = React.useRef(props.Content)
   const selectionChange = React.useRef(props.SelectionChange)
   const drop = React.useRef(props.Drop)
+  const lens = React.useRef(props.Lens)
   const applyingExternalContent = React.useRef(false)
   change.current = props.Change
   content.current = props.Content
   selectionChange.current = props.SelectionChange
   drop.current = props.Drop
+  lens.current = props.Lens
 
   React.useEffect(() => {
     const parent = mount.current
@@ -111,19 +138,31 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
     let highlightRevision = 0
     let highlightTimer: ReturnType<typeof setTimeout> | undefined
     let ownedClient: LSPClient | undefined
+    // Highlighting and the syntax lens are both presentation derived from the same content, so one
+    // debounce schedules both and each result lands only while the document still matches.
     const scheduleHighlight = (view: EditorView, nextContent: string, delayMs = 60): void => {
       const revision = ++highlightRevision
       clearTimeout(highlightTimer)
-      if (props.Highlight === undefined) {
+      const classify = lens.current?.classify
+      if (props.Highlight === undefined && classify === undefined) {
         return
       }
+      const current = (): boolean =>
+        !cancelled && revision === highlightRevision && view.state.doc.toString() === nextContent
       highlightTimer = setTimeout(() => {
         void props.Highlight?.(nextContent).then(tokens => {
-          if (!cancelled && revision === highlightRevision && view.state.doc.toString() === nextContent) {
+          if (current()) {
             view.dispatch({ effects: setCodeEditorHighlight.of(tokens) })
           }
         }).catch(() => {
           // Syntax highlighting is presentation-only; editing and LSP behavior remain available.
+        })
+        void classify?.(nextContent).then(map => {
+          if (current()) {
+            view.dispatch({ effects: CodeEditorLens.effects.setMap.of(map) })
+          }
+        }).catch(() => {
+          // The lens keeps its last projection when classification fails; editing is unaffected.
         })
       }, delayMs)
     }
@@ -149,6 +188,13 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
       parent,
     })
     editor.current = view
+    // The view is rebuilt whenever the LSP transport changes; the lens config would otherwise be
+    // lost with it, and a map landing on an unconfigured lens would fold everything.
+    if (lens.current !== undefined) {
+      view.dispatch({
+        effects: CodeEditorLens.effects.setConfig.of({ active: lens.current.active, facets: lens.current.facets }),
+      })
+    }
     const onDragOver = (event: DragEvent): void => {
       const spec = drop.current
       if (spec !== undefined && spec.accepts.some(type => event.dataTransfer?.types.includes(type) === true)) {
@@ -242,6 +288,24 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
       applyingExternalContent.current = false
     }
   }, [props.Content])
+
+  React.useEffect(() => {
+    const view = editor.current
+    if (!view || props.Lens === undefined) {
+      return
+    }
+    view.dispatch({
+      effects: CodeEditorLens.effects.setConfig.of({ active: props.Lens.active, facets: props.Lens.facets }),
+    })
+  }, [props.Lens?.active, props.Lens?.facets])
+
+  React.useEffect(() => {
+    const view = editor.current
+    if (!view || props.Lens?.refoldRevision === undefined || props.Lens.refoldRevision === 0) {
+      return
+    }
+    view.dispatch({ effects: CodeEditorLens.effects.refold.of(null) })
+  }, [props.Lens?.refoldRevision])
 
   React.useEffect(() => {
     const view = editor.current
