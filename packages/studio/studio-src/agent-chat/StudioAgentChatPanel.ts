@@ -1,3 +1,4 @@
+import { Text } from '@shared/core'
 // Studio agent chat: a second overlay beside the proof-of-concept panel. Plain DOM and inline styles, for
 // the same reason the first one is: the point is to make the flow observable, not to design a product surface.
 
@@ -107,7 +108,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       return wrapper
     }
     const pattern = new RegExp(
-      `\\b(${names.map(name => name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`,
+      `\\b(${names.map(Text.escapeRegExp).join('|')})\\b`,
       'g',
     )
     let index = 0

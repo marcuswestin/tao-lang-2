@@ -1,5 +1,5 @@
 import { Errors, FS } from '@shared'
-import { Expect, Test, withTaoFiles } from '@shared/test'
+import { Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { StudioPreviewManifest } from '../studio-src/StudioPreviewManifest'
 import {
   StudioProjectSession,
@@ -11,6 +11,7 @@ import {
   studioProtocolVersion,
   studioSourceActionVersion,
 } from '../studio-src/StudioProtocol'
+import { systemLightScheme } from './test-studio-fixtures'
 
 Test('Studio project session resolves one current Tao app and serves contained versioned files', async () => {
   await withStudioProject(async (session, paths, root) => {
@@ -345,7 +346,7 @@ Test('Studio file CRUD rejects unsafe, destructive, stale, and dirty mutations',
       writeId: 'dirty-delete',
     })).rejects.toThrow('unsaved Studio draft')
 
-    const outside = await FS.mkTmpDir(FS.resolvePath('tao-studio-crud-outside-', FS.tmpdir()))
+    const outside = await mkTestDir('tao-studio-crud-outside-')
     await FS.symlink(outside, FS.resolvePath('Linked', root))
     try {
       await Expect(session.createFile({ path: 'Linked/Escaped.tao', writeId: 'symlink-create' }))
@@ -1023,12 +1024,7 @@ Test('Studio project session exposes concurrent matrix cells and rejects stale r
       cellRevision: 0,
       environment: {
         network: { latencyMs: 0, outcome: 'normal' as const },
-        scheme: {
-          capability: 'reactive-browser' as const,
-          requested: 'system' as const,
-          resolved: 'light' as const,
-          source: 'system' as const,
-        },
+        scheme: systemLightScheme(),
         viewport: { height: 844, presetId: 'phone', width: 390 },
       },
       scenarioId: 'Garden.phone',
@@ -1231,12 +1227,7 @@ async function registerScenarioCell(session: StudioProjectSession, previewInstan
     cellRevision: 0,
     environment: {
       network: { latencyMs: 0, outcome: 'normal' as const },
-      scheme: {
-        capability: 'reactive-browser' as const,
-        requested: 'system' as const,
-        resolved: 'light' as const,
-        source: 'system' as const,
-      },
+      scheme: systemLightScheme(),
       viewport: { height: 844, presetId: 'phone', width: 390 },
     },
     scenarioId,

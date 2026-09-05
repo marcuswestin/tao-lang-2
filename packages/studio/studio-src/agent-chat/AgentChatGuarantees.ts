@@ -9,7 +9,7 @@
 // it would teach the agent to skip a test the app actually needs. Entries were checked line by line against
 // `Docs/Spec/`; where the spec marks something deferred, the entry says so rather than promising it.
 
-export type GuaranteeVerdict =
+type GuaranteeVerdict =
   /** Tao makes this true, so a test asserting it tests the toolchain rather than the app. */
   | 'guaranteed'
   /** Not guaranteed. This is a real behavior of the app and worth a check. */

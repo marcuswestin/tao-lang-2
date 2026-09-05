@@ -11,7 +11,7 @@
 
 import { AST, Parser } from '@parser'
 
-export type DeclarationChange = {
+type DeclarationChange = {
   added: readonly string[]
   removed: readonly string[]
   /** True when a declaration present in both has different source text. */
@@ -49,7 +49,7 @@ function kindOf(node: AST.Node): string | undefined {
 }
 
 /** declarations lists a file's top-level declarations as `kind Name`, with the text of each. */
-export async function declarations(source: string): Promise<Map<string, string>> {
+async function declarations(source: string): Promise<Map<string, string>> {
   context ??= Parser.createContext()
   const parsed = await Parser.parseSource(context, source, { validation: false })
   const found = new Map<string, string>()
@@ -68,7 +68,7 @@ export async function declarations(source: string): Promise<Map<string, string>>
 }
 
 /** declarationChange says what one edit did to a file's top-level declarations. */
-export async function declarationChange(before: string, after: string): Promise<DeclarationChange> {
+async function declarationChange(before: string, after: string): Promise<DeclarationChange> {
   const [was, now] = await Promise.all([declarations(before), declarations(after)])
   const added = [...now.keys()].filter(key => !was.has(key))
   const removed = [...was.keys()].filter(key => !now.has(key))

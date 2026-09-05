@@ -1,13 +1,14 @@
-import { Assert, Errors } from '@shared/core'
+import { Assert, Errors, Json } from '@shared/core'
 import { EditorView } from 'codemirror'
 import type { StudioDraftFile } from '../StudioDraftSync'
 import { StudioInspector, type StudioInspectorSelection } from '../StudioInspector'
-import {
-  type StudioCellEnvironment,
-  type StudioCellIdentity,
-  type StudioParameterSchema,
-  type StudioPreviewCell,
-  type StudioPreviewManifestV2,
+import { cellIdentity } from '../StudioPreviewCell'
+import type {
+  StudioCellEnvironment,
+  StudioCellIdentity,
+  StudioParameterSchema,
+  StudioPreviewCell,
+  StudioPreviewManifestV2,
 } from '../StudioPreviewManifest'
 import {
   type StudioFixturePlan,
@@ -37,12 +38,12 @@ import {
   type StudioScenarioResult,
 } from './StudioScenarioControls'
 
-export type StudioMatrixCell<Item> = {
+type StudioMatrixCell<Item> = {
   id: string
   item: Item
 }
 
-export type StudioMatrixGroup<Item> = {
+type StudioMatrixGroup<Item> = {
   cells: readonly StudioMatrixCell<Item>[]
   id: string
   label: string
@@ -142,7 +143,7 @@ export const StudioRetainedPreview = {
 } as const
 
 /** Keyed DOM host for scenario-group rows and their left-to-right preview cells. */
-export const StudioMatrixView = {
+const StudioMatrixView = {
   render<Item>(
     parent: HTMLElement,
     groups: readonly StudioMatrixGroup<Item>[],
@@ -311,7 +312,7 @@ export type StudioRuntimeDataTable = Readonly<{
 export const StudioRuntimeData = {
   tables(capture: StudioRuntimeCaptureArtifact | undefined): readonly StudioRuntimeDataTable[] {
     const value = capture?.domains.find(domain => domain.domain === 'data' && domain.version === 1)?.value
-    if (!isRecord(value) || !Array.isArray(value['entries'])) {
+    if (!Json.isRecord(value) || !Array.isArray(value['entries'])) {
       return []
     }
     return value['entries'].flatMap(entry => runtimeDataEntryTables(entry))
@@ -828,7 +829,7 @@ function renderCellPreview(
     void navigator.clipboard.readText().then(replayText).catch(error => {
       pasteReplay.disabled = false
       status.dataset['state'] = 'error'
-      status.textContent = error instanceof Error ? error.message : String(error)
+      status.textContent = Errors.messageOf(error)
     })
   })
   replayFailure.addEventListener('click', () => {
@@ -847,7 +848,7 @@ function renderCellPreview(
     void connection.replayRuntimeCapture?.(replay.value).catch(error => {
       replayFailure.disabled = false
       status.dataset['state'] = 'error'
-      status.textContent = error instanceof Error ? error.message : String(error)
+      status.textContent = Errors.messageOf(error)
     })
   })
   replayFile.addEventListener('change', () => {
@@ -861,7 +862,7 @@ function renderCellPreview(
     void file.text().then(replayText).catch(error => {
       loadReplay.disabled = false
       status.dataset['state'] = 'error'
-      status.textContent = error instanceof Error ? error.message : String(error)
+      status.textContent = Errors.messageOf(error)
     })
   })
 
@@ -895,7 +896,7 @@ function renderCellPreview(
       } catch (error) {
         apply.disabled = false
         status.dataset['state'] = 'error'
-        status.textContent = error instanceof Error ? error.message : String(error)
+        status.textContent = Errors.messageOf(error)
       }
     })()
   })
@@ -931,7 +932,7 @@ function renderCellPreview(
       error => {
         promote.disabled = false
         status.dataset['state'] = 'error'
-        status.textContent = error instanceof Error ? error.message : String(error)
+        status.textContent = Errors.messageOf(error)
       },
     )
   })
@@ -1001,7 +1002,7 @@ function renderCellPreview(
       connection.generation = undefined
       generate.disabled = false
       status.dataset['state'] = 'error'
-      status.textContent = error instanceof Error ? error.message : String(error)
+      status.textContent = Errors.messageOf(error)
     })
   })
   connection.captureFixture = fixtureName =>
@@ -1051,7 +1052,7 @@ function renderCellPreview(
     }, error => {
       capture.disabled = false
       status.dataset['state'] = 'error'
-      status.textContent = error instanceof Error ? error.message : String(error)
+      status.textContent = Errors.messageOf(error)
     })
   })
 
@@ -1091,7 +1092,7 @@ async function configureGenerationAvailability(button: HTMLButtonElement): Promi
   } catch (error) {
     button.textContent = 'AI unavailable'
     button.disabled = true
-    button.title = error instanceof Error ? error.message : String(error)
+    button.title = Errors.messageOf(error)
   }
 }
 
@@ -1129,7 +1130,7 @@ function readScenarioDraft(
       viewport: readViewport(),
     })
   } catch (error) {
-    return { issues: [error instanceof Error ? error.message : String(error)], ok: false }
+    return { issues: [Errors.messageOf(error)], ok: false }
   }
 }
 
@@ -1528,7 +1529,10 @@ function runtimeCaptureEnvironment(capture: StudioRuntimeCaptureArtifact): Studi
 }
 
 function isStudioCellEnvironment(value: unknown): value is StudioCellEnvironment {
-  if (!isRecord(value) || !isRecord(value['network']) || !isRecord(value['scheme']) || !isRecord(value['viewport'])) {
+  if (
+    !Json.isRecord(value) || !Json.isRecord(value['network']) || !Json.isRecord(value['scheme'])
+    || !Json.isRecord(value['viewport'])
+  ) {
     return false
   }
   const network = value['network']
@@ -1539,7 +1543,7 @@ function isStudioCellEnvironment(value: unknown): value is StudioCellEnvironment
   return Number.isSafeInteger(network['latencyMs'])
     && Number(network['latencyMs']) >= 0
     && (outcome === 'error' || outcome === 'normal' || outcome === 'offline')
-    && (outcome === 'error' ? isRecord(error) && typeof error['message'] === 'string' : error === undefined)
+    && (outcome === 'error' ? Json.isRecord(error) && typeof error['message'] === 'string' : error === undefined)
     && isStudioSchemeEnvironment(scheme)
     && typeof viewport['width'] === 'number'
     && Number.isFinite(viewport['width'])
@@ -1551,7 +1555,7 @@ function isStudioCellEnvironment(value: unknown): value is StudioCellEnvironment
 }
 
 function isStudioSchemeEnvironment(value: unknown): value is StudioCellEnvironment['scheme'] {
-  if (!isRecord(value)) {
+  if (!Json.isRecord(value)) {
     return false
   }
   const capability = value['capability']
@@ -1567,10 +1571,6 @@ function isStudioSchemeEnvironment(value: unknown): value is StudioCellEnvironme
     && !(source === 'scenario' && requested === 'system')
     && !(source === 'native-fixed' && capability !== 'fixed-light-native')
     && !(capability === 'fixed-light-native' && (resolved !== 'light' || source !== 'native-fixed'))
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function showRuntimeFailure(
@@ -1605,7 +1605,7 @@ function showRuntimeFailure(
     void openSource().catch(error => {
       source.disabled = false
       status.dataset['state'] = 'error'
-      status.textContent = error instanceof Error ? error.message : String(error)
+      status.textContent = Errors.messageOf(error)
     })
   })
   actions.append(source, status)
@@ -1840,13 +1840,13 @@ export function requestRuntimeCapture(
 }
 
 function runtimeDataEntryTables(value: StudioJsonValue): readonly StudioRuntimeDataTable[] {
-  if (!isRecord(value) || typeof value['key'] !== 'string' || typeof value['snapshot'] !== 'string') {
+  if (!Json.isRecord(value) || typeof value['key'] !== 'string' || typeof value['snapshot'] !== 'string') {
     return []
   }
   const key = value['key']
   try {
     const snapshot = JSON.parse(value['snapshot']) as unknown
-    if (!isRecord(snapshot) || !isRecord(snapshot['rows'])) {
+    if (!Json.isRecord(snapshot) || !Json.isRecord(snapshot['rows'])) {
       return []
     }
     return Object.entries(snapshot['rows']).flatMap(([entity, rows]) =>
@@ -1860,7 +1860,7 @@ function runtimeDataEntryTables(value: StudioJsonValue): readonly StudioRuntimeD
 }
 
 function isStudioJsonObject(value: unknown): value is StudioJsonObject {
-  return isRecord(value) && Object.values(value).every(isStudioJsonValue)
+  return Json.isRecord(value) && Object.values(value).every(isStudioJsonValue)
 }
 
 function isStudioJsonValue(value: unknown): value is StudioJsonValue {
@@ -2094,15 +2094,4 @@ export async function refreshCellPreviews(
     preview.refresh = (preview.refresh ?? Promise.resolve()).catch(() => {}).then(refresh)
     await preview.refresh
   }))
-}
-
-function cellIdentity(manifest: StudioPreviewManifestV2, cell: StudioPreviewCell): StudioCellIdentity {
-  return {
-    appName: manifest.project.appName,
-    cellId: cell.cellId,
-    cellRevision: cell.cellRevision,
-    compileRevision: manifest.compileRevision,
-    manifestRevision: manifest.manifestRevision,
-    project: manifest.project.root,
-  }
 }

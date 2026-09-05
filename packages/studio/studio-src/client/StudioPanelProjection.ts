@@ -29,7 +29,7 @@ export type StudioPanelAction = Readonly<{
   payload: string
 }>
 
-export type StudioPanelSourceIdentity = Readonly<{
+type StudioPanelSourceIdentity = Readonly<{
   end?: number
   path: string
   range?: StudioCompileDiagnostic['range']
@@ -44,7 +44,7 @@ export type StudioProblemPanelRow = Readonly<{
   source?: StudioPanelSourceIdentity
 }>
 
-export type StudioCompilePanelModel = Readonly<{
+type StudioCompilePanelModel = Readonly<{
   appliedRevision: number
   compileRevision: number
   diagnosticCount: number
@@ -53,11 +53,11 @@ export type StudioCompilePanelModel = Readonly<{
   status: StudioCompileState['status']
 }>
 
-export type StudioProblemsPanelModel = Readonly<{
+type StudioProblemsPanelModel = Readonly<{
   rows: readonly StudioProblemPanelRow[]
 }>
 
-export type StudioDataPanelTable = Readonly<{
+type StudioDataPanelTable = Readonly<{
   datasource: string
   entity: string
   retainedRowCount: number
@@ -65,7 +65,7 @@ export type StudioDataPanelTable = Readonly<{
   totalRowCount: number
 }>
 
-export type StudioDataPanelModel = Readonly<{
+type StudioDataPanelModel = Readonly<{
   captureAction: StudioPanelAction
   error?: string
   loading: boolean
@@ -74,7 +74,7 @@ export type StudioDataPanelModel = Readonly<{
   tables: readonly StudioDataPanelTable[]
 }>
 
-export type StudioTestFailurePanelRow = Readonly<{
+type StudioTestFailurePanelRow = Readonly<{
   action: StudioPanelAction
   detail: string
   label: string
@@ -98,13 +98,13 @@ export type StudioTestsPanelModel = Readonly<{
   watchAction: StudioPanelAction
 }>
 
-export type StudioLogPanelRow = Readonly<{
+type StudioLogPanelRow = Readonly<{
   arguments: readonly StudioJsonValue[]
   level: StudioRuntimeLog['level']
   timestamp: number
 }>
 
-export type StudioLogsPanelModel = Readonly<{
+type StudioLogsPanelModel = Readonly<{
   clearAction: StudioPanelAction
   retainedCount: number
   rows: readonly StudioLogPanelRow[]
@@ -112,7 +112,7 @@ export type StudioLogsPanelModel = Readonly<{
   totalCount: number
 }>
 
-export type StudioDrawerPanelModel = Readonly<{
+type StudioDrawerPanelModel = Readonly<{
   compile: StudioCompilePanelModel
   data: StudioDataPanelModel
   logs: StudioLogsPanelModel
@@ -121,7 +121,7 @@ export type StudioDrawerPanelModel = Readonly<{
   tests: StudioTestsPanelModel
 }>
 
-export type StudioSearchPanelRow = Readonly<{
+type StudioSearchPanelRow = Readonly<{
   action: StudioPanelAction
   detail: string
   kind: StudioSearchResult['kind']
@@ -129,7 +129,7 @@ export type StudioSearchPanelRow = Readonly<{
   source: StudioPanelSourceIdentity
 }>
 
-export type StudioSearchPanelModel = Readonly<{
+type StudioSearchPanelModel = Readonly<{
   rows: readonly StudioSearchPanelRow[]
 }>
 
@@ -140,7 +140,7 @@ export type StudioProductHostPanels = Readonly<{
 
 export type StudioTaoPanelAction = Readonly<{ Name: string; Payload: string }>
 
-export type StudioTaoProblemRow = Readonly<{
+type StudioTaoProblemRow = Readonly<{
   Action: StudioTaoPanelAction
   Actionable: boolean
   Column: number
@@ -152,7 +152,7 @@ export type StudioTaoProblemRow = Readonly<{
   SourceVersion: string
 }>
 
-export type StudioTaoDataTable = Readonly<{
+type StudioTaoDataTable = Readonly<{
   Datasource: string
   Entity: string
   RetainedRowCount: number
@@ -160,7 +160,7 @@ export type StudioTaoDataTable = Readonly<{
   TotalRowCount: number
 }>
 
-export type StudioTaoTestFailure = Readonly<{
+type StudioTaoTestFailure = Readonly<{
   Action: StudioTaoPanelAction
   Column: number
   Detail: string
@@ -170,7 +170,7 @@ export type StudioTaoTestFailure = Readonly<{
   Path: string
 }>
 
-export type StudioTaoLogRow = Readonly<{
+type StudioTaoLogRow = Readonly<{
   Level: string
   Message: string
   Timestamp: number

@@ -1,5 +1,5 @@
 import { Errors } from '@shared'
-import { Describe, Expect, Test, until } from '@shared/test'
+import { Deferred, Describe, Expect, Test, until } from '@shared/test'
 import {
   StudioCompileCoordinator,
   type StudioCompileRequest,
@@ -12,7 +12,7 @@ import {
 
 Describe('Studio compile coordinator', () => {
   Test('serializes compiles and coalesces signals received while compiling', async () => {
-    const gates: Array<ReturnType<typeof deferred<void>>> = []
+    const gates: Array<ReturnType<typeof Deferred<void>>> = []
     const requests: StudioCompileRequest[] = []
     let active = 0
     let maximumActive = 0
@@ -22,7 +22,7 @@ Describe('Studio compile coordinator', () => {
         requests.push(request)
         active += 1
         maximumActive = Math.max(maximumActive, active)
-        const gate = deferred<void>()
+        const gate = Deferred<void>()
         gates.push(gate)
         await gate.promise
         active -= 1
@@ -56,7 +56,7 @@ Describe('Studio compile coordinator', () => {
   })
 
   Test('acknowledges the exact filesystem echo of a Studio write without compiling twice', async () => {
-    const gate = deferred<void>()
+    const gate = Deferred<void>()
     const requests: StudioCompileRequest[] = []
     const coordinator = new StudioCompileCoordinator({
       appName: 'Garden',
@@ -179,7 +179,7 @@ Describe('Studio compile coordinator', () => {
   })
 
   Test('continues with a queued revision after a compile error', async () => {
-    const gate = deferred<void>()
+    const gate = Deferred<void>()
     const requests: StudioCompileRequest[] = []
     const coordinator = new StudioCompileCoordinator({
       appName: 'Garden',
@@ -268,18 +268,4 @@ function appliedMessage(previewInstanceId: string, revision: number): StudioPrev
     protocolVersion: studioProtocolVersion,
     type: 'preview-applied',
   }
-}
-
-function deferred<T>(): {
-  promise: Promise<T>
-  reject: (reason?: unknown) => void
-  resolve: (value: T) => void
-} {
-  let reject!: (reason?: unknown) => void
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    reject = promiseReject
-    resolve = promiseResolve
-  })
-  return { promise, reject, resolve }
 }

@@ -1,5 +1,5 @@
 import { AST, Langium, type ParseResult } from '@parser'
-import { Assert, Diagnostics, Errors, FS, Repo, TaoFiles } from '@shared'
+import { Assert, Diagnostics, Errors, FS, Json, Repo, TaoFiles } from '@shared'
 import SourceActions, {
   type StudioComponentKind,
   type StudioInsertCapturedFixturePatchRequest,
@@ -151,10 +151,6 @@ function studioDesignSource(node: AST.Node): { end: number; start: number } {
   const cst = node.$cstNode
   Assert.input(cst, 'Cannot inspect a structured design value without source coordinates.')
   return { end: cst.end, start: cst.offset }
-}
-
-export type StudioPreviewRegistration = {
-  previewInstanceId: string
 }
 
 export type StudioSourceActionResult = {
@@ -532,7 +528,7 @@ export class StudioProjectSession {
   }
 
   registerPreview(input: unknown): StudioCompileSnapshot {
-    if (!isRecord(input) || typeof input['previewInstanceId'] !== 'string') {
+    if (!Json.isRecord(input) || typeof input['previewInstanceId'] !== 'string') {
       Errors.throwUserInput('Expected a Studio preview instance id.')
     }
     this.setPreviewInstance(input['previewInstanceId'])
@@ -1609,7 +1605,7 @@ function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourceP
     && (action['appearance'] === undefined || action['appearance'] === 'dark' || action['appearance'] === 'light')
     && typeof action['scenarioGroupName'] === 'string'
     && typeof action['scenarioName'] === 'string'
-    && isRecord(action['arguments'])
+    && Json.isRecord(action['arguments'])
     && Object.values(action['arguments']).every(isStudioScenarioArgumentValue)
   ) {
     return {
@@ -1659,7 +1655,7 @@ function requireSourceActionPreconditions(
 }
 
 function isStudioStyleLandingScope(value: unknown): value is StudioStyleLandingScope {
-  if (!isRecord(value)) {
+  if (!Json.isRecord(value)) {
     return false
   }
   if (value['kind'] === 'element-inline') {
@@ -1677,16 +1673,16 @@ function isStudioStyleLandingScope(value: unknown): value is StudioStyleLandingS
 }
 
 function isCapturedFixturePlan(value: unknown): value is StudioInsertCapturedFixturePatchRequest['plan'] {
-  return isRecord(value)
+  return Json.isRecord(value)
     && Array.isArray(value['accounts'])
     && value['accounts'].every(account =>
-      isRecord(account)
+      Json.isRecord(account)
       && typeof account['name'] === 'string'
       && isFixtureFields(account['fields'])
     )
     && Array.isArray(value['creates'])
     && value['creates'].every(create =>
-      isRecord(create)
+      Json.isRecord(create)
       && typeof create['entity'] === 'string'
       && typeof create['name'] === 'string'
       && isFixtureFields(create['fields'])
@@ -1694,7 +1690,7 @@ function isCapturedFixturePlan(value: unknown): value is StudioInsertCapturedFix
 }
 
 function isFixtureFields(value: unknown): value is Readonly<Record<string, StudioScenarioArgumentValue>> {
-  return isRecord(value) && Object.values(value).every(isStudioScenarioArgumentValue)
+  return Json.isRecord(value) && Object.values(value).every(isStudioScenarioArgumentValue)
 }
 
 function sourceActionProposalDiff(path: string, before: string, after: string): string {
@@ -1735,19 +1731,15 @@ function isStudioScenarioArgumentValue(value: unknown): value is
   return typeof value === 'boolean'
     || typeof value === 'string'
     || typeof value === 'number' && Number.isFinite(value)
-    || isRecord(value) && value['kind'] === 'now'
-    || isRecord(value)
+    || Json.isRecord(value) && value['kind'] === 'now'
+    || Json.isRecord(value)
       && value['kind'] === 'fixture-reference'
       && typeof value['handle'] === 'string'
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 function cellIdentity(value: unknown): StudioCellIdentity {
   if (
-    !isRecord(value)
+    !Json.isRecord(value)
     || typeof value['appName'] !== 'string'
     || typeof value['cellId'] !== 'string'
     || !nonNegativeInteger(value['cellRevision'])
@@ -1769,7 +1761,7 @@ function cellIdentity(value: unknown): StudioCellIdentity {
 
 function cellInstanceIdentity(value: unknown): StudioCellInstanceIdentity {
   const identity = cellIdentity(value)
-  if (!isRecord(value) || typeof value['previewInstanceId'] !== 'string') {
+  if (!Json.isRecord(value) || typeof value['previewInstanceId'] !== 'string') {
     Errors.throwUserInput('Expected a Studio cell preview instance id.')
   }
   return { ...identity, previewInstanceId: value['previewInstanceId'] }
@@ -1777,7 +1769,7 @@ function cellInstanceIdentity(value: unknown): StudioCellInstanceIdentity {
 
 function cellReconfigureRequest(value: unknown): StudioCellReconfigureRequest {
   const identity = cellIdentity(value)
-  if (!isRecord(value)) {
+  if (!Json.isRecord(value)) {
     Errors.throwUserInput('Expected a Studio cell reconfiguration.')
   }
   const args = value['args']
@@ -1786,10 +1778,10 @@ function cellReconfigureRequest(value: unknown): StudioCellReconfigureRequest {
   const replay = rawReplay === undefined ? undefined : StudioProtocol.parseRuntimeCapture(rawReplay)
   const stateLayers = value['stateLayers']
   Assert.input(
-    args === undefined || isRecord(args) && isJsonValue(args),
+    args === undefined || Json.isRecord(args) && isJsonValue(args),
     'Studio cell arguments must be JSON data.',
   )
-  Assert.input(environment === undefined || isRecord(environment), 'Studio cell environment must be an object.')
+  Assert.input(environment === undefined || Json.isRecord(environment), 'Studio cell environment must be an object.')
   Assert.input(
     rawReplay === undefined || replay !== undefined,
     'Studio cell replay must be a valid runtime capture artifact.',
@@ -1817,7 +1809,7 @@ function isJsonValue(value: unknown): boolean {
   if (Array.isArray(value)) {
     return value.every(isJsonValue)
   }
-  return isRecord(value) && Object.values(value).every(isJsonValue)
+  return Json.isRecord(value) && Object.values(value).every(isJsonValue)
 }
 
 function nonNegativeInteger(value: unknown): value is number {

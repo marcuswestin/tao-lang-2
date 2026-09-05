@@ -1,5 +1,6 @@
 import type { GenerationDeclaration } from '@generation'
 import { Errors } from '@shared'
+import { cellIdentity, requireText, validateTaoSource, valueMatchesParameter } from './StudioPreviewCell'
 import type { StudioJsonObject, StudioJsonValue, StudioSourceRange } from './StudioProtocol'
 import { type StudioStateEntry, StudioStateLibrary } from './StudioStateLibrary'
 
@@ -41,7 +42,7 @@ export type StudioScenario = {
   subjectId: string
 }
 
-export type StudioFixture = {
+type StudioFixture = {
   fixtureId: string
   label: string
   plan: StudioJsonObject
@@ -136,7 +137,7 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
   }
   const subjects = uniqueBy(input.subjects, subject => subject.subjectId, 'Studio subject')
   for (const subject of subjects.values()) {
-    validateSource(subject.source, 'Studio subject source')
+    validateTaoSource(subject.source, 'Studio subject source')
     requireText(subject.kind === 'app' ? subject.appName : subject.viewName, `Studio ${subject.kind} name`)
   }
   for (const [subjectId, parameters] of Object.entries(input.parametersBySubject)) {
@@ -154,12 +155,12 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
   }
   const fixtures = uniqueBy(input.fixtures, fixture => fixture.fixtureId, 'Studio fixture')
   for (const fixture of fixtures.values()) {
-    validateSource(fixture.source, 'Studio fixture source')
+    validateTaoSource(fixture.source, 'Studio fixture source')
     requireText(fixture.label, 'Studio fixture label')
   }
   const scenarios = uniqueBy(input.scenarios, scenario => scenario.scenarioId, 'Studio scenario')
   for (const scenario of scenarios.values()) {
-    validateSource(scenario.source, 'Studio scenario source')
+    validateTaoSource(scenario.source, 'Studio scenario source')
     requireText(scenario.group, 'Studio scenario group')
     requireText(scenario.label, 'Studio scenario label')
     if (!fixtures.has(scenario.fixtureId)) {
@@ -188,17 +189,6 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
     requireText(version, `Studio source version for ${path}`)
   }
   return input
-}
-
-function cellIdentity(manifest: StudioPreviewManifestV2, cell: StudioPreviewCell): StudioCellIdentity {
-  return {
-    appName: manifest.project.appName,
-    cellId: cell.cellId,
-    cellRevision: cell.cellRevision,
-    compileRevision: manifest.compileRevision,
-    manifestRevision: manifest.manifestRevision,
-    project: manifest.project.root,
-  }
 }
 
 function validateArgs(manifest: StudioPreviewManifestV2, scenarioId: string, args: StudioJsonObject): void {
@@ -252,26 +242,6 @@ function validateParameter(parameter: StudioParameterSchema): void {
   }
 }
 
-function valueMatchesParameter(value: StudioJsonValue, parameter: StudioParameterSchema): boolean {
-  switch (parameter.type.kind) {
-    case 'boolean':
-      return typeof value === 'boolean'
-    case 'choice':
-      return parameter.type.values.some(candidate => Object.is(candidate, value))
-    case 'json':
-      return true
-    case 'number':
-      return typeof value === 'number'
-        && Number.isFinite(value)
-        && (parameter.type.minimum === undefined || value >= parameter.type.minimum)
-        && (parameter.type.maximum === undefined || value <= parameter.type.maximum)
-    case 'text':
-      return typeof value === 'string'
-    case 'time':
-      return typeof value === 'string'
-  }
-}
-
 function validateEnvironment(environment: StudioCellEnvironment): void {
   if (!positiveFinite(environment.viewport.width) || !positiveFinite(environment.viewport.height)) {
     throw new Errors.UserInputError('Studio viewport dimensions must be positive finite numbers.')
@@ -304,21 +274,6 @@ function validateScheme(scheme: StudioSchemeEnvironment): void {
   }
 }
 
-function validateSource(source: StudioTaoSource, label: string): void {
-  if (source.kind !== 'tao') {
-    throw new Errors.UserInputError(`${label} must be Tao source.`)
-  }
-  requireText(source.path, `${label} path`)
-  if (
-    !Number.isSafeInteger(source.range.start)
-    || !Number.isSafeInteger(source.range.end)
-    || source.range.start < 0
-    || source.range.end < source.range.start
-  ) {
-    throw new Errors.UserInputError(`${label} range is invalid.`)
-  }
-}
-
 function uniqueBy<Value>(
   values: readonly Value[],
   id: (value: Value) => string,
@@ -343,11 +298,4 @@ function requireRevision(value: number, label: string): void {
   if (!Number.isSafeInteger(value) || value < 0) {
     throw new Errors.UserInputError(`${label} is invalid.`)
   }
-}
-
-function requireText(value: string, label: string): string {
-  if (typeof value !== 'string' || value.trim() === '') {
-    throw new Errors.UserInputError(`${label} must not be empty.`)
-  }
-  return value
 }

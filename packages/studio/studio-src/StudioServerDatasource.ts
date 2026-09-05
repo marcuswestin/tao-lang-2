@@ -247,7 +247,7 @@ export class StudioServerDatasource {
 }
 
 /** Maps the session event stream to the query families a StudioServer mirror must refresh. */
-export function studioServerEntitiesForEvent(event: StudioSessionEvent): readonly StudioServerEntityName[] {
+function studioServerEntitiesForEvent(event: StudioSessionEvent): readonly StudioServerEntityName[] {
   return event.type === 'file-changed' || event.type === 'files-changed'
     ? ['Files', 'DesignTokens', 'Problems']
     : event.type === 'compile-state'

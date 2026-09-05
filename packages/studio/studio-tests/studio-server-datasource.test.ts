@@ -22,6 +22,7 @@ import {
   studioServerForeignActionContract,
   StudioServerForeignActions,
 } from '../studio-src/TaoStudioServerActions'
+import { cellEnvironment } from './test-studio-fixtures'
 
 Test('StudioServer datasource fills source-bound design and problem metadata without leaking contents', async () => {
   await withSession(async session => {
@@ -493,16 +494,7 @@ function manifest(session: StudioProjectSession): StudioPreviewManifestV2 {
       args: { Title: 'Empty' },
       cellId: `${scenarioId}#cell`,
       cellRevision: 0,
-      environment: {
-        network: { latencyMs: 0, outcome: 'normal' },
-        scheme: {
-          capability: 'reactive-browser' as const,
-          requested: 'system' as const,
-          resolved: 'light' as const,
-          source: 'system' as const,
-        },
-        viewport: { height: 844, width: 390 },
-      },
+      environment: cellEnvironment(),
       scenarioId,
       stateLayers: [],
     }],

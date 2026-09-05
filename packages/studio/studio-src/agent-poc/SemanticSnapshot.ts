@@ -7,7 +7,7 @@ import { ASTUtils } from '@ast-utils'
 import { AST, type ParsedFile } from '@parser'
 import { type Diagnostic, FS } from '@shared'
 
-export type SnapshotOrigin = 'compiler' | 'poc-derived'
+type SnapshotOrigin = 'compiler' | 'poc-derived'
 
 export type SnapshotNode = {
   id: string

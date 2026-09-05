@@ -18,6 +18,7 @@ import type { StudioDeviceStatus } from '../studio-src/device/StudioDeviceStatus
 import { StudioDeviceTrustStore } from '../studio-src/device/StudioDeviceTrustStore'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
 import { StudioProjectSession } from '../studio-src/StudioProjectSession'
+import { systemLightScheme } from './test-studio-fixtures'
 
 Describe('Studio device gateway handshake', () => {
   Test('rejects an unknown device while pairing is closed and lets it in once a window opens', async () => {
@@ -508,12 +509,7 @@ Describe('Studio device gateway sealed control plane', () => {
         compileRevision: 1,
         environment: {
           network: { latencyMs: 0, outcome: 'offline' as const },
-          scheme: {
-            capability: 'reactive-browser' as const,
-            requested: 'system' as const,
-            resolved: 'light' as const,
-            source: 'system' as const,
-          },
+          scheme: systemLightScheme(),
           viewport: { height: 844, width: 390 },
         },
         manifestRevision: 'manifest-1',
@@ -529,12 +525,7 @@ Describe('Studio device gateway sealed control plane', () => {
         compileRevision: 1,
         environment: {
           network: { latencyMs: 0, outcome: 'offline' as const },
-          scheme: {
-            capability: 'reactive-browser' as const,
-            requested: 'system' as const,
-            resolved: 'light' as const,
-            source: 'system' as const,
-          },
+          scheme: systemLightScheme(),
           viewport: { height: 844, width: 390 },
         },
         manifestRevision: 'manifest-1',
@@ -1036,12 +1027,7 @@ function manifestFor(
   const source = { kind: 'tao' as const, path: `${session.appName}.tao`, range: { end: 10, start: 0 } }
   const environment = (width: number, height: number) => ({
     network: { latencyMs: 0, outcome: 'normal' as const },
-    scheme: {
-      capability: 'reactive-browser' as const,
-      requested: 'system' as const,
-      resolved: 'light' as const,
-      source: 'system' as const,
-    },
+    scheme: systemLightScheme(),
     viewport: { height, width },
   })
   return {

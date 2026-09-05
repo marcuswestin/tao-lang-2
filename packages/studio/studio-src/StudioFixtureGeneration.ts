@@ -6,7 +6,7 @@ import {
   type GenerationProvider,
   type JsonObject,
 } from '@generation'
-import { Errors } from '@shared'
+import { Errors, Json } from '@shared'
 import type { StudioPreviewManifestV2 } from './StudioPreviewManifest'
 import type { StudioFixturePlan, StudioFixtureValue } from './StudioProtocol'
 
@@ -162,27 +162,27 @@ export class StudioFixtureGeneration {
 }
 
 function fixtureGenerationScenarioId(value: unknown): string {
-  if (!isRecord(value) || typeof value['scenarioId'] !== 'string' || value['scenarioId'].trim().length === 0) {
+  if (!Json.isRecord(value) || typeof value['scenarioId'] !== 'string' || value['scenarioId'].trim().length === 0) {
     throw new Errors.UserInputError('Expected a Studio scenario id for fixture generation.')
   }
   return value['scenarioId']
 }
 
 function studioFixturePlan(value: unknown): StudioFixturePlan {
-  if (!isRecord(value) || !Array.isArray(value['accounts']) || !Array.isArray(value['creates'])) {
+  if (!Json.isRecord(value) || !Array.isArray(value['accounts']) || !Array.isArray(value['creates'])) {
     throw new Errors.UserInputError('The Studio scenario fixture plan is not available for generation.')
   }
   const accounts = value['accounts'].map((account, index) => {
-    if (!isRecord(account) || typeof account['name'] !== 'string' || !isRecord(account['fields'])) {
+    if (!Json.isRecord(account) || typeof account['name'] !== 'string' || !Json.isRecord(account['fields'])) {
       throw new Errors.UserInputError(`Studio fixture account ${index + 1} is invalid.`)
     }
     return { fields: studioFixtureFields(account['fields'], `account ${account['name']}`), name: account['name'] }
   })
   const creates = value['creates'].map((create, index) => {
     if (
-      !isRecord(create)
+      !Json.isRecord(create)
       || typeof create['entity'] !== 'string'
-      || !isRecord(create['fields'])
+      || !Json.isRecord(create['fields'])
       || typeof create['name'] !== 'string'
     ) {
       throw new Errors.UserInputError(`Studio fixture row ${index + 1} is invalid.`)
@@ -218,11 +218,11 @@ function failed(code: GenerationFailure['code'], error: string): StudioFixtureGe
 }
 
 function unsupportedFixtureClause(value: unknown): string | undefined {
-  if (!isRecord(value) || !Array.isArray(value['creates'])) {
+  if (!Json.isRecord(value) || !Array.isArray(value['creates'])) {
     return undefined
   }
   for (const create of value['creates']) {
-    if (!isRecord(create)) {
+    if (!Json.isRecord(create)) {
       continue
     }
     const row = typeof create['name'] === 'string' ? create['name'] : 'an unnamed row'
@@ -243,13 +243,9 @@ async function consume(values: AsyncIterable<unknown>): Promise<void> {
 }
 
 function isFixtureReference(value: unknown): value is { handle: string; kind: 'fixture-reference' } {
-  return isRecord(value) && value['kind'] === 'fixture-reference' && typeof value['handle'] === 'string'
+  return Json.isRecord(value) && value['kind'] === 'fixture-reference' && typeof value['handle'] === 'string'
 }
 
 function isNow(value: unknown): value is { kind: 'now' } {
-  return isRecord(value) && value['kind'] === 'now'
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return Json.isRecord(value) && value['kind'] === 'now'
 }

@@ -3,7 +3,7 @@ import { Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import type { StudioDeviceLaunchInfo, StudioDeviceLaunchOpenResult } from '../device/StudioDeviceLauncher'
 import type { StudioDeviceStateEvent, StudioDeviceStatus } from '../device/StudioDeviceStatus'
-import type { StudioCompileCompletion } from '../StudioCompileCoordinator'
+import type { StudioCompileDiagnostic } from '../StudioCompileCoordinator'
 import type { StudioDraftFile, StudioDraftSyncRequest, StudioDraftSyncResult } from '../StudioDraftSync'
 import type { StudioLanguageHighlight } from '../StudioHighlight'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../StudioPreviewManifest'
@@ -15,15 +15,14 @@ import type {
   StudioDeleteFileResult,
   StudioRenameFileRequest,
   StudioRenameFileResult,
+  StudioSourceActionProposal,
+  StudioSourceActionResult,
+  StudioSourceActionUndoResult,
 } from '../StudioProjectSession'
 import type { StudioFixturePlan, StudioSourceActionEnvelope } from '../StudioProtocol'
 import type { StudioTestRun, StudioTestStatus } from '../StudioTestRunner'
 
-export type StudioCompileDiagnostic = {
-  filePath?: string
-  message: string
-  range?: StudioDiagnosticRange
-}
+export type { StudioCompileDiagnostic, StudioDiagnosticRange } from '../StudioCompileCoordinator'
 
 export type StudioCompileState = {
   appliedRevision: number
@@ -31,11 +30,6 @@ export type StudioCompileState = {
   diagnostics?: readonly StudioCompileDiagnostic[]
   message: string
   status: 'idle' | 'compiling' | 'compiled' | 'error'
-}
-
-export type StudioDiagnosticRange = {
-  end: { character: number; line: number }
-  start: { character: number; line: number }
 }
 
 export type StudioFile = {
@@ -83,32 +77,6 @@ export type StudioBetaShipResult = {
 export type StudioGeneratedFixtureResult =
   | { fixture: StudioFixturePlan; status: 'ready' }
   | { code: string; error: string; issues?: readonly string[]; status: 'failed' }
-
-export type StudioSourceActionResult = {
-  checkpoint: { id: string; status: 'committed' | 'open' }
-  compile: StudioCompileCompletion
-  content: string
-  path: string
-  sourceVersion: string
-}
-
-export type StudioSourceActionProposal = {
-  content: string
-  diff: string
-  edits: readonly { end: number; replacement: string; start: number }[]
-  path: string
-  proposedSourceVersion: string
-  requestId: string
-  sourceVersion: string
-}
-
-export type StudioSourceActionUndoResult = {
-  checkpoint: { id: string; status: 'undone' }
-  compile: StudioCompileCompletion
-  content: string
-  path: string
-  sourceVersion: string
-}
 
 export type StudioApiEventHandlers = {
   onConnect?: () => void

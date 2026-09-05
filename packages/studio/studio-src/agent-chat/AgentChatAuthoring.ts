@@ -1,3 +1,4 @@
+import { Text } from '@shared/core'
 // Studio agent chat: describing a state you want to develop against, and pinning behavior with a check.
 //
 // Both are ordinary Tao source, so both go through the same propose-then-apply path as any other change. What
@@ -9,20 +10,10 @@
 import Formatter from '@formatter'
 import { jsonSchema, tool, type ToolSet } from 'ai'
 import { resolveTarget } from '../agent-poc/SemanticSnapshot'
+import { LIST, objectSchema, refusal, TEXT } from './AgentChatSchema'
 import { requireOnly } from './AgentChatScope'
 import type { AgentChatToolCall } from './AgentChatTools'
 import type { AgentChatWriteWorld } from './AgentChatWrites'
-
-function refusal(message: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
-  return { refused: message, ...extra }
-}
-
-function objectSchema<Input>(properties: Record<string, unknown>, required: readonly string[]) {
-  return jsonSchema<Input>({ additionalProperties: false, properties, required: [...required], type: 'object' })
-}
-
-const TEXT = (description: string) => ({ description, type: 'string' })
-const LIST = (description: string) => ({ description, items: { type: 'string' }, type: 'array' })
 
 export type CodeChangeRequest = { reason: string; missing: string }
 
@@ -184,7 +175,7 @@ export function authoringTools(
         const before = file.content
         // The end of the named suite, not the end of the file: a file with two suites would otherwise take
         // every new check into the last one, whichever was asked for.
-        const header = new RegExp(`^test\\s+"${suite.replace(/[.*+?^$()|[\]\\]/g, '\\$&')}"\\s*\\{`, 'm')
+        const header = new RegExp(`^test\\s+"${Text.escapeRegExp(suite)}"\\s*\\{`, 'm')
         const opens = header.exec(before)
         if (opens === null) {
           return capture(

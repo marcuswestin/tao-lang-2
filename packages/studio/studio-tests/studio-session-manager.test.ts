@@ -1,5 +1,5 @@
 import { Errors } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Deferred, Describe, Expect, Test } from '@shared/test'
 import type { StudioProjectSession } from '../studio-src/StudioProjectSession'
 import { StudioSessionManager, type StudioSessionResource } from '../studio-src/StudioSessionManager'
 import { StudioWelcome } from '../studio-src/StudioWelcome'
@@ -172,7 +172,7 @@ Describe('Studio session manager', () => {
   })
 
   Test('reports closing ownership and joins concurrent close attempts', async () => {
-    const cleanup = deferred<void>()
+    const cleanup = Deferred<void>()
     let attempts = 0
     const manager = new StudioSessionManager({ createSessionId: () => 'closing_window' })
     const opened = manager.add({
@@ -271,12 +271,4 @@ function resource(projectRoot: string, appName: string, closed: string[]): Studi
 function clock(...values: string[]): () => Date {
   let index = 0
   return () => new Date(values[Math.min(index++, values.length - 1)]!)
-}
-
-function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>(promiseResolve => {
-    resolve = promiseResolve
-  })
-  return { promise, resolve }
 }

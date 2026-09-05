@@ -54,7 +54,7 @@ import {
 } from './StudioProductHostProtocol'
 import type { StudioJsonObject, StudioJsonValue } from './StudioProtocol'
 
-export type TaoStudioProductHostProps = Readonly<{
+type TaoStudioProductHostProps = Readonly<{
   children?: React.ReactNode
   Layout?: Readonly<{ style?: React.CSSProperties }>
   Slots?: Readonly<Record<string, React.ReactNode>>
@@ -154,7 +154,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       if (!unmounted) {
         const alert = document.createElement('p')
         alert.role = 'alert'
-        alert.textContent = error instanceof Error ? error.message : String(error)
+        alert.textContent = Errors.messageOf(error)
         root.replaceChildren(alert)
       }
     }
@@ -340,7 +340,7 @@ export function StudioContextPanelSurface(
   )
 }
 
-export type StudioContextSummaryProps =
+type StudioContextSummaryProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     CellId: string
@@ -381,7 +381,7 @@ export function StudioContextSummary(props: StudioContextSummaryProps): React.Re
   )
 }
 
-export type StudioScenarioControlGroupProps =
+type StudioScenarioControlGroupProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     Title: string
@@ -405,7 +405,7 @@ export function StudioScenarioControlGroup(
   )
 }
 
-export type StudioNumericInputProps =
+type StudioNumericInputProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     Change: TaoStudioHostNumberAction
@@ -638,7 +638,7 @@ export function StudioPaletteRow(props: StudioPaletteRowProps): React.ReactEleme
   )
 }
 
-export type StudioSourceRowProps =
+type StudioSourceRowProps =
   & TaoStudioHostVisualProps
   & Readonly<{
     Detail: string
@@ -1424,9 +1424,9 @@ export function StudioFailureCaptureInput(
                 setStatus('')
                 return props.Replay.invoke(TR.Value(text))
               } catch (error) {
-                setStatus(error instanceof Error ? error.message : String(error))
+                setStatus(Errors.messageOf(error))
               }
-            }, error => setStatus(error instanceof Error ? error.message : String(error)))
+            }, error => setStatus(Errors.messageOf(error)))
           }
         }}
         type="file"

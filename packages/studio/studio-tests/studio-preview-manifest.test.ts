@@ -3,6 +3,7 @@ import {
   StudioPreviewManifest,
   type StudioPreviewManifestV2,
 } from '../studio-src/StudioPreviewManifest'
+import { systemLightScheme } from './test-studio-fixtures'
 
 Describe('Studio preview manifest', () => {
   Test('defines typed view and app scenarios with explicit isolated cells', () => {
@@ -15,12 +16,7 @@ Describe('Studio preview manifest', () => {
     Expect(defined.cells.map(cell => cell.cellId)).toEqual(['card-phone', 'app-desktop'])
     Expect(defined.cells[0]?.environment).toEqual({
       network: { latencyMs: 120, outcome: 'normal' },
-      scheme: {
-        capability: 'reactive-browser' as const,
-        requested: 'system' as const,
-        resolved: 'light' as const,
-        source: 'system' as const,
-      },
+      scheme: systemLightScheme(),
       viewport: { height: 844, presetId: 'phone', width: 390 },
     })
     Expect(StudioPreviewManifest.cellIdentity(defined, defined.cells[0]!)).toEqual({
@@ -82,12 +78,7 @@ function fixture(): StudioPreviewManifestV2 & { cells: Array<StudioPreviewManife
         cellRevision: 0,
         environment: {
           network: { latencyMs: 120, outcome: 'normal' },
-          scheme: {
-            capability: 'reactive-browser' as const,
-            requested: 'system' as const,
-            resolved: 'light' as const,
-            source: 'system' as const,
-          },
+          scheme: systemLightScheme(),
           viewport: { height: 844, presetId: 'phone', width: 390 },
         },
         scenarioId: 'card-default',

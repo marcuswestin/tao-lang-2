@@ -1,3 +1,5 @@
+import { Json } from '@shared/core'
+import { valueMatchesParameter } from '../StudioPreviewCell'
 import type {
   StudioCellEnvironment,
   StudioCellIdentity,
@@ -51,7 +53,7 @@ export type StudioScenarioDraft = Readonly<{
   viewport: StudioCellEnvironment['viewport']
 }>
 
-export type StudioScenarioFixtureCapture = Readonly<{
+type StudioScenarioFixtureCapture = Readonly<{
   fixtureName: string
   identity: StudioSourceActionIdentity
   request: Readonly<{
@@ -169,7 +171,7 @@ function validateArguments(
       if (parameter.required && parameter.defaultValue === undefined) {
         issues.push(`${parameter.label} is required.`)
       }
-    } else if (!matchesParameter(value, parameter)) {
+    } else if (!valueMatchesParameter(value, parameter)) {
       issues.push(`${parameter.label} does not match ${parameter.type.kind}.`)
     }
   }
@@ -251,27 +253,8 @@ function replay(
   return capture === undefined ? invalid('This is not a supported Tao runtime capture.') : valid(capture)
 }
 
-function matchesParameter(value: StudioJsonValue, parameter: StudioParameterSchema): boolean {
-  switch (parameter.type.kind) {
-    case 'boolean':
-      return typeof value === 'boolean'
-    case 'choice':
-      return parameter.type.values.some(candidate => Object.is(candidate, value))
-    case 'json':
-      return true
-    case 'number':
-      return typeof value === 'number'
-        && Number.isFinite(value)
-        && (parameter.type.minimum === undefined || value >= parameter.type.minimum)
-        && (parameter.type.maximum === undefined || value <= parameter.type.maximum)
-    case 'text':
-    case 'time':
-      return typeof value === 'string'
-  }
-}
-
 function isViewport(value: unknown): value is StudioCellEnvironment['viewport'] {
-  return isRecord(value)
+  return Json.isRecord(value)
     && typeof value['width'] === 'number'
     && Number.isFinite(value['width'])
     && value['width'] > 0
@@ -282,7 +265,7 @@ function isViewport(value: unknown): value is StudioCellEnvironment['viewport'] 
 }
 
 function isNetwork(value: unknown): value is StudioCellEnvironment['network'] {
-  if (!isRecord(value) || !Number.isSafeInteger(value['latencyMs']) || Number(value['latencyMs']) < 0) {
+  if (!Json.isRecord(value) || !Number.isSafeInteger(value['latencyMs']) || Number(value['latencyMs']) < 0) {
     return false
   }
   const outcome = value['outcome']
@@ -290,14 +273,14 @@ function isNetwork(value: unknown): value is StudioCellEnvironment['network'] {
   return (outcome === 'normal' || outcome === 'offline')
     ? error === undefined
     : outcome === 'error'
-      && isRecord(error)
+      && Json.isRecord(error)
       && typeof error['message'] === 'string'
       && (error['code'] === undefined || typeof error['code'] === 'string')
       && (error['status'] === undefined || Number.isSafeInteger(error['status']))
 }
 
 function isJsonObject(value: unknown): value is StudioJsonObject {
-  return isRecord(value) && Object.values(value).every(isJsonValue)
+  return Json.isRecord(value) && Object.values(value).every(isJsonValue)
 }
 
 function isJsonValue(value: unknown): value is StudioJsonValue {
@@ -307,10 +290,6 @@ function isJsonValue(value: unknown): value is StudioJsonValue {
     || typeof value === 'number' && Number.isFinite(value)
     || Array.isArray(value) && value.every(isJsonValue)
     || isJsonObject(value)
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function valid<Value>(value: Value): StudioScenarioResult<Value> {

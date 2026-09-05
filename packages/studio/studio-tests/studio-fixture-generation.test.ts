@@ -2,6 +2,7 @@ import { type GenerationDeclaration, ScriptedGenerationProvider } from '@generat
 import { Describe, Expect, Test } from '@shared/test'
 import { StudioFixtureGeneration } from '../studio-src/StudioFixtureGeneration'
 import type { StudioPreviewManifestV2 } from '../studio-src/StudioPreviewManifest'
+import { cellEnvironment } from './test-studio-fixtures'
 
 Describe('Studio fixture generation', () => {
   Test('reports injected provider availability without browser-side model access', async () => {
@@ -175,16 +176,7 @@ function manifest(): StudioPreviewManifestV2 {
       args: {},
       cellId: 'Workspace.focused#cell',
       cellRevision: 0,
-      environment: {
-        network: { latencyMs: 0, outcome: 'normal' },
-        scheme: {
-          capability: 'reactive-browser' as const,
-          requested: 'system' as const,
-          resolved: 'light' as const,
-          source: 'system' as const,
-        },
-        viewport: { height: 844, width: 390 },
-      },
+      environment: cellEnvironment(),
       scenarioId: 'Workspace.focused',
       stateLayers: [],
     }],
