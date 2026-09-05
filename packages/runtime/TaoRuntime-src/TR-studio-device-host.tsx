@@ -1235,7 +1235,6 @@ function DeviceInspectOverlay(props: {
     selected === undefined ? null : React.createElement(
       RN.View,
       {
-        pointerEvents: 'none',
         style: {
           ...inspectHighlightStyle,
           height: selected.hit.rect.height,
@@ -1249,7 +1248,7 @@ function DeviceInspectOverlay(props: {
     ),
     React.createElement(
       RN.Text,
-      { pointerEvents: 'none', style: { ...inspectHintStyle, top: 12 + insets.top } },
+      { style: { ...inspectHintStyle, top: 12 + insets.top } },
       props.outcome !== undefined
         ? props.outcome
         : selected !== undefined
@@ -1273,7 +1272,6 @@ function DeviceRemoteHighlight(props: { rects: readonly StudioInspectRect[] }): 
     ...props.rects.map((rect, index) =>
       React.createElement(RN.View, {
         key: `${rect.x}:${rect.y}:${index}`,
-        pointerEvents: 'none',
         style: {
           ...inspectRemoteHighlightStyle,
           height: rect.height,
@@ -1722,6 +1720,7 @@ const inspectHighlightStyle = {
   borderColor: '#2563eb',
   borderRadius: 4,
   borderWidth: 2,
+  pointerEvents: 'none',
   position: 'absolute',
   zIndex: 9500,
 } as const
@@ -1731,6 +1730,7 @@ const inspectRemoteHighlightStyle = {
   borderRadius: 4,
   borderStyle: 'dashed',
   borderWidth: 2,
+  pointerEvents: 'none',
   position: 'absolute',
   zIndex: 9500,
 } as const
@@ -1757,6 +1757,7 @@ const inspectHintStyle = {
   overflow: 'hidden',
   paddingHorizontal: 10,
   paddingVertical: 6,
+  pointerEvents: 'none',
   position: 'absolute',
   right: 12,
   textAlign: 'center',

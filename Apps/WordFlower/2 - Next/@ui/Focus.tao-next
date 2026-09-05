@@ -1,54 +1,27 @@
+use FocusSessions from @data
+use primary from @tao/keys
 use Interval from @tao/time
-use Col, Text from @tao/ui
+use Col, Row, Text from @tao/ui
 use FormButton from @tao/ui/basic
 
 // A focused writing session: pick a length, write until the clock runs out, pause and resume, or
-// stop early. The clock is a library value — `Interval` ticks every second from mount to unmount —
-// and `Left` is an ordinary derivation that recomputes on every tick.
+// stop early. The session is a row in the device-local store rather than state in one view, which
+// is what lets the editor start it and the shell count it down.
+//
+// Starting is an editor affordance -- you choose a length where you are about to write -- so this
+// view creates the row and nothing else.
 folder
-view FocusSession() {
-   state Tick = Interval(1.s)
-   state EndsAt = now
-   state Focusing = false
-   let Left = EndsAt - Tick.Value
+view FocusStarter() {
+   query FocusSessions as CurrentSession {
+      limit 1
+   }
    action Start(Length duration) {
-      set EndsAt = now + Length
-      set Focusing = true
-      do Tick.Start()
-   }
-   // Pausing stops the tick, which freezes `Left`; resuming re-anchors the deadline to the frozen
-   // remainder, so paused time is not lost.
-   action Pause() {
-      do Tick.Stop()
-   }
-   action Resume() {
-      set EndsAt = now + Left
-      do Tick.Start()
-   }
-   action Finish() {
-      set Focusing = false
-   }
+      create FocusSession {
+         EndsAt: now + Length
+   }  }
    render Col() [subtlePanel] {
-      when Focusing {
-         true -> {
-            Text(when Left > 0 Left.Clock / not "Time's up") [title]
-            when Tick.Running {
-               true -> {
-                  #pauseFocus
-                  FormButton("Pause") {
-                     on press Pause
-               }  }
-               otherwise -> {
-                  #resumeFocus
-                  FormButton("Resume") {
-                     on press Resume
-            }  }  }
-
-            #stopFocus
-            FormButton("Stop") [buttonDanger] {
-               on press Finish
-         }  }
-         otherwise -> {
+      when CurrentSession {
+         empty -> {
             Text("Focused writing") [sectionTitle]
 
             #focusFive
@@ -59,4 +32,63 @@ view FocusSession() {
             #focusTwentyFive
             FormButton("Focus for 25 min") {
                on press -> { do Start(25.min) }
-}  }  }  }  }
+         }  }
+         otherwise -> { Text("A session is running") [caption] }
+}  }  }
+
+// The focus bar: the running session, wherever you are. The shell lays it out beside the navigator,
+// and it reads the session from the store rather than from a parent view, which is what lets it
+// stay visible while the writing happens three navigation levels deeper. `EndsAt` is absolute, so a
+// running session survives relaunch; pausing freezes the reading by recording when it stopped, and
+// resuming re-anchors the deadline to the remainder, so paused time is not lost.
+folder
+view FocusBar() {
+   query FocusSessions as CurrentSession {
+      limit 1
+   }
+   state Tick = Interval(1.s)
+   render Row() [subtlePanel, gap 12, border accent when FocusBar is active] {
+      Text("Focus session") [eyebrow]
+      loop CurrentSession / FocusSession {
+         let Left = when FocusSession.Paused {
+            true -> FocusSession.EndsAt - FocusSession.PausedAt
+            otherwise -> FocusSession.EndsAt - Tick.Value
+         }
+         Text(when Left > 0 Left.Clock / not "Time's up") [title]
+         FocusSessionControls(FocusSession)
+}  }  }
+
+// This child is mounted for the one running row, so its command closes over that session while its
+// nearest presented occurrence is the shell. The modifier chord therefore works from the editor
+// without making the focus session an app-wide singleton or teaching product code about focus.
+view FocusSessionControls(FocusSession) {
+   command PauseFocus() {
+      Title "Pause focus session"
+      Key primary + "p"
+      Enabled FocusSession.Paused is Running
+      do -> { update FocusSession {
+         PausedAt: now
+         Paused
+      } }
+   }
+   Commands { PauseFocus }
+   render Row() [gap 12] {
+      when FocusSession.Paused {
+         true -> {
+            #resumeFocus
+            FormButton("Resume") {
+               on press -> { update FocusSession {
+                  EndsAt: now + (FocusSession.EndsAt - FocusSession.PausedAt)
+                  Running
+               } }
+         }  }
+         otherwise -> {
+            #pauseFocus
+            FormButton("Pause") {
+               on press -> { do PauseFocus() }
+      }  }  }
+
+      #stopFocus
+      FormButton("Stop") [buttonDanger] {
+         on press -> { delete FocusSession }
+}  }  }

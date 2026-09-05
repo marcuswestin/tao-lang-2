@@ -15,9 +15,15 @@ entry TestsGrammarEntrypoint:
 TestDeclaration:
     visibility=DeclarationVisibility? 'test'
     (dependencies+=[Declaration:ID] (',' dependencies+=[Declaration:ID])*)?
-    name=STRING? block=Block;
+    name=STRING? block=TestBlock;
 
-type CheckStep = RunStep | PressTextStep | TagPressStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep;
+// Test blocks use the broad diagnostic statement family but deliberately exclude a declaration
+// slot fill. That is what lets the ID-headed `narrow "..."` seam remain spelling-validated without
+// becoming grammatically indistinguishable from `Title "..."` in an ordinary view body.
+TestBlock returns Block:
+    '{' statements+=(AppBlockDiagnosticStatement | NarrowStep)* '}';
+
+type CheckStep = RunStep | PressTextStep | TagPressStep | PressKeyStep | NarrowStep | ExpectTextStep | ExpectCheckboxStateStep | ExpectInputValueStep | TagInputValueExpectation | ExpectGroupStep | ExpectScopeStep | ExpectInteractionStep | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | BackTestStep | RelaunchStep | AdvanceStep | ExpectNavigationTitleStep | ExpectToolbarCommandStep | PressToolbarCommandStep;
 
 RunStep:
     'run' app=[AppValueDeclaration:ID];
@@ -27,6 +33,14 @@ PressTextStep:
 
 TagPressStep:
     'press' tag=TagOrHexColor;
+
+// Interaction vocabulary stays ID-headed and spelling-validated. `key`, `narrow`, `target`,
+// `focus`, `region`, and `verbs` therefore remain available as ordinary names elsewhere.
+PressKeyStep:
+    'press' subject=ID value=STRING;
+
+NarrowStep:
+    head=ID value=STRING;
 
 PressToolbarCommandStep:
     'press' surface=ID 'command' value=Expression;
@@ -55,6 +69,11 @@ ExpectGroupStep:
 ExpectScopeStep:
     'expect' tag=TagOrHexColor block=TestExpectationBlock;
 
+// One rule owns `expect target`, `expect focus region`, and `expect verbs`. Target and a one-verb
+// expectation have the same token shape, so their distinct meaning is validated from `subject`.
+ExpectInteractionStep:
+    'expect' subject=ID detail=ID? values+=STRING (',' values+=STRING)*;
+
 TestExpectationBlock:
     '{' expectations+=TestExpectation* '}';
 
@@ -75,7 +94,7 @@ TagSubmitStep:
     'submit' tag=TagOrHexColor;
 
 SelectStep:
-    'select' tag=TagOrHexColor '[' index=NUMBER ']' block=Block;
+    'select' tag=TagOrHexColor '[' index=NUMBER ']' block=TestBlock;
 
 BackTestStep:
     {infer BackTestStep} 'back';

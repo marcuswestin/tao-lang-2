@@ -78,7 +78,7 @@ app Wayfare {
    Permissions WayfarePermissions
    // Trips are browsable signed out (the library shows the sign-in panel); a link into a private trip waits
    // for the account. So the root is one navigator, and `Me` is guarded where it matters.
-   Navigator WayfareNavigator
+   view WayfareNavigator
    Language Me.Language
    Restore automatic { Exclude sheets, menus, toasts }
 
@@ -126,20 +126,20 @@ app WayfarePreview = Wayfare with {
 
 // -- Settings ------------------------------------------------------------------------------------------
 
-view SettingsScreen() {
+scene SettingsScreen() {
    Title "Settings"
 
-   action DeleteAccountIntent() runs single {
-      Title "Delete my account"
+   action ConfirmDeleteAccount() runs single {
       // Visibility follows the signed-in account. The delete effect and explicit confirmation carry
-      // the destructive intent; commands have no separate `Intent destructive` marker.
+      // destructive behavior; commands need no separate role marker.
       stop unless ask Confirm("Delete your account?", Body: "Trips stay with the people on them; your private documents go with you. This cannot be undone.", Verb: "Delete account")
       do DeleteMyAccount() // a sole owner is refused with the trip's own sentence
    }
-   command DeleteAccount = DeleteAccountIntent() with {
-      Label "Delete my account"
+   command DeleteAccount() {
+      Title "Delete my account"
       Icon "person.crop.circle.badge.xmark"
       Enabled Me is signed in
+      do ConfirmDeleteAccount()
    }
 
    render ScrollView [screen] {

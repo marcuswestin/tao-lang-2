@@ -466,7 +466,7 @@ async function withSession(
       }
       app Garden { view Main }
       view Main() { render Stack() { Text("Garden") } }
-      view Card(Title text) { render Text(Title) }
+      scene Card(Title text) { render Text(Title) }
     `,
   }, async (paths, root) => {
     const session = await StudioProjectSession.open({

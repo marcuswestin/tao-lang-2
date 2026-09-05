@@ -8,14 +8,15 @@ Describe('parser: host-read slots and commands', () => {
       use package @tao/nav/native as native
       public type StackNav = native.StackNav
 
-      action Save(Value text) { Title "Save" }
-      view Home(Title text) {
+      action Save(Value text) { }
+      scene Home(Title text) {
         state Enabled = false
         Title Title
-        command SaveCommand = Save("draft") with {
+        command SaveCommand() {
           Label "Save"
-          Enabled Enabled
+          Enabled Enabled is not empty
           Icon when Enabled "checkmark" / not "circle"
+          do Save("draft")
         }
         Toolbar { SaveCommand }
         render Text()
@@ -45,8 +46,10 @@ Describe('parser: host-read slots and commands', () => {
     const command = AST.commandsOf(home)[0]
     Expect.Is(command, AST.isCommandDeclaration)
     Expect(command.name).toBe('SaveCommand')
-    Expect(command.metadata?.fills.map(fill => fill.name)).toEqual(['Label', 'Enabled', 'Icon'])
-    Expect.Is(command.metadata?.fills[2]?.value, AST.isWhenExpression)
+    Expect(AST.parametersOf(command)).toEqual([])
+    Expect(AST.commandFillsOf(command).map(fill => fill.name)).toEqual(['Label', 'Enabled', 'Icon'])
+    Expect.Is(AST.commandFillsOf(command)[2]?.value, AST.isWhenExpression)
+    Expect(AST.commandDoClauseOf(command)?.action).toBeDefined()
 
     const test = result.entry.ast.statements.find(AST.isTestDeclaration)
     Expect.Is(test, AST.isTestDeclaration)
@@ -58,11 +61,14 @@ Describe('parser: host-read slots and commands', () => {
     ])
   })
 
-  Test('resolves a same-named command intent to its action declaration', async () => {
+  Test('resolves a same-named command to the action its do clause runs', async () => {
     const result = await testParseCode(`
-      action Share(Value text) { Title "Share" }
+      action Share(Value text) { }
       view Home() {
-        command Share = Share("link")
+        command Share() {
+          Title "Share"
+          do Share("link")
+        }
       }
     `)
 
@@ -72,6 +78,37 @@ Describe('parser: host-read slots and commands', () => {
     Expect.Is(home, AST.isViewDeclaration)
     const command = AST.commandsOf(home)[0]
     Expect.Is(command, AST.isCommandDeclaration)
-    Expect(command.action.ref).toBe(action)
+    const target = AST.commandDoClauseOf(command)?.action
+    Expect.Is(target, AST.isValueReference)
+    Expect(target.target.ref).toBe(action)
+  })
+
+  Test('parses a renamed typed slot in the parameter list beside the member fills', async () => {
+    const result = await testParseCode(`
+      data Songs / Song {
+        Title text
+        Liked yes / Unliked no
+      }
+
+      command Like(Track Song) {
+        Title "Like"
+        Enabled Track.Liked is Unliked
+        do -> {
+          update Track { Liked }
+        }
+      }
+    `)
+
+    const command = result.entry.ast.statements.find(AST.isCommandDeclaration)
+    Expect.Is(command, AST.isCommandDeclaration)
+    const slots = AST.parametersOf(command)
+    Expect(slots).toHaveLength(1)
+    const inlineType = slots[0]?.inlineType
+    Expect(inlineType?.name).toBe('Track')
+    const type = inlineType?.type
+    Expect.Is(type, AST.isNamedTypeReference)
+    Expect(type.root).toBe('Song')
+    Expect(AST.commandFillsOf(command).map(fill => fill.name)).toEqual(['Title', 'Enabled'])
+    Expect.Is(AST.commandDoClauseOf(command)?.action, AST.isActionExpression)
   })
 })

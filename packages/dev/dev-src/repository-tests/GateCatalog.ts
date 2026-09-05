@@ -71,11 +71,11 @@ function testCost(): number {
   return Math.max(2, Platform.cpuCount() - SLOTS_BESIDE_TEST)
 }
 
-/** studioLane is the shape every `full-verify` Studio node shares. */
+/** studioLane is the shape every `full-verify` browser or native UI node shares. */
 function studioLane(resources?: readonly string[]): GateMetadata {
   return {
     cost: STUDIO_LANE_COST,
-    // Every Studio lane dies on a missing `_gen_tao-parser`, and none of them may read the tree
+    // Every UI lane dies on a missing `_gen_tao-parser`, and none of them may read the tree
     // while `fix` is still rewriting it; the mutates-tree barrier handles the second half.
     needs: ['_parser-gen'],
     requiresUnsandboxed: true,
@@ -134,11 +134,12 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       },
     ],
 
-    // The three browser lanes are parallel-safe on distinct worker indices; the native shell and
+    // The four browser lanes are parallel-safe on distinct worker indices; the native shell and
     // the canary contend on the window server, which is what `gui` names.
     ['_full-verify-smoke-launch', studioLane()],
     ['_full-verify-real-app', studioLane()],
     ['_full-verify-simulated', studioLane()],
+    ['_full-verify-keyboard-navigation', studioLane()],
     ['_full-verify-native', studioLane(['gui'])],
     // The canary once hung after printing its verdict on a launch-owned process that survived
     // shutdown; `completeNativeProbe` now stops Hutch when the probe resolves, and a healthy run

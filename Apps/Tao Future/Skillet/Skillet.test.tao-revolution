@@ -275,10 +275,10 @@ test "Skillet" {
       run Skillet
       press tab "Shop"
       // The command is mounted on the navigator, so it is not the recipe screen's private key.
-      press key "cmd+n"
+      press key "primary+n"
       expect dialogue "New recipe"
       enter "Nachos" into #newTitle
-      press key "cmd+n" // inside a text field: the field keeps its own keys
+      press key "primary+n" // inside a text field: the field keeps its own keys
       expect field "What are you making?" value "Nachos"
       press #addRecipe
       expect heading "Nachos"

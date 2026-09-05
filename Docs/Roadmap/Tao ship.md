@@ -264,7 +264,7 @@ The server-shaped parts of a declared Tao app, and where each comes from:
 | Push delivery       | `notify` payloads + `Notifications` provider                    | FCM/APNs glue                        |
 | Auth service        | `use auth from @tao/auth`, account references in access rules   | Auth product config                  |
 | Error-report store  | the error architecture's capture bundles                        | third-party crash SDK                |
-| Analytics           | declared intents/transactions/screens (see Derived analytics)   | event-tracking SDK + taxonomy doc    |
+| Analytics           | declared commands/transactions/scenes (see Derived analytics)   | event-tracking SDK + taxonomy doc    |
 
 Two grounding facts give this section its shape. First, §12 decided `automation` is
 "provider-owned scheduled work … explicitly not a timer on one mounted device" — but no
@@ -445,14 +445,14 @@ vocabulary and the capture machinery already exist; ship adds transport, storage
 
 ## Derived analytics
 
-Tao apps need no analytics SDK because the taxonomy is the source: every titled intent,
-transaction, and screen is a named event with declared parameters; the navigation graph is the
+Tao apps need no analytics SDK because the taxonomy is the source: every titled command,
+transaction, and scene is a named event with declared parameters; the navigation graph is the
 funnel diagram. The hosted runtime counts them.
 
 - **Counts, not content**: the derived event is the declaration name + timestamp + anonymous
   session key — parameters and payloads stay out unless explicitly opted in, matching the
   deny-by-default posture everywhere else in the language.
-- The dashboard is derivable too: screens over the nav graph, intents per screen, the
+- The dashboard is derivable too: scenes over the nav graph, commands per scene, the
   `rejected`-vs-`saved` outcome ratio per transaction (which doubles as the health metric the
   error section wants).
 - Open: whether analytics is on-by-default-anonymous or opt-in like reports; app-store privacy

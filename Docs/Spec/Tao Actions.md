@@ -4,6 +4,104 @@ Actions are effectful values. A named action may update Tao state and data, invo
 `do`, stop deliberately with `fail`, or cross a typed TypeScript boundary. The runtime contains every
 root invocation in one serialized transaction.
 
+An action names nothing a person reads. It is a private procedure, and no surface lists one. The
+discoverable verb is a `command`.
+
+## Commands
+
+A command is a standalone configured value: one action invocation, the words a person reads, and the
+slots that invocation still needs.
+
+```tao
+primitive command with {
+   Title text,
+   Description text is "",
+   Summary text is "",
+   Label text is "",
+   Icon text is "",
+   Key shortcut is none,
+   Enabled boolean is true,
+}
+```
+
+`Title` is required, because a verb nothing can name is not discoverable. An unfilled `Label` reads
+as the command's `Title`; the default is written as empty text because a slot default is a literal
+rather than a reference to a sibling slot.
+
+A command is declared at module level or in a view or scene body — the placement `action` already
+has, and for the same reason: a command written in a view body closes over that view's parameters,
+state, and actions. Its slots are its parameters, declared exactly as an action declares its own:
+
+```tao
+package
+command Finish(Document) {
+   Title "Finish document"
+   Description "Moves a document out of drafts and into the archive."
+   Summary "Finish { Document.Title }"
+   Icon "checkmark.circle"
+   Enabled Document.Final is Draft
+   do -> {
+      update Document {
+         Final
+}  }  }
+```
+
+`Document` in the parameter list is a slot taking its same-named type, exactly as
+`view CookScreen(Recipe)` reads, and `command Like(Track Song)` renames a typed slot the way any
+parameter list does. The body holds member fills and exactly one `do` clause naming the action it
+runs — an inline action, or a named action with its call parentheses. Because the slots are not in
+the body, juxtaposition means one thing there: a name followed by a value fills that member.
+`Enabled CanSave`, `Enabled Document.Final is Draft`, and `Key primary + "n"` are all ordinary
+values, and a name the command has no member for is diagnosed. Slots follow the ordinary parameter
+rules: a slot declared twice, or one that shadows a value the command can already see, is diagnosed
+at the parameter.
+
+A command is invoked exactly as an action is. `do Finish(Document)` binds its arguments to the
+command's slots by label or by type through the one mechanism an action `do` uses, and gets the
+same arity and type diagnostics — a missing argument, an unmatched one, or two of one type:
+
+```tao
+on press -> { do Finish(Document) }
+```
+
+Binding a command is derivation. `Finish with { Document }` derives a command value with a slot
+filled, for surfaces and menus, and a binding may also refine `Label`, `Icon`, `Key`, and `Enabled`;
+overriding `Title` is an error, because the title is what identifies the verb wherever it is listed.
+A bound command invokes over the slots its binding left open, so `do` on it takes exactly the
+arguments its type still asks for. A toolbar mention is unfilled on purpose: the presenting scene
+supplies the slot from its own parameters, matched by type, when the command is invoked, and a slot
+the scene cannot supply unambiguously is reported at the mention.
+
+Every module emits a table of the commands it declares and registers it at load through
+`TR.Interaction.RegisterCommands`; a view-body command registers while its view is mounted. The
+table records each command's identity, its slots and whether each names an entity, and the value to
+run, so a verb surface can ask which commands act on what a person has in front of them.
+
+Entity `commands A, B` entries order the default verbs and `commands hide C` withholds a command
+unless a view explicitly lists it. A view's `Commands { ... }` promotes applicable commands and
+`hide X` excludes inherited defaults. The target verb layer folds view promotions, rendered inner
+controls, entity defaults, then remaining applicable commands. Identical visible labels fold onto
+the first verb in that priority order, retaining its provenance, so a generated verb surface never
+presents indistinguishable duplicate choices; duplicate registrations of one command also fold.
+
+At the implemented boundary, module-level command catalogs belong to the compiled project: app
+variants and sibling app declarations in that project share the catalog. A separate running-app
+ownership boundary requires an authored ownership construct and is not inferred from app variants.
+
+## Shortcuts
+
+`shortcut` is the type of the key a command answers to. A bare string literal in `Key` position is a
+shortcut literal (`Key "s"`), and `primary + "n"` chains the one registered modifier onto a key.
+`primary` is a value in `@tao/keys`: the host maps it to whatever chord key the platform it runs on
+already uses, so one authored shortcut is correct on every one of them. Naming a platform key
+directly — `cmd`, `ctrl`, `meta` — is an error, and so is a modifier no tranche has registered.
+Modifier chords dispatch directly using the nearest applicable scope: engaged input, modal
+occurrence, targeted item, focused scene, app-wide command, then reducer keys. Bare single-letter
+keys are accelerators only while the target verb layer is open. The runtime-owned palette is always
+available through `primary+K`; it lists every titled command and entity and shares attention's
+locale-aware word-prefix subsequence matcher. Hints, overview, verb, and palette rows receive
+deterministic label-derived keys without shadowing reducer keys or explicit shortcuts.
+
 ## Failure contracts
 
 A native action reports an expected failure where it detects it:

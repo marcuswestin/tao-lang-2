@@ -1,7 +1,7 @@
 // The shopping list. Lines arrive from the plan and from typing; the same ingredient across a week is
 // one line you tick once.
 
-view ShoppingList() {
+scene ShoppingList() {
    Title "Shop"
    Toolbar { ClearTheBought }
    state NewItem = ""
@@ -28,16 +28,16 @@ view ShoppingList() {
       set NewItem = ""
    }
 
-   action ClearTheBoughtIntent() runs single {
-      Title "Clear bought"
+   action DeleteBoughtItems() runs single {
       // Visibility is store-derived from whether any Bought Grocery may be deleted; Enabled below
       // separately keeps the visible command inert when there are no bought rows.
       delete MyKitchen.Groceries where is Bought
    }
-   command ClearTheBought = ClearTheBoughtIntent() with {
-      Label "Clear bought"
+   command ClearTheBought() {
+      Title "Clear bought"
       Icon "trash"
       Enabled Bought is not empty
+      do DeleteBoughtItems()
    }
 
    render ScrollView [screen] {

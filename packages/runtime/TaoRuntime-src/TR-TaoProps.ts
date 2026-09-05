@@ -1,5 +1,17 @@
 import type React from 'react'
-import { DesignControls, type TaoDesign, type TaoDesignSource, type TaoDesignSpec } from './TR-design'
+import {
+  DesignControls,
+  type TaoDesign,
+  type TaoDesignCondition,
+  type TaoDesignSource,
+  type TaoDesignSpec,
+} from './TR-design'
+import type {
+  TaoInteractionOccurrence,
+  TaoOutlineControlNode,
+  TaoOutlineRowRoot,
+  TaoOutlineSiblingRegionNode,
+} from './TR-interaction-outline'
 import {
   LayoutControls,
   LayoutRuntime,
@@ -20,6 +32,17 @@ export type TaoStudioIdentity = {
   ownerName?: string
   sourcePath: string
   start: number
+}
+
+/**
+ * TaoInteractionProps is the outline metadata one render site carries: the control the occurrence
+ * is, from its module's generated table, and the loop row whose sole root it renders. It is its own
+ * field, never `studio`, because Studio identity lowers a DOM marker that stays Studio-only.
+ */
+export type TaoInteractionProps = {
+  control?: TaoOutlineControlNode
+  region?: TaoOutlineSiblingRegionNode
+  row?: TaoOutlineRowRoot
 }
 
 /** TaoProps declares the Tao-owned props bag generated views receive as the `__tao` prop. */
@@ -44,6 +67,8 @@ export type TaoProps = TaoLayoutProps & {
   designSource?: TaoDesignSource
   /** designDefault names the linked stdlib element bundle applied before render-site clauses. */
   designDefault?: string
+  /** interaction is private outline metadata lowered onto the concrete native root as its accessible name. */
+  interaction?: TaoInteractionProps
   /** testTag is private Tao metadata lowered to the existing concrete native root. */
   testTag?: string
   /** viewDepth counts generated Tao view frames without inspecting argument identity. */
@@ -79,30 +104,93 @@ export type TaoViewRuntimeProps = TaoProps & {
 type MergedTaoViewProps = {
   readonly children?: React.ReactNode
   readonly direction?: TaoLayoutDirection
+  readonly interaction: TaoInteractionProps | undefined
   readonly nativeProps: Record<string, unknown>
   readonly props: TaoResolvedLayoutProps | undefined
   readonly studio: TaoStudioIdentity | undefined
   readonly testTag: string | undefined
 }
 
+type PrivateVisualMetadata = {
+  interaction?: TaoInteractionProps
+  occurrence?: TaoInteractionOccurrence
+  studio?: TaoStudioIdentity
+}
+
 // Injected visual implementations receive a deliberately layout-only value. Studio occurrence
-// identity follows that exact object through a private side table so standard-library wrappers do
-// not need a new language-visible ambient channel or access to the complete private __tao bag.
-const studioIdentityByVisualLayout = new WeakMap<object, TaoStudioIdentity>()
+// identity and outline metadata follow that exact object through a private side table so
+// standard-library wrappers do not need a new language-visible ambient channel or access to the
+// complete private __tao bag.
+const privateMetadataByVisualLayout = new WeakMap<object, PrivateVisualMetadata>()
+const occurrenceByTaoProps = new WeakMap<
+  TaoProps,
+  Readonly<{
+    condition: TaoDesignCondition
+    occurrence: TaoInteractionOccurrence
+  }>
+>()
+const interactionOwnerByTaoProps = new WeakMap<TaoProps, TaoInteractionOccurrence>()
 
 /** TaoPropsControls exposes runtime Tao props merging for generated views. */
 export const TaoPropsControls = {
   ambientContext,
   appInChain,
   responseInChain,
+  interactionOccurrence,
+  interactionOwner,
+  inheritInteractionOwner,
   mergeViewProps,
   nativePropsWithStyle,
   navigationInChain,
   schemeInChain,
+  setInteractionOccurrence,
   visualNativeProps,
+  visualInteractionOccurrence,
   visualLayout,
   visualTag,
 } as const
+
+function setInteractionOccurrence(
+  props: TaoProps | undefined,
+  occurrence: TaoInteractionOccurrence,
+  condition: (subject: string, value: string | undefined, occurrence: TaoInteractionOccurrence | undefined) => boolean,
+): void {
+  if (props) {
+    occurrenceByTaoProps.set(props, {
+      condition: (subject, value) => condition(subject, value, occurrence),
+      occurrence,
+    })
+  }
+}
+
+function interactionOccurrence(props: TaoProps | undefined): TaoInteractionOccurrence | undefined {
+  if (!props) {
+    return undefined
+  }
+  return occurrenceByTaoProps.get(props)?.occurrence ?? interactionOccurrence(props.callerProps)
+}
+
+/** Preserves only private outline ownership when a generated child intentionally drops caller props. */
+function inheritInteractionOwner(props: TaoProps, callerProps: TaoProps | undefined): void {
+  const owner = interactionOccurrence(callerProps)
+  if (owner) {
+    interactionOwnerByTaoProps.set(props, owner)
+  }
+}
+
+/** Returns the generated child's inherited owner without confusing it with its own prior render. */
+function interactionOwner(props: TaoProps | undefined): TaoInteractionOccurrence | undefined {
+  return props === undefined
+    ? undefined
+    : interactionOwnerByTaoProps.get(props) ?? interactionOccurrence(props.callerProps)
+}
+
+function interactionCondition(props: TaoProps | undefined): TaoDesignCondition | undefined {
+  if (!props) {
+    return undefined
+  }
+  return occurrenceByTaoProps.get(props)?.condition ?? interactionCondition(props.callerProps)
+}
 
 /** Copies only ambient presentation context from a generated caller-props chain. */
 function ambientContext(props: TaoProps | undefined): TaoAmbientContext {
@@ -186,8 +274,11 @@ function mergeViewProps(
       resolveDesignProps(explicitLayoutProps, design, scheme),
       ParentDirectionContext.propsForDirection(parentDirection),
     ),
+    interaction: interactionInChain(props.__tao)
+      ?? privateMetadataForVisualLayout(props.layout)?.interaction
+      ?? interactionInChain(taoRuntimeProps),
     studio: studioIdentityInChain(props.__tao)
-      ?? studioIdentityForVisualLayout(props.layout)
+      ?? privateMetadataForVisualLayout(props.layout)?.studio
       ?? studioIdentityInChain(taoRuntimeProps),
     testTag: props.tag ?? testTag ?? testTagInChain(taoRuntimeProps) ?? testTagInChain(props.__tao),
   }
@@ -204,7 +295,7 @@ function resolveDesignProps(
   const designSpec = props.designSpec === undefined || props.designSource === undefined
     ? props.designSpec
     : DesignControls.Source(props.designSpec, props.designSource)
-  const resolved = DesignControls.resolve(design, designSpec, props.designDefault, scheme)
+  const resolved = DesignControls.resolve(design, designSpec, props.designDefault, scheme, interactionCondition(props))
   const callerProps = resolveDesignProps(props.callerProps, design, scheme)
   const style = mergeResolvedStyles(props.style, resolved.style)
   return {
@@ -241,16 +332,26 @@ function visualLayout(props: TaoProps | undefined): TaoVisualLayout | undefined 
     ParentDirectionContext.propsForDirection(ParentDirectionContext.use()),
   )
   const studio = studioIdentityInChain(props)
-  if (studio === undefined) {
+  const interaction = interactionInChain(props)
+  const occurrence = interactionOccurrence(props)
+  if (studio === undefined && interaction === undefined && occurrence === undefined) {
     return resolved
   }
   const visualLayout = resolved ?? {}
-  studioIdentityByVisualLayout.set(visualLayout, studio)
+  privateMetadataByVisualLayout.set(visualLayout, {
+    ...(interaction === undefined ? {} : { interaction }),
+    ...(occurrence === undefined ? {} : { occurrence }),
+    ...(studio === undefined ? {} : { studio }),
+  })
   return visualLayout
 }
 
-function studioIdentityForVisualLayout(layout: TaoVisualLayout | undefined): TaoStudioIdentity | undefined {
-  return layout === undefined ? undefined : studioIdentityByVisualLayout.get(layout)
+function visualInteractionOccurrence(layout: TaoVisualLayout | undefined): TaoInteractionOccurrence | undefined {
+  return privateMetadataForVisualLayout(layout)?.occurrence
+}
+
+function privateMetadataForVisualLayout(layout: TaoVisualLayout | undefined): PrivateVisualMetadata | undefined {
+  return layout === undefined ? undefined : privateMetadataByVisualLayout.get(layout)
 }
 
 /** Returns the nearest concrete occurrence tag without exposing any other Tao-owned metadata. */
@@ -258,9 +359,10 @@ function visualTag(props: TaoProps | undefined): string | undefined {
   return testTagInChain(props)
 }
 
-/** Lowers private Studio occurrence identity and the public test tag onto an injected native root. */
+/** Lowers private Studio identity and the public test tag onto an injected native root. */
 function visualNativeProps(layout: TaoVisualLayout | undefined, tag?: string): Record<string, unknown> {
-  const nativeProps = nativePropsWithStudioIdentity({}, studioIdentityForVisualLayout(layout))
+  const metadata = privateMetadataForVisualLayout(layout)
+  const nativeProps = nativePropsWithStudioIdentity({}, metadata?.studio)
   return tag ? { ...nativeProps, testID: tag } : nativeProps
 }
 
@@ -268,6 +370,28 @@ function nativePropsWithStyle(merged: MergedTaoViewProps): Record<string, unknow
   const nativeProps = LayoutRuntime.nativePropsWithStyle(merged.nativeProps, merged.props, merged.direction)
   const nativePropsWithStudio = nativePropsWithStudioIdentity(nativeProps, merged.studio)
   return merged.testTag ? { ...nativePropsWithStudio, testID: merged.testTag } : nativePropsWithStudio
+}
+
+/**
+ * Merges the outline metadata of a caller chain: the innermost control and the nearest row root,
+ * which one concrete root may carry at once when a row's sole render is itself a control.
+ */
+function interactionInChain(props: TaoProps | undefined): TaoInteractionProps | undefined {
+  if (!props) {
+    return undefined
+  }
+  const outer = interactionInChain(props.callerProps)
+  const control = props.interaction?.control ?? outer?.control
+  const region = props.interaction?.region ?? outer?.region
+  const row = props.interaction?.row ?? outer?.row
+  if (control === undefined && region === undefined && row === undefined) {
+    return undefined
+  }
+  return {
+    ...(control === undefined ? {} : { control }),
+    ...(region === undefined ? {} : { region }),
+    ...(row === undefined ? {} : { row }),
+  }
 }
 
 function nativePropsWithStudioIdentity(

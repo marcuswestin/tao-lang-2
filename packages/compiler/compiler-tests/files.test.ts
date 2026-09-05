@@ -140,7 +140,7 @@ Describe('compiler: files and packages', () => {
         'Main.tao': `
           use ChainStack from @chain
           app Demo { Name "Demo" Navigator ChainStack { Initial Home } }
-          view Home() { Title "Home" render Empty() }
+          scene Home() { Title "Home" render Empty() }
           view Empty() { render inject ${tsFence} return null ${fence} }
         `,
         'Packages/@chain/Navigation.tao': `
@@ -385,7 +385,7 @@ Describe('compiler: files and packages', () => {
           use StackNav from @tao/nav
           use Root from ./
           workspace nav ResetNav = StackNav { Initial Home }
-          view Home() {
+          scene Home() {
             Title "Home"
             action Reset() { replace ResetNav in Root }
             render Empty()
@@ -585,7 +585,7 @@ Describe('compiler: files and packages', () => {
             state Width is PaneWidth = PaneWidth 320 (persist)
             Navigator StackNav { Initial Pane }
           }
-          view Pane() { Title "Pane" render Empty() }
+          scene Pane() { Title "Pane" render Empty() }
           view Empty() { render inject \`\`\`ts return null \`\`\` }
         `,
         'Types.tao': 'workspace type PaneWidth is number',

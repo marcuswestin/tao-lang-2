@@ -1,8 +1,8 @@
 import { HCI, Platform, Repo } from '@shared'
 import { DevFileWatcher } from './DevFileWatcher'
 import { DevLoopTUI } from './DevLoopTUI'
-import { ExpoConfig } from './expo-runner/expo-config'
-import { ExpoRunner } from './expo-runner/ExpoRunner'
+import { PREFERRED_EXPO_PORT } from './expo-runner/expo-config'
+import { ExpoRunner, type ExpoRunnerSession } from './expo-runner/ExpoRunner'
 import { handleCommandKey } from './keyboard-input/CommandKeys'
 import Commands from './keyboard-input/Commands'
 import Run from './Run'
@@ -19,12 +19,20 @@ export type DevLoopOutcome =
   | { kind: 'restart' }
   | { kind: 'select-app' }
 
+/** createDevLoopExpoSession reserves the preferred port or an OS-selected free alternative. */
+export async function createDevLoopExpoSession(
+  preferredPort: number = PREFERRED_EXPO_PORT,
+): Promise<ExpoRunnerSession> {
+  return await ExpoRunner.createSessionWithAvailablePort(preferredPort)
+}
+
 /** runDevLoop runs one selected app until the Tao CLI should exit, restart, or select again. */
 export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOutcome> {
   const repoRoot = Repo.getRoot()
   const { appName, appPath } = selection
-  const runtimeToolchainRoot = Repo.resolvePath(ExpoConfig.RUNTIME_TOOLCHAIN_PATH)
-  const expoServer = ExpoRunner.createServer(runtimeToolchainRoot)
+  const expo = await createDevLoopExpoSession()
+  const runtimeToolchainRoot = Repo.resolvePath(expo.config.RUNTIME_TOOLCHAIN_PATH)
+  const expoServer = expo.createServer(runtimeToolchainRoot)
   const output = DevLoopTUI.startDevLoopOutput()
   let keyInput: HCI.RawKeySession | undefined
   let watcher: DevFileWatcher | undefined
@@ -83,6 +91,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
 
   try {
     DevLoopTUI.logDevLoop('dev', `Tao dev app: ${appPath}`)
+    DevLoopTUI.logDevLoop('dev', `Expo Metro port: ${expo.config.EXPO_PORT}`)
     // Key input starts before the first compile so q and Ctrl-C work during startup, not only
     // once Metro is ready.
     Commands.printControls()
@@ -90,6 +99,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
       void handleCommandKey(key, {
         appPath,
         appName,
+        expo,
         finish: exitCode => finish({ kind: 'exit', exitCode }),
         repoRoot,
         restart: () => finish({ kind: 'restart' }),
@@ -118,21 +128,17 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     watcher = new DevFileWatcher(appPath, shouldRunParserGen => {
       void Run.compileApp({ repoRoot, appPath, appName, reason: 'file change', shouldRunParserGen })
     })
-    await ExpoRunner.ensureMetroPortFree()
-    if (shouldStop()) {
-      return await done
-    }
     await expoServer.start()
     if (shouldStop()) {
       return await done
     }
-    if (!await ExpoRunner.waitForMetro(shouldStop)) {
+    if (!await expo.waitForMetro(shouldStop)) {
       return await done
     }
     if (shouldStop()) {
       return await done
     }
-    void ExpoRunner.openStartupTargets(shouldStop)
+    void expo.openStartupTargets(shouldStop)
     return await done
   } catch (error) {
     DevLoopTUI.recordFailure('dev', Run.formatFailure(error))

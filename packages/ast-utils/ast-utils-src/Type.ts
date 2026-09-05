@@ -13,8 +13,11 @@ export type TaoType =
       | 'time'
       | 'duration'
       | 'none'
+      | 'shortcut'
+      | 'command'
       | 'design'
       | 'view'
+      | 'scene'
       | 'nav'
       | 'datasource'
       | 'app'
@@ -188,6 +191,7 @@ export class Type {
     return Switch.typeMaybe<typeof declaration, TaoType>(declaration, {
       TypeDeclaration: declaration => Type.atMemberPath(Type.ofDefinition(declaration), value.members ?? []),
       ActionDeclaration: typeOfParameterizedDeclaration,
+      CommandDeclaration: typeOfParameterizedDeclaration,
       FunctionDeclaration: typeOfParameterizedDeclaration,
       ViewDeclaration: typeOfParameterizedDeclaration,
       undefined: unresolvedType,
@@ -247,6 +251,11 @@ export class Type {
     return new TypeResolutionContext().ofProperty(property)
   }
 
+  /** ofNone is the type of absence, the value an optional member takes when it has none. */
+  static ofNone(): TaoType {
+    return primitiveType('none')
+  }
+
   /** ofPropertyRead resolves a field read, including absence for an optional field. */
   static ofPropertyRead(property: AST.TypeProperty): TaoType {
     const declared = Type.ofProperty(property)
@@ -293,6 +302,17 @@ export class Type {
 
   /** isAssignable returns whether an actual value type can satisfy an expected parameter/property type. */
   static isAssignable(actual: TaoType, expected: TaoType): boolean {
+    // A bare key is written as text and read as the shortcut it names, the way a bare number in
+    // size position is read as a size. The reverse is not true: a shortcut is not text.
+    if (isPrimitiveNamed(expected, 'shortcut') && isPrimitiveNamed(actual, 'text')) {
+      return true
+    }
+    // Both unions: every value the actual can be must be one the expected accepts. Checked before
+    // the single-sided rules below, which would otherwise ask whether the whole actual union fits
+    // one member of the expected and reject an optional against an optional.
+    if (actual.kind === 'union' && expected.kind === 'union') {
+      return actual.members.every(member => Type.isAssignable(member, expected))
+    }
     if (expected.kind === 'union') {
       return expected.members.some(member => Type.isAssignable(actual, member))
     }
@@ -321,12 +341,24 @@ export class Type {
     }
 
     const candidates = types.filter(candidate => types.every(actual => Type.isAssignable(actual, candidate)))
-    return candidates.reduce<TaoType | undefined>((best, candidate) => {
+    const best = candidates.reduce<TaoType | undefined>((best, candidate) => {
       if (!best) {
         return candidate
       }
       return commonTypeCandidateIsPreferred(candidate, best) ? candidate : best
     }, undefined)
+    if (best) {
+      return best
+    }
+    // Absence unifies with any one value type, because that is what an optional already is: an
+    // optional field reads as `union(declared, none)`. So a conditional whose branches are a value
+    // and `none` produces the optional of that value rather than nothing at all.
+    const present = types.filter(type => !isNoneType(type))
+    if (present.length === types.length || present.length === 0) {
+      return undefined
+    }
+    const common = Type.commonType(present)
+    return common && { kind: 'union', members: [common, primitiveType('none')] }
   }
 
   /** entityOfReference resolves a top-level entity's singular type name. */
@@ -450,6 +482,19 @@ export class Type {
   /** dataFields returns the stored and inferred field declarations of one entity. */
   static dataFields(entity: DataEntityDefinition): DataFieldDefinition[] {
     return entity.block.entries.filter(AST.isEntityDataField)
+  }
+
+  /**
+   * dataEntityTitleField returns the one field an entity marks `(title)`: the text that names a row
+   * to a person, which the outline prefers as a row's label and reads when no rendered text is.
+   */
+  static dataEntityTitleField(entity: DataEntityDefinition): DataFieldDefinition | undefined {
+    return Type.dataFields(entity).find(field => (field.traits?.traits ?? []).some(AST.traitIsTitle))
+  }
+
+  /** dataEntityIsLocalOnly returns whether an entity declares the device-local storage fact. */
+  static dataEntityIsLocalOnly(entity: DataEntityDefinition): boolean {
+    return entity.block.entries.some(AST.isDataLocalOnly)
   }
 
   /** dataFieldRelationName returns the explicit relation target, or the field name when it is
@@ -703,10 +748,12 @@ function primitiveFamilyIsAssignable(actual: TaoType, expected: TaoType): boolea
   if (actual.primitive === expected.primitive) {
     return true
   }
-  // The primitive lattice mirrors the Prelude's `is` chain: `nav` refines `view`, and nothing else
-  // refines anything.
+  // The primitive lattice mirrors the Prelude's `is` chain: `nav` refines `scene` refines `view`,
+  // and nothing else refines anything. The walk below follows the whole chain, so a nav stays
+  // assignable to a view through scene.
   const parents: Partial<Record<Extract<TaoType, { kind: 'primitive' }>['primitive'], string>> = {
-    nav: 'view',
+    nav: 'scene',
+    scene: 'view',
   }
   let current: string | undefined = actual.primitive
   while (current) {
@@ -815,6 +862,9 @@ class TypeResolutionContext {
       PrimitiveConfigurationConstructor: value => primitiveType(value.primitive),
       RefinementExpression: reference => {
         const target = reference.target.ref
+        if (AST.isCommandDeclaration(target)) {
+          return this.ofCommandBinding(target, reference.patchBlock)
+        }
         return AST.isTypeDeclaration(target)
           ? this.ofDefinition(target)
           : AST.isValueDeclaration(target)
@@ -866,6 +916,9 @@ class TypeResolutionContext {
       return primitiveType('boolean')
     }
     const left = this.ofExpression(expression.left)
+    if (expression.operator === '+' && left.kind === 'primitive' && left.primitive === 'shortcut') {
+      return primitiveType('shortcut')
+    }
     if (expression.operator === '+' && left.kind === 'primitive' && left.primitive === 'text') {
       return primitiveType('text')
     }
@@ -899,7 +952,7 @@ class TypeResolutionContext {
   ofValueDeclaration(declaration: AST.ValueDeclaration | undefined): TaoType {
     return Switch.typeMaybe<AST.ValueDeclaration | undefined, TaoType>(declaration, {
       ActionDeclaration: declaration => this.ofAction(declaration),
-      CommandDeclaration: () => actionType([]),
+      CommandDeclaration: command => this.ofAction(command),
       AliasDeclaration: alias => this.aliasDeclarationType(alias),
       AppDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('app'),
       AskStatement: ask =>
@@ -917,14 +970,30 @@ class TypeResolutionContext {
       DesignDeclaration: () => primitiveType('design'),
       NavDeclaration: declaration => declaration.value ? this.ofExpression(declaration.value) : primitiveType('nav'),
       StateDeclaration: state => this.stateDeclarationType(state),
-      ViewDeclaration: () => primitiveType('view'),
+      ViewDeclaration: declaration => primitiveType(declaration.scene ? 'scene' : 'view'),
       undefined: unresolvedType,
     })
   }
 
-  ofAction(declaration: AST.ActionDeclaration): TaoType {
+  /** A command invokes exactly as an action does: its parameters are its slots. */
+  ofAction(declaration: AST.ActionDeclaration | AST.CommandDeclaration): TaoType {
+    return this.actionTypeOfParameters(AST.parametersOf(declaration))
+  }
+
+  /**
+   * A command bound with `with { ... }` still invokes as an action, but only over the slots the
+   * binding left open, so what a surface or a later `do` hands it is exactly what it still needs.
+   */
+  private ofCommandBinding(command: AST.CommandDeclaration, block: AST.ConfigurationBlock): TaoType {
+    const filled = new Set(block.entries.map(AST.configurationEntryName))
+    return this.actionTypeOfParameters(
+      AST.parametersOf(command).filter(parameter => !filled.has(Type.parameterName(parameter))),
+    )
+  }
+
+  private actionTypeOfParameters(parameters: readonly AST.ParameterDeclaration[]): TaoType {
     return actionType(
-      AST.parametersOf(declaration).map(parameter => ({
+      parameters.map(parameter => ({
         type: this.ofParameter(parameter),
         optional: parameter.defaultValue !== undefined,
       })),
@@ -1125,6 +1194,10 @@ class TypeResolutionContext {
   }
 }
 
+function isNoneType(type: TaoType): boolean {
+  return type.kind === 'primitive' && type.primitive === 'none'
+}
+
 function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
   return Switch(primitive, {
     text: () => ({ kind: 'primitive', primitive: 'text' }),
@@ -1136,8 +1209,11 @@ function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
     none: () => ({ kind: 'primitive', primitive: 'none' }),
     list: () => ({ kind: 'list' }),
     item: () => ({ kind: 'item' }),
+    shortcut: () => ({ kind: 'primitive', primitive: 'shortcut' }),
+    command: () => ({ kind: 'primitive', primitive: 'command' }),
     design: () => ({ kind: 'primitive', primitive: 'design' }),
     view: () => ({ kind: 'primitive', primitive: 'view' }),
+    scene: () => ({ kind: 'primitive', primitive: 'scene' }),
     nav: () => ({ kind: 'primitive', primitive: 'nav' }),
     datasource: () => ({ kind: 'primitive', primitive: 'datasource' }),
     app: () => ({ kind: 'primitive', primitive: 'app' }),

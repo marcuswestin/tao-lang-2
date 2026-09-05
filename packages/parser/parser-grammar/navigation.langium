@@ -16,8 +16,11 @@ ContextualPresentStatement:
 PresentationMode:
     'as' (kind='overlay' | kind='sheet' | kind='toast' toast=ToastPresentationOptions);
 
+// The option names are parsed as IDs and their spelling validated, so `Key` and `Duration` stay
+// ordinary words everywhere else — a member named `Key` is exactly what a command declares — rather
+// than becoming global lexer keywords.
 ToastPresentationOptions:
-    '(' 'Key' ':' key=Expression ',' 'Duration' ':' duration=Expression ')';
+    '(' keyName=ID ':' key=Expression ',' durationName=ID ':' duration=Expression ')';
 
 NavigationTarget:
     value=ValueReference | app=[AppValueDeclaration:ID] key=USE_IMPORT_PATH;

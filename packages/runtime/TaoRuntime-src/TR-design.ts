@@ -77,6 +77,9 @@ export type TaoResolvedDesignSpec = Readonly<{
   style?: TaoResolvedLayoutStyle
 }>
 
+/** TaoDesignCondition reads occurrence-local interaction state during mounted design resolution. */
+export type TaoDesignCondition = (subject: string, value: string | undefined) => boolean
+
 const layoutHeads = new Set<TaoLayoutEntry[0]>([
   'aligned',
   'centered',
@@ -150,6 +153,7 @@ function resolve(
   spec: TaoDesignSpec | undefined,
   elementDefault?: string,
   scheme: TaoScheme = 'light',
+  condition?: TaoDesignCondition,
 ): TaoResolvedDesignSpec {
   const defaultSpec = elementDefault === undefined || design?.bundles[elementDefault] === undefined
     ? undefined
@@ -165,7 +169,7 @@ function resolve(
     if (effectiveSpec === undefined) {
       continue
     }
-    for (const expanded of expandEntries(design, effectiveSpec, [], scheme, [])) {
+    for (const expanded of expandEntries(design, effectiveSpec, [], scheme, condition, [])) {
       const entry = resolveSizeTerms(design, expanded.entry)
       const head = entry[0]
       if (layoutHeads.has(head as TaoLayoutEntry[0])) {
@@ -208,11 +212,12 @@ function* expandEntries(
   spec: TaoDesignSpec,
   bundlePath: readonly string[],
   scheme: TaoScheme,
+  condition: TaoDesignCondition | undefined,
   sourceChain: readonly TaoDesignSource[],
 ): Generator<{ chain: readonly TaoDesignSource[]; entry: TaoDesignSpecEntry }> {
   const chain = spec.source === undefined ? sourceChain : [...sourceChain, spec.source]
   for (const authoredEntry of spec.entries) {
-    const entry = activeSchemeEntry(authoredEntry, scheme)
+    const entry = activeConditionEntry(authoredEntry, scheme, condition)
     if (entry === undefined) {
       continue
     }
@@ -234,18 +239,45 @@ function* expandEntries(
         design: design.name,
       })
     }
-    yield* expandEntries(design, bundle, [...bundlePath, head], scheme, chain)
+    yield* expandEntries(design, bundle, [...bundlePath, head], scheme, condition, chain)
   }
 }
 
-function activeSchemeEntry(entry: TaoDesignSpecEntry, scheme: TaoScheme): TaoDesignSpecEntry | undefined {
-  const condition = entry.indexOf('when')
-  if (condition === -1) {
+function activeConditionEntry(
+  entry: TaoDesignSpecEntry,
+  scheme: TaoScheme,
+  read: TaoDesignCondition | undefined,
+): TaoDesignSpecEntry | undefined {
+  const conditionIndex = entry.indexOf('when')
+  if (conditionIndex === -1) {
     return entry
   }
-  const suffix = entry.slice(condition)
+  const suffix = entry.slice(conditionIndex)
   if (
-    condition === 0
+    conditionIndex > 0
+    && suffix.length === 2
+    && suffix[0] === 'when'
+    && typeof suffix[1] === 'string'
+  ) {
+    return read?.(suffix[1], undefined)
+      ? entry.slice(0, conditionIndex) as unknown as TaoDesignSpecEntry
+      : undefined
+  }
+  if (
+    conditionIndex > 0
+    && suffix.length === 4
+    && suffix[0] === 'when'
+    && typeof suffix[1] === 'string'
+    && suffix[2] === 'is'
+    && suffix[3] === 'active'
+    && suffix[1] !== 'Scheme'
+  ) {
+    return read?.(suffix[1], suffix[3])
+      ? entry.slice(0, conditionIndex) as unknown as TaoDesignSpecEntry
+      : undefined
+  }
+  if (
+    conditionIndex === 0
     || suffix.length !== 4
     || suffix[0] !== 'when'
     || suffix[1] !== 'Scheme'
@@ -255,7 +287,7 @@ function activeSchemeEntry(entry: TaoDesignSpecEntry, scheme: TaoScheme): TaoDes
     throw new UserInputError(`Unsupported design condition '${entry.join(' ')}'.`, { entry })
   }
   const required = suffix[3] === 'Dark' ? 'dark' : 'light'
-  return required === scheme ? entry.slice(0, condition) as unknown as TaoDesignSpecEntry : undefined
+  return required === scheme ? entry.slice(0, conditionIndex) as unknown as TaoDesignSpecEntry : undefined
 }
 
 function applyVisualEntry(

@@ -73,7 +73,7 @@ function createSessionFromConfig(
 
 const defaultSession = createSessionFromConfig(ExpoConfig)
 
-/** ExpoRunner is the public Expo runner facade; its direct methods retain the ordinary 8081 dev loop. */
+/** ExpoRunner is the public Expo runner facade; direct methods retain the fixed default session. */
 export const ExpoRunner = {
   ...defaultSession,
   createSession,

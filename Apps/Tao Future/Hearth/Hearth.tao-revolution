@@ -75,7 +75,7 @@ app Hearth {
    // The root follows the account and its open home. A person may belong to more than one home — a kid
    // with two houses is the ordinary case — so the open home is a preference on the account, and making
    // one, accepting an invitation, switching, and leaving are ordinary writes to `Me.CurrentHome`.
-   Navigator when MyHome {
+   view when MyHome {
       loading -> LoadingNav
       none -> WelcomeNav
       missing -> WelcomeNav // the home was deleted under me

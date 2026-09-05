@@ -69,12 +69,14 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     if (context.property === 'function' && AST.isFunctionCallExpression(context.container)) {
       return this.createFunctionScope(context.container)
     }
-    if (context.property === 'action' && AST.isCommandDeclaration(context.container)) {
-      return this.createActionScope(context.container)
-    }
     if (context.property === 'references' && AST.isDeclarationSlotReferenceBlock(context.container)) {
-      const view = AST.findOwningView(context.container)
-      return this.createScopeForNodes(AST.isViewDeclaration(view) ? AST.commandsOf(view) : [])
+      return this.createCommandReferenceScope(context.container)
+    }
+    if (
+      context.property === 'commands'
+      && (AST.isEntityCommandPolicy(context.container) || AST.isViewCommandExclusion(context.container))
+    ) {
+      return this.createCommandReferenceScope(context.container)
     }
     if (context.property === 'importedDeclarations' && AST.isUseStatement(context.container)) {
       return this.createUseImportScope(context.container)
@@ -139,7 +141,12 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createScopeForNodes([])
     }
 
-    let scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root))
+    // A command is not a value inside its own body: leaving its name out is what lets a command
+    // carry the same name as the action it runs, which is the natural spelling for a private
+    // procedure and the verb in front of it.
+    const owner = AST.owningCommand(reference)
+    const visible = (declaration: AST.Node) => declaration !== owner
+    let scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root).filter(visible))
     scope = this.createScopeForNodes(
       this.importedDeclarations(reference, AST.isImportableValueDeclaration),
       scope,
@@ -186,24 +193,31 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       if (forBinding) {
         scope = this.createScopeForNodes([forBinding], scope)
       }
-      scope = this.createScopeForNodes(AST.valueDeclarationsOwnedByBlock(carrier.block), scope)
+      scope = this.createScopeForNodes(AST.valueDeclarationsOwnedByBlock(carrier.block).filter(visible), scope)
+    }
+
+    // A command's own slots are the innermost values in its body: they are what its metadata reads
+    // and what its `do` clause hands to the action it runs.
+    if (owner) {
+      scope = this.createScopeForParameters(owner, scope, reference)
     }
 
     return scope
   }
 
-  private createActionScope(reference: AST.CommandDeclaration): Langium.Scope {
-    const root = AST.findRoot(reference)
+  /** A command surface sees file-local, folder/imported, then occurrence-local commands. */
+  private createCommandReferenceScope(
+    node: AST.DeclarationSlotReferenceBlock | AST.EntityCommandPolicy | AST.ViewCommandExclusion,
+  ): Langium.Scope {
+    const root = AST.findRoot(node)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
     }
-
-    let scope = this.createScopeForNodes(root.statements.filter(AST.isActionDeclaration))
-    scope = this.createScopeForNodes(this.importedDeclarations(reference, AST.isActionDeclaration), scope)
-    for (const carrier of scopeCarriersContaining(reference).reverse()) {
-      if (carrier.kind === 'block') {
-        scope = this.createScopeForNodes(carrier.block.statements.filter(AST.isActionDeclaration), scope)
-      }
+    let scope = this.createScopeForNodes(root.statements.filter(AST.isCommandDeclaration))
+    scope = this.createScopeForNodes(this.importedDeclarations(node, AST.isCommandDeclaration), scope)
+    const view = AST.findOwningView(node)
+    if (AST.isViewDeclaration(view)) {
+      scope = this.createScopeForNodes(AST.commandsOf(view), scope)
     }
     return scope
   }
@@ -292,8 +306,32 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return scope
   }
 
+  /**
+   * A render site names a view or a nav — `nav is scene is view` — and the owning view's own view-,
+   * scene-, or nav-typed parameters shadow both, the way any parameter shadows a declaration. That
+   * is what lets a shell render the navigator it was handed rather than one it names.
+   */
   private createViewScope(render: AST.Render): Langium.Scope {
-    return this.createDeclarationScope(render, AST.isViewDeclaration)
+    const root = AST.findRoot(render)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    const isRenderable = (node: AST.Node): node is AST.ViewDeclaration | AST.NavDeclaration =>
+      AST.isViewDeclaration(node) || AST.isNavDeclaration(node)
+    let scope = this.createScopeForNodes(root.statements.filter(isRenderable))
+    scope = this.createScopeForNodes(this.importedDeclarations(render, isRenderable), scope)
+    const owner = AST.findOwningView(render)
+    const parameters = owner ? AST.parametersOf(owner).filter(isRenderableParameter) : []
+    const firstParameter = parameters[0]
+    if (!firstParameter) {
+      return scope
+    }
+    const document = AST.getDocument(firstParameter)
+    const descriptions = parameters.flatMap(parameter => {
+      const name = parameterValueName(parameter)
+      return name ? [this.descriptions.createDescription(parameter, name, document)] : []
+    })
+    return this.createScope(descriptions, scope)
   }
 
   private createRenderSlotScope(use: AST.RenderSlotUse): Langium.Scope {
@@ -670,10 +708,15 @@ function entityDataForValueDeclaration(
   declaration: AST.ValueDeclaration | undefined,
   context: AST.Node,
 ): AST.EntityDataDeclaration | undefined {
-  if (AST.isParameterDeclaration(declaration) && declaration.type?.members.length === 0) {
-    return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
-      entity.singularName === declaration.type?.root
-    )
+  // A parameter reaches an entity whether it takes its same-named type (`Document`) or renames a
+  // typed one (`Track Song`): the entity is what the type names, not what the parameter is called.
+  if (AST.isParameterDeclaration(declaration)) {
+    const type = declaration.inlineType ? declaration.inlineType.type : declaration.type
+    if (AST.isNamedTypeReference(type) && type.members.length === 0) {
+      return AST.visibleFileDeclarations(context, AST.isEntityDataDeclaration).find(entity =>
+        entity.singularName === type.root
+      )
+    }
   }
   if (AST.isForStatement(declaration)) {
     return entityDataForCollection(declaration.collection, context)
@@ -807,6 +850,11 @@ function parameterOwningDefault(node: AST.Node | undefined): AST.ParameterDeclar
     current = current.$container
   }
   return undefined
+}
+
+/** isRenderableParameter reports a parameter whose declared type a render site may name. */
+function isRenderableParameter(parameter: AST.ParameterDeclaration): boolean {
+  return AST.renderablePrimitiveOfParameter(parameter) !== undefined
 }
 
 function parameterValueName(parameter: AST.ParameterDeclaration): string | undefined {

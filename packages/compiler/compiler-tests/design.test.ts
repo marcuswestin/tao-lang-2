@@ -7,7 +7,7 @@ Describe('compiler: minimal design', () => {
     const source = `
       use StackNav from @tao/nav
       app Demo { Name "Demo" Navigator StackNav { Initial Main } }
-      view Main() { Title "Main" render Surface() [size 14, fg #fff] }
+      scene Main() { Title "Main" render Surface() [size 14, fg #fff] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `
 
@@ -22,7 +22,7 @@ Describe('compiler: minimal design', () => {
       `
       use SlotNav, StackNav from @tao/nav
       app Demo { Name "Demo" Navigator StackNav { Initial Main } }
-      view Main() { Title "Main" render Surface() }
+      scene Main() { Title "Main" render Surface() }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `,
       { validationMode: 'release' },
@@ -35,7 +35,7 @@ Describe('compiler: minimal design', () => {
       use StackNav from @tao/nav
       use Text from @tao/ui
       app Demo { Name "Demo" Navigator StackNav { Initial Main } }
-      view Main() { Title "Main" render Text("Hello") }
+      scene Main() { Title "Main" render Text("Hello") }
     `)
 
     Expect(compiled.code).toContain('designDefault: "Text"')
@@ -59,7 +59,7 @@ Describe('compiler: minimal design', () => {
         Design Theme
       }
 
-      view Main() {
+      scene Main() {
         Title "Main"
         render Surface() [screen, compact, gap 16, claim 2, width max 720, centered]
       }
@@ -92,7 +92,7 @@ Describe('compiler: minimal design', () => {
         body [size 16, weight 600, line 22]
       }
       app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
-      view Main() { Title "Main" render Surface() [card, body] }
+      scene Main() { Title "Main" render Surface() [card, body] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `)
 
@@ -112,7 +112,7 @@ Describe('compiler: minimal design', () => {
         Surface [background canvas, background canvasDark when Scheme is Dark]
       }
       app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
-      view Main() { Title "Main" render Surface() }
+      scene Main() { Title "Main" render Surface() }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `)
 
@@ -140,7 +140,7 @@ Describe('compiler: minimal design', () => {
         }
       }
       app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
-      view Main() { Title "Main" render Surface() [card, title] }
+      scene Main() { Title "Main" render Surface() [card, title] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `,
       { studio: true },
@@ -161,7 +161,7 @@ Describe('compiler: minimal design', () => {
       use StackNav from @tao/nav
       workspace design Theme { ink #111 }
       app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
-      view Main() { Title "Main" render Surface() }
+      scene Main() { Title "Main" render Surface() }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `)
 
@@ -172,7 +172,7 @@ Describe('compiler: minimal design', () => {
     const inline = `
       use StackNav from @tao/nav
       app Demo { Name "Demo" Navigator StackNav { Initial Main } }
-      view Main() { Title "Main" render Surface() [background #fff, size 16, radius 8, pad 12] }
+      scene Main() { Title "Main" render Surface() [background #fff, size 16, radius 8, pad 12] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `
     await Expect(TestCompiler.compileCode(inline, { validationMode: 'release' })).rejects.toThrow(
@@ -184,7 +184,7 @@ Describe('compiler: minimal design', () => {
       use StackNav from @tao/nav
       workspace design Theme { paper #fff Surface [background paper, size 16, radius 8, pad 12] }
       app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
-      view Main() { Title "Main" render Surface() }
+      scene Main() { Title "Main" render Surface() }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `,
       { validationMode: 'release' },
@@ -199,7 +199,7 @@ Describe('compiler: minimal design', () => {
         styles { Surface [background paper, size surfaceSize, radius surfaceRadius, pad surfacePad] }
       }
       app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
-      view Main() { Title "Main" render Surface() }
+      scene Main() { Title "Main" render Surface() }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
     `,
       { validationMode: 'release' },
@@ -212,7 +212,7 @@ Describe('compiler: minimal design', () => {
         use StackNav from @tao/nav
         use Theme from ./Theme
         app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
-        view Main() { Title "Main" render Surface() [panel] }
+        scene Main() { Title "Main" render Surface() [panel] }
         view Surface() { render inject \`\`\`ts return null \`\`\` }
       `,
       'Theme.tao': `
@@ -236,7 +236,7 @@ Describe('compiler: minimal design', () => {
       use StackNav from @tao/nav
       design Light { canvas #fff screen [bg canvas] }
       design Dark { canvas #111 screen [bg canvas] }
-      view Main() { Title "Main" render Surface() [screen] }
+      scene Main() { Title "Main" render Surface() [screen] }
       view Surface() { render inject \`\`\`ts return null \`\`\` }
       app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Light }
       app DemoDark = Demo with { Name "Demo Dark" Design Dark }

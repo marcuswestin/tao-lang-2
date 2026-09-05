@@ -1,6 +1,6 @@
 // Around: the errands with a place, nearest first, on a map and in a list that says the same thing.
 
-view AroundScreen() {
+scene AroundScreen() {
    Title "Around"
    state Selected HearthItem (optional)
    // A query clause may carry a trailing `when`, like a design clause: without location there is no

@@ -3,6 +3,7 @@ import { RuntimeAssert } from './TR-assert'
 import type {
   TaoNavDescriptor,
   TaoNavigationArguments,
+  TaoNavigationInput,
   TaoNavigationPatch,
   TaoNavKindProfile,
   TaoPresentable,
@@ -110,6 +111,23 @@ export function observeNavigationActivation(
   }
 }
 
+/**
+ * HostedNavigation is one navigator a view rendered inside this occurrence's content. Its mount
+ * outlives the React tree that rendered it, which is what keeps its history when the enclosing
+ * presentation is covered and comes back. `attached` counts the rendered occurrences of that mount
+ * and each attachment records the host focus it observed, so Back and activation reach a navigator
+ * whenever at least one rendered occurrence of that shared mount is on screen.
+ */
+type HostedNavigation = {
+  attachments: Map<object, boolean>
+  mount: RuntimeNavigationValue
+}
+
+type PendingHostedRestoration = {
+  codec: TaoNavigationRestorationCodec
+  snapshots: Record<string, TaoNavigationSnapshot>
+}
+
 /** RuntimeNavigationValue is the shared process-local contract for configured navigation values. */
 export abstract class RuntimeNavigationValue implements Subscription {
   protected listeners = new Set<() => void>()
@@ -118,6 +136,9 @@ export abstract class RuntimeNavigationValue implements Subscription {
   private removedBrowserHistoryId: number | undefined
   private nextOverlayEntryId = 1
   private overlayEntries: OverlayEntry[] = []
+  private readonly hosted = new Map<RuntimeNavigationValue, HostedNavigation>()
+  private readonly hostedByInput = new Map<TaoNavigationInput, RuntimeNavigationValue>()
+  private pendingHostedRestoration: PendingHostedRestoration | undefined
 
   abstract readonly kind: TaoNavKindProfile
   abstract readonly name: string
@@ -136,16 +157,23 @@ export abstract class RuntimeNavigationValue implements Subscription {
 
   get canGoBack(): boolean {
     return this.overlayEntries.length > 0 || this.canGoBackContent()
+      || this.hostedNavigations().some(mount => mount.canGoBack)
   }
 
   /** historyDepth is the number of semantic Back operations mirrored by the web adapter. */
   historyDepth(): number {
     return this.overlayEntries.length + this.contentHistoryDepth()
+      + this.hostedNavigations().reduce((depth, mount) => depth + mount.historyDepth(), 0)
   }
 
+  /**
+   * back removes this occurrence's top overlay, then its own content history, then reaches the
+   * navigators its content renders. A hosted navigator sits inside the content, so the content
+   * that covers it — a pushed screen, a presented replacement — goes first.
+   */
   back(): boolean {
     this.removedBrowserHistoryId = undefined
-    return this.dismissOverlay() || this.backContent()
+    return this.dismissOverlay() || this.backContent() || this.backHosted()
   }
 
   dismiss(): boolean {
@@ -173,8 +201,48 @@ export abstract class RuntimeNavigationValue implements Subscription {
 
   abstract patched(patch: TaoNavigationPatch): RuntimeNavigationValue
 
-  activate(_key: string): boolean {
-    return false
+  /** activate reaches a selection key through the navigators this occurrence's content renders. */
+  activate(key: string): boolean {
+    return this.hostedNavigations().some(mount => mount.activate(key))
+  }
+
+  /**
+   * hostNavigation returns the one mount this occurrence holds for a navigator rendered inside its
+   * content, creating it through `create` on first use. The cache is keyed by the configured
+   * descriptor — or by the mounted value itself — so every render of the same navigator, across
+   * covers and returns of the enclosing presentation, reaches the same history. Nothing here emits:
+   * a render site calls it while React is rendering.
+   */
+  hostNavigation(input: TaoNavigationInput, create: () => RuntimeNavigationValue): RuntimeNavigationValue {
+    const existing = this.hostedByInput.get(input)
+    if (existing) {
+      return existing
+    }
+    const mount = create()
+    this.hostedByInput.set(input, mount)
+    this.hosted.set(mount, { attachments: new Map(), mount })
+    mount.subscribe(() => this.emit())
+    return mount
+  }
+
+  /**
+   * attachHostedNavigation marks one rendered occurrence of a hosted navigator as on screen and
+   * applies the position a stored snapshot holds for it. Restoration lands here, when the
+   * navigator is mounted, because the app restores before its first render puts a view on screen
+   * and a view is the only thing that renders a hosted navigator.
+   */
+  attachHostedNavigation(mount: RuntimeNavigationValue, active: boolean): () => void {
+    const record = this.hosted.get(mount)
+    RuntimeAssert.defined(record, `navigation '${mount.name}' is hosted by '${this.name}' before it attaches`, {
+      host: this.name,
+      navigation: mount.name,
+    })
+    const attachment = {}
+    record.attachments.set(attachment, active)
+    this.restorePendingHosted(mount)
+    return () => {
+      record.attachments.delete(attachment)
+    }
   }
 
   /**
@@ -259,7 +327,11 @@ export abstract class RuntimeNavigationValue implements Subscription {
       }
     }
     this.overlayEntries = []
+    this.pendingHostedRestoration = undefined
     this.resetContent()
+    for (const record of this.hosted.values()) {
+      record.mount.reset()
+    }
     this.emit()
   }
 
@@ -278,9 +350,14 @@ export abstract class RuntimeNavigationValue implements Subscription {
       const snapshot = codec.snapshotPresentable(entry)
       return snapshot ? [{ ...snapshot, ...(entry.sheet ? { sheet: true as const } : {}) }] : []
     })
+    const hosted = Object.fromEntries([...this.hosted.values()].flatMap(record => {
+      const key = record.mount.descriptor.canonicalDescriptor?.canonical
+      return key === undefined ? [] : [[key, record.mount.navigationRestorationSnapshot(codec, exclusions)] as const]
+    }))
     return {
       content: this.snapshotRestorationContent(codec),
       descriptor,
+      ...(Object.keys(hosted).length > 0 ? { hosted } : {}),
       kind: this.kind,
       overlays,
     }
@@ -300,6 +377,12 @@ export abstract class RuntimeNavigationValue implements Subscription {
       ...(entry.sheet ? { sheet: true } : {}),
     }))
     this.restoreRestorationContent(snapshot.content, codec)
+    // A hosted navigator this occurrence already holds restores now; one a view has yet to render
+    // restores when it attaches. Either way it restores by its own descriptor identity.
+    this.pendingHostedRestoration = snapshot.hosted ? { codec, snapshots: { ...snapshot.hosted } } : undefined
+    for (const record of this.hosted.values()) {
+      this.restorePendingHosted(record.mount)
+    }
     this.emit()
   }
 
@@ -321,6 +404,44 @@ export abstract class RuntimeNavigationValue implements Subscription {
 
   protected adoptRemovedBrowserHistoryId(instanceId: number | undefined): void {
     this.removedBrowserHistoryId = instanceId
+  }
+
+  /** overlayDepth is how many overlay or ask occurrences currently cover this occurrence's content. */
+  protected overlayDepth(): number {
+    return this.overlayEntries.length
+  }
+
+  /** hostedNavigations lists the rendered, focused navigators this occurrence's content holds. */
+  private hostedNavigations(): RuntimeNavigationValue[] {
+    return [...this.hosted.values()]
+      .filter(record => [...record.attachments.values()].some(Boolean))
+      .map(record => record.mount)
+  }
+
+  private backHosted(): boolean {
+    // Later mounts first, the order the app itself uses for its auxiliaries.
+    for (const mount of this.hostedNavigations().toReversed()) {
+      if (!mount.canGoBack) {
+        continue
+      }
+      const consumed = mount.back()
+      if (consumed) {
+        this.adoptRemovedBrowserHistoryId(takeRemovedBrowserHistoryId(mount))
+        return true
+      }
+    }
+    return false
+  }
+
+  private restorePendingHosted(mount: RuntimeNavigationValue): void {
+    const pending = this.pendingHostedRestoration
+    const key = mount.descriptor.canonicalDescriptor?.canonical
+    const snapshot = pending && key !== undefined ? pending.snapshots[key] : undefined
+    if (!pending || key === undefined || !snapshot) {
+      return
+    }
+    delete pending.snapshots[key]
+    mount.restoreNavigationSnapshot(snapshot, pending.codec)
   }
 
   protected presentableEntry<PresentableT extends TaoPresentable>(

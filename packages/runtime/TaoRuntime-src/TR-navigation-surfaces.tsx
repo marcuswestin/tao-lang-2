@@ -1,25 +1,60 @@
 import React from 'react'
+import {
+  occurrenceRegion,
+  OutlineRegionScope,
+  regionNativeProps,
+  type TaoOutlineRegion,
+} from './TR-interaction-regions'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type { TaoNavigationValue } from './TR-navigation'
 import { backNavigation } from './TR-navigation-registry'
-import type { OverlayEntry, ResponseOccurrenceState } from './TR-navigation-state'
+import type { OverlayEntry, PresentableEntry, ResponseOccurrenceState } from './TR-navigation-state'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 import { Views } from './TR-views'
 
-/** NavigationLevel hides covered stack entries without unmounting their local React state. */
+/**
+ * NavigationLevel hides covered stack entries without unmounting their local React state. A level
+ * that presents one occurrence is that occurrence's region: it registers with the outline and its
+ * native root is the named group the platform reads.
+ */
 export function NavigationLevel(props: {
   children?: React.ReactNode
   fill?: boolean
   hidden: boolean
+  region?: TaoOutlineRegion
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
-  return React.createElement(runtime.View, {
-    accessibilityElementsHidden: props.hidden,
-    children: props.children,
-    importantForAccessibility: props.hidden ? 'no-hide-descendants' : 'auto',
-    style: props.hidden ? hiddenNavigationLevelStyle : props.fill ? visibleOverlayLevelStyle : undefined,
-  })
+  const region = props.region === undefined
+    ? undefined
+    : { ...props.region, active: () => !props.hidden, primary: !props.hidden }
+  return React.createElement(
+    OutlineRegionScope,
+    { region },
+    React.createElement(runtime.View, {
+      ...regionNativeProps(region),
+      accessibilityElementsHidden: props.hidden,
+      children: props.children,
+      importantForAccessibility: props.hidden ? 'no-hide-descendants' : 'auto',
+      style: props.hidden ? hiddenNavigationLevelStyle : props.fill ? visibleOverlayLevelStyle : undefined,
+    }),
+  ) as React.JSX.Element
+}
+
+/** presentedOccurrenceRegion names one presented entry by its live title, else by what was presented. */
+export function presentedOccurrenceRegion(
+  navigation: TaoNavigationValue,
+  entry: PresentableEntry,
+  presentation: 'ask' | 'content' | 'overlay' | 'sheet',
+  active?: () => boolean,
+): TaoOutlineRegion {
+  return occurrenceRegion(
+    navigation.name,
+    entry.instanceId,
+    presentation,
+    () => entry.host?.read().title ?? entry.presentable.name,
+    { ...(active === undefined ? {} : { active }), primary: presentation === 'content' },
+  )
 }
 
 /** NavigationBackAffordance exposes the same root-safe reducer through an accessible control. */
@@ -33,6 +68,7 @@ export function NavigationBackAffordance(props: {
           backNavigation(props.target)
         },
       },
+      semanticIdentity: 'navigation:back',
       title: 'Back',
     },
     { nativeProps: { accessibilityLabel: 'Back', accessibilityRole: 'button' } },
@@ -40,6 +76,7 @@ export function NavigationBackAffordance(props: {
 }
 
 export const navigationHostStyle = { flex: 1, position: 'relative' } as const
+export const navigationContentAccessibilityTestId = '__tao_navigation_content_accessibility'
 const overlayLayerStyle = {
   bottom: 0,
   left: 0,
@@ -110,6 +147,7 @@ function modalSheet(
 ): React.ReactNode {
   const runtime = requireReactNativeRuntime()
   const modal = (runtime as { Modal?: React.ComponentType<any> }).Modal
+  const dismiss = () => dismissOverlay(navigation, taoProps)
   if (!modal) {
     // Without a modal host the sheet renders inline; the enclosing level hides it when covered.
     return React.createElement(
@@ -117,7 +155,10 @@ function modalSheet(
       { style: sheetInlineScrimStyle },
       React.createElement(
         runtime.View,
-        { style: [sheetInlineSurfaceStyle, mountedDesignStyle(taoProps, 'ModalSurface')] },
+        {
+          ...modalAccessibilityProps(navigation, taoProps, visible),
+          style: [sheetInlineSurfaceStyle, mountedDesignStyle(taoProps, 'ModalSurface')],
+        },
         content,
       ),
     )
@@ -130,16 +171,16 @@ function modalSheet(
     {
       allowSwipeDismissal: true,
       animationType: 'slide',
-      onRequestClose: () => {
-        const app = appInProps(taoProps)
-        app ? app.dismiss(navigation) : backNavigation(navigation)
-      },
+      onRequestClose: dismiss,
       presentationStyle: 'pageSheet',
       visible,
     },
     React.createElement(
       runtime.View,
-      { style: [sheetModalSurfaceStyle, mountedDesignStyle(taoProps, 'ModalSurface')] },
+      {
+        ...modalAccessibilityProps(navigation, taoProps, visible),
+        style: [sheetModalSurfaceStyle, mountedDesignStyle(taoProps, 'ModalSurface')],
+      },
       content,
     ),
   )
@@ -153,9 +194,11 @@ export function NavigationSurface(props: {
   taoProps?: TaoProps
 }): React.JSX.Element {
   const runtime = requireReactNativeRuntime()
+  const contentHidden = props.overlays.some(modalOverlay)
   const overlays = props.overlays.length > 0
     ? React.createElement(runtime.View, {
       children: props.overlays.map((entry, index) => {
+        const visible = index === props.overlays.length - 1
         const content = entry.presentable.render(
           entry.arguments,
           entry.response
@@ -164,13 +207,18 @@ export function NavigationSurface(props: {
         )
         return React.createElement(NavigationLevel, {
           children: entry.response
-            ? modalAsk(content, props.taoProps)
+            ? modalAsk(content, props.navigation, props.taoProps, visible)
             : entry.sheet
-            ? modalSheet(content, props.navigation, props.taoProps, index === props.overlays.length - 1)
+            ? modalSheet(content, props.navigation, props.taoProps, visible)
             : content,
           fill: true,
-          hidden: index !== props.overlays.length - 1,
+          hidden: !visible,
           key: entry.instanceId,
+          region: presentedOccurrenceRegion(
+            props.navigation,
+            entry,
+            entry.response ? 'ask' : entry.sheet ? 'sheet' : 'overlay',
+          ),
         })
       }),
       style: overlayLayerStyle,
@@ -185,29 +233,66 @@ export function NavigationSurface(props: {
         pointerTransparentStyle,
       ],
     },
-    props.content,
+    React.createElement(runtime.View, {
+      accessibilityElementsHidden: contentHidden,
+      children: props.content,
+      importantForAccessibility: contentHidden ? 'no-hide-descendants' : 'auto',
+      style: navigationContentStyle,
+      testID: navigationContentAccessibilityTestId,
+    }),
     overlays,
   )
 }
 
+const navigationContentStyle = { flex: 1 } as const
 const pointerTransparentStyle = { pointerEvents: 'box-none' } as const
 
 function appInProps(props: TaoProps | undefined): TaoProps['app'] {
-  return props?.app ?? appInProps(props?.callerProps)
+  return props?.app ?? (props?.callerProps ? appInProps(props.callerProps) : undefined)
 }
 
 /** modalAsk centres one asked view on a dimming scrim, which is what makes it read as modal. */
-function modalAsk(content: React.ReactNode, taoProps: TaoProps | undefined): React.ReactNode {
+function modalAsk(
+  content: React.ReactNode,
+  navigation: TaoNavigationValue,
+  taoProps: TaoProps | undefined,
+  visible: boolean,
+): React.ReactNode {
   const runtime = requireReactNativeRuntime()
   return React.createElement(
     runtime.View,
     { style: askScrimStyle },
     React.createElement(
       runtime.View,
-      { style: [askSurfaceStyle, mountedDesignStyle(taoProps, 'ModalSurface')] },
+      {
+        ...modalAccessibilityProps(navigation, taoProps, visible),
+        style: [askSurfaceStyle, mountedDesignStyle(taoProps, 'ModalSurface')],
+      },
       content,
     ),
   )
+}
+
+function modalOverlay(entry: OverlayEntry): boolean {
+  return entry.response !== undefined || entry.sheet === true
+}
+
+function modalAccessibilityProps(
+  navigation: TaoNavigationValue,
+  taoProps: TaoProps | undefined,
+  visible: boolean,
+): Record<string, unknown> {
+  return visible
+    ? {
+      accessibilityViewIsModal: true,
+      onAccessibilityEscape: () => dismissOverlay(navigation, taoProps),
+    }
+    : {}
+}
+
+function dismissOverlay(navigation: TaoNavigationValue, taoProps: TaoProps | undefined): boolean {
+  const app = appInProps(taoProps)
+  return app ? app.dismiss(navigation) : backNavigation(navigation)
 }
 
 export function navigationProps(props: TaoProps | undefined, navigation: TaoNavigationValue): TaoProps {

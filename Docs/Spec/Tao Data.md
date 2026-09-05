@@ -54,12 +54,39 @@ its case name, as in `Final yes / Draft no`. The `no` side is the default unless
 They exercise declaration syntax and do not require product journeys. Writes, `is <Case>` tests,
 and boolean query filters use named declared cases rather than raw spelling conventions.
 
-Indexes are separate statements, and one default `order by` may be declared for the entity.
+Indexes are separate statements, one default `order by` may be declared for the entity, and
+`local only` states that the entity is stored on the device whatever the app configures as its
+`Datasource`. The three are entity-level storage facts and trail the field list as one group:
+
+```tao
+data FocusSessions / FocusSession {
+   EndsAt time
+   PausedAt time (default now)
+   Paused yes / Running no
+
+   local only
+}
+```
+
+A `local only` entity is compiled into a companion catalog with its own connection and storage key,
+so a synced datasource variant of the same app never syncs it, and it reaches the device-local store
+even when the app's own `Datasource` is already local. Because the two catalogs are separate stores,
+a relationship may not cross between them: both ends of a relationship must declare `local only`, or
+neither.
 
 `unique` marks one primitive field as the entity's external identity — the reconciliation key a
 query-driven datasource upserts by (see _The Http datasource_ below). It is a storage fact stated
 on the field, legal only on primitive fields, declared at most once per field, and carried by at
 most one field per entity, so reconciliation never depends on field order.
+
+`title` marks the one `text` field that names a row to a person. It is legal only on a `text`
+field, declared at most once per field, and carried by at most one field per entity. The
+interaction outline prefers it as a loop row's derived label whenever the row renders it, and reads
+it at runtime when the row renders no text of its own (see _Accessible names and the interaction
+outline_ in `Tao Layout and UI.md`). A selectable row projects that label as the accessible name of
+its press surface; the label remains outline metadata for a non-selectable row. The word is parsed
+as an ordinary identifier and its spelling validated, so `title` stays a legal name elsewhere — a
+design bundle called `title` is exactly what an app declares.
 
 A bare singular name such as `Workspace` is a stored to-one relationship when it names another
 entity. A bare plural name such as `Paragraphs` is an inferred inverse to-many relationship. The
@@ -192,8 +219,8 @@ sync arrives through `subscribe` on the same terms.
 
 ## Queries
 
-Queries are reactive lists and are declared in unconditional definition or root-render placement
-before first use and before control flow:
+Queries are reactive lists. Inside a view they are declared in unconditional definition or
+root-render placement, before first use and before control flow.
 
 ```tao
 query Workspaces { }

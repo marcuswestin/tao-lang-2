@@ -17,8 +17,24 @@ use Checkbox, Col, FormButton, Image, Panes, Progress, Row, ScrollView, Spinner,
 // - Open at derivation time: whether the authority cluster (access rules, transactions, invites,
 //   publish, presence) enters MVP via collaborative workspaces or waits for the app expansion.
 //
-// The focused writing mode landed in Current with the focused writing tranche; the session below is
-// the same feature, sized for the full MVP surface.
+// The focused writing session landed in Current with the interaction system tranche: a device-local
+// row that the shell reads, rather than state inside one view. The session below is that same
+// feature sized for the full MVP surface — its length comes from a stored preference rather than a
+// fixed pair of buttons.
+//
+// Keyboard attention follows the settled T4 contract in `../2 - Next`: the runtime derives regions
+// and targets from the interaction outline, narrowing is locale-aware word-prefix matching, and
+// commands remain the one discoverable verb model for pointer, keyboard, palette, and future host
+// surfaces. The shell's focus-bar siblings form one compiler-described region without a wrapper.
+//
+// Generated interaction surfaces follow the settled T5 contract. Hints, the region overview, the
+// target's verb layer, and the always-present command palette are pure runtime renderings of the
+// outline, attention, bindings, and catalog. One app-host layer sits above content after toasts,
+// never enters navigation history or consumes Back, and is absent from accessibility traversal
+// while hidden. Cached app-relative bounds anchor affordances without measuring when a surface
+// opens. Runtime allocation derives locale-aware keys deterministically by identity, preserves them
+// across reorders, and excludes reducer keys plus explicit shortcuts; affordances appear after the
+// first hardware-key dispatch.
 //
 // MVP retains the requirements intentionally moved out of the current Next tranche:
 // - The InstantDB provider protocol handles inbound subscription deltas, write acknowledgement,
@@ -67,6 +83,9 @@ design WordFlowerDesign {
    title [size 28, weight 700, fg ink]
    body [size 16, line 22, fg inkMuted]
    panel [pad 12, radius 8, bg paper, border line]
+   FormButton [bg accent, bg paper when pressed, border accent when focused, fg ink, fg accent when hovered]
+   Hint [bg accent, fg paper, radius 8, pad 8, weight 700]
+   Overview [bg paper, fg ink, border line, radius 12, pad 12, gap 8]
 }
 
 // A configured nav binding is an immutable descriptor, not a mounted instance or exposed state.
@@ -98,6 +117,31 @@ nav WordFlowerNavigator = SelectionNav {
    }
 }
 
+// The shell: the navigator and the focus bar, laid out as ordinary content. A nav renders like any
+// other view — `nav is scene is view` — so persistent chrome around navigated content is a `Col`,
+// not a navigation kind. The navigator arrives as a parameter, which is how one shell serves every
+// preview variant. The bar is conditional on the data, so it appears with the session and the
+// content grows back when the session ends; the navigator never is, because its history lives on
+// its mount and a branch that unmounted it would drop where the person was.
+scene WordFlowerShell(Navigator nav) {
+   query FocusSessions as CurrentSession {
+      limit 1
+   }
+   render Col() [fill] {
+      Navigator() [fill]
+      when CurrentSession {
+         empty -> { }
+         otherwise -> { FocusBar() }
+      }
+   }
+}
+
+// The preview variant hands the shell a differently configured navigator, so a preview still gets
+// the focus bar.
+nav WordFlowerDrawerNavigator = WordFlowerNavigator with {
+   Display "drawer"
+}
+
 datasource WordFlowerStore = InstantDB {
    AppId "wordflower-mvp"
 }
@@ -106,7 +150,8 @@ datasource WordFlowerStageStore = WordFlowerStore with {
    AppId "wordflower-stage"
 }
 
-// An app mounts navs, it does not render content directly. `Navigator` is the primary nav.
+// The app is rooted in a view: the shell, which lays the navigator and the focus bar out as ordinary
+// content. Tao mounts a navigator around a view root, so nothing here names one.
 // Every nav owns an absolute overlay lane above its content, so no app declares an overlay host;
 // overlays stack while covered entries stay mounted but hidden, and Back/dismiss use the app reducer.
 // Toasts are app-level, transient, replace the same key rather than stacking, and neither consume
@@ -118,16 +163,17 @@ datasource WordFlowerStageStore = WordFlowerStore with {
 app WordFlower {
    Name "WordFlower"
    Design WordFlowerDesign
-   Navigator WordFlowerNavigator
+   view WordFlowerShell(WordFlowerNavigator)
 
    Datasource WordFlowerStore
 }
 
-// `with` copies public properties into a configured variant. A property-position `with` merge-copies
-// the original property without repeating it; WordFlower and WordFlowerNavigator are unchanged.
+// `with` copies public properties into a configured variant; WordFlower and WordFlowerShell are
+// unchanged. The variant rebinds the root with the same shell and a different navigator in it, so it
+// keeps the focus bar.
 app WordFlowerDrawer = WordFlower with {
    Name "WordFlower - Drawer Preview"
-   Navigator with { Display "drawer" }
+   view WordFlowerShell(WordFlowerDrawerNavigator) // the same shell, a different navigator in it
 }
 
 app WordFlowerStage = WordFlower with {
@@ -169,7 +215,7 @@ let StarterPrompt = WritingPrompt {
 type ConfirmResult is one of Confirmed
 
 data Workspaces / Workspace {
-   Name text
+   Name text (title)
    CreatedAt time (default now)
    Pinned yes / no // demonstrative declaration; the product does not use it yet
    Documents (relation Documents, owned)
@@ -179,7 +225,7 @@ data Workspaces / Workspace {
 }
 
 data Documents / Document {
-   Title text
+   Title text (title)
    Body text (default "")
    Final yes / Draft no
    Public yes / Private no (default Public) // demonstrative declaration; the product does not use it yet
@@ -189,6 +235,8 @@ data Documents / Document {
 
    index CreatedAt
    order by CreatedAt
+   commands Finish, Duplicate
+   commands hide Delete
 }
 
 data Paragraphs / Paragraph {
@@ -198,6 +246,59 @@ data Paragraphs / Paragraph {
 
    index Ordering
    order by Ordering
+}
+
+// A focused writing session. `local only` is an entity-level storage fact, a third trailing group
+// entry beside `index` and `order by`: this entity lives in the device store whatever datasource the
+// app configures, so the remote and staged variants never sync it. Holding the session as data
+// rather than as view state is what lets it survive navigation and relaunch, and lets each consumer
+// query it locally.
+data FocusSessions / FocusSession {
+   EndsAt time // absolute, so a running session survives relaunch correctly
+   PausedAt time (default now) // read only while paused; resuming re-anchors EndsAt from it
+   Paused yes / Running no
+
+   local only
+}
+
+// Entity command policy is independent of the view that happens to render a document. Finish and
+// Duplicate are the ordered defaults; destructive deletion is available only where a view
+// explicitly promotes it.
+workspace
+command Finish(Document) {
+   Title "Finish document"
+   Description "Moves a document out of drafts and into the archive."
+   Summary "Finish { Document.Title }"
+   Icon "checkmark.circle"
+   Key "f"
+   Enabled Document.Final is Draft
+   do -> { update Document {
+      Final
+   } }
+}
+
+workspace
+command Duplicate(Document) {
+   Title "Duplicate document"
+   Description "Makes a new draft beside this document."
+   Summary "Duplicate { Document.Title }"
+   Icon "doc.on.doc"
+   Key "d"
+   do -> { create Document {
+      Title: "{ Document.Title } copy"
+      Body: Document.Body
+      Document.Workspace
+   } }
+}
+
+workspace
+command Delete(Document) {
+   Title "Delete document"
+   Description "Permanently removes this document."
+   Summary "Delete { Document.Title }"
+   Icon "trash"
+   Key "x"
+   do -> { delete Document }
 }
 
 function DocumentLabel(Title text) returns text {
@@ -251,7 +352,10 @@ view TagSummary(Tags PromptTags) {
    render Text("Tagged: { Join(Tags, Separator: ", ") }") [body]
 }
 
-view WorkspaceList() {
+// A declaration that fills host-facing chrome is a `scene`, and a scene is presented rather than
+// composed inline. `Title`, `Toolbar`, and `Header` live on `scene` alone, so a view that is only
+// ever composed cannot declare chrome nothing reads.
+scene WorkspaceList() {
    Title "WordFlower"
    state WorkspaceName = ""
    query Workspaces { }
@@ -335,7 +439,7 @@ view WorkspaceNameNotice() {
 }
 
 workspace
-view WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
+scene WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named entity type
    Title Workspace.Name
    state WorkspaceNameDraft = Workspace.Name
    state DocumentTitle = ""
@@ -346,16 +450,22 @@ view WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named
    query FinishedDocuments from Workspace.Documents {
       where is Final
    }
+   // An `action` is private: it carries no `Title`, `Description`, or `Summary` and is never
+   // surfaced. The command is the discoverable verb, so the words a person reads live there.
    action SaveWorkspace() {
-      Title "Save workspace"
       guard WorkspaceNameDraft empty
       update Workspace {
          Name: WorkspaceNameDraft
       }
    }
-   command Save = SaveWorkspace() with {
+   // A command is a configured value: its slots are parameters, and its block holds metadata members
+   // and exactly one `do`. This one is declared in the scene because it reads that scene's own state,
+   // exactly as an `action` may.
+   command Save() {
+      Title "Save workspace"
       Icon "checkmark"
       Enabled WorkspaceNameDraft is not empty
+      do SaveWorkspace()
    }
    Toolbar { Save }
    action AddDocument() {
@@ -417,23 +527,7 @@ view WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named
                   otherwise -> {
                      #documents
                      loop Drafts / Document {
-                        Col() [gap 6] {
-                           #openDocument
-                           FormButton(Document.Title) {
-                              on press -> {
-                                 present WorkspaceSplit(Workspace) in WordFlower@workspace
-                                 present DocumentScreen(Document) in WordFlower@workspace@documents
-                              }
-                           }
-                           #finish
-                           FormButton("Finish document") {
-                              on press -> { update Document { Final } }
-                           }
-                           #delete
-                           FormButton("Delete document", Icon: "trash") {
-                              on press -> { delete Document }
-                           }
-                        }
+                        DraftDocumentRow(Document)
                      }
                   }
                }
@@ -446,17 +540,7 @@ view WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named
                }
                #finishedDocuments
                loop FinishedDocuments / Document {
-                  Col() [gap 6] {
-                     Text(Document.Title)
-                     #reopen
-                     FormButton("Reopen document") {
-                        on press -> { update Document { Draft } }
-                     }
-                     #deleteFinished
-                     FormButton("Delete finished document", Icon: "trash") {
-                        on press -> { delete Document }
-                     }
-                  }
+                  FinishedDocumentRow(Document)
                }
             }
          }
@@ -464,7 +548,50 @@ view WorkspaceDetails(Workspace) { // a bare parameter name binds the same-named
    }
 }
 
-view WorkspaceChooser() {
+// These row views preserve the full MVP screen while applying the settled verb tiers at the
+// occurrence that owns each document target. A draft promotes Finish and excludes Duplicate;
+// a finished row does the inverse. Delete remains hidden by the entity unless a later surface
+// explicitly lists it.
+view DraftDocumentRow(Document) {
+   Commands { Finish }
+   hide Duplicate
+   render Col() [gap 6] {
+      Text(Document.Title)
+      #openDocument
+      FormButton("Open document") {
+         on press -> {
+            present WorkspaceSplit(Document.Workspace) in WordFlower@workspace
+            present DocumentScreen(Document) in WordFlower@workspace@documents
+         }
+      }
+      #finish
+      FormButton("Finish document") {
+         on press -> { do Finish(Document) }
+      }
+      #delete
+      FormButton("Delete document", Icon: "trash") {
+         on press -> { delete Document }
+      }
+   }
+}
+
+view FinishedDocumentRow(Document) {
+   Commands { Duplicate }
+   hide Finish
+   render Col() [gap 6] {
+      Text(Document.Title)
+      #reopen
+      FormButton("Reopen document") {
+         on press -> { update Document { Draft } }
+      }
+      #deleteFinished
+      FormButton("Delete finished document", Icon: "trash") {
+         on press -> { delete Document }
+      }
+   }
+}
+
+scene WorkspaceChooser() {
    Title "Choose a workspace"
    query Workspaces { }
    render Col() [screen, gap 10] {
@@ -560,8 +687,10 @@ view FileTree(Workspace) {
 
 // The pane-level entry guards entity availability; the editor below assumes an available document.
 workspace
-view DocumentScreen(Document) {
+scene DocumentScreen(Document) {
    Title Document.Title
+   // The unfilled entity slot is supplied from this presented scene's Document parameter.
+   Toolbar { Finish }
    render Col() [fill] {
       guard Document {
          loading -> { Spinner() }
@@ -632,7 +761,7 @@ view DocumentEditor(Document) {
       }
       WordCount(BodyDraft)
       #focusSession
-      FocusSession()
+      FocusStarter()
       #markFinal
       Checkbox(Value: Document.Final is Final, Label: "Final") {
          on change SetFinished
@@ -713,55 +842,85 @@ view DocumentSnapshot(Snapshot Document.Snapshot) {
 }
 
 // A focused writing session: pick a length, write until the clock runs out, pause and resume, or
-// stop early. The clock is a library value; `Left` is an ordinary derivation that recomputes as it
-// ticks. The session length comes from the person's preference rather than a fixed pair of buttons.
-file view FocusSession() {
-   state Tick = Interval(1.s)
-   state EndsAt = now
-   state Focusing = false
-   let Left = EndsAt - Tick.Value
+// stop early. The session is a row in the device-local store rather than state in one view, which is
+// what lets the editor start it and the shell count it down.
+//
+// Starting is an editor affordance — you choose a length where you are about to write — so this view
+// creates the row and nothing else. The length comes from the person's preference rather than a
+// fixed pair of buttons.
+file view FocusStarter() {
+   query FocusSessions as CurrentSession {
+      limit 1
+   }
    action Start(Length duration) {
-      set EndsAt = now + Length
-      set Focusing = true
-      do Tick.Start()
-   }
-   action Pause() {
-      do Tick.Stop()
-   }
-   action Resume() {
-      set EndsAt = now + Left
-      do Tick.Start()
-   }
-   action Finish() {
-      set Focusing = false
-   }
+      create FocusSession {
+         EndsAt: now + Length
+   }  }
    render Col() [gap 6] {
-      when Focusing {
-         true -> {
-            Text(when Left > 0 Left.Clock / not "Time's up") [title]
-            when Tick.Running {
-               true -> {
-                  #pauseFocus
-                  FormButton("Pause") {
-                     on press Pause
-                  }
-               }
-               otherwise -> {
-                  #resumeFocus
-                  FormButton("Resume") {
-                     on press Resume
-               }  }
-            }
-            #stopFocus
-            FormButton("Stop") {
-               on press Finish
-            }
-         }
-         otherwise -> {
+      when CurrentSession {
+         empty -> {
             #startFocus
             FormButton("Focus for { SessionMinutes } min") {
                on press -> { do Start(SessionMinutes.min) }
-}  }  }  }  }
+         }  }
+         otherwise -> { Text("A session is running") [body] }
+}  }  }
+
+// The focus bar: the running session, wherever you are. The shell lays it out beside the navigator,
+// and it reads the session from the store rather than from a parent view, which is what lets it stay
+// visible while the writing happens several navigation levels deeper. The clock is a library value
+// and `Left` is an ordinary derivation that recomputes as it ticks. `EndsAt` is absolute, so a
+// running session survives relaunch; pausing freezes the reading by recording when it stopped, and
+// resuming re-anchors the deadline to the remainder, so paused time is not lost.
+file view FocusBar() {
+   query FocusSessions as CurrentSession {
+      limit 1
+   }
+   state Tick = Interval(1.s)
+   render Row() [gap 6, panel, border accent when FocusBar is active] {
+      Text("Focus session") [body]
+      loop CurrentSession / FocusSession {
+         let Left = when FocusSession.Paused {
+            true -> FocusSession.EndsAt - FocusSession.PausedAt
+            otherwise -> FocusSession.EndsAt - Tick.Value
+         }
+         Text(when Left > 0 Left.Clock / not "Time's up") [title]
+         FocusSessionControls(FocusSession)
+}  }  }  }
+
+// The child command closes over one mounted session. Its modifier shortcut therefore remains
+// available while attention is in the editor, without promoting the session to global state.
+view FocusSessionControls(FocusSession) {
+   command PauseFocus() {
+      Title "Pause focus session"
+      Key primary + "p"
+      Enabled FocusSession.Paused is Running
+      do -> { update FocusSession {
+         PausedAt: now
+         Paused
+      } }
+   }
+   Commands { PauseFocus }
+   render Row() [gap 6] {
+      when FocusSession.Paused {
+         true -> {
+            #resumeFocus
+            FormButton("Resume") {
+               on press -> { update FocusSession {
+                  EndsAt: now + (FocusSession.EndsAt - FocusSession.PausedAt)
+                  Running
+               } }
+         }  }
+         otherwise -> {
+            #pauseFocus
+            FormButton("Pause") {
+               on press -> { do PauseFocus() }
+      }  }  }
+
+      #stopFocus
+      FormButton("Stop") {
+         on press -> { delete FocusSession }
+}  }  }
 
 view SavedToast() {
    render Text("Saved")
@@ -782,7 +941,7 @@ view ConfirmCloseDialogue(Document) responds ConfirmResult {
    }
 }
 
-view Settings() {
+scene Settings() {
    Title "Settings"
    render Scroller() [screen] {
       Col() [width max 720, centered, gap 10] {
@@ -800,7 +959,7 @@ view Settings() {
    }
 }
 
-view SignedOut() {
+scene SignedOut() {
    Title "Signed out"
    render Text("Signed out")
 }
@@ -850,7 +1009,7 @@ let WordFlowerDeclarationLetWith = app with {
    Navigator FoundationStackLetWith
 }
 
-view FoundationHome() {
+scene FoundationHome() {
    Title "Navigation foundation"
    render Col() {
       Text("Foundation home marker")
@@ -863,7 +1022,7 @@ view FoundationHome() {
    }
 }
 
-view FoundationDetail() {
+scene FoundationDetail() {
    Title "Foundation detail"
    render Col() {
       Text("Foundation detail marker")

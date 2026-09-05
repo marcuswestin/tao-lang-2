@@ -79,7 +79,10 @@ const LANE = 'dev-test'
 const QUIET_FAILURE_OUTPUT_LINES = 40
 const BUN_SUITE_ARGS = new Map<string, readonly string[]>([
   ['compiler', ['--concurrent']],
-  ['dev', ['--concurrent']],
+  // Developer tests deliberately run concurrently and many of them spawn child processes. During
+  // full verification, a healthy child can wait behind the other CPU-heavy suites long enough to
+  // exceed Bun's generic five-second test timeout even though it completes promptly in isolation.
+  ['dev', ['--concurrent', '--timeout=15000']],
   ['ide-extension', ['--concurrent']],
   // runtime-toolchain tests spawn full tsc typechecks; under parallel suite load these exceed
   // bun's 5s default per-test timeout, which kills the tsc child and fails the test on its

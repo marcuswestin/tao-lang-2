@@ -163,6 +163,7 @@ export const FunctionalCoreCompiler = {
           start: ${cst.offset},
           end: ${cst.end},
         },
+        interaction: ${Compile.OutlineLoopReference(statement)},
       })}
     `
   },

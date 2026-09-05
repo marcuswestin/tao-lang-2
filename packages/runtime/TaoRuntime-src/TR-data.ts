@@ -42,11 +42,14 @@ export type TaoDataField = {
   kind: DataPrimitive | 'relation'
   onDelete?: RelationDeleteBehavior
   relation?: string
+  /** title marks the one text field that names a row to a person: a label of last resort. */
+  title?: boolean
   unique?: boolean
 }
 
 export type TaoDataEntity = {
   collection: string
+  commandPolicy?: TaoEntityCommandPolicy
   defaultOrder?: {
     direction: 'asc' | 'desc'
     field: string
@@ -54,6 +57,12 @@ export type TaoDataEntity = {
   fields: Record<string, TaoDataField>
   inverseFields?: Record<string, { inverseField: string; relation: string }>
 }
+
+/** TaoEntityCommandPolicy is the generated default and withheld verb order for one entity. */
+export type TaoEntityCommandPolicy = Readonly<{
+  hidden: readonly string[]
+  surfaced: readonly string[]
+}>
 
 export type TaoDataSchemaDefinition = {
   entities: Record<string, TaoDataEntity>
@@ -314,6 +323,23 @@ export const DataControls = {
   /** IsEntityHandle lets the TR facade delegate member reads without importing runtime implementation types. */
   IsEntityHandle(value: unknown): boolean {
     return entityHandle(value) !== undefined
+  },
+
+  /** EntityInteraction exposes only the generated interaction facts carried by a live entity handle. */
+  EntityInteraction(value: unknown):
+    | Readonly<{
+      entity: string
+      policy?: TaoEntityCommandPolicy
+    }>
+    | undefined
+  {
+    const handle = entityHandle(value)
+    if (!handle) {
+      return undefined
+    }
+    const metadata = metadataOf(handle)
+    const policy = metadata.schema.definition.entities[metadata.entity]?.commandPolicy
+    return { entity: metadata.entity, ...(policy === undefined ? {} : { policy }) }
   },
 
   /** EntityAvailability derives the exceptional guard state of a live entity handle. */

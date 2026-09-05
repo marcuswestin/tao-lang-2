@@ -13,6 +13,7 @@ class TaoCheckFailure extends Error {
 
 type TestInstance = ReturnType<RuntimeApp.Screen['getByTestId']>
 type ScopeResolver = () => TestInstance | undefined
+const selectedOutlineIdentities = new WeakMap<TestInstance, string>()
 
 /**
  * RunningApp is the app instance a check is currently driving. It is a holder rather than a value
@@ -80,11 +81,16 @@ async function runStep(
     enter: enter => enterStep(screen, enter, resolveScope()),
     expect: expectation => assertExpectation(screen, expectation, resolveScope()),
     expectCheckboxState: expectation => assertCheckboxState(screen, expectation, resolveScope()),
+    expectFocusRegion: expectation => assertFocusRegion(expectation),
     expectGroup: expectation => assertExpectationGroup(screen, expectation, resolveScope()),
     expectNavigationTitle: expectation => assertNavigationTitle(screen, expectation),
     expectInputValue: expectation => assertInputValue(screen, expectation, resolveScope()),
+    expectTarget: expectation => assertTarget(expectation),
     expectToolbarCommand: expectation => assertToolbarCommand(screen, expectation),
+    expectVerbs: expectation => assertVerbs(expectation),
+    narrow: narrow => narrowStep(narrow),
     press: press => pressStep(screen, press, resolveScope()),
+    pressKey: press => pressKeyStep(press),
     pressToolbarCommand: press => pressToolbarCommandStep(screen, press),
     relaunch: relaunch => relaunchStep(app, relaunch),
     select: select => selectStep(app, select, resolveScope),
@@ -196,6 +202,57 @@ async function backStep(_step: Extract<TestCompiler.Step, { kind: 'back' }>): Pr
   await act(async () => {
     TR.Navigation.Back()
   })
+}
+
+async function pressKeyStep(step: Extract<TestCompiler.Step, { kind: 'pressKey' }>): Promise<void> {
+  let handled = false
+  await act(async () => {
+    handled = TR.Interaction.PressKey(step.key)
+  })
+  if (!handled) {
+    Errors.throwUserInput(`${formatStep(step)} was not handled.\n${formatSource(step.source)}`)
+  }
+}
+
+async function narrowStep(step: Extract<TestCompiler.Step, { kind: 'narrow' }>): Promise<void> {
+  await act(async () => {
+    TR.Interaction.Narrow(step.text)
+  })
+}
+
+function assertTarget(step: Extract<TestCompiler.Step, { kind: 'expectTarget' }>): void {
+  const actual = TR.Interaction.Attention.read().targetLabel
+  if (actual !== step.label) {
+    Errors.throwUserInput(
+      `${formatStep(step)} expected interaction target ${JSON.stringify(step.label)}, got ${JSON.stringify(actual)}.\n${
+        formatSource(step.source)
+      }`,
+    )
+  }
+}
+
+function assertFocusRegion(step: Extract<TestCompiler.Step, { kind: 'expectFocusRegion' }>): void {
+  const actual = TR.Interaction.Attention.read().focusRegionLabel
+  if (actual !== step.label) {
+    Errors.throwUserInput(
+      `${formatStep(step)} expected interaction focus region ${JSON.stringify(step.label)}, got ${
+        JSON.stringify(actual)
+      }.\n${formatSource(step.source)}`,
+    )
+  }
+}
+
+function assertVerbs(step: Extract<TestCompiler.Step, { kind: 'expectVerbs' }>): void {
+  // Exact membership and tier order are the observable verb-surface contract. Containment would
+  // miss leaked hidden commands, duplicate labels, and priority regressions.
+  const actual = TR.Interaction.Attention.read().verbs.map(verb => verb.label)
+  if (JSON.stringify(actual) !== JSON.stringify(step.labels)) {
+    Errors.throwUserInput(
+      `${formatStep(step)} expected interaction verbs ${JSON.stringify(step.labels)}, got ${JSON.stringify(actual)}.\n${
+        formatSource(step.source)
+      }`,
+    )
+  }
 }
 
 async function pressStep(
@@ -381,6 +438,11 @@ function selectedRow(
       }`,
     )
   }
+  const parentIdentity = parentScope === undefined ? undefined : selectedOutlineIdentities.get(parentScope)
+  const outlineIdentity = TR.Interaction.Outline.itemIdentityForTestTag(step.tag, step.index, parentIdentity)
+  if (outlineIdentity !== undefined) {
+    selectedOutlineIdentities.set(row, outlineIdentity)
+  }
   return row
 }
 
@@ -395,13 +457,18 @@ function formatStep(step: TestCompiler.Step): string {
         : `expect ${expectation.selector} "${expectation.text}"`,
     expectCheckboxState: expectation =>
       `expect checkbox #${expectation.tag} ${expectation.checked ? 'checked' : 'unchecked'}`,
+    expectFocusRegion: expectation => `expect focus region "${expectation.label}"`,
     expectGroup: expectation => expectation.scopeTag ? `expect #${expectation.scopeTag} { … }` : 'expect { … }',
     expectNavigationTitle: expectation => `expect navigation title "${expectation.title}"`,
     expectInputValue: expectation =>
       `expect input ${expectation.selector} "${expectation.target}" value "${expectation.value}"`,
+    expectTarget: expectation => `expect target "${expectation.label}"`,
     expectToolbarCommand: expectation =>
       `expect toolbar command "${expectation.label}" ${expectation.enabled ? 'enabled' : 'disabled'}`,
+    expectVerbs: expectation => `expect verbs ${expectation.labels.map(label => `"${label}"`).join(', ')}`,
+    narrow: narrow => `narrow "${narrow.text}"`,
     press: press => `press ${press.selector} "${press.text}"`,
+    pressKey: press => `press key "${press.key}"`,
     pressToolbarCommand: press => `press toolbar command "${press.label}"`,
     relaunch: relaunch => relaunch.fresh ? 'relaunch fresh' : 'relaunch',
     select: select => `select #${select.tag}[${select.index}] { … }`,
@@ -451,7 +518,19 @@ function querySelector(
     return matches
   }
   if (selector === 'label') {
-    return queries.queryAllByLabelText(target)
+    const matches = queries.queryAllByLabelText(target)
+    const semanticRow = accessibleAncestorWithLabel(scope, target)
+    if (semanticRow && !matches.includes(semanticRow)) {
+      return [semanticRow, ...matches]
+    }
+    const outlineIdentity = scope === undefined ? undefined : selectedOutlineIdentities.get(scope)
+    const outlineRow = outlineIdentity === undefined
+      ? undefined
+      : TR.Interaction.Outline.read().nodes.find(node => node.identity === outlineIdentity)
+    if (outlineRow?.label === target && !matches.includes(scope!)) {
+      return [scope!, ...matches]
+    }
+    return matches
   }
   if (selector === 'text') {
     return queries.queryAllByText(target)
@@ -460,6 +539,20 @@ function querySelector(
     return queries.queryAllByPlaceholderText(target)
   }
   Errors.throwUserInput(`Unsupported test selector '${selector}'.`)
+}
+
+function accessibleAncestorWithLabel(scope: TestInstance | undefined, label: string): TestInstance | undefined {
+  let current = scope
+  while (current) {
+    if (
+      current.props.accessibilityLabel === label
+      && (current.props.accessible === true || current.props.accessibilityRole !== undefined)
+    ) {
+      return current
+    }
+    current = current.parent ?? undefined
+  }
+  return undefined
 }
 
 function escapeRegExp(value: string): string {

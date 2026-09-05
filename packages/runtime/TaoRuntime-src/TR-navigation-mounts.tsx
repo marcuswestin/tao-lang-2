@@ -2,6 +2,7 @@ import React from 'react'
 import { AppSurfaceFrame } from './TR-app-shell'
 import { RuntimeAssert } from './TR-assert'
 import { UserInputError } from './TR-errors'
+import { OutlineRegionScope, regionNativeProps, selectionItemRegion, splitPaneRegion } from './TR-interaction-regions'
 import { mountedDesignStyle } from './TR-mounted-design'
 import type {
   TaoNavDescriptor,
@@ -24,7 +25,12 @@ import type {
   TaoNavigationRestorationCodec,
 } from './TR-navigation-restoration-state'
 import type { PresentableEntry } from './TR-navigation-state'
-import { navigationHostStyle, NavigationLevel, navigationProps } from './TR-navigation-surfaces'
+import {
+  navigationHostStyle,
+  NavigationLevel,
+  navigationProps,
+  presentedOccurrenceRegion,
+} from './TR-navigation-surfaces'
 import { RuntimeNavigationValue, takeRemovedBrowserHistoryId } from './TR-navigation-value'
 import {
   assertPatchKeys,
@@ -135,8 +141,14 @@ function SplitNavSurface(props: { navigation: RuntimeSplitNav; taoProps?: TaoPro
   const lastTap = React.useRef<Record<string, number>>({})
   const children: React.ReactNode[] = []
   items.forEach(([key, item], index) => {
+    const region = splitPaneRegion(props.navigation.name, key, () => (widths[index] ?? 0) > 0)
     children.push(React.createElement(runtime.View, {
-      children: renderPresentable(item.content, {}, navigationProps(props.taoProps, props.navigation)),
+      ...regionNativeProps(region),
+      children: React.createElement(
+        OutlineRegionScope,
+        { region },
+        renderPresentable(item.content, {}, navigationProps(props.taoProps, props.navigation)),
+      ),
       key,
       style: { flexBasis: widths[index], flexGrow: 0, flexShrink: 0 },
     }))
@@ -318,7 +330,7 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
   reconcileNativeDismissal(instanceId: number, count: number): void {
     // A native gesture belongs to the retained content stack. If Tao is currently presenting an
     // overlay or ask above it, that semantic layer must win Back precedence and the gesture is stale.
-    if (this.historyDepth() > this.contentHistoryDepth()) {
+    if (this.overlayDepth() > 0) {
       return
     }
     const dismissedIndex = this.entries.findIndex(entry => entry.instanceId === instanceId)
@@ -342,7 +354,7 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
   override ownsBackAffordance(): boolean {
     // Content chrome is defocused while an overlay or ask is active, so it cannot own the visible
     // affordance then. The app host supplies one until the overlay lane is empty again.
-    if (this.historyDepth() > this.contentHistoryDepth()) {
+    if (this.overlayDepth() > 0) {
       return false
     }
     return this.depth > 1 || this.initialNavigation()?.ownsBackAffordance() === true
@@ -534,7 +546,8 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
 
   override activate(key: string): boolean {
     if (!this.item(key)) {
-      return false
+      // Not one of this navigator's own keys: a navigator an item's view renders may still own it.
+      return super.activate(key)
     }
     if (key !== this.activeKey) {
       this.activeKey = key
@@ -725,6 +738,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     return React.createElement(runtime.View, {
       children: [
         React.createElement(runtime.View, {
+          accessibilityRole: 'tablist',
           children: this.items.map(item =>
             React.createElement(
               React.Fragment,
@@ -740,6 +754,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
                       this.activate(item.key)
                     },
                   },
+                  semanticIdentity: `navigation:${this.name}:selection:${item.key}`,
                   title: String(item.definition.label.evaluate().jsValue),
                 },
                 {
@@ -758,17 +773,22 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
           ],
         }),
         React.createElement(runtime.View, {
-          children: this.items.flatMap(item =>
-            item.entries.map((entry, index) =>
-              React.createElement(NavigationLevel, {
-                children: renderPresentable(
-                  entry.presentable,
-                  entry.arguments,
-                  this.entryTaoProps(item, taoProps),
-                ),
-                hidden: item.key !== this.activeKey || index !== item.entries.length - 1,
-                key: `${item.key}-${entry.instanceId}`,
-              })
+          children: this.items.map(item =>
+            React.createElement(
+              OutlineRegionScope,
+              { key: item.key, region: this.itemRegion(item) },
+              item.entries.map((entry, index) =>
+                React.createElement(NavigationLevel, {
+                  children: renderPresentable(
+                    entry.presentable,
+                    entry.arguments,
+                    this.entryTaoProps(item, taoProps),
+                  ),
+                  hidden: item.key !== this.activeKey || index !== item.entries.length - 1,
+                  key: `${item.key}-${entry.instanceId}`,
+                  region: presentedOccurrenceRegion(this, entry, 'content'),
+                })
+              ),
             )
           ),
           key: 'selection-content',
@@ -799,21 +819,36 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
    */
   private itemEntryLevels(item: SelectionItemState, taoProps?: TaoProps): React.ReactNode {
     const entryTaoProps = this.entryTaoProps(item, taoProps)
-    return item.entries.map((entry, index) => {
-      const ownsWindow = isNavigation(entry.presentable) && entry.presentable.ownsWindowSurface()
-      const level = React.createElement(NavigationLevel, {
-        children: renderPresentable(entry.presentable, entry.arguments, entryTaoProps),
-        fill: ownsWindow,
-        hidden: index !== item.entries.length - 1,
-        ...(ownsWindow ? { key: `${item.key}-${entry.instanceId}` } : {}),
-      })
-      return ownsWindow ? level : React.createElement(AppSurfaceFrame, {
-        children: level,
-        key: `${item.key}-${entry.instanceId}`,
-        nativeInsets: true,
-        taoProps: entryTaoProps,
-      })
-    })
+    return React.createElement(
+      OutlineRegionScope,
+      { region: this.itemRegion(item) },
+      item.entries.map((entry, index) => {
+        const ownsWindow = isNavigation(entry.presentable) && entry.presentable.ownsWindowSurface()
+        const level = React.createElement(NavigationLevel, {
+          children: renderPresentable(entry.presentable, entry.arguments, entryTaoProps),
+          fill: ownsWindow,
+          hidden: index !== item.entries.length - 1,
+          ...(ownsWindow ? { key: `${item.key}-${entry.instanceId}` } : {}),
+          region: presentedOccurrenceRegion(this, entry, 'content'),
+        })
+        return ownsWindow ? level : React.createElement(AppSurfaceFrame, {
+          children: level,
+          key: `${item.key}-${entry.instanceId}`,
+          nativeInsets: true,
+          taoProps: entryTaoProps,
+        })
+      }),
+    )
+  }
+
+  /** itemRegion is the region one keyed item is: its key, named by its `Label`. */
+  private itemRegion(item: SelectionItemState): ReturnType<typeof selectionItemRegion> {
+    return selectionItemRegion(
+      this.name,
+      item.key,
+      () => String(item.definition.label.evaluate().jsValue),
+      () => item.key === this.activeKey,
+    )
   }
 
   private activeItem(): SelectionItemState {

@@ -1,7 +1,7 @@
 import { Errors } from '@shared'
 import CommandRunner from '../CommandRunner'
 import { DevLoopTUI } from '../DevLoopTUI'
-import { ExpoRunner } from '../expo-runner/ExpoRunner'
+import type { ExpoRunnerSession } from '../expo-runner/ExpoRunner'
 import Run from '../Run'
 import Commands, { type CommandKey } from './Commands'
 type ActionCommandKey = Exclude<CommandKey, '\u0003'>
@@ -11,6 +11,7 @@ type CommandHandler = (context: CommandKeyContext) => Promise<boolean | void> | 
 type CommandKeyContext = {
   appName?: string
   appPath: string
+  expo: ExpoRunnerSession
   finish: (exitCode: number) => Promise<void>
   repoRoot: string
   restart: () => Promise<void>
@@ -42,12 +43,12 @@ const COMMAND_HANDLERS = {
   r: context =>
     CommandRunner.runNonInteractiveCommand(
       'recompile and reload Expo app',
-      () => Run.recompileAndReload(context.repoRoot, context.appPath, context.appName),
+      () => Run.recompileAndReload(context.repoRoot, context.appPath, context.expo, context.appName),
     ),
-  d: () => CommandRunner.runNonInteractiveCommand('open Expo device', ExpoRunner.openPhysicalDevice),
+  d: context => CommandRunner.runNonInteractiveCommand('open Expo device', context.expo.openPhysicalDevice),
   p: context => context.restart(),
-  w: () => CommandRunner.runNonInteractiveCommand('open Expo web', ExpoRunner.openWeb),
-  i: () => CommandRunner.runNonInteractiveCommand('open Expo iOS', ExpoRunner.openIosSimulator),
+  w: context => CommandRunner.runNonInteractiveCommand('open Expo web', context.expo.openWeb),
+  i: context => CommandRunner.runNonInteractiveCommand('open Expo iOS', context.expo.openIosSimulator),
   c: context =>
     CommandRunner.runNonInteractiveCommand(
       'clean, install deps, and reload',
@@ -65,7 +66,7 @@ const COMMAND_HANDLERS = {
       'install IDE extension',
       () => Run.runJust(['install-ide-extension']),
     ),
-  a: () => CommandRunner.runNonInteractiveCommand('open Expo Android', ExpoRunner.openAndroid),
+  a: context => CommandRunner.runNonInteractiveCommand('open Expo Android', context.expo.openAndroid),
   s: context => context.selectApp(),
 } satisfies Record<ActionCommandKey, CommandHandler>
 

@@ -82,7 +82,7 @@ app Skillet {
    // The root is live and follows the account: welcome until you belong to a kitchen, then the kitchen.
    // Starting one, accepting an invitation, and leaving are ordinary writes — no screen replaces the
    // root, and no feature screen re-checks the gate.
-   Navigator when MyKitchen {
+   view when MyKitchen {
       loading -> LoadingNav // never a flash of "Start your kitchen" for a returning cook
       none -> WelcomeNav
       otherwise -> SkilletNavigator
@@ -93,7 +93,7 @@ app Skillet {
    // and toasts do not. An incoming link always wins over restoration.
    Restore automatic { Exclude sheets, menus, toasts }
 
-   // A link is product intent, a stable path, and its mounting policy in one declaration. `reveal`
+   // A link is product behavior, a stable path, and its mounting policy in one declaration. `reveal`
    // focuses an equal mount rather than stacking a second occurrence, so opening the same recipe from
    // two places lands in one place. A link whose target is not mounted yet waits and runs when it is,
    // so a shared link opens after signing in. `{Recipe}` declares an entity parameter; other parameters

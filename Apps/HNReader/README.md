@@ -19,7 +19,7 @@ relation traversal (`Story.Comments`) filling on demand; upsert by an entity's `
 the query availability cases a remote read produces (`loading`, `empty`, `error`, and the advisory
 `refreshing` / `stale`); `limit` on a query; a flattened comment tree rendered with depth rails;
 journeys binding a stub adapter through an ordinary app variant; native-default `StackNav` reading
-reactive screen `Title` and `Toolbar` slots; and the platform-neutral command that opens a story URL.
+reactive scene `Title` and `Toolbar` slots; and the platform-neutral command that opens a story URL.
 
 **Does not belong here:** writes through a remote datasource, authentication, pagination beyond
 `limit`, provider or adapter diagnostics (those are package tests in `packages/runtime`), and

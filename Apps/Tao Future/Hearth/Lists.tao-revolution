@@ -1,23 +1,25 @@
 // Lists, their items, the shopping fold, one item, and sharing.
 
+use primary from @tao/keys
+
 phrase ItemCount(Count number) = one "{ Count } item" / other "{ Count } items"
 
-view HearthListIndex() {
+scene HearthListIndex() {
    Title "Lists"
    Toolbar { NewList }
    query Lists from MyHome.Lists { }
 
-   action NewListIntent() runs single {
-      Title "New list"
+   action CreateNewList() runs single {
       // Visibility follows permission to create a HearthList in MyHome.Lists, resolved by the store.
       let HearthList = ask NewListSheet(MyHome)
       stop if HearthList is none
       open ListLink(HearthList)
    }
-   command NewList = NewListIntent() with {
-      Label "New list"
+   command NewList() {
+      Title "New list"
       Icon "plus"
-      Key "cmd+shift+n"
+      Key primary + "l"
+      do CreateNewList()
    }
 
    render ScrollView [screen] {
@@ -68,7 +70,7 @@ file view NewListSheet(Home) responds HearthList {
 
 // -- One list -----------------------------------------------------------------------------------------------
 
-view HearthListScreen(HearthList) {
+scene HearthListScreen(HearthList) {
    Title HearthList.Name
    Toolbar { Rename ShareThis DeleteThis }
    Search Find
@@ -101,35 +103,36 @@ view HearthListScreen(HearthList) {
       if HearthList.Kind is not Shopping { open ItemLink(Item) }
    }
 
-   action RenameIntent() {
-      Title "Rename"
+   action OpenRename() {
       // Visibility follows permission to change HearthList, resolved by the store.
       present RenameList(HearthList) as sheet
    }
-   command Rename = RenameIntent() with {
-      Label "Rename"
+   command Rename() {
+      Title "Rename"
       Icon "pencil"
+      do OpenRename()
    }
-   action ShareThisIntent() {
-      Title "Share this"
+   action OpenSharing() {
       // Visibility follows permission to change HearthList, resolved by the store.
       present ShareListSheet(HearthList) as sheet
    }
-   command ShareThis = ShareThisIntent() with {
+   command ShareThis() {
+      Title "Share this"
       Label if HearthList is Shared then "Manage link" else "Share list"
       Icon "square.and.arrow.up"
+      do OpenSharing()
    }
-   action DeleteThisIntent() runs single {
-      Title "Delete list"
+   action ConfirmDeleteList() runs single {
       // Store-derived delete permission controls visibility. The delete effect and explicit
-      // confirmation carry the destructive intent; the command adds no separate role marker.
+      // confirmation carry destructive behavior; the command adds no separate role marker.
       stop unless ask Confirm("Delete { HearthList.Name }?", Body: "Its items, notes, and photos will be removed for everyone.", Verb: "Delete")
       delete HearthList
       dismiss
    }
-   command DeleteThis = DeleteThisIntent() with {
-      Label "Delete list"
+   command DeleteThis() {
+      Title "Delete list"
       Icon "trash"
+      do ConfirmDeleteList()
    }
 
    // A view declared inside the screen sees its queries: the shopping fold and the finished items.
@@ -194,15 +197,14 @@ view HearthListScreen(HearthList) {
 
 // Renaming needs no draft: the row exists and each field stands on its own.
 file view RenameList(HearthList) {
-   Title "Rename list"
-   action DoneIntent() {
-      Title "Done"
+   action DismissRename() {
       dismiss
    }
-   command Done = DoneIntent() with {
-      Label "Done"
+   command Done() {
+      Title "Done"
       Icon "checkmark"
       Key "escape"
+      do DismissRename()
    }
    render Col [card, width max 480, gap md] {
       TextInput(Value: HearthList.Name, Label: "List name")
@@ -213,7 +215,7 @@ file view RenameList(HearthList) {
 
 // -- One item ------------------------------------------------------------------------------------------------
 
-view HearthItemScreen(Item) {
+scene HearthItemScreen(Item) {
    Title Item.Title
    Toolbar { OpenSeparately DeleteItem }
    presence Lookers on Item
@@ -230,27 +232,27 @@ view HearthItemScreen(Item) {
       create Photo in Item.Photos { Image: Picture, AddedBy: Me }
    }
 
-   action OpenSeparatelyIntent() {
-      Title "Open separately"
+   action OpenItemSeparately() {
       // A window on a laptop; where there are no windows, a full-screen sheet. The key means opening
       // the same item twice focuses the one window instead of stacking a second.
       present HearthItemScreen(Item) as window (Key: Item)
    }
-   command OpenSeparately = OpenSeparatelyIntent() with {
-      Label "Open separately"
+   command OpenSeparately() {
+      Title "Open separately"
       Icon "rectangle.on.rectangle"
+      do OpenItemSeparately()
    }
-   action DeleteItemIntent() runs single {
-      Title "Delete"
+   action ConfirmDeleteItem() runs single {
       // Store-derived delete permission controls visibility. The delete effect and explicit
-      // confirmation carry the destructive intent; the command adds no separate role marker.
+      // confirmation carry destructive behavior; the command adds no separate role marker.
       stop unless ask Confirm("Delete { Item.Title }?", Body: "Its notes and photos go with it.", Verb: "Delete")
       delete Item
       dismiss
    }
-   command DeleteItem = DeleteItemIntent() with {
-      Label "Delete"
+   command DeleteItem() {
+      Title "Delete"
       Icon "trash"
+      do ConfirmDeleteItem()
    }
 
    render ScrollView [screen] {
@@ -315,7 +317,6 @@ view HearthItemScreen(Item) {
 // -- Sharing --------------------------------------------------------------------------------------------------
 
 file view ShareListSheet(HearthList) {
-   Title "Share list"
    action Start() runs single {
       when ShareList(HearthList) {
          done -> Published { share SharedListLink(Published); dismiss }
@@ -341,7 +342,7 @@ file view ShareListSheet(HearthList) {
                Button("Share link") [primary] { on press -> share SharedListLink(publish HearthList as SharedList) }
 }  }  }  }  }
 
-public view SharedListScreen(SharedList) {
+public scene SharedListScreen(SharedList) {
    Title SharedList.Name
    render ScrollView [screen] {
       guard SharedList

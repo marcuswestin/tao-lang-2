@@ -99,8 +99,12 @@ view Status(Message text, Tone default Neutral)
 view CookScreen(Recipe, Meal?)                  // a bare name takes its same-named type
 ```
 
-- **`:` binds a value to a name.** It appears at call sites and in literals, and nowhere else:
-  `Text(Timer.Step.Text, Lines: 1)`, `create Timer { StartedBy: Me }`, `update Me { Units: Imperial }`.
+- **`:` binds a value to a name at call sites and in literals**: `Text(Timer.Step.Text, Lines: 1)`,
+  `create Timer { StartedBy: Me }`, `update Me { Units: Imperial }`. In a _value body_ — a
+  configuration block, a scene's chrome fills, a command's members — juxtaposition binds instead
+  (`Label "Focus session"`, `Icon "checkmark"`), because nothing in such a body can be a declaration.
+  The rule is that **juxtaposition declares in a type body and binds in a value body**, and no block
+  is both: the one that was, the command block, now declares its slots in a parameter list (§8).
 
 This is why a parameter is not written `Link is text` or `Link: text`. `is` is the language's
 predicate word in every expression (`where Role is Owner`, `when Recipe is Favorite`,
@@ -359,10 +363,11 @@ data Groceries / Grocery {
 | `unique`                | —                    | a storage fact                                         |
 | `search`                | —                    | participates in the entity's multi-field text search   |
 | `device`                | —                    | a preference scoped to one device, so it does not sync |
+| `title`                 | —                    | the one text field that names a row to a person (§9)   |
 
 ```swift
 data Recipes / Recipe {
-   Title text (required "Name this recipe", unique, search)
+   Title text (required "Name this recipe", unique, search, title)
    Servings number (default 4)
    ChangedAt time (default now, touch on change)
    Ingredients (owned, ordered)
@@ -370,9 +375,9 @@ data Recipes / Recipe {
 }
 ```
 
-- **`index` and `order by` trail the field list as a group**, separated from it by a blank line.
-  Both state a storage fact about the _entity_ rather than about one field, so neither rides a
-  field's trait list — `index` names its field the same way `order by` already does:
+- **`index`, `order by`, and `local only` trail the field list as a group**, separated from it by a
+  blank line. Each states a storage fact about the _entity_ rather than about one field, so none
+  rides a field's trait list — `index` names its field the same way `order by` already does:
 
 ```swift
 data Workspaces / Workspace {
@@ -442,6 +447,12 @@ data Groceries / Grocery {
 }
 ```
 
+- **`local only` keeps an entity on the device** whatever datasource the app configures, so a synced
+  variant never syncs it (amended by KEY-D7). It is the narrow form of per-entity datasource
+  scoping, and it is what lets something like a writing session be data — surviving navigation and
+  relaunch — without becoming something to sync. A stored relation may not cross the boundary: the
+  two stores are separate, so a relation between them could not resolve, and it is diagnosed where
+  it is written.
 - **`unique`, `index`, `search`, and `order by` are declarative storage facts** stated on the entity,
   not preflight checks written in UI code:
 
@@ -588,8 +599,12 @@ transaction JoinWithInvite(Code secret) for Me returns Household {
   answer comes from the rule the store enforces:
 
 ```swift
-command Favorite = FavoriteRecipe(Recipe) with { Icon "heart" }
-// shown only while `can change Recipe` — the intent asks the store; nothing re-implements the rule (§8)
+command Favorite(Recipe) {
+   Title "Favorite recipe"
+   Icon "heart"
+   do FavoriteRecipe(Recipe)
+}
+// shown only while `can change Recipe` — the command asks the store; nothing re-implements the rule (§8)
 ```
 
 ---
@@ -766,6 +781,9 @@ query RecentRecipes from MyKitchen.Recipes {
 }
 ```
 
+- **A module-level query is not part of the language today**, although it could be added and nothing
+  strictly prevents it; queries live in the view whose mount owns their reactive lifetime.
+
 - **Queries traverse relations** rather than requiring hand-written joins: `MyKitchen.Recipes` above
   crosses the `Household -> Recipe` relation with no join clause to write.
 - **Multi-field text search is declared on the entity and consumed by the query**:
@@ -849,88 +867,131 @@ if Edit.Conflicted { RecipeConflict(Edit) }   // a generated diff, not hand-auth
 
 ---
 
-## 8. Intents, commands, actions, and concurrency
+## 8. Commands, actions, and concurrency
 
-### Intents
+### Commands and actions
 
-- **An `action` or `transaction` _is_ an intent — there is no separate `intent` keyword.** Optional
-  metadata members make it discoverable; an action without a `Title` is an ordinary private helper,
-  invisible to every surface, with no flag needed:
+**Settled by the interaction system tranche** (KEY-D10; implemented). The earlier model made an
+action discoverable through title metadata and treated a command as a bound affordance reference.
+KEY-D10 replaces both halves with the configured command model below; the former `intent` concept
+word and its declaration model are retired.
 
-```swift
-action FavoriteRecipe(Recipe) {
-   Title "Favorite recipe"                        // its name on any surface; constant copy (§14)
-   Description "Adds a recipe to your favorites, or removes it."
-   Summary "Favorite { Recipe }"                  // the parameter sentence a palette or Siri shows
-   toggle Recipe.Favorite
-}
-
-action Slugify(Title text) returns text { … }    // no Title: not discoverable, nothing to declare
-```
-
-- **Parameters are the disambiguation policy.** They are ordinary typed slots (§2); a parameter typed
-  by an entity is a noun a surface can resolve, a postfix `?` tells an assistant it may proceed
-  without one, and a required parameter is what makes a palette or Siri prompt for it.
-- **Availability belongs to the intent, and the store answers it.** Whether `FavoriteRecipe` may run
-  is `can change Recipe` (§3) — the same answer for a toolbar, a menu, and Siri. _Not permitted_
-  hides; a command may add _not yet_ (below), which disables.
-
-### Commands
-
-- **A `command` is a reference to an intent plus the affordances a menu adds — never a body.**
-  `does` does not exist; the intent's body is the behaviour, and a command that seems to need its own
-  body is a second intent:
+- **The `command` is the discoverable verb, and the `action` behind it is a private procedure.**
+  `Title`, `Description`, and `Summary` move off `primitive action` onto `primitive command`. There
+  is no longer a way to make an action discoverable, because nothing lists an action: a declaration
+  that only ever runs cannot name itself, in the same way a view that is only ever composed cannot
+  name a title (§9). The former `intent` term retires; the metadata it carried belongs to the
+  command.
+- **A command is a standalone configured value, not a reference plus affordances.** It is declared
+  at module level or in a view or scene body — the placement `action` already has — and it declares
+  its slots in a parameter list, exactly as an action does. Its body holds member fills and exactly
+  one `do` clause naming the action it runs:
 
 ```swift
-view RecipeScreen(Recipe) {
-   command Favorite = FavoriteRecipe(Recipe) with {
-      Label when Recipe is Favorite { yes -> "Remove from favorites", no -> "Favorite" }
-      Icon  when Recipe is Favorite { yes -> "heart.fill", no -> "heart" }
-      Key primary + "d"
-   }
-   command Cook = CookRecipe(Recipe) with {
-      Icon "flame"
-      Key primary + "r"
-      Enabled Recipe.Steps is not empty           // possible-but-not-yet: shown, disabled
-   }
+package
+command Finish(Document) {                  // a slot is a parameter: a bare name takes its same-named type
+   Title "Finish document"
+   Summary "Finish { Document.Title }"
+   Icon "checkmark.circle"
+   Enabled Document.Final is Draft
+   do -> { update Document { Final } }
 }
 ```
 
-- **Command members are capitalized** — `Label`, `Icon`, `Key`, `Enabled` — and `Label` defaults
-  to the intent's `Title`. Each member takes an ordinary reactive expression; `Enabled` expects a
-  boolean value and has no special conditional gate syntax.
-- **Commands nest inside the `view` they act on**, closing over its parameters (`Recipe`, above), so
-  they take no parameters of their own. App-wide commands sit on the app the same way:
-  `command New = CreateRecipe with { Icon "plus", Key primary + "n" }` — with no argument bound, the
-  surface prompts for `CreateRecipe`'s required `Title`.
-- **Commands scope to focus, never to a declaration kind.** A command declared in a view is enabled
-  while the nearest presented instance of that view holds focus — there is no separate screen kind
-  to attach it to (§9), so command lifetime is the presentation's, and lifecycle language throughout
-  this document reads "the presentation", never "the `ui`".
-- **A view's host-facing members are one mechanism.** `Title` and `Toolbar` are supplied slots on
-  `view` (§9); commands are the focused declarations a surface such as `Toolbar` lists. The
-  presenter reads those members from the directly presented view and owns their chrome, so a title,
-  a toolbar, and the commands in that toolbar are not three unrelated channels.
-- **Surfaces list commands; a command never names its surface.** `Toolbar { … }` and `menu Name
-  { … }` inside a `view`; `Menu { … }` (the OS menu bar), `Rail { … }`, and `Palette all` on the app.
-  A view's command listed in the app's `Menu` (`RecipeScreen.Favorite`) is enabled while a presented
-  instance of that view holds focus and runs against that presentation's row — which is why the OS
-  menu is tied to windows.
-  `Palette all` lists every intent with a `Title`, resolved against what is on screen — the in-app
-  twin of Spotlight running intents. A command renders as its own button with `Button(Favorite)`.
+- **Slots replace closing over a view.** A command's parameters are its own, declared exactly as
+  `view CookScreen(Recipe, Meal?)` reads (§2), which is what makes one verb reusable everywhere the
+  noun appears rather than an affordance belonging to one screen. A view-body command still closes
+  over that view's parameters, state, and actions.
+- **Juxtaposition means one thing in a command block: bind.** The slots live in the parameter list,
+  so the block never has to tell a slot from a fill by what a name reaches. `Enabled CanSave` is a
+  value, with no `:` escape hatch, and `command Like(Track Song)` renames a typed slot the way any
+  parameter list does — the `Track Document` deferral is closed. Two slots of one type are the
+  ordinary parameter case: legal to declare, bound by label at the invocation, and diagnosed there
+  when an unlabeled argument could mean either. (Revised from the first implementation, which
+  declared slots in the block by juxtaposition and had to legislate around both ambiguities;
+  `Docs/Roadmap/Keyboard driven apps/Open - Shell composition and member syntax.md` §2.)
+- **Invocation is `do` with arguments, and binding is derivation.** `do Finish(Document)` invokes a
+  command exactly as `do SaveWorkspace()` invokes an action: the arguments bind to the slots by
+  label or by type through the one binding mechanism, with the same arity and type diagnostics, and
+  every `do` carries its call parentheses. `Finish with { Document }` derives a command value with a
+  slot filled, for surfaces and menus; a binding may also refine `Label`, `Icon`, `Key`, and
+  `Enabled`, and overriding `Title` is an error, because the title is what identifies the verb
+  wherever it is listed. A bound command invokes over the slots its binding left open.
+  `do X with { … }` is retired as redundant.
+- **Three surfaces retire.** `Rail { … }` retires because a rail is ordinary shell layout (§10); `Palette
+  all` retires because the palette is always present rather than opted into; and the in-view
+  `menu Name { … }` block retires, because the per-view `Commands` slot is the ordering mechanism
+  and a surface never needed a second way to list. `Toolbar` stays, `Menu` (the OS menu bar) stays,
+  and `present … as menu` stays.
+- **A mention is unfilled on purpose, and the surface supplies the noun.** `Toolbar { Finish }` names
+  the verb; the slot is filled from the presenting scene's parameters, matched by type, at
+  invocation. That is what makes one declared verb usable from a row's button and from the scene's
+  own chrome without either restating what it acts on. A slot the scene cannot supply
+  unambiguously — no parameter of that type, or more than one — is an error at the mention, because
+  a surface cannot choose on the author's behalf.
+- **`Description` stays**, alongside `Summary`: the first explains the verb, the second names the
+  particular invocation.
+- **`shortcut` is a primitive value type.** `Key` is typed `shortcut`; a bare string literal in that
+  position is a shortcut literal, and `primary + "n"` chains a modifier onto a key. Only `primary`
+  is registered, and it lives in `@tao/keys` as an ordinary imported value rather than a keyword,
+  because `primary` is also an ordinary design and layout word. Naming a platform key is diagnosed.
+- **`Toolbar` is `list of command`**, so a toolbar lists commands and only commands; there is no
+  second toolbar vocabulary in which an action carries a title of its own.
+- **Every module publishes its commands.** A generated table of a module's commands — identity,
+  slots and whether each names an entity, and the value to run — is registered at load through the
+  handwritten `TR.Interaction.RegisterCommands`; a view-body command registers while its view is
+  mounted. That table is what a verb surface reads to ask which commands act on what a person has in
+  front of them. At the implemented boundary the catalog is scoped to the compiled project, so app
+  variants and sibling app declarations in that project share it; changing that boundary requires
+  an authored app-ownership construct. At the T2 boundary the authored surfaces and dispatch still
+  remained; KEY-D8–D13 below supersede that historical implementation boundary.
 
-```swift
-app Skillet {
-   command New = CreateRecipe with { Icon "plus", Key primary + "n" }
+**Amended by the keyboard-attention tranche** (`Docs/Roadmap/Keyboard driven apps/`, KEY-D8–D13).
+The core reducer, keyboard dispatch, mounted-node narrowing, verb layer, hints, overview, and palette
+are implemented. The keyboard plan's **Remaining decided implementation** ledger is authoritative
+for the adapter and surface tail; this decision section states the target contract, not that every
+part has landed.
 
-   Menu {
-      "File"   { New }
-      "Recipe" { RecipeScreen.Favorite, RecipeScreen.Cook, separator, RecipeScreen.Remove }
-   }
-   Rail { New, Plan, Lists }
-   Palette all
-}
-```
+- **Attention is one runtime-owned reducer, not Tao state.** It owns the focused region, one
+  remembered target and narrowing string per region, engagement, and the modal stack; modes such as
+  narrowing, verbs, hints, and overview are derived. Tests and launches reset attention, while the
+  public interaction outline remains immutable snapshots. Mounted nodes privately provide the
+  reducer with activation, focus, engagement, render order, geometry, and row values.
+- **Regions come from presentation semantics.** Presented occurrences, selection items, split
+  panes, and a view's non-nav sibling subtree are regions. That sibling subtree is one compiler
+  descriptor whose mounted roots coalesce without introducing a wrapper or layout node. A target is
+  selected eagerly but never activated implicitly; narrowing uses locale-aware, case-insensitive
+  word-prefix subsequences across rendered text, and a sole candidate becomes the target.
+- **Keyboard and pointer input share semantic operations.** Enter activates or engages; Escape
+  clears narrowing, disengages without losing the target, ascends, then opens overview; arrows move
+  region or target attention; `.` opens verbs; physical `Slash` toggles hints; and `primary+K`
+  opens the palette. Engaged input, modal occurrence, target, focused scene, app command, then
+  reducer key is the dispatch order. Modifier chords invoke directly, while bare letter keys act
+  only as verb accelerators. Pointer activation first targets the same node.
+- **Command policy folds from authored surfaces.** An entity orders defaults with
+  `commands A, B` and withholds one with `commands hide C`; a view promotes commands using
+  `Commands { … }` and excludes inherited defaults with `hide C`. The folded verb order is view
+  commands, rendered inner controls, entity defaults, then other applicable commands. The first verb
+  with a given visible label wins, so a verb menu never presents indistinguishable choices. Commands
+  with open slots enter a pending flow that fills required slots in declaration order from mounted
+  entity targets, store search, or inline scalar input. The reducer-side request model has landed;
+  the store picker and scalar-input presentation have not.
+- **Interaction conditions stay ordinary words.** `pressed`, `focused`, and `hovered` are postfix
+  conditions; `when FocusBar is active` tests named region focus. These and the new Tao test phrases
+  use spelling-validated identifier seams rather than adding reserved grammar keywords.
+- **Generated interaction surfaces are runtime renderings, not authored navigation** (KEY-D13).
+  Hints, overview, the target's verb menu, the always-present command palette, and contextual Help
+  read the interaction outline, attention snapshot, current bindings, and generated catalog. One
+  host renders them above app content as a sibling after toasts; they do not enter Back history,
+  and hidden layers are removed from accessibility traversal. Hints use cached app-relative bounds,
+  overview lists mounted regions, the verb menu preserves the command tiers above, and the palette lists every
+  titled command and entity while applying the same locale-aware word-prefix subsequence matcher as
+  attention. Help remains unimplemented.
+- **Generated keys are deterministic runtime policy** (KEY-D13). Existing identities retain their keys across
+  reorders; new identities are considered in canonical identity order and receive the first free
+  label-derived letter, then another distinctive label letter, then a two-letter sequence. Reducer
+  keys and explicit shortcuts or accelerators are never allocated. Affordances remain absent until
+  the first hardware-key dispatch, while `press key` drives that same seam in tests.
 
 ### The AI surface
 
@@ -941,30 +1002,37 @@ app Skillet {
 ```swift
 app Skillet {
    Assistant {
-      Recipe { Title, Course, Servings, Photo }   // what an assistant may read of a Recipe
-      Household { Name }
-      CreateRecipe, FavoriteRecipe, CookRecipe     // what it may run — DeleteRecipe deliberately absent
-      Find Recipes by Title, Course                // what it may search
+      Entities {
+         Recipe
+         Household
+      }
+      Commands {
+         CreateRecipe
+         FavoriteRecipe
+         CookRecipe               // DeleteRecipe deliberately absent
+      }
    }
 }
 ```
 
-- On iOS this compiles to `AppEntity` + `EntityQuery` + `AppIntent` build-time metadata (the intents'
+- On iOS this compiles to `AppEntity` + `EntityQuery` + `AppIntent` build-time metadata (the commands'
   titles and summaries above); on other platforms it emits a JSON tool schema of the same shape,
-  which is what any function-calling model consumes. One block, every assistant.
+  which is what any function-calling model consumes. One block, every assistant. This Assistant and
+  native projection remain unimplemented: T6 is deferred until the repository has a tracked native
+  iOS build path on which the Swift bridge and App Intents tests can run.
 - **A test runs a verb the way an assistant would** and asserts on the store: `as assistant do
   FavoriteRecipe(Shakshuka)`, then `expect stored Shakshuka is Favorite`; a verb not in the block is
   `expect refused`.
 
 ### Undo
 
-- **Undo is a property of the intent, and it is derived, not declared.** An intent whose body is
+- **Undo is a property of the command, and it is derived, not declared.** A command whose action is
   only store writes is undoable, because the store knows every inverse: a `toggle` is its own, an
   `update` records prior values at commit, a `create` reverses to a `delete`, and a `delete` restores
-  through tombstones (§11). An intent that crosses the boundary — a sidecar call, a `notify` — is not,
-  and the compiler sees that too. `Undoable no` opts a store-only intent out (`JoinWithInvite` should
+  through tombstones (§11). A command that crosses the boundary — a sidecar call, a `notify` — is not,
+  and the compiler sees that too. `Undoable no` opts a store-only command out (`JoinWithInvite` should
   not be casually reversed). The platform undo gesture and an assistant's "undo that" both reach it;
-  one intent is one undo step.
+  one command is one undo step.
 
 ### Concurrency
 
@@ -992,7 +1060,12 @@ Button("Save") [primary, busy when Save.Running] { on press -> { do Save() } }
 - **Shortcuts are platform-abstract.** The primary modifier is named, never hard-coded to a platform:
 
 ```swift
-command New = CreateRecipe with { Key primary + "n" }   // never Key "cmd+n" — cmd names a platform
+command New(Title text) {
+   Title "New recipe"
+   Key primary + "n"
+   do CreateRecipe(Title)
+}
+// never Key "cmd+n" — cmd names a platform
 ```
 
 ### Conditionals
@@ -1099,7 +1172,8 @@ function FirstOwner(Household is Household) returns Account {
 - **One renderable declaration kind: `view`.** A screen, a reusable leaf, a content-accepting
   wrapper, and a modal that answers are all the same declaration. Nothing about a view's role is
   written on its head, because every distinction a kind could carry is either read off the body or
-  belongs to the call site:
+  belongs to the call site. (`scene` — amended below — is the single exception, and it is not a
+  second kind: `scene is view`, and it carries the one fact a body genuinely cannot state.)
 
 ```swift
 view RecipeScreen(Recipe) { … }                        // a link presents it (§10) — nothing marks that here
@@ -1120,26 +1194,44 @@ file view NewRecipeSheet(Household) responds Recipe { … }   // answers with a 
 - **One body grammar.** State, entity queries, actions, commands, aliases, tags, and render are
   legal in any view body — there is no statelessness ladder, so a stateful content-accepting
   wrapper (a collapsible section) is expressible.
-- **Host-facing self-description is supplied slots on `view`.** The prelude owns the vocabulary, not
-  the compiler, and begins with `Title` and `Toolbar`; `Icon`, `Badge`, detents, appearance, and
-  package-extensible host traits wait for forcing features. A fill is an ordinary capitalized member
-  in the body — no content-side keyword or declaration modifier is added — and its value is an
-  ordinary reactive expression over the view's parameters, state, and reads:
+- **Host-facing self-description is supplied slots on `scene`** (amended by KEY-D11; they began on
+  `view`). The prelude owns the vocabulary, not the compiler: `Title`, `Toolbar`, and `Header`;
+  `Icon`, `Badge`, detents, appearance, and package-extensible host traits wait for forcing
+  features. A fill is an ordinary capitalized member in the body — no content-side keyword or
+  declaration modifier is added — and its value is an ordinary reactive expression over the scene's
+  parameters, state, and reads:
 
 ```swift
-view RecipeScreen(Recipe) {
+scene RecipeScreen(Recipe) {
    Title Recipe.Title
-   command Share = ShareRecipe(Recipe) with { Icon "square.and.arrow.up" }
+   command Share() {
+      Title "Share recipe"
+      Icon "square.and.arrow.up"
+      do ShareRecipe(Recipe)
+   }
    Toolbar { Share }
    render RecipePage(Recipe)
 }
 ```
 
-- **A host reads only the directly presented view.** Host-facing slots never bubble from descendants;
+- **`scene is view`: a scene is presented, never composed.** That is the one fact a body cannot
+  state, and the only reason the kind exists. Because the chrome slots live on `scene` alone, a
+  declaration that is only ever composed _cannot_ declare a title nothing would read — dead chrome
+  becomes unrepresentable rather than merely discouraged. Composing a scene inline is diagnosed at
+  the render site. This reverses part of the unified-view decision above, for that stated reason.
+- **A plain view may still be presented.** A scene is the way to _add_ chrome, not a requirement for
+  presentation: a pushed plain view is legal and shows Back-only header chrome. `nav is scene`, so a
+  mounted navigator still supplies its own chrome.
+- **`Header false` is the explicit opt out**, for a scene that owns its whole surface. Back still
+  works through the reducer, the gesture, and the hardware key — only the bar is gone. A scene that
+  suppresses its header may not fill `Title` or `Toolbar`, by the same rule that put the slots on
+  `scene` in the first place, and is exempt from the pushed-scene `Title` requirement.
+
+- **A host reads only the directly presented scene.** Host-facing slots never bubble from descendants;
   a wrapper that carries a title or toolbar fills its own slots from its own parameters. Because
-  `nav` refines `view`, a nav inherits the same optional slots rather than masking them, but a host
+  `nav is scene is view`, so a nav inherits the same optional slots rather than masking them, but a host
   never reads through the nav to whichever descendant it currently presents.
-- **Self-description stays with the view; presentation policy stays at the call site.** A presenter
+- **Self-description stays with the scene; presentation policy stays at the call site.** A presenter
   cannot override `Title` or `Toolbar`; two presenters that need different policy express that policy
   on `present` (`Key: Recipe` remains on `present … as window`), while stable self-description is a
   slot. Whether a slot is required is inferred from the host usage in §10, never from the view head.
@@ -1161,13 +1253,13 @@ types `visual`, `presentable`, `ui`, `frame`, and `layout` collapse into the sin
 package-exported views was considered and deferred (`Docs/Roadmap/Deferred Tao language
 decisions.md`).
 
-**Amended by the host-read view slots and native nav kit tranche.** The unified view decision made
+**Amended by KEY-D11 and the host-read/native-nav tranche.** The unified view decision made
 every view presentable but left host-owned chrome without a typed way to read the presented view's
 self-description. The declaration model already supplies that mechanism: primitive families own
 supplied slots in the prelude and declarations fill them as named members. `Title` and `Toolbar`
-therefore join the single `view` primitive as optional host-facing slots. They remain reactive,
+therefore live on `scene is view` as optional host-facing slots. They remain reactive,
 direct-only, and usage-required; no second metadata channel, preference bubbling, call-site override,
-or compiler-owned title vocabulary is introduced. `nav is view` keeps the slots by refinement so a
+or compiler-owned title vocabulary is introduced. `nav is scene is view` keeps the slots by refinement so a
 navigator can describe itself when it is itself presented, without exposing its child's slots.
 
 - **Every declaration's parameter list is parenthesized, including an empty one** — `view
@@ -1334,6 +1426,21 @@ loop Recipes / Recipe {
 Image(Recipe.Photo, Description: Recipe.Title)   // a semantic label, not decoration
 ```
 
+- **For the Revolution target, a collection row's interaction label is derived, never declared**
+  (amended by KEY-D2, D5). The interaction outline names every `loop` row by one static ranking: the
+  first unconditional `Text` the row renders whose value is a member path on the row — preferring
+  the entity's `(title)` field when the row renders it, and following a bound parameter one level
+  into a rendered row view — then the `(title)` field read at runtime, then the entity and its
+  handle. A function-wrapped or interpolated value is opaque and passes to the next candidate. One
+  computation names the row for the outline, palette, and a journey's `expect label`; a selectable
+  row also projects it as the accessible name of its press surface. A non-selectable row does not
+  gain a row-level accessibility traversal stop: its visible descendant text remains
+  platform-readable. A row with several roots has no root-level label projection, which the
+  validator hints. The rest of the outline is derived the same way: a `loop` is a collection and
+  each row an item; a render binding `Press` or `Submit`, or a row with `on select`, is an action
+  control; a render binding `Value` with a change is an input control; a presented occurrence, a
+  selection item, and a split pane are regions.
+
 - **A map must name a non-map alternative** over the same rows. Location graphics are never the only
   way to use a feature:
 
@@ -1376,8 +1483,43 @@ nav RecipeWorkspace = SplitNav {
   rather than `Priority` precisely because "priority 1" read both ways in the source designs; an
   _order_ is self-evident.
 
+- **A render site may name a nav** (KEY-D7 as amended by the shell-composition review, 2026-09-02).
+  `nav is scene is view`, and the grammar agrees: everything that renders a view renders a nav, so
+  persistent chrome around navigated content is ordinary layout — a `Col` holding the navigator and
+  a bar — and no frame kind exists. The app root is a view with arguments, and a nav-typed
+  parameter renders like any other view, which is how one shell serves every preview variant:
+
+```swift
+app Skillet {
+   Name "Skillet"
+   view SkilletShell(SkilletNavigator)
+}
+
+view SkilletShell(Navigator nav) {
+   render Col() [fill] {
+      Navigator() [fill]
+      when CurrentCook { empty -> { } otherwise -> { CookBar() } }
+   }
+}
+```
+
+- **A rendered nav still owns its occurrences, Back, restoration, and chrome**; only where it sits
+  in the tree changes. Three invariants keep it honest, all diagnosed at the render site: a nav
+  renders **at most once**, **never inside a loop**, and **never inside a conditional branch** — its
+  history lives on its mount, so a branch that unmounted it would silently drop where the person
+  was. The bar beside it may be conditional; only the navigator is held to the rule. A nav or a
+  parameter renders as the value it was bound to, so the render site passes it no arguments,
+  content, or events.
+- **The host routes to what it holds.** Back reaches a rendered nav through the presentation that
+  hosts it, after that presentation's own overlays and content history; `present @key` reaches a
+  rendered selection the same way; and a rendered nav restores by its own declaration identity when
+  it mounts. `replace … in app` replaces the whole root — the shell view included — because the
+  root is what the app mounts. The rail retires into ordinary shell layout, and the shell root
+  stops being special: an app mounts one nav, synthesized around its root view when the root is a
+  view.
+
 - **A live root.** The top-level experience follows workspace state as an ordinary reactive value:
-  `Navigator when MyKitchen { loading -> …; none -> WelcomeNav; otherwise -> SkilletNavigator }`. No
+  `view when MyKitchen { loading -> Loading, none -> WelcomeNav, otherwise -> SkilletShell(SkilletNavigator) }`. No
   screen imperatively replaces the app.
 - **Reveal-or-focus, never duplicate.** `reveal Screen(Row) in @slot` focuses an equal mount instead
   of stacking a second copy of the same product state:
@@ -1398,7 +1540,7 @@ present ActionsMenu(Recipe) as menu
 present Notice("Saved") as toast
 ```
 
-- **One declaration carries intent, URL, and mounting policy.** There is no separate destination and
+- **One declaration carries address, URL, and mounting policy.** There is no separate destination and
   mount:
 
 ```swift
@@ -1438,8 +1580,9 @@ link JoinLink(Code secret) "/join/{Code}" -> {
   declaration is not wrong; the placement is.
 - **Host read-sets and requirements belong to the stdlib host family.** For the current families and
   presentation modes, the complete set is:
-  - every `StackNav` entry, including `Initial` and later pushes, reads `Title` and `Toolbar` from that
-    entry's own view and requires `Title`;
+  - a `scene` entry in `StackNav`, including `Initial` and later pushes, reads `Title` and `Toolbar`
+    from that scene and requires `Title`; a plain-view entry reads neither and receives Back-only
+    chrome;
   - `present … as window` reads both slots and requires `Title`; its full-screen-sheet fallback on a
     non-windowing target preserves this window contract rather than dropping the chrome;
   - `Toolbar` is optional in both hosts, and an absent toolbar means no toolbar items;
@@ -1450,7 +1593,7 @@ link JoinLink(Code secret) "/join/{Code}" -> {
   Native and basic implementations of a family have the same read-set. The native host renders these
   values in platform chrome; the basic host renders equivalent styled Tao chrome. A missing required
   slot is diagnosed at the placement — for example, "StoryScreen is pushed on a StackNav: it must fill
-  Title" — because the view is valid and that use is not. Slot changes update mounted host chrome
+  Title" — because the scene is valid and that use is not. Slot changes update mounted host chrome
   reactively.
 - **A responding presentation is never restorable.** A view presented while its `responds T` answer
   is awaited does not survive relaunch — the asking context is gone, so restoring the question alone
@@ -1505,14 +1648,14 @@ project { id "skillet", name "Skillet", targets phone, tablet, laptop, languages
 ```
 
 - **`app Name { … }` is the one composition root** selecting design, providers, permissions,
-  language, and navigator:
+  language, and its root view:
 
 ```swift
 app Skillet {
    Design SkilletDesign
    Datasource Kitchen
    Notifications Alerts
-   Navigator SkilletNavigator
+   view SkilletShell(SkilletNavigator)
 }
 ```
 
@@ -1552,8 +1695,8 @@ use Account from @tao/auth
 let Me = Account                 // module-visible; every screen reads Me, tests sign accounts in
 ```
 
-The live root then gates on it as ordinary data: `Navigator when Me { none -> WelcomeNav,
-otherwise -> … }`. Nothing about identity is a keyword.
+The live root then gates on it as ordinary data: `view when Me { none -> WelcomeNav,
+otherwise -> SkilletShell(SkilletNavigator) }`. Nothing about identity is a keyword.
 
 - **The datasource is a `Cloud { … }` value** carrying write behaviour, conflict model, delete
   retention, and an `Offline { … }` block:
@@ -1690,6 +1833,12 @@ design SkilletDesign {
   app starts from the `Text` entry, and `App` is the root's. This replaces the
   `style Control { base / variant / state }` stack: the base is the element default, a variant is a
   bundle, and a state is an ordinary condition.
+- **Generated interaction affordances use ordinary element defaults** (KEY-D13). `Hint` styles an anchored
+  key-and-label affordance and `Overview` styles the generated overview, verb, and palette surfaces;
+  an app may override either in `styles { }` without declaring or owning those runtime layers.
+  This settles the floating-layer part of LANG-018: a layer is a host-owned rendering above content,
+  outside navigation and Back, rather than a declared portal or nav occurrence. The broader modal,
+  popover, and authored overlay-family syntax remains deferred.
 - **Interaction states are conditions.** `pressed`, `focused`, and `hovered` join the condition
   vocabulary, so state styling is §9's postfix `when` (`background ember.20 when pressed`), not a
   sub-grammar of its own.
@@ -1834,6 +1983,12 @@ type Local is datasource with {
   replaces them: neither `implement` nor a kind word nor a marker keyword survives in these positions.
 - **The compiler emits a bridge metadata module beside the Tao source** (`Recipe.tao.ts`), which is
   what makes the join checkable from the TypeScript side.
+- **The compiler emits each module's interaction outline table beside that bridge** (KEY-D2, T3):
+  one static descriptor per `loop` and per event-wired render — the node kind, the row's label
+  ranking, its provenance — which the module's loop frames and render sites reference and the
+  runtime registers at mount. The table is generated; the registry, the label evaluation, and the
+  accessibility projection are handwritten in `TR.Interaction`, and nothing generated is ever
+  attached to `TR`.
 
 ### Foreign views
 
@@ -2127,26 +2282,26 @@ entity and would collide in every bare-name position; `StartedBy Account` becaus
 case; `[Role in Owner, Cook]` because `|` is the type-union operator; `Key primary + "n"` because
 `cmd` names a platform (§8).
 
-| Concern                | Spelling                                    |
-| ---------------------- | ------------------------------------------- |
-| Grocery category type  | `Aisle`                                     |
-| Last category case     | `Homeware`                                  |
-| Split slot names       | `@list` / `@detail`                         |
-| Shortcut literal       | `Key primary + "n"`                         |
-| Changed-at stamp       | `(default now, touch on change)`            |
-| Delete retention       | `Deletes tombstones for 30 days`            |
-| File size unit         | `megabytes`                                 |
-| Audience filter        | `[Role in Owner, Cook]`                     |
-| Timer owner field      | `StartedBy Account`                         |
-| Button tap minimum     | `tap min 48`                                |
-| Command palette        | `present … as palette` (a sheet on a phone) |
-| Reorder flag           | `Reorderable: yes` (a condition allowed)    |
-| Project identity       | `id "skillet"`                              |
-| Desktop target         | `laptop`                                    |
-| Scenario device        | `device laptop 1440 x 900`                  |
-| Scenario appearance    | `appearance dark`                           |
-| Conflict policy        | `Conflicts fieldwise latest`                |
-| Nav / variant bindings | `nav X = …` / `app X = …`                   |
+| Concern                | Spelling                                         |
+| ---------------------- | ------------------------------------------------ |
+| Grocery category type  | `Aisle`                                          |
+| Last category case     | `Homeware`                                       |
+| Split slot names       | `@list` / `@detail`                              |
+| Shortcut literal       | `Key primary + "n"`                              |
+| Changed-at stamp       | `(default now, touch on change)`                 |
+| Delete retention       | `Deletes tombstones for 30 days`                 |
+| File size unit         | `megabytes`                                      |
+| Audience filter        | `[Role in Owner, Cook]`                          |
+| Timer owner field      | `StartedBy Account`                              |
+| Button tap minimum     | `tap min 48`                                     |
+| Command palette        | runtime-owned and always present; no declaration |
+| Reorder flag           | `Reorderable: yes` (a condition allowed)         |
+| Project identity       | `id "skillet"`                                   |
+| Desktop target         | `laptop`                                         |
+| Scenario device        | `device laptop 1440 x 900`                       |
+| Scenario appearance    | `appearance dark`                                |
+| Conflict policy        | `Conflicts fieldwise latest`                     |
+| Nav / variant bindings | `nav X = …` / `app X = …`                        |
 
 (The source table's `Line` row-pattern and `sizes { }` size-class rows are superseded by §13:
 patterns are retired in favour of ordinary content-accepting views, and the size-class block is

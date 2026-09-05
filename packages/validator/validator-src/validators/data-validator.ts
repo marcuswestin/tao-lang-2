@@ -25,6 +25,8 @@ export const dataValidationMessages = {
     `Data field '${field}' declares '${modifier}' more than once.`,
   duplicateBooleanCase: (entity: string, name: string) =>
     `Entity '${entity}' declares boolean case '${name}' more than once.`,
+  moduleQuery:
+    'A module-level query is not part of the language today. It could be added; nothing strictly prevents it.',
   queryPlacement: 'Queries must be declared directly inside view bodies.',
   currentQueryPlacement: 'Queries must be unconditional statements in a view body or its root render block.',
   queryAfterControl: 'Queries must be declared before the first guard, when, or loop in their block.',
@@ -32,6 +34,9 @@ export const dataValidationMessages = {
   unknownCollection: (data: string, name: string) => `Data '${data}' has no collection named '${name}'.`,
   unknownEntity: (data: string, name: string) => `Data '${data}' has no entity named '${name}'.`,
   duplicateIndex: (name: string) => `Index '${name}' is declared more than once.`,
+  duplicateLocalOnly: (entity: string) => `Entity '${entity}' declares 'local only' more than once.`,
+  crossStorageRelation: (entity: string, field: string, relation: string) =>
+    `Relationship '${entity}.${field}' crosses the local-only storage boundary; '${entity}' and '${relation}' must both declare 'local only', or neither.`,
   unknownField: (entity: string, name: string) => `Entity '${entity}' has no field named '${name}'.`,
   duplicateOrder: 'A query may declare only one order clause.',
   duplicateLimit: 'A query may declare only one limit clause.',
@@ -39,6 +44,10 @@ export const dataValidationMessages = {
   uniqueFieldKind: (field: string) => `Only primitive data fields can declare 'unique', not '${field}'.`,
   duplicateUniqueField: (entity: string) =>
     `Entity '${entity}' declares more than one unique field; one field is the reconciliation key.`,
+  titleFieldKind: (field: string) => `Only text data fields can declare 'title', not '${field}'.`,
+  unknownTrait: (word: string) => `Unknown data field trait '${word}'.`,
+  duplicateTitleField: (entity: string) =>
+    `Entity '${entity}' declares more than one title field; one field names a row to a person.`,
   relationOrder: (name: string) => `Relationship field '${name}' cannot be used for ordering.`,
   relationComparison: (name: string, operator: string) =>
     `Relationship field '${name}' supports only == and !=, not '${operator}'.`,
@@ -90,9 +99,16 @@ function validateEntityDefinition(entity: AST.EntityDataDeclaration, ctx: Valida
   for (const duplicate of orders.slice(1)) {
     ctx.error(dataValidationMessages.duplicateOrder, duplicate)
   }
+  for (const duplicate of entity.block.entries.filter(AST.isDataLocalOnly).slice(1)) {
+    ctx.error(dataValidationMessages.duplicateLocalOnly(entity.singularName), duplicate)
+  }
   const uniqueFields = fields.filter(field => (field.traits?.traits ?? []).some(trait => trait.unique))
   for (const extra of uniqueFields.slice(1)) {
     ctx.error(dataValidationMessages.duplicateUniqueField(entity.singularName), extra)
+  }
+  const titleFields = fields.filter(field => (field.traits?.traits ?? []).some(AST.traitIsTitle))
+  for (const extra of titleFields.slice(1)) {
+    ctx.error(dataValidationMessages.duplicateTitleField(entity.singularName), extra)
   }
   for (const field of fields) {
     validateEntityField(entity, field, ctx)
@@ -136,6 +152,20 @@ function validateEntityField(
       ctx.error(dataValidationMessages.uniqueFieldKind(field.name), trait)
     }
   }
+  for (const trait of traits) {
+    if (trait.word !== undefined && !AST.wordTraitNames.includes(trait.word)) {
+      ctx.error(dataValidationMessages.unknownTrait(trait.word), trait)
+    }
+  }
+  const titles = traits.filter(AST.traitIsTitle)
+  for (const duplicate of titles.slice(1)) {
+    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'title'), duplicate)
+  }
+  if (field.primitive !== 'text') {
+    for (const trait of titles) {
+      ctx.error(dataValidationMessages.titleFieldKind(field.name), trait)
+    }
+  }
   if (field.primitive || field.boolean) {
     for (const trait of owned) {
       ctx.error(dataValidationMessages.autoDeleteOwner(field.name), trait)
@@ -157,6 +187,14 @@ function validateRelationshipDataField(
   const inverse = Type.dataFieldIsInverseRelation(field)
   if (!relation) {
     ctx.error(dataValidationMessages.unknownRelation(entity.singularName, relationName), field)
+  }
+  // The two storage facts partition the catalog into a synced store and a device-local one, and a
+  // relation resolves inside one store's rows. Say so here rather than as an unresolved relation.
+  if (relation && Type.dataEntityIsLocalOnly(entity) !== Type.dataEntityIsLocalOnly(relation)) {
+    ctx.error(
+      dataValidationMessages.crossStorageRelation(entity.singularName, field.name, relation.singularName),
+      field,
+    )
   }
   for (const modifier of defaults) {
     ctx.error(dataValidationMessages.relationDefault(field.name), modifier)
@@ -193,6 +231,12 @@ function validateInverseRelationship(
 }
 
 function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationContext): void {
+  // File-level query syntax is retained only as validator-owned diagnostic recovery. Stop after
+  // this one tailored error so details of an unsupported query cannot add secondary diagnostics.
+  if (AST.isTaoFile(query.$container)) {
+    ctx.error(dataValidationMessages.moduleQuery, query)
+    return
+  }
   validateEntityQueryPlacement(query, ctx)
   const entity = Type.queryEntity(query)
   if (!entity) {

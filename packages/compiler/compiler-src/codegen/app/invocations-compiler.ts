@@ -22,6 +22,11 @@ export default {
 
   /** Render compiles a Tao view invocation into a JSX fragment. */
   Render(render: AST.Render, options: CodegenOptions = {}): Compiled {
+    const target = ASTUtils.resolveRenderTarget(render)
+    Assert.defined(target, 'validated render names a view, a nav, or a parameter', { render: render.view?.$refText })
+    if (target.kind !== 'view') {
+      return Compile.RenderOccurrence(render, target, options)
+    }
     const invocation = ASTUtils.resolveRenderInvocation(render)
     const view = invocation.view
     Assert.defined(view, 'validated render targets a view declaration', { render: render.view?.$refText })
@@ -54,6 +59,20 @@ export default {
         })}
       </${gen.scopeName(view)}>
     `
+  },
+
+  /**
+   * RenderOccurrence compiles a render site that names a nav or a view-typed parameter. The value
+   * renders as it was bound — the runtime hosts a nav's mount on the enclosing navigation
+   * occurrence and renders a view value as an ordinary occurrence — so the site contributes only
+   * its clauses and its tag, and the validator has already refused arguments, content, and events.
+   */
+  RenderOccurrence(render: AST.Render, target: ASTUtils.RenderTarget, options: CodegenOptions = {}): Compiled {
+    Assert(target.kind !== 'view', 'a view target compiles as an invocation')
+    const declaration = target.kind === 'nav' ? target.declaration : target.parameter
+    return gen`<TR.Navigation.Occurrence name=${gen.jsLiteral(ASTUtils.renderTargetName(target))} value={${
+      Compile.ValueDeclarationReference(declaration)
+    }}${Compile.RenderTaoProps(render, options)} />`
   },
 
   /** RenderArguments compiles render invocation arguments into JSX props. */

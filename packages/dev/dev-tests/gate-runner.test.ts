@@ -102,6 +102,7 @@ Describe('repository gate runner', () => {
       '_full-verify-smoke-launch',
       '_full-verify-real-app',
       '_full-verify-simulated',
+      '_full-verify-keyboard-navigation',
       '_full-verify-native',
       '_full-verify-canary',
     ]

@@ -1,4 +1,4 @@
-import { Describe, Test } from '@shared/test'
+import { Describe, Expect, Test } from '@shared/test'
 import { completenessValidationMessages } from '../validator-src/validators/completeness-validator'
 import { configurationValidationMessages } from '../validator-src/validators/configuration-validator'
 import { configuredItemValidationMessages } from '../validator-src/validators/configured-item-validator'
@@ -14,6 +14,8 @@ import {
   rejects,
   stubContainer,
   stubView,
+  testValidateCodeWithErrors,
+  validationErrorMessages,
 } from './test-validate'
 
 Describe('validator: declaration contracts', () => {
@@ -206,8 +208,8 @@ Describe('validator: declaration contracts', () => {
       let NavigationAlias = BaseNavigation
       let PatchedNavigation = NavigationAlias with { Initial Other }
       app Demo { Name "Demo" Navigator PatchedNavigation }
-      view Home() { Title "Home" render Empty() }
-      view Other() { Title "Other" render Empty() }
+      scene Home() { Title "Home" render Empty() }
+      scene Other() { Title "Other" render Empty() }
       ${stubView('Empty')}
     `),
   )
@@ -393,7 +395,7 @@ Describe('validator: declaration contracts', () => {
     accepts(`
       use StackNav from @tao/nav
       app ToastActions { Name "Toast actions" Navigator StackNav { Initial Home } }
-      view Home() {
+      scene Home() {
         Title "Home"
         action Callback() { }
         action Open() { present Notice(Callback) as toast (Key: "notice", Duration: 1.s) }
@@ -527,7 +529,7 @@ Describe('validator: declaration contracts', () => {
         @window SlotNav { Initial Detail }
       }
       let StrictVariant = StrictApp with { Name "Strict variant" }
-      view Home() {
+      scene Home() {
         Title "Home"
         action Activate() { present StrictVariant@workspace }
         action Open() { present Detail() in StrictVariant@window }
@@ -631,6 +633,26 @@ Describe('validator: declaration contracts', () => {
     ),
   )
 
+  Test('reports exactly one tailored diagnostic for a module-level query', async () => {
+    const result = await testValidateCodeWithErrors(`
+      data Workspaces / Workspace { Name text }
+      query Missing as Current { limit 0 limit 1 }
+    `)
+
+    Expect(validationErrorMessages(result)).toEqual([dataValidationMessages.moduleQuery])
+  })
+
+  Test(
+    'rejects a query nested inside a control-flow block',
+    rejects(
+      queryApp(
+        'when "on" { empty -> { Text("Off") } otherwise -> { query Workspaces { } Text("On") } }',
+        'data Workspaces / Workspace { Name text }',
+      ),
+      dataValidationMessages.currentQueryPlacement,
+    ),
+  )
+
   const dataFieldCases: ReadonlyArray<readonly [name: string, source: string, message: string]> = [
     [
       'boolean cases that collide with field names',
@@ -692,6 +714,90 @@ Describe('validator: declaration contracts', () => {
     rejects(
       'data Parents / Parent { ExternalId number (unique) Slug text (unique) }',
       dataValidationMessages.duplicateUniqueField('Parent'),
+    ),
+  )
+
+  Test(
+    'accepts title on a text field',
+    accepts('data Recipes / Recipe { Title text (title) Servings number }'),
+  )
+
+  Test(
+    'rejects title on a non-text field',
+    rejects(
+      'data Recipes / Recipe { Servings number (title) }',
+      dataValidationMessages.titleFieldKind('Servings'),
+    ),
+  )
+
+  Test(
+    'rejects duplicate title modifiers',
+    rejects(
+      'data Recipes / Recipe { Title text (title, title) }',
+      dataValidationMessages.duplicateModifier('Title', 'title'),
+    ),
+  )
+
+  Test(
+    'rejects a misspelled word trait',
+    rejects(
+      'data Recipes / Recipe { Title text (titel) }',
+      dataValidationMessages.unknownTrait('titel'),
+    ),
+  )
+
+  Test(
+    'rejects a second title field on one entity',
+    rejects(
+      'data Recipes / Recipe { Title text (title) Subtitle text (title) }',
+      dataValidationMessages.duplicateTitleField('Recipe'),
+    ),
+  )
+
+  Test(
+    'accepts local only beside the other entity storage facts',
+    accepts('data Sessions / Session { Label text index Label order by Label local only }'),
+  )
+
+  Test(
+    'rejects a repeated local only storage fact',
+    rejects(
+      'data Sessions / Session { Label text local only local only }',
+      dataValidationMessages.duplicateLocalOnly('Session'),
+    ),
+  )
+
+  // The two storage facts partition the catalog into two stores, so a relation that spans them
+  // cannot resolve. Both directions are reported where the relation is written.
+  Test(
+    'rejects a stored relation from a local only entity to a synced one',
+    rejects(
+      `
+        data Parents / Parent { Name text }
+        data Sessions / Session { Parent local only }
+      `,
+      dataValidationMessages.crossStorageRelation('Session', 'Parent', 'Parent'),
+    ),
+  )
+
+  Test(
+    'rejects a stored relation from a synced entity to a local only one',
+    rejects(
+      `
+        data Sessions / Session { Label text local only }
+        data Notes / Note { Session }
+      `,
+      dataValidationMessages.crossStorageRelation('Note', 'Session', 'Session'),
+    ),
+  )
+
+  Test(
+    'accepts a relation between two local only entities',
+    accepts(
+      `
+        data Sessions / Session { Label text Marks (owned) local only }
+        data Marks / Mark { Session local only }
+      `,
     ),
   )
 

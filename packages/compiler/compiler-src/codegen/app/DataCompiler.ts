@@ -1,21 +1,50 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
-import { type Compiled, gen, resolveRef } from '../codegen-util'
+import { type Compiled, gen, LocalDataBindings, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { compileDeclarationIdentity } from './declaration-identity'
+
+/**
+ * The stdlib Local declaration's own canonical identity, restated here because the compiler emits
+ * this datasource without the source ever naming it. It must stay equal to what compiling
+ * `packages/stdlib/@tao/data/providers/local/Local.tao` produces; `compiler.test.ts` pins that.
+ */
+const localDatasourceIdentity = [
+  'tao.declaration',
+  1,
+  'tao-stdlib',
+  '@tao/data',
+  'providers/local/Local',
+  'datasource',
+  'Local',
+] as const
 
 /** DataCompiler lowers Tao schemas, reactive queries, and strict row writes to TR.Data. */
 export const DataCompiler = {
-  /** DataCatalog compiles all top-level Plural / Singular declarations into one provider-neutral schema. */
+  /**
+   * DataCatalog compiles all top-level Plural / Singular declarations into provider-neutral
+   * schemas. `local only` entities are partitioned into their own catalog with its own connection
+   * and storage key, so the app's configured Datasource never carries them.
+   */
   DataCatalog(entities: readonly AST.EntityDataDeclaration[]): Compiled {
+    const local = entities.filter(Type.dataEntityIsLocalOnly)
+    const synced = entities.filter(entity => !Type.dataEntityIsLocalOnly(entity))
     return gen`
-      ${dataCatalogScope()} = TR.Data.Schema({
-        name: 'Data',
-        schemaVersion: 1,
-        entities: {
-          ${gen.list(entities, Compile.EntityDataDefinition)}
-        },
-      })
+      ${dataCatalogSchema(dataCatalogScope(), 'Data', synced)}
+      ${
+      local.length === 0 ? gen.noop() : gen`
+        ${dataCatalogSchema(localDataCatalogScope(), 'LocalData', local)}
+        ${gen.scopeName({ name: LocalDataBindings.datasource })} = TR.Data.Configure(
+          TR.Data.Declaration(
+            'Local',
+            ${gen.Name({ name: LocalDataBindings.provider })}(),
+            TR.Navigation.Identity(${gen.jsLiteral([...localDatasourceIdentity])}),
+          ),
+          {},
+        )
+      `
+    }
     `
   },
 
@@ -27,9 +56,20 @@ export const DataCompiler = {
   EntityDataDefinition(entity: AST.EntityDataDeclaration): Compiled {
     const order = entity.block.entries.find(AST.isDataDefaultOrder)
     const fields = entity.block.entries.filter(AST.isEntityDataField)
+    const policies = AST.entityCommandPoliciesOf(entity)
+    const surfaced = policies.filter(policy => !policy.hide).flatMap(policy => policy.commands.map(resolveRef))
+    const hidden = policies.filter(policy => policy.hide).flatMap(policy => policy.commands.map(resolveRef))
     return gen`
       [${gen.jsLiteral(entity.singularName)}]: {
         collection: ${gen.jsLiteral(entity.name)},
+        ${
+      policies.length === 0
+        ? gen.noop()
+        : gen`commandPolicy: {
+          surfaced: [${gen.join(surfaced, command => gen`${compileDeclarationIdentity(command)}.canonical`)}],
+          hidden: [${gen.join(hidden, command => gen`${compileDeclarationIdentity(command)}.canonical`)}],
+        },`
+    }
         ${
       order
         ? gen`defaultOrder: { field: ${gen.jsLiteral(order.fieldName)}, direction: ${
@@ -53,7 +93,7 @@ export const DataCompiler = {
     const sourceFilter = query.source ? compileRelationSourceFilter(query.source, entity) : undefined
     return gen`
       ${gen.scopeName(query)} = TR.Data.Query(
-        ${dataCatalogScope()},
+        ${catalogScopeOf(entity)},
         {
           entity: ${gen.jsLiteral(Type.dataEntityName(entity))},
           filters: [
@@ -102,7 +142,7 @@ export const DataCompiler = {
     const bindings = ASTUtils.resolveDataWriteBindings(entity, create.block.fields, true)
     Assert(bindings.diagnostics.length === 0, 'validated create has no field-binding diagnostics')
     return gen`TR.Data.Create(
-      ${dataCatalogScope()},
+      ${catalogScopeOf(entity)},
       ${gen.jsLiteral(Type.dataEntityName(entity))},
       { ${gen.list(bindings.pairs, Compile.DataWriteField)} },
     )`
@@ -130,8 +170,33 @@ export const DataCompiler = {
   },
 } as const
 
+function dataCatalogSchema(
+  scope: Compiled,
+  name: 'Data' | 'LocalData',
+  entities: readonly AST.EntityDataDeclaration[],
+): Compiled {
+  return gen`
+    ${scope} = TR.Data.Schema({
+      name: '${name}',
+      schemaVersion: 1,
+      entities: {
+        ${gen.list(entities, Compile.EntityDataDefinition)}
+      },
+    })
+  `
+}
+
 function dataCatalogScope(): Compiled {
   return gen.scopeName({ name: '_TaoDataCatalog' })
+}
+
+function localDataCatalogScope(): Compiled {
+  return gen.scopeName({ name: LocalDataBindings.catalog })
+}
+
+/** catalogScopeOf routes one entity's reads and writes to the catalog that stores it. */
+function catalogScopeOf(entity: ASTUtils.DataEntityDefinition): Compiled {
+  return Type.dataEntityIsLocalOnly(entity) ? localDataCatalogScope() : dataCatalogScope()
 }
 
 function compileLimitClause(limit: AST.LimitClause | undefined): Compiled {
@@ -180,6 +245,7 @@ function compileEntityDataField(
       kind: ${gen.jsLiteral(kind)},
       ${indexed ? 'indexed: true,' : ''}
       ${traits.some(trait => trait.unique) ? 'unique: true,' : ''}
+      ${traits.some(AST.traitIsTitle) ? 'title: true,' : ''}
       ${compileEntityFieldDefault(field, defaultModifier)}
     },`
   }

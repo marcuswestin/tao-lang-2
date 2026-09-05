@@ -56,7 +56,7 @@ let Team = [
 }  }
 ]
 
-view Demo() {
+scene Demo() {
    Title "Type System Tests"
    let OuterScopeLabel = ScopeLabel
    render Stack() {

@@ -1,8 +1,10 @@
 // The week: what's for dinner, on which day, and how it gets cooked and shopped.
 
+use primary from @tao/keys
+
 phrase WeekTitle(Day date) = "Week of { Day.Short }"
 
-view WeekPlan() {
+scene WeekPlan() {
    Title WeekTitle(WeekStart)
    Toolbar { AddMeal ShopThisWeek ThisWeek }
    state WeekStart = StartOfWeek(today in MyKitchen.TimeZone)
@@ -12,26 +14,25 @@ view WeekPlan() {
       order by Day, Course
    }
 
-   action AddMealIntent() {
-      Title "Add a meal"
+   action OpenMealPlanner() {
       // Visibility follows permission to create a Meal in MyKitchen.Meals, resolved by the store.
       present PlanMeal() as sheet
    }
-   command AddMeal = AddMealIntent() with {
-      Label "Add a meal"
+   command AddMeal() {
+      Title "Add a meal"
       Icon "plus"
-      Key "cmd+n"
+      Key primary + "n"
+      do OpenMealPlanner()
    }
-   action ThisWeekIntent() {
-      Title "This week"
+   action ReturnToThisWeek() {
       set WeekStart = StartOfWeek(today in MyKitchen.TimeZone)
    }
-   command ThisWeek = ThisWeekIntent() with {
-      Label "This week"
+   command ThisWeek() {
+      Title "This week"
       Icon "calendar"
+      do ReturnToThisWeek()
    }
-   action ShopThisWeekIntent() runs single {
-      Title "Shop the week"
+   action AddWeekToShoppingList() runs single {
       // Visibility follows permission to create Grocery rows in MyKitchen.Groceries.
       // Single-flight plus the transaction's per-meal idempotence prevents a double press from
       // duplicating a week of groceries.
@@ -39,9 +40,10 @@ view WeekPlan() {
                done -> present Notice("Added the week to your list") as toast (Key: "shop")
       }
    }
-   command ShopThisWeek = ShopThisWeekIntent() with {
-      Label "Shop the week"
+   command ShopThisWeek() {
+      Title "Shop the week"
       Icon "basket"
+      do AddWeekToShoppingList()
    }
 
    render ScrollView [screen] {
@@ -74,56 +76,55 @@ view WeekPlan() {
 }  }  }  }  }  }
 
 file view MealRow(Meal) {
-   action CookIntent() {
-      Title "Cook"
+   action StartCooking() {
       open CookMealLink(Meal.Recipe, Meal)
    }
-   command Cook = CookIntent() with {
-      Label "Cook"
+   command Cook() {
+      Title "Cook"
       Icon "flame"
+      do StartCooking()
    }
-   action AddToListIntent() runs single {
-      Title "Add to shopping list"
+   action AddMealGroceries() runs single {
       // The transaction is idempotent per meal, so this cannot double the list either.
             when AddMealToList(Meal) {
                done -> present Notice("Added { Meal.Recipe.Title } to your list") as toast (Key: "shop")
       }
    }
-   command AddToList = AddToListIntent() with {
-      Label "Add to shopping list"
+   command AddToList() {
+      Title "Add to shopping list"
       Icon "basket"
+      do AddMealGroceries()
    }
-   action ChangeIntent() {
-      Title "Change"
+   action OpenMealEditor() {
       present MealScreen(Meal) as sheet
    }
-   command Change = ChangeIntent() with {
-      Label "Change"
+   command Change() {
+      Title "Change"
       Icon "pencil"
+      do OpenMealEditor()
    }
-   action ToggleCookedIntent() {
-      Title "Toggle cooked"
+   action ToggleCookedState() {
       toggle Meal.Cooked
    }
-   command ToggleCooked = ToggleCookedIntent() with {
+   command ToggleCooked() {
+      Title "Toggle cooked"
       Label if Meal is Cooked then "Mark as planned" else "Mark as cooked"
       Icon "checkmark"
+      do ToggleCookedState()
    }
-   action RemoveIntent() {
-      Title "Remove from plan"
+   action RemoveMeal() {
       // Store-derived delete permission controls visibility. The delete effect carries the
-      // destructive intent; the command adds no separate role marker.
+      // destructive behavior; the command adds no separate role marker.
       delete Meal
    }
-   command Remove = RemoveIntent() with {
-      Label "Remove from plan"
+   command Remove() {
+      Title "Remove from plan"
       Icon "trash"
+      do RemoveMeal()
    }
-   // A menu anchors beside what opened it where there is room, and is an action sheet on a phone.
-   menu Actions { Cook, AddToList, Change, ToggleCooked, separator, Remove }
+   Commands { Cook, AddToList, Change, ToggleCooked, Remove }
 
    render Row [pattern Line] {
-      on press -> present Actions as menu
       Icon(if Meal is Cooked then "checkmark.circle" else "circle") [@leading, ink good when Meal is Cooked, muted when Meal is Planned]
       Col [@content, gap xxs] {
          Text(Meal.Recipe.Title, Lines: 1) [body]
@@ -132,7 +133,6 @@ file view MealRow(Meal) {
 
 // Planning a meal from either direction: from a day, or from a recipe. No row yet, so a draft.
 view PlanMeal(Recipe (optional), Day date (optional)) {
-   Title "Add a meal"
    draft New = Meal for new {
       Household: MyKitchen
       Recipe
@@ -171,16 +171,16 @@ view PlanMeal(Recipe (optional), Day date (optional)) {
 }  }  }
 
 // Changing a planned meal: the row exists, so every input writes through.
-view MealScreen(Meal) {
+scene MealScreen(Meal) {
    Title Meal.Recipe.Title
-   action DoneIntent() {
-      Title "Done"
+   action DismissMealEditor() {
       dismiss
    }
-   command Done = DoneIntent() with {
-      Label "Done"
+   command Done() {
+      Title "Done"
       Icon "checkmark"
       Key "escape"
+      do DismissMealEditor()
    }
    render Col [gap lg, pad lg, width max 560] {
       guard Meal

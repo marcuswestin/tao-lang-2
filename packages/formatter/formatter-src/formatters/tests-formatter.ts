@@ -21,6 +21,15 @@ export default {
     f.oneSpaceAfter('press')
   },
 
+  PressKeyStep(f) {
+    f.oneSpaceAfter('press')
+    f.oneSpaceBetweenProperties('subject', 'value')
+  },
+
+  NarrowStep(f) {
+    f.oneSpaceBetweenProperties('head', 'value')
+  },
+
   PressToolbarCommandStep(f) {
     f.oneSpaceAfter('press', 'command')
     f.oneSpaceBefore('command')
@@ -95,6 +104,17 @@ export default {
 
   ExpectScopeStep(f) {
     f.oneSpaceAfter('expect')
+  },
+
+  ExpectInteractionStep(f) {
+    f.oneSpaceAfter('expect')
+    if (f.node.detail) {
+      f.oneSpaceBetweenProperties('subject', 'detail')
+      f.oneSpaceBetweenProperties('detail', 'values')
+    } else {
+      f.oneSpaceBetweenProperties('subject', 'values')
+    }
+    f.commaSpacedList()
   },
 
   TestExpectationBlock(f) {

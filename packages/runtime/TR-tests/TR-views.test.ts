@@ -209,6 +209,10 @@ Describe('TR.Views explicit visual props', () => {
     const defaultTitle = defaults.props['children'] as RuntimeElement
     const themedTitle = button.props['children'] as RuntimeElement
 
+    Expect(defaults.props['accessible']).toBe(true)
+    Expect(defaults.props['accessibilityLabel']).toBe('Save')
+    Expect(defaults.props['accessibilityRole']).toBe('button')
+    Expect(defaults.props['accessibilityState']).toEqual({ disabled: false })
     Expect(flattenStyle(defaults.props['style'])).toMatchObject({
       backgroundColor: '#2f6b4f',
       borderRadius: 8,
@@ -240,6 +244,8 @@ Describe('TR.Views explicit visual props', () => {
     }))
     const [label, input] = fragmentChildren(wrapper)
 
+    Expect(label!.props['accessible']).toBe(false)
+    Expect(input!.props['accessibilityLabel']).toBe('Workspace name')
     Expect(flattenStyle(wrapper.props['style'])['backgroundColor']).toBe(undefined)
     Expect(flattenStyle(label!.props['style'])['color']).toBe('#edf3ee')
     Expect(flattenStyle(input!.props['style'])).toMatchObject({
