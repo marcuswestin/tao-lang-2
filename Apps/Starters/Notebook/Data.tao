@@ -1,0 +1,12 @@
+// The data catalog. Every entity the app stores is declared here, so what a row contains is
+// readable on one page.
+// One note: a title, a body, and whether it is pinned.
+package
+data Notes / Note {
+   Title text (title)
+   Body text (default "")
+   Pinned yes / no
+   CreatedAt time (default now)
+
+   order by CreatedAt
+}

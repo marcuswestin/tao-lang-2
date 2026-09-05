@@ -743,3 +743,208 @@ an entry here may link one when the developer workflow is also affected.
   Undo sequence in ten consecutive normal-terminal runs before it rejoins automatic full verification.
 - **Source:** 2026-09-04 normal-terminal merge verification, the explicit quarantine decision, and the
   2026-09-04 lane diagnostics from the Figma-at-home strides work.
+
+### DEVENV-043 — Changed-files lane fails every package with no affected tests
+
+- **Status:** Candidate
+- **Area:** Verification lanes
+- **Impact:** `just test-changed`, the documented ordinary iteration lane, reports red whenever a change
+  touches a subset of packages, so its summary cannot be read at a glance and the real failures hide
+  among sixteen spurious ones.
+- **Evidence:** With 19 changed files in `parser`, `code-editor`, and `studio`, every other bun suite
+  printed `--changed: 19 changed files, but no test files are affected` and `Ran 0 tests`, exited 0
+  under `--pass-with-no-tests`, wrote no junit file, and the runner then recorded `test result report
+  unavailable` and turned the pass into a failure (`.artifacts/logs/dev-test/2026-09-05T01-34-12-827Z-*`).
+  `./agent test-retry` after a contended `_test` timeout took the same path: the dev suite ran with
+  `--changed`, found no affected test files, ran 0 tests, and reported the retry as failed, so it could
+  not confirm the timeout; `./agent test-file packages/dev/dev-tests/gate-runner.test.ts` passed 19 of 19.
+- **Workaround:** Run `just test-file <path>` per touched suite, and `./agent verify` for the full run.
+- **Proposed change:** Treat a zero-test run under `--changed` as passed with no observations when the
+  process exited 0, or drop suites whose packages have no changed files before spawning them. For the
+  retry path the narrower cause is that `TestRunner.runSuites` passes `changedReference:
+  prepared.changed?.reference` for every kind, while a `retry` run populates `prepared.changed` only to
+  compute its advisory line; passing it solely when `prepared.kind === 'changed'` keeps a retry on the
+  ledger's own file list.
+- **Dependencies:** None.
+- **Acceptance:** A change confined to one package leaves `just test-changed` green with only that
+  package's suites reported.
+- **Source:** 2026-09-04 Studio syntax lens work.
+
+### DEVENV-044 — Typecheck gate runs 19 projects serially on the legacy compiler
+
+- **Status:** Resolved
+- **Area:** Verification performance
+- **Impact:** `_typecheck` is the longest verify gate after `_test` (27.7s in the latest lane, 17.2s
+  uncontended) although the work parallelizes and a native compiler is released.
+- **Evidence:** 2026-09-04, linked worktree, after `_parser-gen`: `bunx tsc --build packages/*/tsconfig.json`
+  17.2s wall (24.7s CPU); one `tsc -p --noEmit` per package concurrently 5.8s wall; `tsgo -p --noEmit`
+  (`@typescript/native-preview` 7.0.0-dev) concurrently 1.3s wall, exit 0 and zero diagnostics for all
+  19 projects. TypeScript 7.0.2 is npm `latest`; `rg` finds no `typescript` API import under `packages/`;
+  every project already sets `rootDir`, `types`, and `moduleResolution: bundler`.
+- **Workaround:** None; the gate is correct, only serial.
+- **Proposed change:** Install TypeScript 7 under the `typescript-native` npm alias and run
+  `_typecheck` and the runtime-toolchain generated-app typecheck through it, leaving `typescript` 5.9
+  in place for the editor's tsserver and `bunx tsc`. Done on `feat/dev-speed-optimization-cbf7e5`:
+  `just _typecheck` 1.7s uncontended; TypeScript 7 also passes the generated runtime app with the
+  test's exact tsconfig.
+- **Dependencies:** TypeScript 7 ships no programmatic API until 7.1, so `typescript` cannot move to 7
+  while `.vscode/settings.json` points the editor at `node_modules/typescript/lib`; revisit when 7.1
+  ships and fold the alias back into one dependency.
+- **Acceptance:** `./agent verify` green with `_typecheck` under 5s uncontended; `just check` membership
+  unchanged. Met 2026-09-04: `_typecheck` 2.2s inside a green, contended `verify` (33.9s lane).
+- **Source:** 2026-09-04 development-speed review.
+
+### DEVENV-045 — Agent shell habits route routine commands through harness review
+
+- **Status:** In progress
+- **Area:** Agent harness performance
+- **Impact:** In Claude Code auto mode, every Bash call outside a narrow allow rule or the built-in
+  read-only set waits about two seconds for the permission classifier; in Codex, every escalated action
+  waits about three seconds for the auto-review model. The commands paying this are mostly routine.
+- **Evidence:** 114 Claude Code sessions in this repository, 17,461 Bash calls: 10,266 begin with `cd`
+  and 550 with `export PATH=…`; `export PATH… && <read-only command>` median 2.5s against 0.0–0.1s for
+  the same command bare; `cat > file <<EOF` median 2.2s, `python3 -` heredocs 2.1s, `mkdir`/`cp`/`rm`
+  1.9s, while `Edit` tool calls are approved instantly; 117 tool results were sandbox denials
+  (`direnv exec .`, `bun install`). Codex: 962 auto-review turns, median 2.9s, 95% approved, dominated
+  by `apply_patch` and `request_permissions`; 91 sandbox denials.
+- **Workaround:** Agents already prefer `rg`, `ls`, and `git` forms that skip review. AGENTS.md tells
+  sandboxed shells to prepend the profile bin themselves, which is what produces the `export PATH` prefix.
+- **Proposed change:** Done on `feat/dev-speed-optimization-cbf7e5`: the SessionStart hook now runs
+  `packages/dev/dev-src/cli/agent-session-start.zsh`, which runs `./agent setup` and, when Claude Code
+  hands it `CLAUDE_ENV_FILE`, exports `.devenv/profile/bin` onto every later Bash tool command's PATH;
+  `.rulesync/permissions.jsonc` sets `env.CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1` and allows
+  `cd *`; AGENTS.md tells agents not to prefix `cd` or `export PATH` and to change files with the
+  harness edit tool. The Codex patch reviews turned out to come from patches into a `/private/tmp`
+  clone outside the workspace roots, so the `tao-workspace` profile is unchanged; work in the
+  worktree instead.
+- **Dependencies:** `.rulesync/permissions.jsonc`, `.rulesync/hooks.jsonc`, and `just _agent-config`
+  own the generated settings. `CLAUDE_ENV_FILE` support is in Claude Code 2.1.220 (the installed CLI)
+  and later.
+- **Acceptance:** In new sessions the median duration of `cd`- or `export`-prefixed read-only commands
+  equals the bare command's; a fresh worktree session shows no `direnv exec` sandbox denial.
+- **Source:** 2026-09-04 development-speed review of Claude Code and Codex transcripts.
+
+### DEVENV-046 — The tao-apps suite is one 22-second process on the test critical path
+
+- **Status:** Candidate
+- **Area:** Test performance
+- **Impact:** `_test` wall time (29.5s) is set by `tao-apps`, a single Jest process that runs all 26 Tao
+  behavior test files after a serial validate and compile phase.
+- **Evidence:** 2026-09-04 verify lane: `tao-apps` 21.7s (Jest phase 15.1s, validate with 8 workers plus
+  compile about 6s); next longest suites `runtime-toolchain` 13.9s, `runtime-jest` 12.6s, `studio` 12.2s;
+  suite sum 104s on 18 CPUs.
+- **Workaround:** `just test-changed` skips tao-apps when no `Apps/` or `.tao` file changed.
+- **Proposed change:** Shard the Tao behavior tests across two or three Jest processes, or cache compiled
+  apps between runs so only changed apps recompile.
+- **Dependencies:** DEVENV-034 (Bun worker pool) is a separate question; revisit the `tao-apps` `cost: 8`
+  reservation after sharding.
+- **Acceptance:** `_test` wall under 20s uncontended with the same test inventory.
+- **Source:** 2026-09-04 development-speed review.
+
+### DEVENV-047 — Release-bundle proof shares Metro's cache with every other worktree
+
+- **Status:** Candidate
+- **Area:** Full verification
+- **Impact:** `_ship-bundle-proof` can fail a green branch's landing run when another worktree bundles
+  at the same moment, because both Expo exports write the same Metro cache under the system temp dir.
+- **Evidence:** 2026-09-04 `just merge-with-main --execute --yes --push` on
+  `feat/dev-speed-optimization-cbf7e5`: `expo export --platform ios … --clear` exited 1 with
+  `ENOTEMPTY, Directory not empty: /var/folders/…/T/metro-cache/6b` while two Tao lanes were running;
+  every other full-verify gate passed. DEVENV-013 moves Expo's user cache into `.artifacts/cache/expo`
+  but not Metro's transformer cache, which `--clear` deletes from under a concurrent bundler.
+- **Workaround:** Re-run the landing once the other lane has finished.
+- **Proposed change:** Give each export a worktree-local Metro cache root (`cacheStores` in the host's
+  Metro config, or `TMPDIR` under `.artifacts/tmp` for the export child) so `--clear` only touches the
+  run's own directory.
+- **Dependencies:** DEVENV-013 owns the Expo cache move; this is the Metro half.
+- **Acceptance:** Two concurrent `just ship-bundle-proof` runs in different worktrees both pass.
+- **Source:** 2026-09-04 development-speed landing run.
+
+### DEVENV-048 — A fresh linked worktree cannot launch Studio until the parser is generated
+
+- **Status:** Candidate
+- **Area:** Worktree setup
+- **Impact:** The one setup entry leaves a new worktree unable to run the product; the first Studio launch
+  fails with a module error that reads like a broken checkout rather than a missing step.
+- **Evidence:** In a new `.claude/worktrees/` checkout, `./agent setup` ran only `bun install`; `./dev studio
+  Apps/HNReader` then exited with `Cannot find module './_gen_tao-parser/module'` until
+  `bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts` (the `_parser-gen` gate) had run.
+  `direnv allow` was also needed first, and it must run from an unsandboxed shell because the allow file
+  lives under `~/.local/share/direnv`.
+- **Workaround:** Run `just _parser-gen` after `./agent setup` in a new worktree.
+- **Proposed change:** Make `setup` depend on `_parser-gen`, or have `./dev studio` generate the parser
+  when the generated tree is missing.
+- **Dependencies:** None.
+- **Acceptance:** A new linked worktree reaches a ready Studio session after `./agent setup` and
+  `./dev studio Apps/HNReader` alone.
+- **Source:** 2026-09-04 Studio visual design work.
+
+### DEVENV-049 — A fresh worktree cannot run `./tao` until the parser is generated
+
+- **Status:** Candidate
+- **Area:** Worktree setup
+- **Impact:** `./agent setup` is the documented one setup entry, yet the CLI it prepares fails on first
+  use, so an agent's first `./tao` command in a new worktree dies with a module error unrelated to its
+  task.
+- **Evidence:** In a linked worktree created 2026-09-04, `./agent setup` completed with no install
+  changes and `./tao fix Apps/Starters/Notebook` failed with `Cannot find module
+  './_gen_tao-parser/module' from packages/parser/parser-src/parserASTExport.ts`; running
+  `bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts` (the `_parser-gen` recipe) fixed it.
+- **Workaround:** Run `just _parser-gen`, or any lane that includes it, before the first `./tao` command.
+- **Proposed change:** Have `setup` run `_parser-gen` when `packages/parser/parser-src/_gen_tao-parser`
+  is missing or older than the grammar, or have `./tao` generate on demand with a one-line notice.
+- **Dependencies:** None.
+- **Acceptance:** In a fresh linked worktree, `./agent setup && ./tao check Apps/HNReader` succeeds
+  without a manual generation step.
+- **Source:** 2026-09-04 `tao create` work.
+
+### DEVENV-050 — `tao test` under a Git-ignored path says "No Tao tests found" without the reason
+
+- **Status:** Candidate
+- **Area:** Diagnostics
+- **Impact:** A project under an ignored directory looks test-less, and the person reads it as a
+  discovery bug in their project rather than an ignore rule.
+- **Evidence:** `tao create "…" --ai none --yes` run from `.artifacts/tmp/create-smoke` printed
+  `No Tao tests found under a-reading-list` although `a-reading-list/AReadingList.test.tao` existed;
+  the same command from a temp directory outside the repository found and ran the test. `findTaoFiles`
+  goes through `Repo.filesUnder`, which applies Git ignore rules inside a worktree.
+- **Workaround:** Run from a path Git does not ignore, or from outside the repository.
+- **Proposed change:** When discovery finds nothing but the directory holds `.tao` files, say that
+  Git-ignored paths are skipped and name the matching rule.
+- **Dependencies:** None.
+- **Acceptance:** `tao test` on an ignored directory that holds a `.test.tao` file prints a message
+  naming the ignore rule.
+- **Source:** 2026-09-04 `tao create` work.
+
+### DEVENV-051 — `sips` exits 13 inside the Claude Code Bash sandbox
+
+- **Status:** Candidate
+- **Area:** Sandbox
+- **Impact:** Any workflow that shells out to the system image tool — `tao create` reading a palette
+  from an image, or an agent converting a screenshot — silently yields nothing in a sandboxed shell.
+- **Evidence:** `sips -s format bmp -Z 48 <png> --out $TMPDIR/x.bmp` exits 13 with no output in the
+  sandbox and exits 0 with a valid 24-bit BMP unsandboxed (found during the `tao create` review, 2026-09-04).
+  `tao create` now reports the exit code and stderr instead of "no palette could be read".
+- **Workaround:** Run image-reading smoke tests unsandboxed.
+- **Proposed change:** Record `sips` as a host tool the sandbox blocks in `./agent capabilities`, so
+  the denial is named rather than inferred.
+- **Dependencies:** None.
+- **Acceptance:** `./agent capabilities` reports whether `sips` can run in the current shell.
+- **Source:** 2026-09-04 `tao create` review.
+
+### DEVENV-052 — `bun --tsconfig-override` fails for scripts outside the repository
+
+- **Status:** Candidate
+- **Area:** Agent scratch tooling
+- **Impact:** An agent cannot run a throwaway script from its scratchpad against the repository's path
+  aliases, so probes end up as files inside the worktree.
+- **Evidence:** `bun --tsconfig-override packages/tsconfig.base.json run <script outside the repo>` fails
+  in bun 1.3.13 with `Internal error: directory mismatch for directory ".../packages/tsconfig.base.json"`.
+- **Workaround:** Put scratch scripts under the ignored `.artifacts/tmp/` and import repository sources by
+  absolute path; remove them afterwards.
+- **Proposed change:** Document the `.artifacts/tmp/` convention for agent probes, or add a `./agent
+  probe <script>` entry that runs a script with the repository's aliases.
+- **Dependencies:** None.
+- **Acceptance:** A documented one-line way to run a scratch TypeScript file against `@shared` and
+  friends from outside the source tree.
+- **Source:** 2026-09-04 `tao create` review.

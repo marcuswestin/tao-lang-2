@@ -1,0 +1,9 @@
+use StackNav from @tao/nav
+use NoteList from ./Notes
+
+// The shared navigation. A single stack today; a second feature turns this into a SelectionNav
+// with one tab per feature.
+folder
+nav NotebookNavigator = StackNav {
+   Initial NoteList
+}

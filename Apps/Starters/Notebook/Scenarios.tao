@@ -1,0 +1,45 @@
+use Notebook, Notes from ./
+use NoteRow from ./Notes
+
+// Deterministic data for Studio previews and the device matrix.
+fixture Sample {
+   Groceries = create Note {
+      Title: "Groceries"
+      Body: "Milk, eggs, bread"
+   }
+   Ideas = create Note {
+      Title: "Ideas"
+      Pinned: true
+   }
+   CallThePlumber = create Note {
+      Title: "Call the plumber"
+      Body: "Ask about the kitchen tap."
+}  }
+
+scenarios Notebook "devices" {
+   fixture Sample
+   scenario "phone" {
+      device phone
+      appearance light
+      network online
+      locale "en"
+   }
+   scenario "tabletDark" {
+      device tablet 1024 x 1366
+      appearance dark
+      network online
+      locale "en"
+}  }
+
+scenarios NoteRow "notes states" {
+   fixture Sample
+   device phone
+   appearance light
+   network online
+   locale "en"
+   scenario "groceries" {
+      render (Note: Groceries)
+   }
+   scenario "ideas" {
+      render (Note: Ideas)
+}  }

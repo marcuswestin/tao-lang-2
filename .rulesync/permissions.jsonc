@@ -22,6 +22,10 @@
       "dprint *": "allow",
       // Routine inspection stays sandboxed. State-changing variants are deliberately absent.
       "pwd": "allow",
+      // Harmless on its own, and listed so a compound `cd <dir> && rg …` keeps every part inside
+      // an allow rule instead of waiting on permission review; the built-in read-only `cd` covers
+      // only paths under the working directory. Agents should still not need it: see `env` below.
+      "cd *": "allow",
       "ls *": "allow",
       "rg *": "allow",
       "file *": "allow",
@@ -217,6 +221,13 @@
           "swdist.apple.com",
         ],
       },
+    },
+    // Claude Code returns its tool shell to the worktree root after every command, so an agent
+    // never needs a `cd` prefix — which takes a command out of its allow rule and into permission
+    // review, about two seconds per call. The profile PATH comes from the session-start hook in
+    // hooks.jsonc, because `env` values here are literal and cannot extend the existing PATH.
+    "env": {
+      "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
     },
     // Deliberately not set here: `env.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`. It scrubs only
     // Anthropic and cloud-provider credentials from subprocess environments, and in exchange

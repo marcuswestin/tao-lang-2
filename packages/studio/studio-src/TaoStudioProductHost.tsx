@@ -7,12 +7,20 @@ import type {
   StudioStyleEntry,
   StudioStyleLandingScope,
 } from '@source-actions'
-import { CodeEditor, type CodeEditorDrop, type CodeEditorLsp } from '@tao/code-editor'
+import {
+  CodeEditor,
+  type CodeEditorDrop,
+  type CodeEditorLensFacet,
+  type CodeEditorLensMap,
+  type CodeEditorLensProps,
+  type CodeEditorLsp,
+} from '@tao/code-editor'
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { StudioApiClient } from './client/StudioApiClient'
 import { mountStudio } from './client/StudioApp'
 import { fileUri, sanitizeLspHtml, StudioEditorInsertion } from './client/StudioEditor'
+import { StudioLens, type StudioLensFacet } from './client/StudioLens'
 import {
   type StudioTaoDrawerPanelModel,
   StudioTaoPanelProjection,
@@ -22,6 +30,7 @@ import {
   type StudioScenarioControlModel,
   StudioScenarioControls,
 } from './client/StudioScenarioControls'
+import { type StudioIconName, studioIconPaths } from './client/StudioShell'
 import {
   studioPaletteMime,
   StudioPaletteTransfer,
@@ -82,21 +91,29 @@ type StudioContextPanelSlotProps = Readonly<{
   ActiveFilePath?: TR.Value<string>
   ActiveFileVersion?: TR.Value<string>
   ActiveScenarioId?: TR.Value<string>
-  NetworkErrorMessage?: TR.Value<string>
-  NetworkErrorStatus?: TR.Value<number>
-  NetworkLatencyMs?: TR.Value<number>
-  NetworkOutcome?: TR.Value<string>
   ProjectRoot?: TR.Value<string>
   Revision?: TR.Value<number>
-  SchemeCapability?: TR.Value<string>
-  SchemeRequested?: TR.Value<string>
-  SchemeResolved?: TR.Value<string>
-  SchemeSource?: TR.Value<string>
   SelectedRenderId?: TR.Value<string>
   SelectedRenderPath?: TR.Value<string>
   SelectedRenderVersion?: TR.Value<string>
   SelectionAnchor?: TR.Value<number>
   SelectionHead?: TR.Value<number>
+  ViewportHeight?: TR.Value<number>
+  ViewportWidth?: TR.Value<number>
+}>
+
+/** The environment editor lives in the Scenario pane; it receives only what the active cell's environment needs. */
+type StudioEnvironmentSlotProps = Readonly<{
+  ActiveCellId?: TR.Value<string>
+  CellRevision?: TR.Value<number>
+  NetworkErrorMessage?: TR.Value<string>
+  NetworkErrorStatus?: TR.Value<number>
+  NetworkLatencyMs?: TR.Value<number>
+  NetworkOutcome?: TR.Value<string>
+  SchemeCapability?: TR.Value<string>
+  SchemeRequested?: TR.Value<string>
+  SchemeResolved?: TR.Value<string>
+  SchemeSource?: TR.Value<string>
   ViewportHeight?: TR.Value<number>
   ViewportPresetId?: TR.Value<string>
   ViewportWidth?: TR.Value<number>
@@ -145,6 +162,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
   const [scenarioTarget, setScenarioTarget] = React.useState<HTMLElement>()
   const [filesTarget, setFilesTarget] = React.useState<HTMLElement>()
   const [inspectorTarget, setInspectorTarget] = React.useState<HTMLElement>()
+  const [environmentTarget, setEnvironmentTarget] = React.useState<HTMLElement>()
   React.useEffect(() => {
     const root = mount.current
     if (root === null) {
@@ -193,6 +211,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
     setDrawerTarget(root.querySelector<HTMLElement>('.studio-drawer-content') ?? undefined)
     setSearchTarget(root.querySelector<HTMLElement>('.studio-search-results') ?? undefined)
     setScenarioTarget(root.querySelector<HTMLElement>('.studio-scenario-inspector-content') ?? undefined)
+    setEnvironmentTarget(root.querySelector<HTMLElement>('.studio-inspector-tao-environment') ?? undefined)
     const inspector = root.querySelector<HTMLElement>('.studio-inspector-tao-context')
     if (inspector !== null) {
       setInspectorTarget(inspector)
@@ -224,6 +243,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
   const drawer = props.Slots?.['@drawer'] ?? props.Slots?.['drawer']
   const search = props.Slots?.['@search'] ?? props.Slots?.['search']
   const scenario = props.Slots?.['@scenario'] ?? props.Slots?.['scenario']
+  const environment = props.Slots?.['@environment'] ?? props.Slots?.['environment']
   const editor = props.Slots?.['@editor'] ?? props.Slots?.['editor']
   const inspector = props.Slots?.['@inspector'] ?? props.Slots?.['inspector']
   const activeFile = hostState.activeFile
@@ -253,26 +273,35 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       ActiveFilePath: TR.Value(activeFile?.path ?? ''),
       ActiveFileVersion: TR.Value(activeFile?.sourceVersion ?? ''),
       ActiveScenarioId: TR.Value(activeCell?.scenarioId ?? ''),
-      NetworkErrorMessage: TR.Value(activeCell?.networkErrorMessage ?? 'Injected Studio network failure'),
-      NetworkErrorStatus: TR.Value(activeCell?.networkErrorStatus ?? 503),
-      NetworkLatencyMs: TR.Value(activeCell?.networkLatencyMs ?? 0),
-      NetworkOutcome: TR.Value(activeCell?.networkOutcome ?? 'normal'),
       ProjectRoot: TR.Value(hostState.projectRoot ?? ''),
       Revision: TR.Value(hostState.revision),
-      SchemeCapability: TR.Value(activeCell?.schemeCapability ?? 'reactive-browser'),
-      SchemeRequested: TR.Value(activeCell?.schemeRequested ?? 'system'),
-      SchemeResolved: TR.Value(activeCell?.schemeResolved ?? 'light'),
-      SchemeSource: TR.Value(activeCell?.schemeSource ?? 'system'),
       SelectedRenderId: TR.Value(selectedRender?.renderId ?? ''),
       SelectedRenderPath: TR.Value(selectedRender?.path ?? ''),
       SelectedRenderVersion: TR.Value(selectedRender?.sourceVersion ?? ''),
       SelectionAnchor: TR.Value(activeFile?.selectionAnchor ?? 0),
       SelectionHead: TR.Value(activeFile?.selectionHead ?? 0),
       ViewportHeight: TR.Value(activeCell?.viewportHeight ?? 0),
-      ViewportPresetId: TR.Value(activeCell?.viewportPresetId ?? 'custom'),
       ViewportWidth: TR.Value(activeCell?.viewportWidth ?? 0),
     })
     : inspector
+  const refreshedEnvironment = React.isValidElement<StudioEnvironmentSlotProps>(environment)
+    ? React.cloneElement(environment, {
+      key: `studio-environment:${activeCell?.cellId ?? 'none'}:${activeCell?.cellRevision ?? 0}`,
+      ActiveCellId: TR.Value(activeCell?.cellId ?? ''),
+      CellRevision: TR.Value(activeCell?.cellRevision ?? 0),
+      NetworkErrorMessage: TR.Value(activeCell?.networkErrorMessage ?? 'Injected Studio network failure'),
+      NetworkErrorStatus: TR.Value(activeCell?.networkErrorStatus ?? 503),
+      NetworkLatencyMs: TR.Value(activeCell?.networkLatencyMs ?? 0),
+      NetworkOutcome: TR.Value(activeCell?.networkOutcome ?? 'normal'),
+      SchemeCapability: TR.Value(activeCell?.schemeCapability ?? 'reactive-browser'),
+      SchemeRequested: TR.Value(activeCell?.schemeRequested ?? 'system'),
+      SchemeResolved: TR.Value(activeCell?.schemeResolved ?? 'light'),
+      SchemeSource: TR.Value(activeCell?.schemeSource ?? 'system'),
+      ViewportHeight: TR.Value(activeCell?.viewportHeight ?? 0),
+      ViewportPresetId: TR.Value(activeCell?.viewportPresetId ?? 'custom'),
+      ViewportWidth: TR.Value(activeCell?.viewportWidth ?? 0),
+    })
+    : environment
   const refreshedDrawer = React.isValidElement<StudioDrawerSlotProps>(drawer)
     ? React.cloneElement(drawer, {
       Compile: TR.Value(panelValues.Drawer.Compile),
@@ -326,6 +355,14 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
             {refreshedScenario}
           </React.Fragment>,
           scenarioTarget,
+        )}
+      {environmentTarget === undefined || refreshedEnvironment === undefined
+        ? undefined
+        : createPortal(
+          <React.Fragment key={`${activeCell?.cellId ?? 'none'}:${activeCell?.cellRevision ?? 0}`}>
+            {refreshedEnvironment}
+          </React.Fragment>,
+          environmentTarget,
         )}
       {editorTarget === undefined || editor === undefined ? undefined : createPortal(editor, editorTarget)}
       {inspectorTarget === undefined || refreshedInspector === undefined
@@ -407,20 +444,174 @@ export type StudioScenarioControlGroupProps =
     children?: React.ReactNode
   }>
 
-/** Presentation-only grouping for Tao-owned scenario controls. */
+/** Presentation-only grouping for Tao-owned scenario controls: a collapsible section, open by default. */
 export function StudioScenarioControlGroup(
   props: StudioScenarioControlGroupProps,
 ): React.ReactElement {
   return (
-    <fieldset
+    <details
       aria-label={props.Title}
-      className="studio-inspector-controls studio-tao-scenario-controls"
+      className="studio-section studio-tao-scenario-controls"
+      data-studio-section={props.Title}
       data-testid={props.Tag}
+      open
       style={props.Layout?.style}
     >
-      <legend>{props.Title}</legend>
+      <summary>{props.Title}</summary>
+      <div className="studio-section-body studio-inspector-controls">{props.children}</div>
+    </details>
+  )
+}
+
+export type StudioButtonProps =
+  & TaoStudioHostVisualProps
+  & Readonly<{
+    Disabled: boolean
+    Label: string
+    Press: TaoStudioHostAction
+    Variant: string
+  }>
+
+/** A workbench button. Tao owns the label, the action, and whether it is enabled; the sheet owns the look. */
+export function StudioButton(props: StudioButtonProps): React.ReactElement {
+  return (
+    <button
+      className="studio-button"
+      data-size="small"
+      data-testid={props.Tag}
+      data-variant={props.Variant}
+      disabled={props.Disabled}
+      onClick={() => void props.Press.invoke()}
+      style={props.Layout?.style}
+      type="button"
+    >
+      {props.Label}
+    </button>
+  )
+}
+
+export type StudioChoiceProps =
+  & TaoStudioHostVisualProps
+  & Readonly<{
+    Change: TaoStudioHostTextAction
+    Label: string
+    Options: readonly string[]
+    Value: string
+  }>
+
+/** An enumeration with a few short values, shown whole so the current one is visible without opening anything. */
+export function StudioSegmented(props: StudioChoiceProps): React.ReactElement {
+  return (
+    <div
+      aria-label={props.Label}
+      className="studio-segmented"
+      data-testid={props.Tag}
+      role="radiogroup"
+      style={props.Layout?.style}
+    >
+      {props.Options.map(option => (
+        <button
+          aria-checked={option === props.Value}
+          key={option}
+          onClick={() => void props.Change.invoke(TR.Value(option))}
+          role="radio"
+          type="button"
+        >
+          {option}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** An enumeration with many or long values; a native select keeps the field one line tall. */
+export function StudioChoice(props: StudioChoiceProps): React.ReactElement {
+  return (
+    <select
+      aria-label={props.Label}
+      className="studio-select"
+      data-testid={props.Tag}
+      onChange={event => void props.Change.invoke(TR.Value(event.currentTarget.value))}
+      style={props.Layout?.style}
+      value={props.Value}
+    >
+      {props.Options.map(option => <option key={option} value={option}>{option}</option>)}
+    </select>
+  )
+}
+
+/** Several small inputs on one labelled line, such as a width and a height. */
+export function StudioInspectorRow(
+  props: TaoStudioHostVisualProps & Readonly<{ children?: React.ReactNode; Label: string }>,
+): React.ReactElement {
+  return (
+    <div className="studio-field-row" data-testid={props.Tag} style={props.Layout?.style}>
+      <span className="studio-field-row-label">{props.Label}</span>
+      <div className="studio-field-row-inputs">{props.children}</div>
+    </div>
+  )
+}
+
+/** A row of buttons; the section body would otherwise stack them one per line. */
+export function StudioActions(
+  props: TaoStudioHostVisualProps & Readonly<{ children?: React.ReactNode }>,
+): React.ReactElement {
+  return <div className="studio-actions" data-testid={props.Tag} style={props.Layout?.style}>{props.children}</div>
+}
+
+export type StudioSchemeNoteProps =
+  & TaoStudioHostVisualProps
+  & Readonly<{
+    Capability: string
+    Requested: string
+    Resolved: string
+    Source: string
+  }>
+
+/** One line for the scheme; what was requested and what the host can do stay available on hover. */
+export function StudioSchemeNote(props: StudioSchemeNoteProps): React.ReactElement {
+  return (
+    <p
+      className="studio-note"
+      data-testid={props.Tag}
+      style={props.Layout?.style}
+      title={`Requested ${props.Requested} · ${props.Capability}`}
+    >
+      Scheme {props.Resolved}, from {props.Source === 'scenario' ? 'the scenario' : props.Source}
+    </p>
+  )
+}
+
+/** The scenario's name block: the entry label Tao renders first, then where it comes from. */
+export function StudioScenarioIdentity(
+  props: TaoStudioHostVisualProps & Readonly<{ children?: React.ReactNode }>,
+): React.ReactElement {
+  return (
+    <div className="studio-scenario-identity" data-testid={props.Tag} style={props.Layout?.style}>
       {props.children}
-    </fieldset>
+    </div>
+  )
+}
+
+export type StudioScenarioSourceProps =
+  & TaoStudioHostVisualProps
+  & Readonly<{
+    Cell: string
+    Group: string
+    Subject: string
+  }>
+
+/** Group and subject by name, and the cell's revision; the cell's id stays on hover. */
+export function StudioScenarioSource(props: StudioScenarioSourceProps): React.ReactElement {
+  const subject = props.Subject.slice(props.Subject.lastIndexOf('#') + 1)
+  const cellParts = props.Cell.split(' · ')
+  const revision = cellParts.find(part => part.startsWith('revision')) ?? props.Cell
+  return (
+    <div className="studio-scenario-source" data-testid={props.Tag} style={props.Layout?.style}>
+      <b>{props.Group}</b>
+      <span>{subject}</span>
+      <span className="studio-scenario-cell" title={props.Cell}>{revision}</span>
+    </div>
   )
 }
 
@@ -533,8 +724,110 @@ const studioViewportPresets: Readonly<Record<string, Readonly<{ height: number; 
   tablet: { height: 1_180, width: 820 },
 }
 
+// The editor asks for colors and for the lens map in the same tick, so one request serves both.
+let lastAnalysis: { content: string; result: ReturnType<typeof StudioApiClient.highlight> } | undefined
+
+function analyzeTaoSource(content: string): ReturnType<typeof StudioApiClient.highlight> {
+  if (lastAnalysis?.content !== content) {
+    lastAnalysis = { content, result: StudioApiClient.highlight(content) }
+  }
+  return lastAnalysis.result
+}
+
 async function highlightTaoSource(content: string) {
-  return (await StudioApiClient.highlight(content)).tokens
+  return (await analyzeTaoSource(content)).tokens
+}
+
+async function lensTaoSource(content: string): Promise<CodeEditorLensMap> {
+  return (await analyzeTaoSource(content)).lens ?? { complete: false, nodes: [] }
+}
+
+const studioLensEditorFacets: readonly CodeEditorLensFacet[] = StudioLens.facets.map(facet => ({
+  glyph: facet.glyph,
+  label: facet.label,
+  name: facet.name,
+}))
+
+function studioLensStorage(): Storage | undefined {
+  try {
+    return typeof localStorage === 'undefined' ? undefined : localStorage
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * isStudioLensCycleShortcut recognises Shift+Alt+L, which steps through the lens presets. The physical
+ * key is checked first because Option+Shift+L types a different character on macOS; the letter is the
+ * fallback for synthetic events that carry no key code.
+ */
+export function isStudioLensCycleShortcut(
+  event: Pick<KeyboardEvent, 'altKey' | 'code' | 'ctrlKey' | 'key' | 'metaKey' | 'shiftKey'>,
+): boolean {
+  return event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey
+    && (event.code === 'KeyL' || event.key.toLowerCase() === 'l')
+}
+
+export type StudioLensBarProps = Readonly<{
+  active: readonly StudioLensFacet[]
+  onChange: (active: readonly StudioLensFacet[]) => void
+  onRefold: () => void
+}>
+
+/** StudioLensBar is the editor's lens control: presets for a way of working, facets to fine-tune, and re-fold. */
+export function StudioLensBar(props: StudioLensBarProps): React.ReactElement {
+  const preset = StudioLens.presetFor(props.active)
+  return (
+    <div
+      className="studio-lens-bar"
+      data-testid="studio-lens-bar"
+      data-preset={preset?.id ?? 'custom'}
+      role="toolbar"
+      aria-label="Syntax lens"
+    >
+      <span className="studio-lens-bar-group" role="group" aria-label="Lens presets">
+        {StudioLens.presets.map(candidate => (
+          <button
+            aria-pressed={candidate.id === preset?.id}
+            className="studio-lens-preset"
+            data-testid={`studio-lens-preset-${candidate.id}`}
+            key={candidate.id}
+            onClick={() => props.onChange(candidate.facets)}
+            title={`Show ${candidate.facets.length === 0 ? 'declaration heads only' : candidate.facets.join(', ')}`}
+            type="button"
+          >
+            {candidate.label}
+          </button>
+        ))}
+      </span>
+      <span className="studio-lens-bar-divider" aria-hidden="true" />
+      <span className="studio-lens-bar-group" role="group" aria-label="Lens facets">
+        {StudioLens.facets.map(facet => (
+          <button
+            aria-pressed={props.active.includes(facet.name)}
+            className="studio-lens-facet"
+            data-testid={`studio-lens-facet-${facet.name}`}
+            key={facet.name}
+            onClick={() => props.onChange(StudioLens.toggle(props.active, facet.name))}
+            title={facet.hint}
+            type="button"
+          >
+            <span className="studio-lens-glyph" aria-hidden="true">{facet.glyph}</span>
+            {facet.label}
+          </button>
+        ))}
+      </span>
+      <button
+        className="studio-lens-refold"
+        data-testid="studio-lens-refold"
+        onClick={props.onRefold}
+        title="Fold everything peeked open again (Shift+Alt+L cycles presets)"
+        type="button"
+      >
+        Re-fold
+      </button>
+    </div>
+  )
 }
 
 /** StudioEditorSurface is the Tao-mounted CodeEditor boundary over the host's revisioned active tab. */
@@ -546,6 +839,28 @@ export function StudioEditorSurface(): React.ReactElement {
   )
   const file = state.activeFile
   const lsp = useStudioEditorLsp(file?.path, state.projectRoot)
+  // The lens is one global preference: it follows the person across files and projects.
+  const [lensActive, setLensActive] = React.useState<readonly StudioLensFacet[]>(() =>
+    StudioLens.load(studioLensStorage())
+  )
+  const [lensRefold, setLensRefold] = React.useState(0)
+  const changeLens = React.useCallback((next: readonly StudioLensFacet[]) => {
+    setLensActive(next)
+    StudioLens.save(studioLensStorage(), next)
+  }, [])
+  const refoldLens = React.useCallback(() => setLensRefold(revision => revision + 1), [])
+  const lensProps = React.useMemo<CodeEditorLensProps>(() => ({
+    active: lensActive,
+    classify: lensTaoSource,
+    facets: studioLensEditorFacets,
+    refoldRevision: lensRefold,
+  }), [lensActive, lensRefold])
+  const onLensKeyDown = React.useCallback((event: React.KeyboardEvent) => {
+    if (isStudioLensCycleShortcut(event)) {
+      event.preventDefault()
+      changeLens(StudioLens.cycle(lensActive))
+    }
+  }, [changeLens, lensActive])
   const change = React.useMemo(() =>
     ({
       invoke(value: TR.Value<string>) {
@@ -586,14 +901,17 @@ export function StudioEditorSurface(): React.ReactElement {
       data-active-scenario={state.activeCell?.scenarioId}
       data-selected-render={state.selectedRender?.renderId}
       data-state-revision={state.revision}
+      onKeyDown={onLensKeyDown}
       ref={wrapper}
     >
+      <StudioLensBar active={lensActive} onChange={changeLens} onRefold={refoldLens} />
       <CodeEditor
         Change={change}
         Content={file.content}
         Drop={paletteDrop}
         Highlight={highlightTaoSource}
         Layout={{ style: editorSurfaceStyle }}
+        Lens={lensProps}
         Lsp={lsp}
         Selection={{ anchor: file.selectionAnchor, head: file.selectionHead }}
         SelectionChange={selection => requestStudioProductHostSelectActiveFile(selection.anchor, selection.head)}
@@ -711,6 +1029,7 @@ export function StudioInspectorField(
 ): React.ReactElement {
   return (
     <div className="studio-inspector-field" data-inspector-field={props.Label} style={props.Layout?.style}>
+      <span>{props.Label}</span>
       {props.children}
     </div>
   )
@@ -1844,6 +2163,20 @@ function useStudioEditorLsp(path: string | undefined, projectRoot: string | unde
     : undefined
 }
 
+function HostIcon(props: Readonly<{ name: StudioIconName; size?: 'small' }>): React.ReactElement {
+  return (
+    <svg aria-hidden="true" className="studio-icon" data-size={props.size} viewBox="0 0 24 24">
+      <path d={studioIconPaths[props.name]} />
+    </svg>
+  )
+}
+
+/** The file's kind, from its extension, so Tao files read as Tao at a glance in the tree. */
+function fileKind(name: string): string {
+  const dot = name.lastIndexOf('.')
+  return dot < 0 ? '' : name.slice(dot + 1).toLowerCase()
+}
+
 /** FilesPanelSurface keeps Tao's query-owned tree inside the shell's existing Files destination. */
 export function FilesPanelSurface(
   props: TaoStudioHostVisualProps & Readonly<{ children?: React.ReactNode }>,
@@ -1852,7 +2185,7 @@ export function FilesPanelSurface(
     <section
       data-studio-files-surface="compact"
       data-testid={props.Tag}
-      style={{ ...filesPanelStyle, ...props.Layout?.style }}
+      style={props.Layout?.style}
     >
       {props.children}
     </section>
@@ -1876,26 +2209,27 @@ export function FileCreateBar(props: FileCreateBarProps): React.ReactElement {
   return (
     <form
       aria-label="Create Tao file"
+      className="studio-file-create"
       data-studio-file-create="compact"
       onSubmit={create}
-      style={{ ...inlineEditorStyle, ...props.Layout?.style }}
+      style={props.Layout?.style}
     >
       <input
         aria-label="New Tao file path"
+        className="studio-input"
         onChange={event => void props.Change.invoke(TR.Value(event.currentTarget.value))}
         placeholder="Folder/New.tao"
         spellCheck={false}
-        style={inlineInputStyle}
         value={props.Path}
       />
       <button
         aria-label="Create file"
+        className="studio-icon-button"
         disabled={props.Path.trim() === ''}
-        style={iconButtonStyle}
         title="Create file"
         type="submit"
       >
-        +
+        <HostIcon name="plus" />
       </button>
     </form>
   )
@@ -1913,18 +2247,25 @@ export type TreeFolderProps =
 /** TreeFolder provides IDE disclosure density while Tao owns expansion state and recursive content. */
 export function TreeFolder(props: TreeFolderProps): React.ReactElement {
   return (
-    <div data-studio-tree-folder={props.Label} data-testid={props.Tag} style={props.Layout?.style}>
+    <div
+      className="studio-tree-folder"
+      data-studio-tree-folder={props.Label}
+      data-testid={props.Tag}
+      style={props.Layout?.style}
+    >
       <button
         aria-expanded={props.Expanded}
+        className="studio-tree-button"
         onClick={() => void props.Toggle.invoke()}
-        style={treePrimaryButtonStyle}
         title={props.Label}
         type="button"
       >
-        <span aria-hidden="true" style={treeIconStyle}>{props.Expanded ? '▾' : '▸'}</span>
-        <span style={treeLabelStyle}>{props.Label}</span>
+        <span className="studio-tree-chevron">
+          <HostIcon name="chevronRight" size="small" />
+        </span>
+        <span className="studio-tree-label">{props.Label}</span>
       </button>
-      {props.Expanded ? <div style={treeChildrenStyle}>{props.children}</div> : undefined}
+      {props.Expanded ? <div className="studio-tree-children">{props.children}</div> : undefined}
     </div>
   )
 }
@@ -1962,29 +2303,21 @@ export function TreeFileRow(props: TreeFileRowProps): React.ReactElement {
   }
   return (
     <div data-studio-tree-file={props.Path} data-testid={props.Tag} style={props.Layout?.style}>
-      <div style={treeRowStyle}>
+      <div className="studio-tree-row">
         <button
-          aria-label={`Move ${props.Name} to package`}
-          hidden={!props.Path.startsWith('@/studio/')}
-          onClick={() => void props.BeginMove.invoke()}
-          style={rowActionStyle}
-          title="Move to package"
-          type="button"
-        >
-          →
-        </button>
-        <button
+          className="studio-tree-button"
           onClick={() => void props.Open.invoke()}
-          style={treePrimaryButtonStyle}
           title={props.Path}
           type="button"
         >
-          <span aria-hidden="true" style={treeIconStyle}>◇</span>
-          <span style={treeLabelStyle}>{props.Name}</span>
-          {props.Dirty ? <span aria-label="Unsaved draft" style={dirtyStyle}>●</span> : undefined}
+          <span aria-hidden="true" className="studio-file-kind" data-kind={fileKind(props.Name)}>
+            {fileKind(props.Name)}
+          </span>
+          <span className="studio-tree-label">{props.Name}</span>
+          {props.Dirty ? <span aria-label="Unsaved draft" className="studio-tree-dirty" role="img"></span> : undefined}
           {props.DiagnosticCount > 0
             ? (
-              <span aria-label={`${props.DiagnosticCount} problems`} style={diagnosticStyle}>
+              <span aria-label={`${props.DiagnosticCount} problems`} className="studio-tree-diagnostics">
                 {props.DiagnosticCount}
               </span>
             )
@@ -1992,39 +2325,60 @@ export function TreeFileRow(props: TreeFileRowProps): React.ReactElement {
         </button>
         <button
           aria-label={`Rename ${props.Name}`}
+          className="studio-tree-action"
           onClick={() => void props.BeginRename.invoke()}
-          style={rowActionStyle}
           title="Rename"
           type="button"
         >
-          ✎
+          <HostIcon name="pen" size="small" />
         </button>
         <button
           aria-label={`Delete ${props.Name}`}
+          className="studio-tree-action"
+          data-action="delete"
           onClick={() => void props.BeginDelete.invoke()}
-          style={rowActionStyle}
           title="Delete"
           type="button"
         >
-          ×
+          <HostIcon name="x" size="small" />
+        </button>
+        <button
+          aria-label={`Move ${props.Name} to package`}
+          className="studio-tree-action"
+          hidden={!props.Path.startsWith('@/studio/')}
+          onClick={() => void props.BeginMove.invoke()}
+          title="Move to package"
+          type="button"
+        >
+          <HostIcon name="arrowRight" size="small" />
         </button>
       </div>
       {props.Renaming
         ? (
-          <form aria-label={`Rename ${props.Name}`} onSubmit={rename} style={inlineEditorStyle}>
+          <form aria-label={`Rename ${props.Name}`} className="studio-inline-editor" onSubmit={rename}>
             <input
               aria-label={`New path for ${props.Name}`}
               autoFocus
+              className="studio-input"
               onChange={event => void props.ChangeRenamePath.invoke(TR.Value(event.currentTarget.value))}
               spellCheck={false}
-              style={inlineInputStyle}
               value={props.RenamePath}
             />
-            <button aria-label="Save rename" style={inlineTextButtonStyle} type="submit">Save</button>
+            <button
+              aria-label="Save rename"
+              className="studio-button"
+              data-size="small"
+              data-variant="primary"
+              type="submit"
+            >
+              Save
+            </button>
             <button
               aria-label="Cancel rename"
+              className="studio-button"
+              data-size="small"
+              data-variant="ghost"
               onClick={() => void props.CancelRename.invoke()}
-              style={inlineTextButtonStyle}
               type="button"
             >
               Cancel
@@ -2036,39 +2390,51 @@ export function TreeFileRow(props: TreeFileRowProps): React.ReactElement {
         ? (
           <form
             aria-label={`Move ${props.Name} to package`}
+            className="studio-inline-editor"
             onSubmit={event => {
               event.preventDefault()
               void props.Move.invoke()
             }}
-            style={inlineEditorStyle}
           >
             <input
               aria-label={`Target package for ${props.Name}`}
               autoFocus
+              className="studio-input"
               onChange={event => void props.ChangeTargetPackage.invoke(TR.Value(event.currentTarget.value))}
               placeholder="@views"
               spellCheck={false}
-              style={inlineInputStyle}
               value={props.TargetPackage}
             />
-            <button aria-label="Move to package" style={inlineTextButtonStyle} type="submit">Move</button>
+            <button
+              aria-label="Move to package"
+              className="studio-button"
+              data-size="small"
+              data-variant="primary"
+              type="submit"
+            >
+              Move
+            </button>
           </form>
         )
         : undefined}
       {props.ConfirmDelete
         ? (
-          <div aria-label={`Confirm delete ${props.Name}`} role="alert" style={deleteConfirmationStyle}>
-            <span style={deletePromptStyle}>Delete {props.Name}?</span>
+          <div aria-label={`Confirm delete ${props.Name}`} className="studio-delete-confirmation" role="alert">
+            <span>Delete {props.Name}?</span>
             <button
+              className="studio-button"
+              data-size="small"
+              data-variant="ghost"
               onClick={() => void props.CancelDelete.invoke()}
-              style={inlineTextButtonStyle}
               type="button"
             >
               Cancel
             </button>
             <button
+              className="studio-button"
+              data-size="small"
+              data-variant="danger"
               onClick={() => void props.Delete.invoke()}
-              style={deleteButtonStyle}
               type="button"
             >
               Delete
@@ -2079,13 +2445,6 @@ export function TreeFileRow(props: TreeFileRowProps): React.ReactElement {
     </div>
   )
 }
-
-const filesPanelStyle = {
-  color: '#c9cfda',
-  fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-  fontSize: 12,
-  minWidth: 0,
-} satisfies React.CSSProperties
 
 const editorSurfaceStyle = {
   height: '100%',
@@ -2117,138 +2476,6 @@ const productHostViewportStyle = {
 export function productHostStyle(layout?: React.CSSProperties): React.CSSProperties {
   return { ...layout, ...productHostViewportStyle }
 }
-
-const treeRowStyle = {
-  alignItems: 'center',
-  display: 'flex',
-  minWidth: 0,
-} satisfies React.CSSProperties
-
-const treePrimaryButtonStyle = {
-  alignItems: 'center',
-  background: 'transparent',
-  border: 0,
-  color: 'inherit',
-  cursor: 'default',
-  display: 'flex',
-  flex: '1 1 auto',
-  font: 'inherit',
-  gap: 5,
-  minHeight: 24,
-  minWidth: 0,
-  padding: '2px 4px',
-  textAlign: 'left',
-} satisfies React.CSSProperties
-
-const treeIconStyle = {
-  color: '#758091',
-  flex: '0 0 12px',
-  textAlign: 'center',
-} satisfies React.CSSProperties
-
-const treeLabelStyle = {
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-} satisfies React.CSSProperties
-
-const treeChildrenStyle = {
-  borderLeft: '1px solid #2b303a',
-  marginLeft: 9,
-  paddingLeft: 7,
-} satisfies React.CSSProperties
-
-const rowActionStyle = {
-  background: 'transparent',
-  border: 0,
-  color: '#8993a2',
-  cursor: 'pointer',
-  flex: '0 0 24px',
-  font: 'inherit',
-  height: 24,
-  padding: 0,
-} satisfies React.CSSProperties
-
-const dirtyStyle = {
-  color: '#e7b84b',
-  fontSize: 8,
-  marginLeft: 'auto',
-} satisfies React.CSSProperties
-
-const diagnosticStyle = {
-  background: '#7b3f3f',
-  borderRadius: 8,
-  color: '#fff',
-  fontSize: 10,
-  lineHeight: '16px',
-  minWidth: 16,
-  padding: '0 4px',
-  textAlign: 'center',
-} satisfies React.CSSProperties
-
-const inlineEditorStyle = {
-  alignItems: 'center',
-  display: 'flex',
-  gap: 4,
-  minWidth: 0,
-  padding: '3px 4px 5px',
-} satisfies React.CSSProperties
-
-const inlineInputStyle = {
-  background: '#14171d',
-  border: '1px solid #343a46',
-  borderRadius: 3,
-  color: '#e8e7e3',
-  font: 'inherit',
-  height: 24,
-  minWidth: 0,
-  outlineColor: '#5d83d3',
-  padding: '2px 6px',
-  width: '100%',
-} satisfies React.CSSProperties
-
-const iconButtonStyle = {
-  ...rowActionStyle,
-  background: '#304a7d',
-  borderRadius: 3,
-  color: '#e8eee9',
-  fontSize: 16,
-} satisfies React.CSSProperties
-
-const inlineTextButtonStyle = {
-  background: '#252a33',
-  border: '1px solid #3b424f',
-  borderRadius: 3,
-  color: '#cbd1dc',
-  cursor: 'pointer',
-  font: 'inherit',
-  height: 24,
-  padding: '0 6px',
-} satisfies React.CSSProperties
-
-const deleteConfirmationStyle = {
-  alignItems: 'center',
-  background: '#2a2020',
-  borderRadius: 3,
-  display: 'flex',
-  gap: 4,
-  margin: '2px 4px 4px',
-  padding: 4,
-} satisfies React.CSSProperties
-
-const deletePromptStyle = {
-  flex: '1 1 auto',
-  minWidth: 0,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-} satisfies React.CSSProperties
-
-const deleteButtonStyle = {
-  ...inlineTextButtonStyle,
-  background: '#703f3f',
-  borderColor: '#8b5151',
-} satisfies React.CSSProperties
 
 /** OpenFile is the Tao Files panel's typed request into the existing editor host. */
 export async function OpenFile(path: string): Promise<void> {

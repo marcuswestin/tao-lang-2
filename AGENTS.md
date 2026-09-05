@@ -7,7 +7,8 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 ## Work
 
 - `./agent setup` is the one setup entry: Worktrunk's blocking pre-start hook runs it before a launched harness starts, the Claude Code and Codex session-start hooks run it for worktrees those harnesses create, and Cursor's worktree setup runs it for its own. In a linked worktree `./agent` reuses the primary checkout's pinned devenv profile; if it reports no profile, run `direnv allow` and `direnv exec . ./agent setup`.
-- `direnv exec .` works in an unsandboxed shell but fails in a sandboxed one: it re-resolves the devenv lock through `.devenv/bootstrap`, which needs the nix daemon socket the sandbox denies. It surfaces as `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'` or, misleadingly, `Failed to get attribute 'config.cachix.enable'`. In a sandboxed shell use the already-materialized profile instead — `export PATH="$PWD/.devenv/profile/bin:$PATH"` — and then call `bun`, `bunx`, `dprint`, `just`, and `node` directly.
+- In Claude Code the session-start hook puts the pinned profile's `.devenv/profile/bin` on the tool shell's PATH, so call `bun`, `bunx`, `dprint`, `just`, and `node` directly, with no `export PATH=…` or `direnv exec .` prefix. `direnv exec .` works in an unsandboxed shell but fails in a sandboxed one: it re-resolves the devenv lock through `.devenv/bootstrap`, which needs the nix daemon socket the sandbox denies, surfacing as `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'` or, misleadingly, `Failed to get attribute 'config.cachix.enable'`. If `which bun` shows a shell without the profile, prepend `$PWD/.devenv/profile/bin` once in that shell rather than on every command.
+- Run commands from the worktree root with paths relative to it; do not prefix them with `cd`. Claude Code returns the tool shell to the worktree root after every command, and a `cd`, `export`, or variable-assignment prefix takes a command out of its allow rule and into permission review. Change files with the harness's edit tool rather than shell heredocs or `sed -i`: edits inside the worktree run without review, shell writes wait for it.
 - `EEXIST: failed to link package` from `bun install`, or a package the doctor reports as declared but not installed, means a sandboxed install cannot replace one of the few packages shipping `.idea/` or `.gitmodules`, which the sandbox protects and no setting exempts. Recover from an unsandboxed shell: `rm -rf node_modules && bun install --frozen-lockfile`.
 - Run ordinary shell commands directly. Use `./tao` for Tao CLI commands and `./agent <command>` for common repository workflows; run `./agent help` to discover them. Human developer commands are defined in `Justfile`.
 - Inspect all processes with `ps -axo pid=,ppid=,lstart=,command=` or selected PIDs with `ps -o pid=,ppid=,lstart=,command= -p <pid-list>`; inspect one listening port with `lsof -nP -iTCP:<port> -sTCP:LISTEN -t`. Agents may stop processes: confirm the PID belongs to the intended task when practical, send `kill -TERM <pid>` first, and use `kill -KILL <pid>` only when it survives graceful shutdown.
@@ -57,7 +58,12 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 - Run `./agent verify` as the final validation and before commits.
 - Read the `verification-lanes` skill when choosing between changed, retry, complete, sandbox, and
   host-only verification. Selection lanes are iteration aids, never merge evidence, and
-  `merge-with-main` is a human-only command that agents do not invoke.
+  `merge-with-main` is never an agent's own initiative: run it only when Ro asks for that merge in
+  the current request.
+- Before reporting a branch ready to merge, write or update its merge message at
+  `.artifacts/merge/<branch>.msg`; the `verification-lanes` skill owns its format. A branch is not
+  merge-ready without it, and the human command Ro then runs is
+  `just merge-with-main --execute --push --yes`.
 - Several worktrees share one machine. Lanes divide its CPUs between themselves automatically, so a
   lane is slower, not oversubscribed, while another agent works. A timeout under that load is
   reported as `machine-contention`, re-run once on its own, and named in the summary's `contention`

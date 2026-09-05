@@ -12,23 +12,6 @@ type ProjectSource = {
   source: string
 }
 
-/** createProject creates a minimal runnable Tao project in a new directory named by its checked-in id. */
-export async function createProject(id: string): Promise<string> {
-  validateProjectId(id)
-  validateDirectoryName(id)
-
-  const directory = FS.resolvePath(id)
-  if (await FS.exists(directory)) {
-    Errors.throwUserInput(`Cannot create project '${id}': ${FS.displayPath(directory)} already exists.`)
-  }
-
-  const appPath = FS.resolvePath('App.tao', directory)
-  const generatedPackageMarker = FS.resolvePath('@/.gitkeep', directory)
-  await FS.writeText(appPath, projectTemplate(id))
-  await FS.writeText(generatedPackageMarker, '')
-  return appPath
-}
-
 /** setProjectId deliberately adds or replaces the checked-in id in one existing project declaration. */
 export async function setProjectId(id: string, target = '.', options: SetProjectIdOptions = {}): Promise<string> {
   validateProjectId(id)
@@ -129,27 +112,17 @@ function replaceNode(source: string, node: AST.Node, replacement: string): strin
   return `${source.slice(0, cst.offset)}${replacement}${source.slice(cst.end)}`
 }
 
-function validateProjectId(id: string): void {
+/** validateProjectId rejects ids that cannot be persisted as checked-in project metadata. */
+export function validateProjectId(id: string): void {
   if (id.length === 0 || /[\u0000-\u001f\u007f]/u.test(id)) {
     Errors.throwUserInput('A project id must be non-empty text without control characters.')
   }
 }
 
-function validateDirectoryName(id: string): void {
-  if (id === '.' || id === '..' || id.includes('/') || id.includes('\\')) {
-    Errors.throwUserInput(`Project id '${id}' cannot be used as a directory name.`)
-  }
-}
-
-function projectTemplate(id: string): string {
-  const value = taoString(id)
-  return `project {\n   id ${value}\n   name ${value}\n   version "0.1.0"\n   DefaultApp App\n}\n\napp App { view Main }\n\nview Main() { }\n`
-}
-
 /**
- * The same three fields `projectTemplate` writes. Metadata added to an existing directory used to carry only
- * an id and a name, so the project it described could never ship: shipping needs a version, and the failure
- * surfaced only at the point of shipping, long after the metadata was written.
+ * Metadata added to an existing directory used to carry only an id and a name, so the project it
+ * described could never ship: shipping needs a version, and the failure surfaced only at the point of
+ * shipping, long after the metadata was written. `tao create` writes the same three fields.
  */
 function projectMetadataTemplate(id: string, name: string): string {
   return `project {\n   id ${taoString(id)}\n   name ${taoString(name)}\n   version "0.1.0"\n}\n`

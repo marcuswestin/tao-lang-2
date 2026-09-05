@@ -30,8 +30,14 @@ description: >-
 - A gate that passes its machine-exclusive confirmation is green evidence, remains marked
   `retried`, and emits a warning preserving the original timeout.
 - `just test-flakes` and `just test-slowest` are reports, not gates.
-- `just merge-with-main` is a human command. Agents prepare the branch and message file but never
-  invoke, automate, or approve the command.
+- `just merge-with-main --execute --push --yes` is the landing command; those are `just` long flags,
+  not `execute=true` positional assignments. Agents prepare the branch and message file and never
+  land on their own initiative, never automate the command, and never decide a merge is warranted;
+  they run it only when Ro asks for that merge in the current request, and say which verification
+  evidence stood behind it.
+- Write or update the message every time a branch becomes merge-ready, including when later commits
+  change what the branch does. The command fails with `Merge message file does not exist` when the
+  file is missing, so a branch handed over without it is not ready.
 - Put its message at `.artifacts/merge/<full-feature-branch>.msg` unless passing `--message-file`.
   Write a summary of at most 72 characters, one blank line, then one or more contiguous `- ...`
   bullets. Do not add Git's squash appendix or any automated-author attribution; the command
@@ -39,9 +45,11 @@ description: >-
 - `merge-with-main` defaults to a ref-preserving dry run. `--execute` enables mutation, `--yes`
   answers normal confirmation non-interactively, `--push` independently authorizes a
   non-interactive push, and `--skip-full-verify` is the only verification escape hatch. Preflight
-  intentionally requires local `main` to equal `origin/main`. Successful execution leaves the
-  invoking feature worktree clean and detached at the archived feature tip, deletes its local
-  feature branch, and leaves worktree removal to archival of the owning task.
+  intentionally requires local `main` to equal `origin/main`. A remote feature branch that is behind
+  the worktree is pushed forward during execution; only one holding commits the worktree lacks stops
+  the landing. Successful execution leaves the invoking feature worktree clean and detached at the
+  archived feature tip, deletes its local feature branch, and leaves worktree removal to archival of
+  the owning task.
 - `--abort <snapshot>` restores only command-owned local state while the snapshot still matches.
   Once a snapshot says `push-started`, the remote result may be ambiguous and automatic history
   rewriting is forbidden; inspect remote `main` and `merged/*` and follow the printed recovery
