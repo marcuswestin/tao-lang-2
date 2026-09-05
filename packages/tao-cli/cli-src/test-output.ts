@@ -4,7 +4,7 @@ import { Errors, FS, HCI, Platform, Switch, Text } from '@shared'
 export type TestOutputMode = 'lines' | 'quiet'
 
 /** TestOutputWriter forwards the test runner's output while it arrives, one whole line at a time. */
-export type TestOutputWriter = {
+type TestOutputWriter = {
   /** flush writes a trailing line the runner left without a newline. */
   flush: () => void
   /** write forwards one output chunk from the test runner process. */
@@ -12,7 +12,7 @@ export type TestOutputWriter = {
 }
 
 /** FinishedTestRun declares one finished test runner process for the end-of-run report. */
-export type FinishedTestRun = {
+type FinishedTestRun = {
   failed: boolean
   logPath?: string
   mode: TestOutputMode

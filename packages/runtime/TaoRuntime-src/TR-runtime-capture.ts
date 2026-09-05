@@ -9,7 +9,7 @@ export type TaoRuntimeJson = boolean | null | number | string | readonly TaoRunt
   readonly [key: string]: TaoRuntimeJson
 }
 
-export type TaoRuntimeCaptureDomain = Readonly<{ domain: string; value: TaoRuntimeJson; version: number }>
+type TaoRuntimeCaptureDomain = Readonly<{ domain: string; value: TaoRuntimeJson; version: number }>
 
 export type TaoRuntimeFailureFrame = Readonly<{
   arguments?: TaoRuntimeJson

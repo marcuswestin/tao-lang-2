@@ -1,4 +1,4 @@
-import { Errors } from '@shared/core'
+import { Errors, Json } from '@shared/core'
 import type {
   DeepPartial,
   GenerationAvailability,
@@ -73,7 +73,7 @@ export class AppleFoundationModelsProvider implements GenerationProvider {
       if (deadline.signal.aborted) {
         return { status: 'unavailable', reason: deadlineMessage('availability', this.#availabilityTimeoutMs) }
       }
-      return { status: 'unavailable', reason: errorMessage(error) }
+      return { status: 'unavailable', reason: Errors.messageOf(error) }
     } finally {
       deadline.clear()
     }
@@ -142,7 +142,7 @@ export class AppleFoundationModelsProvider implements GenerationProvider {
       if (deadline.signal.aborted) {
         return failure('cancelled', deadlineMessage('generation', this.#generationTimeoutMs))
       }
-      return failure('provider_error', errorMessage(error))
+      return failure('provider_error', Errors.messageOf(error))
     } finally {
       deadline.clear()
       partials.finish()
@@ -192,7 +192,7 @@ async function* responseEvents(
 
 function parseEvent(line: string): FoundationModelsEvent {
   const value = JSON.parse(line) as unknown
-  if (!isObject(value) || typeof value['type'] !== 'string') {
+  if (!Json.isRecord(value) || typeof value['type'] !== 'string') {
     Errors.throwHostEnvironment('Foundation Models helper returned an invalid event.')
   }
   if ((value['type'] === 'partial' || value['type'] === 'success') && value['value'] !== undefined) {
@@ -208,10 +208,10 @@ function parseEvent(line: string): FoundationModelsEvent {
 }
 
 function parseAvailability(value: unknown): GenerationAvailability {
-  if (isObject(value) && value['status'] === 'available') {
+  if (Json.isRecord(value) && value['status'] === 'available') {
     return { status: 'available' }
   }
-  if (isObject(value) && value['status'] === 'unavailable' && typeof value['reason'] === 'string') {
+  if (Json.isRecord(value) && value['status'] === 'unavailable' && typeof value['reason'] === 'string') {
     return { status: 'unavailable', reason: value['reason'] }
   }
   return { status: 'unavailable', reason: 'Foundation Models helper returned an invalid availability response.' }
@@ -249,10 +249,6 @@ function failure(
   issues?: readonly string[],
 ): GenerationFailure {
   return { status: 'failure', code, message, issues }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 function requestDeadline(timeoutMs: number): {
@@ -299,10 +295,6 @@ function deadlineMessage(operation: string, timeoutMs: number): string {
 
 function byteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 class AsyncValueQueue<Value> implements AsyncIterable<Value> {

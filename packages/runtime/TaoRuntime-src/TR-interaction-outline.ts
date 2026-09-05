@@ -27,7 +27,7 @@ export type TaoOutlineLoopDescriptor = Readonly<{
 }>
 
 /** TaoOutlineControlDescriptor is what the compiler emitted for one render that wires an event. */
-export type TaoOutlineControlDescriptor = Readonly<{
+type TaoOutlineControlDescriptor = Readonly<{
   declaration: string
   kind: 'control'
   label?: string
@@ -37,7 +37,7 @@ export type TaoOutlineControlDescriptor = Readonly<{
 }>
 
 /** A sibling region groups the concrete roots beside one nav without adding a native wrapper. */
-export type TaoOutlineSiblingRegionDescriptor = Readonly<{
+type TaoOutlineSiblingRegionDescriptor = Readonly<{
   declaration: string
   kind: 'region'
   label?: string
@@ -46,7 +46,7 @@ export type TaoOutlineSiblingRegionDescriptor = Readonly<{
   role: 'nav-siblings'
 }>
 
-export type TaoOutlineDescriptor =
+type TaoOutlineDescriptor =
   | TaoOutlineControlDescriptor
   | TaoOutlineLoopDescriptor
   | TaoOutlineSiblingRegionDescriptor
@@ -62,7 +62,7 @@ export type TaoOutlineTable = Readonly<{
 }>
 
 /** A described node is a table entry that knows its module-qualified identity. */
-export type TaoOutlineDescribed<DescriptorT extends TaoOutlineDescriptor> = DescriptorT & Readonly<{ identity: string }>
+type TaoOutlineDescribed<DescriptorT extends TaoOutlineDescriptor> = DescriptorT & Readonly<{ identity: string }>
 export type TaoOutlineLoopNode = TaoOutlineDescribed<TaoOutlineLoopDescriptor>
 export type TaoOutlineControlNode = TaoOutlineDescribed<TaoOutlineControlDescriptor>
 export type TaoOutlineSiblingRegionNode = TaoOutlineDescribed<TaoOutlineSiblingRegionDescriptor>
@@ -71,7 +71,7 @@ export type TaoOutlineDescribedTable<TableT extends TaoOutlineTable = TaoOutline
   readonly [KeyT in keyof TableT['nodes']]: TaoOutlineDescribed<TableT['nodes'][KeyT]>
 }
 
-export type TaoOutlineNodeKind = 'action' | 'collection' | 'input' | 'item' | 'region'
+type TaoOutlineNodeKind = 'action' | 'collection' | 'input' | 'item' | 'region'
 export type TaoOutlineProvenance = Readonly<Record<string, TaoRuntimeJson>>
 
 /** TaoOutlineNode is one mounted node as a reader sees it: identity, kind, label, provenance. */

@@ -12,7 +12,7 @@ type AppShellProps = {
   children?: React.ReactNode
 }
 
-export type SafeAreaInsets = {
+type SafeAreaInsets = {
   readonly bottom: number
   readonly left: number
   readonly right: number

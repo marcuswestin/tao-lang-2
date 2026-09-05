@@ -296,10 +296,8 @@ export function ancestorBlocks(node: AST.Node): AST.Block[] {
   return blocks
 }
 
-/** importableValueDeclarationsInFile returns file-level value declarations visible to other files. */
-export function importableValueDeclarationsInFile(
-  file: AST.TaoFile,
-): Array<
+/** ImportableValueDeclaration is a file-level value declaration another file can import by name. */
+export type ImportableValueDeclaration =
   | AST.AliasDeclaration
   | AST.ActionDeclaration
   | AST.AppDeclaration
@@ -308,8 +306,11 @@ export function importableValueDeclarationsInFile(
   | AST.DatasourceDeclaration
   | AST.DesignDeclaration
   | AST.ViewDeclaration
-  | AST.CaseSetCase
-> {
+
+/** importableValueDeclarationsInFile returns file-level value declarations visible to other files. */
+export function importableValueDeclarationsInFile(
+  file: AST.TaoFile,
+): Array<ImportableValueDeclaration | AST.CaseSetCase> {
   return [
     ...file.statements.filter(isImportableValueDeclaration),
     ...file.statements.filter(AST.isTypeDeclaration).flatMap(caseSetCasesOf),
@@ -498,18 +499,7 @@ export function testTagForRender(render: AST.Render): string | undefined {
 }
 
 /** isImportableValueDeclaration returns true for value declarations that can be imported. */
-export function isImportableValueDeclaration(
-  node: AST.Node,
-): node is
-  | AST.AliasDeclaration
-  | AST.ActionDeclaration
-  | AST.AppDeclaration
-  | AST.CommandDeclaration
-  | AST.NavDeclaration
-  | AST.DatasourceDeclaration
-  | AST.DesignDeclaration
-  | AST.ViewDeclaration
-{
+export function isImportableValueDeclaration(node: AST.Node): node is ImportableValueDeclaration {
   return AST.isAliasDeclaration(node)
     || AST.isActionDeclaration(node)
     || AST.isAppDeclaration(node)

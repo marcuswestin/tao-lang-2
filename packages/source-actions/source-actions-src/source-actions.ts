@@ -10,37 +10,7 @@ import {
   type SourceActionOptions,
   sourceStatementContext,
 } from './source-actions-utils'
-import {
-  StudioActions,
-  type StudioComponentKind,
-  type StudioInsertCapturedFixturePatchRequest,
-  type StudioInsertComponentPatchRequest,
-  type StudioInsertProjectViewPatchRequest,
-  type StudioLayoutAlignment,
-  type StudioLayoutContentTerm,
-  type StudioLayoutEntry,
-  type StudioLayoutSizeValue,
-  type StudioLayoutSpacingSide,
-  type StudioLayoutTermValue,
-  type StudioMoveRenderPatchRequest,
-  type StudioMoveRenderRequest,
-  type StudioRenderGap,
-  type StudioRenderInspection,
-  type StudioScenarioArgumentValue,
-  type StudioSetLayoutEntryPatchRequest,
-  type StudioSetScenarioArgumentsPatchRequest,
-  type StudioSetStyleEntryPatchRequest,
-  StudioSourceOccurrenceConflictError,
-  type StudioSourceOccurrencePrecondition,
-  type StudioSourcePatch,
-  type StudioSourcePatchRequest,
-  type StudioSourceTextEdit,
-  type StudioStyleEntry,
-  type StudioStyleLandingScope,
-  type StudioStyleProvenance,
-  type StudioWorkspaceDesignContext,
-  type StudioWrapRenderPatchRequest,
-} from './studio-actions'
+import { StudioActions } from './studio-actions'
 import { removeUnusedImportNames } from './use-actions'
 import { moveViewRendersLast } from './views-actions'
 
@@ -97,8 +67,8 @@ const SourceActions = {
   studioSourceVersion: StudioActions.sourceVersion,
 }
 
+export type { SourceActionOptions }
 export {
-  type SourceActionOptions,
   type StudioComponentKind,
   type StudioInsertCapturedFixturePatchRequest,
   type StudioInsertComponentPatchRequest,
@@ -127,6 +97,6 @@ export {
   type StudioStyleProvenance,
   type StudioWorkspaceDesignContext,
   type StudioWrapRenderPatchRequest,
-}
+} from './studio-actions'
 
 export default SourceActions

@@ -39,7 +39,7 @@ export type TaoStudioIdentity = {
  * is, from its module's generated table, and the loop row whose sole root it renders. It is its own
  * field, never `studio`, because Studio identity lowers a DOM marker that stays Studio-only.
  */
-export type TaoInteractionProps = {
+type TaoInteractionProps = {
   control?: TaoOutlineControlNode
   region?: TaoOutlineSiblingRegionNode
   row?: TaoOutlineRowRoot

@@ -1,4 +1,4 @@
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, promptTagsApp, Test } from '@shared/test'
 import { TestCompiler as Compiler } from './test-compile'
 
 Describe('compiler: typed values', () => {
@@ -58,38 +58,3 @@ Describe('compiler: typed values', () => {
     Expect(code).not.toContain('Linking')
   })
 })
-
-function promptTagsApp(): string {
-  return `
-    type PromptTitle is text
-    type PromptMinutes is number
-    type PromptTags is list of text
-    type WritingPrompt is {
-      PromptTitle,
-      PromptMinutes,
-      PromptTags,
-    }
-
-    let StarterTags = PromptTags ["daily", "warmup"]
-    let StarterPrompt = WritingPrompt {
-      PromptTitle: "Morning pages"
-      PromptMinutes: 10
-      StarterTags
-    }
-
-    function Join(Values list of text, Separator text) returns text {
-      return Join(Values, Separator) from ./Join.ts
-    }
-
-    app TypedTags { view Main }
-    view Main() { render TagSummary(StarterPrompt.PromptTags) }
-    view TagSummary(Tags PromptTags) {
-      let Positional = Join(Tags, Separator: ", ")
-      let Labeled = Join(Values: Tags, Separator: ", ")
-      render Text("{ Positional } / { Labeled }")
-    }
-    view Text(Value text) {
-      render inject Value \`\`\`ts return null \`\`\`
-    }
-  `
-}

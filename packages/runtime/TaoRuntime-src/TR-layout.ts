@@ -12,10 +12,6 @@ export type {
   TaoLayout,
   TaoLayoutDirection,
   TaoLayoutEntry,
-  TaoLayoutMergeSpec,
-  TaoLayoutSpec,
-  TaoLayoutStyleValue,
-  TaoLayoutTermValue,
   TaoResolvedLayoutStyle,
 } from './layout-engine/LayoutTypes'
 

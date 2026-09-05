@@ -4,7 +4,7 @@ import { LayoutControls, type TaoLayout, type TaoLayoutEntry, type TaoResolvedLa
 import type { TaoScheme } from './TR-scheme'
 import RuntimeSwitch from './TR-switch'
 
-export type TaoDesignSpecTerm = number | string
+type TaoDesignSpecTerm = number | string
 export type TaoDesignSpecEntry = readonly [string, ...TaoDesignSpecTerm[]]
 
 export type TaoDesignSource = Readonly<{
@@ -21,7 +21,7 @@ export type TaoDesignSpec = Readonly<{
   source?: TaoDesignSource
 }>
 
-export type TaoDesignColorValue =
+type TaoDesignColorValue =
   | TaoDesignColorAtom
   | Readonly<{
     environment: 'Scheme'
@@ -31,19 +31,19 @@ export type TaoDesignColorValue =
     positive: TaoDesignColorAtom
   }>
 
-export type TaoDesignColorAtom = Readonly<{ kind: 'reference'; path: string }> | string
+type TaoDesignColorAtom = Readonly<{ kind: 'reference'; path: string }> | string
 
-export type TaoDesignSizeAtom = Readonly<
+type TaoDesignSizeAtom = Readonly<
   | { kind: 'dimension'; unit: 'px' | 'rem'; value: number }
   | { kind: 'reference'; path: string }
 >
 
-export type TaoDesignSizeValue = Readonly<{
+type TaoDesignSizeValue = Readonly<{
   left: TaoDesignSizeAtom
   right?: TaoDesignSizeAtom
 }>
 
-export type TaoDesignScreen = Readonly<{ below?: number; name: string }>
+type TaoDesignScreen = Readonly<{ below?: number; name: string }>
 
 export type TaoDesignDefinition = Readonly<{
   bundles: Readonly<Record<string, TaoDesignSpec>>
@@ -65,13 +65,13 @@ export type TaoDesign =
     readonly sizes: Readonly<Record<string, TaoDesignSizeValue>>
   }>
 
-export type TaoDesignProvenance = Readonly<{
+type TaoDesignProvenance = Readonly<{
   chain: readonly TaoDesignSource[]
   entry: TaoDesignSpecEntry
   property: string
 }>
 
-export type TaoResolvedDesignSpec = Readonly<{
+type TaoResolvedDesignSpec = Readonly<{
   layout?: TaoLayout
   provenance?: readonly TaoDesignProvenance[]
   style?: TaoResolvedLayoutStyle
@@ -80,6 +80,7 @@ export type TaoResolvedDesignSpec = Readonly<{
 /** TaoDesignCondition reads occurrence-local interaction state during mounted design resolution. */
 export type TaoDesignCondition = (subject: string, value: string | undefined) => boolean
 
+// Mirrors `designLayoutHeads` in packages/ast-utils/ast-utils-src/design-visuals.ts.
 const layoutHeads = new Set<TaoLayoutEntry[0]>([
   'aligned',
   'centered',

@@ -7,22 +7,7 @@ import { LayoutValidator } from './layout-validator'
 
 const visualHeads = new Set<string>(ASTUtils.designVisualHeads)
 const colorHeads = new Set<string>(ASTUtils.designColorHeads)
-const builtInHeads = new Set([
-  ...ASTUtils.designVisualHeads,
-  'aligned',
-  'centered',
-  'claim',
-  'compress',
-  'content',
-  'fill',
-  'gap',
-  'height',
-  'hug',
-  'margin',
-  'pad',
-  'rigid',
-  'width',
-])
+const builtInHeads = new Set<string>([...ASTUtils.designVisualHeads, ...ASTUtils.designLayoutHeads])
 
 const cssHexColor = /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i
 const taoTag = /^#[A-Za-z_][A-Za-z0-9_]*$/

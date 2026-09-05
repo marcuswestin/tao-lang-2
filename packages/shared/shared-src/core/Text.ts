@@ -7,7 +7,7 @@ export function stripIndent(text: string): string {
 }
 
 /** IndentLinesOptions declares which lines should not receive indentation. */
-export type IndentLinesOptions = {
+type IndentLinesOptions = {
   skipFirstLine?: boolean
   skipBlankLines?: boolean
 }
@@ -29,6 +29,46 @@ export function stripAnsi(text: string): string {
 /** escapeRegExp escapes regular-expression metacharacters in literal text. */
 export function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** stripJsonc removes the comments and trailing commas JSONC allows and JSON.parse rejects. */
+export function stripJsonc(source: string): string {
+  let output = ''
+  let index = 0
+  let inString = false
+  while (index < source.length) {
+    const character = source[index]!
+    if (inString) {
+      output += character
+      if (character === '\\') {
+        output += source[index + 1] ?? ''
+        index += 2
+        continue
+      }
+      inString = character !== '"'
+      index += 1
+      continue
+    }
+    if (character === '"') {
+      inString = true
+      output += character
+      index += 1
+      continue
+    }
+    if (character === '/' && source[index + 1] === '/') {
+      const lineEnd = source.indexOf('\n', index)
+      index = lineEnd === -1 ? source.length : lineEnd
+      continue
+    }
+    if (character === '/' && source[index + 1] === '*') {
+      const blockEnd = source.indexOf('*/', index + 2)
+      index = blockEnd === -1 ? source.length : blockEnd + 2
+      continue
+    }
+    output += character
+    index += 1
+  }
+  return output.replace(/,(\s*[}\]])/g, '$1')
 }
 
 function shouldIndentLine(line: string, index: number, options: IndentLinesOptions): boolean {

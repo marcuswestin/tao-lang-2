@@ -2,13 +2,20 @@ import { afterAll, afterEach, describe, expect, mock, test } from 'bun:test'
 import { throwHostEnvironment } from '../core/Errors'
 import { type JestApi, setTestRuntime } from './Test'
 
-export { app, fence, stubContainer, stubView, tsFence } from './TaoFixtures'
+export {
+  app,
+  fence,
+  primitiveAppValueSpellings,
+  promptTagsApp,
+  stubContainer,
+  stubView,
+  tsFence,
+} from './TaoFixtures'
 export {
   AfterAll,
   AfterEach,
   Describe,
   Expect,
-  Jest,
   mkTestDir,
   MockModule,
   setClockForTest,

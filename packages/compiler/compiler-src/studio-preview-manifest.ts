@@ -3,7 +3,7 @@ import type { GenerationDeclaration, GenerationField } from '@generation'
 import { AST, type ParsedFile } from '@parser'
 import { Assert, Switch } from '@shared'
 
-export type StudioPreviewParameterKind =
+type StudioPreviewParameterKind =
   | 'boolean'
   | 'choice'
   | 'number'
@@ -11,7 +11,7 @@ export type StudioPreviewParameterKind =
   | 'time'
   | 'unsupported'
 
-export type StudioPreviewParameterSchema = {
+type StudioPreviewParameterSchema = {
   choices?: readonly string[]
   kind: StudioPreviewParameterKind
   name: string
@@ -19,7 +19,7 @@ export type StudioPreviewParameterSchema = {
   typeName: string
 }
 
-export type StudioPreviewViewManifest = {
+type StudioPreviewViewManifest = {
   id: string
   name: string
   parameters: readonly StudioPreviewParameterSchema[]
@@ -30,20 +30,20 @@ export type StudioPreviewViewManifest = {
   }
 }
 
-export type StudioPreviewSource = {
+type StudioPreviewSource = {
   end: number
   path: string
   start: number
 }
 
-export type StudioPreviewFixtureValue =
+type StudioPreviewFixtureValue =
   | boolean
   | number
   | string
   | { kind: 'now' }
   | { handle: string; kind: 'fixture-reference' }
 
-export type StudioPreviewFixtureManifest = {
+type StudioPreviewFixtureManifest = {
   accounts: readonly {
     fields: Readonly<Record<string, StudioPreviewFixtureValue>>
     name: string
@@ -63,7 +63,7 @@ export type StudioPreviewFixtureManifest = {
   source: StudioPreviewSource
 }
 
-export type StudioPreviewScenarioManifest = {
+type StudioPreviewScenarioManifest = {
   environment: {
     appearance?: 'dark' | 'light'
     device: { height: number; preset: 'laptop' | 'phone' | 'tablet'; width: number }

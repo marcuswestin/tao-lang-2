@@ -69,7 +69,7 @@ type ActionDataOverlay = {
 }
 
 /** evaluatedDatasourceConfiguration collapses runtime Tao values before crossing the provider boundary. */
-export function evaluatedDatasourceConfiguration(
+function evaluatedDatasourceConfiguration(
   source: TaoConfiguredDatasource,
 ): Readonly<Record<string, unknown>> {
   return Object.freeze(Object.fromEntries(
@@ -83,7 +83,7 @@ export function evaluatedDatasourceConfiguration(
  * else — an adapter object's fill functions, for instance — compares by identity, so swapping a
  * variant's adapter rebinds even when the shapes serialize alike.
  */
-export function configurationValuesEqual(left: unknown, right: unknown): boolean {
+function configurationValuesEqual(left: unknown, right: unknown): boolean {
   if (Object.is(left, right)) {
     return true
   }

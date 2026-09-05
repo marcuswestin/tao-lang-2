@@ -1,6 +1,6 @@
 import { Type } from '@ast-utils'
 import { AST } from '@parser'
-import { FS } from '@shared'
+import { FS, Text } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { completenessValidationMessages } from './completeness-validator'
@@ -251,7 +251,7 @@ function isAbsolutePath(path: string): boolean {
 
 function hasNamedExport(source: string, name: string): boolean {
   const executableSource = withoutCommentsAndLiterals(source)
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const escaped = Text.escapeRegExp(name)
   const declared = new RegExp(
     `(?:^|[;}\\n])\\s*export\\s+(?!type\\b)(?:async\\s+)?(?:const|let|var|function|class)\\s+${escaped}\\b`,
     'm',

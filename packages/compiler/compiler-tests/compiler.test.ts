@@ -1,8 +1,15 @@
-import { Packages } from '@ast-utils'
-import { FS } from '@shared'
-import { app, Describe, Expect, stubContainer, stubView, Test, withTaoFiles } from '@shared/test'
+import {
+  app,
+  Describe,
+  Expect,
+  primitiveAppValueSpellings,
+  stubContainer,
+  stubView,
+  Test,
+  withTaoFiles,
+} from '@shared/test'
 import { Workspace } from '@workspace'
-import { TestCompiler as Compiler } from './test-compile'
+import { TestCompiler as Compiler, withCompiledTestPlan } from './test-compile'
 
 const tsFence = '```ts'
 const fence = '```'
@@ -1107,7 +1114,7 @@ Describe('compiler: language lowering', () => {
   })
 
   Test('compiles v0 Tao test-plan IR', async () => {
-    await withTaoFiles(
+    await withCompiledTestPlan(
       'tao-test-plan-',
       {
         'Main.test.tao': `
@@ -1140,13 +1147,8 @@ Describe('compiler: language lowering', () => {
         }
       `,
       },
-      async paths => {
-        const testPath = paths['Main.test.tao']!
-        const validation = await Workspace.validate(testPath)
-        const plan = Compiler.compileTestPlan(
-          validation,
-          Compiler.createContext(await Packages.createContext(FS.dirname(testPath)), FS.dirname(testPath)),
-        )
+      (plan, paths) => {
+        const testPath = paths['Main.test.tao']
 
         Expect(plan.sourcePath).toBe(testPath)
         Expect(plan.suites).toHaveLength(1)
@@ -1189,7 +1191,7 @@ Describe('compiler: language lowering', () => {
   Test(
     'compiles tag selectors, grouped expectations, and selected rows to structured IR',
     async () => {
-      await withTaoFiles(
+      await withCompiledTestPlan(
         'tao-structured-test-plan-',
         {
           'Main.test.tao': `
@@ -1220,13 +1222,7 @@ Describe('compiler: language lowering', () => {
         view MainView() { render inject ${tsFence} return null ${fence} }
       `,
         },
-        async paths => {
-          const testPath = paths['Main.test.tao']!
-          const validation = await Workspace.validate(testPath)
-          const plan = Compiler.compileTestPlan(
-            validation,
-            Compiler.createContext(await Packages.createContext(FS.dirname(testPath)), FS.dirname(testPath)),
-          )
+        plan => {
           const steps = plan.suites[0]?.checks[0]?.steps ?? []
 
           Expect(steps[0]).toMatchObject({
@@ -1261,37 +1257,3 @@ Describe('compiler: language lowering', () => {
     },
   )
 })
-
-function primitiveAppValueSpellings(): string {
-  return `
-    public type TestStack is nav with {
-      Initial view
-      nav TestNavImpl from ./TestNavImpl.ts
-    }
-    workspace type CompleteTestStack is TestStack with { Initial is Home }
-    workspace nav HeadNavigation = CompleteTestStack { }
-    workspace nav HeadWithNavigation = CompleteTestStack with { }
-    workspace let LetNavigation = CompleteTestStack { }
-    workspace let LetWithNavigation = CompleteTestStack with { }
-
-    app HeadApp {
-      Name "Head"
-      Navigator HeadNavigation
-    }
-    app HeadWithApp = app with {
-      Name "Head with"
-      Navigator HeadWithNavigation
-    }
-    workspace let LetApp = app {
-      Name "Let"
-      Navigator LetNavigation
-    }
-    workspace let LetWithApp = app with {
-      Name "Let with"
-      Navigator LetWithNavigation
-    }
-
-    view Home() { render Empty() }
-    view Empty() { render inject ${tsFence} return null ${fence} }
-  `
-}

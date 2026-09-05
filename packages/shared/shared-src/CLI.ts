@@ -7,14 +7,14 @@ import * as Platform from './Platform'
 export type CommandOutputStream = 'stderr' | 'stdout'
 
 /** PrefixedOutputOptions configures line-prefixed command output. */
-export type PrefixedOutputOptions = {
+type PrefixedOutputOptions = {
   logFile?: FileHandle
   processName: string
   terminal?: boolean
 }
 
 /** CommandOutputBuffer buffers command output chunks until whole prefixed lines can be written. */
-export type CommandOutputBuffer = {
+type CommandOutputBuffer = {
   close: () => Promise<void>
   write: (stream: CommandOutputStream, chunk: Buffer) => void
 }
@@ -57,7 +57,7 @@ export type CommandCloseResult = {
 }
 
 /** CommandCloseListener handles process close status. */
-export type CommandCloseListener = (exitCode: number | null, signal: Platform.ProcessSignal | null) => void
+type CommandCloseListener = (exitCode: number | null, signal: Platform.ProcessSignal | null) => void
 
 /** StartedCommand exposes a started child process through the shared CLI wrapper. */
 export type StartedCommand = {
@@ -271,7 +271,7 @@ function resolveCommandStdio(
 }
 
 /** createPrefixedOutputBuffer returns a buffered writer for line-prefixed process output. */
-export function createPrefixedOutputBuffer(options: PrefixedOutputOptions): CommandOutputBuffer {
+function createPrefixedOutputBuffer(options: PrefixedOutputOptions): CommandOutputBuffer {
   const pending: Record<CommandOutputStream, string> = { stderr: '', stdout: '' }
   let logFileWrites = Promise.resolve()
   let closePromise: Promise<void> | undefined
@@ -318,6 +318,18 @@ export function createPrefixedOutputBuffer(options: PrefixedOutputOptions): Comm
       }
     },
   }
+}
+
+/** commandPath resolves an executable on PATH, or `undefined` when nothing answers to the name. */
+export async function commandPath(command: string): Promise<string | undefined> {
+  const result = await run('which', { args: [command], stdio: 'pipe' })
+  const path = result.stdout.trim()
+  return result.error === undefined && result.exitCode === 0 && path !== '' ? path : undefined
+}
+
+/** commandExists reports whether an executable answers to `command` on PATH. */
+export async function commandExists(command: string): Promise<boolean> {
+  return await commandPath(command) !== undefined
 }
 
 /** mustRun runs a command and throws when it does not exit successfully. */

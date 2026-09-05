@@ -19,7 +19,7 @@ export interface ValidationContext extends ValidationRunContext {
 }
 
 /** DiagnosticOptions declares optional diagnostic metadata such as quick-fix codes. */
-export type DiagnosticOptions = {
+type DiagnosticOptions = {
   code?: string
 }
 

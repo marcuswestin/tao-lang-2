@@ -1,12 +1,9 @@
-import { Packages } from '@ast-utils'
-import { FS } from '@shared'
-import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import { Workspace } from '@workspace'
-import { TestCompiler as Compiler } from './test-compile'
+import { Describe, Expect, Test } from '@shared/test'
+import { withCompiledTestPlan } from './test-compile'
 
 Describe('compiler: checkbox test-plan IR', () => {
   Test('lowers tag-only checked state without inventing selector variants', async () => {
-    await withTaoFiles(
+    await withCompiledTestPlan(
       'tao-checkbox-test-plan-',
       {
         'Main.test.tao': `
@@ -25,13 +22,7 @@ Describe('compiler: checkbox test-plan IR', () => {
           view MainView() { render inject \`\`\`ts return null \`\`\` }
         `,
       },
-      async paths => {
-        const testPath = paths['Main.test.tao']!
-        const validation = await Workspace.validate(testPath)
-        const plan = Compiler.compileTestPlan(
-          validation,
-          Compiler.createContext(await Packages.createContext(FS.dirname(testPath)), FS.dirname(testPath)),
-        )
+      plan => {
         const steps = plan.suites[0]?.checks[0]?.steps ?? []
 
         Expect(steps).toHaveLength(2)

@@ -85,11 +85,6 @@ export function statusByFile(results: readonly InPlace.Result[], rootDir: string
   return Object.fromEntries(results.map(result => [FS.relativePath(rootDir, result.path), result.status]))
 }
 
-/** statusByBasename maps in-place results to file basenames for cwd-sensitive assertions. */
-export function statusByBasename(results: readonly InPlace.Result[]): Record<string, string> {
-  return Object.fromEntries(results.map(result => [FS.basename(result.path), result.status]))
-}
-
 /** runTaoCliForTest runs the Tao CLI in-process while capturing terminal output and exit code. */
 export async function runTaoCliForTest(args: readonly string[]): Promise<TaoCliTestResult> {
   const stdout = Platform.runtimeProcess.stdout

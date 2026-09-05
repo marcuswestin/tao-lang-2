@@ -60,7 +60,7 @@ export type TaoStudioDeviceHostPublication = {
 }
 
 /** The cell runtime the generated adapter builds, plus the replay artifact the browser root also passes. */
-export type TaoStudioDeviceCellRuntime = TaoStudioCellRuntime & { replay?: TaoRuntimeCaptureArtifact }
+type TaoStudioDeviceCellRuntime = TaoStudioCellRuntime & { replay?: TaoRuntimeCaptureArtifact }
 
 export type StudioDeviceHostProps = {
   App: React.ComponentType
@@ -77,7 +77,7 @@ export type TaoStudioDeviceScriptOrigin = {
   port?: number
 }
 
-export type TaoStudioDeviceHostAction = 'forget' | 'reconnect'
+type TaoStudioDeviceHostAction = 'forget' | 'reconnect'
 
 /** What the screen shows for one client snapshot: the assigned cell, or one named overlay. */
 export type TaoStudioDeviceHostPresentation =
@@ -1089,7 +1089,7 @@ export function viewportLine(
 }
 
 /** The device's own size in points, or nothing where the platform will not say. */
-export function screenSize(runtime: ReactNativeRuntime): { height: number; width: number } | undefined {
+function screenSize(runtime: ReactNativeRuntime): { height: number; width: number } | undefined {
   const window = runtime.Dimensions?.get('window')
   return typeof window?.height === 'number' && typeof window.width === 'number'
     ? { height: window.height, width: window.width }
@@ -1097,7 +1097,7 @@ export function screenSize(runtime: ReactNativeRuntime): { height: number; width
 }
 
 /** A viewport as a person reads it: whole points, the way the scenario sheet writes them. */
-export function describeViewport(viewport: { height: number; width: number }): string {
+function describeViewport(viewport: { height: number; width: number }): string {
   return `${Math.round(viewport.width)}×${Math.round(viewport.height)}`
 }
 
@@ -1146,7 +1146,7 @@ export function networkConditionOf(runtime: unknown): TaoStudioDeviceNetworkCond
 }
 
 /** Names an occurrence for the label over a selection: the owner if the compiler knew one, else the file. */
-export function occurrenceLabel(identity: { ownerName?: string; sourcePath: string; start: number }): string {
+function occurrenceLabel(identity: { ownerName?: string; sourcePath: string; start: number }): string {
   if (identity.ownerName !== undefined) {
     return identity.ownerName
   }
@@ -1161,7 +1161,7 @@ export function occurrenceLabel(identity: { ownerName?: string; sourcePath: stri
  * Returns undefined when the publication does not know the file, which is the honest answer — the
  * span would be unverifiable, and Studio would have to either trust it blindly or guess a version.
  */
-export function occurrenceOf(
+function occurrenceOf(
   hit: StudioInspectHit,
   sourceVersions: Readonly<Record<string, string>>,
 ): TaoStudioDeviceOccurrence | undefined {
@@ -1182,7 +1182,7 @@ export function occurrenceOf(
  * Looks a file's version up in the publication, tolerating the difference between the path the
  * compiler recorded and the key the publication used — the same allowance the browser preview makes.
  */
-export function sourceVersionFor(
+function sourceVersionFor(
   sourceVersions: Readonly<Record<string, string>>,
   sourcePath: string,
 ): string | undefined {
@@ -1286,7 +1286,7 @@ function DeviceRemoteHighlight(props: { rects: readonly StudioInspectRect[] }): 
 }
 
 /** One entry in the fan-out menu; `active` is what makes a mode read as on rather than available. */
-export type DeviceMenuAction = {
+type DeviceMenuAction = {
   active?: boolean
   disabled?: boolean
   id: string
@@ -1424,7 +1424,7 @@ const menuSpacingPx = 8
  * the badge normally sits at the bottom and a thumb reaching up does not cover the items it is
  * choosing between.
  */
-export function fanOutPlacement(input: {
+function fanOutPlacement(input: {
   badgeBottom: number
   itemCount: number
   maxBottom: number

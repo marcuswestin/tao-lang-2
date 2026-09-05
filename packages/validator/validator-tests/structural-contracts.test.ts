@@ -1,4 +1,4 @@
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, primitiveAppValueSpellings, Test } from '@shared/test'
 import { completenessValidationMessages } from '../validator-src/validators/completeness-validator'
 import { configurationValidationMessages } from '../validator-src/validators/configuration-validator'
 import { configuredItemValidationMessages } from '../validator-src/validators/configured-item-validator'
@@ -21,7 +21,7 @@ import {
 Describe('validator: declaration contracts', () => {
   Test(
     'accepts complete navigation references in every primitive app value spelling',
-    accepts(primitiveAppValueSpellings()),
+    accepts(primitiveAppValueSpellings(implementation('nav'))),
   )
 
   Test(
@@ -960,38 +960,4 @@ function parameterDefaultsApp(parameters: string): string {
 
 function unresolvedValue(name: string): string {
   return `Could not resolve reference to ValueDeclaration named '${name}'.`
-}
-
-function primitiveAppValueSpellings(): string {
-  return `
-    public type TestStack is nav with {
-      Initial view
-      ${implementation('nav')}
-    }
-    workspace type CompleteTestStack is TestStack with { Initial is Home }
-    workspace nav HeadNavigation = CompleteTestStack { }
-    workspace nav HeadWithNavigation = CompleteTestStack with { }
-    workspace let LetNavigation = CompleteTestStack { }
-    workspace let LetWithNavigation = CompleteTestStack with { }
-
-    app HeadApp {
-      Name "Head"
-      Navigator HeadNavigation
-    }
-    app HeadWithApp = app with {
-      Name "Head with"
-      Navigator HeadWithNavigation
-    }
-    workspace let LetApp = app {
-      Name "Let"
-      Navigator LetNavigation
-    }
-    workspace let LetWithApp = app with {
-      Name "Let with"
-      Navigator LetWithNavigation
-    }
-
-    view Home() { render Empty() }
-    ${stubView('Empty')}
-  `
 }

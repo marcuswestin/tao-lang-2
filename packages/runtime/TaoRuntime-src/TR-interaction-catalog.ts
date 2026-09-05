@@ -27,7 +27,7 @@ export type TaoCommandSlotDescription = Readonly<{
   type: string
 }>
 
-export type TaoCommandStaticDescription = Readonly<{
+type TaoCommandStaticDescription = Readonly<{
   description?: string
   icon?: string
   key?: string

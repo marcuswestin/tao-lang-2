@@ -16,33 +16,33 @@ export type OutputOptions = {
 }
 
 /** TextPromptOptions declares options for text prompts. */
-export type TextPromptOptions = TerminalStreams & {
+type TextPromptOptions = TerminalStreams & {
   message: string
   defaultValue?: string
   validate?: (value: string) => string | undefined
 }
 
 /** ConfirmPromptOptions declares options for yes/no prompts. */
-export type ConfirmPromptOptions = TerminalStreams & {
+type ConfirmPromptOptions = TerminalStreams & {
   message: string
   defaultValue?: boolean
 }
 
 /** Choice declares one selectable prompt value. */
-export type Choice<ValueT extends string> = {
+type Choice<ValueT extends string> = {
   value: ValueT
   label?: string
 }
 
 /** ChoicePromptOptions declares options for choice prompts. */
-export type ChoicePromptOptions<ValueT extends string> = TerminalStreams & {
+type ChoicePromptOptions<ValueT extends string> = TerminalStreams & {
   message: string
   choices: readonly Choice<ValueT>[]
   defaultValue?: ValueT
 }
 
 /** RawKeyOptions declares the stream a raw-key session reads keypresses from. */
-export type RawKeyOptions = {
+type RawKeyOptions = {
   input?: Readable
 }
 
@@ -144,7 +144,7 @@ export function logProcessError(processName: string, message: string): void {
 }
 
 /** formatProcessPrefix returns a colored process prefix. */
-export function formatProcessPrefix(processName: string): string {
+function formatProcessPrefix(processName: string): string {
   const color = PROCESS_COLORS[processName] ?? blue
   return `${color(`[${processName}]`)}${dim(':')}`
 }
@@ -271,7 +271,7 @@ export function startRawKeys(onKey: (key: string) => void, options: RawKeyOption
 }
 
 /** PasteResult reports what a hidden prompt captured, so a caller can question surrounding whitespace. */
-export type SecretPrompt = { value: string; wasPasted: boolean }
+type SecretPrompt = { value: string; wasPasted: boolean }
 
 const PASTE_ON = '\u001b[?2004h'
 const PASTE_OFF = '\u001b[?2004l'

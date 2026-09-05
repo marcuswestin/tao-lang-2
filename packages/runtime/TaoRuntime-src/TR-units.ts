@@ -64,7 +64,7 @@ export function makeUnitControls(wrap: <T>(jsValue: T) => any) {
  * Clock renders a duration the way a countdown reads it: whole seconds, `m:ss` under an hour and
  * `h:mm:ss` from an hour up, and `0:00` once there is nothing left.
  */
-export function clockText(duration: number): string {
+function clockText(duration: number): string {
   const totalSeconds = Math.floor(duration / (1e3 * NANOSECONDS_PER_MILLISECOND))
   if (totalSeconds <= 0) {
     return '0:00'

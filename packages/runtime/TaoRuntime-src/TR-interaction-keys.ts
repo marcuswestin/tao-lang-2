@@ -146,7 +146,7 @@ export function dispatchInteractionHardwareKey(
   return dispatch(key)
 }
 
-export function isApplePrimaryPlatform(platform: TaoKeyPlatform): boolean {
+function isApplePrimaryPlatform(platform: TaoKeyPlatform): boolean {
   const os = platform.platformOS?.toLocaleLowerCase()
   if (os === 'ios' || os === 'macos') {
     return true

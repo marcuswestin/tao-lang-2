@@ -290,6 +290,7 @@
         "tao-runtime-toolchain": "workspace:*",
         "tao-shared": "workspace:*",
         "tao-source-actions": "workspace:*",
+        "tao-update-server": "workspace:*",
         "tao-workspace": "workspace:*",
       },
     },

@@ -70,7 +70,7 @@ export type TaoSelectionNavItemDefinition = {
   label: Evaluable
 }
 
-export type TaoSplitNavItemDefinition = {
+type TaoSplitNavItemDefinition = {
   content: TaoPresentable | TaoNavigationValue
   resizable: Evaluable
   width:
@@ -98,7 +98,7 @@ export type TaoAppDefinition = {
   restoration?: TaoAppRestorationDefinition
 }
 
-export type TaoAppRestorationDefinition = Readonly<{
+type TaoAppRestorationDefinition = Readonly<{
   exclusions: readonly ('menus' | 'sheets' | 'toasts')[]
   mode: 'automatic' | 'fresh'
   providerIdentity?(): string | undefined
