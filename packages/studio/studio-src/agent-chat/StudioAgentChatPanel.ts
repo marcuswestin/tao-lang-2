@@ -1,5 +1,6 @@
-// Studio agent chat: a second overlay beside the proof-of-concept panel. Plain DOM and inline styles, for
-// the same reason the first one is: the point is to make the flow observable, not to design a product surface.
+// Studio agent chat: the hosted-model conversation inside the Agent rail panel. Plain DOM, styled by the
+// shared Studio sheet so it reads like the rest of the workbench; the point is still to make the flow
+// observable, and every card here says what the model did or wants to do.
 
 import { StudioApiClient } from '../client/StudioApiClient'
 
@@ -34,33 +35,27 @@ export type StudioAgentChatPanelHooks = {
   knownNames: () => readonly string[]
 }
 
-// Position, chrome and collapse belong to the shell that hosts this; here it is just a column that fills it.
-const SHELL = 'display:flex;flex-direction:column;min-height:0;flex:1'
-
-const INPUT =
-  'flex:1;background:#0f1411;color:#e8ede9;border:1px solid #3a4a3f;border-radius:6px;padding:4px 7px;font:inherit'
+type Tone = 'error' | 'info' | 'ok' | 'quiet' | 'warn'
 
 export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentChatPanelHooks): void {
   const panel = document.createElement('section')
   panel.className = 'studio-agent-chat'
   panel.setAttribute('aria-label', 'Studio agent chat')
-  panel.style.cssText = SHELL
   panel.innerHTML = `
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-      <span style="flex:1"></span>
-      <select class="chat-mode" style="background:#0f1411;color:#e8ede9;border:1px solid #3a4a3f;border-radius:6px;padding:2px 4px;font:inherit" title="Chat answers questions and proposes changes you approve. Scenario sets up states and tests, and must ask before touching app code.">
-        <option value="chat">chat</option>
-        <option value="scenario">scenario</option>
+    <div class="studio-agent-chat-controls">
+      <select class="chat-mode studio-select" aria-label="Agent mode" title="Chat answers questions and proposes changes you approve. Scenario sets up states and tests, and must ask before touching app code.">
+        <option value="chat">Chat</option>
+        <option value="scenario">Scenario</option>
       </select>
-      <label style="display:flex;gap:4px;align-items:center;color:#9fb3a5" title="Send this project's declarations to a hosted model">
-        <input class="chat-cloud" type="checkbox"> cloud
+      <label class="studio-switch" title="Send this project's declarations to a hosted model">
+        <input class="chat-cloud" type="checkbox"> Cloud
       </label>
     </div>
-    <div class="chat-status" style="color:#9fb3a5;margin-bottom:6px"></div>
-    <div class="chat-log" style="flex:1;min-height:200px;overflow:auto;display:flex;flex-direction:column;gap:8px"></div>
-    <div style="display:flex;gap:6px;align-items:center;margin-top:8px">
-      <input class="chat-input" placeholder="what happens when I tap a story?" style="${INPUT}">
-      <button class="chat-send" type="button">Ask</button>
+    <div class="chat-status studio-agent-status" role="status"></div>
+    <div class="chat-log studio-agent-log" aria-live="polite"></div>
+    <div class="studio-agent-composer">
+      <input class="chat-input studio-input" placeholder="Ask about this app…" aria-label="Ask the agent">
+      <button class="chat-send studio-button" data-variant="primary" type="button">Ask</button>
     </div>
   `
   root.append(panel)
@@ -72,21 +67,21 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
   const send = panel.querySelector<HTMLButtonElement>('.chat-send')!
   const mode = panel.querySelector<HTMLSelectElement>('.chat-mode')!
 
-  function line(text: string, color = '#9fb3a5'): HTMLElement {
+  function line(text: string, tone: Tone = 'quiet'): HTMLElement {
     const element = document.createElement('div')
-    element.style.cssText = `color:${color}`
+    element.className = 'studio-agent-line'
+    element.dataset['tone'] = tone
     element.textContent = text
     return element
   }
 
   function say(role: 'you' | 'agent', text: string): HTMLElement {
     const block = document.createElement('div')
-    block.style.cssText = role === 'you'
-      ? 'border-left:2px solid #3a4a3f;padding-left:8px'
-      : 'border-left:2px solid #6fb38a;padding-left:8px'
+    block.className = 'studio-agent-message'
+    block.dataset['role'] = role
     const who = document.createElement('div')
-    who.style.cssText = `color:${role === 'you' ? '#9fb3a5' : '#6fb38a'};margin-bottom:2px`
-    who.textContent = role
+    who.className = 'studio-agent-who'
+    who.textContent = role === 'you' ? 'You' : 'Tao'
     block.append(who)
     block.append(withLinks(text))
     log.append(block)
@@ -100,7 +95,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
    */
   function withLinks(text: string): HTMLElement {
     const wrapper = document.createElement('div')
-    wrapper.style.whiteSpace = 'pre-wrap'
+    wrapper.className = 'studio-agent-text'
     const names = [...hooks.knownNames()].filter(name => name.length > 2).sort((a, b) => b.length - a.length)
     if (names.length === 0) {
       wrapper.textContent = text
@@ -117,9 +112,9 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
         wrapper.append(document.createTextNode(text.slice(index, at)))
       }
       const link = document.createElement('a')
+      link.className = 'studio-agent-link'
       link.href = '#'
       link.textContent = match[0]
-      link.style.cssText = 'color:#8fc7ff;text-decoration:underline;cursor:pointer'
       link.title = 'Open this declaration'
       link.addEventListener('click', event => {
         event.preventDefault()
@@ -138,16 +133,13 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       return
     }
     const box = document.createElement('details')
-    box.style.cssText = 'color:#9fb3a5'
+    box.className = 'studio-agent-tools'
     const heading = document.createElement('summary')
-    heading.style.cursor = 'pointer'
     heading.textContent = `${calls.length} tool ${calls.length === 1 ? 'call' : 'calls'}`
     box.append(heading)
     for (const call of calls) {
       const row = document.createElement('div')
-      row.style.cssText = 'margin:3px 0 3px 10px'
       const name = document.createElement('span')
-      name.style.color = '#e8ede9'
       name.textContent = call.name
       row.append(name)
       const argument = JSON.stringify(call.input)
@@ -169,7 +161,27 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     cloud.checked = state.enabled
     cloud.disabled = !state.configured
     status.textContent = state.reason ?? `Answering with ${state.model}. Only this app's declarations are sent.`
-    status.style.color = state.enabled ? '#6fb38a' : '#9fb3a5'
+    status.dataset['state'] = state.enabled ? 'on' : 'off'
+  }
+
+  function card(tone: Tone, heading: string): HTMLElement {
+    const box = document.createElement('div')
+    box.className = 'studio-agent-card'
+    box.dataset['tone'] = tone
+    const title = document.createElement('strong')
+    title.textContent = heading
+    box.append(title)
+    return box
+  }
+
+  function button(label: string, variant: 'ghost' | 'primary' | 'secondary'): HTMLButtonElement {
+    const element = document.createElement('button')
+    element.className = 'studio-button'
+    element.dataset['size'] = 'small'
+    element.dataset['variant'] = variant
+    element.type = 'button'
+    element.textContent = label
+    return element
   }
 
   /**
@@ -177,32 +189,24 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
    * produced it, because approving an argument list is not consent to a diff nobody has read.
    */
   function askApproval(approvals: readonly Approval[]): void {
-    const box = document.createElement('div')
-    box.style.cssText = 'border:1px solid #d4a96b;border-radius:8px;padding:8px'
-    const heading = document.createElement('strong')
-    heading.style.color = '#d4a96b'
-    heading.textContent = approvals.length === 1
-      ? 'The agent wants to change your app'
-      : `The agent wants to make ${approvals.length} changes`
-    box.append(heading)
+    const box = card(
+      'warn',
+      approvals.length === 1
+        ? 'The agent wants to change your app'
+        : `The agent wants to make ${approvals.length} changes`,
+    )
     for (const approval of approvals) {
       box.append(line(`${approval.toolName}${approval.reason === undefined ? '' : `: ${approval.reason}`}`))
       if (approval.diff !== undefined) {
         const diff = document.createElement('pre')
-        diff.style.cssText =
-          'white-space:pre-wrap;background:#0f1411;border-radius:6px;padding:6px;margin:4px 0;max-height:220px;overflow:auto'
         diff.textContent = approval.diff
         box.append(diff)
       }
     }
     const buttons = document.createElement('div')
-    buttons.style.cssText = 'display:flex;gap:6px;margin-top:6px'
-    const approve = document.createElement('button')
-    approve.type = 'button'
-    approve.textContent = 'Apply it'
-    const decline = document.createElement('button')
-    decline.type = 'button'
-    decline.textContent = 'No'
+    buttons.className = 'studio-agent-card-actions'
+    const approve = button('Apply it', 'primary')
+    const decline = button('No', 'secondary')
     buttons.append(approve, decline)
     box.append(buttons)
     log.append(box)
@@ -211,7 +215,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     const answer = (approved: boolean) => {
       approve.disabled = true
       decline.disabled = true
-      buttons.replaceChildren(line(approved ? 'You approved it.' : 'You declined.', '#9fb3a5'))
+      buttons.replaceChildren(line(approved ? 'You approved it.' : 'You declined.'))
       void resume(approvals.map(approval => ({ approvalId: approval.approvalId, approved })))
     }
     approve.addEventListener('click', () => answer(true))
@@ -234,7 +238,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       show(turn)
     } catch (error) {
       live.done()
-      log.append(line(`Studio could not continue: ${String(error)}`, '#d4736b'))
+      log.append(line(`Studio could not continue: ${String(error)}`, 'error'))
     } finally {
       send.disabled = false
       log.scrollTop = log.scrollHeight
@@ -250,7 +254,6 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
           mode.value === 'scenario'
             ? 'Scenario mode: the agent can add scenarios and tests. It must ask before changing app code.'
             : 'Chat mode: ask anything, and the agent can propose changes you approve before they land.',
-          '#9fb3a5',
         ),
       )
     })()
@@ -268,12 +271,13 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
    */
   function liveTurn(): { text: (chunk: string) => void; tool: (name: string) => void; done: () => string } {
     const block = document.createElement('div')
-    block.style.cssText = 'border-left:2px solid #6fb38a;padding-left:8px'
+    block.className = 'studio-agent-message'
+    block.dataset['role'] = 'agent'
     const who = document.createElement('div')
-    who.style.cssText = 'color:#6fb38a;margin-bottom:2px'
-    who.textContent = 'agent'
+    who.className = 'studio-agent-who'
+    who.textContent = 'Tao'
     const body = document.createElement('div')
-    body.style.whiteSpace = 'pre-wrap'
+    body.className = 'studio-agent-text'
     block.append(who, body)
     log.append(block)
     let text = ''
@@ -293,7 +297,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       },
       tool: name => {
         working?.remove()
-        working = line(`· ${name}…`, '#6b7a70')
+        working = line(`· ${name}…`)
         block.append(working)
         log.scrollTop = log.scrollHeight
       },
@@ -306,23 +310,23 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       if (turn.availability !== undefined) {
         showAvailability(turn.availability)
       }
-      log.append(line(turn.availability?.reason ?? 'The chat is not available.', '#d4736b'))
+      log.append(line(turn.availability?.reason ?? 'The chat is not available.', 'error'))
       return
     }
     if (turn.status === 'failed') {
-      log.append(line(`The model could not answer: ${turn.message ?? 'unknown failure'}`, '#d4736b'))
+      log.append(line(`The model could not answer: ${turn.message ?? 'unknown failure'}`, 'error'))
       return
     }
     if (turn.text !== undefined && turn.text !== '') {
       say('agent', turn.text)
     }
     if (turn.status === 'budget-exhausted' && turn.message !== undefined) {
-      log.append(line(turn.message, '#d4a96b'))
+      log.append(line(turn.message, 'warn'))
     }
     const usage = turn.usage
     if (usage?.inputTokens !== undefined) {
       log.append(
-        line(`${turn.steps ?? 0} steps, ${usage.inputTokens} in / ${usage.outputTokens ?? 0} out tokens`, '#6b7a70'),
+        line(`${turn.steps ?? 0} steps, ${usage.inputTokens} in / ${usage.outputTokens ?? 0} out tokens`),
       )
     }
     if (turn.status === 'needs-approval' && (turn.pendingApprovals ?? []).length > 0) {
@@ -339,18 +343,13 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
 
   /** The app's own tests on a change that landed. This is the only thing here that can contradict the agent. */
   function showVerdict(verdict: NonNullable<TurnResult['verdict']>): void {
-    const colour = verdict.status === 'broke' ? '#d4736b' : verdict.status === 'held' ? '#6fb38a' : '#9fb3a5'
-    const box = document.createElement('div')
-    box.style.cssText = `border:1px solid ${colour};border-radius:8px;padding:8px`
-    const heading = document.createElement('strong')
-    heading.style.color = colour
-    heading.textContent = verdict.heading
-    box.append(heading)
+    const tone: Tone = verdict.status === 'broke' ? 'error' : verdict.status === 'held' ? 'ok' : 'quiet'
+    const box = card(tone, verdict.heading)
     if (verdict.detail !== undefined) {
       box.append(line(verdict.detail))
     }
     for (const broken of verdict.broke) {
-      box.append(line(`· ${broken.name}`, '#d4736b'))
+      box.append(line(`· ${broken.name}`, 'error'))
     }
     log.append(box)
   }
@@ -360,15 +359,9 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
    * request from the one that was made, so it is put to the person rather than assumed.
    */
   function askCodeChanges(request: { reason: string; missing: string }): void {
-    const box = document.createElement('div')
-    box.style.cssText = 'border:1px solid #8fc7ff;border-radius:8px;padding:8px'
-    const heading = document.createElement('strong')
-    heading.style.color = '#8fc7ff'
-    heading.textContent = 'This also needs the app itself to change'
-    box.append(heading, line(`Missing: ${request.missing}`), line(`Why: ${request.reason}`))
-    const allow = document.createElement('button')
-    allow.type = 'button'
-    allow.textContent = 'Allow app changes in this conversation'
+    const box = card('info', 'This also needs the app itself to change')
+    box.append(line(`Missing: ${request.missing}`), line(`Why: ${request.reason}`))
+    const allow = button('Allow app changes in this conversation', 'secondary')
     box.append(allow)
     log.append(box)
     log.scrollTop = log.scrollHeight
@@ -376,7 +369,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       allow.disabled = true
       void (async () => {
         await StudioApiClient.agentChat('grant-code-changes', {})
-        box.append(line('Allowed. Ask the agent to continue.', '#6fb38a'))
+        box.append(line('Allowed. Ask the agent to continue.', 'ok'))
       })()
     })
   }
@@ -404,7 +397,7 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
       show(turn)
     } catch (error) {
       live.done()
-      log.append(line(`Studio could not reach the chat: ${String(error)}`, '#d4736b'))
+      log.append(line(`Studio could not reach the chat: ${String(error)}`, 'error'))
     } finally {
       send.disabled = false
       log.scrollTop = log.scrollHeight

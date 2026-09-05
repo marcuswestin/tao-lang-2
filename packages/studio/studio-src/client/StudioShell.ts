@@ -37,13 +37,45 @@ const paneStorageKey = 'tao-studio:pane-sizes:v4'
 
 export const StudioPaneMinimums: Record<PaneName, number> = { bottom: 96, left: 180, preview: 280, right: 320 }
 
+/** One stroke weight on a 24-unit grid; the rail, toolbar, and tree all draw from this set. */
+export const studioIconPaths = {
+  chevronRight: 'M9 6l6 6-6 6',
+  database:
+    'M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3zM4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3',
+  drop: 'M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z',
+  folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+  grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+  layers: 'M3 8l9-5 9 5-9 5zM3 13l9 5 9-5',
+  pen: 'M4 20l4-1L19 8l-3-3L5 16zM14 7l3 3',
+  phone: 'M8 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM11 18h2',
+  plus: 'M12 5v14M5 12h14',
+  reload: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5',
+  search: 'M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM15.5 15.5 20 20',
+  spark: 'M12 3v4M12 17v4M3 12h4M17 12h4M6.3 6.3l2.8 2.8M14.9 14.9l2.8 2.8M6.3 17.7l2.8-2.8M14.9 9.1l2.8-2.8',
+  x: 'M6 6l12 12M18 6 6 18',
+} as const
+
+export type StudioIconName = keyof typeof studioIconPaths
+
+export function studioIcon(name: StudioIconName, size: 'default' | 'small' = 'default'): string {
+  const sizeAttribute = size === 'small' ? ' data-size="small"' : ''
+  return `<svg class="studio-icon"${sizeAttribute} viewBox="0 0 24 24" aria-hidden="true"><path d="${
+    studioIconPaths[name]
+  }"/></svg>`
+}
+
 export const studioShellRailPanels = [
-  { icon: '🗂️', label: 'Files', panel: 'files' },
-  { icon: '▦', label: 'Components', panel: 'components' },
-  { icon: '🧭', label: 'Screens', panel: 'screens' },
-  { icon: '🎨', label: 'Design tokens', panel: 'tokens' },
-  { icon: '🗄️', label: 'Data', panel: 'data' },
-  { icon: '🔍', label: 'Search', panel: 'search' },
+  { icon: 'folder', label: 'Files', panel: 'files' },
+  { icon: 'grid', label: 'Components', panel: 'components' },
+  { icon: 'layers', label: 'Screens', panel: 'screens' },
+  { icon: 'drop', label: 'Design tokens', panel: 'tokens' },
+  { icon: 'database', label: 'Data', panel: 'data' },
+  { icon: 'search', label: 'Search', panel: 'search' },
+] as const
+
+/** Utilities sit at the bottom of the rail; they open a left panel like the contextual panels above them. */
+export const studioShellRailUtilities = [
+  { icon: 'spark', label: 'Agent', panel: 'agent' },
 ] as const
 
 export const StudioPaneSizes = {
@@ -73,6 +105,8 @@ export function studioShellMarkup(): string {
           <span class="studio-window-controls" aria-hidden="true">
             <i></i><i></i><i></i>
           </span>
+          <span class="studio-wordmark" aria-hidden="true"><i>T</i><b>Tao</b></span>
+          <span class="studio-toolbar-separator" aria-hidden="true">/</span>
           <button class="studio-project studio-picker" type="button" title="Project picker"></button>
           <select class="studio-app-picker studio-picker" aria-label="App variant" title="App variant" disabled></select>
         </div>
@@ -82,20 +116,28 @@ export function studioShellMarkup(): string {
             <button data-preset="code" type="button">Code</button>
             <button data-preset="run" type="button">Run</button>
           </nav>
-          <button class="studio-command-palette" type="button" aria-keyshortcuts="Meta+K Control+K">⌘K</button>
+          <button class="studio-command-palette" type="button" aria-keyshortcuts="Meta+K Control+K" title="Search files, scenarios, and commands">
+            ${studioIcon('search', 'small')}<span>Search files, scenarios, commands</span><kbd>⌘K</kbd>
+          </button>
         </div>
         <div class="studio-toolbar-actions">
-          <button class="studio-device" type="button" aria-haspopup="dialog" aria-expanded="false" title="Physical device">Device</button>
-          <button class="studio-beta-ship" type="button">Beta ship</button>
-          <button class="studio-interaction-mode" type="button">Mode: Edit</button>
-          <button class="studio-reload" type="button">Reload preview</button>
           <span class="studio-status" role="status">Connecting…</span>
+          <button class="studio-device" type="button" aria-haspopup="dialog" aria-expanded="false" title="Physical device">${
+    studioIcon('phone', 'small')
+  }Device</button>
+          <button class="studio-interaction-mode" type="button">Mode: Edit</button>
+          <button class="studio-reload" type="button" title="Reload preview" aria-label="Reload preview">${
+    studioIcon('reload')
+  }</button>
+          <button class="studio-beta-ship" type="button">Beta ship</button>
         </div>
       </header>
       <section class="studio-device-popover" hidden role="dialog" aria-label="Physical device"></section>
       <section class="studio-body">
         <nav class="studio-rail" aria-label="Studio panels">
           ${studioShellRailPanels.map(item => railButton(item.panel, item.label, item.icon)).join('')}
+          <span class="studio-rail-spacer"></span>
+          ${studioShellRailUtilities.map(item => railButton(item.panel, item.label, item.icon)).join('')}
         </nav>
         <aside class="studio-sidebar studio-pane-left">
           <header class="studio-pane-header"><strong>Files</strong><button class="studio-collapse-left" type="button" aria-label="Collapse left panel">‹</button></header>
@@ -111,19 +153,21 @@ export function studioShellMarkup(): string {
             <label><span>Search project</span><input class="studio-search-input" type="search" placeholder="Text or diagnostic"></label>
             <div class="studio-search-results" role="listbox"></div>
           </section>
+          <section class="studio-left-panel studio-agent-host" data-studio-panel="agent" aria-label="Agent" hidden></section>
         </aside>
         <div class="studio-divider studio-divider-left" data-divider="left" role="separator" aria-orientation="vertical"></div>
         <section class="studio-center">
           <aside class="studio-inspector studio-pane-right" aria-label="Inspector">
             <section class="studio-inspector-pane studio-environment-pane" aria-label="Environment and scenario">
-              <header class="studio-inspector-pane-header"><strong>Environment &amp; scenario</strong></header>
-              <div class="studio-scenario-inspector-content"></div>
-            </section>
-            <section class="studio-inspector-pane studio-visual-pane" aria-label="Layout, style, data, and actions">
               <header class="studio-inspector-pane-header">
-                <strong>Selection</strong>
+                <strong>Scenario</strong>
                 <button class="studio-pane-collapse studio-collapse-right" type="button" aria-label="Collapse inspector" title="Collapse inspector">‹</button>
               </header>
+              <div class="studio-scenario-inspector-content"></div>
+              <div class="studio-inspector-tao-environment"></div>
+            </section>
+            <section class="studio-inspector-pane studio-visual-pane" aria-label="Layout, style, data, and actions">
+              <header class="studio-inspector-pane-header"><strong>Selection</strong></header>
               <div class="studio-inspector-tao-context"></div>
               <div class="studio-inspector-content"></div>
             </section>
@@ -218,8 +262,10 @@ export function showOpenFile(view: StudioClientView, path: string): void {
   }))
 }
 
-function railButton(panel: string, label: string, icon: string): string {
-  return `<button class="studio-rail-button" data-panel="${panel}" type="button" title="${label}" aria-label="${label}">${icon}</button>`
+function railButton(panel: string, label: string, icon: StudioIconName): string {
+  return `<button class="studio-rail-button" data-panel="${panel}" type="button" title="${label}" aria-label="${label}">${
+    studioIcon(icon)
+  }</button>`
 }
 
 function drawerTab(label: string): string {
