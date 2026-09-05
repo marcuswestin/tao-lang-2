@@ -677,3 +677,22 @@ an entry here may link one when the developer workflow is also affected.
 - **Dependencies:** None.
 - **Acceptance:** A clean `just studio-native` reaches a ready preview with no unresolved-module output.
 - **Source:** 2026-09-04 companion Slice 2 work.
+
+### DEVENV-040 — Changed-files lane fails every package with no affected tests
+
+- **Status:** Candidate
+- **Area:** Verification lanes
+- **Impact:** `just test-changed`, the documented ordinary iteration lane, reports red whenever a change
+  touches a subset of packages, so its summary cannot be read at a glance and the real failures hide
+  among sixteen spurious ones.
+- **Evidence:** With 19 changed files in `parser`, `code-editor`, and `studio`, every other bun suite
+  printed `--changed: 19 changed files, but no test files are affected` and `Ran 0 tests`, exited 0
+  under `--pass-with-no-tests`, wrote no junit file, and the runner then recorded `test result report
+  unavailable` and turned the pass into a failure (`.artifacts/logs/dev-test/2026-09-05T01-34-12-827Z-*`).
+- **Workaround:** Run `just test-file <path>` per touched suite, and `./agent verify` for the full run.
+- **Proposed change:** Treat a zero-test run under `--changed` as passed with no observations when the
+  process exited 0, or drop suites whose packages have no changed files before spawning them.
+- **Dependencies:** None.
+- **Acceptance:** A change confined to one package leaves `just test-changed` green with only that
+  package's suites reported.
+- **Source:** 2026-09-04 Studio syntax lens work.
