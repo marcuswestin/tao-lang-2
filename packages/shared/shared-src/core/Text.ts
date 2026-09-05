@@ -65,10 +65,14 @@ export function stripJsonc(source: string): string {
       index = blockEnd === -1 ? source.length : blockEnd + 2
       continue
     }
+    if (character === '}' || character === ']') {
+      // A trailing comma is only visible once comments between it and the bracket are gone.
+      output = output.replace(/,\s*$/, '')
+    }
     output += character
     index += 1
   }
-  return output.replace(/,(\s*[}\]])/g, '$1')
+  return output
 }
 
 function shouldIndentLine(line: string, index: number, options: IndentLinesOptions): boolean {

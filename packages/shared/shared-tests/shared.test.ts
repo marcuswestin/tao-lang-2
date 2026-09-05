@@ -646,6 +646,11 @@ Describe('Text', () => {
     const literal = 'a+b?.[x]'
     Expect(new RegExp(Text.escapeRegExp(literal)).test(literal)).toBe(true)
   })
+
+  Test('stripJsonc drops comments and trailing commas but leaves string contents alone', () => {
+    const source = '{\n  // note\n  "s": "x, } /* not a comment */",\n  "list": [1, 2, /* two */],\n}\n'
+    Expect(JSON.parse(Text.stripJsonc(source))).toEqual({ list: [1, 2], s: 'x, } /* not a comment */' })
+  })
 })
 
 async function tmpDir() {

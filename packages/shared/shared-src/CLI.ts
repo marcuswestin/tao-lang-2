@@ -322,7 +322,11 @@ function createPrefixedOutputBuffer(options: PrefixedOutputOptions): CommandOutp
 
 /** commandPath resolves an executable on PATH, or `undefined` when nothing answers to the name. */
 export async function commandPath(command: string): Promise<string | undefined> {
-  const result = await run('which', { args: [command], stdio: 'pipe' })
+  let result = await run('which', { args: [command], stdio: 'pipe' })
+  if (result.error !== undefined) {
+    // A host without `which` still has the shell builtin.
+    result = await run('sh', { args: ['-c', 'command -v "$1"', 'sh', command], stdio: 'pipe' })
+  }
   const path = result.stdout.trim()
   return result.error === undefined && result.exitCode === 0 && path !== '' ? path : undefined
 }
