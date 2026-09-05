@@ -3,6 +3,10 @@
   "private": true,
   "type": "module",
   "module": "dev-src/dev.ts",
+  "exports": {
+    ".": "./dev-src/dev.ts",
+    "./studio-review": "./dev-src/studio/StudioReview.ts"
+  },
   "dependencies": {
     "@commander-js/extra-typings": "^15.0.0",
     "better-opn": "^3.0.2",

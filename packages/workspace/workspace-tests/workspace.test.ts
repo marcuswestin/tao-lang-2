@@ -1,3 +1,4 @@
+import { AST } from '@parser'
 import { type Diagnostic, Diagnostics, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { LSPWorkspace, Workspace } from '@workspace'
@@ -53,6 +54,106 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
+  Test('resolves the reserved root package, nested generated folders, project-relative data, and stdlib', async () => {
+    await withTaoFiles(
+      'tao-workspace-generated-root-',
+      {
+        'Main.tao': `
+          use RootView from @
+          use GeneratedView from @/studio
+          use NestedView from @/studio/nested
+
+          app GeneratedApp { view MainView }
+          view MainView() { render GeneratedView() }
+        `,
+        'Data.tao': 'workspace let SharedTitle = "Generated title"',
+        '@/Root.tao': `workspace view RootView() { render inject ${tsFence} return null ${fence} }`,
+        '@/studio/View.tao': `
+          use SharedTitle from ../../Data
+          use Text from @tao/ui
+          public view GeneratedView() { render Text(SharedTitle) }
+        `,
+        '@/studio/nested/Nested.tao': `
+          workspace view NestedView() { render inject ${tsFence} return null ${fence} }
+        `,
+      },
+      async (paths, rootDir) => {
+        const workspace = await Workspace.open(rootDir)
+        const parseResult = await workspace.parse(paths['Main.tao']!)
+        const validation = await workspace.validate(paths['Main.tao']!)
+        const compiled = await workspace.compile(paths['Main.tao']!)
+        const imports = parseResult.entry.ast.statements.filter(AST.isUseStatement)
+
+        Expect(imports.map(statement => statement.importPath)).toEqual(['@', '@/studio', '@/studio/nested'])
+        Expect(imports.map(statement => statement.importedDeclarations[0]?.ref?.name)).toEqual([
+          'RootView',
+          'GeneratedView',
+          'NestedView',
+        ])
+        Expect(errorMessages(validation)).toEqual([])
+        Expect(compiled.files.map(file => file.sourcePath)).toContain(paths['@/studio/View.tao'])
+        Expect(compiled.files.map(file => file.sourcePath)).toContain(paths['Data.tao'])
+      },
+    )
+  })
+
+  Test('applies workspace visibility across the root generated-package boundary', async () => {
+    await withTaoFiles(
+      'tao-workspace-generated-visibility-',
+      {
+        'Main.tao': `
+          use Hidden, PackageOnly, WorkspaceVisible, Published from @/studio
+          view MainView() { render WorkspaceVisible() }
+        `,
+        '@/studio/Views.tao': `
+          view Hidden() { }
+          package view PackageOnly() { }
+          workspace view WorkspaceVisible() { }
+          public view Published() { }
+        `,
+      },
+      async (paths, rootDir) => {
+        const workspace = await Workspace.open(rootDir)
+        const parsed = await workspace.parse(paths['Main.tao']!)
+        const imported = parsed.entry.ast.statements.find(AST.isUseStatement)?.importedDeclarations ?? []
+
+        Expect(imported.map(reference => reference.ref?.name)).toEqual([
+          undefined,
+          undefined,
+          'WorkspaceVisible',
+          'Published',
+        ])
+        Expect(Diagnostics.errorMessages(parsed.diagnostics).join('\n')).toContain(
+          "Could not resolve reference to Declaration named 'Hidden'",
+        )
+        Expect(Diagnostics.errorMessages(parsed.diagnostics).join('\n')).toContain(
+          "Could not resolve reference to Declaration named 'PackageOnly'",
+        )
+      },
+    )
+  })
+
+  Test('reports duplicate visible names in one generated subfolder', async () => {
+    await withTaoFiles(
+      'tao-workspace-generated-duplicates-',
+      {
+        'Main.tao': `
+          use Duplicate from @/studio
+          view MainView() { render Duplicate() }
+        `,
+        '@/studio/First.tao': 'workspace view Duplicate() { }',
+        '@/studio/Second.tao': 'workspace view Duplicate() { }',
+      },
+      async (paths, rootDir) => {
+        const validation = await (await Workspace.open(rootDir)).validate(paths['Main.tao']!)
+
+        Expect(errorMessages(validation)).toContain(
+          "'Duplicate' matches multiple visible declarations in '@/studio'.",
+        )
+      },
+    )
+  })
+
   Test('reports duplicate package names through the shared package index', async () => {
     await withTaoFiles(
       'tao-workspace-duplicate-package-',
@@ -98,6 +199,34 @@ Describe('directory-rooted Tao workspace pipeline', () => {
 
         Expect(fresh).not.toBe(shared)
         Expect(shared).toBe(sameShared)
+      },
+    )
+  })
+
+  Test('validates multiple app files as independent entry graphs', async () => {
+    await withTaoFiles(
+      'tao-workspace-multiple-entries-',
+      {
+        'First.tao': `
+          app First { view FirstView }
+          view FirstView() { render inject ${tsFence} return null ${fence} }
+        `,
+        'Second.tao': `
+          app Second { view SecondView }
+          view SecondView() { render inject ${tsFence} return null ${fence} }
+        `,
+      },
+      async (paths, rootDir) => {
+        const validation = await (await Workspace.open(rootDir)).validateFiles([
+          paths['First.tao'],
+          paths['Second.tao'],
+        ])
+
+        Expect(errorMessages(validation)).toEqual([])
+        Expect(validation.entry.path).toBe(paths['First.tao'])
+        Expect(validation.files.map(file => file.path)).toEqual(
+          Expect['arrayContaining']([paths['First.tao'], paths['Second.tao']]),
+        )
       },
     )
   })

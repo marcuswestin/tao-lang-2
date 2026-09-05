@@ -143,11 +143,47 @@ likely to belong to another worktree as to this one — check before killing it.
 | `.artifacts/user/studio/device-trust/`                        | Studio's device-gateway identity and trusted devices |
 | `.artifacts/dev/`                                             | Expo logs and the generated preview runtime          |
 | `.artifacts/tests/studio-smoke/<runId>/`                      | One smoke run's isolated lane                        |
+| `.artifacts/reviews/<reviewId>/`                              | Immutable web scenario visual-review bundles         |
 | `.artifacts/tests/studio-canary/`                             | The native canary's report                           |
 | `.artifacts/logs/<lane>/<timestamp>/`                         | One lane run's per-node logs plus `summary.json`     |
 | `.artifacts/logs/<lane>/latest`                               | Symlink to that lane's newest run                    |
 | `.artifacts/timings/`                                         | Measured node durations the scheduler orders by      |
 | `.artifacts/tmp/`                                             | Bootstrap scratch; reclaim with `just clean-scratch` |
+
+## Visual review
+
+Capture every authored scenario cell with the real Studio web renderer:
+
+```bash
+./tao review Apps/HNReader --app HNReader
+```
+
+Compare a later capture with an earlier bundle, or choose a new explicit output directory:
+
+```bash
+./tao review Apps/HNReader --app HNReader \
+  --against .artifacts/reviews/<review-id>/review.json
+./tao review Apps/HNReader --app HNReader --output /tmp/hn-review
+```
+
+The command writes `review.json`, `annotations.json`, `index.html`, `screenshots/`, sanitized browser
+event metadata, and Studio launch logs. Open `index.html` directly to inspect side by side, blink, or
+opacity overlay; record per-cell decisions and comments, then use **Export annotations** to share the
+portable annotation manifest and **Import annotations** to continue a collaborator's pass. Decisions
+are bound to the baseline and current image digests, so a changed rerun keeps earlier context but reopens
+the cell for review.
+
+A changed image is evidence for review, not a failing threshold. Renderer mismatches are labeled
+incomparable, and failed or unstable cells remain visible in the report.
+
+Review waits for authored semantic replay, including explicit `advance` steps. It deliberately does not
+infer ambient network or action quiescence, so scenarios that review delayed outcomes must advance time
+before the expected state.
+
+Review bundles are local derived artifacts and are not uploaded. Screenshots can contain fixture or live
+preview data, so inspect a bundle before sharing it. The first command captures Studio's web renderer only;
+it does not claim native iPhone, Android, or macOS pixel parity. Like the Studio browser smoke, run it from
+an ordinary unsandboxed shell when Chrome cannot create its sockets or Crashpad directories in a sandbox.
 
 ## Launch manifests
 
@@ -221,6 +257,88 @@ launch ID, session ID, component (`studio-server`, `preview`, `metro`, `watcher`
 shutdown reason. The terminal shows only the events a person waits on — server ready, a failed
 compile or reload, shutdown, a signal escalation, an orphan — and never source contents or secrets.
 
+## Freehand Draw, Snap, and Feed project state
+
+Unsnapped Draw geometry is committed in `.tao-project/studio/sketches.jsonc`. It is not a launch
+artifact, browser-local preference, or Tao render tree. Catalog format version 1 stores a monotonic
+`nextViewNumber`, a conflict `revision`, and ordered sketches. Each sketch records stable `id`,
+display `name`, project, generated `view`, width, height, total
+`rectOrder`, free `rects`, and flowed `snapped` associations; each rectangle records stable
+`id`, nonnegative `x` and `y`, positive width and height, an open Tao element `kind`, and optional
+string `content` and optional structured `fieldBinding`. A binding names its entity parameter, dotted
+field path, and text or image presentation, including an optional image-label path.
+
+Studio accepts JSONC but rewrites the file as canonical indented JSON through a temporary sibling and
+rename. The server is the only writer. Clients submit a unique request ID and expected revision;
+stale edits receive a conflict and identical retries are idempotent. Successful mutations are echoed
+through the session event stream. Selection stays in the client and is not catalog state.
+
+The first outer draw creates `@/studio/ViewN.tao` and its catalog row as one recoverable operation.
+`ViewN` is allocated from `nextViewNumber`; deleted numbers are not reused. The generated file has the
+Studio ownership header, mode `0444`, one public view rendering a same-sized `Placeholder`, and a
+fixtureless phone scenario in the `sketch` group. Free rectangles remain in the catalog and are drawn
+through a TypeScript overlay; Draw does not add rectangle, positioned-container, or offset syntax to
+Tao source. The matrix associates each generated `sketch` scenario row with its catalog sketch by
+`view`, renders a row-scoped workspace beside the live cells, and applies completed gestures through
+the versioned catalog endpoint. Move to package is the supported way to make the generated file
+ordinary authored source.
+
+If source creation or compilation fails, Studio removes the new generated file and restores the prior
+catalog snapshot. Studio rejects a malformed or unsupported catalog, and rejects a mutation against a
+stale revision, rather than guessing. Recover the file from version control or repair it while
+preserving stable IDs, rectangle order, revision, and a `nextViewNumber` greater than every retained
+`view` number. Do not lower the allocator to reuse a deleted name; an existing
+`@/studio/ViewN.tao` is never overwritten.
+
+Snap uses the server's deterministic projection engine. The committed 16-case component-layout
+regression corpus currently projects 12 directly (75 percent) and sends four ambiguous cases for
+canonical tree/diff confirmation. It is not the 15–20-real-screen FS-D11 acceptance corpus, and it
+does not measure inspector-fix counts; that acceptance evidence remains open. Two clean separating
+axes are ambiguous and require confirmation. Padding is inferred only from the sketch root, so nested
+container insets and cross-axis alignment remain inspector work until their inference rules are
+decided.
+
+Partial Snap inserts only the newly projected subtree, and Unsnap removes only selected Studio-owned
+leaves, preserving existing manual edits and typed flow actions. Generated leaves carry private stable
+Studio markers only while the source remains under `@/studio`; Move to package strips them. The
+compiler publishes their current render identities and the preview reports measured geometry for
+Unsnap fallback. Direction, separator, and weighted Spacer controls are typed source actions. Snap,
+flow edits, Unsnap, and Undo commit generated source plus catalog associations together and roll both
+back on compile or catalog failure. Reopen reconciles only against a manifest whose source version is
+current, then drops missing, duplicated, or retyped associations. Retained geometry is preferred for
+Unsnap; a current measured render is the fallback.
+
+The project session intentionally rejects whole-sketch deletion until generated-source removal shares
+the same transactional rollback.
+
+Feed foundations preserve entity parameter identity in the preview manifest and accept imported
+`public fixture` declarations, including cross-file scenario row handles. The deterministic generator
+and inventory normalize fixture, generated, live, and library rows without writing source. The
+`StudioSharedFixtureSource` seam creates or extends the generated `@/studio/Sketches.tao` source,
+deduplicates identical rows, and rejects collisions. Typed source actions add an entity parameter and
+fixture-backed arguments to a generated sketch group, bind a tagged snapped leaf to a validated field,
+and insert parameterized project views using exact-type values visible at the target gap. Catalog
+`bind-rect` persists the corresponding structured binding for free and snapped rectangles.
+
+This does not yet constitute the complete Slice 3 gesture: the client row/chip browser, atomic Keep
+transaction, entity/field drop wiring, and scenario relocation during Move to package remain open.
+
+Run the focused Draw, Snap, and Feed-foundation contracts with the repository's installed profile:
+
+```bash
+bun test packages/studio/studio-tests/studio-feed-examples.test.ts packages/studio/studio-tests/studio-feed-inventory.test.ts packages/studio/studio-tests/studio-shared-fixture-source.test.ts packages/studio/studio-tests/studio-sketch-catalog.test.ts packages/studio/studio-tests/studio-sketch-source.test.ts packages/studio/studio-tests/studio-sketch-geometry.test.ts packages/studio/studio-tests/studio-sketch-projection.test.ts packages/studio/studio-tests/studio-sketch-snap.test.ts packages/studio/studio-tests/studio-sketch-session.test.ts packages/studio/studio-tests/studio-sketch-view.test.ts
+```
+
+The existing real browser-shell smoke entry point is:
+
+```bash
+just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts
+```
+
+It must run on a host where Chrome can expose DevTools. Its Draw path creates a 360 by 76 sketch and
+persists a free rectangle. Its Snap path covers playlist flow, reload, repeated partial Snap by gap
+drop, retained-position Unsnap, overlap Cancel/Apply, and source/catalog Undo.
+
 ## Smoke lanes
 
 The smoke lane is deliberately outside ordinary test discovery: it is slow and it binds real ports.
@@ -263,9 +381,11 @@ just studio-smoke packages/dev/studio-smoke/studio-launch.test.ts
 
 The other smoke files build a session in-process and do not exercise the CLI.
 
-The deterministic parts of the same behaviour — save-to-preview synchronization and scenario-group
-startup — live in `packages/studio/studio-tests` and run in the ordinary lane, so `./agent verify`
-stays fast.
+The deterministic parts of the same behaviour — save-to-preview synchronization, scenario-group
+startup, fixtureless empty-store setup, and ordered interaction replay — live in
+`packages/studio/studio-tests`, runtime tests, and the runtime-toolchain Studio E2E suite. They run in
+the ordinary lane, so `./agent verify` stays fast. Focused cells mount an isolated app-owned
+navigation occurrence: contextual presentation and Back work without sharing state between cells.
 
 ## Verification
 

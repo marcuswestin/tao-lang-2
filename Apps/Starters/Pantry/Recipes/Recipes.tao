@@ -1,0 +1,132 @@
+use Checkbox, Col, ScrollView, Spinner, Text, TextInput, TextMultiline from @tao/ui
+use FormButton from @tao/ui/basic
+use Recipes from ..
+
+// The recipes feature: the list a person lands on, one row of it, and the detail of one recipe.
+package
+scene RecipeList() {
+   Title "Recipes"
+   state NewTitle = ""
+   query Recipes { }
+   action AddRecipe() {
+      guard NewTitle empty
+      create Recipe {
+         Title: NewTitle
+      }
+      set NewTitle = ""
+   }
+   command NewRecipe() {
+      Title "Add recipe"
+      Icon "plus"
+      Enabled NewTitle is not empty
+      do AddRecipe()
+   }
+   Toolbar { NewRecipe }
+   render ScrollView() [screen] {
+      Col() [column] {
+         Col() [panel] {
+            Text("NEW RECIPE") [eyebrow]
+
+            #recipeTitle
+            TextInput(Value: NewTitle, Label: "Title", Placeholder: "New recipe title") {
+               on submit AddRecipe
+            }
+
+            #addRecipe
+            FormButton("Add recipe", Disabled: NewTitle is empty) {
+               on press AddRecipe
+         }  }
+         guard Recipes {
+            loading -> { Spinner() }
+            error -> Message {
+               Text("Recipes could not be loaded") [sectionTitle]
+               TextMultiline(Message) [body]
+         }  }
+         guard Recipes empty -> { Col() [panel] {
+            Text("No recipes yet") [sectionTitle]
+            TextMultiline("Add the first one above.") [body]
+         } }
+
+         #recipes
+         loop Recipes / Recipe {
+            RecipeRow(Recipe)
+            on select -> { present RecipeDetail(Recipe) }
+}  }  }  }
+
+// One recipe in the list.
+package
+view RecipeRow(Recipe) {
+   render Col() [card] {
+      if Recipe.Favorite is Favorite {
+         Text("FAVORITE") [eyebrow]
+      }
+      Text(Recipe.Title) [sectionTitle]
+      Text(Recipe.Steps) [caption]
+      Text("Minutes: { Recipe.Minutes }") [caption]
+
+      #openRecipe
+      FormButton("Open") [buttonSecondary] {
+         on press -> { present RecipeDetail(Recipe) }
+}  }  }
+
+// One recipe: edit its fields or delete it.
+package
+scene RecipeDetail(Recipe) {
+   Title Recipe.Title
+   state TitleDraft = Recipe.Title
+   state StepsDraft = Recipe.Steps
+   action SaveRecipe() {
+      guard TitleDraft empty
+      update Recipe {
+         Title: TitleDraft
+         Steps: StepsDraft
+   }  }
+   action SetFavorite(Value boolean) {
+      update Recipe {
+         Favorite: Value
+   }  }
+   action DeleteRecipe() {
+      delete Recipe
+      dismiss
+   }
+   command SaveRecipeCommand() {
+      Title "Save recipe"
+      Icon "checkmark"
+      Enabled TitleDraft is not empty
+      do SaveRecipe()
+   }
+   Toolbar { SaveRecipeCommand }
+   render ScrollView() [screen] {
+      Col() [column, panel] {
+         Text("RECIPE") [eyebrow]
+         guard Recipe {
+            loading -> { Spinner() }
+            missing -> { TextMultiline("This recipe no longer exists.") [body] }
+            error -> Message { TextMultiline("The recipe could not be loaded: { Message }") [body] }
+         }
+
+         #recipeTitleDraft
+         TextInput(Value: TitleDraft, Label: "Title", Placeholder: "Title") {
+            on submit SaveRecipe
+         }
+
+         #recipeStepsDraft
+         TextInput(Value: StepsDraft, Label: "Steps", Placeholder: "Steps") {
+            on submit SaveRecipe
+         }
+         Text("Minutes: { Recipe.Minutes }") [body]
+
+         #recipeFavorite
+         Checkbox(Value: Recipe.Favorite is Favorite, Label: "Favorite") {
+            on change SetFavorite
+         }
+
+         #saveRecipe
+         FormButton("Save recipe", Disabled: TitleDraft is empty) {
+            on press SaveRecipe
+         }
+
+         #deleteRecipe
+         FormButton("Delete recipe") [buttonDanger] {
+            on press DeleteRecipe
+}  }  }  }

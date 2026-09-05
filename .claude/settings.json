@@ -14,6 +14,7 @@
       "Bash(bun install *)",
       "Bash(bun run *)",
       "Bash(bun test *)",
+      "Bash(cd *)",
       "Bash(df *)",
       "Bash(direnv exec . *)",
       "Bash(dprint *)",
@@ -173,10 +174,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/agent setup > /dev/null"
+            "command": "\"$CLAUDE_PROJECT_DIR\"/packages/dev/dev-src/cli/agent-session-start.zsh > /dev/null"
           }
         ]
       }
     ]
+  },
+  "env": {
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
   }
 }

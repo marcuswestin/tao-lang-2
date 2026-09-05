@@ -1,6 +1,6 @@
 import Compiler, { type CompileOptions, type CompileResult } from '@compiler'
 import { Langium, Parser, type ParseResult } from '@parser'
-import { Assert, FS } from '@shared'
+import { Assert, type Diagnostic, Diagnostics, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { createWorkspaceServices, type WorkspaceServices } from './langium-services'
 import { createProjectContext, type ProjectContext } from './workspace-utils'
@@ -89,9 +89,40 @@ export class Workspace<ServicesT extends WorkspaceServices = WorkspaceServices> 
     return Validator.validateParseResult(parseResult, this.validatorContext(parseResult))
   }
 
+  /** validateFiles validates every entry graph with its own entry-sensitive context, then unions results. */
+  async validateFiles(entryFiles: readonly string[]): Promise<ValidationResult> {
+    const entryPaths = [...new Set(entryFiles.map(entryFile => this.resolveEntryFile(entryFile)))]
+    Assert(entryPaths.length > 0, 'workspace validation has at least one entry file')
+
+    const filesByPath = new Map<string, ParseResult['entry']>()
+    const diagnostics: Diagnostic[] = []
+    for (const entryPath of entryPaths) {
+      const parsed = await this.parse(entryPath)
+      for (const file of parsed.files) {
+        filesByPath.set(file.path, file)
+      }
+      const validation = await Validator.validateParseResult(parsed, this.validatorContext(parsed))
+      diagnostics.push(...validation.diagnostics)
+    }
+
+    const entry = filesByPath.get(entryPaths[0]!)
+    Assert.defined(entry, 'workspace batch entry exists in parsed files', { entryPath: entryPaths[0] })
+    return {
+      diagnostics: Diagnostics.unique(diagnostics),
+      entry,
+      files: [...filesByPath.values()],
+    }
+  }
+
   /** compile compiles an entry Tao file and all reachable Tao documents. */
   async compile(entryFile: string, options: CompileOptions = {}): Promise<CompileResult> {
     const validationResult = await this.validate(entryFile)
+    return Compiler.compileValidated(validationResult, this.compilerContext(), options)
+  }
+
+  /** compileFiles compiles the union of several entry graphs while keeping the first as the app entry. */
+  async compileFiles(entryFiles: readonly string[], options: CompileOptions = {}): Promise<CompileResult> {
+    const validationResult = await this.validateFiles(entryFiles)
     return Compiler.compileValidated(validationResult, this.compilerContext(), options)
   }
 

@@ -30,6 +30,13 @@ import {
   StudioScenarioArgumentsPayload,
   StudioScenarioArgumentsValid,
   StudioScenarioCapturedLayers,
+  StudioScenarioJourneyActive,
+  StudioScenarioJourneyCanRecord,
+  StudioScenarioJourneyCanSave,
+  StudioScenarioJourneyCommand,
+  StudioScenarioJourneyLines,
+  StudioScenarioJourneyPayload,
+  StudioScenarioJourneyStatus,
   StudioScenarioUpdateArgumentDraft,
   TreeFileRow,
   type TreeFileRowProps,
@@ -70,7 +77,17 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).not.toContain('StackNav')
   Expect(source).not.toContain('Title "Tao Studio"')
   Expect(source).not.toContain('FormButton(')
-  Expect(source).toContain('use Button, Col, Picker, Text, TextInput from @tao/ui')
+  Expect(source).toContain('use Checkbox, Col, Text, TextInput from @tao/ui')
+  Expect(source).not.toMatch(/\bButton\(/)
+  Expect(source).not.toMatch(/\bPicker\(/)
+  Expect(source).toContain(
+    'view StudioButton(Label text, Press action(), Disabled boolean, Variant text) from ./TaoStudioProductHost.tsx',
+  )
+  Expect(source).toContain(
+    'view StudioSegmented(Value text, Change action(text), Options list of text, Label text) from ./TaoStudioProductHost.tsx',
+  )
+  Expect(source).toContain('@environment StudioEnvironmentPanel(')
+  Expect(source).toContain('view StudioEnvironmentPanel(ActiveCellId text, CellRevision number, ViewportPresetId text')
   Expect(source).toContain('view StudioScenarioEnvironment(')
   Expect(source).not.toContain('view StudioScenarioEnvironmentControls(')
   Expect(source).toContain('state Drafts = StudioScenarioArgumentDrafts(State)')
@@ -85,6 +102,11 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).toContain('view StudioCompilePanelView(')
   Expect(source).toContain('view StudioProblemsPanelView(')
   Expect(source).toContain('view StudioDataPanelView(')
+  Expect(source).toContain('view StudioDataRailPanel(Data StudioDataPanel)')
+  Expect(source).toContain('Text [ink ink]')
+  Expect(source).toContain('TextInput [background panel, border line, ink ink]')
+  Expect(source).toContain('do OpenScreen(View.StableId)')
+  Expect(source).toContain('do OpenSource(Path: DesignToken.SourcePath')
   Expect(source).toContain('view StudioTestsPanelView(')
   Expect(source).toContain('view StudioLogsPanelView(')
   Expect(source).toContain('view StudioSearchPanel(Rows list of StudioSearchPanelRow)')
@@ -98,10 +120,17 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).toContain('view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text')
   Expect(source).toContain('FilePath: ActiveFilePath')
   Expect(source).toContain(
-    'accepts content slots @files, @components, @projectViews, @screens, @tokens, @search, @drawer, @scenario, @editor, @inspector',
+    'accepts content slots @files, @components, @projectViews, @screens, @tokens, @data, @search, @drawer, @scenario, @environment, @editor, @inspector',
   )
-  Expect(source).toContain('@scenario StudioScenarioPanel(State: "null", ResolvedAppearance: "light")')
-  Expect(source).toContain('view StudioScenarioPanel(State text, ResolvedAppearance text)')
+  Expect(source).toContain(
+    '@scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")',
+  )
+  Expect(source).toContain(
+    'view StudioScenarioPanel(State text, JourneyRecording text, JourneyRecordable boolean, ResolvedAppearance text)',
+  )
+  Expect(source).toContain('StudioScenarioControlGroup("Record interaction")')
+  Expect(source).toContain('Name: StudioScenarioJourneyCommand(JourneyRecording)')
+  Expect(source).toContain('Name: "scenario-save-journey"')
   Expect(source).toContain('query Files as Children')
   Expect(source).toContain('FileTree(FolderPath: File.Path')
   Expect(source).toContain('do CreateFile(NewPath)')
@@ -120,6 +149,14 @@ Test('Tao Studio ProductHost injects structured panel values without section-lev
   Expect(source).not.toContain('JSON.stringify(hostState.panels')
 })
 
+Test('Move to package prompts for a replacement only after a declaration conflict', async () => {
+  const source = await FS.readText(FS.resolvePath('../studio-src/client/StudioApp.ts', import.meta.dir))
+
+  Expect(source).toContain("if (result.status === 'confirmation-required')")
+  Expect(source).toContain('const replacement = window.prompt(')
+  Expect(source.indexOf("result.status === 'confirmation-required'")).toBeLessThan(source.indexOf('window.prompt('))
+})
+
 Test('Tao Studio foreign file views render compact tree rows with contextual editing controls', () => {
   const action = noArgAction()
   const textAction = textArgAction()
@@ -136,13 +173,15 @@ Test('Tao Studio foreign file views render compact tree rows with contextual edi
     children: React.createElement('span', null, 'Nested file'),
   })
   const compact = TreeFileRow(fileRowProps({}))
+  const generated = TreeFileRow(fileRowProps({ Name: 'View1.tao', Path: '@/studio/View1.tao' }))
   const renaming = TreeFileRow(fileRowProps({ Renaming: true }))
   const deleting = TreeFileRow(fileRowProps({ ConfirmDelete: true }))
 
   Expect(property(surface, 'data-studio-files-surface')).toBe('compact')
   Expect(textContent(surface)).toBe('Project tree')
   Expect(property(create, 'data-studio-file-create')).toBe('compact')
-  Expect(property(elementWith(create, 'aria-label', 'New Tao file path'), 'style')).toMatchObject({ height: 24 })
+  Expect(property(elementWith(create, 'aria-label', 'New Tao file path'), 'className')).toBe('studio-input')
+  Expect(property(elementWith(create, 'aria-label', 'Create file'), 'className')).toBe('studio-icon-button')
   Expect(property(elementWith(folder, 'aria-expanded', true), 'aria-expanded')).toBe(true)
   Expect(textContent(folder)).toContain('Nested file')
   Expect(property(compact, 'data-studio-tree-file')).toBe('Folder/Roadmap.tao')
@@ -150,6 +189,8 @@ Test('Tao Studio foreign file views render compact tree rows with contextual edi
   Expect(elementWith(compact, 'aria-label', '2 problems')).toBeDefined()
   Expect(elements(compact).some(element => property(element, 'aria-label') === 'Save rename')).toBe(false)
   Expect(elements(compact).some(element => property(element, 'role') === 'alert')).toBe(false)
+  Expect(property(elementWith(compact, 'aria-label', 'Move Roadmap.tao to package'), 'hidden')).toBe(true)
+  Expect(property(elementWith(generated, 'aria-label', 'Move View1.tao to package'), 'hidden')).toBe(false)
   Expect(elementWith(renaming, 'aria-label', 'Save rename')).toBeDefined()
   Expect(property(elementWith(renaming, 'aria-label', 'New path for Roadmap.tao'), 'value'))
     .toBe('Folder/Roadmap.tao')
@@ -241,6 +282,53 @@ Test('Tao scenario helpers preserve cell identity and author only resolved appea
   Expect(() => StudioScenarioArgumentsPayload(state, drafts, 'system')).toThrow(
     'resolved light or dark scenario appearance',
   )
+})
+
+Test('Tao scenario journey helpers expose safe semantic drafts to the visible panel', () => {
+  const state = JSON.stringify({
+    arguments: {},
+    capturedLayers: [],
+    cell: { compileRevision: 7, id: 'cell:states:phone', manifestRevision: 'manifest-7', revision: 3 },
+    entry: { id: 'scenario-card', label: 'Card', subjectId: 'view:Card' },
+    group: { id: 'group:states', label: 'states', sourcePath: 'Scenarios.tao' },
+    parameters: [],
+    sourceIdentity: { appName: 'Garden', path: 'Scenarios.tao', project: '/project' },
+    version: 1,
+  })
+  const recording = JSON.stringify({
+    busy: false,
+    captureSensitiveText: false,
+    id: 'recording-1',
+    status: 'stopped',
+    steps: [
+      { kind: 'press', selector: 'tag', target: 'open-card' },
+      { kind: 'enter', redacted: false, selector: 'label', target: 'Name', value: 'Ada' },
+    ],
+  })
+
+  Expect(StudioScenarioJourneyActive(recording)).toBe(false)
+  Expect(StudioScenarioJourneyCanRecord(state, recording, true)).toBe(false)
+  Expect(StudioScenarioJourneyCanRecord(state, 'null', true)).toBe(true)
+  Expect(StudioScenarioJourneyCanRecord(state, 'null', false)).toBe(false)
+  Expect(StudioScenarioJourneyCanSave(recording)).toBe(true)
+  Expect(StudioScenarioJourneyCommand(recording)).toBe('scenario-start-journey')
+  Expect(StudioScenarioJourneyLines(recording)).toEqual([
+    'press #open-card',
+    'enter "Ada" into label "Name"',
+  ])
+  Expect(StudioScenarioJourneyStatus(recording)).toContain('2 steps ready')
+  Expect(JSON.parse(StudioScenarioJourneyPayload(state, true))).toEqual({
+    captureSensitiveText: true,
+    cellId: 'cell:states:phone',
+    cellRevision: 3,
+  })
+
+  const redacted = JSON.stringify({
+    ...JSON.parse(recording),
+    steps: [{ kind: 'enter', redacted: true, selector: 'tag', target: 'password', value: '' }],
+  })
+  Expect(StudioScenarioJourneyCanSave(redacted)).toBe(false)
+  Expect(StudioScenarioJourneyStatus(redacted)).toContain('Sensitive text was redacted')
 })
 
 Test('Tao-owned inspector layout drafts retain invalid text and emit only current typed actions', () => {
@@ -351,7 +439,7 @@ Test('Tao-owned inspector Data and Actions expose only the published active sele
   Expect(lines).toContain('Selected element: Text')
   Expect(lines).toContain('Binding metadata: not published for this render.')
   Expect(lines).toContain('Datasource context: cell cell-phone revision 4.')
-  Expect(lines).toContain('Entity tables remain in the Data drawer.')
+  Expect(lines).toContain('Entity tables are available in the Data panel.')
   Expect(StudioInspectorActionIds(inspection, selection)).toEqual(['wrap-stack'])
   Expect(JSON.parse(StudioInspectorAction(selection, 'wrap-stack'))).toEqual({
     kind: 'wrap-render',
@@ -406,19 +494,24 @@ function fileRowProps(overrides: Partial<TreeFileRowProps>): TreeFileRowProps {
   return {
     BeginDelete: action,
     BeginRename: action,
+    BeginMove: action,
     CancelDelete: action,
     CancelRename: action,
     ChangeRenamePath: textArgAction(),
+    ChangeTargetPackage: textArgAction(),
     ConfirmDelete: false,
     Delete: action,
     DiagnosticCount: 2,
     Dirty: true,
     Name: 'Roadmap.tao',
+    Move: action,
+    Moving: false,
     Open: action,
     Path: 'Folder/Roadmap.tao',
     Rename: action,
     RenamePath: 'Folder/Roadmap.tao',
     Renaming: false,
+    TargetPackage: '',
     ...overrides,
   }
 }

@@ -18,6 +18,23 @@ Describe('Studio fixture generation', () => {
     })
   })
 
+  Test('declines generation clearly for a valid fixtureless scenario', async () => {
+    const base = manifest()
+    const provider = new ScriptedGenerationProvider([{ kind: 'answer', value: { Title: 'Unused' } }])
+    const result = await new StudioFixtureGeneration(provider).generate({
+      ...base,
+      fixtures: [],
+      scenarios: [{ ...base.scenarios[0]!, fixtureId: undefined }],
+    }, { scenarioId: 'Workspace.focused' })
+
+    Expect(result).toEqual({
+      code: 'validation_failed',
+      error: 'The Studio scenario has no fixture to generate.',
+      status: 'failed',
+    })
+    Expect(provider.calls).toHaveLength(0)
+  })
+
   Test('generates fixture rows, excludes secrets, and preserves explicit relation topology', async () => {
     const provider = new ScriptedGenerationProvider([
       {

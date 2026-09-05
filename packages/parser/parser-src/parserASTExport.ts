@@ -4,6 +4,7 @@ import { Langium } from './langium-exports'
 
 export * from './_gen_tao-parser/ast'
 export * from './ast-structure'
+export * from './syntax-ranges'
 
 /** Document declares a Langium document whose root is a Tao file AST. */
 export type Document = Langium.LangiumDocument<ASTGen.TaoFile>

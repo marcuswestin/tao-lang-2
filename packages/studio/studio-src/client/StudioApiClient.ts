@@ -5,7 +5,6 @@ import type { StudioDeviceLaunchInfo, StudioDeviceLaunchOpenResult } from '../de
 import type { StudioDeviceStateEvent, StudioDeviceStatus } from '../device/StudioDeviceStatus'
 import type { StudioCompileCompletion } from '../StudioCompileCoordinator'
 import type { StudioDraftFile, StudioDraftSyncRequest, StudioDraftSyncResult } from '../StudioDraftSync'
-import type { StudioLanguageHighlight } from '../StudioHighlight'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../StudioPreviewManifest'
 import type {
   StudioAppVariant,
@@ -13,10 +12,27 @@ import type {
   StudioCreateFileResult,
   StudioDeleteFileRequest,
   StudioDeleteFileResult,
+  StudioMoveGeneratedSourceRequest,
+  StudioMoveGeneratedSourceResult,
   StudioRenameFileRequest,
   StudioRenameFileResult,
+  StudioSessionHandshake,
+  StudioSketchActionResult,
+  StudioSketchFlowActionRequest,
+  StudioSketchSnapApplyResult,
+  StudioSketchSnapProposalResult,
+  StudioSketchSnapRequest,
+  StudioSketchSnapUndoRequest,
+  StudioSketchSnapUndoResult,
+  StudioSketchUnsnapRequest,
 } from '../StudioProjectSession'
 import type { StudioFixturePlan, StudioSourceActionEnvelope } from '../StudioProtocol'
+import type { StudioProjectOpenRequest, StudioSessionListing } from '../StudioSessionManager'
+import type {
+  StudioSketchCatalogRequest,
+  StudioSketchCatalogSnapshot,
+} from '../StudioSketchCatalog'
+import type { StudioLanguageAnalysis } from '../StudioSyntaxLens'
 import type { StudioTestRun, StudioTestStatus } from '../StudioTestRunner'
 
 export type StudioCompileDiagnostic = {
@@ -47,11 +63,13 @@ export type StudioFile = {
 
 export type StudioHandshake = {
   apps: readonly StudioAppVariant[]
+  capabilities: StudioSessionHandshake['capabilities']
   compile: StudioCompileState
   entryPath: string
   files: readonly StudioFile[]
   identity: { appName: string; project: string }
   previewManifest?: StudioPreviewManifestV2
+  sketchCatalog: StudioSketchCatalogSnapshot
   type: 'handshake'
 }
 
@@ -63,6 +81,7 @@ export type StudioEvent =
   | { file: StudioFile; type: 'file-changed' }
   | { files: readonly StudioFile[]; type: 'files-changed' }
   | { manifest: StudioPreviewManifestV2; type: 'preview-manifest-changed' }
+  | { catalog: StudioSketchCatalogSnapshot; type: 'sketch-catalog-changed' }
   | { type: 'studio-writes-acknowledged' }
 
 export type StudioCellRuntimeResponse = {
@@ -117,6 +136,7 @@ export type StudioApiEventHandlers = {
   onFile: (file: StudioFile) => void
   onFiles?: (files: readonly StudioFile[]) => void
   onManifest: (manifest: StudioPreviewManifestV2) => void
+  onSketchCatalog?: (catalog: StudioSketchCatalogSnapshot) => void
   onHandshake?: (handshake: StudioHandshake) => void
   onDisconnect: () => void
 }
@@ -181,6 +201,8 @@ export const StudioApiEventStream = {
       handlers.onFiles?.(message.files)
     } else if (message.type === 'preview-manifest-changed') {
       handlers.onManifest(message.manifest)
+    } else if (message.type === 'sketch-catalog-changed') {
+      handlers.onSketchCatalog?.(message.catalog)
     } else if (message.type === 'device-state') {
       handlers.onDeviceState?.(message.status)
     }
@@ -279,10 +301,12 @@ export const StudioApiClient = {
   file: async (path: string, signal?: AbortSignal): Promise<StudioDraftFile> =>
     await get(`/api/file?path=${encodeURIComponent(path)}`, signal),
   files: async (): Promise<{ files: readonly StudioFile[] }> => await get('/api/files'),
+  moveGeneratedSource: async (body: StudioMoveGeneratedSourceRequest): Promise<StudioMoveGeneratedSourceResult> =>
+    await request('/api/file/move-generated', body),
   generateFixture: async (scenarioId: string): Promise<StudioGeneratedFixtureResult> =>
     await request('/api/ai/fixture', { scenarioId }),
   handshake: async (signal?: AbortSignal): Promise<StudioHandshake> => await get('/api/protocol', signal),
-  highlight: async (content: string): Promise<StudioLanguageHighlight> =>
+  highlight: async (content: string): Promise<StudioLanguageAnalysis> =>
     await request('/api/language/highlight', { content }),
   inspectRender: async (
     body: { path: string; renderId: string; sourceVersion: string },
@@ -290,6 +314,8 @@ export const StudioApiClient = {
   lspTransport: async (signal?: AbortSignal): Promise<StudioLspTransport> =>
     await webSocketTransport(webSocketUrl(studioSessionPath('/api/language/lsp')), signal),
   previewApplied: async (body: unknown): Promise<unknown> => await request('/api/preview/applied', body),
+  previewLayoutMeasurements: async (body: unknown): Promise<unknown> =>
+    await request('/api/preview/layout-measurements', body),
   previewDiagnosis: async (signal?: AbortSignal): Promise<{ message?: string; status: string }> =>
     await get('/api/preview/diagnosis', signal),
   previewInstance: async (body: unknown, signal?: AbortSignal): Promise<unknown> =>
@@ -298,6 +324,18 @@ export const StudioApiClient = {
     await request('/api/preview/cell/reconfigure', body),
   renameFile: async (body: StudioRenameFileRequest): Promise<StudioRenameFileResult> =>
     await request('/api/file/rename', body),
+  sketchAction: async (body: StudioSketchCatalogRequest): Promise<StudioSketchActionResult> =>
+    await request('/api/sketches/action', body),
+  sketchFlowAction: async (body: StudioSketchFlowActionRequest): Promise<StudioSketchSnapApplyResult> =>
+    await request('/api/sketches/flow/action', body),
+  sketchSnapApply: async (body: StudioSketchSnapRequest): Promise<StudioSketchSnapApplyResult> =>
+    await request('/api/sketches/snap/apply', body),
+  sketchSnapProposal: async (body: StudioSketchSnapRequest): Promise<StudioSketchSnapProposalResult> =>
+    await request('/api/sketches/snap/propose', body),
+  sketchUnsnapApply: async (body: StudioSketchUnsnapRequest): Promise<StudioSketchSnapApplyResult> =>
+    await request('/api/sketches/unsnap/apply', body),
+  sketches: async (): Promise<StudioSketchCatalogSnapshot> => await get('/api/sketches'),
+  sessions: async (signal?: AbortSignal): Promise<StudioSessionListing> => await rootGet('/api/sessions', signal),
   closeCurrentSession: async (): Promise<void> => {
     const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
     if (sessionId === undefined) {
@@ -309,12 +347,10 @@ export const StudioApiClient = {
     await request('/api/source-action', body),
   sourceActionProposal: async (body: StudioSourceActionEnvelope | unknown): Promise<StudioSourceActionProposal> =>
     await request('/api/source-action/propose', body),
-  switchApp: async (
-    body: { appName: string; entryPath: string; projectPath: string },
-  ): Promise<StudioSessionTransition> => {
+  switchSession: async (body: StudioProjectOpenRequest): Promise<StudioSessionTransition> => {
     const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
     if (sessionId === undefined) {
-      Errors.throwUnexpected('App switching requires a managed Studio session.')
+      Errors.throwUnexpected('Project and app switching require a managed Studio session.')
     }
     return await rootRequest(`/api/sessions/${encodeURIComponent(sessionId)}/switch`, body)
   },
@@ -322,6 +358,8 @@ export const StudioApiClient = {
   testStatus: async (): Promise<StudioTestStatus> => await get('/api/tests/status'),
   undoSourceAction: async (body: unknown): Promise<StudioSourceActionUndoResult> =>
     await request('/api/source-action/undo', body),
+  undoSketchSnap: async (body: StudioSketchSnapUndoRequest): Promise<StudioSketchSnapUndoResult> =>
+    await request('/api/sketches/snap/undo', body),
 } as const
 
 async function get<Result>(path: string, signal?: AbortSignal): Promise<Result> {
@@ -347,6 +385,10 @@ async function rootRequest<Result>(path: string, body: unknown): Promise<Result>
       method: 'POST',
     }),
   )
+}
+
+async function rootGet<Result>(path: string, signal?: AbortSignal): Promise<Result> {
+  return await response<Result>(await fetch(path, { signal }))
 }
 
 async function response<Result>(value: Response): Promise<Result> {

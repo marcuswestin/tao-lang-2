@@ -74,6 +74,104 @@ Describe('parser: fixtures and scenarios', () => {
     Expect(value.target.ref?.name).toBe('LeadStory')
   })
 
+  Test('keeps the narrow scenario journey prefix in authored order after its render subject', async () => {
+    const result = await testParseCode(`
+      view SavedToast(Revert action()) { }
+      scenarios SavedToast "interaction states" {
+        device phone
+        scenario "held revert" {
+          render ()
+          press down label "Revert"
+          advance 600.ms
+          press up #revertSave
+          hover placeholder "Revert save"
+          focus #revertSave
+          hover "Revert by text"
+        }
+      }
+    `)
+
+    const group = result.entry.ast.statements.find(AST.isScenarioGroupDeclaration)
+    const scenario = group?.block.entries.find(AST.isScenarioDeclaration)
+    Expect.Is(scenario, AST.isScenarioDeclaration)
+    Expect(scenario.block.steps.map(step => step.$type)).toEqual([
+      AST.PressPhaseStep.$type,
+      AST.AdvanceStep.$type,
+      AST.PressPhaseStep.$type,
+      AST.HoverStep.$type,
+      AST.FocusStep.$type,
+      AST.HoverStep.$type,
+    ])
+    const down = scenario.block.steps[0]
+    Expect.Is(down, AST.isPressPhaseStep)
+    Expect(down.phase).toBe('down')
+    Expect(down.selector).toBe('label')
+    Expect(down.target).toBe('Revert')
+    const up = scenario.block.steps[2]
+    Expect.Is(up, AST.isPressPhaseStep)
+    Expect(up.tag).toBe('#revertSave')
+  })
+
+  Test(
+    'requires scenario clauses to precede its journey prefix',
+    rejectsParser(`
+      view Card() { }
+      scenarios Card "states" {
+        device phone
+        scenario "invalid" {
+          render ()
+          focus #card
+          appearance dark
+        }
+      }
+    `),
+  )
+
+  Test(
+    'does not widen scenario journeys to the full test language',
+    rejectsParser(`
+      view Card() { }
+      scenarios Card "states" {
+        device phone
+        scenario "invalid" {
+          render ()
+          expect text "Card"
+        }
+      }
+    `),
+  )
+
+  Test('accepts the existing test-body interaction family as a scenario journey prefix', async () => {
+    const result = await testParseCode(`
+      view Card() { }
+      scenarios Card "states" {
+        device phone
+        scenario "edited second row" {
+          render ()
+          press #card
+          enter "Tao" into label "Name"
+          submit #name
+          select #rows[2] {
+            press text "Open"
+          }
+        }
+      }
+    `)
+
+    const group = result.entry.ast.statements.find(AST.isScenarioGroupDeclaration)
+    const scenario = group?.block.entries.find(AST.isScenarioDeclaration)
+    Expect.Is(scenario, AST.isScenarioDeclaration)
+    Expect(scenario.block.steps.map(step => step.$type)).toEqual([
+      AST.TagPressStep.$type,
+      AST.EnterTextStep.$type,
+      AST.TagSubmitStep.$type,
+      AST.SelectStep.$type,
+    ])
+    const select = scenario.block.steps[3]
+    Expect.Is(select, AST.isSelectStep)
+    Expect(select.block.statements.map(step => step.$type)).toEqual([AST.PressTextStep.$type])
+  })
+
   Test('accepts arbitrary string group and entry identities', async () => {
     const result = await testParseCode(`
       scenarios "Review states" {

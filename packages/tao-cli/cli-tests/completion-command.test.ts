@@ -92,7 +92,7 @@ Describe('tao shell completion surface', () => {
   Test('completes command names for the requested prefix', async () => {
     const lines = await captureCompletionRequest(['c'])
 
-    Expect(lines).toContain('check\tCheck .tao files for the full canonical source form without writing.')
+    Expect(lines).toContain('check\tCheck canonical Tao source and report validation warnings without writing.')
     Expect(lines.some(line => line.startsWith('dev\t'))).toBe(false)
   })
 

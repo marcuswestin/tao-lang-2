@@ -42,7 +42,8 @@ Restorable descriptor identity depends on a checked-in project ID, whose contrac
 
 - Every project forming restorable UI or nav descriptors has one opaque immutable `id` in its
   project metadata; Tao never generates identity.
-- `tao create <id>` uses the new project's directory name as the checked-in ID, and
+- `tao create` writes the new project's directory name as the checked-in ID (from `--id` or a
+  confirmed suggestion), and
   `tao project id <id> [path]` migrates an existing project as a deliberate, reviewable command.
 - Clones and published artifacts retain the ID; an independent fork supplies a replacement with
   `--replace`, which explicitly severs persisted-state compatibility.

@@ -1,0 +1,27 @@
+use SelectionNav, StackNav from @tao/nav
+use IngredientList from ./Ingredients
+use RecipeList from ./Recipes
+
+// The shared navigation: one tab per feature, each with its own stack.
+nav IngredientsStack = StackNav {
+   Initial IngredientList
+}
+
+nav RecipesStack = StackNav {
+   Initial RecipeList
+}
+
+folder
+nav PantryNavigator = SelectionNav {
+   Initial @ingredients
+   Display "automatic"
+   @ingredients {
+      Label "Ingredients"
+      Icon "list.bullet"
+      Content IngredientsStack
+   }
+   @recipes {
+      Label "Recipes"
+      Icon "book"
+      Content RecipesStack
+}  }

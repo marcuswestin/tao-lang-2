@@ -66,7 +66,7 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | TypeScript boundary: from, fails, progress (§15)            | WordFlower · build stamp; @tao/text; @tao/time                          | MVP      | partially in Current[^3]  |
 | Fixtures, tests, query assertions (§16)                     | WordFlower · behavior tests                                             | MVP      | partially in Current      |
 | Fault injection (§16)                                       | WordFlower · sync failure journey                                       | MVP      | pending — regressed[^1]   |
-| Scenarios, pseudolocale, review gallery (§16)               | WordFlower · scenario set                                               | TBD      | —                         |
+| Scenarios, pseudolocale, review gallery (§16)               | WordFlower · scenario set                                               | TBD      | partially in Current      |
 | Occurrence queries (§17)                                    | Hearth · routines in Today/Week                                         | Post-MVP | —                         |
 | Nearness, distance, places (§17)                            | Hearth · Around                                                         | Post-MVP | —                         |
 
