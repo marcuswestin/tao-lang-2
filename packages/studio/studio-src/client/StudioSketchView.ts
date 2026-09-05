@@ -685,7 +685,7 @@ function renderSketch(
     event.preventDefault()
   }
   board.addEventListener('pointerdown', event => {
-    if (activePointer !== undefined || !primaryPointer(event)) {
+    if (activePointer !== undefined || !primaryPointer(event) || toolbar.contains(event.target as Node | null)) {
       return
     }
     if ((event.target as HTMLElement).dataset['taoStudioSketchHandle']) {

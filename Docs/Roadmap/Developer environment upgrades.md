@@ -719,17 +719,17 @@ an entry here may link one when the developer workflow is also affected.
 
 - **Status:** In progress
 - **Area:** Test reliability
-- **Impact:** The simulated Studio journey can block a merge after the catalog write succeeds because
-  its next Snap interaction reaches an optimistic sketch board that has not yet been replaced by the
-  server-authoritative render.
-- **Evidence:** A normal-terminal full verification reached catalog revision 6 with all five expected
-  free rectangles, then timed out waiting for Snap without another transition. The smoke waiter had
-  observed only the persisted JSON file; the browser-side `onRectChange` promise settles and replaces
-  the board afterward.
-- **Workaround:** Re-run the host-only simulated lane; the race is timing-dependent.
-- **Proposed change:** Mark the board that dispatched each synthetic draw and wait for that exact node
-  to be replaced before selecting or snapping rectangles. Do not retry Snap because the first request
-  may already be in flight and source-action checkpoints are intentionally not idempotent by accident.
+- **Impact:** The simulated Studio journey blocks a merge at its first Snap, and the visible enabled
+  toolbar control also cannot be activated with an ordinary pointer click.
+- **Evidence:** Two normal-terminal full verifications reached catalog revision 6 with all five expected
+  free rectangles, then timed out without a Snap transition. The second run proved the browser had
+  reconciled its authoritative board first. `renderSketch` handled every board `pointerdown` except a
+  resize handle as a geometry gesture, including toolbar descendants, and called `preventDefault()`
+  before the button could receive its click.
+- **Workaround:** Focus and activate the control without a pointer.
+- **Proposed change:** Keep the authoritative-board barrier after synthetic draws, and make the board
+  gesture handler ignore every event originating in its toolbar so buttons, selects, and sliders retain
+  their native interactions. Do not retry Snap because a request may already be in flight.
 - **Dependencies:** Implemented on `feat/freehand-ui-sketching-implementation`; final acceptance needs
   the normal-terminal browser lane because Chrome aborts before DevTools in the managed command host.
 - **Acceptance:** `_full-verify-simulated` completes the Draw, Snap, Unsnap, overlap-confirmation, and
