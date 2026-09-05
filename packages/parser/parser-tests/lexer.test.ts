@@ -86,9 +86,11 @@ Describe('parser: lexer', () => {
     Expect(tokenImages(result)).toEqual(['#screen', '#121826', '#f6f7f3', '#abc_123'])
   })
 
-  for (const character of ['@', '$']) {
-    Test(`rejects unknown ${character} characters`, rejectsLexer(character, character))
-  }
+  Test('accepts the bare generated-package import token', () => {
+    Expect(tokenImages(testLexCode('@'))).toEqual(['@'])
+  })
+
+  Test('rejects unknown $ characters', rejectsLexer('$', '$'))
 
   Test('rejects unclosed ts code blocks', rejectsLexer('```ts\nconst x = 1', '`'))
 })

@@ -1,5 +1,5 @@
 import type TRType from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, setReactNativeDevModeForTest, Test } from '@shared/test'
 import { mock } from 'bun:test'
 import React from 'react'
 import { UnexpectedBehaviorError } from '../TaoRuntime-src/TR-errors'
@@ -470,6 +470,83 @@ Describe('TR.Views indicators', () => {
 
     Expect(progress.props['accessibilityValue']).toEqual({ max: 1, min: 0, now: 0 })
     Expect((fill.props['style'] as Record<string, unknown>)['width']).toBe('0%')
+  })
+})
+
+Describe('TR.Views sketch elements', () => {
+  Test('renders a labelled hatched Placeholder only in development while retaining its root layout', () => {
+    const restoreDevelopment = setReactNativeDevModeForTest(true)
+    let development: RuntimeElement
+    try {
+      development = renderRuntimeElement(TR.Views.Placeholder(
+        {
+          label: 'Cover art',
+          layout: { layout: TR.Layout.create([['width', 52], ['height', 52]]) },
+          tag: 'cover-art',
+        },
+      ))
+    } finally {
+      restoreDevelopment()
+    }
+    const developmentChildren = fragmentChildren(development)
+
+    Expect(development.type).toBe('View')
+    Expect(development.props['testID']).toBe('cover-art')
+    Expect(flattenStyle(development.props['style'])).toMatchObject({
+      borderStyle: 'dashed',
+      height: 52,
+      overflow: 'hidden',
+      width: 52,
+    })
+    Expect(developmentChildren[0]?.props['children']).toContain('╱')
+    Expect(developmentChildren[1]?.props['children']).toBe('Cover art')
+
+    const restoreRelease = setReactNativeDevModeForTest(false)
+    let release: RuntimeElement
+    try {
+      release = renderRuntimeElement(TR.Views.Placeholder({
+        label: 'Cover art',
+        layout: { layout: TR.Layout.create([['width', 52], ['height', 52]]) },
+      }))
+    } finally {
+      restoreRelease()
+    }
+
+    Expect(release.type).toBe('View')
+    Expect(release.props['children']).toBe(undefined)
+    Expect(flattenStyle(release.props['style'])).toEqual({ height: 52, width: 52 })
+  })
+
+  Test('extends the Placeholder hatch through a tall declared height', () => {
+    const restoreDevelopment = setReactNativeDevModeForTest(true)
+    let placeholder: RuntimeElement
+    try {
+      placeholder = renderRuntimeElement(TR.Views.Placeholder({
+        label: 'Tall draft',
+        layout: { layout: TR.Layout.create([['height', 360]]) },
+      }))
+    } finally {
+      restoreDevelopment()
+    }
+
+    const hatch = String(fragmentChildren(placeholder)[0]?.props['children'])
+    Expect(hatch.split('\n')).toHaveLength(31)
+  })
+
+  Test('gives Spacer claim one by default and lets an explicit claim replace it', () => {
+    const defaultSpacer = renderRuntimeElement(TR.Views.Spacer(
+      {},
+      { layout: TR.Layout.create([['claim', 1]]) },
+    ))
+    const weightedSpacer = renderRuntimeElement(TR.Views.Spacer(
+      { layout: { layout: TR.Layout.create([['claim', 3]]) } },
+      { layout: TR.Layout.create([['claim', 1]]) },
+    ))
+
+    Expect(defaultSpacer.type).toBe('View')
+    Expect(defaultSpacer.props['accessible']).toBe(false)
+    Expect(flattenStyle(defaultSpacer.props['style'])['flexGrow']).toBe(1)
+    Expect(flattenStyle(weightedSpacer.props['style'])['flexGrow']).toBe(3)
   })
 })
 

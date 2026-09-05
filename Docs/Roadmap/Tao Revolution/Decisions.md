@@ -2219,19 +2219,32 @@ scenarios Recipe "devices" {
   every nested `scenario "entry" { … }` has a required entry name.
 - **Group clauses are inherited defaults.** An entry clause of the same kind replaces the group clause
   wholesale, including the mutually exclusive `run`/`render` subject clause. After inheritance, every
-  entry has exactly one fixture, device, and subject; a declaration subject supplies an omitted subject.
+  entry has exactly one device and subject; a declaration subject supplies an omitted subject. Fixture
+  is optional and yields an isolated empty store, but handles in `prepare` or render arguments require it.
 - Entry names are unique within a group. Language identity is `(group, entry)`; compiler and Studio
   identity also include source path. The former dotted singular spelling is retired without an alias.
 
 - **A scenario subject is either an app run or one focused view render.** `run Skillet` exercises the
   app, optionally at a destination; `render RecipeRow(Recipe: Shakshuka)` mounts one parameterized
-  view with named fixture-handle arguments. The two subjects are mutually exclusive.
+  view with named fixture-handle arguments. The two subjects are mutually exclusive. Only a scenario
+  render may omit a required action, receiving a per-cell invocation-recording stand-in from Studio.
+- **A scenario entry may continue with an ordered interaction prefix spelled exactly like a test
+  body.** Complete `press`, `enter`, and `submit` operations join `press down`, `press up`, `hover`,
+  tag-only `focus`, and deterministic `advance`. `select #tag[index] { … }` scopes nested replayable
+  interactions to one loop row. Assertions, app launch or relaunch, navigation `back`, and host-only
+  toolbar operations remain test-only. Studio replays the prefix once per mounted revision and
+  leaves the reached state interactive.
 - **`prepare` is the scenario-local data delta.** It contains ordered `update <fixture-handle> { … }`
   statements applied after the selected fixture and before the subject mounts. It does not introduce
   a second fixture or hidden Studio-owned state.
 - **The first network spelling is exactly `network online` or `network offline`.** Latency, injected
   failures, and synchronization controls remain part of the broader verification world and need their
   own provider-addressed spelling before they join authored scenarios.
+
+- **Sketch placeholders and flexible space are semantic stdlib leaves.** `Placeholder(Label)` shows
+  labelled hatch chrome only in development, is empty without changing declared layout in release,
+  and receives an ordinary `tao check` shipping warning. `Spacer()` has implicit `claim 1`, replaced
+  by an explicit occurrence-level `[claim N]`.
 
 - **There is no `design check` declaration.** The design's `rules { }` are the acceptance criteria,
   and each rule runs where it is actually decidable, so nothing is restated at a check site and

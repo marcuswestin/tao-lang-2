@@ -20,6 +20,7 @@ type NamedFileValueDeclaration =
   | AST.AppDeclaration
   | AST.NavDeclaration
   | AST.DatasourceDeclaration
+  | AST.FixtureDeclaration
   | AST.FunctionDeclaration
   | AST.ViewDeclaration
 type NamedTypeDeclaration = AST.PrimitiveDeclaration | AST.TypeDeclaration | AST.ConfigurableDeclaration
@@ -262,6 +263,7 @@ function isFileValueDeclaration(node: AST.Node): node is NamedFileValueDeclarati
     || AST.isAppDeclaration(node)
     || AST.isNavDeclaration(node)
     || AST.isDatasourceDeclaration(node)
+    || AST.isFixtureDeclaration(node)
     || AST.isFunctionDeclaration(node)
     || AST.isViewDeclaration(node)
 }

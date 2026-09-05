@@ -16,8 +16,18 @@ const FAKE_DRAG_DATA = {
 }
 
 class FakeCdpTransport implements StudioCdpTransport {
+  browserVersion = {
+    jsVersion: '14.2',
+    product: 'Chrome/142.0.1',
+    protocolVersion: '1.3',
+    userAgent: 'Fake Chrome',
+  }
   readonly calls: CdpCall[] = []
   readonly evaluateResults: unknown[] = []
+  frameTree: {
+    childFrames?: Array<{ frame: { id: string; url: string } }>
+    frame: { id: string; url: string }
+  } = { frame: { id: 'root', url: 'http://127.0.0.1/studio' } }
   screenshot = Buffer.from('screenshot bytes').toString('base64')
   private readonly listeners = new Map<string, Set<(params: unknown) => void>>()
   private intercepting = false
@@ -37,6 +47,15 @@ class FakeCdpTransport implements StudioCdpTransport {
     }
     if (method === 'Runtime.evaluate') {
       return { result: { value: this.evaluateResults.shift() } } as Result
+    }
+    if (method === 'Browser.getVersion') {
+      return this.browserVersion as Result
+    }
+    if (method === 'Page.getFrameTree') {
+      return { frameTree: this.frameTree } as Result
+    }
+    if (method === 'Page.createIsolatedWorld') {
+      return { executionContextId: 42 } as Result
     }
     if (method === 'Page.captureScreenshot') {
       return { data: this.screenshot } as Result
@@ -146,11 +165,13 @@ Describe('Studio browser CDP harness', () => {
 
   Test('drags a resizer by an exact pointer delta', async () => {
     const transport = new FakeCdpTransport()
-    transport.evaluateResults.push({ x: 200, y: 300 })
+    transport.evaluateResults.push(true, { x: 200, y: 300 })
     const browser = StudioCdp.testing.create(transport)
 
     await browser.dragBy('[data-divider="preview"]', { x: -40, y: 0 }, { steps: 1 })
 
+    const evaluations = transport.calls.filter(call => call.method === 'Runtime.evaluate')
+    Expect(evaluations[0]?.params['expression']).toContain("scrollIntoView({ block: 'center', inline: 'center' })")
     Expect(transport.calls.filter(call => call.method === 'Input.dispatchMouseEvent')).toEqual([
       {
         method: 'Input.dispatchMouseEvent',
@@ -198,6 +219,96 @@ Describe('Studio browser CDP harness', () => {
     } finally {
       await FS.remove(artifactRoot)
     }
+  })
+
+  Test('captures only a settled DOM element with its page-space clip', async () => {
+    const artifactRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-cdp-element-', FS.tmpdir()))
+    try {
+      const transport = new FakeCdpTransport()
+      transport.evaluateResults.push(undefined, { height: 844, width: 390, x: 120, y: 240 })
+      const browser = StudioCdp.testing.create(transport)
+      const path = FS.resolvePath('cell.png', artifactRoot)
+
+      await browser.captureElementScreenshotAt(path, '.studio-preview-cell-viewport')
+
+      Expect(await FS.readText(path)).toBe('screenshot bytes')
+      const evaluation = transport.calls.find(call =>
+        call.method === 'Runtime.evaluate'
+        && String(call.params['expression']).includes('document.fonts?.ready')
+      )
+      Expect(evaluation?.params['expression']).toContain('document.fonts?.ready')
+      Expect(evaluation?.params['expression']).toContain('requestAnimationFrame(() => requestAnimationFrame(resolve))')
+      Expect(evaluation?.params['expression']).toContain('animation:none!important')
+      Expect(evaluation?.params['expression']).toContain("setProperty('position', 'fixed', 'important')")
+      Expect(transport.calls.find(call => call.method === 'Page.captureScreenshot')).toEqual({
+        method: 'Page.captureScreenshot',
+        params: {
+          captureBeyondViewport: true,
+          clip: { height: 844, scale: 1, width: 390, x: 120, y: 240 },
+          format: 'png',
+          fromSurface: true,
+        },
+      })
+      Expect(transport.calls.at(-1)?.params['expression']).toContain('restoreProperty')
+    } finally {
+      await FS.remove(artifactRoot)
+    }
+  })
+
+  Test('freezes the exact cross-origin preview frame while capturing its viewport', async () => {
+    const artifactRoot = await FS.mkTmpDir(FS.resolvePath('tao-studio-cdp-frame-', FS.tmpdir()))
+    try {
+      const transport = new FakeCdpTransport()
+      transport.frameTree = {
+        childFrames: [{ frame: { id: 'preview', url: 'http://127.0.0.1:55102/?preview=one' } }],
+        frame: { id: 'root', url: 'http://127.0.0.1:55101/studio' },
+      }
+      transport.evaluateResults.push(
+        'http://127.0.0.1:55102/?preview=one',
+        true,
+        { height: 844, width: 390, x: 120, y: 240 },
+        true,
+        true,
+      )
+      const browser = StudioCdp.testing.create(transport)
+
+      await browser.captureElementScreenshotAt(FS.resolvePath('cell.png', artifactRoot), '.viewport')
+
+      const frameEvaluations = transport.calls.filter(call =>
+        call.method === 'Runtime.evaluate' && call.params['contextId'] === 42
+      )
+      Expect(frameEvaluations[0]?.params['expression']).toContain('taoCdpFrameFreeze')
+      Expect(frameEvaluations[0]?.params['expression']).toContain('document.fonts?.ready')
+      Expect(frameEvaluations.at(-1)?.params['expression']).toContain('tao-cdp-frame-freeze')
+    } finally {
+      await FS.remove(artifactRoot)
+    }
+  })
+
+  Test('records the browser renderer fingerprint used for review comparison', async () => {
+    const transport = new FakeCdpTransport()
+    transport.evaluateResults.push({
+      colorGamut: 'p3',
+      deviceScaleFactor: 2,
+      fontFingerprint: '[["Inter","normal","400","normal","loaded"]]',
+      locale: 'en-US',
+      platform: 'MacIntel',
+      timezone: 'America/New_York',
+    })
+    const browser = StudioCdp.testing.create(transport)
+
+    Expect(await browser.rendererFingerprint()).toEqual({
+      colorGamut: 'p3',
+      deviceScaleFactor: 2,
+      fontFingerprint: '[["Inter","normal","400","normal","loaded"]]',
+      jsVersion: '14.2',
+      locale: 'en-US',
+      platform: 'MacIntel',
+      product: 'Chrome/142.0.1',
+      protocolVersion: '1.3',
+      timezone: 'America/New_York',
+      userAgent: 'Fake Chrome',
+    })
   })
 
   Test('dispatches physical keys with platform-primary and unmodified punctuation', async () => {

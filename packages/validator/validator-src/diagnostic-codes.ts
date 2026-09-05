@@ -11,7 +11,8 @@ export const viewValidationCodes = {
   renderNotLast: 'tao-render-not-last',
 } as const
 
-/** designValidationCodes marks inline explorations that release compilation alone promotes to errors. */
+/** designValidationCodes declares stable warnings reported by the ordinary design validator. */
 export const designValidationCodes = {
   exploration: 'design-check-exploration',
+  placeholderShipping: 'design-check-placeholder-shipping',
 } as const

@@ -5,6 +5,8 @@ import "./app"
 import "./data"
 import "./expressions"
 import "./terminals"
+import "./tests"
+import "./visibility"
 
 entry ScenariosGrammarEntrypoint:
     FixtureDeclaration | ScenarioGroupDeclaration;
@@ -12,7 +14,7 @@ entry ScenariosGrammarEntrypoint:
 // A fixture is reusable setup truth: named accounts plus named rows created in declaration order.
 // This slice intentionally carries only the literal/reference value surface Decisions §16 spells.
 FixtureDeclaration:
-    'fixture' name=ID block=FixtureBlock;
+    visibility=DeclarationVisibility? 'fixture' name=ID block=FixtureBlock;
 
 FixtureBlock:
     '{' entries+=(FixtureAccountDeclaration | FixtureCreateBinding)* '}';
@@ -69,7 +71,14 @@ ScenarioDeclaration:
 ScenarioBlock:
     '{' entries+=(ScenarioFixtureClause | ScenarioPrepareClause | ScenarioRunClause
         | ScenarioRenderClause | ScenarioDeviceClause | ScenarioAppearanceClause
-        | ScenarioLocaleClause | ScenarioDirectionClause | ScenarioNetworkClause)* '}';
+        | ScenarioLocaleClause | ScenarioDirectionClause | ScenarioNetworkClause)*
+        steps+=(PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep
+            | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | AdvanceStep)* '}';
+
+// A scenario is a state reached by replaying the interaction prefix after its subject. Assertions,
+// app launch/relaunch, navigation Back, and host-only toolbar operations remain test-only.
+type ScenarioStep = PressTextStep | TagPressStep | PressPhaseStep | HoverStep | FocusStep
+    | EnterTextStep | TagEnterStep | SubmitInputStep | TagSubmitStep | SelectStep | AdvanceStep;
 
 type ScenarioClause = ScenarioFixtureClause | ScenarioPrepareClause | ScenarioRunClause
     | ScenarioRenderClause

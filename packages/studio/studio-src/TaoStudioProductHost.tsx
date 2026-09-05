@@ -44,8 +44,10 @@ import {
   requestStudioProductHostDeleteFile,
   requestStudioProductHostInsertComponent,
   requestStudioProductHostInsertProjectView,
+  requestStudioProductHostMoveGeneratedSource,
   requestStudioProductHostOpenFile,
   requestStudioProductHostOpenScreen,
+  requestStudioProductHostOpenSource,
   requestStudioProductHostPanelAction,
   requestStudioProductHostRenameFile,
   requestStudioProductHostSelectActiveFile,
@@ -110,6 +112,8 @@ type StudioEnvironmentSlotProps = Readonly<{
 }>
 
 type StudioStateSlotProps = Readonly<{
+  JourneyRecordable?: TR.Value<boolean>
+  JourneyRecording?: TR.Value<string>
   ResolvedAppearance?: TR.Value<string>
   State?: TR.Value<string>
 }>
@@ -121,6 +125,10 @@ type StudioDrawerSlotProps = Readonly<{
   Problems?: TR.Value<StudioTaoDrawerPanelModel['Problems']>
   Tab?: TR.Value<string>
   Tests?: TR.Value<StudioTaoDrawerPanelModel['Tests']>
+}>
+
+type StudioDataSlotProps = Readonly<{
+  Data?: TR.Value<StudioTaoDrawerPanelModel['Data']>
 }>
 
 type StudioSearchSlotProps = Readonly<{
@@ -140,6 +148,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
   const [projectViewsTarget, setProjectViewsTarget] = React.useState<HTMLElement>()
   const [screensTarget, setScreensTarget] = React.useState<HTMLElement>()
   const [tokensTarget, setTokensTarget] = React.useState<HTMLElement>()
+  const [dataTarget, setDataTarget] = React.useState<HTMLElement>()
   const [drawerTarget, setDrawerTarget] = React.useState<HTMLElement>()
   const [searchTarget, setSearchTarget] = React.useState<HTMLElement>()
   const [scenarioTarget, setScenarioTarget] = React.useState<HTMLElement>()
@@ -190,6 +199,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
     setProjectViewsTarget(root.querySelector<HTMLElement>('.studio-project-views') ?? undefined)
     setScreensTarget(root.querySelector<HTMLElement>('.studio-screens') ?? undefined)
     setTokensTarget(root.querySelector<HTMLElement>('.studio-design-values') ?? undefined)
+    setDataTarget(root.querySelector<HTMLElement>('.studio-data') ?? undefined)
     setDrawerTarget(root.querySelector<HTMLElement>('.studio-drawer-content') ?? undefined)
     setSearchTarget(root.querySelector<HTMLElement>('.studio-search-results') ?? undefined)
     setScenarioTarget(root.querySelector<HTMLElement>('.studio-scenario-inspector-content') ?? undefined)
@@ -221,6 +231,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
   const projectViews = props.Slots?.['@projectViews'] ?? props.Slots?.['projectViews']
   const screens = props.Slots?.['@screens'] ?? props.Slots?.['screens']
   const tokens = props.Slots?.['@tokens'] ?? props.Slots?.['tokens']
+  const data = props.Slots?.['@data'] ?? props.Slots?.['data']
   const drawer = props.Slots?.['@drawer'] ?? props.Slots?.['drawer']
   const search = props.Slots?.['@search'] ?? props.Slots?.['search']
   const scenario = props.Slots?.['@scenario'] ?? props.Slots?.['scenario']
@@ -293,12 +304,17 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       Tests: TR.Value(panelValues.Drawer.Tests),
     })
     : drawer
+  const refreshedData = React.isValidElement<StudioDataSlotProps>(data)
+    ? React.cloneElement(data, { Data: TR.Value(panelValues.Drawer.Data) })
+    : data
   const refreshedSearch = React.isValidElement<StudioSearchSlotProps>(search)
     ? React.cloneElement(search, { Rows: TR.Value(panelValues.Search.Rows) })
     : search
   const refreshedScenario = React.isValidElement<StudioStateSlotProps>(scenario)
     ? React.cloneElement(scenario, {
       key: `studio-scenario:${activeCell?.cellId ?? 'none'}:${activeCell?.cellRevision ?? 0}`,
+      JourneyRecordable: TR.Value(activeCell?.journeyRecordable ?? false),
+      JourneyRecording: TR.Value(activeCell?.journeyRecording ?? 'null'),
       ResolvedAppearance: TR.Value(activeCell?.schemeResolved ?? 'light'),
       State: TR.Value(activeCell?.scenarioModel ?? 'null'),
     })
@@ -315,6 +331,9 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
         : createPortal(projectViews, projectViewsTarget)}
       {screensTarget === undefined || screens === undefined ? undefined : createPortal(screens, screensTarget)}
       {tokensTarget === undefined || tokens === undefined ? undefined : createPortal(tokens, tokensTarget)}
+      {dataTarget === undefined || refreshedData === undefined
+        ? undefined
+        : createPortal(refreshedData, dataTarget)}
       {drawerTarget === undefined || refreshedDrawer === undefined
         ? undefined
         : createPortal(refreshedDrawer, drawerTarget)}
@@ -1293,7 +1312,7 @@ export function StudioInspectorDataLines(
       ? 'Datasource context: no active preview cell.'
       : `Datasource context: cell ${activeCellId} revision ${activeCellRevision}.`,
     activeScenarioId === '' ? 'Scenario context: none.' : `Scenario context: ${activeScenarioId}.`,
-    'Entity tables remain in the Data drawer.',
+    'Entity tables are available in the Data panel.',
   ]
 }
 
@@ -1562,6 +1581,22 @@ function parseStudioJson<ValueT>(value: string): ValueT | undefined {
 
 type StudioScenarioArgumentDrafts = Readonly<Record<string, string>>
 
+type StudioJourneyRecordingModel = Readonly<{
+  busy: boolean
+  captureSensitiveText: boolean
+  id: string
+  status: 'invalidated' | 'recording' | 'starting' | 'stopped'
+  steps: readonly Readonly<{
+    action?: 'enter' | 'press' | 'submit'
+    kind: 'enter' | 'press' | 'submit' | 'unresolved'
+    reason?: string
+    redacted?: boolean
+    selector?: 'label' | 'placeholder' | 'tag' | 'text'
+    target?: string
+    value?: string
+  }>[]
+}>
+
 export function StudioScenarioPanelSurface(
   props:
     & TaoStudioHostVisualProps
@@ -1707,6 +1742,35 @@ function studioScenarioModel(state: string): StudioScenarioControlModel | undefi
   return isStudioScenarioControlModel(parsed) ? parsed : undefined
 }
 
+function studioJourneyRecording(recording: string): StudioJourneyRecordingModel | undefined {
+  const parsed = parseStudioJson<unknown>(recording)
+  if (parsed === undefined) {
+    return undefined
+  }
+  const candidate = parsed as Partial<StudioJourneyRecordingModel>
+  return typeof candidate.id === 'string'
+      && typeof candidate.busy === 'boolean'
+      && typeof candidate.captureSensitiveText === 'boolean'
+      && ['invalidated', 'recording', 'starting', 'stopped'].includes(candidate.status ?? '')
+      && Array.isArray(candidate.steps)
+    ? candidate as StudioJourneyRecordingModel
+    : undefined
+}
+
+function studioJourneyStepLine(step: StudioJourneyRecordingModel['steps'][number]): string {
+  if (step.kind === 'unresolved') {
+    return `${step.action ?? 'interaction'}: unresolved — ${step.reason ?? 'Interaction target could not be resolved.'}`
+  }
+  const target = step.selector === 'tag'
+    ? `#${step.target ?? ''}`
+    : step.selector === 'text'
+    ? JSON.stringify(step.target ?? '')
+    : `${step.selector ?? 'target'} ${JSON.stringify(step.target ?? '')}`
+  return step.kind === 'enter'
+    ? `enter ${step.redacted ? '<redacted>' : JSON.stringify(step.value ?? '')} into ${target}`
+    : `${step.kind} ${target}`
+}
+
 function studioScenarioDraftMap(drafts: string): StudioScenarioArgumentDrafts {
   const parsed = parseStudioJson<unknown>(drafts)
   if (parsed === undefined || parsed === null || Array.isArray(parsed)) {
@@ -1757,6 +1821,81 @@ export function StudioScenarioCapturedLayers(state: string): string[] {
 
 export function StudioScenarioFailureAvailable(state: string): boolean {
   return studioScenarioModel(state)?.failureReplay !== undefined
+}
+
+export function StudioScenarioJourneyActive(recording: string): boolean {
+  return studioJourneyRecording(recording)?.status === 'recording'
+}
+
+export function StudioScenarioJourneyButtonLabel(recording: string): string {
+  return studioJourneyRecording(recording)?.status === 'starting'
+    ? 'Starting recording…'
+    : StudioScenarioJourneyActive(recording)
+    ? 'Stop recording'
+    : 'Record journey'
+}
+
+export function StudioScenarioJourneyCommand(recording: string): string {
+  return StudioScenarioJourneyActive(recording) ? 'scenario-stop-journey' : 'scenario-start-journey'
+}
+
+export function StudioScenarioJourneyBusy(recording: string): boolean {
+  return studioJourneyRecording(recording)?.busy === true
+}
+
+export function StudioScenarioJourneyAvailable(recording: string): boolean {
+  return studioJourneyRecording(recording) !== undefined
+}
+
+export function StudioScenarioJourneyLines(recording: string): string[] {
+  return studioJourneyRecording(recording)?.steps.map(studioJourneyStepLine) ?? []
+}
+
+export function StudioScenarioJourneyStatus(recording: string): string {
+  const draft = studioJourneyRecording(recording)
+  if (draft === undefined) {
+    return ''
+  }
+  if (draft.busy) {
+    return 'Preparing canonical Tao source…'
+  }
+  if (draft.status === 'starting') {
+    return 'Waiting for the exact preview to acknowledge recording…'
+  }
+  if (draft.status === 'invalidated') {
+    return 'The preview changed; discard this draft and record again.'
+  }
+  if (draft.steps.some(step => step.kind === 'unresolved')) {
+    return 'An interaction has no unique semantic target. Add a unique Tag or accessibility label, then record again.'
+  }
+  if (draft.steps.some(step => step.kind === 'enter' && step.redacted)) {
+    return 'Sensitive text was redacted. Discard and record again with Retain sensitive text only when safe.'
+  }
+  return draft.status === 'recording'
+    ? `Recording ${draft.steps.length} semantic step${draft.steps.length === 1 ? '' : 's'}…`
+    : `${draft.steps.length} step${draft.steps.length === 1 ? '' : 's'} ready for review.`
+}
+
+export function StudioScenarioJourneyCanRecord(state: string, recording: string, ready: boolean): boolean {
+  const draft = studioJourneyRecording(recording)
+  return studioScenarioModel(state)?.sourceIdentity !== undefined
+    && ready
+    && draft === undefined
+}
+
+export function StudioScenarioJourneyCanSave(recording: string): boolean {
+  const draft = studioJourneyRecording(recording)
+  return draft?.status === 'stopped'
+    && !draft.busy
+    && draft.steps.length > 0
+    && !draft.steps.some(step => step.kind === 'unresolved' || step.kind === 'enter' && step.redacted)
+}
+
+export function StudioScenarioJourneyPayload(state: string, captureSensitiveText: boolean): string {
+  return JSON.stringify({
+    ...JSON.parse(StudioScenarioIdentityPayload(state)),
+    captureSensitiveText,
+  })
 }
 
 export function StudioScenarioFixtureNameValid(fixtureName: string): boolean {
@@ -2001,19 +2140,24 @@ export type TreeFileRowProps =
   & Readonly<{
     BeginDelete: TaoStudioHostAction
     BeginRename: TaoStudioHostAction
+    BeginMove: TaoStudioHostAction
     CancelDelete: TaoStudioHostAction
     CancelRename: TaoStudioHostAction
     ChangeRenamePath: TaoStudioHostTextAction
+    ChangeTargetPackage: TaoStudioHostTextAction
     ConfirmDelete: boolean
     Delete: TaoStudioHostAction
     DiagnosticCount: number
     Dirty: boolean
     Name: string
+    Move: TaoStudioHostAction
+    Moving: boolean
     Open: TaoStudioHostAction
     Path: string
     Rename: TaoStudioHostAction
     RenamePath: string
     Renaming: boolean
+    TargetPackage: string
   }>
 
 /** TreeFileRow exposes compact editing affordances without moving CRUD state or decisions out of Tao. */
@@ -2063,6 +2207,16 @@ export function TreeFileRow(props: TreeFileRowProps): React.ReactElement {
         >
           <HostIcon name="x" size="small" />
         </button>
+        <button
+          aria-label={`Move ${props.Name} to package`}
+          className="studio-tree-action"
+          hidden={!props.Path.startsWith('@/studio/')}
+          onClick={() => void props.BeginMove.invoke()}
+          title="Move to package"
+          type="button"
+        >
+          <HostIcon name="arrowRight" size="small" />
+        </button>
       </div>
       {props.Renaming
         ? (
@@ -2093,6 +2247,37 @@ export function TreeFileRow(props: TreeFileRowProps): React.ReactElement {
               type="button"
             >
               Cancel
+            </button>
+          </form>
+        )
+        : undefined}
+      {props.Moving
+        ? (
+          <form
+            aria-label={`Move ${props.Name} to package`}
+            className="studio-inline-editor"
+            onSubmit={event => {
+              event.preventDefault()
+              void props.Move.invoke()
+            }}
+          >
+            <input
+              aria-label={`Target package for ${props.Name}`}
+              autoFocus
+              className="studio-input"
+              onChange={event => void props.ChangeTargetPackage.invoke(TR.Value(event.currentTarget.value))}
+              placeholder="@views"
+              spellCheck={false}
+              value={props.TargetPackage}
+            />
+            <button
+              aria-label="Move to package"
+              className="studio-button"
+              data-size="small"
+              data-variant="primary"
+              type="submit"
+            >
+              Move
             </button>
           </form>
         )
@@ -2162,6 +2347,11 @@ export async function OpenFile(path: string): Promise<void> {
   await requestStudioProductHostOpenFile(path)
 }
 
+/** OpenSource opens a revision-bound declaration and selects the first line containing it. */
+export async function OpenSource(path: string, sourceVersion: string, start: number): Promise<void> {
+  await requestStudioProductHostOpenSource(path, sourceVersion, start)
+}
+
 /** File writes share the workbench controller so open drafts and tabs transition atomically. */
 export async function CreateFile(path: string): Promise<void> {
   await requestStudioProductHostCreateFile(path)
@@ -2169,6 +2359,10 @@ export async function CreateFile(path: string): Promise<void> {
 
 export async function RenameFile(path: string, sourceVersion: string, targetPath: string): Promise<void> {
   await requestStudioProductHostRenameFile(path, sourceVersion, targetPath)
+}
+
+export async function MoveGeneratedSource(path: string, sourceVersion: string, targetPackage: string): Promise<void> {
+  await requestStudioProductHostMoveGeneratedSource(path, sourceVersion, targetPackage)
 }
 
 export async function DeleteFile(path: string, sourceVersion: string): Promise<void> {

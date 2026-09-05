@@ -6,11 +6,13 @@ import type {
   StudioPreviewManifestV2,
 } from '../StudioPreviewManifest'
 import {
+  type StudioJourneyRecordingControlMessage,
   type StudioJsonObject,
   type StudioJsonValue,
   StudioProtocol,
   studioProtocolChannel,
   studioProtocolVersion,
+  type StudioRecordedJourneyStep,
   type StudioRuntimeCaptureArtifact,
   type StudioSourceActionEnvelope,
   type StudioSourceActionIdentity,
@@ -68,14 +70,94 @@ export type StudioScenarioResult<Value> =
   | Readonly<{ ok: true; value: Value }>
 
 export const StudioScenarioControls = {
+  appendRecordedStepsAction,
   fixtureCapture,
   fromManifest,
   groupId,
+  recordingRequest,
   replay,
   saveArgumentsAction,
   validateArguments,
   validateDraft,
 } as const
+
+function recordingRequest(
+  model: StudioScenarioControlModel,
+  recordingId: string,
+  active: boolean,
+  captureSensitiveText = false,
+): StudioScenarioResult<StudioJourneyRecordingControlMessage> {
+  if (model.sourceIdentity === undefined) {
+    return invalid('Journey recording source identity is unavailable.')
+  }
+  if (recordingId.trim() === '') {
+    return invalid('Journey recording id is required.')
+  }
+  const identity = model.sourceIdentity
+  return valid({
+    active,
+    ...(captureSensitiveText ? { captureSensitiveText: true } : {}),
+    channel: studioProtocolChannel,
+    identity: {
+      appName: identity.appName,
+      cellId: model.cell.id,
+      cellRevision: model.cell.revision,
+      compileRevision: model.cell.compileRevision,
+      manifestRevision: model.cell.manifestRevision,
+      previewInstanceId: identity.previewInstanceId,
+      project: identity.project,
+    },
+    protocolVersion: studioProtocolVersion,
+    recordingId,
+    type: 'set-journey-recording',
+  })
+}
+
+function appendRecordedStepsAction(
+  model: StudioScenarioControlModel,
+  steps: readonly StudioRecordedJourneyStep[],
+  requestId: string,
+): StudioScenarioResult<StudioSourceActionEnvelope> {
+  if (model.sourceIdentity === undefined) {
+    return invalid('Journey recording source identity is unavailable.')
+  }
+  if (requestId.trim() === '') {
+    return invalid('Journey save request id is required.')
+  }
+  if (steps.length === 0) {
+    return invalid('Record at least one interaction before saving the journey.')
+  }
+  if (steps.some(step => step.kind === 'unresolved')) {
+    return invalid('Resolve or remove every interaction without a unique semantic target before saving the journey.')
+  }
+  if (steps.some(step => step.kind === 'enter' && step.redacted)) {
+    return invalid('Replace or explicitly retain every redacted input before saving the journey.')
+  }
+  return valid({
+    action: {
+      kind: 'append-scenario-steps',
+      scenarioGroupName: model.group.label,
+      scenarioName: model.entry.label,
+      steps: steps.map(step =>
+        step.kind === 'enter'
+          ? {
+            kind: step.kind,
+            selector: step.selector,
+            target: step.target,
+            value: step.value,
+          }
+          : step
+      ),
+    },
+    channel: studioProtocolChannel,
+    checkpoint: { id: `scenario-journey:${requestId}`, phase: 'single' },
+    identity: model.sourceIdentity,
+    protocolVersion: studioProtocolVersion,
+    requestId,
+    sourceActionVersion: studioSourceActionVersion,
+    type: 'source-action',
+  })
+}
 
 function groupId(sourcePath: string, group: string): string {
   return `${encodeURIComponent(sourcePath)}:${encodeURIComponent(group)}`

@@ -420,7 +420,15 @@ kbd {
 .studio-wordmark b { font-weight: 600; letter-spacing: -.01em; }
 .studio-toolbar-separator { color: var(--studio-text-dim); flex: none; }
 .studio-picker { background: transparent; border: 0; color: var(--studio-text-muted); cursor: pointer; max-width: 260px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.studio-project { color: var(--studio-text); font-weight: 600; padding: 5px 4px; }
+.studio-project {
+  appearance: none; -webkit-appearance: none; background: transparent; border: 0; color: var(--studio-text); cursor: pointer;
+  font-weight: 600; max-width: 260px; padding: 0 4px;
+}
+.studio-project:not(:disabled) {
+  background-image: linear-gradient(45deg, transparent 50%, var(--studio-text-dim) 50%), linear-gradient(135deg, var(--studio-text-dim) 50%, transparent 50%);
+  background-position: calc(100% - 9px) 9px, calc(100% - 5px) 9px; background-repeat: no-repeat; background-size: 4px 4px; padding-right: 18px;
+}
+.studio-project:disabled { cursor: default; opacity: 1; }
 .studio-project:hover, .studio-app-picker:hover:not(:disabled) { color: var(--studio-accent-strong); }
 .studio-app-picker {
   appearance: none; -webkit-appearance: none; background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke-strong);
@@ -703,6 +711,34 @@ kbd {
 /* Tao-rendered text arrives with the wireframe defaults (14px, dark ink); on the workbench it reads as body copy. */
 .tao-studio-product-host div[dir="auto"][class*="css-text"] { color: var(--studio-text-muted) !important; font-size: 12px !important; font-weight: 400 !important; line-height: 1.45 !important; }
 
+/* ---------- data rail panel ---------- */
+.studio-data { color: var(--studio-text-muted); padding: 8px 12px 12px; }
+.studio-data .studio-data-table { display: block; overflow-x: auto; }
+.studio-data-table { border-collapse: collapse; font: 11px var(--studio-mono); width: 100%; }
+.studio-data-table th, .studio-data-table td { border: 1px solid var(--studio-stroke); max-width: 360px; overflow: hidden; padding: 5px 7px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.studio-data-table th { color: var(--studio-text); }
+
+/* ---------- freehand sketches ---------- */
+[data-tao-studio-sketch-host] { flex: none; }
+[data-tao-studio-sketch-workspace] { align-items: flex-start; border: 1px dashed var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); cursor: crosshair; position: relative; }
+[data-tao-studio-sketch-create-surface] [data-tao-studio-sketch-workspace]::before { color: var(--studio-text-dim); content: "Drag empty space to draw a view"; font-size: 11px; left: 10px; pointer-events: none; position: absolute; top: 6px; }
+[data-tao-studio-sketch] { background: #f8f9fb; border: 1px solid #8792a3; border-radius: 8px; box-shadow: 0 10px 28px rgba(0, 0, 0, .5); color: #242a33; }
+[data-tao-studio-sketch-rect] { background: #dce6f5; border: 1px solid #7693bc; box-sizing: border-box; cursor: move; overflow: visible; }
+[data-tao-studio-sketch-rect-kind="Text"] { background: transparent; border-color: #9ca8b8; }
+[data-tao-studio-sketch-rect][data-selected="true"] { outline: 2px solid var(--studio-accent); outline-offset: 1px; }
+[data-tao-studio-sketch-handle] { background: #fff; border: 1px solid var(--studio-accent); border-radius: 50%; height: 8px; padding: 0; position: absolute; width: 8px; }
+[data-tao-studio-sketch-handle="north-west"] { cursor: nwse-resize; left: -5px; top: -5px; }
+[data-tao-studio-sketch-handle="north"] { cursor: ns-resize; left: calc(50% - 4px); top: -5px; }
+[data-tao-studio-sketch-handle="north-east"] { cursor: nesw-resize; right: -5px; top: -5px; }
+[data-tao-studio-sketch-handle="east"] { cursor: ew-resize; right: -5px; top: calc(50% - 4px); }
+[data-tao-studio-sketch-handle="south-east"] { bottom: -5px; cursor: nwse-resize; right: -5px; }
+[data-tao-studio-sketch-handle="south"] { bottom: -5px; cursor: ns-resize; left: calc(50% - 4px); }
+[data-tao-studio-sketch-handle="south-west"] { bottom: -5px; cursor: nesw-resize; left: -5px; }
+[data-tao-studio-sketch-handle="west"] { cursor: ew-resize; left: -5px; top: calc(50% - 4px); }
+[data-tao-studio-sketch-inspector] { background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); cursor: default; display: grid; gap: 6px; padding: 8px; }
+[data-tao-studio-sketch-inspector][hidden] { display: none; }
+[data-tao-studio-sketch-inspector] input, [data-tao-studio-sketch-inspector] select { background: var(--studio-bg-deep); border: 1px solid var(--studio-stroke-strong); border-radius: var(--studio-radius); color: var(--studio-text); min-width: 0; padding: 5px 6px; }
+
 /* ---------- preview canvas ---------- */
 .studio-preview { background: var(--studio-canvas); border-left: 1px solid var(--studio-stroke); min-height: 0; position: relative; }
 .studio-preview iframe { border: 0; display: block; height: 100%; width: 100%; }
@@ -723,6 +759,25 @@ kbd {
   overscroll-behavior-x: contain; padding: 4px 8px 14px 4px; scroll-snap-type: x proximity;
 }
 .studio-preview-group-cells > .studio-preview-cell { scroll-snap-align: start; }
+[data-tao-studio-sketch-host] { flex: none; }
+[data-tao-studio-sketch-workspace] { align-items: flex-start; border: 1px dashed var(--studio-stroke); border-radius: 10px; cursor: crosshair; position: relative; }
+[data-tao-studio-sketch-create-surface] [data-tao-studio-sketch-workspace]::before { color: var(--studio-text-muted); content: "Drag empty space to draw a view"; font-size: 10px; left: 10px; pointer-events: none; position: absolute; top: 6px; }
+[data-tao-studio-sketch] { background: #f8f9fb; border: 1px solid #8792a3; border-radius: 8px; box-shadow: 0 10px 28px #0007; color: #242a33; }
+[data-tao-studio-sketch-rect] { background: #dce6f5; border: 1px solid #7693bc; box-sizing: border-box; cursor: move; overflow: visible; }
+[data-tao-studio-sketch-rect-kind="Text"] { background: transparent; border-color: #9ca8b8; }
+[data-tao-studio-sketch-rect][data-selected="true"] { outline: 2px solid #4b91ff; outline-offset: 1px; }
+[data-tao-studio-sketch-handle] { background: #fff; border: 1px solid #397ee8; border-radius: 50%; height: 8px; padding: 0; position: absolute; width: 8px; }
+[data-tao-studio-sketch-handle="north-west"] { cursor: nwse-resize; left: -5px; top: -5px; }
+[data-tao-studio-sketch-handle="north"] { cursor: ns-resize; left: calc(50% - 4px); top: -5px; }
+[data-tao-studio-sketch-handle="north-east"] { cursor: nesw-resize; right: -5px; top: -5px; }
+[data-tao-studio-sketch-handle="east"] { cursor: ew-resize; right: -5px; top: calc(50% - 4px); }
+[data-tao-studio-sketch-handle="south-east"] { bottom: -5px; cursor: nwse-resize; right: -5px; }
+[data-tao-studio-sketch-handle="south"] { bottom: -5px; cursor: ns-resize; left: calc(50% - 4px); }
+[data-tao-studio-sketch-handle="south-west"] { bottom: -5px; cursor: nesw-resize; left: -5px; }
+[data-tao-studio-sketch-handle="west"] { cursor: ew-resize; left: -5px; top: calc(50% - 4px); }
+[data-tao-studio-sketch-inspector] { background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px; cursor: default; display: grid; gap: 6px; padding: 8px; }
+[data-tao-studio-sketch-inspector][hidden] { display: none; }
+[data-tao-studio-sketch-inspector] input, [data-tao-studio-sketch-inspector] select { background: #101319; border: 1px solid #3a4352; border-radius: 4px; color: #dce2ec; min-width: 0; padding: 5px 6px; }
 .studio-preview-cell { display: grid; flex: none; gap: 8px; justify-items: start; min-width: 0; }
 .studio-preview-cell:focus-visible { outline: 2px solid var(--studio-accent); outline-offset: 8px; }
 .studio-preview-cell-label {
@@ -784,11 +839,15 @@ kbd {
 
 /* ---------- overlays ---------- */
 .studio-global-loading {
-  align-items: center; background: var(--studio-panel); border: 1px solid var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); box-shadow: 0 18px 70px rgba(0, 0, 0, .75);
-  display: flex; gap: 12px; left: 50%; min-width: 300px; padding: 14px 16px; position: fixed; top: 72px; transform: translateX(-50%); z-index: 30;
+  -webkit-backdrop-filter: grayscale(1) brightness(.5); align-items: center; backdrop-filter: grayscale(1) brightness(.5);
+  background: rgba(0, 0, 0, .55); display: grid; inset: 0; justify-items: center; padding: 24px; position: fixed; z-index: 60;
 }
 .studio-global-loading[hidden] { display: none; }
-.studio-global-loading > span:last-child { display: grid; gap: 2px; }
+.studio-global-loading-panel {
+  align-items: center; background: var(--studio-panel); border: 1px solid var(--studio-stroke-strong); border-radius: 12px;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, .8); display: flex; gap: 14px; max-width: 420px; min-width: 300px; padding: 18px 20px;
+}
+.studio-global-loading-panel > span:last-child { display: grid; gap: 3px; }
 .studio-global-loading strong { color: var(--studio-text); font-size: 12px; }
 .studio-global-loading small { color: var(--studio-text-muted); font-size: 10.5px; }
 .studio-global-loading-spinner { animation: studio-loading-spin 700ms linear infinite; border: 2px solid var(--studio-stroke-strong); border-radius: 50%; border-top-color: var(--studio-accent); height: 18px; width: 18px; }

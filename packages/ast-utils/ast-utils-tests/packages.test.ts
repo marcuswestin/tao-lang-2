@@ -36,6 +36,70 @@ Describe('Tao package discovery', () => {
     }
   })
 
+  Test('reserves the project-root generated package before it contains Tao source', async () => {
+    const root = await mkTestDir('tao-packages-generated-root-')
+    try {
+      await FS.writeText(FS.resolvePath('@/studio/.gitkeep', root), '')
+
+      const context = await Packages.createContext(root)
+      const rootResolution = Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', root),
+        importPath: '@',
+      })
+      const nestedResolution = Packages.resolve(context, {
+        fromFilePath: FS.resolvePath('Main.tao', root),
+        importPath: '@/studio',
+      })
+
+      Expect(context.index.packages.get('@')).toEqual([FS.resolvePath('@', root)])
+      Expect(rootResolution).toMatchObject({
+        packageName: '@',
+        relation: 'same-project-package',
+        targetPath: FS.resolvePath('@', root),
+      })
+      Expect(nestedResolution).toMatchObject({
+        packageName: '@',
+        relation: 'same-project-package',
+        targetPath: FS.resolvePath('@/studio', root),
+      })
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test(
+    'allows generated source to import ordinary project files without opening other package boundaries',
+    async () => {
+      const root = await mkTestDir('tao-packages-generated-relative-')
+      try {
+        const generatedView = FS.resolvePath('@/studio/View.tao', root)
+        await FS.writeText(generatedView, '')
+        await FS.writeText(FS.resolvePath('Data.tao', root), '')
+        await FS.writeText(FS.resolvePath('@other/Data.tao', root), '')
+        const context = await Packages.createContext(root)
+
+        Expect(Packages.resolve(context, {
+          fromFilePath: generatedView,
+          importPath: '../../Data',
+        })).toMatchObject({
+          packageName: '@',
+          relation: 'same-project-package',
+          targetPath: FS.resolvePath('Data', root),
+        })
+        Expect(Packages.resolve(context, {
+          fromFilePath: generatedView,
+          importPath: '../../@other',
+        })).toMatchObject({ invalidReason: 'package-boundary', relation: 'invalid' })
+        Expect(Packages.resolve(context, {
+          fromFilePath: FS.resolvePath('Main.tao', root),
+          importPath: './@/studio',
+        })).toMatchObject({ invalidReason: 'package-boundary', relation: 'invalid' })
+      } finally {
+        await FS.remove(root)
+      }
+    },
+  )
+
   Test('indexes only eligible package directories beside ancestor roots', async () => {
     const root = await mkTestDir('tao-packages-ancestor-eligibility-')
     try {
@@ -77,6 +141,37 @@ Describe('Tao package discovery', () => {
         '@cards/Rows.tao',
         '@cards/Syntax Sketches/Valid.tao',
       ])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('reserves only the project-root bare @ directory as a package boundary', async () => {
+    const root = await mkTestDir('tao-packages-generated-boundary-')
+    try {
+      const mainPath = FS.resolvePath('@cards/Main.tao', root)
+      await FS.writeText(mainPath, '')
+      await FS.writeText(FS.resolvePath('@/studio/Generated.tao', root), '')
+      await FS.writeText(FS.resolvePath('@cards/Apps/Foo/@/Nested.tao', root), '')
+      const context = await Packages.createContext(root)
+      const resolution = Packages.resolve(context, { fromFilePath: mainPath })
+
+      Expect((await Packages.candidateFilePaths(resolution)).map(path => FS.relativePath(root, path))).toEqual([
+        '@cards/Apps/Foo/@/Nested.tao',
+        '@cards/Main.tao',
+      ])
+      Expect(Packages.targetMatches(resolution, {
+        filePath: FS.resolvePath('@cards/Apps/Foo/@/Nested.tao', root),
+        workspaceFilePaths: new Set([
+          mainPath,
+          FS.resolvePath('@/studio/Generated.tao', root),
+          FS.resolvePath('@cards/Apps/Foo/@/Nested.tao', root),
+        ]),
+      })).toBe(true)
+      Expect(Packages.targetMatches(resolution, {
+        filePath: FS.resolvePath('@/studio/Generated.tao', root),
+        workspaceFilePaths: new Set(),
+      })).toBe(false)
     } finally {
       await FS.remove(root)
     }

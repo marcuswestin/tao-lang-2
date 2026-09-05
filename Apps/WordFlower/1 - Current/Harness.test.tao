@@ -70,6 +70,8 @@ scene HarnessHome() {
    Title "Navigation harness"
    render Col() {
       Text("Harness home marker")
+
+      #openHarnessDetail
       FormButton("Open deterministic detail") {
          on press -> { present HarnessDetail() }
       }
@@ -100,7 +102,15 @@ test "WordFlower navigation foundation" {
       run WordFlowerNavHarness
       expect navigation title "Navigation harness"
       expect text "Harness home marker"
-      press "Open deterministic detail"
+      // Phase, pointer, and focus steps deliver their own events without collapsing into a full
+      // activation. The adapter-level mutation proof checks their exact event names and order.
+      press down #openHarnessDetail
+      advance 600.ms
+      press up #openHarnessDetail
+      hover #openHarnessDetail
+      focus #openHarnessDetail
+      expect missing text "Harness detail marker"
+      press #openHarnessDetail
       expect navigation title "Harness detail"
       expect text "Harness detail marker"
       back

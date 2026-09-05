@@ -2,10 +2,12 @@
 
 Status: authoritative executable contract for the current Tao Studio development surface.
 
-Tao Studio is a local development product over a Tao project. Tao source is the durable authority:
-the editor and visual tools submit versioned source actions, and Studio keeps no hidden layout,
-example, or runtime state as project truth. `fixture` and grouped `scenarios` are the shared Tao-owned
-source for examples; there is no `example` declaration or Studio-only cases file.
+Tao Studio is a local development product over a Tao project. Tao source is the durable authority for
+executable product behavior. The one current exception is unsnapped freehand geometry, whose explicit
+project authority is Studio's committed `.tao-project/studio/sketches.jsonc` catalog. The editor and
+flowed visual tools submit versioned source actions; Studio keeps no other hidden layout, example, or
+runtime state as project truth. `fixture` and grouped `scenarios` are the shared Tao-owned source for
+examples; there is no `example` declaration or Studio-only cases file.
 
 This page distinguishes implemented protocol/runtime foundations from product wiring that remains
 open. A type or manifest field existing does not by itself mean the browser preview executes that
@@ -51,7 +53,9 @@ fields, `through`, and `for` plan into the preview manifest.
 A file-level `scenarios` declaration gives a string-named group of entries. The optional declaration
 subject is either a whole app or one focused view. Clauses on the group are defaults; an entry clause
 of the same kind replaces the group clause as a whole, including `run` or `render`. After inheritance,
-every entry selects exactly one fixture, exactly one device, and exactly one subject:
+every entry selects exactly one device and exactly one subject. A fixture is optional; omitting it
+creates a real isolated empty store. A fixture becomes required when `prepare` or a focused-render
+argument references one of its handles:
 
 ```tao
 scenarios HNReader "devices" {
@@ -93,18 +97,26 @@ are adopted; compiler and Studio identity additionally include the source path.
 `run` and `render` are mutually exclusive. A declaration subject supplies the omitted name, as in
 `scenarios StoryRow` plus `render (...)` or `scenarios HNReader` with no explicit `run` clause. Focused
 render arguments are named and validated against the view's parameter names, required parameters, and
-Tao types. An app subject may optionally name a destination with `run App at Destination(...)`;
+Tao types. A required action parameter may be omitted only from a scenario render; Studio supplies a
+per-cell recording stand-in that logs evaluated invocations without granting product authority. An
+app subject may optionally name a destination with `run App at Destination(...)`;
 destination execution is not connected to the current preview host yet.
 
-The implemented optional clauses are one ordered `prepare { update ... }` block, `appearance light`
-or `dark`, a string locale or `pseudolocale`, `direction rightToLeft`, and `network online` or
-`offline`. A pseudolocale requires right-to-left direction. Device presets are `phone`, `tablet`, and
-`laptop`; custom positive whole-number width and height may follow the preset. The defaults used by
-the Studio manifest are 390 by 844, 768 by 1024, and 1440 by 900 respectively.
+After the effective subject, an entry may contain an ordered journey prefix using complete `press`,
+`enter`, and `submit` operations; `press down`, `press up`, `hover`, tag-only `focus`, scoped
+`select #tag[index] { ... }`, and deterministic `advance`. Studio replays that prefix once for each
+mounted cell revision, then leaves the reached preview fully interactive. Phase presses do not
+synthesize a plain press. Assertions, launch and relaunch, Back, and host-only toolbar operations
+remain test-only. The implemented optional clauses are one ordered `prepare { update ... }` block,
+`appearance light` or `dark`, a string locale or `pseudolocale`, `direction rightToLeft`, and
+`network online` or `offline`. A pseudolocale requires right-to-left direction. Device presets are
+`phone`, `tablet`, and `laptop`; custom positive whole-number width and height may follow the preset.
+The defaults used by the Studio manifest are 390 by 844, 768 by 1024, and 1440 by 900 respectively.
 
 Scenario groups are also metadata in ordinary app builds. A Studio compilation emits one source-owned
-scenario record and initially one preview cell per authored entry. The test runner does not yet
-execute fixtures or scenarios; its current `test`/`check` contract remains separate.
+scenario record and initially one preview cell per authored entry. Focused previews run inside an
+isolated app-owned navigation occurrence, so contextual presentation and Back work exactly as they do
+inside an app while remaining isolated from other cells.
 
 ## Studio compilation manifest
 
@@ -114,8 +126,8 @@ not emit this sidecar. The compiler manifest contains:
 - every app and view subject with stable compilation-local ID and Tao source range;
 - the selected app name and each view's parameter name, requiredness, Tao type name, and control kind;
 - fixture execution plans;
-- scenario group and entry name, fixture, ordered preparation, subject and arguments, viewport,
-  appearance, locale, direction, and network metadata.
+- scenario group and entry name, optional fixture, ordered preparation and journey steps, subject and
+  arguments, viewport, appearance, locale, direction, and network metadata.
 
 The Studio session adapts that compiler output into preview-manifest version 2. The preview manifest
 adds project identity, source versions, compile and manifest revisions, parameter controls, cells,
@@ -249,6 +261,170 @@ with other project mutations, compile the resulting file set, and publish refres
 server rejects paths outside the project, non-Tao files, stale source versions, destructive changes to the
 active entry file, and rename/delete while the file has an unresolved dirty draft. File contents remain
 ephemeral editor buffers and never enter the StudioServer entity model.
+
+The project-root `@/` package is reserved for committed generated source. Studio owns `@/studio`,
+writes one public view per file with an ownership header, and keeps those files at mode `0444`.
+Project open repairs the mode because Git does not track the write bit. A Studio write temporarily
+grants only owner-write and restores read-only mode after success or failure; neither Studio nor the
+repository uses filesystem immutable flags. The ordinary Tao and dprint fix lanes check generated
+source but do not rewrite it.
+
+### Freehand Draw, Snap, and Feed catalog
+
+The Draw slice stores each unsnapped rectangle in `.tao-project/studio/sketches.jsonc`. The file is
+JSONC on input and canonical indented JSON on every Studio write. It is committed project state, not
+an artifact or browser preference. Format version 1 has this shape:
+
+```jsonc
+{
+  "formatVersion": 1,
+  "nextViewNumber": 2,
+  "revision": 1,
+  "sketches": [
+    {
+      "height": 76,
+      "id": "sketch-row",
+      "name": "View1",
+      "project": "/path/to/project",
+      "rectOrder": ["rect-cover"],
+      "rects": [
+        {
+          "content": "Cover art",
+          "height": 52,
+          "id": "rect-cover",
+          "fieldBinding": {
+            "parameter": "Playlist",
+            "path": "Cover",
+            "presentation": { "kind": "image", "label": { "path": "Title" } }
+          },
+          "kind": "Placeholder",
+          "width": 52,
+          "x": 12,
+          "y": 12
+        }
+      ],
+      "snapped": [],
+      "view": "View1",
+      "width": 360
+    }
+  ]
+}
+```
+
+Sketches and rectangles have stable unique IDs. `rectOrder` preserves the total order across free
+`rects` and flowed `snapped` associations, so partial Snap and Unsnap cannot change z-order. A
+snapped association retains the exact rectangle plus the generated path, view, element kind,
+source version, render identity, and Studio rectangle marker. Coordinates are
+finite and nonnegative, dimensions are finite and positive, `kind` is an open Tao element name, and
+optional `content` is a string. An optional `fieldBinding` records a validated parameter, dotted field
+path, and text or image presentation; an image label may name its own path and text affixes. Unknown
+fields, duplicate IDs, duplicate sketch names or views, malformed JSONC, and unsupported format
+versions are rejected rather than repaired silently. `revision` is the server conflict precondition.
+`nextViewNumber` is project-wide and must
+remain greater than every generated `view` association; deletion and reopening never reuse a `ViewN`
+number. `name` remains display text and does not control allocation.
+
+The session handshake includes the current catalog and advertises catalog format version 1. The same
+snapshot is available from `GET /api/sketches`. Draw mutations use typed requests at
+`POST /api/sketches/action` with a unique request ID and the expected catalog revision. The server
+serializes them with other project mutations, rejects a stale revision as an HTTP 409 conflict,
+replays an identical request ID idempotently, rejects reuse of that ID for different input, and
+publishes successful snapshots through `sketch-catalog-changed`.
+
+The catalog provider defines sketch deletion, but the project session currently rejects that action.
+Deleting a sketch remains unavailable until removal of its generated source can participate in the
+same rollback contract. Rectangle creation, update, duplication, and deletion are catalog-only and do
+not compile or rewrite the generated Tao file.
+
+Creating a sketch allocates `ViewN`, atomically replaces the catalog through a sibling temporary file,
+and creates `@/studio/ViewN.tao`. The generated file contains one public view whose flowed render tree
+is a sketch-sized `Placeholder`, plus a co-located, fixtureless phone scenario named `draft` in the
+`sketch` group. It contains no free `Rect`, positioned-container, or offset syntax. If generated-source
+creation or compilation fails, the session removes the new generated file and atomically restores the
+prior catalog snapshot, including its revision and allocator. A generated-name collision is rejected;
+Studio never overwrites an existing `@/studio/ViewN.tao`.
+
+The browser matrix renders ordered catalog rectangles through a row-scoped TypeScript sketch workspace
+beside its keyed preview cells. A generated `sketch` scenario row is associated by its unique view
+subject matching `sketch.view`; an unmatched sketch temporarily falls back to the first matrix row.
+Handshake and catalog-change snapshots re-render the overlay in authoritative catalog order.
+
+The geometry model normalizes drawing in either direction, enforces a four-pixel minimum extent,
+selects the frontmost rectangle, moves and resizes through eight handles, cancels a pointer gesture back
+to its prior snapshot, and duplicates with Option-drag. Pointer capture and primary-pointer ownership
+keep stray events from completing another gesture. Kind and content edits preserve geometry and
+binding. Each completed gesture is serialized into one catalog action; an asynchronous rejection rolls
+the overlay back to its authoritative snapshot and exposes the error on the sketch host. Selecting,
+moving, resizing, retyping, and editing a free rectangle never write the Tao render tree. The language
+boundary is fixed: only snapping writes free rectangles into flowed Tao source.
+
+Snap projects selected rectangles through a deterministic server-owned inference: one clean
+separating axis chooses `Row` or `Col`, stacked lanes nest, median neighbour distance becomes `gap`,
+sketch-edge distance becomes root `pad`, opposite-edge contact becomes `fill`, the widest slack
+assigns `claim 1` to its neighbour, drawn numeric sizes remain `width` and `height` entries even when
+that claim lets the node absorb main-axis slack, and Text/Image hug. Two clean axes and
+overlap are ambiguous. The committed 16-case component-layout regression corpus records 12 direct
+projections (75 percent) and four proposals; it does not constitute the FS-D11 real-screen acceptance
+corpus or measure inspector-fix counts. Nested padding and cross-axis alignment inference remain open.
+Clean projections apply directly. Ambiguity returns the canonical tree and diff through the proposal
+route and requires the exact proposed source version to confirm.
+
+Generated leaves carry private `#studio_rect_...` markers while Studio owns the source under
+`@/studio`; authored source cannot publish or spoof that identity, and Move to package strips the
+markers. The compiler publishes current render identities and element names; the preview reports
+finite cell-relative measured rectangles. Snap inserts only newly selected projected nodes and Unsnap
+removes only selected Studio leaves, preserving manual edits and typed flow actions. Snap, repeated
+partial Snap, Unsnap, direction changes, separator insertion, weighted Spacer edits, and Undo are
+serialized source/catalog transactions: generated source compiles before the catalog advances, both
+stores roll back on failure, and successful revisions remain monotonic. Unsnap first uses the retained
+rectangle. On reopen, reconciliation waits for a manifest matching the current source version before
+missing, duplicated, or retyped associations are dropped; an active matching preview measurement is
+the fallback, otherwise Studio returns the retryable `measurement-unavailable` conflict without
+changing either store. Free rows remain in the TypeScript overlay beside the flowed preview until they
+are snapped.
+
+### Feed source contracts
+
+Studio preview manifests preserve a Tao entity parameter's canonical entity identity while retaining
+the JSON-object control representation. Primitive values are rejected for entity arguments. A
+`public fixture` is importable through an ordinary `use` statement; scenario fixture clauses and
+their row handles resolve across that file boundary, and fixture-only imports emit no runtime binding.
+This is the executable basis for the generated `@/studio/Sketches.tao` home.
+
+The deterministic Feed generator requires an explicit seed and emits empty, typical, and edge rows
+from compiler-owned entity metadata. Fixture, generated, live-store, and library rows normalize to one
+immutable typed inventory with stable opaque IDs and promotion records. Generated and live rows remain
+values only; generating them does not write source. The shared-fixture source builder creates or
+extends one Studio-owned `public fixture Sketches`, preserves existing imports and rows, is idempotent,
+and rejects a same-name row whose entity or fields differ.
+
+Two structured source actions implement the source half of binding. `add-sketch-entity-parameter`
+adds the imported entity parameter and supplies a validated fixture handle to every entry in the
+owned sketch scenario group. `bind-sketch-field` resolves a typed field path and rewrites one exact
+tagged leaf as current-dialect `Text` or accessible `Image` source while preserving its marker and
+layout. Catalog action `bind-rect` persists the equivalent structured binding on a free or snapped
+rectangle without disturbing geometry, total order, or its Snap target. Parameterized
+`insert-project-view` derives exact-type arguments from declarations visible at its insertion gap,
+including the nearest loop row and owning-view parameters; unresolved or ambiguous required values
+fail before mutation, and an explicit structured binding can disambiguate.
+
+These are server-side and source-action foundations, not yet the complete Feed gesture. The current
+Studio client does not yet expose the four-source row browser, drag entity/field chips, Keep as one
+multi-file transaction, or Move-to-package scenario-group relocation. Until those land, callers must
+not present Slice 3 as an end-to-end Studio workflow.
+
+The catalog is intended to be recovered through version control. A malformed or unsupported catalog
+blocks publication instead of discarding geometry. Restore a known-good committed copy or repair it
+while preserving stable IDs, rectangle order, `revision`, and a `nextViewNumber` above every retained
+`view`. Do not reset the allocator to reuse a deleted number or hand-edit generated source to resolve a
+collision. Studio's automatic rollback covers failed create transactions; Move to package is the
+supported way to take ownership of a generated view.
+
+Move to package transfers one `@/studio/<Name>.tao` file into an existing authored `@package`, removes
+the generated header and private Studio rectangle markers, restores normal writable ownership, and rewrites every parsed
+`use <Name> from @/studio` site to the target package before one serialized compile. A declaration
+with the same name in the target package returns a conflict for the client to resolve before any
+mutation; all nonconflicting moves proceed without an extra confirmation.
 
 ## Foreign views and code editor
 
@@ -438,13 +614,39 @@ HTTPS release-host round trip still require an ordinary Terminal and release cre
 Per-cell argument controls can save their current values back into the authored focused scenario entry
 as one reviewable and undoable source action. Each matrix cell also exposes `Capture fixture`: Studio
 asks for a Tao fixture name, captures only the isolated provider state, shows the proposed fixture
-source, and writes only after confirmation. The following remain open before the scenario matrix is a
-complete user feature:
+source, and writes only after confirmation.
+
+Each authored matrix cell also exposes `Record journey`. Recording switches that preview to Run mode and
+captures only replayable semantic `press`, committed `enter`, and Enter-driven `submit` operations. It
+chooses a unique Tao tag, accessibility label, placeholder, or visible-text target in that order; an
+ambiguous action becomes an explicit unresolved draft step and cannot be saved. Password, payment,
+one-time-code, and explicitly sensitive input is redacted unless the person opts in before recording.
+Existing journey replay is excluded from capture. A preview remount or source-identity change invalidates
+the draft. Stopped drafts show their canonical Tao operations, obtain a server-canonical source diff,
+and append to the exact scenario as one checkpoint only after confirmation; ordinary Studio Undo can
+restore the prior source.
+
+`tao review` starts the real web Studio renderer, waits for each authored cell's exact applied revision,
+settles fonts and paint, and captures only the cell viewport twice. Replay settlement means that the
+ordered semantic replay, including every authored `advance`, completed; it does not guess when ambient
+network or action work has become quiet. A scenario whose reviewed state depends on delayed work must
+author an `advance` before that state. The immutable review bundle contains
+PNG evidence, relative source/scenario identity, normalized render inputs, environment and renderer
+fingerprints, sanitized browser-event metadata,
+`review.json`, a separate portable `annotations.json`, and a static `index.html`. A prior
+`review.json` structurally pairs added, removed, changed, unchanged, failed, and renderer-incomparable
+cells. The report supports side-by-side, blink, and opacity-overlay inspection plus exportable per-cell
+decisions and comments bound to both image digests; changed pixels reopen earlier decisions while
+preserving them as context. Missing, escaped, altered, or unstable evidence fails closed. Pixel
+difference is not a pass/fail policy, and this first command makes a web-renderer claim only.
+
+The following remain open before the scenario matrix is a complete user feature:
 
 - keep fixture-through-action execution fail-closed while its result/handle contract remains deferred;
 - load accepted captured state through the test harness after those semantics are adopted;
-- resume generalized semantic capture/replay and authored failure-capture promotion only after their
-  explicitly deferred artifact, restoration, naming, and conflict contracts are adopted;
+- expand recording beyond the implemented semantic scenario prefix, and resume generalized runtime-state
+  capture/replay and authored failure-capture promotion only after their explicitly deferred artifact,
+  restoration, naming, and conflict contracts are adopted;
 - complete the remaining wide-screen inspector smoke and real Electrobun interaction passes; live file
   CRUD, independent retained cell state across two recompiles, drawer data/log/compile surfaces, and the
   WordFlower Tao test run have browser evidence;

@@ -22,6 +22,7 @@ import {
   type StudioSourceActionEnvelope,
   type StudioSourceActionIdentity,
 } from '../StudioProtocol'
+import type { StudioSketchCatalogSnapshot } from '../StudioSketchCatalog'
 import type { StudioTestFailure, StudioTestStatus } from '../StudioTestRunner'
 import { StudioTextMateLanguage } from '../StudioTextMateLanguage'
 import {
@@ -38,6 +39,7 @@ import {
   isStudioSaveShortcut,
   projectRelativePath,
   StudioCodeEditor,
+  StudioDefinitionNavigation,
   StudioDiagnosticNavigation,
   StudioEditorInsertion,
   StudioOpenFileLifecycle,
@@ -46,6 +48,7 @@ import {
 import { StudioEditorTabs } from './StudioEditorTabs'
 import { mountStudioFileTree, StudioFileTreeTransitions } from './StudioFileTree'
 import {
+  awaitPreviewJourneyRecordingAcknowledgement,
   configureInteractionMode,
   connectPreviews,
   currentSourceIdentity,
@@ -57,6 +60,9 @@ import {
   refreshCellPreviews,
   requestRuntimeCapture,
   StudioActivePreview,
+  StudioJourneyRecorder,
+  StudioMatrixView,
+  type StudioPreviewConnection,
   studioPreviewNotice,
   StudioPreviewSourceSync,
   StudioRuntimeData,
@@ -79,6 +85,7 @@ import {
   createStudioShell,
   showOpenFile,
   type StudioClientConfig,
+  StudioGlobalLoading,
 } from './StudioShell'
 import {
   showSourceActionError,
@@ -151,7 +158,6 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     throwIfMountAborted(options.signal)
     const handshake = await StudioApiClient.handshake(options.signal)
     throwIfMountAborted(options.signal)
-    view.project.textContent = StudioProjectContext.label(handshake.identity.project, handshake.identity.appName)
     updateStatus(view.status, handshake.compile, diagnostic => void openCompileDiagnostic(diagnostic))
     const previews = await connectPreviews(view.preview, config.previewUrl, handshake, options.signal)
     partialPreviews = previews
@@ -178,6 +184,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let dataResult: readonly StudioRuntimeDataTable[] = []
     let dataTimer: ReturnType<typeof setInterval> | undefined
     let drawerTab: StudioDrawerTab = 'Problems'
+    let railPanel = 'files'
     let highlightRequestRevision = 0
     let highlightTimer: ReturnType<typeof setTimeout> | undefined
     let activeFile: StudioDraftFile | undefined
@@ -193,6 +200,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     let searchRevision = 0
     let searchTimer: ReturnType<typeof setTimeout> | undefined
     let sourceActionBusy = false
+    const journeyOperations = new WeakMap<StudioPreviewConnection, number>()
+    const journeyBusy = new WeakSet<StudioPreviewConnection>()
     let shipActive = false
     let testError: string | undefined
     let testStatus: StudioTestStatus | undefined
@@ -208,6 +217,14 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     })
     let preparedActiveMutationPath: string | undefined
     let preparedOpenMutationPath: string | undefined
+
+    const advanceJourneyOperation = (preview: StudioPreviewConnection): number => {
+      const operation = (journeyOperations.get(preview) ?? 0) + 1
+      journeyOperations.set(preview, operation)
+      return operation
+    }
+    const isCurrentJourneyOperation = (preview: StudioPreviewConnection, operation: number): boolean =>
+      journeyOperations.get(preview) === operation
 
     /**
      * renderPreviewNotice explains a preview that cannot show the app. A failed compile leaves the last good
@@ -249,6 +266,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             networkErrorStatus: preview.cell.environment.network.error?.status,
             networkLatencyMs: preview.cell.environment.network.latencyMs,
             networkOutcome: preview.cell.environment.network.outcome,
+            journeyRecordable: StudioJourneyRecorder.canStart(preview),
+            journeyRecording: JSON.stringify(
+              preview.journeyRecording === undefined
+                ? null
+                : { ...preview.journeyRecording, busy: journeyBusy.has(preview) },
+            ),
             scenarioModel: JSON.stringify(preview.scenarioModel ?? null),
             scenarioId: preview.cell.scenarioId,
             schemeCapability: preview.cell.environment.scheme.capability,
@@ -306,6 +329,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             sourceVersion: inspected.identity.sourceVersion,
           },
       })
+    }
+
+    for (const preview of previews) {
+      preview.changed = publishProductHostState
     }
 
     async function openFile(path: string, refresh = false): Promise<StudioOpenFile | undefined> {
@@ -509,13 +536,43 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       return true
     }
 
-    function configureProjectAndAppPickers(): void {
+    let projectChoices = StudioProjectContext.choices(handshake.identity, [])
+
+    async function configureProjectAndAppPickers(): Promise<void> {
       const currentSessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
-      view.project.disabled = currentSessionId === undefined
+      if (currentSessionId !== undefined) {
+        try {
+          const listing = await StudioApiClient.sessions(options.signal)
+          throwIfMountAborted(options.signal)
+          projectChoices = StudioProjectContext.choices(handshake.identity, listing.recent)
+        } catch (error) {
+          if (isAbortError(error)) {
+            throw error
+          }
+        }
+      }
+      const currentProject = document.createElement('option')
+      currentProject.value = '0'
+      currentProject.textContent = projectChoices[0]!.label
+      currentProject.selected = true
+      const recentProjects = document.createElement('optgroup')
+      recentProjects.label = 'Recent projects'
+      recentProjects.append(
+        ...projectChoices.slice(1).map((project, index) => {
+          const option = document.createElement('option')
+          option.value = String(index + 1)
+          option.textContent = project.label
+          return option
+        }),
+      )
+      view.project.replaceChildren(currentProject, ...projectChoices.length > 1 ? [recentProjects] : [])
+      view.project.disabled = currentSessionId === undefined || projectChoices.length < 2
       view.project.title = currentSessionId === undefined
         ? 'Project selection requires a managed Studio window.'
-        : 'Choose another project'
-      view.project.addEventListener('click', () => void selectProject())
+        : projectChoices.length < 2
+        ? 'No other recent projects'
+        : 'Recent projects'
+      view.project.addEventListener('change', () => void selectProject())
 
       const duplicateNames = new Set(
         handshake.apps.filter((app, index) =>
@@ -600,19 +657,35 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     })()
 
     async function selectProject(): Promise<void> {
+      const selected = projectChoices[Number(view.project.value)]
+      if (selected === undefined || selected.project === handshake.identity.project) {
+        view.project.value = '0'
+        return
+      }
       if (!requireAllTabsSaved('Save or revert unsaved files before choosing another project.')) {
+        view.project.value = '0'
         return
       }
       view.project.disabled = true
+      view.appPicker.disabled = true
+      view.status.dataset['state'] = 'compiling'
+      view.status.textContent = `Opening ${selected.label}…`
+      StudioGlobalLoading.show(
+        view.globalLoading,
+        `Opening ${selected.label}…`,
+        'Please wait while Studio loads the project and prepares its preview.',
+      )
       try {
-        await StudioApiClient.closeCurrentSession()
-        const welcome = new URL('/welcome', window.location.origin)
-        if (window.location.search.includes('native-window=project')) {
-          welcome.searchParams.set('native-window', 'welcome')
-        }
-        window.location.assign(`${welcome.pathname}${welcome.search}`)
+        const transition = await StudioApiClient.switchSession({
+          appName: selected.appName,
+          projectPath: selected.project,
+        })
+        window.location.assign(StudioApiRoutes.transitionUrl(transition, new URL(window.location.href)))
       } catch (error) {
-        view.project.disabled = false
+        StudioGlobalLoading.hide(view.globalLoading)
+        view.project.disabled = projectChoices.length < 2
+        view.appPicker.disabled = handshake.apps.length < 2
+        view.project.value = '0'
         showSourceActionError(view.status, error)
       }
     }
@@ -634,26 +707,25 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         return
       }
       view.appPicker.disabled = true
+      view.project.disabled = true
       view.status.dataset['state'] = 'compiling'
       view.status.textContent = `Opening ${selected.appName}…`
-      const loadingTimer = setTimeout(() => {
-        const heading = view.globalLoading.querySelector<HTMLElement>('strong')
-        if (heading !== null) {
-          heading.textContent = `Switching to ${selected.appName}…`
-        }
-        view.globalLoading.hidden = false
-      }, 300)
+      StudioGlobalLoading.show(
+        view.globalLoading,
+        `Switching to ${selected.appName}…`,
+        'Please wait while Studio loads the app and prepares its preview.',
+      )
       try {
-        const transition = await StudioApiClient.switchApp({
+        const transition = await StudioApiClient.switchSession({
           appName: selected.appName,
           entryPath: selected.entryPath,
           projectPath: handshake.identity.project,
         })
         window.location.assign(StudioApiRoutes.transitionUrl(transition, new URL(window.location.href)))
       } catch (error) {
-        clearTimeout(loadingTimer)
-        view.globalLoading.hidden = true
+        StudioGlobalLoading.hide(view.globalLoading)
         view.appPicker.disabled = false
+        view.project.disabled = projectChoices.length < 2
         view.appPicker.value = String(currentIndex)
         showSourceActionError(view.status, error)
       }
@@ -747,10 +819,30 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       if (opened === undefined) {
         return
       }
-      const offset = Math.min(item.start, opened.editor.state.doc.length)
+      const selection = StudioDefinitionNavigation.selection(opened.editor.state.doc, item.start)
       opened.editor.dispatch({
-        effects: EditorView.scrollIntoView(offset, { y: 'center' }),
-        selection: { anchor: offset },
+        effects: EditorView.scrollIntoView(selection.anchor, { y: 'center' }),
+        selection,
+      })
+      opened.editor.focus()
+    }
+
+    async function openSource(path: string, sourceVersion: string, start: number): Promise<void> {
+      const relativePath = projectRelativePath(handshake.identity.project, path) ?? path
+      const current = projectFiles.find(file => file.path === relativePath)
+      Assert.input(current, `Tao Studio source is no longer available: ${relativePath}`)
+      Assert.input(
+        current.sourceVersion === sourceVersion,
+        `Tao Studio source location is stale; reopen ${relativePath} after the current compile.`,
+      )
+      const opened = await openFile(relativePath)
+      if (opened === undefined) {
+        return
+      }
+      const selection = StudioDefinitionNavigation.selection(opened.editor.state.doc, start)
+      opened.editor.dispatch({
+        effects: EditorView.scrollIntoView(selection.anchor, { y: 'center' }),
+        selection,
       })
       opened.editor.focus()
     }
@@ -867,6 +959,20 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       publishProductHostState()
     }
 
+    function dataPanelVisible(): boolean {
+      return drawerTab === 'Data' || railPanel === 'data'
+    }
+
+    function synchronizeDataPolling(): void {
+      if (dataPanelVisible()) {
+        void loadData()
+        dataTimer ??= setInterval(() => void loadData(), 2_000)
+      } else if (dataTimer !== undefined) {
+        clearInterval(dataTimer)
+        dataTimer = undefined
+      }
+    }
+
     function selectDrawer(tab: StudioDrawerTab): void {
       drawerTab = tab
       for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('[data-drawer-tab]')) {
@@ -877,13 +983,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         }
       }
       renderDrawer()
-      if (tab === 'Data') {
-        void loadData()
-        dataTimer ??= setInterval(() => void loadData(), 2_000)
-      } else if (dataTimer !== undefined) {
-        clearInterval(dataTimer)
-        dataTimer = undefined
-      }
+      synchronizeDataPolling()
     }
 
     const dataFill = new StudioDataFillCoordinator(async isLatest => {
@@ -1032,7 +1132,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       renderInspector()
     }
 
-    async function applySourceAction(envelope: StudioSourceActionEnvelope): Promise<void> {
+    async function applySourceAction(envelope: StudioSourceActionEnvelope): Promise<boolean> {
       setSourceActionBusy(true)
       view.status.dataset['state'] = 'compiling'
       view.status.textContent = `Applying ${sourceActionLabel(envelope.action)}…`
@@ -1050,8 +1150,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           StudioCompileStatus.completed(result.compile, compileState),
           diagnostic => void openCompileDiagnostic(diagnostic),
         )
+        return true
       } catch (error) {
         showSourceActionError(view.status, error)
+        return false
       } finally {
         setSourceActionBusy(false)
       }
@@ -1255,7 +1357,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       if (view.searchInput.value.trim() !== '') {
         scheduleSearch()
       }
-      if (drawerTab === 'Data') {
+      if (dataPanelVisible()) {
         void loadData()
       }
     }
@@ -1296,7 +1398,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         if (preview === activePreview.current()) {
           publishProductHostState()
           renderInspector()
-          if (drawerTab === 'Data') {
+          if (dataPanelVisible()) {
             void loadData()
           } else if (drawerTab === 'Logs') {
             renderDrawer()
@@ -1313,7 +1415,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       publishProductHostState()
       renderInspector()
       renderDrawer()
-      if (drawerTab === 'Data') {
+      if (dataPanelVisible()) {
         void loadData()
       }
     })
@@ -1358,9 +1460,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     view.rail.addEventListener('click', event => {
       const panel = (event.target as HTMLElement).closest<HTMLElement>('[data-panel]')?.dataset['panel']
-      if (panel === 'data') {
-        selectDrawer('Data')
-      } else if (panel === 'search') {
+      railPanel = panel ?? railPanel
+      synchronizeDataPolling()
+      if (panel === 'search') {
         view.searchInput.focus()
       }
     })
@@ -1396,7 +1498,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       },
       prepareMutation: prepareFileMutation,
     })
-    configureProjectAndAppPickers()
+    await configureProjectAndAppPickers()
     const restoredTabs = editorTabs.snapshot()
     const restoredPaths = restoredTabs.paths.length === 0 ? [handshake.entryPath] : restoredTabs.paths
     for (const path of restoredPaths) {
@@ -1420,7 +1522,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         if (state.status !== 'compiling') {
           void fileTree?.refresh().catch(error => showSourceActionError(view.status, error))
         }
-        if (drawerTab === 'Data') {
+        if (dataPanelVisible()) {
           void loadData()
         }
         if (testWatch && state.status === 'compiled') {
@@ -1446,7 +1548,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             view.status.textContent = 'This file changed on disk while the editor has an unsaved draft.'
           }
         }
-        if (drawerTab === 'Data') {
+        if (dataPanelVisible()) {
           void loadData()
         }
       },
@@ -1471,9 +1573,12 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           })
         }
         renderCommands()
-        if (drawerTab === 'Data') {
+        if (dataPanelVisible()) {
           void loadData()
         }
+      },
+      onSketchCatalog(catalog) {
+        StudioMatrixView.renderSketches(view.preview, handshake.identity.project, catalog)
       },
     })
     view.reload.addEventListener('click', () => {
@@ -1498,9 +1603,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
             if (drawerTab === 'Logs') {
               renderDrawer()
             }
-            if (drawerTab === 'Data') {
+            if (dataPanelVisible()) {
               void loadData()
             }
+            connection.changed?.()
           },
           inspect(selection) {
             inspected = selection
@@ -1546,7 +1652,7 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         const preview = previews.find(candidate => candidate.cell?.scenarioId === target.scenarioId)
         if (preview !== undefined) {
           activePreview.activate(preview)
-          if (drawerTab === 'Data') {
+          if (dataPanelVisible()) {
             void loadData()
           }
           if (drawerTab === 'Logs') {
@@ -1668,6 +1774,44 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         Assert.input(projectView, `Tao Studio project view is no longer available: ${viewName}`)
         insertProjectView(projectView)
       },
+      async moveGeneratedSource(path, sourceVersion, initialTargetPackage) {
+        const selected = projectFiles.find(file => file.path === path && file.sourceVersion === sourceVersion)
+        Assert.input(selected, `Tao Studio generated source is no longer current: ${path}`)
+        const current = await prepareFileMutation(selected)
+        if (current === undefined) {
+          return
+        }
+        let targetPackage = initialTargetPackage
+        while (true) {
+          const result = await StudioApiClient.moveGeneratedSource({
+            path: current.path,
+            sourceVersion: current.sourceVersion,
+            targetPackage,
+            writeId: `move-generated-${crypto.randomUUID()}`,
+          })
+          if (result.status === 'confirmation-required') {
+            const replacement = window.prompt(
+              `${result.targetPackage} already declares ${result.name} in ${
+                result.conflicts.join(', ')
+              }. Choose a different package.`,
+              targetPackage,
+            )
+            if (replacement === null) {
+              return
+            }
+            targetPackage = replacement
+            continue
+          }
+          const wasOpen = preparedOpenMutationPath === result.previousPath
+          preparedActiveMutationPath = undefined
+          preparedOpenMutationPath = undefined
+          fileTree!.setFiles(result.files)
+          if (wasOpen) {
+            await openFile(result.file.path)
+          }
+          return
+        }
+      },
       async openFile(path) {
         Assert.input(
           projectFiles.some(file => file.path === path),
@@ -1679,6 +1823,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         const screen = StudioRailPanels.screens(previewManifest).find(candidate => candidate.id === subjectId)
         Assert.input(screen, `Tao Studio screen is no longer available: ${subjectId}`)
         await openScreen(screen)
+      },
+      async openSource(path, sourceVersion, start) {
+        await openSource(path, sourceVersion, start)
       },
       async productPanelAction(name, payload) {
         if (name.startsWith('scenario-')) {
@@ -1730,6 +1877,123 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           if (command.kind === 'scenario-capture-fixture') {
             Assert.input(preview.captureFixture, 'The active scenario cannot currently capture a fixture.')
             await preview.captureFixture(command.fixtureName)
+            return
+          }
+          if (command.kind === 'scenario-start-journey') {
+            Assert.input(!journeyBusy.has(preview), 'Wait for the current journey operation to finish.')
+            Assert.input(
+              preview.journeyRecording === undefined,
+              'Save or discard the current journey recording before starting another.',
+            )
+            Assert.input(
+              StudioJourneyRecorder.canStart(preview),
+              'Wait for this preview and its scenario journey to finish loading before recording.',
+            )
+            const recordingId = crypto.randomUUID()
+            const request = StudioScenarioControls.recordingRequest(
+              model,
+              recordingId,
+              true,
+              command.captureSensitiveText,
+            )
+            if (!request.ok) {
+              Errors.throwUserInput(request.issues.join(' '))
+            }
+            advanceJourneyOperation(preview)
+            preview.journeyRecording = {
+              captureSensitiveText: command.captureSensitiveText,
+              id: recordingId,
+              sequence: 0,
+              sourceIdentity: JSON.stringify(model.sourceIdentity),
+              status: 'starting',
+              steps: [],
+            }
+            preview.setInteractionMode?.('run')
+            awaitPreviewJourneyRecordingAcknowledgement(preview, recordingId)
+            preview.iframe.contentWindow?.postMessage(request.value, preview.origin)
+            publishProductHostState()
+            return
+          }
+          if (command.kind === 'scenario-stop-journey') {
+            Assert.input(!journeyBusy.has(preview), 'Wait for the current journey operation to finish.')
+            const draft = preview.journeyRecording
+            Assert.input(draft?.status === 'recording', 'No journey recording is active for this preview.')
+            const request = StudioScenarioControls.recordingRequest(
+              model,
+              draft.id,
+              false,
+              draft.captureSensitiveText,
+            )
+            if (!request.ok) {
+              Errors.throwUserInput(request.issues.join(' '))
+            }
+            preview.iframe.contentWindow?.postMessage(request.value, preview.origin)
+            return
+          }
+          if (command.kind === 'scenario-discard-journey') {
+            Assert.input(!journeyBusy.has(preview), 'Wait for the current journey operation to finish.')
+            const draft = preview.journeyRecording
+            if (draft?.status === 'recording') {
+              const request = StudioScenarioControls.recordingRequest(
+                model,
+                draft.id,
+                false,
+                draft.captureSensitiveText,
+              )
+              if (request.ok) {
+                preview.iframe.contentWindow?.postMessage(request.value, preview.origin)
+              }
+            }
+            advanceJourneyOperation(preview)
+            preview.journeyRecording = undefined
+            publishProductHostState()
+            return
+          }
+          if (command.kind === 'scenario-save-journey') {
+            Assert.input(!journeyBusy.has(preview), 'Wait for the current journey operation to finish.')
+            const draft = preview.journeyRecording
+            Assert.input(draft?.status === 'stopped', 'Stop the journey recording before saving it.')
+            const action = StudioScenarioControls.appendRecordedStepsAction(
+              model,
+              draft.steps,
+              crypto.randomUUID(),
+            )
+            if (!action.ok) {
+              Errors.throwUserInput(action.issues.join(' '))
+            }
+            if (sourceActionBusy || !requireVisualEditDraftSaved()) {
+              return
+            }
+            const operation = advanceJourneyOperation(preview)
+            const draftId = draft.id
+            journeyBusy.add(preview)
+            publishProductHostState()
+            try {
+              const proposal = await StudioApiClient.sourceActionProposal(action.value)
+              if (
+                !isCurrentJourneyOperation(preview, operation)
+                || preview !== activePreview.current()
+                || preview.journeyRecording !== draft
+              ) {
+                return
+              }
+              if (!window.confirm(`Save these recorded Tao steps?\n\n${proposal.diff}`)) {
+                return
+              }
+              const applied = await applySourceAction(action.value)
+              if (
+                applied
+                && isCurrentJourneyOperation(preview, operation)
+                && preview.journeyRecording?.id === draftId
+              ) {
+                preview.journeyRecording = undefined
+              }
+            } finally {
+              if (isCurrentJourneyOperation(preview, operation)) {
+                journeyBusy.delete(preview)
+                publishProductHostState()
+              }
+            }
             return
           }
           const replay = StudioScenarioControls.replay(
@@ -1872,6 +2136,7 @@ function connectEvents(
     onFile: (file: StudioFile) => void
     onFiles: (files: readonly StudioFile[]) => void
     onManifest: (manifest: StudioPreviewManifestV2) => void
+    onSketchCatalog: (catalog: StudioSketchCatalogSnapshot) => void
   },
 ): () => void {
   const initialReconnectDelayMs = 500
@@ -1910,8 +2175,10 @@ function connectEvents(
         if (handshake.previewManifest !== undefined) {
           handlers.onManifest(handshake.previewManifest)
         }
+        handlers.onSketchCatalog(handshake.sketchCatalog)
       },
       onManifest: handlers.onManifest,
+      onSketchCatalog: handlers.onSketchCatalog,
     })
   }
   connect()
@@ -1999,16 +2266,40 @@ const StudioCompileStatus = {
   },
 }
 
+export type StudioProjectChoice = Readonly<{
+  appName: string
+  label: string
+  project: string
+}>
+
 export const StudioProjectContext = {
-  label(projectPath: string, fallback: string): string {
-    const segments = projectPath.split('/').filter(Boolean)
-    const leaf = segments.at(-1)
-    if (leaf === undefined) {
-      return fallback
-    }
-    return /^\d+\s*-\s*/.test(leaf) ? segments.at(-2) ?? fallback : leaf
+  choices(
+    current: Readonly<{ appName: string; project: string }>,
+    recent: readonly Readonly<{ appName: string; project: string }>[],
+  ): readonly StudioProjectChoice[] {
+    const projects = [current, ...recent].filter((candidate, index, all) =>
+      all.findIndex(project => project.project === candidate.project) === index
+    )
+    const baseLabels = projects.map(project => studioProjectLabel(project.project, project.appName))
+    return projects.map((project, index) => ({
+      appName: project.appName,
+      label: baseLabels.filter(label => label === baseLabels[index]).length > 1
+        ? `${baseLabels[index]} — ${project.project}`
+        : baseLabels[index]!,
+      project: project.project,
+    }))
   },
+  label: studioProjectLabel,
 } as const
+
+function studioProjectLabel(projectPath: string, fallback: string): string {
+  const segments = projectPath.split('/').filter(Boolean)
+  const leaf = segments.at(-1)
+  if (leaf === undefined) {
+    return fallback
+  }
+  return /^\d+\s*-\s*/.test(leaf) ? segments.at(-2) ?? fallback : leaf
+}
 
 function sourceActionUsesRenderOccurrence(action: StudioCanonicalSourceAction): boolean {
   return action.kind === 'move-render'
@@ -2049,6 +2340,27 @@ type StudioScenarioPanelCommand =
     cellId: string
     cellRevision: number
     kind: 'scenario-replay-capture'
+  }>
+  | Readonly<{
+    captureSensitiveText: boolean
+    cellId: string
+    cellRevision: number
+    kind: 'scenario-start-journey'
+  }>
+  | Readonly<{
+    cellId: string
+    cellRevision: number
+    kind: 'scenario-stop-journey'
+  }>
+  | Readonly<{
+    cellId: string
+    cellRevision: number
+    kind: 'scenario-discard-journey'
+  }>
+  | Readonly<{
+    cellId: string
+    cellRevision: number
+    kind: 'scenario-save-journey'
   }>
 
 export function parseScenarioPanelCommand(name: string, payload: string): StudioScenarioPanelCommand {
@@ -2098,6 +2410,19 @@ export function parseScenarioPanelCommand(name: string, payload: string): Studio
   }
   if (name === 'scenario-replay-capture') {
     return { ...identity, capture: input['capture'], kind: name }
+  }
+  if (name === 'scenario-start-journey') {
+    if (typeof input['captureSensitiveText'] !== 'boolean') {
+      Errors.throwUserInput('Tao Studio journey recording requires an explicit sensitive-text choice.')
+    }
+    return { ...identity, captureSensitiveText: input['captureSensitiveText'], kind: name }
+  }
+  if (
+    name === 'scenario-stop-journey'
+    || name === 'scenario-discard-journey'
+    || name === 'scenario-save-journey'
+  ) {
+    return { ...identity, kind: name }
   }
   Errors.throwUserInput(`Unsupported Tao Studio scenario action: ${name}`)
 }

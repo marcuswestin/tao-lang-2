@@ -90,6 +90,32 @@ function createCommands(): Command {
     })
 
   commands
+    .command('review')
+    .argument('[path]', 'Tao project directory to capture in Studio.', '.')
+    .option('--app <name>', 'Select a named app within the project.')
+    .option('--against <review>', 'Compare with an earlier review.json manifest.')
+    .option('--output <directory>', 'Write the immutable review artifact to this new directory.')
+    .description('Capture every Studio scenario as a portable web visual review.')
+    .action(async (path: string, options: { against?: string; app?: string; output?: string }) => {
+      try {
+        const { runStudioReview } = await import('tao-dev/studio-review')
+        const result = await runStudioReview(path, {
+          against: options.against,
+          appName: options.app,
+          artifactRoot: options.output,
+        })
+        const counts = Object.entries(result.statusCounts)
+          .filter(([, count]) => count > 0)
+          .map(([status, count]) => `${count} ${status}`)
+          .join(', ')
+        HCI.writeSuccess(`Captured Tao visual review: ${FS.displayPath(result.reportPath)} (${counts})\n`)
+      } catch (error) {
+        HCI.writeErrorLine(Errors.formatForUser(error))
+        Platform.runtimeProcess.setExitCode(1)
+      }
+    })
+
+  commands
     .command('compile')
     .argument('<appPath>', 'Tao app path to compile into the local runtime package.')
     .option('--app <name>', 'Select a named app when the file declares multiple apps.')
@@ -184,7 +210,7 @@ function createCommands(): Command {
   commands
     .command('check')
     .argument('[paths...]', 'Tao files or directories to check. Defaults to the current directory.')
-    .description('Check .tao files for the full canonical source form without writing.')
+    .description('Check canonical Tao source and report validation warnings without writing.')
     .action(async (paths: string[]) => {
       const { runCheck } = await import('./source-commands')
       await runInPlaceCommand(paths, runCheck, {
@@ -286,8 +312,12 @@ async function runInPlaceCommand(
     }
     const changed = results.filter(result => result.status === 'changed')
     const errored = results.filter(result => result.status === 'error')
+    const warnings = results.flatMap(result => result.warnings ?? [])
 
     writeChangedResults(changed, labels)
+    for (const warning of warnings) {
+      HCI.logProcessWarn(labels.failedVerb, warning)
+    }
     for (const result of errored) {
       HCI.writeErrorLine(`Failed to ${labels.failedVerb} ${FS.displayPath(result.path)}: ${result.error}`)
     }
@@ -297,7 +327,10 @@ async function runInPlaceCommand(
     }
 
     const unchangedCount = results.length - changed.length - errored.length
-    const summary = `${changed.length} ${labels.changed}, ${unchangedCount} unchanged`
+    const warningSummary = warnings.length === 0
+      ? ''
+      : ', ' + String(warnings.length) + ' warning' + (warnings.length === 1 ? '' : 's')
+    const summary = `${changed.length} ${labels.changed}, ${unchangedCount} unchanged` + warningSummary
     const shouldFail = errored.length > 0 || labels.failOnChanged && changed.length > 0
     if (shouldFail) {
       HCI.writeErrorLine(`${summary}${errored.length > 0 ? `, ${errored.length} failed` : ''}`)

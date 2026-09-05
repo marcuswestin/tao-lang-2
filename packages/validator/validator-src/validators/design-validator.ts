@@ -1,5 +1,6 @@
-import { ASTUtils } from '@ast-utils'
+import { ASTUtils, Packages } from '@ast-utils'
 import { AST } from '@parser'
+import { FS } from '@shared'
 import { designValidationCodes } from '../diagnostic-codes'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
@@ -47,6 +48,7 @@ const designValidationMessages = {
     `Design screen '${name}' must use an increasing px threshold; only the last may omit it.`,
   invalidSize: (name: string) => `Design size '${name}' must resolve from px/rem values in the same unit family.`,
   missingMountedDesign: (entry: string) => `Design entry '${entry}' requires an app Design selection.`,
+  placeholderShipping: 'Placeholder ships as an empty box in release.',
   reservedBundle: (name: string) => `Design bundle '${name}' collides with built-in clause '${name}'.`,
   unknownBundle: (design: string, name: string) => `Design '${design}' has no bundle '${name}'.`,
   unknownToken: (design: string, name: string) => `Design '${design}' has no token '${name}'.`,
@@ -114,6 +116,25 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
 }
 
 function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void {
+  // Almost every render can skip package resolution. Placeholder is deliberately uncommon in
+  // authored product source. Alias renders are the only other calls that can terminate at it.
+  const renderedView = render.view?.ref
+  if (
+    AST.isViewDeclaration(renderedView)
+    && (render.view?.$refText === 'Placeholder' || renderedView.aliasTarget !== undefined)
+    && !isNonShippingSource(render, ctx)
+  ) {
+    const terminalView = renderedView.aliasTarget === undefined ? renderedView : AST.viewAliasTarget(renderedView)
+    if (
+      AST.isViewDeclaration(terminalView)
+      && terminalView.name === 'Placeholder'
+      && FS.pathIsWithin(AST.getDocument(terminalView).uri.path, ctx.packagesContext.stdlibRoot)
+    ) {
+      ctx.warning(designValidationMessages.placeholderShipping, render, {
+        code: designValidationCodes.placeholderShipping,
+      })
+    }
+  }
   const clause = render.layoutClause
   if (!clause) {
     return
@@ -166,6 +187,12 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   if (expanded) {
     validateEffectiveConflicts(expanded, ctx)
   }
+}
+
+function isNonShippingSource(render: AST.Render, ctx: ValidationContext): boolean {
+  const sourcePath = AST.getDocument(render).uri.path
+  const studioGeneratedRoot = FS.resolvePath('@/studio', ctx.packagesContext.index.projectRoot)
+  return Packages.isTestSourcePath(sourcePath) || FS.pathIsWithin(sourcePath, studioGeneratedRoot)
 }
 
 function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {

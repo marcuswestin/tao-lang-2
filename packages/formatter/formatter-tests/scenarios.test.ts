@@ -50,4 +50,23 @@ Describe('Tao formatter fixtures and scenarios', () => {
       `,
     ),
   )
+
+  Test(
+    'formats an ordered pointer journey after its focused render',
+    formats(
+      `scenarios SavedToast "states"{device phone scenario "held"{render()press down label "Revert" advance 600.ms press up #revertSave hover placeholder "Revert save" focus #revertSave}}`,
+      `
+        scenarios SavedToast "states" {
+           device phone
+           scenario "held" {
+              render ()
+              press down label "Revert"
+              advance 600.ms
+              press up #revertSave
+              hover placeholder "Revert save"
+              focus #revertSave
+        }  }
+      `,
+    ),
+  )
 })
