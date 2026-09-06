@@ -161,7 +161,8 @@ error state instead.
 Shipped datasources are ordinary public Tao declarations in package-owned homes — not
 compiler-known names. Each provider owns one package path with its declaration and implementation
 side by side: `Memory` in `@tao/data/providers/memory`, `Local` in `@tao/data/providers/local`,
-`Http` in `@tao/data/providers/http`, and `InstantDB` in `@tao/data/providers/instantdb`.
+`Http` in `@tao/data/providers/http`, `InstantDB` in `@tao/data/providers/instantdb`, `ICloud` in
+`@tao/data/providers/icloud`, and `CloudKit` in `@tao/data/providers/cloudkit`.
 
 Reusable provider types use `type Name is datasource with { ... }`. Their explicit
 `provider <Export> from <path>` clause fills primitive `datasource`'s implementation requirement; it
@@ -211,11 +212,63 @@ InstantDB syncs each storage key's snapshot through one deterministic keyed row 
 app, resolves its startup load from the SDK's own subscription (so an offline launch serves the
 local cache), and publishes remote replacement snapshots through `subscribe`.
 
+ICloud is the platform-sync member of the family: it keeps each storage key's snapshot as one
+document in the app's iCloud Drive container (outside the user-visible `Documents/` folder), so the
+signed-in iCloud account sees one store across its devices with no account, server, or sign-in of
+Tao's own. `Container text?` names the container; omitted, the app's first entitled container is
+used. Its optional `subscribe` publishes the document as a replacement snapshot whenever another
+device rewrites it, and iCloud's conflict versions collapse to the newest one, so concurrent writers
+are last-snapshot-wins exactly as with InstantDB. iCloud keeps a local copy, so an offline launch
+loads the last synced document and an offline save uploads on reconnect. Like InstantDB it grants no
+`reset`, because the document is shared with the account's other devices. The provider is native
+code (`tao-icloud-native`, an Expo module with its own entitlement config plugin, which the ship
+pipeline applies from the manifest's `icloud` section), so it needs a development or release build
+rather than Expo Go, runs only on Apple platforms, and fails a mount elsewhere with a
+host-environment error; an app that also targets Android or the web binds another datasource in a
+variant for those targets.
+
 Authentication, permissions, migrations, transactions, aggregation, and provider-specific query
 features remain deferred. They require new provider families rather than leaking incremental or
 remote semantics into this full-snapshot protocol. The first such family has landed: the query-fill
 half layers remote reads over the snapshot contract without changing it, and last-snapshot-wins
-sync arrives through `subscribe` on the same terms.
+sync arrives through `subscribe` on the same terms. The second, the granular-write family, is
+described next.
+
+## The granular-write family and the CloudKit datasource
+
+The granular-write family exchanges what changed rather than whole stores. Each commit becomes one
+change-set of row upserts and deletes; every field value carries the stamp of the edit that set it;
+and replicas converge by folding change-sets, per field the greatest stamp winning whatever order
+the change-sets arrive in. The runtime owns the fold, the durable pending queue, and the projection
+of the folded state into the snapshot the store mounts, so queries, writes, and entity handles are
+unchanged. A provider owns transport and the authority's acceptance: `TR.SyncProvider` connects to
+a `TR.SyncConnection` that pushes change-sets, subscribes to remote ones and to acceptance of its
+own, and may fetch on demand. `TR.Sync.overSnapshot` is the bridge that mounts such a provider
+behind the snapshot contract today; `TR.Sync.testProvider` is the family's conformance suite, and
+`TR.Sync.memoryAuthority` its in-process authority for deterministic tests.
+
+Three working assumptions are taken so the machinery can be exercised, and remain open decisions
+in `Docs/Roadmap/Multiplayer sync.md`: "latest" is edit order on a hybrid logical clock; a deleted
+row stays deleted while later field edits merge into its tombstone; and row identity on the wire is
+the pair of creating replica and local id, projected into a replica's store as the local id for its
+own rows and `<id>~<origin>` for every other replica's, so sequential local ids never collide. A
+child row is hidden until its parent has arrived, so a transport may deliver in any order.
+
+`CloudKit` in `@tao/data/providers/cloudkit` is the family's first member: each row is one record
+in a record zone of the iCloud account's private database, named by origin replica, entity, and
+local id. Every record is the one generic `TaoRow` type with a single JSON `payload` field holding
+the row's stamped fields and, for a deleted row, its stamped tombstone, so no device can resurrect
+it and the CloudKit schema is deployed to production once and never follows a Tao `data` change.
+A change-set's records are sent as one atomic batch per zone. `CKSyncEngine` owns batching, retries, and the
+offline queue on the device; fetched changes are held durably on the device until the fold has
+checkpointed them; a server-side conflict comes back with the server's copy and merges fieldwise
+before the record is sent again. The declaration is `StorageKey text?` (the zone name, defaulting
+to the schema name) and `Container text?`. It shares the `tao-icloud-native` module and
+entitlement plugin with `ICloud`, needs iOS 17 or later, and has the same platform limits: native
+code, Apple only. Elsewhere the store still mounts from its local checkpoint and edits queue, and
+the missing native side surfaces as the recoverable sync error. Like the snapshot-family `ICloud`
+it serves one iCloud account across its devices; sharing a zone with other accounts is not yet
+modelled, and an account switch stops sync until the app relaunches.
 
 ## Queries
 

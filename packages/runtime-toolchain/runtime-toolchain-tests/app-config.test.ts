@@ -11,7 +11,7 @@ type ExpoAppConfig = {
     config?: { usesNonExemptEncryption?: boolean }
   }
   name: string
-  plugins?: string[]
+  plugins?: Array<string | [string, unknown]>
   runtimeVersion?: { policy: 'fingerprint' }
   slug: string
   splash?: { backgroundColor: string; image: string; resizeMode: string }
@@ -120,6 +120,24 @@ Describe('Expo ship host configuration', () => {
     Expect(config.icon).toBe('./assets/tao-app-icon.png')
     Expect(config.runtimeVersion).toBeUndefined()
     Expect(config.updates).toBeUndefined()
+  })
+
+  Test('applies the iCloud entitlement plugin with the manifest containers', async () => {
+    const projectRoot = await mkTestDir('tao-app-config-icloud-')
+    await FS.writeJson(
+      FS.resolvePath('_gen_tao-app/ship.json', projectRoot),
+      {
+        ...shipManifest,
+        icloud: { containers: ['iCloud.lang.tao.wordflower'], services: ['CloudKit'] },
+      } satisfies ShipManifest,
+    )
+
+    const config = createExpoAppConfig(fallbackConfig, projectRoot)
+
+    Expect(config.plugins).toEqual([
+      './plugins/with-ios-fmt-compat.cjs',
+      ['tao-icloud-native', { containers: ['iCloud.lang.tao.wordflower'], services: ['CloudKit'] }],
+    ])
   })
 
   Test('ships opaque square iOS assets for the default and badged variant', async () => {
