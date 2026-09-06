@@ -8,7 +8,7 @@ export const PROFILES_SOURCE = '.rulesync/profiles.jsonc'
  * may write or reach that the default policy does not. `extends` folds another profile's
  * filesystem grants in; command lists are never inherited, because each harness spells them per file.
  */
-export type AgentProfile = {
+type AgentProfile = {
   description: string
   extends?: string
   /** Commands a person confirms before they run; they also leave the sandbox. */

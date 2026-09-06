@@ -1,18 +1,26 @@
 import { AST, Langium, type ParseResult } from '@parser'
-import { Assert, Diagnostics, Errors, FS, Repo, TaoFiles } from '@shared'
+import { Assert, Diagnostics, Errors, FS, Json } from '@shared'
 import SourceActions, {
-  type StudioAppendScenarioStepsPatchRequest,
-  type StudioComponentKind,
-  type StudioInsertCapturedFixturePatchRequest,
-  type StudioLayoutEntry,
   type StudioRenderInspection,
-  type StudioScenarioArgumentValue,
   StudioSourceOccurrenceConflictError,
   type StudioSourcePatchRequest,
-  type StudioStyleEntry,
-  type StudioStyleLandingScope,
 } from '@source-actions'
 import { Workspace } from '@workspace'
+import { discoverStudioApp, requireStudioProjectRoot } from './session/StudioAppDiscovery'
+import {
+  type SketchSnapCheckpoint,
+  type SourceActionCheckpoint,
+  StudioCheckpointLedger,
+} from './session/StudioCheckpointLedger'
+import { type StudioDesignValue, studioDesignValues } from './session/StudioDesignInspection'
+import { StudioFileOperations } from './session/StudioFileOperations'
+import { type StudioFileDraftState, StudioProjectFiles, type StudioProjectFilesIO } from './session/StudioProjectFiles'
+import { StudioSessionRequests } from './session/StudioSessionRequests'
+import {
+  requireSourceVersion,
+  StudioSourceActionConflictError,
+  StudioSourceConflictError,
+} from './session/StudioSourceConflicts'
 import {
   type StudioCompileCompletion,
   StudioCompileCoordinator,
@@ -21,18 +29,9 @@ import {
   type StudioSourceChange,
   type StudioWatchResult,
 } from './StudioCompileCoordinator'
-import { studioGeneratedSourceHeader, StudioGeneratedSources } from './StudioGeneratedSources'
-import {
-  type StudioCellReconfigureRequest,
-  type StudioCellRuntime,
-  StudioMatrixSession,
-} from './StudioMatrixSession'
-import {
-  type StudioCellEnvironment,
-  type StudioCellIdentity,
-  type StudioCellInstanceIdentity,
-  type StudioPreviewManifestV2,
-} from './StudioPreviewManifest'
+import { StudioGeneratedSources } from './StudioGeneratedSources'
+import { type StudioCellRuntime, StudioMatrixSession } from './StudioMatrixSession'
+import type { StudioCellInstanceIdentity, StudioPreviewManifestV2 } from './StudioPreviewManifest'
 import {
   type StudioAppVariant,
   type StudioCheckpointSummary,
@@ -43,11 +42,9 @@ import {
   type StudioDraftWriteRequest,
   type StudioDraftWriteResult,
   type StudioInspectRenderRequest,
-  type StudioJsonObject,
   type StudioMoveGeneratedSourceRequest,
   type StudioMoveGeneratedSourceResult,
   type StudioPreviewLayoutMeasurement,
-  type StudioPreviewLayoutMeasurementsMessage,
   type StudioProjectFile,
   type StudioProjectFileContent,
   type StudioProjectIdentity,
@@ -60,16 +57,11 @@ import {
   type StudioSessionEvent,
   type StudioSessionHandshake,
   type StudioSketchActionResult,
-  type StudioSketchFlowAction,
-  type StudioSketchFlowActionRequest,
   type StudioSketchSnapApplyResult,
   type StudioSketchSnapProposalResult,
   type StudioSketchSnapRequest,
-  type StudioSketchSnapUndoRequest,
   type StudioSketchSnapUndoResult,
-  type StudioSketchUnsnapRequest,
   type StudioSourceActionEnvelope,
-  type StudioSourceActionIdentity,
   type StudioSourceActionProposal,
   type StudioSourceActionResult,
   type StudioSourceActionUndoEnvelope,
@@ -79,7 +71,6 @@ import {
 import {
   type StudioSketch,
   StudioSketchCatalog,
-  type StudioSketchCatalogAction,
   StudioSketchCatalogConflictError,
   studioSketchCatalogFormatVersion,
   type StudioSketchCatalogIO,
@@ -127,117 +118,26 @@ export type {
   StudioSourceActionUndoResult,
 } from './StudioProtocol'
 
+/** The session's own value types are split across `session/`; the facade and its tests import them from here. */
+export {
+  StudioSourceActionConflictError,
+  StudioSourceConflictError,
+} from './session/StudioSourceConflicts'
+export type { StudioDesignValue, StudioFileDraftState }
+
 export type StudioProjectSessionOptions = {
   appName?: string
   compile: StudioCompileCoordinatorOptions['compile']
   entryPath?: string
   projectRoot: string
+  /** Substitutes the disk behind the file listing; tests use it to count scans and reads. */
+  projectFilesIO?: StudioProjectFilesIO
   sketchCatalogIO?: StudioSketchCatalogIO
-}
-
-export type StudioFileDraftState = {
-  diagnostics: readonly string[]
-  dirty: boolean
-}
-
-export type StudioDesignValue =
-  & Readonly<{ designName: string; end: number; start: number }>
-  & (
-    | { entries: readonly string[]; kind: 'bundle'; name: string }
-    | { kind: 'color'; name: string; value: string }
-    | { entries: readonly string[]; kind: 'default'; name: string }
-    | { kind: 'screen'; name: string; value: string }
-    | { kind: 'size'; name: string; value: string }
-    | { entries: readonly string[]; kind: 'style'; name: string }
-    | { entries: readonly string[]; kind: 'text'; name: string }
-    | { kind: 'token'; name: string; value: string }
-  )
-
-function studioDesignSource(node: AST.Node): { end: number; start: number } {
-  const cst = node.$cstNode
-  Assert.input(cst, 'Cannot inspect a structured design value without source coordinates.')
-  return { end: cst.end, start: cst.offset }
-}
-
-function normalizedTargetPackage(input: string): string {
-  const targetPackage = input.trim()
-  Assert.input(
-    /^@[A-Za-z][A-Za-z0-9_-]*(?:\/[A-Za-z0-9_-]+)*$/.test(targetPackage),
-    'Move to package requires an authored @package or @package/subfolder path.',
-  )
-  return targetPackage
-}
-
-function rewriteGeneratedStudioImports(
-  content: string,
-  file: AST.TaoFile,
-  name: string,
-  targetPackage: string,
-): string | undefined {
-  const uses = file.statements.filter(AST.isUseStatement)
-  const sourceUses = uses.filter(statement =>
-    statement.importPath === '@/studio'
-    && statement.importedDeclarations.some(reference => reference.$refText === name)
-  )
-  if (sourceUses.length === 0) {
-    return undefined
-  }
-  const targetUse = uses.find(statement => statement.importPath === targetPackage)
-  const edits: Array<{ end: number; replacement: string; start: number }> = sourceUses.map(statement => {
-    Assert.defined(statement.$cstNode, 'parsed use statement has source coordinates')
-    const remaining = statement.importedDeclarations
-      .map(reference => reference.$refText)
-      .filter(imported => imported !== name)
-    return {
-      end: statement.$cstNode.end,
-      replacement: remaining.length === 0 ? '' : `use ${remaining.join(', ')} from @/studio`,
-      start: statement.$cstNode.offset,
-    }
-  })
-  if (targetUse === undefined) {
-    const lastUse = uses.at(-1)
-    if (lastUse?.$cstNode) {
-      edits.push({
-        end: lastUse.$cstNode.end,
-        replacement: `\nuse ${name} from ${targetPackage}`,
-        start: lastUse.$cstNode.end,
-      })
-    } else {
-      edits.push({ end: 0, replacement: `use ${name} from ${targetPackage}\n\n`, start: 0 })
-    }
-  } else if (!targetUse.importedDeclarations.some(reference => reference.$refText === name)) {
-    Assert.defined(targetUse.$cstNode, 'parsed target use statement has source coordinates')
-    const names = [...targetUse.importedDeclarations.map(reference => reference.$refText), name].toSorted()
-    edits.push({
-      end: targetUse.$cstNode.end,
-      replacement: `use ${names.join(', ')} from ${targetPackage}`,
-      start: targetUse.$cstNode.offset,
-    })
-  }
-  return edits
-    .toSorted((left, right) => right.start - left.start)
-    .reduce((rewritten, edit) => rewritten.slice(0, edit.start) + edit.replacement + rewritten.slice(edit.end), content)
 }
 
 type SourceActionCacheEntry = {
   fingerprint: string
   result: StudioSourceActionResult
-}
-
-type SourceActionCheckpoint = {
-  afterSourceVersion: string
-  beforeContent: string
-  beforeSourceVersion: string
-  id: string
-  identity: SourceActionCheckpointIdentity
-  path: string
-  status: 'committed' | 'open' | 'undone'
-}
-
-type SourceActionCheckpointIdentity = Pick<StudioSourceActionIdentity, 'appName' | 'path' | 'project'> & {
-  cellId?: string
-  occurrence?: StudioSourceActionIdentity['occurrence']
-  scenarioId?: string
 }
 
 type PreparedSourceAction = {
@@ -265,28 +165,21 @@ type PreparedSketchSnap = Readonly<{
   tree: StudioSketchSnapTree
 }>
 
-type SketchSnapCheckpoint = {
-  afterCatalogRevision: number
-  afterContent: string
-  afterSourceVersion: string
-  beforeContent: string
-  beforeSourceVersion: string
-  id: string
-  path: string
-  status: 'committed' | 'undone'
-  undoAction: StudioSketchCatalogAction
-}
-
-/** StudioProjectSession owns one project/app's disk-synced source and serialized compile state. */
+/**
+ * StudioProjectSession owns one project/app's disk-synced source and serialized compile state. It
+ * coordinates the file listing (`session/StudioProjectFiles`), file mutations
+ * (`session/StudioFileOperations`), the undo ledger (`session/StudioCheckpointLedger`), the compile
+ * coordinator, the matrix session, and the sketch catalog behind one mutation lane.
+ */
 export class StudioProjectSession {
   static readonly testing = { measuredUnsnapRect, sourceActionProposalDiff }
 
-  readonly #actionCheckpoints = new Map<string, SourceActionCheckpoint>()
   readonly #actionResults = new Map<string, SourceActionCacheEntry>()
   readonly #actionUndoResults = new Map<string, SourceActionUndoCacheEntry>()
-  readonly #checkpointOrder: string[] = []
   readonly #coordinator: StudioCompileCoordinator
-  readonly #draftStates = new Map<string, StudioFileDraftState>()
+  readonly #fileOperations: StudioFileOperations
+  readonly #files: StudioProjectFiles
+  readonly #ledger: StudioCheckpointLedger
   readonly #listeners = new Set<(event: StudioSessionEvent) => void>()
   readonly #previewLayoutMeasurements = new Map<
     string,
@@ -296,7 +189,6 @@ export class StudioProjectSession {
     }>
   >()
   readonly #sketchCatalog: StudioSketchCatalog
-  readonly #sketchSnapCheckpoints = new Map<string, SketchSnapCheckpoint>()
   readonly #sketchSnapProposalResults = new Map<
     string,
     Readonly<{ fingerprint: string; result: StudioSketchSnapProposalResult }>
@@ -313,7 +205,6 @@ export class StudioProjectSession {
   readonly #workspace: Workspace
   #mutationLane: Promise<void> = Promise.resolve()
   #matrix: StudioMatrixSession | undefined
-  #openCheckpointId: string | undefined
 
   private constructor(
     readonly projectRoot: string,
@@ -321,11 +212,14 @@ export class StudioProjectSession {
     readonly appName: string,
     readonly apps: readonly StudioAppVariant[],
     workspace: Workspace,
+    files: StudioProjectFiles,
     compile: StudioCompileCoordinatorOptions['compile'],
     sketchCatalogIO?: StudioSketchCatalogIO,
   ) {
     this.#workspace = workspace
+    this.#files = files
     this.#sketchCatalog = new StudioSketchCatalog(projectRoot, sketchCatalogIO)
+    this.#ledger = new StudioCheckpointLedger(projectRoot, checkpoint => this.#emitCheckpoint(checkpoint))
     this.#coordinator = new StudioCompileCoordinator({
       appName,
       compile,
@@ -338,26 +232,43 @@ export class StudioProjectSession {
         }),
       project: projectRoot,
     })
+    this.#fileOperations = new StudioFileOperations({
+      coordinator: this.#coordinator,
+      entryPath,
+      files,
+      onFileChanged: file => this.#emitFile(file),
+      onFilesChanged: listed => this.#emitFiles(listed),
+      onSketchCatalogChanged: catalog => this.#emitSketchCatalog(catalog),
+      projectRoot,
+      sketchCatalog: this.#sketchCatalog,
+      workspace,
+    })
   }
 
   static async open(options: StudioProjectSessionOptions): Promise<StudioProjectSession> {
-    const projectRoot = await requireProjectRoot(options.projectRoot)
+    const projectRoot = await requireStudioProjectRoot(options.projectRoot)
     await new StudioGeneratedSources(projectRoot).repair()
     const workspace = await Workspace.open(projectRoot)
-    const { apps, defaultAppName } = await discoverAppVariants(projectRoot, workspace)
-    const requestedEntryPath = options.entryPath === undefined
-      ? undefined
-      : FS.relativePath(projectRoot, await resolveEntryPath(projectRoot, options.entryPath))
-    const selection = resolveAppSelection(projectRoot, apps, options.appName, requestedEntryPath, defaultAppName)
-    return new StudioProjectSession(
+    // The listing reports compile diagnostics per file, and the coordinator that owns them is built by the
+    // session, which in turn needs the listing scanned before it can discover its app: bind late.
+    let session: StudioProjectSession | undefined
+    const files = await StudioProjectFiles.open(
       projectRoot,
-      FS.resolvePath(selection.entryPath, projectRoot),
+      () => session?.compileSnapshot().diagnostics ?? [],
+      options.projectFilesIO,
+    )
+    const selection = await discoverStudioApp(projectRoot, workspace, files.absolutePaths(), options)
+    session = new StudioProjectSession(
+      projectRoot,
+      selection.entryPath,
       selection.appName,
-      apps,
+      selection.apps,
       workspace,
+      files,
       options.compile,
       options.sketchCatalogIO,
     )
+    return session
   }
 
   identity(): StudioProjectIdentity {
@@ -402,27 +313,22 @@ export class StudioProjectSession {
         }
       }
       const writes = await Promise.all(request.edits.map(async edit => ({
-        path: await this.#resolveTaoFile(edit.path),
+        path: await this.#files.resolveTaoFile(edit.path),
         sourceVersion: SourceActions.studioSourceVersion(edit.content),
         writeId: request.writeId,
       })))
       await Promise.all(request.edits.map(async (edit, index) => FS.writeText(writes[index]!.path, edit.content)))
+      for (const write of writes) {
+        this.#files.note(write.path, write.sourceVersion)
+      }
       const compile = await this.#coordinator.noteStudioFileMutation(writes)
       if (compile.status === 'error') {
-        await Promise.all(before.map(async file => FS.writeText(await this.#resolveTaoFile(file.path), file.content)))
-        await this.#coordinator.noteStudioFileMutation(before.map(file => ({
-          path: FS.resolvePath(file.path, this.projectRoot),
-          sourceVersion: file.sourceVersion,
-          writeId: `rollback:${request.writeId}`,
-        })))
-        for (const file of before) {
-          this.#emitFile(this.#projectFile(file.path, file.sourceVersion))
-        }
+        await this.#restoreAgentFiles(before, `rollback:${request.writeId}`)
         return { compile, rolledBack: true }
       }
       this.#agentUndoStack.push(before)
       for (const [index, write] of writes.entries()) {
-        this.#emitFile(this.#projectFile(before[index]!.path, write.sourceVersion))
+        this.#emitFile(this.#files.projectFile(before[index]!.path, write.sourceVersion))
       }
       return { compile, rolledBack: false }
     })
@@ -432,18 +338,29 @@ export class StudioProjectSession {
     return this.#mutate(async () => {
       const before = this.#agentUndoStack[this.#agentUndoStack.length - 1]
       Assert.input(before !== undefined, 'Nothing applied by the agent to undo.')
-      await Promise.all(before.map(async file => FS.writeText(await this.#resolveTaoFile(file.path), file.content)))
-      const compile = await this.#coordinator.noteStudioFileMutation(before.map(file => ({
-        path: FS.resolvePath(file.path, this.projectRoot),
-        sourceVersion: file.sourceVersion,
-        writeId,
-      })))
+      const compile = await this.#restoreAgentFiles(before, writeId)
       this.#agentUndoStack.pop()
-      for (const file of before) {
-        this.#emitFile(this.#projectFile(file.path, file.sourceVersion))
-      }
       return { compile, restored: before.map(file => file.path) }
     })
+  }
+
+  async #restoreAgentFiles(
+    files: readonly { path: string; content: string; sourceVersion: string }[],
+    writeId: string,
+  ): Promise<StudioCompileCompletion> {
+    await Promise.all(files.map(async file => FS.writeText(await this.#files.resolveTaoFile(file.path), file.content)))
+    for (const file of files) {
+      this.#files.note(file.path, file.sourceVersion)
+    }
+    const compile = await this.#coordinator.noteStudioFileMutation(files.map(file => ({
+      path: FS.resolvePath(file.path, this.projectRoot),
+      sourceVersion: file.sourceVersion,
+      writeId,
+    })))
+    for (const file of files) {
+      this.#emitFile(this.#files.projectFile(file.path, file.sourceVersion))
+    }
+    return compile
   }
 
   /** agentParse parses the selected app entry with linked cross-references. */
@@ -456,26 +373,11 @@ export class StudioProjectSession {
   }
 
   fileDraftState(path: string): StudioFileDraftState {
-    return this.#draftStates.get(path) ?? { diagnostics: [], dirty: false }
+    return this.#files.draftState(path)
   }
 
   checkpoints(): readonly StudioCheckpointSummary[] {
-    return [
-      ...[...this.#actionCheckpoints.values()].map(checkpoint => ({
-        afterSourceVersion: checkpoint.afterSourceVersion,
-        beforeSourceVersion: checkpoint.beforeSourceVersion,
-        id: checkpoint.id,
-        path: checkpoint.path,
-        status: checkpoint.status,
-      })),
-      ...[...this.#sketchSnapCheckpoints.values()].map(checkpoint => ({
-        afterSourceVersion: checkpoint.afterSourceVersion,
-        beforeSourceVersion: checkpoint.beforeSourceVersion,
-        id: checkpoint.id,
-        path: FS.relativePath(this.projectRoot, checkpoint.path),
-        status: checkpoint.status,
-      })),
-    ]
+    return this.#ledger.summaries()
   }
 
   compileInitial(): Promise<StudioCompileCompletion> {
@@ -488,7 +390,7 @@ export class StudioProjectSession {
   }
 
   registerPreview(input: unknown): StudioCompileSnapshot {
-    if (!isRecord(input) || typeof input['previewInstanceId'] !== 'string') {
+    if (!Json.isRecord(input) || typeof input['previewInstanceId'] !== 'string') {
       Errors.throwUserInput('Expected a Studio preview instance id.')
     }
     this.setPreviewInstance(input['previewInstanceId'])
@@ -524,7 +426,7 @@ export class StudioProjectSession {
   }
 
   registerCellPreview(input: unknown): StudioCellRuntime {
-    return this.#requireMatrix().registerInstance(cellInstanceIdentity(input))
+    return this.#requireMatrix().registerInstance(StudioSessionRequests.cellInstanceIdentity(input))
   }
 
   /** unregisterCellPreview releases one live instance; a stale or unknown id is a no-op. */
@@ -533,7 +435,7 @@ export class StudioProjectSession {
   }
 
   reconfigureCell(input: unknown): StudioCellRuntime {
-    const request = cellReconfigureRequest(input)
+    const request = StudioSessionRequests.cellReconfigureRequest(input)
     const runtime = this.#requireMatrix().reconfigure(request)
     this.#emit({
       cellId: request.cellId,
@@ -580,7 +482,7 @@ export class StudioProjectSession {
     if (message?.type !== 'preview-layout-measurements') {
       Errors.throwUserInput('Expected a valid Tao Studio preview-layout-measurements message.')
     }
-    const cellIdentity = completeCellInstanceIdentity(message)
+    const cellIdentity = StudioSessionRequests.completeCellInstanceIdentity(message)
     this.#requireMatrix().assertCurrentInstance(cellIdentity)
     this.#previewLayoutMeasurements.set(
       previewMeasurementCellKey(cellIdentity),
@@ -609,11 +511,7 @@ export class StudioProjectSession {
   ): StudioSketchRect {
     const measurement = this.previewLayoutMeasurement(identity, renderId)
     if (measurement === undefined || measurement.studioRectId === undefined) {
-      throw new StudioSourceActionConflictError(
-        'measurement-unavailable',
-        'Current preview geometry is not available yet; retry Unsnap after the preview finishes measuring.',
-        { renderId },
-      )
+      throw measurementUnavailable(renderId)
     }
     return measuredUnsnapRect(measurement, sketch)
   }
@@ -740,22 +638,23 @@ export class StudioProjectSession {
     return this.#mutate(async () => {
       const request = input as StudioSketchCatalogRequest
       const fingerprint = JSON.stringify(input)
-      const requestId = isRecord(input) && typeof input['requestId'] === 'string' ? input['requestId'] : undefined
+      const requestId = Json.isRecord(input) && typeof input['requestId'] === 'string' ? input['requestId'] : undefined
       const cached = requestId === undefined ? undefined : this.#sketchResults.get(requestId)
       if (cached !== undefined) {
         Assert.input(cached.fingerprint === fingerprint, `Studio sketch request id was reused: ${requestId}`)
         return cached.result
       }
-      if (isRecord(input) && isRecord(input['action']) && input['action']['kind'] === 'create-sketch') {
+      const action = Json.isRecord(input) && Json.isRecord(input['action']) ? input['action'] : undefined
+      if (action?.['kind'] === 'create-sketch') {
         Assert.input(
-          input['action']['project'] === this.identity().project,
+          action['project'] === this.identity().project,
           'A Studio sketch can only be created in the active project.',
         )
       }
-      if (isRecord(input) && isRecord(input['action']) && input['action']['kind'] === 'delete-sketch') {
+      if (action?.['kind'] === 'delete-sketch') {
         Errors.throwUserInput('Deleting a Studio sketch is not available until its generated-source lifecycle lands.')
       }
-      if (isRecord(input) && isRecord(input['action']) && input['action']['kind'] === 'refresh-snap-targets') {
+      if (action?.['kind'] === 'refresh-snap-targets') {
         Errors.throwUserInput('Refreshing Studio Snap targets is owned by generated-source transactions.')
       }
 
@@ -799,6 +698,7 @@ export class StudioProjectSession {
         if (applied) {
           if (createdName !== undefined && createdPath !== undefined && await FS.isFile(createdPath)) {
             await new StudioGeneratedSources(this.projectRoot).removeView(createdName)
+            this.#files.forget(createdPath)
           }
           await this.#sketchCatalog.restore(prior)
           if (writeRegistered && createdPath !== undefined) {
@@ -815,7 +715,7 @@ export class StudioProjectSession {
 
   proposeSketchSnap(input: unknown): Promise<StudioSketchSnapProposalResult> {
     return this.#mutate(async () => {
-      const request = parseSketchSnapRequest(input)
+      const request = StudioSessionRequests.parseSketchSnapRequest(input)
       const fingerprint = JSON.stringify(request)
       const cached = this.#sketchSnapProposalResults.get(request.requestId)
       if (cached !== undefined) {
@@ -842,7 +742,7 @@ export class StudioProjectSession {
 
   applySketchSnap(input: unknown): Promise<StudioSketchSnapApplyResult> {
     return this.#mutate(async () => {
-      const request = parseSketchSnapRequest(input)
+      const request = StudioSessionRequests.parseSketchSnapRequest(input)
       const fingerprint = JSON.stringify(request)
       const cached = this.#sketchSnapResults.get(request.requestId)
       if (cached !== undefined) {
@@ -856,16 +756,12 @@ export class StudioProjectSession {
           'Studio Snap overlap requires confirmation of the current canonical proposal.',
         )
       }
-      Assert.input(this.#openCheckpointId === undefined, 'Commit the active Studio source-action checkpoint first.')
-      Assert.input(
-        !this.#actionCheckpoints.has(request.checkpointId) && !this.#sketchSnapCheckpoints.has(request.checkpointId),
-        `Studio source-action checkpoint id was reused: ${request.checkpointId}`,
-      )
+      this.#ledger.requireSketchCheckpointSlot(request.checkpointId)
 
       const generated = new StudioGeneratedSources(this.projectRoot)
       let sourceWritten = false
       try {
-        await generated.rewrite(prepared.path, prepared.patch.content)
+        await this.#rewriteGenerated(generated, prepared.path, prepared.patch.content, prepared.patch.sourceVersion)
         sourceWritten = true
         const compile = await this.#coordinator.noteStudioWrite({
           path: prepared.path,
@@ -873,11 +769,7 @@ export class StudioProjectSession {
           writeId: request.requestId,
         })
         if (compile.status === 'error') {
-          await this.#restoreGeneratedSnap(
-            generated,
-            prepared,
-            `rollback:${request.requestId}`,
-          )
+          await this.#restoreGeneratedSnap(generated, prepared, `rollback:${request.requestId}`)
           Errors.throwUserInput(
             `Studio did not Snap because the generated Tao source failed to compile: ${compile.message}`,
           )
@@ -895,7 +787,7 @@ export class StudioProjectSession {
         })
         const file: StudioProjectFileContent = {
           content: prepared.patch.content,
-          ...this.#projectFile(prepared.current.path, prepared.patch.sourceVersion),
+          ...this.#files.projectFile(prepared.current.path, prepared.patch.sourceVersion),
         }
         const checkpoint: SketchSnapCheckpoint = {
           afterCatalogRevision: catalogResult.catalog.revision,
@@ -913,9 +805,7 @@ export class StudioProjectSession {
             targets: prepared.beforeTargets,
           },
         }
-        this.#sketchSnapCheckpoints.set(checkpoint.id, checkpoint)
-        this.#checkpointOrder.push(checkpoint.id)
-        this.#trimSourceActionCheckpoints()
+        this.#ledger.recordSketchSnap(checkpoint)
         const result: StudioSketchSnapApplyResult = {
           catalog: catalogResult.catalog,
           checkpoint: { id: checkpoint.id, status: 'committed' },
@@ -942,7 +832,7 @@ export class StudioProjectSession {
   /** Applies an authenticated rect-based flow edit as one generated-source/catalog checkpoint. */
   applySketchFlowAction(input: unknown): Promise<StudioSketchSnapApplyResult> {
     return this.#mutate(async () => {
-      const request = parseSketchFlowActionRequest(input)
+      const request = StudioSessionRequests.parseSketchFlowActionRequest(input)
       const fingerprint = JSON.stringify(request)
       const cached = this.#sketchSnapResults.get(request.requestId)
       if (cached !== undefined) {
@@ -1000,15 +890,11 @@ export class StudioProjectSession {
         files: parsed.files.map(file => file.ast),
         occurrence: { nodeKind: 'render', renderOwner: sketch.view },
       })
-      Assert.input(this.#openCheckpointId === undefined, 'Commit the active Studio source-action checkpoint first.')
-      Assert.input(
-        !this.#actionCheckpoints.has(request.checkpointId) && !this.#sketchSnapCheckpoints.has(request.checkpointId),
-        `Studio source-action checkpoint id was reused: ${request.checkpointId}`,
-      )
+      this.#ledger.requireSketchCheckpointSlot(request.checkpointId)
       let sourceWritten = false
       let catalogWritten = false
       try {
-        await generatedSources.rewrite(generated.path, patch.content)
+        await this.#rewriteGenerated(generatedSources, generated.path, patch.content, patch.sourceVersion)
         sourceWritten = true
         const compile = await this.#coordinator.noteStudioWrite({
           path: generated.path,
@@ -1034,7 +920,7 @@ export class StudioProjectSession {
         catalogWritten = true
         const file: StudioProjectFileContent = {
           content: patch.content,
-          ...this.#projectFile(current.path, patch.sourceVersion),
+          ...this.#files.projectFile(current.path, patch.sourceVersion),
         }
         const checkpoint: SketchSnapCheckpoint = {
           afterCatalogRevision: catalogResult.catalog.revision,
@@ -1051,9 +937,7 @@ export class StudioProjectSession {
             targets: sketch.snapped.map(item => item.target),
           },
         }
-        this.#sketchSnapCheckpoints.set(checkpoint.id, checkpoint)
-        this.#checkpointOrder.push(checkpoint.id)
-        this.#trimSourceActionCheckpoints()
+        this.#ledger.recordSketchSnap(checkpoint)
         const rectIds = request.action.kind === 'toggle-direction'
           ? [request.action.rectId]
           : [
@@ -1094,7 +978,7 @@ export class StudioProjectSession {
 
   applySketchUnsnap(input: unknown): Promise<StudioSketchSnapApplyResult> {
     return this.#mutate(async () => {
-      const request = parseSketchUnsnapRequest(input)
+      const request = StudioSessionRequests.parseSketchUnsnapRequest(input)
       const fingerprint = JSON.stringify(request)
       const cached = this.#sketchSnapResults.get(request.requestId)
       if (cached !== undefined) {
@@ -1132,14 +1016,10 @@ export class StudioProjectSession {
       }, { files: parsed.files.map(file => file.ast) })
       const content = patch.content
       const sourceVersion = patch.sourceVersion
-      Assert.input(this.#openCheckpointId === undefined, 'Commit the active Studio source-action checkpoint first.')
-      Assert.input(
-        !this.#actionCheckpoints.has(request.checkpointId) && !this.#sketchSnapCheckpoints.has(request.checkpointId),
-        `Studio source-action checkpoint id was reused: ${request.checkpointId}`,
-      )
+      this.#ledger.requireSketchCheckpointSlot(request.checkpointId)
       let sourceWritten = false
       try {
-        await generatedSources.rewrite(generated.path, content)
+        await this.#rewriteGenerated(generatedSources, generated.path, content, sourceVersion)
         sourceWritten = true
         const compile = await this.#coordinator.noteStudioWrite({
           path: generated.path,
@@ -1181,7 +1061,7 @@ export class StudioProjectSession {
           })
         const file: StudioProjectFileContent = {
           content,
-          ...this.#projectFile(current.path, sourceVersion),
+          ...this.#files.projectFile(current.path, sourceVersion),
         }
         const checkpoint: SketchSnapCheckpoint = {
           afterCatalogRevision: catalogResult.catalog.revision,
@@ -1201,9 +1081,7 @@ export class StudioProjectSession {
             ],
           },
         }
-        this.#sketchSnapCheckpoints.set(checkpoint.id, checkpoint)
-        this.#checkpointOrder.push(checkpoint.id)
-        this.#trimSourceActionCheckpoints()
+        this.#ledger.recordSketchSnap(checkpoint)
         const result: StudioSketchSnapApplyResult = {
           catalog: catalogResult.catalog,
           checkpoint: { id: checkpoint.id, status: 'committed' },
@@ -1235,22 +1113,14 @@ export class StudioProjectSession {
 
   undoSketchSnap(input: unknown): Promise<StudioSketchSnapUndoResult> {
     return this.#mutate(async () => {
-      const request = parseSketchSnapUndoRequest(input)
+      const request = StudioSessionRequests.parseSketchSnapUndoRequest(input)
       const fingerprint = JSON.stringify(request)
       const cached = this.#sketchSnapUndoResults.get(request.requestId)
       if (cached !== undefined) {
         Assert.input(cached.fingerprint === fingerprint, `Studio Snap undo request id was reused: ${request.requestId}`)
         return cached.result
       }
-      Assert.input(
-        this.#checkpointOrder.at(-1) === request.checkpointId,
-        'Studio can only undo the latest committed source-action checkpoint.',
-      )
-      const checkpoint = this.#sketchSnapCheckpoints.get(request.checkpointId)
-      Assert.input(
-        checkpoint?.status === 'committed',
-        `Studio Snap checkpoint is not undoable: ${request.checkpointId}`,
-      )
+      const checkpoint = this.#ledger.sketchSnapUndoTarget(request.checkpointId)
       const current = await this.readFile(FS.relativePath(this.projectRoot, checkpoint.path))
       requireSourceVersion(current, request.sourceVersion)
       requireSourceVersion(current, checkpoint.afterSourceVersion)
@@ -1262,19 +1132,20 @@ export class StudioProjectSession {
       }
 
       const generated = new StudioGeneratedSources(this.projectRoot)
-      await generated.rewrite(checkpoint.path, checkpoint.beforeContent)
+      await this.#rewriteGenerated(generated, checkpoint.path, checkpoint.beforeContent, checkpoint.beforeSourceVersion)
       const compile = await this.#coordinator.noteStudioWrite({
         path: checkpoint.path,
         sourceVersion: checkpoint.beforeSourceVersion,
         writeId: request.requestId,
       })
       if (compile.status === 'error') {
-        await generated.rewrite(checkpoint.path, checkpoint.afterContent)
-        await this.#coordinator.noteStudioWrite({
-          path: checkpoint.path,
-          sourceVersion: checkpoint.afterSourceVersion,
-          writeId: `rollback:${request.requestId}`,
-        })
+        await this.#restoreGeneratedContent(
+          generated,
+          checkpoint.path,
+          checkpoint.afterContent,
+          checkpoint.afterSourceVersion,
+          `rollback:${request.requestId}`,
+        )
         Errors.throwUserInput(
           `Studio did not undo Snap because the original Tao source failed to compile: ${compile.message}`,
         )
@@ -1287,19 +1158,19 @@ export class StudioProjectSession {
           requestId: `catalog:${request.requestId}`,
         })).catalog
       } catch (error) {
-        await generated.rewrite(checkpoint.path, checkpoint.afterContent)
-        await this.#coordinator.noteStudioWrite({
-          path: checkpoint.path,
-          sourceVersion: checkpoint.afterSourceVersion,
-          writeId: `rollback:${request.requestId}`,
-        })
+        await this.#restoreGeneratedContent(
+          generated,
+          checkpoint.path,
+          checkpoint.afterContent,
+          checkpoint.afterSourceVersion,
+          `rollback:${request.requestId}`,
+        )
         throw error
       }
-      checkpoint.status = 'undone'
-      this.#checkpointOrder.pop()
+      this.#ledger.markUndone(checkpoint)
       const file: StudioProjectFileContent = {
         content: checkpoint.beforeContent,
-        ...this.#projectFile(FS.relativePath(this.projectRoot, checkpoint.path), checkpoint.beforeSourceVersion),
+        ...this.#files.projectFile(FS.relativePath(this.projectRoot, checkpoint.path), checkpoint.beforeSourceVersion),
       }
       const result: StudioSketchSnapUndoResult = {
         catalog: undoneCatalog,
@@ -1377,6 +1248,17 @@ export class StudioProjectSession {
     }
   }
 
+  /** #rewriteGenerated rewrites one generated source and records its version before the coordinator is told. */
+  async #rewriteGenerated(
+    generated: StudioGeneratedSources,
+    path: string,
+    content: string,
+    sourceVersion: string,
+  ): Promise<void> {
+    await generated.rewrite(path, content)
+    this.#files.note(path, sourceVersion)
+  }
+
   async #restoreGeneratedSnap(
     generated: StudioGeneratedSources,
     prepared: PreparedSketchSnap,
@@ -1398,7 +1280,7 @@ export class StudioProjectSession {
     sourceVersion: string,
     writeId: string,
   ): Promise<void> {
-    await generated.rewrite(path, content)
+    await this.#rewriteGenerated(generated, path, content, sourceVersion)
     await this.#coordinator.noteStudioWrite({
       path,
       sourceVersion,
@@ -1527,330 +1409,43 @@ export class StudioProjectSession {
     return this.#matrix
   }
 
+  /**
+   * files describes every project Tao file at its current source version. The listing is maintained
+   * incrementally by the session's own writes and the watcher's reports, so this reads no disk.
+   */
   async files(): Promise<StudioProjectFile[]> {
-    const paths = await Repo.filesUnder(this.projectRoot, {
-      excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
-      extensions: ['.tao'],
-    })
-    const files = await Promise.all(paths.map(async path => {
-      try {
-        const content = await FS.readText(path)
-        return this.#projectFile(
-          FS.relativePath(this.projectRoot, path),
-          SourceActions.studioSourceVersion(content),
-        )
-      } catch (error) {
-        // A watcher may remove a file after discovery but before this snapshot reads it.
-        if (!await FS.isFile(path)) {
-          return undefined
-        }
-        throw error
-      }
-    }))
-    return files.filter(file => file !== undefined)
+    return this.#files.list()
   }
 
-  async readFile(path: string): Promise<StudioProjectFileContent> {
-    const resolved = await this.#resolveTaoFile(path)
-    const content = await FS.readText(resolved)
-    return {
-      content,
-      ...this.#projectFile(
-        FS.relativePath(this.projectRoot, resolved),
-        SourceActions.studioSourceVersion(content),
-      ),
-    }
+  readFile(path: string): Promise<StudioProjectFileContent> {
+    return this.#files.readFile(path)
   }
 
   createFile(request: StudioCreateFileRequest): Promise<StudioCreateFileResult> {
-    return this.#mutate(async () => {
-      const path = await this.#resolveNewTaoFile(request.path)
-      const content = ''
-      const sourceVersion = SourceActions.studioSourceVersion(content)
-      await FS.writeText(path, content)
-      const compile = await this.#coordinator.noteStudioFileMutation([{
-        path,
-        sourceVersion,
-        writeId: request.writeId,
-      }])
-      const file: StudioProjectFileContent = {
-        content,
-        ...this.#projectFile(FS.relativePath(this.projectRoot, path), sourceVersion),
-      }
-      this.#emitFile(file)
-      const files = await this.files()
-      this.#emitFiles(files)
-      return { compile, file, files }
-    })
+    return this.#mutate(() => this.#fileOperations.createFile(request))
   }
 
   renameFile(request: StudioRenameFileRequest): Promise<StudioRenameFileResult> {
-    return this.#mutate(async () => {
-      const current = await this.readFile(request.path)
-      requireSourceVersion(current, request.sourceVersion)
-      this.#requireFileMutationAllowed(current.path)
-      const path = await this.#resolveTaoFile(current.path)
-      Assert.input(await FS.realPath(path) !== this.entryPath, 'Studio cannot rename the active app entry file.')
-      const targetPath = await this.#resolveNewTaoFile(request.targetPath)
-      await FS.move(path, targetPath)
-      const compile = await this.#coordinator.noteStudioFileMutation([
-        { path, writeId: request.writeId },
-        { path: targetPath, sourceVersion: current.sourceVersion, writeId: request.writeId },
-      ])
-      const file: StudioProjectFileContent = {
-        content: current.content,
-        ...this.#projectFile(FS.relativePath(this.projectRoot, targetPath), current.sourceVersion),
-      }
-      const files = await this.files()
-      this.#emitFiles(files)
-      return { compile, file, files, previousPath: current.path }
-    })
+    return this.#mutate(() => this.#fileOperations.renameFile(request))
   }
 
   moveGeneratedSource(request: StudioMoveGeneratedSourceRequest): Promise<StudioMoveGeneratedSourceResult> {
-    return this.#mutate(async () => {
-      const current = await this.readFile(request.path)
-      requireSourceVersion(current, request.sourceVersion)
-      const match = current.path.match(/^@\/studio\/([A-Z][A-Za-z0-9_]*)\.tao$/)
-      Assert.input(match, 'Move to package requires a generated @/studio/<Name>.tao source.')
-      Assert.input(
-        current.content.startsWith(`${studioGeneratedSourceHeader}\n`),
-        `${current.path} is not a Studio-generated source.`,
-      )
-      const name = match[1]!
-      const targetPackage = normalizedTargetPackage(request.targetPackage)
-      const conflicts = await this.#targetPackageDeclarationConflicts(targetPackage, name)
-      if (conflicts.length > 0) {
-        return { conflicts, name, status: 'confirmation-required', targetPackage }
-      }
-
-      const sourcePath = FS.resolvePath(current.path, this.projectRoot)
-      const beforeCatalog = await this.#sketchCatalog.read()
-      const catalogSketches = beforeCatalog.sketches.filter(sketch => sketch.view === name)
-      Assert.input(catalogSketches.length <= 1, `Move to package found multiple sketches for generated view ${name}.`)
-      const catalogSketch = catalogSketches[0]
-
-      const sourceFiles = await this.files()
-      const rewrites: Array<{ content: string; current: StudioProjectFileContent; path: string }> = []
-      for (const file of sourceFiles) {
-        const fileContent = file.path === current.path ? current : await this.readFile(file.path)
-        const rewritten = await this.#rewriteGeneratedImport(fileContent, name, targetPackage)
-        if (rewritten !== undefined) {
-          rewrites.push({
-            content: rewritten,
-            current: fileContent,
-            path: FS.resolvePath(file.path, this.projectRoot),
-          })
-        }
-      }
-      const movedContent = rewrites.find(rewrite => rewrite.current.path === current.path)?.content ?? current.content
-      const generated = new StudioGeneratedSources(this.projectRoot)
-      let targetPath: string | undefined
-      let retiredCatalog: StudioSketchCatalogSnapshot | undefined
-      try {
-        targetPath = await generated.moveView(name, targetPackage, movedContent)
-        const rewritten: StudioProjectFileContent[] = []
-        for (const rewrite of rewrites.filter(candidate => candidate.current.path !== current.path)) {
-          if (rewrite.current.path.startsWith('@/studio/')) {
-            await generated.rewrite(rewrite.path, rewrite.content)
-          } else {
-            await FS.writeText(rewrite.path, rewrite.content)
-          }
-          const sourceVersion = SourceActions.studioSourceVersion(rewrite.content)
-          rewritten.push({
-            content: rewrite.content,
-            ...this.#projectFile(rewrite.current.path, sourceVersion),
-          })
-        }
-        const targetContent = await FS.readText(targetPath)
-        const targetSourceVersion = SourceActions.studioSourceVersion(targetContent)
-        const file: StudioProjectFileContent = {
-          content: targetContent,
-          ...this.#projectFile(FS.relativePath(this.projectRoot, targetPath), targetSourceVersion),
-        }
-        const compile = await this.#coordinator.noteStudioFileMutation([
-          { path: sourcePath, writeId: request.writeId },
-          { path: targetPath, sourceVersion: targetSourceVersion, writeId: request.writeId },
-          ...rewritten.map(candidate => ({
-            path: FS.resolvePath(candidate.path, this.projectRoot),
-            sourceVersion: candidate.sourceVersion,
-            writeId: request.writeId,
-          })),
-        ])
-        if (compile.status === 'error') {
-          Errors.throwUserInput(
-            `Studio did not move ${name} because the authored Tao source failed to compile: ${compile.message}`,
-          )
-        }
-        const files = await this.files()
-        if (catalogSketch !== undefined) {
-          retiredCatalog = (await this.#sketchCatalog.apply({
-            action: { id: catalogSketch.id, kind: 'delete-sketch' },
-            expectedRevision: beforeCatalog.revision,
-            requestId: `catalog:${request.writeId}`,
-          })).catalog
-        }
-        for (const changed of rewritten) {
-          this.#emitFile(changed)
-        }
-        this.#emitFiles(files)
-        if (retiredCatalog !== undefined) {
-          this.#emitSketchCatalog(retiredCatalog)
-        }
-        return { compile, file, files, previousPath: current.path, rewritten, status: 'moved' }
-      } catch (error) {
-        if (targetPath !== undefined) {
-          const rollbackFailures: unknown[] = []
-          try {
-            if (await FS.isFile(targetPath)) {
-              if (await FS.exists(sourcePath)) {
-                await FS.remove(targetPath)
-              } else {
-                await FS.move(targetPath, sourcePath)
-              }
-            }
-            if (await FS.isFile(sourcePath)) {
-              await generated.rewrite(sourcePath, current.content)
-            } else {
-              await FS.writeText(sourcePath, current.content)
-              await FS.chmod(sourcePath, 0o444)
-            }
-          } catch (rollbackError) {
-            rollbackFailures.push(rollbackError)
-          }
-          for (const rewrite of rewrites.filter(candidate => candidate.current.path !== current.path)) {
-            try {
-              if (rewrite.current.path.startsWith('@/studio/')) {
-                await generated.rewrite(rewrite.path, rewrite.current.content)
-              } else {
-                await FS.writeText(rewrite.path, rewrite.current.content)
-              }
-            } catch (rollbackError) {
-              rollbackFailures.push(rollbackError)
-            }
-          }
-          if (retiredCatalog !== undefined) {
-            try {
-              await this.#sketchCatalog.restore(beforeCatalog)
-            } catch (rollbackError) {
-              rollbackFailures.push(rollbackError)
-            }
-          }
-          try {
-            const rollback = await this.#coordinator.noteStudioFileMutation([
-              { path: sourcePath, sourceVersion: current.sourceVersion, writeId: `rollback:${request.writeId}` },
-              { path: targetPath, writeId: `rollback:${request.writeId}` },
-              ...rewrites.filter(candidate => candidate.current.path !== current.path).map(rewrite => ({
-                path: rewrite.path,
-                sourceVersion: rewrite.current.sourceVersion,
-                writeId: `rollback:${request.writeId}`,
-              })),
-            ])
-            if (rollback.status === 'error') {
-              rollbackFailures.push(new Errors.HostEnvironmentError(rollback.message))
-            }
-          } catch (rollbackError) {
-            rollbackFailures.push(rollbackError)
-          }
-          if (rollbackFailures.length > 0) {
-            Errors.throwHostEnvironment(
-              `Studio could not completely roll back the failed move of ${name}.`,
-              { cause: rollbackFailures[0] },
-            )
-          }
-        }
-        throw Errors.fromUnknown(error, { studioOperation: 'move-generated-source', writeId: request.writeId })
-      }
-    })
-  }
-
-  async #targetPackageDeclarationConflicts(targetPackage: string, name: string): Promise<string[]> {
-    const directory = FS.resolvePath(targetPackage, this.projectRoot)
-    Assert.input(await FS.isDirectory(directory), `Target Tao package does not exist: ${targetPackage}`)
-    const conflicts: string[] = []
-    for (const child of await FS.listDir(directory)) {
-      if (!child.endsWith('.tao')) {
-        continue
-      }
-      const path = FS.resolvePath(child, directory)
-      const parsed = await this.#workspace.parseSource(await FS.readText(path), Langium.URI.file(path))
-      Assert.input(
-        !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
-        `Cannot move generated source until ${FS.relativePath(this.projectRoot, path)} parses.`,
-      )
-      if (parsed.entry.ast.statements.some(statement => AST.isDeclaration(statement) && statement.name === name)) {
-        conflicts.push(FS.relativePath(this.projectRoot, path))
-      }
-    }
-    return conflicts
-  }
-
-  async #rewriteGeneratedImport(
-    file: StudioProjectFileContent,
-    name: string,
-    targetPackage: string,
-  ): Promise<string | undefined> {
-    const path = FS.resolvePath(file.path, this.projectRoot)
-    const parsed = await this.#workspace.parseSource(file.content, Langium.URI.file(path))
-    Assert.input(
-      !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
-      `Cannot move generated source until ${file.path} parses.`,
-    )
-    return rewriteGeneratedStudioImports(file.content, parsed.entry.ast, name, targetPackage)
+    return this.#mutate(() => this.#fileOperations.moveGeneratedSource(request))
   }
 
   deleteFile(request: StudioDeleteFileRequest): Promise<StudioDeleteFileResult> {
-    return this.#mutate(async () => {
-      const current = await this.readFile(request.path)
-      requireSourceVersion(current, request.sourceVersion)
-      this.#requireFileMutationAllowed(current.path)
-      const path = await this.#resolveTaoFile(current.path)
-      Assert.input(await FS.realPath(path) !== this.entryPath, 'Studio cannot delete the active app entry file.')
-      await FS.remove(path)
-      const compile = await this.#coordinator.noteStudioFileMutation([{ path, writeId: request.writeId }])
-      const deleted = this.#projectFile(current.path, current.sourceVersion)
-      const files = await this.files()
-      this.#emitFiles(files)
-      return { compile, deleted, files }
-    })
+    return this.#mutate(() => this.#fileOperations.deleteFile(request))
   }
 
   syncDraft(request: StudioDraftWriteRequest): Promise<StudioDraftWriteResult> {
-    return this.#mutate(async () => {
-      const current = await this.readFile(request.path)
-      requireSourceVersion(current, request.sourceVersion)
-      const resolved = await this.#resolveTaoFile(request.path)
-      const parsed = await this.#workspace.parseSource(request.content, Langium.URI.file(resolved))
-      const diagnostics = Diagnostics.errorMessages(parsed.diagnostics, 'lexer', 'parser')
-      if (diagnostics.length > 0) {
-        this.#draftStates.set(current.path, { diagnostics, dirty: true })
-        const file = { ...current, ...this.#projectFile(current.path, current.sourceVersion) }
-        this.#emitFile(file)
-        return { diagnostics, file, saved: false }
-      }
-
-      const sourceVersion = SourceActions.studioSourceVersion(request.content)
-      await FS.writeText(resolved, request.content)
-      const compile = await this.#coordinator.noteStudioWrite({
-        path: resolved,
-        sourceVersion,
-        writeId: request.writeId,
-      })
-      this.#draftStates.delete(current.path)
-      const file: StudioProjectFileContent = {
-        content: request.content,
-        ...this.#projectFile(current.path, sourceVersion),
-      }
-      this.#emitFile(file)
-      return { compile, diagnostics: [], file, saved: true }
-    })
+    return this.#mutate(() => this.#fileOperations.syncDraft(request))
   }
 
   applySourceAction(input: unknown): Promise<StudioSourceActionResult> {
     return this.#mutate(async () => {
       const envelope = StudioProtocol.parseSourceActionEnvelope(input)
       Assert.input(envelope, 'Expected a valid Tao Studio source-action v2 envelope.')
-      requireSessionIdentity(envelope, this.identity())
+      StudioSessionRequests.requireSessionIdentity(envelope, this.identity())
       this.#acceptPreviewIdentity(envelope)
 
       const fingerprint = JSON.stringify(envelope)
@@ -1864,8 +1459,9 @@ export class StudioProjectSession {
       }
 
       const { current, patch, path } = await this.#prepareSourceAction(envelope)
-      const checkpoint = this.#prepareSourceActionCheckpoint(envelope, current)
+      const checkpoint = this.#ledger.prepareSourceAction(envelope, current)
       await FS.writeText(path, patch.content)
+      this.#files.note(path, patch.sourceVersion)
       const compile = await this.#coordinator.noteStudioWrite({
         path,
         sourceVersion: patch.sourceVersion,
@@ -1873,6 +1469,7 @@ export class StudioProjectSession {
       })
       if (envelope.action.kind === 'insert-captured-fixture' && compile.status === 'error') {
         await FS.writeText(path, current.content)
+        this.#files.note(path, current.sourceVersion)
         const rollback = await this.#coordinator.noteStudioWrite({
           path,
           sourceVersion: current.sourceVersion,
@@ -1888,7 +1485,7 @@ export class StudioProjectSession {
         )
       }
       const result: StudioSourceActionResult = {
-        checkpoint: this.#recordSourceActionCheckpoint(envelope, checkpoint, patch.sourceVersion),
+        checkpoint: this.#ledger.recordSourceAction(envelope, checkpoint, patch.sourceVersion),
         compile,
         content: patch.content,
         edits: patch.edits,
@@ -1899,9 +1496,7 @@ export class StudioProjectSession {
       this.#emitCheckpoint(result.checkpoint)
       this.#actionResults.set(envelope.requestId, { fingerprint, result })
       trimMap(this.#actionResults, sourceActionResultLimit)
-      this.#emitFile({
-        ...this.#projectFile(current.path, patch.sourceVersion),
-      })
+      this.#emitFile(this.#files.projectFile(current.path, patch.sourceVersion))
       return result
     })
   }
@@ -1911,7 +1506,7 @@ export class StudioProjectSession {
     return this.#mutate(async () => {
       const envelope = StudioProtocol.parseSourceActionEnvelope(input)
       Assert.input(envelope, 'Expected a valid Tao Studio source-action v2 envelope.')
-      requireSessionIdentity(envelope, this.identity())
+      StudioSessionRequests.requireSessionIdentity(envelope, this.identity())
       const { current, patch } = await this.#prepareSourceAction(envelope)
       return {
         content: patch.content,
@@ -1929,14 +1524,14 @@ export class StudioProjectSession {
     this.#acceptPreviewIdentity(envelope)
     const current = await this.readFile(envelope.identity.path)
     requireSourceVersion(current, envelope.identity.sourceVersion)
-    const path = await this.#resolveTaoFile(current.path)
+    const path = await this.#files.resolveTaoFile(current.path)
     const parsed = await this.#workspace.parse(path)
     Assert.input(
       !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
       `Cannot apply a Studio source action until ${current.path} parses.`,
     )
-    const request = sourcePatchRequest(envelope)
-    requireSourceActionPreconditions(envelope, request)
+    const request = StudioSessionRequests.sourcePatchRequest(envelope)
+    StudioSessionRequests.requireSourceActionPreconditions(envelope, request)
     this.#requireScenarioActionIdentity(envelope, request)
     try {
       const patch = await SourceActions.applyStudioPatch(parsed.entry.document, request, {
@@ -1959,14 +1554,7 @@ export class StudioProjectSession {
 
   inspectRender(request: StudioInspectRenderRequest): Promise<StudioRenderInspection> {
     return this.#mutate(async () => {
-      const current = await this.readFile(request.path)
-      requireSourceVersion(current, request.sourceVersion)
-      const path = await this.#resolveTaoFile(current.path)
-      const parsed = await this.#workspace.parse(path)
-      Assert.input(
-        !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
-        `Cannot inspect a Studio render until ${current.path} parses.`,
-      )
+      const parsed = await this.#parseVersionedFile(request, 'inspect a Studio render')
       return SourceActions.inspectStudioRender(parsed.entry.document, request.renderId, {
         files: parsed.files.map(file => file.ast),
       })
@@ -1977,104 +1565,32 @@ export class StudioProjectSession {
     request: Pick<StudioInspectRenderRequest, 'path' | 'sourceVersion'>,
   ): Promise<readonly StudioDesignValue[]> {
     return this.#mutate(async () => {
-      const current = await this.readFile(request.path)
-      requireSourceVersion(current, request.sourceVersion)
-      const path = await this.#resolveTaoFile(current.path)
-      const parsed = await this.#workspace.parse(path)
-      Assert.input(
-        !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
-        `Cannot inspect Studio design values until ${current.path} parses.`,
-      )
-      const values: StudioDesignValue[] = []
-      for (const design of parsed.entry.ast.statements.filter(AST.isDesignDeclaration)) {
-        for (const member of design.block.members) {
-          if (AST.isDesignToken(member)) {
-            values.push({
-              designName: design.name,
-              ...studioDesignSource(member),
-              kind: 'token',
-              name: member.name,
-              value: member.value,
-            })
-          } else if (AST.isDesignBundle(member)) {
-            values.push({
-              designName: design.name,
-              ...studioDesignSource(member),
-              entries: member.spec.entries.flatMap(entry => entry.$cstNode?.text ?? []),
-              kind: 'bundle',
-              name: member.name,
-            })
-          } else if (AST.isDesignColorsBlock(member)) {
-            for (const entry of member.entries) {
-              values.push({
-                designName: design.name,
-                ...studioDesignSource(entry),
-                kind: 'color',
-                name: entry.name,
-                value: entry.value.$cstNode?.text ?? '',
-              })
-              for (const family of entry.family?.members ?? []) {
-                values.push({
-                  designName: design.name,
-                  ...studioDesignSource(family),
-                  kind: 'color',
-                  name: `${entry.name}.${family.name}`,
-                  value: family.value.$cstNode?.text ?? '',
-                })
-              }
-            }
-          } else if (AST.isDesignSizesBlock(member)) {
-            for (const entry of member.entries) {
-              values.push({
-                designName: design.name,
-                ...studioDesignSource(entry),
-                kind: 'size',
-                name: entry.name,
-                value: entry.value.$cstNode?.text ?? '',
-              })
-            }
-          } else if (AST.isDesignTextBlock(member)) {
-            for (const entry of member.entries) {
-              values.push({
-                designName: design.name,
-                ...studioDesignSource(entry),
-                entries: entry.spec.entries.flatMap(candidate => candidate.$cstNode?.text ?? []),
-                kind: 'text',
-                name: entry.name,
-              })
-            }
-          } else if (AST.isDesignScreensBlock(member)) {
-            for (const entry of member.entries) {
-              values.push({
-                designName: design.name,
-                ...studioDesignSource(entry),
-                kind: 'screen',
-                name: entry.name,
-                value: entry.threshold === undefined ? 'otherwise' : `below ${entry.threshold.$cstNode?.text ?? ''}`,
-              })
-            }
-          } else if (AST.isDesignStylesBlock(member)) {
-            for (const entry of member.entries) {
-              values.push({
-                designName: design.name,
-                ...studioDesignSource(entry),
-                entries: entry.spec.entries.flatMap(candidate => candidate.$cstNode?.text ?? []),
-                kind: /^[A-Z]/.test(entry.name) ? 'default' : 'style',
-                name: entry.name,
-              })
-            }
-          }
-        }
-      }
-      return values
+      const parsed = await this.#parseVersionedFile(request, 'inspect Studio design values')
+      return studioDesignValues(parsed.entry.ast)
     })
+  }
+
+  /** #parseVersionedFile parses one project file after checking the version the request was computed against. */
+  async #parseVersionedFile(
+    request: Pick<StudioInspectRenderRequest, 'path' | 'sourceVersion'>,
+    purpose: string,
+  ): Promise<ParseResult> {
+    const current = await this.readFile(request.path)
+    requireSourceVersion(current, request.sourceVersion)
+    const path = await this.#files.resolveTaoFile(current.path)
+    const parsed = await this.#workspace.parse(path)
+    Assert.input(
+      !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+      `Cannot ${purpose} until ${current.path} parses.`,
+    )
+    return parsed
   }
 
   undoSourceAction(input: unknown): Promise<StudioSourceActionUndoResult> {
     return this.#mutate(async () => {
       const envelope = StudioProtocol.parseSourceActionUndoEnvelope(input)
       Assert.input(envelope, 'Expected a valid Tao Studio source-action undo v2 envelope.')
-      requireSessionIdentity(envelope, this.identity())
+      StudioSessionRequests.requireSessionIdentity(envelope, this.identity())
       this.#acceptPreviewIdentity(envelope)
 
       const fingerprint = JSON.stringify(envelope)
@@ -2087,41 +1603,20 @@ export class StudioProjectSession {
         return cached.result
       }
 
-      Assert.input(
-        this.#openCheckpointId === undefined,
-        'Commit the active Studio source-action checkpoint before undoing.',
-      )
-      const latestCheckpointId = this.#checkpointOrder.at(-1)
-      Assert.input(
-        latestCheckpointId === envelope.checkpointId,
-        'Studio can only undo the latest committed source-action checkpoint.',
-      )
-      const checkpoint = this.#actionCheckpoints.get(envelope.checkpointId)
-      if (checkpoint === undefined || checkpoint.status !== 'committed') {
-        Errors.throwUserInput(`Studio source-action checkpoint is not undoable: ${envelope.checkpointId}`)
-      }
+      const checkpoint: SourceActionCheckpoint = this.#ledger.undoableSourceAction(envelope.checkpointId)
       const current = await this.readFile(envelope.identity.path)
-      if (
-        checkpoint.path !== current.path
-        || !sameCheckpointIdentity(checkpoint.identity, sourceActionCheckpointIdentity(envelope.identity, current.path))
-      ) {
-        throw new StudioSourceActionConflictError(
-          'checkpoint-identity-mismatch',
-          'Studio source-action undo targets different source-action identity.',
-          { checkpointId: checkpoint.id, path: current.path },
-        )
-      }
+      this.#ledger.requireUndoIdentity(checkpoint, envelope, current)
       requireSourceVersion(current, envelope.identity.sourceVersion)
       requireSourceVersion(current, checkpoint.afterSourceVersion)
-      const path = await this.#resolveTaoFile(current.path)
+      const path = await this.#files.resolveTaoFile(current.path)
       await FS.writeText(path, checkpoint.beforeContent)
+      this.#files.note(path, checkpoint.beforeSourceVersion)
       const compile = await this.#coordinator.noteStudioWrite({
         path,
         sourceVersion: checkpoint.beforeSourceVersion,
         writeId: envelope.requestId,
       })
-      checkpoint.status = 'undone'
-      this.#checkpointOrder.pop()
+      this.#ledger.markUndone(checkpoint)
       const result: StudioSourceActionUndoResult = {
         checkpoint: { id: checkpoint.id, status: 'undone' },
         compile,
@@ -2133,9 +1628,7 @@ export class StudioProjectSession {
       this.#emitCheckpoint(result.checkpoint)
       this.#actionUndoResults.set(envelope.requestId, { fingerprint, result })
       trimMap(this.#actionUndoResults, sourceActionResultLimit)
-      this.#emitFile({
-        ...this.#projectFile(checkpoint.path, checkpoint.beforeSourceVersion),
-      })
+      this.#emitFile(this.#files.projectFile(checkpoint.path, checkpoint.beforeSourceVersion))
       return result
     })
   }
@@ -2143,8 +1636,11 @@ export class StudioProjectSession {
   async noteWatchChanges(changes: readonly StudioSourceChange[]): Promise<StudioWatchResult> {
     const normalized = await Promise.all(changes.map(async change => ({
       ...change,
-      path: await this.#resolveTaoWatchPath(change.path),
+      path: await this.#files.resolveTaoWatchPath(change.path),
     })))
+    for (const change of normalized) {
+      await this.#files.noteChange(change)
+    }
     const result = await this.#coordinator.noteWatchChanges(normalized)
     if (result.acknowledgements.length > 0) {
       this.#emit({
@@ -2155,93 +1651,6 @@ export class StudioProjectSession {
       })
     }
     return result
-  }
-
-  async #resolveTaoWatchPath(path: string): Promise<string> {
-    const resolved = FS.resolvePath(path, this.projectRoot)
-    Assert.input(FS.extname(resolved) === '.tao', `Studio path is not a Tao file in the project: ${path}`)
-    const missingParts = [FS.basename(resolved)]
-    let ancestor = FS.dirname(resolved)
-    while (!await FS.isDirectory(ancestor)) {
-      const parent = FS.dirname(ancestor)
-      Assert.input(parent !== ancestor, `Studio path is not a Tao file in the project: ${path}`)
-      missingParts.unshift(FS.basename(ancestor))
-      ancestor = parent
-    }
-    const canonical = FS.resolvePath(missingParts.join('/'), await FS.realPath(ancestor))
-    Assert.input(
-      FS.pathIsWithin(canonical, this.projectRoot),
-      `Studio path is not a Tao file in the project: ${path}`,
-    )
-    if (await FS.isFile(canonical)) {
-      const realPath = await FS.realPath(canonical)
-      Assert.input(
-        FS.pathIsWithin(realPath, this.projectRoot),
-        `Studio path resolves outside the project: ${path}`,
-      )
-    }
-    return canonical
-  }
-
-  async #resolveTaoFile(path: string): Promise<string> {
-    const resolved = FS.resolvePath(path, this.projectRoot)
-    Assert.input(
-      FS.pathIsWithin(resolved, this.projectRoot) && FS.extname(resolved) === '.tao' && await FS.isFile(resolved),
-      `Studio path is not a Tao file in the project: ${path}`,
-    )
-    const realPath = await FS.realPath(resolved)
-    Assert.input(
-      FS.pathIsWithin(realPath, this.projectRoot),
-      `Studio path resolves outside the project: ${path}`,
-    )
-    return resolved
-  }
-
-  async #resolveNewTaoFile(path: string): Promise<string> {
-    const resolved = FS.resolvePath(path, this.projectRoot)
-    Assert.input(
-      FS.pathIsWithin(resolved, this.projectRoot) && FS.extname(resolved) === '.tao',
-      `Studio path is not a Tao file in the project: ${path}`,
-    )
-    Assert.input(
-      !await FS.exists(resolved),
-      `Studio file already exists: ${FS.relativePath(this.projectRoot, resolved)}`,
-    )
-    const missingParts = [FS.basename(resolved)]
-    let ancestor = FS.dirname(resolved)
-    while (!await FS.isDirectory(ancestor)) {
-      Assert.input(!await FS.exists(ancestor), `Studio file parent is not a folder: ${path}`)
-      const parent = FS.dirname(ancestor)
-      Assert.input(parent !== ancestor, `Studio path is not a Tao file in the project: ${path}`)
-      missingParts.unshift(FS.basename(ancestor))
-      ancestor = parent
-    }
-    const canonical = FS.resolvePath(missingParts.join('/'), await FS.realPath(ancestor))
-    Assert.input(
-      FS.pathIsWithin(canonical, this.projectRoot),
-      `Studio path resolves outside the project: ${path}`,
-    )
-    return resolved
-  }
-
-  #requireFileMutationAllowed(path: string): void {
-    Assert.input(
-      !this.fileDraftState(path).dirty,
-      `Save or discard the unsaved Studio draft before changing ${path}.`,
-    )
-  }
-
-  #projectFile(path: string, sourceVersion: string): StudioProjectFile {
-    const draft = this.fileDraftState(path)
-    const diagnosticCount = draft.diagnostics.length + this.#coordinator.snapshot().diagnostics.filter(diagnostic => {
-      if (diagnostic.filePath === undefined) {
-        return false
-      }
-      const diagnosticPath = FS.resolvePath(diagnostic.filePath, this.projectRoot)
-      return FS.pathIsWithin(diagnosticPath, this.projectRoot)
-        && FS.relativePath(this.projectRoot, diagnosticPath) === path
-    }).length
-    return { diagnosticCount, dirty: draft.dirty, kind: 'file', path, sourceVersion }
   }
 
   #acceptPreviewIdentity(envelope: StudioSourceActionEnvelope | StudioSourceActionUndoEnvelope): void {
@@ -2298,47 +1707,6 @@ export class StudioProjectSession {
     }
   }
 
-  #prepareSourceActionCheckpoint(
-    envelope: StudioSourceActionEnvelope,
-    current: StudioProjectFileContent,
-  ): SourceActionCheckpoint {
-    const { id, phase } = envelope.checkpoint
-    const existing = this.#actionCheckpoints.get(id)
-    if (phase === 'begin' || phase === 'single') {
-      if (this.#openCheckpointId !== undefined && this.#openCheckpointId !== id) {
-        this.#commitAbandonedCheckpoint(this.#openCheckpointId)
-      }
-      Assert.input(existing === undefined, `Studio source-action checkpoint id was reused: ${id}`)
-      Assert.input(
-        this.#openCheckpointId === undefined,
-        `Studio source-action checkpoint is still open: ${this.#openCheckpointId}`,
-      )
-      return {
-        afterSourceVersion: current.sourceVersion,
-        beforeContent: current.content,
-        beforeSourceVersion: current.sourceVersion,
-        id,
-        identity: sourceActionCheckpointIdentity(envelope.identity, current.path),
-        path: current.path,
-        status: phase === 'single' ? 'committed' : 'open',
-      }
-    }
-    if (
-      existing === undefined
-      || existing.status !== 'open'
-      || this.#openCheckpointId !== id
-      || existing.path !== current.path
-      || !sameCheckpointIdentity(existing.identity, sourceActionCheckpointIdentity(envelope.identity, current.path))
-    ) {
-      throw new StudioSourceActionConflictError(
-        'checkpoint-identity-mismatch',
-        `Studio source-action checkpoint identity changed while it was open: ${id}`,
-        { checkpointId: id, path: current.path },
-      )
-    }
-    return existing
-  }
-
   #requireScenarioActionIdentity(
     envelope: StudioSourceActionEnvelope,
     request: StudioSourcePatchRequest,
@@ -2369,52 +1737,6 @@ export class StudioProjectSession {
           path: envelope.identity.path,
         },
       )
-    }
-  }
-
-  #commitAbandonedCheckpoint(id: string): void {
-    const checkpoint = this.#actionCheckpoints.get(id)
-    if (checkpoint === undefined || checkpoint.status !== 'open') {
-      this.#openCheckpointId = undefined
-      return
-    }
-    checkpoint.status = 'committed'
-    this.#openCheckpointId = undefined
-    this.#checkpointOrder.push(id)
-    this.#trimSourceActionCheckpoints()
-    this.#emitCheckpoint({ id, status: 'committed' })
-  }
-
-  #recordSourceActionCheckpoint(
-    envelope: StudioSourceActionEnvelope,
-    checkpoint: SourceActionCheckpoint,
-    afterSourceVersion: string,
-  ): StudioSourceActionResult['checkpoint'] {
-    checkpoint.afterSourceVersion = afterSourceVersion
-    if (envelope.checkpoint.phase === 'begin') {
-      this.#openCheckpointId = checkpoint.id
-      checkpoint.status = 'open'
-      this.#actionCheckpoints.set(checkpoint.id, checkpoint)
-      return { id: checkpoint.id, status: 'open' }
-    }
-    if (envelope.checkpoint.phase === 'update') {
-      return { id: checkpoint.id, status: 'open' }
-    }
-    checkpoint.status = 'committed'
-    this.#openCheckpointId = undefined
-    this.#actionCheckpoints.set(checkpoint.id, checkpoint)
-    this.#checkpointOrder.push(checkpoint.id)
-    this.#trimSourceActionCheckpoints()
-    return { id: checkpoint.id, status: 'committed' }
-  }
-
-  #trimSourceActionCheckpoints(): void {
-    while (this.#checkpointOrder.length > 100) {
-      const expired = this.#checkpointOrder.shift()
-      if (expired !== undefined) {
-        this.#actionCheckpoints.delete(expired)
-        this.#sketchSnapCheckpoints.delete(expired)
-      }
     }
   }
 
@@ -2481,150 +1803,6 @@ function trimMap<Key, Value>(map: Map<Key, Value>, limit: number): void {
   }
 }
 
-function parseSketchSnapRequest(value: unknown): StudioSketchSnapRequest {
-  Assert.input(isRecord(value), 'Studio Snap request must be an object.')
-  requireOnlyInputKeys(
-    value,
-    [
-      'checkpointId',
-      'confirmedProposalVersion',
-      'expectedCatalogRevision',
-      'rectIds',
-      'requestId',
-      'sketchId',
-      'sourceVersion',
-    ],
-    'Studio Snap request',
-  )
-  const checkpointId = requireInputText(value['checkpointId'], 'Studio Snap checkpointId')
-  const requestId = requireInputText(value['requestId'], 'Studio Snap requestId')
-  const sketchId = requireInputText(value['sketchId'], 'Studio Snap sketchId')
-  const sourceVersion = requireInputText(value['sourceVersion'], 'Studio Snap sourceVersion')
-  Assert.input(
-    Number.isSafeInteger(value['expectedCatalogRevision']) && Number(value['expectedCatalogRevision']) >= 0,
-    'Studio Snap expectedCatalogRevision must be a nonnegative integer.',
-  )
-  Assert.input(Array.isArray(value['rectIds']) && value['rectIds'].length > 0, 'Studio Snap rectIds must not be empty.')
-  const rectIds = value['rectIds'].map((id, index) => requireInputText(id, `Studio Snap rectIds[${index}]`))
-  Assert.input(new Set(rectIds).size === rectIds.length, 'Studio Snap rectIds must be unique.')
-  const confirmedProposalVersion = value['confirmedProposalVersion'] === undefined
-    ? undefined
-    : requireInputText(value['confirmedProposalVersion'], 'Studio Snap confirmedProposalVersion')
-  return {
-    checkpointId,
-    ...(confirmedProposalVersion === undefined ? {} : { confirmedProposalVersion }),
-    expectedCatalogRevision: Number(value['expectedCatalogRevision']),
-    rectIds,
-    requestId,
-    sketchId,
-    sourceVersion,
-  }
-}
-
-function parseSketchSnapUndoRequest(value: unknown): StudioSketchSnapUndoRequest {
-  Assert.input(isRecord(value), 'Studio Snap undo request must be an object.')
-  requireOnlyInputKeys(
-    value,
-    ['checkpointId', 'expectedCatalogRevision', 'requestId', 'sourceVersion'],
-    'Studio Snap undo request',
-  )
-  Assert.input(
-    Number.isSafeInteger(value['expectedCatalogRevision']) && Number(value['expectedCatalogRevision']) >= 0,
-    'Studio Snap undo expectedCatalogRevision must be a nonnegative integer.',
-  )
-  return {
-    checkpointId: requireInputText(value['checkpointId'], 'Studio Snap undo checkpointId'),
-    expectedCatalogRevision: Number(value['expectedCatalogRevision']),
-    requestId: requireInputText(value['requestId'], 'Studio Snap undo requestId'),
-    sourceVersion: requireInputText(value['sourceVersion'], 'Studio Snap undo sourceVersion'),
-  }
-}
-
-function parseSketchFlowActionRequest(value: unknown): StudioSketchFlowActionRequest {
-  Assert.input(isRecord(value), 'Studio flow request must be an object.')
-  requireOnlyInputKeys(
-    value,
-    ['action', 'checkpointId', 'expectedCatalogRevision', 'requestId', 'sketchId', 'sourceVersion'],
-    'Studio flow request',
-  )
-  Assert.input(
-    Number.isSafeInteger(value['expectedCatalogRevision']) && Number(value['expectedCatalogRevision']) >= 0,
-    'Studio flow expectedCatalogRevision must be a nonnegative integer.',
-  )
-  Assert.input(isRecord(value['action']), 'Studio flow action must be an object.')
-  const raw = value['action']
-  let action: StudioSketchFlowAction
-  if (raw['kind'] === 'toggle-direction') {
-    requireOnlyInputKeys(raw, ['kind', 'rectId'], 'Studio toggle-direction action')
-    action = { kind: 'toggle-direction', rectId: requireInputText(raw['rectId'], 'Studio flow rectId') }
-  } else if (raw['kind'] === 'insert-separator') {
-    requireOnlyInputKeys(raw, ['afterRectId', 'beforeRectId', 'kind'], 'Studio insert-separator action')
-    action = {
-      afterRectId: requireInputText(raw['afterRectId'], 'Studio flow afterRectId'),
-      ...(raw['beforeRectId'] === undefined
-        ? {}
-        : { beforeRectId: requireInputText(raw['beforeRectId'], 'Studio flow beforeRectId') }),
-      kind: 'insert-separator',
-    }
-  } else if (raw['kind'] === 'insert-spacer') {
-    requireOnlyInputKeys(raw, ['afterRectId', 'beforeRectId', 'kind', 'ratio'], 'Studio insert-spacer action')
-    Assert.input(
-      Array.isArray(raw['ratio'])
-        && raw['ratio'].length === 2
-        && raw['ratio'].every(value => Number.isSafeInteger(value) && Number(value) >= 1 && Number(value) <= 100),
-      'Studio flow Spacer ratio must contain two integers from 1 through 100.',
-    )
-    action = {
-      afterRectId: requireInputText(raw['afterRectId'], 'Studio flow afterRectId'),
-      beforeRectId: requireInputText(raw['beforeRectId'], 'Studio flow beforeRectId'),
-      kind: 'insert-spacer',
-      ratio: [Number(raw['ratio'][0]), Number(raw['ratio'][1])],
-    }
-  } else {
-    Errors.throwUserInput(`Unsupported Studio flow action: ${String(raw['kind'])}`)
-  }
-  return {
-    action,
-    checkpointId: requireInputText(value['checkpointId'], 'Studio flow checkpointId'),
-    expectedCatalogRevision: Number(value['expectedCatalogRevision']),
-    requestId: requireInputText(value['requestId'], 'Studio flow requestId'),
-    sketchId: requireInputText(value['sketchId'], 'Studio flow sketchId'),
-    sourceVersion: requireInputText(value['sourceVersion'], 'Studio flow sourceVersion'),
-  }
-}
-
-function parseSketchUnsnapRequest(value: unknown): StudioSketchUnsnapRequest {
-  Assert.input(isRecord(value), 'Studio Unsnap request must be an object.')
-  requireOnlyInputKeys(
-    value,
-    ['checkpointId', 'expectedCatalogRevision', 'rectIds', 'requestId', 'sketchId', 'sourceVersion'],
-    'Studio Unsnap request',
-  )
-  const parsed = parseSketchSnapRequest(value)
-  return {
-    checkpointId: parsed.checkpointId,
-    expectedCatalogRevision: parsed.expectedCatalogRevision,
-    rectIds: parsed.rectIds,
-    requestId: parsed.requestId,
-    sketchId: parsed.sketchId,
-    sourceVersion: parsed.sourceVersion,
-  }
-}
-
-function requireOnlyInputKeys(
-  value: Readonly<Record<string, unknown>>,
-  allowed: readonly string[],
-  label: string,
-): void {
-  const unsupported = Object.keys(value).filter(key => !allowed.includes(key))
-  Assert.input(unsupported.length === 0, `${label} has unsupported fields: ${unsupported.join(', ')}`)
-}
-
-function requireInputText(value: unknown, label: string): string {
-  Assert.input(typeof value === 'string' && value.trim().length > 0, `${label} must be a nonempty string.`)
-  return value
-}
-
 function decodeStudioRectTag(tag: string): string | undefined {
   const encoded = tag.match(/^studio_rect_([0-9a-f]+)$/)?.[1]
   if (encoded === undefined || encoded.length % 4 !== 0) {
@@ -2647,344 +1825,6 @@ function decodeStudioRectTag(tag: string): string | undefined {
     }
   }
   return decoded
-}
-
-async function requireProjectRoot(input: string): Promise<string> {
-  const resolved = FS.resolvePath(input)
-  Assert.input(await FS.isDirectory(resolved), `Studio project folder does not exist: ${resolved}`)
-  return await FS.realPath(resolved)
-}
-
-async function discoverAppVariants(
-  projectRoot: string,
-  workspace: Workspace,
-): Promise<{ apps: StudioAppVariant[]; defaultAppName?: string }> {
-  const candidates = await Repo.filesUnder(projectRoot, {
-    excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
-    extensions: ['.tao'],
-  })
-  const apps: StudioAppVariant[] = []
-  let defaultAppName: string | undefined
-  for (const entryPath of candidates) {
-    const parsed = await workspace.parse(entryPath)
-    for (const project of parsed.entry.ast.statements.filter(AST.isProjectDeclaration)) {
-      defaultAppName ??= AST.blockStatementOf(project, { filter: AST.isProjectDefaultApp })[0]?.app.$refText
-    }
-    for (const declaration of AST.appValueDeclarationsInFile(parsed.entry.ast)) {
-      apps.push({ appName: declaration.name, entryPath: FS.relativePath(projectRoot, entryPath) })
-    }
-  }
-  return {
-    apps: apps.toSorted((left, right) =>
-      left.appName.localeCompare(right.appName) || left.entryPath.localeCompare(right.entryPath)
-    ),
-    ...(defaultAppName === undefined ? {} : { defaultAppName }),
-  }
-}
-
-/**
- * Which app a project opens as, when the command line did not say.
- *
- * A project that declares `DefaultApp` has already answered this question for its own tooling —
- * `tao ship` reads it — so Studio reads it too rather than refusing every multi-app project until
- * someone repeats the answer as `--app`. An explicit request still wins, and a project without a
- * DefaultApp still has to be told which of several apps to open.
- */
-function resolveAppSelection(
-  projectRoot: string,
-  apps: readonly StudioAppVariant[],
-  requestedAppName: string | undefined,
-  requestedEntryPath: string | undefined,
-  defaultAppName?: string,
-): StudioAppVariant {
-  const selected = requestedAppName
-    ?? (apps.filter(app => app.appName === defaultAppName).length === 1 ? defaultAppName : undefined)
-  const matching = apps.filter(app =>
-    (selected === undefined || app.appName === selected)
-    && (requestedEntryPath === undefined || app.entryPath === requestedEntryPath)
-  )
-  if (matching.length === 0) {
-    const available = apps.map(app => app.appName)
-    Errors.throwUserInput(
-      requestedAppName === undefined && requestedEntryPath === undefined
-        ? `No Tao app declaration found under ${projectRoot}`
-        : `No matching Tao app found. Available apps: ${available.join(', ') || 'none'}.`,
-    )
-  }
-  Assert.input(
-    matching.length === 1,
-    requestedAppName === undefined && requestedEntryPath === undefined
-      ? `Multiple Tao apps found: ${matching.map(app => app.appName).join(', ')}. Select an appName.`
-      : `Multiple matching Tao app declarations were found. Select an appName and entryPath.`,
-  )
-  return matching[0]!
-}
-
-async function resolveEntryPath(projectRoot: string, input: string): Promise<string> {
-  const resolved = FS.resolvePath(input, projectRoot)
-  Assert.input(
-    FS.extname(resolved) === '.tao' && await FS.isFile(resolved),
-    `Studio entry is not a Tao file in the project: ${input}`,
-  )
-  const realPath = await FS.realPath(resolved)
-  Assert.input(FS.pathIsWithin(realPath, projectRoot), `Studio entry resolves outside the project: ${input}`)
-  return realPath
-}
-
-function requireSourceVersion(file: StudioProjectFile, expected: string): void {
-  if (file.sourceVersion !== expected) {
-    throw new StudioSourceConflictError(file.path, expected, file.sourceVersion)
-  }
-}
-
-function sourceActionCheckpointIdentity(
-  identity: StudioSourceActionIdentity,
-  normalizedPath: string,
-): SourceActionCheckpointIdentity {
-  return {
-    appName: identity.appName,
-    ...(identity.cellId === undefined ? {} : { cellId: identity.cellId }),
-    ...(identity.occurrence === undefined ? {} : { occurrence: identity.occurrence }),
-    path: normalizedPath,
-    project: identity.project,
-    ...(identity.scenarioId === undefined ? {} : { scenarioId: identity.scenarioId }),
-  }
-}
-
-function sameCheckpointIdentity(left: SourceActionCheckpointIdentity, right: SourceActionCheckpointIdentity): boolean {
-  return left.appName === right.appName
-    && left.cellId === right.cellId
-    && left.path === right.path
-    && left.project === right.project
-    && left.scenarioId === right.scenarioId
-    && left.occurrence?.nodeKind === right.occurrence?.nodeKind
-    && left.occurrence?.renderOwner === right.occurrence?.renderOwner
-}
-
-function requireSessionIdentity(
-  envelope: StudioSourceActionEnvelope | StudioSourceActionUndoEnvelope,
-  expected: StudioProjectIdentity,
-): void {
-  Assert.input(
-    envelope.identity.project === expected.project && envelope.identity.appName === expected.appName,
-    'Studio source action targets a different project or app.',
-  )
-}
-
-function sourcePatchRequest(envelope: StudioSourceActionEnvelope): StudioSourcePatchRequest {
-  const action = envelope.action
-  if (
-    action.kind === 'append-scenario-steps'
-    && typeof action['scenarioGroupName'] === 'string'
-    && typeof action['scenarioName'] === 'string'
-    && Array.isArray(action['steps'])
-    && action['steps'].every(isRecordedScenarioStep)
-  ) {
-    return {
-      kind: action.kind,
-      scenarioGroupName: action['scenarioGroupName'],
-      scenarioName: action['scenarioName'],
-      steps: action['steps'],
-    }
-  }
-  if (
-    action.kind === 'insert-captured-fixture'
-    && typeof action['fixtureName'] === 'string'
-    && isCapturedFixturePlan(action['plan'])
-  ) {
-    return {
-      fixtureName: action['fixtureName'],
-      kind: action.kind,
-      plan: action['plan'],
-    }
-  }
-  if (action.kind === 'insert-component' && isStudioComponentKind(action['component'])) {
-    return {
-      ...(typeof action['afterId'] === 'string' ? { afterId: action['afterId'] } : {}),
-      ...(typeof action['beforeId'] === 'string' ? { beforeId: action['beforeId'] } : {}),
-      component: action['component'],
-      kind: action.kind,
-    }
-  }
-  if (action.kind === 'insert-project-view' && typeof action['viewName'] === 'string') {
-    return {
-      ...(typeof action['afterId'] === 'string' ? { afterId: action['afterId'] } : {}),
-      ...(typeof action['beforeId'] === 'string' ? { beforeId: action['beforeId'] } : {}),
-      kind: action.kind,
-      viewName: action['viewName'],
-    }
-  }
-  if (
-    action.kind === 'move-render'
-    && typeof action['draggedId'] === 'string'
-    && (action['afterId'] === undefined || typeof action['afterId'] === 'string')
-    && (action['beforeId'] === undefined || typeof action['beforeId'] === 'string')
-  ) {
-    return {
-      ...(typeof action['afterId'] === 'string' ? { afterId: action['afterId'] } : {}),
-      ...(typeof action['beforeId'] === 'string' ? { beforeId: action['beforeId'] } : {}),
-      draggedId: action['draggedId'],
-      kind: action.kind,
-    }
-  }
-  if (
-    action.kind === 'set-layout-entry'
-    && typeof action['renderId'] === 'string'
-    && Array.isArray(action['entry'])
-    && action['entry'].every(value => typeof value === 'string' || typeof value === 'number')
-  ) {
-    return {
-      entry: action['entry'] as unknown as StudioLayoutEntry,
-      kind: action.kind,
-      renderId: action['renderId'],
-    }
-  }
-  if (
-    action.kind === 'wrap-render'
-    && typeof action['renderId'] === 'string'
-    && (action['wrapper'] === 'Col' || action['wrapper'] === 'Row' || action['wrapper'] === 'Stack')
-  ) {
-    return { kind: action.kind, renderId: action['renderId'], wrapper: action['wrapper'] }
-  }
-  if (action.kind === 'remove-render' && typeof action['renderId'] === 'string') {
-    return { kind: action.kind, renderId: action['renderId'] }
-  }
-  if (
-    action.kind === 'set-text-content'
-    && typeof action['renderId'] === 'string'
-    && typeof action['content'] === 'string'
-  ) {
-    return { content: action['content'], kind: action.kind, renderId: action['renderId'] }
-  }
-  if (
-    action.kind === 'bind-text'
-    && typeof action['renderId'] === 'string'
-    && typeof action['expression'] === 'string'
-  ) {
-    return { expression: action['expression'], kind: action.kind, renderId: action['renderId'] }
-  }
-  if (
-    action.kind === 'set-style-entry'
-    && typeof action['renderId'] === 'string'
-    && Array.isArray(action['entry'])
-    && action['entry'].length > 0
-    && action['entry'].every(value => typeof value === 'string' || typeof value === 'number')
-    && isStudioStyleLandingScope(action['landing'])
-  ) {
-    return {
-      entry: action['entry'] as unknown as StudioStyleEntry,
-      kind: action.kind,
-      landing: action['landing'],
-      renderId: action['renderId'],
-    }
-  }
-  if (
-    action.kind === 'set-scenario-arguments'
-    && (action['appearance'] === undefined || action['appearance'] === 'dark' || action['appearance'] === 'light')
-    && typeof action['scenarioGroupName'] === 'string'
-    && typeof action['scenarioName'] === 'string'
-    && isRecord(action['arguments'])
-    && Object.values(action['arguments']).every(isStudioScenarioArgumentValue)
-  ) {
-    return {
-      ...(action['appearance'] === undefined ? {} : { appearance: action['appearance'] }),
-      arguments: action['arguments'] as Readonly<Record<string, StudioScenarioArgumentValue>>,
-      kind: action.kind,
-      scenarioGroupName: action['scenarioGroupName'],
-      scenarioName: action['scenarioName'],
-    }
-  }
-  if (
-    action.kind === 'set-design-entry'
-    && typeof action['designName'] === 'string'
-    && typeof action['memberName'] === 'string'
-    && Array.isArray(action['entry'])
-    && action['entry'].length > 0
-    && action['entry'].every(value => typeof value === 'string' || typeof value === 'number')
-  ) {
-    return {
-      designName: action['designName'],
-      entry: action['entry'] as unknown as StudioStyleEntry,
-      kind: action.kind,
-      memberName: action['memberName'],
-    }
-  }
-  Errors.throwUserInput(`Unsupported or invalid Studio source action: ${action.kind}`)
-}
-
-function requireSourceActionPreconditions(
-  envelope: StudioSourceActionEnvelope,
-  request: StudioSourcePatchRequest,
-): void {
-  const occurrenceRequired = request.kind === 'move-render'
-    || request.kind === 'set-layout-entry'
-    || request.kind === 'set-style-entry'
-    || request.kind === 'wrap-render'
-    || request.kind === 'remove-render'
-    || request.kind === 'set-text-content'
-    || request.kind === 'bind-text'
-    || (request.kind === 'insert-component' || request.kind === 'insert-project-view')
-      && (request.beforeId !== undefined || request.afterId !== undefined)
-  Assert.input(
-    !occurrenceRequired || envelope.identity.occurrence !== undefined,
-    `Studio source action requires render occurrence identity: ${request.kind}`,
-  )
-  Assert.input(
-    occurrenceRequired || envelope.identity.occurrence === undefined,
-    `Studio source action cannot carry render occurrence identity: ${request.kind}`,
-  )
-}
-
-function isStudioStyleLandingScope(value: unknown): value is StudioStyleLandingScope {
-  if (!isRecord(value)) {
-    return false
-  }
-  if (value['kind'] === 'element-inline') {
-    return true
-  }
-  if (value['kind'] === 'style-bundle') {
-    return typeof value['bundleName'] === 'string'
-      && (value['mode'] === 'edit' || value['mode'] === 'fork')
-      && (value['forkName'] === undefined || typeof value['forkName'] === 'string')
-  }
-  if (value['kind'] === 'element-default') {
-    return typeof value['elementName'] === 'string'
-  }
-  return (value['kind'] === 'token' || value['kind'] === 'size-token') && typeof value['tokenName'] === 'string'
-}
-
-function isCapturedFixturePlan(value: unknown): value is StudioInsertCapturedFixturePatchRequest['plan'] {
-  return isRecord(value)
-    && Array.isArray(value['accounts'])
-    && value['accounts'].every(account =>
-      isRecord(account)
-      && typeof account['name'] === 'string'
-      && isFixtureFields(account['fields'])
-    )
-    && Array.isArray(value['creates'])
-    && value['creates'].every(create =>
-      isRecord(create)
-      && typeof create['entity'] === 'string'
-      && typeof create['name'] === 'string'
-      && isFixtureFields(create['fields'])
-    )
-}
-
-function isRecordedScenarioStep(value: unknown): value is StudioAppendScenarioStepsPatchRequest['steps'][number] {
-  if (!isRecord(value) || typeof value['target'] !== 'string') {
-    return false
-  }
-  const selector = value['selector']
-  if (selector !== 'label' && selector !== 'placeholder' && selector !== 'tag' && selector !== 'text') {
-    return false
-  }
-  return value['kind'] === 'press'
-    || value['kind'] === 'submit'
-    || value['kind'] === 'enter' && typeof value['value'] === 'string'
-}
-
-function isFixtureFields(value: unknown): value is Readonly<Record<string, StudioScenarioArgumentValue>> {
-  return isRecord(value) && Object.values(value).every(isStudioScenarioArgumentValue)
 }
 
 function sourceActionProposalDiff(path: string, before: string, after: string): string {
@@ -3015,69 +1855,6 @@ function sourceActionProposalDiff(path: string, before: string, after: string): 
   ].join('\n')
 }
 
-function isStudioScenarioArgumentValue(value: unknown): value is
-  | boolean
-  | number
-  | string
-  | { kind: 'now' }
-  | { handle: string; kind: 'fixture-reference' }
-{
-  return typeof value === 'boolean'
-    || typeof value === 'string'
-    || typeof value === 'number' && Number.isFinite(value)
-    || isRecord(value) && value['kind'] === 'now'
-    || isRecord(value)
-      && value['kind'] === 'fixture-reference'
-      && typeof value['handle'] === 'string'
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function cellIdentity(value: unknown): StudioCellIdentity {
-  if (
-    !isRecord(value)
-    || typeof value['appName'] !== 'string'
-    || typeof value['cellId'] !== 'string'
-    || !nonNegativeInteger(value['cellRevision'])
-    || !nonNegativeInteger(value['compileRevision'])
-    || typeof value['manifestRevision'] !== 'string'
-    || typeof value['project'] !== 'string'
-  ) {
-    Errors.throwUserInput('Expected a complete Studio cell identity.')
-  }
-  return {
-    appName: value['appName'],
-    cellId: value['cellId'],
-    cellRevision: value['cellRevision'],
-    compileRevision: value['compileRevision'],
-    manifestRevision: value['manifestRevision'],
-    project: value['project'],
-  }
-}
-
-function completeCellInstanceIdentity(message: StudioPreviewLayoutMeasurementsMessage): StudioCellInstanceIdentity {
-  const identity = message.identity
-  if (
-    identity.cellId === undefined
-    || identity.cellRevision === undefined
-    || identity.compileRevision === undefined
-    || identity.manifestRevision === undefined
-  ) {
-    Errors.throwUserInput('Expected a complete Studio cell preview identity for layout measurements.')
-  }
-  return {
-    appName: identity.appName,
-    cellId: identity.cellId,
-    cellRevision: identity.cellRevision,
-    compileRevision: identity.compileRevision,
-    manifestRevision: identity.manifestRevision,
-    previewInstanceId: identity.previewInstanceId,
-    project: identity.project,
-  }
-}
-
 function previewMeasurementCellKey(identity: StudioCellInstanceIdentity): string {
   return [
     identity.project,
@@ -3088,141 +1865,6 @@ function previewMeasurementCellKey(identity: StudioCellInstanceIdentity): string
     identity.cellRevision,
     identity.previewInstanceId,
   ].join('\u0000')
-}
-
-function cellInstanceIdentity(value: unknown): StudioCellInstanceIdentity {
-  const identity = cellIdentity(value)
-  if (!isRecord(value) || typeof value['previewInstanceId'] !== 'string') {
-    Errors.throwUserInput('Expected a Studio cell preview instance id.')
-  }
-  return { ...identity, previewInstanceId: value['previewInstanceId'] }
-}
-
-function cellReconfigureRequest(value: unknown): StudioCellReconfigureRequest {
-  const identity = cellIdentity(value)
-  if (!isRecord(value)) {
-    Errors.throwUserInput('Expected a Studio cell reconfiguration.')
-  }
-  const args = value['args']
-  const environment = value['environment']
-  const rawReplay = value['replay']
-  const replay = rawReplay === undefined ? undefined : StudioProtocol.parseRuntimeCapture(rawReplay)
-  const stateLayers = value['stateLayers']
-  Assert.input(
-    args === undefined || isRecord(args) && isJsonValue(args),
-    'Studio cell arguments must be JSON data.',
-  )
-  Assert.input(environment === undefined || isRecord(environment), 'Studio cell environment must be an object.')
-  Assert.input(
-    rawReplay === undefined || replay !== undefined,
-    'Studio cell replay must be a valid runtime capture artifact.',
-  )
-  Assert.input(
-    stateLayers === undefined || Array.isArray(stateLayers) && stateLayers.every(isString),
-    'Studio cell state layers must be names.',
-  )
-  return {
-    ...identity,
-    ...(args === undefined ? {} : { args: args as StudioJsonObject }),
-    ...(environment === undefined ? {} : { environment: environment as StudioCellEnvironment }),
-    ...(replay === undefined ? {} : { replay }),
-    ...(stateLayers === undefined ? {} : { stateLayers: stateLayers as readonly string[] }),
-  }
-}
-
-function isJsonValue(value: unknown): boolean {
-  if (value === null || typeof value === 'boolean' || typeof value === 'string') {
-    return true
-  }
-  if (typeof value === 'number') {
-    return Number.isFinite(value)
-  }
-  if (Array.isArray(value)) {
-    return value.every(isJsonValue)
-  }
-  return isRecord(value) && Object.values(value).every(isJsonValue)
-}
-
-function nonNegativeInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
-}
-
-function isString(value: unknown): value is string {
-  return typeof value === 'string'
-}
-
-function isStudioComponentKind(value: unknown): value is StudioComponentKind {
-  return typeof value === 'string' && studioComponentKinds.has(value as StudioComponentKind)
-}
-
-const studioComponentKinds = new Set<StudioComponentKind>([
-  'Box',
-  'Button',
-  'Checkbox',
-  'Col',
-  'DatePicker',
-  'FormButton',
-  'Image',
-  'Number',
-  'Panes',
-  'Picker',
-  'Progress',
-  'Row',
-  'ScrollView',
-  'SegmentedControl',
-  'Slider',
-  'Spinner',
-  'Stack',
-  'Switch',
-  'Text',
-  'TextFrame',
-  'TextInput',
-  'TextMultiline',
-  'WrappingRow',
-])
-
-export type StudioSourceActionConflictCode =
-  | 'checkpoint-identity-mismatch'
-  | 'node-kind-mismatch'
-  | 'render-owner-mismatch'
-  | 'measurement-unavailable'
-  | 'scenario-action-mismatch'
-  | 'stale-preview'
-  | 'stale-scenario'
-  | 'stale-source'
-
-export type StudioSourceActionConflictDetails = {
-  actual?: string
-  checkpointId?: string
-  expected?: string
-  path?: string
-  renderId?: string
-}
-
-/** StudioSourceActionConflictError carries stable, UI-safe conflict details across the Studio server boundary. */
-export class StudioSourceActionConflictError extends Errors.UserInputError {
-  constructor(
-    readonly code: StudioSourceActionConflictCode,
-    message: string,
-    override readonly details: StudioSourceActionConflictDetails,
-  ) {
-    super(message, details)
-  }
-}
-
-/** StudioSourceConflictError reports optimistic source-version mismatches as HTTP 409 at the server boundary. */
-export class StudioSourceConflictError extends StudioSourceActionConflictError {
-  constructor(
-    readonly path: string,
-    readonly expectedSourceVersion: string,
-    readonly actualSourceVersion: string,
-  ) {
-    super('stale-source', `Studio source changed before the edit was applied: ${path}`, {
-      actual: actualSourceVersion,
-      expected: expectedSourceVersion,
-      path,
-    })
-  }
 }
 
 /**

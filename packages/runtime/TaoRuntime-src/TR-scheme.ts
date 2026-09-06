@@ -10,7 +10,7 @@ export type TaoScheme = 'dark' | 'light'
 export type TaoSchemeCapability = 'fixed-light-native' | 'pinned-native' | 'reactive-browser'
 
 /** The capability a browser cell reports: it follows the page's color scheme as it changes. */
-export const reactiveBrowserSchemeCapability = 'reactive-browser' satisfies TaoSchemeCapability
+const reactiveBrowserSchemeCapability = 'reactive-browser' satisfies TaoSchemeCapability
 export type TaoSchemeSource = 'native-fixed' | 'preference' | 'scenario' | 'system'
 
 export type TaoSchemeSnapshot = Readonly<{

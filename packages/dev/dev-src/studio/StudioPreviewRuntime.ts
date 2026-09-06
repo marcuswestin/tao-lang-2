@@ -16,7 +16,7 @@ export type CreatedStudioPreviewRuntime = {
 }
 
 /** The non-secret bootstrap facts a loaded preview bundle reads from its Expo manifest. */
-export type StudioPreviewBootstrapOptions = {
+type StudioPreviewBootstrapOptions = {
   /** The tao-dev-data-v1 server and app key a `Dev` datasource in the preview dials. */
   devData?: DevDataManifest
   /** The tao-studio-device-v1 gateway port a companion build should dial after loading this bundle. */

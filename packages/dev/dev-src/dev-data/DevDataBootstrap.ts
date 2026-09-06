@@ -16,7 +16,7 @@ export const DevDataProtocol = {
 export const DEV_DATA_ROOT_PATH = '.artifacts/user/dev-data'
 
 /** The environment `tao dev` hands Expo so the checked-in `app.config.js` can write the manifest fact. */
-export const DevDataEnvironment = {
+const DevDataEnvironment = {
   app: 'TAO_DEV_DATA_APP',
   port: 'TAO_DEV_DATA_PORT',
 } as const

@@ -264,7 +264,10 @@ const REJECTED_RAW_ERROR_ALLOWLIST = [
   'packages/shared/shared-tests/test-helpers.test.ts',
   'packages/stdlib/@tao/data/providers/instantdb/InstantDB.ts',
   'packages/studio/studio-src/client/StudioApiClient.ts',
-  'packages/studio/studio-src/client/StudioMatrixView.ts',
+  'packages/studio/studio-src/client/matrix/StudioPreviewBridge.ts',
+  'packages/studio/studio-src/client/matrix/StudioPreviewCellView.ts',
+  'packages/studio/studio-src/client/matrix/StudioPreviewConnection.ts',
+  'packages/studio/studio-src/client/matrix/StudioPreviewMatrix.ts',
   'packages/studio/studio-tests/studio-client.test.ts',
 ]
 
@@ -325,6 +328,7 @@ const CONSOLE_CALL_ALLOWLIST = [
   // Browser code, where `HCI` has no stream to write to.
   'packages/code-editor/code-editor-src/CodeEditor.tsx',
   'packages/studio/studio-src/TaoStudioProductHost.tsx',
+  'packages/studio/studio-src/product-host/StudioEditorSurface.tsx',
   // Device-side stdlib provider running inside the app, where `HCI` has no terminal either.
   'packages/stdlib/@tao/data/providers/icloud/ICloud.ts',
   // Emitted text: the Electrobun main, a `bun -e` body, and bundles a test writes to disk.

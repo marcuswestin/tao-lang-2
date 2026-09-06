@@ -3,6 +3,7 @@ import { type Command, type EditorView, keymap } from '@codemirror/view'
 import { Errors } from '@shared'
 import { Deferred, Expect, Test, until } from '@shared/test'
 import type { StudioRenderInspection } from '@source-actions'
+import { StudioSourceMutations } from '../studio-src/client/app/StudioSourceMutations'
 import {
   StudioApiClient,
   StudioApiError,
@@ -2600,6 +2601,149 @@ Test('Studio recognizes command and control save without consuming modified shor
   Expect(isStudioSaveShortcut({ altKey: false, ctrlKey: true, key: 'S', metaKey: false })).toBe(true)
   Expect(isStudioSaveShortcut({ altKey: true, ctrlKey: false, key: 's', metaKey: true })).toBe(false)
   Expect(isStudioSaveShortcut({ altKey: false, ctrlKey: false, key: 's', metaKey: false })).toBe(false)
+})
+
+Test('Studio source mutations share one envelope and bind undo to the file the edit landed in', async () => {
+  const previousFetch = globalThis.fetch
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: { location: { pathname: '/sessions/window-7' } },
+    writable: true,
+  })
+  const replies: Array<() => Response> = []
+  const requests: string[] = []
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    requests.push(typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url)
+    const reply = replies.shift()
+    if (reply === undefined) {
+      Errors.throwUnexpected('No reply was queued for this request.')
+    }
+    return reply()
+  }) as typeof fetch
+  try {
+    const selected = StudioInspector.selection({
+      channel: studioProtocolChannel,
+      identity: {
+        appName: 'Garden',
+        occurrence: { nodeKind: 'render', renderOwner: 'Main' },
+        path: '/workspace/Garden.tao',
+        previewInstanceId: 'preview-1',
+        project: '/workspace',
+        sourceVersion: 'source-1',
+      },
+      protocolVersion: studioProtocolVersion,
+      range: { end: 42, start: 20 },
+      type: 'preview-select-source',
+    })
+    const envelope = StudioInspector.singleAction({
+      action: { entry: ['gap', 16], kind: 'set-layout-entry', renderId: selected.renderId },
+      checkpointId: 'checkpoint-1',
+      identity: selected.identity,
+      requestId: 'request-1',
+    })
+    const compile = {
+      causes: [],
+      changes: [],
+      compileRevision: 2,
+      diagnostics: [],
+      message: 'compiled',
+      status: 'compiled' as const,
+    }
+    const result = (checkpointId: string): Response =>
+      Response.json({
+        checkpoint: { id: checkpointId, status: 'committed' },
+        compile,
+        content: 'view Main',
+        edits: [],
+        path: 'Garden.tao',
+      })
+    const status = { dataset: {} as Record<string, string | undefined>, textContent: '' } as unknown as HTMLElement
+    const events: string[] = []
+    let activePath: string | undefined = 'Garden.tao'
+    const mutations = new StudioSourceMutations({
+      activeFile: () => ({ content: 'view Main', path: 'Garden.tao', sourceVersion: 'source-1' }),
+      activePath: () => activePath,
+      clearInspection: () => events.push('clear'),
+      completeCompile: completion => events.push(`compile:${completion.compileRevision}`),
+      currentIdentity: () => selected.identity,
+      editor: () => undefined,
+      focusEditor: () => {},
+      inspected: () => selected,
+      openFile: async (path, refresh) => {
+        events.push(`open:${path}:${refresh}`)
+      },
+      project: '/workspace',
+      publish: () => events.push(`publish:${mutations.busy() ? 'busy' : 'idle'}`),
+      renderInspector: () => events.push('inspector'),
+      requireActiveDraftSaved: () => true,
+      status,
+    })
+
+    // One envelope: busy while pending, then clear the selection, reopen the rewritten file, fold in the compile.
+    replies.push(() => result('checkpoint-1'))
+    Expect(await mutations.apply(envelope)).toBe(true)
+    Expect(requests.at(-1)).toBe('/sessions/window-7/api/source-action')
+    Expect(status.textContent).toBe('Applying set layout entry…')
+    Expect(events).toEqual([
+      'publish:busy',
+      'inspector',
+      'clear',
+      'publish:busy',
+      'open:Garden.tao:true',
+      'compile:2',
+      'publish:idle',
+      'inspector',
+    ])
+    Expect(mutations.canUndo()).toBe(true)
+    activePath = 'Other.tao'
+    Expect(mutations.canUndo()).toBe(false)
+    activePath = 'Garden.tao'
+
+    // A refused mutation reports in the status line and leaves the undo stack and busy flag alone.
+    replies.push(() => Response.json({ error: 'That render moved.' }, { status: 409 }))
+    events.length = 0
+    Expect(await mutations.apply(envelope)).toBe(false)
+    Expect(status.dataset['state']).toBe('error')
+    Expect(status.textContent).toBe('That render moved.')
+    Expect(mutations.busy()).toBe(false)
+    Expect(mutations.canUndo()).toBe(true)
+    Expect(events).toEqual(['publish:busy', 'inspector', 'publish:idle', 'inspector'])
+
+    // The same checkpoint id lands once; one undo then empties the stack through the same envelope.
+    replies.push(() => result('checkpoint-1'))
+    Expect(await mutations.apply(envelope)).toBe(true)
+    replies.push(() =>
+      Response.json({
+        checkpoint: { id: 'checkpoint-1', status: 'undone' },
+        compile,
+        content: 'view Main',
+        path: 'Garden.tao',
+      })
+    )
+    events.length = 0
+    await mutations.undoLatest()
+    Expect(requests.at(-1)).toBe('/sessions/window-7/api/source-action/undo')
+    Expect(events).toEqual([
+      'publish:busy',
+      'inspector',
+      'clear',
+      'publish:busy',
+      'open:Garden.tao:true',
+      'compile:2',
+      'publish:idle',
+      'inspector',
+    ])
+    Expect(mutations.canUndo()).toBe(false)
+    Expect(replies).toHaveLength(0)
+  } finally {
+    globalThis.fetch = previousFetch
+    if (previousWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window
+    } else {
+      Object.defineProperty(globalThis, 'window', previousWindow)
+    }
+  }
 })
 
 function saved(request: StudioDraftSyncRequest, sourceVersion: string): StudioDraftSyncResult {
