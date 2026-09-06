@@ -122,8 +122,8 @@ tests written in Tao, green in Current, for every construct introduced.
     `postEditorSelection` message and knows its source ranges from the bundle it runs. Rework the
     stub onto that contract instead.
   - The lane is quarantined from the `full-verify` graph with a stated reason (its palette-to-preview
-    drop stalls before source mutation); `just _full-verify-simulated` runs it directly on its own
-    worker while it is being repaired, and re-adding it to the graph is one Justfile membership edit.
+    drop stalls before source mutation); `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`
+    runs it directly while it is being repaired, and re-adding it to the graph is one catalog edit.
   - Context: `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md` and the ownership rules in
     `agents/skills/studio-hybrid-client/SKILL.md`.
 - [ ] Implement a drag-and-drop example app

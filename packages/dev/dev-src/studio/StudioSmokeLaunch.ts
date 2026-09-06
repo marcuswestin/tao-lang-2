@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Repo } from '@shared'
+import { CLI, Errors, FS, Repo, Time } from '@shared'
 import { stopLaunches } from './StudioLifecycle'
 import type { StudioReadiness } from './StudioReadiness'
 
@@ -111,7 +111,7 @@ async function waitForReadiness(
         `Tao Studio exited before reporting readiness (${completion}). Output:\n${output()}`,
       )
     }
-    await Bun.sleep(READY_POLL_MS)
+    await Time.sleep(READY_POLL_MS)
   }
   Errors.throwUnexpected(
     `Tao Studio never reported readiness within ${timeoutMs}ms. Output:\n${output()}`,
@@ -137,7 +137,7 @@ async function stopSmokeLaunch(
   }
   if (command.exitCode === null && command.signalCode === null) {
     command.kill('SIGTERM')
-    await Promise.race([command.waitForClose(), Bun.sleep(5_000)])
+    await Promise.race([command.waitForClose(), Time.sleep(5_000)])
     if (command.exitCode === null && command.signalCode === null) {
       command.kill('SIGKILL')
       await command.waitForClose()

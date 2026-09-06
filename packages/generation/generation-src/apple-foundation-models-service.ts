@@ -1,5 +1,4 @@
-import { CLI, Errors, FS, Repo, Time } from '@shared'
-import { randomUUID } from 'node:crypto'
+import { CLI, Errors, FS, Platform, Repo, Time } from '@shared'
 import { AppleFoundationModelsProvider } from './apple-foundation-models-provider'
 import type { GenerationProvider } from './generation-contract'
 import { UnavailableGenerationProvider } from './unavailable-generation-provider'
@@ -46,7 +45,7 @@ export async function startAppleFoundationModelsService(): Promise<AppleFoundati
     }
   }
 
-  const token = randomUUID()
+  const token = Platform.randomUUID()
   let stdout = ''
   let stderr = ''
   let helperFailure: string | undefined

@@ -1,5 +1,6 @@
-import { FS, Repo } from '@shared'
+import { FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
+import { parseProfiles, readProfiles } from '../dev-src/agent-config/AgentProfiles'
 import { CodexConfigGenerator } from '../dev-src/agent-config/CodexConfigGenerator'
 
 const canonicalRules = `{
@@ -28,6 +29,29 @@ const canonicalRules = `{
         "allowedDomains": ["registry.npmjs.org", "*.npmjs.org", "exp.host", "cache.nixos.org"],
       },
       "excludedCommands": ["ps -o pid=,command= -p *", "kill -TERM *"],
+    },
+  },
+}
+`
+
+const canonicalProfiles = `{
+  "profiles": {
+    "native": {
+      "description": "Test native.",
+      "ask": ["xcrun simctl *"],
+      "allowWrite": ["~/Library/Developer/CoreSimulator"],
+    },
+    "local-services": {
+      "description": "Test services.",
+      "allow": ["docker ps *"],
+      "excludedCommands": ["docker *"],
+      "unixSockets": ["/var/run/docker.sock", "~/.docker/run/docker.sock"],
+    },
+    "release": {
+      "description": "Test release.",
+      "extends": "native",
+      "ask": ["codesign *"],
+      "allowWrite": ["~/Library/Developer/Xcode/Archives"],
     },
   },
 }
@@ -62,8 +86,11 @@ Describe('Codex config generation', () => {
   })
 
   Test('renders a profile that narrows the workspace rather than opening it', () => {
-    const rendered = CodexConfigGenerator.render(CodexConfigGenerator.parsePermissions(canonicalRules))
-    const parsed = Bun.TOML.parse(rendered) as Record<string, any>
+    const rendered = CodexConfigGenerator.render(
+      CodexConfigGenerator.parsePermissions(canonicalRules),
+      parseProfiles(canonicalProfiles),
+    )
+    const parsed = Platform.parseToml(rendered) as Record<string, any>
     const profile = parsed['permissions']['tao-workspace']
 
     Expect(parsed['default_permissions']).toBe('tao-workspace')
@@ -97,8 +124,11 @@ Describe('Codex config generation', () => {
   })
 
   Test('grants both harnesses the same caches outside the worktree', () => {
-    const rendered = CodexConfigGenerator.render(CodexConfigGenerator.parsePermissions(canonicalRules))
-    const filesystem = (Bun.TOML.parse(rendered) as any)['permissions']['tao-workspace']['filesystem']
+    const rendered = CodexConfigGenerator.render(
+      CodexConfigGenerator.parsePermissions(canonicalRules),
+      parseProfiles(canonicalProfiles),
+    )
+    const filesystem = (Platform.parseToml(rendered) as any)['permissions']['tao-workspace']['filesystem']
 
     // The pinned toolchain and the machine-wide lane registry both write under the user's cache
     // root. A harness that is not granted them prompts, or silently loses shared state the other
@@ -110,9 +140,12 @@ Describe('Codex config generation', () => {
   })
 
   Test("denies dotenv files without denying this repository's own .envrc", () => {
-    const rendered = CodexConfigGenerator.render(CodexConfigGenerator.parsePermissions(canonicalRules))
+    const rendered = CodexConfigGenerator.render(
+      CodexConfigGenerator.parsePermissions(canonicalRules),
+      parseProfiles(canonicalProfiles),
+    )
     const workspaceRoots =
-      (Bun.TOML.parse(rendered) as any)['permissions']['tao-workspace']['filesystem'][':workspace_roots']
+      (Platform.parseToml(rendered) as any)['permissions']['tao-workspace']['filesystem'][':workspace_roots']
 
     Expect(Object.keys(workspaceRoots).toSorted()).toEqual(['**/.env', '**/.env.*'])
     Expect(rendered).not.toContain('**/.env*"')
@@ -122,6 +155,7 @@ Describe('Codex config generation', () => {
     const root = await mkTestDir('tao-codex-config-')
     try {
       await FS.writeText(FS.resolvePath('.rulesync/permissions.jsonc', root), canonicalRules)
+      await FS.writeText(FS.resolvePath('.rulesync/profiles.jsonc', root), canonicalProfiles)
       await CodexConfigGenerator.generate({ root })
 
       const written = await FS.readText(FS.resolvePath('.codex/config.toml', root))
@@ -173,6 +207,7 @@ Describe('Codex config generation', () => {
     const root = Repo.getRoot()
     const rendered = CodexConfigGenerator.render(
       CodexConfigGenerator.parsePermissions(await FS.readText(FS.resolvePath('.rulesync/permissions.jsonc', root))),
+      await readProfiles(root),
     )
 
     Expect(await FS.readText(FS.resolvePath('.codex/config.toml', root))).toBe(rendered)

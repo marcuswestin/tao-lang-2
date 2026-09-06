@@ -20,6 +20,7 @@ Describe('agent config generation', () => {
             })
           }
         },
+        generateClaudeProfiles: async () => {},
         generateCodexConfig: async options => {
           codexRoots.push(options.root)
         },
@@ -56,6 +57,7 @@ Describe('agent config generation', () => {
             })
           }
         },
+        generateClaudeProfiles: async () => {},
         generateCodexConfig: async () => {},
         onSkip: message => skipped.push(message),
         root,

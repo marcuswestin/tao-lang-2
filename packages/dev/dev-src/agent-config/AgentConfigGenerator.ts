@@ -1,5 +1,6 @@
-import { resolve } from 'node:path'
+import { FS, HCI } from '@shared'
 import { type Feature, generate, type GenerateOptions, type ToolTarget } from 'rulesync'
+import { ClaudeProfilesGenerator } from './ClaudeProfilesGenerator'
 import { CodexConfigGenerator } from './CodexConfigGenerator'
 
 /**
@@ -22,6 +23,7 @@ const guardedOutputs: Record<string, string[]> = {
 
 type GenerateAgentConfigOptions = {
   generate?: (options: GenerateOptions) => Promise<unknown>
+  generateClaudeProfiles?: (options: { onSkip?: (message: string) => void; root: string }) => Promise<void>
   generateCodexConfig?: (options: { onSkip?: (message: string) => void; root: string }) => Promise<void>
   onSkip?: (message: string) => void
   root: string
@@ -43,10 +45,14 @@ async function generateAgentConfigs(options: GenerateAgentConfigOptions): Promis
         throw error
       }
       const path = (error as NodeJS.ErrnoException).path
-      ;(options.onSkip ?? console.warn)(`Skipped ${target} agent config: ${path} is not writable.`)
+      ;(options.onSkip ?? HCI.writeErrorLine)(`Skipped ${target} agent config: ${path} is not writable.`)
     }
   }
   await (options.generateCodexConfig ?? CodexConfigGenerator.generate)({
+    onSkip: options.onSkip,
+    root: options.root,
+  })
+  await (options.generateClaudeProfiles ?? ClaudeProfilesGenerator.generate)({
     onSkip: options.onSkip,
     root: options.root,
   })
@@ -58,7 +64,7 @@ function isBlockedAdapterOutput(error: unknown, target: ToolTarget, root: string
     return false
   }
   return (guardedOutputs[target] ?? []).some(output => {
-    const expectedPath = resolve(root, output)
+    const expectedPath = FS.resolvePath(output, root)
     return path === expectedPath || path.startsWith(`${expectedPath}/`)
   })
 }

@@ -6,7 +6,7 @@ import { type ContentionReport, type MachineLane, MachineLanes } from './Machine
 import { RunArtifacts } from './RunArtifacts'
 import { buildSummary, type GateSummary, skippedResult } from './RunSummary'
 import { RunTimings } from './RunTimings'
-import { WorkGraph, type WorkOutcome, type WorkRunContext, type WorkState } from './WorkGraph'
+import { type WorkCommand, WorkGraph, type WorkOutcome, type WorkRunContext, type WorkState } from './WorkGraph'
 import { type OutputMode, WorkReporter, type WorkReporterHandle } from './WorkReporter'
 
 /**
@@ -16,8 +16,9 @@ import { type OutputMode, WorkReporter, type WorkReporterHandle } from './WorkRe
  * is, and the first failure worth acting on.
  *
  * The Justfile still decides which gates belong to which lane; this owns only how they run and how
- * the result is reported. `GateCatalog` supplies each name's scheduling shape, so a lane is one
- * list of recipe names and nothing here has to know what any of them do.
+ * the result is reported. `GateCatalog` supplies each name's scheduling shape and, where a gate is
+ * not simply its recipe, its command, so a lane is one list of names and nothing here has to know
+ * what any of them do.
  */
 
 export type RunGatesOptions = {
@@ -58,6 +59,8 @@ export type RunGatesOptions = {
     name: string,
     logPath: string,
     environment: Readonly<Record<string, string>>,
+    /** The command the graph resolved for the gate after admission. */
+    run: WorkCommand,
   ) => Promise<{ exitCode: number; output: string }>
 }
 
@@ -203,7 +206,7 @@ function injectedRunner(
   runGate: NonNullable<RunGatesOptions['runGate']>,
 ): (state: WorkState, context: WorkRunContext) => Promise<WorkOutcome> {
   return async (state, context) => {
-    const result = await runGate(state.name, state.logPath ?? '', context.env)
+    const result = await runGate(state.name, state.logPath ?? '', context.env, context.run)
     return { exitCode: result.exitCode, output: result.output }
   }
 }

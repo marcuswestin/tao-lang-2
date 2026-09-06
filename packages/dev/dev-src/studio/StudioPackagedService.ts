@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { Errors, FS, HCI } from '@shared'
 import { startStudioSessionServer, StudioClientAssets, StudioSessionManager } from '@studio'
 import { createRecentProjectStore, openStudioProjectResource } from './StudioDev'
 
@@ -42,7 +42,7 @@ export async function startStudioPackagedService(
   const manager = new StudioSessionManager({
     onRecentProjectsChanged(recent) {
       void recentProjects.save(recent).catch(error =>
-        console.error('Could not save recent Tao Studio projects.', error)
+        HCI.writeErrorLine(`Could not save recent Tao Studio projects. ${Errors.formatForLog(error)}`)
       )
     },
     async openProject(request) {
@@ -64,7 +64,7 @@ export async function startStudioPackagedService(
         },
         testCommandPath: options.testNodePath,
         stop(exitCode) {
-          console.error(`Tao Studio preview exited unexpectedly (${exitCode}).`)
+          HCI.writeErrorLine(`Tao Studio preview exited unexpectedly (${exitCode}).`)
         },
         validationMode: 'release',
       })

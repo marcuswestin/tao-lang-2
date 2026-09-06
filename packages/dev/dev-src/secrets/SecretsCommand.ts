@@ -4,7 +4,7 @@
 // machine and never per worktree. Decrypting asks for a fingerprint because the kernel asks, not because
 // this code does; nothing here ever sees or stores a passphrase.
 
-import { CLI, Errors, FS, HCI, Repo } from '@shared'
+import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 import {
   type Cipher,
   formatStore,
@@ -78,12 +78,12 @@ export async function runSecrets(args: readonly string[], environment = liveEnvi
 }
 
 function identityFile(): string {
-  return FS.resolvePath(IDENTITY_PATH.replace('~', process.env['HOME'] ?? '~'))
+  return FS.resolvePath(IDENTITY_PATH.replace('~', Platform.runtimeProcess.env['HOME'] ?? '~'))
 }
 
 /** homePath shows a path under the home directory as `~/...`; the repository-relative form is nonsense here. */
 function homePath(path: string): string {
-  const home = process.env['HOME']
+  const home = Platform.runtimeProcess.env['HOME']
   return home !== undefined && path.startsWith(home) ? `~${path.slice(home.length)}` : path
 }
 

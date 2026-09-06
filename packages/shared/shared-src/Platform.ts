@@ -41,6 +41,27 @@ export function processIsAlive(pid: number): boolean {
   }
 }
 
+/** randomUUID returns a fresh random identifier, for temporary names and tokens that must not collide. */
+export function randomUUID(): string {
+  return globalThis.crypto.randomUUID()
+}
+
+/*
+ * The two helpers below delegate to Bun because nothing else in the tree implements them, and only
+ * the dev tooling that runs under Bun calls them. The extension bundle carries them unused, so
+ * neither may run at module evaluation.
+ */
+
+/** semverSatisfies reports whether a version is inside a semver range. */
+export function semverSatisfies(version: string, range: string): boolean {
+  return Bun.semver.satisfies(version, range)
+}
+
+/** parseToml parses TOML text into plain data. */
+export function parseToml(text: string): unknown {
+  return Bun.TOML.parse(text)
+}
+
 /** SpawnOptions declares options for starting a child process. */
 export type SpawnOptions = Omit<NodeSpawnOptions, 'env'> & {
   args?: readonly string[]

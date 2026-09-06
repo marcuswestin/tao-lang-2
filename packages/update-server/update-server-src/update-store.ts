@@ -1,5 +1,4 @@
-import { Errors, FS } from '@shared'
-import { randomUUID } from 'node:crypto'
+import { Errors, FS, Platform } from '@shared'
 import type { StoredAsset, StoredUpdate } from './update-types'
 
 /** UpdateStore is the persistence seam a later Tao Lang host can replace without changing HTTP semantics. */
@@ -139,7 +138,7 @@ export class FilesystemUpdateStore implements UpdateStore {
 
   async #writeState(state: FileStoreState): Promise<void> {
     const path = this.#statePath()
-    const temporary = `${path}.${randomUUID()}.tmp`
+    const temporary = `${path}.${Platform.randomUUID()}.tmp`
     await FS.writeJson(temporary, state)
     await FS.move(temporary, path)
   }

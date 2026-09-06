@@ -731,15 +731,15 @@ an entry here may link one when the developer workflow is also affected.
   `Studio Snap cannot preserve authored source for interleaved rectangle geometry` because the free
   rectangle sits between two flowed siblings. The failing step's diagnostics record board bounds,
   the element under the pointer, the gesture state, host errors, and a screenshot.
-- **Workaround:** The full-verification graph reports `_full-verify-simulated` as explicitly skipped;
-  `just _full-verify-simulated` remains available to reproduce it, and the deterministic catalog tests
+- **Workaround:** The full-verification graph reports `studio-smoke-simulated-user` as explicitly skipped;
+  `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` reproduces it, and the deterministic catalog tests
   in the same file plus the native and canary lanes remain active.
 - **Proposed change:** Let a partial Snap insert one rectangle between existing flowed siblings, or
   route that case through the proposal endpoint, in the Snap-trust stride of the Figma-at-home plan;
   keep every sketch step's precondition hit-tested rather than bounding-box based. Keep mutations
   single-shot rather than retrying requests that may already be live.
 - **Dependencies:** Product fixes and lane diagnostics landed with the Figma-at-home strides plan.
-- **Acceptance:** `_full-verify-simulated` completes the Draw, Snap, Unsnap, overlap-confirmation, and
+- **Acceptance:** `studio-smoke-simulated-user` completes the Draw, Snap, Unsnap, overlap-confirmation, and
   Undo sequence in ten consecutive normal-terminal runs before it rejoins automatic full verification.
 - **Source:** 2026-09-04 normal-terminal merge verification, the explicit quarantine decision, and the
   2026-09-04 lane diagnostics from the Figma-at-home strides work.

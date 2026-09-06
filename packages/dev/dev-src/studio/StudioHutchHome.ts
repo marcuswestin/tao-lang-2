@@ -40,7 +40,7 @@ async function prepare(options: PrepareStudioHutchHomeOptions): Promise<string> 
   }
 
   await sweepInterruptedPreparations(targetHome)
-  const temporaryHome = `${targetHome}.preparing-${Bun.randomUUIDv7()}`
+  const temporaryHome = `${targetHome}.preparing-${Platform.randomUUID()}`
   try {
     await FS.remove(temporaryHome)
     await FS.mkdir(FS.dirname(temporaryHome))

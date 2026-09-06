@@ -41,6 +41,14 @@ reserve one slot each because they spend most of their wall time waiting on host
 several smokes overlap the package critical path while the `gui` resource still serializes the two
 window-server lanes.
 
+A gate is a name in a lane's list; `GateCatalog` says how it runs. Most gates are the Justfile recipe
+of their own name. The Studio smokes are the exception: their catalog entries carry the
+`./dev studio-smoke` command, and the graph numbers them from the `studio-smoke` worker pool as it
+admits them, so `StudioSmoke.resources()` hands each its own ports and artifact root without any
+recipe pinning a worker index. Those gates are named for the public recipes that run the same files by
+hand — `studio-smoke`, `studio-proof-real-app`, `keyboard-navigation-smoke`, `studio-smoke-native`,
+`studio-canary` — and log under those names.
+
 `./agent doctor` reads this registry without pruning or otherwise mutating it, and reports the load
 average beside it — the one reading that also counts work no lane registered, such as an Xcode build
 or another repository entirely.
@@ -129,8 +137,16 @@ with a registry-lock timeout; `rm -rf ~/.cache/tao/machine-lanes` resets it.
 - `just full-verify-sandbox` runs the same full gate membership in a managed shell while explicitly
   skipping the five active host-only browser and native UI gates. Only `just full-verify` from an
   unsandboxed shell proves those five gates. The simulated editor journey remains individually
-  runnable as `just _full-verify-simulated`, but is temporarily quarantined from both
-  full-verification lanes while DEVENV-042 tracks its unreliable synthetic sketch input.
+  runnable as `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`, but its
+  gate, `studio-smoke-simulated-user`, is temporarily quarantined from both full-verification lanes
+  while DEVENV-042 tracks its unreliable synthetic sketch input.
+
+`./dev test` chooses suites from one registry in `TestRunner.ts`: a Bun suite per package with a
+`<name>-tests` directory, `performance-checks`, `runtime-jest`, and `tao-apps`, each entry owning
+its files, its process, and its scheduling weight. Every lane above is a filter over that registry —
+a name pattern, an exact file, the changed plan's suites, the retry ledger's files — and a source that
+cannot serve a run kind says so in the entry, which is where the summary's "suite was skipped" note
+comes from.
 
 `just test-flakes` and `just test-slowest` report ledger evidence but are not gates. Changed and retry
 runs print one advisory when their change shape or full-run history makes a complete run worthwhile.

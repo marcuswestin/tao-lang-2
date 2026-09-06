@@ -271,12 +271,119 @@ const REJECTED_RAW_ERROR_ALLOWLIST = [
 const REJECTED_RAW_ERROR_DETAIL = 'rejects with a raw `Error`; reach for the same taxonomy a throw'
   + ' would use, since a rejection reaches the reader the same way.'
 
+/*
+ * Platform-wrapper conventions. Code reaches the host through the shared `CLI`, `FS`, `HCI`,
+ * `Platform`, and `Time` wrappers rather than `node:` modules, the global console, the process
+ * object, or Bun's convenience APIs. `packages/shared` is the wrappers themselves and
+ * `packages/runtime` imports nothing from `@shared`, so both are outside these rules rather than
+ * allowlisted. Each list is a ratchet like the raw-throw list: it names every file that still
+ * reaches past a wrapper today, and an entry goes stale — and must be deleted — when its file is
+ * swept.
+ *
+ * An entry that survives a sweep is one of two things, and says which: emitted text — a script body
+ * rendered into a string, a bundler `define` key, a test asserting on generated source, a jest test
+ * silencing the global it captures — or a seam no wrapper covers yet. `node:crypto` hashing and
+ * signing, `node:net` sockets, and the stream classes a test constructs are the open seams; a new
+ * use of one goes behind `Platform` rather than onto the list. A type-only `node:` import names a
+ * shape, not a behavior, and is outside the import rule.
+ */
+const PLATFORM_WRAPPER_HOMES = ['packages/shared/', 'packages/runtime/']
+
+const NODE_IMPORT_ALLOWLIST = [
+  // `node:crypto` hashing, until a `Platform` digest seam exists.
+  'packages/dev/dev-src/dev-data/DevDataBootstrap.ts',
+  'packages/dev/dev-src/repository-tests/GreenTree.ts',
+  'packages/dev/dev-src/repository-tests/ParserGenerate.ts',
+  'packages/dev/dev-src/repository-tests/TestLedger.ts',
+  'packages/dev/dev-src/studio/StudioCdp.ts',
+  'packages/dev/dev-src/studio/StudioNative.ts',
+  'packages/dev/dev-src/studio/StudioReview.ts',
+  'packages/dev/dev-tests/studio-review.test.ts',
+  'packages/tao-cli/cli-src/ship-executor.ts',
+  'packages/tao-cli/cli-src/ship-model.ts',
+  'packages/update-server/update-server-src/main.ts',
+  'packages/update-server/update-server-src/update-service.ts',
+  'packages/update-server/update-server-tests/update-server.test.ts',
+  // `node:crypto` key signing for App Store Connect.
+  'packages/tao-cli/cli-src/app-store-connect-auth.ts',
+  'packages/tao-cli/cli-tests/app-store-connect-auth.test.ts',
+  // `node:net` port probes and socket connections.
+  'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts',
+  'packages/dev/dev-tests/expo-dev-loop.test.ts',
+  'packages/generation/generation-live/apple-foundation-models.live.ts',
+  // Stream classes a test constructs to stand in for a terminal.
+  'packages/tao-cli/cli-tests/compile-command.test.ts',
+  'packages/tao-cli/cli-tests/create-command.test.ts',
+  'packages/tao-cli/cli-tests/dev-command.test.ts',
+  'packages/tao-cli/cli-tests/test-cli-files.ts',
+  // Studio's `node:fs` reads close with its own sweep onto `FS`.
+  'packages/studio/studio-src/StudioClientAssets.ts',
+  'packages/studio/studio-src/device/StudioDeviceTrustStore.ts',
+]
+
+const CONSOLE_CALL_ALLOWLIST = [
+  // Browser code, where `HCI` has no stream to write to.
+  'packages/code-editor/code-editor-src/CodeEditor.tsx',
+  'packages/studio/studio-src/TaoStudioProductHost.tsx',
+  // Emitted text: the Electrobun main, a `bun -e` body, and bundles a test writes to disk.
+  'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/dev-src/studio/StudioWatchHealth.ts',
+  'packages/runtime-toolchain/runtime-toolchain-tests/release-bundle-proof.test.ts',
+  'packages/update-server/update-server-tests/update-server.test.ts',
+  // Tests that capture or silence the global a library writes through.
+  'packages/runtime-toolchain/runtime-toolchain-tests/runtime-containment.jest-test.tsx',
+  'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx',
+  'packages/tao-cli/cli-tests/completion-command.test.ts',
+]
+
+const PROCESS_ACCESS_ALLOWLIST = [
+  // Emitted text: the Electrobun main, a bundler `define` key, child scripts a test renders, and
+  // tests asserting on generated source.
+  'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/dev-src/studio/StudioNative.ts',
+  'packages/dev/dev-tests/machine-lanes.test.ts',
+  'packages/dev/dev-tests/native-host-lease.test.ts',
+  'packages/dev/dev-tests/studio-electrobun.test.ts',
+  'packages/dev/dev-tests/studio-port-lease.test.ts',
+  'packages/dev/dev-tests/test-ledger.test.ts',
+  'packages/runtime-toolchain/runtime-toolchain-tests/injections-e2e.jest-test.tsx',
+  'packages/runtime-toolchain/runtime-toolchain-tests/runtime.test.ts',
+  'packages/tao-cli/cli-tests/test-command-cli.test.ts',
+  // Studio's environment reads close with its own sweep onto `Platform.runtimeProcess`.
+  'packages/studio/studio-src/agent-chat/AgentChatProvider.ts',
+  'packages/studio/studio-src/agent-chat/AgentChatServer.ts',
+  'packages/studio/studio-tests/studio-agent-chat-server.test.ts',
+]
+
+/** The Electrobun main is emitted text that runs where no Tao module is loaded. */
+const BUN_CONVENIENCE_ALLOWLIST = [
+  'packages/dev/dev-src/studio/StudioElectrobun.ts',
+]
+
+const NODE_IMPORT_DETAIL = 'imports a `node:` module directly; reach for `FS`, `CLI`, `Platform`, or `HCI`'
+  + ' from `@shared`, and add the seam there when none fits.'
+const CONSOLE_CALL_DETAIL = 'writes through the global console; use `HCI.writeLine` or `HCI.writeErrorLine`'
+  + ' for a person, and `Platform.runtimeConsole` where the output must stay raw.'
+const PROCESS_ACCESS_DETAIL = 'reads the process environment, arguments, streams, or exit state directly;'
+  + ' go through `Platform.runtimeProcess`.'
+const BUN_CONVENIENCE_DETAIL = 'calls a Bun convenience API directly; use `Time.sleep`, `Platform.randomUUID`,'
+  + ' `Platform.semverSatisfies`, or `Platform.parseToml`, which keep the Bun dependency inside the wrappers.'
+
 const NATIVE_SWITCH_PATTERN = /^[ \t]*switch[ \t]*\(/gm
 const CONSTRUCTED_THROW_PATTERN =
   /\bthrow\s+new\s+(?:Errors\.)?(?:UserInput|UnexpectedBehavior|HostEnvironment)Error\s*\(/g
 const RAW_THROW_PATTERN = /\bthrow\s+new\s+Error\s*\(/g
 const REJECTED_RAW_ERROR_PATTERN = /(?:reject|rejectPendingLoad|fail)\??\.?\(?\s*\(?\s*new\s+Error\s*\(/g
 const BUN_TEST_IMPORT_PATTERN = /\bfrom\s*['"]bun:test['"]/g
+/*
+ * The wrapper patterns are written so this file never matches them: each spells its target with an
+ * escape or a group, and the details above name the construct without writing it.
+ */
+/** A static value import from a `node:` module; `import type` is not a platform call and passes. */
+const NODE_IMPORT_PATTERN = /^import\s+(?!type\b)[^'"]*from\s*['"]node:/gm
+const CONSOLE_CALL_PATTERN = /(?<![\w$.\-])console\.(?:debug|error|info|log|warn)\b/g
+const PROCESS_ACCESS_PATTERN = /(?<![\w$.])process\.(?:argv|cwd|env|exitCode|exit|stderr|stdin|stdout)\b/g
+const BUN_CONVENIENCE_PATTERN = /\bBun\.(?:randomUUIDv7|semver|sleep|TOML)\b/g
 const LANGIUM_IMPORT_PATTERN = /\bfrom\s*['"]langium(?:\/[^'"]*)?['"]/g
 const RELATIVE_IMPORT_PATTERN = /\bfrom\s*['"](\.{1,2}\/[^'"]*)['"]/g
 const PACKAGE_SOURCE_DIRECTORY_PATTERN = /(?:^|\/)[^/]*-src\//
@@ -333,6 +440,34 @@ export const CONVENTION_RULES = {
     detail: REJECTED_RAW_ERROR_DETAIL,
     pattern: REJECTED_RAW_ERROR_PATTERN,
     staleDetail: 'no longer rejects with a raw `Error`; drop its repo lint allowlist entry.',
+  },
+  nodeImport: {
+    allowlist: NODE_IMPORT_ALLOWLIST,
+    detail: NODE_IMPORT_DETAIL,
+    excludePathPrefixes: PLATFORM_WRAPPER_HOMES,
+    pattern: NODE_IMPORT_PATTERN,
+    staleDetail: 'no longer imports a `node:` module; drop its repo lint allowlist entry.',
+  },
+  consoleCall: {
+    allowlist: CONSOLE_CALL_ALLOWLIST,
+    detail: CONSOLE_CALL_DETAIL,
+    excludePathPrefixes: PLATFORM_WRAPPER_HOMES,
+    pattern: CONSOLE_CALL_PATTERN,
+    staleDetail: 'no longer writes through the global console; drop its repo lint allowlist entry.',
+  },
+  processAccess: {
+    allowlist: PROCESS_ACCESS_ALLOWLIST,
+    detail: PROCESS_ACCESS_DETAIL,
+    excludePathPrefixes: PLATFORM_WRAPPER_HOMES,
+    pattern: PROCESS_ACCESS_PATTERN,
+    staleDetail: 'no longer reads the process object directly; drop its repo lint allowlist entry.',
+  },
+  bunConvenience: {
+    allowlist: BUN_CONVENIENCE_ALLOWLIST,
+    detail: BUN_CONVENIENCE_DETAIL,
+    excludePathPrefixes: PLATFORM_WRAPPER_HOMES,
+    pattern: BUN_CONVENIENCE_PATTERN,
+    staleDetail: 'no longer calls a Bun convenience API; drop its repo lint allowlist entry.',
   },
 } as const satisfies Record<string, ConventionRule>
 

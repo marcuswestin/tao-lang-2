@@ -99,12 +99,12 @@ Describe('repository gate runner', () => {
 
   Test('skips every catalogued unsandboxed gate before scheduling it', async () => {
     const hostOnly = [
-      '_full-verify-smoke-launch',
-      '_full-verify-real-app',
-      '_full-verify-simulated',
-      '_full-verify-keyboard-navigation',
-      '_full-verify-native',
-      '_full-verify-canary',
+      'studio-smoke',
+      'studio-proof-real-app',
+      'studio-smoke-simulated-user',
+      'keyboard-navigation-smoke',
+      'studio-smoke-native',
+      'studio-canary',
     ]
     const { started, summary } = await run(['_repo-lint', ...hostOnly], {}, { skipUnsandboxed: true })
 

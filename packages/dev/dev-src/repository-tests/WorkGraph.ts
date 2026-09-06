@@ -41,13 +41,29 @@ export type WorkCommand = {
   env?: Record<string, string>
 }
 
+/**
+ * WorkAdmission is what the graph settled when it admitted a node: the width the machine-wide
+ * broker actually granted, and the node's index within its worker pool.
+ */
+export type WorkAdmission = {
+  slots: number
+  /** Unique among the pool's members in one run; absent for a node outside any pool. */
+  workerIndex?: number
+}
+
 /** WorkNode declares one unit of schedulable work and how it relates to the rest of a run. */
 export type WorkNode = {
   name: string
-  /** Just recipe or explicit command; both run through `CLI.start` with piped output. */
-  run: WorkCommand
-  /** Rebuild the command from the slots actually admitted by the machine-wide broker. */
-  runForSlots?: (slots: number) => WorkCommand
+  /**
+   * The process the node runs, through `CLI.start` with piped output: a command, or a builder
+   * handed what the graph admitted so the command can carry its granted width or worker index.
+   */
+  run: WorkCommand | ((admission: WorkAdmission) => WorkCommand)
+  /**
+   * Named pool of worker indices. The graph numbers a pool's members in admission order, so two
+   * members running at once never share an index and neither has to carry one as a literal.
+   */
+  workerPool?: string
   /** Env keys a nested runner reads its own worker budget from; inferred from `run` when absent. */
   budgetEnvKeys?: readonly string[]
   /** Worker slots reserved while running (CPU width). Default 1. */
@@ -100,7 +116,7 @@ export type WorkEvent =
   | { kind: 'done'; interrupted: boolean; states: readonly WorkState[] }
 
 /** WorkRunContext is what a node's runner is handed when the graph admits it. */
-export type WorkRunContext = {
+export type WorkRunContext = WorkAdmission & {
   /** Command resolved after admission, including arguments derived from the reserved slots. */
   run: WorkCommand
   /** Env the command runs with, including the worker budget the graph reserved for it. */
@@ -109,8 +125,6 @@ export type WorkRunContext = {
   onCancel: (cancel: () => void) => void
   /** Reports incremental output; the graph records it and emits it. */
   onOutput: (output: string) => void
-  /** Worker slots reserved for this node. */
-  slots: number
 }
 
 /** WorkOutcome is how one node ended. */
@@ -206,6 +220,7 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
   const pending = [...states].sort(startOrder(states, ranks))
   const running = new Map<WorkState, RunningNode>()
   const heldResources = new Set<string>()
+  const workersAdmitted = new Map<string, number>()
   const runOne = options.runNode ?? runProcess
   let availableSlots = capacity
   let interrupted = false
@@ -310,8 +325,10 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
   function startNode(state: WorkState, slots: number, machineReservation?: WorkSlotReservation): void {
     let cancel = () => {}
     let timedOut = false
-    const run = state.node.runForSlots?.(slots) ?? state.node.run
+    const admission: WorkAdmission = { slots, workerIndex: nextWorkerIndex(state.node.workerPool) }
+    const run = typeof state.node.run === 'function' ? state.node.run(admission) : state.node.run
     const context: WorkRunContext = {
+      ...admission,
       run,
       env: { ...run.env, ...options.env, ...budgetEnv(state.node, run, slots) },
       onCancel: handler => {
@@ -321,7 +338,6 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         appendOutput(state, output)
         emit({ kind: 'output', output, state })
       },
-      slots,
     }
     state.status = 'running'
     state.reason = undefined
@@ -358,6 +374,16 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       emit({ kind: 'complete', state })
     })
     running.set(state, { cancel: () => cancel(), promise })
+  }
+
+  /** nextWorkerIndex numbers one more member of a pool; indices are never reused within a run. */
+  function nextWorkerIndex(pool: string | undefined): number | undefined {
+    if (pool === undefined) {
+      return undefined
+    }
+    const index = workersAdmitted.get(pool) ?? 0
+    workersAdmitted.set(pool, index + 1)
+    return index
   }
 }
 
