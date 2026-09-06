@@ -510,6 +510,38 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.files.some(file => file.sourcePath.endsWith('/InstantDB.ts'))).toBe(true)
   })
 
+  Test('resolves the ICloud datasource package and its shared configuration reader', async () => {
+    const compiled = await Compiler.compileCode(
+      `
+        use ICloud from @tao/data/providers/icloud
+        use Local from @tao/data/providers/local
+        use StackNav from @tao/nav
+        data Notes / Note { Title text }
+        app LocalNotes {
+          Name "Local Notes"
+          Navigator StackNav { Initial Main }
+          Datasource Local { StorageKey "Notes" }
+        }
+        app CloudNotes = LocalNotes with {
+          Name "Cloud Notes"
+          Datasource ICloud { Container "iCloud.lang.tao.notes" }
+        }
+        scene Main() {
+          Title "Notes"
+          render Text("Ready")
+        }
+        view Text(Value text) { render inject ${tsFence} return null ${fence} }
+      `,
+      { appName: 'CloudNotes' },
+    )
+
+    Expect(compiled.code).toContain('TR.Data.Configure(_Scope.__tao_type_ICloud, {')
+    Expect(compiled.code).toContain('"Container": TR.Value("iCloud.lang.tao.notes")')
+    Expect(compiled.code).toContain('export default TaoApps["CloudNotes"]')
+    Expect(compiled.files.some(file => file.sourcePath.endsWith('/icloud/ICloud.ts'))).toBe(true)
+    Expect(compiled.files.some(file => file.sourcePath.endsWith('/providers/provider-configuration.ts'))).toBe(true)
+  })
+
   Test('patches only the selected app datasource with derived host configuration', async () => {
     const compiled = await Compiler.compileCode(
       `

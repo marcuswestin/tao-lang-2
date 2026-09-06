@@ -1,6 +1,9 @@
 import TR from '@runtime/TR'
 import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import type { ICloudDocumentObserver, ICloudDocuments } from 'tao-icloud-native'
+import type { CloudKitRecord, CloudKitZone, CloudKitZoneObserver, CloudKitZones } from 'tao-icloud-native/cloudkit'
+import { CloudKitProvider, CloudKitSyncProvider } from '../@tao/data/providers/cloudkit/CloudKit'
 import {
   type DevDataHost,
   type DevDataSocket,
@@ -9,6 +12,7 @@ import {
   fetchDevDataManifest,
   parseBundleHost,
 } from '../@tao/data/providers/dev/Dev'
+import { ICloudProvider } from '../@tao/data/providers/icloud/ICloud'
 import { InstantDBProvider } from '../@tao/data/providers/instantdb/InstantDB'
 import { LocalProvider } from '../@tao/data/providers/local/Local'
 import { MemoryProvider } from '../@tao/data/providers/memory/Memory'
@@ -131,6 +135,246 @@ Describe('@tao/data providers', () => {
     Expect(sdk.shutdownCalls).toBe(0)
     second.close?.()
     Expect(sdk.shutdownCalls).toBe(1)
+  })
+
+  Test('publishes ICloud through the provider conformance contract', async () => {
+    const cloud = fakeICloud()
+    await TR.testProvider(
+      () => ICloudProvider(() => cloud.documents),
+      () => ICloudProvider(() => rejectingICloud()),
+    )
+  })
+
+  Test('keeps one iCloud document per storage key and container and grants no reset', async () => {
+    const cloud = fakeICloud()
+    const provider = ICloudProvider(() => cloud.documents)
+    const connection = provider.connect({
+      configuration: { Container: ' iCloud.lang.tao.notes ' },
+      schema: { entities: {}, name: 'ICloudTest' },
+      storageKey: 'My Notes/Draft',
+    })
+
+    Expect(await connection.load()).toBeUndefined()
+    await connection.save('{"snapshot":"saved"}')
+    Expect(await connection.load()).toBe('{"snapshot":"saved"}')
+    Expect([...cloud.store.keys()]).toHaveLength(1)
+    Expect([...cloud.store.keys()][0]).toMatch(/^iCloud\.lang\.tao\.notes\/My%20Notes%2FDraft\.[0-9a-f]{8}\.json$/u)
+    // Keys differing only by case must not share a document on a case-insensitive volume.
+    await provider.connect({
+      configuration: { Container: 'iCloud.lang.tao.notes' },
+      schema: { entities: {}, name: 'ICloudTest' },
+      storageKey: 'my notes/draft',
+    }).save('{"snapshot":"other"}')
+    Expect(new Set([...cloud.store.keys()].map(key => key.toLowerCase())).size).toBe(2)
+    Expect(connection.reset).toBeUndefined()
+    Expect(connection.referenceToken?.({ entity: 'Note', id: 'Note-1', schema: 'ICloudTest' })).toBe('Note-1')
+    Expect(connection.resolveReference?.({ entity: 'Note', schema: 'ICloudTest', token: 'Note-1' })).toBe('Note-1')
+  })
+
+  Test('publishes remote document changes, never a missing document, and drops echoes of its own saves', async () => {
+    const cloud = fakeICloud()
+    const connection = ICloudProvider(() => cloud.documents).connect({
+      configuration: {},
+      schema: { entities: {}, name: 'ICloudTest' },
+      storageKey: 'Notes',
+    })
+    await connection.load()
+    const snapshots: Array<string | undefined> = []
+    const errors: unknown[] = []
+    const stop = connection.subscribe!({
+      error: error => errors.push(error),
+      snapshot: snapshot => snapshots.push(snapshot),
+    })
+    const watch = cloud.watchers[0]!
+    Expect(watch.name).toMatch(/^\/Notes\.[0-9a-f]{8}\.json$/u)
+
+    // A missing document is iCloud's bookkeeping mid-flight, never a request to empty the store.
+    watch.observer.changed(undefined)
+    watch.observer.changed('remote-1')
+    // The metadata query reports our own write back; the runtime already holds that commit.
+    await connection.save('local-1')
+    watch.observer.changed('local-1')
+    watch.observer.changed(undefined)
+    watch.observer.changed('remote-2')
+    watch.observer.failed('iCloud is unavailable')
+    stop()
+    watch.observer.changed('after-stop')
+    connection.close?.()
+
+    Expect(snapshots).toEqual(['remote-1', 'remote-2'])
+    Expect(errors).toHaveLength(1)
+    Expect(errors[0]).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect(Errors.messageOf(errors[0])).toBe('iCloud is unavailable')
+    Expect(watch.stopped).toBe(1)
+  })
+
+  Test('defers watch events during back-to-back saves and re-reads the document once they settle', async () => {
+    const cloud = fakeICloud()
+    const connection = ICloudProvider(() => cloud.documents).connect({
+      configuration: {},
+      schema: { entities: {}, name: 'ICloudTest' },
+      storageKey: 'Notes',
+    })
+    await connection.load()
+    const snapshots: Array<string | undefined> = []
+    connection.subscribe!({ error: () => undefined, snapshot: snapshot => snapshots.push(snapshot) })
+    const watch = cloud.watchers[0]!
+
+    // Two writes in flight: the watch reads the document between them and reports the earlier
+    // contents after the later write has been recorded. Nothing publishes until both settle, and
+    // the settling re-read finds this connection's own latest write.
+    const first = connection.save('local-1')
+    const second = connection.save('local-2')
+    watch.observer.changed('local-1')
+    await Promise.all([first, second])
+    Expect(snapshots).toEqual([])
+
+    // A remote write that lands right after ours is picked up by the settling re-read.
+    cloud.afterWrite = () => cloud.store.set([...cloud.store.keys()][0]!, 'remote-after-3')
+    const third = connection.save('local-3')
+    watch.observer.changed('local-3')
+    await third
+    Expect(snapshots).toEqual(['remote-after-3'])
+  })
+
+  Test('validates ICloud config before touching the native module', () => {
+    let nativeLoads = 0
+    const provider = ICloudProvider(() => {
+      nativeLoads += 1
+      Errors.throwUnexpected('native module should not load')
+    })
+
+    Expect(() =>
+      provider.connect({
+        configuration: { Container: '  ' },
+        schema: { entities: {}, name: 'ICloudConfigTest' },
+        storageKey: 'Notes',
+      })
+    ).toThrow("ICloud datasource configuration 'Container' expects non-empty text when provided.")
+    Expect(nativeLoads).toBe(0)
+  })
+
+  Test('publishes CloudKit through the sync provider conformance contract', async () => {
+    const cloud = fakeCloudKit()
+    await TR.Sync.testProvider(() => CloudKitSyncProvider(() => cloud.zones))
+  })
+
+  Test('stores one CloudKit record per row with stamped fields and relation identities', async () => {
+    const cloud = fakeCloudKit()
+    const connection = CloudKitProvider(() => cloud.zones, () => memoryKeyValueStorage()).connect({
+      configuration: { Container: 'iCloud.lang.tao.notes' },
+      schema: syncSchema,
+      storageKey: 'Notes',
+    })
+    await connection.load()
+    connection.subscribe!({ error: () => undefined, snapshot: () => undefined })
+    await connection.save(JSON.stringify({
+      formatVersion: 1,
+      nextId: 3,
+      rows: {
+        Note: [{ Id: 'Note-1', Pinned: true, Title: 'Hello' }],
+        Paragraph: [{ Id: 'Paragraph-2', Note: 'Note-1', Text: 'Body' }],
+      },
+      schemaVersion: 1,
+    }))
+    await settle()
+
+    // Every row is one `TaoRow` record with one JSON payload field, so the CloudKit schema is
+    // deployed once and never follows a Tao data change.
+    const records = [...cloud.zone('iCloud.lang.tao.notes', 'Notes').values()].map(entry => entry.record)
+    type Payload = {
+      deleted?: string
+      entity: string
+      fields: Record<string, { stamp: string; value: unknown }>
+      row: { id: string; origin: string }
+    }
+    const payloadOf = (record: CloudKitRecord): Payload => JSON.parse(record.fields['payload'] as string) as Payload
+    Expect(records.map(record => record.type)).toEqual(['TaoRow', 'TaoRow'])
+    Expect(records.every(record => Object.keys(record.fields).join() === 'payload')).toBe(true)
+    const note = records.find(record => payloadOf(record).entity === 'Note')!
+    const paragraph = records.find(record => payloadOf(record).entity === 'Paragraph')!
+    Expect(note.name).toMatch(/^[0-9a-f]{8}:Note:Note-1$/u)
+    Expect(payloadOf(note).fields['Title']?.value).toBe('Hello')
+    Expect(payloadOf(note).fields['Pinned']?.value).toBe(true)
+    Expect(payloadOf(note).fields['Title']?.stamp).toMatch(/^[0-9a-f]{16}[0-9a-f]{8}$/u)
+    Expect(payloadOf(paragraph).fields['Note']?.value).toEqual({ id: 'Note-1', origin: payloadOf(note).row.origin })
+    Expect(payloadOf(note).deleted).toBeUndefined()
+
+    // A delete keeps the record and stamps a tombstone on it, so no relaunch can resurrect the row.
+    await connection.save(JSON.stringify({
+      formatVersion: 1,
+      nextId: 3,
+      rows: { Note: [], Paragraph: [] },
+      schemaVersion: 1,
+    }))
+    await settle()
+    const deleted = payloadOf(cloud.zone('iCloud.lang.tao.notes', 'Notes').get(note.name)!.record)
+    Expect(deleted.fields['Title']?.value).toBe('Hello')
+    Expect(deleted.deleted).toMatch(/^[0-9a-f]{16}[0-9a-f]{8}$/u)
+  })
+
+  Test('merges a CloudKit server conflict fieldwise and converges both devices', async () => {
+    const cloud = fakeCloudKit()
+    let clock = 5_000
+    const replica = async (origin: string): Promise<{ connection: TR.DataConnection; snapshots: string[] }> => {
+      const connection = TR.Sync.overSnapshot(
+        CloudKitSyncProvider(() => cloud.zones),
+        { configuration: {}, schema: syncSchema, storageKey: 'Notes' },
+        { now: () => clock++, origin, storage: memoryKeyValueStorage() },
+      )
+      const snapshots: string[] = []
+      await connection.load()
+      connection.subscribe!({ error: () => undefined, snapshot: value => snapshots.push(value ?? '') })
+      await settle()
+      return { connection, snapshots }
+    }
+    const a = await replica('aaaaaaaa')
+    const b = await replica('bbbbbbbb')
+    const snapshot = (rows: Record<string, unknown[]>): string =>
+      JSON.stringify({ formatVersion: 1, nextId: 2, rows: { Paragraph: [], ...rows }, schemaVersion: 1 })
+    const rowsOf = (serialized: string): { Note: Array<Record<string, unknown>> } =>
+      (JSON.parse(serialized) as { rows: { Note: Array<Record<string, unknown>> } }).rows
+
+    await a.connection.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'Hello' }] }))
+    await settle()
+    Expect(rowsOf(b.snapshots.at(-1)!).Note).toEqual([{ Id: 'Note-1~aaaaaaaa', Pinned: false, Title: 'Hello' }])
+
+    // B falls offline; A retitles; B pins. B's save reaches the server with a stale record and
+    // comes back as a conflict, which merges fieldwise: A's title, B's pin.
+    cloud.setOnline(1, false)
+    await a.connection.save(snapshot({ Note: [{ Id: 'Note-1', Pinned: false, Title: 'From A' }] }))
+    await b.connection.save(snapshot({ Note: [{ Id: 'Note-1~aaaaaaaa', Pinned: true, Title: 'Hello' }] }))
+    await settle()
+    cloud.setOnline(1, true)
+    await settle()
+
+    Expect(cloud.conflicts).toBe(1)
+    // Every fetched batch was acknowledged once the fold had persisted it.
+    Expect(cloud.acknowledged).toBeGreaterThan(0)
+    Expect(cloud.unacknowledged).toBe(0)
+    Expect(rowsOf(a.snapshots.at(-1)!).Note).toEqual([{ Id: 'Note-1', Pinned: true, Title: 'From A' }])
+    Expect(rowsOf((await b.connection.load())!).Note).toEqual([{
+      Id: 'Note-1~aaaaaaaa',
+      Pinned: true,
+      Title: 'From A',
+    }])
+  })
+
+  Test('validates CloudKit config before touching the native module', () => {
+    let nativeLoads = 0
+    const provider = CloudKitProvider(() => {
+      nativeLoads += 1
+      Errors.throwUnexpected('native module should not load')
+    }, () => memoryKeyValueStorage())
+
+    Expect(() =>
+      provider.connect({
+        configuration: { Container: '' },
+        schema: syncSchema,
+        storageKey: 'Notes',
+      })
+    ).toThrow("CloudKit datasource configuration 'Container' expects non-empty text when provided.")
+    Expect(nativeLoads).toBe(0)
   })
 
   Test('validates required InstantDB config before loading the native SDK', () => {
@@ -484,5 +728,249 @@ function rejectingStorage(): ReturnType<typeof mapStorage> {
     setItem: async (_key: string, _value: string) => {
       Errors.throwHostEnvironment('storage unavailable')
     },
+  }
+}
+
+type FakeICloudWatch = { name: string; observer: ICloudDocumentObserver; stopped: number }
+
+/**
+ * fakeICloud emulates the native document boundary: one store keyed by container and document.
+ * `afterWrite` lets a test land a remote write immediately after this connection's own.
+ */
+function fakeICloud(): {
+  afterWrite?: (contents: string) => void
+  documents: ICloudDocuments
+  store: Map<string, string>
+  watchers: FakeICloudWatch[]
+} {
+  const store = new Map<string, string>()
+  const watchers: FakeICloudWatch[] = []
+  const key = (container: string | undefined, name: string): string => `${container ?? ''}/${name}`
+  const cloud: ReturnType<typeof fakeICloud> = {
+    documents: {
+      read: async (container, name) => store.get(key(container, name)),
+      watch: (container, name, observer) => {
+        const watch: FakeICloudWatch = { name: key(container, name), observer, stopped: 0 }
+        watchers.push(watch)
+        return () => {
+          watch.stopped += 1
+        }
+      },
+      write: async (container, name, contents) => {
+        store.set(key(container, name), contents)
+        cloud.afterWrite?.(contents)
+      },
+    },
+    store,
+    watchers,
+  }
+  return cloud
+}
+
+function rejectingICloud(): ICloudDocuments {
+  return {
+    read: async () => undefined,
+    watch: () => () => undefined,
+    write: async () => {
+      Errors.throwHostEnvironment('iCloud unavailable')
+    },
+  }
+}
+
+const syncSchema: TR.DataSchemaDefinition = {
+  entities: {
+    Note: {
+      collection: 'Notes',
+      fields: {
+        Pinned: { kind: 'boolean' },
+        Title: { kind: 'text' },
+      },
+    },
+    Paragraph: {
+      collection: 'Paragraphs',
+      fields: {
+        Note: { kind: 'relation', relation: 'Note' },
+        Text: { kind: 'text' },
+      },
+    },
+  },
+  name: 'CloudKitTest',
+}
+
+function memoryKeyValueStorage(): {
+  getItem(key: string): Promise<string | null>
+  setItem(key: string, value: string): Promise<void>
+} {
+  const values = new Map<string, string>()
+  return {
+    getItem: async key => values.get(key) ?? null,
+    setItem: async (key, value) => {
+      values.set(key, value)
+    },
+  }
+}
+
+async function settle(): Promise<void> {
+  for (let index = 0; index < 8; index += 1) {
+    await new Promise<void>(resolve => setTimeout(resolve, 0))
+  }
+}
+
+type FakeCloudKitEntry = { record: CloudKitRecord; version: number }
+type FakeCloudKitSession = {
+  known: Map<string, number>
+  observer?: CloudKitZoneObserver
+  online: boolean
+  /** outbox holds queued sends with the record versions known when they were queued, as the sync engine's pending records do. */
+  outbox: Array<{ known: Map<string, number>; records: readonly CloudKitRecord[] }>
+  zone: Map<string, FakeCloudKitEntry>
+}
+
+/**
+ * fakeCloudKit emulates CloudKit's private database for the zone boundary: one record store per
+ * container and zone shared by every session opened on it, versioned records so a save over a
+ * stale copy comes back as a conflict carrying the server's record, and push-style delivery of
+ * every accepted change to the other online sessions. As `CKSyncEngine` does, an offline session
+ * takes sends into its own queue and plays them against the server once it is back online, after
+ * fetching what it missed. As the server does, it stores numbers as doubles, so a boolean that
+ * was not encoded deliberately would not survive; and every fetched batch must be acknowledged.
+ */
+function fakeCloudKit(): {
+  acknowledged: number
+  conflicts: number
+  sessions: FakeCloudKitSession[]
+  setOnline(index: number, online: boolean): void
+  unacknowledged: number
+  zone(container: string | undefined, name: string): Map<string, FakeCloudKitEntry>
+  zones: CloudKitZones
+} {
+  const stores = new Map<string, Map<string, FakeCloudKitEntry>>()
+  const sessions: FakeCloudKitSession[] = []
+  const state = { acknowledged: 0, conflicts: 0, delivered: 0 }
+  const zoneOf = (container: string | undefined, name: string): Map<string, FakeCloudKitEntry> => {
+    const key = `${container ?? ''}/${name}`
+    const existing = stores.get(key)
+    if (existing) {
+      return existing
+    }
+    const created = new Map<string, FakeCloudKitEntry>()
+    stores.set(key, created)
+    return created
+  }
+  const stored = (record: CloudKitRecord): CloudKitRecord => ({
+    ...record,
+    fields: Object.fromEntries(
+      Object.entries(record.fields).map((
+        [key, value],
+      ) => [key, typeof value === 'number' ? Number(value) : String(value)]),
+    ),
+  })
+  const fetched = (session: FakeCloudKitSession, modifications: CloudKitRecord[]): void => {
+    if (modifications.length === 0 || session.observer === undefined) {
+      return
+    }
+    state.delivered += 1
+    session.observer.fetched(modifications, [], async () => {
+      state.acknowledged += 1
+    })
+  }
+  const catchUp = (session: FakeCloudKitSession): void => {
+    const modifications: CloudKitRecord[] = []
+    for (const [name, entry] of session.zone) {
+      if (session.known.get(name) !== entry.version) {
+        session.known.set(name, entry.version)
+        modifications.push(entry.record)
+      }
+    }
+    fetched(session, modifications)
+  }
+  const process = (
+    session: FakeCloudKitSession,
+    records: readonly CloudKitRecord[],
+    knownAtQueue: Map<string, number> = session.known,
+  ): void => {
+    const savedRecords: CloudKitRecord[] = []
+    const conflicts: Array<{ name: string; server: CloudKitRecord }> = []
+    for (const sent of records) {
+      const record = stored(sent)
+      const existing = session.zone.get(record.name)
+      if (existing !== undefined && knownAtQueue.get(record.name) !== existing.version) {
+        state.conflicts += 1
+        session.known.set(record.name, existing.version)
+        conflicts.push({ name: record.name, server: existing.record })
+        continue
+      }
+      const version = (existing?.version ?? 0) + 1
+      session.zone.set(record.name, { record, version })
+      session.known.set(record.name, version)
+      savedRecords.push(record)
+      for (const other of sessions) {
+        if (other !== session && other.zone === session.zone && other.online) {
+          other.known.set(record.name, version)
+          fetched(other, [record])
+        }
+      }
+    }
+    session.observer?.sent(savedRecords, conflicts, [])
+  }
+  const zones: CloudKitZones = (container, name) => {
+    const session: FakeCloudKitSession = {
+      known: new Map(),
+      online: true,
+      outbox: [],
+      zone: zoneOf(container, name),
+    }
+    sessions.push(session)
+    const zone: CloudKitZone = {
+      close: () => {
+        session.observer = undefined
+      },
+      fetch: async () => {
+        if (session.online) {
+          catchUp(session)
+        }
+      },
+      send: async records => {
+        if (session.online) {
+          process(session, records)
+        } else {
+          session.outbox.push({ known: new Map(session.known), records })
+        }
+      },
+      subscribe: observer => {
+        session.observer = observer
+        return () => {
+          if (session.observer === observer) {
+            session.observer = undefined
+          }
+        }
+      },
+    }
+    return zone
+  }
+  return {
+    get acknowledged() {
+      return state.acknowledged
+    },
+    get conflicts() {
+      return state.conflicts
+    },
+    sessions,
+    setOnline: (index, online) => {
+      const session = sessions[index]!
+      session.online = online
+      if (online) {
+        catchUp(session)
+        const queued = session.outbox.splice(0)
+        for (const entry of queued) {
+          process(session, entry.records, entry.known)
+        }
+      }
+    },
+    get unacknowledged() {
+      return state.delivered - state.acknowledged
+    },
+    zone: zoneOf,
+    zones,
   }
 }

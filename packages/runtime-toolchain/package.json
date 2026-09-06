@@ -39,6 +39,7 @@
     "react-native-screens": "~4.16.0",
     "react-native-web": "~0.21.0",
     "react-test-renderer": "19.1.0",
+    "tao-icloud-native": "workspace:*",
     "tao-runtime": "workspace:*",
     "tao-shared": "workspace:*",
     "tao-workspace": "workspace:*"

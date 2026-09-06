@@ -24,6 +24,7 @@ import {
   type TaoDatasourceDeclaration,
   type TaoFillOps,
   type TaoFillRequest,
+  type TaoKeyValueStorage,
   type TaoQueryDescriptor,
   testProvider as testDataProvider,
 } from './TR-data'
@@ -34,6 +35,19 @@ import {
   type TaoHttpMatch,
   type TaoHttpShape,
 } from './TR-data-http'
+import {
+  SyncControls,
+  type TaoChangeSet,
+  type TaoSyncConnection,
+  type TaoSyncObserver,
+  type TaoSyncOp,
+  type TaoSyncProvider,
+  type TaoSyncProviderContext,
+  type TaoSyncRowId,
+  type TaoSyncStamp,
+  type TaoSyncStampedValue,
+  type TaoSyncValue,
+} from './TR-data-sync'
 import {
   DesignControls,
   type TaoDesign,
@@ -651,6 +665,13 @@ class TR {
   /** Http is the adapter-authoring surface for Http datasources: `TR.Http.adapter`, `TR.Http.on`. */
   static readonly Http = HttpAdapterControls
 
+  /**
+   * Sync is the granular-write family's surface: `TR.Sync.overSnapshot` mounts a granular provider
+   * behind the snapshot contract, `TR.Sync.memoryAuthority` is the in-process authority, and
+   * `TR.Sync.testProvider` its conformance suite.
+   */
+  static readonly Sync = SyncControls
+
   /** Scheme exposes the resolved appearance environment used by conditional design entries. */
   static readonly Scheme = SchemeControls
 
@@ -1047,6 +1068,28 @@ namespace TR {
   export type HttpShape = TaoHttpShape
   /** HttpFillTools is what an adapter shape's fill receives to land fetched rows. */
   export type HttpFillTools = TaoHttpFillTools
+  /** ChangeSet is one commit as the granular-write family carries it between replicas. */
+  export type ChangeSet = TaoChangeSet
+  /** SyncOp is one row-level operation inside a change-set. */
+  export type SyncOp = TaoSyncOp
+  /** SyncRowId identifies a row across replicas by its creating replica and local id. */
+  export type SyncRowId = TaoSyncRowId
+  /** SyncValue is one field value on the wire; a relation is the related row's identity. */
+  export type SyncValue = TaoSyncValue
+  /** SyncStampedValue pairs a field value with the stamp of the edit that set it. */
+  export type SyncStampedValue = TaoSyncStampedValue
+  /** SyncStamp orders edits: a fixed-width hybrid logical clock reading followed by the origin. */
+  export type SyncStamp = TaoSyncStamp
+  /** KeyValueStorage is the host's durable key-value boundary a sync bridge keeps its checkpoint in. */
+  export type KeyValueStorage = TaoKeyValueStorage
+  /** SyncConnection is one transport binding of a store to its authority. */
+  export type SyncConnection = TaoSyncConnection
+  /** SyncObserver receives the authority's events for one connection. */
+  export type SyncObserver = TaoSyncObserver
+  /** SyncProvider is the package boundary a granular datasource implements. */
+  export type SyncProvider = TaoSyncProvider
+  /** SyncProviderContext is the provider-neutral mount plus this replica's identity. */
+  export type SyncProviderContext = TaoSyncProviderContext
   /** DatasourceDeclaration owns the identity and provider implementation of a Tao datasource. */
   export type DatasourceDeclaration = TaoDatasourceDeclaration
   /** ConfiguredDatasource is an immutable declaration-linked provider configuration. */
