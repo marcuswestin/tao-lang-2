@@ -1,5 +1,6 @@
 import React from 'react'
 import { RuntimeAssert } from './TR-assert'
+import { Debug } from './TR-debug'
 import { captureArguments, onRuntimeFailure } from './TR-error-containment'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { captureRuntime, restoreRuntimeCapture, type TaoRuntimeCaptureArtifact } from './TR-runtime-capture'
@@ -1031,6 +1032,15 @@ export function mountStudioPreviewBridge(
     }, config.parentOrigin)
   })
   const restoreConsole = forwardPreviewConsole(host, config)
+  const stopDebug = Debug.onEvent(event => {
+    host.parent.postMessage({
+      channel: studioProtocolChannel,
+      event: captureArguments(event),
+      identity: previewIdentity(config),
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-debug',
+    }, config.parentOrigin)
+  })
 
   return () => {
     stopped = true
@@ -1042,6 +1052,7 @@ export function mountStudioPreviewBridge(
     }
     restoreConsole()
     stopFailures()
+    stopDebug()
     host.document.removeEventListener('click', onClick, true)
     host.document.removeEventListener('click', onRecordedClick, true)
     host.document.removeEventListener('input', onRecordedInput, true)

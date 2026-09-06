@@ -34,6 +34,7 @@ import {
   type TaoHttpMatch,
   type TaoHttpShape,
 } from './TR-data-http'
+import { Debug } from './TR-debug'
 import {
   DesignControls,
   type TaoDesign,
@@ -623,6 +624,9 @@ class TR {
     SubjectHost: StudioSubjectHost,
   } as const
 
+  /** Debug is the debugger controller: journal, breakpoints, and the statement gate, owned by `TR-debug.ts`. */
+  static readonly Debug = Debug
+
   /** Errors is the runtime's one error-handling surface, owned by `TR-errors.ts`. */
   static readonly Errors = ErrorControls
 
@@ -725,6 +729,7 @@ class RuntimeState<T> {
       committed => this.commit(committed.value),
       undefined,
       committed => this.commit(committed.previous),
+      overlay => [{ kind: 'state', target: 'state', committed: overlay.previous, pending: overlay.value }],
     )
     if (overlay) {
       overlay.value = nextValue

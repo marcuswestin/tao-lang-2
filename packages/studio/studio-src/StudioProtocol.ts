@@ -228,6 +228,15 @@ type StudioPreviewLogMessage = {
   type: 'preview-console'
 }
 
+/** StudioPreviewDebugMessage carries one debugger event: a journal entry, a pause, or a resume. */
+export type StudioPreviewDebugMessage = {
+  channel: typeof studioProtocolChannel
+  event: StudioJsonValue
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-debug'
+}
+
 type StudioPreviewSchemeMessage = {
   channel: typeof studioProtocolChannel
   identity: StudioPreviewIdentity
@@ -331,6 +340,7 @@ export type StudioWindowMessage =
   | StudioPreviewFixtureCapturedMessage
   | StudioPreviewFixtureCaptureFailedMessage
   | StudioPreviewLogMessage
+  | StudioPreviewDebugMessage
   | StudioPreviewLayoutMeasurementsMessage
   | StudioPreviewJourneyRecordingStateMessage
   | StudioPreviewJourneyReplayFailedMessage
@@ -435,6 +445,9 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
   }
   if (value['type'] === 'preview-console') {
     return parsePreviewLog(value)
+  }
+  if (value['type'] === 'preview-debug') {
+    return parsePreviewDebug(value)
   }
   if (value['type'] === 'preview-scheme-changed') {
     return parsePreviewScheme(value)
@@ -716,6 +729,21 @@ function parsePreviewRuntimeCaptureFailed(
     protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],
     type: 'preview-runtime-capture-failed',
+  }
+}
+
+function parsePreviewDebug(value: StudioJsonObject): StudioPreviewDebugMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const event = value['event']
+  if (identity === undefined || !isJsonValue(event)) {
+    return undefined
+  }
+  return {
+    channel: studioProtocolChannel,
+    event,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    type: 'preview-debug',
   }
 }
 

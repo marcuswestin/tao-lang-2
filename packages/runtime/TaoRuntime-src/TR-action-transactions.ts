@@ -1,4 +1,5 @@
-import { recordActionFailureFrames, reportActionFailure, reportUnownedFailure } from './TR-errors'
+import { journalSettle, journalStart, type TaoDebugJournalEntry } from './TR-debug'
+import { recordActionFailureFrames, reportActionFailure, reportUnownedFailure, TaoActionFailure } from './TR-errors'
 
 export type TaoDeclaredFailure = Readonly<{
   case: { evaluate(): { jsValue: unknown } }
@@ -9,8 +10,17 @@ type TransactionResource<ValueT> = {
   commit(value: ValueT): void
   prepare?(value: ValueT): void
   rollbackCommit?(value: ValueT): void
+  describe?(value: ValueT): readonly TaoDebugPendingWrite[]
   value: ValueT
 }
+
+/** TaoDebugPendingWrite is one write a transaction will publish at commit, beside its committed value. */
+export type TaoDebugPendingWrite = Readonly<{
+  kind: 'state' | 'persisted' | 'data'
+  target: string
+  committed: unknown
+  pending: unknown
+}>
 
 /**
  * launchGeneration numbers the launch every action root belongs to. It is declared above the
@@ -26,6 +36,8 @@ class ActionTransaction {
   readonly resources = new Map<object, TransactionResource<any>>()
   externalEffects = false
   committed = false
+  journal: TaoDebugJournalEntry | undefined
+  failure: unknown
 
   resource<ValueT>(
     key: object,
@@ -33,14 +45,24 @@ class ActionTransaction {
     commit: (value: ValueT) => void,
     prepare?: (value: ValueT) => void,
     rollbackCommit?: (value: ValueT) => void,
+    describe?: (value: ValueT) => readonly TaoDebugPendingWrite[],
   ): ValueT {
     const existing = this.resources.get(key) as TransactionResource<ValueT> | undefined
     if (existing) {
       return existing.value
     }
     const value = create()
-    this.resources.set(key, { commit, prepare, rollbackCommit, value })
+    this.resources.set(key, { commit, describe, prepare, rollbackCommit, value })
     return value
+  }
+
+  /** pendingWrites describes every write this transaction would publish at commit. */
+  pendingWrites(): readonly TaoDebugPendingWrite[] {
+    const writes: TaoDebugPendingWrite[] = []
+    for (const resource of this.resources.values()) {
+      writes.push(...(resource.describe?.(resource.value) ?? []))
+    }
+    return writes
   }
 
   existing<ValueT>(key: object): ValueT | undefined {
@@ -128,6 +150,7 @@ export function runAction(
     const transaction = new ActionTransaction()
     let pending = false
     activeTransaction = transaction
+    transaction.journal = journalStart(name, arguments_)
     transaction.frames.push(name)
     try {
       const result = body()
@@ -194,6 +217,7 @@ function finishRootFailure(
 ): void {
   activeTransaction = undefined
   transaction.rollback()
+  transaction.failure = error
   if (abandonedByLaunch(transaction)) {
     return
   }
@@ -203,6 +227,7 @@ function finishRootFailure(
 function finishRoot(transaction: ActionTransaction, suspendedTransaction?: ActionTransaction): void {
   activeTransaction = suspendedTransaction
   transaction.frames.pop()
+  settleJournal(transaction)
   if (transaction.committed) {
     for (const effect of transaction.afterCommit) {
       try {
@@ -220,6 +245,47 @@ function finishRoot(transaction: ActionTransaction, suspendedTransaction?: Actio
   }
   for (const detached of transaction.detached) {
     void enqueueDetached(detached)
+  }
+}
+
+function settleJournal(transaction: ActionTransaction): void {
+  if (!transaction.journal) {
+    return
+  }
+  const outcome = abandonedByLaunch(transaction) ? 'abandoned' : transaction.committed ? 'committed' : 'failed'
+  const failure = transaction.failure
+  journalSettle(transaction.journal, outcome, {
+    externalEffect: transaction.externalEffects,
+    frames: transaction.frames,
+    failureCase: failure instanceof TaoActionFailure ? failure.caseName : undefined,
+  })
+}
+
+/** SuspendedTransaction is what a paused root hands back to the debugger to restore on resume. */
+export type SuspendedTransaction = Readonly<{
+  frames: readonly string[]
+  pendingWrites(): readonly TaoDebugPendingWrite[]
+  transaction: object
+}>
+
+/**
+ * suspendActiveTransaction releases the active transaction while a root is paused at a debugger
+ * gate, so a render meanwhile reads committed values. The paused body resumes it before its next
+ * statement writes. A gate reached outside any transaction returns undefined and restores nothing.
+ */
+export function suspendActiveTransaction(): SuspendedTransaction | undefined {
+  const transaction = activeTransaction
+  if (!transaction) {
+    return undefined
+  }
+  activeTransaction = undefined
+  return { frames: transaction.frames, pendingWrites: () => transaction.pendingWrites(), transaction }
+}
+
+/** resumeSuspendedTransaction puts a paused root's transaction back as the active one. */
+export function resumeSuspendedTransaction(suspended: SuspendedTransaction | undefined): void {
+  if (suspended) {
+    activeTransaction = suspended.transaction as ActionTransaction
   }
 }
 
@@ -270,8 +336,9 @@ export function transactionResource<ValueT>(
   commit: (value: ValueT) => void,
   prepare?: (value: ValueT) => void,
   rollbackCommit?: (value: ValueT) => void,
+  describe?: (value: ValueT) => readonly TaoDebugPendingWrite[],
 ): ValueT | undefined {
-  return activeTransaction?.resource(key, create, commit, prepare, rollbackCommit)
+  return activeTransaction?.resource(key, create, commit, prepare, rollbackCommit, describe)
 }
 
 /**

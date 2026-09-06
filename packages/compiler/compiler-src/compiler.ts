@@ -112,6 +112,8 @@ export type CompileOptions = {
   appDatasourceConfiguration?: Readonly<Record<string, string>>
   /** studio emits preview-only render occurrence metadata into generated Tao props. */
   studio?: boolean
+  /** debug instruments every action statement with a debugger gate. */
+  debug?: boolean
   /** release promotes only stable release-gate diagnostics; ordinary development warnings stay non-blocking. */
   validationMode?: 'development' | 'release'
 }
@@ -274,6 +276,7 @@ function compileValidatedInput(
       selectedAppName: file.path === entryPath ? selectedAppName : undefined,
       studio,
       studioViews,
+      debug: options.debug === true,
     })
   )
 
@@ -420,6 +423,7 @@ type CompileSourceFileOptions = {
   selectedAppName: string | undefined
   studio: boolean
   studioViews: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
+  debug: boolean
 }
 
 function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile[] {
@@ -434,6 +438,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     selectedAppName,
     studio,
     studioViews,
+    debug,
   } = options
   const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
   const ownsDataCatalog = dataCatalog?.ownerPath === file.path
@@ -515,6 +520,7 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
             projectRoot,
             studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
             studio,
+            debug,
             studioViews: studio && selectedAppName !== undefined ? studioViews : [],
             viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }),
           }),

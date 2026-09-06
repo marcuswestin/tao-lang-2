@@ -131,6 +131,7 @@ export class RuntimePersistedState<T> implements TaoWritableState<T> {
       committed => this.#commit(committed.value),
       undefined,
       committed => this.#commit(committed.previous),
+      overlay => [{ kind: 'persisted', target: 'persisted', committed: overlay.previous, pending: overlay.value }],
     )
     if (overlay) {
       overlay.value = nextValue

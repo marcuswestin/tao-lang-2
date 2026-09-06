@@ -2377,6 +2377,16 @@ export async function handlePreviewMessage(
     actions.changed?.()
     return
   }
+  if (message.type === 'preview-debug') {
+    // Proof of concept: debugger events share the runtime log pane until the Debug drawer exists.
+    preview.runtimeLogs = [...(preview.runtimeLogs ?? []), {
+      arguments: ['[debug]', message.event],
+      level: 'info' as const,
+      timestamp: Date.now(),
+    }].slice(-500)
+    actions.changed?.()
+    return
+  }
   if (
     message.type === 'preview-journey-step-recorded'
     || message.type === 'preview-journey-recording-state'
