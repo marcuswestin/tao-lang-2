@@ -325,6 +325,8 @@ const CONSOLE_CALL_ALLOWLIST = [
   // Browser code, where `HCI` has no stream to write to.
   'packages/code-editor/code-editor-src/CodeEditor.tsx',
   'packages/studio/studio-src/TaoStudioProductHost.tsx',
+  // Device-side stdlib provider running inside the app, where `HCI` has no terminal either.
+  'packages/stdlib/@tao/data/providers/icloud/ICloud.ts',
   // Emitted text: the Electrobun main, a `bun -e` body, and bundles a test writes to disk.
   'packages/dev/dev-src/studio/StudioElectrobun.ts',
   'packages/dev/dev-src/studio/StudioWatchHealth.ts',
