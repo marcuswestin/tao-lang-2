@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import { type Compiled, gen } from '../codegen-util'
 
-export default {
+export const UseStatementCompiler = {
   /** UsePackageStatement compiles to a source comment; its imports come from the aliases using it. */
   UsePackageStatement(statement: AST.UsePackageStatement): Compiled {
     const asClause = statement.name ? ` as ${statement.name}` : ''

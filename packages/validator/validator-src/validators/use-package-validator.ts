@@ -21,11 +21,11 @@ export function validatePackageUseStatements(file: AST.TaoFile, ctx: ValidationC
   for (const statement of file.statements.filter(AST.isUsePackageStatement)) {
     const name = AST.packageNamespaceName(statement)
     if (!name) {
-      ctx.error(usePackageValidationMessages.underivableName(statement.importPath ?? ''), statement)
+      ctx.error(statement, usePackageValidationMessages.underivableName(statement.importPath ?? ''))
       continue
     }
     if (seen.has(name)) {
-      ctx.error(usePackageValidationMessages.duplicateNamespace(name), statement)
+      ctx.error(statement, usePackageValidationMessages.duplicateNamespace(name))
     }
     seen.set(name, statement)
     const resolution = Packages.resolve(ctx.packagesContext, {
@@ -33,7 +33,7 @@ export function validatePackageUseStatements(file: AST.TaoFile, ctx: ValidationC
       fromFilePath,
     })
     if (resolution.relation === 'invalid') {
-      ctx.error(usePackageValidationMessages.unresolvedPackage(statement.importPath ?? ''), statement)
+      ctx.error(statement, usePackageValidationMessages.unresolvedPackage(statement.importPath ?? ''))
     }
   }
 }
@@ -52,13 +52,13 @@ export const usePackageValidationChecks = {
     }
     const target = AST.viewAliasTarget(declaration)
     if (!target) {
-      ctx.error(usePackageValidationMessages.aliasCycle(declaration.name), declaration)
+      ctx.error(declaration, usePackageValidationMessages.aliasCycle(declaration.name))
       return
     }
     if (!AST.isViewDeclaration(target)) {
       ctx.error(
-        usePackageValidationMessages.aliasTargetKind(declaration.name, aliasTarget.member.$refText),
         declaration,
+        usePackageValidationMessages.aliasTargetKind(declaration.name, aliasTarget.member.$refText),
       )
     }
   },
@@ -76,13 +76,13 @@ export const usePackageValidationChecks = {
       return
     }
     if (resolution.kind === 'cycle') {
-      ctx.error(usePackageValidationMessages.typeAliasCycle(declaration.name), declaration)
+      ctx.error(declaration, usePackageValidationMessages.typeAliasCycle(declaration.name))
       return
     }
     if (resolution.kind === 'invalid' || !AST.isConfigurableDeclaration(resolution.target)) {
       ctx.error(
-        usePackageValidationMessages.typeAliasTargetKind(declaration.name, resolution.target.name),
         declaration,
+        usePackageValidationMessages.typeAliasTargetKind(declaration.name, resolution.target.name),
       )
     }
   },

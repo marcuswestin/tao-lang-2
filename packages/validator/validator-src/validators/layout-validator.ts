@@ -56,7 +56,7 @@ export const LayoutValidator = {
 
 function validateRender(render: AST.Render, ctx: ValidationContext): void {
   if (AST.isRenderStatement(render) && render.injection && render.layoutClause) {
-    ctx.error(layoutValidationMessages.injectLayout, render.layoutClause)
+    ctx.error(render.layoutClause, layoutValidationMessages.injectLayout)
     return
   }
   if (render.layoutClause) {
@@ -79,7 +79,7 @@ function validateLayoutClause(layoutClause: AST.LayoutClause, ctx: ValidationCon
   if (layoutClause.entries.every(isLayoutEntry)) {
     const conflict = effectiveWeightedRigidClaim(layoutClause.entries)
     if (conflict) {
-      ctx.error(layoutValidationMessages.conflictingEntries('claim', 'rigid'), conflict.rigid)
+      ctx.error(conflict.rigid, layoutValidationMessages.conflictingEntries('claim', 'rigid'))
     }
   }
 }
@@ -102,13 +102,13 @@ function validateLayoutEntry(
 ): void {
   const head = layoutEntryHead(entry)
   if (!head) {
-    ctx.error(layoutValidationMessages.unsupportedEntry(layoutEntryText(entry)), entry)
+    ctx.error(entry, layoutValidationMessages.unsupportedEntry(layoutEntryText(entry)))
     return
   }
 
   const headValue = layoutHeadValue(head)
   if (!headValue) {
-    ctx.error(layoutValidationMessages.unsupportedEntry(layoutEntryText(entry)), entry)
+    ctx.error(entry, layoutValidationMessages.unsupportedEntry(layoutEntryText(entry)))
     return
   }
 
@@ -135,7 +135,7 @@ function validateContent(
 ): void {
   const terms = entry.terms
   if (terms.length < 1 || terms.length > 2 || !terms.every(AST.isLayoutWord)) {
-    ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+    ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
     return
   }
   const contentTerms = validateAllowedTerms(entry, terms, contentTermValue, ctx)
@@ -148,7 +148,7 @@ function validateSingleNumber(entry: AST.LayoutEntry, ctx: ValidationContext, al
     terms.length !== 1
     || (!AST.isLayoutNumberLiteral(terms[0]) && !(allowToken && isDesignSizeReference(terms[0])))
   ) {
-    ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+    ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
     return
   }
   if (AST.isLayoutNumberLiteral(terms[0])) {
@@ -162,7 +162,7 @@ function validatePositiveNumber(
   ctx: ValidationContext,
 ): void {
   if (term.value <= 0) {
-    ctx.error(layoutValidationMessages.positiveNumber(layoutEntryText(entry)), entry)
+    ctx.error(entry, layoutValidationMessages.positiveNumber(layoutEntryText(entry)))
   }
 }
 
@@ -175,7 +175,7 @@ function validateSpacing(entry: AST.LayoutEntry, ctx: ValidationContext, head: '
     return
   }
   if (terms.length < 2 || terms.length % 2 !== 0) {
-    ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+    ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
     return
   }
 
@@ -185,7 +185,7 @@ function validateSpacing(entry: AST.LayoutEntry, ctx: ValidationContext, head: '
     const value = terms[index + 1]
     const side = sideTerm && AST.isLayoutWord(sideTerm) ? padSideValue(sideTerm) : undefined
     if (!side || !value || (!AST.isLayoutNumberLiteral(value) && !isDesignSizeReference(value))) {
-      ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+      ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
       return
     }
     if (AST.isLayoutNumberLiteral(value)) {
@@ -211,11 +211,11 @@ function validateDimension(
       }
       return
     }
-    ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+    ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
     return
   }
   if (terms.length !== 1) {
-    ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+    ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
     return
   }
   const value = terms[0]!
@@ -230,12 +230,12 @@ function validateDimension(
   if (isDesignSizeReference(value)) {
     return
   }
-  ctx.error(layoutValidationMessages.unsupportedTerm(layoutEntryText(entry), layoutTermText(value)), entry)
+  ctx.error(entry, layoutValidationMessages.unsupportedTerm(layoutEntryText(entry), layoutTermText(value)))
 }
 
 function validateBareEntry(entry: AST.LayoutEntry, ctx: ValidationContext): void {
   if (entry.terms.length > 0) {
-    ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+    ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
   }
 }
 
@@ -245,7 +245,7 @@ function validateAligned(
 ): void {
   const terms = entry.terms
   if (terms.length !== 1 || !AST.isLayoutWord(terms[0])) {
-    ctx.error(layoutValidationMessages.malformedEntry(layoutEntryText(entry)), entry)
+    ctx.error(entry, layoutValidationMessages.malformedEntry(layoutEntryText(entry)))
     return
   }
   validateAllowedTerms(entry, [terms[0]], alignTermValue, ctx)
@@ -261,7 +261,7 @@ function validateAllowedTerms<TermT extends string>(
   for (const term of terms) {
     const value = termValue(term)
     if (!value) {
-      ctx.error(layoutValidationMessages.unsupportedTerm(layoutEntryText(entry), layoutWordText(term)), entry)
+      ctx.error(entry, layoutValidationMessages.unsupportedTerm(layoutEntryText(entry), layoutWordText(term)))
       continue
     }
     allowedTerms.push(value)

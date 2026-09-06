@@ -2,7 +2,7 @@ import { AST } from '@parser'
 import { Switch } from '@shared'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
-import { isRuntimeConfigurableDeclaration } from './configuration-compiler'
+import { isRuntimeConfigurableDeclaration } from './ConfigurationCompiler'
 
 export const StatementsCompiler = {
   /** Statement compiles one Tao statement. */

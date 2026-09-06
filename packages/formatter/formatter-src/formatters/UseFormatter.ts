@@ -1,6 +1,6 @@
 import type { FormatHandlers } from '../formatting'
 
-export default {
+export const UseFormatter = {
   /** UseStatement formats `use Name, Name from path` spacing. */
   UseStatement(f) {
     f.oneSpaceAfter('use')

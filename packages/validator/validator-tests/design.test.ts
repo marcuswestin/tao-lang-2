@@ -171,7 +171,7 @@ Describe('validator: minimal design', () => {
     'rejects a named layout size absent from the selected design',
     rejects(
       designApp('workspace design Theme { sizes { sm 8.px } }', 'render Surface() [width absent]'),
-      "Design 'Theme' has no size 'absent'.",
+      messages.unknownSize('Theme', 'absent'),
     ),
   )
 

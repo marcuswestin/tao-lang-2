@@ -5,8 +5,7 @@
   "module": "validator-src/validator.ts",
   "exports": {
     ".": "./validator-src/validator.ts",
-    "./diagnostic-codes": "./validator-src/diagnostic-codes.ts",
-    "./langium-validation": "./validator-src/langium-validation.ts"
+    "./diagnostic-codes": "./validator-src/diagnostic-codes.ts"
   },
   "dependencies": {
     "tao-ast-utils": "workspace:*",

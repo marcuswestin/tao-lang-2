@@ -107,28 +107,28 @@ export const testValidationChecks = {
 function validateAdvanceDuration(step: AST.AdvanceStep, ctx: ValidationContext): void {
   const nanoseconds = ASTUtils.literalDurationOf(step.duration)
   if (nanoseconds === undefined) {
-    ctx.error(testValidationMessages.advanceDuration, step)
+    ctx.error(step, testValidationMessages.advanceDuration)
     return
   }
   if (nanoseconds < 0) {
-    ctx.error(testValidationMessages.advanceNegative, step)
+    ctx.error(step, testValidationMessages.advanceNegative)
   }
 }
 
 // A test is either a group of nested tests or a leaf journey of steps, never a mix.
 function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
   if (AST.testDisplayName(test) === '') {
-    ctx.error(testValidationMessages.unnamedTest, test)
+    ctx.error(test, testValidationMessages.unnamedTest)
   }
   const owner = test.$container
   if (!AST.isTaoFile(owner) && !AST.isTestDeclaration(blockOwner(test))) {
-    ctx.error(testValidationMessages.testPlacement, test)
+    ctx.error(test, testValidationMessages.testPlacement)
   }
   const nested = test.block.statements.filter(AST.isTestDeclaration)
   if (nested.length > 0) {
     for (const statement of test.block.statements) {
       if (!AST.isTestDeclaration(statement)) {
-        ctx.error(testValidationMessages.testBlock(AST.testDisplayName(test)), statement)
+        ctx.error(statement, testValidationMessages.testBlock(AST.testDisplayName(test)))
       }
     }
     return
@@ -139,19 +139,19 @@ function validateTest(test: AST.TestDeclaration, ctx: ValidationContext): void {
 function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): void {
   for (const statement of check.block.statements) {
     if (!AST.isCheckStep(statement)) {
-      ctx.error(testValidationMessages.checkBlock(AST.testDisplayName(check)), statement)
+      ctx.error(statement, testValidationMessages.checkBlock(AST.testDisplayName(check)))
     }
   }
   const runSteps = check.block.statements.filter(AST.isRunStep)
   if (runSteps.length === 0) {
-    ctx.error(testValidationMessages.missingRun(AST.testDisplayName(check)), check)
+    ctx.error(check, testValidationMessages.missingRun(AST.testDisplayName(check)))
     return
   }
   for (const run of runSteps) {
     validateRun(run, ctx)
   }
   for (const run of runSteps.slice(1)) {
-    ctx.error(testValidationMessages.duplicateRun(AST.testDisplayName(check)), run)
+    ctx.error(run, testValidationMessages.duplicateRun(AST.testDisplayName(check)))
   }
 
   let hasRun = false
@@ -217,26 +217,26 @@ function validateLeafTest(check: AST.TestDeclaration, ctx: ValidationContext): v
       | AST.AdvanceStep,
   ): void {
     if (!hasRun) {
-      ctx.error(testValidationMessages.expectationBeforeRun, step)
+      ctx.error(step, testValidationMessages.expectationBeforeRun)
     }
   }
 }
 
 function validatePressKeyVocabulary(step: AST.PressKeyStep, ctx: ValidationContext): void {
   if (step.subject !== 'key') {
-    ctx.error(testValidationMessages.interactionVocabulary('key'), step)
+    ctx.error(step, testValidationMessages.interactionVocabulary('key'))
   }
 }
 
 function validateNarrowVocabulary(step: AST.NarrowStep, ctx: ValidationContext): void {
   if (step.head !== 'narrow') {
-    ctx.error(testValidationMessages.interactionVocabulary('narrow'), step)
+    ctx.error(step, testValidationMessages.interactionVocabulary('narrow'))
   }
 }
 
 function validateFocusVocabulary(step: AST.FocusStep, ctx: ValidationContext): void {
   if (step.head !== 'focus') {
-    ctx.error(testValidationMessages.interactionVocabulary('focus'), step)
+    ctx.error(step, testValidationMessages.interactionVocabulary('focus'))
   }
 }
 
@@ -245,7 +245,7 @@ function validateInteractionExpectation(step: AST.ExpectInteractionStep, ctx: Va
     || (step.subject === 'focus' && step.detail === 'region' && step.values.length === 1)
     || (step.subject === 'verbs' && step.detail === undefined)
   if (!valid) {
-    ctx.error(testValidationMessages.interactionExpectation, step)
+    ctx.error(step, testValidationMessages.interactionExpectation)
   }
 }
 
@@ -256,14 +256,14 @@ function validateNavigationValue(
   if (!AST.isStringLiteral(step.value)) {
     const actual = Type.ofExpression(step.value)
     if (actual.kind === 'primitive' && actual.primitive === 'text') {
-      ctx.error(testValidationMessages.navigationValueLiteral, step.value)
+      ctx.error(step.value, testValidationMessages.navigationValueLiteral)
       return
     }
   }
   const actual = Type.ofExpression(step.value)
   const expected: ASTUtils.TaoType = { kind: 'primitive', primitive: 'text' }
   if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
-    ctx.error(testValidationMessages.navigationValueType(Type.displayName(actual)), step.value)
+    ctx.error(step.value, testValidationMessages.navigationValueType(Type.displayName(actual)))
   }
 }
 
@@ -274,27 +274,27 @@ function validateNavigationVocabulary(
   const actual = AST.isExpectNavigationTitleStep(step) ? step.subject : step.surface
   const expected = AST.isExpectNavigationTitleStep(step) ? 'title' : 'toolbar'
   if (actual !== expected) {
-    ctx.error(testValidationMessages.navigationVocabulary(expected), step)
+    ctx.error(step, testValidationMessages.navigationVocabulary(expected))
   }
 }
 
 function validateSelect(select: AST.SelectStep, ctx: ValidationContext): void {
   if (statementNeedsStepPlacementDiagnostic(select)) {
-    ctx.error(testValidationMessages.expectationPlacement, select)
+    ctx.error(select, testValidationMessages.expectationPlacement)
   }
   if (select.index < 1) {
-    ctx.error(testValidationMessages.selectIndex, select)
+    ctx.error(select, testValidationMessages.selectIndex)
   }
   for (const statement of select.block.statements) {
     if (AST.isRelaunchStep(statement)) {
-      ctx.error(testValidationMessages.relaunchInSelect, statement)
+      ctx.error(statement, testValidationMessages.relaunchInSelect)
       continue
     }
     if (!AST.isCheckStep(statement) || AST.isRunStep(statement)) {
-      ctx.error(testValidationMessages.selectBlock, statement)
+      ctx.error(statement, testValidationMessages.selectBlock)
     }
     if (AST.findOwningScenario(select) && AST.isCheckStep(statement) && !AST.isScenarioStep(statement)) {
-      ctx.error(testValidationMessages.scenarioSelectBlock, statement)
+      ctx.error(statement, testValidationMessages.scenarioSelectBlock)
     }
   }
 }
@@ -304,7 +304,7 @@ function validateRun(run: AST.RunStep, ctx: ValidationContext): void {
     return
   }
   if (!run.app.ref) {
-    ctx.error(testValidationMessages.runTarget(run.app.$refText), run)
+    ctx.error(run, testValidationMessages.runTarget(run.app.$refText))
   }
 }
 
@@ -316,13 +316,13 @@ function validateSelector(
     return
   }
   if (!supportedSelectors.includes(step.selector as (typeof supportedSelectors)[number])) {
-    ctx.error(testValidationMessages.selector(step.selector), step)
+    ctx.error(step, testValidationMessages.selector(step.selector))
   }
 }
 
 function validateInputSelector(step: AST.ExpectInputValueStep, ctx: ValidationContext): void {
   if (!supportedInputSelectors.includes(step.selector as (typeof supportedInputSelectors)[number])) {
-    ctx.error(testValidationMessages.inputSelector(step.selector), step)
+    ctx.error(step, testValidationMessages.inputSelector(step.selector))
   }
 }
 
@@ -330,14 +330,14 @@ function validatePointerSelector(step: AST.PressPhaseStep | AST.HoverStep, ctx: 
   if (
     step.selector !== undefined && !supportedSelectors.includes(step.selector as (typeof supportedSelectors)[number])
   ) {
-    ctx.error(testValidationMessages.selector(step.selector), step)
+    ctx.error(step, testValidationMessages.selector(step.selector))
   }
 }
 
 function validateStepPlacement(message: string): NodeValidationCheck<AST.CheckStep> {
   return (statement, ctx) => {
     if (statementNeedsStepPlacementDiagnostic(statement)) {
-      ctx.error(message, statement)
+      ctx.error(statement, message)
     }
   }
 }

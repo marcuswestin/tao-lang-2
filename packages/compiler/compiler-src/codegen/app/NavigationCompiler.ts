@@ -3,7 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
-import { appDefinitionReference } from './app-compiler'
+import { appDefinitionReference } from './AppCompiler'
 
 /** NavigationCompiler lowers configured navigation actions to TR.Navigation. */
 export const NavigationCompiler = {

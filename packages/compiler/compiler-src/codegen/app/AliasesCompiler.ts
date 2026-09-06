@@ -1,10 +1,10 @@
 import { AST } from '@parser'
 import { type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
-import AppCompiler from './app-compiler'
+import { AppCompiler } from './AppCompiler'
 import { bridgeBindingName } from './injection-plan'
 
-export default {
+export const AliasesCompiler = {
   /** AliasDeclaration compiles a Tao alias into a generated Tao value binding. */
   AliasDeclaration(alias: AST.AliasDeclaration): Compiled {
     if (AST.configuredPrimitiveOfExpression(alias.value) === 'app') {

@@ -1,5 +1,5 @@
 import { ASTUtils, Packages, Type } from '@ast-utils'
-import { AST, type ParsedFile } from '@parser'
+import { AST, codeProjectRoot, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, Errors, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { designValidationCodes } from '@validator/diagnostic-codes'
@@ -9,7 +9,7 @@ import {
   configurationSidecarBindingName,
   isRuntimeConfigurableDeclaration,
   isTransparentConfigurableAlias,
-} from './codegen/app/configuration-compiler'
+} from './codegen/app/ConfigurationCompiler'
 import {
   type DeclarationIdentityProject,
   withDeclarationIdentityContext,
@@ -26,16 +26,15 @@ import {
   inlineInjectionsOf,
   withInlineInjectionBindings,
 } from './codegen/app/injection-plan'
-import RuntimeGen from './codegen/app/runtime-gen'
+import { RuntimeGen } from './codegen/app/RuntimeGen'
 import { LocalDataBindings } from './codegen/codegen-util'
 import {
   compileStudioPreviewManifest,
   type StudioPreviewManifest,
   studioPreviewManifestModule,
 } from './studio-preview-manifest'
-import { compileTestPlan, type TaoTestPlan } from './tests-compiler'
+import { compileTestPlan, type TaoTestPlan } from './test-plan-compiler'
 
-const codeProjectRoot = '/__tao__'
 const compiledSourceOutputPathMessage = 'compiled source output path exists'
 const dataCatalogBindingName = '_TaoDataCatalog'
 // `local only` entities live in a second emitted catalog with its own connection and storage key.

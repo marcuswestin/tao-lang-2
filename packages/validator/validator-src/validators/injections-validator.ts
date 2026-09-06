@@ -22,7 +22,7 @@ function reportDuplicateArguments(
   for (const argument of AST.injectionArgumentsOf(injection)) {
     const name = ASTUtils.injectionArgumentName(argument)
     if (seen.has(name)) {
-      ctx.error(injectionValidationMessages.duplicateArgument(name), argument)
+      ctx.error(argument, injectionValidationMessages.duplicateArgument(name))
       continue
     }
     seen.add(name)
@@ -42,7 +42,7 @@ function validateAmbientChannels(
       continue
     }
     if (!isRenderInjection) {
-      ctx.error(injectionValidationMessages.ambientRenderOnly, ambient)
+      ctx.error(ambient, injectionValidationMessages.ambientRenderOnly)
       continue
     }
   }

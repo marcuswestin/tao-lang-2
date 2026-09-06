@@ -1,5 +1,5 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
+import { Deferred, Describe, Expect, Test } from '@shared/test'
 import type {
   TaoDataConnection,
   TaoDataConnectionObserver,
@@ -342,7 +342,7 @@ Describe('TR.Data provider foundation', () => {
       load: () => undefined,
       save: value => {
         saves.push(value)
-        const gate = new Deferred<void>()
+        const gate = Deferred<void>()
         gates.push(gate)
         return gate.promise
       },
@@ -492,7 +492,7 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('ignores a stale async load after provider reconfiguration', async () => {
-    const stale = new Deferred<string | undefined>()
+    const stale = Deferred<string | undefined>()
     const staleProvider: TaoDataConnection = {
       load: () => stale.promise,
       save: () => {},
@@ -574,7 +574,7 @@ Describe('TR.Data provider foundation', () => {
   })
 
   Test('keeps local state when a remote snapshot arrives during an ordered save', async () => {
-    const pendingSave = new Deferred<void>()
+    const pendingSave = Deferred<void>()
     let observer: TaoDataConnectionObserver | undefined
     const liveConnection: TaoDataConnection = {
       load: () => undefined,
@@ -860,7 +860,7 @@ Describe('TR.Data save and sync reconciliation', () => {
   })
 
   Test('drains queued saves to the outgoing connection before closing it on reconfiguration', async () => {
-    const gate = new Deferred<void>()
+    const gate = Deferred<void>()
     const saved: string[] = []
     let closed = false
     const slowConnection: TaoDataConnection = {
@@ -962,7 +962,7 @@ Describe('TR.Data save and sync reconciliation', () => {
   })
 
   Test('replays the latest remote snapshot suppressed while ordered saves were pending', async () => {
-    const pendingSave = new Deferred<void>()
+    const pendingSave = Deferred<void>()
     let observer: TaoDataConnectionObserver | undefined
     const connection: TaoDataConnection = {
       load: () => undefined,
@@ -1205,27 +1205,4 @@ function persistedNotes(title: string): string {
 async function flushMicrotasks(): Promise<void> {
   await Promise.resolve()
   await Promise.resolve()
-}
-
-class Deferred<T> {
-  readonly promise: Promise<T>
-  private rejectPromise!: (error: unknown) => void
-  private resolvePromise!: (value: T) => void
-
-  constructor() {
-    this.promise = new Promise<T>((resolve, reject) => {
-      this.resolvePromise = resolve
-      this.rejectPromise = reject
-    })
-  }
-
-  resolve(value: T extends void ? never : T): void
-  resolve(): void
-  resolve(value?: T): void {
-    this.resolvePromise(value as T)
-  }
-
-  reject(error: unknown): void {
-    this.rejectPromise(error)
-  }
 }

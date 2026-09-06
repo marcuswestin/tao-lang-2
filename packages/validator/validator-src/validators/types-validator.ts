@@ -45,13 +45,13 @@ export const typeValidationChecks = {
 
 function validateTypeDeclaration(declaration: AST.TypeDeclaration, ctx: ValidationContext): void {
   if (typeDefinitionHasCycle(declaration, declaration, new Set())) {
-    ctx.error(typeValidationMessages.cyclicType(Type.definitionName(declaration)), declaration)
+    ctx.error(declaration, typeValidationMessages.cyclicType(Type.definitionName(declaration)))
   }
 }
 
 function validateParameter(parameter: AST.ParameterDeclaration, ctx: ValidationContext): void {
   if (parameter.inlineType && typeDefinitionHasCycle(parameter.inlineType, parameter.inlineType, new Set())) {
-    ctx.error(typeValidationMessages.cyclicType(Type.definitionName(parameter.inlineType)), parameter.inlineType)
+    ctx.error(parameter.inlineType, typeValidationMessages.cyclicType(Type.definitionName(parameter.inlineType)))
   }
   if (!parameter.defaultValue) {
     return
@@ -60,12 +60,12 @@ function validateParameter(parameter: AST.ParameterDeclaration, ctx: ValidationC
   const actual = Type.ofExpression(parameter.defaultValue)
   if (expected.kind !== 'unresolved' && actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
     ctx.error(
+      parameter.defaultValue,
       typeValidationMessages.defaultParameterType(
         Type.parameterName(parameter),
         Type.displayName(expected),
         Type.displayName(actual),
       ),
-      parameter.defaultValue,
     )
   }
 }
@@ -78,7 +78,7 @@ function validateDefaultParameterOrder(declaration: AST.ParameterizedDeclaration
       continue
     }
     if (foundDefault) {
-      ctx.error(typeValidationMessages.defaultParameterOrder(Type.parameterName(parameter)), parameter)
+      ctx.error(parameter, typeValidationMessages.defaultParameterOrder(Type.parameterName(parameter)))
     }
   }
 }
@@ -87,7 +87,7 @@ function validateItemType(type: AST.ItemTypeExpression, ctx: ValidationContext):
   const seen = new Set<string>()
   for (const property of type.properties) {
     if (seen.has(property.name)) {
-      ctx.error(typeValidationMessages.duplicateItemField(property.name), property)
+      ctx.error(property, typeValidationMessages.duplicateItemField(property.name))
       continue
     }
     seen.add(property.name)
@@ -103,7 +103,7 @@ function validateDerivedType(derived: AST.DerivedTypeExpression, ctx: Validation
     return
   }
   if (base.kind !== 'item' || !base.item) {
-    ctx.error(typeValidationMessages.derivedBaseShape(Type.referenceName(derived.base)), derived.base)
+    ctx.error(derived.base, typeValidationMessages.derivedBaseShape(Type.referenceName(derived.base)))
     return
   }
   for (const slot of derived.slots.properties) {
@@ -112,7 +112,7 @@ function validateDerivedType(derived: AST.DerivedTypeExpression, ctx: Validation
       continue
     }
     if (baseSlot.value && !slot.value) {
-      ctx.error(typeValidationMessages.derivedSlotReopened(slot.name), slot)
+      ctx.error(slot, typeValidationMessages.derivedSlotReopened(slot.name))
       continue
     }
     const expected = slotConstraintType(baseSlot)
@@ -123,12 +123,12 @@ function validateDerivedType(derived: AST.DerivedTypeExpression, ctx: Validation
       && !Type.isAssignable(actual, expected)
     ) {
       ctx.error(
+        slot,
         typeValidationMessages.derivedSlotType(
           slot.name,
           Type.displayName(expected),
           Type.displayName(actual),
         ),
-        slot,
       )
     }
   }
@@ -143,11 +143,11 @@ function slotConstraintType(slot: AST.TypeProperty): ASTUtils.TaoType {
 
 function validateTypeProperty(property: AST.TypeProperty, ctx: ValidationContext): void {
   if (property.optional && !property.type) {
-    ctx.error(typeValidationMessages.optionalFieldType(property.name), property)
+    ctx.error(property, typeValidationMessages.optionalFieldType(property.name))
     return
   }
   if (property.optional && property.value) {
-    ctx.error(typeValidationMessages.optionalFieldDefault(property.name), property.value)
+    ctx.error(property.value, typeValidationMessages.optionalFieldDefault(property.name))
     return
   }
   const itemOwner = property.$container.$container
@@ -155,7 +155,7 @@ function validateTypeProperty(property: AST.TypeProperty, ctx: ValidationContext
     return
   }
   if (!property.type && !property.value && Type.ofProperty(property).kind === 'unresolved') {
-    ctx.error(typeValidationMessages.unknownType(property.name), property)
+    ctx.error(property, typeValidationMessages.unknownType(property.name))
     return
   }
   if (!property.type || !property.value) {
@@ -171,12 +171,12 @@ function validateTypeProperty(property: AST.TypeProperty, ctx: ValidationContext
     && !Type.isAssignable(actual, expected)
   ) {
     ctx.error(
+      property.value,
       typeValidationMessages.slotDefaultType(
         property.name,
         Type.displayName(expected),
         Type.displayName(actual),
       ),
-      property.value,
     )
   }
 }
@@ -193,7 +193,7 @@ function validateNamedTypeReference(reference: AST.NamedTypeReference, ctx: Vali
   }
   const root = Type.rootOfReference(reference)
   if (!root.definition) {
-    ctx.error(typeValidationMessages.unknownType(Type.referenceName(reference)), reference)
+    ctx.error(reference, typeValidationMessages.unknownType(Type.referenceName(reference)))
     return
   }
 
@@ -201,12 +201,12 @@ function validateNamedTypeReference(reference: AST.NamedTypeReference, ctx: Vali
   for (const member of root.remainingMembers) {
     const currentType = Type.ofDefinition(currentDefinition)
     if (currentType.kind !== 'item' || !currentType.item) {
-      ctx.error(typeValidationMessages.memberNotItem(member), reference)
+      ctx.error(reference, typeValidationMessages.memberNotItem(member))
       return
     }
     const property = currentType.item.properties.find(candidate => candidate.name === member)
     if (!property) {
-      ctx.error(typeValidationMessages.unknownMember(Type.definitionName(currentDefinition), member), reference)
+      ctx.error(reference, typeValidationMessages.unknownMember(Type.definitionName(currentDefinition), member))
       return
     }
     currentDefinition = property
@@ -228,10 +228,10 @@ function validateTypedConstructor(constructor: AST.TypedConstructor, ctx: Valida
       if (!expected.item) {
         if (value.properties.length > 0) {
           ctx.error(
+            value,
             typeValidationMessages.shapelessItemConstructor(
               Type.referenceName(constructor.type),
             ),
-            value,
           )
         }
         return
@@ -252,8 +252,8 @@ function validateConstructorKind(
 ): void {
   if (!valid) {
     ctx.error(
-      typeValidationMessages.constructorShape(Type.referenceName(constructor.type), expected),
       constructor,
+      typeValidationMessages.constructorShape(Type.referenceName(constructor.type), expected),
     )
   }
 }
@@ -267,40 +267,40 @@ function validateItemConstructor(
   for (const diagnostic of result.diagnostics) {
     Switch.kind(diagnostic, {
       'missing-property': diagnostic => {
-        ctx.error(typeValidationMessages.missingProperty(diagnostic.expected.name), item)
+        ctx.error(item, typeValidationMessages.missingProperty(diagnostic.expected.name))
       },
       'unmatched-property': diagnostic => {
-        ctx.error(typeValidationMessages.unmatchedProperty, diagnostic.property)
+        ctx.error(diagnostic.property, typeValidationMessages.unmatchedProperty)
       },
       'ambiguous-property': diagnostic => {
         ctx.error(
-          typeValidationMessages.ambiguousProperty(diagnostic.expected.map(property => property.name)),
           diagnostic.property,
+          typeValidationMessages.ambiguousProperty(diagnostic.expected.map(property => property.name)),
         )
       },
       'ambiguous-field': diagnostic => {
-        ctx.error(typeValidationMessages.ambiguousField(diagnostic.expected.name), item)
+        ctx.error(item, typeValidationMessages.ambiguousField(diagnostic.expected.name))
       },
       'duplicate-provided-property-type': diagnostic => {
-        ctx.error(typeValidationMessages.duplicateProvidedPropertyType, diagnostic.property)
+        ctx.error(diagnostic.property, typeValidationMessages.duplicateProvidedPropertyType)
       },
       'duplicate-property-type': diagnostic => {
-        ctx.error(typeValidationMessages.duplicatePropertyType(diagnostic.expected.name), item)
+        ctx.error(item, typeValidationMessages.duplicatePropertyType(diagnostic.expected.name))
       },
       'unknown-named-property': diagnostic => {
-        ctx.error(typeValidationMessages.unknownNamedProperty(diagnostic.name), diagnostic.property)
+        ctx.error(diagnostic.property, typeValidationMessages.unknownNamedProperty(diagnostic.name))
       },
       'duplicate-named-property': diagnostic => {
-        ctx.error(typeValidationMessages.duplicateNamedProperty(diagnostic.expected.name), diagnostic.property)
+        ctx.error(diagnostic.property, typeValidationMessages.duplicateNamedProperty(diagnostic.expected.name))
       },
       'named-property-type': diagnostic => {
         ctx.error(
+          diagnostic.property,
           typeValidationMessages.namedPropertyType(
             diagnostic.expected.name,
             Type.displayName(Type.ofProperty(diagnostic.expected)),
             Type.displayName(Type.ofExpression(diagnostic.property.value)),
           ),
-          diagnostic.property,
         )
       },
     })
@@ -419,7 +419,7 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
     if (unitFamily) {
       const memberType = Type.unitMemberType(unitFamily, member)
       if (!memberType) {
-        ctx.error(typeValidationMessages.unknownMember(typeName, member), memberAccess)
+        ctx.error(memberAccess, typeValidationMessages.unknownMember(typeName, member))
         return
       }
       current = memberType
@@ -434,7 +434,7 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
       }
       const field = Type.dataFields(current.entity).find(candidate => candidate.name === member)
       if (!field) {
-        ctx.error(typeValidationMessages.unknownMember(typeName, member), memberAccess)
+        ctx.error(memberAccess, typeValidationMessages.unknownMember(typeName, member))
         return
       }
       current = Type.dataFieldType(field)
@@ -442,12 +442,12 @@ function validateMemberAccess(memberAccess: AST.MemberAccessExpression, ctx: Val
       continue
     }
     if (current.kind !== 'item' || !current.item) {
-      ctx.error(typeValidationMessages.memberNotItem(member), memberAccess)
+      ctx.error(memberAccess, typeValidationMessages.memberNotItem(member))
       return
     }
     const property = current.item.properties.find(candidate => candidate.name === member)
     if (!property) {
-      ctx.error(typeValidationMessages.unknownMember(typeName, member), memberAccess)
+      ctx.error(memberAccess, typeValidationMessages.unknownMember(typeName, member))
       return
     }
     current = Type.ofPropertyRead(property)

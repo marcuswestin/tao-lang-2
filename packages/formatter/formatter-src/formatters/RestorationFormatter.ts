@@ -1,6 +1,6 @@
 import type { FormatHandlers } from '../formatting'
 
-export default {
+export const RestorationFormatter = {
   RestorationPolicy(f) {
     f.oneSpaceAfter('Restore')
     f.oneSpaceBeforeProperty('exclusions')

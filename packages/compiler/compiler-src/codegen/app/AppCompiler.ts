@@ -15,7 +15,7 @@ type EffectiveAppProperty = {
 
 type EffectiveAppConfiguration = Map<string, EffectiveAppProperty>
 
-export default {
+export const AppCompiler = {
   /** App compiles complete primitive-headed app values, including the root-view Navigator sugar. */
   App(app: AST.AppDeclaration, options: CodegenOptions = {}): Compiled {
     return compileAppValue(app, options)

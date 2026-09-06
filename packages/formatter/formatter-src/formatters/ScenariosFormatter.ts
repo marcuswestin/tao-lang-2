@@ -1,6 +1,6 @@
 import type { FormatHandlers } from '../formatting'
 
-export default {
+export const ScenariosFormatter = {
   FixtureDeclaration(f) {
     f.oneSpaceAfter('fixture')
   },

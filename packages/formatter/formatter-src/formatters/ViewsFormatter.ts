@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import type { FormatHandlers, NodeFormat } from '../formatting'
 
-export default {
+export const ViewsFormatter = {
   TagStatement() {},
 
   ViewCommandExclusion(f) {

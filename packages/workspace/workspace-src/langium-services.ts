@@ -1,11 +1,10 @@
 import { Packages } from '@ast-utils'
-import { AST, Langium, Parser, type ParserServices } from '@parser'
+import { Langium, type PackageResolver, Parser, type ParserContext, type ParserServices } from '@parser'
 import Validator from '@validator'
-import { registerTaoValidationChecks } from '@validator/langium-validation'
 
 /** WorkspaceServices declares Langium services for non-LSP workspace operations. */
 export type WorkspaceServices = ParserServices & {
-  packages: ReturnType<typeof Packages.createResolver>
+  packages: PackageResolver
 }
 
 /** WorkspaceLspServices declares Workspace services with Langium LSP support. */
@@ -22,20 +21,7 @@ export type WorkspaceLspContributions = {
 
 /** createWorkspaceServices creates parser and validator services for one package context. */
 export function createWorkspaceServices(packagesContext: Packages.Context): WorkspaceServices {
-  const packages = Packages.createResolver(packagesContext)
-  const parserContext = Parser.createContext({
-    packages,
-  })
-
-  registerTaoValidationChecks(
-    parserContext.services.language,
-    validationContextFor(parserContext.services, packagesContext),
-  )
-
-  return {
-    ...parserContext.services,
-    packages,
-  }
+  return assembleWorkspaceServices(packagesContext, options => Parser.createContext(options))
 }
 
 /** createWorkspaceLspServices creates Langium LSP services for one package context. */
@@ -44,32 +30,23 @@ export function createWorkspaceLspServices(
   context: Langium.DefaultSharedModuleContext = Langium.NodeFileSystem,
   contributions: WorkspaceLspContributions = {},
 ): WorkspaceLspServices {
-  const packages = Packages.createResolver(packagesContext)
-  const parserContext = Parser.createLspContext({
-    packages,
-    langiumContext: context,
-    ...contributions,
-  })
-  registerTaoValidationChecks(
-    parserContext.services.language,
-    validationContextFor(parserContext.services, packagesContext),
+  return assembleWorkspaceServices(
+    packagesContext,
+    options => Parser.createLspContext({ ...options, langiumContext: context, ...contributions }),
   )
-
-  return { ...parserContext.services, packages }
 }
 
-function validationContextFor(
-  services: { shared: Langium.LangiumSharedCoreServices },
+/**
+ * assembleWorkspaceServices is the one place the workspace builds on the parser's services: the
+ * package resolver both flavors read, and the validation checks both flavors run on every
+ * document build. Whatever the workspace adds for the core and LSP flavors alike is added here.
+ */
+function assembleWorkspaceServices<ServicesT extends ParserServices>(
   packagesContext: Packages.Context,
-): (file: AST.TaoFile) => Validator.Context {
-  return (file) => {
-    const workspaceFiles = Array.from(services.shared.workspace.LangiumDocuments.all)
-      .map(document => document.parseResult.value)
-      .filter(AST.isTaoFile)
-    return Validator.createContext(
-      packagesContext,
-      workspaceFiles,
-      AST.getDocument(file).uri.path,
-    )
-  }
+  createParserContext: (options: { packages: PackageResolver }) => ParserContext<ServicesT>,
+): ServicesT & { packages: PackageResolver } {
+  const packages = Packages.createResolver(packagesContext)
+  const { services } = createParserContext({ packages })
+  Validator.installLangiumChecks(services, packagesContext)
+  return { ...services, packages }
 }

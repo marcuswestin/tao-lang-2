@@ -70,7 +70,7 @@ function validateRootViewPlacement(root: AST.AppView, ctx: ValidationContext): v
   const owner = entry.$container.$container
   const type = AST.isExpression(owner) ? Type.ofExpression(owner) : { kind: 'unresolved' as const }
   if (type.kind !== 'unresolved' && !Type.isAssignable(type, { kind: 'primitive', primitive: 'app' })) {
-    ctx.error(appValidationMessages.rootViewPlacement, root)
+    ctx.error(root, appValidationMessages.rootViewPlacement)
   }
 }
 
@@ -78,7 +78,7 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
   if (app.value) {
     const actual = Type.ofExpression(app.value)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'app' })) {
-      ctx.error(appValidationMessages.headType(app.name, Type.displayName(actual)), app.value)
+      ctx.error(app.value, appValidationMessages.headType(app.name, Type.displayName(actual)))
     }
     return
   }
@@ -95,7 +95,7 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
       && !AST.isStateDeclaration(statement)
       && !AST.isActionDeclaration(statement)
     ) {
-      ctx.error(appValidationMessages.appBlock(app.name), statement)
+      ctx.error(statement, appValidationMessages.appBlock(app.name))
     }
   }
   const supplied = [...properties.map(suppliedSlotOfProperty), ...rootViewSlots(app, roots, properties, ctx)]
@@ -123,7 +123,7 @@ function rootViewSlots(
   ctx: ValidationContext,
 ): SuppliedSlot[] {
   if (roots.length > 1) {
-    ctx.error(appValidationMessages.appRootCount(app.name, roots.length), app)
+    ctx.error(app, appValidationMessages.appRootCount(app.name, roots.length))
   }
   const root = roots[0]
   if (!root) {
@@ -151,11 +151,11 @@ function validateAppProperties(
   for (const slot of supplied) {
     const expected = contractByName.get(slot.name)
     if (!expected) {
-      ctx.error(appValidationMessages.variantProperty(appName, slot.name), slot.node)
+      ctx.error(slot.node, appValidationMessages.variantProperty(appName, slot.name))
       continue
     }
     if (seen.has(slot.name)) {
-      ctx.error(appValidationMessages.propertyDuplicate(appName, slot.name), slot.node)
+      ctx.error(slot.node, appValidationMessages.propertyDuplicate(appName, slot.name))
     }
     seen.add(slot.name)
     if (slot.sugar) {
@@ -166,13 +166,13 @@ function validateAppProperties(
         continue
       }
       ctx.error(
+        slot.node,
         appValidationMessages.propertyType(
           appName,
           slot.name,
           Type.displayName(Type.ofProperty(expected)),
           'patch',
         ),
-        slot.node,
       )
       continue
     }
@@ -187,13 +187,13 @@ function validateAppProperties(
       actual.kind !== 'unresolved' && expectedType.kind !== 'unresolved' && !Type.isAssignable(actual, expectedType)
     ) {
       ctx.error(
+        slot.value,
         appValidationMessages.propertyType(
           appName,
           slot.name,
           Type.displayName(expectedType),
           Type.displayName(actual),
         ),
-        slot.value,
       )
     }
   }
@@ -206,11 +206,11 @@ function validateAppProperties(
     }
     const node = supplied[0]?.node ?? owner
     if (required.name === 'Name') {
-      ctx.error(appValidationMessages.nameCount(appName, 0), node)
+      ctx.error(node, appValidationMessages.nameCount(appName, 0))
     } else if (required.name === 'Navigator') {
-      ctx.error(appValidationMessages.appRootCount(appName, 0), node)
+      ctx.error(node, appValidationMessages.appRootCount(appName, 0))
     } else {
-      ctx.error(appValidationMessages.missingProperty(appName, required.name), node)
+      ctx.error(node, appValidationMessages.missingProperty(appName, required.name))
     }
   }
 }
@@ -245,7 +245,7 @@ function validateAppVariant(
       return [{ name: 'Navigator', node: entry, patched: false, sugar: true }]
     }
     if (!entry.name) {
-      ctx.error(appValidationMessages.variantProperty(variant.name, entry.key ?? ''), entry)
+      ctx.error(entry, appValidationMessages.variantProperty(variant.name, entry.key ?? ''))
       return []
     }
     const patched = entry.value !== undefined && AST.isPropertyConfigurationPatch(entry.value)
@@ -267,21 +267,21 @@ function validateRestorationPolicies(
   ctx: ValidationContext,
 ): void {
   for (const policy of policies.slice(1)) {
-    ctx.error(appValidationMessages.restorationDuplicate(appName), policy)
+    ctx.error(policy, appValidationMessages.restorationDuplicate(appName))
   }
   const policy = policies[0]
   if (!policy) {
     return
   }
   if (policy.mode === 'fresh' && policy.exclusions) {
-    ctx.error(appValidationMessages.restorationFreshExclusions(), policy.exclusions)
+    ctx.error(policy.exclusions, appValidationMessages.restorationFreshExclusions())
   }
   const seen = new Set<string>()
   for (const exclusion of policy.exclusions?.exclusions ?? []) {
     if (!['sheets', 'menus', 'toasts'].includes(exclusion)) {
-      ctx.error(appValidationMessages.restorationExclusion(exclusion), policy.exclusions!)
+      ctx.error(policy.exclusions!, appValidationMessages.restorationExclusion(exclusion))
     } else if (seen.has(exclusion)) {
-      ctx.error(appValidationMessages.restorationExclusionDuplicate(exclusion), policy.exclusions!)
+      ctx.error(policy.exclusions!, appValidationMessages.restorationExclusionDuplicate(exclusion))
     }
     seen.add(exclusion)
   }
@@ -292,15 +292,15 @@ function validateAppAuxiliaryNavigators(app: AST.AppDeclaration, ctx: Validation
   for (const auxiliary of AST.blockStatements(app).filter(AST.isAppAuxiliaryNavigator)) {
     const key = auxiliary.name.slice(1)
     if (!/^@[A-Za-z_][A-Za-z0-9_]*$/.test(auxiliary.name)) {
-      ctx.error(appValidationMessages.auxiliaryKey(auxiliary.name), auxiliary)
+      ctx.error(auxiliary, appValidationMessages.auxiliaryKey(auxiliary.name))
     }
     if (auxiliaryKeys.has(key)) {
-      ctx.error(appValidationMessages.duplicateAuxiliary(app.name, key), auxiliary)
+      ctx.error(auxiliary, appValidationMessages.duplicateAuxiliary(app.name, key))
     }
     auxiliaryKeys.add(key)
     const actual = Type.ofExpression(auxiliary.value)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
-      ctx.error(appValidationMessages.auxiliaryType(app.name, key, Type.displayName(actual)), auxiliary)
+      ctx.error(auxiliary, appValidationMessages.auxiliaryType(app.name, key, Type.displayName(actual)))
     }
   }
 }
@@ -308,11 +308,11 @@ function validateAppAuxiliaryNavigators(app: AST.AppDeclaration, ctx: Validation
 function validateAppPlacement(app: AST.AppValueDeclaration, file: AST.TaoFile, ctx: ValidationContext): void {
   const filePath = AST.getDocument(file).uri.path
   if (isInsidePackage(filePath, ctx)) {
-    ctx.error(appValidationMessages.appPackage(app.name), app)
+    ctx.error(app, appValidationMessages.appPackage(app.name))
     return
   }
   if (filePath !== ctx.entryFilePath && !isTestCompanionAppFile(filePath, ctx)) {
-    ctx.error(appValidationMessages.appEntryFile(app.name), app)
+    ctx.error(app, appValidationMessages.appEntryFile(app.name))
   }
 }
 
@@ -324,7 +324,7 @@ function validateTopLevelStatements(file: AST.TaoFile, ctx: ValidationContext): 
       continue
     }
     if (!AST.isTopLevelStatement(statement)) {
-      ctx.error(appValidationMessages.topLevel, statement)
+      ctx.error(statement, appValidationMessages.topLevel)
     }
   }
 }

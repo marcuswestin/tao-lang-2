@@ -1,6 +1,6 @@
 import type { FormatHandlers } from '../formatting'
 
-export default {
+export const AppFormatter = {
   /** AppDeclaration formats the `app Name` header; the app body is formatted as a Block. */
   AppDeclaration(f) {
     f.visibilityOnOwnLine()

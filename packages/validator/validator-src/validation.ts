@@ -18,10 +18,10 @@ export interface ValidationContext extends ValidationRunContext {
    * run over n files stays O(n) rather than O(n²). The key names the index; the run holds the value.
    */
   memo<T>(key: string, compute: () => T): T
-  error(message: string, node: AST.Node, opts?: DiagnosticOptions): void
-  warning(message: string, node: AST.Node, opts?: DiagnosticOptions): void
+  error(node: AST.Node, message: string, opts?: DiagnosticOptions): void
+  warning(node: AST.Node, message: string, opts?: DiagnosticOptions): void
   /** hint names something the source could do better without being wrong: it never fails a check. */
-  hint(message: string, node: AST.Node, opts?: DiagnosticOptions): void
+  hint(node: AST.Node, message: string, opts?: DiagnosticOptions): void
 }
 
 /** DiagnosticOptions declares optional diagnostic metadata such as quick-fix codes. */
@@ -49,13 +49,13 @@ function createContext(
       }
       return memos.get(key) as T
     },
-    error(message: string, node: AST.Node, opts?: DiagnosticOptions) {
+    error(node: AST.Node, message: string, opts?: DiagnosticOptions) {
       accept('error', message, { node, code: opts?.code })
     },
-    warning(message: string, node: AST.Node, opts?: DiagnosticOptions) {
+    warning(node: AST.Node, message: string, opts?: DiagnosticOptions) {
       accept('warning', message, { node, code: opts?.code })
     },
-    hint(message: string, node: AST.Node, opts?: DiagnosticOptions) {
+    hint(node: AST.Node, message: string, opts?: DiagnosticOptions) {
       accept('hint', message, { node, code: opts?.code })
     },
   }
@@ -68,7 +68,7 @@ function collectDiagnostics(): {
 } {
   const diagnostics: Diagnostic[] = []
   const accept: Langium.ValidationAcceptor = (severity, message, info) => {
-    diagnostics.push(validatorDiagnostic(severity, message, info.node as AST.Node, {
+    diagnostics.push(validatorDiagnostic(severity, info.node as AST.Node, message, {
       code: info.code === undefined ? undefined : String(info.code),
     }))
   }

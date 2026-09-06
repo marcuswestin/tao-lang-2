@@ -55,20 +55,20 @@ export async function validateConfigurationSidecarFiles(
       continue
     }
     if (!await FS.exists(resolvedSidecarPath)) {
-      ctx.error(configurationValidationMessages.sidecarMissing(sidecarPath), implementation)
+      ctx.error(implementation, configurationValidationMessages.sidecarMissing(sidecarPath))
       continue
     }
     let sidecarSource: string
     try {
       sidecarSource = await FS.readText(resolvedSidecarPath)
     } catch {
-      ctx.error(configurationValidationMessages.sidecarMissing(sidecarPath), implementation)
+      ctx.error(implementation, configurationValidationMessages.sidecarMissing(sidecarPath))
       continue
     }
     if (!hasNamedExport(sidecarSource, implementation.exportName)) {
       ctx.error(
-        configurationValidationMessages.sidecarNamedExport(sidecarPath, implementation.exportName),
         implementation,
+        configurationValidationMessages.sidecarNamedExport(sidecarPath, implementation.exportName),
       )
     }
   }
@@ -85,7 +85,7 @@ function validateDeclaration(declaration: AST.ConfigurableDeclaration, ctx: Vali
   }
   const kind = primitive === 'nav' ? 'Nav' : 'Datasource'
   if (!AST.isTaoFile(declaration.$container)) {
-    ctx.error(configurationValidationMessages.topLevel(kind), declaration)
+    ctx.error(declaration, configurationValidationMessages.topLevel(kind))
   }
 
   validateConfigurationProperties(declaration, ctx)
@@ -97,15 +97,15 @@ function validateConfigurationProperties(declaration: AST.ConfigurableDeclaratio
   const seen = new Set<string>()
   for (const property of ownTypeSlots(declaration)?.properties ?? []) {
     if (seen.has(property.name)) {
-      ctx.error(configurationValidationMessages.duplicateProperty(property.name), property)
+      ctx.error(property, configurationValidationMessages.duplicateProperty(property.name))
     }
     seen.add(property.name)
     if (Type.ofConfigurationProperty(property).kind === 'unresolved') {
-      ctx.error(configurationValidationMessages.propertyType(property.name), property.type ?? property)
+      ctx.error(property.type ?? property, configurationValidationMessages.propertyType(property.name))
     }
     validateConfigurationPropertyDefault(property, ctx)
     if (AST.configurationPropertyIsKey(property) && !AST.configurationKeyOf(declaration)) {
-      ctx.error(configurationValidationMessages.keyProperty(property.name), property.type ?? property)
+      ctx.error(property.type ?? property, configurationValidationMessages.keyProperty(property.name))
     }
   }
 }
@@ -114,26 +114,26 @@ function validateConfigurationKeyDeclarations(declaration: AST.ConfigurableDecla
   const keys = ownTypeSlots(declaration)?.keys ?? []
   if (keys.length > 1) {
     for (const key of keys.slice(1)) {
-      ctx.error(configurationValidationMessages.duplicateKey, key)
+      ctx.error(key, configurationValidationMessages.duplicateKey)
     }
   }
   if (AST.configurationPrimitiveOf(declaration) === 'datasource') {
     for (const key of keys) {
-      ctx.error(configurationValidationMessages.datasourceKey, key)
+      ctx.error(key, configurationValidationMessages.datasourceKey)
     }
   }
   for (const key of keys) {
     const keyProperties = new Set<string>()
     for (const property of key.block.properties) {
       if (keyProperties.has(property.name)) {
-        ctx.error(configurationValidationMessages.duplicateProperty(property.name), property)
+        ctx.error(property, configurationValidationMessages.duplicateProperty(property.name))
       }
       keyProperties.add(property.name)
       if (AST.configurationPropertyIsKey(property)) {
-        ctx.error(configurationValidationMessages.keyProperty(property.name), property.type)
+        ctx.error(property.type, configurationValidationMessages.keyProperty(property.name))
       }
       if (Type.ofConfigurationProperty(property).kind === 'unresolved') {
-        ctx.error(configurationValidationMessages.propertyType(property.name), property.type)
+        ctx.error(property.type, configurationValidationMessages.propertyType(property.name))
       }
       validateConfigurationPropertyDefault(property, ctx)
     }
@@ -144,16 +144,16 @@ function validateConfigurationImplementations(declaration: AST.ConfigurableDecla
   const implementations = ownTypeSlots(declaration)?.implementations ?? []
   if (implementations.length > 1) {
     for (const implementation of implementations.slice(1)) {
-      ctx.error(configurationValidationMessages.duplicateImplementation, implementation)
+      ctx.error(implementation, configurationValidationMessages.duplicateImplementation)
     }
   }
   if (!AST.configurationImplementationOf(declaration)) {
-    ctx.error(configurationValidationMessages.missingImplementation(declaration.name), declaration)
+    ctx.error(declaration, configurationValidationMessages.missingImplementation(declaration.name))
   }
   const expectedProtocol = AST.configurationPrimitiveOf(declaration) === 'nav' ? 'nav' : 'provider'
   for (const implementation of implementations) {
     if (implementation.protocol !== expectedProtocol) {
-      ctx.error(configurationValidationMessages.protocol(declaration.name, expectedProtocol), implementation)
+      ctx.error(implementation, configurationValidationMessages.protocol(declaration.name, expectedProtocol))
     }
     validateSidecarLocation(implementation, ctx)
   }
@@ -168,8 +168,8 @@ function validatePrimitiveValue(
     const actual = Type.ofExpression(declaration.value)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive })) {
       ctx.error(
-        configurationValidationMessages.valueHeadType(declaration.name, primitive, Type.displayName(actual)),
         declaration.value,
+        configurationValidationMessages.valueHeadType(declaration.name, primitive, Type.displayName(actual)),
       )
     }
     return
@@ -179,7 +179,7 @@ function validatePrimitiveValue(
       .filter(Type.propertyRequiresValue)
       .map(property => property.name)
     if (required.length > 0) {
-      ctx.error(completenessValidationMessages.incomplete(declaration.name, required), declaration.block)
+      ctx.error(declaration.block, completenessValidationMessages.incomplete(declaration.name, required))
     }
   }
 }
@@ -198,12 +198,12 @@ function validateConfigurationPropertyDefault(
     !absent && expected.kind !== 'unresolved' && actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)
   ) {
     ctx.error(
+      property.value,
       configurationValidationMessages.propertyDefaultType(
         property.name,
         Type.displayName(expected),
         Type.displayName(actual),
       ),
-      property.value,
     )
   }
 }
@@ -221,7 +221,7 @@ function validateSidecarLocation(
   ctx: ValidationContext,
 ): void {
   if (!sidecarLocationIsValid(implementation) && implementation.path !== undefined) {
-    ctx.error(configurationValidationMessages.sidecarLocation(implementation.path), implementation)
+    ctx.error(implementation, configurationValidationMessages.sidecarLocation(implementation.path))
   }
 }
 

@@ -2,7 +2,7 @@ import { AST } from '@parser'
 import { Switch } from '@shared'
 import { type Compiled, gen } from '../codegen-util'
 
-export default {
+export const ProjectDeclarationCompiler = {
   /** ProjectDeclaration compiles a Tao project block into a source comment. */
   ProjectDeclaration(project: AST.ProjectDeclaration): Compiled {
     const body = AST.blockStatementOf(project, { map: formatProjectStatement }).join(' ')

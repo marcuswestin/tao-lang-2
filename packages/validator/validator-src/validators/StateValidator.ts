@@ -42,20 +42,20 @@ function reportStatePlacement(state: AST.StateDeclaration, ctx: ValidationContex
     : undefined
   if (app) {
     if (!state.persist) {
-      ctx.error(stateValidationMessages.appStateMustPersist(state.name), state)
+      ctx.error(state, stateValidationMessages.appStateMustPersist(state.name))
     }
     if (!state.type) {
-      ctx.error(stateValidationMessages.persistedTypeRequired(state.name), state)
+      ctx.error(state, stateValidationMessages.persistedTypeRequired(state.name))
     } else {
       const type = Type.ofReference(state.type)
       if (type.kind !== 'unresolved' && !isPersistableType(type)) {
-        ctx.error(stateValidationMessages.persistedTypeUnsupported(state.name, Type.displayName(type)), state.type)
+        ctx.error(state.type, stateValidationMessages.persistedTypeUnsupported(state.name, Type.displayName(type)))
       }
     }
     return
   }
   if (state.persist) {
-    ctx.error(stateValidationMessages.persistedOnlyInApp(state.name), state)
+    ctx.error(state, stateValidationMessages.persistedOnlyInApp(state.name))
   }
 }
 
@@ -103,7 +103,7 @@ function reportToggleTarget(toggle: AST.ToggleStatement, ctx: ValidationContext)
     return
   }
   if (stateType.kind !== 'primitive' || stateType.primitive !== 'boolean') {
-    ctx.error(stateValidationMessages.toggleStateType(state.name, Type.displayName(stateType)), toggle)
+    ctx.error(toggle, stateValidationMessages.toggleStateType(state.name, Type.displayName(stateType)))
   }
 }
 
@@ -111,7 +111,7 @@ function reportStateReferenceOrder(state: AST.StateDeclaration, ctx: ValidationC
   for (const reference of DeclarationOrder.valueReferences(state.value)) {
     const target = reference.target.ref
     if (AST.isValueDeclaration(target) && isInvalidStateInitializerReferenceOrder(target, state)) {
-      ctx.error(stateValidationMessages.usedBeforeDeclaration(valueDeclarationName(target)), reference)
+      ctx.error(reference, stateValidationMessages.usedBeforeDeclaration(valueDeclarationName(target)))
     }
   }
 }
@@ -126,7 +126,7 @@ function reportStateMutationTargetReferenceOrder(
 ): void {
   const target = mutation.target.ref
   if (isInvalidStateMutationTargetReferenceOrder(target, mutation)) {
-    ctx.error(stateValidationMessages.usedBeforeDeclaration(target.name), mutation)
+    ctx.error(mutation, stateValidationMessages.usedBeforeDeclaration(target.name))
   }
 }
 
@@ -168,20 +168,20 @@ function reportSetStatementTypes(setStatement: AST.SetStatement, ctx: Validation
   // the assignment check below would only restate it.
   if (setStatement.operator !== '=' && !isPlainNumberType(expected)) {
     ctx.error(
-      stateValidationMessages.compoundStateType(state.name, setStatement.operator, Type.displayName(expected)),
       setStatement,
+      stateValidationMessages.compoundStateType(state.name, setStatement.operator, Type.displayName(expected)),
     )
     return
   }
 
   if (!Type.isAssignable(actual, expected)) {
     ctx.error(
+      setStatement.value,
       stateValidationMessages.setTypeMismatch(
         state.name,
         Type.displayName(expected),
         Type.displayName(actual),
       ),
-      setStatement.value,
     )
   }
 }
@@ -198,18 +198,18 @@ function reportStateDeclarationTypes(state: AST.StateDeclaration, ctx: Validatio
     const actual = Type.ofExpression(state.value)
     if (expected.kind !== 'unresolved' && actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
       ctx.error(
+        state.value,
         stateValidationMessages.initialTypeMismatch(
           state.name,
           Type.displayName(expected),
           Type.displayName(actual),
         ),
-        state.value,
       )
       return
     }
   }
   const valueType = Type.ofExpression(state.value)
   if (valueType.kind === 'primitive' && valueType.primitive === 'action') {
-    ctx.error(stateValidationMessages.stateActionType(state.name), state.value)
+    ctx.error(state.value, stateValidationMessages.stateActionType(state.name))
   }
 }

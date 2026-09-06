@@ -1,6 +1,6 @@
 import type { FormatHandlers } from '../formatting'
 
-export default {
+export const TestsFormatter = {
   /** TestDeclaration formats a v0 Tao test suite. */
   TestDeclaration(f) {
     f.oneSpaceAfter('test')

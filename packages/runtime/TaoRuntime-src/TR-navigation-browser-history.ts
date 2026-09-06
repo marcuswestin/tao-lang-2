@@ -403,6 +403,7 @@ function readHistoryPosition(state: unknown): BrowserNavigationPosition | undefi
   return { epoch: stored[0], sequence: stored[1] as number }
 }
 
+// Mirrors `isRecord` in packages/shared/shared-src/core/Json.ts; `runtime-mirrors.test.ts` keeps them in step.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

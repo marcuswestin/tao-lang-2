@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import { type Compiled, gen } from '../codegen-util'
 
-export default {
+export const TestsCompiler = {
   /** TestDeclaration compiles to no generated app output. */
   TestDeclaration(_test: AST.TestDeclaration): Compiled {
     return gen.noop()

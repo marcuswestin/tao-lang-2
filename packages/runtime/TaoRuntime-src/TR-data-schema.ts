@@ -118,6 +118,7 @@ function isEvaluable(value: unknown): value is Evaluable {
   return isRecord(value) && 'evaluate' in value && typeof value['evaluate'] === 'function'
 }
 
+// Mirrors `isRecord` in packages/shared/shared-src/core/Json.ts; `runtime-mirrors.test.ts` keeps them in step.
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

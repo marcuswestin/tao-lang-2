@@ -672,7 +672,7 @@ Describe('validator: declaration contracts', () => {
     [
       'a field that is both optional and defaulted',
       'data Parents / Parent { Title text? (default "x") }',
-      "Field 'Title' is optional, so it cannot also declare a default.",
+      dataValidationMessages.optionalDefault('Title'),
     ],
     [
       'ambiguous owner-side cascade relations',
