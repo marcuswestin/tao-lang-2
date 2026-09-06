@@ -103,7 +103,7 @@ export class ShipProgress {
 /** shipCommandFailure keeps terminal errors actionable while the full vendor output stays in a log. */
 export function shipCommandFailure(error: unknown, phase: string | undefined, logPath: string): Error {
   if (!(error instanceof Errors.CommandExecutionError)) {
-    return error instanceof Error ? error : new Error(String(error))
+    return Errors.asError(error)
   }
   const output = Text.stripAnsi(`${error.result.stderr}\n${error.result.stdout}`)
   const diagnostic = output

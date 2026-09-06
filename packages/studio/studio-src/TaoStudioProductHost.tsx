@@ -288,9 +288,9 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
     const unmount = (): void => {
       unmounted = true
       cancellation.abort()
-      const error = new Error('Tao Studio product host unmounted before the requested action could run.')
-      error.name = 'AbortError'
-      rejectPendingStudioProductHostActions(error)
+      rejectPendingStudioProductHostActions(
+        Errors.abortError('Tao Studio product host unmounted before the requested action could run.'),
+      )
       cleanup?.()
     }
     const target = root.querySelector<HTMLElement>('.studio-files')

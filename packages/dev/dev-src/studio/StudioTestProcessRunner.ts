@@ -1,4 +1,4 @@
-import { Text } from '@shared'
+import { Errors, Text } from '@shared'
 import { StudioTestOutput, type StudioTestRun, type StudioTestRunner, type StudioTestStatus } from '@studio'
 import {
   finalizeStudioProcessTree,
@@ -37,7 +37,7 @@ export class StudioTestProcessRunner implements StudioTestRunner {
 
   run(): Promise<StudioTestRun> {
     if (this.#closed) {
-      return Promise.reject(new Error('The Studio test runner is closed.'))
+      return Promise.reject(new Errors.UnexpectedBehaviorError('The Studio test runner is closed.'))
     }
     return this.#running ??= this.#run().finally(() => {
       this.#running = undefined

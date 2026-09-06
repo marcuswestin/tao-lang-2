@@ -253,26 +253,30 @@ const RAW_THROW_DETAIL = 'throws a raw `Error`; use `Assert(...)` for invariants
  * throw rule cannot see it. This is its own ratchet so the two lists stay legible: the entries here
  * are the sites that predate the taxonomy, not an exemption for new ones.
  */
-const REJECTED_RAW_ERROR_ALLOWLIST = [
-  'packages/code-editor/code-editor-src/CodeEditor.tsx',
+const RAW_ERROR_ALLOWLIST = [
+  // Emitted text: browser-evaluated bodies, the Electrobun main, an inline page script, where no Tao module loads.
   'packages/dev/dev-src/studio/StudioCdp.ts',
-  'packages/dev/dev-src/studio/StudioTestProcessRunner.ts',
-  'packages/generation/generation-live/apple-foundation-models.live.ts',
-  'packages/generation/generation-src/apple-foundation-models-service.ts',
-  'packages/runtime-toolchain/runtime-toolchain-src/testing/test-compiler/Worker.ts',
-  'packages/runtime/TR-tests/TR-data.test.ts',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts',
+  'packages/dev/studio-smoke/studio-simulated-user.test.ts',
+  'packages/studio/studio-src/StudioWelcome.ts',
+  // The leaf that builds the taxonomy's own cancellation error.
+  'packages/shared/shared-src/core/Errors.ts',
+  // Tests that hand an unknown raw error to the code under test to prove it is classified.
+  'packages/dev/dev-tests/agent-config-generation.test.ts',
+  'packages/dev/dev-tests/claude-profiles-generation.test.ts',
+  'packages/dev/dev-tests/codex-config-generation.test.ts',
+  'packages/dev/dev-tests/expo-dev-loop.test.ts',
+  'packages/dev/dev-tests/studio-companion-device.test.ts',
+  'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx',
   'packages/shared/shared-tests/test-helpers.test.ts',
-  'packages/stdlib/@tao/data/providers/instantdb/InstantDB.ts',
-  'packages/studio/studio-src/client/StudioApiClient.ts',
-  'packages/studio/studio-src/client/matrix/StudioPreviewBridge.ts',
-  'packages/studio/studio-src/client/matrix/StudioPreviewCellView.ts',
-  'packages/studio/studio-src/client/matrix/StudioPreviewConnection.ts',
-  'packages/studio/studio-src/client/matrix/StudioPreviewMatrix.ts',
+  'packages/stdlib/stdlib-tests/data-providers.test.ts',
   'packages/studio/studio-tests/studio-client.test.ts',
+  'packages/studio/studio-tests/studio-server-datasource.test.ts',
 ]
 
-const REJECTED_RAW_ERROR_DETAIL = 'rejects with a raw `Error`; reach for the same taxonomy a throw'
-  + ' would use, since a rejection reaches the reader the same way.'
+const RAW_ERROR_DETAIL = 'constructs a raw `Error`; where an error object must exist rather than be thrown,'
+  + ' build `new Errors.UserInputError(...)`, `new Errors.UnexpectedBehaviorError(...)`, or'
+  + ' `new Errors.HostEnvironmentError(...)`, wrap an unknown with `Errors.asError(...)`, or cancel with `Errors.abortError(...)`.'
 
 /*
  * Platform-wrapper conventions. Code reaches the host through the shared `CLI`, `FS`, `HCI`,
@@ -379,7 +383,7 @@ const NATIVE_SWITCH_PATTERN = /^[ \t]*switch[ \t]*\(/gm
 const CONSTRUCTED_THROW_PATTERN =
   /\bthrow\s+new\s+(?:Errors\.)?(?:UserInput|UnexpectedBehavior|HostEnvironment)Error\s*\(/g
 const RAW_THROW_PATTERN = /\bthrow\s+new\s+Error\s*\(/g
-const REJECTED_RAW_ERROR_PATTERN = /(?:reject|rejectPendingLoad|fail)\??\.?\(?\s*\(?\s*new\s+Error\s*\(/g
+const RAW_ERROR_PATTERN = /\bnew\s+Error\s*\(/g
 const BUN_TEST_IMPORT_PATTERN = /\bfrom\s*['"]bun:test['"]/g
 /*
  * The wrapper patterns are written so this file never matches them: each spells its target with an
@@ -441,11 +445,12 @@ export const CONVENTION_RULES = {
     pattern: RAW_THROW_PATTERN,
     staleDetail: 'no longer throws a raw `Error`; drop its repo lint allowlist entry.',
   },
-  rejectedRawError: {
-    allowlist: REJECTED_RAW_ERROR_ALLOWLIST,
-    detail: REJECTED_RAW_ERROR_DETAIL,
-    pattern: REJECTED_RAW_ERROR_PATTERN,
-    staleDetail: 'no longer rejects with a raw `Error`; drop its repo lint allowlist entry.',
+  rawError: {
+    allowlist: RAW_ERROR_ALLOWLIST,
+    detail: RAW_ERROR_DETAIL,
+    excludePathPrefixes: ['packages/runtime/'],
+    pattern: RAW_ERROR_PATTERN,
+    staleDetail: 'no longer constructs a raw `Error`; drop its repo lint allowlist entry.',
   },
   nodeImport: {
     allowlist: NODE_IMPORT_ALLOWLIST,

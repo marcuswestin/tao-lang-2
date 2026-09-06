@@ -69,25 +69,28 @@ _bench-check:
     ])
   })
 
-  Test('reports a raw Error handed to a promise rejection', () => {
-    const source = `function run(reject: (e: unknown) => void) {\n  reject(${'new Error'}('nope'))\n}`
+  Test('reports a raw Error built anywhere, not only inside a rejection', () => {
+    const source =
+      `function run(reject: (e: unknown) => void) {\n  const failure = ${'new Error'}('nope')\n  reject(failure)\n}`
     Expect(conventionRuleIssues(
-      CONVENTION_RULES.rejectedRawError,
+      CONVENTION_RULES.rawError,
       [{ path: 'packages/studio/studio-src/StudioNew.ts', source }],
       [],
     )).toEqual([
-      'packages/studio/studio-src/StudioNew.ts:2 rejects with a raw `Error`; reach for the same taxonomy'
-      + ' a throw would use, since a rejection reaches the reader the same way.',
+      'packages/studio/studio-src/StudioNew.ts:2 constructs a raw `Error`; where an error object must exist rather than'
+      + ' be thrown, build `new Errors.UserInputError(...)`, `new Errors.UnexpectedBehaviorError(...)`, or'
+      + ' `new Errors.HostEnvironmentError(...)`, wrap an unknown with `Errors.asError(...)`, or cancel with'
+      + ' `Errors.abortError(...)`.',
     ])
   })
 
-  Test('reports a rejection allowlist entry that no longer rejects raw', () => {
+  Test('reports a raw-error allowlist entry that no longer builds one', () => {
     Expect(conventionRuleIssues(
-      CONVENTION_RULES.rejectedRawError,
+      CONVENTION_RULES.rawError,
       [{ path: 'packages/studio/studio-src/Clean.ts', source: 'export const clean = 1\n' }],
       ['packages/studio/studio-src/Clean.ts'],
     )).toEqual([
-      'packages/studio/studio-src/Clean.ts no longer rejects with a raw `Error`; drop its repo lint allowlist entry.',
+      'packages/studio/studio-src/Clean.ts no longer constructs a raw `Error`; drop its repo lint allowlist entry.',
     ])
   })
 

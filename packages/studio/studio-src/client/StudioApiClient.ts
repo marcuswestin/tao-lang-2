@@ -385,9 +385,7 @@ function webSocketTransport(url: string, signal?: AbortSignal): Promise<StudioLs
     const abort = (): void => {
       close()
       if (!settled) {
-        const error = new Error('Tao language server connection was cancelled.')
-        error.name = 'AbortError'
-        reject(error)
+        reject(Errors.abortError('Tao language server connection was cancelled.'))
       }
     }
     if (signal?.aborted) {
@@ -417,7 +415,7 @@ function webSocketTransport(url: string, signal?: AbortSignal): Promise<StudioLs
     })
     socket.addEventListener('error', () => {
       close()
-      reject(new Error('Could not connect to the Tao language server.'))
+      reject(new Errors.HostEnvironmentError('Could not connect to the Tao language server.'))
     })
   })
 }

@@ -1,3 +1,4 @@
+import { Errors } from '@shared/core'
 import type { StudioCompileDiagnostic, StudioDiagnosticRange } from './client/StudioApiClient'
 import type { StudioSearchResult } from './client/StudioRailPanels'
 import { type StudioCanonicalSourceAction, StudioProtocol } from './StudioProtocol'
@@ -129,5 +130,5 @@ function nonNegativeInteger(value: unknown): value is number {
 }
 
 function invalidPayload(label: string): Error {
-  return new Error(`Tao Studio ${label} actions require a valid structured payload.`)
+  return new Errors.UserInputError(`Tao Studio ${label} actions require a valid structured payload.`)
 }

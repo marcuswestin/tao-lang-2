@@ -137,12 +137,12 @@ export function disconnectPreviews(
     }
     if (preview.capture !== undefined) {
       clearTimeout(preview.capture.timeout)
-      preview.capture.reject(new Error(reason))
+      preview.capture.reject(new Errors.HostEnvironmentError(reason))
       preview.capture = undefined
     }
     if (preview.runtimeCaptureRequest !== undefined) {
       clearTimeout(preview.runtimeCaptureRequest.timeout)
-      preview.runtimeCaptureRequest.reject(new Error(reason))
+      preview.runtimeCaptureRequest.reject(new Errors.HostEnvironmentError(reason))
       preview.runtimeCaptureRequest = undefined
     }
     preview.visibilityObserver?.disconnect()

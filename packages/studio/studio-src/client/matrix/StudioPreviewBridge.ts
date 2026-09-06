@@ -1,4 +1,4 @@
-import { Assert, Switch } from '@shared/core'
+import { Assert, Errors, Switch } from '@shared/core'
 import type { EditorView } from 'codemirror'
 import type { StudioDraftFile } from '../../StudioDraftSync'
 import { StudioInspector, type StudioInspectorSelection } from '../../StudioInspector'
@@ -257,7 +257,7 @@ function receiveRuntimeCapture(
   clearTimeout(request.timeout)
   preview.runtimeCaptureRequest = undefined
   if (message.type === 'preview-runtime-capture-failed') {
-    request.reject(new Error(message.error))
+    request.reject(new Errors.HostEnvironmentError(message.error))
   } else {
     request.resolve(message.capture)
   }
@@ -344,7 +344,7 @@ async function receiveFixtureCapture(
   clearTimeout(capture.timeout)
   preview.capture = undefined
   if (message.type === 'preview-fixture-capture-failed') {
-    capture.reject(new Error(message.error))
+    capture.reject(new Errors.HostEnvironmentError(message.error))
     return
   }
   const envelope = StudioInspector.singleAction({
@@ -361,7 +361,7 @@ async function receiveFixtureCapture(
   try {
     proposal = await StudioApiClient.sourceActionProposal(envelope)
   } catch (error) {
-    capture.reject(error instanceof Error ? error : new Error(String(error)))
+    capture.reject(Errors.asError(error))
     return
   }
   const confirmed = await StudioDialog.confirm({
@@ -377,7 +377,7 @@ async function receiveFixtureCapture(
     await actions.applySourceAction(envelope)
     capture.resolve('saved')
   } catch (error) {
-    capture.reject(error instanceof Error ? error : new Error(String(error)))
+    capture.reject(Errors.asError(error))
   }
 }
 
@@ -413,9 +413,11 @@ export function requestRuntimeCapture(
 ): Promise<StudioRuntimeCaptureArtifact> {
   const target = preview.iframe.contentWindow
   if (target === null) {
-    return Promise.reject(new Error('The active preview is not connected.'))
+    return Promise.reject(new Errors.HostEnvironmentError('The active preview is not connected.'))
   }
-  preview.runtimeCaptureRequest?.reject(new Error('A newer live-data refresh replaced this request.'))
+  preview.runtimeCaptureRequest?.reject(
+    new Errors.UnexpectedBehaviorError('A newer live-data refresh replaced this request.'),
+  )
   if (preview.runtimeCaptureRequest !== undefined) {
     clearTimeout(preview.runtimeCaptureRequest.timeout)
   }
@@ -424,7 +426,7 @@ export function requestRuntimeCapture(
     const timeout = setTimeout(() => {
       if (preview.runtimeCaptureRequest?.requestId === requestId) {
         preview.runtimeCaptureRequest = undefined
-        reject(new Error('The active preview did not return live app data.'))
+        reject(new Errors.HostEnvironmentError('The active preview did not return live app data.'))
       }
     }, 5_000)
     preview.runtimeCaptureRequest = { reject, requestId, resolve, timeout }

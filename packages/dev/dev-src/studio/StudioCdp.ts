@@ -313,7 +313,7 @@ export class StudioCdp {
       const intercepted = new Promise<Record<string, unknown>>((resolve, reject) => {
         const timer = setTimeout(() => {
           unsubscribe()
-          reject(new Error('The page never started an HTML5 drag for this source element.'))
+          reject(new Errors.HostEnvironmentError('The page never started an HTML5 drag for this source element.'))
         }, 10_000)
         const unsubscribe = this.client.subscribe('Input.dragIntercepted', params => {
           clearTimeout(timer)
@@ -802,7 +802,7 @@ class CdpClient implements StudioCdpTransport {
       }
       const onError = (): void => {
         cleanup()
-        reject(new Error('Could not connect to Chrome DevTools.'))
+        reject(new Errors.HostEnvironmentError('Could not connect to Chrome DevTools.'))
       }
       socket.addEventListener('open', onOpen)
       socket.addEventListener('error', onError)
@@ -862,7 +862,7 @@ class CdpClient implements StudioCdpTransport {
     }
     this.pending.delete(response.id)
     if (response.error !== undefined) {
-      pending.reject(new Error(response.error.message))
+      pending.reject(new Errors.HostEnvironmentError(response.error.message))
     } else {
       pending.resolve(response.result ?? {})
     }
@@ -870,7 +870,7 @@ class CdpClient implements StudioCdpTransport {
 
   private rejectAll(message: string): void {
     for (const pending of this.pending.values()) {
-      pending.reject(new Error(message))
+      pending.reject(new Errors.HostEnvironmentError(message))
     }
     this.pending.clear()
   }

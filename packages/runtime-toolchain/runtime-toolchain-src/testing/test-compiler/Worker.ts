@@ -253,11 +253,11 @@ class Session {
     }
     this.pending.delete(response.id)
     if (response.error !== undefined) {
-      pending.reject(new Error(response.error))
+      pending.reject(new Errors.HostEnvironmentError(response.error))
       return
     }
     if (response.output === undefined) {
-      pending.reject(new Error('Test compiler worker returned no output.'))
+      pending.reject(new Errors.UnexpectedBehaviorError('Test compiler worker returned no output.'))
       return
     }
     pending.resolve(response.output)
@@ -265,7 +265,7 @@ class Session {
 
   private rejectPending(message: string): void {
     for (const pending of this.pending.values()) {
-      pending.reject(new Error(message))
+      pending.reject(new Errors.HostEnvironmentError(message))
     }
     this.pending.clear()
   }

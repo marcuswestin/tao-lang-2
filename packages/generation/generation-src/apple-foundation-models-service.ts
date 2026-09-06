@@ -65,7 +65,7 @@ export async function startAppleFoundationModelsService(): Promise<AppleFoundati
         return
       }
       if (readyPort === undefined && Buffer.byteLength(stdout + String(chunk), 'utf8') > MAX_HELPER_OUTPUT_BYTES) {
-        fail?.(new Error('Foundation Models helper exceeded its startup output limit.'))
+        fail?.(new Errors.HostEnvironmentError('Foundation Models helper exceeded its startup output limit.'))
         return
       }
       stdout = appendBounded(stdout, String(chunk))
@@ -79,7 +79,11 @@ export async function startAppleFoundationModelsService(): Promise<AppleFoundati
         const match = /^READY ([1-9]\d{0,4})$/.exec(line)
         const port = match?.[1] === undefined ? 0 : Number(match[1])
         if (port <= 0 || port > 65_535 || trailing.length > 0) {
-          fail?.(new Error(`Foundation Models helper returned invalid startup output: ${JSON.stringify(stdout)}`))
+          fail?.(
+            new Errors.HostEnvironmentError(
+              `Foundation Models helper returned invalid startup output: ${JSON.stringify(stdout)}`,
+            ),
+          )
           return
         }
         readyPort = port
@@ -91,7 +95,7 @@ export async function startAppleFoundationModelsService(): Promise<AppleFoundati
   child.onceClose((exitCode, signal) => {
     const reason = helperExitMessage(exitCode, signal, stderr)
     if (readyPort === undefined) {
-      fail?.(new Error(reason))
+      fail?.(new Errors.HostEnvironmentError(reason))
     } else {
       helperFailure = reason
     }
