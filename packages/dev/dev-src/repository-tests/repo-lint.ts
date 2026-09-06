@@ -262,6 +262,10 @@ const RAW_ERROR_ALLOWLIST = [
   // The leaf that builds the taxonomy's own cancellation error.
   'packages/shared/shared-src/core/Errors.ts',
   // Tests that hand an unknown raw error to the code under test to prove it is classified.
+  'packages/dev/dev-tests/agent-config-generation.test.ts',
+  'packages/dev/dev-tests/claude-profiles-generation.test.ts',
+  'packages/dev/dev-tests/codex-config-generation.test.ts',
+  'packages/dev/dev-tests/expo-dev-loop.test.ts',
   'packages/dev/dev-tests/studio-companion-device.test.ts',
   'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx',
   'packages/shared/shared-tests/test-helpers.test.ts',
@@ -338,7 +342,6 @@ const CONSOLE_CALL_ALLOWLIST = [
   'packages/update-server/update-server-tests/update-server.test.ts',
   // Tests that capture or silence the global a library writes through.
   'packages/runtime-toolchain/runtime-toolchain-tests/runtime-containment.jest-test.tsx',
-  'packages/dev/dev-tests/studio-companion-device.test.ts',
   'packages/runtime-toolchain/runtime-toolchain-tests/studio-device-host-e2e.jest-test.tsx',
   'packages/tao-cli/cli-tests/completion-command.test.ts',
 ]
