@@ -105,6 +105,9 @@ async function generateApp(appPath: string, opts: GenerateAppOptions = {}): Prom
     const compileOptions = {
       appDatasourceConfiguration: opts.datasourceConfiguration,
       appName: opts.appName,
+      // A Studio preview carries debugger gates so a breakpoint can pause it. Nothing else does:
+      // an app built for a device or a test run compiles exactly as it did before.
+      debug: opts.preview !== undefined,
       studio: opts.preview !== undefined,
       validationMode: opts.validationMode,
     }
