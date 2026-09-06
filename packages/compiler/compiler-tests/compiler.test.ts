@@ -452,6 +452,33 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).not.toContain('__tao_local_datasource_provider__')
   })
 
+  Test('resolves the Dev datasource package and copies its sidecar like any provider', async () => {
+    const compiled = await Compiler.compileCode(`
+      use Dev from @tao/data/providers/dev
+      use StackNav from @tao/nav
+      data Notes / Note { Title text }
+      app Notebook {
+        Name "Notebook"
+        Navigator StackNav { Initial Main }
+        Datasource Dev { }
+      }
+      scene Main() {
+        Title "Notebook"
+        query Notes { }
+        render Text("{ Notes.Count }")
+      }
+      view Text(Value text) { render inject ${tsFence} return null ${fence} }
+    `)
+
+    // The app binds the stdlib declaration's own identity with an all-defaulted configuration.
+    Expect(compiled.code).toContain("import { __tao_type_Dev } from './modules/external/Dev.tao'")
+    Expect(compiled.code).toContain(
+      'TR.Data.Configure(_Scope.__tao_type_Dev, {\n                ...{\n                  },',
+    )
+    Expect(compiled.files.some(file => file.sourcePath.endsWith('/providers/dev/Dev.tao'))).toBe(true)
+    Expect(compiled.files.some(file => file.sourcePath.endsWith('/providers/dev/Dev.ts'))).toBe(true)
+  })
+
   Test('resolves the InstantDB datasource package for a selected app variant', async () => {
     const compiled = await Compiler.compileCode(
       `

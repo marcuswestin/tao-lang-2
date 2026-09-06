@@ -24,7 +24,11 @@ type ExpoAppConfig = {
 }
 
 const { createExpoAppConfig } = require('../app-config.cjs') as {
-  createExpoAppConfig(config: ExpoAppConfig, projectRoot: string): ExpoAppConfig
+  createExpoAppConfig(
+    config: ExpoAppConfig,
+    projectRoot: string,
+    env?: Record<string, string | undefined>,
+  ): ExpoAppConfig
 }
 
 const fallbackConfig: ExpoAppConfig = {
@@ -55,7 +59,24 @@ Describe('Expo ship host configuration', () => {
   Test('preserves the checked-in development configuration when no ship manifest exists', async () => {
     const projectRoot = await mkTestDir('tao-app-config-fallback-')
 
-    Expect(createExpoAppConfig(fallbackConfig, projectRoot)).toBe(fallbackConfig)
+    Expect(createExpoAppConfig(fallbackConfig, projectRoot, {})).toBe(fallbackConfig)
+  })
+
+  Test('writes the dev data bootstrap fact the dev loop places in the environment, and only then', async () => {
+    const projectRoot = await mkTestDir('tao-app-config-dev-data-')
+
+    const configured = createExpoAppConfig(fallbackConfig, projectRoot, {
+      TAO_DEV_DATA_APP: 'Notes-0123abcd',
+      TAO_DEV_DATA_PORT: '4321',
+    })
+    Expect(configured.extra).toEqual({
+      taoDevData: { app: 'Notes-0123abcd', port: 4_321, protocol: 'tao-dev-data-v1' },
+    })
+    Expect(configured.name).toBe('Tao Runtime')
+
+    Expect(createExpoAppConfig(fallbackConfig, projectRoot, { TAO_DEV_DATA_PORT: '4321' })).toBe(fallbackConfig)
+    Expect(createExpoAppConfig(fallbackConfig, projectRoot, { TAO_DEV_DATA_APP: 'Notes', TAO_DEV_DATA_PORT: 'x' }))
+      .toBe(fallbackConfig)
   })
 
   Test('derives the iOS release and update configuration from ship.json', async () => {

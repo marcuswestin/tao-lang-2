@@ -829,6 +829,15 @@ Describe('Studio smoke resource isolation', () => {
       })
       Expect(preview.expo['slug']).toBe(source.expo['slug'])
       Expect(JSON.stringify(preview)).not.toContain('secret')
+
+      // The dev data fact arrives once the session has resolved its app, and keeps the gateway fact.
+      await runtime.configure({ devData: { app: 'Notes-0123abcd', port: 4_321, protocol: 'tao-dev-data-v1' } })
+      const configured = await FS.readJson<{ expo: Record<string, unknown> }>(FS.resolvePath('app.json', runtime.root))
+      Expect(configured.expo['extra']).toEqual({
+        taoDevData: { app: 'Notes-0123abcd', port: 4_321, protocol: 'tao-dev-data-v1' },
+        taoStudioDevice: { gatewayPort: 43_210, protocol: 'tao-studio-device-v1' },
+      })
+      Expect(configured.expo['scheme']).toBe('taostudiocompanion')
     } finally {
       await runtime.close()
     }

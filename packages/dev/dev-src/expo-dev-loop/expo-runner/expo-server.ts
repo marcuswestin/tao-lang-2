@@ -49,6 +49,7 @@ export class ExpoServer {
       cwd: this.runtimeRoot,
       env: {
         ...this.config.EXPO_START_ENV,
+        ...this.options.env,
         TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT: this.options.runtimeToolchainSourceRoot
           ?? Repo.resolvePath(this.config.RUNTIME_TOOLCHAIN_PATH),
       },
