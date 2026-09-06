@@ -35,7 +35,6 @@ import {
   type TaoHttpMatch,
   type TaoHttpShape,
 } from './TR-data-http'
-import { Debug } from './TR-debug'
 import {
   SyncControls,
   type TaoChangeSet,
@@ -49,6 +48,7 @@ import {
   type TaoSyncStampedValue,
   type TaoSyncValue,
 } from './TR-data-sync'
+import { Debug } from './TR-debug'
 import {
   DesignControls,
   type TaoDesign,
