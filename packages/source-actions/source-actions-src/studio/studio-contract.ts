@@ -156,6 +156,16 @@ export type StudioRenderInspection = {
   elementName?: string
   explorations: readonly StudioStyleEntry[]
   layoutEntries: readonly StudioLayoutEntry[]
+  /**
+   * The view definition rendering this occurrence and that definition's root render. A host that
+   * measured the root render's occurrence can size a focused frame to it instead of to the device.
+   */
+  owner?: Readonly<{
+    /** Filled by the Studio server from the selecting cell's last layout measurement, when it has one. */
+    rect?: Readonly<{ height: number; width: number; x: number; y: number }>
+    renderId: string
+    view: string
+  }>
   renderId: string
   styleEntries: readonly StudioStyleEntry[]
   styleProvenance: readonly StudioStyleProvenance[]

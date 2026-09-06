@@ -921,6 +921,95 @@ Test('Studio inspects parser-owned current render clauses through a versioned fi
   })
 })
 
+// Canvas mode frames a focused view at the size its occurrence had, so the inspection of any element
+// reports the owning view's root render and, for the cell that measured it, that render's rectangle.
+Test('Studio reports the owning view root render and its measured rectangle to the selecting cell', async () => {
+  await withStudioProject(async session => {
+    const compiled = await session.compileInitial()
+    const file = await session.readFile('Garden.tao')
+    const selected = 'Text("Before")'
+    const start = file.content.indexOf(selected)
+    const renderId = `${FS.resolvePath(file.path, session.projectRoot)}:${start}:${start + selected.length}`
+    const request = { path: file.path, renderId, sourceVersion: file.sourceVersion }
+
+    const unmeasured = await session.inspectRender(request)
+    Expect(unmeasured.owner?.view).toBe('MainView')
+    Expect(unmeasured.owner?.renderId).toContain('Garden.tao')
+    Expect(unmeasured.owner?.renderId).not.toBe(renderId)
+    Expect(unmeasured.owner?.rect).toBeUndefined()
+
+    const cell = {
+      args: {},
+      cellId: 'cell:phone',
+      cellRevision: 0,
+      environment: {
+        network: { latencyMs: 0, outcome: 'normal' as const },
+        scheme: systemLightScheme(),
+        viewport: { height: 844, presetId: 'phone', width: 390 },
+      },
+      scenarioId: 'Garden.phone',
+      stateLayers: [],
+    }
+    const manifest = {
+      capabilities: { captureDomains: [], scheme: 'reactive-browser' as const },
+      cells: [cell],
+      compileRevision: compiled.compileRevision,
+      fixtures: [],
+      generationDeclarations: [],
+      manifestRevision: 'manifest-framed',
+      parametersBySubject: { 'app:Garden': [] },
+      project: { appName: session.appName, entryPath: 'Garden.tao', root: session.projectRoot },
+      renders: [],
+      scenarios: [{
+        args: {},
+        group: 'Garden',
+        label: 'Garden phone',
+        prepare: [],
+        scenarioId: 'Garden.phone',
+        source: { kind: 'tao' as const, path: 'Garden.tao', range: { end: 10, start: 0 } },
+        stateLayers: [],
+        subjectId: 'app:Garden',
+      }],
+      sourceVersions: { 'Garden.tao': file.sourceVersion },
+      states: [],
+      subjects: [{
+        appName: 'Garden',
+        kind: 'app' as const,
+        source: { kind: 'tao' as const, path: 'Garden.tao', range: { end: 10, start: 0 } },
+        subjectId: 'app:Garden',
+      }],
+      version: 2 as const,
+    }
+    session.setMatrixManifest(manifest)
+    const identity = {
+      ...StudioPreviewManifest.cellIdentity(manifest, cell),
+      previewInstanceId: 'cell-preview-framed',
+    }
+    session.registerCellPreview(identity)
+    session.recordPreviewLayoutMeasurements({
+      channel: studioProtocolChannel,
+      identity,
+      measurements: [{
+        elementName: 'Stack',
+        rect: { height: 64, width: 390, x: 0, y: 0 },
+        renderId: unmeasured.owner!.renderId,
+      }],
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-layout-measurements',
+    })
+
+    const measured = await session.inspectRender({ ...request, identity: { ...identity, ...file } })
+    Expect(measured.owner?.rect).toEqual({ height: 64, width: 390, x: 0, y: 0 })
+
+    // A cell that never measured, and a stale preview instance, both leave the frame at the device size.
+    const otherInstance = await session.inspectRender({
+      ...request,
+      identity: { ...identity, ...file, previewInstanceId: 'cell-preview-gone' },
+    })
+    Expect(otherInstance.owner?.rect).toBeUndefined()
+  })
+})
+
 Test('Studio resolves imported design provenance and disables cross-file design writes', async () => {
   await withTaoFiles('tao-studio-design-provenance-', {
     'Main.tao': `

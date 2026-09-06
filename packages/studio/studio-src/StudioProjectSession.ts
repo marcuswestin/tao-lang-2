@@ -1555,9 +1555,35 @@ export class StudioProjectSession {
   inspectRender(request: StudioInspectRenderRequest): Promise<StudioRenderInspection> {
     return this.#mutate(async () => {
       const parsed = await this.#parseVersionedFile(request, 'inspect a Studio render')
-      return SourceActions.inspectStudioRender(parsed.entry.document, request.renderId, {
+      const inspection = SourceActions.inspectStudioRender(parsed.entry.document, request.renderId, {
         files: parsed.files.map(file => file.ast),
       })
+      // The owner's root render is what a focused frame should be sized to; the preview measured it
+      // for the selecting cell if that cell is still current. A stale or unmeasured cell reports no rect.
+      const owner = inspection.owner
+      const identity = request.identity
+      if (
+        owner === undefined
+        || identity?.cellId === undefined
+        || identity.cellRevision === undefined
+        || identity.compileRevision === undefined
+        || identity.manifestRevision === undefined
+      ) {
+        return inspection
+      }
+      let rect: StudioPreviewLayoutMeasurement['rect'] | undefined
+      try {
+        rect = this.previewLayoutMeasurement({
+          ...identity,
+          cellId: identity.cellId,
+          cellRevision: identity.cellRevision,
+          compileRevision: identity.compileRevision,
+          manifestRevision: identity.manifestRevision,
+        }, owner.renderId)?.rect
+      } catch {
+        rect = undefined
+      }
+      return rect === undefined ? inspection : { ...inspection, owner: { ...owner, rect } }
     })
   }
 

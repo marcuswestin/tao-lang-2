@@ -346,7 +346,13 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     })
     const canvasFocus = mountStudioCanvasFocus({
       button: view.canvasFocus,
+      onError: error => showSourceActionError(view.status, error),
+      ownerFrame: candidate => {
+        const owner = inspection.inspection()?.owner
+        return owner?.view === candidate ? owner.rect : undefined
+      },
       preview: view.preview,
+      previews: () => previews,
       selectedOwner: () => inspection.selectedOwner(),
       status: view.status,
     })

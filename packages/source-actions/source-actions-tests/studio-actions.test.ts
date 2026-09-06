@@ -342,6 +342,23 @@ Describe('Studio source-action patch bus', () => {
     Expect(patch.content).toContain('Text("First") [gap 8, body, size 18]')
   })
 
+  Test('inspects the owning view and its root render so a host can size a focused frame to it', async () => {
+    const document = await parseDocument(`
+      use Col, Text from @tao/ui
+      view MainView() {
+         render Col() {
+            Text("Inner")
+         }
+      }
+      view Alias() from ./Alias.tsx
+    `)
+    const inner = renderId(requireRenderByText(document, 'Text("Inner")'))
+    const root = renderId(requireRenderByText(document, 'Col()'))
+
+    Expect(SourceActions.inspectStudioRender(document, inner).owner).toEqual({ renderId: root, view: 'MainView' })
+    Expect(SourceActions.inspectStudioRender(document, root).owner).toEqual({ renderId: root, view: 'MainView' })
+  })
+
   Test('inspects and promotes decided visual aliases and representable numeric families', async () => {
     const document = await parseDocument(`
       use Text from @tao/ui

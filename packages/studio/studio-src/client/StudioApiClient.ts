@@ -14,6 +14,7 @@ import {
   type StudioDeleteFileRequest,
   type StudioDeleteFileResult,
   type StudioFixturePlan,
+  type StudioInspectRenderRequest,
   type StudioMoveGeneratedSourceRequest,
   type StudioMoveGeneratedSourceResult,
   type StudioProjectFile,
@@ -277,7 +278,7 @@ export const StudioApiClient = {
   highlight: async (content: string): Promise<StudioLanguageAnalysis> =>
     await request(routes.languageHighlight, { content }),
   inspectRender: async (
-    body: { path: string; renderId: string; sourceVersion: string },
+    body: StudioInspectRenderRequest,
   ): Promise<StudioRenderInspection> => await request(routes.sourceActionInspect, body),
   lspTransport: async (signal?: AbortSignal): Promise<StudioLspTransport> =>
     await webSocketTransport(webSocketUrl(studioSessionPath(routes.languageLsp.path)), signal),

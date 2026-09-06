@@ -47,6 +47,17 @@ function renderIdFor(render: AST.Render): string {
   return `${document.uri.fsPath}:${cstNode?.offset ?? 0}:${cstNode?.end ?? 0}`
 }
 
+/** The owning view definition and its root render; a bodiless view alias owns no render tree. */
+export function renderOwnerInspection(render: AST.Render): Readonly<{ renderId: string; view: string }> | undefined {
+  const view = AST.findOwningView(render)
+  const statement = view?.block?.statements.find(AST.isRenderStatement)
+  if (view === undefined || statement === undefined) {
+    return undefined
+  }
+  const root = AST.isRender(statement) ? statement : AST.streamAllContents(statement).find(AST.isRender)
+  return root === undefined ? undefined : { renderId: renderIdFor(root), view: view.name }
+}
+
 export function requireRenderById(file: AST.TaoFile, id: string): AST.Render {
   const render = AST.streamAllContents(file)
     .filter(AST.isRender)

@@ -18,7 +18,9 @@ import {
   type StudioCreateFileRequest,
   type StudioDeleteFileRequest,
   type StudioDraftWriteRequest,
+  type StudioInspectRenderRequest,
   type StudioMoveGeneratedSourceRequest,
+  StudioProtocol,
   studioProtocolChannel,
   studioProtocolVersion,
   type StudioRenameFileRequest,
@@ -859,7 +861,7 @@ async function runBetaShip(request: StudioBetaShipRequest): Promise<void> {
   })
 }
 
-function inspectRenderRequest(value: unknown): { path: string; renderId: string; sourceVersion: string } {
+function inspectRenderRequest(value: unknown): StudioInspectRenderRequest {
   if (
     !Json.isRecord(value)
     || typeof value['path'] !== 'string'
@@ -868,7 +870,15 @@ function inspectRenderRequest(value: unknown): { path: string; renderId: string;
   ) {
     Errors.throwUserInput('Expected a source path, version, and render id to inspect.')
   }
-  return { path: value['path'], renderId: value['renderId'], sourceVersion: value['sourceVersion'] }
+  const identity = value['identity'] === undefined
+    ? undefined
+    : StudioProtocol.parseSourceActionIdentity(value['identity'])
+  return {
+    ...(identity === undefined ? {} : { identity }),
+    path: value['path'],
+    renderId: value['renderId'],
+    sourceVersion: value['sourceVersion'],
+  }
 }
 
 function dataFillRequest(value: unknown): StudioServerFillRequest {
