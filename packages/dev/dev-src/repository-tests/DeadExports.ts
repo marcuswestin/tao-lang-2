@@ -462,10 +462,41 @@ export function resolveTaoBindings(
         staleness.push(`${file.path}:${binding.line} binds ${binding.name}, which ${target} does not declare.`)
       } else {
         keys.add(`${target}#${binding.name}`)
+        // An entry may publish the name from a sibling module (`export { Name } from './part'`); the
+        // `.tao` source binds the entry, but the export knip sees as orphaned is the sibling's.
+        for (const origin of reexportOrigins(target, binding.name, sources)) {
+          keys.add(`${origin}#${binding.name}`)
+        }
       }
     }
   }
   return { keys, staleness }
+}
+
+/** reexportOrigins follows `export { … Name … } from './module'` chains from `path` to where `Name` is declared. */
+function reexportOrigins(path: string, name: string, sources: ReadonlyMap<string, string>): string[] {
+  const origins: string[] = []
+  const known = new Set(sources.keys())
+  const seen = new Set<string>([path])
+  let current: string | undefined = path
+  while (current !== undefined) {
+    const source = sources.get(current) ?? ''
+    let next: string | undefined
+    for (const match of source.matchAll(/export\s*(?:type\s*)?\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g)) {
+      const names = match[1]!.split(',').map(entry => entry.trim().replace(/^type\s+/, '').split(/\s+as\s+/).at(-1))
+      if (names.includes(name)) {
+        next = resolveModulePath(current, match[2]!, known)
+        break
+      }
+    }
+    if (next === undefined || seen.has(next)) {
+      break
+    }
+    seen.add(next)
+    origins.push(next)
+    current = next
+  }
+  return origins
 }
 
 /** runKnip runs the installed knip and parses its JSON report; a findings run exits non-zero. */

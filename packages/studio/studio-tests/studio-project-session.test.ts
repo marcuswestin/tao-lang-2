@@ -11,6 +11,7 @@ import {
   studioProtocolVersion,
   studioSourceActionVersion,
 } from '../studio-src/StudioProtocol'
+import { StudioServerDatasource } from '../studio-src/StudioServerDatasource'
 import { systemLightScheme } from './test-studio-fixtures'
 
 Test('Studio project session resolves one current Tao app and serves contained versioned files', async () => {
@@ -558,6 +559,111 @@ Test('Studio file CRUD rejects unsafe, destructive, stale, and dirty mutations',
       await FS.remove(outside)
     }
   })
+})
+
+Test('Studio lists project files from one scan kept current by writes and watcher echoes', async () => {
+  let listings = 0
+  let reads = 0
+  const compiledFiles: Array<Record<string, string>> = []
+  await withTaoFiles(
+    'tao-studio-incremental-files-',
+    {
+      'Garden.tao': 'app Garden { view Main }\nview Main() { render Text("Before") }\n',
+      'Support.tao': 'view Support() { }\n',
+    },
+    async (paths, root) => {
+      let session: StudioProjectSession | undefined
+      session = await StudioProjectSession.open({
+        async compile() {
+          const files = await session!.files()
+          compiledFiles.push(Object.fromEntries(files.map(file => [file.path, file.sourceVersion])))
+        },
+        entryPath: paths['Garden.tao'],
+        projectFilesIO: {
+          async listTaoFiles(projectRoot) {
+            listings += 1
+            return (await FS.listDir(projectRoot))
+              .filter(name => name.endsWith('.tao'))
+              .map(name => FS.resolvePath(name, projectRoot))
+          },
+          readText(path) {
+            reads += 1
+            return FS.readText(path)
+          },
+        },
+        projectRoot: root,
+      })
+      const datasource = new StudioServerDatasource(session)
+      const initial = await session.files()
+      const initialReads = reads
+      Expect(listings).toBe(1)
+      Expect(initialReads).toBe(initial.length)
+      Expect(initial.map(file => file.path)).toEqual(['Garden.tao', 'Project.tao', 'Support.tao'])
+
+      await session.compileInitial()
+      const garden = await session.readFile('Garden.tao')
+      const saved = await session.syncDraft({
+        content: garden.content.replace('Before', 'After'),
+        path: garden.path,
+        sourceVersion: garden.sourceVersion,
+        writeId: 'save-garden',
+      })
+      const created = await session.createFile({ path: 'Nested/New.tao', writeId: 'create-new' })
+      await session.noteWatchChanges([
+        { path: 'Garden.tao', sourceVersion: saved.file.sourceVersion },
+        { path: 'Nested/New.tao', sourceVersion: created.file.sourceVersion },
+      ])
+      const renamed = await session.renameFile({
+        path: created.file.path,
+        sourceVersion: created.file.sourceVersion,
+        targetPath: 'Nested/Renamed.tao',
+        writeId: 'rename-new',
+      })
+      await datasource.fill({ entity: 'Files' })
+      await datasource.fill({ entity: 'Problems' })
+      await datasource.fill({ entity: 'DesignTokens' })
+
+      // An editor outside Studio rewrites Support.tao; the watcher reports the version it hashed.
+      const externalContent = 'view Support() { render Text("external") }\n'
+      await FS.writeText(paths['Support.tao'], externalContent)
+      const supportVersionBefore = initial.find(file => file.path === 'Support.tao')!.sourceVersion
+      const external = await session.noteWatchChanges([{ path: paths['Support.tao'], sourceVersion: 'external-1' }])
+      Expect(external.compile?.status).toBe('compiled')
+      Expect((await session.files()).find(file => file.path === 'Support.tao')?.sourceVersion).toBe('external-1')
+      Expect(supportVersionBefore).not.toBe('external-1')
+
+      // A watcher report without a version means "look for yourself": one read, not a rescan.
+      const readsBeforeUnversioned = reads
+      await session.noteWatchChanges([{ path: paths['Support.tao'] }])
+      Expect(reads).toBe(readsBeforeUnversioned + 1)
+      Expect((await session.files()).find(file => file.path === 'Support.tao')?.sourceVersion)
+        .toBe((await session.readFile('Support.tao')).sourceVersion)
+
+      await FS.remove(paths['Support.tao'])
+      await session.noteWatchChanges([{ path: paths['Support.tao'] }])
+      await session.deleteFile({
+        path: renamed.file.path,
+        sourceVersion: renamed.file.sourceVersion,
+        writeId: 'delete-renamed',
+      })
+      await datasource.fill({ entity: 'Files' })
+      await datasource.fill({ entity: 'Problems' })
+      datasource.close()
+
+      Expect((await session.files()).map(file => [file.path, file.sourceVersion])).toEqual([
+        ['Garden.tao', saved.file.sourceVersion],
+        ['Project.tao', initial.find(file => file.path === 'Project.tao')!.sourceVersion],
+      ])
+      Expect(compiledFiles.length).toBeGreaterThanOrEqual(6)
+      Expect(compiledFiles[1]?.['Garden.tao']).toBe(saved.file.sourceVersion)
+      Expect(compiledFiles[2]?.['Nested/New.tao']).toBe(created.file.sourceVersion)
+      Expect(compiledFiles[3]?.['Nested/Renamed.tao']).toBe(renamed.file.sourceVersion)
+      Expect(compiledFiles[3]?.['Nested/New.tao']).toBeUndefined()
+      Expect(compiledFiles.at(-1)?.['Support.tao']).toBeUndefined()
+      Expect(listings).toBe(1)
+      Expect(reads).toBe(initialReads + 1)
+    },
+  )
 })
 
 Test('Studio draft writes keep invalid source off disk and acknowledge their exact watcher echo', async () => {

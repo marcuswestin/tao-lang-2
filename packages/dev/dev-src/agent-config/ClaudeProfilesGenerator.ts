@@ -25,12 +25,12 @@ type GenerateClaudeProfilesOptions = {
 }
 
 /** settingsPath names the file a profile renders to, relative to the repository root. */
-export function settingsPath(name: string): string {
+function settingsPath(name: string): string {
   return `.claude/settings.${name}.json`
 }
 
 /** renderClaudeProfile renders one profile as a complete settings file. */
-export function renderClaudeProfile(profiles: AgentProfiles, name: string): string {
+function renderClaudeProfile(profiles: AgentProfiles, name: string): string {
   const profile = profiles[name]!
   const settings: ClaudeSettings = { $schema: SETTINGS_SCHEMA }
   if (profile.sandbox === false) {

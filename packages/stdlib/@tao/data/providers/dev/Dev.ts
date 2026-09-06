@@ -18,7 +18,7 @@ function hostError(message: string): Error {
  */
 
 /** The wire contract; `packages/dev/dev-src/dev-data/DevDataServer.ts` mirrors it and must stay in step. */
-export const DevDataProtocol = {
+const DevDataProtocol = {
   /** The Expo manifest key (`expo.extra.taoDevData`) a development build reads its bootstrap from. */
   manifestKey: 'taoDevData',
   name: 'tao-dev-data-v1',
@@ -29,19 +29,19 @@ export const DevDataProtocol = {
   connectTimeoutMs: 4_000,
 } as const
 
-export type DevDataClientMessage =
+type DevDataClientMessage =
   | { seq: number; snapshot: string; type: 'save' }
   | { seq: number; type: 'reset' }
   /** load asks for the stream's current snapshot again; the server answers it before the ack. */
   | { seq: number; type: 'load' }
 
-export type DevDataServerMessage =
+type DevDataServerMessage =
   | { revision: number; snapshot: string | null; type: 'snapshot' }
   | { revision: number; seq: number; type: 'ack' }
   | { message: string; seq: number; type: 'rejected' }
 
 /** The non-secret facts written into a development build's Expo manifest by the dev server. */
-export type DevDataManifest = {
+type DevDataManifest = {
   app: string
   port: number
   protocol: typeof DevDataProtocol.name
@@ -122,7 +122,7 @@ export function resolveDevDataBootstrap(input: {
 }
 
 /** parseBundleOrigin reads where a native bundle loaded from; mirrors `TR-studio-device-host`'s parse. */
-export function parseBundleOrigin(scriptURL: string | undefined): { host: string; origin: string } | undefined {
+function parseBundleOrigin(scriptURL: string | undefined): { host: string; origin: string } | undefined {
   if (scriptURL === undefined) {
     return undefined
   }

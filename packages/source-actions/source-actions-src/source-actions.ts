@@ -110,6 +110,6 @@ export {
   type StudioToggleFlowDirectionPatchRequest,
   type StudioWorkspaceDesignContext,
   type StudioWrapRenderPatchRequest,
-} from './studio-actions'
+} from './studio/studio-contract'
 
 export default SourceActions

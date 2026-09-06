@@ -119,7 +119,7 @@ export function classifyCapability(probe: CapabilityProbe, result: ProbeResult):
 }
 
 /** detectSandbox reports whether this command runs under a harness sandbox policy. */
-export function detectSandbox(env: Readonly<Record<string, string | undefined>>): boolean {
+function detectSandbox(env: Readonly<Record<string, string | undefined>>): boolean {
   return SANDBOX_SIGNALS.some(name => (env[name] ?? '') !== '')
 }
 

@@ -71,7 +71,7 @@ export const StudioSessionPath = {
 
 // ---- Route table
 
-export type StudioRouteMethod = 'GET' | 'POST' | 'WS'
+type StudioRouteMethod = 'GET' | 'POST' | 'WS'
 
 /** One HTTP or WebSocket route; a `:name` segment is a parameter, and `:sessionId` must satisfy the id grammar. */
 export type StudioRoute = Readonly<{ method: StudioRouteMethod; path: string }>

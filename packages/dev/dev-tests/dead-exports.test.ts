@@ -123,6 +123,34 @@ Describe('tao binding resolution against TypeScript', () => {
     Expect(resolved.staleness).toEqual([])
   })
 
+  Test('follows an entry that republishes the bound name from a sibling module', () => {
+    const entry: SourceFile = {
+      path: 'packages/studio/studio-src/Entry.tsx',
+      source: "export { CreateFile } from './parts/Files'\nexport { type Draft, SaveDraft } from './parts/Drafts'\n",
+    }
+    const files: SourceFile = {
+      path: 'packages/studio/studio-src/parts/Files.ts',
+      source: 'export function CreateFile() {}\n',
+    }
+    const drafts: SourceFile = {
+      path: 'packages/studio/studio-src/parts/Drafts.ts',
+      source: 'export function SaveDraft() {}\n',
+    }
+    const tao: SourceFile = {
+      path: 'packages/studio/studio-src/Client.tao',
+      source: 'action CreateFile(Path text) from ./Entry.tsx\naction SaveDraft(Path text) from ./Entry.tsx\n',
+    }
+    const resolved = resolveTaoBindings([tao], [entry, files, drafts])
+
+    Expect([...resolved.keys].sort()).toEqual([
+      'packages/studio/studio-src/Entry.tsx#CreateFile',
+      'packages/studio/studio-src/Entry.tsx#SaveDraft',
+      'packages/studio/studio-src/parts/Drafts.ts#SaveDraft',
+      'packages/studio/studio-src/parts/Files.ts#CreateFile',
+    ])
+    Expect(resolved.staleness).toEqual([])
+  })
+
   Test('reports a binding naming a symbol its module does not declare', () => {
     const tao: SourceFile = {
       path: 'packages/studio/studio-src/Client.tao',

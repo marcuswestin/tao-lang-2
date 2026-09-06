@@ -13,9 +13,6 @@ import { Clock } from './TR-units'
 export const studioEnvironmentVersion = 1 as const
 export const studioStateSeedVersion = 1 as const
 
-/** The scheme capability a browser preview cell reports; `TaoSchemeCapability` in TR-scheme lists every value. */
-export { reactiveBrowserSchemeCapability } from './TR-scheme'
-
 /** TaoStudioSchemeConfig carries the winning request source into one isolated runtime cell. */
 export type TaoStudioSchemeConfig = Readonly<{
   replay?: TaoSchemeSnapshot
