@@ -1,40 +1,42 @@
-import type {
-  StudioCreateFileRequest,
-  StudioCreateFileResult,
-  StudioDeleteFileRequest,
-  StudioDeleteFileResult,
-  StudioDraftWriteRequest,
-  StudioDraftWriteResult,
-  StudioRenameFileRequest,
-  StudioRenameFileResult,
-} from './StudioProjectSession'
-import type {
-  StudioSourceActionEnvelope,
-  StudioSourceActionUndoEnvelope,
+import {
+  type StudioCreateFileRequest,
+  type StudioCreateFileResult,
+  type StudioDeleteFileRequest,
+  type StudioDeleteFileResult,
+  type StudioDraftWriteRequest,
+  type StudioDraftWriteResult,
+  type StudioJsonPostInit,
+  type StudioRenameFileRequest,
+  type StudioRenameFileResult,
+  StudioRoutes,
+  StudioSessionPath,
+  type StudioSourceActionEnvelope,
+  type StudioSourceActionUndoEnvelope,
+  StudioTransport,
 } from './StudioProtocol'
 
 const fileConflictSentence = 'This file changed under this edit.'
 
 export const studioServerForeignActionContract = {
   ApplySourceAction: {
-    endpoint: '/api/source-action',
+    endpoint: StudioRoutes.session.sourceAction.path,
     failures: { Conflict: fileConflictSentence },
   },
   CreateFile: {
-    endpoint: '/api/file/create',
+    endpoint: StudioRoutes.session.fileCreate.path,
     failures: { Conflict: fileConflictSentence },
   },
   DeleteFile: {
-    endpoint: '/api/file/delete',
+    endpoint: StudioRoutes.session.fileDelete.path,
     failures: { Conflict: fileConflictSentence },
   },
   RenameFile: {
-    endpoint: '/api/file/rename',
+    endpoint: StudioRoutes.session.fileRename.path,
     failures: { Conflict: fileConflictSentence },
   },
-  SyncDraft: { endpoint: '/api/file/draft', runs: 'latest' },
+  SyncDraft: { endpoint: StudioRoutes.session.fileDraft.path, runs: 'latest' },
   UndoSourceAction: {
-    endpoint: '/api/source-action/undo',
+    endpoint: StudioRoutes.session.sourceActionUndo.path,
     failures: { Conflict: fileConflictSentence },
   },
 } as const
@@ -54,7 +56,7 @@ export class StudioForeignActionFailure extends Error {
 
 export type StudioForeignActionFetch = (
   input: string,
-  init: { body: string; headers: Readonly<Record<string, string>>; method: 'POST' },
+  init: StudioJsonPostInit,
 ) => Promise<Pick<Response, 'json' | 'ok' | 'status'>>
 
 /** HTTP adapter consumed by the shipped Tao foreign actions and injectable host tests. */
@@ -112,36 +114,28 @@ export class StudioServerForeignActions {
   }
 
   async #post<Result>(endpoint: string, request: unknown, conflictSentence?: string): Promise<Result> {
-    const response = await this.#fetch(`${this.#basePath}${endpoint}`, {
-      body: JSON.stringify(request),
-      headers: { 'content-type': 'application/json' },
-      method: 'POST',
-    })
-    const body = await response.json() as Result | {
-      details?: Readonly<Record<string, unknown>>
-      error?: string
+    const reply = await StudioTransport.readJsonReply<Result>(
+      await this.#fetch(`${this.#basePath}${endpoint}`, StudioTransport.jsonPostInit(request)),
+    )
+    if (reply.ok) {
+      return reply.body
     }
-    if (response.ok) {
-      return body as Result
+    if (conflictSentence !== undefined && reply.status === 409) {
+      throw new StudioForeignActionFailure('Conflict', conflictSentence, reply.status, reply.details)
     }
-    if (conflictSentence !== undefined && response.status === 409) {
-      const details = typeof body === 'object' && body !== null && 'details' in body ? body.details : undefined
-      throw new StudioForeignActionFailure('Conflict', conflictSentence, response.status, details)
-    }
-    const message = typeof body === 'object' && body !== null && 'error' in body ? body.error : undefined
     throw new StudioForeignActionFailure(
       'Server',
-      message ?? `Studio action failed (${response.status}).`,
-      response.status,
-      typeof body === 'object' && body !== null && 'details' in body ? body.details : undefined,
+      reply.error ?? `Studio action failed (${reply.status}).`,
+      reply.status,
+      reply.details,
     )
   }
 }
 
 function studioSessionBasePath(): string {
   const pathname = (globalThis as { location?: { pathname?: string } }).location?.pathname ?? ''
-  const matched = pathname.match(/^\/sessions\/([A-Za-z0-9_-]{1,128})(?:\/|$)/)
-  return matched === null ? '' : `/sessions/${matched[1]}`
+  const sessionId = StudioSessionPath.sessionIdOf(pathname)
+  return sessionId === undefined ? '' : StudioSessionPath.window(sessionId)
 }
 
 const taoStudioActions = new StudioServerForeignActions()

@@ -1,5 +1,6 @@
 import type TR from '@runtime/TR'
 import { Assert, Errors } from '@shared/core'
+import { StudioRoutes, StudioSessionPath, StudioTransport } from './StudioProtocol'
 
 const serverEntity = {
   Checkpoint: 'Checkpoints',
@@ -58,10 +59,14 @@ export function StudioServerProvider(options: StudioServerProviderOptions = {}):
           const entity = fillRequest.descriptor.entity as StudioEntity
           const remote = serverEntity[entity]
           Assert.input(remote, `StudioServer has no entity '${fillRequest.descriptor.entity}'.`)
-          const result = await post<StudioFillResult>(request, endpoint(configuredOrigin, '/api/data/fill'), {
-            entity: remote,
-            where: scalarWhere(fillRequest.descriptor.where),
-          })
+          const result = await post<StudioFillResult>(
+            request,
+            endpoint(configuredOrigin, StudioRoutes.session.dataFill.path),
+            {
+              entity: remote,
+              where: scalarWhere(fillRequest.descriptor.where),
+            },
+          )
           ops.upsert(entity, result.rows.map(row => taoRow(entity, row)))
         },
         load: () => snapshot,
@@ -93,7 +98,7 @@ export function StudioServerProvider(options: StudioServerProviderOptions = {}):
               running = undefined
             }
           }
-          const socket = openSocket(webSocketEndpoint(configuredOrigin, '/events'))
+          const socket = openSocket(webSocketEndpoint(configuredOrigin, StudioRoutes.session.events.path))
           socket.addEventListener('message', event => {
             const message = parseMessage(event.data)
             if (
@@ -140,7 +145,9 @@ async function completeSnapshot(
   const entries = await Promise.all(
     [...requestedEntities].map(async entity => {
       const remote = serverEntity[entity]
-      const result = await post<StudioFillResult>(request, endpoint(origin, '/api/data/fill'), { entity: remote })
+      const result = await post<StudioFillResult>(request, endpoint(origin, StudioRoutes.session.dataFill.path), {
+        entity: remote,
+      })
       return [entity, result.rows] as const
     }),
   )
@@ -206,22 +213,20 @@ async function post<Result>(request: StudioFetch, path: string, body: unknown): 
 }
 
 function endpoint(origin: string, path: string): string {
-  return origin === '' ? studioSessionPath(path) : `${origin.replace(/\/$/, '')}${path}`
+  if (origin !== '') {
+    return `${origin.replace(/\/$/, '')}${path}`
+  }
+  const sessionId = StudioSessionPath.sessionIdOf(
+    (globalThis as { location?: { pathname?: string } }).location?.pathname ?? '',
+  )
+  return sessionId === undefined ? path : StudioSessionPath.endpoint(sessionId, path)
 }
 
 function webSocketEndpoint(origin: string, path: string): string {
   const base = origin === ''
     ? ((globalThis as { location?: { href?: string } }).location?.href ?? 'http://127.0.0.1')
     : `${origin.replace(/\/$/, '')}/`
-  const url = new URL(endpoint(origin, path), base)
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  return url.toString()
-}
-
-function studioSessionPath(path: string): string {
-  const pathname = (globalThis as { location?: { pathname?: string } }).location?.pathname ?? ''
-  const matched = pathname.match(/^\/sessions\/([A-Za-z0-9_-]{1,128})(?:\/|$)/)
-  return matched === null ? path : `/sessions/${matched[1]}${path}`
+  return StudioTransport.webSocketUrl(endpoint(origin, path), base)
 }
 
 function parseMessage(value: unknown): { revision?: number; type?: string } | undefined {

@@ -46,7 +46,7 @@ const manifest = {
 } as unknown as StudioPreviewManifestV2
 
 const handshake: Pick<StudioHandshake, 'compile' | 'previewManifest'> = {
-  compile: { appliedRevision: 5, compileRevision: 5, message: 'Compiled.', status: 'compiled' },
+  compile: { appliedRevision: 5, compileRevision: 5, diagnostics: [], message: 'Compiled.', status: 'compiled' },
   previewManifest: manifest,
 }
 

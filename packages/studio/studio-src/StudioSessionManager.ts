@@ -1,5 +1,6 @@
 import { Assert, Errors } from '@shared'
 import type { StudioProjectSession } from './StudioProjectSession'
+import { StudioSessionPath } from './StudioProtocol'
 import type { StudioTestRunner } from './StudioTestRunner'
 
 export type StudioProjectOpenRequest = {
@@ -221,7 +222,7 @@ function summary(managed: ManagedSession): StudioCurrentSession {
 }
 
 function validSessionId(value: string): boolean {
-  return /^[A-Za-z0-9_-]{1,128}$/.test(value)
+  return StudioSessionPath.isValidSessionId(value)
 }
 
 function validateOpenRequest(request: StudioProjectOpenRequest): void {

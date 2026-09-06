@@ -2,34 +2,42 @@ import type { Transport } from '@codemirror/lsp-client'
 import { Errors } from '@shared/core'
 import type { StudioRenderInspection } from '@source-actions'
 import type { StudioDeviceLaunchInfo, StudioDeviceLaunchOpenResult } from '../device/StudioDeviceLauncher'
-import type { StudioDeviceStateEvent, StudioDeviceStatus } from '../device/StudioDeviceStatus'
-import type { StudioCompileDiagnostic } from '../StudioCompileCoordinator'
+import type { StudioDeviceStatus } from '../device/StudioDeviceStatus'
+import type { StudioCompileSnapshot, StudioWriteAcknowledgement } from '../StudioCompileCoordinator'
 import type { StudioDraftFile, StudioDraftSyncRequest, StudioDraftSyncResult } from '../StudioDraftSync'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../StudioPreviewManifest'
-import type {
-  StudioAppVariant,
-  StudioCreateFileRequest,
-  StudioCreateFileResult,
-  StudioDeleteFileRequest,
-  StudioDeleteFileResult,
-  StudioMoveGeneratedSourceRequest,
-  StudioMoveGeneratedSourceResult,
-  StudioRenameFileRequest,
-  StudioRenameFileResult,
-  StudioSessionHandshake,
-  StudioSketchActionResult,
-  StudioSketchFlowActionRequest,
-  StudioSketchSnapApplyResult,
-  StudioSketchSnapProposalResult,
-  StudioSketchSnapRequest,
-  StudioSketchSnapUndoRequest,
-  StudioSketchSnapUndoResult,
-  StudioSketchUnsnapRequest,
-  StudioSourceActionProposal,
-  StudioSourceActionResult,
-  StudioSourceActionUndoResult,
-} from '../StudioProjectSession'
-import type { StudioFixturePlan, StudioSourceActionEnvelope } from '../StudioProtocol'
+import {
+  type StudioCheckpointSummary,
+  type StudioCreateFileRequest,
+  type StudioCreateFileResult,
+  type StudioDataInvalidatedEvent,
+  type StudioDeleteFileRequest,
+  type StudioDeleteFileResult,
+  type StudioFixturePlan,
+  type StudioMoveGeneratedSourceRequest,
+  type StudioMoveGeneratedSourceResult,
+  type StudioProjectFile,
+  type StudioRenameFileRequest,
+  type StudioRenameFileResult,
+  type StudioRoute,
+  StudioRoutes,
+  type StudioSessionHandshake,
+  StudioSessionPath,
+  type StudioSessionSocketEvent,
+  type StudioSketchActionResult,
+  type StudioSketchFlowActionRequest,
+  type StudioSketchSnapApplyResult,
+  type StudioSketchSnapProposalResult,
+  type StudioSketchSnapRequest,
+  type StudioSketchSnapUndoRequest,
+  type StudioSketchSnapUndoResult,
+  type StudioSketchUnsnapRequest,
+  type StudioSourceActionEnvelope,
+  type StudioSourceActionProposal,
+  type StudioSourceActionResult,
+  type StudioSourceActionUndoResult,
+  StudioTransport,
+} from '../StudioProtocol'
 import type { StudioProjectOpenRequest, StudioSessionListing } from '../StudioSessionManager'
 import type {
   StudioSketchCatalogRequest,
@@ -40,43 +48,18 @@ import type { StudioTestRun, StudioTestStatus } from '../StudioTestRunner'
 
 export type { StudioCompileDiagnostic, StudioDiagnosticRange } from '../StudioCompileCoordinator'
 
-export type StudioCompileState = {
-  appliedRevision: number
-  compileRevision: number
-  diagnostics?: readonly StudioCompileDiagnostic[]
-  message: string
-  status: 'idle' | 'compiling' | 'compiled' | 'error'
-}
+/** The slice of the compile snapshot the browser renders; the wire carries the whole `StudioCompileSnapshot`. */
+export type StudioCompileState = Pick<
+  StudioCompileSnapshot,
+  'appliedRevision' | 'compileRevision' | 'diagnostics' | 'message' | 'status'
+>
 
-export type StudioFile = {
-  diagnosticCount: number
-  dirty: boolean
-  path: string
-  sourceVersion: string
-}
+export type StudioFile = StudioProjectFile
 
-export type StudioHandshake = {
-  apps: readonly StudioAppVariant[]
-  capabilities: StudioSessionHandshake['capabilities']
-  compile: StudioCompileState
-  entryPath: string
-  files: readonly StudioFile[]
-  identity: { appName: string; project: string }
-  previewManifest?: StudioPreviewManifestV2
-  sketchCatalog: StudioSketchCatalogSnapshot
-  type: 'handshake'
-}
+/** The handshake as the browser reads it: the server's, with `compile` narrowed to the slice it renders. */
+export type StudioHandshake = Omit<StudioSessionHandshake, 'compile'> & { compile: StudioCompileState }
 
 export type StudioLspTransport = Transport & Readonly<{ close: () => void }>
-
-export type StudioEvent =
-  | StudioDeviceStateEvent
-  | { state: StudioCompileState; type: 'compile-state' }
-  | { file: StudioFile; type: 'file-changed' }
-  | { files: readonly StudioFile[]; type: 'files-changed' }
-  | { manifest: StudioPreviewManifestV2; type: 'preview-manifest-changed' }
-  | { catalog: StudioSketchCatalogSnapshot; type: 'sketch-catalog-changed' }
-  | { type: 'studio-writes-acknowledged' }
 
 export type StudioCellRuntimeResponse = {
   cell: StudioPreviewCell
@@ -97,21 +80,26 @@ export type StudioGeneratedFixtureResult =
   | { fixture: StudioFixturePlan; status: 'ready' }
   | { code: string; error: string; issues?: readonly string[]; status: 'failed' }
 
+/** One handler per message the event socket can send; the ones the workbench has no use for are optional. */
 export type StudioApiEventHandlers = {
   onConnect?: () => void
+  onCellReconfigured?: (cellId: string) => void
+  onCheckpoint?: (checkpoint: Pick<StudioCheckpointSummary, 'id' | 'status'>) => void
   onCompile: (state: StudioCompileState) => void
+  onDataInvalidated?: (invalidation: Omit<StudioDataInvalidatedEvent, 'type'>) => void
   onDeviceState?: (status: StudioDeviceStatus) => void
   onFile: (file: StudioFile) => void
   onFiles?: (files: readonly StudioFile[]) => void
   onManifest: (manifest: StudioPreviewManifestV2) => void
   onSketchCatalog?: (catalog: StudioSketchCatalogSnapshot) => void
   onHandshake?: (handshake: StudioHandshake) => void
+  onWritesAcknowledged?: (acknowledgements: readonly StudioWriteAcknowledgement[]) => void
   onDisconnect: () => void
 }
 
 export const StudioApiRoutes = {
   currentSessionId(locationPath: string): string | undefined {
-    return locationPath.match(/^\/sessions\/([A-Za-z0-9_-]{1,128})(?:\/|$)/)?.[1]
+    return StudioSessionPath.sessionIdOf(locationPath)
   },
   /** Every Studio page is served under its own window ID, so an unscoped location is never routable. */
   sessionPath(locationPath: string, endpoint: string): string {
@@ -119,14 +107,14 @@ export const StudioApiRoutes = {
     if (sessionId === undefined) {
       Errors.throwUnexpected('Studio requests require a managed session window.')
     }
-    return `/sessions/${sessionId}${endpoint}`
+    return StudioSessionPath.endpoint(sessionId, endpoint)
   },
   transitionUrl(
     transition: Pick<StudioSessionTransition, 'previewUrl' | 'url'>,
     current: URL,
   ): string {
     const target = new URL(transition.url, current.origin)
-    if (target.origin !== current.origin || !/^\/sessions\/[A-Za-z0-9_-]{1,128}$/.test(target.pathname)) {
+    if (target.origin !== current.origin || !StudioSessionPath.isWindowRoot(target.pathname)) {
       Errors.throwUnexpected('Studio returned an invalid managed session URL.')
     }
     if (current.searchParams.get('native-window') === 'project') {
@@ -158,7 +146,8 @@ export class StudioApiError extends Error {
 }
 
 export const StudioApiEventStream = {
-  dispatch(message: StudioHandshake | StudioEvent, handlers: StudioApiEventHandlers): void {
+  /** dispatch routes one socket message to its handler; a server event with no branch here is a type error. */
+  dispatch(message: StudioHandshake | StudioSessionSocketEvent, handlers: StudioApiEventHandlers): void {
     if (message.type === 'handshake') {
       handlers.onHandshake?.(message)
     } else if (message.type === 'compile-state') {
@@ -173,14 +162,28 @@ export const StudioApiEventStream = {
       handlers.onSketchCatalog?.(message.catalog)
     } else if (message.type === 'device-state') {
       handlers.onDeviceState?.(message.status)
+    } else if (message.type === 'checkpoint-changed') {
+      handlers.onCheckpoint?.(message.checkpoint)
+    } else if (message.type === 'data-invalidated') {
+      handlers.onDataInvalidated?.({ entities: message.entities, revision: message.revision })
+    } else if (message.type === 'cell-reconfigured') {
+      handlers.onCellReconfigured?.(message.cellId)
+    } else if (message.type === 'studio-writes-acknowledged') {
+      handlers.onWritesAcknowledged?.(message.acknowledgements)
+    } else {
+      const unhandled: never = message
+      Errors.throwUnexpected(`Studio event stream sent an unknown message: ${JSON.stringify(unhandled)}`)
     }
   },
 }
 
+const routes = StudioRoutes.session
+const manager = StudioRoutes.manager
+
 /** Typed boundary around Studio's HTTP and WebSocket endpoints. */
 export const StudioApiClient = {
   agentChat: async <Result>(command: string, body: unknown): Promise<Result> =>
-    await request(`/api/agent-chat/${command}`, body),
+    await request(StudioRoutes.path(routes.agentChat, { command }), body),
 
   /**
    * Runs one chat turn, reporting each newline-delimited event as it arrives and resolving with the final
@@ -191,11 +194,10 @@ export const StudioApiClient = {
     body: unknown,
     onEvent: (event: { type: string; text?: string; name?: string }) => void,
   ): Promise<Result> => {
-    const response = await fetch(studioSessionPath(`/api/agent-chat/stream/${command}`), {
-      body: JSON.stringify(body),
-      headers: { 'content-type': 'application/json' },
-      method: 'POST',
-    })
+    const response = await fetch(
+      studioSessionPath(StudioRoutes.path(routes.agentChatStream, { command })),
+      StudioTransport.jsonPostInit(body),
+    )
     if (!response.ok || response.body === null) {
       Errors.throwHostEnvironment(`Studio returned ${response.status} for the chat stream.`)
     }
@@ -234,149 +236,135 @@ export const StudioApiClient = {
     return turn
   },
 
-  aiAvailability: async (): Promise<StudioAIAvailability> => await get('/api/ai/availability'),
-  betaShip: async (): Promise<StudioBetaShipResult> => await request('/api/ship/beta', {}),
-  captureFixture: async <Result>(body: unknown): Promise<Result> => await request('/api/source-action', body),
+  aiAvailability: async (): Promise<StudioAIAvailability> => await get(routes.aiAvailability),
+  betaShip: async (): Promise<StudioBetaShipResult> => await request(routes.shipBeta, {}),
+  captureFixture: async <Result>(body: unknown): Promise<Result> => await request(routes.sourceAction, body),
   cellInstance: async (body: unknown, signal?: AbortSignal): Promise<unknown> =>
-    await request('/api/preview/cell/instance', body, signal),
+    await request(routes.previewCellInstance, body, signal),
   connectEvents,
   createFile: async (body: StudioCreateFileRequest): Promise<StudioCreateFileResult> =>
-    await request('/api/file/create', body),
-  draft: async (body: StudioDraftSyncRequest): Promise<StudioDraftSyncResult> => await request('/api/file/draft', body),
+    await request(routes.fileCreate, body),
+  draft: async (body: StudioDraftSyncRequest): Promise<StudioDraftSyncResult> => await request(routes.fileDraft, body),
   deleteFile: async (body: StudioDeleteFileRequest): Promise<StudioDeleteFileResult> =>
-    await request('/api/file/delete', body),
+    await request(routes.fileDelete, body),
   deviceHighlight: async (
     body: {
       occurrence?: { end: number; ownerName?: string; sourcePath: string; sourceVersion: string; start: number }
     },
-  ): Promise<{ delivered: boolean }> => await request('/api/device/highlight', body),
+  ): Promise<{ delivered: boolean }> => await request(routes.deviceHighlight, body),
   deviceConfirmPairing: async (devicePublicKey: string): Promise<{ accepted: boolean }> =>
-    await request('/api/device/pairing/confirm', { devicePublicKey }),
+    await request(routes.devicePairingConfirm, { devicePublicKey }),
   deviceDeclinePairing: async (devicePublicKey: string): Promise<{ declined: boolean }> =>
-    await request('/api/device/pairing/decline', { devicePublicKey }),
-  deviceLaunch: async (): Promise<StudioDeviceLaunchInfo> => await get('/api/device/launch'),
+    await request(routes.devicePairingDecline, { devicePublicKey }),
+  deviceLaunch: async (): Promise<StudioDeviceLaunchInfo> => await get(routes.deviceLaunch),
   deviceLaunchOpen: async (hostId: string): Promise<StudioDeviceLaunchOpenResult> =>
-    await request('/api/device/launch/open', { hostId }),
-  deviceOpenPairing: async (): Promise<{ expiresAt: string }> => await request('/api/device/pairing/open', {}),
-  deviceReconnect: async (): Promise<{ requested: boolean }> => await request('/api/device/reconnect', {}),
+    await request(routes.deviceLaunchOpen, { hostId }),
+  deviceOpenPairing: async (): Promise<{ expiresAt: string }> => await request(routes.devicePairingOpen, {}),
+  deviceReconnect: async (): Promise<{ requested: boolean }> => await request(routes.deviceReconnect, {}),
   deviceRevoke: async (devicePublicKey: string): Promise<{ revoked: boolean }> =>
-    await request('/api/device/revoke', { devicePublicKey }),
+    await request(routes.deviceRevoke, { devicePublicKey }),
   deviceSelectCell: async (cellId: string): Promise<{ requested: boolean }> =>
-    await request('/api/device/select-cell', { cellId }),
-  deviceStatus: async (signal?: AbortSignal): Promise<StudioDeviceStatus> => await get('/api/device/status', signal),
+    await request(routes.deviceSelectCell, { cellId }),
+  deviceStatus: async (signal?: AbortSignal): Promise<StudioDeviceStatus> => await get(routes.deviceStatus, signal),
   file: async (path: string, signal?: AbortSignal): Promise<StudioDraftFile> =>
-    await get(`/api/file?path=${encodeURIComponent(path)}`, signal),
-  files: async (): Promise<{ files: readonly StudioFile[] }> => await get('/api/files'),
+    await get(`${routes.file.path}?path=${encodeURIComponent(path)}`, signal),
+  files: async (): Promise<{ files: readonly StudioFile[] }> => await get(routes.files),
   moveGeneratedSource: async (body: StudioMoveGeneratedSourceRequest): Promise<StudioMoveGeneratedSourceResult> =>
-    await request('/api/file/move-generated', body),
+    await request(routes.fileMoveGenerated, body),
   generateFixture: async (scenarioId: string): Promise<StudioGeneratedFixtureResult> =>
-    await request('/api/ai/fixture', { scenarioId }),
-  handshake: async (signal?: AbortSignal): Promise<StudioHandshake> => await get('/api/protocol', signal),
+    await request(routes.aiFixture, { scenarioId }),
+  handshake: async (signal?: AbortSignal): Promise<StudioHandshake> => await get(routes.protocol, signal),
   highlight: async (content: string): Promise<StudioLanguageAnalysis> =>
-    await request('/api/language/highlight', { content }),
+    await request(routes.languageHighlight, { content }),
   inspectRender: async (
     body: { path: string; renderId: string; sourceVersion: string },
-  ): Promise<StudioRenderInspection> => await request('/api/source-action/inspect', body),
+  ): Promise<StudioRenderInspection> => await request(routes.sourceActionInspect, body),
   lspTransport: async (signal?: AbortSignal): Promise<StudioLspTransport> =>
-    await webSocketTransport(webSocketUrl(studioSessionPath('/api/language/lsp')), signal),
-  previewApplied: async (body: unknown): Promise<unknown> => await request('/api/preview/applied', body),
+    await webSocketTransport(webSocketUrl(studioSessionPath(routes.languageLsp.path)), signal),
+  previewApplied: async (body: unknown): Promise<unknown> => await request(routes.previewApplied, body),
   previewLayoutMeasurements: async (body: unknown): Promise<unknown> =>
-    await request('/api/preview/layout-measurements', body),
+    await request(routes.previewLayoutMeasurements, body),
   previewDiagnosis: async (signal?: AbortSignal): Promise<{ message?: string; status: string }> =>
-    await get('/api/preview/diagnosis', signal),
+    await get(routes.previewDiagnosis, signal),
   previewInstance: async (body: unknown, signal?: AbortSignal): Promise<unknown> =>
-    await request('/api/preview/instance', body, signal),
+    await request(routes.previewInstance, body, signal),
   reconfigureCell: async (body: unknown): Promise<StudioCellRuntimeResponse> =>
-    await request('/api/preview/cell/reconfigure', body),
+    await request(routes.previewCellReconfigure, body),
   renameFile: async (body: StudioRenameFileRequest): Promise<StudioRenameFileResult> =>
-    await request('/api/file/rename', body),
+    await request(routes.fileRename, body),
   sketchAction: async (body: StudioSketchCatalogRequest): Promise<StudioSketchActionResult> =>
-    await request('/api/sketches/action', body),
+    await request(routes.sketchAction, body),
   sketchFlowAction: async (body: StudioSketchFlowActionRequest): Promise<StudioSketchSnapApplyResult> =>
-    await request('/api/sketches/flow/action', body),
+    await request(routes.sketchFlowAction, body),
   sketchSnapApply: async (body: StudioSketchSnapRequest): Promise<StudioSketchSnapApplyResult> =>
-    await request('/api/sketches/snap/apply', body),
+    await request(routes.sketchSnapApply, body),
   sketchSnapProposal: async (body: StudioSketchSnapRequest): Promise<StudioSketchSnapProposalResult> =>
-    await request('/api/sketches/snap/propose', body),
+    await request(routes.sketchSnapPropose, body),
   sketchUnsnapApply: async (body: StudioSketchUnsnapRequest): Promise<StudioSketchSnapApplyResult> =>
-    await request('/api/sketches/unsnap/apply', body),
-  sketches: async (): Promise<StudioSketchCatalogSnapshot> => await get('/api/sketches'),
-  sessions: async (signal?: AbortSignal): Promise<StudioSessionListing> => await rootGet('/api/sessions', signal),
+    await request(routes.sketchUnsnapApply, body),
+  sketches: async (): Promise<StudioSketchCatalogSnapshot> => await get(routes.sketches),
+  sessions: async (signal?: AbortSignal): Promise<StudioSessionListing> => await rootGet(manager.sessions.path, signal),
   closeCurrentSession: async (): Promise<void> => {
     const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
     if (sessionId === undefined) {
       Errors.throwUnexpected('Project selection requires a managed Studio session.')
     }
-    await rootRequest(`/api/sessions/${encodeURIComponent(sessionId)}/close`, {})
+    await rootRequest(StudioRoutes.path(manager.closeSession, { sessionId }), {})
   },
   sourceAction: async (body: StudioSourceActionEnvelope | unknown): Promise<StudioSourceActionResult> =>
-    await request('/api/source-action', body),
+    await request(routes.sourceAction, body),
   sourceActionProposal: async (body: StudioSourceActionEnvelope | unknown): Promise<StudioSourceActionProposal> =>
-    await request('/api/source-action/propose', body),
+    await request(routes.sourceActionPropose, body),
   switchSession: async (body: StudioProjectOpenRequest): Promise<StudioSessionTransition> => {
     const sessionId = StudioApiRoutes.currentSessionId(window.location.pathname)
     if (sessionId === undefined) {
       Errors.throwUnexpected('Project and app switching require a managed Studio session.')
     }
-    return await rootRequest(`/api/sessions/${encodeURIComponent(sessionId)}/switch`, body)
+    return await rootRequest(StudioRoutes.path(manager.switchSession, { sessionId }), body)
   },
-  testRun: async (): Promise<StudioTestRun> => await request('/api/tests/run', {}),
-  testStatus: async (): Promise<StudioTestStatus> => await get('/api/tests/status'),
+  testRun: async (): Promise<StudioTestRun> => await request(routes.testsRun, {}),
+  testStatus: async (): Promise<StudioTestStatus> => await get(routes.testsStatus),
   undoSourceAction: async (body: unknown): Promise<StudioSourceActionUndoResult> =>
-    await request('/api/source-action/undo', body),
+    await request(routes.sourceActionUndo, body),
   undoSketchSnap: async (body: StudioSketchSnapUndoRequest): Promise<StudioSketchSnapUndoResult> =>
-    await request('/api/sketches/snap/undo', body),
+    await request(routes.sketchSnapUndo, body),
 } as const
 
-async function get<Result>(path: string, signal?: AbortSignal): Promise<Result> {
-  return await response<Result>(await fetch(studioSessionPath(path), { signal }))
+async function get<Result>(route: StudioRoute | string, signal?: AbortSignal): Promise<Result> {
+  return await response<Result>(await fetch(studioSessionPath(pathOf(route)), { signal }))
 }
 
-async function request<Result>(path: string, body: unknown, signal?: AbortSignal): Promise<Result> {
+async function request<Result>(route: StudioRoute | string, body: unknown, signal?: AbortSignal): Promise<Result> {
   return await response<Result>(
-    await fetch(studioSessionPath(path), {
-      body: JSON.stringify(body),
-      headers: { 'content-type': 'application/json' },
-      method: 'POST',
-      signal,
-    }),
+    await fetch(studioSessionPath(pathOf(route)), { ...StudioTransport.jsonPostInit(body), signal }),
   )
 }
 
 async function rootRequest<Result>(path: string, body: unknown): Promise<Result> {
-  return await response<Result>(
-    await fetch(path, {
-      body: JSON.stringify(body),
-      headers: { 'content-type': 'application/json' },
-      method: 'POST',
-    }),
-  )
+  return await response<Result>(await fetch(path, StudioTransport.jsonPostInit(body)))
 }
 
 async function rootGet<Result>(path: string, signal?: AbortSignal): Promise<Result> {
   return await response<Result>(await fetch(path, { signal }))
 }
 
+/** A route stands for its path; a string is a path that already carries its query or parameters. */
+function pathOf(route: StudioRoute | string): string {
+  return typeof route === 'string' ? route : route.path
+}
+
 async function response<Result>(value: Response): Promise<Result> {
-  const body = await value.json() as Result | { details?: unknown; error?: string }
-  if (!value.ok) {
-    const message = typeof body === 'object' && body !== null && 'error' in body ? body.error : undefined
-    const details = typeof body === 'object'
-        && body !== null
-        && 'details' in body
-        && typeof body.details === 'object'
-        && body.details !== null
-      ? body.details as Readonly<Record<string, unknown>>
-      : undefined
-    throw new StudioApiError(message ?? `Tao Studio request failed (${value.status}).`, value.status, details)
+  const reply = await StudioTransport.readJsonReply<Result>(value)
+  if (!reply.ok) {
+    throw new StudioApiError(reply.error ?? `Tao Studio request failed (${reply.status}).`, reply.status, reply.details)
   }
-  return body as Result
+  return reply.body
 }
 
 function connectEvents(handlers: StudioApiEventHandlers): WebSocket {
-  const socket = new WebSocket(webSocketUrl(studioSessionPath('/events')))
+  const socket = new WebSocket(webSocketUrl(studioSessionPath(routes.events.path)))
   socket.addEventListener('message', event => {
-    const message = JSON.parse(String(event.data)) as StudioHandshake | StudioEvent
+    const message = JSON.parse(String(event.data)) as StudioHandshake | StudioSessionSocketEvent
     StudioApiEventStream.dispatch(message, handlers)
   })
   socket.addEventListener('open', () => handlers.onConnect?.())
@@ -438,7 +426,5 @@ function studioSessionPath(path: string): string {
 }
 
 function webSocketUrl(path: string): string {
-  const url = new URL(path, window.location.href)
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  return url.toString()
+  return StudioTransport.webSocketUrl(path, window.location.href)
 }

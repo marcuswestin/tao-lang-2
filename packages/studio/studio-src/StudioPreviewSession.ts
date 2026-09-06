@@ -7,7 +7,7 @@ import type {
   StudioTaoSource,
 } from './StudioPreviewManifest'
 import { StudioProjectSession, type StudioProjectSessionOptions } from './StudioProjectSession'
-import type { StudioJsonObject, StudioJsonValue } from './StudioProtocol'
+import { reactiveBrowserSchemeCapability, type StudioJsonObject, type StudioJsonValue } from './StudioProtocol'
 
 export type OpenStudioPreviewSessionOptions = Omit<StudioProjectSessionOptions, 'compile'> & {
   previewRuntimeRoot: string
@@ -112,7 +112,7 @@ function matrixManifest(
   return {
     capabilities: {
       captureDomains: ['action-history', 'data', 'environment', 'navigation', 'persisted-state', 'scheme'],
-      scheme: 'reactive-browser',
+      scheme: reactiveBrowserSchemeCapability,
     },
     cells: previewScenarios.map(scenario => ({
       args: scenario.subject.kind === 'view' ? jsonObject(scenario.subject.arguments) : {},
@@ -124,7 +124,7 @@ function matrixManifest(
           outcome: scenario.environment.network === 'offline' ? 'offline' : 'normal',
         },
         scheme: {
-          capability: 'reactive-browser',
+          capability: reactiveBrowserSchemeCapability,
           requested: scenario.environment.appearance ?? 'system',
           resolved: scenario.environment.appearance ?? 'light',
           source: scenario.environment.appearance === undefined ? 'system' : 'scenario',
