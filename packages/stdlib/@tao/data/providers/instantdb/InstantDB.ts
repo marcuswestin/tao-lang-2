@@ -1,5 +1,5 @@
 import type TR from '@runtime/TR'
-import { Assert } from '@shared/core'
+import { Assert, Errors } from '@shared/core'
 import { optionalConfigurationText, requiredConfigurationText } from '../provider-configuration'
 
 const providerName = 'InstantDB'
@@ -65,7 +65,9 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
           closed = true
           stopQuery?.()
           stopQuery = undefined
-          rejectPendingLoad?.(new Error('The InstantDB connection closed before its load settled.'))
+          rejectPendingLoad?.(
+            new Errors.HostEnvironmentError('The InstantDB connection closed before its load settled.'),
+          )
           rejectPendingLoad = undefined
           const remaining = (clientReferences.get(db.core) ?? 1) - 1
           if (remaining > 0) {
@@ -83,7 +85,7 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
           new Promise<string | undefined>((resolve, reject) => {
             let settled = false
             stopQuery?.()
-            rejectPendingLoad?.(new Error('The InstantDB connection restarted its load.'))
+            rejectPendingLoad?.(new Errors.HostEnvironmentError('The InstantDB connection restarted its load.'))
             rejectPendingLoad = error => {
               if (!settled) {
                 settled = true
@@ -170,7 +172,7 @@ function toError(error: unknown): Error {
   const message = typeof error === 'object' && error !== null && 'message' in error
     ? String((error as { message: unknown }).message)
     : String(error)
-  return new Error(message)
+  return new Errors.UnexpectedBehaviorError(message)
 }
 
 function instantSDK(): InstantSDK {

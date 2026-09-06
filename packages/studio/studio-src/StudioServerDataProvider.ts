@@ -112,7 +112,10 @@ export function StudioServerProvider(options: StudioServerProviderOptions = {}):
               refresh()
             }
           })
-          socket.addEventListener('error', () => observer.error(new Error('StudioServer event stream disconnected.')))
+          socket.addEventListener(
+            'error',
+            () => observer.error(new Errors.HostEnvironmentError('StudioServer event stream disconnected.')),
+          )
           return () => socket.close()
         },
       }

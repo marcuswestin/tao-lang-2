@@ -121,7 +121,7 @@ class StudioLspMessageReader implements LspMessageReader {
         this.#callback(message)
       }
     } catch (error) {
-      this.#errorEmitter.fire(error instanceof Error ? error : new Error(String(error)))
+      this.#errorEmitter.fire(Errors.asError(error))
     }
   }
 
@@ -176,7 +176,7 @@ class StudioLspMessageWriter implements LspMessageWriter {
       this.socket.send(JSON.stringify(message))
     } catch (error) {
       this.#errorCount += 1
-      const writeError = error instanceof Error ? error : new Error(String(error))
+      const writeError = Errors.asError(error)
       this.#errorEmitter.fire([writeError, message, this.#errorCount])
       throw writeError
     }

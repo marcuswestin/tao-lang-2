@@ -113,7 +113,11 @@ Test(
     Expect(child.args).not.toContain(token)
     child.onceError(error => rejectReady?.(error))
     child.onceClose((exitCode, signal) => {
-      rejectReady?.(new Error(`Helper exited before the raw checks: code=${exitCode} signal=${signal}. ${stderr}`))
+      rejectReady?.(
+        new Errors.HostEnvironmentError(
+          `Helper exited before the raw checks: code=${exitCode} signal=${signal}. ${stderr}`,
+        ),
+      )
     })
 
     try {
@@ -209,7 +213,7 @@ async function rawHTTP(port: number, request: string): Promise<string> {
     socket.setEncoding('utf8')
     socket.setTimeout(5_000, () => {
       socket.destroy()
-      fail(new Error('Timed out waiting for the helper HTTP response.'))
+      fail(new Errors.HostEnvironmentError('Timed out waiting for the helper HTTP response.'))
     })
     socket.on('connect', () => socket.write(request))
     socket.on('data', chunk => {

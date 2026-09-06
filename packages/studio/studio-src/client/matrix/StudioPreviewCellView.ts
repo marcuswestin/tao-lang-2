@@ -390,26 +390,30 @@ export function renderCellPreview(
   connection.captureFixture = fixtureName =>
     new Promise((resolve, reject) => {
       if (scenarioModel === undefined) {
-        reject(new Error('Studio scenario identity is unavailable.'))
+        reject(new Errors.UnexpectedBehaviorError('Studio scenario identity is unavailable.'))
         return
       }
       const target = connection.iframe.contentWindow
       const requestId = crypto.randomUUID()
       const request = StudioScenarioControls.fixtureCapture(scenarioModel, fixtureName.trim(), requestId)
       if (!request.ok || target === null) {
-        reject(new Error(request.ok ? 'The active preview is not connected.' : request.issues.join(' ')))
+        reject(
+          request.ok
+            ? new Errors.HostEnvironmentError('The active preview is not connected.')
+            : new Errors.UserInputError(request.issues.join(' ')),
+        )
         return
       }
       if (connection.capture !== undefined) {
         clearTimeout(connection.capture.timeout)
-        connection.capture.reject(new Error('A newer fixture capture replaced this request.'))
+        connection.capture.reject(new Errors.UnexpectedBehaviorError('A newer fixture capture replaced this request.'))
       }
       const timeout = setTimeout(() => {
         if (connection.capture?.requestId !== requestId) {
           return
         }
         connection.capture = undefined
-        reject(new Error('Fixture capture timed out; retry after the preview is ready.'))
+        reject(new Errors.HostEnvironmentError('Fixture capture timed out; retry after the preview is ready.'))
       }, 10_000)
       connection.capture = {
         fixtureName: request.value.fixtureName,

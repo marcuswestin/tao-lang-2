@@ -1,6 +1,7 @@
 import { languageServerExtensions, LSPClient, type Transport } from '@codemirror/lsp-client'
 import { EditorState, type Extension, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView } from '@codemirror/view'
+import { Errors } from '@shared/core'
 import { basicSetup } from 'codemirror'
 import React from 'react'
 import TR from 'tao-runtime/TR'
@@ -421,7 +422,7 @@ export function webSocketTransport(url: string): Promise<Transport> {
       if (!settled) {
         settled = true
         socket.close()
-        reject(new Error('Could not connect to the Tao language server.'))
+        reject(new Errors.HostEnvironmentError('Could not connect to the Tao language server.'))
       }
     })
   })

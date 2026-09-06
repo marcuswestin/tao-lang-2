@@ -118,6 +118,22 @@ export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+/**
+ * asError hands back a thrown value as an `Error`: an `Error` unchanged, anything else wrapped as an
+ * `UnexpectedBehaviorError` carrying its text, for an emitter or rejection that needs the object.
+ */
+export function asError(error: unknown): Error {
+  return error instanceof Error ? error : new UnexpectedBehaviorError(String(error))
+}
+
+/**
+ * abortError is the cancellation an `AbortSignal` consumer expects: a plain `Error` named `AbortError`,
+ * which is the Web contract, not a Tao failure category.
+ */
+export function abortError(message: string): Error {
+  return Object.assign(new Error(message), { name: 'AbortError' })
+}
+
 /** fromUnknown normalizes an unknown thrown value into a Tao error. */
 export function fromUnknown(error: unknown, details?: ErrorDetails): TaoError {
   if (isTaoError(error)) {

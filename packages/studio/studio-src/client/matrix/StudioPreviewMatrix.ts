@@ -1,4 +1,4 @@
-import { Assert } from '@shared/core'
+import { Assert, Errors } from '@shared/core'
 import type { StudioCellIdentity, StudioPreviewCell, StudioPreviewManifestV2 } from '../../StudioPreviewManifest'
 import { StudioProtocol } from '../../StudioProtocol'
 import { StudioApiClient, type StudioCellRuntimeResponse, type StudioHandshake } from '../StudioApiClient'
@@ -250,7 +250,9 @@ export async function refreshCellPreviews(
       }
       if (preview.runtimeCaptureRequest !== undefined) {
         clearTimeout(preview.runtimeCaptureRequest.timeout)
-        preview.runtimeCaptureRequest.reject(new Error('The preview remounted before live data arrived.'))
+        preview.runtimeCaptureRequest.reject(
+          new Errors.UnexpectedBehaviorError('The preview remounted before live data arrived.'),
+        )
         preview.runtimeCaptureRequest = undefined
       }
       preview.cell = runtime.cell
