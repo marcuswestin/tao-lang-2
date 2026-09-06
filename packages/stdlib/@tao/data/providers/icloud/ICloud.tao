@@ -1,0 +1,11 @@
+// ICloud syncs each datasource's complete snapshot through one document in the app's iCloud Drive
+// container, so the same iCloud account sees one store across its devices. Apple platforms only.
+public
+type ICloud is datasource with {
+   // Defaults to the mounted Tao data schema name when omitted.
+   StorageKey text?
+   // The iCloud container identifier; defaults to the app's first entitled container when omitted.
+   Container text?
+
+   provider ICloudProvider from ./ICloud.ts
+}

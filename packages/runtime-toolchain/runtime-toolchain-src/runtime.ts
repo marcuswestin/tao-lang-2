@@ -49,6 +49,11 @@ export type ShipManifest = {
     dirty: boolean
   }
   icon: 'default' | 'badged'
+  /** icloud names the containers and services an app bound to an Apple datasource is entitled to. */
+  icloud?: {
+    containers: readonly string[]
+    services: ReadonlyArray<'CloudDocuments' | 'CloudKit'>
+  }
   ios: {
     usesNonExemptEncryption: false
   }

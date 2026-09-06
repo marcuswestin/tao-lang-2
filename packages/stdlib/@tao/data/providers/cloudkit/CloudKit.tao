@@ -1,0 +1,12 @@
+// CloudKit syncs a datasource row by row through a CloudKit record zone in the iCloud account's
+// private database: each row is one record, each field carries the stamp of its last edit, and
+// devices converge fieldwise. Apple platforms, iOS 17 or later, only.
+public
+type CloudKit is datasource with {
+   // Defaults to the mounted Tao data schema name when omitted; it names the record zone.
+   StorageKey text?
+   // The iCloud container identifier; defaults to the app's first entitled container when omitted.
+   Container text?
+
+   provider CloudKitProvider from ./CloudKit.ts
+}

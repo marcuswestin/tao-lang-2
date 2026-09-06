@@ -1,5 +1,8 @@
 import type TR from '@runtime/TR'
 import { Assert } from '@shared/core'
+import { optionalConfigurationText, requiredConfigurationText } from '../provider-configuration'
+
+const providerName = 'InstantDB'
 
 type InstantSDK = typeof import('@instantdb/react-native')
 type InstantDatabase = ReturnType<InstantSDK['init']>
@@ -26,9 +29,9 @@ const snapshotQuery = (entityId: string) =>
 export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.DataProvider {
   return {
     connect: context => {
-      const appId = requiredConfigurationText(context, 'AppId')
-      const apiURI = optionalConfigurationText(context, 'ApiURI')
-      const websocketURI = optionalConfigurationText(context, 'WebsocketURI')
+      const appId = requiredConfigurationText(providerName, context, 'AppId')
+      const apiURI = optionalConfigurationText(providerName, context, 'ApiURI')
+      const websocketURI = optionalConfigurationText(providerName, context, 'WebsocketURI')
       const { i, init } = loadSDK()
       const instantSchema = i.schema({
         entities: {
@@ -172,27 +175,6 @@ function toError(error: unknown): Error {
 
 function instantSDK(): InstantSDK {
   return require('@instantdb/react-native') as InstantSDK
-}
-
-function requiredConfigurationText(context: TR.DataProviderContext, name: string): string {
-  const value = context.configuration[name]
-  Assert.input(
-    typeof value === 'string' && value.trim().length > 0,
-    `InstantDB datasource configuration '${name}' expects non-empty text.`,
-  )
-  return value.trim()
-}
-
-function optionalConfigurationText(context: TR.DataProviderContext, name: string): string | undefined {
-  const value = context.configuration[name]
-  if (value === undefined) {
-    return undefined
-  }
-  Assert.input(
-    typeof value === 'string' && value.trim().length > 0,
-    `InstantDB datasource configuration '${name}' expects non-empty text when provided.`,
-  )
-  return value.trim()
 }
 
 function snapshotFromRow(

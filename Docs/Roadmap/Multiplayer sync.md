@@ -2,6 +2,13 @@
 
 Status: **exploration, dialogue open**. The body is a thousand-mile overview of live collaboration as a runtime capability: the sync architecture, the granular-write provider family, offline and conflict machinery on the decided policies, and presence. Dated "Direction settled" sections will record what dialogue with Ro settles as working direction for the first implementation slices. Nothing here is language law until it reaches `Tao Revolution/Decisions.md`, which wins wherever the two collide. The authority direction (`Decisions.md` §3–§4, restated in `Docs/Spec - Revolution/Authority and Sharing.md`) is decided upstream input throughout: the refusal contract, sharing semantics, and the household model are consumed here, never reopened.
 
+> Implementation note (2026-09-05): the family's runtime machinery — change-sets, the fold, a
+> snapshot bridge, the in-process authority, and the conformance suite — and a CloudKit provider
+> over `CKSyncEngine` landed as a stab under stated working assumptions for open questions 1, 2,
+> and 5. `Docs/Roadmap/CloudKit granular datasource provider/Implementation - CloudKit granular
+> datasource provider.md` records what was built and what those assumptions are; the dialogue
+> below is unchanged by it.
+
 ## Framing
 
 Live collaboration enters a Tao app in four ways, and they are in very different states of decidedness:
