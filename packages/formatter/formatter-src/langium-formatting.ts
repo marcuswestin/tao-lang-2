@@ -2,12 +2,10 @@ import { AST, Langium } from '@parser'
 import { Assert } from '@shared'
 import { type EmbeddedTsFormatter, ensureEmbeddedTsFormatter } from './embedded-ts'
 import { Format } from './Format'
-import { reindentInjectionFences } from './formatters/injections-formatter'
-import { collapseClosingBraces } from './formatters/statements-formatter'
 import {
   applyTextEdits,
   createNodeFormat,
-  finalizeFormattedText,
+  finishFormattedText,
   type FormattedNodeType,
   taoTabSize,
 } from './formatting'
@@ -27,9 +25,7 @@ export class TaoFormatter extends Langium.AbstractFormatter {
     const formatted = applyTextEdits(document as AST.Document, edits)
     const tab = ' '.repeat(taoTabSize)
     const embeddedTsFormatter = await tryEnsureEmbeddedTsFormatter()
-    const finalText = finalizeFormattedText(
-      collapseClosingBraces(reindentInjectionFences(formatted, tab, embeddedTsFormatter)),
-    )
+    const finalText = finishFormattedText(formatted, tab, embeddedTsFormatter)
     if (finalText === formatted) {
       return edits
     }

@@ -27,7 +27,8 @@ type ResultSummaryOptions = {
   contention?: ContentionReport
   includeFailureOutput?: boolean
   failureOutputLineLimit?: number
-  taoAppsSkipped?: boolean
+  /** Registry sources that could not serve this run, each with the reason the registry gave. */
+  skippedSuites?: readonly { name: string; reason: string }[]
 }
 
 const FAILURE_OUTPUT_LINE_LIMIT = 100
@@ -49,10 +50,9 @@ function printResultSummary(
   printSuiteSummaries(states, failed.length > 0)
   printTotalSummary(states, elapsedMs, failed.length > 0)
 
-  if (options.taoAppsSkipped === true) {
-    // A pattern selects tests by name and the Tao app suite has no name-level filter, so it is
-    // dropped from discovery entirely. Without this line a filtered run reads as full coverage.
-    Shared.HCI.writeLine('Note: the tao-apps suite was skipped; a test-name pattern cannot select Tao behavior tests.')
+  // A suite the registry could not serve is named here so a filtered run never reads as full coverage.
+  for (const skipped of options.skippedSuites ?? []) {
+    Shared.HCI.writeLine(`Note: the ${skipped.name} suite was skipped; ${skipped.reason}.`)
   }
 
   printContentionNote(states, options.contention)

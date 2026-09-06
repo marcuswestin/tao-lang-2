@@ -1,0 +1,36 @@
+{
+  // Opt-in permission profiles layered over the default policy in permissions.jsonc. `./agent setup`
+  // renders each one into `.claude/settings.<name>.json` (which `just claude-<name>` launches with)
+  // and into the matching `tao-<name>` profile in `.codex/config.toml`. Edit this file, never the
+  // generated ones. A profile is what the default policy deliberately lacks: the host commands it
+  // prompts for, the commands that leave the sandbox, the directories and sockets it may write.
+  "profiles": {
+    "native": {
+      "description": "Tao native host: add Simulator and Xcode working directories; host commands still follow project rules.",
+      // Device and simulator control is prompted, never automatic, and runs outside the sandbox.
+      "ask": ["adb *", "emulator *", "open -a Simulator *", "xcrun simctl *"],
+      "allowWrite": [
+        "~/Library/Developer/CoreSimulator",
+        "~/Library/Developer/Xcode/DerivedData",
+        "~/Library/Logs/CoreSimulator",
+      ],
+    },
+    "local-services": {
+      "description": "Tao local services: opt in to the Docker daemon used by the local InstantDB stack.",
+      // Docker can control the host through mounts and networking, so it is not in the default profile.
+      "allow": ["docker compose *", "docker ps *"],
+      "excludedCommands": ["docker *"],
+      "unixSockets": ["/var/run/docker.sock", "~/.docker/run/docker.sock"],
+    },
+    "release": {
+      "description": "Tao release: add the local Xcode archive destination; credentials and publication remain denied or reviewed.",
+      "extends": "native",
+      "ask": ["codesign *", "hdiutil *", "spctl *", "xcrun notarytool *", "xcrun stapler *"],
+      "allowWrite": ["~/Library/Developer/Xcode/Archives"],
+    },
+    "unsandboxed": {
+      "description": "Claude Code with the Bash sandbox off; switch a running session with /sandbox.",
+      "sandbox": false,
+    },
+  },
+}

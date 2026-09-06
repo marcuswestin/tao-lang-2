@@ -16,11 +16,15 @@ export const dataValidationMessages = {
     `Entity '${entity}' references unknown relationship entity '${name}'.`,
   relationModifier: (field: string) => `Primitive or boolean data field '${field}' cannot declare a relation.`,
   relationDefault: (field: string) => `Relationship data field '${field}' cannot declare a default.`,
+  optionalDefault: (field: string) => `Field '${field}' is optional, so it cannot also declare a default.`,
   autoDeleteOwner: (field: string) =>
     `Data field '${field}' can use auto-delete only on an inverse collection relationship.`,
+  missingInverseRelation: (field: string, relation: string, entity: string) =>
+    `Inverse relationship '${field}' requires a stored relationship from '${relation}' back to '${entity}'.`,
   ambiguousInverseRelation: (field: string, relation: string) =>
     `Inverse relationship '${field}' is ambiguous because '${relation}' has more than one stored relationship back to its owner.`,
   booleanDefaultCase: (field: string) => `Boolean data field '${field}' must name a yes/no case as its default.`,
+  defaultCase: (name: string, field: string) => `Default case '${name}' is not a boolean case of field '${field}'.`,
   duplicateModifier: (field: string, modifier: string) =>
     `Data field '${field}' declares '${modifier}' more than once.`,
   duplicateBooleanCase: (entity: string, name: string) =>
@@ -92,23 +96,23 @@ function validateEntityDefinition(entity: AST.EntityDataDeclaration, ctx: Valida
   reportDuplicates(indexes, index => index.fieldName, dataValidationMessages.duplicateIndex, ctx)
   for (const index of indexes) {
     if (!fields.some(field => field.name === index.fieldName)) {
-      ctx.error(dataValidationMessages.unknownField(entity.singularName, index.fieldName), index)
+      ctx.error(index, dataValidationMessages.unknownField(entity.singularName, index.fieldName))
     }
   }
   const orders = entity.block.entries.filter(AST.isDataDefaultOrder)
   for (const duplicate of orders.slice(1)) {
-    ctx.error(dataValidationMessages.duplicateOrder, duplicate)
+    ctx.error(duplicate, dataValidationMessages.duplicateOrder)
   }
   for (const duplicate of entity.block.entries.filter(AST.isDataLocalOnly).slice(1)) {
-    ctx.error(dataValidationMessages.duplicateLocalOnly(entity.singularName), duplicate)
+    ctx.error(duplicate, dataValidationMessages.duplicateLocalOnly(entity.singularName))
   }
   const uniqueFields = fields.filter(field => (field.traits?.traits ?? []).some(trait => trait.unique))
   for (const extra of uniqueFields.slice(1)) {
-    ctx.error(dataValidationMessages.duplicateUniqueField(entity.singularName), extra)
+    ctx.error(extra, dataValidationMessages.duplicateUniqueField(entity.singularName))
   }
   const titleFields = fields.filter(field => (field.traits?.traits ?? []).some(AST.traitIsTitle))
   for (const extra of titleFields.slice(1)) {
-    ctx.error(dataValidationMessages.duplicateTitleField(entity.singularName), extra)
+    ctx.error(extra, dataValidationMessages.duplicateTitleField(entity.singularName))
   }
   for (const field of fields) {
     validateEntityField(entity, field, ctx)
@@ -116,9 +120,9 @@ function validateEntityDefinition(entity: AST.EntityDataDeclaration, ctx: Valida
   for (const order of orders) {
     const field = fields.find(candidate => candidate.name === order.fieldName)
     if (!field) {
-      ctx.error(dataValidationMessages.unknownField(entity.singularName, order.fieldName), order)
+      ctx.error(order, dataValidationMessages.unknownField(entity.singularName, order.fieldName))
     } else if (Type.dataFieldType(field).kind === 'list') {
-      ctx.error(dataValidationMessages.relationOrder(field.name), order)
+      ctx.error(order, dataValidationMessages.relationOrder(field.name))
     }
   }
 }
@@ -129,46 +133,46 @@ function validateEntityField(
   ctx: ValidationContext,
 ): void {
   if (field.name === 'Id') {
-    ctx.error(dataValidationMessages.reservedField(entity.singularName, field.name), field)
+    ctx.error(field, dataValidationMessages.reservedField(entity.singularName, field.name))
   }
   const traits = field.traits?.traits ?? []
   const defaults = traits.filter(trait => trait.defaultValue || trait.defaultCase)
   for (const duplicate of defaults.slice(1)) {
-    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'default'), duplicate)
+    ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'default'))
   }
   if (field.optional && defaults.length > 0) {
-    ctx.error(`Field '${field.name}' is optional, so it cannot also declare a default.`, field)
+    ctx.error(field, dataValidationMessages.optionalDefault(field.name))
   }
   const owned = traits.filter(trait => trait.owned)
   for (const duplicate of owned.slice(1)) {
-    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'owned'), duplicate)
+    ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'owned'))
   }
   const uniques = traits.filter(trait => trait.unique)
   for (const duplicate of uniques.slice(1)) {
-    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'unique'), duplicate)
+    ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'unique'))
   }
   if (!field.primitive) {
     for (const trait of uniques) {
-      ctx.error(dataValidationMessages.uniqueFieldKind(field.name), trait)
+      ctx.error(trait, dataValidationMessages.uniqueFieldKind(field.name))
     }
   }
   for (const trait of traits) {
     if (trait.word !== undefined && !AST.wordTraitNames.includes(trait.word)) {
-      ctx.error(dataValidationMessages.unknownTrait(trait.word), trait)
+      ctx.error(trait, dataValidationMessages.unknownTrait(trait.word))
     }
   }
   const titles = traits.filter(AST.traitIsTitle)
   for (const duplicate of titles.slice(1)) {
-    ctx.error(dataValidationMessages.duplicateModifier(field.name, 'title'), duplicate)
+    ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'title'))
   }
   if (field.primitive !== 'text') {
     for (const trait of titles) {
-      ctx.error(dataValidationMessages.titleFieldKind(field.name), trait)
+      ctx.error(trait, dataValidationMessages.titleFieldKind(field.name))
     }
   }
   if (field.primitive || field.boolean) {
     for (const trait of owned) {
-      ctx.error(dataValidationMessages.autoDeleteOwner(field.name), trait)
+      ctx.error(trait, dataValidationMessages.autoDeleteOwner(field.name))
     }
   } else {
     validateRelationshipDataField(entity, field, defaults, ctx)
@@ -186,18 +190,18 @@ function validateRelationshipDataField(
   const relation = Type.dataFieldRelationEntity(field)
   const inverse = Type.dataFieldIsInverseRelation(field)
   if (!relation) {
-    ctx.error(dataValidationMessages.unknownRelation(entity.singularName, relationName), field)
+    ctx.error(field, dataValidationMessages.unknownRelation(entity.singularName, relationName))
   }
   // The two storage facts partition the catalog into a synced store and a device-local one, and a
   // relation resolves inside one store's rows. Say so here rather than as an unresolved relation.
   if (relation && Type.dataEntityIsLocalOnly(entity) !== Type.dataEntityIsLocalOnly(relation)) {
     ctx.error(
-      dataValidationMessages.crossStorageRelation(entity.singularName, field.name, relation.singularName),
       field,
+      dataValidationMessages.crossStorageRelation(entity.singularName, field.name, relation.singularName),
     )
   }
   for (const modifier of defaults) {
-    ctx.error(dataValidationMessages.relationDefault(field.name), modifier)
+    ctx.error(modifier, dataValidationMessages.relationDefault(field.name))
   }
   if (relation && inverse) {
     validateInverseRelationship(entity, field, relation, ctx)
@@ -216,16 +220,20 @@ function validateInverseRelationship(
   })
   if (inverseFields.length === 0) {
     ctx.error(
-      `Inverse relationship '${entity.singularName}.${field.name}' requires a stored relationship from '${relation.singularName}' back to '${entity.singularName}'.`,
       field,
+      dataValidationMessages.missingInverseRelation(
+        `${entity.singularName}.${field.name}`,
+        relation.singularName,
+        entity.singularName,
+      ),
     )
   } else if (inverseFields.length > 1) {
     ctx.error(
+      field,
       dataValidationMessages.ambiguousInverseRelation(
         `${entity.singularName}.${field.name}`,
         relation.singularName,
       ),
-      field,
     )
   }
 }
@@ -234,28 +242,28 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
   // File-level query syntax is retained only as validator-owned diagnostic recovery. Stop after
   // this one tailored error so details of an unsupported query cannot add secondary diagnostics.
   if (AST.isTaoFile(query.$container)) {
-    ctx.error(dataValidationMessages.moduleQuery, query)
+    ctx.error(query, dataValidationMessages.moduleQuery)
     return
   }
   validateEntityQueryPlacement(query, ctx)
   const entity = Type.queryEntity(query)
   if (!entity) {
-    ctx.error(dataValidationMessages.querySource, query.source ?? query)
+    ctx.error(query.source ?? query, dataValidationMessages.querySource)
     return
   }
   const clauses = query.block?.clauses ?? []
   const orders = clauses.filter(AST.isOrderClause)
   for (const duplicate of orders.slice(1)) {
-    ctx.error(dataValidationMessages.duplicateOrder, duplicate)
+    ctx.error(duplicate, dataValidationMessages.duplicateOrder)
   }
   const limits = clauses.filter(AST.isLimitClause)
   for (const duplicate of limits.slice(1)) {
-    ctx.error(dataValidationMessages.duplicateLimit, duplicate)
+    ctx.error(duplicate, dataValidationMessages.duplicateLimit)
   }
   for (const limit of limits) {
     const count = Number(limit.count.value)
     if (!Number.isInteger(count) || count < 1) {
-      ctx.error(dataValidationMessages.limitCount, limit)
+      ctx.error(limit, dataValidationMessages.limitCount)
     }
   }
   const fields = Type.dataFields(entity)
@@ -266,19 +274,19 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
     if (AST.isBooleanWhereClause(clause)) {
       const field = clause.case.ref
       if (field && !fields.includes(field)) {
-        ctx.error(dataValidationMessages.unknownField(Type.dataEntityName(entity), field.name), clause)
+        ctx.error(clause, dataValidationMessages.unknownField(Type.dataEntityName(entity), field.name))
       }
       continue
     }
     const field = fields.find(candidate => candidate.name === clause.fieldName)
     if (!field) {
-      ctx.error(dataValidationMessages.unknownField(Type.dataEntityName(entity), clause.fieldName), clause)
+      ctx.error(clause, dataValidationMessages.unknownField(Type.dataEntityName(entity), clause.fieldName))
       continue
     }
     const fieldType = Type.dataFieldType(field)
     if (AST.isOrderClause(clause)) {
       if (fieldType.kind === 'list' || fieldType.kind === 'entity') {
-        ctx.error(dataValidationMessages.relationOrder(field.name), clause)
+        ctx.error(clause, dataValidationMessages.relationOrder(field.name))
       }
       continue
     }
@@ -287,10 +295,10 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
       && clause.operator !== '=='
       && clause.operator !== '!='
     if (usesUnsupportedBooleanComparison) {
-      ctx.error(dataValidationMessages.booleanComparison(field.name, clause.operator), clause)
+      ctx.error(clause, dataValidationMessages.booleanComparison(field.name, clause.operator))
     }
     if (fieldType.kind === 'entity' && clause.operator !== '==' && clause.operator !== '!=') {
-      ctx.error(dataValidationMessages.relationComparison(field.name, clause.operator), clause)
+      ctx.error(clause, dataValidationMessages.relationComparison(field.name, clause.operator))
     }
     validateFieldValue(field, clause.value, ctx)
   }
@@ -299,7 +307,7 @@ function validateEntityQuery(query: AST.EntityQueryDeclaration, ctx: ValidationC
 function validateEntityQueryPlacement(query: AST.EntityQueryDeclaration, ctx: ValidationContext): void {
   const block = query.$container
   if (!AST.isBlock(block)) {
-    ctx.error(dataValidationMessages.currentQueryPlacement, query)
+    ctx.error(query, dataValidationMessages.currentQueryPlacement)
     return
   }
   const owner = block.$container
@@ -308,7 +316,7 @@ function validateEntityQueryPlacement(query: AST.EntityQueryDeclaration, ctx: Va
     && AST.isBlock(owner.$container)
     && AST.isViewDeclaration(owner.$container.$container)
   if (!directView && !directRootRender) {
-    ctx.error(dataValidationMessages.currentQueryPlacement, query)
+    ctx.error(query, dataValidationMessages.currentQueryPlacement)
   }
   const queryIndex = block.statements.indexOf(query)
   const controlIndex = block.statements.findIndex(statement =>
@@ -318,7 +326,7 @@ function validateEntityQueryPlacement(query: AST.EntityQueryDeclaration, ctx: Va
     || AST.isForStatement(statement)
   )
   if (controlIndex >= 0 && queryIndex > controlIndex) {
-    ctx.error(dataValidationMessages.queryAfterControl, query)
+    ctx.error(query, dataValidationMessages.queryAfterControl)
   }
 }
 
@@ -330,7 +338,7 @@ function validateEntityFieldDefault(field: AST.EntityDataField, ctx: ValidationC
   }
   if (modifier.defaultCase) {
     if (!field.boolean || (modifier.defaultCase !== field.name && modifier.defaultCase !== field.negativeName)) {
-      ctx.error(`Default case '${modifier.defaultCase}' is not a boolean case of field '${field.name}'.`, modifier)
+      ctx.error(modifier, dataValidationMessages.defaultCase(modifier.defaultCase, field.name))
     }
     return
   }
@@ -339,12 +347,12 @@ function validateEntityFieldDefault(field: AST.EntityDataField, ctx: ValidationC
     return
   }
   if (field.boolean) {
-    ctx.error(dataValidationMessages.booleanDefaultCase(field.name), modifier)
+    ctx.error(modifier, dataValidationMessages.booleanDefaultCase(field.name))
     return
   }
   if (AST.isNowExpression(defaultValue)) {
     if (field.primitive !== 'time') {
-      ctx.error(dataValidationMessages.nowDefault(field.name), defaultValue)
+      ctx.error(defaultValue, dataValidationMessages.nowDefault(field.name))
     }
     return
   }
@@ -352,8 +360,8 @@ function validateEntityFieldDefault(field: AST.EntityDataField, ctx: ValidationC
   const actual = Type.ofExpression(defaultValue)
   if (expected.kind !== 'unresolved' && actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
     ctx.error(
-      dataValidationMessages.defaultType(field.name, Type.displayName(expected), Type.displayName(actual)),
       defaultValue,
+      dataValidationMessages.defaultType(field.name, Type.displayName(expected), Type.displayName(actual)),
     )
   }
 }
@@ -369,7 +377,7 @@ function validateBooleanCaseNames(
       continue
     }
     if (owners.has(field.negativeName)) {
-      ctx.error(dataValidationMessages.duplicateBooleanCase(entity.singularName, field.negativeName), field)
+      ctx.error(field, dataValidationMessages.duplicateBooleanCase(entity.singularName, field.negativeName))
       continue
     }
     owners.set(field.negativeName, field)
@@ -383,7 +391,7 @@ function validateFieldValue(field: ASTUtils.DataFieldDefinition, value: AST.Expr
     return
   }
   if (!Type.isAssignable(actual, expected)) {
-    ctx.error(dataValidationMessages.fieldType(field.name, Type.displayName(expected), Type.displayName(actual)), value)
+    ctx.error(value, dataValidationMessages.fieldType(field.name, Type.displayName(expected), Type.displayName(actual)))
   }
 }
 
@@ -397,7 +405,7 @@ function reportDuplicates<Item extends AST.Node>(
   for (const item of items) {
     const name = nameOf(item)
     if (seen.has(name)) {
-      ctx.error(message(name), item)
+      ctx.error(item, message(name))
     }
     seen.add(name)
   }

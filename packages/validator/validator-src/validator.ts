@@ -1,11 +1,10 @@
 import { Packages } from '@ast-utils'
-import { AST, Parser, type ParseResult } from '@parser'
+import { AST, codeProjectRoot, Parser, type ParseResult, type ParserServices } from '@parser'
 import { type Diagnostic, Diagnostics } from '@shared'
+import { registerTaoValidationChecks } from './langium-validation'
 import { Validate } from './Validate'
 import { Validation, type ValidationRunContext } from './validation'
 import { validateProjectWorkspace } from './validators/project-validator'
-
-const codeProjectRoot = '/__tao__'
 
 /** ValidationResult declares validated Tao source and diagnostics. */
 export type ValidationResult = Pick<ParseResult, 'entry' | 'files'> & {
@@ -28,6 +27,21 @@ function createContext(
     packagesContext,
     workspaceFiles,
   }
+}
+
+/**
+ * installLangiumChecks makes a document build on `services` run Tao validation, with each file
+ * validated against the workspace those services currently hold. It is the one place validation
+ * joins a Langium container, so the core and LSP workspace flavors install it the same way; the
+ * standalone session below validates a parse result directly instead and never installs it.
+ */
+function installLangiumChecks(services: ParserServices, packagesContext: Packages.Context): void {
+  registerTaoValidationChecks(services.language, file => {
+    const workspaceFiles = Array.from(services.shared.workspace.LangiumDocuments.all)
+      .map(document => document.parseResult.value)
+      .filter(AST.isTaoFile)
+    return createContext(packagesContext, workspaceFiles, AST.getDocument(file).uri.path)
+  })
 }
 
 /** validateParseResult validates an existing parse result. */
@@ -102,6 +116,7 @@ async function validateCode(code: string): Promise<ValidationResult> {
 const Validator = {
   createContext,
   createSession,
+  installLangiumChecks,
   validateCode,
   validateParseResult,
 }

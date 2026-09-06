@@ -119,9 +119,9 @@ export function launchDirectory(repositoryRoot = Repo.getRoot()): string {
   return FS.resolvePath(LAUNCH_DIRECTORY, repositoryRoot)
 }
 
-/** createLaunchId returns a sortable, collision-free identifier for one launch. */
+/** createLaunchId returns a collision-free identifier for one launch. */
 function createLaunchId(mode: StudioLaunchMode): string {
-  return `${mode}-${Bun.randomUUIDv7()}`
+  return `${mode}-${Platform.randomUUID()}`
 }
 
 /** StudioLaunchRecord is the writer one running Studio holds for its own manifest. */
@@ -206,7 +206,7 @@ async function pruneFinalizedLaunches(repositoryRoot: string, exceptLaunchId: st
 
 /** writeManifestAtomically publishes a manifest through a temporary file and a rename. */
 export async function writeManifestAtomically(path: string, manifest: StudioLaunchManifest): Promise<void> {
-  const temporaryPath = `${path}.${Bun.randomUUIDv7()}.tmp`
+  const temporaryPath = `${path}.${Platform.randomUUID()}.tmp`
   try {
     await FS.writeJson(temporaryPath, manifest)
     await FS.move(temporaryPath, path)

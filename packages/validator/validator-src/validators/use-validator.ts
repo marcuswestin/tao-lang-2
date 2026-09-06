@@ -97,7 +97,7 @@ function validateUseStatement(useStatement: AST.UseStatement, options: ValidateU
     })
   })
   if (targetFiles.length === 0) {
-    ctx.error(unresolvedMessage(useStatement), useStatement)
+    ctx.error(useStatement, unresolvedMessage(useStatement))
     return
   }
 
@@ -122,16 +122,16 @@ function reportInvalidResolution(
 ): void {
   if (resolution.invalidReason === 'duplicate-package' && resolution.packageName) {
     ctx.error(
-      useValidationMessages.duplicatePackage(resolution.packageName, resolution.duplicatePackagePaths ?? []),
       useStatement,
+      useValidationMessages.duplicatePackage(resolution.packageName, resolution.duplicatePackagePaths ?? []),
     )
     return
   }
   if (resolution.invalidReason === 'package-boundary' && useStatement.importPath) {
-    ctx.error(useValidationMessages.packageBoundary(useStatement.importPath), useStatement)
+    ctx.error(useStatement, useValidationMessages.packageBoundary(useStatement.importPath))
     return
   }
-  ctx.error(unresolvedMessage(useStatement), useStatement)
+  ctx.error(useStatement, unresolvedMessage(useStatement))
 }
 
 function unresolvedMessage(useStatement: AST.UseStatement): string {
@@ -155,22 +155,22 @@ function validateImportedName(importedName: string, options: ValidateImportedNam
   const { useStatement, declarations, resolution, ctx, seen } = options
   const matches = declarations.filter(declaration => declaration.name === importedName)
   if (matches.length === 0) {
-    ctx.error(useValidationMessages.missingImport(importedName, importLabel(useStatement)), useStatement)
+    ctx.error(useStatement, useValidationMessages.missingImport(importedName, importLabel(useStatement)))
     return
   }
   const importableMatches = matches.filter(declaration => !declaration.isAppValue || canImportApp(resolution))
   if (importableMatches.length === 0 && matches.some(declaration => declaration.isAppValue)) {
-    ctx.error(useValidationMessages.appImport(importedName), useStatement)
+    ctx.error(useStatement, useValidationMessages.appImport(importedName))
     return
   }
   const visibleMatches = importableMatches.filter(declaration => importedDeclarationIsVisible(declaration, resolution))
   if (visibleMatches.length === 0) {
-    ctx.error(useValidationMessages.notVisible(importedName), useStatement)
+    ctx.error(useStatement, useValidationMessages.notVisible(importedName))
     return
   }
   for (const namespace of new Set(visibleMatches.map(match => match.namespace))) {
     if (seen.localDeclarationNames.has(`${namespace}:${importedName}`)) {
-      ctx.error(useValidationMessages.localDeclarationCollision(importedName), useStatement)
+      ctx.error(useStatement, useValidationMessages.localDeclarationCollision(importedName))
     }
   }
   const matchesByNamespace = new Map<AST.DeclarationNamespace, DeclarationRecord[]>()
@@ -180,13 +180,13 @@ function validateImportedName(importedName: string, options: ValidateImportedNam
     matchesByNamespace.set(match.namespace, records)
   }
   if ([...matchesByNamespace.values()].some(records => records.length > 1)) {
-    ctx.error(useValidationMessages.ambiguousImport(importedName, importLabel(useStatement)), useStatement)
+    ctx.error(useStatement, useValidationMessages.ambiguousImport(importedName, importLabel(useStatement)))
     return
   }
   for (const match of visibleMatches) {
     const key = declarationRecordKey(match)
     if (seen.previouslyImportedNames.has(key)) {
-      ctx.error(useValidationMessages.repeatedImport(importedName), useStatement, {
+      ctx.error(useStatement, useValidationMessages.repeatedImport(importedName), {
         code: useValidationCodes.repeatedImport,
       })
     } else {
@@ -217,7 +217,7 @@ function reportDuplicateImports(useStatement: AST.UseStatement, ctx: ValidationC
   const seen = new Set<string>()
   for (const name of useStatement.importedDeclarations.map(reference => reference.$refText)) {
     if (seen.has(name)) {
-      ctx.error(useValidationMessages.duplicateImport(name), useStatement, {
+      ctx.error(useStatement, useValidationMessages.duplicateImport(name), {
         code: useValidationCodes.duplicateImport,
       })
       continue
@@ -233,7 +233,7 @@ function reportUnusedImports(
 ): void {
   for (const name of new Set(useStatement.importedDeclarations.map(reference => reference.$refText))) {
     if (!referencedNames.has(name)) {
-      ctx.warning(useValidationMessages.unusedImport(name), useStatement, {
+      ctx.warning(useStatement, useValidationMessages.unusedImport(name), {
         code: useValidationCodes.unusedImport,
       })
     }
@@ -247,7 +247,7 @@ function reportUseStatementsOutOfSection(file: AST.TaoFile, ctx: ValidationConte
   }
   for (const statement of file.statements.slice(firstNonUseIndex)) {
     if (AST.isUseStatement(statement)) {
-      ctx.warning(useValidationMessages.useOutOfSection, statement, {
+      ctx.warning(statement, useValidationMessages.useOutOfSection, {
         code: useValidationCodes.useOutOfSection,
       })
     }
@@ -303,8 +303,8 @@ export function validateVisibleDeclarations(
       for (const record of records) {
         if (targetDocument === undefined || targetDocument === record.document) {
           ctx.error(
-            useValidationMessages.duplicateVisibleDeclaration(record.declaration.name, record.folderPath),
             record.declaration,
+            useValidationMessages.duplicateVisibleDeclaration(record.declaration.name, record.folderPath),
           )
         }
       }

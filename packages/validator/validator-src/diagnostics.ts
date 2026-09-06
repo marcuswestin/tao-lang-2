@@ -4,8 +4,8 @@ import { type Diagnostic, type DiagnosticSeverity, Switch } from '@shared'
 /** validatorDiagnostic creates a validator diagnostic. */
 export function validatorDiagnostic(
   severity: Parameters<Langium.ValidationAcceptor>[0],
-  message: string,
   node: AST.Node,
+  message: string,
   opts: { code?: string } = {},
 ): Diagnostic {
   return {

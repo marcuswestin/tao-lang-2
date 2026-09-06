@@ -1,4 +1,4 @@
-import { CLI, Errors, FS, Repo, Time } from '@shared'
+import { CLI, Errors, FS, Platform, Repo, Time } from '@shared'
 import { Expect, Test } from '@shared/test'
 import { randomUUID } from 'node:crypto'
 import { createConnection } from 'node:net'
@@ -9,7 +9,7 @@ import {
   type JsonObject,
 } from '../generation-src/generation'
 
-if (process.env['TAO_LIVE_APPLE_AI'] !== '1') {
+if (Platform.runtimeProcess.env['TAO_LIVE_APPLE_AI'] !== '1') {
   Errors.throwUserInput('Set TAO_LIVE_APPLE_AI=1 to run live Apple Foundation Models checks.')
 }
 

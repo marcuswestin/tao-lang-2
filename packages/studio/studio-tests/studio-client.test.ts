@@ -6,6 +6,7 @@ import type { StudioRenderInspection } from '@source-actions'
 import {
   StudioApiClient,
   StudioApiError,
+  type StudioApiEventHandlers,
   StudioApiEventStream,
   StudioApiRoutes,
   type StudioHandshake,
@@ -286,6 +287,42 @@ Test('Studio events dispatch device-state snapshots to an optional handler', () 
   })
 
   Expect(received).toEqual([status])
+})
+
+Test('Studio events dispatch checkpoint, data-invalidation, cell, and write-receipt notices', () => {
+  const received: string[] = []
+  const handlers: StudioApiEventHandlers = {
+    onCellReconfigured: cellId => received.push(`cell:${cellId}`),
+    onCheckpoint: checkpoint => received.push(`checkpoint:${checkpoint.id}:${checkpoint.status}`),
+    onCompile() {},
+    onDataInvalidated: invalidation =>
+      received.push(`data:${invalidation.entities.join(',')}:${invalidation.revision}`),
+    onDisconnect() {},
+    onFile() {},
+    onManifest() {},
+    onWritesAcknowledged: acknowledgements =>
+      received.push(`writes:${acknowledgements.map(acknowledgement => acknowledgement.writeId).join(',')}`),
+  }
+  const envelope = { channel: studioProtocolChannel, protocolVersion: studioProtocolVersion } as const
+
+  StudioApiEventStream.dispatch(
+    { ...envelope, checkpoint: { id: 'checkpoint-1', status: 'committed' }, type: 'checkpoint-changed' },
+    handlers,
+  )
+  StudioApiEventStream.dispatch({ entities: ['Files', 'Problems'], revision: 3, type: 'data-invalidated' }, handlers)
+  StudioApiEventStream.dispatch({ ...envelope, cellId: 'cell-1', type: 'cell-reconfigured' }, handlers)
+  StudioApiEventStream.dispatch({
+    ...envelope,
+    acknowledgements: [{ compileRevision: 2, path: 'Garden.tao', writeId: 'write-1' }],
+    type: 'studio-writes-acknowledged',
+  }, handlers)
+
+  Expect(received).toEqual([
+    'checkpoint:checkpoint-1:committed',
+    'data:Files,Problems:3',
+    'cell:cell-1',
+    'writes:write-1',
+  ])
 })
 
 Test('Studio API client addresses every loopback device route with the contract bodies', async () => {
@@ -1253,11 +1290,23 @@ Test(
     const requests: Array<{ kind: string; request: Record<string, unknown> }> = []
     const published: string[][] = []
     const callbacks: string[] = []
-    let files = [{ diagnosticCount: 0, dirty: false, path: 'Garden.tao', sourceVersion: 'garden-1' }]
+    let files = [{
+      diagnosticCount: 0,
+      dirty: false,
+      kind: 'file' as const,
+      path: 'Garden.tao',
+      sourceVersion: 'garden-1',
+    }]
     const api = {
       async createFile(request: Record<string, unknown>) {
         requests.push({ kind: 'create', request })
-        const file = { diagnosticCount: 0, dirty: false, path: request['path'] as string, sourceVersion: 'new-1' }
+        const file = {
+          diagnosticCount: 0,
+          dirty: false,
+          kind: 'file' as const,
+          path: request['path'] as string,
+          sourceVersion: 'new-1',
+        }
         files = [...files, file]
         return { file: { ...file, content: '' }, files } as never
       },
@@ -1723,7 +1772,7 @@ Test('Studio command palette indexes files, views, grouped scenarios, commands, 
     }],
   } as unknown as StudioPreviewManifestV2
   const items = StudioCommandPalette.items({
-    files: [{ diagnosticCount: 0, dirty: false, path: 'Garden.tao', sourceVersion: 'source-1' }],
+    files: [{ diagnosticCount: 0, dirty: false, kind: 'file', path: 'Garden.tao', sourceVersion: 'source-1' }],
     manifest,
     projectViews: [{
       label: 'Card',
@@ -2466,6 +2515,7 @@ Test('Studio save responses preserve completed and newer compile status', () => 
   const completed = StudioDraftStatus.completedCompile(result, {
     appliedRevision: 1,
     compileRevision: 2,
+    diagnostics: [],
     message: 'Compiling Garden revision 2.',
     status: 'compiling',
   })
@@ -2480,6 +2530,7 @@ Test('Studio save responses preserve completed and newer compile status', () => 
   const newer = {
     appliedRevision: 2,
     compileRevision: 3,
+    diagnostics: [],
     message: 'Compiling Garden revision 3.',
     status: 'compiling' as const,
   }

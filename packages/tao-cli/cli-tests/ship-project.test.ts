@@ -2,6 +2,7 @@ import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
 import {
   deriveHostedDatasourceConfiguration,
+  deriveICloudBinding,
   discoverShipProject,
   selectShipApp,
   writeProjectVersion,
@@ -56,5 +57,107 @@ Describe('tao ship project discovery', () => {
       WebsocketURI: 'wss://api.instantdb.com/runtime/session',
     })
     Expect(deriveHostedDatasourceConfiguration('WordFlower', local)).toBeUndefined()
+  })
+
+  Test('derives the iCloud binding from direct, named, and inherited datasource bindings', () => {
+    const source = `
+use ICloud from @tao/data/providers/icloud
+use Local from @tao/data/providers/local
+
+app Notes {
+   Name "Notes"
+   Datasource NotesCloud
+}
+
+app NotesDevice = Notes with {
+   Datasource Local { StorageKey "Notes" }
+}
+
+app NotesInherited = Notes with { Name "Notes Beta" }
+
+app NotesInline = Notes with {
+   Datasource ICloud { Container "iCloud.custom.notes" }
+}
+
+// A patch keeps the base's provider and may override the container.
+app NotesPatched = Notes with {
+   Datasource with { Container "iCloud.patched.notes" }
+}
+
+app NotesWithForm = Notes with {
+   Datasource ICloud with { Container "iCloud.with.notes" }
+}
+
+app NotesTyped = Notes with {
+   Datasource TypedCloud { }
+}
+
+app NotesCommented = Notes with {
+   // Datasource ICloud { Container "iCloud.commented" }
+   Datasource Local { StorageKey "Notes" }
+}
+
+datasource NotesCloud = ICloud {
+   StorageKey "Notes"
+}
+
+type TypedCloud is ICloud with {
+   Container "iCloud.typed.notes"
+}
+`
+    // The parser hands the ship pipeline each declaration's own text, closed on its line or later.
+    const declaration = (name: string): string => {
+      const line = new RegExp(`^app ${name}\\b.*$`, 'mu').exec(source)![0]
+      return line.trimEnd().endsWith('}') ? line : new RegExp(`^app ${name}\\b[\\s\\S]*?^\\}`, 'mu').exec(source)![0]
+    }
+
+    const documents = { services: ['CloudDocuments'] }
+    Expect(deriveICloudBinding(declaration('Notes'), source)).toEqual(documents)
+    Expect(deriveICloudBinding(declaration('NotesDevice'), source)).toBeUndefined()
+    Expect(deriveICloudBinding(declaration('NotesInherited'), source)).toEqual(documents)
+    Expect(deriveICloudBinding(declaration('NotesInline'), source)).toEqual({
+      ...documents,
+      container: 'iCloud.custom.notes',
+    })
+    Expect(deriveICloudBinding(declaration('NotesPatched'), source)).toEqual({
+      ...documents,
+      container: 'iCloud.patched.notes',
+    })
+    Expect(deriveICloudBinding(declaration('NotesWithForm'), source)).toEqual({
+      ...documents,
+      container: 'iCloud.with.notes',
+    })
+    Expect(deriveICloudBinding(declaration('NotesTyped'), source)).toEqual({
+      ...documents,
+      container: 'iCloud.typed.notes',
+    })
+    Expect(deriveICloudBinding(declaration('NotesCommented'), source)).toBeUndefined()
+    Expect(deriveICloudBinding(declaration('Notes'), source.replace(/^use ICloud.*\n/mu, ''))).toBeUndefined()
+  })
+
+  Test('derives the CloudKit binding with its own service', () => {
+    const source = `
+use CloudKit from @tao/data/providers/cloudkit
+
+app Kitchen {
+   Name "Kitchen"
+   Datasource CloudKit { Container "iCloud.lang.tao.kitchen" }
+}
+
+app KitchenBeta = Kitchen with { Name "Kitchen Beta" }
+`
+    const declaration = (name: string): string => {
+      const line = new RegExp(`^app ${name}\\b.*$`, 'mu').exec(source)![0]
+      return line.trimEnd().endsWith('}') ? line : new RegExp(`^app ${name}\\b[\\s\\S]*?^\\}`, 'mu').exec(source)![0]
+    }
+
+    Expect(deriveICloudBinding(declaration('Kitchen'), source)).toEqual({
+      container: 'iCloud.lang.tao.kitchen',
+      services: ['CloudKit'],
+    })
+    Expect(deriveICloudBinding(declaration('KitchenBeta'), source)).toEqual({
+      container: 'iCloud.lang.tao.kitchen',
+      services: ['CloudKit'],
+    })
   })
 })

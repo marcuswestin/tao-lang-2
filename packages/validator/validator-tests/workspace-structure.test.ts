@@ -1,5 +1,5 @@
 import { Packages } from '@ast-utils'
-import { AST, Langium, Parser } from '@parser'
+import { AST, codeProjectRoot, Langium, Parser } from '@parser'
 import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { Validation } from '../validator-src/validation'
@@ -110,7 +110,7 @@ Describe('validator: workspace structure', () => {
 
   Test('does not report duplicate visible declarations for repeated LSP document instances', async () => {
     const parserContext = Parser.createContext()
-    const uri = Langium.URI.file('/__tao__/Views.tao')
+    const uri = Langium.URI.file(`${codeProjectRoot}/Views.tao`)
     const documentOne = parserContext.services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
       'public view Box() { }',
       uri,
@@ -120,7 +120,7 @@ Describe('validator: workspace structure', () => {
       uri,
     )
     const diagnostics = Validation.collectDiagnostics()
-    const packagesContext = await Packages.createContext('/__tao__')
+    const packagesContext = await Packages.createContext(codeProjectRoot)
     const ctx = Validation.createContext(diagnostics.accept, {
       entryFilePath: uri.path,
       packagesContext,

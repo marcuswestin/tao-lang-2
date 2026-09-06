@@ -1,4 +1,4 @@
-import { AST } from '@parser'
+import { AST, codeProjectRoot } from '@parser'
 import { FS } from '@shared'
 import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
@@ -25,7 +25,7 @@ export const projectValidationMessages = {
 
 /** validateProjectWorkspace enforces identity ownership across all files participating in one build. */
 export function validateProjectWorkspace(ctx: ValidationContext): void {
-  if (ctx.entryFilePath.startsWith('/__tao__/')) {
+  if (ctx.entryFilePath.startsWith(`${codeProjectRoot}/`)) {
     return
   }
   const projects = ctx.workspaceFiles.flatMap(file =>
@@ -40,7 +40,7 @@ export function validateProjectWorkspace(ctx: ValidationContext): void {
   if (!owner) {
     const entry = ctx.workspaceFiles.find(file => AST.getDocument(file).uri.path === ctx.entryFilePath)
     if (entry) {
-      ctx.error(projectValidationMessages.missingProject(), entry)
+      ctx.error(entry, projectValidationMessages.missingProject())
     }
   }
 
@@ -48,7 +48,7 @@ export function validateProjectWorkspace(ctx: ValidationContext): void {
   for (const project of projects.toSorted((left, right) => left.root.localeCompare(right.root))) {
     const first = firstById.get(project.id.value)
     if (first && first.root !== project.root) {
-      ctx.error(projectValidationMessages.duplicateProjectId(project.id.value), project.id)
+      ctx.error(project.id, projectValidationMessages.duplicateProjectId(project.id.value))
     } else {
       firstById.set(project.id.value, project)
     }
@@ -64,13 +64,13 @@ export const projectValidationChecks = {
 export function validateProjectFile(file: AST.TaoFile, ctx: ValidationContext): void {
   const topLevelProjects = file.statements.filter(AST.isProjectDeclaration)
   for (const project of topLevelProjects.slice(1)) {
-    ctx.error(projectValidationMessages.duplicateProject(), project)
+    ctx.error(project, projectValidationMessages.duplicateProject())
   }
 }
 
 function validateProject(project: AST.ProjectDeclaration, ctx: ValidationContext): void {
   if (!AST.isTaoFile(project.$container)) {
-    ctx.error(projectValidationMessages.topLevelOnly(), project)
+    ctx.error(project, projectValidationMessages.topLevelOnly())
   }
   validateProjectBlock(project, ctx)
 }
@@ -85,35 +85,35 @@ function validateProjectBlock(project: AST.ProjectDeclaration, ctx: ValidationCo
   const requires = AST.blockStatementOf(project, { filter: AST.isProjectRequires })
 
   if (ids.length === 0) {
-    ctx.error(projectValidationMessages.requiredId(), project)
+    ctx.error(project, projectValidationMessages.requiredId())
   }
   for (const id of ids.slice(1)) {
-    ctx.error(projectValidationMessages.duplicateId(), id)
+    ctx.error(id, projectValidationMessages.duplicateId())
   }
   if (names.length === 0) {
-    ctx.error(projectValidationMessages.requiredName(), project)
+    ctx.error(project, projectValidationMessages.requiredName())
   }
   for (const name of names.slice(1)) {
-    ctx.error(projectValidationMessages.duplicateName(), name)
+    ctx.error(name, projectValidationMessages.duplicateName())
   }
   for (const version of versions) {
     if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/u.test(version.value)) {
-      ctx.error(projectValidationMessages.invalidVersion(), version)
+      ctx.error(version, projectValidationMessages.invalidVersion())
     }
   }
   for (const version of versions.slice(1)) {
-    ctx.error(projectValidationMessages.duplicateVersion(), version)
+    ctx.error(version, projectValidationMessages.duplicateVersion())
   }
   for (const defaultApp of defaultApps.slice(1)) {
-    ctx.error(projectValidationMessages.duplicateDefaultApp(), defaultApp)
+    ctx.error(defaultApp, projectValidationMessages.duplicateDefaultApp())
   }
   for (const remote of remotes.slice(1)) {
-    ctx.error(projectValidationMessages.duplicateRemote(), remote)
+    ctx.error(remote, projectValidationMessages.duplicateRemote())
   }
   for (const license of licenses.slice(1)) {
-    ctx.error(projectValidationMessages.duplicateLicense(), license)
+    ctx.error(license, projectValidationMessages.duplicateLicense())
   }
   for (const requireStatement of requires) {
-    ctx.error(projectValidationMessages.unsupportedRequires(), requireStatement)
+    ctx.error(requireStatement, projectValidationMessages.unsupportedRequires())
   }
 }

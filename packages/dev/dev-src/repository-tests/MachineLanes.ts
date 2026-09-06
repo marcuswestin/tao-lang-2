@@ -1,5 +1,4 @@
 import { CLI, Errors, FS, Platform, Time } from '@shared'
-import { randomUUID } from 'node:crypto'
 
 /** LaneRecord is the live, machine-wide accounting record for one top-level lane. */
 export type LaneRecord = {
@@ -206,7 +205,7 @@ async function acquire(options: AcquireOptions): Promise<MachineLane> {
     return observingUnregisteredLane(options.reservedJobs, root, cpuCount)
   }
 
-  const id = `${Platform.runtimeProcess.pid}-${randomUUID()}`
+  const id = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
   const path = lanePath(root, id)
   const now = new Date().toISOString()
   const record: LaneRecord & { id: string; maxSlots: number } = {
@@ -426,7 +425,7 @@ async function acquireExclusive(
   laneId: string,
   timeoutMs: number,
 ): Promise<MachineExclusiveLease | undefined> {
-  const id = `${Platform.runtimeProcess.pid}-${randomUUID()}`
+  const id = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
   const deadline = Time.nowMs() + Math.max(0, timeoutMs)
   let ownsIntent = false
   while (Time.nowMs() <= deadline) {
@@ -543,7 +542,7 @@ async function claimResource(
   options: ResourceOptions,
 ): Promise<{ lease?: MachineResourceLease; owner: MachineResourceOwner }> {
   const root = options.registryRoot ?? registryRoot()
-  const id = `${Platform.runtimeProcess.pid}-${randomUUID()}`
+  const id = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
   const path = resourcePath(root, options.name)
   const processIdentity = options.processIdentity ?? inspectProcessIdentity
   const maxAgeMs = options.maxAgeMs ?? MAX_LEASE_AGE_MS
@@ -686,7 +685,7 @@ async function withRegistryLock<T>(
 ): Promise<T> {
   await FS.mkdir(root)
   const ownerRoot = FS.resolvePath('.mutex-contenders', root)
-  const ownerPath = FS.resolvePath(`${Platform.runtimeProcess.pid}-${randomUUID()}.json`, ownerRoot)
+  const ownerPath = FS.resolvePath(`${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.json`, ownerRoot)
   const linkPath = FS.resolvePath(MUTEX_LINK, root)
   await atomicWriteJson(
     ownerPath,
@@ -739,7 +738,7 @@ async function withRegistryLock<T>(
  */
 async function reclaimStaleMutex(root: string, linkPath: string): Promise<void> {
   const staleTarget = await FS.realPath(linkPath).catch(() => undefined)
-  const asidePath = FS.resolvePath(`.mutex-stale-${Platform.runtimeProcess.pid}-${randomUUID()}`, root)
+  const asidePath = FS.resolvePath(`.mutex-stale-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`, root)
   try {
     await FS.move(linkPath, asidePath)
   } catch {
@@ -759,7 +758,7 @@ async function ownerIsLive(owner: MachineResourceOwner): Promise<boolean> {
 }
 
 async function atomicWriteJson(path: string, value: unknown): Promise<void> {
-  const temporary = `${path}.${Platform.runtimeProcess.pid}-${randomUUID()}.tmp`
+  const temporary = `${path}.${Platform.runtimeProcess.pid}-${Platform.randomUUID()}.tmp`
   try {
     await FS.writeJson(temporary, value)
     await FS.move(temporary, path)

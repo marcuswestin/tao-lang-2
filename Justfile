@@ -7,8 +7,8 @@ BUN_TMP_DIR := justfile_directory() + "/.artifacts/tmp/bun"
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/config/local-instantdb"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
-FULL_VERIFY_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports _ship-bundle-proof _full-verify-smoke-launch _full-verify-real-app _full-verify-keyboard-navigation _full-verify-native _full-verify-canary"
-FULL_VERIFY_SKIPPED := "_full-verify-simulated=temporarily quarantined; run just _full-verify-simulated to reproduce"
+FULL_VERIFY_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app keyboard-navigation-smoke studio-smoke-native studio-canary"
+FULL_VERIFY_SKIPPED := "studio-smoke-simulated-user=temporarily quarantined; run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"
 
 # Print available recipes
 help:
@@ -101,7 +101,7 @@ studio-canary project="Apps/HNReader" app="HNReader":
 
 # Export real release and Studio-preview iOS bundles and prove only the preview carries Studio code
 ship-bundle-proof:
-    just _ship-bundle-proof
+    bun run packages/runtime-toolchain/runtime-toolchain-src/testing/verify-release-bundle.ts
 
 # Run the native Studio checks that require a person; never part of test or verify
 studio-manual-checks project="Apps/HNReader" app="HNReader":
@@ -251,30 +251,6 @@ full-verify-sandbox fresh='false':
 
 # Private
 #########
-
-# The full-verify Studio lanes. One recipe per lane, each on its own worker index so
-# StudioSmoke.resources() hands it ports and an artifact root no other lane touches.
-
-_full-verify-smoke-launch:
-    ./dev studio-smoke --run-id full-verify-launch --worker 0 packages/dev/studio-smoke/studio-launch.test.ts
-
-_full-verify-real-app:
-    ./dev studio-smoke --run-id full-verify-real-app --worker 1 packages/dev/studio-smoke/studio-real-app.test.ts
-
-_full-verify-simulated:
-    ./dev studio-smoke --run-id full-verify-simulated --worker 2 packages/dev/studio-smoke/studio-simulated-user.test.ts
-
-_full-verify-keyboard-navigation:
-    ./dev studio-smoke --run-id full-verify-keyboard-navigation --worker 4 packages/dev/studio-smoke/runtime-keyboard-navigation.test.ts
-
-_full-verify-native:
-    ./dev studio-smoke --native --run-id full-verify-native --worker 3 packages/dev/studio-smoke/studio-simulated-user.test.ts
-
-_full-verify-canary:
-    ./dev studio-canary --project Apps/HNReader --app HNReader
-
-_ship-bundle-proof:
-    bun run packages/runtime-toolchain/runtime-toolchain-src/testing/verify-release-bundle.ts
 
 # The doctor's own versioned report, so the node's log is the artifact
 _doctor-json:

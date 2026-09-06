@@ -20,6 +20,7 @@ const designValidationMessages = {
   bundleCycle: (design: string, path: readonly string[]) =>
     `Design '${design}' has a bundle cycle: ${path.join(' -> ')}.`,
   duplicateMember: (name: string) => `Design member '${name}' is declared more than once.`,
+  duplicateTypedBlock: (design: string) => `Design '${design}' may declare each typed block only once.`,
   duplicateVisualAlias: (first: string, second: string) =>
     `Design entries '${first}' and '${second}' set the same visual property.`,
   exploration: (entry: string) =>
@@ -36,6 +37,8 @@ const designValidationMessages = {
   placeholderShipping: 'Placeholder ships as an empty box in release.',
   reservedBundle: (name: string) => `Design bundle '${name}' collides with built-in clause '${name}'.`,
   unknownBundle: (design: string, name: string) => `Design '${design}' has no bundle '${name}'.`,
+  unknownColor: (path: string) => `Design has no color '${path}'.`,
+  unknownSize: (design: string, name: string) => `Design '${design}' has no size '${name}'.`,
   unknownToken: (design: string, name: string) => `Design '${design}' has no token '${name}'.`,
   weightedRigidClaim: "Design entries 'claim' and 'rigid' cannot remain effective together.",
 } as const
@@ -63,7 +66,7 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
   const members = new Map<string, AST.Node>()
   for (const member of namedMembers) {
     if (members.has(member.name)) {
-      ctx.error(designValidationMessages.duplicateMember(member.name), member.node)
+      ctx.error(member.node, designValidationMessages.duplicateMember(member.name))
     } else {
       members.set(member.name, member.node)
     }
@@ -87,7 +90,7 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
   validateScreens(design, ctx)
   for (const bundle of bundles.values()) {
     if (builtInHeads.has(bundle.name)) {
-      ctx.error(designValidationMessages.reservedBundle(bundle.name), bundle)
+      ctx.error(bundle, designValidationMessages.reservedBundle(bundle.name))
     }
     validateEntries(bundle.spec.entries, design, tokens, sizes, bundles, ctx)
   }
@@ -115,7 +118,7 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
       && terminalView.name === 'Placeholder'
       && FS.pathIsWithin(AST.getDocument(terminalView).uri.path, ctx.packagesContext.stdlibRoot)
     ) {
-      ctx.warning(designValidationMessages.placeholderShipping, render, {
+      ctx.warning(render, designValidationMessages.placeholderShipping, {
         code: designValidationCodes.placeholderShipping,
       })
     }
@@ -129,7 +132,7 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   // that same tree is exactly what FS-D2 warns about, so that warning is never suppressed there.
   if (!isStudioGeneratedSource(render, ctx)) {
     for (const entry of clause.entries.filter(isInlineDesignExploration)) {
-      ctx.warning(designValidationMessages.exploration(entryText(entry)), entry, {
+      ctx.warning(entry, designValidationMessages.exploration(entryText(entry)), {
         code: designValidationCodes.exploration,
       })
     }
@@ -154,15 +157,15 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   const design = designs[0]
   if (!design) {
     for (const entry of sizeEntries) {
-      ctx.error(designValidationMessages.missingMountedDesign(entryText(entry)), entry)
+      ctx.error(entry, designValidationMessages.missingMountedDesign(entryText(entry)))
     }
     for (const entry of designEntries.filter(requiresDesignLookup)) {
       const text = entryText(entry)
       if (!isVisualEntry(entry)) {
         // A bare word only names a bundle once a design defines it, so LayoutValidator defers it here.
-        ctx.error(LayoutValidator.messages.unsupportedEntry(text), entry)
+        ctx.error(entry, LayoutValidator.messages.unsupportedEntry(text))
       }
-      ctx.error(designValidationMessages.missingMountedDesign(text), entry)
+      ctx.error(entry, designValidationMessages.missingMountedDesign(text))
     }
     return
   }
@@ -207,7 +210,7 @@ function validateTaggedTestStep(step: TaggedTestStep, ctx: ValidationContext): v
 
 function validateTagValue(value: string, node: AST.Node, ctx: ValidationContext): void {
   if (!taoTag.test(value)) {
-    ctx.error(designValidationMessages.malformedTag(value), node)
+    ctx.error(node, designValidationMessages.malformedTag(value))
   }
 }
 
@@ -234,9 +237,9 @@ function validateEntries(
     const values = ASTUtils.layoutEntryValues(entry)
     const name = String(values[0] ?? '')
     if (values.length !== 1) {
-      ctx.error(designValidationMessages.malformedVisual(entryText(entry)), entry)
+      ctx.error(entry, designValidationMessages.malformedVisual(entryText(entry)))
     } else if (!bundles.has(name)) {
-      ctx.error(designValidationMessages.unknownBundle(design.name, name), entry)
+      ctx.error(entry, designValidationMessages.unknownBundle(design.name, name))
     }
   }
 }
@@ -250,7 +253,7 @@ function validateVisualEntry(
 ): void {
   const conditioned = conditionedVisualValues(entry)
   if (conditioned === undefined) {
-    ctx.error(designValidationMessages.malformedVisual(entryText(entry)), entry)
+    ctx.error(entry, designValidationMessages.malformedVisual(entryText(entry)))
     return
   }
   const [head, ...terms] = conditioned
@@ -258,13 +261,13 @@ function validateVisualEntry(
   if (colorHeads.has(name)) {
     const token = terms.length === 1 && typeof terms[0] === 'string' ? terms[0] : undefined
     if (!token) {
-      ctx.error(designValidationMessages.malformedVisual(entryText(entry)), entry)
+      ctx.error(entry, designValidationMessages.malformedVisual(entryText(entry)))
     } else if (token.startsWith('#')) {
       if (!cssHexColor.test(token)) {
-        ctx.error(designValidationMessages.malformedColor(token), entry)
+        ctx.error(entry, designValidationMessages.malformedColor(token))
       }
     } else if (design && tokens && !tokens.has(token)) {
-      ctx.error(designValidationMessages.unknownToken(design.name, token), entry)
+      ctx.error(entry, designValidationMessages.unknownToken(design.name, token))
     }
     return
   }
@@ -280,7 +283,7 @@ function validateVisualEntry(
       || (typeof term === 'string' && ['bold', 'medium', 'regular', 'semibold'].includes(term))
     : size || (value !== undefined && value > 0)
   if (!valid) {
-    ctx.error(designValidationMessages.malformedVisual(entryText(entry)), entry)
+    ctx.error(entry, designValidationMessages.malformedVisual(entryText(entry)))
   }
 }
 
@@ -311,7 +314,7 @@ function validateBundleCycles(
         const key = [...new Set(cycle.slice(0, -1))].sort().join('|')
         if (!reported.has(key)) {
           reported.add(key)
-          ctx.error(designValidationMessages.bundleCycle(design.name, cycle), entry)
+          ctx.error(entry, designValidationMessages.bundleCycle(design.name, cycle))
         }
         continue
       }
@@ -356,7 +359,7 @@ function expandEntries(
 function validateEffectiveConflicts(entries: readonly AST.LayoutEntry[], ctx: ValidationContext): void {
   const conflict = LayoutValidator.effectiveWeightedRigidClaim(entries)
   if (conflict) {
-    ctx.error(designValidationMessages.weightedRigidClaim, conflict.rigid)
+    ctx.error(conflict.rigid, designValidationMessages.weightedRigidClaim)
   }
   const visualAliases = new Map<string, { entry: AST.LayoutEntry; head: string }>()
   for (const entry of entries.filter(isVisualEntry)) {
@@ -371,7 +374,7 @@ function validateEffectiveConflicts(entries: readonly AST.LayoutEntry[], ctx: Va
     const canonical = ASTUtils.canonicalDesignVisualHead(head)
     const previous = visualAliases.get(canonical)
     if (previous !== undefined && previous.head !== head) {
-      ctx.error(designValidationMessages.duplicateVisualAlias(previous.head, head), entry)
+      ctx.error(entry, designValidationMessages.duplicateVisualAlias(previous.head, head))
     } else if (previous === undefined) {
       visualAliases.set(canonical, { entry, head })
     }
@@ -406,7 +409,7 @@ function validateUniqueBlocks(design: AST.DesignDeclaration, ctx: ValidationCont
   ) {
     const blocks = design.block.members.filter(predicate)
     for (const block of blocks.slice(1)) {
-      ctx.error(`Design '${design.name}' may declare each typed block only once.`, block)
+      ctx.error(block, designValidationMessages.duplicateTypedBlock(design.name))
     }
   }
 }
@@ -461,7 +464,7 @@ function designSpecMembers(design: AST.DesignDeclaration): Map<string, DesignSpe
 
 function validateColorLiteral(value: string, node: AST.Node, ctx: ValidationContext): void {
   if (!cssHexColor.test(value)) {
-    ctx.error(designValidationMessages.malformedColor(value), node)
+    ctx.error(node, designValidationMessages.malformedColor(value))
   }
 }
 
@@ -475,7 +478,7 @@ function validateColorValue(
     return
   }
   if (value.environment !== 'Scheme' || (value.expected !== 'Dark' && value.expected !== 'Light')) {
-    ctx.error(designValidationMessages.invalidColorCondition, value)
+    ctx.error(value, designValidationMessages.invalidColorCondition)
   }
   validateColorAtom(value.positive, colors, ctx)
   validateColorAtom(value.negative, colors, ctx)
@@ -492,7 +495,7 @@ function validateColorAtom(
   }
   const path = designValuePath(atom.path!)
   if (!colors.has(path)) {
-    ctx.error(`Design has no color '${path}'.`, atom)
+    ctx.error(atom, designValidationMessages.unknownColor(path))
   }
 }
 
@@ -506,7 +509,7 @@ function validateSizes(design: AST.DesignDeclaration, ctx: ValidationContext): v
   const resolving = new Set<string>()
   for (const entry of entries.values()) {
     if (resolve(entry.name) === undefined) {
-      ctx.error(designValidationMessages.invalidSize(entry.name), entry)
+      ctx.error(entry, designValidationMessages.invalidSize(entry.name))
     }
   }
 
@@ -552,7 +555,7 @@ function validateScreens(design: AST.DesignDeclaration, ctx: ValidationContext):
         ? index === block.entries.length - 1
         : threshold.unit === 'px' && threshold.value > previous
       if (!valid) {
-        ctx.error(designValidationMessages.invalidScreen(entry.name), entry)
+        ctx.error(entry, designValidationMessages.invalidScreen(entry.name))
       }
       if (threshold !== undefined) {
         previous = threshold.value
@@ -570,7 +573,7 @@ function validateDesignLayoutReferences(
   for (const entry of entries) {
     for (const reference of layoutSizeReferences(entry)) {
       if (!sizes.has(reference)) {
-        ctx.error(`Design '${design.name}' has no size '${reference}'.`, entry)
+        ctx.error(entry, designValidationMessages.unknownSize(design.name, reference))
       }
     }
   }

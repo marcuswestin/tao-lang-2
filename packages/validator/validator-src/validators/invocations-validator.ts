@@ -56,58 +56,58 @@ function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext)
     Switch.kind(diagnostic, {
       'missing-argument': diagnostic => {
         ctx.error(
-          invocationValidationMessages.missingArgument(view.name, Type.parameterName(diagnostic.parameter)),
           render,
+          invocationValidationMessages.missingArgument(view.name, Type.parameterName(diagnostic.parameter)),
         )
       },
       'unmatched-argument': diagnostic => {
-        ctx.error(invocationValidationMessages.unmatchedArgument(view.name), diagnostic.argument)
+        ctx.error(diagnostic.argument, invocationValidationMessages.unmatchedArgument(view.name))
       },
       'ambiguous-argument': diagnostic => {
         ctx.error(
-          invocationValidationMessages.ambiguousArgument(view.name, diagnostic.parameters),
           diagnostic.argument,
+          invocationValidationMessages.ambiguousArgument(view.name, diagnostic.parameters),
         )
       },
       'ambiguous-parameter': diagnostic => {
         ctx.error(
+          render,
           invocationValidationMessages.ambiguousParameter(
             view.name,
             Type.parameterName(diagnostic.parameter),
           ),
-          render,
         )
       },
       'duplicate-argument-type': diagnostic => {
-        ctx.error(invocationValidationMessages.duplicateArgumentType(view.name), diagnostic.argument)
+        ctx.error(diagnostic.argument, invocationValidationMessages.duplicateArgumentType(view.name))
       },
       'duplicate-parameter-type': diagnostic => {
         ctx.error(
+          render,
           invocationValidationMessages.duplicateParameterType(
             view.name,
             Type.parameterName(diagnostic.parameter),
           ),
-          render,
         )
       },
       'unknown-named-argument': diagnostic => {
-        ctx.error(invocationValidationMessages.unknownNamedArgument(view.name, diagnostic.name), diagnostic.argument)
+        ctx.error(diagnostic.argument, invocationValidationMessages.unknownNamedArgument(view.name, diagnostic.name))
       },
       'duplicate-named-argument': diagnostic => {
         ctx.error(
-          invocationValidationMessages.duplicateNamedArgument(view.name, Type.parameterName(diagnostic.parameter)),
           diagnostic.argument,
+          invocationValidationMessages.duplicateNamedArgument(view.name, Type.parameterName(diagnostic.parameter)),
         )
       },
       'named-argument-type': diagnostic => {
         ctx.error(
+          diagnostic.argument,
           invocationValidationMessages.namedArgumentType(
             view.name,
             Type.parameterName(diagnostic.parameter),
             Type.displayName(Type.ofParameter(diagnostic.parameter)),
             Type.displayName(Type.ofArgument(diagnostic.argument)),
           ),
-          diagnostic.argument,
         )
       },
     })
@@ -116,8 +116,8 @@ function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext)
     Switch.kind(diagnostic, {
       'duplicate-event': diagnostic => {
         ctx.error(
-          invocationValidationMessages.duplicateEvent(view.name, diagnostic.handler.event),
           diagnostic.handler,
+          invocationValidationMessages.duplicateEvent(view.name, diagnostic.handler.event),
         )
       },
       'unsupported-event': diagnostic => {
@@ -125,41 +125,41 @@ function reportInvocationDiagnostics(render: AST.Render, ctx: ValidationContext)
           ? Type.parameterName(diagnostic.parameter)
           : eventParameterName(diagnostic.handler.event)
         ctx.error(
-          invocationValidationMessages.unsupportedEvent(view.name, diagnostic.handler.event, parameter),
           diagnostic.handler,
+          invocationValidationMessages.unsupportedEvent(view.name, diagnostic.handler.event, parameter),
         )
       },
       'event-argument-conflict': diagnostic => {
         ctx.error(
+          diagnostic.handler,
           invocationValidationMessages.eventArgumentConflict(
             view.name,
             diagnostic.handler.event,
             Type.parameterName(diagnostic.parameter),
           ),
-          diagnostic.handler,
         )
       },
       'event-action-type': diagnostic => {
         ctx.error(
+          diagnostic.handler,
           invocationValidationMessages.eventActionType(
             view.name,
             diagnostic.handler.event,
             Type.displayName(Type.ofParameter(diagnostic.parameter)),
             Type.displayName(diagnostic.actual),
           ),
-          diagnostic.handler,
         )
       },
       'unexpected-event-payload': diagnostic => {
         ctx.error(
-          invocationValidationMessages.unexpectedEventPayload(diagnostic.handler.event),
           diagnostic.handler.payload ?? diagnostic.handler,
+          invocationValidationMessages.unexpectedEventPayload(diagnostic.handler.event),
         )
       },
       'implicit-change-target': diagnostic => {
         ctx.error(
-          invocationValidationMessages.implicitChangeTarget(view.name),
           diagnostic.valueArgument,
+          invocationValidationMessages.implicitChangeTarget(view.name),
         )
       },
     })

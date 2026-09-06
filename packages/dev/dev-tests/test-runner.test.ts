@@ -3,101 +3,133 @@ import { MachineLanes } from '../dev-src/repository-tests/MachineLanes'
 import { TestResultSummary } from '../dev-src/repository-tests/TestResultSummary'
 import { TestRunner } from '../dev-src/repository-tests/TestRunner'
 
-function suiteState(name: string, sleepSeconds = 0) {
-  return TestRunner.createSuiteState({ name, command: 'sleep', args: [String(sleepSeconds)] })
+function suiteState(name: string, sleepSeconds = 0, scheduling?: { cost?: number; priority?: number }) {
+  return TestRunner.createSuiteState({ name, command: 'sleep', args: [String(sleepSeconds)], scheduling })
 }
 
-Describe('test runner suite scheduling', () => {
-  Test('filtered Bun suites pass when another package owns the matching test', async () => {
-    const suites = await TestRunner.discoverTestSuites('one package only')
-    const devSuite = suites.find(suite => suite.name === 'dev')
+/** discover answers one selection from the real registry and returns the suites by name. */
+async function discover(
+  selection: Parameters<typeof TestRunner.discoverTestSuites>[0] = {},
+  context: Parameters<typeof TestRunner.discoverTestSuites>[1] = {},
+) {
+  const result = await TestRunner.discoverTestSuites(selection, context)
+  return { ...result, byName: new Map(result.suites.map(suite => [suite.name, suite])) }
+}
 
-    Expect(devSuite?.args).toContain('--pass-with-no-tests')
-    Expect(devSuite?.args).toContain('--test-name-pattern=one package only')
+Describe('test runner suite registry', () => {
+  Test('a name pattern filters every Bun suite and leaves out the suite that cannot filter by name', async () => {
+    const { byName, skipped } = await discover({ pattern: 'one package only' })
+
+    Expect(byName.get('dev')?.args).toContain('--pass-with-no-tests')
+    Expect(byName.get('dev')?.args).toContain('--test-name-pattern=one package only')
+    Expect(byName.has('tao-apps')).toBe(false)
+    // The summary's note comes from the registry entry, so the runner has no second flag to keep true.
+    Expect(skipped).toEqual([{ name: 'tao-apps', reason: 'a test-name pattern cannot select Tao behavior tests' }])
   })
 
   Test('gives concurrent process-heavy developer tests a contention-safe timeout', async () => {
-    const suites = await TestRunner.discoverTestSuites()
-    const devSuite = suites.find(suite => suite.name === 'dev')
+    const { byName } = await discover()
 
-    Expect(devSuite?.args).toContain('--concurrent')
-    Expect(devSuite?.args).toContain('--timeout=15000')
+    Expect(byName.get('dev')?.args).toContain('--concurrent')
+    Expect(byName.get('dev')?.args).toContain('--timeout=15000')
   })
 
   Test('runs performance checks as a dashboard suite', async () => {
-    const suites = await TestRunner.discoverTestSuites()
-    const performanceSuite = suites.find(suite => suite.name === 'performance-checks')
+    const { byName } = await discover()
 
     Expect(
-      performanceSuite?.args.some(argument =>
+      byName.get('performance-checks')?.args.some(argument =>
         argument.endsWith('/packages/dev/performance-checks/language-performance.test.ts')
       ),
     ).toBe(true)
   })
 
   Test('holds the Jest suite to the slots it reserved instead of letting it size to the machine', async () => {
-    const suites = await TestRunner.discoverTestSuites()
-    const jestSuite = suites.find(suite => suite.name === 'runtime-jest')
+    const { byName } = await discover()
 
     // Jest defaults to `cpuCount - 1` workers. Inside a three-slot reservation that fills the
     // machine on its own, and on a machine already shared with another worktree it fills it twice.
-    Expect(jestSuite?.args).toContain('--maxWorkers=3')
+    Expect(byName.get('runtime-jest')?.args).toContain('--maxWorkers=3')
   })
 
   Test('narrows the Jest suite further when the whole lane has been narrowed', async () => {
-    const suites = await TestRunner.discoverTestSuites('', 1)
-    const jestSuite = suites.find(suite => suite.name === 'runtime-jest')
+    const { byName } = await discover({}, { jobs: 1 })
 
-    Expect(jestSuite?.args).toContain('--maxWorkers=1')
+    Expect(byName.get('runtime-jest')?.args).toContain('--maxWorkers=1')
   })
 
   Test('narrows the Jest child to the slots actually admitted after another lane joins', async () => {
-    const suites = await TestRunner.discoverTestSuites()
-    const jestSuite = suites.find(suite => suite.name === 'runtime-jest')!
-    const state = TestRunner.createSuiteState(jestSuite)
+    const { byName } = await discover()
+    const state = TestRunner.createSuiteState(byName.get('runtime-jest')!)
+    const run = state.node.run
+    Expect(typeof run).toBe('function')
+    if (typeof run !== 'function') {
+      return
+    }
 
-    Expect(state.node.runForSlots?.(1).args).toContain('--maxWorkers=1')
-    Expect(state.node.runForSlots?.(2).args).toContain('--maxWorkers=2')
+    Expect(run({ slots: 1 }).args).toContain('--maxWorkers=1')
+    Expect(run({ slots: 2 }).args).toContain('--maxWorkers=2')
   })
 
   Test('gives every native runner its own structured report artifact', async () => {
-    const suites = await TestRunner.discoverTestSuites('', 3, { reportRoot: '/tmp/test-reports' })
-    const devSuite = suites.find(suite => suite.name === 'dev')
-    const jestSuite = suites.find(suite => suite.name === 'runtime-jest')
+    const { byName } = await discover({}, { jobs: 3, reportRoot: '/tmp/test-reports' })
 
-    Expect(devSuite?.args).toContain('--reporter=junit')
-    Expect(devSuite?.args).toContain('--reporter-outfile=/tmp/test-reports/dev.xml')
-    Expect(jestSuite?.args).toContain('--json')
-    Expect(jestSuite?.args).toContain('--outputFile=/tmp/test-reports/runtime-jest.json')
+    Expect(byName.get('dev')?.args).toContain('--reporter=junit')
+    Expect(byName.get('dev')?.args).toContain('--reporter-outfile=/tmp/test-reports/dev.xml')
+    Expect(byName.get('runtime-jest')?.args).toContain('--json')
+    Expect(byName.get('runtime-jest')?.args).toContain('--outputFile=/tmp/test-reports/runtime-jest.json')
   })
 
   Test('a suite plan keeps only the named suites and hands the Tao Apps suite its roots', async () => {
-    const suites = await TestRunner.discoverTestSuites('', 3, {
+    const { byName, suites } = await discover({
+      files: new Map([['tao-apps', ['Apps/WordFlower']]]),
+      kind: 'changed',
       suites: new Set(['dev', 'runtime-jest', 'tao-apps']),
-      taoAppPaths: ['Apps/WordFlower'],
-    })
+    }, { jobs: 3 })
 
     Expect(suites.map(suite => suite.name)).toEqual(['dev', 'runtime-jest', 'tao-apps'])
     // Whole suites run in full: neither runner is asked to narrow by Git, because Bun's
     // `--changed` stops at the package boundary and Jest ignores `--changedSince` beside paths.
-    Expect(suites.find(suite => suite.name === 'dev')?.args.some(arg => arg.startsWith('--changed'))).toBe(false)
-    Expect(suites.find(suite => suite.name === 'dev')?.args).not.toContain('--pass-with-no-tests')
-    Expect(suites.find(suite => suite.name === 'runtime-jest')?.args.some(arg => arg.startsWith('--changedSince')))
-      .toBe(false)
-    Expect(suites.find(suite => suite.name === 'tao-apps')?.args).toEqual(['test', 'Apps/WordFlower'])
-    Expect(suites.find(suite => suite.name === 'tao-apps')?.files).toEqual(['Apps/WordFlower'])
+    Expect(byName.get('dev')?.args.some(arg => arg.startsWith('--changed'))).toBe(false)
+    Expect(byName.get('dev')?.args).not.toContain('--pass-with-no-tests')
+    Expect(byName.get('runtime-jest')?.args.some(arg => arg.startsWith('--changedSince'))).toBe(false)
+    Expect(byName.get('tao-apps')?.args).toEqual(['test', 'Apps/WordFlower'])
+    Expect(byName.get('tao-apps')?.files).toEqual(['Apps/WordFlower'])
+  })
+
+  Test('exact files run only their own suites, over only those files', async () => {
+    const file = 'packages/shared/shared-tests/shared.test.ts'
+    const { suites } = await discover({
+      files: new Map([['shared', [file]]]),
+      kind: 'file',
+      suites: new Set(['shared']),
+    })
+
+    Expect(suites.map(suite => suite.name)).toEqual(['shared'])
+    Expect(suites[0]?.files).toEqual([file])
+    Expect(suites[0]?.args.filter(arg => arg.endsWith('.test.ts'))).toHaveLength(1)
   })
 
   Test('the complete run tests every app and the inventory names every suite it would run', async () => {
-    const suites = await TestRunner.discoverTestSuites()
+    const { byName, skipped, suites } = await discover()
     const inventory = await TestRunner.suiteInventory()
 
-    Expect(suites.find(suite => suite.name === 'tao-apps')?.args).toEqual(['test', 'Apps'])
+    Expect(skipped).toEqual([])
+    Expect(byName.get('tao-apps')?.args).toEqual(['test', 'Apps'])
     Expect(inventory.packageSuites).toContain('dev')
     Expect(inventory.packageSuites).toContain('shared')
     Expect(inventory.hasRuntimeJest).toBe(true)
     const expected = [...inventory.packageSuites, 'performance-checks', 'runtime-jest', 'tao-apps'].sort()
     Expect(suites.map(suite => suite.name).sort()).toEqual(expected)
+  })
+
+  Test('weights the widest suites so the three largest fit inside the test gate together', async () => {
+    const { byName } = await discover()
+
+    Expect(byName.get('tao-apps')?.scheduling).toEqual({ priority: 5, cost: 8 })
+    Expect(byName.get('runtime-jest')?.scheduling).toEqual({ priority: 4, cost: 3 })
+    Expect(byName.get('runtime-toolchain')?.scheduling).toEqual({ priority: 3, cost: 2 })
+    Expect(byName.get('dev')?.scheduling).toBeUndefined()
   })
 
   Test('a name-filter run fails only when reporter metadata proves zero tests executed', () => {
@@ -136,7 +168,11 @@ Describe('test runner suite scheduling', () => {
 
   Test('a costly suite reserves the whole capacity before cheap suites start', async () => {
     const events: string[] = []
-    const states = [suiteState('cheap-a'), suiteState('tao-apps', 0.1), suiteState('cheap-b')]
+    const states = [
+      suiteState('cheap-a'),
+      suiteState('tao-apps', 0.1, { priority: 5, cost: 8 }),
+      suiteState('cheap-b'),
+    ]
     await TestRunner.runSuiteProcesses(states, {
       jobs: 2,
       onChange: () => {},
@@ -153,7 +189,11 @@ Describe('test runner suite scheduling', () => {
 
   Test('higher-priority suites start first under a single job', async () => {
     const started: string[] = []
-    const states = [suiteState('cheap-a'), suiteState('tao-cli'), suiteState('runtime-jest')]
+    const states = [
+      suiteState('cheap-a'),
+      suiteState('tao-cli', 0, { priority: 2 }),
+      suiteState('runtime-jest', 0, { priority: 4, cost: 3 }),
+    ]
     await TestRunner.runSuiteProcesses(states, {
       jobs: 1,
       onChange: () => {},
@@ -217,6 +257,20 @@ Describe('test lane reporting on a shared machine', () => {
 
     Expect(output).toContain('failed again on an isolated retry')
     Expect(output).not.toContain('Confirm it alone')
+  })
+
+  Test('names every suite the registry left out, with the registry reason', async () => {
+    const state = suiteState('dev')
+    state.status = 'passed'
+    const captured = await withCapturedOutput(() => {
+      TestResultSummary.printResultSummary([state], 1_000, {
+        skippedSuites: [{ name: 'tao-apps', reason: 'a test-name pattern cannot select Tao behavior tests' }],
+      })
+    })
+
+    Expect(captured.stdout).toContain(
+      'Note: the tao-apps suite was skipped; a test-name pattern cannot select Tao behavior tests.',
+    )
   })
 
   Test('says nothing at all about a machine this run had to itself', async () => {

@@ -246,7 +246,7 @@ export async function readDependencyFacts(repoRoot = Repo.getRoot()): Promise<De
       (await readJsonOrEmpty<{ peerDependencies?: Record<string, string> }>(anchorBase, 'react-native/package.json'))
         .peerDependencies?.['@types/react'],
     resolvedByPackage,
-    satisfies: (version, range) => Bun.semver.satisfies(version, range),
+    satisfies: Platform.semverSatisfies,
   }
 }
 

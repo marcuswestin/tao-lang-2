@@ -1,7 +1,7 @@
 import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { TaoFormatter } from 'tao-formatter'
-import { AST, Langium } from 'tao-parser'
+import { AST, codeProjectRoot, Langium } from 'tao-parser'
 import { TaoCodeActionProvider } from 'tao-source-actions/langium-code-actions'
 import { LSPWorkspace } from 'tao-workspace'
 import { mergeTaoTextMateGrammar } from '../ide-extension-src/syntax/textmate-grammar'
@@ -188,10 +188,10 @@ Describe('Tao IDE extension smoke', () => {
 
   Test('reports duplicate visible declarations through Langium services', async () => {
     const diagnostics = await validateFilesWithLanguageServerServices({
-      '/__tao__/First.tao': `
+      [`${codeProjectRoot}/First.tao`]: `
         workspace let Shared = "First"
       `,
-      '/__tao__/Second.tao': `
+      [`${codeProjectRoot}/Second.tao`]: `
         package let Shared = "Second"
       `,
     })
@@ -320,8 +320,8 @@ async function validateFilesWithLanguageServerServices(sources: Record<string, s
     const workspace = await LSPWorkspace.open(rootDir)
     const services = workspace.services
     const documents = Object.entries(sources).map(([path, source]) => {
-      const workspacePath = path.startsWith('/__tao__/')
-        ? FS.resolvePath(path.slice('/__tao__/'.length), rootDir)
+      const workspacePath = path.startsWith(`${codeProjectRoot}/`)
+        ? FS.resolvePath(path.slice(codeProjectRoot.length + 1), rootDir)
         : FS.resolvePath(path, rootDir)
       const document = services.shared.workspace.LangiumDocumentFactory.fromString<AST.TaoFile>(
         source,

@@ -26,13 +26,19 @@ function createExpoAppConfig(config, projectRoot, env = process.env) {
       },
     }
 
+  // An app bound to the iCloud datasource needs the iCloud Documents entitlements in its binary;
+  // the manifest names the containers so the plugin never has to guess from the bundle identifier.
+  const icloudPlugins = ship.icloud === undefined
+    ? []
+    : [['tao-icloud-native', { containers: ship.icloud.containers, services: ship.icloud.services }]]
+
   return {
     ...config,
     name: ship.name,
     slug: ship.slug,
     version: ship.version,
     icon,
-    plugins: [...(config.plugins ?? []), './plugins/with-ios-fmt-compat.cjs'],
+    plugins: [...(config.plugins ?? []), './plugins/with-ios-fmt-compat.cjs', ...icloudPlugins],
     splash: {
       backgroundColor: '#171b2d',
       image: ship.splash ?? './assets/tao-app-icon.png',

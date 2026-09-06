@@ -488,6 +488,14 @@ function runtimeManifest(
     bundleIdentifier: prepared.bundleIdentifier,
     git: { commit, dirty: prepared.git.dirty },
     icon: prepared.app.name === prepared.project.primaryAppName ? 'default' : 'badged',
+    ...(prepared.app.icloud === undefined
+      ? {}
+      : {
+        icloud: {
+          containers: [prepared.app.icloud.container ?? `iCloud.${prepared.bundleIdentifier}`],
+          services: [...prepared.app.icloud.services],
+        },
+      }),
     ios: { usesNonExemptEncryption: false },
     name: prepared.app.displayName,
     schemaVersion: 1,

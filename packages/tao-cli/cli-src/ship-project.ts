@@ -8,6 +8,8 @@ export type ShipProjectApp = {
   baseAppName?: string
   displayName: string
   hasLocalDatasourceEndpoint: boolean
+  /** icloud is present when the app mounts the iCloud datasource; its explicit container, if any. */
+  icloud?: ShipICloudBinding
   isVariant: boolean
   name: string
   releaseDatasourceConfiguration?: Readonly<Record<string, string>>
@@ -15,6 +17,20 @@ export type ShipProjectApp = {
   /** The app configures the development-only `Dev` datasource, which needs a running dev server. */
   usesDevDatasource: boolean
 }
+
+export type ShipICloudBinding = {
+  container?: string
+  /** services names the iCloud service the bound provider needs entitled. */
+  services: readonly ShipICloudService[]
+}
+
+type ShipICloudService = 'CloudDocuments' | 'CloudKit'
+
+/** The Apple datasource providers, each with the iCloud service its entitlement must name. */
+const appleDatasourceProviders: ReadonlyArray<{ importPath: string; service: ShipICloudService; typeName: string }> = [
+  { importPath: 'icloud', service: 'CloudDocuments', typeName: 'ICloud' },
+  { importPath: 'cloudkit', service: 'CloudKit', typeName: 'CloudKit' },
+]
 
 export type ShipProject = {
   apps: ShipProjectApp[]
@@ -95,11 +111,13 @@ async function readShipProject(
     for (const declaration of AST.appValueDeclarationsInFile(parsed.entry.ast)) {
       const declarationSource = declaration.$cstNode?.text ?? ''
       const releaseDatasourceConfiguration = deriveHostedDatasourceConfiguration(declaration.name, source)
+      const icloud = deriveICloudBinding(declarationSource, source)
       apps.push({
         baseAppName: directAppBaseName(declarationSource),
         displayName: authoredAppName(declarationSource) ?? declaration.name,
         hasLocalDatasourceEndpoint: declaration.name.toLowerCase().includes('instantdb')
           && /(?:ApiURI|WebsocketURI)\s+"(?:https?|wss?):\/\/localhost(?::\d+)?/u.test(source),
+        ...(icloud === undefined ? {} : { icloud }),
         isVariant: AST.isAliasDeclaration(declaration)
           || (AST.isAppDeclaration(declaration) && declaration.value !== undefined),
         name: declaration.name,
@@ -162,6 +180,111 @@ export function deriveHostedDatasourceConfiguration(
     AppId: uniqueAppIds[0]!,
     WebsocketURI: 'wss://api.instantdb.com/runtime/session',
   }
+}
+
+/**
+ * deriveICloudBinding reports whether an app declaration mounts one of the Apple datasources —
+ * directly, through a named `datasource X = ICloud { … }` or a `type X is CloudKit with { … }`,
+ * through a `Datasource with { … }` patch of its base, or by inheriting its direct base app's
+ * binding — with the explicit `Container` that datasource declares, if any, and the iCloud
+ * service the provider needs. The ship pipeline turns the binding into the binary's iCloud
+ * entitlements, defaulting the container to the bundle identifier.
+ */
+export function deriveICloudBinding(
+  declarationSource: string,
+  source: string,
+): ShipICloudBinding | undefined {
+  const file = withoutLineComments(source)
+  const own = withoutLineComments(declarationSource)
+  for (const provider of appleDatasourceProviders) {
+    if (!new RegExp(`\\bfrom\\s+@tao/data/providers/${provider.importPath}\\b`, 'u').test(file)) {
+      continue
+    }
+    const binding = providerBinding(provider.typeName, own, file)
+    if (binding !== undefined) {
+      return { ...binding, services: [provider.service] }
+    }
+  }
+  return undefined
+}
+
+function providerBinding(
+  typeName: string,
+  declarationSource: string,
+  file: string,
+): { container?: string } | undefined {
+  // Every spelling that binds the provider by name: a configured `datasource X = T { … }` (with or
+  // without `with`), and a reusable `type X is T with { … }` an app then constructs.
+  const namedBindings = new Map<string, string>()
+  for (
+    const match of file.matchAll(
+      new RegExp(
+        `\\b(?:datasource\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*=|type\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+is)\\s*${typeName}\\s*(?:with\\s*)?\\{([^}]*)\\}`,
+        'gu',
+      ),
+    )
+  ) {
+    namedBindings.set(match[1] ?? match[2]!, match[3]!)
+  }
+  const bindingOf = (appSource: string): { container?: string } | undefined => {
+    const inline = new RegExp(`\\bDatasource\\s+${typeName}\\s*(?:with\\s*)?\\{([^}]*)\\}`, 'u').exec(appSource)
+    if (inline) {
+      return { ...containerOf(inline[1]!) }
+    }
+    const named = /\bDatasource\s+([A-Za-z_][A-Za-z0-9_]*)\b(?:\s*(?:with\s*)?\{([^}]*)\})?/u.exec(appSource)
+    if (named === null) {
+      return undefined
+    }
+    const [, name, patch] = named
+    if (name === 'with') {
+      // `Datasource with { … }` patches the base app's datasource; the base decides the provider
+      // and the patch may override the container.
+      const inherited = fromBase(appSource)
+      return inherited === undefined ? undefined : { ...inherited, ...containerOf(patch ?? '') }
+    }
+    const declared = namedBindings.get(name!)
+    if (declared === undefined) {
+      return undefined
+    }
+    return { ...containerOf(declared), ...containerOf(patch ?? '') }
+  }
+  const fromBase = (appSource: string): { container?: string } | undefined => {
+    const baseName = directAppBaseName(appSource)
+    if (baseName === undefined) {
+      return undefined
+    }
+    const base = appDeclarationText(file, baseName)
+    return base === undefined ? undefined : bindingOf(base)
+  }
+  return /\bDatasource\b/u.test(declarationSource) ? bindingOf(declarationSource) : fromBase(declarationSource)
+}
+
+/**
+ * withoutLineComments drops `//` comments so a commented-out binding never ships an entitlement.
+ * A comment starts at a line start or after whitespace, which leaves the `//` inside a URL alone.
+ */
+function withoutLineComments(source: string): string {
+  return source.replace(/(^|\s)\/\/[^\n]*/gu, '$1')
+}
+
+/** appDeclarationText finds a direct app declaration's text, whether it closes on its line or later. */
+function appDeclarationText(source: string, name: string): string | undefined {
+  const opening = new RegExp(`^[ \\t]*app\\s+${name}\\s*\\{.*$`, 'mu').exec(source)
+  if (opening === null) {
+    return undefined
+  }
+  if (opening[0].trimEnd().endsWith('}')) {
+    return opening[0]
+  }
+  const closing = /^\}/mu.exec(source.slice(opening.index + opening[0].length))
+  return closing === null
+    ? undefined
+    : source.slice(opening.index, opening.index + opening[0].length + closing.index + 1)
+}
+
+function containerOf(block: string): { container?: string } {
+  const container = /\bContainer\s+"([^"]+)"/u.exec(block)?.[1]
+  return container === undefined ? {} : { container }
 }
 
 function oneProjectString(

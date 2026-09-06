@@ -1,8 +1,568 @@
+import type { TaoSchemeCapability } from '@runtime/TR-scheme'
 import { TaoStudioProtocolVersions } from '@runtime/TR-studio-protocol'
+import { Assert } from '@shared/core'
+import type { StudioDeviceStateEvent } from './device/StudioDeviceStatus'
+import type {
+  StudioCompileCompletion,
+  StudioCompileSnapshot,
+  StudioWatchResult,
+} from './StudioCompileCoordinator'
+import type { StudioPreviewManifestV2 } from './StudioPreviewManifest'
+import type { StudioServerInvalidation } from './StudioServerDatasource'
+import type {
+  studioSketchCatalogFormatVersion,
+  StudioSketchCatalogResult,
+  StudioSketchCatalogSnapshot,
+} from './StudioSketchCatalog'
+import type { StudioSketchSnapTree } from './StudioSketchSnap'
+
+/**
+ * The capability a browser cell reports: it follows the page's color scheme as it changes. Mirrors
+ * `reactiveBrowserSchemeCapability` in packages/runtime/TaoRuntime-src/TR-scheme.ts; a runtime value
+ * import here would pull React Native into the packaged Studio service bundle.
+ */
+export const reactiveBrowserSchemeCapability = 'reactive-browser' satisfies TaoSchemeCapability
+
+/*
+ * StudioProtocol is the one wire contract between the Studio server, the browser client, the Tao-side
+ * foreign actions, and the preview iframe. Every DTO, route, and event either side sends is declared
+ * here once, so a shape or path only exists in one place and a mismatch fails to typecheck rather
+ * than at runtime.
+ */
 
 export const studioProtocolVersion = TaoStudioProtocolVersions.protocolVersion
 export const studioProtocolChannel = TaoStudioProtocolVersions.channel
 export const studioSourceActionVersion = TaoStudioProtocolVersions.sourceActionVersion
+
+// ---- Session identity and window paths
+
+/** The grammar of one opaque window/session id; anything else in a path never reaches a session. */
+const sessionIdGrammar = '[A-Za-z0-9_-]{1,128}'
+const sessionIdPattern = new RegExp(`^${sessionIdGrammar}$`)
+const sessionWindowPattern = new RegExp(`^/sessions/(${sessionIdGrammar})(/.*)?$`)
+const sessionWindowRootPattern = new RegExp(`^/sessions/${sessionIdGrammar}$`)
+
+/** Every Studio page is served under `/sessions/<id>`, and every session endpoint hangs off that window path. */
+export const StudioSessionPath = {
+  /** endpoint scopes one session route under the window that owns it. */
+  endpoint(sessionId: string, path: string): string {
+    return `${this.window(sessionId)}${path}`
+  },
+  isValidSessionId(value: string): boolean {
+    return sessionIdPattern.test(value)
+  },
+  /** isWindowRoot accepts exactly `/sessions/<id>`, the URL a session transition may land on. */
+  isWindowRoot(pathname: string): boolean {
+    return sessionWindowRootPattern.test(pathname)
+  },
+  /** route splits a request path into the window's session id and the path the session sees. */
+  route(pathname: string): { pathname: string; sessionId: string } | undefined {
+    const matched = pathname.match(sessionWindowPattern)
+    return matched === null ? undefined : { pathname: matched[2] ?? '/', sessionId: matched[1]! }
+  },
+  /** sessionIdOf reads the session id a page location is scoped to, if any. */
+  sessionIdOf(pathname: string): string | undefined {
+    return this.route(pathname)?.sessionId
+  },
+  window(sessionId: string): string {
+    return `/sessions/${encodeURIComponent(sessionId)}`
+  },
+} as const
+
+// ---- Route table
+
+export type StudioRouteMethod = 'GET' | 'POST' | 'WS'
+
+/** One HTTP or WebSocket route; a `:name` segment is a parameter, and `:sessionId` must satisfy the id grammar. */
+export type StudioRoute = Readonly<{ method: StudioRouteMethod; path: string }>
+
+/** Routes served at the server root: the Welcome surface and session management. */
+const managerRoutes = {
+  closeAllSessions: { method: 'POST', path: '/api/sessions/close-all' },
+  closeSession: { method: 'POST', path: '/api/sessions/:sessionId/close' },
+  openSession: { method: 'POST', path: '/api/sessions/open' },
+  root: { method: 'GET', path: '/' },
+  sessions: { method: 'GET', path: '/api/sessions' },
+  switchSession: { method: 'POST', path: '/api/sessions/:sessionId/switch' },
+  welcome: { method: 'GET', path: '/welcome' },
+} as const satisfies Record<string, StudioRoute>
+
+/** Routes served under one session window; the handshake advertises this table as `endpoints`. */
+const sessionRoutes = {
+  agentChat: { method: 'POST', path: '/api/agent-chat/:command' },
+  agentChatStream: { method: 'POST', path: '/api/agent-chat/stream/:command' },
+  aiAvailability: { method: 'GET', path: '/api/ai/availability' },
+  aiFixture: { method: 'POST', path: '/api/ai/fixture' },
+  dataFill: { method: 'POST', path: '/api/data/fill' },
+  deviceCapture: { method: 'POST', path: '/api/device/capture' },
+  deviceHighlight: { method: 'POST', path: '/api/device/highlight' },
+  deviceLaunch: { method: 'GET', path: '/api/device/launch' },
+  deviceLaunchOpen: { method: 'POST', path: '/api/device/launch/open' },
+  devicePairingConfirm: { method: 'POST', path: '/api/device/pairing/confirm' },
+  devicePairingDecline: { method: 'POST', path: '/api/device/pairing/decline' },
+  devicePairingOpen: { method: 'POST', path: '/api/device/pairing/open' },
+  deviceReconnect: { method: 'POST', path: '/api/device/reconnect' },
+  deviceRevoke: { method: 'POST', path: '/api/device/revoke' },
+  deviceSelectCell: { method: 'POST', path: '/api/device/select-cell' },
+  deviceStatus: { method: 'GET', path: '/api/device/status' },
+  events: { method: 'WS', path: '/events' },
+  file: { method: 'GET', path: '/api/file' },
+  fileCreate: { method: 'POST', path: '/api/file/create' },
+  fileDelete: { method: 'POST', path: '/api/file/delete' },
+  fileDraft: { method: 'POST', path: '/api/file/draft' },
+  fileMoveGenerated: { method: 'POST', path: '/api/file/move-generated' },
+  fileRename: { method: 'POST', path: '/api/file/rename' },
+  files: { method: 'GET', path: '/api/files' },
+  languageHighlight: { method: 'POST', path: '/api/language/highlight' },
+  languageLsp: { method: 'WS', path: '/api/language/lsp' },
+  previewApplied: { method: 'POST', path: '/api/preview/applied' },
+  previewCell: { method: 'GET', path: '/api/preview/cell' },
+  previewCellBootstrap: { method: 'GET', path: '/api/preview/cell/bootstrap' },
+  previewCellInstance: { method: 'POST', path: '/api/preview/cell/instance' },
+  previewCellReconfigure: { method: 'POST', path: '/api/preview/cell/reconfigure' },
+  previewDiagnosis: { method: 'GET', path: '/api/preview/diagnosis' },
+  previewInstance: { method: 'POST', path: '/api/preview/instance' },
+  previewLayoutMeasurements: { method: 'POST', path: '/api/preview/layout-measurements' },
+  previewManifest: { method: 'GET', path: '/api/preview/manifest' },
+  protocol: { method: 'GET', path: '/api/protocol' },
+  shipBeta: { method: 'POST', path: '/api/ship/beta' },
+  sketchAction: { method: 'POST', path: '/api/sketches/action' },
+  sketchFlowAction: { method: 'POST', path: '/api/sketches/flow/action' },
+  sketchSnapApply: { method: 'POST', path: '/api/sketches/snap/apply' },
+  sketchSnapPropose: { method: 'POST', path: '/api/sketches/snap/propose' },
+  sketchSnapUndo: { method: 'POST', path: '/api/sketches/snap/undo' },
+  sketchUnsnapApply: { method: 'POST', path: '/api/sketches/unsnap/apply' },
+  sketches: { method: 'GET', path: '/api/sketches' },
+  sourceAction: { method: 'POST', path: '/api/source-action' },
+  sourceActionInspect: { method: 'POST', path: '/api/source-action/inspect' },
+  sourceActionPropose: { method: 'POST', path: '/api/source-action/propose' },
+  sourceActionUndo: { method: 'POST', path: '/api/source-action/undo' },
+  testsRun: { method: 'POST', path: '/api/tests/run' },
+  testsStatus: { method: 'GET', path: '/api/tests/status' },
+} as const satisfies Record<string, StudioRoute>
+
+const routePatterns = new Map<StudioRoute, RegExp>()
+
+/** StudioRoutes is the one route table the server dispatcher, the handshake, and every client consume. */
+export const StudioRoutes = {
+  /** The browser client page of one session window. */
+  client: { method: 'GET', path: '/' },
+  /** The client bundle, served at the root and under any session window alike. */
+  clientBundle: { method: 'GET', path: '/studio.js' },
+  /** Development servers answer their bundle revision here so an open client can reload itself. */
+  devRevision: { method: 'GET', path: '/studio-dev/revision' },
+  manager: managerRoutes,
+  session: sessionRoutes,
+
+  /** match returns the route's parameters when `pathname` is that route, and undefined otherwise. */
+  match(route: StudioRoute, pathname: string): Readonly<Record<string, string>> | undefined {
+    if (!route.path.includes(':')) {
+      return pathname === route.path ? {} : undefined
+    }
+    return pathname.match(routePattern(route))?.groups ?? undefined
+  },
+  /** matchesRequest is `match` plus the method check the HTTP dispatcher applies. */
+  matchesRequest(route: StudioRoute, method: string, pathname: string): boolean {
+    return route.method === method && this.match(route, pathname) !== undefined
+  },
+  /** path fills the route's parameters, so a caller never spells a parameterised path by hand. */
+  path(route: StudioRoute, parameters: Readonly<Record<string, string>> = {}): string {
+    return route.path.replaceAll(/:([A-Za-z]+)/g, (_segment, name: string): string => {
+      const value: string | undefined = parameters[name]
+      Assert.defined(value, `a ${name} for the Studio route ${route.path}`)
+      return encodeURIComponent(value)
+    })
+  },
+} as const
+
+function routePattern(route: StudioRoute): RegExp {
+  const cached = routePatterns.get(route)
+  if (cached !== undefined) {
+    return cached
+  }
+  const source = route.path
+    .split('/')
+    .map(segment =>
+      segment === ':sessionId'
+        ? `(?<sessionId>${sessionIdGrammar})`
+        : segment.startsWith(':')
+        ? `(?<${segment.slice(1)}>.+)`
+        : segment.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    )
+    .join('/')
+  const pattern = new RegExp(`^${source}$`)
+  routePatterns.set(route, pattern)
+  return pattern
+}
+
+/** Every session-scoped route, in the shape the handshake advertises. */
+export const studioSessionEndpoints: readonly StudioRoute[] = Object.values(sessionRoutes)
+
+// ---- Transport
+
+export type StudioJsonPostInit = Readonly<{
+  body: string
+  headers: Readonly<{ 'content-type': 'application/json' }>
+  method: 'POST'
+}>
+
+/** One Studio JSON reply, unwrapped: the typed body on success, or the `{ error, details }` failure shape. */
+export type StudioJsonReply<Result> =
+  | Readonly<{ body: Result; ok: true; status: number }>
+  | Readonly<{ details?: Readonly<Record<string, unknown>>; error?: string; ok: false; status: number }>
+
+/** StudioTransport is what every HTTP or WebSocket caller of the session routes shares. */
+export const StudioTransport = {
+  jsonPostInit(body: unknown): StudioJsonPostInit {
+    return { body: JSON.stringify(body), headers: { 'content-type': 'application/json' }, method: 'POST' }
+  },
+  async readJsonReply<Result>(response: Pick<Response, 'json' | 'ok' | 'status'>): Promise<StudioJsonReply<Result>> {
+    const body = await response.json() as unknown
+    if (response.ok) {
+      return { body: body as Result, ok: true, status: response.status }
+    }
+    const failure = typeof body === 'object' && body !== null ? body as Readonly<Record<string, unknown>> : {}
+    const details = failure['details']
+    return {
+      ...(typeof details === 'object' && details !== null
+        ? { details: details as Readonly<Record<string, unknown>> }
+        : {}),
+      ...(typeof failure['error'] === 'string' ? { error: failure['error'] } : {}),
+      ok: false,
+      status: response.status,
+    }
+  },
+  /** webSocketUrl resolves a path against the page or server URL and swaps in the matching socket scheme. */
+  webSocketUrl(path: string, base: string): string {
+    const url = new URL(path, base)
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    return url.toString()
+  },
+} as const
+
+// ---- Session DTOs
+
+export type StudioProjectFile = {
+  diagnosticCount: number
+  dirty: boolean
+  kind: 'file'
+  path: string
+  sourceVersion: string
+}
+
+export type StudioProjectFileContent = StudioProjectFile & {
+  content: string
+}
+
+export type StudioAppVariant = Readonly<{
+  appName: string
+  entryPath: string
+}>
+
+export type StudioDraftWriteRequest = {
+  content: string
+  path: string
+  sourceVersion: string
+  writeId: string
+}
+
+export type StudioDraftWriteResult = {
+  compile?: StudioCompileCompletion
+  diagnostics: readonly string[]
+  file: StudioProjectFileContent
+  saved: boolean
+}
+
+export type StudioCreateFileRequest = {
+  path: string
+  writeId: string
+}
+
+export type StudioRenameFileRequest = {
+  path: string
+  sourceVersion: string
+  targetPath: string
+  writeId: string
+}
+
+export type StudioDeleteFileRequest = {
+  path: string
+  sourceVersion: string
+  writeId: string
+}
+
+export type StudioMoveGeneratedSourceRequest = {
+  path: string
+  sourceVersion: string
+  targetPackage: string
+  writeId: string
+}
+
+export type StudioCreateFileResult = {
+  compile: StudioCompileCompletion
+  file: StudioProjectFileContent
+  files: readonly StudioProjectFile[]
+}
+
+export type StudioRenameFileResult = StudioCreateFileResult & {
+  previousPath: string
+}
+
+export type StudioDeleteFileResult = {
+  compile: StudioCompileCompletion
+  deleted: StudioProjectFile
+  files: readonly StudioProjectFile[]
+}
+
+export type StudioMoveGeneratedSourceResult =
+  | {
+    conflicts: readonly string[]
+    name: string
+    status: 'confirmation-required'
+    targetPackage: string
+  }
+  | {
+    compile: StudioCompileCompletion
+    file: StudioProjectFileContent
+    files: readonly StudioProjectFile[]
+    previousPath: string
+    rewritten: readonly StudioProjectFileContent[]
+    status: 'moved'
+  }
+
+export type StudioCheckpointSummary = {
+  afterSourceVersion: string
+  beforeSourceVersion: string
+  id: string
+  path: string
+  status: 'committed' | 'open' | 'undone'
+}
+
+export type StudioInspectRenderRequest = {
+  path: string
+  renderId: string
+  sourceVersion: string
+}
+
+export type StudioSourceActionResult = {
+  checkpoint: {
+    id: string
+    status: 'committed' | 'open'
+  }
+  compile: StudioCompileCompletion
+  content: string
+  edits: readonly {
+    end: number
+    replacement: string
+    start: number
+  }[]
+  path: string
+  requestId: string
+  sourceVersion: string
+}
+
+export type StudioSourceActionProposal = {
+  content: string
+  diff: string
+  edits: readonly {
+    end: number
+    replacement: string
+    start: number
+  }[]
+  path: string
+  proposedSourceVersion: string
+  requestId: string
+  sourceVersion: string
+}
+
+export type StudioSourceActionUndoResult = {
+  checkpoint: {
+    id: string
+    status: 'undone'
+  }
+  compile: StudioCompileCompletion
+  content: string
+  path: string
+  requestId: string
+  sourceVersion: string
+}
+
+export type StudioSketchActionResult =
+  & StudioSketchCatalogResult
+  & Readonly<{
+    compile?: StudioCompileCompletion
+    generatedFile?: StudioProjectFileContent
+  }>
+
+export type StudioSketchSnapRequest = Readonly<{
+  checkpointId: string
+  confirmedProposalVersion?: string
+  expectedCatalogRevision: number
+  rectIds: readonly string[]
+  requestId: string
+  sketchId: string
+  sourceVersion: string
+}>
+
+export type StudioSketchUnsnapRequest = Readonly<
+  Omit<StudioSketchSnapRequest, 'confirmedProposalVersion'>
+>
+
+export type StudioSketchFlowAction =
+  | Readonly<{ kind: 'toggle-direction'; rectId: string }>
+  | Readonly<{ afterRectId: string; beforeRectId?: string; kind: 'insert-separator' }>
+  | Readonly<{
+    afterRectId: string
+    beforeRectId: string
+    kind: 'insert-spacer'
+    ratio: readonly [number, number]
+  }>
+
+/** Browser-safe flow intent; render identities remain a server/catalog implementation detail. */
+export type StudioSketchFlowActionRequest = Readonly<{
+  action: StudioSketchFlowAction
+  checkpointId: string
+  expectedCatalogRevision: number
+  requestId: string
+  sketchId: string
+  sourceVersion: string
+}>
+
+export type StudioSketchSnapProposalResult = Readonly<{
+  content: string
+  diff: string
+  needsConfirmation: boolean
+  path: string
+  projectedRectIds: readonly string[]
+  proposedSourceVersion: string
+  requestId: string
+  sourceVersion: string
+  tree: StudioSketchSnapTree
+}>
+
+export type StudioSketchSnapApplyResult = Readonly<{
+  catalog: StudioSketchCatalogSnapshot
+  checkpoint: { id: string; status: 'committed' }
+  compile: StudioCompileCompletion
+  file: StudioProjectFileContent
+  projectedRectIds: readonly string[]
+  requestId: string
+}>
+
+export type StudioSketchSnapUndoRequest = Readonly<{
+  checkpointId: string
+  expectedCatalogRevision: number
+  requestId: string
+  sourceVersion: string
+}>
+
+export type StudioSketchSnapUndoResult = Readonly<{
+  catalog: StudioSketchCatalogSnapshot
+  checkpoint: { id: string; status: 'undone' }
+  compile: StudioCompileCompletion
+  file: StudioProjectFileContent
+  requestId: string
+}>
+
+/** The first message on the session event socket, and the body of `GET /api/protocol`. */
+export type StudioSessionHandshake = {
+  apps: readonly StudioAppVariant[]
+  capabilities: {
+    drafts: 'disk-synced-parsable'
+    language: readonly string[]
+    sourceActions: {
+      canonicalEnvelope: true
+      checkpoints: true
+      proposals: true
+      undo: true
+      version: typeof studioSourceActionVersion
+    }
+    matrix: {
+      concurrentCells: true
+      scheme: 'reactive-browser-fixed-light-native'
+      version: 2
+    }
+    sketches: {
+      catalogVersion: typeof studioSketchCatalogFormatVersion
+      freeGeometry: true
+    }
+  }
+  channel: typeof studioProtocolChannel
+  compile: StudioCompileSnapshot
+  endpoints: readonly StudioRoute[]
+  entryPath: string
+  files: readonly StudioProjectFile[]
+  identity: StudioProjectIdentity
+  previewManifest?: StudioPreviewManifestV2
+  sketchCatalog: StudioSketchCatalogSnapshot
+  protocolVersion: typeof studioProtocolVersion
+  type: 'handshake'
+}
+
+/** Events one project session publishes; the server relays each to that session's event sockets. */
+export type StudioSessionEvent =
+  | {
+    channel: typeof studioProtocolChannel
+    protocolVersion: typeof studioProtocolVersion
+    state: StudioCompileSnapshot
+    type: 'compile-state'
+  }
+  | {
+    channel: typeof studioProtocolChannel
+    file: StudioProjectFile
+    protocolVersion: typeof studioProtocolVersion
+    type: 'file-changed'
+  }
+  | {
+    channel: typeof studioProtocolChannel
+    files: readonly StudioProjectFile[]
+    protocolVersion: typeof studioProtocolVersion
+    type: 'files-changed'
+  }
+  | {
+    acknowledgements: StudioWatchResult['acknowledgements']
+    channel: typeof studioProtocolChannel
+    protocolVersion: typeof studioProtocolVersion
+    type: 'studio-writes-acknowledged'
+  }
+  | {
+    channel: typeof studioProtocolChannel
+    manifest: StudioPreviewManifestV2
+    protocolVersion: typeof studioProtocolVersion
+    type: 'preview-manifest-changed'
+  }
+  | {
+    channel: typeof studioProtocolChannel
+    checkpoint: Pick<StudioCheckpointSummary, 'id' | 'status'>
+    protocolVersion: typeof studioProtocolVersion
+    type: 'checkpoint-changed'
+  }
+  | {
+    catalog: StudioSketchCatalogSnapshot
+    channel: typeof studioProtocolChannel
+    protocolVersion: typeof studioProtocolVersion
+    type: 'sketch-catalog-changed'
+  }
+  /**
+   * One cell was reconfigured — new arguments, environment, state layers, or a replayed capture.
+   * Reconfiguring invalidates every live instance of that cell, so a canvas rendering it holds an
+   * instance the session will refuse from that moment on. The browser learns this by driving the
+   * reconfigure itself; anything else rendering the same cell has to be told.
+   */
+  | {
+    cellId: string
+    channel: typeof studioProtocolChannel
+    protocolVersion: typeof studioProtocolVersion
+    type: 'cell-reconfigured'
+  }
+
+/** The server-side datasource's query families went stale; Tao panels mirroring them refetch. */
+export type StudioDataInvalidatedEvent = StudioServerInvalidation & { type: 'data-invalidated' }
+
+/** Everything the session event socket sends after its handshake. */
+export type StudioSessionSocketEvent = StudioDataInvalidatedEvent | StudioDeviceStateEvent | StudioSessionEvent
+
+// ---- Preview protocol
 
 export type StudioJsonObject = { readonly [key: string]: StudioJsonValue }
 
@@ -242,7 +802,7 @@ type StudioPreviewSchemeMessage = {
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
   scheme: Readonly<{
-    capability: 'fixed-light-native' | 'reactive-browser'
+    capability: 'fixed-light-native' | typeof reactiveBrowserSchemeCapability
     requested: 'dark' | 'light' | 'system'
     resolved: 'dark' | 'light'
     source: 'native-fixed' | 'preference' | 'scenario' | 'system'
@@ -672,7 +1232,7 @@ function parsePreviewScheme(value: StudioJsonObject): StudioPreviewSchemeMessage
   if (
     identity === undefined
     || !isObject(scheme)
-    || !['fixed-light-native', 'reactive-browser'].includes(String(scheme['capability']))
+    || !['fixed-light-native', reactiveBrowserSchemeCapability].includes(String(scheme['capability']))
     || !['dark', 'light', 'system'].includes(String(scheme['requested']))
     || !['dark', 'light'].includes(String(scheme['resolved']))
     || !['native-fixed', 'preference', 'scenario', 'system'].includes(String(scheme['source']))

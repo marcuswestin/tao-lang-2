@@ -36,14 +36,14 @@ export const ResponsesValidator = {
       // `respond` is legal only in a view that promises a typed answer with `responds`.
       const owner = AST.findOwningView(respond)
       if (!owner?.response) {
-        ctx.error(responseValidationMessages.responseContext, respond)
+        ctx.error(respond, responseValidationMessages.responseContext)
       }
     },
     [AST.ActionBlock.$type]: (block, ctx) => {
       const seen = new Set<string>()
       for (const ask of AST.askDeclarationsOwnedByActionBlock(block)) {
         if (seen.has(ask.name)) {
-          ctx.error(responseValidationMessages.duplicateResult(ask.name), ask)
+          ctx.error(ask, responseValidationMessages.duplicateResult(ask.name))
         }
         seen.add(ask.name)
       }
@@ -59,71 +59,71 @@ function validateAsk(ask: AST.AskStatement, ctx: ValidationContext): void {
   }
   // `ask` answers with the target's `responds` type, so a view without one cannot be asked.
   if (!view.response) {
-    ctx.error(responseValidationMessages.askTarget(view.name), ask)
+    ctx.error(ask, responseValidationMessages.askTarget(view.name))
   }
   const resolved = ASTUtils.resolveArgumentBindings(view, ask)
   for (const diagnostic of resolved.diagnostics) {
     Switch.kind(diagnostic, {
       'missing-argument': diagnostic => {
         ctx.error(
-          responseValidationMessages.missingArgument(view.name, Type.parameterName(diagnostic.parameter)),
           ask,
+          responseValidationMessages.missingArgument(view.name, Type.parameterName(diagnostic.parameter)),
         )
       },
       'unmatched-argument': diagnostic => {
-        ctx.error(responseValidationMessages.unmatchedArgument(view.name), diagnostic.argument)
+        ctx.error(diagnostic.argument, responseValidationMessages.unmatchedArgument(view.name))
       },
       'ambiguous-argument': diagnostic => {
         ctx.error(
-          responseValidationMessages.ambiguousArgument(view.name, diagnostic.parameters),
           diagnostic.argument,
+          responseValidationMessages.ambiguousArgument(view.name, diagnostic.parameters),
         )
       },
       'ambiguous-parameter': diagnostic => {
         ctx.error(
+          ask,
           responseValidationMessages.ambiguousParameter(
             view.name,
             Type.parameterName(diagnostic.parameter),
           ),
-          ask,
         )
       },
       'duplicate-argument-type': diagnostic => {
-        ctx.error(responseValidationMessages.duplicateArgumentType(view.name), diagnostic.argument)
+        ctx.error(diagnostic.argument, responseValidationMessages.duplicateArgumentType(view.name))
       },
       'duplicate-parameter-type': diagnostic => {
         ctx.error(
+          ask,
           responseValidationMessages.duplicateParameterType(
             view.name,
             Type.parameterName(diagnostic.parameter),
           ),
-          ask,
         )
       },
       'unknown-named-argument': diagnostic => {
         ctx.error(
-          responseValidationMessages.unknownNamedArgument(view.name, diagnostic.name),
           diagnostic.argument,
+          responseValidationMessages.unknownNamedArgument(view.name, diagnostic.name),
         )
       },
       'duplicate-named-argument': diagnostic => {
         ctx.error(
+          diagnostic.argument,
           responseValidationMessages.duplicateNamedArgument(
             view.name,
             Type.parameterName(diagnostic.parameter),
           ),
-          diagnostic.argument,
         )
       },
       'named-argument-type': diagnostic => {
         ctx.error(
+          diagnostic.argument,
           responseValidationMessages.namedArgumentType(
             view.name,
             Type.parameterName(diagnostic.parameter),
             Type.displayName(Type.ofParameter(diagnostic.parameter)),
             Type.displayName(Type.ofArgument(diagnostic.argument)),
           ),
-          diagnostic.argument,
         )
       },
     })

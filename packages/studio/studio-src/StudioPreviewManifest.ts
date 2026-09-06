@@ -1,7 +1,12 @@
 import type { GenerationDeclaration } from '@generation'
 import { Errors, Json } from '@shared'
 import { cellIdentity, requireText, validateTaoSource, valueMatchesParameter } from './StudioPreviewCell'
-import type { StudioJsonObject, StudioJsonValue, StudioSourceRange } from './StudioProtocol'
+import {
+  reactiveBrowserSchemeCapability,
+  type StudioJsonObject,
+  type StudioJsonValue,
+  type StudioSourceRange,
+} from './StudioProtocol'
 import { type StudioStateEntry, StudioStateLibrary } from './StudioStateLibrary'
 
 export const studioPreviewManifestVersion = 2 as const
@@ -158,7 +163,7 @@ function define(input: StudioPreviewManifestV2): StudioPreviewManifestV2 {
   requireText(input.project.appName, 'Studio project app name')
   requireText(input.project.entryPath, 'Studio project entry path')
   requireText(input.project.root, 'Studio project root')
-  if (input.capabilities.scheme !== 'reactive-browser') {
+  if (input.capabilities.scheme !== reactiveBrowserSchemeCapability) {
     Errors.throwUserInput('Studio browser previews require the reactive Scheme capability.')
   }
   const subjects = uniqueBy(input.subjects, subject => subject.subjectId, 'Studio subject')

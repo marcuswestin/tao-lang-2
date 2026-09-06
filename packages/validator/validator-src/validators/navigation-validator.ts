@@ -71,20 +71,20 @@ export const navigationValidationChecks = {
   [AST.Render.$type]: validateRenderedValue,
   [AST.DismissStatement.$type]: (dismiss, ctx) => {
     if (!AST.findOwningView(dismiss)) {
-      ctx.error(navigationValidationMessages.dismissContext, dismiss)
+      ctx.error(dismiss, navigationValidationMessages.dismissContext)
     }
   },
   [AST.SelectionActivateStatement.$type]: (activation, ctx, file) => {
     if (!AST.findOwningView(activation)) {
-      ctx.error(navigationValidationMessages.activationContext, activation)
+      ctx.error(activation, navigationValidationMessages.activationContext)
     }
     const app = activation.app?.ref
     if (app) {
       for (const contract of selectionKeyContractsForAppFamily(app, file)) {
         if (!contract.keys.has(activation.key)) {
           ctx.error(
-            navigationValidationMessages.unknownSelection(contract.app.name, activation.key.slice(1)),
             activation,
+            navigationValidationMessages.unknownSelection(contract.app.name, activation.key.slice(1)),
           )
         }
       }
@@ -92,11 +92,11 @@ export const navigationValidationChecks = {
   },
   [AST.ReplaceStatement.$type]: (replace, ctx) => {
     if (!AST.findOwningView(replace)) {
-      ctx.error(navigationValidationMessages.replaceContext, replace)
+      ctx.error(replace, navigationValidationMessages.replaceContext)
     }
     const actual = Type.ofExpression(replace.navigator)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
-      ctx.error(navigationValidationMessages.replaceNavigator(Type.displayName(actual)), replace.navigator)
+      ctx.error(replace.navigator, navigationValidationMessages.replaceNavigator(Type.displayName(actual)))
     }
     void replace.app?.ref
   },
@@ -126,23 +126,23 @@ function validateRenderedValue(render: AST.Render, ctx: ValidationContext): void
   }
   const name = ASTUtils.renderTargetName(target)
   if (AST.argumentsOf(render).length > 0) {
-    ctx.error(navigationValidationMessages.valueRenderArguments(name), render)
+    ctx.error(render, navigationValidationMessages.valueRenderArguments(name))
   }
   if (render.block && render.block.statements.length > 0) {
-    ctx.error(navigationValidationMessages.valueRenderContent(name), render)
+    ctx.error(render, navigationValidationMessages.valueRenderContent(name))
   }
   if (!ASTUtils.renderTargetIsNav(target)) {
     return
   }
   const placement = renderPlacement(render)
   if (placement.loop) {
-    ctx.error(navigationValidationMessages.navRenderedInLoop(name), render)
+    ctx.error(render, navigationValidationMessages.navRenderedInLoop(name))
   }
   if (placement.conditional) {
-    ctx.error(navigationValidationMessages.navRenderedConditionally(name), render)
+    ctx.error(render, navigationValidationMessages.navRenderedConditionally(name))
   }
   if (navRenderSites(render, target, ctx).length > 1) {
-    ctx.error(navigationValidationMessages.navRenderedTwice(name), render)
+    ctx.error(render, navigationValidationMessages.navRenderedTwice(name))
   }
 }
 
@@ -439,7 +439,7 @@ function validateStackInitialTitle(entry: AST.ConfigurationEntry, ctx: Validatio
     && AST.configurationPrimitiveOf(configuration.declaration) === 'nav'
     && !configurationExpressionFillsTitle(value, new Set())
   ) {
-    ctx.error(navigationValidationMessages.missingNavHostTitle(configuration.declaration.name), entry)
+    ctx.error(entry, navigationValidationMessages.missingNavHostTitle(configuration.declaration.name))
   }
 }
 
@@ -472,7 +472,7 @@ function validateReferencedStackDestinationTitle(
     && Type.isAssignable(Type.ofValueDeclaration(destination), { kind: 'primitive', primitive: 'nav' })
     && !configuredValueFillsTitle(destination)
   ) {
-    ctx.error(navigationValidationMessages.missingNavHostTitle(destination.name), node)
+    ctx.error(node, navigationValidationMessages.missingNavHostTitle(destination.name))
   }
 }
 
@@ -681,7 +681,7 @@ function reportMissingHostTitle(
     return
   }
   if (!AST.declarationSlotFillNamed(declaration, 'Title')) {
-    ctx.error(navigationValidationMessages.missingHostTitle(view.name), node)
+    ctx.error(node, navigationValidationMessages.missingHostTitle(view.name))
   }
 }
 
@@ -726,35 +726,35 @@ function validatePresentationMode(
   const owningView = AST.findOwningView(presentation)
   if (!owningView) {
     ctx.error(
-      toast ? navigationValidationMessages.toastContext : navigationValidationMessages.presentationContext,
       presentation,
+      toast ? navigationValidationMessages.toastContext : navigationValidationMessages.presentationContext,
     )
   }
   if (toast && presentation.target) {
-    ctx.error(navigationValidationMessages.toastTarget, presentation.target)
+    ctx.error(presentation.target, navigationValidationMessages.toastTarget)
   }
   if (toast) {
     // The option names are ordinary words, so their spelling is checked here rather than by the
     // lexer. That is what keeps `Key` and `Duration` usable as member names elsewhere.
     if (toast.keyName !== 'Key') {
-      ctx.error(navigationValidationMessages.toastOptionName(toast.keyName, 'Key'), toast)
+      ctx.error(toast, navigationValidationMessages.toastOptionName(toast.keyName, 'Key'))
     }
     if (toast.durationName !== 'Duration') {
-      ctx.error(navigationValidationMessages.toastOptionName(toast.durationName, 'Duration'), toast)
+      ctx.error(toast, navigationValidationMessages.toastOptionName(toast.durationName, 'Duration'))
     }
     const keyType = Type.ofExpression(toast.key)
     if (keyType.kind !== 'unresolved' && !Type.isAssignable(keyType, { kind: 'primitive', primitive: 'text' })) {
-      ctx.error(navigationValidationMessages.toastKeyType(Type.displayName(keyType)), toast.key)
+      ctx.error(toast.key, navigationValidationMessages.toastKeyType(Type.displayName(keyType)))
     }
     const durationType = Type.ofExpression(toast.duration)
     if (
       durationType.kind !== 'unresolved'
       && !Type.isAssignable(durationType, { kind: 'primitive', primitive: 'duration' })
     ) {
-      ctx.error(navigationValidationMessages.toastDurationType(Type.displayName(durationType)), toast.duration)
+      ctx.error(toast.duration, navigationValidationMessages.toastDurationType(Type.displayName(durationType)))
     }
     if (negativeNumberLiteral(toast.duration)) {
-      ctx.error(navigationValidationMessages.toastDurationNegative, toast.duration)
+      ctx.error(toast.duration, navigationValidationMessages.toastDurationNegative)
     }
   }
 }
@@ -774,8 +774,8 @@ function validatePresentationArguments(
         const parameterType = Type.ofParameter(parameter)
         if (parameterType.kind === 'primitive' && parameterType.primitive === 'action') {
           ctx.error(
-            navigationValidationMessages.nonRestorableArgument(view.name, Type.parameterName(parameter)),
             argument,
+            navigationValidationMessages.nonRestorableArgument(view.name, Type.parameterName(parameter)),
           )
         }
       }
@@ -795,7 +795,7 @@ function validatePresentationTarget(
   if (target.value) {
     const actual = Type.ofExpression(target.value)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, { kind: 'primitive', primitive: 'nav' })) {
-      ctx.error(navigationValidationMessages.presentationTarget(Type.displayName(actual)), target)
+      ctx.error(target, navigationValidationMessages.presentationTarget(Type.displayName(actual)))
     }
     return
   }
@@ -806,7 +806,7 @@ function validatePresentationTarget(
   const targetKey = target.key.slice(1)
   const auxiliary = auxiliaryNavigatorForTarget(target)
   if (!auxiliary) {
-    ctx.error(navigationValidationMessages.unknownAuxiliary(app.name, targetKey), target)
+    ctx.error(target, navigationValidationMessages.unknownAuxiliary(app.name, targetKey))
   }
 }
 
@@ -843,49 +843,49 @@ export function reportPresentationBindingDiagnostic(
   Switch.kind(diagnostic, {
     'missing-argument': diagnostic => {
       ctx.error(
-        navigationValidationMessages.missingArgument(view.name, Type.parameterName(diagnostic.parameter)),
         presentation,
+        navigationValidationMessages.missingArgument(view.name, Type.parameterName(diagnostic.parameter)),
       )
     },
     'unmatched-argument': diagnostic => {
-      ctx.error(navigationValidationMessages.unmatchedArgument(view.name), diagnostic.argument)
+      ctx.error(diagnostic.argument, navigationValidationMessages.unmatchedArgument(view.name))
     },
     'ambiguous-argument': diagnostic => {
-      ctx.error(navigationValidationMessages.ambiguousArgument(view.name, diagnostic.parameters), diagnostic.argument)
+      ctx.error(diagnostic.argument, navigationValidationMessages.ambiguousArgument(view.name, diagnostic.parameters))
     },
     'ambiguous-parameter': diagnostic => {
       ctx.error(
-        navigationValidationMessages.ambiguousParameter(view.name, Type.parameterName(diagnostic.parameter)),
         presentation,
+        navigationValidationMessages.ambiguousParameter(view.name, Type.parameterName(diagnostic.parameter)),
       )
     },
     'duplicate-argument-type': diagnostic => {
-      ctx.error(navigationValidationMessages.duplicateArgumentType(view.name), diagnostic.argument)
+      ctx.error(diagnostic.argument, navigationValidationMessages.duplicateArgumentType(view.name))
     },
     'duplicate-parameter-type': diagnostic => {
       ctx.error(
-        navigationValidationMessages.duplicateParameterType(view.name, Type.parameterName(diagnostic.parameter)),
         presentation,
+        navigationValidationMessages.duplicateParameterType(view.name, Type.parameterName(diagnostic.parameter)),
       )
     },
     'unknown-named-argument': diagnostic => {
-      ctx.error(navigationValidationMessages.unknownNamedArgument(view.name, diagnostic.name), diagnostic.argument)
+      ctx.error(diagnostic.argument, navigationValidationMessages.unknownNamedArgument(view.name, diagnostic.name))
     },
     'duplicate-named-argument': diagnostic => {
       ctx.error(
-        navigationValidationMessages.duplicateNamedArgument(view.name, Type.parameterName(diagnostic.parameter)),
         diagnostic.argument,
+        navigationValidationMessages.duplicateNamedArgument(view.name, Type.parameterName(diagnostic.parameter)),
       )
     },
     'named-argument-type': diagnostic => {
       ctx.error(
+        diagnostic.argument,
         navigationValidationMessages.namedArgumentType(
           view.name,
           Type.parameterName(diagnostic.parameter),
           Type.displayName(Type.ofParameter(diagnostic.parameter)),
           Type.displayName(Type.ofArgument(diagnostic.argument)),
         ),
-        diagnostic.argument,
       )
     },
   })

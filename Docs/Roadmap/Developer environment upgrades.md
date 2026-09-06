@@ -731,15 +731,15 @@ an entry here may link one when the developer workflow is also affected.
   `Studio Snap cannot preserve authored source for interleaved rectangle geometry` because the free
   rectangle sits between two flowed siblings. The failing step's diagnostics record board bounds,
   the element under the pointer, the gesture state, host errors, and a screenshot.
-- **Workaround:** The full-verification graph reports `_full-verify-simulated` as explicitly skipped;
-  `just _full-verify-simulated` remains available to reproduce it, and the deterministic catalog tests
+- **Workaround:** The full-verification graph reports `studio-smoke-simulated-user` as explicitly skipped;
+  `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` reproduces it, and the deterministic catalog tests
   in the same file plus the native and canary lanes remain active.
 - **Proposed change:** Let a partial Snap insert one rectangle between existing flowed siblings, or
   route that case through the proposal endpoint, in the Snap-trust stride of the Figma-at-home plan;
   keep every sketch step's precondition hit-tested rather than bounding-box based. Keep mutations
   single-shot rather than retrying requests that may already be live.
 - **Dependencies:** Product fixes and lane diagnostics landed with the Figma-at-home strides plan.
-- **Acceptance:** `_full-verify-simulated` completes the Draw, Snap, Unsnap, overlap-confirmation, and
+- **Acceptance:** `studio-smoke-simulated-user` completes the Draw, Snap, Unsnap, overlap-confirmation, and
   Undo sequence in ten consecutive normal-terminal runs before it rejoins automatic full verification.
 - **Source:** 2026-09-04 normal-terminal merge verification, the explicit quarantine decision, and the
   2026-09-04 lane diagnostics from the Figma-at-home strides work.
@@ -961,6 +961,35 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** A documented one-line way to run a scratch TypeScript file against `@shared` and
   friends from outside the source tree.
 - **Source:** 2026-09-04 `tao create` review.
+
+### DEVENV-055 — No repository command compiles a native module
+
+- **Status:** Candidate
+- **Area:** Native builds
+- **Impact:** The repository now carries native code (`packages/icloud-native`, an Expo module in
+  Swift), and nothing short of a full `expo run:ios` proves it compiles. An agent has to hand-assemble
+  the steps, two of which fail in the Bash sandbox.
+- **Evidence:** `expo prebuild packages/runtime-toolchain --platform ios --no-install` works in the
+  sandbox. `pod install --project-directory=packages/runtime-toolchain/ios` fails with `cannot load such
+  file -- ./scripts/autolinking` because the Podfile's `node --print "require.resolve('expo/package.json')"`
+  resolves from the shell's cwd, so the install must run from inside the `ios` directory (a subshell
+  `(cd packages/runtime-toolchain/ios && pod install)` keeps the session cwd). `xcodebuild -project
+  ios/Pods/Pods.xcodeproj -target TaoICloudNative -sdk iphonesimulator` with `SYMROOT`/`OBJROOT` inside
+  the worktree still fails sandboxed with `Could not compute dependency graph … Operation not permitted`
+  on its `XCBuildData/PIFCache` write, because Xcode's build service is a separate process the sandbox
+  does not cover; unsandboxed it succeeds in about two minutes and proves the Swift module against
+  ExpoModulesCore. Autolinking only finds a podspec in a top-level subdirectory of the package
+  (`ios/`), never at its root.
+- **Workaround:** The three commands above, with `pod install` in a subshell and `xcodebuild`
+  unsandboxed.
+- **Proposed change:** A `just native-module-check` (or `./agent native-check`) recipe that prebuilds
+  the toolchain host, installs pods from the right directory, and compiles every workspace pod target
+  for the simulator with build products under `.artifacts/`; list it beside `just claude-native` as the
+  sanctioned unsandboxed native step.
+- **Dependencies:** None.
+- **Acceptance:** One documented command compiles `TaoICloudNative` for the simulator from a fresh
+  worktree and fails loudly on a Swift error.
+- **Source:** 2026-09-05 iCloud datasource provider implementation.
 
 ### DEVENV-053 — Verifying a sibling worktree from an agent shell needs unsandboxed commands
 

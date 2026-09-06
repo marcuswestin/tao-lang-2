@@ -44,18 +44,18 @@ export const FunctionsValidator = {
 
 function validateFunction(fn: AST.FunctionDeclaration, ctx: ValidationContext): void {
   if (!AST.isTaoFile(fn.$container)) {
-    ctx.error(messages.functionPlacement, fn)
+    ctx.error(fn, messages.functionPlacement)
   }
   const seen = new Set<string>()
   for (const parameter of AST.parametersOf(fn)) {
     const name = Type.parameterName(parameter)
     if (seen.has(name)) {
-      ctx.error(messages.duplicateParameter(name), parameter)
+      ctx.error(parameter, messages.duplicateParameter(name))
     }
     seen.add(name)
   }
   if (!AST.functionHasFallthroughReturn(fn)) {
-    ctx.error(messages.functionMissingReturn(fn.name), fn.block)
+    ctx.error(fn.block, messages.functionMissingReturn(fn.name))
   }
   const returns = AST.returnStatementsOf(fn)
   if (fn.returnType) {
@@ -78,8 +78,8 @@ function validateExplicitReturnType(
     const actual = Type.ofExpression(statement.value)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
       ctx.error(
-        messages.functionReturn(fn.name, Type.displayName(expected), Type.displayName(actual)),
         statement.value,
+        messages.functionReturn(fn.name, Type.displayName(expected), Type.displayName(actual)),
       )
     }
   }
@@ -103,8 +103,8 @@ function validateInferredReturnType(
     const common = Type.commonType([inferred, actual])
     if (!common) {
       ctx.error(
-        messages.functionReturnInference(fn.name, Type.displayName(inferred), Type.displayName(actual)),
         statement.value,
+        messages.functionReturnInference(fn.name, Type.displayName(inferred), Type.displayName(actual)),
       )
       return
     }
@@ -121,41 +121,41 @@ function validateFunctionCall(call: AST.FunctionCallExpression, ctx: ValidationC
   for (const diagnostic of resolved.diagnostics) {
     Switch.kind(diagnostic, {
       'missing-argument': diagnostic => {
-        ctx.error(messages.functionMissingArgument(fn.name, Type.parameterName(diagnostic.parameter)), call)
+        ctx.error(call, messages.functionMissingArgument(fn.name, Type.parameterName(diagnostic.parameter)))
       },
       'unmatched-argument': diagnostic => {
-        ctx.error(messages.functionUnmatchedArgument(fn.name), diagnostic.argument)
+        ctx.error(diagnostic.argument, messages.functionUnmatchedArgument(fn.name))
       },
       'ambiguous-argument': diagnostic => {
-        ctx.error(messages.functionAmbiguousArgument(fn.name, diagnostic.parameters), diagnostic.argument)
+        ctx.error(diagnostic.argument, messages.functionAmbiguousArgument(fn.name, diagnostic.parameters))
       },
       'ambiguous-parameter': diagnostic => {
-        ctx.error(messages.functionAmbiguousParameter(fn.name, Type.parameterName(diagnostic.parameter)), call)
+        ctx.error(call, messages.functionAmbiguousParameter(fn.name, Type.parameterName(diagnostic.parameter)))
       },
       'duplicate-argument-type': diagnostic => {
-        ctx.error(messages.functionDuplicateArgumentType(fn.name), diagnostic.argument)
+        ctx.error(diagnostic.argument, messages.functionDuplicateArgumentType(fn.name))
       },
       'duplicate-parameter-type': diagnostic => {
-        ctx.error(messages.functionDuplicateParameterType(fn.name, Type.parameterName(diagnostic.parameter)), call)
+        ctx.error(call, messages.functionDuplicateParameterType(fn.name, Type.parameterName(diagnostic.parameter)))
       },
       'unknown-named-argument': diagnostic => {
-        ctx.error(messages.functionUnknownLabel(fn.name, diagnostic.name), diagnostic.argument)
+        ctx.error(diagnostic.argument, messages.functionUnknownLabel(fn.name, diagnostic.name))
       },
       'duplicate-named-argument': diagnostic => {
         ctx.error(
-          messages.functionDuplicateLabel(fn.name, Type.parameterName(diagnostic.parameter)),
           diagnostic.argument,
+          messages.functionDuplicateLabel(fn.name, Type.parameterName(diagnostic.parameter)),
         )
       },
       'named-argument-type': diagnostic => {
         ctx.error(
+          diagnostic.argument,
           messages.functionLabelType(
             fn.name,
             Type.parameterName(diagnostic.parameter),
             Type.displayName(Type.ofParameter(diagnostic.parameter)),
             Type.displayName(Type.ofArgument(diagnostic.argument)),
           ),
-          diagnostic.argument,
         )
       },
     })

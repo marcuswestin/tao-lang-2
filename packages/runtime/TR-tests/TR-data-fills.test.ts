@@ -1,5 +1,5 @@
 import TR from '@runtime/TR'
-import { Describe, Expect, Test } from '@shared/test'
+import { Deferred, Describe, Expect, Test } from '@shared/test'
 import type {
   TaoDataConnection,
   TaoDataSchemaDefinition,
@@ -37,18 +37,6 @@ const feedDefinition: TaoDataSchemaDefinition = {
 }
 
 type QueryRows = unknown[] & { Loading: boolean; Error: string; Refreshing: boolean; Stale: boolean }
-
-type Deferred = { promise: Promise<void>; reject(error: Error): void; resolve(): void }
-
-function deferred(): Deferred {
-  let resolve!: () => void
-  let reject!: (error: Error) => void
-  const promise = new Promise<void>((res, rej) => {
-    resolve = res
-    reject = rej
-  })
-  return { promise, reject, resolve }
-}
 
 function fillConnection(
   fill: (request: TaoFillRequest, ops: TaoFillOps) => Promise<void>,
@@ -111,7 +99,7 @@ Describe('TR.Data query fills', () => {
   })
 
   Test('reports loading while a first fill has nothing to show, then ready', async () => {
-    const gate = deferred()
+    const gate = Deferred<void>()
     const connection = fillConnection(async (_request, ops) => {
       await gate.promise
       ops.upsert('Story', [{ HnId: 1, Title: 'First', Rank: 1 }])
@@ -134,7 +122,7 @@ Describe('TR.Data query fills', () => {
 
   Test('reports refreshing over cached rows, and stale when the refill fails', async () => {
     let outcome: 'succeed' | 'fail' | 'wait' = 'succeed'
-    let gate = deferred()
+    let gate = Deferred<void>()
     const connection = fillConnection(async (_request, ops) => {
       if (outcome === 'wait') {
         await gate.promise
@@ -150,7 +138,7 @@ Describe('TR.Data query fills', () => {
     await schema.settle()
 
     outcome = 'wait'
-    gate = deferred()
+    gate = Deferred<void>()
     schema.activateQuery(storiesPlan())
     await Promise.resolve()
     const refreshing = schema.query(storiesPlan()) as QueryRows
@@ -281,7 +269,7 @@ Describe('TR.Data query fills', () => {
 
   Test('bridges fill state to the language subject cases a render site matches', async () => {
     let outcome: 'succeed' | 'fail' | 'wait' = 'succeed'
-    let gate = deferred()
+    let gate = Deferred<void>()
     const connection = fillConnection(async (_request, ops) => {
       if (outcome === 'wait') {
         await gate.promise
@@ -316,7 +304,7 @@ Describe('TR.Data query fills', () => {
     await schema.settle()
 
     outcome = 'wait'
-    gate = deferred()
+    gate = Deferred<void>()
     schema.activateQuery(storiesPlan())
     await Promise.resolve()
     Expect(cases(schema.query(storiesPlan()))).toEqual({
@@ -340,7 +328,7 @@ Describe('TR.Data query fills', () => {
   })
 
   Test('treats a descriptor that filled empty as content, not a second spinner', async () => {
-    let gate = deferred()
+    let gate = Deferred<void>()
     const connection = fillConnection(async () => {
       await gate.promise
     })
@@ -353,7 +341,7 @@ Describe('TR.Data query fills', () => {
     gate.resolve()
     await schema.settle()
 
-    gate = deferred()
+    gate = Deferred<void>()
     schema.activateQuery(storiesPlan())
     await Promise.resolve()
     const refilling = schema.query(storiesPlan()) as QueryRows

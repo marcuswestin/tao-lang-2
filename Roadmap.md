@@ -122,8 +122,8 @@ tests written in Tao, green in Current, for every construct introduced.
     `postEditorSelection` message and knows its source ranges from the bundle it runs. Rework the
     stub onto that contract instead.
   - The lane is quarantined from the `full-verify` graph with a stated reason (its palette-to-preview
-    drop stalls before source mutation); `just _full-verify-simulated` runs it directly on its own
-    worker while it is being repaired, and re-adding it to the graph is one Justfile membership edit.
+    drop stalls before source mutation); `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`
+    runs it directly while it is being repaired, and re-adding it to the graph is one catalog edit.
   - Context: `Docs/Roadmap/Tao Studio v2/Plan - Tao Studio v2.md` and the ownership rules in
     `agents/skills/studio-hybrid-client/SKILL.md`.
 - [ ] Implement a drag-and-drop example app
@@ -184,6 +184,16 @@ tests written in Tao, green in Current, for every construct introduced.
   - Syntax, diagnostics, formatting, source actions, go-to-definition, and references remain the IDE
     surface. Tao Studio now owns the richer live-preview product rather than duplicating it inside the
     IDE; finish the browser proof and capture workflow in the Studio workstream above.
+- [ ] Prove the iCloud datasource on devices
+  - The snapshot-family `ICloud` provider landed with its native Expo module and ship
+    entitlements; see `Docs/Roadmap/iCloud datasource provider/Implementation - iCloud datasource
+    provider.md` for the boundary, its limits, and the two-device live acceptance still owed.
+- [ ] Settle the granular-write family's open questions and prove CloudKit on devices
+  - The family's runtime machinery (change-sets, fold, bridge, conformance suite) and a `CloudKit`
+    provider over `CKSyncEngine` landed as a stab under three stated assumptions; see
+    `Docs/Roadmap/CloudKit granular datasource provider/Implementation - CloudKit granular
+    datasource provider.md`. Open questions 1, 2, and 5 in `Docs/Roadmap/Multiplayer sync.md`
+    need Ro's answers before the fold is more than a working assumption.
 - [ ] Widen the HTTP datasource
   - The query-driven `Http` datasource landed with `Apps/HNReader`; see
     `Docs/Roadmap/HTTP Datasource/Overview - HTTP datasource.md` for the settled design and its

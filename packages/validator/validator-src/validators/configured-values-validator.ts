@@ -68,7 +68,7 @@ export const configuredValueValidationChecks = {
     }
     if (!AST.isAliasDeclaration(base) && !AST.isNavDeclaration(base) && !AST.isDatasourceDeclaration(base)) {
       if (base) {
-        ctx.error(configuredValueValidationMessages.patchTarget(patch.target.$refText), patch)
+        ctx.error(patch, configuredValueValidationMessages.patchTarget(patch.target.$refText))
       }
       return
     }
@@ -79,7 +79,7 @@ export const configuredValueValidationChecks = {
     }
     const declaration = configuredDeclarationOfValue(base)
     if (!declaration) {
-      ctx.error(configuredValueValidationMessages.patchTarget(base.name), patch)
+      ctx.error(patch, configuredValueValidationMessages.patchTarget(base.name))
       return
     }
     validateConfigurationBlock(patch.patchBlock, declaration, ctx, { requireConstructorProperties: false })
@@ -98,7 +98,7 @@ function validateConfiguredValue(value: AST.ConfiguredValue, ctx: ValidationCont
     return
   }
   if (!value.block) {
-    ctx.error(configuredValueValidationMessages.constructorBlock(declaration.name), value)
+    ctx.error(value, configuredValueValidationMessages.constructorBlock(declaration.name))
     return
   }
   validateConfigurationBlock(value.block, declaration, ctx, { requireConstructorProperties: true })
@@ -167,12 +167,12 @@ function validateConfigurationBlock(
       : []
   ) {
     if (!state.entries.has(required.name)) {
-      ctx.error(configuredValueValidationMessages.missingConfiguration(state.typeName, required.name), block)
+      ctx.error(block, configuredValueValidationMessages.missingConfiguration(state.typeName, required.name))
     }
   }
   if (state.keyedContract) {
     if (requireConstructorProperties && state.keyedEntries.size === 0) {
-      ctx.error(configuredValueValidationMessages.missingKeyedItem(state.typeName), block)
+      ctx.error(block, configuredValueValidationMessages.missingKeyedItem(state.typeName))
     }
     validateConfigurationKeyReferences(block, state, ctx)
   }
@@ -191,8 +191,8 @@ function validateConfigurationKeyReferences(
     for (const configured of configuredValues) {
       if (!state.keyedEntries.has(configured.key)) {
         ctx.error(
-          configuredValueValidationMessages.unknownConfigurationKey(state.typeName, property.name, configured.key),
           configured,
+          configuredValueValidationMessages.unknownConfigurationKey(state.typeName, property.name, configured.key),
         )
       }
     }
@@ -207,11 +207,11 @@ function validateConfigurationEntries(
   for (const entry of block.entries) {
     if (entry.key) {
       if (!state.keyedContract) {
-        ctx.error(configuredValueValidationMessages.keyedConfiguration(state.typeName), entry)
+        ctx.error(entry, configuredValueValidationMessages.keyedConfiguration(state.typeName))
         continue
       }
       if (state.keyedEntries.has(entry.key)) {
-        ctx.error(configuredValueValidationMessages.duplicateConfigurationKey(state.typeName, entry.key), entry)
+        ctx.error(entry, configuredValueValidationMessages.duplicateConfigurationKey(state.typeName, entry.key))
       }
       state.keyedEntries.set(entry.key, entry)
       validateKeyedConfigurationItem(entry, state.typeName, state.keyedContract, ctx)
@@ -222,18 +222,18 @@ function validateConfigurationEntries(
     }
     const property = state.propertiesByName.get(entry.name)
     if (!property) {
-      ctx.error(configuredValueValidationMessages.unknownConfiguration(state.typeName, entry.name), entry)
+      ctx.error(entry, configuredValueValidationMessages.unknownConfiguration(state.typeName, entry.name))
       continue
     }
     if (state.entries.has(entry.name)) {
-      ctx.error(configuredValueValidationMessages.duplicateConfiguration(state.typeName, entry.name), entry)
+      ctx.error(entry, configuredValueValidationMessages.duplicateConfiguration(state.typeName, entry.name))
     }
     state.entries.set(entry.name, entry)
     if (entry.block) {
       if (entry.name === 'Toolbar') {
         validateToolbarReferenceBlock(entry.block, ctx)
       } else {
-        ctx.error(configuredValueValidationMessages.configurationBlock(state.typeName, entry.name), entry.block)
+        ctx.error(entry.block, configuredValueValidationMessages.configurationBlock(state.typeName, entry.name))
       }
       continue
     }
@@ -254,21 +254,21 @@ function validateToolbarReferenceBlock(block: AST.ConfigurationBlock, ctx: Valid
     const reference = entry.reference?.ref
     if (!reference) {
       if (!entry.reference) {
-        ctx.error(configuredValueValidationMessages.toolbarReference, entry)
+        ctx.error(entry, configuredValueValidationMessages.toolbarReference)
       }
       continue
     }
     if (!AST.isCommandDeclaration(reference)) {
-      ctx.error(configuredValueValidationMessages.toolbarReference, entry)
+      ctx.error(entry, configuredValueValidationMessages.toolbarReference)
       continue
     }
     if (seen.has(reference)) {
-      ctx.error(configuredValueValidationMessages.duplicateToolbarReference(reference.name), entry)
+      ctx.error(entry, configuredValueValidationMessages.duplicateToolbarReference(reference.name))
     }
     seen.add(reference)
     const slot = ASTUtils.commandSlots(reference)[0]
     if (slot) {
-      ctx.error(configuredValueValidationMessages.toolbarUnfilled(reference.name, slot.name), entry)
+      ctx.error(entry, configuredValueValidationMessages.toolbarUnfilled(reference.name, slot.name))
     }
   }
 }
@@ -284,18 +284,18 @@ function validateKeyedConfigurationItem(
   const properties = new Map<string, AST.ConfigurationEntry>()
   for (const property of entry.block?.entries ?? []) {
     if (!property.name || !property.value) {
-      ctx.error(configuredValueValidationMessages.keyedItemConfiguration(typeName, key, property.key ?? ''), property)
+      ctx.error(property, configuredValueValidationMessages.keyedItemConfiguration(typeName, key, property.key ?? ''))
       continue
     }
     const expected = expectedByName.get(property.name)
     if (!expected) {
-      ctx.error(configuredValueValidationMessages.keyedItemConfiguration(typeName, key, property.name), property)
+      ctx.error(property, configuredValueValidationMessages.keyedItemConfiguration(typeName, key, property.name))
       continue
     }
     if (properties.has(property.name)) {
       ctx.error(
-        configuredValueValidationMessages.duplicateConfiguration(`${typeName} item ${key}`, property.name),
         property,
+        configuredValueValidationMessages.duplicateConfiguration(`${typeName} item ${key}`, property.name),
       )
     }
     properties.set(property.name, property)
@@ -303,7 +303,7 @@ function validateKeyedConfigurationItem(
   }
   for (const required of declaration.block.properties) {
     if (required.value === undefined && !properties.has(required.name)) {
-      ctx.error(configuredValueValidationMessages.keyedItemMissing(typeName, key, required.name), entry)
+      ctx.error(entry, configuredValueValidationMessages.keyedItemMissing(typeName, key, required.name))
     }
   }
 }
@@ -316,7 +316,7 @@ function validateConfiguredProperty(
 ): void {
   if (AST.configurationPropertyIsKey(property)) {
     if (!AST.isConfigurationKeyValue(value)) {
-      ctx.error(configuredValueValidationMessages.configurationKeyType(property.name), node)
+      ctx.error(node, configuredValueValidationMessages.configurationKeyType(property.name))
     }
     return
   }
@@ -329,12 +329,12 @@ function validateConfiguredProperty(
     : Type.ofConfigurationProperty(property)
   if (actual.kind !== 'unresolved' && expected.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
     ctx.error(
+      node,
       configuredValueValidationMessages.configurationType(
         property.name,
         Type.displayName(expected),
         Type.displayName(actual),
       ),
-      node,
     )
   }
 }
