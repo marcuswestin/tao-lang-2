@@ -107,7 +107,7 @@ plugin entry.
 
 The Swift module compiles: `expo prebuild` of the runtime host, `pod install`, and an `xcodebuild`
 of the `TaoICloudNative` pod target for the iOS Simulator succeeded against ExpoModulesCore 3.0.
-The three commands, and which of them the Bash sandbox refuses, are recorded as DEVENV-053 in
+The three commands, and which of them the Bash sandbox refuses, are recorded as DEVENV-055 in
 `Docs/Roadmap/Developer environment upgrades.md`. No simulator or device has run the provider yet.
 
 ## Live acceptance still required

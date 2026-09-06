@@ -1,6 +1,6 @@
 import { Assert } from '@shared/core'
 import { StudioPanelPayloads } from '../StudioPanelPayloads'
-import type { StudioJsonObject, StudioJsonValue } from '../StudioProtocol'
+import type { StudioJsonValue } from '../StudioProtocol'
 import type { StudioTestFailure, StudioTestStatus } from '../StudioTestRunner'
 import type { StudioCompileDiagnostic, StudioCompileState } from './StudioApiClient'
 import { studioCellLabel } from './StudioEditor'
@@ -15,134 +15,27 @@ export const StudioPanelBounds = {
   testOutputCharacters: 40_000,
 } as const
 
-export type StudioPanelCellIdentity = Readonly<{ cellId: string; cellRevision: number }>
+type StudioPanelCellIdentity = Readonly<{ cellId: string; cellRevision: number }>
 
-export type StudioPanelAction = Readonly<{
-  name:
-    | 'capture-fixture'
-    | 'clear-logs'
-    | 'open-diagnostic'
-    | 'open-search-result'
-    | 'open-test-failure'
-    | 'refresh-data'
-    | 'run-tests'
-    | 'test-watch'
-  payload: string
-}>
+type StudioPanelActionName =
+  | 'capture-fixture'
+  | 'clear-logs'
+  | 'open-diagnostic'
+  | 'open-search-result'
+  | 'open-test-failure'
+  | 'refresh-data'
+  | 'run-tests'
+  | 'test-watch'
 
-type StudioPanelSourceIdentity = Readonly<{
-  end?: number
-  path: string
-  range?: StudioCompileDiagnostic['range']
-  sourceVersion?: string
-  start?: number
-}>
+/**
+ * The panel models below are Tao item values: capitalized fields, no optionals, and every source
+ * position spelled as a number with `-1` and `HasPosition` standing in for "unknown". The Tao Studio
+ * client (`TaoStudioClient.tao`) reads them straight from the ProductHost state.
+ */
+export type StudioPanelAction = Readonly<{ Name: StudioPanelActionName; Payload: string }>
 
 export type StudioProblemPanelRow = Readonly<{
-  action?: StudioPanelAction
-  detail: string
-  label: string
-  source?: StudioPanelSourceIdentity
-}>
-
-type StudioCompilePanelModel = Readonly<{
-  appliedRevision: number
-  compileRevision: number
-  diagnosticCount: number
-  diagnostics: readonly StudioProblemPanelRow[]
-  message: string
-  status: StudioCompileState['status']
-}>
-
-type StudioProblemsPanelModel = Readonly<{
-  rows: readonly StudioProblemPanelRow[]
-}>
-
-type StudioDataPanelTable = Readonly<{
-  datasource: string
-  entity: string
-  retainedRowCount: number
-  rows: readonly StudioJsonObject[]
-  totalRowCount: number
-}>
-
-type StudioDataPanelModel = Readonly<{
-  captureAction: StudioPanelAction
-  error?: string
-  loading: boolean
-  refreshAction: StudioPanelAction
-  source?: StudioPanelCellIdentity
-  tables: readonly StudioDataPanelTable[]
-}>
-
-type StudioTestFailurePanelRow = Readonly<{
-  action: StudioPanelAction
-  detail: string
-  label: string
-  source: Readonly<{
-    column?: number
-    line?: number
-    path: string
-  }>
-}>
-
-export type StudioTestsPanelModel = Readonly<{
-  available: boolean
-  error?: string
-  failures: readonly StudioTestFailurePanelRow[]
-  output?: string
-  reason?: string
-  runAction: StudioPanelAction
-  running: boolean
-  summary?: string
-  watch: boolean
-  watchAction: StudioPanelAction
-}>
-
-type StudioLogPanelRow = Readonly<{
-  arguments: readonly StudioJsonValue[]
-  level: StudioRuntimeLog['level']
-  timestamp: number
-}>
-
-type StudioLogsPanelModel = Readonly<{
-  clearAction: StudioPanelAction
-  retainedCount: number
-  rows: readonly StudioLogPanelRow[]
-  source?: StudioPanelCellIdentity
-  totalCount: number
-}>
-
-type StudioDrawerPanelModel = Readonly<{
-  compile: StudioCompilePanelModel
-  data: StudioDataPanelModel
-  logs: StudioLogsPanelModel
-  problems: StudioProblemsPanelModel
-  tab: StudioDrawerTab
-  tests: StudioTestsPanelModel
-}>
-
-type StudioSearchPanelRow = Readonly<{
-  action: StudioPanelAction
-  detail: string
-  kind: StudioSearchResult['kind']
-  label: string
-  source: StudioPanelSourceIdentity
-}>
-
-type StudioSearchPanelModel = Readonly<{
-  rows: readonly StudioSearchPanelRow[]
-}>
-
-export type StudioProductHostPanels = Readonly<{
-  drawer: StudioDrawerPanelModel
-  search: StudioSearchPanelModel
-}>
-
-export type StudioTaoPanelAction = Readonly<{ Name: string; Payload: string }>
-
-type StudioTaoProblemRow = Readonly<{
-  Action: StudioTaoPanelAction
+  Action: StudioPanelAction
   Actionable: boolean
   Column: number
   Detail: string
@@ -153,7 +46,7 @@ type StudioTaoProblemRow = Readonly<{
   SourceVersion: string
 }>
 
-type StudioTaoDataTable = Readonly<{
+type StudioDataPanelTable = Readonly<{
   Datasource: string
   Entity: string
   RetainedRowCount: number
@@ -161,8 +54,8 @@ type StudioTaoDataTable = Readonly<{
   TotalRowCount: number
 }>
 
-type StudioTaoTestFailure = Readonly<{
-  Action: StudioTaoPanelAction
+type StudioTestFailurePanelRow = Readonly<{
+  Action: StudioPanelAction
   Column: number
   Detail: string
   HasPosition: boolean
@@ -171,14 +64,14 @@ type StudioTaoTestFailure = Readonly<{
   Path: string
 }>
 
-type StudioTaoLogRow = Readonly<{
+type StudioLogPanelRow = Readonly<{
   Level: string
   Message: string
   Timestamp: number
 }>
 
-export type StudioTaoSearchRow = Readonly<{
-  Action: StudioTaoPanelAction
+export type StudioSearchPanelRow = Readonly<{
+  Action: StudioPanelAction
   Column: number
   Detail: string
   End: number
@@ -190,49 +83,52 @@ export type StudioTaoSearchRow = Readonly<{
   Start: number
 }>
 
-export type StudioTaoDrawerPanelModel = Readonly<{
+export type StudioTestsPanelModel = Readonly<{
+  Available: boolean
+  Error: string
+  Failures: readonly StudioTestFailurePanelRow[]
+  Output: string
+  Reason: string
+  RunAction: StudioPanelAction
+  Running: boolean
+  Summary: string
+  Watch: boolean
+  WatchAction: StudioPanelAction
+}>
+
+export type StudioDrawerPanelModel = Readonly<{
   Compile: Readonly<{
     AppliedRevision: number
     CompileRevision: number
     DiagnosticCount: number
-    Diagnostics: readonly StudioTaoProblemRow[]
+    Diagnostics: readonly StudioProblemPanelRow[]
     Message: string
-    Status: string
+    Status: StudioCompileState['status']
   }>
   Data: Readonly<{
-    CaptureAction: StudioTaoPanelAction
+    CaptureAction: StudioPanelAction
     Error: string
     Loading: boolean
+    RefreshAction: StudioPanelAction
     Source: string
-    Tables: readonly StudioTaoDataTable[]
-    RefreshAction: StudioTaoPanelAction
+    Tables: readonly StudioDataPanelTable[]
   }>
   Logs: Readonly<{
-    ClearAction: StudioTaoPanelAction
+    ClearAction: StudioPanelAction
     RetainedCount: number
-    Rows: readonly StudioTaoLogRow[]
+    Rows: readonly StudioLogPanelRow[]
     Source: string
     TotalCount: number
   }>
-  Problems: Readonly<{ Rows: readonly StudioTaoProblemRow[] }>
+  Problems: Readonly<{ Rows: readonly StudioProblemPanelRow[] }>
   Tab: StudioDrawerTab
-  Tests: Readonly<{
-    Available: boolean
-    Error: string
-    Failures: readonly StudioTaoTestFailure[]
-    Output: string
-    Reason: string
-    RunAction: StudioTaoPanelAction
-    Running: boolean
-    Summary: string
-    Watch: boolean
-    WatchAction: StudioTaoPanelAction
-  }>
+  Tests: StudioTestsPanelModel
 }>
 
-export type StudioTaoPanelValues = Readonly<{
-  Drawer: StudioTaoDrawerPanelModel
-  Search: Readonly<{ Rows: readonly StudioTaoSearchRow[] }>
+/** StudioProductHostPanels is the structured panel state the browser publishes to the Tao ProductHost. */
+export type StudioProductHostPanels = Readonly<{
+  Drawer: StudioDrawerPanelModel
+  Search: Readonly<{ Rows: readonly StudioSearchPanelRow[] }>
 }>
 
 export type StudioPanelProjectionInput = Readonly<{
@@ -251,7 +147,7 @@ export type StudioPanelProjectionInput = Readonly<{
   testWatch: boolean
 }>
 
-/** Pure bounded projections shared by the legacy browser renderer and Tao ProductHost migration. */
+/** Pure bounded projections shared by the browser renderer and the ProductHost panel state. */
 export const StudioPanelModels = {
   dataRows<RowT extends Readonly<Record<string, unknown>>>(rows: readonly RowT[]): readonly RowT[] {
     return rows.slice(0, StudioPanelBounds.dataRowsPerTable)
@@ -264,74 +160,10 @@ export const StudioPanelModels = {
   },
 } as const
 
-/** StudioPanelProjection validates and freezes the structured ProductHost panel state. */
+/** StudioPanelProjection validates, bounds, and freezes the ProductHost panel state as Tao item values. */
 export const StudioPanelProjection = {
-  project(input: StudioPanelProjectionInput): StudioProductHostPanels {
-    const diagnostics = Object.freeze(
-      (input.compile.diagnostics ?? []).map(diagnostic => problemRow(diagnostic, input.sourceVersions ?? {})),
-    )
-    const compile = Object.freeze({
-      appliedRevision: nonNegativeInteger(input.compile.appliedRevision, 'applied compile revision'),
-      compileRevision: nonNegativeInteger(input.compile.compileRevision, 'compile revision'),
-      diagnosticCount: diagnostics.length,
-      diagnostics,
-      message: input.compile.message,
-      status: input.compile.status,
-    })
-    const source = optionalCellIdentity(input.dataSource)
-    const logSource = optionalCellIdentity(input.logSource)
-    const dataTables = Object.freeze(input.data.map(table => {
-      const rows = Object.freeze(StudioPanelModels.dataRows(table.rows).map(row => freezeJsonObject(row)))
-      return Object.freeze({
-        datasource: table.datasource,
-        entity: table.entity,
-        retainedRowCount: rows.length,
-        rows,
-        totalRowCount: table.rows.length,
-      })
-    }))
-    const retainedLogs = Object.freeze(
-      StudioPanelModels.logs(input.logs).map(log =>
-        Object.freeze({
-          arguments: Object.freeze(log.arguments.map(argument => freezeJson(argument))),
-          level: log.level,
-          timestamp: finiteNumber(log.timestamp, 'log timestamp'),
-        })
-      ),
-    )
-    const tests = testsModel(input.testStatus, input.testWatch, input.testError)
-    const searchRows = Object.freeze(input.search.map(searchRow))
-    return Object.freeze({
-      drawer: Object.freeze({
-        compile,
-        data: Object.freeze({
-          captureAction: action('capture-fixture'),
-          ...(input.dataError === undefined ? {} : { error: input.dataError }),
-          loading: input.dataLoading,
-          refreshAction: action('refresh-data'),
-          ...(source === undefined ? {} : { source }),
-          tables: dataTables,
-        }),
-        logs: Object.freeze({
-          clearAction: action('clear-logs'),
-          retainedCount: retainedLogs.length,
-          rows: retainedLogs,
-          ...(logSource === undefined ? {} : { source: logSource }),
-          totalCount: input.logs.length,
-        }),
-        problems: Object.freeze({ rows: diagnostics }),
-        tab: input.tab,
-        tests,
-      }),
-      search: Object.freeze({ rows: searchRows }),
-    })
-  },
-} as const
-
-/** Adapts the validated panel projection to Tao's nominal item fields. */
-export const StudioTaoPanelProjection = {
-  empty(): StudioTaoPanelValues {
-    return this.project(StudioPanelProjection.project({
+  empty(): StudioProductHostPanels {
+    return this.project({
       compile: {
         appliedRevision: 0,
         compileRevision: 0,
@@ -345,115 +177,75 @@ export const StudioTaoPanelProjection = {
       search: [],
       tab: 'Problems',
       testWatch: false,
-    }))
+    })
   },
 
-  project(panels: StudioProductHostPanels): StudioTaoPanelValues {
-    const problemRows = Object.freeze(panels.drawer.problems.rows.map(taoProblemRow))
+  project(input: StudioPanelProjectionInput): StudioProductHostPanels {
+    const sourceVersions = input.sourceVersions ?? {}
+    const diagnostics = Object.freeze(
+      (input.compile.diagnostics ?? []).map(diagnostic => problemRow(diagnostic, sourceVersions)),
+    )
+    const tables = Object.freeze(input.data.map(table => {
+      const rows = StudioPanelModels.dataRows(table.rows)
+      return Object.freeze({
+        Datasource: table.datasource,
+        Entity: table.entity,
+        RetainedRowCount: rows.length,
+        Rows: Object.freeze(rows.map(row => JSON.stringify(row))),
+        TotalRowCount: table.rows.length,
+      })
+    }))
+    const retainedLogs = Object.freeze(
+      StudioPanelModels.logs(input.logs).map(log =>
+        Object.freeze({
+          Level: log.level,
+          Message: log.arguments.map(argument => jsonDisplay(argument)).join(' '),
+          Timestamp: finiteNumber(log.timestamp, 'log timestamp'),
+        })
+      ),
+    )
     return Object.freeze({
       Drawer: Object.freeze({
         Compile: Object.freeze({
-          AppliedRevision: panels.drawer.compile.appliedRevision,
-          CompileRevision: panels.drawer.compile.compileRevision,
-          DiagnosticCount: panels.drawer.compile.diagnosticCount,
-          Diagnostics: Object.freeze(panels.drawer.compile.diagnostics.map(taoProblemRow)),
-          Message: panels.drawer.compile.message,
-          Status: panels.drawer.compile.status,
+          AppliedRevision: nonNegativeInteger(input.compile.appliedRevision, 'applied compile revision'),
+          CompileRevision: nonNegativeInteger(input.compile.compileRevision, 'compile revision'),
+          DiagnosticCount: diagnostics.length,
+          Diagnostics: diagnostics,
+          Message: input.compile.message,
+          Status: input.compile.status,
         }),
         Data: Object.freeze({
-          CaptureAction: taoAction(panels.drawer.data.captureAction),
-          Error: panels.drawer.data.error ?? '',
-          Loading: panels.drawer.data.loading,
-          RefreshAction: taoAction(panels.drawer.data.refreshAction),
-          Source: cellSource(panels.drawer.data.source),
-          Tables: Object.freeze(panels.drawer.data.tables.map(table =>
-            Object.freeze({
-              Datasource: table.datasource,
-              Entity: table.entity,
-              RetainedRowCount: table.retainedRowCount,
-              Rows: Object.freeze(table.rows.map(row => JSON.stringify(row))),
-              TotalRowCount: table.totalRowCount,
-            })
-          )),
+          CaptureAction: action('capture-fixture'),
+          Error: input.dataError ?? '',
+          Loading: input.dataLoading,
+          RefreshAction: action('refresh-data'),
+          Source: cellSource(input.dataSource, 'panel source cell'),
+          Tables: tables,
         }),
         Logs: Object.freeze({
-          ClearAction: taoAction(panels.drawer.logs.clearAction),
-          RetainedCount: panels.drawer.logs.retainedCount,
-          Rows: Object.freeze(panels.drawer.logs.rows.map(row =>
-            Object.freeze({
-              Level: row.level,
-              Message: row.arguments.map(argument => jsonDisplay(argument)).join(' '),
-              Timestamp: row.timestamp,
-            })
-          )),
-          Source: cellSource(panels.drawer.logs.source),
-          TotalCount: panels.drawer.logs.totalCount,
+          ClearAction: action('clear-logs'),
+          RetainedCount: retainedLogs.length,
+          Rows: retainedLogs,
+          Source: cellSource(input.logSource, 'panel source cell'),
+          TotalCount: input.logs.length,
         }),
-        Problems: Object.freeze({ Rows: problemRows }),
-        Tab: panels.drawer.tab,
-        Tests: Object.freeze({
-          Available: panels.drawer.tests.available,
-          Error: panels.drawer.tests.error ?? '',
-          Failures: Object.freeze(panels.drawer.tests.failures.map(failure =>
-            Object.freeze({
-              Action: taoAction(failure.action),
-              Column: failure.source.column ?? -1,
-              Detail: failure.detail,
-              HasPosition: failure.source.line !== undefined,
-              Label: failure.label,
-              Line: failure.source.line ?? -1,
-              Path: failure.source.path,
-            })
-          )),
-          Output: panels.drawer.tests.output ?? '',
-          Reason: panels.drawer.tests.reason ?? '',
-          RunAction: taoAction(panels.drawer.tests.runAction),
-          Running: panels.drawer.tests.running,
-          Summary: panels.drawer.tests.summary ?? '',
-          Watch: panels.drawer.tests.watch,
-          WatchAction: taoAction(panels.drawer.tests.watchAction),
-        }),
+        Problems: Object.freeze({ Rows: diagnostics }),
+        Tab: input.tab,
+        Tests: testsModel(input.testStatus, input.testWatch, input.testError),
       }),
-      Search: Object.freeze({
-        Rows: Object.freeze(panels.search.rows.map(row =>
-          Object.freeze({
-            Action: taoAction(row.action),
-            Column: row.source.range?.start.character ?? -1,
-            Detail: row.detail,
-            End: row.source.end ?? -1,
-            Kind: row.kind,
-            Label: row.label,
-            Line: row.source.range?.start.line ?? -1,
-            Path: row.source.path,
-            SourceVersion: row.source.sourceVersion ?? '',
-            Start: row.source.start ?? -1,
-          })
-        )),
-      }),
+      Search: Object.freeze({ Rows: Object.freeze(input.search.map(searchRow)) }),
     })
   },
 } as const
 
-function taoAction(value: StudioPanelAction): StudioTaoPanelAction {
-  return Object.freeze({ Name: value.name, Payload: value.payload })
-}
-
-function taoProblemRow(row: StudioProblemPanelRow): StudioTaoProblemRow {
-  return Object.freeze({
-    Action: taoAction(row.action ?? action('open-diagnostic')),
-    Actionable: row.action !== undefined,
-    Column: row.source?.range?.start.character ?? -1,
-    Detail: row.detail,
-    HasPosition: row.source?.range !== undefined,
-    Label: row.label,
-    Line: row.source?.range?.start.line ?? -1,
-    Path: row.source?.path ?? '',
-    SourceVersion: row.source?.sourceVersion ?? '',
-  })
-}
-
-function cellSource(source: StudioPanelCellIdentity | undefined): string {
-  return source === undefined ? '' : `${studioCellLabel(source.cellId)} · revision ${source.cellRevision}`
+function cellSource(identity: StudioPanelCellIdentity | undefined, label: string): string {
+  if (identity === undefined) {
+    return ''
+  }
+  Assert.input(identity.cellId.trim() !== '', 'Studio panel source cell identity must not be empty.')
+  return `${studioCellLabel(identity.cellId)} · revision ${
+    nonNegativeInteger(identity.cellRevision, `${label} revision`)
+  }`
 }
 
 function jsonDisplay(value: StudioJsonValue): string {
@@ -466,19 +258,17 @@ function problemRow(
 ): StudioProblemPanelRow {
   const payload = JSON.stringify(diagnostic)
   const validated = StudioPanelPayloads.compileDiagnostic(payload)
-  const source = validated.filePath === undefined
-    ? undefined
-    : Object.freeze({
-      path: validated.filePath,
-      ...(validated.range === undefined ? {} : { range: validated.range }),
-      ...(sourceVersions[validated.filePath] === undefined
-        ? {}
-        : { sourceVersion: sourceVersions[validated.filePath] }),
-    })
+  const actionable = validated.filePath !== undefined
   return Object.freeze({
-    ...(source === undefined ? {} : { action: action('open-diagnostic', payload), source }),
-    detail: validated.message,
-    label: diagnosticLabel(validated),
+    Action: action('open-diagnostic', actionable ? payload : undefined),
+    Actionable: actionable,
+    Column: validated.range?.start.character ?? -1,
+    Detail: validated.message,
+    HasPosition: actionable && validated.range !== undefined,
+    Label: diagnosticLabel(validated),
+    Line: validated.range?.start.line ?? -1,
+    Path: validated.filePath ?? '',
+    SourceVersion: (validated.filePath === undefined ? undefined : sourceVersions[validated.filePath]) ?? '',
   })
 }
 
@@ -488,23 +278,22 @@ function testsModel(
   error: string | undefined,
 ): StudioTestsPanelModel {
   const lastRun = status?.lastRun
-  const failures = Object.freeze((lastRun?.failures ?? []).map(testFailureRow))
   const summary = lastRun === undefined
-    ? undefined
+    ? ''
     : lastRun.status === 'no-tests'
     ? 'No Tao tests found.'
     : `${lastRun.passed} passed · ${lastRun.failed} failed · ${lastRun.durationMs}ms`
   return Object.freeze({
-    available: status?.available ?? false,
-    ...(error === undefined ? {} : { error }),
-    failures,
-    ...(lastRun === undefined ? {} : { output: StudioPanelModels.testOutput(lastRun.output) }),
-    ...(status?.reason === undefined ? {} : { reason: status.reason }),
-    runAction: action('run-tests'),
-    running: status?.running ?? false,
-    ...(summary === undefined ? {} : { summary }),
-    watch,
-    watchAction: action('test-watch', JSON.stringify(!watch)),
+    Available: status?.available ?? false,
+    Error: error ?? '',
+    Failures: Object.freeze((lastRun?.failures ?? []).map(testFailureRow)),
+    Output: lastRun === undefined ? '' : StudioPanelModels.testOutput(lastRun.output),
+    Reason: status?.reason ?? '',
+    RunAction: action('run-tests'),
+    Running: status?.running ?? false,
+    Summary: summary,
+    Watch: watch,
+    WatchAction: action('test-watch', JSON.stringify(!watch)),
   })
 }
 
@@ -512,14 +301,13 @@ function testFailureRow(failure: StudioTestFailure): StudioTestFailurePanelRow {
   const payload = JSON.stringify(failure)
   const validated = StudioPanelPayloads.testFailure(payload)
   return Object.freeze({
-    action: action('open-test-failure', payload),
-    detail: validated.message,
-    label: validated.name,
-    source: Object.freeze({
-      ...(validated.column === undefined ? {} : { column: validated.column }),
-      ...(validated.line === undefined ? {} : { line: validated.line }),
-      path: validated.filePath,
-    }),
+    Action: action('open-test-failure', payload),
+    Column: validated.column ?? -1,
+    Detail: validated.message,
+    HasPosition: validated.line !== undefined,
+    Label: validated.name,
+    Line: validated.line ?? -1,
+    Path: validated.filePath,
   })
 }
 
@@ -527,33 +315,21 @@ function searchRow(result: StudioSearchResult): StudioSearchPanelRow {
   const payload = JSON.stringify(result)
   const validated = StudioPanelPayloads.searchResult(payload)
   return Object.freeze({
-    action: action('open-search-result', payload),
-    detail: validated.detail,
-    kind: validated.kind,
-    label: validated.label,
-    source: Object.freeze({
-      ...(validated.end === undefined ? {} : { end: validated.end }),
-      path: validated.path,
-      ...(validated.range === undefined ? {} : { range: validated.range }),
-      ...(validated.sourceVersion === undefined ? {} : { sourceVersion: validated.sourceVersion }),
-      ...(validated.start === undefined ? {} : { start: validated.start }),
-    }),
+    Action: action('open-search-result', payload),
+    Column: validated.range?.start.character ?? -1,
+    Detail: validated.detail,
+    End: validated.end ?? -1,
+    Kind: validated.kind,
+    Label: validated.label,
+    Line: validated.range?.start.line ?? -1,
+    Path: validated.path,
+    SourceVersion: validated.sourceVersion ?? '',
+    Start: validated.start ?? -1,
   })
 }
 
-function action(name: StudioPanelAction['name'], payload = 'null'): StudioPanelAction {
-  return Object.freeze({ name, payload })
-}
-
-function optionalCellIdentity(identity: StudioPanelCellIdentity | undefined): StudioPanelCellIdentity | undefined {
-  if (identity === undefined) {
-    return undefined
-  }
-  Assert.input(identity.cellId.trim() !== '', 'Studio panel source cell identity must not be empty.')
-  return Object.freeze({
-    cellId: identity.cellId,
-    cellRevision: nonNegativeInteger(identity.cellRevision, 'panel source cell revision'),
-  })
+function action(name: StudioPanelActionName, payload = 'null'): StudioPanelAction {
+  return Object.freeze({ Name: name, Payload: payload })
 }
 
 function nonNegativeInteger(value: number, label: string): number {
@@ -563,22 +339,6 @@ function nonNegativeInteger(value: number, label: string): number {
 
 function finiteNumber(value: number, label: string): number {
   Assert.input(Number.isFinite(value), `Studio ${label} must be finite.`)
-  return value
-}
-
-function freezeJsonObject(value: StudioJsonObject): StudioJsonObject {
-  return freezeJson(value) as StudioJsonObject
-}
-
-function freezeJson(value: StudioJsonValue): StudioJsonValue {
-  if (Array.isArray(value)) {
-    return Object.freeze(value.map(entry => freezeJson(entry)))
-  }
-  if (value !== null && typeof value === 'object') {
-    return Object.freeze(Object.fromEntries(
-      Object.entries(value).map(([key, entry]) => [key, freezeJson(entry)]),
-    ))
-  }
   return value
 }
 

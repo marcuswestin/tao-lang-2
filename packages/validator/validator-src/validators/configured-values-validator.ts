@@ -5,6 +5,7 @@ import type { ValidationContext } from '../validation'
 import { validateCommandBinding } from './commands-validator'
 import { referencedConfigurationType } from './configuration-type'
 import { validateConfiguredItemConstruction, validateConfiguredItemPatch } from './configured-item-validator'
+import { primitiveSlots } from './workspace-index'
 
 export const configuredValueValidationMessages = {
   patchTarget: (name: string) =>
@@ -40,7 +41,7 @@ export const configuredValueValidationChecks = {
   },
   [AST.PrimitiveConfigurationConstructor.$type]: (value, ctx) => {
     validateConfiguredItemConstruction(value.block, {
-      properties: AST.primitiveSlots(ctx.workspaceFiles, value.primitive),
+      properties: primitiveSlots(ctx, value.primitive),
     }, ctx)
   },
   [AST.RefinementExpression.$type]: (value, ctx) => {
@@ -353,7 +354,7 @@ function effectiveConfigurationProperties(
 ): AST.ConfigurationProperty[] {
   const primitive = AST.configurationPrimitiveOf(declaration)
   const properties: AST.ConfigurationProperty[] = primitive
-    ? AST.primitiveSlots(ctx.workspaceFiles, primitive).filter(property => property.name !== 'implement')
+    ? primitiveSlots(ctx, primitive).filter(property => property.name !== 'implement')
     : []
   for (const property of AST.configurationPropertiesOf(declaration)) {
     const index = properties.findIndex(candidate => candidate.name === property.name)

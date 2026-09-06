@@ -1,6 +1,6 @@
 import { Expect, Test, withTaoFiles } from '@shared/test'
 import { Workspace } from '@workspace'
-import { buildSemanticSnapshot } from '../studio-src/agent-poc/SemanticSnapshot'
+import { buildSemanticSnapshot } from '../studio-src/agent-chat/SemanticSnapshot'
 
 Test('semantic snapshot names a rendered view parameter without inventing a declaration edge', async () => {
   await withTaoFiles('tao-studio-semantic-render-parameter-', {

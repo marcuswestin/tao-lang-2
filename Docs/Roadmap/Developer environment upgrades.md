@@ -746,7 +746,7 @@ an entry here may link one when the developer workflow is also affected.
 
 ### DEVENV-043 — Changed-files lane fails every package with no affected tests
 
-- **Status:** Candidate
+- **Status:** Resolved
 - **Area:** Verification lanes
 - **Impact:** `just test-changed`, the documented ordinary iteration lane, reports red whenever a change
   touches a subset of packages, so its summary cannot be read at a glance and the real failures hide
@@ -758,16 +758,29 @@ an entry here may link one when the developer workflow is also affected.
   `./agent test-retry` after a contended `_test` timeout took the same path: the dev suite ran with
   `--changed`, found no affected test files, ran 0 tests, and reported the retry as failed, so it could
   not confirm the timeout; `./agent test-file packages/dev/dev-tests/gate-runner.test.ts` passed 19 of 19.
+  On a clean branch (2026-09-05, `.artifacts/logs/dev-test/2026-09-05T15-54-44-702Z-*`) the lane spawned
+  all 19 bun suites, failed 18 of them the same way, and still took 21s: `runtime-jest` ran all 27 files
+  and 156 tests because Jest ignores `--changedSince` when explicit test paths are also passed, so the
+  changed lane never narrows its most expensive package suite. Across every recorded checkout 372 of 425
+  `dev-test` runs executed 19 or more suites and 53 executed exactly one; no run selected a subset.
 - **Workaround:** Run `just test-file <path>` per touched suite, and `./agent verify` for the full run.
 - **Proposed change:** Treat a zero-test run under `--changed` as passed with no observations when the
   process exited 0, or drop suites whose packages have no changed files before spawning them. For the
   retry path the narrower cause is that `TestRunner.runSuites` passes `changedReference:
   prepared.changed?.reference` for every kind, while a `retry` run populates `prepared.changed` only to
   compute its advisory line; passing it solely when `prepared.kind === 'changed'` keeps a retry on the
-  ledger's own file list.
-- **Dependencies:** None.
+  ledger's own file list. For `runtime-jest`, omit the positional file list in changed mode (or run
+  `jest --listTests --changedSince` first and spawn nothing when it is empty) so `--changedSince` is
+  honoured.
+- **Dependencies:** Implemented on `feat/granular-test-selection-dfed54`: the changed lane no longer
+  uses Bun's `--changed` or Jest's `--changedSince` at all. A probe showed Bun's selection also stops at
+  the package boundary (a change to `packages/shared/shared-src/shared.ts` selected no `compiler`
+  test), so `TestSelection.planChangedSuites` selects whole suites from `PackageGraph`, the workspace
+  import graph read from each package's `@alias` imports; `package.json` was not usable because seven
+  packages import a workspace package their manifest omits. `just verify` now requires `--changed` or
+  `--complete`, and every lane records the tree it proved green so an identical tree is not re-run.
 - **Acceptance:** A change confined to one package leaves `just test-changed` green with only that
-  package's suites reported.
+  package's suites reported, and a clean branch reports nothing selected in well under five seconds.
 - **Source:** 2026-09-04 Studio syntax lens work.
 
 ### DEVENV-044 — Typecheck gate runs 19 projects serially on the legacy compiler
@@ -949,7 +962,7 @@ an entry here may link one when the developer workflow is also affected.
   friends from outside the source tree.
 - **Source:** 2026-09-04 `tao create` review.
 
-### DEVENV-053 — No repository command compiles a native module
+### DEVENV-055 — No repository command compiles a native module
 
 - **Status:** Candidate
 - **Area:** Native builds
@@ -977,3 +990,49 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** One documented command compiles `TaoICloudNative` for the simulator from a fresh
   worktree and fails loudly on a Swift error.
 - **Source:** 2026-09-05 iCloud datasource provider implementation.
+
+### DEVENV-053 — Verifying a sibling worktree from an agent shell needs unsandboxed commands
+
+- **Status:** Candidate
+- **Area:** Agent worktrees
+- **Impact:** An agent whose session is rooted in one worktree but asked to land work in another cannot
+  typecheck or run `./agent verify` there from the sandboxed shell; each attempt is re-run unsandboxed
+  and goes through harness review.
+- **Evidence:** 2026-09-05, session rooted in `.claude/worktrees/agent-response-preferences-2374d6`,
+  work in `.claude/worktrees/main-landing-review-9f3a2c`: `bunx tsc --build packages/*/tsconfig.json`
+  run through `sh -c 'cd <sibling> && …'` fails for all 19 projects with `TS5033: Could not write file
+  '<sibling>/packages/ast-utils/tsconfig.tsbuildinfo': EPERM`, because the sandbox write allowlist
+  covers only the session worktree. `bun --cwd <sibling> test <file>` reports `Script not found "test"`;
+  `bun test --cwd <sibling> <file>` runs sandboxed because it writes nothing.
+- **Workaround:** Run the typecheck and `./agent verify` for the sibling worktree unsandboxed; use
+  `bun test --cwd <worktree> <files>` for focused tests.
+- **Proposed change:** Give `./agent verify` a documented `--worktree <path>` form for verifying another
+  checkout the agent owns, or allow sandbox writes under the repository's own `.claude/worktrees/*` so a
+  branch an agent was asked to land can be verified in place.
+- **Dependencies:** None.
+- **Acceptance:** From a sandboxed agent shell rooted in one worktree, `bunx tsc --build` and
+  `./agent verify` complete in a sibling worktree without an unsandboxed retry.
+- **Source:** 2026-09-05 main-landing review.
+
+### DEVENV-054 — A forced `Bun.serve` stop strands another test's in-process WebSocket dial
+
+- **Status:** Candidate
+- **Area:** Package tests
+- **Impact:** Under the dev suite's `--concurrent` flag, a test that stops a `Bun.serve` with
+  `stop(true)` while another test's same-process `WebSocket` client is mid-dial to a different
+  server leaves that dial without an `open`, `error`, or `close` event, so the second test hangs to
+  its timeout. The lane reports it as a test assertion, not contention, and it reproduces only with
+  several server tests in one file.
+- **Evidence:** `bun test --concurrent packages/dev/dev-tests/dev-data.test.ts` on bun 1.3.13 hung the
+  sync and conformance tests 12 of 12 runs until the client bounded its dials; a socket trace showed
+  the dial coinciding with another test's `close 1006 Connection ended`. Serial runs and a scratch
+  script with the same steps never reproduced it.
+- **Workaround:** Bound every in-process dial and redial when it neither opens nor fails, as the
+  `Dev` datasource client now does; or keep tests that stop a server with a live client in files
+  that do not also dial other servers.
+- **Proposed change:** A shared test helper for `Bun.serve`-backed tests that stops servers only
+  after their own clients closed, or a note in the test-quality skill naming this hazard.
+- **Dependencies:** None.
+- **Acceptance:** A test file with several servers and clients passes under `--concurrent` without
+  each client needing its own dial bound.
+- **Source:** 2026-09-05 Dev datasource implementation.

@@ -81,17 +81,16 @@ async function waitForMetro(
   config: ExpoSessionConfig,
   shouldStop: () => boolean = () => false,
 ): Promise<boolean> {
-  const deadline = Date.now() + config.EXPO_START_TIMEOUT_MS
-  while (!shouldStop() && Date.now() < deadline) {
+  const running = await Time.pollUntil(async () => {
     try {
       const response = await fetch(config.EXPO_STATUS_URL)
-      if (response.ok && (await response.text()).includes('running')) {
-        return true
-      }
+      return response.ok && (await response.text()).includes('running')
     } catch {
-      // Metro is still starting.
+      return false // Metro is still starting.
     }
-    await Time.sleep(config.EXPO_START_POLL_MS)
+  }, { intervalMs: config.EXPO_START_POLL_MS, stop: shouldStop, timeoutMs: config.EXPO_START_TIMEOUT_MS })
+  if (running) {
+    return true
   }
   if (shouldStop()) {
     return false

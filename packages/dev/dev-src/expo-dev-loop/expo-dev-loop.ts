@@ -1,4 +1,6 @@
-import { HCI, Platform, Repo } from '@shared'
+import { Errors, HCI, Platform, Repo } from '@shared'
+import { DEV_DATA_ROOT_PATH, devDataAppKey, devDataEnvironment } from '../dev-data/DevDataBootstrap'
+import { DevDataServer } from '../dev-data/DevDataServer'
 import { DevFileWatcher } from './DevFileWatcher'
 import { DevLoopTUI } from './DevLoopTUI'
 import { PREFERRED_EXPO_PORT } from './expo-runner/expo-config'
@@ -11,6 +13,8 @@ import Run from './Run'
 export type DevAppSelection = {
   appName: string
   appPath: string
+  /** The project the app belongs to; with the app name it keys the app's dev data. */
+  projectRoot: string
 }
 
 /** DevLoopOutcome tells the Tao CLI whether to exit, restart, or run app selection again. */
@@ -30,9 +34,22 @@ export async function createDevLoopExpoSession(
 export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOutcome> {
   const repoRoot = Repo.getRoot()
   const { appName, appPath } = selection
-  const expo = await createDevLoopExpoSession()
+  // The dev data server starts first: its port and the app's key go into Expo's environment, where
+  // the checked-in `app.config.js` writes them into the manifest every development build reads.
+  const devDataApp = devDataAppKey(selection.projectRoot, appName)
+  const devData = await DevDataServer.start({
+    log: line => DevLoopTUI.logDevLoop('data', line),
+    rootDir: Repo.resolvePath(DEV_DATA_ROOT_PATH),
+  })
+  let expo: ExpoRunnerSession
+  try {
+    expo = await createDevLoopExpoSession()
+  } catch (error) {
+    await devData.stop().catch(() => {})
+    throw error
+  }
   const runtimeToolchainRoot = Repo.resolvePath(expo.config.RUNTIME_TOOLCHAIN_PATH)
-  const expoServer = expo.createServer(runtimeToolchainRoot)
+  const expoServer = expo.createServer(runtimeToolchainRoot, { env: devDataEnvironment(devData.port, devDataApp) })
   const output = DevLoopTUI.startDevLoopOutput()
   let keyInput: HCI.RawKeySession | undefined
   let watcher: DevFileWatcher | undefined
@@ -68,6 +85,9 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
     await watcher?.close()
     watcher = undefined
     await expoServer.stop()
+    await devData.stop().catch(error => {
+      DevLoopTUI.logDevLoop('data', `Could not stop the dev data server: ${Errors.formatForLog(error)}`, 'warn')
+    })
   }
 
   const requestFinish = (exitCode: number) => {
@@ -92,6 +112,7 @@ export async function runDevLoop(selection: DevAppSelection): Promise<DevLoopOut
   try {
     DevLoopTUI.logDevLoop('dev', `Tao dev app: ${appPath}`)
     DevLoopTUI.logDevLoop('dev', `Expo Metro port: ${expo.config.EXPO_PORT}`)
+    DevLoopTUI.logDevLoop('dev', `Dev data: tao-dev-data-v1 on port ${devData.port}, app ${devDataApp}`)
     // Key input starts before the first compile so q and Ctrl-C work during startup, not only
     // once Metro is ready.
     Commands.printControls()

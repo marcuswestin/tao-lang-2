@@ -101,7 +101,7 @@ function normalizeReservationError(error: Error): Error {
 async function requireEphemeralReservation(): Promise<PortReservation> {
   const reservation = await reservePort(0)
   if (reservation === undefined) {
-    throw new Errors.UserInputError('Could not reserve a free Expo Metro port.')
+    Errors.throwUserInput('Could not reserve a free Expo Metro port.')
   }
   return reservation
 }
@@ -109,7 +109,7 @@ async function requireEphemeralReservation(): Promise<PortReservation> {
 async function requireEphemeralPort(probe: PortProbe): Promise<number> {
   const port = await probe(0)
   if (port === undefined) {
-    throw new Errors.UserInputError('Could not allocate a free Expo Metro port.')
+    Errors.throwUserInput('Could not allocate a free Expo Metro port.')
   }
   return port
 }
@@ -142,7 +142,7 @@ async function ensureFree(port: number): Promise<boolean> {
     message: 'Kill it?',
   })
   if (!shouldKill) {
-    throw new Errors.UserInputError(
+    Errors.throwUserInput(
       `Port ${port} is already in use by ${formatListeners(listeners)}. To kill it, run: ${
         formatKillCommand(listeners)
       }`,
@@ -247,7 +247,7 @@ async function terminateListeners(listeners: readonly Listener[]): Promise<void>
     return
   }
 
-  throw new Errors.UserInputError(
+  Errors.throwUserInput(
     `Could not kill ${formatListenerSubject(listeners)}: ${
       result.stderr.trim() || result.error?.message || 'kill failed'
     }`,
@@ -261,7 +261,7 @@ async function waitForRelease(port: number): Promise<void> {
     await Time.sleep(RELEASE_POLL_MS)
     const listeners = await findListeners(port)
     if (listeners === undefined) {
-      throw new Errors.UserInputError(`Sent SIGTERM, but could not verify that port ${port} is free.`)
+      Errors.throwUserInput(`Sent SIGTERM, but could not verify that port ${port} is free.`)
     }
     remaining = listeners
     if (remaining.length === 0) {
@@ -269,7 +269,7 @@ async function waitForRelease(port: number): Promise<void> {
     }
   } while (Date.now() < deadline)
 
-  throw new Errors.UserInputError(
+  Errors.throwUserInput(
     `Port ${port} is still in use by ${formatListeners(remaining)} after SIGTERM.`,
   )
 }

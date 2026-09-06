@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { FS } from '@shared'
 import type { ValidationContext } from '../validation'
 import { reportPresentationBindingDiagnostic } from './navigation-validator'
+import { primitiveSlots } from './workspace-index'
 
 /** appValidationMessages declares structural diagnostics for Tao app placement and configuration. */
 const appValidationMessages = {
@@ -144,7 +145,7 @@ function validateAppProperties(
   ctx: ValidationContext,
   requireComplete: boolean,
 ): void {
-  const contract = AST.primitiveSlots(ctx.workspaceFiles, 'app')
+  const contract = primitiveSlots(ctx, 'app')
   const contractByName = new Map(contract.map(slot => [slot.name, slot]))
   const seen = new Set<string>()
   for (const slot of supplied) {
@@ -173,6 +174,10 @@ function validateAppProperties(
         ),
         slot.node,
       )
+      continue
+    }
+    // A slot whose declared default is `none` is optional, so `none` is one of its legal fills.
+    if (AST.isExpression(slot.value) && AST.isNoneLiteral(slot.value) && !Type.propertyRequiresValue(expected)) {
       continue
     }
     // Configuration-only nodes carry no expression type; the owning configuration validator checks those.

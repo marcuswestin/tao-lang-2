@@ -2,6 +2,7 @@ import { Errors, FS, HCI } from '@shared'
 import Workspace from '@workspace'
 import type { Readable, Writable } from 'node:stream'
 import { runFix } from '../source-commands'
+import { findTaoTestFiles } from '../test-command'
 import { buildCreationBrief, type BuildCreationBriefOptions, type CreationBrief } from './creation-brief'
 import {
   type CreationLane,
@@ -134,6 +135,14 @@ export async function runCreate(description: string, options: CreateCommandOptio
   if (options.runTests !== false) {
     say('')
     say("Running the new project's tests.")
+    // Lowering always writes one behavior test. Discovery walks Git's view of the tree, so a project
+    // created under an ignored folder would otherwise "pass" without a single test having run.
+    const tests = await findTaoTestFiles(directory)
+    if (tests.length === 0) {
+      Errors.throwUnexpected(
+        `The new project's tests were not found under ${FS.displayPath(directory)}; refusing to report it created.`,
+      )
+    }
     await (options.runTests ?? runProjectTests)(directory)
   }
   say('')

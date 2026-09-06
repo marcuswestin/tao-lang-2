@@ -35,14 +35,14 @@ export class StudioFixtureGeneration {
     const scenarioId = fixtureGenerationScenarioId(input)
     const scenario = manifest.scenarios.find(candidate => candidate.scenarioId === scenarioId)
     if (scenario === undefined) {
-      throw new Errors.UserInputError(`Studio scenario does not exist: ${scenarioId}`)
+      Errors.throwUserInput(`Studio scenario does not exist: ${scenarioId}`)
     }
     if (scenario.fixtureId === undefined) {
       return failed('validation_failed', 'The Studio scenario has no fixture to generate.')
     }
     const fixture = manifest.fixtures.find(candidate => candidate.fixtureId === scenario.fixtureId)
     if (fixture === undefined) {
-      throw new Errors.UserInputError(`Studio scenario fixture does not exist: ${scenario.fixtureId}`)
+      Errors.throwUserInput(`Studio scenario fixture does not exist: ${scenario.fixtureId}`)
     }
     const unsupportedClause = unsupportedFixtureClause(fixture.plan)
     if (unsupportedClause !== undefined) {
@@ -166,18 +166,18 @@ export class StudioFixtureGeneration {
 
 function fixtureGenerationScenarioId(value: unknown): string {
   if (!Json.isRecord(value) || typeof value['scenarioId'] !== 'string' || value['scenarioId'].trim().length === 0) {
-    throw new Errors.UserInputError('Expected a Studio scenario id for fixture generation.')
+    Errors.throwUserInput('Expected a Studio scenario id for fixture generation.')
   }
   return value['scenarioId']
 }
 
 function studioFixturePlan(value: unknown): StudioFixturePlan {
   if (!Json.isRecord(value) || !Array.isArray(value['accounts']) || !Array.isArray(value['creates'])) {
-    throw new Errors.UserInputError('The Studio scenario fixture plan is not available for generation.')
+    Errors.throwUserInput('The Studio scenario fixture plan is not available for generation.')
   }
   const accounts = value['accounts'].map((account, index) => {
     if (!Json.isRecord(account) || typeof account['name'] !== 'string' || !Json.isRecord(account['fields'])) {
-      throw new Errors.UserInputError(`Studio fixture account ${index + 1} is invalid.`)
+      Errors.throwUserInput(`Studio fixture account ${index + 1} is invalid.`)
     }
     return { fields: studioFixtureFields(account['fields'], `account ${account['name']}`), name: account['name'] }
   })
@@ -188,7 +188,7 @@ function studioFixturePlan(value: unknown): StudioFixturePlan {
       || !Json.isRecord(create['fields'])
       || typeof create['name'] !== 'string'
     ) {
-      throw new Errors.UserInputError(`Studio fixture row ${index + 1} is invalid.`)
+      Errors.throwUserInput(`Studio fixture row ${index + 1} is invalid.`)
     }
     return {
       entity: create['entity'],
@@ -211,7 +211,7 @@ function studioFixtureFields(
       if (isFixtureReference(field)) {
         return [name, { handle: field.handle, kind: 'fixture-reference' as const }]
       }
-      throw new Errors.UserInputError(`Generated ${owner}.${name} is not a Tao fixture value.`)
+      Errors.throwUserInput(`Generated ${owner}.${name} is not a Tao fixture value.`)
     }),
   )
 }

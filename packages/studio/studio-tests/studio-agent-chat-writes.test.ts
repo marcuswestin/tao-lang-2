@@ -4,7 +4,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { findSpec, type SpecSection } from '../studio-src/agent-chat/AgentChatReference'
 import type { AgentChatWriteWorld, StagedChange } from '../studio-src/agent-chat/AgentChatWrites'
 import { APPROVAL_REQUIRED, writeTools } from '../studio-src/agent-chat/AgentChatWrites'
-import type { SemanticSnapshot, SnapshotNode } from '../studio-src/agent-poc/SemanticSnapshot'
+import type { SemanticSnapshot, SnapshotNode } from '../studio-src/agent-chat/SemanticSnapshot'
 
 const PATH = 'App.tao'
 

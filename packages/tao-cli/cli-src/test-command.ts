@@ -28,19 +28,30 @@ type CompletedTestRun = {
 type TaoTestValidationError = RuntimeTesting.TestCompiler.ValidationError
 
 /**
- * runTestCommand runs the user-facing `tao test` command for one path. `options.output` selects how
- * the test runner's own output is reported; a caller that does not choose gets the streamed lines,
- * because an embedding host — Tao Studio's packaged runner — reads the whole stream. The CLI
- * resolves the mode from `--output` and the terminal before calling here.
+ * runTestCommand runs the user-facing `tao test` command for one or more paths, compiled and run as
+ * one plan. `options.output` selects how the test runner's own output is reported; a caller that
+ * does not choose gets the streamed lines, because an embedding host — Tao Studio's packaged
+ * runner — reads the whole stream. The CLI resolves the mode from `--output` and the terminal
+ * before calling here.
  */
-export async function runTestCommand(path: string, options: TestCommandOptions = {}): Promise<void> {
+export async function runTestCommand(
+  paths: string | readonly string[],
+  options: TestCommandOptions = {},
+): Promise<void> {
   const mode = options.output ?? 'lines'
   try {
-    const root = FS.resolvePath(path)
-    HCI.logProcessInfo('test', `Finding Tao tests under ${FS.displayPath(root)}`)
-    const testPaths = await findTaoTestFiles(root)
+    const roots = (typeof paths === 'string' ? [paths] : paths).map(path => FS.resolvePath(path))
+    const displayRoots = roots.map(root => FS.displayPath(root)).join(', ')
+    HCI.logProcessInfo('test', `Finding Tao tests under ${displayRoots}`)
+    const found = new Set<string>()
+    for (const root of roots) {
+      for (const testPath of await findTaoTestFiles(root)) {
+        found.add(testPath)
+      }
+    }
+    const testPaths = [...found].sort()
     if (testPaths.length === 0) {
-      HCI.writeLine(`No Tao tests found under ${FS.displayPath(root)}`)
+      HCI.writeLine(`No Tao tests found under ${displayRoots}`)
       return
     }
     HCI.logProcessInfo('test', `Found ${testPaths.length} Tao test ${testPaths.length === 1 ? 'file' : 'files'}`)

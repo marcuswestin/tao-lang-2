@@ -107,13 +107,13 @@ async function waitForReadiness(
       const completion = command.error === undefined
         ? `code=${String(command.exitCode)} signal=${String(command.signalCode)}`
         : `spawn error=${command.error.message}`
-      throw new Errors.UnexpectedBehaviorError(
+      Errors.throwUnexpected(
         `Tao Studio exited before reporting readiness (${completion}). Output:\n${output()}`,
       )
     }
     await Bun.sleep(READY_POLL_MS)
   }
-  throw new Errors.UnexpectedBehaviorError(
+  Errors.throwUnexpected(
     `Tao Studio never reported readiness within ${timeoutMs}ms. Output:\n${output()}`,
   )
 }

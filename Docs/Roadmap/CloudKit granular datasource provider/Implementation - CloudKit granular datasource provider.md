@@ -117,7 +117,7 @@ into the snapshot the store already loads.
 - **The store still saves whole snapshots** to the bridge; the ledger is derived by diffing. When
   the runtime grows a native ledger (the exploration's first slice as written), the diff goes away
   and the family contract, the fold, and the providers stay.
-- **Not run on a device.** The Swift compiles (see DEVENV-053 for the build steps); the provider
+- **Not run on a device.** The Swift compiles (see DEVENV-055 for the build steps); the provider
   is proven only against the fake CloudKit zone in `packages/stdlib/stdlib-tests`, which stores
   numbers as the server does, versions records, answers conflicts with the server's copy, plays an
   offline session's queue against the server on reconnect, and counts acknowledgements — but has

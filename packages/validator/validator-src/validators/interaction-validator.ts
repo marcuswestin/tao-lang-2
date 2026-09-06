@@ -9,6 +9,8 @@ const editingShortcuts = new Set(['primary+a', 'primary+c', 'primary+v', 'primar
 const interactionValidationMessages = {
   condition: (condition: string) =>
     `Unknown interaction condition '${condition}'; expected when pressed, when focused, when hovered, when <region> is active, or when Scheme is Light|Dark.`,
+  unknownRegion: (subject: string) =>
+    `'when ${subject} is active' names no view or #tag visible from this file; a misspelt region is a condition that is never true.`,
   duplicateEntityPolicy: (entity: string, hidden: boolean) =>
     `Entity '${entity}' may declare '${hidden ? 'commands hide' : 'commands'}' only once.`,
   duplicateMention: (scope: string, command: string) => `${scope} references command '${command}' more than once.`,
@@ -45,7 +47,24 @@ function validateInteractionCondition(condition: AST.LayoutCondition, ctx: Valid
   const scheme = subject === 'Scheme' && (value === 'Light' || value === 'Dark')
   if (!bare && !active && !scheme) {
     ctx.error(interactionValidationMessages.condition(conditionText(condition)), condition)
+    return
   }
+  // The runtime resolves the subject against the regions an occurrence renders. It is the one word in
+  // this vocabulary that is not a cross-reference, so it is checked here against the views and tags
+  // this file can see; otherwise a typo is a style that silently never applies.
+  if (active && !regionSubjectKnown(subject, condition)) {
+    ctx.error(interactionValidationMessages.unknownRegion(subject), condition)
+  }
+}
+
+function regionSubjectKnown(subject: string, condition: AST.LayoutCondition): boolean {
+  const file = AST.getDocument(condition).parseResult.value
+  const declared = file.statements.filter(AST.isViewDeclaration).some(view => view.name === subject)
+  const imported = file.statements.filter(AST.isUseStatement).some(statement =>
+    statement.importedDeclarations.some(reference => reference.$refText === subject)
+  )
+  const tagged = [...AST.streamAllContents(file)].filter(AST.isTagStatement).some(tag => tag.tag === `#${subject}`)
+  return declared || imported || tagged
 }
 
 function isPlainWord(word: AST.LayoutWord): boolean {

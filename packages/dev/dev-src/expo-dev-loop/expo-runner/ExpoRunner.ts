@@ -24,6 +24,8 @@ export type ExpoServerOptions = {
     argsPrefix?: readonly string[]
     executable: string
   }
+  /** Extra environment for the Expo CLI process, such as the dev data facts `app.config.js` reads. */
+  env?: Readonly<Record<string, string>>
   logRoot?: string
   runtimeToolchainSourceRoot?: string
   stopTimeoutMs?: number

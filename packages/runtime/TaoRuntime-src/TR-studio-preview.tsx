@@ -348,8 +348,9 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
       return
     }
     let active = true
+    const abort = new AbortController()
     setJourneyError(undefined)
-    void replayStudioJourney(steps).then(
+    void replayStudioJourney(steps, undefined, { signal: abort.signal }).then(
       () => {
         journeyReplayGate.current.completeReplay(journeyRevision)
         if (active) {
@@ -365,7 +366,10 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
       },
     )
     return () => {
+      // A remount or scenario change supersedes this replay: stop it before the successor starts
+      // dispatching into the same realm, and never publish its outcome.
       active = false
+      abort.abort()
     }
   }, [journeyRevision, scenario])
   if (journeyError !== undefined) {
@@ -378,29 +382,39 @@ function PreviewBridge(props: StudioPreviewBridgeProps): React.ReactElement {
 export async function replayStudioJourney(
   steps: readonly TaoJourneyStep[],
   suppliedHost?: StudioPreviewHost,
-  options: Readonly<{ targetTimeoutMs?: number }> = {},
+  options: Readonly<{ signal?: AbortSignal; targetTimeoutMs?: number }> = {},
 ): Promise<void> {
   const host = suppliedHost ?? browserPreviewHost()
   if (host === undefined || steps.length === 0) {
     return
   }
-  const holdsClock = journeyUsesClock(steps)
-  if (holdsClock) {
-    Clock.beginTest()
+  const checkAborted = (): void => {
+    RuntimeAssert.input(
+      options.signal?.aborted !== true,
+      'The Tao Studio journey replay was superseded before it finished.',
+    )
   }
+  // The clock is held, not taken over: the cell's own toasts, tickers, and pending fills keep their
+  // schedule and resume on real timers when the replay releases it.
+  const release = journeyUsesClock(steps) ? Clock.hold() : undefined
   try {
     await Promise.resolve()
+    checkAborted()
     const adapter: TaoJourneyAdapter<StudioPreviewElement> = {
       advance(milliseconds) {
+        checkAborted()
         Clock.advance(milliseconds)
       },
       dispatch(target, event, value) {
+        checkAborted()
         dispatchJourneyEvent(target, event, value)
       },
       async find(selector, target, scope) {
+        checkAborted()
         return await findJourneyTarget(host, selector, target, scope, options.targetTimeoutMs)
       },
       async select(tag, index, scope) {
+        checkAborted()
         let matchCount = 0
         const selected = await waitForTaoJourneyTarget(() => {
           const matches = findJourneyTargets(host, 'tag', tag, scope)
@@ -417,15 +431,15 @@ export async function replayStudioJourney(
         return selected
       },
       async settle() {
+        // Discrete events commit synchronously, but a virtual-clock callback or a hover update is
+        // flushed by React's scheduler on a macrotask, so settling yields one of those as well.
         await Promise.resolve()
-        await Promise.resolve()
+        await new Promise<void>(resolve => setTimeout(resolve, 0))
       },
     }
     await replayTaoJourney(steps, adapter)
   } finally {
-    if (holdsClock) {
-      Clock.endTest()
-    }
+    release?.()
   }
 }
 
@@ -532,8 +546,11 @@ function dispatchJourneyEvent(target: StudioPreviewElement, event: TaoJourneyEve
       cancelable: true,
       pointerType: 'mouse',
     })
+    // A text selector resolves to the innermost matching node, which for a pressable is its nested
+    // label, while react-native-web listens for `enter` on the pressable itself. A real pointer
+    // entering the label enters every ancestor too, so the synthetic event bubbles to reach them.
     dispatchBrowserEvent(target, `${pointer}enter`, PointerConstructor, {
-      bubbles: false,
+      bubbles: true,
       cancelable: true,
       pointerType: 'mouse',
     })
@@ -1223,7 +1240,7 @@ function isJourneySubmitKey(event: StudioPreviewPointerEvent, element: StudioPre
 }
 
 /** recordedJourneyTarget chooses only selectors the Tao journey runtime can resolve uniquely later. */
-export function recordedJourneyTarget(
+function recordedJourneyTarget(
   host: StudioPreviewHost,
   startingElement: StudioPreviewElement,
 ): StudioRecordedJourneyTarget | undefined {

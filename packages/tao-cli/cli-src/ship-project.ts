@@ -14,6 +14,8 @@ export type ShipProjectApp = {
   name: string
   releaseDatasourceConfiguration?: Readonly<Record<string, string>>
   sourcePath: string
+  /** The app configures the development-only `Dev` datasource, which needs a running dev server. */
+  usesDevDatasource: boolean
 }
 
 export type ShipICloudBinding = {
@@ -121,6 +123,7 @@ async function readShipProject(
         name: declaration.name,
         releaseDatasourceConfiguration,
         sourcePath: path,
+        usesDevDatasource: /\bDatasource\s+Dev\b/u.test(declarationSource),
       })
     }
   }

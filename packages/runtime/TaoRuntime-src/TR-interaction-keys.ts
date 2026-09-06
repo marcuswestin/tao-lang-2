@@ -132,7 +132,11 @@ export function interactionKeyFromHardwareEvent(
   return normalizeInteractionKey([...modifiers, key].join('+'))
 }
 
-/** dispatchInteractionHardwareKey is the listener-free native seam shared with the web host. */
+/**
+ * dispatchInteractionHardwareKey lowers one host key event to a canonical key, records that a
+ * keyboard is present, and hands the key to the dispatch its caller passes in. It registers no
+ * listener of its own; the web app host, which owns the app's one key listener, is its only caller.
+ */
 export function dispatchInteractionHardwareKey(
   event: TaoHardwareKeyEvent,
   dispatch: (key: string) => boolean,

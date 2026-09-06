@@ -70,6 +70,8 @@ export type GateSummary = {
   /** The first failing node, which is the one to act on. */
   firstFailure?: { logPath?: string; name: string; output: string }
   gates: readonly GateResult[]
+  /** The earlier green run this one stood on instead of running; every gate is then `skipped`. */
+  greenTree?: { at: string; lane: string; logRoot: string; treeHash: string }
   /** The lane this run belongs to, which is also its artifact directory. */
   lane: string
   logRoot: string
@@ -289,9 +291,11 @@ function nodeResult(
 ): GateResult {
   const exitCode = typeof state.exitCode === 'number' ? state.exitCode : undefined
   const failed = state.status === 'failed'
+  // A node that failed again on its isolated retry has had the machine ruled out for it, so the
+  // contention this run recorded no longer explains its failure.
   const failureKind = failed
     ? classifyFailure(state.fullOutput, {
-      contention,
+      contention: state.retried === true ? undefined : contention,
       interrupted: state.failure?.kind === 'interrupted',
     })
     : undefined

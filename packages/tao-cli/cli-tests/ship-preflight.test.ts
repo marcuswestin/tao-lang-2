@@ -32,12 +32,14 @@ Describe('tao ship preflight', () => {
       git: { ...cleanGit, dirty: true },
       ignoreGit: false,
       localDatasourceEndpoint: true,
+      usesDevDatasource: true,
     }, runner())
 
     Expect(issues.map(issue => issue.message).join('\n')).toContain('Git working tree is dirty')
     Expect(issues.map(issue => issue.message).join('\n')).toContain('Admin App Store Connect API team key')
     Expect(issues.map(issue => issue.message).join('\n')).toContain('Create the iOS app record')
     Expect(issues.map(issue => issue.message).join('\n')).toContain('localhost datasource')
+    Expect(issues.map(issue => issue.message).join('\n')).toContain('uses the Dev datasource')
   })
 
   Test('reports old Xcode, unfinished first launch, a missing SDK, and a missing key file', async () => {

@@ -25,12 +25,12 @@ async function prepare(options: PrepareStudioHutchHomeOptions): Promise<string> 
   const sourceHome = FS.resolvePath(options.sourceHome ?? defaultSourceHome())
   const targetHome = FS.resolvePath(options.targetHome)
   if (sourceHome === targetHome) {
-    throw new Errors.HostEnvironmentError(
+    Errors.throwHostEnvironment(
       `Tao Studio's isolated Hutch home must differ from the source Hutch home: ${sourceHome}.`,
     )
   }
   if (!await FS.isDirectory(sourceHome)) {
-    throw new Errors.HostEnvironmentError(`The Hutch home to isolate does not exist: ${sourceHome}.`)
+    Errors.throwHostEnvironment(`The Hutch home to isolate does not exist: ${sourceHome}.`)
   }
 
   const metadata = await readMetadata(targetHome)
@@ -39,6 +39,7 @@ async function prepare(options: PrepareStudioHutchHomeOptions): Promise<string> 
     return targetHome
   }
 
+  await sweepInterruptedPreparations(targetHome)
   const temporaryHome = `${targetHome}.preparing-${Bun.randomUUIDv7()}`
   try {
     await FS.remove(temporaryHome)
@@ -62,11 +63,25 @@ async function prepare(options: PrepareStudioHutchHomeOptions): Promise<string> 
     return targetHome
   } catch (error) {
     await FS.remove(temporaryHome).catch(() => {})
-    throw new Errors.HostEnvironmentError(
+    Errors.throwHostEnvironment(
       `Could not prepare Tao Studio's isolated Hutch home at ${targetHome}.`,
       { cause: error, details: { sourceHome, targetHome } },
     )
   }
+}
+
+/**
+ * A hard interrupt (SIGKILL, a lost machine) leaves a half-cloned `<target>.preparing-<id>` behind
+ * that the catch above never reached. The next preparation removes those siblings, which only this
+ * function names, before it clones again.
+ */
+async function sweepInterruptedPreparations(targetHome: string): Promise<void> {
+  const parent = FS.dirname(targetHome)
+  const prefix = `${FS.basename(targetHome)}.preparing-`
+  const names = await FS.listDir(parent).catch((): string[] => [])
+  await Promise.all(
+    names.filter(name => name.startsWith(prefix)).map(async name => await FS.remove(FS.resolvePath(name, parent))),
+  )
 }
 
 /**

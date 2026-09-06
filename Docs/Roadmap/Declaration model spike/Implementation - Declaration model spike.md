@@ -5,7 +5,7 @@ collisions they created with scheduled work. WordFlower Tranche 4 subsequently r
 reusable navigation and datasource types bind protocols with `implement inject nav|provider`, inline
 or by sidecar path. The superseded `implement is "./X.ts"` proposal is not current Tao syntax.
 
-Everything still unresolved lives in `Open questions - Declaration model spike - Claude.md`. Do not
+Everything still unresolved lives in `Open questions - Declaration model spike.md`. Do not
 guess at those; several of them would change the shape of what you build. Ask Ro if one blocks you.
 
 ## The model
@@ -177,7 +177,7 @@ case covers `let Person = { … }`.
 
 **5. Separate type and value namespaces.** Required by 4 — `let Person = { … }` binds a value named
 `Person` while the type `Person` stays reachable, otherwise you shadow the type at the moment you use
-it. `Design - Canonical descriptor identity - Claude.md` already assumes per-kind namespaces, so this
+it. `Design - Canonical descriptor identity.md` already assumes per-kind namespaces, so this
 is consistent rather than new.
 
 **6. `with` derivation on values, and monotonic narrowing.** `Value with { … }` derives; `Type { … }`

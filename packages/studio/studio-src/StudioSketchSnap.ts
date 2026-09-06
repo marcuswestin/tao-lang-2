@@ -14,14 +14,14 @@ import type { StudioSketchProjectionNode, StudioSketchProjectionResult } from '.
 
 export type StudioSketchSnapTree = StudioSketchSnapContainer | StudioSketchSnapElement
 
-export type StudioSketchSnapContainer = Readonly<{
+type StudioSketchSnapContainer = Readonly<{
   children: readonly StudioSketchSnapTree[]
   direction: 'Col' | 'Row'
   layout: readonly StudioLayoutEntry[]
   type: 'container'
 }>
 
-export type StudioSketchSnapElement = Readonly<{
+type StudioSketchSnapElement = Readonly<{
   arguments: readonly string[]
   component: 'Image' | 'Placeholder' | 'Text'
   content?: string
@@ -30,7 +30,7 @@ export type StudioSketchSnapElement = Readonly<{
   type: 'element'
 }>
 
-export type StudioSketchSnapSourceAction =
+type StudioSketchSnapSourceAction =
   & StudioCanonicalSourceAction
   & Readonly<{
     expectedCatalogRevision: number
@@ -43,12 +43,12 @@ export type StudioSketchSnapSourceAction =
     viewName: string
   }>
 
-export type StudioSketchSnapMergePlan = Readonly<{
+type StudioSketchSnapMergePlan = Readonly<{
   direction: 'Col' | 'Row'
   position: 'after' | 'before'
 }>
 
-export type StudioSketchSnapPrepared = Readonly<{
+type StudioSketchSnapPrepared = Readonly<{
   action: StudioSketchSnapSourceAction
   needsConfirmation: boolean
   projectedRectIds: readonly string[]
@@ -59,7 +59,7 @@ export type StudioSketchSnapTransport = Readonly<{
   propose: (envelope: StudioSourceActionEnvelope) => Promise<StudioSourceActionProposal>
 }>
 
-export type StudioSketchSnapSubmission =
+type StudioSketchSnapSubmission =
   | Readonly<{
     kind: 'applied'
     projectedRectIds: readonly string[]

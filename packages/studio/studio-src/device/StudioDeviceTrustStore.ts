@@ -1,5 +1,8 @@
 import { StudioDeviceTrust, type TaoStudioDeviceIdentity } from '@runtime/TR-studio-device-trust'
 import { Errors, FS, Json } from '@shared'
+// `@shared/FS` has no exclusive-create helper, and creating the identity is the one place that needs
+// one: two Studio processes starting together must not each believe they wrote the installation key.
+import * as nodeFs from 'node:fs/promises'
 import type { StudioTrustedDevice } from './StudioDeviceStatus'
 
 const identityFileName = 'studio-identity.json'
@@ -15,12 +18,22 @@ type TrustedDevicesFile = { devices: readonly StudioTrustedDevice[]; version: ty
  * confirmed, as JSON under the Studio user state root. Malformed files are ignored rather than fatal:
  * a broken identity regenerates and a broken device list starts empty, because trust is only ever
  * re-established by comparing codes on two screens. Writes are serialized and land atomically.
+ *
+ * The state root is shared by every Studio process on the machine, so neither file is this process's
+ * to own. The identity is created with an exclusive open and the loser of that race adopts the
+ * winner's key rather than overwriting it — two identities under one root would mean a phone paired
+ * with one Studio being unrecognized by the other. The device list is re-read inside each write and
+ * merged by `devicePublicKey`: this process is authoritative only for the keys its own operation
+ * touched, so a device another Studio paired survives, and one another Studio revoked is not
+ * resurrected by this process's stale copy.
  */
 export class StudioDeviceTrustStore {
   readonly #devices: StudioTrustedDevice[]
   readonly #devicesPath: string
   readonly #identity: TaoStudioDeviceIdentity
   #pending: Promise<void> = Promise.resolve()
+  /** Writes still queued; only the last one to land replaces the in-memory list with the merged file. */
+  #queued = 0
 
   private constructor(identity: TaoStudioDeviceIdentity, devices: StudioTrustedDevice[], devicesPath: string) {
     this.#identity = identity
@@ -32,12 +45,7 @@ export class StudioDeviceTrustStore {
   static async open(root: string): Promise<StudioDeviceTrustStore> {
     const identityPath = FS.resolvePath(identityFileName, root)
     const devicesPath = FS.resolvePath(trustedDevicesFileName, root)
-    const existing = await readIdentity(identityPath)
-    const identity = existing ?? StudioDeviceTrust.generateIdentity()
-    if (existing === undefined) {
-      await writeAtomically(identityPath, { ...identity, version: storeVersion } satisfies IdentityFile)
-    }
-    return new StudioDeviceTrustStore(identity, await readDevices(devicesPath), devicesPath)
+    return new StudioDeviceTrustStore(await openIdentity(identityPath), await readDevices(devicesPath), devicesPath)
   }
 
   identity(): TaoStudioDeviceIdentity {
@@ -76,7 +84,7 @@ export class StudioDeviceTrustStore {
     } else {
       this.#devices.push(stored)
     }
-    await this.#save()
+    await this.#save(record.devicePublicKey, stored)
   }
 
   /** revoke forgets a device; it resolves `false` when the key was not trusted. */
@@ -86,7 +94,7 @@ export class StudioDeviceTrustStore {
       return false
     }
     this.#devices.splice(index, 1)
-    await this.#save()
+    await this.#save(devicePublicKey, undefined)
     return true
   }
 
@@ -96,8 +104,9 @@ export class StudioDeviceTrustStore {
     if (index < 0) {
       return false
     }
-    this.#devices[index] = { ...this.#devices[index]!, lastSeenAt }
-    await this.#save()
+    const touched = { ...this.#devices[index]!, lastSeenAt }
+    this.#devices[index] = touched
+    await this.#save(devicePublicKey, touched)
     return true
   }
 
@@ -106,12 +115,81 @@ export class StudioDeviceTrustStore {
     return this.#pending
   }
 
-  #save(): Promise<void> {
-    const snapshot: TrustedDevicesFile = { devices: this.trusted(), version: storeVersion }
-    const write = async () => await writeAtomically(this.#devicesPath, snapshot)
+  /**
+   * Persists one decision, merged with whatever is on disk when the write runs. This process is
+   * authoritative for `devicePublicKey` alone — `record` is the entry it decided on, `undefined` a
+   * revocation — and every other key is taken from the file, so a device a second Studio paired
+   * survives and one it revoked is not resurrected. The decision is captured here rather than read
+   * back from the list at write time, because writes are queued and an earlier merge may already
+   * have replaced the list this one would have read.
+   */
+  #save(devicePublicKey: string, record: StudioTrustedDevice | undefined): Promise<void> {
+    this.#queued += 1
+    const write = async () => {
+      const merged: StudioTrustedDevice[] = []
+      // Disk order first, so a record this process only renamed keeps its place in the list.
+      for (const device of await readDevices(this.#devicesPath)) {
+        if (device.devicePublicKey !== devicePublicKey) {
+          merged.push(device)
+        } else if (record !== undefined) {
+          merged.push(record)
+        }
+      }
+      if (record !== undefined && !merged.some(device => device.devicePublicKey === devicePublicKey)) {
+        merged.push(record)
+      }
+      try {
+        await writeAtomically(
+          this.#devicesPath,
+          { devices: merged, version: storeVersion } satisfies TrustedDevicesFile,
+        )
+      } finally {
+        this.#queued -= 1
+      }
+      // Only the last write in the queue adopts the merged list: an earlier one would drop the
+      // records the still-queued mutations are holding optimistically in memory.
+      if (this.#queued === 0) {
+        this.#devices.splice(0, this.#devices.length, ...merged)
+      }
+    }
     const saving = this.#pending.then(write, write)
     this.#pending = saving
     return saving
+  }
+}
+
+/**
+ * Loads the installation identity, creating it only if nobody else has. The create is an exclusive
+ * open: when a second Studio process wins that race this one adopts the key it wrote, because two
+ * identities under one state root would make every device paired with the loser unrecognizable. A
+ * file that exists but does not parse is not a race — it is the corruption case — and is replaced.
+ */
+async function openIdentity(path: string): Promise<TaoStudioDeviceIdentity> {
+  const existing = await readIdentity(path)
+  if (existing !== undefined) {
+    return existing
+  }
+  const identity = StudioDeviceTrust.generateIdentity()
+  const file: IdentityFile = { ...identity, version: storeVersion }
+  await FS.mkdir(FS.dirname(path))
+  try {
+    const handle = await nodeFs.open(path, 'wx', 0o600)
+    try {
+      await handle.writeFile(`${JSON.stringify(file, null, 2)}\n`, 'utf8')
+    } finally {
+      await handle.close()
+    }
+    return identity
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'EEXIST') {
+      throw error
+    }
+    const adopted = await readIdentity(path)
+    if (adopted !== undefined) {
+      return adopted
+    }
+    await writeAtomically(path, file)
+    return identity
   }
 }
 

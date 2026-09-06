@@ -152,17 +152,20 @@ transport failure offers a plain retry; provably corrupt stored data offers the 
 only when the connection grants `reset`, which wipes and remounts the app root so recovery needs no
 manual restart. A connection without `reset` — a shared remote store, deliberately — keeps the
 retry, because overwriting data this client failed to parse could erase every peer's rows. A
-snapshot that fails to parse mid-session degrades to the recoverable sync failure over the last
-usable data instead of blocking the app. Schemas with no bound datasource keep their ordinary query
-error state instead.
+connection that grants `reset` and declares `automaticReset` is a disposable store: the runtime
+runs that reset itself, once per corrupt load, and reloads without asking — how the `Dev`
+datasource clears an app's development data after a schema edit. A snapshot that fails to parse
+mid-session degrades to the recoverable sync failure over the last usable data instead of blocking
+the app. Schemas with no bound datasource keep their ordinary query error state instead.
 
 ## Self-hosted datasource declarations
 
 Shipped datasources are ordinary public Tao declarations in package-owned homes — not
 compiler-known names. Each provider owns one package path with its declaration and implementation
 side by side: `Memory` in `@tao/data/providers/memory`, `Local` in `@tao/data/providers/local`,
-`Http` in `@tao/data/providers/http`, `InstantDB` in `@tao/data/providers/instantdb`, `ICloud` in
-`@tao/data/providers/icloud`, and `CloudKit` in `@tao/data/providers/cloudkit`.
+`Dev` in `@tao/data/providers/dev`, `Http` in `@tao/data/providers/http`, `InstantDB` in
+`@tao/data/providers/instantdb`, `ICloud` in `@tao/data/providers/icloud`, and `CloudKit` in
+`@tao/data/providers/cloudkit`.
 
 Reusable provider types use `type Name is datasource with { ... }`. Their explicit
 `provider <Export> from <path>` clause fills primitive `datasource`'s implementation requirement; it
@@ -210,7 +213,9 @@ coherent stateless storage boundary. The shipped implementations pass that suite
 process-local and instance-isolated; Local delegates its storage boundary to AsyncStorage;
 InstantDB syncs each storage key's snapshot through one deterministic keyed row in an InstantDB
 app, resolves its startup load from the SDK's own subscription (so an offline launch serves the
-local cache), and publishes remote replacement snapshots through `subscribe`.
+local cache), and publishes remote replacement snapshots through `subscribe`; Dev keeps each
+storage key's snapshot on the Tao dev server and publishes every peer's write through `subscribe`
+(see _The Dev datasource_ below).
 
 ICloud is the platform-sync member of the family: it keeps each storage key's snapshot as one
 document in the app's iCloud Drive container (outside the user-visible `Documents/` folder), so the
@@ -269,6 +274,52 @@ code, Apple only. Elsewhere the store still mounts from its local checkpoint and
 the missing native side surfaces as the recoverable sync error. Like the snapshot-family `ICloud`
 it serves one iCloud account across its devices; sharing a zone with other accounts is not yet
 modelled, and an account switch stops sync until the app relaunches.
+
+## The Dev datasource
+
+`Dev` is the development-only datasource. It holds nothing on the device: the Tao dev server —
+`tao dev` or Studio — stores each app's snapshots on the development machine and syncs them live
+to every device, browser tab, and simulator running that app's development build, so two phones
+and a browser tab editing the same app see one set of rows.
+
+```tao
+use Dev from @tao/data/providers/dev
+
+app Notes {
+   Name "Notes"
+   Navigator NotesNavigator
+   Datasource Dev { }
+}
+```
+
+`Dev` declares an optional `StorageKey`, defaulting to the data schema name. The rest is decided
+by the dev server:
+
+- **Storage is per app.** The dev server keys every stream by the app it is running — the app
+  name plus a digest of its project root — and by storage key, so several apps developing side by
+  side never see each other's rows. `tao dev` and Studio derive the same key for the same app.
+- **Storage survives the dev server.** Snapshots live as one file per app and storage key under
+  `.artifacts/user/dev-data/`, written whole through a rename; the next dev server serves them
+  again.
+- **A schema edit that leaves the stored data unreadable clears it.** The connection grants
+  `reset` and declares `automaticReset`, so the first client whose new schema cannot parse the
+  stored snapshot wipes that app's stream and every peer receives the empty snapshot. Nothing asks;
+  development data is disposable by definition.
+- **Sync is last-snapshot-wins over the full-snapshot protocol**, the same terms as InstantDB. A
+  write is acknowledged by the server after it has landed and been published to every peer.
+- **A lost server is a recoverable sync failure, never a fallback.** While the dev server is away,
+  the app keeps its last snapshot, writes fail visibly, and the client reconnects with backoff; the
+  server's snapshot replaces local state when it returns. A build with no dev server at all — no
+  bootstrap fact in its Expo manifest — reports that plainly at load instead of dialing nowhere.
+- **It never ships.** `tao ship` refuses an app that configures `Datasource Dev`; ship a variant
+  with a shippable datasource instead.
+
+A development build finds the server through the host its bundle loaded from — `location` on web,
+the bundle URL on a device, which is where Expo's dev server already lives — and the port and app
+key the dev server writes into the Expo manifest as `expo.extra.taoDevData`. The wire contract,
+`tao-dev-data-v1`, lives beside the client in `@tao/data/providers/dev/Dev.ts`; the server in
+`packages/dev` mirrors it. `packages/studio/README.md` owns the operational side: ports, the
+storage root, and how to inspect or clear it.
 
 ## Queries
 

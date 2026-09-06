@@ -2,10 +2,9 @@
 
 Open work only. Completed work is recorded under `Docs/Roadmap/Archive/`.
 
-Language features are built in tranches through the WordFlower app family: decisions are settled in
-`Apps/WordFlower/2 - Next` and implemented into `1 - Current` slice by slice.
-`Apps/WordFlower/README.md` owns the tranche mechanics. The language target and the program that
-reaches it — first MVP, then Revolution — are owned by `Docs/Roadmap/Tao Revolution/`: `Decisions.md`
+`Apps/WordFlower/README.md` owns the tranche mechanics language features are built through. The
+language target and the program that reaches it — first MVP, then Revolution — are owned by
+`Docs/Roadmap/Tao Revolution/`: `Decisions.md`
 (what Tao becomes), `Process.md` (how the program proceeds, step by step), and `Coverage.md` (which
 app feature and Tao test proves each capability).
 
@@ -176,8 +175,10 @@ tests written in Tao, green in Current, for every construct introduced.
     one journey on the device is a fork rather than a task, and capture/restore has no UI on any
     surface. Status, what was proven live, and the open decisions are in
     `Docs/Roadmap/Tao Studio companion app/Slice 2 - Everyday development canvas.md`.
-- [ ] Add `tao create` project scaffold
-  - New app folder, minimal Tao app, default package layout, docs, dev and test scripts, and an immediate open-and-run path.
+- [x] Add `tao create` project scaffold
+  - Shipped 2026-09-04: `tao create "<description>"` writes the canonical project layout, id, and
+    starters. Contract: `Docs/Spec/Tao Packages.md`. Direction and open follow-ups:
+    `Docs/Roadmap/Tao create.md`.
 - [ ] Implement secrets
 - [ ] Polish the IDE MVP
   - Syntax, diagnostics, formatting, source actions, go-to-definition, and references remain the IDE

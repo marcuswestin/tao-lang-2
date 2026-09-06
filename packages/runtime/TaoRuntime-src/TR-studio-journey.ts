@@ -109,7 +109,7 @@ async function replayTaoJourneySteps<Target>(
 }
 
 /** replayTaoJourneyStep applies one already-validated test-shaped operation through a host adapter. */
-export async function replayTaoJourneyStep<Target>(
+async function replayTaoJourneyStep<Target>(
   step: TaoJourneyStep,
   adapter: TaoJourneyAdapter<Target>,
   scope?: Target,

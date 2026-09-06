@@ -626,29 +626,15 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     view.betaShip.addEventListener('click', betaShipListener)
 
     let chatNames: readonly string[] = []
-    // Both agents share one rail panel; see packages/studio/studio-src/agent-chat/StudioAgentPanel.
     mountStudioAgentPanel(root, {
-      chat: {
-        knownNames: () => chatNames,
-        openDeclaration: async name => {
-          const found = await StudioApiClient.agentChat<{ found: boolean; path?: string; line?: number }>('locate', {
-            name,
-          })
-          if (found.found && found.path !== undefined) {
-            await openFile(found.path, true)
-          }
-        },
-      },
-      poc: {
-        activeScenario: () => activePreview.current()?.cell?.scenarioId,
-        identityFor: file => currentSourceIdentity(handshake, activePreview.current(), { content: '', ...file }),
-        openFile: async path => {
-          const known = projectFiles.find(file =>
-            file.path === path || file.path === `/${path}` || file.path.endsWith(`/${path}`)
-          )
-          await openFile(known?.path ?? path, true)
-        },
-        selection: () => inspected,
+      knownNames: () => chatNames,
+      openDeclaration: async name => {
+        const found = await StudioApiClient.agentChat<{ found: boolean; path?: string; line?: number }>('locate', {
+          name,
+        })
+        if (found.found && found.path !== undefined) {
+          await openFile(found.path, true)
+        }
       },
     })
     void (async () => {

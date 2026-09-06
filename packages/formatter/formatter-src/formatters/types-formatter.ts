@@ -61,11 +61,6 @@ export default {
     f.oneSpaceAround('is')
   },
 
-  /** ParameterTypeDeclaration formats scoped parameter type declarations. */
-  ParameterTypeDeclaration(f) {
-    f.oneSpaceAround('is')
-  },
-
   /** Type references have no interior spacing. */
   PrimitiveTypeReference() {},
 

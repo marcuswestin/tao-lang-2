@@ -2,7 +2,14 @@ import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { FS } from '@shared'
 
-const studioRectTagPrefix = '#studio_rect_'
+/**
+ * studioRectMarkerPrefix opens Snap's private rectangle marker. The marker is a Studio identity
+ * carried by the studio-gated `studioRectId`, never an authored test tag, so codegen keeps it out
+ * of the public `testTag` a release build ships.
+ */
+export const studioRectMarkerPrefix = 'studio_rect_'
+
+const studioRectTagPrefix = `#${studioRectMarkerPrefix}`
 const studioGeneratedSourceHeader = '// Studio-written generated source. Read-only until moved to a package.'
 
 /** studioRenderIdentity derives Studio's stable source and Snap identities from one render. */
@@ -25,7 +32,7 @@ export function studioRenderIdentity(render: AST.Render, projectRoot: string): {
 }
 
 /** studioRectIdForRender decodes the source-safe UTF-16 hex payload emitted by Snap. */
-export function studioRectIdForRender(render: AST.Render, projectRoot: string): string | undefined {
+function studioRectIdForRender(render: AST.Render, projectRoot: string): string | undefined {
   const document = AST.getDocument(render)
   const studioRoot = FS.resolvePath('@/studio', projectRoot)
   if (

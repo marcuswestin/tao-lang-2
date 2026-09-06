@@ -51,7 +51,7 @@ export type MachineResourceOwner = {
   /** OS process start identity, when the host can report it, protects against PID reuse. */
   processStartedAt?: string
   repositoryRoot: string
-  /** Lease acquisition time. Age alone never makes a live resource owner stale. */
+  /** Lease acquisition time. A lease past its resource's staleness bound is prunable. */
   startedAt: string
 }
 
@@ -90,6 +90,12 @@ export type ResourceOptions = {
   command?: string
   /** Injected by tests. */
   lockTimeoutMs?: number
+  /**
+   * How old a lease may get before it is prunable regardless of its process identity. Defaults to
+   * `MAX_LEASE_AGE_MS`; pass `Infinity` for a resource an interactive session may validly hold all
+   * day, where only process identity may retire the lease.
+   */
+  maxAgeMs?: number
   name: string
   /** Injected by tests. */
   processIdentity?: (pid: number) => Promise<ProcessIdentity>
@@ -540,12 +546,13 @@ async function claimResource(
   const id = `${Platform.runtimeProcess.pid}-${randomUUID()}`
   const path = resourcePath(root, options.name)
   const processIdentity = options.processIdentity ?? inspectProcessIdentity
+  const maxAgeMs = options.maxAgeMs ?? MAX_LEASE_AGE_MS
   const owner: MachineResourceOwner = {
     command: options.command ?? options.name,
     id,
     name: options.name,
     pid: Platform.runtimeProcess.pid,
-    processStartedAt: (await processIdentity(Platform.runtimeProcess.pid)).startedAt,
+    processStartedAt: (await ownProcessIdentity(processIdentity)).startedAt,
     repositoryRoot: options.repositoryRoot ?? Platform.runtimeProcess.cwd(),
     startedAt: new Date().toISOString(),
   }
@@ -553,7 +560,11 @@ async function claimResource(
   try {
     const acquired = await withRegistryLock(root, async () => {
       const existing = normalizeResourceRecord(await readRecord<unknown>(path))
-      if (existing !== undefined && await resourceOwnerIsLive(existing, processIdentity)) {
+      if (
+        existing !== undefined
+        && !leaseExpired(existing, maxAgeMs)
+        && await resourceOwnerIsLive(existing, processIdentity)
+      ) {
         existingOwner = existing
         return false
       }
@@ -565,7 +576,7 @@ async function claimResource(
       return { owner: existingOwner ?? owner }
     }
   } catch (error) {
-    throw new Errors.HostEnvironmentError(`Cannot coordinate machine resource '${options.name}'.`, { cause: error })
+    Errors.throwHostEnvironment(`Cannot coordinate machine resource '${options.name}'.`, { cause: error })
   }
 
   let released = false
@@ -697,7 +708,7 @@ async function withRegistryLock<T>(
       }
       const existing = await readRecord<MutexRecord>(linkPath)
       if (existing === undefined || mutexIsStale(existing)) {
-        await FS.remove(linkPath).catch(() => {})
+        await reclaimStaleMutex(root, linkPath)
         continue
       }
       if (Time.nowMs() >= deadline) {
@@ -717,6 +728,34 @@ async function withRegistryLock<T>(
     }
     await FS.remove(ownerPath).catch(() => {})
   }
+}
+
+/**
+ * Reclaims a stale lock without discarding a fresh one. Two contenders can read the same stale
+ * record; unlinking by path would let the slower one remove the link the faster one had already
+ * replaced with its own, and both would then run the critical section. Renaming the link aside is
+ * atomic, so exactly one contender gets it, and it is discarded only once it is confirmed to be the
+ * stale link that was read; a fresh link renamed by mistake is put back.
+ */
+async function reclaimStaleMutex(root: string, linkPath: string): Promise<void> {
+  const staleTarget = await FS.realPath(linkPath).catch(() => undefined)
+  const asidePath = FS.resolvePath(`.mutex-stale-${Platform.runtimeProcess.pid}-${randomUUID()}`, root)
+  try {
+    await FS.move(linkPath, asidePath)
+  } catch {
+    return // Another contender already took the stale link.
+  }
+  const movedTarget = await FS.realPath(asidePath).catch(() => undefined)
+  if (movedTarget === staleTarget) {
+    await FS.remove(asidePath).catch(() => {})
+    return
+  }
+  await FS.move(asidePath, linkPath).catch(async () => await FS.remove(asidePath).catch(() => {}))
+}
+
+/** ownerIsLive reports whether a recorded resource owner still runs as the process that took the lease. */
+async function ownerIsLive(owner: MachineResourceOwner): Promise<boolean> {
+  return await resourceOwnerIsLive(owner, inspectProcessIdentity)
 }
 
 async function atomicWriteJson(path: string, value: unknown): Promise<void> {
@@ -750,8 +789,11 @@ function isLive(record: { pid: number; startedAt: string; updatedAt?: string }):
 
 function mutexIsStale(record: MutexRecord): boolean {
   const startedAt = Date.parse(record.startedAt)
+  // The registry lock guards millisecond critical sections. A record older than twice the acquire
+  // timeout belongs to a holder that died with the lock, even when its PID has since been reused.
   return !Platform.processIsAlive(record.pid)
     || !Number.isFinite(startedAt)
+    || Time.nowMs() - startedAt > MUTEX_ACQUIRE_TIMEOUT_MS * 2
 }
 
 function normalizeLaneRecord(
@@ -815,9 +857,39 @@ function normalizeResourceRecord(value: unknown): MachineResourceOwner | undefin
 }
 
 /**
+ * leaseExpired applies a resource's staleness bound. Most leases are short-lived lane leases whose
+ * holder may have died without a reachable process identity, so age alone retires them; a resource
+ * that opts out with an infinite bound (interactive native Studio) is retired only by identity.
+ */
+function leaseExpired(owner: MachineResourceOwner, maxAgeMs: number): boolean {
+  if (!Number.isFinite(maxAgeMs)) {
+    return false
+  }
+  const timestamp = Date.parse(owner.startedAt)
+  return Number.isFinite(timestamp) && Time.nowMs() - timestamp > maxAgeMs
+}
+
+let ownIdentity: { pid: number; identity: Promise<ProcessIdentity> } | undefined
+
+/**
+ * ownProcessIdentity reads this process's start identity once: it cannot change, and a contended
+ * lease is claimed in a tight poll loop that must not spawn `ps` on every attempt.
+ */
+function ownProcessIdentity(inspect: (pid: number) => Promise<ProcessIdentity>): Promise<ProcessIdentity> {
+  const pid = Platform.runtimeProcess.pid
+  if (inspect !== inspectProcessIdentity) {
+    return inspect(pid)
+  }
+  if (ownIdentity === undefined || ownIdentity.pid !== pid) {
+    ownIdentity = { identity: inspect(pid), pid }
+  }
+  return ownIdentity.identity
+}
+
+/**
  * resourceOwnerIsLive requires evidence that the recorded process identity disappeared or changed
- * before pruning. Lease age is deliberately irrelevant: interactive native Studio may be validly
- * open for many hours, and an unreadable process table is uncertainty rather than staleness.
+ * before pruning a lease inside its staleness bound: an unreadable process table is uncertainty
+ * rather than staleness.
  */
 async function resourceOwnerIsLive(
   owner: MachineResourceOwner,
@@ -879,6 +951,7 @@ export const MachineLanes = {
   describeContention,
   fairAllocations,
   inspectLanes,
+  ownerIsLive,
   registryRoot,
   tryAcquireResource,
 } as const

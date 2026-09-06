@@ -99,17 +99,17 @@ function parsed(): Promise<{ files: unknown[]; diagnostics: unknown[] }> {
 function session(applied: { path: string; content: string }[]): StudioProjectSession {
   return {
     appName: 'Reader',
-    applyAgentPocFiles: async (request: { edits: readonly { path: string; content: string }[] }) => {
+    applyAgentFiles: async (request: { edits: readonly { path: string; content: string }[] }) => {
       applied.push(...request.edits)
       return { compile: { message: 'compiled', status: 'compiled' }, rolledBack: false }
     },
-    agentPocParse: async () => await parsed(),
+    agentParse: async () => await parsed(),
     compileSnapshot: () => ({ diagnostics: [], status: 'compiled' }),
     files: async () => [{ path: PATH }],
     // The snapshot keeps only files under the project root, so this has to be where the source really is.
     projectRoot: ROOT,
     readFile: async (path: string) => ({ content: SOURCE, path, sourceVersion: 'v1' }),
-    undoAgentPocFiles: async () => ({ compile: { message: 'compiled', status: 'compiled' }, restored: [PATH] }),
+    undoAgentFiles: async () => ({ compile: { message: 'compiled', status: 'compiled' }, restored: [PATH] }),
   } as unknown as StudioProjectSession
 }
 

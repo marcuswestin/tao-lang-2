@@ -1,11 +1,14 @@
 const nodeFs = require('node:fs')
 const nodePath = require('node:path')
 
-/** createExpoAppConfig derives Expo's checked-in host configuration from an optional ship manifest. */
-function createExpoAppConfig(config, projectRoot) {
+/**
+ * createExpoAppConfig derives Expo's checked-in host configuration from an optional ship manifest,
+ * or from the dev data facts `tao dev` places in the environment (`env` defaults to the process's).
+ */
+function createExpoAppConfig(config, projectRoot, env = process.env) {
   const shipManifestPath = nodePath.resolve(projectRoot, '_gen_tao-app', 'ship.json')
   if (!nodeFs.existsSync(shipManifestPath)) {
-    return config
+    return withDevData(config, env)
   }
 
   const ship = JSON.parse(nodeFs.readFileSync(shipManifestPath, 'utf8'))
@@ -62,6 +65,27 @@ function createExpoAppConfig(config, projectRoot) {
           schemaVersion: ship.schemaVersion,
         },
       },
+    },
+  }
+}
+
+/**
+ * withDevData writes the tao-dev-data-v1 bootstrap fact a development build reads from its Expo
+ * manifest when `tao dev` hosts a dev data server. A shipped build never carries it: the ship
+ * manifest path above returns before this runs, and a plain `expo start` sets neither variable.
+ * The variable names mirror `packages/dev/dev-src/dev-data/DevDataBootstrap.ts`.
+ */
+function withDevData(config, env) {
+  const port = Number(env.TAO_DEV_DATA_PORT)
+  const app = env.TAO_DEV_DATA_APP
+  if (!Number.isInteger(port) || port <= 0 || port > 65_535 || typeof app !== 'string' || app === '') {
+    return config
+  }
+  return {
+    ...config,
+    extra: {
+      ...config.extra,
+      taoDevData: { app, port, protocol: 'tao-dev-data-v1' },
     },
   }
 }

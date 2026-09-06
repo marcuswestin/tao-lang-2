@@ -124,6 +124,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export class RuntimeDataSchema {
   readonly name: string
+  private automaticResetAttempted = false
   private bufferedRemoteSnapshot: { stored: string | undefined } | undefined
   private committedData: StoredData
   private error = ''
@@ -954,11 +955,24 @@ export class RuntimeDataSchema {
     this.status = 'error'
     this.error = `Could not load data: ${errorMessage(error)}`
     if (this.providerBinding !== 'unbound') {
+      const connection = this.connection
       // A transport failure gets a plain retry; only provably corrupt stored data offers the
       // destructive reset, so a transient outage can never wipe a provider's good snapshot. And
       // the reset exists only where the connection grants it: a connection without `reset` — a
       // shared remote store, deliberately — keeps the retry, because overwriting data this client
       // failed to parse could erase every peer's rows.
+      if (
+        cause === 'corrupt' && connection.reset !== undefined && connection.automaticReset
+        && !this.automaticResetAttempted
+      ) {
+        // A disposable store resets itself once per corrupt load. Should the emptied store still
+        // fail to parse, the second failure lands here with the attempt spent and offers the
+        // ordinary overlay instead of looping.
+        this.automaticResetAttempted = true
+        void this.resetAutomatically(connection, this.providerBinding)
+        this.emit()
+        return
+      }
       DataLoadRecovery.report(
         this,
         this.error,
@@ -981,9 +995,31 @@ export class RuntimeDataSchema {
     }
   }
 
+  /** resetAutomatically wipes a disposable store and reloads it; a failed wipe falls back to the overlay. */
+  private async resetAutomatically(connection: TaoDataConnection, providerBinding: ProviderBinding): Promise<void> {
+    try {
+      await connection.reset?.()
+    } catch (error) {
+      if (this.connection !== connection) {
+        return
+      }
+      this.error = `Could not reset data: ${errorMessage(error)}`
+      DataLoadRecovery.report(this, this.error, {
+        label: 'Reset app data and reload',
+        run: () => this.recoverAfterLoadFailure(true),
+      })
+      this.emit()
+      return
+    }
+    if (this.connection === connection) {
+      this.configure(connection, providerBinding)
+    }
+  }
+
   /** applySnapshot replaces the store with one parsed snapshot; a parse failure throws unapplied. */
   private applySnapshot(stored: string | undefined): void {
     this.committedData = stored === undefined ? emptyData(this.definition) : parseEnvelope(stored, this.definition)
+    this.automaticResetAttempted = false
     this.failedSaveSequence = undefined
     this.errorRecoverable = false
     this.hasUsableSnapshot = true

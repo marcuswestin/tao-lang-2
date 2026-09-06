@@ -738,10 +738,10 @@ function localHttpUrl(value: string, label: string): URL {
   try {
     url = new URL(value)
   } catch {
-    throw new Errors.UserInputError(`${label} must be a valid URL.`)
+    Errors.throwUserInput(`${label} must be a valid URL.`)
   }
   if (url.protocol !== 'http:' || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) {
-    throw new Errors.UserInputError(`${label} must be a loopback HTTP URL.`)
+    Errors.throwUserInput(`${label} must be a loopback HTTP URL.`)
   }
   return url
 }
@@ -751,7 +751,7 @@ function safeAppName(value: string): string {
   if (appName !== '' && !/[/:\\]/.test(appName)) {
     return appName
   }
-  throw new Errors.UserInputError('Electrobun app name must be a non-empty macOS file name.')
+  Errors.throwUserInput('Electrobun app name must be a non-empty macOS file name.')
 }
 
 function safeBundleIdentifier(value: string): string {
@@ -759,7 +759,7 @@ function safeBundleIdentifier(value: string): string {
   if (/^[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/.test(bundleIdentifier)) {
     return bundleIdentifier
   }
-  throw new Errors.UserInputError('Electrobun bundle identifier must be a reverse-DNS identifier.')
+  Errors.throwUserInput('Electrobun bundle identifier must be a reverse-DNS identifier.')
 }
 
 function safeVersion(value: string): string {
@@ -767,5 +767,5 @@ function safeVersion(value: string): string {
   if (/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
     return version
   }
-  throw new Errors.UserInputError('Electrobun version must be a semantic version.')
+  Errors.throwUserInput('Electrobun version must be a semantic version.')
 }

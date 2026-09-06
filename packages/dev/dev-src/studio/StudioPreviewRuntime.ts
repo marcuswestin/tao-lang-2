@@ -1,4 +1,5 @@
 import { FS, Json, Repo } from '@shared'
+import { type DevDataManifest, DevDataProtocol } from '../dev-data/DevDataBootstrap'
 import { StudioCompanionIdentity } from './StudioCompanionIdentity'
 
 const runtimeFiles = [
@@ -9,13 +10,21 @@ const runtimeFiles = [
 
 export type CreatedStudioPreviewRuntime = {
   close: () => Promise<void>
+  /** configure rewrites the preview's Expo config with facts known only after the project session opens. */
+  configure: (options: StudioPreviewBootstrapOptions) => Promise<void>
   root: string
 }
 
-type StudioPreviewRuntimeOptions = {
-  artifactRoot?: string
+/** The non-secret bootstrap facts a loaded preview bundle reads from its Expo manifest. */
+export type StudioPreviewBootstrapOptions = {
+  /** The tao-dev-data-v1 server and app key a `Dev` datasource in the preview dials. */
+  devData?: DevDataManifest
   /** The tao-studio-device-v1 gateway port a companion build should dial after loading this bundle. */
   deviceGatewayPort?: number
+}
+
+type StudioPreviewRuntimeOptions = StudioPreviewBootstrapOptions & {
+  artifactRoot?: string
 }
 
 /** StudioPreviewRuntime creates an isolated Expo project for one Studio process. */
@@ -37,10 +46,20 @@ async function create(
       runtimeFiles.map(file => FS.copyFile(FS.resolvePath(file, sourceRoot), FS.resolvePath(file, root))),
     )
     const appConfig = await FS.readJson<Record<string, unknown>>(FS.resolvePath('app.json', sourceRoot))
-    await FS.writeJson(FS.resolvePath('app.json', root), previewAppConfig(appConfig, settings))
+    const writeAppConfig = (bootstrap: StudioPreviewBootstrapOptions) =>
+      FS.writeJson(FS.resolvePath('app.json', root), previewAppConfig(appConfig, bootstrap))
+    let bootstrap: StudioPreviewBootstrapOptions = {
+      ...(settings.devData === undefined ? {} : { devData: settings.devData }),
+      ...(settings.deviceGatewayPort === undefined ? {} : { deviceGatewayPort: settings.deviceGatewayPort }),
+    }
+    await writeAppConfig(bootstrap)
     await FS.symlink(FS.resolvePath('node_modules', sourceRoot), FS.resolvePath('node_modules', root))
     return {
       close: () => FS.remove(root),
+      configure: async next => {
+        bootstrap = { ...bootstrap, ...next }
+        await writeAppConfig(bootstrap)
+      },
       root,
     }
   } catch (error) {
@@ -52,26 +71,28 @@ async function create(
 /**
  * previewAppConfig is the runtime toolchain's Expo config plus what only a Studio preview needs: the
  * companion's scheme, so Expo's own `/_expo/link?choice=expo-dev-client` answers with the installed
- * shell's deep link, and the non-secret bootstrap fact a loaded bundle needs to find the gateway.
- * Shipping apps never see either; this config exists only inside the isolated preview project.
+ * shell's deep link, and the non-secret bootstrap facts a loaded bundle needs to find the device
+ * gateway and the dev data server. Shipping apps never see any of it; this config exists only
+ * inside the isolated preview project.
  */
 function previewAppConfig(
   appConfig: Record<string, unknown>,
-  options: Pick<StudioPreviewRuntimeOptions, 'deviceGatewayPort'>,
+  options: StudioPreviewBootstrapOptions,
 ): Record<string, unknown> {
   const expo = Json.isRecord(appConfig['expo']) ? appConfig['expo'] : {}
   const extra = Json.isRecord(expo['extra']) ? expo['extra'] : {}
+  const bootstrap = {
+    ...(options.deviceGatewayPort === undefined ? {} : {
+      taoStudioDevice: { gatewayPort: options.deviceGatewayPort, protocol: 'tao-studio-device-v1' },
+    }),
+    ...(options.devData === undefined ? {} : { [DevDataProtocol.manifestKey]: options.devData }),
+  }
   return {
     ...appConfig,
     expo: {
       ...expo,
       scheme: StudioCompanionIdentity.scheme,
-      ...(options.deviceGatewayPort === undefined ? {} : {
-        extra: {
-          ...extra,
-          taoStudioDevice: { gatewayPort: options.deviceGatewayPort, protocol: 'tao-studio-device-v1' },
-        },
-      }),
+      ...(Object.keys(bootstrap).length === 0 ? {} : { extra: { ...extra, ...bootstrap } }),
     },
   }
 }

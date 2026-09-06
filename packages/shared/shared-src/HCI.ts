@@ -1,6 +1,6 @@
 import { createInterface as createNodeReadlineInterface } from 'node:readline/promises'
 import type { Readable, Writable } from 'node:stream'
-import { UserInputError } from './core/Errors'
+import { throwUserInput, UserInputError } from './core/Errors'
 import { runtimeProcess, setInputRawMode } from './Platform'
 
 type TerminalStreams = {
@@ -291,7 +291,7 @@ const PASTE_END = '\u001b[201~'
  */
 export async function askSecret(options: TextPromptOptions): Promise<SecretPrompt> {
   if (!isInteractive(options)) {
-    throw new UserInputError(`${options.message} needs a terminal, because the value is never echoed.`)
+    throwUserInput(`${options.message} needs a terminal, because the value is never echoed.`)
   }
   const input = options.input ?? runtimeProcess.stdin
   writeOutput(options, `${options.message} `)
@@ -444,7 +444,7 @@ function getNonInteractiveDefault<T>(message: string, defaultValue: T | undefine
   if (defaultValue !== undefined) {
     return defaultValue
   }
-  throw new UserInputError(`Cannot ask "${message}" without an interactive terminal.`)
+  throwUserInput(`Cannot ask "${message}" without an interactive terminal.`)
 }
 
 function formatTextQuestion(options: TextPromptOptions): string {
@@ -493,10 +493,10 @@ function findChoice<ValueT extends string>(
 
 function assertChoices<ValueT extends string>(options: ChoicePromptOptions<ValueT>): void {
   if (options.choices.length === 0) {
-    throw new UserInputError(`Prompt "${options.message}" must provide at least one choice.`)
+    throwUserInput(`Prompt "${options.message}" must provide at least one choice.`)
   }
   if (options.defaultValue && !findChoice(options.choices, options.defaultValue)) {
-    throw new UserInputError(`Prompt "${options.message}" default value must match one of its choices.`)
+    throwUserInput(`Prompt "${options.message}" default value must match one of its choices.`)
   }
 }
 

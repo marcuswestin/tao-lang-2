@@ -125,6 +125,13 @@ export type TaoFillOps = {
  * belong to a future provider family rather than leaking into this full-snapshot contract.
  */
 export type TaoDataConnection = {
+  /**
+   * automaticReset lets the runtime run `reset` itself when a starting snapshot fails to parse,
+   * instead of offering that destructive reset through the recovery overlay. Only a disposable
+   * store declares it: the development datasource, where a schema edit is the ordinary cause and
+   * clearing the app's development data is the expected answer. It requires `reset`.
+   */
+  automaticReset?: true
   close?(): void
   /** referenceToken and resolveReference are the optional, versioned restoration capability. */
   referenceToken?(reference: { entity: string; id: string; schema: string }): string

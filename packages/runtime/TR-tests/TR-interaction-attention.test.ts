@@ -635,6 +635,49 @@ Describe('TR.Interaction attention', () => {
     Expect(invoked).toEqual(['Scoped'])
   })
 
+  Test('dispatches a bare declared command key instead of typing it into narrowing', () => {
+    const outline = new InteractionOutline()
+    const catalog = new CommandCatalog()
+    const attention = new InteractionAttention(outline, catalog)
+    const invoked: string[] = []
+    const save = TR.Interaction.Command({
+      action: () => TR.Action(() => invoked.push('Save')),
+      members: { Key: () => TR.Value('s'), Title: () => TR.Value('Save') },
+      name: 'Save',
+    })
+    catalog.register({
+      commands: [{
+        command: () => save,
+        identity: 'Save',
+        name: 'Save',
+        scope: { kind: 'module' },
+        slots: [],
+        static: { key: 's', title: 'Save' },
+      }],
+      module: 'Commands',
+    })
+    register(outline, region('main', { primary: true }))
+    register(outline, item('draft', 'main', 'Draft'))
+    attention.revalidateOutline()
+
+    Expect(attention.pressKey('s')).toBe(true)
+    Expect(invoked).toEqual(['Save'])
+    Expect(attention.read().narrowing).toBe('')
+    Expect(attention.read().mode).toBe('navigating')
+
+    // A letter no command declares still narrows, so the shortcut has not swallowed the alphabet.
+    Expect(attention.pressKey('d')).toBe(true)
+    Expect(invoked).toEqual(['Save'])
+    Expect(attention.read().narrowing).toBe('d')
+    Expect(attention.pressKey('Backspace')).toBe(true)
+
+    // The exclusion contract: a generated hint key never takes `s`, so `s` still reaches the command.
+    Expect(attention.pressKey('/')).toBe(true)
+    Expect(attention.read().mode).toBe('hints')
+    Expect(attention.pressKey('s')).toBe(true)
+    Expect(invoked).toEqual(['Save', 'Save'])
+  })
+
   Test('keeps a mounted shell-sibling command available while navigation owns the focused region', () => {
     const outline = new InteractionOutline()
     const catalog = new CommandCatalog()

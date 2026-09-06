@@ -63,7 +63,7 @@ export class StudioMatrixSession {
   cell(cellId: string): StudioCellRuntime {
     const cell = this.#cells.get(cellId)
     if (cell === undefined) {
-      throw new Errors.UserInputError(`Studio cell does not exist: ${cellId}`)
+      Errors.throwUserInput(`Studio cell does not exist: ${cellId}`)
     }
     return this.#runtime(cell)
   }
@@ -121,7 +121,7 @@ export class StudioMatrixSession {
   registerInstance(identity: StudioCellInstanceIdentity): StudioCellRuntime {
     this.#assertCellIdentity(identity)
     if (identity.previewInstanceId.trim() === '') {
-      throw new Errors.UserInputError('Studio preview instance id must not be empty.')
+      Errors.throwUserInput('Studio preview instance id must not be empty.')
     }
     // A cell may have several live renderers at once, such as the browser iframe and a paired
     // device; each is an opaque instance, and only a reconfiguration or a new manifest ends them.
@@ -204,7 +204,7 @@ export class StudioMatrixSession {
     const supported = new Set(this.manifest.capabilities.captureDomains)
     const unsupported = replay.domains.find(domain => !supported.has(domain.domain))
     if (unsupported !== undefined) {
-      throw new Errors.UserInputError(`Studio runtime capture domain is not supported: ${unsupported.domain}`)
+      Errors.throwUserInput(`Studio runtime capture domain is not supported: ${unsupported.domain}`)
     }
   }
 
@@ -224,7 +224,7 @@ export class StudioMatrixSession {
 
   #assertCellIdentity(identity: StudioCellIdentity): void {
     if (identity.project !== this.manifest.project.root || identity.appName !== this.manifest.project.appName) {
-      throw new Errors.UserInputError('Studio cell identity targets a different project or app.')
+      Errors.throwUserInput('Studio cell identity targets a different project or app.')
     }
     if (identity.manifestRevision !== this.manifest.manifestRevision) {
       throw new StudioMatrixConflictError('stale-manifest', 'Studio cell targets a stale manifest revision.')
@@ -234,7 +234,7 @@ export class StudioMatrixSession {
     }
     const cell = this.#cells.get(identity.cellId)
     if (cell === undefined) {
-      throw new Errors.UserInputError(`Studio cell does not exist: ${identity.cellId}`)
+      Errors.throwUserInput(`Studio cell does not exist: ${identity.cellId}`)
     }
     if (identity.cellRevision !== cell.cellRevision) {
       throw new StudioMatrixConflictError('stale-cell', 'Studio cell targets a stale configuration revision.')

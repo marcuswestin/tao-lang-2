@@ -69,9 +69,13 @@ function normalizePathPart(part: string): string {
   return nodePath.sep === '/' ? part : part.replaceAll('/', nodePath.sep)
 }
 
-/** mkTmpDir creates a unique temporary directory with the given prefix. */
+/**
+ * mkTmpDir creates a unique temporary directory with the given prefix. A bare prefix is placed in
+ * the platform's temporary directory rather than the process cwd, which a sandbox may not let the
+ * process write and which no caller means to litter.
+ */
 export async function mkTmpDir(prefix: string): Promise<string> {
-  return nodeFs.mkdtemp(prefix)
+  return nodeFs.mkdtemp(nodePath.isAbsolute(prefix) ? prefix : nodePath.join(nodeOs.tmpdir(), prefix))
 }
 
 /** exists checks whether a path can be accessed. */

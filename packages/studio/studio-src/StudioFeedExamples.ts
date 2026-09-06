@@ -1,16 +1,16 @@
 import type { EntityGenerationDeclaration, GenerationField, JsonValue } from '@generation'
 import { Assert } from '@shared/core'
 
-export type StudioFeedExampleVariant = 'empty' | 'typical' | 'edge'
+type StudioFeedExampleVariant = 'empty' | 'typical' | 'edge'
 
-export type StudioFeedExampleRow = Readonly<{
+type StudioFeedExampleRow = Readonly<{
   entity: string
   fields: Readonly<Record<string, JsonValue>>
   name: string
   variant: StudioFeedExampleVariant
 }>
 
-export type StudioFeedExampleUnsupportedField = Readonly<{
+type StudioFeedExampleUnsupportedField = Readonly<{
   field: string
   reason: 'inverse-relation' | 'outbound-relation' | 'secret' | 'zero-case-type'
   required: boolean

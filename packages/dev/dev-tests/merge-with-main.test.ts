@@ -331,7 +331,7 @@ Describe('merge-with-main', () => {
     ])
     Expect(fake.calls.some(call => ['fetch', 'merge', 'commit', 'push', 'reset'].includes(call.args[0]!))).toBe(false)
     Expect(fake.lines.at(-1)).toBe(
-      'DRY RUN  No refs or worktrees changed. Execute with: ./dev merge-with-main --execute',
+      'DRY RUN  No refs or worktrees changed. Execute with: ./dev merge-with-main --execute --yes',
     )
     Expect(fake.snapshots.size).toBe(0)
   })
@@ -381,7 +381,7 @@ Describe('merge-with-main', () => {
     const fullVerify = operations.indexOf('just full-verify')
     const squash = operations.findIndex(operation => operation.startsWith('git merge --squash'))
     const treeProof = operations.findIndex((operation, index) => index > squash && operation === 'git write-tree')
-    const verify = operations.indexOf('just verify')
+    const verify = operations.indexOf('just verify --complete')
     const commit = operations.findIndex(operation => operation.startsWith('git commit -F'))
     const push = operations.indexOf('git push origin main:main')
     const archive = operations.indexOf(

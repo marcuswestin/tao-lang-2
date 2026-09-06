@@ -5,7 +5,12 @@
 // refusal a model can read, rather than throwing or reaching for something it was not given.
 
 import { jsonSchema, tool, type ToolSet } from 'ai'
-import type { TestRunSummary } from '../agent-poc/FeatureVerdict'
+import { parseChecks, viewCoverage } from './AgentChatCoverage'
+import { declarationSource, fileOutlines, improvementFacts } from './AgentChatFacts'
+import { taoGuarantees } from './AgentChatGuarantees'
+import { findSpec, specSections } from './AgentChatReference'
+import { objectSchema, refusal, TEXT } from './AgentChatSchema'
+import type { TestRunSummary } from './FeatureVerdict'
 import {
   fieldStory,
   inspect,
@@ -13,12 +18,7 @@ import {
   resolveTarget,
   type SemanticSnapshot,
   trace,
-} from '../agent-poc/SemanticSnapshot'
-import { parseChecks, viewCoverage } from './AgentChatCoverage'
-import { declarationSource, fileOutlines, improvementFacts } from './AgentChatFacts'
-import { taoGuarantees } from './AgentChatGuarantees'
-import { findSpec, specSections } from './AgentChatReference'
-import { objectSchema, refusal, TEXT } from './AgentChatSchema'
+} from './SemanticSnapshot'
 
 type AgentChatFile = { path: string; content: string; sourceVersion?: string }
 

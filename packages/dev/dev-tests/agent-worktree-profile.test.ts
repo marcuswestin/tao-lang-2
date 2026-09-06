@@ -386,14 +386,42 @@ Describe('agent worktree profile bootstrap', () => {
     Expect(commands.slice(graph)).toContain('_parser-gen')
   })
 
-  Test('bootstraps dependencies before verify runs its graph', async () => {
-    const commands = await justCommands('verify')
+  Test('bootstraps dependencies before either verify scope runs its graph', async () => {
+    for (const scope of ['_verify-complete', '_verify-changed']) {
+      const commands = await justCommands(scope)
 
-    const install = commands.indexOf('bun install --frozen-lockfile')
-    const graph = commands.indexOf('./dev gates')
-    Expect(install).toBeGreaterThanOrEqual(0)
-    Expect(graph).toBeGreaterThan(install)
-    Expect(commands.slice(graph)).toContain('_parser-gen')
+      const install = commands.indexOf('bun install --frozen-lockfile')
+      const graph = commands.indexOf('./dev gates')
+      Expect(install).toBeGreaterThanOrEqual(0)
+      Expect(graph).toBeGreaterThan(install)
+      Expect(commands.slice(graph)).toContain('_parser-gen')
+    }
+  })
+
+  Test('verify dispatches on its scope and refuses to run without one', async () => {
+    Expect((await justCommands('verify', '--complete')).trim()).toBe('just _verify-complete false')
+    Expect((await justCommands('verify', '--changed')).trim()).toBe('just _verify-changed false')
+    Expect((await justCommands('verify', '--changed', '--fresh')).trim()).toBe('just _verify-changed true')
+    Expect((await justCommands('verify')).trim()).toBe('just _verify-scope-menu')
+
+    const bare = await CLI.run('just', { args: ['verify'], cwd: Repo.getRoot(), stdio: 'pipe' })
+    Expect(bare.exitCode).not.toBe(0)
+    Expect(bare.stderr).toContain('just verify --changed')
+    Expect(bare.stderr).toContain('just verify --complete')
+
+    // The two scopes differ only in the test gate, and each records its green tree under its own
+    // lane while standing on the lanes that contain it.
+    const complete = await justCommands('_verify-complete')
+    const changed = await justCommands('_verify-changed')
+    Expect(complete).toContain(' _test ')
+    Expect(changed).toContain(' _test-changed ')
+    Expect(changed).not.toContain(' _test ')
+    Expect(complete).toContain('--green-tree verify full-verify-sandbox full-verify')
+    Expect(changed).toContain('--green-tree verify-changed verify full-verify-sandbox full-verify')
+    Expect(await justCommands('_verify-complete', 'true')).toContain('--fresh')
+    Expect(complete).not.toContain('--fresh')
+    Expect(await justCommands('full-verify')).toContain('--green-tree full-verify')
+    Expect(await justCommands('full-verify-sandbox')).toContain('--green-tree full-verify-sandbox full-verify')
   })
 
   Test('runs every stable browser and native lane while reporting the simulated journey quarantine', async () => {
@@ -468,7 +496,7 @@ Describe('agent worktree profile bootstrap', () => {
   })
 
   Test('reports only work deliberately omitted from a lane as skipped', async () => {
-    const verify = await justCommands('verify')
+    const verify = await justCommands('_verify-complete')
     const fullVerify = await justCommands('full-verify')
     const sandbox = await justCommands('full-verify-sandbox')
 
@@ -495,8 +523,8 @@ async function git(cwd: string, args: readonly string[]): Promise<void> {
 }
 
 /** justCommands returns the commands a recipe would run, so tests assert behavior, not layout. */
-async function justCommands(name: string): Promise<string> {
-  const result = await CLI.run('just', { args: ['--dry-run', name], cwd: Repo.getRoot() })
+async function justCommands(name: string, ...args: string[]): Promise<string> {
+  const result = await CLI.run('just', { args: ['--dry-run', name, ...args], cwd: Repo.getRoot() })
   Expect(result.exitCode).toBe(0)
   return `${result.stdout}${result.stderr}`
 }

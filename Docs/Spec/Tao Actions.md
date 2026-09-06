@@ -24,7 +24,8 @@ primitive command with {
 }
 ```
 
-`Title` is required, because a verb nothing can name is not discoverable. An unfilled `Label` reads
+`Title` is required and must be a static text literal, because a verb nothing can name is not
+discoverable and the catalog reads titles before any value exists. An unfilled `Label` reads
 as the command's `Title`; the default is written as empty text because a slot default is a literal
 rather than a reference to a sibling slot.
 
@@ -65,8 +66,9 @@ on press -> { do Finish(Document) }
 ```
 
 Binding a command is derivation. `Finish with { Document }` derives a command value with a slot
-filled, for surfaces and menus, and a binding may also refine `Label`, `Icon`, `Key`, and `Enabled`;
-overriding `Title` is an error, because the title is what identifies the verb wherever it is listed.
+filled, for surfaces and menus, and a binding may also refine any other contract member (`Label`,
+`Icon`, `Key`, `Enabled`, `Description`, `Summary`); overriding `Title` is an error, because the title
+is what identifies the verb wherever it is listed.
 A bound command invokes over the slots its binding left open, so `do` on it takes exactly the
 arguments its type still asks for. A toolbar mention is unfilled on purpose: the presenting scene
 supplies the slot from its own parameters, matched by type, when the command is invoked, and a slot

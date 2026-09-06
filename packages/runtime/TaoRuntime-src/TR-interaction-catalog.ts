@@ -3,7 +3,7 @@ import { focusAccessibilityHost, type TaoAccessibilityHost } from './TR-accessib
 import type { TaoDesign, TaoDesignSpec } from './TR-design'
 import { CommandControls, type RuntimeCommand } from './TR-interaction'
 import { InteractionAttention, type TaoAttentionKey } from './TR-interaction-attention'
-import { interactionKeyboardPresence } from './TR-interaction-keys'
+import { interactionKeyboardPresence, normalizeInteractionKey } from './TR-interaction-keys'
 import {
   describeOutlineTable,
   interactionOutline,
@@ -165,20 +165,20 @@ export class CommandCatalog {
     focusRegion: string | undefined,
     nodes: readonly TaoOutlineLiveNode[],
   ): TaoInteractionVerb | undefined {
-    const normalized = key.toLocaleLowerCase()
+    const normalized = normalizedShortcutKey(key)
     for (const surface of target ? this.surfacesForTarget(target, nodes) : []) {
       if (surface.parent !== target?.identity) {
         continue
       }
       for (const command of surface.commands) {
         const verb = this.verbForCommand(command, 'view')
-        if (verb.key?.toLocaleLowerCase() === normalized) {
+        if (normalizedShortcutKey(verb.key) === normalized) {
           return verb
         }
       }
     }
     const targetVerb = this.verbsFor(target, interactionOutline, nodes)
-      .find(verb => verb.source !== 'view' && verb.key?.toLocaleLowerCase() === normalized)
+      .find(verb => verb.source !== 'view' && normalizedShortcutKey(verb.key) === normalized)
     if (targetVerb) {
       return targetVerb
     }
@@ -202,7 +202,7 @@ export class CommandCatalog {
     for (const surface of inFocusedRegion) {
       for (const command of surface.commands) {
         const verb = this.verbForCommand(command, 'view')
-        if (verb.key?.toLocaleLowerCase() === normalized) {
+        if (normalizedShortcutKey(verb.key) === normalized) {
           return verb
         }
       }
@@ -213,14 +213,14 @@ export class CommandCatalog {
           continue
         }
         const verb = this.verbForEntry(entry, target, 'catalog')
-        if (verb?.key?.toLocaleLowerCase() === normalized) {
+        if (verb && normalizedShortcutKey(verb.key) === normalized) {
           return verb
         }
       }
     }
     for (const entry of this.global()) {
       const verb = this.verbForEntry(entry, target, 'catalog')
-      if (verb?.key?.toLocaleLowerCase() === normalized) {
+      if (verb && normalizedShortcutKey(verb.key) === normalized) {
         return verb
       }
     }
@@ -382,6 +382,14 @@ export class CommandCatalog {
       source,
     }
   }
+}
+
+/**
+ * normalizedShortcutKey canonicalizes a declared key exactly as key allocation's exclusion list
+ * does, so the one spelling a command reserves is the one spelling that dispatches it.
+ */
+function normalizedShortcutKey(value: string | undefined): string | undefined {
+  return value === undefined ? undefined : normalizeInteractionKey(value).toLocaleLowerCase()
 }
 
 function staticLabel(entry: TaoCommandTableEntry): string {

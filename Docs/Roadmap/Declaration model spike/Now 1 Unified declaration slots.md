@@ -2,7 +2,7 @@
 
 Historical build slice, now landed. Every item below was settled in dialogue with no branch left
 open. Companion to
-`Implementation - Declaration model spike - Claude.md`, which this narrows to a priority-ordered build
+`Implementation - Declaration model spike.md`, which this narrows to a priority-ordered build
 list. Grammar facts verified against `main` at `6cfd88be` on 2026-08-14; re-verify line numbers before
 starting, since concurrent work may have moved them.
 
