@@ -58,7 +58,7 @@ function validateRowTarget(
     return type
   }
   if (type.kind !== 'entity') {
-    ctx.error(dataWriteValidationMessages.rowTarget(operation), target)
+    ctx.error(target, dataWriteValidationMessages.rowTarget(operation))
   }
   return type
 }
@@ -74,51 +74,51 @@ function validateWriteFields(
     Switch.kind(diagnostic, {
       'missing-data-field': diagnostic => {
         ctx.error(
-          dataWriteValidationMessages.missingCreateField(Type.dataEntityName(entity), diagnostic.field.name),
           fields[0]?.$container ?? entity,
+          dataWriteValidationMessages.missingCreateField(Type.dataEntityName(entity), diagnostic.field.name),
         )
       },
       'unmatched-write': diagnostic => {
-        ctx.error(dataWriteValidationMessages.unmatchedWrite(Type.dataEntityName(entity)), diagnostic.write)
+        ctx.error(diagnostic.write, dataWriteValidationMessages.unmatchedWrite(Type.dataEntityName(entity)))
       },
       'ambiguous-write': diagnostic => {
         ctx.error(
-          dataWriteValidationMessages.ambiguousWrite(Type.dataEntityName(entity), diagnostic.fields),
           diagnostic.write,
+          dataWriteValidationMessages.ambiguousWrite(Type.dataEntityName(entity), diagnostic.fields),
         )
       },
       'ambiguous-data-field': diagnostic => {
         ctx.error(
-          dataWriteValidationMessages.ambiguousDataField(Type.dataEntityName(entity), diagnostic.field.name),
           fields[0]?.$container ?? entity,
+          dataWriteValidationMessages.ambiguousDataField(Type.dataEntityName(entity), diagnostic.field.name),
         )
       },
       'duplicate-field-type': diagnostic => {
         ctx.error(
-          dataWriteValidationMessages.duplicateFieldType(Type.dataEntityName(entity), diagnostic.field.name),
           fields[0]?.$container ?? entity,
+          dataWriteValidationMessages.duplicateFieldType(Type.dataEntityName(entity), diagnostic.field.name),
         )
       },
       'duplicate-write-type': diagnostic => {
-        ctx.error(dataWriteValidationMessages.duplicateWriteType(Type.dataEntityName(entity)), diagnostic.write)
+        ctx.error(diagnostic.write, dataWriteValidationMessages.duplicateWriteType(Type.dataEntityName(entity)))
       },
       'unknown-named-field': diagnostic => {
         ctx.error(
-          dataWriteValidationMessages.unknownWriteLabel(Type.dataEntityName(entity), diagnostic.name),
           diagnostic.write,
+          dataWriteValidationMessages.unknownWriteLabel(Type.dataEntityName(entity), diagnostic.name),
         )
       },
       'duplicate-named-field': diagnostic => {
-        ctx.error(dataWriteValidationMessages.duplicateWriteField(diagnostic.field.name), diagnostic.write)
+        ctx.error(diagnostic.write, dataWriteValidationMessages.duplicateWriteField(diagnostic.field.name))
       },
       'named-field-type': diagnostic => {
         ctx.error(
+          diagnostic.write,
           dataWriteValidationMessages.fieldType(
             diagnostic.field.name,
             Type.displayName(Type.dataFieldType(diagnostic.field)),
             Type.displayName(Type.ofExpression(diagnostic.write.value)),
           ),
-          diagnostic.write,
         )
       },
     })

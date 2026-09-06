@@ -33,7 +33,7 @@ export const preludeValidationMessages = {
 export const preludeValidationChecks = {
   [AST.PrimitiveDeclaration.$type]: (declaration, ctx) => {
     if (AST.getDocument(declaration).uri.path !== preludePath(ctx)) {
-      ctx.error(preludeValidationMessages.location, declaration)
+      ctx.error(declaration, preludeValidationMessages.location)
     }
   },
 } satisfies NodeValidationChecks
@@ -47,16 +47,16 @@ export function validatePreludeFile(file: AST.TaoFile, ctx: ValidationContext): 
   const expectedNames = new Set<AST.PrimitiveType>(expectedPrimitives)
   for (const expected of expectedPrimitives) {
     if (!declarations.some(declaration => declaration.name === expected)) {
-      ctx.error(preludeValidationMessages.missing(expected), file)
+      ctx.error(file, preludeValidationMessages.missing(expected))
     }
   }
   for (const declaration of declarations) {
     if (!expectedNames.has(declaration.name)) {
-      ctx.error(preludeValidationMessages.extra(declaration.name), declaration)
+      ctx.error(declaration, preludeValidationMessages.extra(declaration.name))
     }
     for (const property of declaration.slots?.properties ?? []) {
       if (property.name !== 'implement' && Type.ofProperty(property).kind === 'unresolved') {
-        ctx.error(preludeValidationMessages.slotType(property.name), property)
+        ctx.error(property, preludeValidationMessages.slotType(property.name))
       }
     }
   }

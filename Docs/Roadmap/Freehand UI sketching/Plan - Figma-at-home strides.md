@@ -31,7 +31,7 @@ the transactional Unsnap and typed flow actions, the Slice 3 Feed server foundat
 roadmap's first two targets (Record journey, `tao review`).
 
 Browser evidence: the simulated smoke lane, the only real-browser proof of Draw and Snap, is
-quarantined from `full-verify` again (`just _full-verify-simulated` reproduces it). The landing
+quarantined from `full-verify` again (`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` reproduces it). The landing
 fixed a real product bug it exposed: the board's pointer handler swallowed toolbar clicks, so Snap
 could not be pressed with a mouse. After that fix the synthetic CDP drags themselves proved
 nondeterministic (one run left the catalog at revision 1 with no rectangle), and the ledger in

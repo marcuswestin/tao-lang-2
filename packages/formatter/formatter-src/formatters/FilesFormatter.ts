@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import type { FormatHandlers } from '../formatting'
 
-export default {
+export const FilesFormatter = {
   /**
    * TaoFile formats top-level statements one blank line apart. Within use and let groups,
    * neighbors stay adjacent but keep an existing blank line, capped at one. A declaration that

@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import type { FormatHandlers } from '../formatting'
 
-export default {
+export const ExpressionsFormatter = {
   /** ArgumentList formats comma-separated invocation arguments. */
   ArgumentList(f) {
     f.commaSpacedList()

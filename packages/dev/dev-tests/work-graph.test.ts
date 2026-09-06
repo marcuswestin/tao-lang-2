@@ -17,11 +17,13 @@ type NodeSpec = {
   needs?: readonly string[]
   priority?: number
   resources?: readonly string[]
-  run?: WorkCommand
+  run?: WorkNode['run']
   timeoutMs?: number
+  workerPool?: string
 }
 
 type ScheduledRun = {
+  commandOf: (name: string) => WorkCommand | undefined
   envOf: (name: string) => Record<string, string>
   finished: Promise<{ interrupted: boolean; states: readonly WorkState[] }>
   interrupt: () => void
@@ -40,6 +42,7 @@ function workNode(spec: NodeSpec): WorkNode {
     resources: spec.resources,
     run: spec.run ?? { args: [spec.name], command: 'true' },
     timeoutMs: spec.timeoutMs,
+    workerPool: spec.workerPool,
   }
 }
 
@@ -50,6 +53,7 @@ function schedule(
   const specsByName = new Map(specs.map(spec => [spec.name, spec]))
   const holds = new Map(specs.map(spec => [spec.name, Deferred()]))
   const environments = new Map<string, Record<string, string>>()
+  const commands = new Map<string, WorkCommand>()
   const started: string[] = []
   const states = specs.map(spec => WorkGraph.createState(workNode(spec)))
   let interrupt = () => {}
@@ -60,6 +64,7 @@ function schedule(
     runNode: async (state, context) => {
       started.push(state.name)
       environments.set(state.name, context.env)
+      commands.set(state.name, context.run)
       let cancelled = false
       context.onCancel(() => {
         cancelled = true
@@ -77,6 +82,7 @@ function schedule(
   })
 
   return {
+    commandOf: name => commands.get(name),
     envOf: name => environments.get(name) ?? {},
     finished,
     interrupt: () => interrupt(),
@@ -190,6 +196,31 @@ Describe('work graph scheduling', () => {
     Expect(run.envOf('tao-apps')[WorkGraph.BUDGET_ENV_KEYS.taoTest]).toBe('3')
     Expect(run.envOf('repo-lint')[WorkGraph.BUDGET_ENV_KEYS.devTest]).toBeUndefined()
     Expect(run.envOf('repo-lint')[WorkGraph.BUDGET_ENV_KEYS.taoTest]).toBeUndefined()
+  })
+
+  Test('numbers the members of a worker pool in admission order and builds their commands from it', async () => {
+    const smoke = (name: string): NodeSpec => ({
+      held: true,
+      name,
+      run: ({ workerIndex }) => ({ args: ['--worker', String(workerIndex)], command: './dev' }),
+      workerPool: 'studio-smoke',
+    })
+    const run = schedule([
+      smoke('launch'),
+      smoke('real-app'),
+      { name: 'lint', run: ({ workerIndex }) => ({ args: [String(workerIndex)], command: 'true' }) },
+      smoke('native'),
+    ], { jobs: 4 })
+    await settle(2)
+
+    // Every member holds an index no other member holds, and a node outside the pool gets none.
+    const indices = ['launch', 'real-app', 'native'].map(name => run.commandOf(name)?.args[1])
+    Expect(indices.toSorted()).toEqual(['0', '1', '2'])
+    Expect(run.commandOf('lint')?.args).toEqual(['undefined'])
+    for (const name of ['launch', 'real-app', 'native']) {
+      run.release(name)
+    }
+    await run.finished
   })
 
   Test('exports the clamped width, never more slots than the run owns', async () => {

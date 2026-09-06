@@ -1,4 +1,5 @@
-import { FS, Text } from '@shared'
+import { Errors, FS, HCI, Text } from '@shared'
+import { type AgentProfiles, inheritedWritePaths, PROFILES_SOURCE, readProfiles } from './AgentProfiles'
 
 /**
  * Codex CLI's permission profile is generated here rather than by rulesync: rulesync's Codex
@@ -24,13 +25,6 @@ const RELEASE_PROFILE = 'tao-release'
  * on purpose: the generated file is committed, so it cannot carry a linked worktree's path.
  */
 const PRIMARY_GIT_DIRECTORY = '~/code/tao-lang-2/.git'
-const DOCKER_SOCKETS = ['/var/run/docker.sock', '~/.docker/run/docker.sock'] as const
-const NATIVE_WRITE_PATHS = [
-  '~/Library/Developer/CoreSimulator',
-  '~/Library/Developer/Xcode/DerivedData',
-  '~/Library/Logs/CoreSimulator',
-] as const
-const RELEASE_WRITE_PATHS = ['~/Library/Developer/Xcode/Archives'] as const
 
 /** CanonicalPermissions is the subset of `.rulesync/permissions.jsonc` this renderer reads. */
 type CanonicalPermissions = {
@@ -61,8 +55,9 @@ type GenerateCodexConfigOptions = {
 
 async function generateCodexConfig(options: GenerateCodexConfigOptions): Promise<void> {
   const permissions = parsePermissions(await FS.readText(FS.resolvePath(PERMISSIONS_SOURCE, options.root)))
+  const profiles = await readProfiles(options.root)
   const outputs = [
-    { content: renderCodexConfig(permissions), path: FS.resolvePath(CODEX_CONFIG_OUTPUT, options.root) },
+    { content: renderCodexConfig(permissions, profiles), path: FS.resolvePath(CODEX_CONFIG_OUTPUT, options.root) },
     { content: renderCodexRules(permissions), path: FS.resolvePath(CODEX_RULES_OUTPUT, options.root) },
   ]
   for (const output of outputs) {
@@ -73,7 +68,7 @@ async function generateCodexConfig(options: GenerateCodexConfigOptions): Promise
       if (code !== 'EACCES' && code !== 'EPERM') {
         throw error
       }
-      ;(options.onSkip ?? console.warn)(`Skipped codexcli permissions: ${output.path} is not writable.`)
+      ;(options.onSkip ?? HCI.writeErrorLine)(`Skipped codexcli permissions: ${output.path} is not writable.`)
     }
   }
 }
@@ -83,8 +78,15 @@ function parsePermissions(source: string): CanonicalPermissions {
   return JSON.parse(Text.stripJsonc(source)) as CanonicalPermissions
 }
 
-/** renderCodexConfig renders the whole `.codex/config.toml` from canonical permission rules. */
-function renderCodexConfig(permissions: CanonicalPermissions): string {
+/** renderCodexConfig renders the whole `.codex/config.toml` from the canonical rules and profiles. */
+function renderCodexConfig(permissions: CanonicalPermissions, profiles: AgentProfiles): string {
+  const overlay = (name: string) => {
+    const profile = profiles[name]
+    if (profile === undefined) {
+      Errors.throwUserInput(`${PROFILES_SOURCE} declares no '${name}' profile.`)
+    }
+    return profile
+  }
   const read = permissions.permission?.read ?? {}
   const allowWrite = permissions.claudecode?.sandbox?.filesystem?.allowWrite ?? []
   const network = permissions.claudecode?.sandbox?.network ?? {}
@@ -125,23 +127,27 @@ function renderCodexConfig(permissions: CanonicalPermissions): string {
     '',
     `[permissions.${NATIVE_PROFILE}]`,
     `extends = ${quote(PROFILE)}`,
-    'description = "Tao native host: add Simulator and Xcode working directories; host commands still follow project rules."',
+    `description = ${quote(overlay('native').description)}`,
     '',
-    ...directFilesystemSection(NATIVE_PROFILE, NATIVE_WRITE_PATHS),
+    ...directFilesystemSection(NATIVE_PROFILE, overlay('native').allowWrite ?? []),
     '',
     `[permissions.${LOCAL_SERVICES_PROFILE}]`,
     `extends = ${quote(PROFILE)}`,
-    'description = "Tao local services: opt in to the Docker daemon used by the local InstantDB stack."',
+    `description = ${quote(overlay('local-services').description)}`,
     '',
-    ...unixSocketSection(LOCAL_SERVICES_PROFILE, DOCKER_SOCKETS, [
+    ...unixSocketSection(LOCAL_SERVICES_PROFILE, overlay('local-services').unixSockets ?? [], [
       '# Docker can control the host through mounts and networking, so it is not in the default profile.',
     ]),
     '',
     `[permissions.${RELEASE_PROFILE}]`,
     `extends = ${quote(NATIVE_PROFILE)}`,
-    'description = "Tao release: add the local Xcode archive destination; credentials and publication remain denied or reviewed."',
+    `description = ${quote(overlay('release').description)}`,
     '',
-    ...directFilesystemSection(RELEASE_PROFILE, RELEASE_WRITE_PATHS),
+    // Codex inherits the parent's grants through `extends`, so only the profile's own paths are spelled.
+    ...directFilesystemSection(
+      RELEASE_PROFILE,
+      inheritedWritePaths(profiles, 'release').filter(path => !inheritedWritePaths(profiles, 'native').includes(path)),
+    ),
     '',
   ].join('\n')
 }

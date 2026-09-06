@@ -1,4 +1,5 @@
 import { AST, Langium } from '@parser'
+import { type EmbeddedTsFormatter, formatEmbeddedTs } from './embedded-ts'
 
 /** taoTabSize declares the canonical Tao indentation width in spaces; Tao formatting is not configurable. */
 export const taoTabSize = 3
@@ -304,8 +305,225 @@ export function collapsesToOneLine(node: AST.Node, statements: readonly AST.Node
   return statements.length === 1 && node.$cstNode !== undefined && !hasInteriorComments(node)
 }
 
+/**
+ * finishFormattedText runs the whole-document text post-passes over Langium's edited output. Each
+ * runs on text because Langium formatting is node-local: an inject fence body is one lexer token it
+ * cannot reach inside, and every block formats only its own closing delimiter.
+ */
+export function finishFormattedText(text: string, tab: string, embeddedTsFormatter?: EmbeddedTsFormatter): string {
+  return finalizeFormattedText(collapseClosingBraces(reindentInjectionFences(text, tab, embeddedTsFormatter)))
+}
+
+/**
+ * reindentInjectionFences re-indents multiline inject fence bodies one tab below the line that opens
+ * the fence, with the closing fence at the opening line's indentation. The fence body is one lexer
+ * token, so Langium formatting cannot reach inside it and this runs as a text post-pass.
+ */
+function reindentInjectionFences(text: string, tab: string, formatter?: EmbeddedTsFormatter): string {
+  const lines = text.split('\n')
+  const result: string[] = []
+  let index = 0
+  while (index < lines.length) {
+    const line = lines[index]!
+    if (!isInjectionFenceOpenLine(line)) {
+      result.push(line)
+      index++
+      continue
+    }
+    const closeIndex = findInjectionFenceCloseIndex(lines, index)
+    if (closeIndex === -1) {
+      result.push(...lines.slice(index))
+      break
+    }
+    const baseIndent = line.match(/^[ \t]*/)![0]
+    const closeLine = lines[closeIndex]!
+    const fenceOffset = closeLine.indexOf('```')
+    const beforeFence = closeLine.slice(0, fenceOffset)
+    const bodyLines = lines.slice(index + 1, closeIndex)
+    if (beforeFence.trim() !== '') {
+      // Body content sharing the close line moves onto its own line at the body indentation.
+      bodyLines.push(beforeFence.trim())
+    }
+    const formattedBody = formatter
+      ? formatEmbeddedTs(bodyLines.join('\n'), { baseIndent, tabSize: tab.length }, formatter)
+      : null
+
+    result.push(line)
+    if (formattedBody === null) {
+      result.push(...reindentLines(bodyLines, baseIndent + tab))
+    } else if (formattedBody !== '') {
+      result.push(...formattedBody.split('\n'))
+    }
+    result.push(baseIndent + closeLine.slice(fenceOffset))
+    index = closeIndex + 1
+  }
+  return result.join('\n')
+}
+
+function reindentLines(lines: readonly string[], indent: string): string[] {
+  const contentLines = lines.filter(line => line.trim() !== '')
+  if (contentLines.length === 0) {
+    return lines.map(() => '')
+  }
+  const sharedIndentLength = Math.min(...contentLines.map(line => line.length - line.trimStart().length))
+  return lines.map(line => line.trim() === '' ? '' : indent + line.slice(sharedIndentLength))
+}
+
+/**
+ * collapseClosingBraces merges runs of consecutive closing-delimiter-only lines onto one line at the
+ * outermost (last) delimiter's indentation, with two spaces between delimiters, per `Docs/Spec/Tao Packages.md`.
+ * Lines inside inject TS fences and block comments are left untouched. Runs as a text post-pass
+ * because each block-like node formats its own closing delimiter and Langium indentation is always
+ * block-local.
+ */
+function collapseClosingBraces(text: string): string {
+  const lines = text.split('\n')
+  const designLines = linesInsideDesign(lines)
+  const result: string[] = []
+  let index = 0
+  let inBlockComment = false
+  while (index < lines.length) {
+    const line = lines[index]!
+    if (isInjectionFenceOpenLine(line)) {
+      const closeIndex = findInjectionFenceCloseIndex(lines, index)
+      const fenceEnd = closeIndex === -1 ? lines.length - 1 : closeIndex
+      result.push(...lines.slice(index, fenceEnd + 1))
+      index = fenceEnd + 1
+      continue
+    }
+    const blockComment = scanBlockCommentLine(line, inBlockComment)
+    if (inBlockComment || blockComment.enteredBlockComment) {
+      result.push(line)
+      inBlockComment = blockComment.inBlockComment
+      index++
+      continue
+    }
+    inBlockComment = blockComment.inBlockComment
+    let runEnd = index
+    while (
+      isClosingDelimiterLine(lines[runEnd]!)
+      && runEnd + 1 < lines.length
+      && isClosingDelimiterLine(lines[runEnd + 1]!)
+    ) {
+      runEnd++
+    }
+    if (runEnd > index) {
+      if (designLines[index] || isTestClosingBraceRun(lines, index)) {
+        result.push(lines[index]!)
+        index++
+        continue
+      }
+      const indent = lines[runEnd]!.match(/^[ \t]*/)![0]
+      const delimiters = lines.slice(index, runEnd + 1).map(closingDelimiter)
+      result.push(indent + delimiters.join('  '))
+      index = runEnd + 1
+      continue
+    }
+    result.push(line)
+    index++
+  }
+  return result.join('\n')
+}
+
+/** Structured design blocks retain one owned closing brace per line so nested typed blocks stay unambiguous. */
+function linesInsideDesign(lines: readonly string[]): readonly boolean[] {
+  const result: boolean[] = []
+  let depth = 0
+  for (const line of lines) {
+    const source = line.replace(/\/\/.*$/, '')
+    if (depth === 0 && /^\s*design\s+[A-Za-z_]\w*\s*\{/.test(source)) {
+      depth = braceDelta(source)
+      result.push(true)
+      continue
+    }
+    result.push(depth > 0)
+    if (depth > 0) {
+      depth += braceDelta(source)
+    }
+  }
+  return result
+}
+
+function braceDelta(line: string): number {
+  return [...line].reduce((depth, character) => depth + (character === '{' ? 1 : character === '}' ? -1 : 0), 0)
+}
+
+function isClosingDelimiterLine(line: string): boolean {
+  return /^[ \t]*}$/.test(line)
+}
+
+function closingDelimiter(line: string): string {
+  return line.trim()
+}
+
+function isTestClosingBraceRun(lines: readonly string[], index: number): boolean {
+  const previous = previousNonEmptyLine(lines, index)
+  return previous !== undefined && /^[ \t]*(expect|run)\b/.test(previous)
+}
+
+function previousNonEmptyLine(lines: readonly string[], index: number): string | undefined {
+  for (let lineIndex = index - 1; lineIndex >= 0; lineIndex--) {
+    const line = lines[lineIndex]!
+    const trimmed = line.trim()
+    if (trimmed !== '' && !trimmed.startsWith('//')) {
+      return line
+    }
+  }
+  return undefined
+}
+
+function scanBlockCommentLine(
+  line: string,
+  inBlockComment: boolean,
+): { enteredBlockComment: boolean; inBlockComment: boolean } {
+  let inside = inBlockComment
+  let enteredBlockComment = false
+  let insideString = false
+  let index = 0
+  while (index < line.length) {
+    if (inside) {
+      const end = line.indexOf('*/', index)
+      if (end === -1) {
+        return { enteredBlockComment, inBlockComment: true }
+      }
+      inside = false
+      index = end + 2
+      continue
+    }
+
+    if (insideString) {
+      if (line[index] === '\\') {
+        index += 2
+        continue
+      }
+      if (line[index] === '"') {
+        insideString = false
+      }
+      index++
+      continue
+    }
+
+    if (line.startsWith('//', index)) {
+      return { enteredBlockComment, inBlockComment: false }
+    }
+    if (line[index] === '"') {
+      insideString = true
+      index++
+      continue
+    }
+    if (line.startsWith('/*', index)) {
+      enteredBlockComment = true
+      inside = true
+      index += 2
+      continue
+    }
+    index++
+  }
+  return { enteredBlockComment, inBlockComment: inside }
+}
+
 /** isInjectionFenceOpenLine returns true when a line opens a multiline inject TS fence. */
-export function isInjectionFenceOpenLine(line: string): boolean {
+function isInjectionFenceOpenLine(line: string): boolean {
   // Anchored to an injection statement or typed return start so comment lines never match.
   // Configuration implementations use the same fenced TypeScript representation as injections.
   // Trailing whitespace after the opener is part of the fence token and only trimmed at finalization.
@@ -313,7 +531,7 @@ export function isInjectionFenceOpenLine(line: string): boolean {
 }
 
 /** findInjectionFenceCloseIndex returns the index of the line closing the fence opened above `openIndex`, or -1. */
-export function findInjectionFenceCloseIndex(lines: readonly string[], openIndex: number): number {
+function findInjectionFenceCloseIndex(lines: readonly string[], openIndex: number): number {
   return lines.findIndex((line, index) => index > openIndex && line.includes('```'))
 }
 
@@ -322,7 +540,7 @@ export function findInjectionFenceCloseIndex(lines: readonly string[], openIndex
  * bodies, and ends the text with exactly one newline. Fence body lines keep their trailing
  * whitespace because they are user TypeScript.
  */
-export function finalizeFormattedText(text: string): string {
+function finalizeFormattedText(text: string): string {
   const lines = text.replace(/^\s+/, '').split('\n')
   const result: string[] = []
   let index = 0

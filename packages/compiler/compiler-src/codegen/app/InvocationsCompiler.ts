@@ -5,7 +5,7 @@ import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { actionBlockContainsRespond, actionBlockRequiresAsync } from './action-control-flow'
 
-export default {
+export const InvocationsCompiler = {
   /** RenderStatementBody compiles a Tao render statement into a JSX fragment. */
   RenderStatementBody(render: AST.RenderStatement, options: CodegenOptions = {}): Compiled {
     if (render.injection) {

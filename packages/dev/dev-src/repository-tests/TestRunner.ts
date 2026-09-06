@@ -26,6 +26,7 @@ export type TestSuite = {
   cwd?: string
   /** Repository-relative test files this process may execute. */
   files?: readonly string[]
+  scheduling?: SuiteScheduling
   testReport?: NativeTestReport
 }
 
@@ -69,33 +70,8 @@ type PreparedRun = {
   retryStamp?: string
 }
 
-type DiscoverOptions = {
-  files?: readonly TestFile[]
-  reportRoot?: string
-  /** Suite names to keep; every other discovered suite is dropped. Absent means every suite. */
-  suites?: ReadonlySet<string>
-  /** Roots the Tao Apps suite tests; defaults to every app. */
-  taoAppPaths?: readonly string[]
-}
-
-const LANE = 'dev-test'
-/** How much of a failing suite's output a quiet run repeats; the whole of it is in the log file. */
-const QUIET_FAILURE_OUTPUT_LINES = 40
-const BUN_SUITE_ARGS = new Map<string, readonly string[]>([
-  ['compiler', ['--concurrent']],
-  // Developer tests deliberately run concurrently and many of them spawn child processes. During
-  // full verification, a healthy child can wait behind the other CPU-heavy suites long enough to
-  // exceed Bun's generic five-second test timeout even though it completes promptly in isolation.
-  ['dev', ['--concurrent', '--timeout=15000']],
-  ['ide-extension', ['--concurrent']],
-  // runtime-toolchain tests spawn full tsc typechecks; under parallel suite load these exceed
-  // bun's 5s default per-test timeout, which kills the tsc child and fails the test on its
-  // empty output.
-  ['runtime-toolchain', ['--timeout=60000']],
-  ['validator', ['--concurrent']],
-])
 /** SuiteScheduling weights one suite for the shared work graph. */
-type SuiteScheduling = {
+export type SuiteScheduling = {
   /** Higher-priority suites start earlier. Default 0. */
   priority?: number
   // A suite occupies `cost` of the cpuCount worker slots while it runs, so CPU-hungry suites
@@ -103,6 +79,63 @@ type SuiteScheduling = {
   // back cheap suites instead of running under full contention. Default 1.
   cost?: number
 }
+
+/** SuiteSelection is what one run asks of the suite registry. */
+export type SuiteSelection = {
+  kind: TestRunRequest['kind']
+  /** Test-name pattern; empty selects every test. */
+  pattern: string
+  /**
+   * Files by suite when the run names them exactly — a retry ledger, a `test-file` path, or the
+   * app roots a changed plan chose. A suite absent here runs everything it owns.
+   */
+  files?: ReadonlyMap<string, readonly string[]>
+  /** Suites to run; absent means every source that serves the run's kind. */
+  suites?: ReadonlySet<string>
+}
+
+/** SuiteBuildContext is what a run hands every source that builds a process. */
+type SuiteBuildContext = {
+  /** The lane's worker budget, which bounds any runner that would otherwise size itself to the machine. */
+  jobs?: number
+  /** Where native runner reports go; absent, the runner prints a summary instead. */
+  reportRoot?: string
+}
+
+/**
+ * SuiteSource is one registry entry: a suite, the files it owns in this checkout, the process that
+ * runs a selection of them, and how the graph weighs it. Every way a run chooses suites — the
+ * complete run, a name pattern, an exact file, the changed-files plan, the retry ledger — is a
+ * filter over this registry, so nothing outside it knows which suites exist.
+ */
+type SuiteSource = {
+  name: string
+  /** Repository-relative files the source owns; `Apps` stands for every Tao behavior test. */
+  files: readonly string[]
+  /** The package whose `<name>-tests` directory the source runs, when it is one. */
+  package?: string
+  /** Turns the files this run selected into the process that runs them. */
+  build: (files: readonly string[], selection: SuiteSelection, context: SuiteBuildContext) => TestSuite
+  scheduling?: SuiteScheduling
+  /** Why the source sits out a run of this kind; absent, or undefined for the kind, means it serves it. */
+  sitsOut?: (kind: TestRunRequest['kind']) => string | undefined
+}
+
+/** SuiteSelectionResult is what the registry produced for one run: processes, and what it left out and why. */
+type SuiteSelectionResult = {
+  /** Sources that could not serve this run's kind, with the reason the summary repeats. */
+  skipped: readonly { name: string; reason: string }[]
+  suites: TestSuite[]
+}
+
+const LANE = 'dev-test'
+/** How much of a failing suite's output a quiet run repeats; the whole of it is in the log file. */
+const QUIET_FAILURE_OUTPUT_LINES = 40
+const PERFORMANCE_CHECKS = 'performance-checks'
+const PERFORMANCE_CHECK_FILE = 'packages/dev/performance-checks/language-performance.test.ts'
+const RUNTIME_JEST = 'runtime-jest'
+const RUNTIME_JEST_TESTS = 'packages/runtime-toolchain/runtime-toolchain-tests'
+const TAO_APPS = 'tao-apps'
 /**
  * The runtime-jest reservation, and the worker count the Jest child is held to. Jest sizes itself
  * to the whole machine by default, so without the flag this suite spawns `cpuCount - 1` workers
@@ -110,98 +143,170 @@ type SuiteScheduling = {
  * already full. The two numbers are one number for that reason.
  */
 const RUNTIME_JEST_COST = 3
-const SUITE_SCHEDULING = new Map<string, SuiteScheduling>([
-  // tao-apps dominates the wall time of a full run; its validate+compile phase is one
-  // single-threaded process, so it gets the earliest start and a wide slot reservation.
-  // tao-apps fans out into compiler worker processes plus a Jest run of its own.
-  //
-  // The three widest reservations fit together inside the budget an outer graph hands this runner
-  // (`_test`'s `cost`, which is `cpuCount - 6`), not just inside a whole machine. A reservation
-  // that alone fills that budget makes the widest suite exclusive and the rest of the run queues
-  // behind it: measured on 18 CPUs, `--jobs 12` against the old 12/4/3 weights took 41.6s where
-  // `--jobs 18` took 22.6s; at 8/3/2 the same `--jobs 12` run takes 21.5s and `--jobs 18` 22.9s.
-  ['tao-apps', { priority: 5, cost: 8 }],
-  ['runtime-jest', { priority: 4, cost: RUNTIME_JEST_COST }],
-  // runtime-toolchain spawns tsc typecheck children per test.
-  ['runtime-toolchain', { priority: 3, cost: 2 }],
-  ['source-actions', { priority: 3 }],
-  ['tao-cli', { priority: 2 }],
+
+/** PackageTuning is what one package's Bun suite needs beyond the defaults every package gets. */
+type PackageTuning = {
+  args?: readonly string[]
+  scheduling?: SuiteScheduling
+}
+
+/**
+ * The three widest reservations in this registry fit together inside the budget an outer graph
+ * hands this runner (`_test`'s `cost`, which is `cpuCount - 6`), not just inside a whole machine. A
+ * reservation that alone fills that budget makes the widest suite exclusive and the rest of the run
+ * queues behind it: measured on 18 CPUs, `--jobs 12` against the old 12/4/3 weights took 41.6s
+ * where `--jobs 18` took 22.6s; at 8/3/2 the same `--jobs 12` run takes 21.5s and `--jobs 18` 22.9s.
+ */
+const PACKAGE_TUNING = new Map<string, PackageTuning>([
+  ['compiler', { args: ['--concurrent'] }],
+  // Developer tests deliberately run concurrently and many of them spawn child processes. During
+  // full verification, a healthy child can wait behind the other CPU-heavy suites long enough to
+  // exceed Bun's generic five-second test timeout even though it completes promptly in isolation.
+  ['dev', { args: ['--concurrent', '--timeout=15000'] }],
+  ['ide-extension', { args: ['--concurrent'] }],
+  // runtime-toolchain tests spawn full tsc typechecks per test; under parallel suite load these
+  // exceed Bun's 5s default per-test timeout, which kills the tsc child and fails the test on its
+  // empty output.
+  ['runtime-toolchain', { args: ['--timeout=60000'], scheduling: { priority: 3, cost: 2 } }],
+  ['source-actions', { scheduling: { priority: 3 } }],
+  ['tao-cli', { scheduling: { priority: 2 } }],
+  ['validator', { args: ['--concurrent'] }],
 ])
 
-async function discoverTestSuites(pattern = '', jobs?: number, options: DiscoverOptions = {}): Promise<TestSuite[]> {
-  const packageRoot = Shared.Repo.resolvePath('packages')
-  const testFilesByPackage = await packageTestFilesByPackage(packageRoot)
-  const suites: TestSuite[] = []
-  const selectedFiles = options.files === undefined ? undefined : filesBySuite(options.files)
-  const wanted = (suite: string) =>
-    (options.suites === undefined || options.suites.has(suite))
-    && (selectedFiles === undefined || (selectedFiles.get(suite)?.size ?? 0) > 0)
+/**
+ * suiteRegistry lists every suite this checkout can run, in discovery order: one Bun suite per
+ * package with a `<name>-tests` directory, the language performance checks, the runtime Jest
+ * suite, and the Tao behavior tests. A source with nothing to run is not listed.
+ */
+async function suiteRegistry(repositoryRoot = Shared.Repo.getRoot()): Promise<SuiteSource[]> {
+  const [byPackage, jestFiles] = await Promise.all([
+    packageTestFilesByPackage(repositoryRoot),
+    runtimeJestTestFiles(repositoryRoot),
+  ])
+  const sources: SuiteSource[] = [
+    ...[...byPackage].map(([name, files]): SuiteSource => {
+      const tuning = PACKAGE_TUNING.get(name)
+      return {
+        build: (selected, selection, context) =>
+          bunSuite(name, selected, selection.pattern, context, repositoryRoot, tuning),
+        files,
+        name,
+        package: name,
+        scheduling: tuning?.scheduling,
+      }
+    }),
+    {
+      build: (selected, selection, context) =>
+        bunSuite(PERFORMANCE_CHECKS, selected, selection.pattern, context, repositoryRoot),
+      files: [PERFORMANCE_CHECK_FILE],
+      name: PERFORMANCE_CHECKS,
+    },
+    {
+      build: (selected, selection, context) => runtimeJestSuite(selected, selection.pattern, context, repositoryRoot),
+      files: jestFiles,
+      name: RUNTIME_JEST,
+      scheduling: { priority: 4, cost: RUNTIME_JEST_COST },
+    },
+    {
+      build: roots => taoAppsSuite(roots, repositoryRoot),
+      files: [TestSelection.ALL_APPS],
+      name: TAO_APPS,
+      // tao-apps dominates the wall time of a full run; its validate+compile phase is one
+      // single-threaded process, so it gets the earliest start and a wide slot reservation, and it
+      // then fans out into compiler worker processes plus a Jest run of its own.
+      scheduling: { priority: 5, cost: 8 },
+      // Without this note a name-filtered run reads as full coverage.
+      sitsOut: kind => kind === 'name' ? 'a test-name pattern cannot select Tao behavior tests' : undefined,
+    },
+  ]
+  return sources.filter(source => source.files.length > 0)
+}
 
-  for (const [packageName, allTestFiles] of testFilesByPackage) {
-    if (!wanted(packageName)) {
+/** selectSuites is the one filter over the registry: which sources run, over which files. */
+function selectSuites(
+  registry: readonly SuiteSource[],
+  selection: SuiteSelection,
+  context: SuiteBuildContext = {},
+): SuiteSelectionResult {
+  const result: SuiteSelectionResult = { skipped: [], suites: [] }
+  for (const source of registry) {
+    if (selection.suites !== undefined && !selection.suites.has(source.name)) {
       continue
     }
-    const testFiles = selectedFiles === undefined
-      ? allTestFiles
-      : allTestFiles.filter(path => selectedFiles.get(packageName)?.has(repositoryRelative(path)) === true)
-    if (testFiles.length === 0) {
+    const reason = source.sitsOut?.(selection.kind)
+    if (reason !== undefined) {
+      result.skipped = [...result.skipped, { name: source.name, reason }]
       continue
     }
-    suites.push(...packageSuites(packageName, testFiles, pattern, options))
+    const files = selection.files?.get(source.name) ?? source.files
+    if (files.length > 0) {
+      result.suites.push({ scheduling: source.scheduling, ...source.build(files, selection, context) })
+    }
   }
+  return result
+}
 
-  if (wanted('performance-checks')) {
-    suites.push(...performanceCheckSuites(pattern, options))
-  }
-  if (wanted('runtime-jest')) {
-    const runtimeFiles = selectedFiles === undefined
-      ? await runtimeJestTestFiles(Shared.Repo.resolvePath())
-      : [...(selectedFiles.get('runtime-jest') ?? [])]
-    suites.push(...runtimeJestSuites(
-      pattern,
-      jobs,
-      runtimeFiles,
-      options,
-    ))
-  }
-  if (wanted('tao-apps')) {
-    suites.push(...taoAppsSuites(pattern, options.taoAppPaths))
-  }
-  return suites
+/** discoverTestSuites answers one selection from this checkout's registry. */
+async function discoverTestSuites(
+  selection: Partial<SuiteSelection> = {},
+  context: SuiteBuildContext = {},
+  repositoryRoot = Shared.Repo.getRoot(),
+): Promise<SuiteSelectionResult> {
+  const pattern = selection.pattern ?? ''
+  return selectSuites(
+    await suiteRegistry(repositoryRoot),
+    { kind: pattern.length > 0 ? 'name' : 'full', ...selection, pattern },
+    context,
+  )
 }
 
 /** suiteInventory names every suite a complete run would execute, in discovery order. */
 async function suiteInventory(repositoryRoot = Shared.Repo.getRoot()): Promise<SuiteInventory> {
-  const packageRoot = Shared.FS.resolvePath('packages', repositoryRoot)
+  const registry = await suiteRegistry(repositoryRoot)
+  const listed = (name: string) => registry.some(source => source.name === name)
   return {
-    hasPerformanceChecks: true,
-    hasRuntimeJest: (await runtimeJestTestFiles(repositoryRoot)).length > 0,
-    hasTaoApps: true,
-    packageSuites: [...(await packageTestFilesByPackage(packageRoot)).keys()],
+    hasPerformanceChecks: listed(PERFORMANCE_CHECKS),
+    hasRuntimeJest: listed(RUNTIME_JEST),
+    hasTaoApps: listed(TAO_APPS),
+    packageSuites: registry.flatMap(source => source.package === undefined ? [] : [source.package]),
   }
 }
 
-function filesBySuite(files: readonly TestFile[]): Map<string, Set<string>> {
-  const result = new Map<string, Set<string>>()
+/**
+ * selectionFor states a prepared run as a registry selection: a changed plan names its suites and
+ * the app roots it chose, a retry or exact-file run names its files and thereby its suites.
+ */
+function selectionFor(prepared: PreparedRun): SuiteSelection {
+  const files = prepared.files === undefined ? undefined : filesBySuite(prepared.files)
+  const appRoots = prepared.plan?.taoAppPaths
+  return {
+    files: appRoots === undefined ? files : new Map([...files ?? [], [TAO_APPS, appRoots]]),
+    kind: prepared.kind,
+    pattern: prepared.pattern,
+    suites: prepared.plan !== undefined
+      ? new Set(prepared.plan.selected.keys())
+      : files === undefined
+      ? undefined
+      : new Set(files.keys()),
+  }
+}
+
+function filesBySuite(files: readonly TestFile[]): Map<string, readonly string[]> {
+  const result = new Map<string, string[]>()
   for (const file of files) {
-    const suiteFiles = result.get(file.suite) ?? new Set<string>()
-    suiteFiles.add(file.file)
-    result.set(file.suite, suiteFiles)
+    result.set(file.suite, [...result.get(file.suite) ?? [], file.file])
   }
   return result
 }
 
 /** suiteNode turns one discovered suite into a work-graph node with its scheduling weights. */
 function suiteNode(suite: TestSuite): WorkNode {
-  const scheduling = SUITE_SCHEDULING.get(suite.name)
+  const command = (args: readonly string[]) => ({ args, command: suite.command, cwd: suite.cwd })
   return {
-    cost: scheduling?.cost,
+    cost: suite.scheduling?.cost,
     name: suite.name,
-    priority: scheduling?.priority,
-    run: { args: suite.args, command: suite.command, cwd: suite.cwd },
-    runForSlots: suite.argsForSlots === undefined
-      ? undefined
-      : slots => ({ args: suite.argsForSlots!(slots), command: suite.command, cwd: suite.cwd }),
+    priority: suite.scheduling?.priority,
+    run: suite.argsForSlots === undefined ? command(suite.args) : ({ slots }) => command(suite.argsForSlots!(slots)),
   }
 }
 
@@ -214,7 +319,7 @@ function createSuiteState(suite: TestSuite): SuiteState {
 
 /**
  * runSuiteProcesses schedules suites through the work graph. Suites are nodes with no dependencies,
- * so ordering is the graph's priority-then-critical-path policy over `SUITE_SCHEDULING`'s seeds.
+ * so ordering is the graph's priority-then-critical-path policy over the registry's weights.
  */
 async function runSuiteProcesses(states: SuiteState[], options: RunSuiteProcessesOptions): Promise<void> {
   await WorkGraph.run(states, {
@@ -327,14 +432,11 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   const { location, machineLane, prepared } = options
   const reportRoot = Shared.FS.resolvePath('test-results', location.logRoot)
   await Shared.FS.mkdir(reportRoot)
-  const suites = await discoverTestSuites(prepared.pattern, machineLane.capacity, {
-    // A changed-files run carries a suite plan; a retry carries the ledger's own file list. Neither
-    // intersects with the other, or a retry would run nothing and report red.
-    files: prepared.files,
-    reportRoot,
-    suites: prepared.plan === undefined ? undefined : new Set(prepared.plan.selected.keys()),
-    taoAppPaths: prepared.plan?.taoAppPaths,
-  })
+  const { skipped, suites } = selectSuites(
+    await suiteRegistry(location.repositoryRoot),
+    selectionFor(prepared),
+    { jobs: machineLane.capacity, reportRoot },
+  )
   printSelection(prepared, suites)
   if (suites.length === 0) {
     if (prepared.kind === 'changed') {
@@ -409,7 +511,7 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
     // and an agent reading a pipe needs it short enough to act on.
     includeFailureOutput: mode !== 'lines',
     failureOutputLineLimit: mode === 'quiet' ? QUIET_FAILURE_OUTPUT_LINES : undefined,
-    taoAppsSkipped: prepared.kind === 'name',
+    skippedSuites: skipped,
   })
   if (prepared.kind === 'retry') {
     printRetryHonesty(prepared)
@@ -472,14 +574,14 @@ async function withExistingAppRoots(plan: ChangedPlan, repositoryRoot: string): 
     return { ...plan, taoAppPaths: existing }
   }
   const selected = new Map(plan.selected)
-  selected.delete('tao-apps')
-  return { ...plan, selected, skipped: [...plan.skipped, 'tao-apps'], taoAppPaths: undefined }
+  selected.delete(TAO_APPS)
+  return { ...plan, selected, skipped: [...plan.skipped, TAO_APPS], taoAppPaths: undefined }
 }
 
 async function observationsFor(states: readonly SuiteState[], repositoryRoot: string): Promise<TestObservation[]> {
   const observations: TestObservation[] = []
   for (const state of states) {
-    state.testObservations = state.name === 'tao-apps'
+    state.testObservations = state.name === TAO_APPS
       ? [{
         durationMs: state.elapsedMs,
         file: 'Apps',
@@ -534,7 +636,7 @@ function printSelection(prepared: PreparedRun, suites: readonly TestSuite[]): vo
       : prepared.kind === 'file'
       ? 'exact requested file'
       : 'contains an unsettled or unrecorded test'
-    const roots = suite.name === 'tao-apps' && prepared.kind === 'changed' ? ` (${suite.files?.join(', ')})` : ''
+    const roots = suite.name === TAO_APPS && prepared.kind === 'changed' ? ` (${suite.files?.join(', ')})` : ''
     Shared.HCI.writeLine(`- selected ${suite.name}: ${details}${roots}`)
   }
   const skipped = prepared.plan?.skipped ?? []
@@ -570,44 +672,32 @@ async function printAdvisory(prepared: PreparedRun, ledger: TestLedgerStore): Pr
   }
 }
 
+/** allTestFiles is the registry as the retry ledger keys it: every file, under the suite that owns it. */
 async function allTestFiles(repositoryRoot: string): Promise<TestFile[]> {
-  const packageRoot = Shared.FS.resolvePath('packages', repositoryRoot)
-  const byPackage = await packageTestFilesByPackage(packageRoot)
-  const files: TestFile[] = []
-  for (const [suite, paths] of byPackage) {
-    files.push(...paths.map(path => ({ file: repositoryRelative(path, repositoryRoot), suite })))
-  }
-  files.push({ file: 'packages/dev/performance-checks/language-performance.test.ts', suite: 'performance-checks' })
-  for (const file of await runtimeJestTestFiles(repositoryRoot)) {
-    files.push({ file, suite: 'runtime-jest' })
-  }
-  files.push({ file: 'Apps', suite: 'tao-apps' })
-  return files.sort((left, right) => `${left.suite}:${left.file}`.localeCompare(`${right.suite}:${right.file}`))
+  const registry = await suiteRegistry(repositoryRoot)
+  return registry
+    .flatMap(source => source.files.map(file => ({ file, suite: source.name })))
+    .sort((left, right) => `${left.suite}:${left.file}`.localeCompare(`${right.suite}:${right.file}`))
 }
 
 async function runtimeJestTestFiles(repositoryRoot: string): Promise<string[]> {
-  const runtimeRoot = Shared.FS.resolvePath('packages/runtime-toolchain/runtime-toolchain-tests', repositoryRoot)
+  const runtimeRoot = Shared.FS.resolvePath(RUNTIME_JEST_TESTS, repositoryRoot)
   return (await Shared.Repo.filesUnder(runtimeRoot, { extensions: ['.ts', '.tsx'] }))
     .filter(path => /\.jest-test\.tsx?$/.test(path))
     .map(path => repositoryRelative(path, repositoryRoot))
     .sort()
 }
 
+/** testFile routes one exact path to the registry source that owns it. */
 async function testFile(inputPath: string, repositoryRoot = Shared.Repo.getRoot()): Promise<TestFile> {
   const absolutePath = Shared.FS.resolvePath(inputPath, repositoryRoot)
   if (!Shared.FS.pathIsWithin(absolutePath, repositoryRoot) || !await Shared.FS.isFile(absolutePath)) {
     throw new Shared.Errors.UserInputError(`Test file does not exist in this repository: ${inputPath}`)
   }
   const file = repositoryRelative(absolutePath, repositoryRoot)
-  if (/^packages\/runtime-toolchain\/runtime-toolchain-tests\/[^/]+\.jest-test\.tsx?$/.test(file)) {
-    return { file, suite: 'runtime-jest' }
-  }
-  if (file === 'packages/dev/performance-checks/language-performance.test.ts') {
-    return { file, suite: 'performance-checks' }
-  }
-  const match = file.match(/^packages\/([^/]+)\/\1-tests\/[^/]+\.test\.ts$/)
-  if (match?.[1] !== undefined) {
-    return { file, suite: match[1] }
+  const owner = (await suiteRegistry(repositoryRoot)).find(source => source.files.includes(file))
+  if (owner !== undefined) {
+    return { file, suite: owner.name }
   }
   throw new Shared.Errors.UserInputError(
     `Unsupported test file: ${file}. Use 'just test <name>' for package test names, './tao test' for Tao files, or `
@@ -637,103 +727,60 @@ function reservedJobs(): number | undefined {
   return Number.isInteger(envJobs) && envJobs > 0 ? envJobs : undefined
 }
 
-function packageSuites(
-  packageName: string,
-  testFiles: string[],
+function bunSuite(
+  name: string,
+  files: readonly string[],
   pattern: string,
-  options: DiscoverOptions,
-): TestSuite[] {
-  return [bunSuite(packageName, testFiles, pattern, options)]
-}
-
-function bunSuite(name: string, testFiles: string[], pattern: string, options: DiscoverOptions = {}): TestSuite {
-  const testReport = options.reportRoot === undefined ? undefined : nativeReport(name, 'bun-junit', options.reportRoot)
+  context: SuiteBuildContext,
+  repositoryRoot: string,
+  tuning: PackageTuning = {},
+): TestSuite {
+  const testReport = context.reportRoot === undefined ? undefined : nativeReport(name, 'bun-junit', context.reportRoot)
   const args = [
     'test',
     // Bun reads a bare relative path as a filter, walks the whole repository to resolve it, and
     // leaves a file descriptor open per visited entry. Children spawned by a test then inherit an
     // exhausted descriptor table and their piped output never arrives. An absolute path is taken
     // literally, so the walk never happens.
-    ...testFiles,
+    ...files.map(file => Shared.FS.resolvePath(file, repositoryRoot)),
     ...(testReport === undefined
       ? ['--reporter=dot']
       : ['--reporter=junit', `--reporter-outfile=${testReport.path}`]),
-    ...(BUN_SUITE_ARGS.get(name) ?? []),
+    ...(tuning.args ?? []),
     ...(pattern ? ['--pass-with-no-tests', `--test-name-pattern=${pattern}`] : []),
   ]
-  return {
-    name,
-    command: 'bun',
-    args,
-    cwd: Shared.Repo.resolvePath(),
-    files: testFiles.map(path => repositoryRelative(path)),
-    testReport,
-  }
+  return { name, command: 'bun', args, cwd: repositoryRoot, files, testReport }
 }
 
-function performanceCheckSuites(pattern: string, options: DiscoverOptions): TestSuite[] {
-  return [bunSuite(
-    'performance-checks',
-    [Shared.Repo.resolvePath('packages/dev/performance-checks/language-performance.test.ts')],
-    pattern,
-    options,
-  )]
-}
-
-function runtimeJestSuites(
-  pattern: string,
-  jobs: number | undefined,
-  testFiles: string[],
-  options: DiscoverOptions,
-): TestSuite[] {
-  return [runtimeJestSuite(
-    'runtime-jest',
-    testFiles.map(file => Shared.Repo.resolvePath(file)),
-    pattern,
-    jobs,
-    options,
-  )]
-}
-
-function taoAppsSuites(pattern: string, roots: readonly string[] = [TestSelection.ALL_APPS]): TestSuite[] {
-  if (pattern.length > 0 || roots.length === 0) {
-    return []
-  }
-  return [{
-    name: 'tao-apps',
-    command: './tao',
-    args: ['test', ...roots],
-    cwd: Shared.Repo.resolvePath(),
-    files: [...roots],
-  }]
+function taoAppsSuite(roots: readonly string[], repositoryRoot: string): TestSuite {
+  return { name: TAO_APPS, command: './tao', args: ['test', ...roots], cwd: repositoryRoot, files: roots }
 }
 
 function runtimeJestSuite(
-  name: string,
-  testFiles: string[],
+  files: readonly string[],
   pattern: string,
-  jobs?: number,
-  options: DiscoverOptions = {},
+  context: SuiteBuildContext,
+  repositoryRoot: string,
 ): TestSuite {
-  const nodePath = Shared.Repo.resolvePath('.devenv/profile/bin/node')
-  const testReport = options.reportRoot === undefined ? undefined : nativeReport(name, 'jest-json', options.reportRoot)
+  const testReport = context.reportRoot === undefined
+    ? undefined
+    : nativeReport(RUNTIME_JEST, 'jest-json', context.reportRoot)
   const argsForSlots = (slots: number) => [
     'node_modules/jest/bin/jest.js',
-    ...testFiles,
+    ...files.map(file => Shared.FS.resolvePath(file, repositoryRoot)),
     '--no-watchman',
     `--maxWorkers=${runtimeJestWorkers(slots)}`,
     ...(pattern ? ['--passWithNoTests', `--testNamePattern=${pattern}`] : []),
     ...(testReport === undefined ? [] : ['--json', `--outputFile=${testReport.path}`]),
     '--silent',
   ]
-  const args = argsForSlots(runtimeJestWorkers(jobs))
   return {
-    name,
-    command: nodePath,
-    args,
+    name: RUNTIME_JEST,
+    command: Shared.FS.resolvePath('.devenv/profile/bin/node', repositoryRoot),
+    args: argsForSlots(runtimeJestWorkers(context.jobs)),
     argsForSlots,
-    cwd: Shared.Repo.resolvePath('packages/runtime-toolchain'),
-    files: testFiles.map(path => repositoryRelative(path)),
+    cwd: Shared.FS.resolvePath('packages/runtime-toolchain', repositoryRoot),
+    files,
     testReport,
   }
 }
@@ -752,7 +799,9 @@ function runtimeJestWorkers(jobs: number | undefined): number {
   return Math.max(1, Math.min(RUNTIME_JEST_COST, jobs ?? RUNTIME_JEST_COST))
 }
 
-async function packageTestFilesByPackage(packageRoot: string): Promise<Map<string, string[]>> {
+/** packageTestFilesByPackage lists each package's `<name>-tests/*.test.ts` files, repository-relative. */
+async function packageTestFilesByPackage(repositoryRoot: string): Promise<Map<string, string[]>> {
+  const packageRoot = Shared.FS.resolvePath('packages', repositoryRoot)
   const testFilesByPackage = new Map<string, string[]>()
   for (
     const testFile of (await Shared.Repo.filesUnder(packageRoot, { extensions: ['.ts'] })).filter(path =>
@@ -764,7 +813,7 @@ async function packageTestFilesByPackage(packageRoot: string): Promise<Map<strin
       continue
     }
     const packageTestFiles = testFilesByPackage.get(packageName) ?? []
-    packageTestFiles.push(testFile)
+    packageTestFiles.push(repositoryRelative(testFile, repositoryRoot))
     testFilesByPackage.set(packageName, packageTestFiles)
   }
   for (const testFiles of testFilesByPackage.values()) {
@@ -782,7 +831,7 @@ function isPackageTestFile(packageRoot: string, path: string): boolean {
     && rest.length === 0
 }
 
-/** TestRunner owns package test discovery, scheduling seeds, and the `./dev test` lane. */
+/** TestRunner owns the suite registry, its scheduling weights, and the `./dev test` lane. */
 export const TestRunner = {
   createSuiteState,
   discoverTestSuites,

@@ -69,7 +69,7 @@ export function validateScenarioFile(file: AST.TaoFile, ctx: ValidationContext):
 
 function validateFixture(fixture: AST.FixtureDeclaration, ctx: ValidationContext): void {
   if (!AST.isTaoFile(fixture.$container)) {
-    ctx.error(scenarioValidationMessages.fixturePlacement, fixture)
+    ctx.error(fixture, scenarioValidationMessages.fixturePlacement)
   }
   reportDuplicates(
     AST.fixtureValueDeclarations(fixture),
@@ -98,11 +98,11 @@ function validateCreateBinding(binding: AST.FixtureCreateBinding, ctx: Validatio
 
 function validateScenarioGroup(group: AST.ScenarioGroupDeclaration, ctx: ValidationContext): void {
   if (!AST.isTaoFile(group.$container)) {
-    ctx.error(scenarioValidationMessages.scenarioGroupPlacement, group)
+    ctx.error(group, scenarioValidationMessages.scenarioGroupPlacement)
   }
   const scenarios = AST.scenarioDeclarations(group)
   if (scenarios.length === 0) {
-    ctx.error(scenarioValidationMessages.missingScenario(group.name), group)
+    ctx.error(group, scenarioValidationMessages.missingScenario(group.name))
   }
   reportDuplicates(
     scenarios,
@@ -117,7 +117,7 @@ function validateScenarioGroup(group: AST.ScenarioGroupDeclaration, ctx: Validat
 function validateScenario(scenario: AST.ScenarioDeclaration, ctx: ValidationContext): void {
   const group = AST.findOwningScenarioGroup(scenario)
   if (!group) {
-    ctx.error(scenarioValidationMessages.scenarioPlacement, scenario)
+    ctx.error(scenario, scenarioValidationMessages.scenarioPlacement)
     return
   }
   const identity = `${group.name} / ${scenario.name}`
@@ -126,23 +126,23 @@ function validateScenario(scenario: AST.ScenarioDeclaration, ctx: ValidationCont
   requireEffectiveClause(scenario, identity, 'device', AST.isScenarioDeviceClause, ctx)
 
   if (!AST.effectiveScenarioClause(scenario, AST.isScenarioFixtureClause) && scenarioRequiresFixture(scenario)) {
-    ctx.error(scenarioValidationMessages.fixtureRequired(identity), scenario)
+    ctx.error(scenario, scenarioValidationMessages.fixtureRequired(identity))
   }
 
   const subjectClause = AST.effectiveScenarioSubjectClause(scenario)
   const subject = AST.scenarioSubjectDeclaration(scenario)
   if (!subject) {
-    ctx.error(scenarioValidationMessages.subjectCount(identity), subjectClause ?? scenario)
+    ctx.error(subjectClause ?? scenario, scenarioValidationMessages.subjectCount(identity))
   } else if (AST.isScenarioRenderClause(subjectClause) && !AST.isViewDeclaration(subject)) {
-    ctx.error(scenarioValidationMessages.subjectKind(identity, 'render'), subjectClause)
+    ctx.error(subjectClause, scenarioValidationMessages.subjectKind(identity, 'render'))
   } else if (AST.isScenarioRunClause(subjectClause) && !AST.isAppValueDeclaration(subject)) {
-    ctx.error(scenarioValidationMessages.subjectKind(identity, 'run'), subjectClause)
+    ctx.error(subjectClause, scenarioValidationMessages.subjectKind(identity, 'run'))
   }
 
   const locale = AST.effectiveScenarioClause(scenario, AST.isScenarioLocaleClause)
   const direction = AST.effectiveScenarioClause(scenario, AST.isScenarioDirectionClause)
   if (locale?.pseudolocale && !direction) {
-    ctx.error(scenarioValidationMessages.pseudolocaleDirection, locale)
+    ctx.error(locale, scenarioValidationMessages.pseudolocaleDirection)
   }
 
   if (AST.isScenarioRenderClause(subjectClause) && AST.isViewDeclaration(subject)) {
@@ -164,7 +164,7 @@ function validateClauseSet(owner: string, clauses: readonly AST.ScenarioClause[]
     AST.isScenarioRunClause(clause) || AST.isScenarioRenderClause(clause)
   )
   for (const duplicate of subjects.slice(1)) {
-    ctx.error(scenarioValidationMessages.duplicateClause(owner, 'subject'), duplicate)
+    ctx.error(duplicate, scenarioValidationMessages.duplicateClause(owner, 'subject'))
   }
 }
 
@@ -175,7 +175,7 @@ function validateClauseContents(clauses: readonly AST.ScenarioClause[], ctx: Val
       && (!Number.isInteger(device.width) || !Number.isInteger(device.height) || device.width <= 0
         || device.height! <= 0)
     ) {
-      ctx.error(scenarioValidationMessages.deviceDimensions, device)
+      ctx.error(device, scenarioValidationMessages.deviceDimensions)
     }
   }
   for (const prepare of clauses.filter(AST.isScenarioPrepareClause)) {
@@ -203,11 +203,11 @@ function validateScenarioRender(
   for (const argument of render?.argumentList?.arguments ?? []) {
     const parameter = parametersByName.get(argument.label)
     if (!parameter) {
-      ctx.error(scenarioValidationMessages.renderUnknownArgument(view.name, argument.label), argument)
+      ctx.error(argument, scenarioValidationMessages.renderUnknownArgument(view.name, argument.label))
       continue
     }
     if (supplied.has(argument.label)) {
-      ctx.error(scenarioValidationMessages.renderDuplicateArgument(view.name, argument.label), argument)
+      ctx.error(argument, scenarioValidationMessages.renderDuplicateArgument(view.name, argument.label))
       continue
     }
     supplied.add(argument.label)
@@ -215,13 +215,13 @@ function validateScenarioRender(
     const expected = Type.ofParameter(parameter)
     if (actual.kind !== 'unresolved' && expected.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
       ctx.error(
+        argument.value,
         scenarioValidationMessages.renderArgumentType(
           view.name,
           argument.label,
           Type.displayName(expected),
           Type.displayName(actual),
         ),
-        argument.value,
       )
     }
   }
@@ -230,7 +230,7 @@ function validateScenarioRender(
     const type = Type.ofParameter(parameter)
     const omittedRequiredAction = type.kind === 'primitive' && type.primitive === 'action'
     if (!supplied.has(name) && !parameter.optional && !parameter.defaultValue && !omittedRequiredAction) {
-      ctx.error(scenarioValidationMessages.renderMissingArgument(view.name, name), render ?? view)
+      ctx.error(render ?? view, scenarioValidationMessages.renderMissingArgument(view.name, name))
     }
   }
 }
@@ -266,13 +266,13 @@ function validateFields(
   for (const suppliedField of supplied) {
     const field = fieldsByName.get(suppliedField.name)
     if (!field) {
-      ctx.error(scenarioValidationMessages.unknownField(entity.singularName, suppliedField.name), suppliedField)
+      ctx.error(suppliedField, scenarioValidationMessages.unknownField(entity.singularName, suppliedField.name))
       continue
     }
     const expected = fixtureFieldType(field)
     const actual = fixtureValueType(suppliedField.value)
     if (expected !== 'unresolved' && actual !== 'unresolved' && expected !== actual) {
-      ctx.error(scenarioValidationMessages.fieldType(field.name, expected, actual), suppliedField.value)
+      ctx.error(suppliedField.value, scenarioValidationMessages.fieldType(field.name, expected, actual))
     }
   }
   if (!requireAll) {
@@ -281,7 +281,7 @@ function validateFields(
   const suppliedNames = new Set(supplied.map(field => field.name))
   for (const field of fields) {
     if (!suppliedNames.has(field.name) && fieldRequiresValue(field)) {
-      ctx.error(scenarioValidationMessages.missingField(entity.singularName, field.name), entity)
+      ctx.error(entity, scenarioValidationMessages.missingField(entity.singularName, field.name))
     }
   }
 }
@@ -359,16 +359,16 @@ function validateThrough(through: AST.FixtureThroughClause, ctx: ValidationConte
   for (const argument of named) {
     const name = argument.label!
     if (!parameterNames.includes(name)) {
-      ctx.error(scenarioValidationMessages.unknownArgument(action.name, name), argument)
+      ctx.error(argument, scenarioValidationMessages.unknownArgument(action.name, name))
     } else if (seen.has(name)) {
-      ctx.error(scenarioValidationMessages.duplicateArgument(action.name, name), argument)
+      ctx.error(argument, scenarioValidationMessages.duplicateArgument(action.name, name))
     }
     seen.add(name)
   }
   const remaining = parameters.filter(parameter => !seen.has(Type.parameterName(parameter)))
   const positional = arguments_.filter(argument => argument.label === undefined)
   if (positional.length > remaining.length) {
-    ctx.error(scenarioValidationMessages.argumentCount(action.name), through)
+    ctx.error(through, scenarioValidationMessages.argumentCount(action.name))
   }
   const suppliedPositionally = new Set(remaining.slice(0, positional.length))
   for (const parameter of parameters) {
@@ -378,7 +378,7 @@ function validateThrough(through: AST.FixtureThroughClause, ctx: ValidationConte
       && !parameter.optional
       && !parameter.defaultValue
     ) {
-      ctx.error(scenarioValidationMessages.missingArgument(action.name, Type.parameterName(parameter)), through)
+      ctx.error(through, scenarioValidationMessages.missingArgument(action.name, Type.parameterName(parameter)))
     }
   }
 }
@@ -399,7 +399,7 @@ function requireEffectiveClause<ClauseT extends AST.ScenarioClause>(
   ctx: ValidationContext,
 ): void {
   if (!AST.effectiveScenarioClause(scenario, predicate)) {
-    ctx.error(scenarioValidationMessages.missingClause(owner, name), scenario)
+    ctx.error(scenario, scenarioValidationMessages.missingClause(owner, name))
   }
 }
 
@@ -411,7 +411,7 @@ function allowOne<ClauseT extends AST.ScenarioClause>(
   ctx: ValidationContext,
 ): void {
   for (const duplicate of clauses.filter(predicate).slice(1)) {
-    ctx.error(scenarioValidationMessages.duplicateClause(owner, name), duplicate)
+    ctx.error(duplicate, scenarioValidationMessages.duplicateClause(owner, name))
   }
 }
 
@@ -425,7 +425,7 @@ function reportDuplicates<NodeT extends AST.Node>(
   for (const node of nodes) {
     const name = key(node)
     if (seen.has(name)) {
-      ctx.error(message(name), node)
+      ctx.error(node, message(name))
     }
     seen.add(name)
   }

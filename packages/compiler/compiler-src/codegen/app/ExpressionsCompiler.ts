@@ -3,7 +3,7 @@ import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import { type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
-import { configurationRuntimeBindingName } from './configuration-compiler'
+import { configurationRuntimeBindingName } from './ConfigurationCompiler'
 import { compileDeclarationIdentity } from './declaration-identity'
 import { bridgeBindingName } from './injection-plan'
 

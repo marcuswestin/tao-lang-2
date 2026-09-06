@@ -1,5 +1,5 @@
 import Runtime, { RuntimeToolchainPaths, type ShipManifest } from '@runtime-toolchain'
-import { Assert, CLI, Errors, FS, Repo } from '@shared'
+import { Assert, CLI, Errors, FS, Platform, Repo } from '@shared'
 
 /** verifyReleaseBundle exports real release and preview bundles in an isolated host. */
 async function verifyReleaseBundle(): Promise<void> {
@@ -79,7 +79,7 @@ async function expoExport(hostRoot: string, outputRoot: string): Promise<void> {
     args: ['export', '--platform', 'ios', '--output-dir', outputRoot, '--clear'],
     cwd: hostRoot,
     env: {
-      ...process.env,
+      ...Platform.runtimeProcess.env,
       TAO_RUNTIME_TOOLCHAIN_SOURCE_ROOT: RuntimeToolchainPaths.packageRoot,
     },
     prefixedOutput: { processName: 'bundle' },

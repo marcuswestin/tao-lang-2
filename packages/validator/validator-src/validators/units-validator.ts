@@ -19,12 +19,12 @@ export const unitsValidationChecks = {
     const receiverName = Type.displayName(receiver)
     if (receiver.primitive === 'number') {
       if (!Units.familyOf(access.member)) {
-        ctx.error(unitsValidationMessages.unknownUnit(access.member, receiverName), access)
+        ctx.error(access, unitsValidationMessages.unknownUnit(access.member, receiverName))
       }
       return
     }
     if (!Units.isFamily(receiver.primitive)) {
-      ctx.error(unitsValidationMessages.notAUnitReceiver(access.member, receiverName), access)
+      ctx.error(access, unitsValidationMessages.notAUnitReceiver(access.member, receiverName))
       return
     }
     const family = receiver.primitive
@@ -34,10 +34,10 @@ export const unitsValidationChecks = {
     // A unit of another family is the mistake worth naming precisely; anything else is unknown.
     const otherFamily = Units.familyOf(access.member)
     ctx.error(
+      access,
       otherFamily
         ? unitsValidationMessages.crossFamily(access.member, family, otherFamily)
         : unitsValidationMessages.unknownUnit(access.member, receiverName),
-      access,
     )
   },
 } satisfies NodeValidationChecks

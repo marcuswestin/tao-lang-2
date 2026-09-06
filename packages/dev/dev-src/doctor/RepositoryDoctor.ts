@@ -500,7 +500,7 @@ export async function readDoctorFacts(
     nodeVersion,
     ports,
     repositoryRoot: canonicalRepositoryRoot,
-    satisfies: (version, range) => Bun.semver.satisfies(version, range),
+    satisfies: Platform.semverSatisfies,
     watchmanHealthy: watchman.healthy,
     watchmanVersion: watchman.version,
   }
@@ -619,7 +619,7 @@ async function nearestExistingAncestor(path: string): Promise<string> {
 /** Probes with a real nested write, which is what a sandbox actually denies. */
 async function isWritable(path: string): Promise<boolean> {
   // Named uniquely so concurrent doctor runs cannot delete each other's probe mid-check.
-  const probeRoot = FS.resolvePath(`tao-doctor-probe-${Bun.randomUUIDv7()}`, path)
+  const probeRoot = FS.resolvePath(`tao-doctor-probe-${Platform.randomUUID()}`, path)
   try {
     await FS.writeText(FS.resolvePath('nested/probe', probeRoot), 'probe')
     return true

@@ -1,3 +1,4 @@
+import { Platform } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import {
   dependencyCompatibilityIssues,
@@ -47,7 +48,7 @@ function facts(
     })),
     reactNativeTypesPeer: '^19.1.0',
     resolvedByPackage,
-    satisfies: (version, range) => Bun.semver.satisfies(version, range),
+    satisfies: Platform.semverSatisfies,
     ...overrides,
   }
 }

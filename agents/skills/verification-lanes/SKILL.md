@@ -32,8 +32,9 @@ description: >-
   not maintain a second trigger list in instructions.
 - Run `./agent full-verify-sandbox` immediately before a merge when working in a managed shell. It
   runs the full gate membership except the five explicitly host-only browser and native UI gates (the
-  simulated-user journey is a separate quarantine skip, not a host-only gate) and
-  never proves those gates passed.
+  simulated-user journey, `studio-smoke-simulated-user`, is a separate quarantine skip, not a
+  host-only gate; `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts`
+  reproduces it) and never proves those gates passed.
 - Run `just full-verify` from an unsandboxed normal terminal whenever Studio is in scope and before
   landing through the human merge workflow.
 - Read `.artifacts/logs/<lane>/latest/summary.json` before diagnosing a red lane. A separately

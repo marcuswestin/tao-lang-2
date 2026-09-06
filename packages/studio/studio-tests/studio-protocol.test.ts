@@ -3,9 +3,81 @@ import {
   StudioProtocol,
   studioProtocolChannel,
   studioProtocolVersion,
+  StudioRoutes,
+  studioSessionEndpoints,
+  StudioSessionPath,
   type StudioSourceActionEnvelope,
   studioSourceActionVersion,
+  StudioTransport,
 } from '../studio-src/StudioProtocol'
+
+Describe('Studio session paths and routes', () => {
+  Test('scopes every session endpoint under one opaque window id and refuses anything else', () => {
+    Expect(StudioSessionPath.route('/sessions/first_session/api/protocol')).toEqual({
+      pathname: '/api/protocol',
+      sessionId: 'first_session',
+    })
+    Expect(StudioSessionPath.route('/sessions/second_session')).toEqual({ pathname: '/', sessionId: 'second_session' })
+    Expect(StudioSessionPath.route('/api/protocol')).toBe(undefined)
+    Expect(StudioSessionPath.route('/sessions/../api/protocol')).toBe(undefined)
+    Expect(StudioSessionPath.sessionIdOf('/sessions/window_one/')).toBe('window_one')
+    Expect(StudioSessionPath.sessionIdOf('/')).toBe(undefined)
+    Expect(StudioSessionPath.isWindowRoot('/sessions/window_one')).toBe(true)
+    Expect(StudioSessionPath.isWindowRoot('/sessions/window_one/api/files')).toBe(false)
+    Expect(StudioSessionPath.isValidSessionId('window-1')).toBe(true)
+    Expect(StudioSessionPath.isValidSessionId('a'.repeat(129))).toBe(false)
+    Expect(StudioSessionPath.isValidSessionId('../escape')).toBe(false)
+    Expect(StudioSessionPath.endpoint('window_one', StudioRoutes.session.files.path))
+      .toBe('/sessions/window_one/api/files')
+  })
+
+  Test('matches and fills parameterised routes with the session id grammar', () => {
+    const manager = StudioRoutes.manager
+    Expect(StudioRoutes.match(manager.switchSession, '/api/sessions/current_window/switch'))
+      .toEqual({ sessionId: 'current_window' })
+    Expect(StudioRoutes.match(manager.switchSession, '/api/sessions/../switch')).toBe(undefined)
+    Expect(StudioRoutes.match(manager.closeSession, '/api/sessions/current_window/switch')).toBe(undefined)
+    Expect(StudioRoutes.match(StudioRoutes.session.agentChatStream, '/api/agent-chat/stream/send'))
+      .toEqual({ command: 'send' })
+    Expect(StudioRoutes.match(StudioRoutes.session.files, '/api/files')).toEqual({})
+    Expect(StudioRoutes.match(StudioRoutes.session.files, '/api/files/')).toBe(undefined)
+    Expect(StudioRoutes.matchesRequest(StudioRoutes.session.files, 'GET', '/api/files')).toBe(true)
+    Expect(StudioRoutes.matchesRequest(StudioRoutes.session.files, 'POST', '/api/files')).toBe(false)
+    Expect(StudioRoutes.path(manager.closeSession, { sessionId: 'window one' }))
+      .toBe('/api/sessions/window%20one/close')
+    Expect(StudioRoutes.path(StudioRoutes.session.agentChat, { command: 'mode' })).toBe('/api/agent-chat/mode')
+    Expect(StudioRoutes.path(StudioRoutes.session.files)).toBe('/api/files')
+    Expect(() => StudioRoutes.path(manager.closeSession)).toThrow('sessionId')
+  })
+
+  Test('advertises every session route exactly once in the handshake', () => {
+    const advertised = studioSessionEndpoints.map(route => `${route.method} ${route.path}`)
+    Expect(advertised).toContain('WS /events')
+    Expect(advertised).toContain('POST /api/source-action/undo')
+    Expect(new Set(advertised).size).toBe(Object.keys(StudioRoutes.session).length)
+    Expect(advertised.length).toBe(Object.keys(StudioRoutes.session).length)
+  })
+
+  Test('unwraps JSON replies and upgrades page URLs to the matching socket scheme', async () => {
+    Expect(StudioTransport.webSocketUrl('/sessions/w/events', 'https://studio.local/sessions/w'))
+      .toBe('wss://studio.local/sessions/w/events')
+    Expect(StudioTransport.webSocketUrl('/events', 'http://127.0.0.1:4276/')).toBe('ws://127.0.0.1:4276/events')
+    Expect(StudioTransport.jsonPostInit({ a: 1 })).toEqual({
+      body: '{"a":1}',
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+    })
+    Expect(await StudioTransport.readJsonReply(new Response(JSON.stringify({ ok: 1 }))))
+      .toEqual({ body: { ok: 1 }, ok: true, status: 200 })
+    const conflict = new Response(JSON.stringify({ details: { code: 'conflict' }, error: 'Nope.' }), { status: 409 })
+    Expect(await StudioTransport.readJsonReply(conflict))
+      .toEqual({ details: { code: 'conflict' }, error: 'Nope.', ok: false, status: 409 })
+    Expect(await StudioTransport.readJsonReply(new Response('"text"', { status: 500 }))).toEqual({
+      ok: false,
+      status: 500,
+    })
+  })
+})
 
 const previewWindow = {}
 const identity = {

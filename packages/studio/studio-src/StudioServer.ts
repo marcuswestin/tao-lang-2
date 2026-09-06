@@ -10,21 +10,24 @@ import { StudioHighlight } from './StudioHighlight'
 import { StudioLsp, type StudioLspSession } from './StudioLsp'
 import { StudioMatrixConflictError } from './StudioMatrixSession'
 import {
-  type StudioCreateFileRequest,
-  type StudioDeleteFileRequest,
-  type StudioDraftWriteRequest,
-  type StudioMoveGeneratedSourceRequest,
   StudioProjectSession,
-  type StudioRenameFileRequest,
-  type StudioSessionEvent,
   StudioSourceActionConflictError,
   StudioSourceConflictError,
 } from './StudioProjectSession'
 import {
-  StudioServerDatasource,
-  type StudioServerFillRequest,
-  type StudioServerInvalidation,
-} from './StudioServerDatasource'
+  type StudioCreateFileRequest,
+  type StudioDeleteFileRequest,
+  type StudioDraftWriteRequest,
+  type StudioMoveGeneratedSourceRequest,
+  studioProtocolChannel,
+  studioProtocolVersion,
+  type StudioRenameFileRequest,
+  type StudioRoute,
+  StudioRoutes,
+  StudioSessionPath,
+  type StudioSessionSocketEvent,
+} from './StudioProtocol'
+import { StudioServerDatasource, type StudioServerFillRequest } from './StudioServerDatasource'
 import {
   type StudioProjectOpenRequest,
   type StudioSessionManager,
@@ -92,6 +95,13 @@ type StudioSocketData =
   | { kind: 'lsp'; session?: StudioLspSession; sessionId: string }
 
 type StudioSocket = Bun.ServerWebSocket<StudioSocketData>
+
+const routes = StudioRoutes.session
+
+/** at says whether the request is exactly this route: same method, same path. */
+function at(request: Request, pathname: string, route: StudioRoute): boolean {
+  return StudioRoutes.matchesRequest(route, request.method, pathname)
+}
 
 /** Starts the multi-session server whose root is the Welcome surface. */
 export async function startStudioSessionServer(
@@ -182,7 +192,7 @@ export async function startStudioSessionServer(
         bunServer.hostname ?? options.hostname ?? '127.0.0.1',
         bunServer.port ?? options.port ?? 0,
       )
-      const route = managerRequestPath(url.pathname) ? undefined : studioSessionRoute(url.pathname)
+      const route = managerRequestPath(url.pathname) ? undefined : StudioSessionPath.route(url.pathname)
       const requestOptions = {
         ...options,
         allowedOrigins: route === undefined ? [] : authorization.allowedOrigins(route.sessionId, route.pathname),
@@ -194,11 +204,7 @@ export async function startStudioSessionServer(
         return response(request, url, requestOptions, null, 204)
       }
       try {
-        if (
-          request.method === 'GET'
-          && url.pathname === '/studio-dev/revision'
-          && options.clientReloadRevision !== undefined
-        ) {
+        if (at(request, url.pathname, StudioRoutes.devRevision) && options.clientReloadRevision !== undefined) {
           return response(request, url, requestOptions, { revision: options.clientReloadRevision() })
         }
         const managerResponse = await handleManagerRequest(
@@ -212,7 +218,8 @@ export async function startStudioSessionServer(
         if (managerResponse !== undefined) {
           return managerResponse
         }
-        if (request.method === 'GET' && url.pathname === '/studio.js') {
+        // The bundle is one asset whether the page asked for it at the root or under its own window.
+        if (at(request, route?.pathname ?? url.pathname, StudioRoutes.clientBundle)) {
           return javascriptResponse(await clientAssets.bundle())
         }
         if (route === undefined) {
@@ -241,10 +248,10 @@ export async function startStudioSessionServer(
         if (deviceResponse !== undefined) {
           return deviceResponse
         }
-        if (route.pathname === '/events' || route.pathname === '/api/language/lsp') {
+        if (route.pathname === routes.events.path || route.pathname === routes.languageLsp.path) {
           const upgraded = bunServer.upgrade(request, {
             data: {
-              kind: route.pathname === '/events' ? 'events' : 'lsp',
+              kind: route.pathname === routes.events.path ? 'events' : 'lsp',
               sessionId: route.sessionId,
             },
           })
@@ -360,8 +367,11 @@ async function initializeEventSocket(
 }
 
 function deviceStateEvent(status: StudioDeviceStateEvent['status']): StudioDeviceStateEvent {
-  return { channel: 'tao-studio', protocolVersion: 1, status, type: 'device-state' }
+  return { channel: studioProtocolChannel, protocolVersion: studioProtocolVersion, status, type: 'device-state' }
 }
+
+/** Every device route shares this prefix, and an unknown path under it is still the gateway's to refuse. */
+const deviceRoutePrefix = '/api/device/'
 
 /** Device routes answer 501 without a gateway; launch routes also need the host-tooling launcher. */
 async function handleDeviceRequest(
@@ -372,35 +382,35 @@ async function handleDeviceRequest(
   options: StudioServerOptions,
   pathname: string,
 ): Promise<Response | undefined> {
-  if (!pathname.startsWith('/api/device/')) {
+  if (!pathname.startsWith(deviceRoutePrefix)) {
     return undefined
   }
   const gateway = options.deviceGateway
   if (gateway === undefined) {
     return response(request, url, options, { error: 'This Studio service does not include the device gateway.' }, 501)
   }
-  if (request.method === 'GET' && pathname === '/api/device/status') {
+  if (at(request, pathname, routes.deviceStatus)) {
     return response(request, url, options, gateway.status(sessionId))
   }
-  if (request.method === 'POST' && pathname === '/api/device/pairing/open') {
+  if (at(request, pathname, routes.devicePairingOpen)) {
     return response(request, url, options, gateway.openPairing(sessionId))
   }
-  if (request.method === 'POST' && pathname === '/api/device/pairing/confirm') {
+  if (at(request, pathname, routes.devicePairingConfirm)) {
     const { devicePublicKey } = devicePublicKeyRequest(await request.json())
     return response(request, url, options, await gateway.confirmPairing(sessionId, devicePublicKey))
   }
-  if (request.method === 'POST' && pathname === '/api/device/pairing/decline') {
+  if (at(request, pathname, routes.devicePairingDecline)) {
     const { devicePublicKey } = devicePublicKeyRequest(await request.json())
     return response(request, url, options, gateway.declinePairing(sessionId, devicePublicKey))
   }
-  if (request.method === 'POST' && pathname === '/api/device/revoke') {
+  if (at(request, pathname, routes.deviceRevoke)) {
     const { devicePublicKey } = devicePublicKeyRequest(await request.json())
     return response(request, url, options, await gateway.revoke(sessionId, devicePublicKey))
   }
-  if (request.method === 'POST' && pathname === '/api/device/reconnect') {
+  if (at(request, pathname, routes.deviceReconnect)) {
     return response(request, url, options, gateway.requestReconnect(sessionId))
   }
-  if (request.method === 'POST' && pathname === '/api/device/select-cell') {
+  if (at(request, pathname, routes.deviceSelectCell)) {
     return response(
       request,
       url,
@@ -408,14 +418,14 @@ async function handleDeviceRequest(
       gateway.selectCell(sessionId, deviceCellRequest(await request.json()).cellId),
     )
   }
-  if (request.method === 'POST' && pathname === '/api/device/capture') {
+  if (at(request, pathname, routes.deviceCapture)) {
     return response(request, url, options, await gateway.captureRuntime(sessionId))
   }
-  if (request.method === 'POST' && pathname === '/api/device/highlight') {
+  if (at(request, pathname, routes.deviceHighlight)) {
     const occurrence = deviceHighlightRequest(await request.json())
     return response(request, url, options, gateway.highlightSource(sessionId, occurrence))
   }
-  if (pathname === '/api/device/launch' || pathname === '/api/device/launch/open') {
+  if (pathname === routes.deviceLaunch.path || pathname === routes.deviceLaunchOpen.path) {
     const launcher = options.deviceLauncher
     if (launcher === undefined) {
       return response(request, url, options, {
@@ -426,10 +436,10 @@ async function handleDeviceRequest(
     if (metroOrigin === undefined) {
       return response(request, url, options, { error: 'This project has no Metro preview to launch on a device.' }, 501)
     }
-    if (request.method === 'GET' && pathname === '/api/device/launch') {
+    if (at(request, pathname, routes.deviceLaunch)) {
       return response(request, url, options, await launcher.describe({ metroOrigin }))
     }
-    if (request.method === 'POST' && pathname === '/api/device/launch/open') {
+    if (at(request, pathname, routes.deviceLaunchOpen)) {
       const { hostId, route } = deviceLaunchOpenRequest(await request.json())
       return response(request, url, options, await launcher.open({ hostId, metroOrigin, route }))
     }
@@ -497,7 +507,7 @@ async function handleTestRequest(
   options: StudioServerOptions,
   pathname: string,
 ): Promise<Response | undefined> {
-  if (request.method === 'GET' && pathname === '/api/tests/status') {
+  if (at(request, pathname, routes.testsStatus)) {
     return response(
       request,
       url,
@@ -509,7 +519,7 @@ async function handleTestRequest(
       },
     )
   }
-  if (request.method === 'POST' && pathname === '/api/tests/run') {
+  if (at(request, pathname, routes.testsRun)) {
     if (resource.tests === undefined) {
       return response(request, url, options, {
         error: 'This Studio service does not include the Tao test runtime.',
@@ -528,60 +538,51 @@ async function handleManagerRequest(
   subscribeSession: (sessionId: string) => void,
   closeSession: (sessionId: string) => Promise<boolean>,
 ): Promise<Response | undefined> {
-  if (request.method === 'GET' && (url.pathname === '/welcome' || url.pathname === '/')) {
+  const manage = StudioRoutes.manager
+  if (at(request, url.pathname, manage.welcome) || at(request, url.pathname, manage.root)) {
     return htmlResponse(StudioWelcome.html(manager.list()))
   }
-  if (request.method === 'GET' && url.pathname === '/api/sessions') {
+  if (at(request, url.pathname, manage.sessions)) {
     return response(request, url, options, manager.list())
   }
-  if (request.method === 'POST' && url.pathname === '/api/sessions/open') {
+  if (at(request, url.pathname, manage.openSession)) {
     const opened = await manager.open(projectOpenRequest(await request.json()))
     subscribeSession(opened.sessionId)
     const resource = manager.require(opened.sessionId)
     return response(request, url, options, {
       previewUrl: resource.previewUrl,
       session: opened,
-      url: `/sessions/${encodeURIComponent(opened.sessionId)}`,
+      url: StudioSessionPath.window(opened.sessionId),
     }, 201)
   }
-  const replacement = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{1,128})\/switch$/)
-  if (request.method === 'POST' && replacement !== null) {
-    const opened = await manager.replace(replacement[1]!, projectOpenRequest(await request.json()))
+  const replacement = StudioRoutes.match(manage.switchSession, url.pathname)
+  if (request.method === manage.switchSession.method && replacement !== undefined) {
+    const opened = await manager.replace(replacement['sessionId']!, projectOpenRequest(await request.json()))
     subscribeSession(opened.sessionId)
     const resource = manager.require(opened.sessionId)
     return response(request, url, options, {
       previewUrl: resource.previewUrl,
       session: opened,
-      url: `/sessions/${encodeURIComponent(opened.sessionId)}`,
+      url: StudioSessionPath.window(opened.sessionId),
     }, 201)
   }
-  if (request.method === 'POST' && url.pathname === '/api/sessions/close-all') {
+  if (at(request, url.pathname, manage.closeAllSessions)) {
     const ids = manager.list().current.map(item => item.sessionId)
     await Promise.all(ids.map(closeSession))
     return response(request, url, options, { closed: ids })
   }
-  const close = url.pathname.match(/^\/api\/sessions\/([A-Za-z0-9_-]{1,128})\/close$/)
-  if (request.method === 'POST' && close !== null) {
-    const sessionId = close[1]!
+  const close = StudioRoutes.match(manage.closeSession, url.pathname)
+  if (request.method === manage.closeSession.method && close !== undefined) {
+    const sessionId = close['sessionId']!
     const closed = await closeSession(sessionId)
     return response(request, url, options, { closed, sessionId }, closed ? 200 : 404)
   }
   return undefined
 }
 
+/** A manager path is never a session path, whatever its method, so the two tables cannot shadow each other. */
 function managerRequestPath(pathname: string): boolean {
-  return pathname === '/welcome'
-    || pathname === '/'
-    || pathname === '/api/sessions'
-    || pathname === '/api/sessions/open'
-    || pathname === '/api/sessions/close-all'
-    || /^\/api\/sessions\/[A-Za-z0-9_-]{1,128}\/switch$/.test(pathname)
-    || /^\/api\/sessions\/[A-Za-z0-9_-]{1,128}\/close$/.test(pathname)
-}
-
-function studioSessionRoute(pathname: string): { pathname: string; sessionId: string } | undefined {
-  const matched = pathname.match(/^\/sessions\/([A-Za-z0-9_-]{1,128})(\/.*)?$/)
-  return matched === null ? undefined : { pathname: matched[2] ?? '/', sessionId: matched[1]! }
+  return Object.values(StudioRoutes.manager).some(route => StudioRoutes.match(route, pathname) !== undefined)
 }
 
 function projectOpenRequest(value: unknown): StudioProjectOpenRequest {
@@ -666,49 +667,50 @@ async function handleRequest(
   options: StudioServerOptions,
   tests?: StudioTestRunner,
 ): Promise<Response> {
-  if (request.method === 'GET' && url.pathname === '/') {
+  const pathname = url.pathname
+  if (at(request, pathname, StudioRoutes.client)) {
     return htmlResponse(studioClientHtml(options))
   }
-  if (request.method === 'GET' && url.pathname === '/studio.js') {
+  if (at(request, pathname, StudioRoutes.clientBundle)) {
     return javascriptResponse(await (options.clientAssets ?? StudioClientAssets).bundle())
   }
-  if (request.method === 'GET' && url.pathname === '/api/protocol') {
+  if (at(request, pathname, routes.protocol)) {
     return response(request, url, options, await session.handshake())
   }
-  if (request.method === 'GET' && url.pathname === '/api/files') {
+  if (at(request, pathname, routes.files)) {
     return response(request, url, options, { files: await session.files() })
   }
-  if (request.method === 'GET' && url.pathname === '/api/sketches') {
+  if (at(request, pathname, routes.sketches)) {
     return response(request, url, options, await session.sketchCatalog())
   }
-  if (request.method === 'POST' && url.pathname === '/api/sketches/action') {
+  if (at(request, pathname, routes.sketchAction)) {
     return response(request, url, options, await session.applySketchAction(await request.json()))
   }
-  if (request.method === 'POST' && url.pathname === '/api/sketches/flow/action') {
+  if (at(request, pathname, routes.sketchFlowAction)) {
     return response(request, url, options, await session.applySketchFlowAction(await request.json()))
   }
-  if (request.method === 'POST' && url.pathname === '/api/sketches/snap/propose') {
+  if (at(request, pathname, routes.sketchSnapPropose)) {
     return response(request, url, options, await session.proposeSketchSnap(await request.json()))
   }
-  if (request.method === 'POST' && url.pathname === '/api/sketches/snap/apply') {
+  if (at(request, pathname, routes.sketchSnapApply)) {
     return response(request, url, options, await session.applySketchSnap(await request.json()))
   }
-  if (request.method === 'POST' && url.pathname === '/api/sketches/snap/undo') {
+  if (at(request, pathname, routes.sketchSnapUndo)) {
     return response(request, url, options, await session.undoSketchSnap(await request.json()))
   }
-  if (request.method === 'POST' && url.pathname === '/api/sketches/unsnap/apply') {
+  if (at(request, pathname, routes.sketchUnsnapApply)) {
     return response(request, url, options, await session.applySketchUnsnap(await request.json()))
   }
-  if (request.method === 'GET' && url.pathname === '/api/file') {
+  if (at(request, pathname, routes.file)) {
     return response(request, url, options, await session.readFile(requiredPath(url)))
   }
-  if (request.method === 'POST' && url.pathname === '/api/file/create') {
+  if (at(request, pathname, routes.fileCreate)) {
     return response(request, url, options, await session.createFile(createFileRequest(await request.json())), 201)
   }
-  if (request.method === 'POST' && url.pathname === '/api/file/rename') {
+  if (at(request, pathname, routes.fileRename)) {
     return response(request, url, options, await session.renameFile(renameFileRequest(await request.json())))
   }
-  if (request.method === 'POST' && url.pathname === '/api/file/move-generated') {
+  if (at(request, pathname, routes.fileMoveGenerated)) {
     return response(
       request,
       url,
@@ -716,41 +718,42 @@ async function handleRequest(
       await session.moveGeneratedSource(moveGeneratedSourceRequest(await request.json())),
     )
   }
-  if (request.method === 'POST' && url.pathname === '/api/file/delete') {
+  if (at(request, pathname, routes.fileDelete)) {
     return response(request, url, options, await session.deleteFile(deleteFileRequest(await request.json())))
   }
-  if (request.method === 'POST' && url.pathname === '/api/file/draft') {
+  if (at(request, pathname, routes.fileDraft)) {
     return response(request, url, options, await session.syncDraft(draftWriteRequest(await request.json())))
   }
-  if (request.method === 'POST' && url.pathname === '/api/data/fill') {
+  if (at(request, pathname, routes.dataFill)) {
     return response(request, url, options, await datasource.fill(dataFillRequest(await request.json())))
   }
-  if (request.method === 'POST' && url.pathname === '/api/language/highlight') {
+  if (at(request, pathname, routes.languageHighlight)) {
     const input: unknown = await request.json()
     const [highlight, lens] = await Promise.all([StudioHighlight.highlight(input), StudioSyntaxLens.classify(input)])
     const analysis: StudioLanguageAnalysis = { ...highlight, lens }
     return response(request, url, options, analysis)
   }
-  if (request.method === 'POST' && url.pathname === '/api/ship/beta') {
+  if (at(request, pathname, routes.shipBeta)) {
     await shipBeta(session, options.shipBeta ?? runBetaShip)
     return response(request, url, options, {
       appName: session.appName,
       message: `${session.appName} was uploaded and distributed through TestFlight.`,
     })
   }
-  if (request.method === 'POST' && url.pathname === '/api/source-action') {
+  if (at(request, pathname, routes.sourceAction)) {
     return response(request, url, options, await session.applySourceAction(await request.json()))
   }
-  if (request.method === 'POST' && url.pathname === '/api/source-action/inspect') {
+  if (at(request, pathname, routes.sourceActionInspect)) {
     return response(request, url, options, await session.inspectRender(inspectRenderRequest(await request.json())))
   }
-  if (request.method === 'POST' && url.pathname === '/api/source-action/propose') {
+  if (at(request, pathname, routes.sourceActionPropose)) {
     return response(request, url, options, await session.proposeSourceAction(await request.json()))
   }
-  if (request.method === 'POST' && url.pathname === '/api/source-action/undo') {
+  if (at(request, pathname, routes.sourceActionUndo)) {
     return response(request, url, options, await session.undoSourceAction(await request.json()))
   }
-  if (request.method === 'POST' && url.pathname.startsWith('/api/agent-chat/stream/')) {
+  const streamedChat = StudioRoutes.match(routes.agentChatStream, pathname)
+  if (request.method === routes.agentChatStream.method && streamedChat !== undefined) {
     // A turn is streamed rather than awaited: the panel prints the answer as the model produces it.
     return streamResponse(
       request,
@@ -758,65 +761,67 @@ async function handleRequest(
       options,
       streamTurn(
         session,
-        url.pathname.slice('/api/agent-chat/stream/'.length),
+        streamedChat['command']!,
         (await request.json()) as Record<string, unknown>,
         tests,
         options.agentSecrets,
       ),
     )
   }
-  if (url.pathname.startsWith('/api/agent-chat/')) {
+  // The chat commands answer any method; the table's POST is the one the client sends.
+  const chat = StudioRoutes.match(routes.agentChat, pathname)
+  if (chat !== undefined) {
     return response(
       request,
       url,
       options,
       await AgentChat.handle(
         session,
-        url.pathname.slice('/api/agent-chat/'.length),
+        chat['command']!,
         (await request.json()) as Record<string, unknown>,
         tests,
         options.agentSecrets,
       ),
     )
   }
-  if (request.method === 'GET' && url.pathname === '/api/ai/availability') {
+  if (at(request, pathname, routes.aiAvailability)) {
     return response(request, url, options, await fixtureGeneration.availability())
   }
-  if (request.method === 'POST' && url.pathname === '/api/ai/fixture') {
+  if (at(request, pathname, routes.aiFixture)) {
     const manifest = session.previewManifest()
     if (manifest === undefined) {
       return response(request, url, options, { error: 'Studio preview manifest is not available yet.' }, 404)
     }
     return response(request, url, options, await fixtureGeneration.generate(manifest, await request.json()))
   }
-  if (request.method === 'GET' && url.pathname === '/api/preview/diagnosis') {
+  if (at(request, pathname, routes.previewDiagnosis)) {
     return response(request, url, options, await previewDiagnosis(options.previewUrl))
   }
-  if (request.method === 'POST' && url.pathname === '/api/preview/instance') {
+  if (at(request, pathname, routes.previewInstance)) {
     return response(request, url, options, session.registerPreview(await request.json()))
   }
-  if (request.method === 'POST' && url.pathname === '/api/preview/applied') {
+  if (at(request, pathname, routes.previewApplied)) {
     return response(request, url, options, { accepted: session.acknowledgePreview(await request.json()) })
   }
-  if (request.method === 'POST' && url.pathname === '/api/preview/layout-measurements') {
+  if (at(request, pathname, routes.previewLayoutMeasurements)) {
     return response(request, url, options, session.recordPreviewLayoutMeasurements(await request.json()))
   }
-  if (request.method === 'GET' && url.pathname === '/api/preview/manifest') {
+  if (at(request, pathname, routes.previewManifest)) {
     const manifest = session.previewManifest()
     return manifest === undefined
       ? response(request, url, options, { error: 'Studio preview manifest is not available yet.' }, 404)
       : response(request, url, options, manifest)
   }
-  if (request.method === 'GET' && url.pathname === '/api/preview/cell') {
+  if (at(request, pathname, routes.previewCell)) {
     return response(request, url, options, session.previewCell(requiredCellId(url)))
   }
-  if (request.method === 'GET' && url.pathname === '/api/preview/cell/bootstrap') {
+  if (at(request, pathname, routes.previewCellBootstrap)) {
     return response(request, url, options, session.previewCellInstance(requiredPreviewInstanceId(url)))
   }
-  if (request.method === 'POST' && url.pathname === '/api/preview/cell/instance') {
+  if (at(request, pathname, routes.previewCellInstance)) {
     return response(request, url, options, session.registerCellPreview(await request.json()))
   }
-  if (request.method === 'POST' && url.pathname === '/api/preview/cell/reconfigure') {
+  if (at(request, pathname, routes.previewCellReconfigure)) {
     return response(request, url, options, session.reconfigureCell(await request.json()))
   }
   return response(request, url, options, { error: 'Studio endpoint not found.' }, 404)
@@ -1127,14 +1132,19 @@ function originAuthorization(
   }
 }
 
+/** The routes a preview iframe calls from its own origin; every other route is same-origin only. */
+const previewOriginRoutes: readonly StudioRoute[] = [
+  routes.previewInstance,
+  routes.previewApplied,
+  routes.previewLayoutMeasurements,
+  routes.previewCell,
+  routes.previewCellBootstrap,
+  routes.previewCellInstance,
+  routes.previewCellReconfigure,
+]
+
 function previewOriginPath(pathname: string): boolean {
-  return pathname === '/api/preview/instance'
-    || pathname === '/api/preview/applied'
-    || pathname === '/api/preview/layout-measurements'
-    || pathname === '/api/preview/cell'
-    || pathname === '/api/preview/cell/bootstrap'
-    || pathname === '/api/preview/cell/instance'
-    || pathname === '/api/preview/cell/reconfigure'
+  return previewOriginRoutes.some(route => route.path === pathname)
 }
 
 function serverOrigin(protocol: string, hostname: string, port: number): string {
@@ -1166,7 +1176,7 @@ export const StudioServerTesting = {
   requestAllowed,
   serverOrigin,
   studioClientHtml,
-  studioSessionRoute,
+  studioSessionRoute: StudioSessionPath.route,
 } as const
 
 function studioClientHtml(options: StudioServerOptions): string {
@@ -1180,7 +1190,7 @@ function studioClientHtml(options: StudioServerOptions): string {
   let revision = ${JSON.stringify(revision)}
   const poll = async () => {
     try {
-      const response = await fetch('/studio-dev/revision', { cache: 'no-store' })
+      const response = await fetch('${StudioRoutes.devRevision.path}', { cache: 'no-store' })
       if (response.ok) {
         const next = await response.json()
         if (next.revision !== revision) {
@@ -1212,10 +1222,7 @@ async function handleRequestForTesting(
   }
 }
 
-function broadcast(
-  clients: Set<StudioSocket>,
-  event: StudioDeviceStateEvent | StudioSessionEvent | (StudioServerInvalidation & { type: 'data-invalidated' }),
-): void {
+function broadcast(clients: Set<StudioSocket>, event: StudioSessionSocketEvent): void {
   const payload = JSON.stringify(event)
   for (const client of clients) {
     client.send(payload)

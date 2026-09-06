@@ -69,7 +69,7 @@ import {
   studioProductHostState,
   subscribeStudioProductHostState,
 } from './StudioProductHostProtocol'
-import type { StudioJsonObject, StudioJsonValue } from './StudioProtocol'
+import { reactiveBrowserSchemeCapability, type StudioJsonObject, type StudioJsonValue } from './StudioProtocol'
 
 type TaoStudioProductHostProps = Readonly<{
   children?: React.ReactNode
@@ -297,7 +297,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       NetworkErrorStatus: TR.Value(activeCell?.networkErrorStatus ?? 503),
       NetworkLatencyMs: TR.Value(activeCell?.networkLatencyMs ?? 0),
       NetworkOutcome: TR.Value(activeCell?.networkOutcome ?? 'normal'),
-      SchemeCapability: TR.Value(activeCell?.schemeCapability ?? 'reactive-browser'),
+      SchemeCapability: TR.Value(activeCell?.schemeCapability ?? reactiveBrowserSchemeCapability),
       SchemeRequested: TR.Value(activeCell?.schemeRequested ?? 'system'),
       SchemeResolved: TR.Value(activeCell?.schemeResolved ?? 'light'),
       SchemeSource: TR.Value(activeCell?.schemeSource ?? 'system'),

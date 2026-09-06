@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import type { FormatHandlers } from '../formatting'
 
-export default {
+export const TypesFormatter = {
   /** PrimitiveDeclaration formats the pinned intrinsic shape declaration. */
   PrimitiveDeclaration(f) {
     f.oneSpaceAfter('primitive')

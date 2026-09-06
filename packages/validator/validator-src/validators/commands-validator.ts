@@ -61,11 +61,11 @@ export function validateCommandBinding(
       continue
     }
     if (seen.has(name)) {
-      ctx.error(commandValidationMessages.duplicateMember(name), entry)
+      ctx.error(entry, commandValidationMessages.duplicateMember(name))
     }
     seen.add(name)
     if (name === 'Title') {
-      ctx.error(commandValidationMessages.titleOverride(command.name), entry)
+      ctx.error(entry, commandValidationMessages.titleOverride(command.name))
       continue
     }
     const slot = slots.get(name)
@@ -75,7 +75,7 @@ export function validateCommandBinding(
     }
     const property = contract.find(candidate => candidate.name === name)
     if (!property) {
-      ctx.error(commandValidationMessages.unknownBinding(command.name, name), entry)
+      ctx.error(entry, commandValidationMessages.unknownBinding(command.name, name))
       continue
     }
     const value = bindingValue(entry)
@@ -99,8 +99,8 @@ function reportSlotBinding(
     return
   }
   ctx.error(
-    commandValidationMessages.memberType(slot.name, Type.displayName(slot.type), Type.displayName(actual)),
     entry,
+    commandValidationMessages.memberType(slot.name, Type.displayName(slot.type), Type.displayName(actual)),
   )
 }
 
@@ -114,7 +114,7 @@ function bindingValue(entry: AST.ConfigurationEntry): AST.Expression | undefined
 
 function validateCommand(command: AST.CommandDeclaration, ctx: ValidationContext): void {
   if (!commandIsWellPlaced(command)) {
-    ctx.error(commandValidationMessages.placement, command)
+    ctx.error(command, commandValidationMessages.placement)
   }
   // Slots are parameters, so the ordinary parameter rules cover them: a name declared twice, or one
   // that shadows a value the command can already see.
@@ -137,18 +137,18 @@ function validateDoClauses(command: AST.CommandDeclaration, ctx: ValidationConte
   const clauses = AST.commandDoClausesOf(command)
   const clause = clauses[0]
   if (!clause) {
-    ctx.error(commandValidationMessages.missingDo(command.name), command)
+    ctx.error(command, commandValidationMessages.missingDo(command.name))
     return
   }
   for (const extra of clauses.slice(1)) {
-    ctx.error(commandValidationMessages.duplicateDo(command.name), extra)
+    ctx.error(extra, commandValidationMessages.duplicateDo(command.name))
   }
   const target = ASTUtils.resolveActionTarget(clause.action)
   if (target.kind === 'named') {
     // A command runs an action, never another verb: a verb behind a verb would be two names for
     // one thing, and the catalog would list both.
     if (AST.isCommandDeclaration(target.action)) {
-      ctx.error(commandValidationMessages.doTarget(command.name), clause.action)
+      ctx.error(clause.action, commandValidationMessages.doTarget(command.name))
       return
     }
     const resolved = ASTUtils.resolveArgumentBindings(target.action, clause)
@@ -160,7 +160,7 @@ function validateDoClauses(command: AST.CommandDeclaration, ctx: ValidationConte
   if (target.kind === 'unresolved') {
     const type = Type.ofExpression(clause.action)
     if (type.kind !== 'unresolved') {
-      ctx.error(commandValidationMessages.doTarget(command.name), clause.action)
+      ctx.error(clause.action, commandValidationMessages.doTarget(command.name))
     }
   }
 }
@@ -172,11 +172,11 @@ function validateMembers(command: AST.CommandDeclaration, ctx: ValidationContext
   for (const fill of AST.commandFillsOf(command)) {
     const property = contract.find(candidate => candidate.name === fill.name)
     if (!property) {
-      ctx.error(commandValidationMessages.member(fill.name, expected), fill)
+      ctx.error(fill, commandValidationMessages.member(fill.name, expected))
       continue
     }
     if (filled.has(fill.name)) {
-      ctx.error(commandValidationMessages.duplicateMember(fill.name), fill)
+      ctx.error(fill, commandValidationMessages.duplicateMember(fill.name))
     }
     filled.add(fill.name)
     if (fill.name === 'Title' && !AST.isStringLiteral(fill.value)) {
@@ -185,13 +185,13 @@ function validateMembers(command: AST.CommandDeclaration, ctx: ValidationContext
         actual.kind !== 'unresolved'
         && Type.isAssignable(actual, { kind: 'primitive', primitive: 'text' })
       ) {
-        ctx.error(commandValidationMessages.staticTitle(command.name), fill.value)
+        ctx.error(fill.value, commandValidationMessages.staticTitle(command.name))
       }
     }
     reportMemberValue(fill.name, property, fill.value, ctx)
   }
   if (!filled.has('Title')) {
-    ctx.error(commandValidationMessages.missingTitle(command.name), command)
+    ctx.error(command, commandValidationMessages.missingTitle(command.name))
   }
 }
 
@@ -216,8 +216,8 @@ function reportMemberValue(
   }
   const expectedDisplay = property.type ? Type.ofReference(property.type) : expected
   ctx.error(
-    commandValidationMessages.memberType(name, Type.displayName(expectedDisplay), Type.displayName(actual)),
     value,
+    commandValidationMessages.memberType(name, Type.displayName(expectedDisplay), Type.displayName(actual)),
   )
 }
 
@@ -232,17 +232,17 @@ function validateShortcut(value: AST.Expression, ctx: ValidationContext): void {
   }
   const key = segments.at(-1)
   if (key === undefined || key.length === 0) {
-    ctx.error(commandValidationMessages.shortcutKey, value)
+    ctx.error(value, commandValidationMessages.shortcutKey)
     return
   }
   for (const modifier of segments.slice(0, -1)) {
     const normalized = modifier.toLowerCase()
     if (platformShortcutModifiers.includes(normalized)) {
-      ctx.error(commandValidationMessages.shortcutPlatformModifier(modifier), value)
+      ctx.error(value, commandValidationMessages.shortcutPlatformModifier(modifier))
       continue
     }
     if (!registeredShortcutModifiers.includes(normalized as typeof registeredShortcutModifiers[number])) {
-      ctx.error(commandValidationMessages.shortcutModifier(modifier), value)
+      ctx.error(value, commandValidationMessages.shortcutModifier(modifier))
     }
   }
 }

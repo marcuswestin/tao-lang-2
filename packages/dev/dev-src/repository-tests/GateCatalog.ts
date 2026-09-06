@@ -1,10 +1,10 @@
-import { Platform } from '@shared'
-import { WorkGraph, type WorkNode } from './WorkGraph'
+import { Assert, Platform } from '@shared'
+import { type WorkAdmission, type WorkCommand, WorkGraph, type WorkNode } from './WorkGraph'
 
 /**
- * What the scheduler needs to know about each Justfile gate: what must pass before it starts, how
- * much of the machine it occupies while it runs, which exclusive device it holds, and whether it
- * rewrites the tree.
+ * What the scheduler needs to know about each gate: what must pass before it starts, how much of
+ * the machine it occupies while it runs, which exclusive device it holds, whether it rewrites the
+ * tree, and — when the gate is not simply the Justfile recipe of its own name — the process it runs.
  *
  * Membership stays in the Justfile. This catalog says nothing about which lane a gate belongs to:
  * an entry may name a gate the lane left out, and the graph ignores an edge whose other end is not
@@ -17,15 +17,24 @@ import { WorkGraph, type WorkNode } from './WorkGraph'
  * `_test` deliberately leaves room for `_typecheck` and `_tao-check` beside it.
  */
 
+/** GateCommand is a gate's process without the working directory, which is always the repository. */
+type GateCommand = Pick<WorkCommand, 'args' | 'command'>
+
 /** GateMetadata is one gate's scheduling shape, in the vocabulary `WorkNode` already speaks. */
 export type GateMetadata =
   & Pick<
     WorkNode,
-    'budgetEnvKeys' | 'cost' | 'mutatesTree' | 'needs' | 'priority' | 'resources' | 'timeoutMs'
+    'budgetEnvKeys' | 'cost' | 'mutatesTree' | 'needs' | 'priority' | 'resources' | 'timeoutMs' | 'workerPool'
   >
   & {
     /** True when the gate needs host capabilities the managed agent sandbox deliberately denies. */
     requiresUnsandboxed?: boolean
+    /**
+     * The process the gate runs, or a builder over what the graph admitted; absent, the gate is
+     * `just <name>`. A public recipe and a catalog command may share a name: the recipe is the
+     * human spelling with its own defaults, the command is what the graph runs under that name.
+     */
+    run?: GateCommand | ((admission: WorkAdmission) => GateCommand)
   }
 
 /** A gate nobody has tuned occupies one slot and waits for nothing. */
@@ -51,6 +60,12 @@ const SHIP_BUNDLE_PROOF_COST = 3
 /** Generous against a healthy canary run; a bound against a post-report hang regressing. */
 const STUDIO_CANARY_TIMEOUT_MS = 300_000
 const SHIP_BUNDLE_PROOF_TIMEOUT_MS = 180_000
+/**
+ * The pool every Studio smoke gate draws its worker index from. `StudioSmoke.resources()` turns the
+ * index into ports and an artifact root no other smoke in the run touches, so the graph numbering
+ * the pool is what lets the smokes overlap.
+ */
+const STUDIO_SMOKE_POOL = 'studio-smoke'
 
 /**
  * Start-order pins. Measured durations order nodes within a priority; these make the two stable
@@ -86,7 +101,7 @@ function testGate(): GateMetadata {
   }
 }
 
-/** studioLane is the shape every `full-verify` browser or native UI node shares. */
+/** studioLane is the shape every browser or native UI node shares. */
 function studioLane(resources?: readonly string[]): GateMetadata {
   return {
     cost: STUDIO_LANE_COST,
@@ -95,6 +110,36 @@ function studioLane(resources?: readonly string[]): GateMetadata {
     needs: ['_parser-gen'],
     requiresUnsandboxed: true,
     resources,
+  }
+}
+
+/**
+ * studioSmoke runs one smoke file through `./dev studio-smoke` under the gate's own run id, on the
+ * worker index the graph assigns from the smoke pool.
+ */
+function studioSmoke(
+  name: string,
+  file: string,
+  options: { native?: boolean; resources?: readonly string[] } = {},
+): GateMetadata {
+  return {
+    ...studioLane(options.resources),
+    run: ({ workerIndex }) => {
+      Assert.defined(workerIndex, `a worker index for pool member ${name}`)
+      return {
+        args: [
+          'studio-smoke',
+          ...(options.native === true ? ['--native'] : []),
+          '--run-id',
+          name,
+          '--worker',
+          String(workerIndex),
+          file,
+        ],
+        command: './dev',
+      }
+    },
+    workerPool: STUDIO_SMOKE_POOL,
   }
 }
 
@@ -131,7 +176,7 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
     ['dead-exports', {}],
     ['_doctor-json', {}],
     [
-      '_ship-bundle-proof',
+      'ship-bundle-proof',
       {
         cost: SHIP_BUNDLE_PROOF_COST,
         needs: ['_parser-gen'],
@@ -139,17 +184,33 @@ function buildCatalog(): ReadonlyMap<string, GateMetadata> {
       },
     ],
 
-    // The four browser lanes are parallel-safe on distinct worker indices; the native shell and
-    // the canary contend on the window server, which is what `gui` names.
-    ['_full-verify-smoke-launch', studioLane()],
-    ['_full-verify-real-app', studioLane()],
-    ['_full-verify-simulated', studioLane()],
-    ['_full-verify-keyboard-navigation', studioLane()],
-    ['_full-verify-native', studioLane(['gui'])],
+    // The browser smokes are parallel-safe on the worker indices the pool hands them; the native
+    // shell and the canary contend on the window server, which is what `gui` names. Each smoke
+    // gate is named for the public recipe that runs the same file by hand.
+    ['studio-smoke', studioSmoke('studio-smoke', 'packages/dev/studio-smoke/studio-launch.test.ts')],
+    [
+      'studio-proof-real-app',
+      studioSmoke('studio-proof-real-app', 'packages/dev/studio-smoke/studio-real-app.test.ts'),
+    ],
+    [
+      'studio-smoke-simulated-user',
+      studioSmoke('studio-smoke-simulated-user', 'packages/dev/studio-smoke/studio-simulated-user.test.ts'),
+    ],
+    [
+      'keyboard-navigation-smoke',
+      studioSmoke('keyboard-navigation-smoke', 'packages/dev/studio-smoke/runtime-keyboard-navigation.test.ts'),
+    ],
+    [
+      'studio-smoke-native',
+      studioSmoke('studio-smoke-native', 'packages/dev/studio-smoke/studio-simulated-user.test.ts', {
+        native: true,
+        resources: ['gui'],
+      }),
+    ],
     // The canary once hung after printing its verdict on a launch-owned process that survived
     // shutdown; `completeNativeProbe` now stops Hutch when the probe resolves, and a healthy run
     // takes ~10s. The bound stays so a regression fails the node instead of holding the lane open.
-    ['_full-verify-canary', { ...studioLane(['gui']), timeoutMs: STUDIO_CANARY_TIMEOUT_MS }],
+    ['studio-canary', { ...studioLane(['gui']), timeoutMs: STUDIO_CANARY_TIMEOUT_MS }],
   ])
 }
 
@@ -160,21 +221,28 @@ function metadata(name: string): GateMetadata {
   return CATALOG.get(name) ?? DEFAULT_METADATA
 }
 
-/** node turns one Justfile recipe name into the work-graph node that runs it. */
+/** node turns one gate name into the work-graph node that runs it. */
 function node(name: string, repositoryRoot: string): WorkNode {
+  const { requiresUnsandboxed: _requiresUnsandboxed, run, ...scheduling } = metadata(name)
+  const inRepository = (command: GateCommand): WorkCommand => ({ ...command, cwd: repositoryRoot })
   return {
-    ...metadata(name),
+    ...scheduling,
     // Logs and dashboard tiles have always named a gate without its private-recipe underscore.
     label: name.replace(/^_/, ''),
     name,
-    run: { args: [name], command: 'just', cwd: repositoryRoot },
+    run: run === undefined
+      ? inRepository({ args: [name], command: 'just' })
+      : typeof run === 'function'
+      ? admission => inRepository(run(admission))
+      : inRepository(run),
   }
 }
 
-/** GateCatalog owns the scheduling metadata every Justfile gate runs under. */
+/** GateCatalog owns the scheduling metadata every gate runs under. */
 export const GateCatalog = {
   DEFAULT_METADATA,
   STUDIO_LANE_COST,
+  STUDIO_SMOKE_POOL,
   TAO_CHECK_COST,
   TYPECHECK_COST,
   metadata,

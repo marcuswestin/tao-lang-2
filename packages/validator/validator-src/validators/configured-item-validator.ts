@@ -72,24 +72,24 @@ function validateConfiguredItemConstructor(
       ListLiteral: () => 'list' as const,
     })
     if (actualKind !== expectedKind) {
-      ctx.error(configuredItemValidationMessages.constructorShape(typeName, expectedKind), value)
+      ctx.error(value, configuredItemValidationMessages.constructorShape(typeName, expectedKind))
       return
     }
     const actual = Type.ofExpression(value.value)
     if (actual.kind !== 'unresolved' && !Type.isAssignable(actual, constructed)) {
       ctx.error(
+        value.value,
         configuredItemValidationMessages.constructorValueType(
           typeName,
           Type.displayName(constructed),
           Type.displayName(actual),
         ),
-        value.value,
       )
     }
     return
   }
   if (constructed.kind !== 'item') {
-    ctx.error(configuredItemValidationMessages.constructorShape(typeName, constructorLiteralKind(constructed)), value)
+    ctx.error(value, configuredItemValidationMessages.constructorShape(typeName, constructorLiteralKind(constructed)))
     return
   }
   const block = value.block
@@ -98,7 +98,7 @@ function validateConfiguredItemConstructor(
   }
   if (!constructed.item) {
     if (block.entries.length > 0) {
-      ctx.error(configuredItemValidationMessages.shapelessItemConstructor(typeName), block)
+      ctx.error(block, configuredItemValidationMessages.shapelessItemConstructor(typeName))
     }
     return
   }
@@ -116,16 +116,16 @@ function validateInferredConfiguredItem(
   }
   const inferred = Type.ofInferredConfiguration(value)
   if (inferred.kind === 'unresolved') {
-    ctx.error(configuredItemValidationMessages.inferredConstructorContext, value)
+    ctx.error(value, configuredItemValidationMessages.inferredConstructorContext)
     return
   }
   if (inferred.kind !== 'item') {
-    ctx.error(configuredItemValidationMessages.constructorShape('inferred', constructorLiteralKind(inferred)), value)
+    ctx.error(value, configuredItemValidationMessages.constructorShape('inferred', constructorLiteralKind(inferred)))
     return
   }
   if (!inferred.item) {
     if (value.block.entries.length > 0) {
-      ctx.error(configuredItemValidationMessages.shapelessItemConstructor('inferred'), value.block)
+      ctx.error(value.block, configuredItemValidationMessages.shapelessItemConstructor('inferred'))
     }
     return
   }
@@ -189,27 +189,27 @@ function collectConfiguredItemCandidates(
     if (entry.label && entry.expression) {
       const expected = item.properties.find(property => property.name === entry.label)
       if (!expected) {
-        state.ctx.error(configuredItemValidationMessages.unknownNamedProperty(entry.label), entry)
+        state.ctx.error(entry, configuredItemValidationMessages.unknownNamedProperty(entry.label))
         continue
       }
       if (Type.propertyIsFilled(expected)) {
-        state.ctx.error(configuredItemValidationMessages.filledProperty(expected.name), entry)
+        state.ctx.error(entry, configuredItemValidationMessages.filledProperty(expected.name))
         continue
       }
       if (state.namedEntries.has(entry.label)) {
-        state.ctx.error(configuredItemValidationMessages.duplicateNamedProperty(entry.label), entry)
+        state.ctx.error(entry, configuredItemValidationMessages.duplicateNamedProperty(entry.label))
       }
       state.namedEntries.set(entry.label, entry)
       const actual = Type.ofExpression(entry.expression)
       const expectedType = Type.ofProperty(expected)
       if (actual.kind !== 'unresolved' && !Type.isCastCompatible(actual, expectedType)) {
         state.ctx.error(
+          entry,
           configuredItemValidationMessages.namedPropertyType(
             entry.label,
             Type.displayName(expectedType),
             Type.displayName(actual),
           ),
-          entry,
         )
       }
       continue
@@ -231,11 +231,11 @@ const configuredItemCandidateType = (candidate: ConfiguredItemCandidate): ASTUti
 function bindUnambiguousConfiguredItemCandidates(state: ConfiguredItemBindingState): Set<string> {
   const duplicateExpected = duplicateTypes([...state.remainingExpected], Type.ofProperty)
   for (const property of duplicateExpected.values()) {
-    state.ctx.error(configuredItemValidationMessages.duplicatePropertyType(property.name), state.block)
+    state.ctx.error(state.block, configuredItemValidationMessages.duplicatePropertyType(property.name))
   }
   const duplicateCandidates = duplicateTypes([...state.remainingCandidates], configuredItemCandidateType)
   for (const candidate of duplicateCandidates.values()) {
-    state.ctx.error(configuredItemValidationMessages.duplicateProvidedPropertyType, candidate.entry)
+    state.ctx.error(candidate.entry, configuredItemValidationMessages.duplicateProvidedPropertyType)
   }
   const blockedCandidateTypes = new Set(duplicateCandidates.keys())
   bindConfiguredEntries(state.remainingCandidates, state.remainingExpected, {
@@ -266,11 +266,11 @@ function reportRemainingConfiguredItemCandidates(
     )
     if (matches.length > 1) {
       state.ctx.error(
-        configuredItemValidationMessages.ambiguousProperty(matches.map(property => property.name)),
         candidate.entry,
+        configuredItemValidationMessages.ambiguousProperty(matches.map(property => property.name)),
       )
     } else if (matches.length === 0) {
-      state.ctx.error(configuredItemValidationMessages.unmatchedProperty, candidate.entry)
+      state.ctx.error(candidate.entry, configuredItemValidationMessages.unmatchedProperty)
     }
   }
 }
@@ -288,7 +288,7 @@ function reportRemainingConfiguredItemFields(
       && Type.isAssignable(configuredItemCandidateType(candidate), Type.ofProperty(property))
     )
     if (matches.length > 1) {
-      state.ctx.error(configuredItemValidationMessages.ambiguousField(property.name), state.block)
+      state.ctx.error(state.block, configuredItemValidationMessages.ambiguousField(property.name))
       continue
     }
     if (matches.length > 0) {
@@ -301,7 +301,7 @@ function reportRemainingConfiguredItemFields(
     if (!Type.propertyRequiresValue(property)) {
       continue
     }
-    state.ctx.error(configuredItemValidationMessages.missingProperty(property.name), state.block)
+    state.ctx.error(state.block, configuredItemValidationMessages.missingProperty(property.name))
   }
 }
 
@@ -321,7 +321,7 @@ function configuredItemEntryType(
   }
   const ownerProperty = item.properties.find(property => property.name === entry.name)
   if (ownerProperty && Type.propertyIsFilled(ownerProperty)) {
-    ctx.error(configuredItemValidationMessages.filledProperty(ownerProperty.name), entry)
+    ctx.error(entry, configuredItemValidationMessages.filledProperty(ownerProperty.name))
     return { kind: 'unresolved' }
   }
   const expected = ownerProperty
@@ -344,14 +344,14 @@ function validateConfiguredEntryLiteral(
   if (entry.block) {
     if (expected.kind !== 'item') {
       ctx.error(
-        configuredItemValidationMessages.constructorShape(entry.name ?? '', constructorLiteralKind(expected)),
         entry,
+        configuredItemValidationMessages.constructorShape(entry.name ?? '', constructorLiteralKind(expected)),
       )
       return
     }
     if (!expected.item) {
       if (entry.block.entries.length > 0) {
-        ctx.error(configuredItemValidationMessages.shapelessItemConstructor(entry.name ?? ''), entry.block)
+        ctx.error(entry.block, configuredItemValidationMessages.shapelessItemConstructor(entry.name ?? ''))
       }
       return
     }
@@ -367,8 +367,8 @@ function validateConfiguredEntryLiteral(
     : Type.isCastCompatible(actual, expected)
   if (actual.kind !== 'unresolved' && !isCompatible) {
     ctx.error(
-      configuredItemValidationMessages.constructorShape(entry.name ?? '', constructorLiteralKind(expected)),
       entry,
+      configuredItemValidationMessages.constructorShape(entry.name ?? '', constructorLiteralKind(expected)),
     )
   }
 }
@@ -406,7 +406,7 @@ function validateConfiguredConstructorMembers(
       : undefined
     if (!parameterName || !parameterType) {
       if (parameterName) {
-        ctx.error(configuredItemValidationMessages.unknownMember(ownerName, parameterName), value)
+        ctx.error(value, configuredItemValidationMessages.unknownMember(ownerName, parameterName))
       }
       return false
     }
@@ -418,12 +418,12 @@ function validateConfiguredConstructorMembers(
   }
   for (const member of members) {
     if (current.kind !== 'item' || !current.item) {
-      ctx.error(configuredItemValidationMessages.memberNotItem(member), value)
+      ctx.error(value, configuredItemValidationMessages.memberNotItem(member))
       return false
     }
     const property = current.item.properties.find(candidate => candidate.name === member)
     if (!property) {
-      ctx.error(configuredItemValidationMessages.unknownMember(ownerName, member), value)
+      ctx.error(value, configuredItemValidationMessages.unknownMember(ownerName, member))
       return false
     }
     current = Type.ofProperty(property)

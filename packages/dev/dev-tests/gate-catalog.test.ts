@@ -2,7 +2,7 @@ import { FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, settle, Test } from '@shared/test'
 import { GateCatalog } from '../dev-src/repository-tests/GateCatalog'
 import { runGates } from '../dev-src/repository-tests/GateRunner'
-import { WorkGraph } from '../dev-src/repository-tests/WorkGraph'
+import { type WorkCommand, WorkGraph, type WorkNode } from '../dev-src/repository-tests/WorkGraph'
 
 /**
  * The catalog is metadata, so most of it is asserted as metadata. Claims about scheduling rather
@@ -11,14 +11,31 @@ import { WorkGraph } from '../dev-src/repository-tests/WorkGraph'
  */
 
 const REPOSITORY_ROOT = '/repository'
+/** Every Studio smoke gate: the pool members the graph numbers. */
+const STUDIO_SMOKES = [
+  'studio-smoke',
+  'studio-proof-real-app',
+  'studio-smoke-simulated-user',
+  'keyboard-navigation-smoke',
+  'studio-smoke-native',
+]
+/** Every gate that needs a host the managed sandbox denies: the smokes plus the native canary. */
+const HOST_ONLY_GATES = [...STUDIO_SMOKES, 'studio-canary']
 
 function nodeOf(name: string) {
   return GateCatalog.node(name, REPOSITORY_ROOT)
 }
 
+/** commandOf reads a node's fixed command; a node whose command depends on admission fails the test. */
+function commandOf(node: WorkNode): WorkCommand {
+  Expect(typeof node.run).not.toBe('function')
+  return typeof node.run === 'function' ? node.run({ slots: 1 }) : node.run
+}
+
 /**
- * runLane records which nodes were running at the same moment. Tests that must prove two nodes can
- * overlap use a start barrier so the first cannot finish before the second is admitted.
+ * runLane records which nodes were running at the same moment, and the command each ran. Tests
+ * that must prove two nodes can overlap use a start barrier so the first cannot finish before the
+ * second is admitted.
  */
 async function runLane(gates: readonly string[], jobs: number, startBarrierCount = 0) {
   const root = await mkTestDir('tao-gate-catalog-')
@@ -26,6 +43,7 @@ async function runLane(gates: readonly string[], jobs: number, startBarrierCount
     const running = new Set<string>()
     const overlaps: string[][] = []
     const started: string[] = []
+    const commands = new Map<string, WorkCommand>()
     let releaseStartBarrier = () => {}
     const startBarrier = new Promise<void>(resolve => {
       releaseStartBarrier = resolve
@@ -36,9 +54,10 @@ async function runLane(gates: readonly string[], jobs: number, startBarrierCount
       logRoot: FS.resolvePath('logs', root),
       registryRoot: FS.resolvePath('registry', root),
       repositoryRoot: root,
-      runGate: async name => {
+      runGate: async (name, _logPath, _environment, run) => {
         started.push(name)
         running.add(name)
+        commands.set(name, run)
         if (startBarrierCount > 0) {
           if (started.length >= startBarrierCount) {
             releaseStartBarrier()
@@ -52,7 +71,7 @@ async function runLane(gates: readonly string[], jobs: number, startBarrierCount
         return { exitCode: 0, output: '' }
       },
     })
-    return { overlaps, started }
+    return { commands, overlaps, started }
   } finally {
     await FS.remove(root)
   }
@@ -85,8 +104,8 @@ Describe('gate catalog metadata', () => {
     Expect(nodeOf('_tao-check').needs).toEqual(['_parser-gen'])
     Expect(nodeOf('_ide-extension-build').needs).toEqual(['_parser-gen'])
     Expect(nodeOf('_fix-tao').needs).toEqual(['_parser-gen'])
-    Expect(nodeOf('_full-verify-simulated').needs).toEqual(['_parser-gen'])
-    Expect(nodeOf('_full-verify-keyboard-navigation').needs).toEqual(['_parser-gen'])
+    Expect(nodeOf('studio-smoke-simulated-user').needs).toEqual(['_parser-gen'])
+    Expect(nodeOf('keyboard-navigation-smoke').needs).toEqual(['_parser-gen'])
   })
 
   Test('waits for the compiled WordFlower app before the test lane runs', () => {
@@ -103,7 +122,7 @@ Describe('gate catalog metadata', () => {
     for (const name of ['_fix-dprint', '_fix-tao', '_fix-just-fmt', '_parser-gen', '_compile-word-flower-app']) {
       Expect(nodeOf(name).mutatesTree).toBe(true)
     }
-    for (const name of ['_typecheck', '_test', '_repo-lint', '_tao-check', '_full-verify-native']) {
+    for (const name of ['_typecheck', '_test', '_repo-lint', '_tao-check', 'studio-smoke-native']) {
       Expect(nodeOf(name).mutatesTree).toBeUndefined()
     }
   })
@@ -125,28 +144,37 @@ Describe('gate catalog metadata', () => {
   Test('hands the nested test runner the budget the graph reserved for it', () => {
     Expect(nodeOf('_test').budgetEnvKeys).toEqual([WorkGraph.BUDGET_ENV_KEYS.devTest])
     // `just _test` hides `./dev test`, so nothing else can infer the key from the command.
-    Expect(nodeOf('_test').run.command).toBe('just')
+    Expect(commandOf(nodeOf('_test')).command).toBe('just')
   })
 
-  Test('schedules the real ship bundle proof as a bounded slow lane', () => {
-    Expect(GateCatalog.metadata('_ship-bundle-proof')).toEqual({
+  Test('schedules the real ship bundle proof as a bounded slow lane under its public recipe', () => {
+    Expect(GateCatalog.metadata('ship-bundle-proof')).toEqual({
       cost: 3,
       needs: ['_parser-gen'],
       timeoutMs: 180_000,
     })
+    Expect(commandOf(nodeOf('ship-bundle-proof'))).toEqual({
+      args: ['ship-bundle-proof'],
+      command: 'just',
+      cwd: REPOSITORY_ROOT,
+    })
+  })
+
+  Test('runs the canary through its public recipe and every smoke through the smoke command', () => {
+    Expect(commandOf(nodeOf('studio-canary'))).toEqual({
+      args: ['studio-canary'],
+      command: 'just',
+      cwd: REPOSITORY_ROOT,
+    })
+    Expect(nodeOf('studio-canary').workerPool).toBeUndefined()
+    for (const name of STUDIO_SMOKES) {
+      Expect(nodeOf(name).workerPool).toBe(GateCatalog.STUDIO_SMOKE_POOL)
+      Expect(typeof nodeOf(name).run).toBe('function')
+    }
   })
 
   Test('starts the package critical path before one-slot Studio waits', () => {
-    for (
-      const name of [
-        '_full-verify-smoke-launch',
-        '_full-verify-real-app',
-        '_full-verify-simulated',
-        '_full-verify-keyboard-navigation',
-        '_full-verify-native',
-        '_full-verify-canary',
-      ]
-    ) {
+    for (const name of HOST_ONLY_GATES) {
       Expect(nodeOf(name).cost).toBe(1)
       Expect(nodeOf(name).priority).toBeUndefined()
     }
@@ -155,28 +183,19 @@ Describe('gate catalog metadata', () => {
   })
 
   Test('gives only the two window-server lanes the gui resource', () => {
-    Expect(nodeOf('_full-verify-native').resources).toEqual(['gui'])
-    Expect(nodeOf('_full-verify-canary').resources).toEqual(['gui'])
-    Expect(nodeOf('_full-verify-smoke-launch').resources).toBeUndefined()
-    Expect(nodeOf('_full-verify-real-app').resources).toBeUndefined()
-    Expect(nodeOf('_full-verify-simulated').resources).toBeUndefined()
-    Expect(nodeOf('_full-verify-keyboard-navigation').resources).toBeUndefined()
+    Expect(nodeOf('studio-smoke-native').resources).toEqual(['gui'])
+    Expect(nodeOf('studio-canary').resources).toEqual(['gui'])
+    Expect(nodeOf('studio-smoke').resources).toBeUndefined()
+    Expect(nodeOf('studio-proof-real-app').resources).toBeUndefined()
+    Expect(nodeOf('studio-smoke-simulated-user').resources).toBeUndefined()
+    Expect(nodeOf('keyboard-navigation-smoke').resources).toBeUndefined()
   })
 
   Test('marks exactly the six browser and native UI lanes as requiring an unsandboxed host', () => {
-    const studioLanes = [
-      '_full-verify-smoke-launch',
-      '_full-verify-real-app',
-      '_full-verify-simulated',
-      '_full-verify-keyboard-navigation',
-      '_full-verify-native',
-      '_full-verify-canary',
-    ]
-
-    for (const name of studioLanes) {
+    for (const name of HOST_ONLY_GATES) {
       Expect(GateCatalog.metadata(name).requiresUnsandboxed).toBe(true)
     }
-    for (const name of ['_ship-bundle-proof', '_doctor-json', 'dead-exports', '_test']) {
+    for (const name of ['ship-bundle-proof', '_doctor-json', 'dead-exports', '_test']) {
       Expect(GateCatalog.metadata(name).requiresUnsandboxed).toBeUndefined()
     }
   })
@@ -190,8 +209,28 @@ Describe('gate catalog scheduling', () => {
     ])
 
     Expect(full).toEqual(sandbox)
-    Expect(full).toContain('_ship-bundle-proof')
-    Expect(full).toContain('_full-verify-canary')
+    Expect(full).toContain('ship-bundle-proof')
+    Expect(full).toContain('studio-canary')
+  })
+
+  Test('numbers the Studio smokes from the pool and runs each under its own run id', async () => {
+    const smokes = ['studio-smoke', 'studio-proof-real-app', 'studio-smoke-native']
+    const { commands } = await runLane(smokes, 24, smokes.length)
+
+    const workers = smokes.map(name => {
+      const args = commands.get(name)?.args ?? []
+      Expect(commands.get(name)?.command).toBe('./dev')
+      Expect(args.slice(0, 1)).toEqual(['studio-smoke'])
+      Expect(args).toContain('--run-id')
+      Expect(args[args.indexOf('--run-id') + 1]).toBe(name)
+      return Number(args[args.indexOf('--worker') + 1])
+    })
+    // Three smokes admitted together hold three distinct indices, so `StudioSmoke.resources()`
+    // hands each its own ports and artifact root without any recipe carrying a literal.
+    Expect(workers.toSorted()).toEqual([0, 1, 2])
+    Expect(commands.get('studio-smoke-native')?.args).toContain('--native')
+    Expect(commands.get('studio-smoke')?.args).not.toContain('--native')
+    Expect(commands.get('studio-smoke')?.args.at(-1)).toBe('packages/dev/studio-smoke/studio-launch.test.ts')
   })
 
   Test('runs the generator, then the compile, then the tests', async () => {
@@ -215,8 +254,8 @@ Describe('gate catalog scheduling', () => {
   Test('starts test and typecheck before auxiliary full-verification gates', async () => {
     const { started } = await runLane(
       [
-        '_full-verify-canary',
-        '_ship-bundle-proof',
+        'studio-canary',
+        'ship-bundle-proof',
         '_typecheck',
         '_test',
       ],
@@ -225,16 +264,16 @@ Describe('gate catalog scheduling', () => {
     )
 
     Expect(started.slice(0, 2).toSorted()).toEqual(['_test', '_typecheck'])
-    Expect(started[2]).toBe('_ship-bundle-proof')
+    Expect(started[2]).toBe('ship-bundle-proof')
   })
 
   Test('uses the slots beside package work for three Studio waits at once', async () => {
     const { overlaps, started } = await runLane(
       [
-        '_full-verify-smoke-launch',
-        '_full-verify-real-app',
-        '_full-verify-simulated',
-        '_full-verify-native',
+        'studio-smoke',
+        'studio-proof-real-app',
+        'studio-smoke-simulated-user',
+        'studio-smoke-native',
         '_typecheck',
         '_test',
       ],
@@ -246,20 +285,20 @@ Describe('gate catalog scheduling', () => {
     Expect(overlaps.some(names =>
       names.includes('_test')
       && names.includes('_typecheck')
-      && names.filter(name => name.startsWith('_full-verify-')).length === 3
+      && names.filter(name => STUDIO_SMOKES.includes(name)).length === 3
     )).toBe(true)
   })
 
   Test('keeps the gui lanes exclusive and lets the browser lane overlap either one', async () => {
     // Each pair fits inside 24 slots. The barrier makes allowed overlap deterministic, while the
     // two gui nodes must still run sequentially because they hold the same resource.
-    const guiPair = await runLane(['_full-verify-native', '_full-verify-canary'], 24)
-    const nativeAndBrowser = await runLane(['_full-verify-native', '_full-verify-simulated'], 24, 2)
-    const canaryAndBrowser = await runLane(['_full-verify-canary', '_full-verify-simulated'], 24, 2)
+    const guiPair = await runLane(['studio-smoke-native', 'studio-canary'], 24)
+    const nativeAndBrowser = await runLane(['studio-smoke-native', 'studio-smoke-simulated-user'], 24, 2)
+    const canaryAndBrowser = await runLane(['studio-canary', 'studio-smoke-simulated-user'], 24, 2)
 
-    Expect(overlapped(guiPair.overlaps, '_full-verify-native', '_full-verify-canary')).toBe(false)
-    Expect(overlapped(nativeAndBrowser.overlaps, '_full-verify-native', '_full-verify-simulated')).toBe(true)
-    Expect(overlapped(canaryAndBrowser.overlaps, '_full-verify-canary', '_full-verify-simulated')).toBe(true)
+    Expect(overlapped(guiPair.overlaps, 'studio-smoke-native', 'studio-canary')).toBe(false)
+    Expect(overlapped(nativeAndBrowser.overlaps, 'studio-smoke-native', 'studio-smoke-simulated-user')).toBe(true)
+    Expect(overlapped(canaryAndBrowser.overlaps, 'studio-canary', 'studio-smoke-simulated-user')).toBe(true)
   })
 })
 

@@ -1,6 +1,6 @@
-import { FS } from '@shared'
+import { FS, Platform } from '@shared'
 
 /** Stdlib owns the source root for Tao's built-in packages. */
 export const Stdlib = {
-  rootPath: process.env['TAO_STDLIB_ROOT'] ?? FS.resolvePath('..', import.meta.dirname),
+  rootPath: Platform.runtimeProcess.env['TAO_STDLIB_ROOT'] ?? FS.resolvePath('..', import.meta.dirname),
 } as const

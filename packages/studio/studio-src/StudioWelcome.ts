@@ -1,3 +1,4 @@
+import { StudioRoutes, StudioSessionPath } from './StudioProtocol'
 import type { StudioSessionListing } from './StudioSessionManager'
 
 /*
@@ -14,7 +15,7 @@ export const StudioWelcome = {
       : `<ul>${
         listing.current.map(session => `
           <li>
-            <a href="/sessions/${encodeURIComponent(session.sessionId)}">
+            <a href="${StudioSessionPath.window(session.sessionId)}">
               <strong>${escapeHtml(session.appName)}</strong>
               <span>${escapeHtml(session.project)}</span>
             </a>
@@ -62,7 +63,7 @@ export const StudioWelcome = {
     ? '<p class="empty">Recently opened projects will appear here.</p>'
     : '<ul>' + listing.recent.map(project => '<li><button type="button" data-app-name="' + escapeHtml(project.appName) + '" data-project="' + escapeHtml(project.project) + '"><strong>' + escapeHtml(project.appName) + '</strong><span>' + escapeHtml(project.project) + '</span></button></li>').join('') + '</ul>'
   async function refresh() {
-    const response = await fetch('/api/sessions')
+    const response = await fetch('${StudioRoutes.manager.sessions.path}')
     if (!response.ok) return
     const listing = await response.json()
     document.querySelector('#current').innerHTML = '<h2>Open projects</h2>' + currentMarkup(listing)
@@ -73,7 +74,7 @@ export const StudioWelcome = {
     if (!button) return
     button.disabled = true
     try {
-      const response = await fetch('/api/sessions/open', {
+      const response = await fetch('${StudioRoutes.manager.openSession.path}', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ appName: button.dataset.appName, projectPath: button.dataset.project }),

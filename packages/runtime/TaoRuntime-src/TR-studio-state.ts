@@ -237,6 +237,7 @@ function canonicalDataState(snapshots: Readonly<Record<string, string>>): TaoStu
   })
 }
 
+// Mirrors `isRecord` in packages/shared/shared-src/core/Json.ts; `runtime-mirrors.test.ts` keeps them in step.
 function isObject(value: unknown): value is Record<string, TaoStudioJsonValue> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

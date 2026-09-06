@@ -1,7 +1,7 @@
 import type { FormatHandlers } from '../formatting'
 
 /** DesignFormatter formats the structured §13 surface and its absorbed flat compatibility form. */
-export default {
+export const DesignFormatter = {
   DesignDeclaration(f) {
     f.visibilityOnOwnLine()
     f.oneSpaceAfter('design')

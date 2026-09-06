@@ -44,13 +44,13 @@ export const FunctionalCoreValidator = {
       const operand = Type.ofExpression(expression.operand)
       if (expression.operator === 'not') {
         if (!isPrimitive(operand, 'boolean')) {
-          ctx.error(messages.unaryBoolean, expression)
+          ctx.error(expression, messages.unaryBoolean)
         }
         return
       }
       // Negating a unit value is negating its magnitude, so the family passes through.
       if (!isPrimitive(operand, 'number') && !Type.unitFamilyOf(operand)) {
-        ctx.error(messages.unaryNumber, expression)
+        ctx.error(expression, messages.unaryNumber)
       }
     },
     [AST.CaseTestExpression.$type]: validateCaseTestExpression,
@@ -63,7 +63,7 @@ export const FunctionalCoreValidator = {
       const type = Type.ofExpression(interpolation.expression)
       const supported = isSupportedInterpolationType(type)
       if (type.kind !== 'unresolved' && !supported) {
-        ctx.error(messages.interpolationPart, interpolation.expression)
+        ctx.error(interpolation.expression, messages.interpolationPart)
       }
     },
     [AST.ListLiteral.$type]: validateList,
@@ -91,7 +91,7 @@ export const FunctionalCoreValidator = {
     [AST.ForStatement.$type]: (statement, ctx) => {
       const collection = Type.ofExpression(statement.collection)
       if (collection.kind !== 'unresolved' && collection.kind !== 'list') {
-        ctx.error(messages.forCollection, statement.collection)
+        ctx.error(statement.collection, messages.forCollection)
       }
       validateRenderControlPlacement(statement, ctx)
     },
@@ -107,7 +107,7 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
   }
   if (expression.operator === 'and' || expression.operator === 'or') {
     if (!isPrimitive(left, 'boolean') || !isPrimitive(right, 'boolean')) {
-      ctx.error(messages.binaryBoolean(expression.operator), expression)
+      ctx.error(expression, messages.binaryBoolean(expression.operator))
     }
     return
   }
@@ -116,7 +116,7 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
       return
     }
     if (!isPrimitive(left, 'number') || !isPrimitive(right, 'number')) {
-      ctx.error(messages.binaryComparable(expression.operator), expression)
+      ctx.error(expression, messages.binaryComparable(expression.operator))
     }
     return
   }
@@ -125,7 +125,7 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
       return
     }
     if (!Type.isAssignable(left, right) && !Type.isAssignable(right, left)) {
-      ctx.error(messages.binaryCompatible(expression.operator), expression)
+      ctx.error(expression, messages.binaryCompatible(expression.operator))
     }
     return
   }
@@ -140,14 +140,14 @@ function validateBinary(expression: AST.BinaryExpression, ctx: ValidationContext
   if (Type.unitFamilyOf(left) || Type.unitFamilyOf(right) || isPrimitive(left, 'time') || isPrimitive(right, 'time')) {
     if (!Type.dimensionalResult(left, expression.operator, right)) {
       ctx.error(
-        messages.dimensional(dimensionName(left), expression.operator, dimensionName(right)),
         expression,
+        messages.dimensional(dimensionName(left), expression.operator, dimensionName(right)),
       )
     }
     return
   }
   if (!isPrimitive(left, 'number') || !isPrimitive(right, 'number')) {
-    ctx.error(messages.binaryNumeric(expression.operator), expression)
+    ctx.error(expression, messages.binaryNumeric(expression.operator))
   }
 }
 
@@ -176,7 +176,7 @@ function validateCompactWhen(expression: AST.WhenExpression, ctx: ValidationCont
   }
   const subject = Type.ofExpression(expression.subject)
   if (subject.kind !== 'unresolved' && !isPrimitive(subject, 'boolean')) {
-    ctx.error(messages.compactWhenSubject, expression)
+    ctx.error(expression, messages.compactWhenSubject)
     return
   }
   const label = expression.negativeLabel
@@ -185,7 +185,7 @@ function validateCompactWhen(expression: AST.WhenExpression, ctx: ValidationCont
   }
   const alias = negativePoleAlias(expression.subject)
   if (label !== alias) {
-    ctx.error(messages.compactWhenLabel(label, alias ?? 'not'), expression)
+    ctx.error(expression, messages.compactWhenLabel(label, alias ?? 'not'))
   }
 }
 
@@ -233,13 +233,13 @@ type SubjectCaseBranch = AST.WhenBranch | AST.WhenRenderBranch | AST.GuardAction
 
 function validateEnum(declaration: AST.TypeDeclaration, ctx: ValidationContext): void {
   if (!AST.isTaoFile(declaration.$container)) {
-    ctx.error(messages.enumPlacement, declaration)
+    ctx.error(declaration, messages.enumPlacement)
   }
   const seen = new Set<string>()
   for (const enumCase of AST.caseSetCasesOf(declaration)) {
     const caseName = AST.caseSetCaseName(enumCase)
     if (seen.has(caseName)) {
-      ctx.error(messages.duplicateEnumCase(declaration.name, caseName), enumCase)
+      ctx.error(enumCase, messages.duplicateEnumCase(declaration.name, caseName))
     }
     seen.add(caseName)
   }
@@ -253,10 +253,10 @@ function validateCaseTestExpression(expression: AST.CaseTestExpression, ctx: Val
     }
     if (!allowedCases(category).has(expression.builtinCase)) {
       ctx.error(
+        expression.value,
         expression.builtinCase === 'empty'
           ? messages.emptySubject
           : messages.invalidCase(expression.builtinCase, subjectCaseLabel(category)),
-        expression.value,
       )
     }
     return
@@ -272,7 +272,7 @@ function validateCaseTestExpression(expression: AST.CaseTestExpression, ctx: Val
   if (AST.isCaseSetCase(declaredCase)) {
     const owner = AST.caseSetOwningCase(declaredCase)
     if (type.kind !== 'enum' || type.declaration !== owner) {
-      ctx.error(messages.invalidCase(AST.caseSetCaseName(declaredCase), Type.displayName(type)), expression)
+      ctx.error(expression, messages.invalidCase(AST.caseSetCaseName(declaredCase), Type.displayName(type)))
     }
     return
   }
@@ -281,8 +281,8 @@ function validateCaseTestExpression(expression: AST.CaseTestExpression, ctx: Val
     : undefined
   if (!declaredCase.boolean || subjectField !== declaredCase) {
     ctx.error(
-      messages.invalidCase(expression.declaredCase?.$refText ?? declaredCase.name, Type.displayName(type)),
       expression,
+      messages.invalidCase(expression.declaredCase?.$refText ?? declaredCase.name, Type.displayName(type)),
     )
   }
 }
@@ -290,7 +290,7 @@ function validateCaseTestExpression(expression: AST.CaseTestExpression, ctx: Val
 function validateIfCondition(condition: AST.Expression, ctx: ValidationContext): void {
   const type = Type.ofExpression(condition)
   if (type.kind !== 'unresolved' && !isPrimitive(type, 'boolean')) {
-    ctx.error(messages.ifCondition, condition)
+    ctx.error(condition, messages.ifCondition)
   }
 }
 
@@ -304,20 +304,20 @@ function validateSubjectCases(
     return
   }
   if (category === 'unsupported') {
-    ctx.error(messages.subjectCases, subject)
+    ctx.error(subject, messages.subjectCases)
   }
   const allowed = allowedCases(category)
   const seen = new Set<string>()
   for (const branch of branches) {
     if (seen.has(branch.case)) {
-      ctx.error(messages.duplicateCase(branch.case), branch)
+      ctx.error(branch, messages.duplicateCase(branch.case))
     }
     seen.add(branch.case)
     if (!allowed.has(branch.case)) {
-      ctx.error(messages.invalidCase(branch.case, subjectCaseLabel(category)), branch)
+      ctx.error(branch, messages.invalidCase(branch.case, subjectCaseLabel(category)))
     }
     if ('payload' in branch && branch.payload && branch.case !== 'error') {
-      ctx.error(messages.invalidCasePayload, branch.payload)
+      ctx.error(branch.payload, messages.invalidCasePayload)
     }
   }
 }
@@ -371,7 +371,7 @@ function validateCompatibleBranches(
     .filter(({ type }) => type.kind !== 'unresolved')
   const incompatible = firstValueWithoutCommonType(resolvedValues)
   if (incompatible) {
-    ctx.error(messages.conditionalBranch, incompatible.value)
+    ctx.error(incompatible.value, messages.conditionalBranch)
   }
 }
 
@@ -381,7 +381,7 @@ function validateList(list: AST.ListLiteral, ctx: ValidationContext): void {
     .filter(({ type }) => type.kind !== 'unresolved')
   const incompatible = firstValueWithoutCommonType(resolvedElements)
   if (incompatible) {
-    ctx.error(messages.listElement, incompatible.element)
+    ctx.error(incompatible.element, messages.listElement)
   }
 }
 
@@ -412,7 +412,7 @@ function validateRenderControlPlacement(
     }
     current = current.$container
   }
-  ctx.error(messages.renderControlPlacement, node)
+  ctx.error(node, messages.renderControlPlacement)
 }
 
 function isPrimitive(type: ReturnType<typeof Type.ofExpression>, primitive: string): boolean {

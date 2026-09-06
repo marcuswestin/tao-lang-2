@@ -34,16 +34,46 @@ import {
   type StudioPreviewManifestV2,
 } from './StudioPreviewManifest'
 import {
+  type StudioAppVariant,
+  type StudioCheckpointSummary,
+  type StudioCreateFileRequest,
+  type StudioCreateFileResult,
+  type StudioDeleteFileRequest,
+  type StudioDeleteFileResult,
+  type StudioDraftWriteRequest,
+  type StudioDraftWriteResult,
+  type StudioInspectRenderRequest,
   type StudioJsonObject,
+  type StudioMoveGeneratedSourceRequest,
+  type StudioMoveGeneratedSourceResult,
   type StudioPreviewLayoutMeasurement,
   type StudioPreviewLayoutMeasurementsMessage,
+  type StudioProjectFile,
+  type StudioProjectFileContent,
   type StudioProjectIdentity,
   StudioProtocol,
   studioProtocolChannel,
   studioProtocolVersion,
+  type StudioRenameFileRequest,
+  type StudioRenameFileResult,
+  studioSessionEndpoints,
+  type StudioSessionEvent,
+  type StudioSessionHandshake,
+  type StudioSketchActionResult,
+  type StudioSketchFlowAction,
+  type StudioSketchFlowActionRequest,
+  type StudioSketchSnapApplyResult,
+  type StudioSketchSnapProposalResult,
+  type StudioSketchSnapRequest,
+  type StudioSketchSnapUndoRequest,
+  type StudioSketchSnapUndoResult,
+  type StudioSketchUnsnapRequest,
   type StudioSourceActionEnvelope,
   type StudioSourceActionIdentity,
+  type StudioSourceActionProposal,
+  type StudioSourceActionResult,
   type StudioSourceActionUndoEnvelope,
+  type StudioSourceActionUndoResult,
   studioSourceActionVersion,
 } from './StudioProtocol'
 import {
@@ -64,17 +94,38 @@ import { StudioSketchProjection } from './StudioSketchProjection'
 import { StudioSketchSnap, type StudioSketchSnapTree } from './StudioSketchSnap'
 import { StudioSketchSource } from './StudioSketchSource'
 
-export type StudioProjectFile = {
-  diagnosticCount: number
-  dirty: boolean
-  kind: 'file'
-  path: string
-  sourceVersion: string
-}
-
-export type StudioProjectFileContent = StudioProjectFile & {
-  content: string
-}
+/** The session's wire DTOs live in StudioProtocol; they are republished here for the package facade. */
+export type {
+  StudioAppVariant,
+  StudioCheckpointSummary,
+  StudioCreateFileRequest,
+  StudioCreateFileResult,
+  StudioDeleteFileRequest,
+  StudioDeleteFileResult,
+  StudioDraftWriteRequest,
+  StudioDraftWriteResult,
+  StudioInspectRenderRequest,
+  StudioMoveGeneratedSourceRequest,
+  StudioMoveGeneratedSourceResult,
+  StudioProjectFile,
+  StudioProjectFileContent,
+  StudioRenameFileRequest,
+  StudioRenameFileResult,
+  StudioSessionEvent,
+  StudioSessionHandshake,
+  StudioSketchActionResult,
+  StudioSketchFlowAction,
+  StudioSketchFlowActionRequest,
+  StudioSketchSnapApplyResult,
+  StudioSketchSnapProposalResult,
+  StudioSketchSnapRequest,
+  StudioSketchSnapUndoRequest,
+  StudioSketchSnapUndoResult,
+  StudioSketchUnsnapRequest,
+  StudioSourceActionProposal,
+  StudioSourceActionResult,
+  StudioSourceActionUndoResult,
+} from './StudioProtocol'
 
 export type StudioProjectSessionOptions = {
   appName?: string
@@ -84,99 +135,9 @@ export type StudioProjectSessionOptions = {
   sketchCatalogIO?: StudioSketchCatalogIO
 }
 
-export type StudioAppVariant = Readonly<{
-  appName: string
-  entryPath: string
-}>
-
-export type StudioDraftWriteRequest = {
-  content: string
-  path: string
-  sourceVersion: string
-  writeId: string
-}
-
-export type StudioDraftWriteResult = {
-  compile?: StudioCompileCompletion
-  diagnostics: readonly string[]
-  file: StudioProjectFileContent
-  saved: boolean
-}
-
-export type StudioCreateFileRequest = {
-  path: string
-  writeId: string
-}
-
-export type StudioRenameFileRequest = {
-  path: string
-  sourceVersion: string
-  targetPath: string
-  writeId: string
-}
-
-export type StudioDeleteFileRequest = {
-  path: string
-  sourceVersion: string
-  writeId: string
-}
-
-export type StudioMoveGeneratedSourceRequest = {
-  path: string
-  sourceVersion: string
-  targetPackage: string
-  writeId: string
-}
-
-export type StudioCreateFileResult = {
-  compile: StudioCompileCompletion
-  file: StudioProjectFileContent
-  files: readonly StudioProjectFile[]
-}
-
-export type StudioRenameFileResult = StudioCreateFileResult & {
-  previousPath: string
-}
-
-export type StudioDeleteFileResult = {
-  compile: StudioCompileCompletion
-  deleted: StudioProjectFile
-  files: readonly StudioProjectFile[]
-}
-
-export type StudioMoveGeneratedSourceResult =
-  | {
-    conflicts: readonly string[]
-    name: string
-    status: 'confirmation-required'
-    targetPackage: string
-  }
-  | {
-    compile: StudioCompileCompletion
-    file: StudioProjectFileContent
-    files: readonly StudioProjectFile[]
-    previousPath: string
-    rewritten: readonly StudioProjectFileContent[]
-    status: 'moved'
-  }
-
 export type StudioFileDraftState = {
   diagnostics: readonly string[]
   dirty: boolean
-}
-
-export type StudioCheckpointSummary = {
-  afterSourceVersion: string
-  beforeSourceVersion: string
-  id: string
-  path: string
-  status: 'committed' | 'open' | 'undone'
-}
-
-export type StudioInspectRenderRequest = {
-  path: string
-  renderId: string
-  sourceVersion: string
 }
 
 export type StudioDesignValue =
@@ -258,219 +219,6 @@ function rewriteGeneratedStudioImports(
     .reduce((rewritten, edit) => rewritten.slice(0, edit.start) + edit.replacement + rewritten.slice(edit.end), content)
 }
 
-export type StudioSourceActionResult = {
-  checkpoint: {
-    id: string
-    status: 'committed' | 'open'
-  }
-  compile: StudioCompileCompletion
-  content: string
-  edits: readonly {
-    end: number
-    replacement: string
-    start: number
-  }[]
-  path: string
-  requestId: string
-  sourceVersion: string
-}
-
-export type StudioSourceActionProposal = {
-  content: string
-  diff: string
-  edits: readonly {
-    end: number
-    replacement: string
-    start: number
-  }[]
-  path: string
-  proposedSourceVersion: string
-  requestId: string
-  sourceVersion: string
-}
-
-export type StudioSourceActionUndoResult = {
-  checkpoint: {
-    id: string
-    status: 'undone'
-  }
-  compile: StudioCompileCompletion
-  content: string
-  path: string
-  requestId: string
-  sourceVersion: string
-}
-
-export type StudioSketchActionResult =
-  & StudioSketchCatalogResult
-  & Readonly<{
-    compile?: StudioCompileCompletion
-    generatedFile?: StudioProjectFileContent
-  }>
-
-export type StudioSketchSnapRequest = Readonly<{
-  checkpointId: string
-  confirmedProposalVersion?: string
-  expectedCatalogRevision: number
-  rectIds: readonly string[]
-  requestId: string
-  sketchId: string
-  sourceVersion: string
-}>
-
-export type StudioSketchUnsnapRequest = Readonly<
-  Omit<StudioSketchSnapRequest, 'confirmedProposalVersion'>
->
-
-export type StudioSketchFlowAction =
-  | Readonly<{ kind: 'toggle-direction'; rectId: string }>
-  | Readonly<{ afterRectId: string; beforeRectId?: string; kind: 'insert-separator' }>
-  | Readonly<{
-    afterRectId: string
-    beforeRectId: string
-    kind: 'insert-spacer'
-    ratio: readonly [number, number]
-  }>
-
-/** Browser-safe flow intent; render identities remain a server/catalog implementation detail. */
-export type StudioSketchFlowActionRequest = Readonly<{
-  action: StudioSketchFlowAction
-  checkpointId: string
-  expectedCatalogRevision: number
-  requestId: string
-  sketchId: string
-  sourceVersion: string
-}>
-
-export type StudioSketchSnapProposalResult = Readonly<{
-  content: string
-  diff: string
-  needsConfirmation: boolean
-  path: string
-  projectedRectIds: readonly string[]
-  proposedSourceVersion: string
-  requestId: string
-  sourceVersion: string
-  tree: StudioSketchSnapTree
-}>
-
-export type StudioSketchSnapApplyResult = Readonly<{
-  catalog: StudioSketchCatalogSnapshot
-  checkpoint: { id: string; status: 'committed' }
-  compile: StudioCompileCompletion
-  file: StudioProjectFileContent
-  projectedRectIds: readonly string[]
-  requestId: string
-}>
-
-export type StudioSketchSnapUndoRequest = Readonly<{
-  checkpointId: string
-  expectedCatalogRevision: number
-  requestId: string
-  sourceVersion: string
-}>
-
-export type StudioSketchSnapUndoResult = Readonly<{
-  catalog: StudioSketchCatalogSnapshot
-  checkpoint: { id: string; status: 'undone' }
-  compile: StudioCompileCompletion
-  file: StudioProjectFileContent
-  requestId: string
-}>
-
-export type StudioSessionHandshake = {
-  apps: readonly StudioAppVariant[]
-  capabilities: {
-    drafts: 'disk-synced-parsable'
-    language: readonly string[]
-    sourceActions: {
-      canonicalEnvelope: true
-      checkpoints: true
-      proposals: true
-      undo: true
-      version: typeof studioSourceActionVersion
-    }
-    matrix: {
-      concurrentCells: true
-      scheme: 'reactive-browser-fixed-light-native'
-      version: 2
-    }
-    sketches: {
-      catalogVersion: typeof studioSketchCatalogFormatVersion
-      freeGeometry: true
-    }
-  }
-  channel: typeof studioProtocolChannel
-  compile: StudioCompileSnapshot
-  endpoints: readonly {
-    method: 'GET' | 'POST' | 'WS'
-    path: string
-  }[]
-  entryPath: string
-  files: readonly StudioProjectFile[]
-  identity: StudioProjectIdentity
-  previewManifest?: StudioPreviewManifestV2
-  sketchCatalog: StudioSketchCatalogSnapshot
-  protocolVersion: typeof studioProtocolVersion
-  type: 'handshake'
-}
-
-export type StudioSessionEvent =
-  | {
-    channel: typeof studioProtocolChannel
-    protocolVersion: typeof studioProtocolVersion
-    state: StudioCompileSnapshot
-    type: 'compile-state'
-  }
-  | {
-    channel: typeof studioProtocolChannel
-    file: StudioProjectFile
-    protocolVersion: typeof studioProtocolVersion
-    type: 'file-changed'
-  }
-  | {
-    channel: typeof studioProtocolChannel
-    files: readonly StudioProjectFile[]
-    protocolVersion: typeof studioProtocolVersion
-    type: 'files-changed'
-  }
-  | {
-    acknowledgements: StudioWatchResult['acknowledgements']
-    channel: typeof studioProtocolChannel
-    protocolVersion: typeof studioProtocolVersion
-    type: 'studio-writes-acknowledged'
-  }
-  | {
-    channel: typeof studioProtocolChannel
-    manifest: StudioPreviewManifestV2
-    protocolVersion: typeof studioProtocolVersion
-    type: 'preview-manifest-changed'
-  }
-  | {
-    channel: typeof studioProtocolChannel
-    checkpoint: Pick<StudioCheckpointSummary, 'id' | 'status'>
-    protocolVersion: typeof studioProtocolVersion
-    type: 'checkpoint-changed'
-  }
-  | {
-    catalog: StudioSketchCatalogSnapshot
-    channel: typeof studioProtocolChannel
-    protocolVersion: typeof studioProtocolVersion
-    type: 'sketch-catalog-changed'
-  }
-  /**
-   * One cell was reconfigured — new arguments, environment, state layers, or a replayed capture.
-   * Reconfiguring invalidates every live instance of that cell, so a canvas rendering it holds an
-   * instance the session will refuse from that moment on. The browser learns this by driving the
-   * reconfigure itself; anything else rendering the same cell has to be told.
-   */
-  | {
-    cellId: string
-    channel: typeof studioProtocolChannel
-    protocolVersion: typeof studioProtocolVersion
-    type: 'cell-reconfigured'
-  }
-
 type SourceActionCacheEntry = {
   fingerprint: string
   result: StudioSourceActionResult
@@ -503,54 +251,6 @@ type SourceActionUndoCacheEntry = {
   fingerprint: string
   result: StudioSourceActionUndoResult
 }
-
-const sessionEndpoints: StudioSessionHandshake['endpoints'] = [
-  { method: 'GET', path: '/api/protocol' },
-  { method: 'POST', path: '/api/data/fill' },
-  { method: 'GET', path: '/api/files' },
-  { method: 'GET', path: '/api/file' },
-  { method: 'POST', path: '/api/file/create' },
-  { method: 'POST', path: '/api/file/delete' },
-  { method: 'POST', path: '/api/file/draft' },
-  { method: 'POST', path: '/api/file/move-generated' },
-  { method: 'POST', path: '/api/file/rename' },
-  { method: 'POST', path: '/api/language/highlight' },
-  { method: 'POST', path: '/api/ship/beta' },
-  { method: 'POST', path: '/api/source-action' },
-  { method: 'POST', path: '/api/source-action/inspect' },
-  { method: 'POST', path: '/api/source-action/propose' },
-  { method: 'POST', path: '/api/source-action/undo' },
-  { method: 'GET', path: '/api/sketches' },
-  { method: 'POST', path: '/api/sketches/action' },
-  { method: 'POST', path: '/api/sketches/flow/action' },
-  { method: 'POST', path: '/api/sketches/snap/apply' },
-  { method: 'POST', path: '/api/sketches/snap/propose' },
-  { method: 'POST', path: '/api/sketches/snap/undo' },
-  { method: 'POST', path: '/api/sketches/unsnap/apply' },
-  { method: 'GET', path: '/api/tests/status' },
-  { method: 'POST', path: '/api/tests/run' },
-  { method: 'GET', path: '/api/ai/availability' },
-  { method: 'POST', path: '/api/ai/fixture' },
-  { method: 'POST', path: '/api/preview/instance' },
-  { method: 'POST', path: '/api/preview/applied' },
-  { method: 'POST', path: '/api/preview/layout-measurements' },
-  { method: 'GET', path: '/api/preview/manifest' },
-  { method: 'GET', path: '/api/preview/cell' },
-  { method: 'GET', path: '/api/preview/cell/bootstrap' },
-  { method: 'POST', path: '/api/preview/cell/instance' },
-  { method: 'POST', path: '/api/preview/cell/reconfigure' },
-  { method: 'GET', path: '/api/device/status' },
-  { method: 'POST', path: '/api/device/pairing/open' },
-  { method: 'POST', path: '/api/device/pairing/confirm' },
-  { method: 'POST', path: '/api/device/pairing/decline' },
-  { method: 'POST', path: '/api/device/revoke' },
-  { method: 'POST', path: '/api/device/reconnect' },
-  { method: 'POST', path: '/api/device/select-cell' },
-  { method: 'GET', path: '/api/device/launch' },
-  { method: 'POST', path: '/api/device/launch/open' },
-  { method: 'WS', path: '/events' },
-  { method: 'WS', path: '/api/language/lsp' },
-]
 
 const sourceActionResultLimit = 100
 
@@ -945,7 +645,7 @@ export class StudioProjectSession {
       },
       channel: studioProtocolChannel,
       compile: this.compileSnapshot(),
-      endpoints: sessionEndpoints,
+      endpoints: studioSessionEndpoints,
       entryPath: FS.relativePath(this.projectRoot, this.entryPath),
       files: await this.files(),
       identity: this.identity(),

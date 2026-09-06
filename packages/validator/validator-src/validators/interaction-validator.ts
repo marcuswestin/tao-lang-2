@@ -46,14 +46,14 @@ function validateInteractionCondition(condition: AST.LayoutCondition, ctx: Valid
   const active = value === 'active' && isPlainWord(condition.subject)
   const scheme = subject === 'Scheme' && (value === 'Light' || value === 'Dark')
   if (!bare && !active && !scheme) {
-    ctx.error(interactionValidationMessages.condition(conditionText(condition)), condition)
+    ctx.error(condition, interactionValidationMessages.condition(conditionText(condition)))
     return
   }
   // The runtime resolves the subject against the regions an occurrence renders. It is the one word in
   // this vocabulary that is not a cross-reference, so it is checked here against the views and tags
   // this file can see; otherwise a typo is a style that silently never applies.
   if (active && !regionSubjectKnown(subject, condition)) {
-    ctx.error(interactionValidationMessages.unknownRegion(subject), condition)
+    ctx.error(condition, interactionValidationMessages.unknownRegion(subject))
   }
 }
 
@@ -82,7 +82,7 @@ function validateEntityCommandPolicy(policy: AST.EntityCommandPolicy, ctx: Valid
   const entity = policy.$container.$container
   const matching = AST.entityCommandPoliciesOf(entity).filter(candidate => candidate.hide === policy.hide)
   if (matching.indexOf(policy) > 0) {
-    ctx.error(interactionValidationMessages.duplicateEntityPolicy(entity.singularName, policy.hide), policy)
+    ctx.error(policy, interactionValidationMessages.duplicateEntityPolicy(entity.singularName, policy.hide))
   }
   validateDistinctMentions(policy.commands, `Entity '${entity.singularName}' commands`, policy, ctx)
   for (const reference of policy.commands) {
@@ -94,7 +94,7 @@ function validateEntityCommandPolicy(policy: AST.EntityCommandPolicy, ctx: Valid
       slot.type.kind === 'entity' && slot.type.entity === entity
     )
     if (!applicable) {
-      ctx.error(interactionValidationMessages.inapplicableEntityCommand(entity.singularName, command.name), policy)
+      ctx.error(policy, interactionValidationMessages.inapplicableEntityCommand(entity.singularName, command.name))
     }
   }
 
@@ -106,7 +106,7 @@ function validateEntityCommandPolicy(policy: AST.EntityCommandPolicy, ctx: Valid
     .flatMap(candidate => candidate.commands.map(reference => reference.ref).filter(AST.isCommandDeclaration))
   for (const command of hidden) {
     if (defaults.includes(command) && policy.hide && policy.commands.some(reference => reference.ref === command)) {
-      ctx.error(interactionValidationMessages.conflictingEntityMention(entity.singularName, command.name), policy)
+      ctx.error(policy, interactionValidationMessages.conflictingEntityMention(entity.singularName, command.name))
     }
   }
   if (!policy.hide && matching[0] === policy) {
@@ -120,7 +120,7 @@ function validateViewCommandExclusion(exclusion: AST.ViewCommandExclusion, ctx: 
     && AST.isViewDeclaration(block.$container)
     && block.$container.block === block
   if (!direct) {
-    ctx.error(interactionValidationMessages.hidePlacement, exclusion)
+    ctx.error(exclusion, interactionValidationMessages.hidePlacement)
   }
   validateDistinctMentions(exclusion.commands, 'View hide list', exclusion, ctx)
 }
@@ -137,7 +137,7 @@ function validateCommandShortcut(command: AST.CommandDeclaration, ctx: Validatio
   const shortcut = ASTUtils.commandStaticShortcut(command)
   if (shortcut && editingShortcuts.has(shortcut)) {
     const key = AST.commandFillsOf(command).find(fill => fill.name === 'Key')
-    ctx.warning(interactionValidationMessages.editingShortcut(command.name, shortcut), key ?? command)
+    ctx.warning(key ?? command, interactionValidationMessages.editingShortcut(command.name, shortcut))
   }
   if (!shortcut) {
     return
@@ -174,8 +174,8 @@ function validatePreviousShortcut(
   const first = commands.slice(0, index).find(candidate => ASTUtils.commandStaticShortcut(candidate) === shortcut)
   if (first) {
     ctx.error(
-      interactionValidationMessages.duplicateShortcut(scope, shortcut, first.name, command.name),
       command,
+      interactionValidationMessages.duplicateShortcut(scope, shortcut, first.name, command.name),
     )
   }
 }
@@ -196,7 +196,7 @@ function validateDistinctMentions(
       ? `${AST.getDocument(reference.ref).uri.path}#${reference.ref.name}`
       : reference.$refText
     if (seen.has(identity)) {
-      ctx.error(interactionValidationMessages.duplicateMention(scope, reference.$refText), node)
+      ctx.error(node, interactionValidationMessages.duplicateMention(scope, reference.$refText))
       return
     }
     seen.add(identity)
@@ -217,7 +217,7 @@ function validateDistinctShortcuts(
     }
     const first = byShortcut.get(shortcut)
     if (first) {
-      ctx.error(interactionValidationMessages.duplicateShortcut(scope, shortcut, first.name, command.name), node)
+      ctx.error(node, interactionValidationMessages.duplicateShortcut(scope, shortcut, first.name, command.name))
       return
     }
     byShortcut.set(shortcut, command)

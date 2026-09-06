@@ -12,7 +12,7 @@ function entryGroup(entry: AST.Node): 'field' | 'policy' | 'storage' {
   return AST.isEntityCommandPolicy(entry) ? 'policy' : isStorageTail(entry) ? 'storage' : 'field'
 }
 
-export default {
+export const DataFormatter = {
   EntityDataDeclaration(f) {
     f.visibilityOnOwnLine()
     f.oneSpaceAfter('data')

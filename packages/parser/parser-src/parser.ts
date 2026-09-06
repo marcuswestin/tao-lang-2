@@ -7,7 +7,13 @@ import { TaoValueConverter } from './tao-value-converter'
 import { ValueScopeProvider } from './value-scope'
 
 const URI = Langium.URI
-const codeSourceUri = Langium.URI.file('/__tao__/source.tao')
+/**
+ * codeProjectRoot is the synthetic project root every Tao source parsed from a string lives under.
+ * A path below it names no file on disk, so consumers use it to tell a string-backed document from
+ * a workspace file.
+ */
+export const codeProjectRoot = '/__tao__'
+const codeSourceUri = Langium.URI.file(`${codeProjectRoot}/source.tao`)
 
 export { AST, Langium, URI }
 export type URI = Langium.URI
@@ -169,6 +175,13 @@ function createParserContext<ServicesT extends ParserServices>(
   }
 }
 
+/*
+ * Both service flavors are Langium's defaults, the generated grammar module, and then Tao's own
+ * language module; the LSP flavor adds the host's LSP services after it. A Tao service belongs in
+ * `taoLanguageModule` and nowhere else: from there it reaches the core parser, the language server,
+ * and every workspace or session built on either.
+ */
+
 function createServices(options: CreateParserContextOptions & { packages: PackageResolver }): ParserServices {
   const shared = Langium.inject(
     Langium.createDefaultSharedCoreModule(options.langiumContext ?? Langium.NodeFileSystem),
@@ -177,22 +190,39 @@ function createServices(options: CreateParserContextOptions & { packages: Packag
   const language = Langium.inject(
     Langium.createDefaultCoreModule({ shared }),
     AST.GeneratedModule,
-    {
-      parser: {
-        // Tao deliberately resolves token-identical configured constructors and one-field
-        // unlabeled item forms from their linked owner declarations.
-        ParserConfig: () => ({ skipValidations: true }),
-        TokenBuilder: () => new TaoTokenBuilder(),
-        ValueConverter: () => new TaoValueConverter(),
-      },
-      references: {
-        ScopeProvider: (services) => new ValueScopeProvider(services, options.packages),
-      },
-    },
+    taoLanguageModule(options.packages),
   )
-  shared.ServiceRegistry.register(language)
+  return registerLanguage(shared, language)
+}
 
-  return { shared, language }
+function createLspServices(options: CreateParserLspContextOptions & { packages: PackageResolver }): ParserLspServices {
+  const shared = Langium.inject(
+    Langium.createDefaultSharedModule(options.langiumContext ?? Langium.NodeFileSystem),
+    AST.GeneratedSharedModule,
+  )
+  const language = Langium.inject(
+    Langium.createDefaultModule({ shared }),
+    AST.GeneratedModule,
+    taoLanguageModule(options.packages),
+    lspModule(options),
+  )
+  return registerLanguage(shared, language)
+}
+
+/** taoLanguageModule declares the services Tao overrides or adds on a Langium language container. */
+function taoLanguageModule(packages: PackageResolver) {
+  return {
+    parser: {
+      // Tao deliberately resolves token-identical configured constructors and one-field
+      // unlabeled item forms from their linked owner declarations.
+      ParserConfig: () => ({ skipValidations: true }),
+      TokenBuilder: () => new TaoTokenBuilder(),
+      ValueConverter: () => new TaoValueConverter(),
+    },
+    references: {
+      ScopeProvider: (services: Langium.LangiumCoreServices) => new ValueScopeProvider(services, packages),
+    },
+  }
 }
 
 type ParserLspModule = {
@@ -210,28 +240,15 @@ function lspModule(options: ParserLspContributions): ParserLspModule {
   return Object.keys(lsp).length > 0 ? { lsp } : {}
 }
 
-function createLspServices(options: CreateParserLspContextOptions & { packages: PackageResolver }): ParserLspServices {
-  const shared = Langium.inject(
-    Langium.createDefaultSharedModule(options.langiumContext ?? Langium.NodeFileSystem),
-    AST.GeneratedSharedModule,
-  )
-  const language = Langium.inject(
-    Langium.createDefaultModule({ shared }),
-    AST.GeneratedModule,
-    {
-      parser: {
-        ParserConfig: () => ({ skipValidations: true }),
-        TokenBuilder: () => new TaoTokenBuilder(),
-        ValueConverter: () => new TaoValueConverter(),
-      },
-      references: {
-        ScopeProvider: (services) => new ValueScopeProvider(services, options.packages),
-      },
-      ...lspModule(options),
-    },
-  )
+/** registerLanguage makes an assembled language container reachable through its shared services. */
+function registerLanguage<
+  SharedT extends Langium.LangiumSharedCoreServices,
+  LanguageT extends Langium.LangiumCoreServices,
+>(
+  shared: SharedT,
+  language: LanguageT,
+): { shared: SharedT; language: LanguageT } {
   shared.ServiceRegistry.register(language)
-
   return { shared, language }
 }
 

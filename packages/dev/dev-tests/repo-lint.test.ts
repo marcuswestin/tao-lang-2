@@ -386,6 +386,78 @@ Describe('repo lint conventions', () => {
     ])
   })
 
+  Test('reports a node module imported outside the wrappers', () => {
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.nodeImport,
+      [{ path: 'packages/dev/dev-src/studio/StudioNew.ts', source: importFrom('node:crypto') }],
+      [],
+    )).toEqual([
+      'packages/dev/dev-src/studio/StudioNew.ts:1 imports a `node:` module directly; reach for `FS`, `CLI`,'
+      + ' `Platform`, or `HCI` from `@shared`, and add the seam there when none fits.',
+    ])
+  })
+
+  Test('leaves a type-only node import alone', () => {
+    const typeImport = ['import type { Writable }', 'from', "'node:stream'"].join(' ')
+    const source = `${typeImport}\n${importFrom('@shared')}`
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.nodeImport,
+      [{ path: 'packages/tao-cli/cli-src/compile-command.ts', source }],
+      [],
+    )).toEqual([])
+  })
+
+  Test('reports a global console write outside the allowlist', () => {
+    const source = `function report(error: unknown) {\n  ${['console', 'error'].join('.')}('failed', error)\n}`
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.consoleCall,
+      [{ path: 'packages/dev/dev-src/studio/StudioNew.ts', source }],
+      [],
+    )).toEqual([
+      'packages/dev/dev-src/studio/StudioNew.ts:2 writes through the global console; use `HCI.writeLine` or'
+      + ' `HCI.writeErrorLine` for a person, and `Platform.runtimeConsole` where the output must stay raw.',
+    ])
+  })
+
+  Test('reports a direct process read outside the allowlist', () => {
+    const source = `const home = ${['process', 'env'].join('.')}['HOME']\n`
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.processAccess,
+      [{ path: 'packages/dev/dev-src/studio/StudioNew.ts', source }],
+      [],
+    )).toEqual([
+      'packages/dev/dev-src/studio/StudioNew.ts:1 reads the process environment, arguments, streams, or exit'
+      + ' state directly; go through `Platform.runtimeProcess`.',
+    ])
+  })
+
+  Test('reports a Bun convenience call outside the allowlist', () => {
+    const source = `await ${['Bun', 'sleep'].join('.')}(100)\n`
+    Expect(conventionRuleIssues(
+      CONVENTION_RULES.bunConvenience,
+      [{ path: 'packages/dev/dev-src/studio/StudioNew.ts', source }],
+      [],
+    )).toEqual([
+      'packages/dev/dev-src/studio/StudioNew.ts:1 calls a Bun convenience API directly; use `Time.sleep`,'
+      + ' `Platform.randomUUID`, `Platform.semverSatisfies`, or `Platform.parseToml`, which keep the Bun'
+      + ' dependency inside the wrappers.',
+    ])
+  })
+
+  Test('leaves the wrappers and the runtime outside the platform rules', () => {
+    const source = `const env = ${['process', 'env'].join('.')}\n${importFrom('node:os')}`
+    for (const rule of [CONVENTION_RULES.nodeImport, CONVENTION_RULES.processAccess]) {
+      Expect(conventionRuleIssues(
+        rule,
+        [
+          { path: 'packages/shared/shared-src/Platform.ts', source },
+          { path: 'packages/runtime/TaoRuntime-src/TR-data.ts', source },
+        ],
+        [],
+      )).toEqual([])
+    }
+  })
+
   Test('reports a langium import outside the parser package', () => {
     Expect(langiumImportIssues([
       { path: 'packages/validator/validator-src/Rules.ts', source: importFrom('langium/lsp') },

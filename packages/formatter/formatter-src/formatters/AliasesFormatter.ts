@@ -1,6 +1,6 @@
 import type { FormatHandlers } from '../formatting'
 
-export default {
+export const AliasesFormatter = {
   /** AliasDeclaration normalizes canonical immutable `let` bindings. */
   AliasDeclaration(f) {
     f.visibilityOnOwnLine()

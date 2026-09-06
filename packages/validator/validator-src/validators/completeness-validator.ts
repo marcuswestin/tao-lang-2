@@ -30,7 +30,7 @@ function reportIncomplete(
 ): void {
   const slots = incompleteSuppliedSlots(declaration)
   if (declaration && slots.length > 0) {
-    ctx.error(completenessValidationMessages.incomplete(Type.declarationName(declaration), slots), node)
+    ctx.error(node, completenessValidationMessages.incomplete(Type.declarationName(declaration), slots))
   }
 }
 

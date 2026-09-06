@@ -15,14 +15,14 @@ export const bridgeValidationMessages = {
 export const bridgeValidationChecks = {
   [AST.FromExpression.$type]: (bridge, ctx) => {
     if (!bridge.path.endsWith('.ts') && !bridge.path.endsWith('.tsx')) {
-      ctx.error(bridgeValidationMessages.path(bridge.path), bridge)
+      ctx.error(bridge, bridgeValidationMessages.path(bridge.path))
     }
     if (!AST.isFunctionCallExpression(bridge.expression) && !AST.isValueReference(bridge.expression)) {
-      ctx.error(bridgeValidationMessages.head, bridge)
+      ctx.error(bridge, bridgeValidationMessages.head)
       return
     }
     if (!declaresBridgedType(bridge)) {
-      ctx.error(bridgeValidationMessages.untyped, bridge)
+      ctx.error(bridge, bridgeValidationMessages.untyped)
     }
   },
 } satisfies NodeValidationChecks

@@ -1,5 +1,4 @@
 import { FS, Platform, Repo } from '@shared'
-import { randomUUID } from 'node:crypto'
 import { RunTimings } from './RunTimings'
 import { WorkGraph, type WorkState } from './WorkGraph'
 
@@ -41,7 +40,7 @@ const LATEST_LINK = 'latest'
 /** runStamp returns the filesystem-safe timestamp a run's directory is named after. */
 function runStamp(now = new Date()): string {
   const timestamp = now.toISOString().replaceAll(/[:.]/g, '-')
-  return `${timestamp}-${Platform.runtimeProcess.pid}-${randomUUID().slice(0, 8)}`
+  return `${timestamp}-${Platform.runtimeProcess.pid}-${Platform.randomUUID().slice(0, 8)}`
 }
 
 /** locate resolves where one lane's run writes, creating nothing yet. */

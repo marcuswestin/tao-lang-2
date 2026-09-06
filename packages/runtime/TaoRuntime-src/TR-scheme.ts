@@ -8,6 +8,9 @@ const schemeCaptureVersion = 1 as const
 export type TaoAppearance = 'dark' | 'light' | 'system'
 export type TaoScheme = 'dark' | 'light'
 export type TaoSchemeCapability = 'fixed-light-native' | 'pinned-native' | 'reactive-browser'
+
+/** The capability a browser cell reports: it follows the page's color scheme as it changes. */
+export const reactiveBrowserSchemeCapability = 'reactive-browser' satisfies TaoSchemeCapability
 export type TaoSchemeSource = 'native-fixed' | 'preference' | 'scenario' | 'system'
 
 export type TaoSchemeSnapshot = Readonly<{
@@ -83,7 +86,7 @@ function resolveScheme(
     })
   }
   return Object.freeze({
-    capability: 'reactive-browser',
+    capability: reactiveBrowserSchemeCapability,
     requested,
     resolved: requested === 'system' ? environment.system : requested,
     source: requestSource,

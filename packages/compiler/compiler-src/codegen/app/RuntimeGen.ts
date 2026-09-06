@@ -19,7 +19,7 @@ type TaoFileCompileOptions = {
   viewRegistrations?: string
 }
 
-export default {
+export const RuntimeGen = {
   /** TaoFile compiles a parsed Tao file into Expo-compatible TSX source. */
   TaoFile(taoFile: AST.TaoFile, opts: TaoFileCompileOptions = {}): string {
     return Langium.toString(Compile.TaoFile(taoFile, opts))

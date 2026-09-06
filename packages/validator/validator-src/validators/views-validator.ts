@@ -84,7 +84,7 @@ function validateHeaderlessChrome(view: AST.ViewDeclaration, ctx: ValidationCont
   for (const slot of ['Title', 'Toolbar'] as const) {
     const fill = AST.declarationSlotFillNamed(view, slot)
     if (fill) {
-      ctx.error(viewValidationMessages.headerlessChrome(view.name, slot), fill)
+      ctx.error(fill, viewValidationMessages.headerlessChrome(view.name, slot))
     }
   }
 }
@@ -92,14 +92,14 @@ function validateHeaderlessChrome(view: AST.ViewDeclaration, ctx: ValidationCont
 function validateLoopSelectHandler(handler: AST.LoopSelectHandler, ctx: ValidationContext): void {
   const loop = AST.directLoopForSelectHandler(handler)
   if (!loop) {
-    ctx.error(viewValidationMessages.loopSelectPlacement, handler)
+    ctx.error(handler, viewValidationMessages.loopSelectPlacement)
     return
   }
   if (handler.action || !handler.block) {
-    ctx.error(viewValidationMessages.loopSelectInline, handler)
+    ctx.error(handler, viewValidationMessages.loopSelectInline)
   }
   if (AST.loopSelectHandlers(loop).indexOf(handler) > 0) {
-    ctx.error(viewValidationMessages.loopSelectDuplicate, handler)
+    ctx.error(handler, viewValidationMessages.loopSelectDuplicate)
   }
 }
 
@@ -118,20 +118,20 @@ function validateLoopRowLabel(loop: AST.ForStatement, ctx: ValidationContext): v
   if (!titled && ASTUtils.outlineLoopDescriptor(loop).texts.length === 0) {
     return
   }
-  ctx.hint(viewValidationMessages.loopRowLabel, loop)
+  ctx.hint(loop, viewValidationMessages.loopRowLabel)
 }
 
 function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {
   const block = tag.$container
   if (!AST.isBlock(block)) {
-    ctx.error(viewValidationMessages.tagAttachment, tag)
+    ctx.error(tag, viewValidationMessages.tagAttachment)
     return
   }
   const duplicate = block.statements.some(statement =>
     statement !== tag && AST.isTagStatement(statement) && statement.tag === tag.tag
   )
   if (duplicate) {
-    ctx.error(viewValidationMessages.duplicateTag(tag.tag), tag)
+    ctx.error(tag, viewValidationMessages.duplicateTag(tag.tag))
   }
   if (AST.isSlotFillRootTag(tag)) {
     return
@@ -139,11 +139,11 @@ function validateTag(tag: AST.TagStatement, ctx: ValidationContext): void {
   const index = block.statements.indexOf(tag)
   const target = block.statements[index + 1]
   if (!AST.isRender(target) && !AST.isForStatement(target)) {
-    ctx.error(viewValidationMessages.tagAttachment, tag)
+    ctx.error(tag, viewValidationMessages.tagAttachment)
     return
   }
   if (AST.isForStatement(target) && !AST.loopRowRoot(target)) {
-    ctx.error(viewValidationMessages.taggedLoopRoot, target)
+    ctx.error(target, viewValidationMessages.taggedLoopRoot)
   }
 }
 
@@ -166,13 +166,13 @@ function validateForeignView(view: AST.ViewDeclaration, ctx: ValidationContext):
     return
   }
   if (!/^\.\.?\/.+\.tsx?$/.test(foreign.path)) {
-    ctx.error(viewValidationMessages.foreignViewPath, foreign)
+    ctx.error(foreign, viewValidationMessages.foreignViewPath)
   }
   if (foreign.accepts && foreign.content === undefined && foreign.slots.length === 0) {
-    ctx.error(viewValidationMessages.foreignViewAccepts, foreign)
+    ctx.error(foreign, viewValidationMessages.foreignViewAccepts)
   }
   if (foreign.content !== undefined && foreign.content !== 'content') {
-    ctx.error(viewValidationMessages.foreignViewAccepts, foreign)
+    ctx.error(foreign, viewValidationMessages.foreignViewAccepts)
   }
 }
 
@@ -187,7 +187,7 @@ async function validateForeignViewFiles(file: AST.TaoFile, ctx: ValidationContex
       await FS.isDirectory(documentDirectory)
       && !await FS.exists(FS.resolvePath(foreign.path, documentDirectory))
     ) {
-      ctx.error(viewValidationMessages.foreignViewMissing(foreign.path), foreign)
+      ctx.error(foreign, viewValidationMessages.foreignViewMissing(foreign.path))
     }
   }
 }
@@ -197,10 +197,10 @@ function validateDuplicateParameters(view: AST.ViewDeclaration, ctx: ValidationC
   for (const parameter of AST.parametersOf(view)) {
     const name = Type.parameterName(parameter)
     if (reservedParameterNames.has(name)) {
-      ctx.error(viewValidationMessages.reservedParameter(name), parameter)
+      ctx.error(parameter, viewValidationMessages.reservedParameter(name))
     }
     if (seen.has(name)) {
-      ctx.error(viewValidationMessages.duplicateParameter(name), parameter)
+      ctx.error(parameter, viewValidationMessages.duplicateParameter(name))
       continue
     }
     seen.add(name)
@@ -214,7 +214,7 @@ function validateRenderCount(view: AST.ViewDeclaration, ctx: ValidationContext):
   }
   const renderCount = AST.blockStatementOf(view, { filter: AST.isRenderStatement }).length
   if (renderCount !== 1) {
-    ctx.error(viewValidationMessages.renderCount(view.name), view)
+    ctx.error(view, viewValidationMessages.renderCount(view.name))
   }
 }
 
@@ -222,7 +222,7 @@ function validateRenderLast(view: AST.ViewDeclaration, ctx: ValidationContext): 
   const statements = AST.blockStatements(view)
   const renderIndex = statements.findIndex(AST.isRenderStatement)
   if (renderIndex >= 0 && renderIndex !== statements.length - 1) {
-    ctx.error(viewValidationMessages.renderLast, statements[renderIndex]!, {
+    ctx.error(statements[renderIndex]!, viewValidationMessages.renderLast, {
       code: viewValidationCodes.renderNotLast,
     })
   }
@@ -248,7 +248,7 @@ function validateViewBodyBlock(block: AST.Block, ctx: ValidationContext): void {
       validateRender(statement, block, ctx)
       continue
     }
-    ctx.error(viewValidationMessages.viewBody, statement)
+    ctx.error(statement, viewValidationMessages.viewBody)
   }
 }
 
@@ -257,7 +257,7 @@ function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
   for (const statement of block.statements) {
     if (AST.isAliasDeclaration(statement)) {
       if (hasChildInvocation) {
-        ctx.error(viewValidationMessages.renderBlockAliasPlacement, statement)
+        ctx.error(statement, viewValidationMessages.renderBlockAliasPlacement)
       }
       continue
     }
@@ -285,7 +285,7 @@ function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
     }
     if (AST.isEventHandler(statement)) {
       if (!AST.isRender(block.$container)) {
-        ctx.error(viewValidationMessages.eventPlacement, statement)
+        ctx.error(statement, viewValidationMessages.eventPlacement)
       }
       continue
     }
@@ -319,7 +319,7 @@ function validateRenderBlock(block: AST.Block, ctx: ValidationContext): void {
       validateRenderBlock(statement.block, ctx)
       continue
     }
-    ctx.error(viewValidationMessages.renderBlock, statement)
+    ctx.error(statement, viewValidationMessages.renderBlock)
   }
 }
 
@@ -329,7 +329,7 @@ function validateRender(
   ctx: ValidationContext,
 ): void {
   if (AST.isRenderStatement(render) && render.view === undefined && render.injection === undefined) {
-    ctx.error(viewValidationMessages.renderTarget, render)
+    ctx.error(render, viewValidationMessages.renderTarget)
   }
   // The one fact a scene carries that a body cannot state. Diagnosing it here, at the render site,
   // is what makes chrome nothing reads unrepresentable: a declaration that fills `Title` can never
@@ -340,7 +340,7 @@ function validateRender(
   const effectiveTarget = AST.isViewDeclaration(aliasTarget) ? aliasTarget : target
   if (AST.isViewDeclaration(effectiveTarget) && effectiveTarget.scene) {
     const renderedName = AST.isViewDeclaration(target) ? target.name : effectiveTarget.name
-    ctx.error(viewValidationMessages.sceneComposed(renderedName), render)
+    ctx.error(render, viewValidationMessages.sceneComposed(renderedName))
   }
   // The same fact through a parameter: a scene handed to a `view`-typed slot is rendered inline by
   // the receiving view, so it is refused where it is bound rather than escaping the rule above.
@@ -354,8 +354,8 @@ function validateRender(
       const bound = value.target.ref
       if (AST.isViewDeclaration(bound) && bound.scene) {
         ctx.error(
-          viewValidationMessages.sceneBoundToView(bound.name, Type.parameterName(pair.parameter)),
           pair.argument,
+          viewValidationMessages.sceneBoundToView(bound.name, Type.parameterName(pair.parameter)),
         )
       }
     }
@@ -372,7 +372,7 @@ function validateRender(
           && !(AST.isRenderSlotUse(statement) && statement.render)
           && !(AST.isTagStatement(statement) && AST.isSlotFillRootTag(statement))
         ) {
-          ctx.error(viewValidationMessages.leafContent(target.name), statement)
+          ctx.error(statement, viewValidationMessages.leafContent(target.name))
         }
       }
     }
@@ -383,7 +383,7 @@ function validateRender(
   const isSoleViewBodyStatement = AST.isViewDeclaration(owningBlock.$container)
     && owningBlock.statements.length === 1
   if (!isSoleViewBodyStatement) {
-    ctx.error(viewValidationMessages.renderInjectPlacement, render)
+    ctx.error(render, viewValidationMessages.renderInjectPlacement)
   }
 }
 
@@ -396,13 +396,13 @@ function validateCallerContentContract(view: AST.ViewDeclaration, ctx: Validatio
   }
   const placements = AST.streamAllContents(rootRender).filter(AST.isCallerContentStatement)
   for (const extra of placements.slice(1)) {
-    ctx.error(viewValidationMessages.callerContentCount(view.name), extra)
+    ctx.error(extra, viewValidationMessages.callerContentCount(view.name))
   }
 }
 
 function validateCallerContentPlacement(content: AST.CallerContentStatement, ctx: ValidationContext): void {
   if (!AST.isViewDeclaration(AST.findOwningView(content))) {
-    ctx.error(viewValidationMessages.callerContentPlacement, content)
+    ctx.error(content, viewValidationMessages.callerContentPlacement)
   }
 }
 
@@ -412,7 +412,7 @@ function validateRenderSlotDeclarationPlacement(
 ): void {
   const block = declaration.$container
   if (!AST.isBlock(block) || !AST.isViewDeclaration(block.$container) || block.$container.block !== block) {
-    ctx.error(viewValidationMessages.renderSlotDeclarationPlacement, declaration)
+    ctx.error(declaration, viewValidationMessages.renderSlotDeclarationPlacement)
   }
 }
 
@@ -421,7 +421,7 @@ function validateRenderSlots(view: AST.ViewDeclaration, ctx: ValidationContext):
   const seen = new Set<string>()
   for (const declaration of declarations) {
     if (seen.has(declaration.name)) {
-      ctx.error(viewValidationMessages.duplicateRenderSlot(declaration.name), declaration)
+      ctx.error(declaration, viewValidationMessages.duplicateRenderSlot(declaration.name))
     }
     seen.add(declaration.name)
 
@@ -432,7 +432,7 @@ function validateRenderSlots(view: AST.ViewDeclaration, ctx: ValidationContext):
       .filter(AST.isRenderSlotUse)
       .filter(use => !use.render && use.slot.$refText === declaration.name)
     if (placements.length !== 1) {
-      ctx.error(viewValidationMessages.renderSlotPlacementCount(declaration.name), declaration)
+      ctx.error(declaration, viewValidationMessages.renderSlotPlacementCount(declaration.name))
     }
   }
 }
@@ -447,7 +447,7 @@ function validateRenderSlotUse(use: AST.RenderSlotUse, ctx: ValidationContext): 
       || !AST.isBlock(declarationBlock)
       || declarationBlock.$container !== owner
     ) {
-      ctx.error(viewValidationMessages.renderSlotReferencePlacement, use)
+      ctx.error(use, viewValidationMessages.renderSlotReferencePlacement)
     }
     return
   }
@@ -463,13 +463,13 @@ function validateRenderSlotUse(use: AST.RenderSlotUse, ctx: ValidationContext): 
       || (AST.isForeignViewImplementation(declarationBlock) && target.foreign === declarationBlock)
     )
   if (!validOwner) {
-    ctx.error(viewValidationMessages.renderSlotFillPlacement, use)
+    ctx.error(use, viewValidationMessages.renderSlotFillPlacement)
   }
   if (AST.isBlock(block)) {
     const fills = AST.renderSlotUsesOf(block)
       .filter(candidate => candidate.render && candidate.slot.$refText === use.slot.$refText)
     if (fills.indexOf(use) > 0) {
-      ctx.error(viewValidationMessages.duplicateRenderSlotFill(use.slot.$refText), use)
+      ctx.error(use, viewValidationMessages.duplicateRenderSlotFill(use.slot.$refText))
     }
   }
 }

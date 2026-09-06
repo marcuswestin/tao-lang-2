@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
-import { isRuntimeConfigurableDeclaration } from './configuration-compiler'
+import { isRuntimeConfigurableDeclaration } from './ConfigurationCompiler'
 
 type TaoFileCompileOptions = CodegenOptions & {
   configurationTypes?: string
@@ -13,7 +13,7 @@ type TaoFileCompileOptions = CodegenOptions & {
   viewRegistrations?: string
 }
 
-export default {
+export const FilesCompiler = {
   /** TaoFile compiles a parsed Tao file into a default React component module. */
   TaoFile(taoFile: AST.TaoFile, opts: TaoFileCompileOptions = {}): Compiled {
     const configurationTypes = opts.configurationTypes ?? ''

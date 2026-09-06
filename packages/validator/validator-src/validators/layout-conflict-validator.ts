@@ -31,10 +31,10 @@ function validate<KeyT extends string>(
       const existing = seen.get(key)
       if (existing) {
         ctx.error(
+          item.node,
           existing.label === item.label
             ? messages.duplicateEntry(item.label)
             : messages.conflictingEntries(existing.label, item.label),
-          item.node,
         )
         continue items
       }

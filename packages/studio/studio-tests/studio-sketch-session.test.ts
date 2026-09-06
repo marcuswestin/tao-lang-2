@@ -742,7 +742,12 @@ Describe('Studio sketch session protocol', () => {
     )
     let received: unknown
     StudioApiEventStream.dispatch(
-      { catalog: snapshot, type: 'sketch-catalog-changed' },
+      {
+        catalog: snapshot,
+        channel: studioProtocolChannel,
+        protocolVersion: studioProtocolVersion,
+        type: 'sketch-catalog-changed',
+      },
       {
         onCompile() {},
         onDisconnect() {},

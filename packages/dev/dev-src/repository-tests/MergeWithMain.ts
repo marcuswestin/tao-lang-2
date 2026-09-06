@@ -1,5 +1,4 @@
-import { CLI, Errors, FS, HCI, Repo } from '@shared'
-import { randomUUID } from 'node:crypto'
+import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
 
 // TODO(merge-with-main-default): Change `execute`'s CLI default from false to true after this command
 // has landed several merges safely; retain an explicit `--dry-run` escape hatch when doing so.
@@ -437,7 +436,7 @@ async function createSnapshot(
   dependencies: MergeWithMainDependencies,
 ): Promise<MergeSnapshot> {
   const createdAt = dependencies.now().toISOString()
-  const stamp = `${createdAt.replaceAll(/[:.]/gu, '-')}-${randomUUID().slice(0, 8)}`
+  const stamp = `${createdAt.replaceAll(/[:.]/gu, '-')}-${Platform.randomUUID().slice(0, 8)}`
   const snapshotPath = FS.resolvePath(`.artifacts/merge/${stamp}.json`, preflight.mainRoot)
   const [featureTree, featureIndexTree, mainTree, mainIndexTree] = await Promise.all([
     git(dependencies, preflight.featureRoot, ['rev-parse', 'HEAD^{tree}']).then(result => result.stdout.trim()),
@@ -970,7 +969,7 @@ async function advanceSnapshot(
 }
 
 async function persistSnapshot(snapshot: MergeSnapshot, dependencies: MergeWithMainDependencies): Promise<void> {
-  const temporaryPath = `${snapshot.snapshotPath}.${randomUUID()}.tmp`
+  const temporaryPath = `${snapshot.snapshotPath}.${Platform.randomUUID()}.tmp`
   await dependencies.writeJson(temporaryPath, snapshot)
   try {
     await dependencies.move(temporaryPath, snapshot.snapshotPath)

@@ -88,7 +88,7 @@ function validateViewDeclaration(view: AST.ViewDeclaration, ctx: ValidationConte
 function reportReservedRuntimeName(declaration: NamedDeclaration, ctx: ValidationContext): void {
   const name = Type.declarationName(declaration)
   if (name === '__proto__') {
-    ctx.error(aliasValidationMessages.reservedName(name), declaration)
+    ctx.error(declaration, aliasValidationMessages.reservedName(name))
   }
 }
 
@@ -102,12 +102,12 @@ function reportAliasAscription(alias: AST.AliasDeclaration, ctx: ValidationConte
     return
   }
   ctx.error(
+    alias.value,
     aliasValidationMessages.ascriptionType(
       alias.name,
       Type.displayName(expected),
       Type.displayName(actual),
     ),
-    alias.value,
   )
 }
 
@@ -119,7 +119,7 @@ function reportDuplicateNames(
   for (const declaration of declarations) {
     const name = Type.declarationName(declaration)
     if (visible.has(name)) {
-      ctx.error(aliasValidationMessages.duplicateName(name), declaration)
+      ctx.error(declaration, aliasValidationMessages.duplicateName(name))
       continue
     }
     visible.set(name, declaration)
@@ -134,7 +134,7 @@ function reportNameConflicts(
   for (const declaration of declarations) {
     const name = Type.declarationName(declaration)
     if (visible.has(name)) {
-      ctx.error(aliasValidationMessages.duplicateName(name), declaration)
+      ctx.error(declaration, aliasValidationMessages.duplicateName(name))
     }
   }
 }
@@ -151,8 +151,8 @@ function reportAliasReferenceOrder(alias: AST.AliasDeclaration, ctx: ValidationC
     const target = reference.target.ref
     if (AST.isValueDeclaration(target) && isInvalidAliasInitializerReferenceOrder(target, reference, alias)) {
       ctx.error(
-        aliasValidationMessages.aliasUsedBeforeDeclaration(alias.name, Type.declarationName(target)),
         reference,
+        aliasValidationMessages.aliasUsedBeforeDeclaration(alias.name, Type.declarationName(target)),
       )
     }
   }
@@ -164,7 +164,7 @@ function reportLocalValueReferenceOrder(reference: ValueReferenceLike, ctx: Vali
   }
   const target = reference.target.ref
   if (AST.isValueDeclaration(target) && isInvalidLocalValueReferenceOrder(target, reference)) {
-    ctx.error(aliasValidationMessages.usedBeforeDeclaration(Type.declarationName(target)), reference)
+    ctx.error(reference, aliasValidationMessages.usedBeforeDeclaration(Type.declarationName(target)))
   }
 }
 

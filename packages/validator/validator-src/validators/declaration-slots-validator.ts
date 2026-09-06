@@ -25,19 +25,19 @@ export const declarationSlotValidationChecks = {
 function validateDeclarationSlotFill(fill: AST.DeclarationSlotFill, ctx: ValidationContext): void {
   const owner = directDeclarationOwner(fill)
   if (!owner) {
-    ctx.error(declarationSlotValidationMessages.placement, fill)
+    ctx.error(fill, declarationSlotValidationMessages.placement)
     return
   }
   const kind = AST.isViewDeclaration(owner) ? (owner.scene ? 'scene' : 'view') : 'action'
   const contract = primitiveSlots(ctx, kind)
   const property = contract.find(candidate => candidate.name === fill.name)
   if (!property) {
-    ctx.error(declarationSlotValidationMessages.unknown(kind, fill.name), fill)
+    ctx.error(fill, declarationSlotValidationMessages.unknown(kind, fill.name))
     return
   }
   const fills = AST.declarationSlotFillsOf(owner)
   if (fills.find(candidate => candidate.name === fill.name) !== fill) {
-    ctx.error(declarationSlotValidationMessages.duplicate(kind, fill.name), fill)
+    ctx.error(fill, declarationSlotValidationMessages.duplicate(kind, fill.name))
   }
 
   const expected = Type.ofProperty(property)
@@ -46,7 +46,7 @@ function validateDeclarationSlotFill(fill: AST.DeclarationSlotFill, ctx: Validat
     && expected.element.primitive === 'command'
   if (fill.block) {
     if (!commandList) {
-      ctx.error(declarationSlotValidationMessages.scalar(fill.name), fill.block)
+      ctx.error(fill.block, declarationSlotValidationMessages.scalar(fill.name))
       return
     }
     validateCommandReferences(fill.block, ctx)
@@ -56,19 +56,19 @@ function validateDeclarationSlotFill(fill: AST.DeclarationSlotFill, ctx: Validat
     return
   }
   if (commandList) {
-    ctx.error(declarationSlotValidationMessages.commandBlock(fill.name), fill.value)
+    ctx.error(fill.value, declarationSlotValidationMessages.commandBlock(fill.name))
     return
   }
   const actual = Type.ofExpression(fill.value)
   if (expected.kind !== 'unresolved' && actual.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
     const expectedDisplay = property.type ? Type.ofReference(property.type) : expected
     ctx.error(
+      fill.value,
       declarationSlotValidationMessages.type(
         fill.name,
         Type.displayName(expectedDisplay),
         Type.displayName(actual),
       ),
-      fill.value,
     )
   }
 }
@@ -103,11 +103,11 @@ function validateCommandReferences(block: AST.DeclarationSlotReferenceBlock, ctx
     const command = reference.ref
     const name = reference.$refText
     if (command && !AST.isCommandDeclaration(command)) {
-      ctx.error(declarationSlotValidationMessages.foreignCommand(name, surface), block)
+      ctx.error(block, declarationSlotValidationMessages.foreignCommand(name, surface))
       continue
     }
     if ((command && seen.has(command)) || (!command && seenNames.has(name))) {
-      ctx.error(declarationSlotValidationMessages.duplicateCommand(name, surface), block)
+      ctx.error(block, declarationSlotValidationMessages.duplicateCommand(name, surface))
     }
     if (command) {
       seen.add(command)
@@ -116,13 +116,13 @@ function validateCommandReferences(block: AST.DeclarationSlotReferenceBlock, ctx
       const slot = unresolved[0]
       if (slot) {
         ctx.error(
+          block,
           declarationSlotValidationMessages.unfilledCommand(
             command.name,
             slot.name,
             owner?.name ?? 'the surface',
             surface,
           ),
-          block,
         )
       }
     }

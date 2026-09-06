@@ -48,17 +48,17 @@ export const ActionsValidator = {
     [AST.ActionDeclaration.$type]: (action, ctx) => {
       validateParameters(action, ctx)
       if (action.runsLatest && !action.foreign) {
-        ctx.error(actionValidationMessages.runsLatestNative, action)
+        ctx.error(action, actionValidationMessages.runsLatestNative)
       }
       if (action.foreign) {
         if (!/^\.\.?\/.+\.tsx?$/.test(action.foreign.path)) {
-          ctx.error(actionValidationMessages.foreignActionPath, action.foreign)
+          ctx.error(action.foreign, actionValidationMessages.foreignActionPath)
         }
       }
     },
     [AST.AsyncActionStatement.$type]: (statement, ctx) => {
       if (!AST.findOwningActionBlock(statement)) {
-        ctx.error(actionValidationMessages.asyncPlacement, statement)
+        ctx.error(statement, actionValidationMessages.asyncPlacement)
       }
     },
     [AST.DoStatement.$type]: reportArity,
@@ -83,7 +83,7 @@ async function validateForeignActionFiles(file: AST.TaoFile, ctx: ValidationCont
       await FS.isDirectory(documentDirectory)
       && !await FS.exists(FS.resolvePath(foreign.path, documentDirectory))
     ) {
-      ctx.error(actionValidationMessages.foreignActionMissing(foreign.path), foreign)
+      ctx.error(foreign, actionValidationMessages.foreignActionMissing(foreign.path))
     }
   }
 }
@@ -101,7 +101,7 @@ function validateDuplicateParameters(owner: ParameterOwner, ctx: ValidationConte
   for (const parameter of AST.parametersOf(owner)) {
     const name = Type.parameterName(parameter)
     if (seen.has(name)) {
-      ctx.error(actionValidationMessages.duplicateParameter(name, kind), parameter)
+      ctx.error(parameter, actionValidationMessages.duplicateParameter(name, kind))
       continue
     }
     seen.add(name)
@@ -113,7 +113,7 @@ function validateParameterNameConflicts(owner: ParameterOwner, ctx: ValidationCo
   for (const parameter of AST.parametersOf(owner)) {
     const name = Type.parameterName(parameter)
     if (visibleNames.has(name)) {
-      ctx.error(AliasesValidator.messages.duplicateName(name), parameter)
+      ctx.error(parameter, AliasesValidator.messages.duplicateName(name))
     }
   }
 }
@@ -164,52 +164,52 @@ export function reportActionBindingDiagnostic(
   Switch.kind(diagnostic, {
     'missing-argument': diagnostic => {
       ctx.error(
-        actionValidationMessages.missingArgument(action.name, Type.parameterName(diagnostic.parameter)),
         invocation,
+        actionValidationMessages.missingArgument(action.name, Type.parameterName(diagnostic.parameter)),
       )
     },
     'unmatched-argument': diagnostic => {
-      ctx.error(actionValidationMessages.unmatchedArgument(action.name), diagnostic.argument)
+      ctx.error(diagnostic.argument, actionValidationMessages.unmatchedArgument(action.name))
     },
     'ambiguous-argument': diagnostic => {
       ctx.error(
-        actionValidationMessages.ambiguousArgument(action.name, diagnostic.parameters),
         diagnostic.argument,
+        actionValidationMessages.ambiguousArgument(action.name, diagnostic.parameters),
       )
     },
     'ambiguous-parameter': diagnostic => {
       ctx.error(
-        actionValidationMessages.ambiguousParameter(action.name, Type.parameterName(diagnostic.parameter)),
         invocation,
+        actionValidationMessages.ambiguousParameter(action.name, Type.parameterName(diagnostic.parameter)),
       )
     },
     'duplicate-argument-type': diagnostic => {
-      ctx.error(actionValidationMessages.duplicateArgumentType(action.name), diagnostic.argument)
+      ctx.error(diagnostic.argument, actionValidationMessages.duplicateArgumentType(action.name))
     },
     'duplicate-parameter-type': diagnostic => {
       ctx.error(
-        actionValidationMessages.duplicateParameterType(action.name, Type.parameterName(diagnostic.parameter)),
         invocation,
+        actionValidationMessages.duplicateParameterType(action.name, Type.parameterName(diagnostic.parameter)),
       )
     },
     'unknown-named-argument': diagnostic => {
-      ctx.error(actionValidationMessages.unknownNamedArgument(action.name, diagnostic.name), diagnostic.argument)
+      ctx.error(diagnostic.argument, actionValidationMessages.unknownNamedArgument(action.name, diagnostic.name))
     },
     'duplicate-named-argument': diagnostic => {
       ctx.error(
-        actionValidationMessages.duplicateNamedArgument(action.name, Type.parameterName(diagnostic.parameter)),
         diagnostic.argument,
+        actionValidationMessages.duplicateNamedArgument(action.name, Type.parameterName(diagnostic.parameter)),
       )
     },
     'named-argument-type': diagnostic => {
       ctx.error(
+        diagnostic.argument,
         actionValidationMessages.namedArgumentType(
           action.name,
           Type.parameterName(diagnostic.parameter),
           Type.displayName(Type.ofParameter(diagnostic.parameter)),
           Type.displayName(Type.ofArgument(diagnostic.argument)),
         ),
-        diagnostic.argument,
       )
     },
   })
@@ -222,7 +222,7 @@ function validateDynamicActionInvocation(invocation: AST.DoStatement, ctx: Valid
   }
   const args = AST.argumentsOf(invocation)
   if (actionType.parameters.length === 0 && args.length > 0) {
-    ctx.error(actionValidationMessages.dynamicActionArguments, args[0]!)
+    ctx.error(args[0]!, actionValidationMessages.dynamicActionArguments)
     return
   }
   const requiredCount = actionType.parameters.filter(parameter => !parameter.optional).length
@@ -230,11 +230,11 @@ function validateDynamicActionInvocation(invocation: AST.DoStatement, ctx: Valid
     const message = requiredCount === actionType.parameters.length
       ? actionValidationMessages.dynamicActionArity(actionType.parameters.length, args.length)
       : actionValidationMessages.dynamicActionArgumentCount(requiredCount, actionType.parameters.length, args.length)
-    ctx.error(message, invocation)
+    ctx.error(invocation, message)
   }
   for (const [index, argument] of args.entries()) {
     if (argument.label) {
-      ctx.error(actionValidationMessages.dynamicActionNamedArgument, argument)
+      ctx.error(argument, actionValidationMessages.dynamicActionNamedArgument)
       continue
     }
     const parameter = actionType.parameters[index]
@@ -248,12 +248,12 @@ function validateDynamicActionInvocation(invocation: AST.DoStatement, ctx: Valid
       && !Type.isAssignable(actual, parameter.type)
     ) {
       ctx.error(
+        argument,
         actionValidationMessages.dynamicActionArgumentType(
           index + 1,
           Type.displayName(parameter.type),
           Type.displayName(actual),
         ),
-        argument,
       )
     }
   }
@@ -268,6 +268,6 @@ function reportDoStatementActionType(invocation: AST.DoStatement, ctx: Validatio
   const runnable = actionType.kind === 'primitive'
     && (actionType.primitive === 'action' || actionType.primitive === 'command')
   if (!runnable) {
-    ctx.error(actionValidationMessages.doTypeMismatch(Type.displayName(actionType)), invocation.action)
+    ctx.error(invocation.action, actionValidationMessages.doTypeMismatch(Type.displayName(actionType)))
   }
 }

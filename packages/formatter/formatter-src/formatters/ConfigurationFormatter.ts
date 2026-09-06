@@ -1,7 +1,7 @@
 import { AST } from '@parser'
 import type { FormatHandlers } from '../formatting'
 
-export default {
+export const ConfigurationFormatter = {
   /** NavDeclaration formats one declaration-owned navigation configuration contract. */
   NavDeclaration(f) {
     f.visibilityOnOwnLine()

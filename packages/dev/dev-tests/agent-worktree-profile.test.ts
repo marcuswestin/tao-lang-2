@@ -427,34 +427,25 @@ Describe('agent worktree profile bootstrap', () => {
   Test('runs every stable browser and native lane while reporting the simulated journey quarantine', async () => {
     const commands = await justCommands('full-verify')
 
+    // The lanes are named for the public recipes that run the same files by hand; the graph runs
+    // the smokes through the catalog's command, which is where their worker indices come from.
     Expect(commands).toContain(
-      '_full-verify-smoke-launch _full-verify-real-app _full-verify-keyboard-navigation '
-        + '_full-verify-native _full-verify-canary',
+      'ship-bundle-proof studio-smoke studio-proof-real-app keyboard-navigation-smoke studio-smoke-native studio-canary',
     )
     Expect(commands).toContain('--lane full-verify')
     Expect(commands).not.toContain('--jobs 1')
     Expect(commands).toContain(
-      '--skipped "_full-verify-simulated=temporarily quarantined; '
-        + 'run just _full-verify-simulated to reproduce"',
+      '--skipped "studio-smoke-simulated-user=temporarily quarantined; '
+        + 'run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"',
     )
     Expect(commands).not.toContain('_tao-check=')
     Expect(commands).not.toContain('_dprint-check=')
     Expect(commands).not.toContain('manual-check')
-    // Each lane owns a worker index so StudioSmoke.resources() keeps their ports and roots apart.
-    Expect(await justCommands('_full-verify-smoke-launch')).toContain(
-      '--worker 0 packages/dev/studio-smoke/studio-launch.test.ts',
+    Expect(await justRecipeNames()).not.toContain('_full-verify-smoke-launch')
+    Expect(await justCommands('ship-bundle-proof')).toContain(
+      'bun run packages/runtime-toolchain/runtime-toolchain-src/testing/verify-release-bundle.ts',
     )
-    Expect(await justCommands('_full-verify-real-app')).toContain(
-      '--worker 1 packages/dev/studio-smoke/studio-real-app.test.ts',
-    )
-    Expect(await justCommands('_full-verify-simulated')).toContain(
-      '--worker 2 packages/dev/studio-smoke/studio-simulated-user.test.ts',
-    )
-    Expect(await justCommands('_full-verify-keyboard-navigation')).toContain(
-      '--worker 4 packages/dev/studio-smoke/runtime-keyboard-navigation.test.ts',
-    )
-    Expect(await justCommands('_full-verify-native')).toContain('--native --run-id full-verify-native --worker 3')
-    Expect(await justCommands('_full-verify-canary')).toContain('./dev studio-canary')
+    Expect(await justCommands('studio-canary')).toContain('./dev studio-canary')
     Expect(await justCommands('studio-manual-checks')).toContain('./dev studio-manual-checks')
   })
 
@@ -505,15 +496,11 @@ Describe('agent worktree profile bootstrap', () => {
       Expect(commands).not.toContain('_tao-check=')
       Expect(commands).not.toContain('_dprint-check=')
     }
-    Expect(fullVerify).toContain(
-      '--skipped "_full-verify-simulated=temporarily quarantined; '
-        + 'run just _full-verify-simulated to reproduce"',
-    )
+    const quarantine = '--skipped "studio-smoke-simulated-user=temporarily quarantined; '
+      + 'run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"'
+    Expect(fullVerify).toContain(quarantine)
     Expect(sandbox).toContain('--skip-unsandboxed')
-    Expect(sandbox).toContain(
-      '--skipped "_full-verify-simulated=temporarily quarantined; '
-        + 'run just _full-verify-simulated to reproduce"',
-    )
+    Expect(sandbox).toContain(quarantine)
   })
 })
 

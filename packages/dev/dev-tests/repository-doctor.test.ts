@@ -26,7 +26,7 @@ function facts(overrides: Partial<DoctorFacts> = {}): DoctorFacts {
     nodeVersion: 'v24.14.1',
     ports: [{ listeners: [], port: 8081, purpose: 'Expo Metro' }],
     repositoryRoot: '/w',
-    satisfies: (version, range) => Bun.semver.satisfies(version, range),
+    satisfies: Platform.semverSatisfies,
     watchmanHealthy: true,
     watchmanVersion: '2026.01.19.00',
     ...overrides,

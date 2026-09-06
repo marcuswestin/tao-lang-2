@@ -187,7 +187,9 @@ export async function runStudioDev(options: StudioDevOptions): Promise<number> {
     // Read here rather than exported into the environment: everything Studio starts inherits an environment,
     // and only the chat needs these. `--native` takes the same path, which is why it was missing them too.
     const agentSecrets = await readDecryptedSecrets()
-    if (agentSecrets['ANTHROPIC_API_KEY'] === undefined && process.env['ANTHROPIC_API_KEY'] === undefined) {
+    if (
+      agentSecrets['ANTHROPIC_API_KEY'] === undefined && Platform.runtimeProcess.env['ANTHROPIC_API_KEY'] === undefined
+    ) {
       HCI.logProcessInfo('studio', 'Agent chat: no ANTHROPIC_API_KEY; run `just secrets` to decrypt one.')
     }
     server = await startStudioSessionServer(manager, {
