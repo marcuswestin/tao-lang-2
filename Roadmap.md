@@ -10,6 +10,7 @@ app feature and Tao test proves each capability).
 
 ## Ro STACK
 
+- [ ] While running TUI tests, increase main testing timer counter from 0.5 seconds to 0.1 seconds
 - [ ] Deep links and navigation persistence
 - [ ] Enable Codex to interact with studio on its own for testing and development of it.
 - [ ] Work through the durable developer-environment upgrade ledger.
