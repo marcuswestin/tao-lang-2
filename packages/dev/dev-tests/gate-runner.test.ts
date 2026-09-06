@@ -385,3 +385,89 @@ Describe('gate runner under a shared machine', () => {
     await FS.remove(registryRoot)
   })
 })
+
+Describe('gate runner green trees', () => {
+  async function runOnce(
+    root: string,
+    options: { fresh?: boolean; hash: string; lanes: readonly string[]; script?: GateScript },
+  ) {
+    const started: string[] = []
+    const summary = await runGates({
+      gates: ['_repo-lint', '_typecheck'],
+      greenTree: { fresh: options.fresh, hashTree: async () => options.hash, lanes: options.lanes },
+      jobs: 2,
+      lane: options.lanes[0],
+      logRoot: FS.resolvePath('logs', root),
+      registryRoot: FS.resolvePath('registry', root),
+      repositoryRoot: root,
+      runGate: async (name, logPath) => {
+        started.push(name)
+        const result = options.script?.[name] ?? { exitCode: 0, output: '' }
+        await FS.writeText(logPath, result.output)
+        return result
+      },
+    })
+    return { started, summary }
+  }
+
+  Test('a green run records its tree and an identical tree is not run again', async () => {
+    const root = await mkTestDir('tao-gate-runner-green-')
+    try {
+      const first = await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })
+      Expect(first.started.sort()).toEqual(['_repo-lint', '_typecheck'])
+      Expect(first.summary.greenTree).toBeUndefined()
+
+      const second = await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })
+      Expect(second.started).toEqual([])
+      Expect(second.summary.status).toBe('passed')
+      Expect(second.summary.greenTree?.lane).toBe('verify')
+      Expect(second.summary.greenTree?.logRoot).toBe(first.summary.logRoot)
+      Expect(second.summary.gates.map(gate => gate.status)).toEqual(['skipped', 'skipped'])
+      Expect(second.summary.gates[0]?.reason).toContain('tree unchanged since the green verify run')
+
+      const edited = await runOnce(root, { hash: 'tree-2', lanes: ['verify'] })
+      Expect(edited.started.sort()).toEqual(['_repo-lint', '_typecheck'])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('a red run records nothing, and --fresh runs everything while still recording', async () => {
+    const root = await mkTestDir('tao-gate-runner-green-red-')
+    try {
+      const red = await runOnce(root, {
+        hash: 'tree-1',
+        lanes: ['verify'],
+        script: { _typecheck: { exitCode: 1, output: 'boom' } },
+      })
+      Expect(red.summary.status).toBe('failed')
+
+      const again = await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })
+      Expect(again.started.length).toBe(2)
+
+      const fresh = await runOnce(root, { fresh: true, hash: 'tree-1', lanes: ['verify'] })
+      Expect(fresh.started.length).toBe(2)
+      Expect(fresh.summary.greenTree).toBeUndefined()
+      Expect((await runOnce(root, { hash: 'tree-1', lanes: ['verify'] })).started).toEqual([])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
+  Test('a lane stands on a superset lane record but a superset never stands on a subset', async () => {
+    const root = await mkTestDir('tao-gate-runner-green-superset-')
+    try {
+      await runOnce(root, { hash: 'tree-1', lanes: ['full-verify'] })
+
+      const verify = await runOnce(root, { hash: 'tree-1', lanes: ['verify', 'full-verify'] })
+      Expect(verify.started).toEqual([])
+      Expect(verify.summary.greenTree?.lane).toBe('full-verify')
+
+      await runOnce(root, { hash: 'tree-2', lanes: ['verify', 'full-verify'] })
+      const full = await runOnce(root, { hash: 'tree-2', lanes: ['full-verify'] })
+      Expect(full.started.length).toBe(2)
+    } finally {
+      await FS.remove(root)
+    }
+  })
+})

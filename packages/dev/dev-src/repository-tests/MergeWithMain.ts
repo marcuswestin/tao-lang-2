@@ -377,7 +377,7 @@ function formatDryRun(preflight: MergePreflight, options: MergeWithMainOptions):
       ? 'PLAN  Skip full verification because --skip-full-verify was explicit.'
       : 'PLAN  Run just full-verify on the feature branch.',
     'PLAN  Fetch and, if main moved, merge it into the feature branch and restart full verification.',
-    "PLAN  Squash onto main, compare tree hashes, run just verify, and commit with Git's squash appendix.",
+    "PLAN  Squash onto main, compare tree hashes, run just verify --complete, and commit with Git's squash appendix.",
     'PLAN  Push main, archive the remote feature branch, detach its clean worktree, delete its local branch, and prune.',
     'PLAN  Preserve the invoking worktree and shell until its owning task is archived.',
     `DRY RUN  No refs or worktrees changed. Execute with: ${command}`,
@@ -628,7 +628,7 @@ async function squashAndVerify(
   await runAndSnapshot(
     snapshot,
     'just',
-    ['verify'],
+    ['verify', '--complete'],
     snapshot.mainRoot,
     'main-verified',
     dependencies,

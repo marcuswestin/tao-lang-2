@@ -71,12 +71,33 @@ Describe('test runner suite scheduling', () => {
     Expect(jestSuite?.args).toContain('--outputFile=/tmp/test-reports/runtime-jest.json')
   })
 
-  Test('adds each runner native changed-since argument', async () => {
-    const suites = await TestRunner.discoverTestSuites('', 3, { changedReference: 'abc123' })
+  Test('a suite plan keeps only the named suites and hands the Tao Apps suite its roots', async () => {
+    const suites = await TestRunner.discoverTestSuites('', 3, {
+      suites: new Set(['dev', 'runtime-jest', 'tao-apps']),
+      taoAppPaths: ['Apps/WordFlower'],
+    })
 
-    Expect(suites.find(suite => suite.name === 'dev')?.args).toContain('--changed=abc123')
-    Expect(suites.find(suite => suite.name === 'dev')?.args).toContain('--pass-with-no-tests')
-    Expect(suites.find(suite => suite.name === 'runtime-jest')?.args).toContain('--changedSince=abc123')
+    Expect(suites.map(suite => suite.name)).toEqual(['dev', 'runtime-jest', 'tao-apps'])
+    // Whole suites run in full: neither runner is asked to narrow by Git, because Bun's
+    // `--changed` stops at the package boundary and Jest ignores `--changedSince` beside paths.
+    Expect(suites.find(suite => suite.name === 'dev')?.args.some(arg => arg.startsWith('--changed'))).toBe(false)
+    Expect(suites.find(suite => suite.name === 'dev')?.args).not.toContain('--pass-with-no-tests')
+    Expect(suites.find(suite => suite.name === 'runtime-jest')?.args.some(arg => arg.startsWith('--changedSince')))
+      .toBe(false)
+    Expect(suites.find(suite => suite.name === 'tao-apps')?.args).toEqual(['test', 'Apps/WordFlower'])
+    Expect(suites.find(suite => suite.name === 'tao-apps')?.files).toEqual(['Apps/WordFlower'])
+  })
+
+  Test('the complete run tests every app and the inventory names every suite it would run', async () => {
+    const suites = await TestRunner.discoverTestSuites()
+    const inventory = await TestRunner.suiteInventory()
+
+    Expect(suites.find(suite => suite.name === 'tao-apps')?.args).toEqual(['test', 'Apps'])
+    Expect(inventory.packageSuites).toContain('dev')
+    Expect(inventory.packageSuites).toContain('shared')
+    Expect(inventory.hasRuntimeJest).toBe(true)
+    const expected = [...inventory.packageSuites, 'performance-checks', 'runtime-jest', 'tao-apps'].sort()
+    Expect(suites.map(suite => suite.name).sort()).toEqual(expected)
   })
 
   Test('a name-filter run fails only when reporter metadata proves zero tests executed', () => {
