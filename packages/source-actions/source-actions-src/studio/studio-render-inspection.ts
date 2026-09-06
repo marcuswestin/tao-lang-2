@@ -15,7 +15,12 @@ import type {
 } from './studio-contract'
 import { selectedDesign, styleProvenance } from './studio-design-styles'
 import { isInlineDesignExploration, isStudioLayoutEntry } from './studio-layout-entries'
-import { requireLocalRenderId, requireRenderById, visibleRenderValues } from './studio-render-occurrences'
+import {
+  renderOwnerInspection,
+  requireLocalRenderId,
+  requireRenderById,
+  visibleRenderValues,
+} from './studio-render-occurrences'
 import { applySourceEdits, requireExactKeys, taoStringLiteral } from './studio-source-text'
 
 /** inspectRender returns parser-owned current clause values and workspace-aware design provenance. */
@@ -35,6 +40,7 @@ export function inspectRender(
   const ownerPath = design === undefined ? undefined : AST.getDocument(design).uri.fsPath
   const local = ownerPath === undefined || ownerPath === document.uri.fsPath
   const elementName = ASTUtils.standardDesignElementName(render)
+  const owner = renderOwnerInspection(render)
   return {
     ...(design === undefined || ownerPath === undefined
       ? {}
@@ -49,6 +55,7 @@ export function inspectRender(
     ...(elementName === undefined ? {} : { elementName }),
     explorations: entries.filter(isInlineDesignExploration) as unknown as StudioStyleEntry[],
     layoutEntries,
+    ...(owner === undefined ? {} : { owner }),
     renderId,
     styleEntries,
     styleProvenance: styleEntries.map(entry => styleProvenance(files, document, design, entry)),

@@ -339,6 +339,8 @@ export type StudioCheckpointSummary = {
 }
 
 export type StudioInspectRenderRequest = {
+  /** The selecting cell instance; with it the owner's root render is reported with its measured rectangle. */
+  identity?: StudioSourceActionIdentity
   path: string
   renderId: string
   sourceVersion: string
@@ -923,6 +925,7 @@ export const StudioProtocol = {
   parseMessage: parseMessageData,
   parseRuntimeCapture,
   parseSourceActionEnvelope,
+  parseSourceActionIdentity,
   parseSourceActionUndoEnvelope,
   parseWindowMessage,
 } as const
