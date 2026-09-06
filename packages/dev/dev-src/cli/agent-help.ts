@@ -49,9 +49,13 @@ Examples:
   ./agent test-file packages/parser/parser-tests/Parser.test.ts
   ./agent test-changed
   ./agent test-retry
-  ./agent verify
+  ./agent verify --changed
+  ./agent verify --complete
   ./agent full-verify-sandbox
 
+verify needs a scope: --changed runs the gates plus the test suites the branch diff reaches (iterate
+with it); --complete runs every suite (the gate before a reviewed commit or a merge). A lane whose
+tree is already recorded green prints that run's evidence and stops; --fresh runs it anyway.
 Every lane writes .artifacts/logs/<lane>/latest/ — one <node>.log per gate plus summary.json.
 On a failure, read summary.json first: it names the first failing gate and its log.
 `

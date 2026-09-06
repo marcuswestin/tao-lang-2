@@ -235,18 +235,18 @@ function createCommands(): Command {
 
   commands
     .command('test')
-    .argument('[path]', 'Tao test file or directory to search. Defaults to the current directory.', '.')
+    .argument('[paths...]', 'Tao test files or directories to search. Defaults to the current directory.')
     .option(
       '--output <mode>',
       'Report the run as streamed lines or as a quiet summary with a log file (tui streams lines).'
         + ' Defaults to lines in a terminal and quiet otherwise.',
     )
-    .description('Run Tao tests declared in .tao files at or under a path.')
-    .action(async (path: string, options: { output?: string }) => {
+    .description('Run Tao tests declared in .tao files at or under the given paths.')
+    .action(async (paths: string[], options: { output?: string }) => {
       try {
         const { TestOutput } = await import('./test-output')
         const { runTestCommand } = await import('./test-command')
-        await runTestCommand(path, { output: TestOutput.resolveMode(options.output) })
+        await runTestCommand(paths.length > 0 ? paths : ['.'], { output: TestOutput.resolveMode(options.output) })
       } catch (error) {
         HCI.writeErrorLine(Errors.formatForUser(error))
         Platform.runtimeProcess.exit(1)

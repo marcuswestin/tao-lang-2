@@ -54,8 +54,10 @@ Ro is the project lead and language designer. Ro decides language semantics, roa
 
 ## Validation
 
-- Run focused tests while working.
-- Run `./agent verify` as the final validation and before commits.
+- Run focused tests while working, and `./agent verify --changed` as the iteration gate: it runs the
+  fix, typecheck, and lint gates plus only the test suites the branch diff reaches.
+- Run `./agent verify --complete` as the final validation and before a commit that goes to review or
+  merge; a work-in-progress commit may stand on `--changed`. `verify` refuses to run without a scope.
 - Read the `verification-lanes` skill when choosing between changed, retry, complete, sandbox, and
   host-only verification. Selection lanes are iteration aids, never merge evidence, and
   `merge-with-main` is never an agent's own initiative: run it only when Ro asks for that merge in

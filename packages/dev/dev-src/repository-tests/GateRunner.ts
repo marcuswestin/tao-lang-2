@@ -1,6 +1,7 @@
 import { Repo, Time } from '@shared'
 import { ContentionRetry } from './ContentionRetry'
 import { GateCatalog } from './GateCatalog'
+import { GreenTree, type GreenTreeMatch } from './GreenTree'
 import { type ContentionReport, type MachineLane, MachineLanes } from './MachineLanes'
 import { RunArtifacts } from './RunArtifacts'
 import { buildSummary, type GateSummary, skippedResult } from './RunSummary'
@@ -22,6 +23,18 @@ import { type OutputMode, WorkReporter, type WorkReporterHandle } from './WorkRe
 export type RunGatesOptions = {
   /** Gate recipe names, in the order the Justfile declared them. */
   gates: readonly string[]
+  /**
+   * Skip the run when this tree is already proved green. The first lane is the name this run
+   * records its own green tree under; every lane listed is accepted as proof, so list only this
+   * lane and lanes whose gate membership contains it. Absent, no record is read or written.
+   */
+  greenTree?: {
+    /** Ignore every record and run; the run still records its own green tree. */
+    fresh?: boolean
+    /** Injected by tests; defaults to hashing the Git working tree. */
+    hashTree?: (repositoryRoot: string) => Promise<string>
+    lanes: readonly string[]
+  }
   jobs?: number
   /** Path to write an extra stable copy of the JSON summary to, for the lane's known-path readers. */
   jsonPath?: string
@@ -59,6 +72,17 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   })
   const now = options.now ?? Time.nowMs
   const startedAt = now()
+  const hashTree = options.greenTree?.hashTree ?? GreenTree.hashTree
+  if (options.greenTree !== undefined && options.greenTree.fresh !== true) {
+    const match = await GreenTree.find(
+      location.repositoryRoot,
+      await hashTree(location.repositoryRoot),
+      options.greenTree.lanes,
+    )
+    if (match !== undefined) {
+      return greenTreeSummary(options, location.lane, match, now() - startedAt)
+    }
+  }
   // A gate that is both run and declared skipped is run: the declaration is stale, and counting
   // it twice would make the totals disagree with the list above them.
   const runnableGates = options.skipUnsandboxed === true
@@ -128,7 +152,36 @@ export async function runGates(options: RunGatesOptions): Promise<GateSummary> {
   if (options.jsonPath !== undefined) {
     await RunArtifacts.writeSummaryCopy(options.jsonPath, location.repositoryRoot, summary)
   }
+  if (options.greenTree !== undefined && summary.status === 'passed' && !result.interrupted) {
+    // The tree is hashed after the run because the fix gates may have rewritten it; what was
+    // proved green is the tree the run left behind, which is the one the next run would see.
+    await GreenTree.record(location.repositoryRoot, options.greenTree.lanes[0] ?? location.lane, {
+      at: new Date().toISOString(),
+      logRoot: location.logRoot,
+      treeHash: await hashTree(location.repositoryRoot),
+    })
+  }
   return summary
+}
+
+/** greenTreeSummary is the rollup of a run that did not happen because its tree was already proved. */
+function greenTreeSummary(
+  options: RunGatesOptions,
+  lane: string,
+  match: GreenTreeMatch,
+  elapsedMs: number,
+): GateSummary {
+  const reason = `tree unchanged since the green ${match.lane} run at ${match.at}`
+  return {
+    elapsedMs,
+    gates: options.gates.map(name => ({ elapsedMs: 0, name, reason, status: 'skipped' })),
+    greenTree: match,
+    lane,
+    logRoot: match.logRoot,
+    status: 'passed',
+    version: 2,
+    warnings: [],
+  }
 }
 
 /** runUnderLane runs one lane's work and releases its machine registration however that ends. */

@@ -1,6 +1,7 @@
 import * as Shared from '@shared'
 import { ContentionRetry } from './ContentionRetry'
 import { type MachineLane, MachineLanes } from './MachineLanes'
+import { PackageGraph } from './PackageGraph'
 import { RunArtifacts } from './RunArtifacts'
 import { buildSummary } from './RunSummary'
 import { RunTimings } from './RunTimings'
@@ -8,7 +9,7 @@ import { TestAdvisory } from './TestAdvisory'
 import { type TestFile, TestLedger, type TestLedgerStore, type TestObservation } from './TestLedger'
 import { type NativeTestReport, TestReport } from './TestReport'
 import { TestResultSummary } from './TestResultSummary'
-import { type ChangedSelection, TestSelection } from './TestSelection'
+import { type ChangedPlan, type ChangedSelection, type SuiteInventory, TestSelection } from './TestSelection'
 import { type WorkEvent, WorkGraph, type WorkNode, type WorkState } from './WorkGraph'
 import { type OutputMode, WorkReporter } from './WorkReporter'
 
@@ -62,16 +63,19 @@ type PreparedRun = {
   files?: readonly TestFile[]
   kind: TestRunRequest['kind']
   pattern: string
+  /** The suites a changed-files run chose and why; absent for every other kind. */
+  plan?: ChangedPlan
   retryGreenTestCount?: number
   retryStamp?: string
 }
 
 type DiscoverOptions = {
-  changedReference?: string
   files?: readonly TestFile[]
-  includePerformance?: boolean
-  includeTaoApps?: boolean
   reportRoot?: string
+  /** Suite names to keep; every other discovered suite is dropped. Absent means every suite. */
+  suites?: ReadonlySet<string>
+  /** Roots the Tao Apps suite tests; defaults to every app. */
+  taoAppPaths?: readonly string[]
 }
 
 const LANE = 'dev-test'
@@ -126,17 +130,17 @@ const SUITE_SCHEDULING = new Map<string, SuiteScheduling>([
 
 async function discoverTestSuites(pattern = '', jobs?: number, options: DiscoverOptions = {}): Promise<TestSuite[]> {
   const packageRoot = Shared.Repo.resolvePath('packages')
-  const packageNames = await Shared.FS.listDir(packageRoot)
   const testFilesByPackage = await packageTestFilesByPackage(packageRoot)
   const suites: TestSuite[] = []
   const selectedFiles = options.files === undefined ? undefined : filesBySuite(options.files)
+  const wanted = (suite: string) =>
+    (options.suites === undefined || options.suites.has(suite))
+    && (selectedFiles === undefined || (selectedFiles.get(suite)?.size ?? 0) > 0)
 
-  for (const packageName of packageNames) {
-    const packagePath = Shared.FS.resolvePath(packageName, packageRoot)
-    if (!await Shared.FS.isDirectory(packagePath)) {
+  for (const [packageName, allTestFiles] of testFilesByPackage) {
+    if (!wanted(packageName)) {
       continue
     }
-    const allTestFiles = testFilesByPackage.get(packageName) ?? []
     const testFiles = selectedFiles === undefined
       ? allTestFiles
       : allTestFiles.filter(path => selectedFiles.get(packageName)?.has(repositoryRelative(path)) === true)
@@ -146,10 +150,10 @@ async function discoverTestSuites(pattern = '', jobs?: number, options: Discover
     suites.push(...packageSuites(packageName, testFiles, pattern, options))
   }
 
-  if (options.includePerformance !== false && selectedSuite(selectedFiles, 'performance-checks')) {
+  if (wanted('performance-checks')) {
     suites.push(...performanceCheckSuites(pattern, options))
   }
-  if (selectedSuite(selectedFiles, 'runtime-jest')) {
+  if (wanted('runtime-jest')) {
     const runtimeFiles = selectedFiles === undefined
       ? await runtimeJestTestFiles(Shared.Repo.resolvePath())
       : [...(selectedFiles.get('runtime-jest') ?? [])]
@@ -160,14 +164,21 @@ async function discoverTestSuites(pattern = '', jobs?: number, options: Discover
       options,
     ))
   }
-  if (options.includeTaoApps !== false && selectedSuite(selectedFiles, 'tao-apps')) {
-    suites.push(...taoAppsSuites(pattern))
+  if (wanted('tao-apps')) {
+    suites.push(...taoAppsSuites(pattern, options.taoAppPaths))
   }
   return suites
 }
 
-function selectedSuite(selectedFiles: Map<string, Set<string>> | undefined, suite: string): boolean {
-  return selectedFiles === undefined || (selectedFiles.get(suite)?.size ?? 0) > 0
+/** suiteInventory names every suite a complete run would execute, in discovery order. */
+async function suiteInventory(repositoryRoot = Shared.Repo.getRoot()): Promise<SuiteInventory> {
+  const packageRoot = Shared.FS.resolvePath('packages', repositoryRoot)
+  return {
+    hasPerformanceChecks: true,
+    hasRuntimeJest: (await runtimeJestTestFiles(repositoryRoot)).length > 0,
+    hasTaoApps: true,
+    packageSuites: [...(await packageTestFilesByPackage(packageRoot)).keys()],
+  }
 }
 
 function filesBySuite(files: readonly TestFile[]): Map<string, Set<string>> {
@@ -317,20 +328,22 @@ async function runSuites(options: RunSuitesOptions): Promise<number> {
   const reportRoot = Shared.FS.resolvePath('test-results', location.logRoot)
   await Shared.FS.mkdir(reportRoot)
   const suites = await discoverTestSuites(prepared.pattern, machineLane.capacity, {
-    // Only a changed-files run narrows suites by the branch diff. A retry carries the ledger's own
-    // file list and must not intersect it with the diff, or it runs nothing and reports red.
-    changedReference: prepared.kind === 'changed' ? prepared.changed?.reference : undefined,
+    // A changed-files run carries a suite plan; a retry carries the ledger's own file list. Neither
+    // intersects with the other, or a retry would run nothing and report red.
     files: prepared.files,
-    includePerformance: prepared.kind !== 'changed'
-      || TestSelection.selectsPerformanceChecks(prepared.changed?.changedPaths ?? []),
-    includeTaoApps: prepared.kind !== 'changed'
-      || TestSelection.selectsTaoApps(prepared.changed?.changedPaths ?? []),
     reportRoot,
+    suites: prepared.plan === undefined ? undefined : new Set(prepared.plan.selected.keys()),
+    taoAppPaths: prepared.plan?.taoAppPaths,
   })
   printSelection(prepared, suites)
   if (suites.length === 0) {
+    if (prepared.kind === 'changed') {
+      Shared.HCI.writeSuccess('No suite observes the changed paths; nothing to run.')
+      await printAdvisory(prepared, await TestLedger.load(location.repositoryRoot))
+      return 0
+    }
     Shared.HCI.writeLine('No test suites found.')
-    return prepared.kind === 'changed' ? 0 : 1
+    return 1
   }
 
   const mode = options.mode ?? WorkReporter.resolveMode()
@@ -421,7 +434,9 @@ async function prepareRun(request: TestRunRequest, repositoryRoot: string): Prom
 
   if (request.kind === 'changed') {
     const changed = await TestSelection.changedSelection(request.reference, repositoryRoot)
-    return { changed, kind: 'changed', pattern: '' }
+    const [graph, inventory] = await Promise.all([PackageGraph.load(repositoryRoot), suiteInventory(repositoryRoot)])
+    const plan = TestSelection.planChangedSuites(changed.changedPaths, graph, inventory)
+    return { changed, kind: 'changed', pattern: '', plan: await withExistingAppRoots(plan, repositoryRoot) }
   }
   const changed = await TestSelection.changedSelection(undefined, repositoryRoot)
   const retry = await TestLedger.selectRetryFiles(await allTestFiles(repositoryRoot), repositoryRoot)
@@ -435,6 +450,32 @@ async function prepareRun(request: TestRunRequest, repositoryRoot: string): Prom
   }
 }
 
+/**
+ * withExistingAppRoots drops app roots the diff names but the tree no longer has, such as a deleted
+ * app, so `./tao test` is not asked for a path that does not exist.
+ */
+async function withExistingAppRoots(plan: ChangedPlan, repositoryRoot: string): Promise<ChangedPlan> {
+  if (plan.taoAppPaths === undefined) {
+    return plan
+  }
+  const existing: string[] = []
+  for (const root of plan.taoAppPaths) {
+    const absolute = Shared.FS.resolvePath(root, repositoryRoot)
+    if (await Shared.FS.isDirectory(absolute) || await Shared.FS.isFile(absolute)) {
+      existing.push(root)
+    }
+  }
+  if (existing.length === plan.taoAppPaths.length) {
+    return plan
+  }
+  if (existing.length > 0) {
+    return { ...plan, taoAppPaths: existing }
+  }
+  const selected = new Map(plan.selected)
+  selected.delete('tao-apps')
+  return { ...plan, selected, skipped: [...plan.skipped, 'tao-apps'], taoAppPaths: undefined }
+}
+
 async function observationsFor(states: readonly SuiteState[], repositoryRoot: string): Promise<TestObservation[]> {
   const observations: TestObservation[] = []
   for (const state of states) {
@@ -442,7 +483,9 @@ async function observationsFor(states: readonly SuiteState[], repositoryRoot: st
       ? [{
         durationMs: state.elapsedMs,
         file: 'Apps',
-        name: 'all Tao behavior tests',
+        // A partial app run is recorded under its own name, so it can never stand in for the
+        // complete inventory the retry ledger keys on.
+        name: taoAppsObservationName(state.selectedTestFiles ?? []),
         outcome: state.status === 'passed' ? 'passed' : state.status === 'failed' ? 'failed' : 'skipped',
         suite: state.name,
       }]
@@ -477,22 +520,37 @@ function printSelection(prepared: PreparedRun, suites: readonly TestSuite[]): vo
     return
   }
   Shared.HCI.writeLine('\nTest selection:')
+  if (prepared.kind === 'changed') {
+    const paths = prepared.changed?.changedPaths ?? []
+    Shared.HCI.writeLine(
+      `- ${paths.length} changed path${paths.length === 1 ? '' : 's'} since ${
+        prepared.changed?.reference.slice(0, 12)
+      }`,
+    )
+  }
   for (const suite of suites) {
     const details = prepared.kind === 'changed'
-      ? `runner change selection since ${prepared.changed?.reference}`
+      ? prepared.plan?.selected.get(suite.name) ?? 'selected'
       : prepared.kind === 'file'
       ? 'exact requested file'
       : 'contains an unsettled or unrecorded test'
-    Shared.HCI.writeLine(`- selected ${suite.name}: ${details}`)
+    const roots = suite.name === 'tao-apps' && prepared.kind === 'changed' ? ` (${suite.files?.join(', ')})` : ''
+    Shared.HCI.writeLine(`- selected ${suite.name}: ${details}${roots}`)
   }
-  if (prepared.kind === 'changed') {
-    if (!TestSelection.selectsPerformanceChecks(prepared.changed?.changedPaths ?? [])) {
-      Shared.HCI.writeLine('- skipped performance-checks: no performance or language-service path changed')
-    }
-    if (!TestSelection.selectsTaoApps(prepared.changed?.changedPaths ?? [])) {
-      Shared.HCI.writeLine('- skipped tao-apps: no Apps/ or .tao file changed')
-    }
+  const skipped = prepared.plan?.skipped ?? []
+  if (skipped.length > 0) {
+    Shared.HCI.writeLine(
+      `- skipped ${skipped.length} suite${skipped.length === 1 ? '' : 's'} nothing changed reaches: ${
+        skipped.join(', ')
+      }`,
+    )
   }
+}
+
+function taoAppsObservationName(roots: readonly string[]): string {
+  return roots.length === 0 || (roots.length === 1 && roots[0] === TestSelection.ALL_APPS)
+    ? 'all Tao behavior tests'
+    : `Tao behavior tests under ${roots.join(', ')}`
 }
 
 function printRetryHonesty(prepared: PreparedRun): void {
@@ -601,9 +659,7 @@ function bunSuite(name: string, testFiles: string[], pattern: string, options: D
       ? ['--reporter=dot']
       : ['--reporter=junit', `--reporter-outfile=${testReport.path}`]),
     ...(BUN_SUITE_ARGS.get(name) ?? []),
-    ...(options.changedReference === undefined ? [] : [`--changed=${options.changedReference}`]),
-    ...(pattern || options.changedReference !== undefined ? ['--pass-with-no-tests'] : []),
-    ...(pattern ? [`--test-name-pattern=${pattern}`] : []),
+    ...(pattern ? ['--pass-with-no-tests', `--test-name-pattern=${pattern}`] : []),
   ]
   return {
     name,
@@ -639,16 +695,16 @@ function runtimeJestSuites(
   )]
 }
 
-function taoAppsSuites(pattern: string): TestSuite[] {
-  if (pattern.length > 0) {
+function taoAppsSuites(pattern: string, roots: readonly string[] = [TestSelection.ALL_APPS]): TestSuite[] {
+  if (pattern.length > 0 || roots.length === 0) {
     return []
   }
   return [{
     name: 'tao-apps',
     command: './tao',
-    args: ['test', 'Apps'],
+    args: ['test', ...roots],
     cwd: Shared.Repo.resolvePath(),
-    files: ['Apps'],
+    files: [...roots],
   }]
 }
 
@@ -666,9 +722,7 @@ function runtimeJestSuite(
     ...testFiles,
     '--no-watchman',
     `--maxWorkers=${runtimeJestWorkers(slots)}`,
-    ...(options.changedReference === undefined ? [] : [`--changedSince=${options.changedReference}`]),
-    ...(pattern || options.changedReference !== undefined ? ['--passWithNoTests'] : []),
-    ...(pattern ? [`--testNamePattern=${pattern}`] : []),
+    ...(pattern ? ['--passWithNoTests', `--testNamePattern=${pattern}`] : []),
     ...(testReport === undefined ? [] : ['--json', `--outputFile=${testReport.path}`]),
     '--silent',
   ]
@@ -741,5 +795,6 @@ export const TestRunner = {
   runTestFile,
   runTestRequest,
   runTests,
+  suiteInventory,
   testFile,
 } as const
