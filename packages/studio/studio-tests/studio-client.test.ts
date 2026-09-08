@@ -3,7 +3,9 @@ import { type Command, type EditorView, keymap } from '@codemirror/view'
 import { Errors } from '@shared'
 import { Deferred, Expect, Test, until } from '@shared/test'
 import type { StudioRenderInspection } from '@source-actions'
+import { mountStudioPreviewReload } from '../studio-src/client/app/StudioPreviewStatus'
 import { StudioSourceMutations } from '../studio-src/client/app/StudioSourceMutations'
+import { expectPreviewRevision } from '../studio-src/client/matrix/StudioPreviewConnection'
 import {
   StudioApiClient,
   StudioApiError,
@@ -822,6 +824,45 @@ Test('Studio invalidates a browser-local recording when its iframe reloads', () 
 
   Expect(preview.journeyRecording.status).toBe('invalidated')
   Expect(messages.at(-1)).toMatchObject({ type: 'set-interaction-mode' })
+})
+
+Test('Studio expects a new preview revision without automatically reloading its iframe', () => {
+  const iframe = { src: 'http://127.0.0.1:56102/' } as HTMLIFrameElement
+  const preview = { ...previewConnection('preview-revision', 'novel', {}), iframe }
+
+  expectPreviewRevision(preview, 2)
+
+  Expect(preview.expectedRevision).toBe(2)
+  Expect('revisionTimeout' in preview).toBe(false)
+  Expect(iframe.src).toBe('http://127.0.0.1:56102/')
+})
+
+Test('Studio reloads previews only through the explicit toolbar action', () => {
+  const iframe = new EventTarget() as HTMLIFrameElement
+  let source = 'http://127.0.0.1:56102/'
+  let reloads = 0
+  Object.defineProperty(iframe, 'src', {
+    get: () => source,
+    set: value => {
+      source = value as string
+      reloads += 1
+    },
+  })
+  const preview = { ...previewConnection('preview-manual-reload', 'novel', {}), iframe }
+  const button = new EventTarget() as HTMLButtonElement
+  const status = { textContent: '' } as HTMLElement
+  let restored = 0
+  mountStudioPreviewReload(button, status, [preview], () => {
+    restored += 1
+  })
+
+  button.dispatchEvent(new Event('click'))
+
+  Expect(reloads).toBe(1)
+  Expect(iframe.src).toBe('http://127.0.0.1:56102/')
+  Expect(status.textContent).toBe('Reloading preview…')
+  iframe.dispatchEvent(new Event('load'))
+  Expect(restored).toBe(1)
 })
 
 Test('Studio Tao fixture capture rejects its pending action when the active preview reports failure', async () => {

@@ -110,9 +110,11 @@ app WordFlowerDrawer = WordFlower with {
 }
 ```
 
-Every app value, including variants, must be declared in the entry file; cross-module
-variant derivation is unreachable. `run`, imports, and strict app identity accept any complete app
-value uniformly whether its declaration uses a primitive `app` head or inferred `let`.
+App values are ordinary visible declarations: they may live in any project or package module, and
+variants may derive across module boundaries. An unmarked direct `app` remains folder-visible for
+source compatibility; explicit `file`, `folder`, `package`, `workspace`, and `public` visibility
+otherwise follows the common declaration rules. `run`, imports, and strict app identity accept any
+complete app value uniformly whether its declaration uses a primitive `app` head or inferred `let`.
 
 Strict app targets name a complete app value statically and select its running occurrence dynamically.
 `present App@key`, `present Ui() in App@key`, and `replace Nav in App` walk the enclosing app chain
@@ -120,10 +122,11 @@ for the nearest occurrence with the named declaration identity. The app position
 root app or an in-file complete variant; a variant is a static spelling for its originating app
 identity, not a separately targetable declaration. No match is a structured runtime error; target
 resolution never mounts or falls back to the named app definition. A strict selection key must exist
-on the root app's SelectionNav and every variant of that root declared in the same file.
+on the root app's SelectionNav and every reachable variant of that root.
 
-One source module may declare several apps. Generated modules expose a registry local to that module
-and retain the selected app as their default export. `run AppName` selects directly from that module.
+One source module may declare several apps. Generated modules expose a registry local to that module,
+and the module owning the selected app becomes the generated default entry. `run AppName` resolves
+the declaration through ordinary local/import visibility.
 Ordinary tooling uses `tao compile PATH --app NAME` and `dev PATH --app NAME`. Without `--app`, an
 interactive terminal asks which app to use; a noninteractive process fails before code generation or
 Expo startup and lists the available names. Filename, source order, and a global name registry never

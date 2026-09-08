@@ -388,8 +388,10 @@ Describe('compiler: Studio render occurrences', () => {
       Expect(compiled.code).toContain(
         "import { _TaoDataCatalog, Accounts, Detail } from './modules/More.tao'",
       )
-      Expect(compiled.code).toContain('TR.Studio.Environment.useScenario()')
-      Expect(compiled.code).toContain('TR.Studio.Environment.useFixture(_Scope._TaoDataCatalog)')
+      Expect(compiled.code).toContain('const useTaoGeneratedStudioScenario = TR.Studio.Environment.useScenario')
+      Expect(compiled.code).toContain('const useTaoGeneratedStudioFixture = TR.Studio.Environment.useFixture')
+      Expect(compiled.code).toContain('useTaoGeneratedStudioScenario()')
+      Expect(compiled.code).toContain('useTaoGeneratedStudioFixture(_Scope._TaoDataCatalog)')
       // A focused view is mounted through a navigator of its own, so `present` inside it has
       // somewhere to go — the subject entry is the app definition that navigator belongs to.
       Expect(compiled.code).toContain(
@@ -403,7 +405,7 @@ Describe('compiler: Studio render occurrences', () => {
       const production = await Workspace.compile(paths['Main.tao'])
       Expect(production.studioManifest).toBeUndefined()
       Expect(production.files.some(file => file.relativePath === 'TaoStudioManifest.ts')).toBe(false)
-      Expect(production.code).not.toContain('TR.Studio.Environment.useScenario()')
+      Expect(production.code).not.toContain('useTaoGeneratedStudioScenario')
     })
   })
 

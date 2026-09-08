@@ -12,6 +12,42 @@ import {
 registerRuntimeE2ELifecycle()
 
 Describe('Expo runtime', () => {
+  Test('renders a multi-hop app variant whose root is declared in a package module', async () => {
+    await testCompileFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+          use MiddleApp from ./Middle.tao
+          app FinalApp = MiddleApp with { Name "Final app" }
+        `,
+        'Middle.tao': `
+          use Memory from @tao/data/providers/memory
+          use PackageApp from @feature
+          workspace app MiddleApp = PackageApp with {
+            Name "Middle app"
+            Datasource Memory { }
+          }
+        `,
+        'packages/@feature/App.tao': `
+          use Text from @tao/ui
+          data Records / Record { Label text }
+          public app PackageApp {
+            Name "Package app"
+            state LaunchCount is number = 0 (persist)
+            view PackageHome
+          }
+          view PackageHome() {
+            query Records { }
+            render Text("Cross-module app { Records.Count }")
+          }
+        `,
+      },
+      screen => {
+        ExpectScreen(screen).toHaveText('Cross-module app 0')
+      },
+    )
+  })
+
   Test('compiles and renders runtime stdlib imports', async () => {
     const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
     const screen = await compileAndRenderApp(runtimeStdlibTestsPath)

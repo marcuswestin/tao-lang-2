@@ -4,9 +4,61 @@ import {
   type TaoRuntimeCaptureArtifact,
 } from '@runtime/TR-runtime-capture'
 import { StudioPreview } from '@runtime/TR-studio-preview'
+import { Errors } from '@shared'
 import { act, render } from '@testing-library/react-native'
 import React from 'react'
 import { Text } from 'react-native'
+
+describe('resetting a mounted Studio preview error boundary', () => {
+  test('keeps healthy children mounted and retries a failed child only for a new reset key', () => {
+    let mounts = 0
+    let unmounts = 0
+    function Preview({ fails }: { fails: boolean }): React.ReactElement {
+      React.useEffect(() => {
+        mounts += 1
+        return () => {
+          unmounts += 1
+        }
+      }, [])
+      if (fails) {
+        return Errors.throwUnexpected('The preview failed to render.')
+      }
+      return React.createElement(Text, null, 'healthy preview')
+    }
+    const preview = (resetKey: string, fails: boolean): React.ReactElement =>
+      React.createElement(
+        StudioPreview.ErrorBoundary,
+        { resetKey },
+        React.createElement(Preview, { fails }),
+      )
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const screen = render(preview('revision-1', false))
+      expect(screen.getByText('healthy preview')).toBeTruthy()
+      expect({ mounts, unmounts }).toEqual({ mounts: 1, unmounts: 0 })
+
+      screen.rerender(preview('revision-2', false))
+      expect(screen.getByText('healthy preview')).toBeTruthy()
+      expect({ mounts, unmounts }).toEqual({ mounts: 1, unmounts: 0 })
+
+      screen.rerender(preview('revision-2', true))
+      expect(screen.getByText('Tao Studio preview error')).toBeTruthy()
+      expect(screen.getByText('The preview failed to render.')).toBeTruthy()
+      expect({ mounts, unmounts }).toEqual({ mounts: 1, unmounts: 1 })
+
+      screen.rerender(preview('revision-2', false))
+      expect(screen.getByText('Tao Studio preview error')).toBeTruthy()
+      expect(screen.queryByText('healthy preview')).toBeNull()
+      expect({ mounts, unmounts }).toEqual({ mounts: 1, unmounts: 1 })
+
+      screen.rerender(preview('revision-3', false))
+      expect(screen.getByText('healthy preview')).toBeTruthy()
+      expect({ mounts, unmounts }).toEqual({ mounts: 2, unmounts: 1 })
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+})
 
 /**
  * A cell that carries a replay used to spin until React gave up with "Maximum update depth

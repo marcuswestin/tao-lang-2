@@ -24,11 +24,9 @@ export const useValidationMessages = {
   missingImport: (name: string, importPath: string) => `'${name}' is not visible from '${importPath}'.`,
   notVisible: (name: string) =>
     `'${name}' is not visible from here; mark it as 'folder', 'package', 'workspace', or 'public'.`,
-  appImport: (name: string) => `App '${name}' cannot be imported.`,
 } as const
 
 type DeclarationRecord = {
-  isAppValue: boolean
   name: string
   namespace: AST.DeclarationNamespace
   visibility?: AST.DeclarationVisibility
@@ -158,12 +156,7 @@ function validateImportedName(importedName: string, options: ValidateImportedNam
     ctx.error(useStatement, useValidationMessages.missingImport(importedName, importLabel(useStatement)))
     return
   }
-  const importableMatches = matches.filter(declaration => !declaration.isAppValue || canImportApp(resolution))
-  if (importableMatches.length === 0 && matches.some(declaration => declaration.isAppValue)) {
-    ctx.error(useStatement, useValidationMessages.appImport(importedName))
-    return
-  }
-  const visibleMatches = importableMatches.filter(declaration => importedDeclarationIsVisible(declaration, resolution))
+  const visibleMatches = matches.filter(declaration => importedDeclarationIsVisible(declaration, resolution))
   if (visibleMatches.length === 0) {
     ctx.error(useStatement, useValidationMessages.notVisible(importedName))
     return
@@ -199,14 +192,7 @@ function importedDeclarationIsVisible(
   declaration: DeclarationRecord,
   resolution: Packages.Resolution,
 ): boolean {
-  if (declaration.isAppValue) {
-    return canImportApp(resolution)
-  }
   return Packages.isVisible(declaration.visibility, resolution)
-}
-
-function canImportApp(resolution: Packages.Resolution): boolean {
-  return resolution.relation === 'same-file' || resolution.relation === 'same-directory'
 }
 
 function importLabel(useStatement: AST.UseStatement): string {
@@ -258,7 +244,6 @@ function declarationsInFile(file: AST.TaoFile): DeclarationRecord[] {
   return file.statements
     .filter(AST.isDeclaration)
     .map((declaration) => ({
-      isAppValue: AST.isConcreteAppValueDeclaration(declaration),
       name: declaration.name,
       namespace: AST.declarationNamespace(declaration),
       visibility: Packages.visibilityOf(declaration),

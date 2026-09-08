@@ -126,6 +126,16 @@ Describe('compiler: language lowering', () => {
     `)
     Expect(compiled.code).toContain('TR.AssertViewDepth(_ViewProps.__tao, "Recursive")')
     Expect(compiled.code).toContain('TR.ViewTaoProps(')
+
+    const studio = await Compiler.compileCode(
+      `
+      app RecursiveApp { view Recursive }
+      view Recursive() { render Recursive() }
+    `,
+      { studio: true },
+    )
+    Expect(studio.code).toContain('function TaoGeneratedView_Recursive(')
+    Expect(studio.code).toContain('_Scope.Recursive = TaoGeneratedView_Recursive')
   })
 
   Test('propagates view depth through nested render statements without inheriting layout props', async () => {
@@ -473,7 +483,7 @@ Describe('compiler: language lowering', () => {
     // The app binds the stdlib declaration's own identity with an all-defaulted configuration.
     Expect(compiled.code).toContain("import { __tao_type_Dev } from './modules/external/Dev.tao'")
     Expect(compiled.code).toContain(
-      'TR.Data.Configure(_Scope.__tao_type_Dev, {\n                ...{\n                  },',
+      'datasource: () => TR.Data.Configure(_Scope.__tao_type_Dev, {',
     )
     Expect(compiled.files.some(file => file.sourcePath.endsWith('/providers/dev/Dev.tao'))).toBe(true)
     Expect(compiled.files.some(file => file.sourcePath.endsWith('/providers/dev/Dev.ts'))).toBe(true)

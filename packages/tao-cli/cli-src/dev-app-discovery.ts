@@ -47,9 +47,13 @@ async function discoverAppsInFile(appPath: string): Promise<TaoDevApp[]> {
     return []
   }
 
-  const project = parsed.entry.ast.statements.find(AST.isProjectDeclaration)
+  const projectFile = parsed.files
+    .flatMap(file => file.ast.statements.filter(AST.isProjectDeclaration).map(project => ({ file, project })))
+    .filter(candidate => FS.pathIsWithin(appPath, FS.dirname(candidate.file.path)))
+    .toSorted((left, right) => right.file.path.length - left.file.path.length)[0]
+  const project = projectFile?.project
   const declaredName = project?.block.statements.find(AST.isProjectName)?.value
-  const projectRoot = FS.dirname(appPath)
+  const projectRoot = projectFile ? FS.dirname(projectFile.file.path) : FS.dirname(appPath)
   const projectName = declaredName ?? FS.basename(projectRoot)
   return appNames.map(appName => ({ appName, appPath, projectName, projectRoot }))
 }

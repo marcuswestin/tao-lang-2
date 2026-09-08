@@ -49,7 +49,6 @@ export type StudioPreviewConnection = {
   journeyRecording?: StudioJourneyRecordingDraft
   journeyRecordingTimeout?: ReturnType<typeof setTimeout>
   journeyReplayStatus?: 'failed' | 'pending' | 'settled'
-  revisionTimeout?: ReturnType<typeof setTimeout>
   replayRuntimeCapture?: (capture: StudioRuntimeCaptureArtifact) => Promise<void>
   runtimeCaptureRequest?: {
     reject: (error: Error) => void
@@ -131,10 +130,6 @@ export function disconnectPreviews(
 ): void {
   for (const preview of previews) {
     invalidatePreviewJourneyRecording(preview)
-    if (preview.revisionTimeout !== undefined) {
-      clearTimeout(preview.revisionTimeout)
-      preview.revisionTimeout = undefined
-    }
     if (preview.capture !== undefined) {
       clearTimeout(preview.capture.timeout)
       preview.capture.reject(new Errors.HostEnvironmentError(reason))
@@ -269,7 +264,6 @@ export function observePreviewVisibility(frame: HTMLElement, connection: StudioP
       connection.suspendedSource = undefined
       if (source !== undefined) {
         connection.iframe.src = source
-        schedulePreviewRevisionFallback(connection)
       }
     }
   }, { root: frame.closest<HTMLElement>('.studio-preview-grid'), rootMargin: '600px' })
@@ -288,37 +282,4 @@ export function setPreviewSource(connection: StudioPreviewConnection, source: st
 
 export function expectPreviewRevision(connection: StudioPreviewConnection, compileRevision: number): void {
   connection.expectedRevision = compileRevision
-  if (connection.revisionTimeout !== undefined) {
-    clearTimeout(connection.revisionTimeout)
-    connection.revisionTimeout = undefined
-  }
-  schedulePreviewRevisionFallback(connection)
-}
-
-/** Reloads a preview that never applied the compile revision it was told to expect. */
-export function schedulePreviewRevisionFallback(connection: StudioPreviewConnection): void {
-  const expected = connection.expectedRevision
-  if (
-    expected === undefined
-    || (connection.appliedRevision ?? -1) >= expected
-    || connection.suspended === true
-    || connection.revisionTimeout !== undefined
-  ) {
-    return
-  }
-  connection.revisionTimeout = setTimeout(() => {
-    connection.revisionTimeout = undefined
-    if (
-      connection.expectedRevision !== expected
-      || (connection.appliedRevision ?? -1) >= expected
-      || connection.suspended === true
-    ) {
-      return
-    }
-    const source = connection.iframe.src
-    if (source !== '' && source !== 'about:blank') {
-      invalidatePreviewJourneyRecording(connection)
-      connection.iframe.src = source
-    }
-  }, 750)
 }

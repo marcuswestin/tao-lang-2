@@ -47,10 +47,14 @@ type StudioPreviewErrorBoundaryProps = {
   /** Called once, synchronously during commit — before any sibling's `useEffect` — so a caller
    * deciding whether to acknowledge the cell that just mounted can see the failure first. */
   onError?: (error: unknown) => void
+  /** Clears a previously caught failure when Studio accepts a newer preview without remounting
+   * healthy children while revisions advance. */
+  resetKey?: string
 }
 
 type StudioPreviewErrorBoundaryState = {
   error?: unknown
+  resetKey?: string
 }
 
 type StudioSourceRange = {
@@ -211,10 +215,17 @@ class StudioPreviewErrorBoundary extends React.Component<
   StudioPreviewErrorBoundaryProps,
   StudioPreviewErrorBoundaryState
 > {
-  override state: StudioPreviewErrorBoundaryState = {}
+  override state: StudioPreviewErrorBoundaryState = { resetKey: this.props.resetKey }
 
-  static getDerivedStateFromError(error: unknown): StudioPreviewErrorBoundaryState {
+  static getDerivedStateFromError(error: unknown): Pick<StudioPreviewErrorBoundaryState, 'error'> {
     return { error }
+  }
+
+  static getDerivedStateFromProps(
+    props: StudioPreviewErrorBoundaryProps,
+    state: StudioPreviewErrorBoundaryState,
+  ): StudioPreviewErrorBoundaryState | null {
+    return props.resetKey === state.resetKey ? null : { error: undefined, resetKey: props.resetKey }
   }
 
   override componentDidCatch(error: unknown): void {

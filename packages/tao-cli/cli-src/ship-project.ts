@@ -107,25 +107,30 @@ async function readShipProject(
       continue
     }
     const parsed = await workspace.parse(path)
-    const source = await FS.readText(path)
     for (const declaration of AST.appValueDeclarationsInFile(parsed.entry.ast)) {
       const declarationSource = declaration.$cstNode?.text ?? ''
-      const releaseDatasourceConfiguration = deriveHostedDatasourceConfiguration(declaration.name, source)
-      const icloud = deriveICloudBinding(declarationSource, source)
+      const inheritedSource = appSourceGraph(declaration)
+      const releaseDatasourceConfiguration = deriveHostedDatasourceConfiguration(declaration.name, inheritedSource)
+      const icloud = deriveICloudBinding(declarationSource, inheritedSource)
       apps.push({
         baseAppName: directAppBaseName(declarationSource),
         displayName: authoredAppName(declarationSource) ?? declaration.name,
         hasLocalDatasourceEndpoint: declaration.name.toLowerCase().includes('instantdb')
-          && /(?:ApiURI|WebsocketURI)\s+"(?:https?|wss?):\/\/localhost(?::\d+)?/u.test(source),
+          && /(?:ApiURI|WebsocketURI)\s+"(?:https?|wss?):\/\/localhost(?::\d+)?/u.test(inheritedSource),
         ...(icloud === undefined ? {} : { icloud }),
         isVariant: AST.isAliasDeclaration(declaration)
           || (AST.isAppDeclaration(declaration) && declaration.value !== undefined),
         name: declaration.name,
         releaseDatasourceConfiguration,
         sourcePath: path,
-        usesDevDatasource: /\bDatasource\s+Dev\b/u.test(declarationSource),
+        usesDevDatasource: /\bDatasource\s+Dev\b/u.test(inheritedSource),
       })
     }
+  }
+  const duplicates = apps.filter((app, index) => apps.findIndex(candidate => candidate.name === app.name) !== index)
+  if (duplicates.length > 0) {
+    const names = [...new Set(duplicates.map(app => app.name))]
+    Errors.throwUserInput(`Tao app names must be unique within a ship project: ${names.join(', ')}.`)
   }
   const unique = new Map(apps.map(app => [app.name, app]))
   const uniqueApps = [...unique.values()].toSorted((left, right) => left.name.localeCompare(right.name))
@@ -153,7 +158,75 @@ function authoredAppName(source: string): string | undefined {
 }
 
 function directAppBaseName(source: string): string | undefined {
-  return /^\s*app\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s+with\b/u.exec(source)?.[1]
+  return /^\s*(?:(?:file|folder|package|workspace|public)\s+)?app\s+[A-Za-z_][A-Za-z0-9_]*\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s+with\b/u
+    .exec(source)?.[1]
+}
+
+function appSourceGraph(app: AST.AppValueDeclaration): string {
+  const declarations = new Set<AST.Node>()
+  const documents = new Set<AST.TaoFile>()
+  const seenApps = new Set<AST.AppValueDeclaration>()
+  let current: AST.AppValueDeclaration | undefined = app
+  while (current && !seenApps.has(current)) {
+    seenApps.add(current)
+    declarations.add(current)
+    documents.add(AST.getDocument(current).parseResult.value)
+    collectDatasourceDependencies(current, declarations, documents)
+    const expression: AST.Expression | undefined = current.value
+    const target: AST.RefinementBaseDeclaration | undefined = expression
+        && (AST.isRefinementExpression(expression) || AST.isValueReference(expression))
+      ? expression.target.ref
+      : undefined
+    current = AST.isAppValueDeclaration(target) ? target : undefined
+  }
+  const providerImports = [...documents].flatMap(file =>
+    file.statements
+      .filter(AST.isUseStatement)
+      .filter(statement => statement.importPath?.startsWith('@tao/data/providers/') === true)
+      .filter(statement =>
+        statement.importedDeclarations.some(reference => reference.ref !== undefined && declarations.has(reference.ref))
+      )
+      .flatMap(statement => statement.$cstNode?.text ?? [])
+  )
+  return [...providerImports, ...[...declarations].flatMap(declaration => declaration.$cstNode?.text ?? [])].join('\n')
+}
+
+function collectDatasourceDependencies(
+  app: AST.AppValueDeclaration,
+  declarations: Set<AST.Node>,
+  documents: Set<AST.TaoFile>,
+): void {
+  const datasourceValues = AST.streamAllContents(app).filter(node =>
+    (AST.isAppProperty(node) || AST.isConfigurationEntry(node)) && node.name === 'Datasource'
+  )
+  for (const value of datasourceValues) {
+    collectReferencedDeclarations(value, declarations, documents)
+  }
+}
+
+function collectReferencedDeclarations(
+  root: AST.Node,
+  declarations: Set<AST.Node>,
+  documents: Set<AST.TaoFile>,
+): void {
+  for (const node of [root, ...AST.streamAllContents(root)]) {
+    const target = AST.isValueReference(node) || AST.isRefinementExpression(node)
+      ? node.target.ref
+      : AST.isConfigurationReference(node)
+      ? node.target.ref
+      : AST.isConfigurationConstructor(node)
+      ? node.type.ref
+      : undefined
+    if (!target || declarations.has(target) || AST.isAppValueDeclaration(target)) {
+      continue
+    }
+    if (!AST.isDatasourceDeclaration(target) && !AST.isTypeDeclaration(target) && !AST.isAliasDeclaration(target)) {
+      continue
+    }
+    declarations.add(target)
+    documents.add(AST.getDocument(target).parseResult.value)
+    collectReferencedDeclarations(target, declarations, documents)
+  }
 }
 
 /** deriveHostedDatasourceConfiguration keeps a local InstantDB declaration intact while deriving its ship patch. */
@@ -269,7 +342,10 @@ function withoutLineComments(source: string): string {
 
 /** appDeclarationText finds a direct app declaration's text, whether it closes on its line or later. */
 function appDeclarationText(source: string, name: string): string | undefined {
-  const opening = new RegExp(`^[ \\t]*app\\s+${name}\\s*\\{.*$`, 'mu').exec(source)
+  const opening = new RegExp(
+    `^[ \\t]*(?:(?:file|folder|package|workspace|public)\\s+)?app\\s+${name}\\s*\\{.*$`,
+    'mu',
+  ).exec(source)
   if (opening === null) {
     return undefined
   }

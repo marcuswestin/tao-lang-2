@@ -1,6 +1,5 @@
-import { ASTUtils, Packages, Type } from '@ast-utils'
+import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
-import { FS } from '@shared'
 import type { ValidationContext } from '../validation'
 import { reportPresentationBindingDiagnostic } from './navigation-validator'
 import { primitiveSlots } from './workspace-index'
@@ -9,8 +8,6 @@ import { primitiveSlots } from './workspace-index'
 const appValidationMessages = {
   topLevel:
     'Only project, app, nav, datasource, ui, dialogue, view, layout, let, function, action, data, type, enum, test declarations, and use statements are allowed at file level.',
-  appEntryFile: (name: string) => `App ${name} must be declared in the entry Tao file.`,
-  appPackage: (name: string) => `App ${name} cannot be declared inside a package.`,
   appBlock: (name: string) => `App ${name} contains a statement that is not app configuration.`,
   appRootCount: (name: string, count: number) =>
     `App ${name} must declare exactly one Navigator (or root view), found ${count}.`,
@@ -47,7 +44,6 @@ function validate(file: AST.TaoFile, ctx: ValidationContext): void {
     ...AST.appValueDeclarationsInFile(file).filter(app => !AST.isAppDeclaration(app)),
   ]
   for (const app of apps) {
-    validateAppPlacement(app, file, ctx)
     if (AST.isAppDeclaration(app)) {
       validateAppDeclaration(app, ctx)
     }
@@ -305,17 +301,6 @@ function validateAppAuxiliaryNavigators(app: AST.AppDeclaration, ctx: Validation
   }
 }
 
-function validateAppPlacement(app: AST.AppValueDeclaration, file: AST.TaoFile, ctx: ValidationContext): void {
-  const filePath = AST.getDocument(file).uri.path
-  if (isInsidePackage(filePath, ctx)) {
-    ctx.error(app, appValidationMessages.appPackage(app.name))
-    return
-  }
-  if (filePath !== ctx.entryFilePath && !isTestCompanionAppFile(filePath, ctx)) {
-    ctx.error(app, appValidationMessages.appEntryFile(app.name))
-  }
-}
-
 function validateTopLevelStatements(file: AST.TaoFile, ctx: ValidationContext): void {
   for (const statement of file.statements) {
     // A bare module query is intentionally parsed as diagnostic recovery; DataValidator owns its
@@ -327,25 +312,4 @@ function validateTopLevelStatements(file: AST.TaoFile, ctx: ValidationContext): 
       ctx.error(statement, appValidationMessages.topLevel)
     }
   }
-}
-
-function isInsidePackage(filePath: string, ctx: ValidationContext): boolean {
-  for (const packagePaths of ctx.packagesContext.index.packages.values()) {
-    if (packagePaths.some(packagePath => FS.pathIsWithin(filePath, packagePath))) {
-      return true
-    }
-  }
-  return false
-}
-
-// A test sidecar runs an app declared elsewhere in the project. That file is its own directory's
-// entry when the tests sit beside it, and an ancestor's once the sources are grouped into folders,
-// so reachability is what this allows rather than an exact directory match.
-function isTestCompanionAppFile(filePath: string, ctx: ValidationContext): boolean {
-  if (!Packages.isTestSourcePath(ctx.entryFilePath)) {
-    return false
-  }
-  const testDirectory = FS.dirname(ctx.entryFilePath)
-  const appDirectory = FS.dirname(filePath)
-  return FS.pathIsWithin(testDirectory, appDirectory)
 }

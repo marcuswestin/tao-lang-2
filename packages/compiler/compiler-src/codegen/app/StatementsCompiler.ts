@@ -8,7 +8,7 @@ export const StatementsCompiler = {
   /** Statement compiles one Tao statement. */
   Statement(statement: AST.Statement, options: CodegenOptions = {}): Compiled {
     return Switch.type(statement, {
-      AliasDeclaration: Compile.AliasDeclaration,
+      AliasDeclaration: value => Compile.AliasDeclaration(value, options),
       AppDeclaration: value => Compile.App(value, options),
       ActionDeclaration: Compile.ActionDeclaration,
       AsyncActionStatement: Compile.AsyncActionStatement,

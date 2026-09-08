@@ -37,6 +37,96 @@ Describe('tao ship project discovery', () => {
     })
   })
 
+  Test('discovers a package app and a cross-file variant under root project metadata', async () => {
+    await withTaoFiles('tao-ship-split-project-', {
+      'Project.tao': `
+        project {
+          id "split-notes"
+          name "Split notes"
+          version "1.2.3"
+          DefaultApp NotesBeta
+        }
+      `,
+      'Apps/Notes.tao': `
+        use NotesBase from @notes
+        workspace app NotesBeta = NotesBase with { Name "Notes Beta" }
+      `,
+      'packages/@notes/App.tao': `
+        public app NotesBase { Name "Notes" view Main }
+        view Main() { }
+      `,
+    }, async paths => {
+      const project = await discoverShipProject(paths['Apps/Notes.tao']!)
+
+      Expect(project.root).toBe(FS.dirname(paths['Project.tao']!))
+      Expect(project.apps.map(app => app.name)).toEqual(['NotesBase', 'NotesBeta'])
+      Expect(selectShipApp(project)?.sourcePath).toBe(paths['Apps/Notes.tao'])
+      Expect(project.primaryAppName).toBe('NotesBase')
+    })
+  })
+
+  Test('derives inherited ship metadata without inspecting unrelated sibling declarations', async () => {
+    await withTaoFiles('tao-ship-metadata-graph-', {
+      'Project.tao': `
+        project {
+          id "metadata-graph"
+          name "Metadata graph"
+          version "1.2.3"
+          DefaultApp TargetInstantDBBeta
+        }
+      `,
+      'Apps/Target.tao': `
+        use TargetInstantDBBase, CloudBase from @metadata
+        workspace app TargetInstantDBBeta = TargetInstantDBBase with { Name "Target Beta" }
+        workspace app CloudBeta = CloudBase with { Name "Cloud Beta" }
+      `,
+      'packages/@metadata/App.tao': `
+        use ICloud from @tao/data/providers/icloud
+
+        public app TargetInstantDBBase {
+          Datasource TargetStore
+          view Main
+        }
+        public datasource TargetStore = InstantDB {
+          AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
+          ApiURI "http://localhost:9020"
+          WebsocketURI "ws://localhost:9020/runtime/session"
+        }
+
+        public app CloudBase {
+          Datasource ICloud { Container "iCloud.target.notes" }
+          view Main
+        }
+
+        app UnrelatedDev { Datasource Dev view Main }
+        datasource UnrelatedStore = InstantDB {
+          AppId "unrelated-app-id"
+          ApiURI "http://localhost:9030"
+          WebsocketURI "ws://localhost:9030/runtime/session"
+        }
+        view Main() { }
+      `,
+    }, async paths => {
+      const project = await discoverShipProject(paths['Apps/Target.tao']!)
+      const instant = selectShipApp(project, 'TargetInstantDBBeta')
+      const cloud = selectShipApp(project, 'CloudBeta')
+
+      Expect(instant?.usesDevDatasource).toBe(false)
+      Expect(instant?.hasLocalDatasourceEndpoint).toBe(true)
+      Expect(instant?.releaseDatasourceConfiguration).toEqual({
+        ApiURI: 'https://api.instantdb.com',
+        AppId: '9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f',
+        WebsocketURI: 'wss://api.instantdb.com/runtime/session',
+      })
+      Expect(cloud?.icloud).toEqual({
+        container: 'iCloud.target.notes',
+        services: ['CloudDocuments'],
+      })
+      Expect(cloud?.hasLocalDatasourceEndpoint).toBe(false)
+      Expect(cloud?.usesDevDatasource).toBe(false)
+    })
+  })
+
   Test('writes the version in canonical source', async () => {
     await withTaoFiles('tao-ship-project-', { 'App.tao': projectSource }, async paths => {
       const project = await discoverShipProject(paths['App.tao']!)

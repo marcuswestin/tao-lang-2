@@ -10,7 +10,7 @@ type AppPropertySource = AST.Expression | AST.ConfigurationValue | AST.AppView
 
 type EffectiveAppProperty = {
   patches: AST.ConfigurationBlock[]
-  value: AppPropertySource
+  value?: AppPropertySource
 }
 
 type EffectiveAppConfiguration = Map<string, EffectiveAppProperty>
@@ -22,8 +22,8 @@ export const AppCompiler = {
   },
 
   /** AppValue compiles an inferred `let` whose value family is app. */
-  AppValue(app: AST.AppValueDeclaration): Compiled {
-    return compileAppValue(app)
+  AppValue(app: AST.AppValueDeclaration, options: CodegenOptions = {}): Compiled {
+    return compileAppValue(app, options)
   },
 
   /** PrimitiveValueDeclaration binds one complete nav or datasource descriptor as an immutable Tao value. */
@@ -46,20 +46,39 @@ export const AppCompiler = {
 } as const
 
 function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions = {}): Compiled {
-  const configuration = effectiveAppConfiguration(app)
-  const navigator = configuration.get('Navigator')
-  Assert.defined(navigator, 'validated app value has a Navigator')
-  const name = configuration.get('Name')
-  const datasource = configuration.get('Datasource')
-  const design = configuration.get('Design')
-  const restoration = effectiveRestorationPolicy(app)
+  const base = directAppBase(app)
   const root = ASTUtils.rootAppValue(app)
   Assert.defined(root, 'validated app derivation is acyclic')
+  const crossModuleBase = base && appInheritanceLeavesModule(app, base) ? base : undefined
+  const configuration = crossModuleBase ? directAppConfiguration(app) : effectiveAppConfiguration(app)
+  const baseReference = crossModuleBase ? appDefinitionReference(crossModuleBase) : undefined
+  const inheritedConfiguration = crossModuleBase ? effectiveAppConfiguration(crossModuleBase) : undefined
+  const navigator = compileResolvedAppProperty(configuration.get('Navigator'), 'Navigator', baseReference)
+  Assert.defined(navigator, 'validated app value has a Navigator')
+  const name = compileResolvedAppProperty(
+    configuration.get('Name'),
+    'Name',
+    inheritedConfiguration?.has('Name') ? baseReference : undefined,
+  )
+  const datasource = compileResolvedAppProperty(
+    configuration.get('Datasource'),
+    'Datasource',
+    inheritedConfiguration?.has('Datasource') ? baseReference : undefined,
+    app.name === options.selectedAppName ? options.selectedAppDatasourceConfiguration : undefined,
+  )
+  const design = compileResolvedAppProperty(
+    configuration.get('Design'),
+    'Design',
+    inheritedConfiguration?.has('Design') ? baseReference : undefined,
+  )
+  const restoration = effectiveRestorationPolicy(app)
   const definition = { name: `_TaoAppDefinition_${app.name}` }
-  const rootDeclaration = root === app
+  const rootDeclaration = crossModuleBase
+    ? gen`${baseReference}.declaration`
+    : root === app
     ? gen`TR.Navigation.AppDeclaration(${gen.jsLiteral(app.name)}, ${compileDeclarationIdentity(app)})`
     : gen`${appDefinitionReference(root)}.declaration`
-  const auxiliaries = rootAuxiliaryNavigators(root)
+  const auxiliaries = crossModuleBase ? [] : rootAuxiliaryNavigators(root)
   const persistedStates = AST.isAppDeclaration(root) && root.block
     ? root.block.statements.filter(AST.isStateDeclaration)
     : []
@@ -68,34 +87,38 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     : []
   const declaredPersistedStates = root === app ? persistedStates : []
   const declaredAppActions = root === app ? appActions : []
-  const selectedDatasourceConfiguration = app.name === options.selectedAppName
-    ? options.selectedAppDatasourceConfiguration
-    : undefined
   return gen`
     ${gen.list(declaredPersistedStates, Compile.StateDeclaration)}
     ${gen.list(declaredAppActions, Compile.ActionDeclaration)}
     const ${gen.Name(definition)} = TR.Navigation.App({
       declaration: ${rootDeclaration},
-      name: ${name ? gen`${compileAppProperty(name, 'Name')}.evaluate().jsValue as string` : gen.jsLiteral(app.name)},
-      navigator: () => ${compileAppProperty(navigator, 'Navigator')},
+      name: ${name ? gen`${name}.evaluate().jsValue as string` : gen.jsLiteral(app.name)},
+      navigator: () => ${navigator},
+      ${datasource ? gen`datasource: () => ${datasource},` : gen.noop()}
+      useSetup: () => {
+        ${
+    crossModuleBase
+      ? gen`${baseReference}.definition.useSetup?.()`
+      : gen.list(persistedStates, state => gen`TR.UsePersistedState(${gen.scopeName(state)})`)
+  }
+      },
       restoration: {
         exclusions: ${gen.jsLiteral(restoration.exclusions)},
         mode: ${gen.jsLiteral(restoration.mode)},
         variant: ${gen.jsLiteral(app.name)},
         ${
     datasource
-      ? gen`providerIdentity: () => ${
-        compileAppProperty(datasource, 'Datasource', selectedDatasourceConfiguration)
-      }.bindingIdentity(),`
+      ? gen`providerIdentity: () => ${datasource}.bindingIdentity(),`
       : gen.noop()
   }
       },
       ${
-    design && !AST.isNoneLiteral(design.value)
-      ? gen`design: () => ${compileAppProperty(design, 'Design')},`
+    design
+      ? gen`design: () => ${design},`
       : gen.noop()
   }
       auxiliaries: () => ({
+        ${crossModuleBase ? gen`...${baseReference}.definition.auxiliaries(),` : gen.noop()}
         ${
     gen.list(auxiliaries, auxiliary =>
       gen`${gen.jsLiteral(auxiliary.name.slice(1))}: ${Compile.ConfiguredValue(auxiliary.value)},`)
@@ -103,12 +126,12 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
       }),
     })
     function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
-      ${gen.list(persistedStates, state => gen`TR.UsePersistedState(${gen.scopeName(state)})`)}
+      ${gen.Name(definition)}.definition.useSetup?.()
       ${
     datasource
       ? gen`TR.Data.UseConfigured(
           ${gen.scopeName({ name: '_TaoDataCatalog' })},
-          ${compileAppProperty(datasource, 'Datasource', selectedDatasourceConfiguration)},
+          ${gen.Name(definition)}.definition.datasource!(),
         )`
       : gen.noop()
   }
@@ -142,8 +165,8 @@ function compileStudioSubject(options: CodegenOptions, app: { name: string }): C
     return gen.noop()
   }
   return gen`
-    const _TaoStudioScenario = TR.Studio.Environment.useScenario()
-    const _TaoStudioFixture = TR.Studio.Environment.useFixture(${
+    const _TaoStudioScenario = useTaoGeneratedStudioScenario()
+    const _TaoStudioFixture = useTaoGeneratedStudioFixture(${
     options.studioDataCatalog ? gen.scopeName({ name: '_TaoDataCatalog' }) : 'undefined'
   })
     if (_TaoStudioScenario?.kind === 'view') {
@@ -317,6 +340,125 @@ function effectiveAppConfiguration(
   return effectiveAppExpression(expression, seen)
 }
 
+/** directAppBase returns the immediate app value a reference or refinement derives from. */
+function directAppBase(app: AST.AppValueDeclaration): AST.AppValueDeclaration | undefined {
+  const expression = app.value
+  if (!expression || (!AST.isRefinementExpression(expression) && !AST.isValueReference(expression))) {
+    return undefined
+  }
+  const target = resolveRef(expression.target)
+  Assert.is(target, AST.isAppValueDeclaration, 'validated app reference resolves a complete app value')
+  return target
+}
+
+/** appInheritanceLeavesModule keeps every chain containing a foreign ancestor on runtime values. */
+function appInheritanceLeavesModule(
+  app: AST.AppValueDeclaration,
+  base: AST.AppValueDeclaration,
+): boolean {
+  const appPath = AST.getDocument(app).uri.path
+  const seen = new Set<AST.AppValueDeclaration>()
+  let current: AST.AppValueDeclaration | undefined = base
+  while (current && !seen.has(current)) {
+    if (AST.getDocument(current).uri.path !== appPath) {
+      return true
+    }
+    seen.add(current)
+    current = directAppBase(current)
+  }
+  return false
+}
+
+/** directAppConfiguration keeps cross-module inheritance on the imported runtime app value. */
+function directAppConfiguration(app: AST.AppValueDeclaration): EffectiveAppConfiguration {
+  const configuration: EffectiveAppConfiguration = new Map()
+  const expression = app.value
+  Assert.defined(expression, 'cross-module app value has an initializer')
+  if (AST.isRefinementExpression(expression)) {
+    applyDirectConfigurationBlock(configuration, expression.patchBlock)
+  }
+  return configuration
+}
+
+function applyDirectConfigurationBlock(
+  configuration: EffectiveAppConfiguration,
+  block: AST.ConfigurationBlock,
+): void {
+  for (const entry of block.entries) {
+    if (entry.rootView) {
+      configuration.set('Navigator', { patches: [], value: entry.rootView })
+      continue
+    }
+    if (!entry.name || !entry.value) {
+      continue
+    }
+    if (AST.isPropertyConfigurationPatch(entry.value)) {
+      const property = configuration.get(entry.name)
+      if (property) {
+        property.patches.push(entry.value.block)
+      } else {
+        configuration.set(entry.name, { patches: [entry.value.block] })
+      }
+    } else {
+      configuration.set(entry.name, { patches: [], value: entry.value })
+    }
+  }
+}
+
+function compileResolvedAppProperty(
+  property: EffectiveAppProperty | undefined,
+  name: 'Name' | 'Navigator' | 'Datasource' | 'Design',
+  base: Compiled | undefined,
+  datasourceConfiguration?: Readonly<Record<string, string>>,
+): Compiled | undefined {
+  let result = property?.value
+    ? name === 'Design' && AST.isNoneLiteral(property.value)
+      ? gen`undefined`
+      : compileAppPropertySource(property.value)
+    : base
+    ? inheritedAppProperty(base, name)
+    : undefined
+  if (!result) {
+    return undefined
+  }
+  for (const patch of property?.patches ?? []) {
+    if (name === 'Navigator') {
+      result = gen`TR.Navigation.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
+    } else if (name === 'Datasource') {
+      result = gen`TR.Data.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
+    } else {
+      Assert(false, `validated app ${name} cannot be patched`)
+    }
+  }
+  if (name === 'Datasource' && datasourceConfiguration && Object.keys(datasourceConfiguration).length > 0) {
+    result = gen`TR.Data.Patch(${result}, {
+      ${
+      gen.list(
+        Object.entries(datasourceConfiguration).toSorted(([left], [right]) => left.localeCompare(right)),
+        ([key, value]) => gen`${gen.jsLiteral(key)}: TR.Value(${gen.jsLiteral(value)}),`,
+      )
+    }
+    })`
+  }
+  return result
+}
+
+function inheritedAppProperty(
+  base: Compiled,
+  name: 'Name' | 'Navigator' | 'Datasource' | 'Design',
+): Compiled {
+  if (name === 'Name') {
+    return gen`TR.Value(${base}.definition.name)`
+  }
+  if (name === 'Navigator') {
+    return gen`${base}.definition.navigator()`
+  }
+  if (name === 'Datasource') {
+    return gen`${base}.definition.datasource!()`
+  }
+  return gen`${base}.definition.design?.()`
+}
+
 function effectiveAppExpression(
   expression: AST.Expression,
   seen: Set<AST.AppValueDeclaration>,
@@ -409,34 +551,6 @@ function applyAppPropertyPatch(
   const property = configuration.get(name)
   Assert.defined(property, 'validated app property patch has a base value')
   property.patches.push(patch)
-}
-
-function compileAppProperty(
-  property: EffectiveAppProperty,
-  name: 'Name' | 'Navigator' | 'Datasource' | 'Design',
-  datasourceConfiguration?: Readonly<Record<string, string>>,
-): Compiled {
-  let result = compileAppPropertySource(property.value)
-  for (const patch of property.patches) {
-    if (name === 'Navigator') {
-      result = gen`TR.Navigation.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
-    } else if (name === 'Datasource') {
-      result = gen`TR.Data.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
-    } else {
-      Assert(false, `validated app ${name} cannot be patched`)
-    }
-  }
-  if (name === 'Datasource' && datasourceConfiguration && Object.keys(datasourceConfiguration).length > 0) {
-    result = gen`TR.Data.Patch(${result}, {
-      ${
-      gen.list(
-        Object.entries(datasourceConfiguration).toSorted(([left], [right]) => left.localeCompare(right)),
-        ([key, value]) => gen`${gen.jsLiteral(key)}: TR.Value(${gen.jsLiteral(value)}),`,
-      )
-    }
-    })`
-  }
-  return result
 }
 
 function compileAppPropertySource(value: AppPropertySource): Compiled {

@@ -281,14 +281,6 @@ async function receivePreviewApplied(
   }
   if (identity !== undefined) {
     preview.appliedRevision = Math.max(preview.appliedRevision ?? 0, message.appliedRevision)
-    if (
-      preview.expectedRevision !== undefined
-      && preview.appliedRevision >= preview.expectedRevision
-      && preview.revisionTimeout !== undefined
-    ) {
-      clearTimeout(preview.revisionTimeout)
-      preview.revisionTimeout = undefined
-    }
   }
   if (preview.frame !== undefined && StudioReviewDom.appliedReady(preview.journeyReplayStatus)) {
     StudioReviewDom.status(preview.frame, 'ready')

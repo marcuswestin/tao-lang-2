@@ -880,6 +880,17 @@ Describe('Tao formatter structured design', () => {
 
 Describe('Tao formatter project metadata', () => {
   Test(
+    'formats app visibility like other declarations',
+    formats(
+      `public app PackageAccess{}`,
+      `
+        public
+        app PackageAccess { }
+      `,
+    ),
+  )
+
+  Test(
     'formats project metadata blocks',
     formats(
       `project{id "package-access" name "Package Access" version  "1.2.3" DefaultApp   PackageAccess remote   none license   MIT}\napp PackageAccess {}`,

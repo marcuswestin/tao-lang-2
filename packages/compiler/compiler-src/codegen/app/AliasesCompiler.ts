@@ -1,14 +1,14 @@
 import { AST } from '@parser'
-import { type Compiled, gen } from '../codegen-util'
+import { type CodegenOptions, type Compiled, gen } from '../codegen-util'
 import { Compile } from '../Compile'
 import { AppCompiler } from './AppCompiler'
 import { bridgeBindingName } from './injection-plan'
 
 export const AliasesCompiler = {
   /** AliasDeclaration compiles a Tao alias into a generated Tao value binding. */
-  AliasDeclaration(alias: AST.AliasDeclaration): Compiled {
+  AliasDeclaration(alias: AST.AliasDeclaration, options: CodegenOptions = {}): Compiled {
     if (AST.configuredPrimitiveOfExpression(alias.value) === 'app') {
-      return AppCompiler.AppValue(alias)
+      return AppCompiler.AppValue(alias, options)
     }
     if (AST.isActionTypeReference(alias.type) && AST.isFromExpression(alias.value)) {
       return gen`${gen.scopeName(alias)} = TR.Alias(TR.BridgedAction(${

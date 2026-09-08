@@ -173,20 +173,28 @@ function compileValidated(
     diagnostics: Diagnostics.errors(validationResult.diagnostics),
     errors,
   })
-  const entryApps = AST.appValueDeclarationsInFile(validationResult.entry.ast)
-  Assert(entryApps.length > 0, 'Cannot compile app entry: entry file must declare at least one app.')
-  const appNames = entryApps.map(app => app.name)
-  const selectedAppName = options.appName ?? (appNames.length === 1 ? appNames[0] : undefined)
+  const apps = validationResult.files.flatMap(file =>
+    AST.appValueDeclarationsInFile(file.ast).map(app => ({ app, path: file.path }))
+  )
+  Assert(apps.length > 0, 'Cannot compile app graph: no app declaration is reachable from the entry file.')
+  const entryApps = apps.filter(candidate => candidate.path === validationResult.entry.path)
+  const namedApps = options.appName === undefined
+    ? []
+    : apps.filter(candidate => candidate.app.name === options.appName)
+  const selected = options.appName === undefined
+    ? (entryApps.length === 1 ? entryApps[0] : apps.length === 1 ? apps[0] : undefined)
+    : (entryApps.find(candidate => candidate.app.name === options.appName)
+      ?? (namedApps.length === 1 ? namedApps[0] : undefined))
+  const appNames = apps.map(candidate => candidate.app.name)
   Assert.defined(
-    selectedAppName,
-    `Cannot compile app entry with multiple apps without a selection. Available apps: ${appNames.join(', ')}.`,
+    selected,
+    options.appName === undefined
+      ? `Cannot compile app graph with multiple apps without a selection. Available apps: ${appNames.join(', ')}.`
+      : namedApps.length > 1
+      ? `Cannot compile ambiguous app '${options.appName}'. Select its declaring Tao file as the entry.`
+      : `Cannot compile unknown app '${options.appName}'. Available apps: ${appNames.join(', ')}.`,
   )
-  Assert(
-    appNames.includes(selectedAppName),
-    `Cannot compile unknown app '${selectedAppName}'. Available apps: ${appNames.join(', ')}.`,
-    { appNames, selectedAppName },
-  )
-  return compileValidatedInput(validationResult, context, selectedAppName, options)
+  return compileValidatedInput(validationResult, context, selected.app.name, selected.path, options)
 }
 
 function validationForCompileMode(
@@ -228,6 +236,7 @@ function compileValidatedInput(
   validationResult: ValidationResult,
   context: CompilerContext,
   selectedAppName: string,
+  selectedAppPath: string,
   options: CompileOptions,
 ): CompileResult {
   const studio = options.studio === true
@@ -253,7 +262,7 @@ function compileValidatedInput(
       )
     )
     : []
-  const outputPaths = planOutputPaths(sourceFiles, entryPath, context.sourceRoot, {
+  const outputPaths = planOutputPaths(sourceFiles, selectedAppPath, context.sourceRoot, {
     localDataProvider: dataCatalog?.localOnly
       ? {
         ownerPath: dataCatalog.ownerPath,
@@ -270,7 +279,7 @@ function compileValidatedInput(
       identityProjects,
       projectRoot: context.sourceRoot,
       selectedAppDatasourceConfiguration: options.appDatasourceConfiguration,
-      selectedAppName: file.path === entryPath ? selectedAppName : undefined,
+      selectedAppName: file.path === selectedAppPath ? selectedAppName : undefined,
       studio,
       studioViews,
     })
@@ -288,7 +297,7 @@ function compileValidatedInput(
   }
 
   return {
-    ...compileResultForEntry(validationResult, compiledFiles),
+    ...compileResultForApp(validationResult, compiledFiles, selectedAppPath),
     ...(studioManifest === undefined ? {} : { studioManifest }),
   }
 }
@@ -858,14 +867,20 @@ function configurationAliasImportLines(
 
 function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string): DataCatalogPlan | undefined {
   const entities = sourceFiles.flatMap(file => file.ast.statements.filter(AST.isEntityDataDeclaration))
-  const userPaths = new Set(
+  const directUserPaths = new Set(
     sourceFiles
       .filter(fileUsesDataCatalog)
       .map(file => file.path),
   )
-  if (entities.length === 0 && userPaths.size === 0) {
+  if (entities.length === 0 && directUserPaths.size === 0) {
     return undefined
   }
+  const userPaths = new Set([
+    ...directUserPaths,
+    ...sourceFiles
+      .filter(file => AST.appValueDeclarationsInFile(file.ast).some(appUsesDatasource))
+      .map(file => file.path),
+  ])
   const ownerPath = sourceFiles.find(file => file.ast.statements.some(AST.isEntityDataDeclaration))?.path ?? entryPath
   // Both catalogs are emitted by one owner file, so a project that mixes stores still has a single
   // module every user imports from and a single sidecar copy of the local provider. An app root
@@ -885,6 +900,28 @@ function fileUsesDataCatalog(file: ParsedFile): boolean {
     || AST.isCreateStatement(node)
     || (AST.isAppProperty(node) && node.name === 'Datasource')
   )
+}
+
+function appUsesDatasource(app: AST.AppValueDeclaration): boolean {
+  const seen = new Set<AST.AppValueDeclaration>()
+  let current: AST.AppValueDeclaration | undefined = app
+  while (current && !seen.has(current)) {
+    seen.add(current)
+    if (
+      AST.streamAllContents(current).some(node =>
+        (AST.isAppProperty(node) || AST.isConfigurationEntry(node)) && node.name === 'Datasource'
+      )
+    ) {
+      return true
+    }
+    const expression: AST.Expression | undefined = current.value
+    if (!expression || (!AST.isRefinementExpression(expression) && !AST.isValueReference(expression))) {
+      return false
+    }
+    const target: AST.RefinementBaseDeclaration | undefined = expression.target.ref
+    current = AST.isConcreteAppValueDeclaration(target) ? target : undefined
+  }
+  return false
 }
 
 function addResolvedImport(imports: ResolvedImports, sourcePath: string, binding: string): void {
@@ -911,15 +948,18 @@ function importLinesForCompiledFile(
   })
 }
 
-function compileResultForEntry(
+function compileResultForApp(
   validationResult: ValidationResult,
   compiledFiles: CompiledFile[],
+  selectedAppPath: string,
 ): CompileResult {
-  const entryPath = validationResult.entry.path
-  const entryCode = compiledFiles.find((compiledFile: CompiledFile) => compiledFile.sourcePath === entryPath)?.code
-  Assert.defined(entryCode, 'entry compiled code exists', { entryPath })
+  const appNames = validationResult.files.flatMap(file => AST.appValueDeclarationsInFile(file.ast).map(app => app.name))
+  const entryCode = compiledFiles.find((compiledFile: CompiledFile) =>
+    compiledFile.sourcePath === selectedAppPath && compiledFile.relativePath === 'App.tsx'
+  )?.code
+  Assert.defined(entryCode, 'selected app compiled code exists', { selectedAppPath })
   return {
-    appNames: AST.appValueDeclarationsInFile(validationResult.entry.ast).map(app => app.name),
+    appNames,
     validation: validationResult,
     code: entryCode,
     files: compiledFiles,
@@ -1159,7 +1199,7 @@ function suffixedOutputPath(outputPath: string, suffix: number): string {
 }
 
 function declarationVisibleOutsideFile(declaration: AST.Declaration): boolean {
-  return AST.isAppDeclaration(declaration) || Packages.visibilityOf(declaration) !== undefined
+  return Packages.visibilityOf(declaration) !== undefined
 }
 
 // Most type declarations are erased, but a case set carries runtime case identities and a
