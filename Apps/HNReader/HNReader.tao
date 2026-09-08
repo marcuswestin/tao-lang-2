@@ -109,7 +109,7 @@ scene FrontPage() {
       limit 30
    }
    render Col() [screen] {
-      Col() [header] {
+      Col() [header, hug] {
          Text("Hacker News") [headerTitle]
       }
       guard TopStories {
