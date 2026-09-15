@@ -904,6 +904,40 @@ type StudioLogsPanel is {
    TotalCount number,
 }
 
+type StudioDebugJournalRow is {
+   Action text,
+   Detail text,
+   Outcome text,
+}
+
+type StudioDebugBinding is {
+   Name text,
+   Value text,
+}
+
+type StudioDebugPendingWrite is {
+   Committed text,
+   Kind text,
+   Pending text,
+   Target text,
+}
+
+type StudioDebugPanel is {
+   BreakAction StudioPanelAction,
+   ClearAction StudioPanelAction,
+   ContinueAction StudioPanelAction,
+   Frames list of text,
+   Journal list of StudioDebugJournalRow,
+   Paused boolean,
+   PausedAt text,
+   PendingWrites list of StudioDebugPendingWrite,
+   Scope list of StudioDebugBinding,
+   Source text,
+   StepIntoAction StudioPanelAction,
+   StepOutAction StudioPanelAction,
+   StepOverAction StudioPanelAction,
+}
+
 type StudioSearchPanelRow is {
    Action StudioPanelAction,
    Column number,
@@ -970,8 +1004,40 @@ let InitialLogsPanel = StudioLogsPanel {
    Source: "",
    TotalCount: 0
 }
+let InitialDebugPanel = StudioDebugPanel {
+   BreakAction: StudioPanelAction {
+      Name: "debug-break",
+      Payload: "null"
+   },
+   ClearAction: StudioPanelAction {
+      Name: "debug-clear",
+      Payload: "null"
+   },
+   ContinueAction: StudioPanelAction {
+      Name: "debug-continue",
+      Payload: "null"
+   },
+   Frames: [],
+   Journal: [],
+   Paused: false,
+   PausedAt: "",
+   PendingWrites: [],
+   Scope: [],
+   Source: "",
+   StepIntoAction: StudioPanelAction {
+      Name: "debug-step-into",
+      Payload: "null"
+   },
+   StepOutAction: StudioPanelAction {
+      Name: "debug-step-out",
+      Payload: "null"
+   },
+   StepOverAction: StudioPanelAction {
+      Name: "debug-step-over",
+      Payload: "null"
+}  }
 
-view StudioDrawerPanel(Tab text, Compile StudioCompilePanel, Problems StudioProblemsPanel, Data StudioDataPanel, Tests StudioTestsPanel, Logs StudioLogsPanel) {
+view StudioDrawerPanel(Tab text, Compile StudioCompilePanel, Problems StudioProblemsPanel, Data StudioDataPanel, Debug StudioDebugPanel, Tests StudioTestsPanel, Logs StudioLogsPanel) {
    action Dispatch(Name text, Payload text) {
       do ProductPanelAction(Name: Name, Payload: Payload)
    }
@@ -994,6 +1060,10 @@ view StudioDrawerPanel(Tab text, Compile StudioCompilePanel, Problems StudioProb
       }
       when StudioPanelSelected(Tab: Tab, Panel: "Logs") {
          true -> { StudioLogsPanelView(Logs: Logs, Dispatch: Dispatch) }
+         otherwise -> { }
+      }
+      when StudioPanelSelected(Tab: Tab, Panel: "Debug") {
+         true -> { StudioDebugPanelView(Debug: Debug, Dispatch: Dispatch) }
          otherwise -> { }
 }  }  }
 
@@ -1129,6 +1199,51 @@ view StudioLogsPanelView(Logs StudioLogsPanel, Dispatch action(text, text)) {
          empty -> { Text("No console messages from the active preview.") }
          otherwise -> { loop Logs.Rows / Row {
             Text("{ Row.Level } · { Row.Timestamp } · { Row.Message }")
+         } }
+}  }  }
+
+view StudioDebugPanelView(Debug StudioDebugPanel, Dispatch action(text, text)) {
+   render Col() {
+      StudioPanelCommand(Label: "Break", Command: Debug.BreakAction, Dispatch: Dispatch, Disabled: Debug.Paused)
+      StudioPanelCommand(Label: "Continue", Command: Debug.ContinueAction, Dispatch: Dispatch, Disabled: not Debug.Paused)
+      StudioPanelCommand(Label: "Step over", Command: Debug.StepOverAction, Dispatch: Dispatch, Disabled: not Debug.Paused)
+      StudioPanelCommand(Label: "Step into", Command: Debug.StepIntoAction, Dispatch: Dispatch, Disabled: not Debug.Paused)
+      StudioPanelCommand(Label: "Step out", Command: Debug.StepOutAction, Dispatch: Dispatch, Disabled: not Debug.Paused)
+      StudioPanelCommand(Label: "Clear journal", Command: Debug.ClearAction, Dispatch: Dispatch, Disabled: false)
+      when Debug.Source {
+         empty -> { Text("Select a preview cell to debug the app running in it.") }
+         otherwise -> { Text("Active cell: { Debug.Source }") }
+      }
+      when Debug.Paused {
+         true -> { StudioDebugPauseView(Debug) }
+         otherwise -> { Text("Running. Break stops the next statement any action reaches.") }
+      }
+      Text("Action journal")
+      when Debug.Journal {
+         empty -> { Text("No actions have run in this cell yet.") }
+         otherwise -> { loop Debug.Journal / Entry {
+            Text("{ Entry.Action } · { Entry.Detail }")
+         } }
+}  }  }
+
+view StudioDebugPauseView(Debug StudioDebugPanel) {
+   render Col() {
+      Text("Paused at { Debug.PausedAt }")
+      loop Debug.Frames / Frame {
+         Text("in { Frame }")
+      }
+      Text("Scope")
+      when Debug.Scope {
+         empty -> { Text("Nothing is bound in this action's scope.") }
+         otherwise -> { loop Debug.Scope / Binding {
+            Text("{ Binding.Name } = { Binding.Value }")
+         } }
+      }
+      Text("Pending writes")
+      when Debug.PendingWrites {
+         empty -> { Text("This action has written nothing yet.") }
+         otherwise -> { loop Debug.PendingWrites / Write {
+            Text("{ Write.Kind } { Write.Target }: { Write.Committed } → { Write.Pending }")
          } }
 }  }  }
 
@@ -1398,7 +1513,7 @@ view StudioRoot(CollapsedFolders list of text, ToggleFolder action(text)) {
       @tokens DesignTokensPanel()
       @data StudioDataRailPanel(InitialDataPanel)
       @search StudioSearchPanel([])
-      @drawer StudioDrawerPanel(Tab: "Problems", Compile: InitialCompilePanel, Problems: InitialProblemsPanel, Data: InitialDataPanel, Tests: InitialTestsPanel, Logs: InitialLogsPanel)
+      @drawer StudioDrawerPanel(Tab: "Problems", Compile: InitialCompilePanel, Problems: InitialProblemsPanel, Data: InitialDataPanel, Debug: InitialDebugPanel, Tests: InitialTestsPanel, Logs: InitialLogsPanel)
       @scenario StudioScenarioPanel(State: "null", JourneyRecording: "null", JourneyRecordable: false, ResolvedAppearance: "light")
       @environment StudioEnvironmentPanel(ActiveCellId: "", CellRevision: 0, ViewportPresetId: "custom", ViewportWidth: 0, ViewportHeight: 0, NetworkOutcome: "normal", NetworkLatencyMs: 0, NetworkErrorMessage: "Injected Studio network failure", NetworkErrorStatus: 503, SchemeRequested: "system", SchemeResolved: "light", SchemeSource: "system", SchemeCapability: "reactive-browser")
       @editor StudioEditorSurface()

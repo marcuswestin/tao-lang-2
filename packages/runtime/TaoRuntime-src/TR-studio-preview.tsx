@@ -1,5 +1,6 @@
 import React from 'react'
 import { RuntimeAssert } from './TR-assert'
+import { Debug } from './TR-debug'
 import { captureArguments, onRuntimeFailure } from './TR-error-containment'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { captureRuntime, restoreRuntimeCapture, type TaoRuntimeCaptureArtifact } from './TR-runtime-capture'
@@ -978,6 +979,9 @@ export function mountStudioPreviewBridge(
       }
       return
     }
+    if (applyDebugCommand(event, config, host.parent)) {
+      return
+    }
     const captureRequestId = captureRequestFromMessage(event, config, host.parent)
     if (captureRequestId !== undefined && captureFixture !== undefined) {
       void captureFixture().then(
@@ -1031,6 +1035,15 @@ export function mountStudioPreviewBridge(
     }, config.parentOrigin)
   })
   const restoreConsole = forwardPreviewConsole(host, config)
+  const stopDebug = Debug.onEvent(event => {
+    host.parent.postMessage({
+      channel: studioProtocolChannel,
+      event: captureArguments(event),
+      identity: previewIdentity(config),
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-debug',
+    }, config.parentOrigin)
+  })
 
   return () => {
     stopped = true
@@ -1042,6 +1055,7 @@ export function mountStudioPreviewBridge(
     }
     restoreConsole()
     stopFailures()
+    stopDebug()
     host.document.removeEventListener('click', onClick, true)
     host.document.removeEventListener('click', onRecordedClick, true)
     host.document.removeEventListener('input', onRecordedInput, true)
@@ -1140,6 +1154,54 @@ function blockAppPointerEvent(event: StudioPreviewPointerEvent): void {
   event.preventDefault?.()
   event.stopImmediatePropagation?.()
   event.stopPropagation?.()
+}
+
+/** applyDebugCommand runs one Studio debugger command against this preview's controller. */
+function applyDebugCommand(
+  event: StudioPreviewMessageEvent,
+  config: StudioPreviewConfig,
+  parent: StudioPreviewHost['parent'],
+): boolean {
+  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
+    return false
+  }
+  const message = event.data
+  const identity = message['identity']
+  if (
+    message['channel'] !== studioProtocolChannel
+    || message['protocolVersion'] !== studioProtocolVersion
+    || message['type'] !== 'debug-command'
+    || !isObject(identity)
+    || identity['appName'] !== config.appName
+    || identity['project'] !== config.project
+    || identity['previewInstanceId'] !== config.previewInstanceId
+  ) {
+    return false
+  }
+  const steps = Array.isArray(message['steps']) ? message['steps'] : []
+  const actions = Array.isArray(message['actions']) ? message['actions'] : []
+  const commands: Record<string, () => void> = {
+    break: () => Debug.Break(),
+    configure: () =>
+      Debug.Configure({
+        actions: actions.filter((entry): entry is string => typeof entry === 'string'),
+        steps: steps.filter(isDebugStepValue),
+      }),
+    continue: () => Debug.Continue(),
+    'step-into': () => Debug.Step('into'),
+    'step-out': () => Debug.Step('out'),
+    'step-over': () => Debug.Step('over'),
+  }
+  const run = commands[String(message['command'])]
+  if (run === undefined) {
+    return false
+  }
+  run()
+  return true
+}
+
+function isDebugStepValue(value: unknown): value is { action: string; path: string } {
+  return isObject(value) && typeof value['action'] === 'string' && typeof value['path'] === 'string'
 }
 
 function interactionModeFromMessage(

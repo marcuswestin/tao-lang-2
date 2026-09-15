@@ -14,6 +14,7 @@ import type {
 } from '../../StudioProtocol'
 import { StudioApiError, StudioApiRoutes } from '../StudioApiClient'
 import type { StudioScenarioControlModel } from '../StudioScenarioControls'
+import type { StudioDebugState } from './StudioDebugEvents'
 import { invalidatePreviewJourneyRecording, type StudioJourneyRecordingDraft } from './StudioJourneyRecording'
 import type { StudioRuntimeLog } from './StudioRuntimeCapture'
 
@@ -35,6 +36,7 @@ export type StudioPreviewConnection = {
   captureFixture?: (fixtureName: string) => Promise<'cancelled' | 'saved'>
   generation?: { phase: 'generating' | 'saving'; requestId: string }
   generationNotice?: string
+  debug?: StudioDebugState
   cell?: StudioPreviewCell
   cellIdentity?: StudioCellIdentity
   frame?: HTMLElement

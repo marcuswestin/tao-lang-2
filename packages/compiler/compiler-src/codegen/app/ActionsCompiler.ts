@@ -6,6 +6,7 @@ import { Compile } from '../Compile'
 import {
   actionBlockContainsRespond,
   actionBlockRequiresAsync,
+  actionInstrumentationEnabled,
   actionInvocationRequiresAsync,
 } from './action-control-flow'
 import { compileDeclarationIdentity, declarationModuleName } from './declaration-identity'
@@ -171,7 +172,17 @@ export const ActionsCompiler = {
 
   /** ActionBlockBody compiles one callback-owned action block. */
   ActionBlockBody(block: AST.ActionBlock | undefined): Compiled {
-    return gen.list(block?.statements ?? [], Compile.ActionStatement)
+    if (!actionInstrumentationEnabled() || !block) {
+      return gen.list(block?.statements ?? [], Compile.ActionStatement)
+    }
+    const owner = enclosingActionName(block)
+    return gen.list(block.statements.map((statement, index) => ({ index, statement })), ({ index, statement }) =>
+      gen`
+        await TR.Debug.At({ action: ${gen.jsLiteral(owner)}, path: ${
+        gen.jsLiteral(statementPath(block, index))
+      } }, _Scope)
+        ${Compile.ActionStatement(statement)}
+      `)
   },
 
   /** DeclarationSlotFill is metadata consumed by its owning action or view compiler. */
@@ -360,4 +371,30 @@ function compileForeignActionParameterBinding(parameter: ActionParameter): Compi
     : gen`${gen.scopeName(name)} = ${runtimeParameter} == null
       ? ${Compile.Expression(parameter.parameter.defaultValue)}
       : TR.Value(${runtimeParameter})`
+}
+
+/** enclosingActionName finds the named action or command an action block belongs to. */
+function enclosingActionName(block: AST.ActionBlock): string {
+  let node: AST.Node | undefined = block
+  while (node) {
+    if (AST.isActionDeclaration(node) || AST.isCommandDeclaration(node)) {
+      return node.name
+    }
+    node = node.$container
+  }
+  return 'action'
+}
+
+/** statementPath is the statement's position through nested blocks, root block first. */
+function statementPath(block: AST.ActionBlock, index: number): string {
+  const segments: number[] = [index]
+  let node: AST.Node | undefined = block.$container
+  while (node && !AST.isActionDeclaration(node) && !AST.isCommandDeclaration(node)) {
+    const parent: AST.Node | undefined = node.$container
+    if (parent && AST.isActionBlock(parent)) {
+      segments.unshift(parent.statements.indexOf(node as AST.ActionStatement))
+    }
+    node = parent
+  }
+  return segments.join('.')
 }

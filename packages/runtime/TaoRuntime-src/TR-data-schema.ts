@@ -1,4 +1,4 @@
-import { existingTransactionResource, transactionResource } from './TR-action-transactions'
+import { existingTransactionResource, type TaoDebugPendingWrite, transactionResource } from './TR-action-transactions'
 import { RuntimeAssert } from './TR-assert'
 import type {
   TaoConfiguredDatasource,
@@ -929,6 +929,7 @@ export class RuntimeDataSchema {
           this.commit()
         }
       },
+      overlay => describeDataOverlay(overlay),
     )
   }
 
@@ -1190,6 +1191,30 @@ export class RuntimeDataSchema {
       this.committedAccessDepth -= 1
     }
   }
+}
+
+/** describeDataOverlay lists the rows an action transaction would create, change, or delete at commit. */
+function describeDataOverlay(overlay: ActionDataOverlay): TaoDebugPendingWrite[] {
+  const writes: TaoDebugPendingWrite[] = []
+  const entities = new Set([...Object.keys(overlay.base.rows), ...Object.keys(overlay.working.rows)])
+  for (const entity of entities) {
+    const before = new Map((overlay.base.rows[entity] ?? []).map(row => [row.Id, row]))
+    const after = new Map((overlay.working.rows[entity] ?? []).map(row => [row.Id, row]))
+    for (const [id, row] of after) {
+      const previous = before.get(id)
+      if (previous === undefined) {
+        writes.push({ kind: 'data', target: `${entity}/${id}`, committed: undefined, pending: row })
+      } else if (JSON.stringify(previous) !== JSON.stringify(row)) {
+        writes.push({ kind: 'data', target: `${entity}/${id}`, committed: previous, pending: row })
+      }
+    }
+    for (const [id, row] of before) {
+      if (!after.has(id)) {
+        writes.push({ kind: 'data', target: `${entity}/${id}`, committed: row, pending: undefined })
+      }
+    }
+  }
+  return writes
 }
 
 function cloneStoredData(data: StoredData): StoredData {

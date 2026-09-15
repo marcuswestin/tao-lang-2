@@ -790,6 +790,26 @@ type StudioPreviewLogMessage = {
   type: 'preview-console'
 }
 
+/** StudioDebugCommandMessage drives the preview's debugger: breakpoints, continue, and stepping. */
+export type StudioDebugCommandMessage = {
+  actions?: readonly string[]
+  channel: typeof studioProtocolChannel
+  command: 'break' | 'configure' | 'continue' | 'step-over' | 'step-into' | 'step-out'
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  steps?: ReadonlyArray<{ action: string; path: string }>
+  type: 'debug-command'
+}
+
+/** StudioPreviewDebugMessage carries one debugger event: a journal entry, a pause, or a resume. */
+export type StudioPreviewDebugMessage = {
+  channel: typeof studioProtocolChannel
+  event: StudioJsonValue
+  identity: StudioPreviewIdentity
+  protocolVersion: typeof studioProtocolVersion
+  type: 'preview-debug'
+}
+
 type StudioPreviewSchemeMessage = {
   channel: typeof studioProtocolChannel
   identity: StudioPreviewIdentity
@@ -893,6 +913,8 @@ export type StudioWindowMessage =
   | StudioPreviewFixtureCapturedMessage
   | StudioPreviewFixtureCaptureFailedMessage
   | StudioPreviewLogMessage
+  | StudioPreviewDebugMessage
+  | StudioDebugCommandMessage
   | StudioPreviewLayoutMeasurementsMessage
   | StudioPreviewJourneyRecordingStateMessage
   | StudioPreviewJourneyReplayFailedMessage
@@ -998,6 +1020,12 @@ function parseMessageData(value: unknown): StudioWindowMessage | undefined {
   }
   if (value['type'] === 'preview-console') {
     return parsePreviewLog(value)
+  }
+  if (value['type'] === 'preview-debug') {
+    return parsePreviewDebug(value)
+  }
+  if (value['type'] === 'debug-command') {
+    return parseDebugCommand(value)
   }
   if (value['type'] === 'preview-scheme-changed') {
     return parsePreviewScheme(value)
@@ -1279,6 +1307,52 @@ function parsePreviewRuntimeCaptureFailed(
     protocolVersion: studioProtocolVersion,
     requestId: value['requestId'],
     type: 'preview-runtime-capture-failed',
+  }
+}
+
+const debugCommands = ['break', 'configure', 'continue', 'step-over', 'step-into', 'step-out'] as const
+
+function parseDebugCommand(value: StudioJsonObject): StudioDebugCommandMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const command = debugCommands.find(candidate => candidate === value['command'])
+  if (identity === undefined || command === undefined) {
+    return undefined
+  }
+  const steps = value['steps']
+  const actions = value['actions']
+  if (
+    (steps !== undefined && (!Array.isArray(steps) || !steps.every(isDebugStep)))
+    || (actions !== undefined && (!Array.isArray(actions) || !actions.every(entry => typeof entry === 'string')))
+  ) {
+    return undefined
+  }
+  return {
+    ...(actions === undefined ? {} : { actions: actions as readonly string[] }),
+    channel: studioProtocolChannel,
+    command,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    ...(steps === undefined ? {} : { steps: steps as ReadonlyArray<{ action: string; path: string }> }),
+    type: 'debug-command',
+  }
+}
+
+function isDebugStep(value: unknown): value is { action: string; path: string } {
+  return isObject(value) && typeof value['action'] === 'string' && typeof value['path'] === 'string'
+}
+
+function parsePreviewDebug(value: StudioJsonObject): StudioPreviewDebugMessage | undefined {
+  const identity = parsePreviewIdentity(value['identity'])
+  const event = value['event']
+  if (identity === undefined || !isJsonValue(event)) {
+    return undefined
+  }
+  return {
+    channel: studioProtocolChannel,
+    event,
+    identity,
+    protocolVersion: studioProtocolVersion,
+    type: 'preview-debug',
   }
 }
 

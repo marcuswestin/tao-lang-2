@@ -14,6 +14,11 @@ export {
   type StudioCanvasViewportControls,
   type StudioCanvasViewportState,
 } from './matrix/StudioCanvasViewport'
+export {
+  StudioDebugEvents,
+  type StudioDebugJournalRow,
+  type StudioDebugState,
+} from './matrix/StudioDebugEvents'
 export { StudioFixtureGenerationFeedback, StudioFixtureProposal } from './matrix/StudioFixtureActions'
 export {
   awaitPreviewJourneyRecordingAcknowledgement,
@@ -30,6 +35,7 @@ export {
   configureInteractionMode,
   currentSourceIdentity,
   handlePreviewMessage,
+  postDebugCommand,
   postEditorSelection,
   requestRuntimeCapture,
 } from './matrix/StudioPreviewBridge'

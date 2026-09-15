@@ -27,6 +27,8 @@ export type CodegenOptions = {
   selectedAppName?: string
   studioDataCatalog?: boolean
   studio?: boolean
+  /** debug emits a debugger gate before every action statement. */
+  debug?: boolean
   studioViews?: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
 }
 

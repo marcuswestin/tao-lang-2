@@ -10,6 +10,7 @@ import {
   publishStudioProductHostState,
   registerStudioProductHostActions,
 } from '../StudioProductHostProtocol'
+import type { StudioDebugCommandMessage } from '../StudioProtocol'
 import { mountStudioAgentChat } from './app/StudioAgentPanelWiring'
 import { StudioAppNavigation } from './app/StudioAppNavigation'
 import { mountStudioBetaShip } from './app/StudioBetaShip'
@@ -43,9 +44,11 @@ import {
   currentSourceIdentity,
   disconnectPreviews,
   mountCanvasViewport,
+  postDebugCommand,
   postEditorSelection,
   refreshCellPreviews,
   StudioActivePreview,
+  StudioDebugEvents,
   StudioMatrixView,
 } from './StudioMatrixView'
 import type { StudioDrawerTab } from './StudioProductPanels'
@@ -503,6 +506,19 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           scenarios.focusCaptureFixture()
           return
         }
+        if (name.startsWith('debug-')) {
+          const preview = activePreview.current()
+          if (preview === undefined) {
+            Errors.throwUserInput('Select a connected preview cell before using the debugger.')
+          }
+          if (name === 'debug-clear') {
+            preview.debug = StudioDebugEvents.empty()
+            publish()
+            return
+          }
+          postDebugCommand(preview, handshake, debugCommandOf(name))
+          return
+        }
         if (name === 'clear-logs') {
           const preview = activePreview.current()
           if (preview !== undefined) {
@@ -591,4 +607,20 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     throw error
   }
+}
+
+/** The Debug panel names its buttons in panel-action spelling; the preview knows protocol spelling. */
+function debugCommandOf(name: string): StudioDebugCommandMessage['command'] {
+  const commands: Record<string, StudioDebugCommandMessage['command']> = {
+    'debug-break': 'break',
+    'debug-continue': 'continue',
+    'debug-step-into': 'step-into',
+    'debug-step-out': 'step-out',
+    'debug-step-over': 'step-over',
+  }
+  const command = commands[name]
+  if (command === undefined) {
+    Errors.throwUserInput(`Unsupported Tao Studio debugger action: ${name}`)
+  }
+  return command
 }

@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { configureActionInstrumentation } from './action-control-flow'
 import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
 
 // A root `view` statement supplies the app's Navigator as sugar, so the source has one app shape.
@@ -18,11 +19,13 @@ type EffectiveAppConfiguration = Map<string, EffectiveAppProperty>
 export const AppCompiler = {
   /** App compiles complete primitive-headed app values, including the root-view Navigator sugar. */
   App(app: AST.AppDeclaration, options: CodegenOptions = {}): Compiled {
+    configureActionInstrumentation(options.debug === true)
     return compileAppValue(app, options)
   },
 
   /** AppValue compiles an inferred `let` whose value family is app. */
   AppValue(app: AST.AppValueDeclaration): Compiled {
+    configureActionInstrumentation(false)
     return compileAppValue(app)
   },
 

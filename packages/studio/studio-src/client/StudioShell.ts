@@ -198,7 +198,7 @@ export function studioShellMarkup(): string {
           <div class="studio-divider studio-divider-bottom" data-divider="bottom" role="separator" aria-orientation="horizontal"></div>
           <section class="studio-drawer">
             <nav class="studio-drawer-tabs" aria-label="Bottom drawer">
-              ${['Problems', 'Tests', 'Data', 'Logs', 'Compile'].map(drawerTab).join('')}
+              ${['Problems', 'Tests', 'Data', 'Debug', 'Logs', 'Compile'].map(drawerTab).join('')}
               <button class="studio-pane-collapse studio-collapse-bottom" type="button" aria-label="Collapse bottom drawer" title="Collapse bottom drawer">⌄</button>
             </nav>
             <div class="studio-drawer-content"></div>
