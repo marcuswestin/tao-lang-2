@@ -38,6 +38,9 @@ export const StubAdapter = TR.Http.adapter({
       const id = query.where['HnId']
       upsert([...frontPage, offFrontPage].filter(story => story.HnId === id))
     }),
+    // The Reading feed is this device's own record of what it opened: the rows are already in the
+    // store, so the shape is declared to say so rather than left to fail as unsupported.
+    TR.Http.on({ orderBy: 'OpenedAt', where: 'Opened' }, async () => {}),
   ],
   Comment: [
     TR.Http.on({ where: 'Story' }, async (query, { upsert }) => {

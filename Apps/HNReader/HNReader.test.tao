@@ -23,6 +23,24 @@ test "hn reader" {
       back
       expect text "Why local-first sync wins"
    }
+   // The bar's right-hand control switches to Reading, which lists what this device opened and
+   // keeps the feed's place behind it.
+   test "keeps opened stories in the Reading stack" {
+      run HNReaderStub
+      press label "Reading"
+      expect navigation title "Reading"
+      expect text "Nothing opened yet"
+      press label "Top"
+      press "Show HN: A Tao reader"
+      press label "Back"
+      press label "Reading"
+      expect text "Show HN: A Tao reader"
+      expect missing text "Why local-first sync wins"
+      press "Show HN: A Tao reader"
+      expect navigation title "Show HN: A Tao reader"
+      press label "Top"
+      expect navigation title "Hacker News"
+   }
    test "shows an empty thread as content, not failure" {
       run HNReaderStub
       press "Why local-first sync wins"

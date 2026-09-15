@@ -61,6 +61,7 @@ const optionalHostModules = new Set([
   '@react-native-community/slider',
   '@react-native-picker/picker',
   '@react-native-segmented-control/segmented-control',
+  'expo-glass-effect',
   'react-native-screens',
 ])
 

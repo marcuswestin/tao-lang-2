@@ -176,6 +176,7 @@ function taoStudioBrowserPlugin(generatedAppPath: string): Bun.BunPlugin {
     '@react-native-segmented-control/segmented-control',
     'expo-clipboard',
     'expo-constants',
+    'expo-glass-effect',
     'expo-haptics',
     'expo-secure-store',
     'react-native-get-random-values',

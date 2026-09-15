@@ -21,8 +21,11 @@ entities filled from a remote API through declared adapter query shapes; a
 relation traversal (`Story.Comments`) filling on demand; upsert by an entity's `(unique)` field;
 the query availability cases a remote read produces (`loading`, `empty`, `error`, and the advisory
 `refreshing` / `stale`); `limit` on a query; a flattened comment tree rendered with depth rails;
-journeys binding a stub adapter through an ordinary app variant; native-default `StackNav` reading
-reactive scene `Title` and `Toolbar` slots; and the platform-neutral command that opens a story URL.
+journeys binding a stub adapter through an ordinary app variant; a `Display "toggle"` `SelectionNav`
+over two native-default stacks, whose single bottom bar shows reactive scene `Title` and `Toolbar`
+slots in place of any header; a Reading feed over the same entity, filtered on its own locally
+written facts (`Opened`, `OpenedAt`) and declared to the adapter as a shape with nothing to fetch;
+and the platform-neutral command that opens a story URL.
 
 **Does not belong here:** writes through a remote datasource, authentication, pagination beyond
 `limit`, provider or adapter diagnostics (those are package tests in `packages/runtime`), and

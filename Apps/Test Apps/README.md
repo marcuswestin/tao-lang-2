@@ -57,9 +57,9 @@ without erasing compatible coverage:
 ## Navigation
 
 Exercise the navigation layer: the native stack, the portable basic kit, platform sheet and overlay
-presentation, the split surface, the root-view app form, and the shell that renders a navigator as
-ordinary content. Eight `app` declarations share the folder, one or more per source file, and each
-check picks its app with `run`.
+presentation, the split surface, the root-view app form, the shell that renders a navigator as
+ordinary content, and the toggle bar that replaces a stack's header. Ten `app` declarations share
+the folder, one or more per source file, and each check picks its app with `run`.
 
 **Belongs here:**
 
@@ -76,6 +76,11 @@ check picks its app with `run`.
 - _Basic kit_ (`Basic Navigation.tao`): `StackNav` from `@tao/nav/basic`, with the same required
   `Title` and optional `Toolbar` slots as native StackNav; command-title label defaulting; host
   command invocation; deterministic basic chrome assertions.
+- _Toggle bar_ (`Toggle Navigation.tao`): `SelectionNav { Display "toggle" }` over two stacks; the
+  visible screen's `Title` and `Toolbar` shown once, in the bottom bar, with no stack header; the
+  bar's own Back walking the active stack; the right-hand control naming and switching to the other
+  item while each stack keeps its position; a plain-view item titled by its `Label`; the test
+  `relaunch` step restoring both.
 - _Sheets and overlays_ (`Sheet Presentation.tao`): `present X as sheet`, the platform's own modal
   presentation; `present X as overlay` from inside one; dismissing from inside with `dismiss`;
   dismissing with Back; a covered sheet hiding and restoring when its cover dismisses — a sheet

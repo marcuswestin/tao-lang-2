@@ -88,6 +88,8 @@ function AppShellFrame(props: AppShellProps & { SafeAreaContext: SafeAreaContext
  * must own true window bounds, and an enclosing scroll frame would push its bar offscreen.
  */
 export function AppSurfaceFrame(props: {
+  /** Chrome floating over the bottom edge; the content scrolls beneath it and clears it at the end. */
+  bottomInset?: number
   children?: React.ReactNode
   /** Inside a native screen the platform supplies the safe-area and bar insets itself. */
   nativeInsets?: boolean
@@ -96,15 +98,16 @@ export function AppSurfaceFrame(props: {
   const RN = requireReactNativeRuntime()
   const platformOS = RN.Platform?.OS ?? 'web'
   const insets = requireSafeAreaContext().useSafeAreaInsets()
+  const bottomInset = props.bottomInset ?? 0
   const contentPadding = props.nativeInsets
     ? {
-      paddingBottom: appFramePadding,
+      paddingBottom: appFramePadding + bottomInset,
       paddingLeft: appFramePadding,
       paddingRight: appFramePadding,
       paddingTop: appFramePadding,
     }
     : {
-      paddingBottom: appFramePadding + insets.bottom,
+      paddingBottom: appFramePadding + insets.bottom + bottomInset,
       paddingLeft: appFramePadding + insets.left,
       paddingRight: appFramePadding + insets.right,
       paddingTop: appFramePadding + insets.top,

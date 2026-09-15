@@ -2,7 +2,7 @@ use View1 from @/studio
 use CloudKit from @tao/data/providers/cloudkit
 use Http from @tao/data/providers/http
 use OpenUrl from @tao/linking
-use StackNav from @tao/nav
+use SelectionNav, StackNav from @tao/nav
 use Col, FormButton, Row, ScrollView, Spinner, Text, TextMultiline from @tao/ui
 
 project {
@@ -21,9 +21,7 @@ project {
 folder
 app HNReader {
    Name "HNReader"
-   Navigator StackNav {
-      Initial FrontPage
-   }
+   Navigator HNNavigator
    // The shipped reader keeps its bookmarks under their own key. The patch derives this app's copy
    // where it is bound; the declaration stays as it is.
    Datasource {
@@ -73,6 +71,31 @@ datasource Personal = CloudKit {
       Bookmarks
 }  }
 
+// Two stacks behind one bottom bar, the way Safari keeps its controls: the feed and the stories
+// you have opened. The bar carries Back, the visible screen's title and toolbar, and a control that
+// switches to the other stack, so no screen draws a header of its own.
+nav TopStack = StackNav {
+   Initial FrontPage
+}
+
+nav ReadingStack = StackNav {
+   Initial ReadingPage
+}
+
+nav HNNavigator = SelectionNav {
+   Initial @top
+   Display "toggle"
+   @top {
+      Label "Top"
+      Icon "newspaper"
+      Content TopStack
+   }
+   @reading {
+      Label "Reading"
+      Icon "book"
+      Content ReadingStack
+}  }
+
 // Hacker News's warm paper and orange, tuned for reading: white story cards on the beige ground,
 // rank and bylines in the brand orange, ink sized for scanning titles and reading comments.
 design HNDesign {
@@ -85,15 +108,11 @@ design HNDesign {
       accentDeep #c9560c
       line #e7e7db
       railInk #d9d2ba
-      snow #ffffff
    }
    sizes {
       sm 4.px
-      med 14.px
    }
    screen [fill, content top stretch, bg paper]
-   header [hug, pad med, bg accent]
-   headerTitle [size 19, weight 800, fg snow]
    feed [fill, content top stretch, pad 10, gap 8]
    threadWrap [fill, content center top]
    thread [claim 1, compress, width max 680, content top stretch, pad 10, gap 8]
@@ -122,6 +141,10 @@ data Stories / Story {
    // A story's front-page rank, or 0 for a story that reached the store some other way. Feeds over
    // one entity share its rows, so a feed's query filters on its own materialized field.
    Rank number (default 0)
+   // Whether this device opened the story, and when — the Reading feed's own facts. A refetch
+   // upserts only the fields the API supplies, so both survive the feed refreshing.
+   Opened yes / no
+   OpenedAt time (default now)
    Comments (owned)
 
    order by Rank
@@ -167,9 +190,6 @@ scene FrontPage() {
    }
    Toolbar { Bookmarks }
    render Col() [screen] {
-      Row() [header] {
-         Text("Hacker News") [headerTitle]
-      }
       guard TopStories {
          loading -> { Col() [stateBox] {
             Spinner()
@@ -192,8 +212,37 @@ scene FrontPage() {
             #stories
             loop TopStories / Story {
                StoryRow(Story)
-               on select -> { present StoryScreen(Story) }
-}  }  }  }  }
+               on select -> {
+                  update Story {
+                     Opened,
+                     OpenedAt: now
+                  }
+                  present StoryScreen(Story)
+}  }  }  }  }  }
+
+// Every story opened on this device, most recent first. The rows are the feed's own, so a story
+// reads the same here as on the front page and opens the same discussion.
+scene ReadingPage() {
+   Title "Reading"
+   query Stories as OpenedStories {
+      where is Opened
+      order by OpenedAt desc
+   }
+   render Col() [screen] {
+      when OpenedStories {
+         empty -> { Col() [stateBox, gap 6] {
+            Text("Nothing opened yet") [problemTitle]
+            Text("Stories you open from Top appear here.") [meta]
+         } }
+         otherwise -> { ScrollView() {
+            Col() [feed] {
+               #reading
+               loop OpenedStories / Story {
+                  StoryRow(Story)
+                  on select -> { present StoryScreen(Story) }
+            }  }
+         } }
+}  }  }
 
 folder
 view StoryRow(Story) {
@@ -233,9 +282,6 @@ scene StoryScreen(Story) {
    Toolbar { Open, Keep }
    query Thread from Story.Comments { }
    render Col() [screen] {
-      Col() [header] {
-         Text("Hacker News") [headerTitle]
-      }
       ScrollView() {
          Row() [threadWrap] {
             Col() [thread] {
@@ -268,9 +314,6 @@ scene BookmarkList() {
    Title "Bookmarks"
    query Bookmarks { }
    render Col() [screen] {
-      Col() [header] {
-         Text("Bookmarks") [headerTitle]
-      }
       when Bookmarks {
          empty -> { Col() [pad 10] {
             Text("Nothing kept yet") [notice]

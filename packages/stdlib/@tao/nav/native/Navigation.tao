@@ -14,6 +14,10 @@ type SlotNav is nav with {
    nav SlotNavKind from ./NavKinds.ts
 }
 
+// `Display` picks the surface: "automatic" is the platform tab bar, "tabs" and "drawer" are Tao-drawn
+// controls, and "toggle" is one Safari-style bar floating over the bottom edge — Back, the visible
+// screen's title and toolbar, and a control that switches to the next item. Under "toggle" a stack
+// inside an item draws no header of its own, and on iOS 26 the bar is Liquid Glass.
 public
 type SelectionNav is nav with {
    Initial key

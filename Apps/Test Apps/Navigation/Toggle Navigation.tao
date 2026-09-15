@@ -1,0 +1,85 @@
+use SelectionNav, StackNav from @tao/nav
+use Button, Col, Text from @tao/ui
+
+// Two stacks behind one Safari-style bottom bar. Neither stack draws a header: the bar shows the
+// visible screen's title and toolbar, Back, and a control that switches to the other stack.
+app ToggleNavigation {
+   Name "Toggle Navigation"
+   Navigator ToggleTabs
+}
+
+// An item may be a plain view rather than a stack. Nothing reads its slots, so the bar names it by
+// the item's `Label`.
+app ToggleWithView {
+   Name "Toggle Navigation - Plain View"
+   Navigator ViewToggle
+}
+
+nav TopStack = StackNav {
+   Initial TopStories
+}
+
+nav ReadingStack = StackNav {
+   Initial ReadingList
+}
+
+nav ToggleTabs = SelectionNav {
+   Initial @top
+   Display "toggle"
+   @top {
+      Label "Top"
+      Content TopStack
+   }
+   @reading {
+      Label "Reading"
+      Content ReadingStack
+}  }
+
+nav ViewToggle = SelectionNav {
+   Initial @notes
+   Display "toggle"
+   @notes {
+      Label "Notes"
+      Content NotesPage
+   }
+   @stories {
+      Label "Stories"
+      Content TopStack
+}  }
+
+view NotesPage() {
+   render Col() {
+      Text("No notes")
+}  }
+
+scene TopStories() {
+   Title "Top stories"
+   render Col() [gap 8] {
+      Text("Front page")
+      Button("Open story") {
+         on press -> { present StoryDetail() }
+}  }  }
+
+scene StoryDetail() {
+   Title "Story"
+   state Saved = false
+   let Saving = when Saved "saved" / not "unsaved"
+   action SaveStory() {
+      set Saved = true
+   }
+   command Save() {
+      Title "Save story"
+      Icon "checkmark"
+      do SaveStory()
+   }
+   Toolbar { Save }
+   render Col() {
+      Text("Story body")
+      Text("Story is { Saving }")
+}  }
+
+scene ReadingList() {
+   Title "Reading list"
+   render Col() {
+      Text("Nothing saved yet")
+}  }

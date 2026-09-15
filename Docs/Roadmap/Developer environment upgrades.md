@@ -903,6 +903,10 @@ an entry here may link one when the developer workflow is also affected.
   changes and `./tao fix Apps/Starters/Notebook` failed with `Cannot find module
   './_gen_tao-parser/module' from packages/parser/parser-src/parserASTExport.ts`; running
   `bun run packages/dev/dev-src/repository-tests/ParserGenerate.ts` (the `_parser-gen` recipe) fixed it.
+  The stale variant is worse: on 2026-09-15 a linked worktree whose generated tree existed but predated
+  the grammar ran `./tao test "Apps/Test Apps/Navigation/…"` to a bare `Something went wrong.`; only
+  `TAO_DEBUG_ERRORS=1` revealed `undefined is not an object (evaluating 'AST.EntityCommandPolicy.$type')`
+  at validator module load, and `just _parser-gen` fixed it.
 - **Workaround:** Run `just _parser-gen`, or any lane that includes it, before the first `./tao` command.
 - **Proposed change:** Have `setup` run `_parser-gen` when `packages/parser/parser-src/_gen_tao-parser`
   is missing or older than the grammar, or have `./tao` generate on demand with a one-line notice.

@@ -23,6 +23,8 @@ export function NavigationCommandButton(props: {
   accessibilityState?: Readonly<{ expanded?: boolean }>
   command: TaoNavigationCommand
   hostRef?: React.RefObject<TaoAccessibilityHost | null>
+  /** iconOnly draws just the glyph where one resolves; the label stays the accessible name. */
+  iconOnly?: boolean
   onInvoke?: () => void
   outlineIdentity?: string
   role?: CommandRole
@@ -94,7 +96,9 @@ export function NavigationCommandButton(props: {
           testID: navigationCommandIconTestId(props.command.icon!),
         })
         : null,
-      React.createElement(runtime.Text, { accessible: false, style: textStyle }, props.command.label),
+      props.iconOnly && (icon || fallbackGlyph)
+        ? null
+        : React.createElement(runtime.Text, { accessible: false, style: textStyle }, props.command.label),
     ),
   )
 }
@@ -153,6 +157,8 @@ export const navigationCommandIconTestId = (name: string): string => `__tao_navi
 const commandContentStyle = { alignItems: 'center', flexDirection: 'row', gap: 6 } as const
 const iconFallbacks: Readonly<Record<string, { fallback: string; fontAwesome: string }>> = Object.freeze({
   checkmark: { fallback: '✓', fontAwesome: 'check' },
+  'chevron.left': { fallback: '‹', fontAwesome: 'chevron-left' },
+  ellipsis: { fallback: '…', fontAwesome: 'ellipsis' },
   safari: { fallback: '◉', fontAwesome: 'safari' },
   'square.and.arrow.up': { fallback: '↗', fontAwesome: 'share-from-square' },
 })
