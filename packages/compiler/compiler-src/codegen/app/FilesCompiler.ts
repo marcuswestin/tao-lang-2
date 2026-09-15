@@ -53,7 +53,9 @@ export const FilesCompiler = {
       ${(opts.emitDataCatalog ?? dataEntities.length > 0) ? Compile.DataCatalog(dataEntities) : gen.noop()}
       ${Compile.OutlineTable(taoFile)}
 
-      ${gen.list(taoFile.statements, statement => Compile.Statement(statement, opts), { newLines: 2 })}
+      ${
+      gen.list(inDeclarationOrder(taoFile.statements), statement => Compile.Statement(statement, opts), { newLines: 2 })
+    }
       ${
       moduleCommands.length === 0
         ? gen.noop()
@@ -65,3 +67,17 @@ export const FilesCompiler = {
     `
   },
 } as const
+
+/**
+ * inDeclarationOrder emits reusable nav and datasource types before everything else in the module.
+ * A type compiles to a declaration built only from its imported implementation and its identity, so
+ * it can go first; a value constructed from it — `datasource Feed = FeedSource { … }` — reads it
+ * eagerly, so it must. Tao lets a file declare them in either order, and emitting in source order
+ * turned a type written below its first use into `undefined` at runtime.
+ */
+function inDeclarationOrder(statements: readonly AST.Statement[]): AST.Statement[] {
+  return [
+    ...statements.filter(isRuntimeConfigurableDeclaration),
+    ...statements.filter(statement => !isRuntimeConfigurableDeclaration(statement)),
+  ]
+}

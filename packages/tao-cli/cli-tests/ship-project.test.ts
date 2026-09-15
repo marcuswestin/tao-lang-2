@@ -1,12 +1,6 @@
 import { FS } from '@shared'
 import { Describe, Expect, Test, withTaoFiles } from '@shared/test'
-import {
-  deriveHostedDatasourceConfiguration,
-  deriveICloudBinding,
-  discoverShipProject,
-  selectShipApp,
-  writeProjectVersion,
-} from '../cli-src/ship-project'
+import { discoverShipProject, selectShipApp, writeProjectVersion } from '../cli-src/ship-project'
 
 const projectSource = `
 project {
@@ -45,119 +39,107 @@ Describe('tao ship project discovery', () => {
     })
   })
 
-  Test('derives hosted InstantDB endpoints without changing local source configuration', () => {
-    const local = `datasource Store = InstantDB {
-      AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
-      ApiURI "http://localhost:9020"
-      WebsocketURI "ws://localhost:9020/runtime/session"
-    }`
-    Expect(deriveHostedDatasourceConfiguration('WordFlowerInstantDB', local)).toEqual({
-      ApiURI: 'https://api.instantdb.com',
-      AppId: '9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f',
-      WebsocketURI: 'wss://api.instantdb.com/runtime/session',
-    })
-    Expect(deriveHostedDatasourceConfiguration('WordFlower', local)).toBeUndefined()
-  })
-
-  Test('derives the iCloud binding from direct, named, and inherited datasource bindings', () => {
+  Test('reads every provider an app mounts through its variants, declarations, and types', async () => {
     const source = `
+project { id "notes" name "Notes" version "1.0.0" }
+use CloudKit from @tao/data/providers/cloudkit
 use ICloud from @tao/data/providers/icloud
 use Local from @tao/data/providers/local
+use StackNav from @tao/nav
 
-app Notes {
-   Name "Notes"
-   Datasource NotesCloud
-}
-
-app NotesDevice = Notes with {
-   Datasource Local { StorageKey "Notes" }
-}
-
+app Notes { Name "Notes" Navigator StackNav { Initial Main } Datasource NotesCloud }
+app NotesDevice = Notes with { Datasource Local { StorageKey "Notes" } }
 app NotesInherited = Notes with { Name "Notes Beta" }
+app NotesInline = Notes with { Datasource ICloud { Container "iCloud.custom.notes" } }
+app NotesPatched = Notes with { Datasource with { Container "iCloud.patched.notes" } }
+app NotesTyped = Notes with { Datasource TypedCloud { } }
+app NotesKit = Notes with { Datasource CloudKit { Container "iCloud.lang.tao.kitchen" } }
 
-app NotesInline = Notes with {
-   Datasource ICloud { Container "iCloud.custom.notes" }
-}
-
-// A patch keeps the base's provider and may override the container.
-app NotesPatched = Notes with {
-   Datasource with { Container "iCloud.patched.notes" }
-}
-
-app NotesWithForm = Notes with {
-   Datasource ICloud with { Container "iCloud.with.notes" }
-}
-
-app NotesTyped = Notes with {
-   Datasource TypedCloud { }
-}
-
-app NotesCommented = Notes with {
-   // Datasource ICloud { Container "iCloud.commented" }
-   Datasource Local { StorageKey "Notes" }
-}
-
-datasource NotesCloud = ICloud {
-   StorageKey "Notes"
-}
-
-type TypedCloud is ICloud with {
-   Container "iCloud.typed.notes"
-}
+datasource NotesCloud = ICloud { StorageKey "Notes" }
+type TypedCloud is ICloud with { Container is "iCloud.typed.notes" }
+view Main() { }
 `
-    // The parser hands the ship pipeline each declaration's own text, closed on its line or later.
-    const declaration = (name: string): string => {
-      const line = new RegExp(`^app ${name}\\b.*$`, 'mu').exec(source)![0]
-      return line.trimEnd().endsWith('}') ? line : new RegExp(`^app ${name}\\b[\\s\\S]*?^\\}`, 'mu').exec(source)![0]
-    }
+    await withTaoFiles('tao-ship-icloud-', { 'App.tao': source }, async paths => {
+      const project = await discoverShipProject(paths['App.tao']!)
+      const icloudOf = (name: string) => project.apps.find(app => app.name === name)?.icloud
+      const documents = { services: ['CloudDocuments'] }
 
-    const documents = { services: ['CloudDocuments'] }
-    Expect(deriveICloudBinding(declaration('Notes'), source)).toEqual(documents)
-    Expect(deriveICloudBinding(declaration('NotesDevice'), source)).toBeUndefined()
-    Expect(deriveICloudBinding(declaration('NotesInherited'), source)).toEqual(documents)
-    Expect(deriveICloudBinding(declaration('NotesInline'), source)).toEqual({
-      ...documents,
-      container: 'iCloud.custom.notes',
+      // A named declaration, an inherited variant, an inline construction, a patch of the base's
+      // binding, and a reusable type all name the same provider.
+      Expect(icloudOf('Notes')).toEqual(documents)
+      Expect(icloudOf('NotesInherited')).toEqual(documents)
+      Expect(icloudOf('NotesInline')).toEqual({ ...documents, container: 'iCloud.custom.notes' })
+      Expect(icloudOf('NotesPatched')).toEqual({ ...documents, container: 'iCloud.patched.notes' })
+      Expect(icloudOf('NotesTyped')).toEqual({ ...documents, container: 'iCloud.typed.notes' })
+      // CloudKit is the other Apple provider, and entitles its own service.
+      Expect(icloudOf('NotesKit')).toEqual({ container: 'iCloud.lang.tao.kitchen', services: ['CloudKit'] })
+      // A variant that binds a device store mounts no Apple provider at all.
+      Expect(icloudOf('NotesDevice')).toBeUndefined()
     })
-    Expect(deriveICloudBinding(declaration('NotesPatched'), source)).toEqual({
-      ...documents,
-      container: 'iCloud.patched.notes',
-    })
-    Expect(deriveICloudBinding(declaration('NotesWithForm'), source)).toEqual({
-      ...documents,
-      container: 'iCloud.with.notes',
-    })
-    Expect(deriveICloudBinding(declaration('NotesTyped'), source)).toEqual({
-      ...documents,
-      container: 'iCloud.typed.notes',
-    })
-    Expect(deriveICloudBinding(declaration('NotesCommented'), source)).toBeUndefined()
-    Expect(deriveICloudBinding(declaration('Notes'), source.replace(/^use ICloud.*\n/mu, ''))).toBeUndefined()
   })
 
-  Test('derives the CloudKit binding with its own service', () => {
+  Test('reads the providers of every datasource an app binds, not only the first', async () => {
     const source = `
+project { id "reader" name "Reader" version "1.0.0" }
 use CloudKit from @tao/data/providers/cloudkit
+use Dev from @tao/data/providers/dev
+use StackNav from @tao/nav
 
-app Kitchen {
-   Name "Kitchen"
-   Datasource CloudKit { Container "iCloud.lang.tao.kitchen" }
+data Stories / Story { HnId number (unique) Title text }
+data Bookmarks / Bookmark { Story (reference) }
+
+datasource Feed = Dev { Data { Stories } }
+datasource Personal = CloudKit { Container "iCloud.lang.tao.reader" Data { Bookmarks } }
+
+app Reader {
+   Name "Reader"
+   Navigator StackNav { Initial Main }
+   Datasource { Feed, Personal }
+}
+view Main() { }
+`
+    await withTaoFiles('tao-ship-multi-', { 'App.tao': source }, async paths => {
+      const project = await discoverShipProject(paths['App.tao']!)
+      const reader = project.apps.find(app => app.name === 'Reader')!
+
+      // The Dev store is the second binding, and it still refuses to ship.
+      Expect(reader.usesDevDatasource).toBe(true)
+      // The Apple entitlement comes from the other binding.
+      Expect(reader.icloud).toEqual({ container: 'iCloud.lang.tao.reader', services: ['CloudKit'] })
+    })
+  })
+
+  Test('derives hosted InstantDB endpoints from the datasource an app actually binds', async () => {
+    const source = `
+project { id "notes" name "Notes" version "1.0.0" }
+use InstantDB from @tao/data/providers/instantdb
+use Local from @tao/data/providers/local
+use StackNav from @tao/nav
+
+datasource Store = InstantDB {
+   AppId "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
+   ApiURI "http://localhost:9020"
+   WebsocketURI "ws://localhost:9020/runtime/session"
 }
 
-app KitchenBeta = Kitchen with { Name "Kitchen Beta" }
+app Notes { Name "Notes" Navigator StackNav { Initial Main } Datasource Store }
+app NotesDevice = Notes with { Datasource Local { StorageKey "Notes" } }
+view Main() { }
 `
-    const declaration = (name: string): string => {
-      const line = new RegExp(`^app ${name}\\b.*$`, 'mu').exec(source)![0]
-      return line.trimEnd().endsWith('}') ? line : new RegExp(`^app ${name}\\b[\\s\\S]*?^\\}`, 'mu').exec(source)![0]
-    }
+    await withTaoFiles('tao-ship-instant-', { 'App.tao': source }, async paths => {
+      const project = await discoverShipProject(paths['App.tao']!)
+      const notes = project.apps.find(app => app.name === 'Notes')!
+      const device = project.apps.find(app => app.name === 'NotesDevice')!
 
-    Expect(deriveICloudBinding(declaration('Kitchen'), source)).toEqual({
-      container: 'iCloud.lang.tao.kitchen',
-      services: ['CloudKit'],
-    })
-    Expect(deriveICloudBinding(declaration('KitchenBeta'), source)).toEqual({
-      container: 'iCloud.lang.tao.kitchen',
-      services: ['CloudKit'],
+      Expect(notes.hasLocalDatasourceEndpoint).toBe(true)
+      Expect(notes.releaseDatasourceConfiguration).toEqual({
+        ApiURI: 'https://api.instantdb.com',
+        AppId: '9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f',
+        WebsocketURI: 'wss://api.instantdb.com/runtime/session',
+      })
+      // The variant swapped the store, so it carries neither the warning nor the patch.
+      Expect(device.hasLocalDatasourceEndpoint).toBe(false)
+      Expect(device.releaseDatasourceConfiguration).toBeUndefined()
     })
   })
 })

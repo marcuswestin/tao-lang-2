@@ -315,6 +315,67 @@ Describe('Expo runtime', () => {
     Expect((schema.query({ entity: 'Entry', filters: [] })[0] as Record<string, unknown>)['Name'])
       .toBe('Still live')
   })
+
+  Test('seeds a Studio fixture into whichever store holds each entity', async () => {
+    const declaration = TR.Data.Declaration('StudioMemory', memoryProvider())
+    const stories = TR.Data.Schema({
+      name: 'StudioFixtureStories',
+      entities: { Story: { collection: 'Stories', fields: { HnId: { kind: 'number', unique: true } } } },
+    })
+    const bookmarks = TR.Data.Schema({
+      name: 'StudioFixtureBookmarks',
+      entities: {
+        Bookmark: {
+          collection: 'Bookmarks',
+          fields: {
+            Note: { kind: 'text' },
+            Story: { kind: 'reference', referenceField: 'HnId', relation: 'Story', store: 'StudioFixtureStories' },
+          },
+        },
+      },
+    })
+    TR.Data.LinkStores([stories, bookmarks])
+    let fixture: { handles: Readonly<Record<string, unknown>>; ready: boolean } | undefined
+    function Root(): null {
+      TR.Data.UseConfigured(stories, TR.Data.Configure(declaration, {}), 'Feed')
+      TR.Data.UseConfigured(bookmarks, TR.Data.Configure(declaration, {}), 'Personal')
+      fixture = TR.Studio.Environment.useFixture([stories, bookmarks])
+      return null
+    }
+    const cell = {
+      environment: { network: { mode: 'online' }, scheme: { requested: 'light', source: 'scenario' }, version: 1 },
+      fixture: {
+        accounts: [],
+        creates: [
+          { entity: 'Story', fields: { HnId: 7 }, name: 'Lead' },
+          {
+            entity: 'Bookmark',
+            fields: { Note: 'kept', Story: { handle: 'Lead', kind: 'fixture-reference' } },
+            name: 'Kept',
+          },
+        ],
+      },
+      scenario: {
+        arguments: {},
+        kind: 'app',
+        prepare: [{ fields: { Note: 'prepared' }, target: 'Kept' }],
+        subjectId: 'App',
+      },
+    } as const
+
+    render(createElement(TR.Studio.Environment.Host, { cell: cell as never, children: createElement(Root) }))
+    await act(async () => {
+      await TR.Data.Settle(stories)
+      await TR.Data.Settle(bookmarks)
+    })
+
+    Expect(fixture?.ready).toBe(true)
+    Expect(stories.query({ entity: 'Story', filters: [] })).toHaveLength(1)
+    const [bookmark] = bookmarks.query({ entity: 'Bookmark', filters: [] })
+    // The prepare update reached the store holding the row it names, and the reference resolved across.
+    Expect(TR.Data.Read(bookmark, 'Note')).toBe('prepared')
+    Expect(TR.Data.Read(TR.Data.Read(bookmark, 'Story'), 'HnId')).toBe(7)
+  })
 })
 
 function memoryProvider(): TR.DataProvider {

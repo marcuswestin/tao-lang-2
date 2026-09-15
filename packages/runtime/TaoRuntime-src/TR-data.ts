@@ -38,9 +38,19 @@ export type TaoDataField = {
   defaultNow?: true
   defaultValue?: boolean | number | string
   indexed?: boolean
-  kind: DataPrimitive | 'relation'
+  /**
+   * A `relation` is stored as the target row's id and resolves inside this schema's rows. A
+   * `reference` is stored as the target's unique field value instead, so it still names one row when
+   * that row lives in a store this schema knows nothing about; it resolves through the schema
+   * registry and reads as `missing` when no store holds it.
+   */
+  kind: DataPrimitive | 'reference' | 'relation'
   onDelete?: RelationDeleteBehavior
+  /** referenceField is the target entity's unique field, the value a reference stores. */
+  referenceField?: string
   relation?: string
+  /** store names the store a reference's target lives in, among the stores its project links. */
+  store?: string
   /** title marks the one text field that names a row to a person: a label of last resort. */
   title?: boolean
   unique?: boolean
@@ -206,7 +216,11 @@ export type TaoKeyValueStorage = {
 
 type RuntimeValueFactory = <T>(value: T) => Evaluable
 
-function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoConfiguredDatasource): void {
+function useConfiguredProviderBinding(
+  schema: RuntimeDataSchema,
+  source: TaoConfiguredDatasource,
+  storageName?: string,
+): void {
   // The wrapped declaration must be stable across renders: the app root reconstructs the
   // configured value per render, and bindConfigured treats a new declaration object as a full
   // rebind. Only `source.declaration` and the studio overlay are stable inputs.
@@ -221,8 +235,9 @@ function useConfiguredProviderBinding(schema: RuntimeDataSchema, source: TaoConf
     DataControls.BindConfigured(
       schema,
       declaration === source.declaration ? source : DataControls.Configure(declaration, { ...source.config }),
+      storageName,
     )
-  }, [schema, declaration, source.config])
+  }, [schema, declaration, source.config, storageName])
 }
 
 /** DataControls is the provider-neutral generated-code API for Tao schemas, queries, and writes. */
@@ -280,8 +295,9 @@ export const DataControls = {
   BindConfigured(
     schema: RuntimeDataSchema,
     source: TaoConfiguredDatasource,
+    storageName?: string,
   ): void {
-    bindConfiguredDataSchema(schema, source)
+    bindConfiguredDataSchema(schema, source, storageName)
   },
 
   /** UseConfigured binds a declaration-owned datasource configuration at an app root. */
@@ -346,6 +362,25 @@ export const DataControls = {
     const metadata = metadataOf(handle)
     const policy = metadata.schema.definition.entities[metadata.entity]?.commandPolicy
     return { entity: metadata.entity, ...(policy === undefined ? {} : { policy }) }
+  },
+
+  /**
+   * CombinedIdentity keys restoration for an app that mounts several stores. Every member must be
+   * representable; one that is not leaves the app unkeyed, as a single unrepresentable store does.
+   */
+  CombinedIdentity(identities: readonly (string | undefined)[]): string | undefined {
+    return identities.every(identity => identity !== undefined) ? JSON.stringify(identities) : undefined
+  },
+
+  /**
+   * LinkStores records the stores one compiled project mounts. A reference resolves only among the
+   * stores linked with the one holding it, so two projects mounted in one process never answer each
+   * other's references.
+   */
+  LinkStores(stores: readonly RuntimeDataSchema[]): void {
+    for (const store of stores) {
+      store.linkStores(stores)
+    }
   },
 
   /** EntityAvailability derives the exceptional guard state of a live entity handle. */

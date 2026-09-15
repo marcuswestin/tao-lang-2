@@ -330,6 +330,94 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.ForEach(_Scope.Drafts.evaluate()')
   })
 
+  Test('partitions collections into one catalog per datasource an app binds', async () => {
+    const compiled = await Compiler.compileCode(`
+      use Local from @tao/data/providers/local
+      use Memory from @tao/data/providers/memory
+      use StackNav from @tao/nav
+      data Stories / Story { HnId number (unique) Title text }
+      data Bookmarks / Bookmark { Story (reference) Note text (default "") }
+      datasource Feed = Memory {
+        Data { Stories }
+      }
+      datasource Personal = Local {
+        StorageKey "personal"
+        Data { Bookmarks }
+      }
+      app Reader {
+        Name "Reader"
+        Navigator StackNav { Initial Main }
+        Datasource { Feed, Personal with { StorageKey "personal-prod" } }
+      }
+      scene Main() {
+        Title "Reader"
+        query Stories { }
+        query Bookmarks { }
+        action Save(Story) { create Bookmark { Story, Note: "kept" } }
+        render Text("{ Stories.Count }{ Bookmarks.Count }")
+      }
+      view Text(Value text) { render inject ${tsFence} return null ${fence} }
+    `)
+
+    // One schema per store, named after the collections it holds rather than the datasource filling
+    // it, and each carrying only its own collections.
+    Expect(compiled.code).toContain("_Scope._TaoDataCatalog_Stories = TR.Data.Schema({\n  name: 'Stories',")
+    Expect(compiled.code).toContain("_Scope._TaoDataCatalog_Bookmarks = TR.Data.Schema({\n  name: 'Bookmarks',")
+    Expect(compiled.code).not.toContain("name: 'Data',")
+    // Stores are emitted in name order, so Bookmarks precedes Stories.
+    Expect(compiled.code.slice(compiled.code.indexOf("name: 'Bookmarks',"), compiled.code.indexOf("name: 'Stories',")))
+      .toContain('collection: "Bookmarks"')
+    Expect(compiled.code.slice(compiled.code.indexOf("name: 'Stories',")))
+      .toContain('collection: "Stories"')
+    // Reads and writes reach the store that holds their collection.
+    Expect(compiled.code).toContain('TR.Data.Query(\n      _Scope._TaoDataCatalog_Stories,')
+    Expect(compiled.code).toContain('TR.Data.Query(\n      _Scope._TaoDataCatalog_Bookmarks,')
+    Expect(compiled.code).toContain('TR.Data.Create(\n              _Scope._TaoDataCatalog_Bookmarks,')
+    // The app mounts both, and the patch on the listed name layers an app-local copy over the bound declaration
+    // without touching the declaration itself.
+    Expect(compiled.code).toContain('TR.Data.UseConfigured(\n            _Scope._TaoDataCatalog_Stories,')
+    Expect(compiled.code).toContain('TR.Data.UseConfigured(\n            _Scope._TaoDataCatalog_Bookmarks,')
+    // Only the named datasource is patched; the other keeps the declaration's own configuration.
+    Expect(compiled.code).toContain('_Scope._TaoDataCatalog_Stories,\n            _Scope.Feed.evaluate(),')
+    Expect(compiled.code).toContain('TR.Data.Patch(_Scope.Personal.evaluate(), {')
+    Expect(compiled.code).toContain('"StorageKey": TR.Value("personal-prod")')
+    // Membership is structural: it partitions the catalog and never crosses the provider boundary.
+    Expect(compiled.code).not.toContain('"Data":')
+    // A reference stores the target's unique value rather than a row handle in this store.
+    Expect(compiled.code).toContain("kind: 'reference'")
+    Expect(compiled.code).toContain('store: "Stories"')
+    // The project's stores are linked, so a reference resolves among them and nowhere else.
+    Expect(compiled.code).toContain(
+      'TR.Data.LinkStores([_Scope._TaoDataCatalog_Bookmarks, _Scope._TaoDataCatalog_Stories])',
+    )
+  })
+
+  Test('keeps one catalog for an app whose datasource claims no collections', async () => {
+    const compiled = await Compiler.compileCode(`
+      use Memory from @tao/data/providers/memory
+      use StackNav from @tao/nav
+      data Stories / Story { HnId number (unique) Title text }
+      data Bookmarks / Bookmark { Story (relation Story) }
+      datasource Everything = Memory { }
+      app Reader {
+        Name "Reader"
+        Navigator StackNav { Initial Main }
+        Datasource Everything
+      }
+      scene Main() {
+        Title "Reader"
+        query Stories { }
+        query Bookmarks { }
+        render Text("{ Stories.Count }{ Bookmarks.Count }")
+      }
+      view Text(Value text) { render inject ${tsFence} return null ${fence} }
+    `)
+
+    Expect(compiled.code).toContain("_Scope._TaoDataCatalog = TR.Data.Schema({\n  name: 'Data',")
+    Expect(compiled.code).not.toContain('_TaoDataCatalog_')
+    Expect(compiled.code).toContain('TR.Data.UseConfigured(\n            _Scope._TaoDataCatalog,')
+  })
+
   Test('partitions local only entities into a device-local companion catalog', async () => {
     const compiled = await Compiler.compileCode(`
       use Memory from @tao/data/providers/memory
@@ -577,6 +665,95 @@ Describe('compiler: language lowering', () => {
       '"WebsocketURI": TR.Value("wss://api.instantdb.com/runtime/session")',
     )
     Expect(compiled.code.match(/"AppId": TR.Value\("hosted-app"\)/gu)).toHaveLength(2)
+  })
+
+  Test('reaches only a bound datasource whose contract declares the release override keys', async () => {
+    const compiled = await Compiler.compileCode(
+      `
+        use CloudKit from @tao/data/providers/cloudkit
+        use InstantDB from @tao/data/providers/instantdb
+        use StackNav from @tao/nav
+        data Notes / Note { Title text }
+        data Pins / Pin { Label text }
+        datasource Shared = InstantDB { AppId "local-app" ApiURI "http://localhost:9020" Data { Notes } }
+        datasource Mine = CloudKit { Data { Pins } }
+        app Notes2 { Name "Notes" Navigator StackNav { Initial Main } Datasource { Shared, Mine } }
+        scene Main() { Title "Notes" render Text("Ready") }
+        view Text(Value text) { render inject ${tsFence} return null ${fence} }
+      `,
+      { appDatasourceConfiguration: { ApiURI: 'https://api.instantdb.com', AppId: 'hosted-app' } },
+    )
+
+    const mine = compiled.code.slice(compiled.code.indexOf('_Scope._TaoDataCatalog_Pins,\n'))
+    Expect(compiled.code).toContain('"AppId": TR.Value("hosted-app")')
+    Expect(mine.slice(0, mine.indexOf('TR.Data.UseConfigured'))).not.toContain('hosted-app')
+  })
+
+  Test('keys restoration by every bound store and names each store after its datasource', async () => {
+    const compiled = await Compiler.compileCode(
+      `
+      use Memory from @tao/data/providers/memory
+      use StackNav from @tao/nav
+      data Stories / Story { HnId number (unique) Title text }
+      data Bookmarks / Bookmark { Story (reference) }
+      datasource Feed = Memory { Data { Stories } }
+      datasource StubFeed = Feed with { }
+      datasource Personal = Memory { Data { Bookmarks } }
+      app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
+      app ReaderStub = Reader with { Datasource { StubFeed, Personal } }
+      scene Main() { Title "Reader" render Text("Ready") }
+      view Text(Value text) { render inject ${tsFence} return null ${fence} }
+    `,
+      { appName: 'ReaderStub' },
+    )
+
+    Expect(compiled.code).toContain('providerIdentity: () => TR.Data.CombinedIdentity([')
+    // A derived stub is an alternative for its base's store, and keeps a storage key of its own.
+    Expect(compiled.code).toContain(
+      '_Scope._TaoDataCatalog_Stories,\n            _Scope.StubFeed.evaluate(),\n            "StubFeed",',
+    )
+    Expect(compiled.code).toContain(
+      '_Scope._TaoDataCatalog_Stories,\n            _Scope.Feed.evaluate(),\n            "Feed",',
+    )
+  })
+
+  Test('hands a Studio fixture every store an app mounts', async () => {
+    const compiled = await Compiler.compileCode(
+      `
+      use Memory from @tao/data/providers/memory
+      use StackNav from @tao/nav
+      data Stories / Story { HnId number (unique) Title text }
+      data Bookmarks / Bookmark { Story (reference) }
+      datasource Feed = Memory { Data { Stories } }
+      datasource Personal = Memory { Data { Bookmarks } }
+      app Reader { Name "Reader" Navigator StackNav { Initial Main } Datasource { Feed, Personal } }
+      scene Main() { Title "Reader" render Text("Ready") }
+      view Text(Value text) { render inject ${tsFence} return null ${fence} }
+    `,
+      { studio: true },
+    )
+
+    Expect(compiled.code).toContain(
+      'TR.Studio.Environment.useFixture([_Scope._TaoDataCatalog_Bookmarks, _Scope._TaoDataCatalog_Stories])',
+    )
+    Expect(compiled.code).not.toContain('_Scope._TaoDataCatalog)')
+  })
+
+  Test('emits a datasource type before a datasource declared above it', async () => {
+    const compiled = await Compiler.compileCode(`
+      use Memory from @tao/data/providers/memory
+      use StackNav from @tao/nav
+      data Notes / Note { Title text }
+      datasource Store = LaterSource { }
+      app Notes2 { Name "Notes" Navigator StackNav { Initial Main } Datasource Store }
+      type LaterSource is Memory with { }
+      scene Main() { Title "Notes" render Text("Ready") }
+      view Text(Value text) { render inject ${tsFence} return null ${fence} }
+    `)
+
+    const typeAt = compiled.code.indexOf('_Scope.__tao_type_LaterSource = ')
+    Expect(typeAt).toBeGreaterThan(-1)
+    Expect(typeAt).toBeLessThan(compiled.code.indexOf('_Scope.Store = '))
   })
 
   Test('lowers render and loop tags through Tao props without adding a row wrapper', async () => {

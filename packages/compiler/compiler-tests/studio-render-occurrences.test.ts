@@ -389,7 +389,7 @@ Describe('compiler: Studio render occurrences', () => {
         "import { _TaoDataCatalog, Accounts, Detail } from './modules/More.tao'",
       )
       Expect(compiled.code).toContain('TR.Studio.Environment.useScenario()')
-      Expect(compiled.code).toContain('TR.Studio.Environment.useFixture(_Scope._TaoDataCatalog)')
+      Expect(compiled.code).toContain('TR.Studio.Environment.useFixture([_Scope._TaoDataCatalog])')
       // A focused view is mounted through a navigator of its own, so `present` inside it has
       // somewhere to go — the subject entry is the app definition that navigator belongs to.
       Expect(compiled.code).toContain(

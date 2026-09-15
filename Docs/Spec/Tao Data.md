@@ -55,7 +55,7 @@ They exercise declaration syntax and do not require product journeys. Writes, `i
 and boolean query filters use named declared cases rather than raw spelling conventions.
 
 Indexes are separate statements, one default `order by` may be declared for the entity, and
-`local only` states that the entity is stored on the device whatever the app configures as its
+`local only` states that the entity is stored on the device whatever the app binds as its
 `Datasource`. The three are entity-level storage facts and trail the field list as one group:
 
 ```tao
@@ -71,8 +71,9 @@ data FocusSessions / FocusSession {
 A `local only` entity is compiled into a companion catalog with its own connection and storage key,
 so a synced datasource variant of the same app never syncs it, and it reaches the device-local store
 even when the app's own `Datasource` is already local. Because the two catalogs are separate stores,
-a relationship may not cross between them: both ends of a relationship must declare `local only`, or
-neither.
+a stored `relation` may not cross between them: both ends must declare `local only`, or neither. The
+same holds for two collections held by different datasources, and `reference` is the link that
+crosses either boundary (see _References across datasources_).
 
 `unique` marks one primitive field as the entity's external identity — the reconciliation key a
 query-driven datasource upserts by (see _The Http datasource_ below). It is a storage fact stated
@@ -136,6 +137,108 @@ that app or reconstruct by provider name. The same patch rule applies to a confi
 named with `let`. The `datasource Name = Assignment` head is a family-constrained value
 declaration equivalent to auto-typed `let`, not a new datasource type; reusable types use
 `type Name is datasource with { ... }`.
+
+## Datasource membership and binding a set
+
+An app's data is the union of the stores its datasources hold. A datasource states the collections
+it stores in a `Data` reference block, and an app binds the set it mounts:
+
+```tao
+use Http from @tao/data/providers/http
+use Local from @tao/data/providers/local
+
+datasource HackerNews = HNSource {
+   Data { Stories, Comments }
+}
+
+datasource Personal = Local {
+   StorageKey "HNReaderBookmarks"
+   Data { Bookmarks }
+}
+
+app HNReader {
+   Name "HNReader"
+   Navigator HNNavigator
+   Datasource { HackerNews, Personal with { StorageKey "HNReaderBookmarksProd" } }
+}
+```
+
+Which store holds a collection is a fact about the project rather than about one app: a query
+compiles once and every app that runs it reads the same store. The partition therefore comes from
+the `Data` slots of the project's datasource declarations, and an app only chooses which datasource
+fills each store. Two datasources declaring the same collections are **alternatives** for one store
+— which is what a stub or preview variant is — and an app binds one of them; a partial overlap is a
+diagnostic, because a collection cannot live in two stores at once. A datasource derived from another,
+`datasource Preview = Feed with { … }`, stores exactly what its base stores and is an alternative for
+the base's store; its patch may not restate `Data`.
+
+A store is named by the collections it holds, sorted and joined (`Comments_Stories`), never by a
+datasource that fills it. That name identifies the store in generated code; it is not where rows are
+kept. A provider that defaults its storage key uses the name of the bound `datasource` declaration, so
+adding a collection, adding an alternative, or reordering declarations leaves saved rows where they
+are, and a stub standing in for the real datasource keeps rows of its own.
+
+Every store the project declares must be filled in every app that binds datasources, because every
+query over a claimed collection compiles against that store whether the app meant to use it or not.
+A bound datasource that declares no `Data` holds only what no datasource in the project claims — the
+default store. That is the ordinary single-datasource app, which writes no membership at all, mounts
+one catalog named `Data`, and keeps the `Data` storage key it always had. An app may bind at most one
+such catch-all, and a collection in the default store with no catch-all bound is a diagnostic naming
+it. These checks, the overlap check, and the relation check below read every declaration in the file's
+project, so a datasource, its collections, and the app that binds it may live in different modules.
+
+A Studio fixture seeds every store an app mounts: each create lands in the store holding its entity,
+and each prepare update in the store holding the row it names.
+
+Membership is structural. It partitions the catalog at compile time and never crosses the provider
+boundary, so no provider reads it, a patch where it is bound may not change it, and a variant changes which
+datasource fills a store by restating the slot rather than by moving collections between stores.
+
+`local only` is the narrow form of the same fact, decided on the entity: such an entity is held by
+the device store whatever the app binds, and a `Data` slot may not claim it.
+
+## Patching a datasource where it is bound
+
+A listed datasource may carry its own patch, `Personal with { StorageKey "…" }`, which derives that
+app's copy where it is bound. It is the language's one refinement, checked against the datasource's
+configuration contract exactly as the same `with` is anywhere else, and the declaration it names
+keeps its own value, so two apps bind one datasource differently. A variant that restates the set
+restates the patches it wants, so what is written is what is bound. Only a datasource may be derived
+where it is listed; a command on a toolbar or a collection in `Data` is named, not patched.
+
+## References across datasources
+
+A stored `relation` resolves inside one store's rows, so both of its ends must live in the same
+store; crossing a `local only` or a datasource boundary is diagnosed where the relation is written,
+and an inverse collection whose only back-link is a reference is refused, since a reference has none.
+A `reference` is the link that may cross:
+
+```tao
+data Bookmarks / Bookmark {
+   Story (reference)
+   Note text (default "")
+}
+```
+
+A reference stores the target's `unique` value rather than its row id. Like `unique` and `owned` it
+is a bare storage fact; `(reference Story)` names the target only when the field name is not the
+entity's. It names one singular entity, which must declare a `unique` field, and it owns nothing:
+`owned` may not accompany it, and deleting one side never reaches the other.
+
+A reference that holds a value always reads as an entity handle, so a guard can tell what state its
+target is in. When the target's store holds the row, the handle is that row. Otherwise it is a stable
+placeholder: `loading` while the store loads, or while a fill-capable store fetches the row, `error`
+when that fetch fails, and `missing` once there is nothing left to wait for. The first read of such a
+placeholder offers the store the one-row query a live query would make — entity, the unique field's
+value, limit one — so an `Http` adapter that declares a by-id shape brings the row in and the next read
+returns it. A cleared reference reads as `none`.
+
+A reference resolves only among the stores its own project mounts, never against every store in the
+process, so two projects running side by side — as Studio runs them — cannot answer each other's
+references. There is no inferred inverse
+across stores; `query Bookmarks { where Story == Story }` is the inverse, and equality by that stored
+value is the only comparison a reference supports. A reference is legal within one store too — it is
+the weaker link, not a cross-store exception.
 
 The storage key belongs to the configured provider—not to a display `Name`, source filename, or
 data declaration. A provider persists the version-1 envelope containing schema version, rows, and

@@ -29,6 +29,9 @@ export function compileRuntimeType(type: ASTUtils.TaoType): Compiled {
         scene: () => gen`TR.Presentable`,
         nav: () => gen`TR.NavigationValue`,
         datasource: () => gen`TR.Evaluable`,
+        // `data` names a collection in a datasource's membership list and never reaches a value
+        // position, so it carries no runtime wrapper of its own.
+        data: () => gen`TR.Evaluable`,
         app: () => gen`TR.Evaluable`,
       }),
     list: () => gen`TR.Value<any[]>`,

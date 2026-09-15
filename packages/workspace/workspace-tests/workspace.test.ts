@@ -1,4 +1,4 @@
-import { AST } from '@parser'
+import { AST, Langium } from '@parser'
 import { type Diagnostic, Diagnostics, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { LSPWorkspace, Workspace } from '@workspace'
@@ -251,6 +251,37 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           FS.resolvePath('Project.tao', rootDir),
           FS.resolvePath('Roadmap/Feature/Syntax Sketches/Valid.tao', rootDir),
         ])
+      },
+    )
+  })
+
+  // The editor reports linking errors through Langium's document validator, not through the CLI's
+  // diagnostics pass, so the bridge exemption has to hold on that path too. It once held only on the
+  // CLI side, and every `Name from ./File.ts` read as a missing Tao declaration in the editor.
+  Test('does not report a bridged TypeScript export as an unresolved reference in the editor', async () => {
+    await withTaoFiles(
+      'tao-workspace-lsp-bridge-',
+      {
+        'Main.tao': `
+          use Http from @tao/data/providers/http
+          type StubSource is Http with {
+            Adapter item is StubAdapter from ./StubAdapter.ts
+          }
+          let Broken = Missing
+        `,
+        'StubAdapter.ts': 'export const StubAdapter = {}\n',
+      },
+      async (paths, rootDir) => {
+        const workspace = await LSPWorkspace.open(rootDir)
+        const uri = Langium.URI.file(paths['Main.tao']!)
+        const documents = workspace.services.shared.workspace.LangiumDocuments
+        const document = documents.getDocument(uri) ?? await documents.getOrCreateDocument(uri)
+        await workspace.services.shared.workspace.DocumentBuilder.build([document], { validation: true })
+        const messages = (document.diagnostics ?? []).map(diagnostic => diagnostic.message)
+
+        Expect(messages.join('\n')).not.toContain("named 'StubAdapter'")
+        // An ordinary unresolved name on the same path is still reported.
+        Expect(messages.join('\n')).toContain("named 'Missing'")
       },
     )
   })

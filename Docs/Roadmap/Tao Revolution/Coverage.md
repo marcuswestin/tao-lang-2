@@ -55,6 +55,9 @@ expansion), **TBD** (assigned at step 4). Test status is updated as tranches lan
 | Restoration policy (§10)                                    | WordFlower · relaunch                                                   | MVP      | in Current                |
 | App composition, variants, providers (§11)                  | WordFlower · app root + test variants                                   | MVP      | partially in Current      |
 | InstantDB datasource (§11)                                  | WordFlower · sync                                                       | MVP      | experimental              |
+| Datasource membership, bound sets (§6)                      | HNReader · a feed store beside the reader's own bookmarks               | MVP      | in Current[^14]           |
+| Patching a datasource where it is bound (§6)                | HNReader · the shipped bookmarks storage key                            | MVP      | in Current[^14]           |
+| reference across datasources (§6)                           | HNReader · a bookmark naming a story in the feed store                  | MVP      | in Current[^14]           |
 | auth library, Me binding (§11)                              | WordFlower · account                                                    | MVP      | pending                   |
 | Files provider (§11)                                        | Wayfare · offline documents                                             | Post-MVP | —                         |
 | Offline closure (§11)                                       | WordFlower · offline writing                                            | TBD      | —                         |
@@ -145,3 +148,11 @@ it (`Docs/Roadmap/Focused writing tranche/`).
     check that drove a provider through `loading`, `error`, and `ready`. Nothing replaces it in this
     tranche, so provider-state coverage is lower than before until the world controls — network,
     sync, and datasource fault injection — land.
+
+[^14]: HNReader binds a query-driven feed store beside a CloudKit store for bookmarks, and a patch on
+    the bound name gives the shipped app its own bookmarks storage key without forking the
+    declaration. Journeys prove a bookmark is written to the reader's own store while the story it
+    names stays in the feed, that the story screen reads the other store to know a story is kept,
+    that reading a bookmark back crosses the boundary, that removing one empties the list, and that
+    bookmarks survive a relaunch while the feed fills again. A reference's `loading`, `missing`, and
+    `error` readings and its cold fetch are proved at the runtime level; no journey forces them.

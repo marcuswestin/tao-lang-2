@@ -39,6 +39,8 @@ export const DataFormatter = {
 
   Trait(f) {
     f.oneSpaceAfter('default', 'relation', 'required', 'touch', 'on')
+    // `(reference)` names its target only when the field name is not the entity.
+    f.oneSpaceBeforeProperty('referenceName')
   },
 
   TraitList(f) {

@@ -41,6 +41,15 @@ export const dataValidationMessages = {
   duplicateLocalOnly: (entity: string) => `Entity '${entity}' declares 'local only' more than once.`,
   crossStorageRelation: (entity: string, field: string, relation: string) =>
     `Relationship '${entity}.${field}' crosses the local-only storage boundary; '${entity}' and '${relation}' must both declare 'local only', or neither.`,
+  inverseOfReference: (field: string, relation: string, entity: string) =>
+    `Inverse relationship '${field}' has only references from '${relation}' back to '${entity}'; a reference has no inverse, so query '${relation}' by it instead.`,
+  referenceTarget: (field: string, relation: string) =>
+    `Reference '${field}' must name a singular entity, not the collection '${relation}'.`,
+  referenceUnique: (field: string, relation: string) =>
+    `Reference '${field}' needs '${relation}' to declare a unique field: a reference is stored as that value, because the two rows can live in different stores.`,
+  referenceOwned: (field: string) =>
+    `Reference '${field}' cannot be owned; deleting a row never cascades across a datasource boundary.`,
+  referenceRelation: (field: string) => `Data field '${field}' declares both 'relation' and 'reference'.`,
   unknownField: (entity: string, name: string) => `Entity '${entity}' has no field named '${name}'.`,
   duplicateOrder: 'A query may declare only one order clause.',
   duplicateLimit: 'A query may declare only one limit clause.',
@@ -174,6 +183,9 @@ function validateEntityField(
     for (const trait of owned) {
       ctx.error(trait, dataValidationMessages.autoDeleteOwner(field.name))
     }
+    for (const trait of traits.filter(candidate => candidate.reference)) {
+      ctx.error(trait, dataValidationMessages.relationModifier(field.name))
+    }
   } else {
     validateRelationshipDataField(entity, field, defaults, ctx)
   }
@@ -192,19 +204,69 @@ function validateRelationshipDataField(
   if (!relation) {
     ctx.error(field, dataValidationMessages.unknownRelation(entity.singularName, relationName))
   }
-  // The two storage facts partition the catalog into a synced store and a device-local one, and a
-  // relation resolves inside one store's rows. Say so here rather than as an unresolved relation.
+  for (const modifier of defaults) {
+    ctx.error(modifier, dataValidationMessages.relationDefault(field.name))
+  }
+  if (Type.dataFieldIsReference(field)) {
+    validateReferenceDataField(field, relation, inverse, ctx)
+    return
+  }
+  validateSameStoreRelation(entity, field, relation, ctx)
+  if (relation && inverse) {
+    validateInverseRelationship(entity, field, relation, ctx)
+  }
+}
+
+/**
+ * A `relation` resolves inside one store's rows, so both ends must live in the same store. `local only`
+ * separates them on the entity itself and is reported here; a datasource boundary is decided by the
+ * project's datasources, which the membership validator reads, and is reported there.
+ */
+function validateSameStoreRelation(
+  entity: AST.EntityDataDeclaration,
+  field: AST.EntityDataField,
+  relation: AST.EntityDataDeclaration | undefined,
+  ctx: ValidationContext,
+): void {
   if (relation && Type.dataEntityIsLocalOnly(entity) !== Type.dataEntityIsLocalOnly(relation)) {
     ctx.error(
       field,
       dataValidationMessages.crossStorageRelation(entity.singularName, field.name, relation.singularName),
     )
   }
-  for (const modifier of defaults) {
-    ctx.error(modifier, dataValidationMessages.relationDefault(field.name))
+}
+
+/**
+ * A reference is stored as the target's unique value rather than as a row handle, which is what lets
+ * it name a row another datasource holds. It therefore names one row, never a collection, it needs a
+ * reconciliation key to name that row by, and it owns nothing: a delete on one side of a datasource
+ * boundary cannot reach the other, so a reference whose target is gone reads `missing` instead.
+ */
+function validateReferenceDataField(
+  field: AST.EntityDataField,
+  relation: AST.EntityDataDeclaration | undefined,
+  inverse: boolean,
+  ctx: ValidationContext,
+): void {
+  const traits = field.traits?.traits ?? []
+  for (const trait of traits.filter(candidate => candidate.relationName)) {
+    ctx.error(trait, dataValidationMessages.referenceRelation(field.name))
   }
-  if (relation && inverse) {
-    validateInverseRelationship(entity, field, relation, ctx)
+  for (const duplicate of traits.filter(trait => trait.reference).slice(1)) {
+    ctx.error(duplicate, dataValidationMessages.duplicateModifier(field.name, 'reference'))
+  }
+  for (const trait of traits.filter(candidate => candidate.owned)) {
+    ctx.error(trait, dataValidationMessages.referenceOwned(field.name))
+  }
+  if (!relation) {
+    return
+  }
+  if (inverse) {
+    ctx.error(field, dataValidationMessages.referenceTarget(field.name, relation.name))
+    return
+  }
+  if (!Type.dataFields(relation).some(candidate => (candidate.traits?.traits ?? []).some(trait => trait.unique))) {
+    ctx.error(field, dataValidationMessages.referenceUnique(field.name, relation.singularName))
   }
 }
 
@@ -214,10 +276,23 @@ function validateInverseRelationship(
   relation: AST.EntityDataDeclaration,
   ctx: ValidationContext,
 ): void {
-  const inverseFields = Type.dataFields(relation).filter(candidate => {
+  const backLinks = Type.dataFields(relation).filter(candidate => {
     const candidateType = Type.dataFieldType(candidate)
     return candidateType.kind === 'entity' && candidateType.entity === entity
   })
+  // A reference stores a unique value rather than a row id, so no row-id inverse can read it.
+  const inverseFields = backLinks.filter(candidate => !Type.dataFieldIsReference(candidate))
+  if (inverseFields.length === 0 && backLinks.length > 0) {
+    ctx.error(
+      field,
+      dataValidationMessages.inverseOfReference(
+        `${entity.singularName}.${field.name}`,
+        relation.singularName,
+        entity.singularName,
+      ),
+    )
+    return
+  }
   if (inverseFields.length === 0) {
     ctx.error(
       field,

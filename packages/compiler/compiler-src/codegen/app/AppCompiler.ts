@@ -1,20 +1,12 @@
-import { ASTUtils, Type } from '@ast-utils'
+import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
 import { configureActionInstrumentation } from './action-control-flow'
+import { activeDataStorePlan } from './data-store-context'
 import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
-
-// A root `view` statement supplies the app's Navigator as sugar, so the source has one app shape.
-type AppPropertySource = AST.Expression | AST.ConfigurationValue | AST.AppView
-
-type EffectiveAppProperty = {
-  patches: AST.ConfigurationBlock[]
-  value: AppPropertySource
-}
-
-type EffectiveAppConfiguration = Map<string, EffectiveAppProperty>
+import { configuredDeclarationOfValue } from './ExpressionsCompiler'
 
 export const AppCompiler = {
   /** App compiles complete primitive-headed app values, including the root-view Navigator sugar. */
@@ -49,11 +41,10 @@ export const AppCompiler = {
 } as const
 
 function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions = {}): Compiled {
-  const configuration = effectiveAppConfiguration(app)
+  const configuration = ASTUtils.effectiveAppConfiguration(app)
   const navigator = configuration.get('Navigator')
   Assert.defined(navigator, 'validated app value has a Navigator')
   const name = configuration.get('Name')
-  const datasource = configuration.get('Datasource')
   const design = configuration.get('Design')
   const restoration = effectiveRestorationPolicy(app)
   const root = ASTUtils.rootAppValue(app)
@@ -74,6 +65,7 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
   const selectedDatasourceConfiguration = app.name === options.selectedAppName
     ? options.selectedAppDatasourceConfiguration
     : undefined
+  const datasources = compileAppDatasourceBindings(app, selectedDatasourceConfiguration)
   return gen`
     ${gen.list(declaredPersistedStates, Compile.StateDeclaration)}
     ${gen.list(declaredAppActions, Compile.ActionDeclaration)}
@@ -86,12 +78,19 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
         mode: ${gen.jsLiteral(restoration.mode)},
         variant: ${gen.jsLiteral(app.name)},
         ${
-    datasource
-      ? gen`providerIdentity: () => ${
-        compileAppProperty(datasource, 'Datasource', selectedDatasourceConfiguration)
-      }.bindingIdentity(),`
-      : gen.noop()
-  }
+    // Restoration keys saved navigation state by the providers it was written against. An app with one
+    // store keeps the identity it always had; an app with several lists them all, so changing any one
+    // member's configuration starts restoration afresh rather than restoring handles it cannot resolve.
+    datasources.length === 1
+      ? gen`providerIdentity: () => ${datasources[0]!.compiled}.bindingIdentity(),`
+      : datasources.length > 1
+      // A member whose identity cannot be represented leaves the whole app unkeyed, exactly as a
+      // single unrepresentable store does: restoring against a provider that cannot be recognised
+      // again would restore handles into the wrong data.
+      ? gen`providerIdentity: () => TR.Data.CombinedIdentity([${
+        gen.join(datasources, binding => gen`${binding.compiled}.bindingIdentity()`, { separator: ', ' })
+      }]),`
+      : gen.noop()}
       },
       ${
     design && !AST.isNoneLiteral(design.value)
@@ -108,12 +107,15 @@ function compileAppValue(app: AST.AppValueDeclaration, options: CodegenOptions =
     function ${gen.Name({ name: `TaoApp_${app.name}` })}() {
       ${gen.list(persistedStates, state => gen`TR.UsePersistedState(${gen.scopeName(state)})`)}
       ${
-    datasource
-      ? gen`TR.Data.UseConfigured(
-          ${gen.scopeName({ name: '_TaoDataCatalog' })},
-          ${compileAppProperty(datasource, 'Datasource', selectedDatasourceConfiguration)},
-        )`
-      : gen.noop()
+    gen.list(
+      datasources,
+      binding =>
+        gen`TR.Data.UseConfigured(
+          ${gen.scopeName({ name: binding.catalog })},
+          ${binding.compiled},
+          ${binding.storageName === undefined ? gen.noop() : gen`${gen.jsLiteral(binding.storageName)},`}
+        )`,
+    )
   }
       ${
     options.localDataCatalog
@@ -147,7 +149,7 @@ function compileStudioSubject(options: CodegenOptions, app: { name: string }): C
   return gen`
     const _TaoStudioScenario = TR.Studio.Environment.useScenario()
     const _TaoStudioFixture = TR.Studio.Environment.useFixture(${
-    options.studioDataCatalog ? gen.scopeName({ name: '_TaoDataCatalog' }) : 'undefined'
+    options.studioDataCatalog ? compileStudioStores() : 'undefined'
   })
     if (_TaoStudioScenario?.kind === 'view') {
       const _TaoStudioSubject = ${gen.Name(studioSubjectsName(app))}[_TaoStudioScenario.subjectId]
@@ -162,6 +164,17 @@ function compileStudioSubject(options: CodegenOptions, app: { name: string }): C
       return <TR.AppShell><TR.Studio.SubjectHost arguments={_TaoStudioArgs} definition={_TaoStudioSubject} /></TR.AppShell>
     }
   `
+}
+
+/**
+ * compileStudioStores lists every store a fixture may seed. An app with one datasource has one store,
+ * and passing the default catalog by name missed every collection a `Data` slot moved elsewhere.
+ */
+function compileStudioStores(): Compiled {
+  const plan = activeDataStorePlan()
+  Assert.defined(plan, 'a Studio compile with a data catalog has a store plan')
+  const stores = plan.stores.filter(store => store.kind !== 'device')
+  return gen`[${gen.join(stores, store => gen`${gen.scopeName({ name: store.binding })}`, { separator: ', ' })}]`
 }
 
 /**
@@ -294,155 +307,117 @@ function restorationPolicy(
   }
 }
 
-function effectiveAppConfiguration(
-  declaration: AST.AppValueDeclaration,
-  seen: Set<AST.AppValueDeclaration> = new Set(),
-): EffectiveAppConfiguration {
-  Assert(!seen.has(declaration), 'validated app derivation is acyclic')
-  seen.add(declaration)
-  if (AST.isAppDeclaration(declaration) && declaration.block) {
-    const configuration: EffectiveAppConfiguration = new Map()
-    const rootView = AST.blockStatements(declaration).find(AST.isAppView)
-    if (rootView) {
-      configuration.set('Navigator', { patches: [], value: rootView })
-    }
-    for (const property of AST.blockStatements(declaration).filter(AST.isAppProperty)) {
-      if (property.patch) {
-        applyAppPropertyPatch(configuration, property.name, property.patch.block)
-      } else if (property.value) {
-        configuration.set(property.name, { patches: [], value: property.value })
-      }
-    }
-    return configuration
-  }
-  const expression = declaration.value
-  Assert.defined(expression, 'validated app value has an initializer')
-  return effectiveAppExpression(expression, seen)
-}
-
-function effectiveAppExpression(
-  expression: AST.Expression,
-  seen: Set<AST.AppValueDeclaration>,
-): EffectiveAppConfiguration {
-  if (AST.isPrimitiveConfigurationConstructor(expression)) {
-    Assert(expression.primitive === 'app', 'validated app primitive constructor has the app family')
-    const configuration: EffectiveAppConfiguration = new Map()
-    applyConfigurationBlock(configuration, expression.block)
-    return configuration
-  }
-  if (AST.isConfigurationConstructor(expression)) {
-    const declaration = resolveRef(expression.type)
-    Assert.is(declaration, isConfigurableDeclaration, 'validated app constructor resolves a configurable type')
-    Assert(
-      AST.configurationPrimitiveOf(declaration) === 'app',
-      'validated app constructor resolves an app type',
-    )
-    const configuration = configurationDefaults(declaration)
-    Assert.defined(expression.block, 'validated app type construction has a block')
-    applyConfigurationBlock(configuration, expression.block)
-    return configuration
-  }
-  if (AST.isInferredConfigurationConstructor(expression)) {
-    const owner = expression.$container
-    Assert.is(owner, AST.isAliasDeclaration, 'inferred app construction is owned by a let declaration')
-    const declaration = typeDeclarationForInferredApp(owner)
-    const configuration = configurationDefaults(declaration)
-    applyConfigurationBlock(configuration, expression.block)
-    return configuration
-  }
-  if (AST.isRefinementExpression(expression) || AST.isValueReference(expression)) {
-    const target = resolveRef(expression.target)
-    Assert.is(target, AST.isAppValueDeclaration, 'validated app reference resolves a complete app value')
-    const configuration = effectiveAppConfiguration(target, seen)
-    if (AST.isRefinementExpression(expression)) {
-      applyConfigurationBlock(configuration, expression.patchBlock)
-    }
-    return configuration
-  }
-  return Assert.never(expression as never, 'validated app value uses a supported declaration initializer')
-}
-
-function typeDeclarationForInferredApp(owner: AST.AliasDeclaration): AST.ConfigurableDeclaration {
-  const declaration = Type.visibleDeclaration(owner, owner.name)
-  Assert.defined(declaration, 'validated inferred app block resolves its same-name type')
-  Assert.is(declaration, isConfigurableDeclaration, 'validated inferred app block resolves a configurable type')
-  Assert(
-    AST.configurationPrimitiveOf(declaration) === 'app',
-    'validated inferred app block resolves its same-name app type',
-  )
-  return declaration
-}
-
-function configurationDefaults(declaration: AST.ConfigurableDeclaration): EffectiveAppConfiguration {
-  const configuration: EffectiveAppConfiguration = new Map()
-  for (const property of AST.configurationPropertiesOf(declaration)) {
-    if (property.value) {
-      configuration.set(property.name, { patches: [], value: property.value })
-    }
-  }
-  return configuration
-}
-
-function applyConfigurationBlock(
-  configuration: EffectiveAppConfiguration,
-  block: AST.ConfigurationBlock,
-): void {
-  for (const entry of block.entries) {
-    // `view Shell(Other)` in a variant rebinds the root view, which is the Navigator slot's sugar.
-    if (entry.rootView) {
-      configuration.set('Navigator', { patches: [], value: entry.rootView })
-      continue
-    }
-    if (!entry.name || !entry.value) {
-      continue
-    }
-    if (AST.isPropertyConfigurationPatch(entry.value)) {
-      applyAppPropertyPatch(configuration, entry.name, entry.value.block)
-    } else {
-      configuration.set(entry.name, { patches: [], value: entry.value })
-    }
-  }
-}
-
-function applyAppPropertyPatch(
-  configuration: EffectiveAppConfiguration,
-  name: string,
-  patch: AST.ConfigurationBlock,
-): void {
-  const property = configuration.get(name)
-  Assert.defined(property, 'validated app property patch has a base value')
-  property.patches.push(patch)
-}
-
 function compileAppProperty(
-  property: EffectiveAppProperty,
-  name: 'Name' | 'Navigator' | 'Datasource' | 'Design',
-  datasourceConfiguration?: Readonly<Record<string, string>>,
+  property: ASTUtils.EffectiveAppProperty,
+  name: 'Name' | 'Navigator' | 'Design',
 ): Compiled {
+  Assert.defined(property.value, `validated app ${name} supplies a value`)
   let result = compileAppPropertySource(property.value)
   for (const patch of property.patches) {
-    if (name === 'Navigator') {
-      result = gen`TR.Navigation.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
-    } else if (name === 'Datasource') {
-      result = gen`TR.Data.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
-    } else {
-      Assert(false, `validated app ${name} cannot be patched`)
-    }
-  }
-  if (name === 'Datasource' && datasourceConfiguration && Object.keys(datasourceConfiguration).length > 0) {
-    result = gen`TR.Data.Patch(${result}, {
-      ${
-      gen.list(
-        Object.entries(datasourceConfiguration).toSorted(([left], [right]) => left.localeCompare(right)),
-        ([key, value]) => gen`${gen.jsLiteral(key)}: TR.Value(${gen.jsLiteral(value)}),`,
-      )
-    }
-    })`
+    Assert(name === 'Navigator', `validated app ${name} cannot be patched`)
+    result = gen`TR.Navigation.Patch(${result}, ${Compile.ConfigurationPatchObject(patch)})`
   }
   return result
 }
 
-function compileAppPropertySource(value: AppPropertySource): Compiled {
+/** CompiledDatasourceBinding pairs one mounted store's catalog binding with the datasource filling it. */
+type CompiledDatasourceBinding = {
+  catalog: string
+  compiled: Compiled
+  /** storageName is the bound declaration's name, passed only for a store a `Data` slot declares. */
+  storageName?: string
+}
+
+/**
+ * compileAppDatasourceBindings mounts one datasource per store the app binds. A patch written on
+ * the listed name (`Personal with { … }`), a slot patch, and the ship-time release override all layer
+ * onto the same configured value, so the app holds its own copy and the declaration is never mutated.
+ *
+ * A datasource that declares membership fills the store its `Data` names, and passes its own name as
+ * the storage key that store defaults to. One that declares none fills the default store and keeps the
+ * `Data` key every single-datasource app has always used, so no existing store moves.
+ */
+function compileAppDatasourceBindings(
+  app: AST.AppValueDeclaration,
+  datasourceConfiguration: Readonly<Record<string, string>> | undefined,
+): readonly CompiledDatasourceBinding[] {
+  const plan = activeDataStorePlan()
+  const bindings = ASTUtils.appBoundDatasources(app)
+  if (bindings.length === 0) {
+    return []
+  }
+  Assert.defined(plan, 'an app that binds a datasource has a store plan')
+  return bindings.flatMap(binding => {
+    const source = binding.value
+      ? compileAppPropertySource(binding.value)
+      : binding.declaration
+      ? Compile.ValueDeclarationReference(binding.declaration)
+      : undefined
+    Assert.defined(source, 'validated datasource binding names a declaration or supplies a value')
+    const claims = binding.declaration && ASTUtils.datasourceCollectionNames(binding.declaration) !== undefined
+    const store = claims ? ASTUtils.storeOfDatasource(plan, binding.declaration!) : plan.defaultStore
+    // A catch-all in a project whose datasources claim everything has nothing left to hold.
+    if (!claims && store === undefined) {
+      return []
+    }
+    Assert.defined(store, 'validated datasource with membership fills a planned store')
+    let compiled = source
+    for (const patch of binding.patches) {
+      compiled = gen`TR.Data.Patch(${compiled}, ${Compile.ConfigurationPatchObject(patch)})`
+    }
+    const release = releaseConfigurationFor(binding, datasourceConfiguration)
+    if (Object.keys(release).length > 0) {
+      compiled = gen`TR.Data.Patch(${compiled}, {
+        ${
+        gen.list(
+          Object.entries(release).toSorted(([left], [right]) => left.localeCompare(right)),
+          ([key, value]) => gen`${gen.jsLiteral(key)}: TR.Value(${gen.jsLiteral(value)}),`,
+        )
+      }
+      })`
+    }
+    return [{
+      catalog: store.binding,
+      compiled,
+      ...claims ? { storageName: binding.declaration!.name } : {},
+    }]
+  })
+}
+
+/**
+ * The ship pipeline's release override replaces a hosted datasource's development endpoints. It is
+ * keyed by configuration slot, so it reaches only a bound datasource whose contract declares those
+ * slots: InstantDB's keys land on the InstantDB store and never on a CloudKit store bound beside it.
+ */
+function releaseConfigurationFor(
+  binding: ASTUtils.AppDatasourceBinding,
+  configuration: Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, string>> {
+  if (!configuration) {
+    return {}
+  }
+  const declaration = configurableDeclarationOf(binding)
+  const slots = new Set(declaration ? AST.configurationPropertiesOf(declaration).map(property => property.name) : [])
+  return Object.fromEntries(Object.entries(configuration).filter(([key]) => slots.has(key)))
+}
+
+function configurableDeclarationOf(binding: ASTUtils.AppDatasourceBinding): AST.ConfigurableDeclaration | undefined {
+  const value = binding.value
+  if (value && !AST.isAppView(value) && AST.isExpression(value)) {
+    if (AST.isConfigurationConstructor(value)) {
+      const target = value.type.ref
+      return target && AST.isConfigurableDeclaration(target) ? target : undefined
+    }
+    if (AST.isValueReference(value) || AST.isRefinementExpression(value)) {
+      const target = value.target.ref
+      return target && AST.isValueDeclaration(target) ? configuredDeclarationOfValue(target) : undefined
+    }
+    return undefined
+  }
+  return binding.declaration ? configuredDeclarationOfValue(binding.declaration) : undefined
+}
+
+function compileAppPropertySource(value: ASTUtils.AppPropertySource): Compiled {
   if (AST.isAppView(value)) {
     return compileRootViewNavigator(value)
   }
@@ -528,8 +503,4 @@ function compilePrimitiveBlock(declaration: AST.NavDeclaration | AST.DatasourceD
     $container: declaration,
   } as unknown as AST.PrimitiveConfigurationConstructor
   return Compile.PrimitiveConfigurationConstructor(constructor)
-}
-
-function isConfigurableDeclaration(value: unknown): value is AST.ConfigurableDeclaration {
-  return AST.isNode(value) && AST.isConfigurableDeclaration(value)
 }

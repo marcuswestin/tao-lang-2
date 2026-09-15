@@ -166,6 +166,11 @@ Landed, with `Docs/Spec/Tao Data.md` as the implemented contract:
   field (defaulted for rows other feeds fetch) and filters on it — `Rank number (default 0)` with
   `where Rank >= 1`.
 
+**No longer deferred: per-entity datasource scoping.** An app binds a set of datasources, each
+stating the collections it stores, and `reference` links a row to one held by another store.
+HNReader's bookmarks are the local favorites this list was waiting for; see
+`Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`.
+
 The decisions above are recorded in `Decisions.md` §6 under "Amended by the HTTP datasource work".
 
 ## Known consequences of the deferrals

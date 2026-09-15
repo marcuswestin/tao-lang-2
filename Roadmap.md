@@ -195,12 +195,20 @@ tests written in Tao, green in Current, for every construct introduced.
     `Docs/Roadmap/CloudKit granular datasource provider/Implementation - CloudKit granular
     datasource provider.md`. Open questions 1, 2, and 5 in `Docs/Roadmap/Multiplayer sync.md`
     need Ro's answers before the fold is more than a working assumption.
+- [ ] Finish the multiple-datasources follow-ups
+  - Binding several datasources to one app landed: a datasource names the collections it stores, an
+    app binds a set and derives a member where it is bound with `with`, and `reference` links rows across
+    stores by unique value. `Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md` holds
+    the decisions and its revision note what remains: a reference's `missing` and `error` readings
+    have no forcing journey until datasource fault injection lands, the release override is scoped by
+    configuration slot rather than keyed by datasource, and whether `Data` should become an ordinary
+    patchable slot is open.
 - [ ] Widen the HTTP datasource
   - The query-driven `Http` datasource landed with `Apps/HNReader`; see
     `Docs/Roadmap/HTTP Datasource/Overview - HTTP datasource.md` for the settled design and its
-    deferred list — offline persistence across launches, remote writes, per-entity datasource
-    scoping, a user-triggered refresh spelling, cache eviction and retry, and per-feed row
-    provenance.
+    deferred list — offline persistence across launches, remote writes, a user-triggered refresh
+    spelling, cache eviction and retry, and per-feed row provenance. Per-entity datasource scoping
+    moved to the multiple-datasources plan above.
 - [ ] Bridge React Native and Expo APIs into Tao
   - Design how a native API becomes a Tao binding before building more of them: whether bindings can
     be generated from TypeScript type definitions or published documentation, driven by per-API

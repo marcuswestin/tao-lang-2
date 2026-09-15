@@ -1,6 +1,7 @@
 import React from 'react'
 import { RuntimeAssert } from './TR-assert'
 import type { TaoDataConnection, TaoDataProvider, TaoDataSchema, TaoFillOps, TaoFillRequest } from './TR-data'
+import { entityHandle, metadataOf } from './TR-data-entity'
 import { UserInputError } from './TR-errors'
 import {
   SchemeControls,
@@ -199,19 +200,26 @@ export const StudioEnvironmentControls = {
     return SchemeControls.use()
   },
 
-  /** useFixture applies fixture creates and ordered prepare updates after datasource binding. */
+  /**
+   * useFixture applies fixture creates and ordered prepare updates after datasource binding. An app
+   * with several stores passes all of them: each create lands in the store that holds its entity, and
+   * each update in the store that holds the row it names.
+   */
   useFixture(
-    schema: TaoDataSchema | undefined,
+    stores: TaoDataSchema | readonly TaoDataSchema[] | undefined,
   ): Readonly<{ handles: Readonly<Record<string, unknown>>; ready: boolean }> {
     const host = React.useContext(StudioHostContext)
     const applied = React.useRef(false)
+    const schemas = stores === undefined ? [] : Array.isArray(stores) ? stores : [stores as TaoDataSchema]
     const [handles, setHandles] = React.useState<Readonly<Record<string, unknown>>>({})
-    const [ready, setReady] = React.useState(host === undefined || schema === undefined)
+    const [ready, setReady] = React.useState(host === undefined || schemas.length === 0)
     React.useLayoutEffect(() => {
-      if (host === undefined || schema === undefined || applied.current) {
+      if (host === undefined || schemas.length === 0 || applied.current) {
         return
       }
-      host.registerSchema(schema)
+      for (const schema of schemas) {
+        host.registerSchema(schema)
+      }
       applied.current = true
       const resolved: Record<string, unknown> = {}
       for (const account of host.cell.fixture.accounts) {
@@ -223,20 +231,26 @@ export const StudioEnvironmentControls = {
           `Tao Studio fixture '${create.name}' uses through-action setup that this runtime cannot execute yet.`,
           { fixture: create.name },
         )
-        resolved[create.name] = schema.create(create.entity, resolveObject(create.fields, resolved))
+        const store = schemas.find(schema => schema.definition.entities[create.entity] !== undefined)
+        RuntimeAssert.input(
+          store,
+          `Tao Studio fixture '${create.name}' creates ${create.entity}, which no store in this app holds.`,
+          { entity: create.entity, fixture: create.name },
+        )
+        resolved[create.name] = store.create(create.entity, resolveObject(create.fields, resolved))
       }
       for (const update of host.cell.scenario.prepare) {
-        const target = resolved[update.target]
+        const target = entityHandle(resolved[update.target])
         RuntimeAssert.input(
           target !== undefined,
           `Tao Studio prepare target '${update.target}' was not created.`,
           { target: update.target },
         )
-        schema.update(target as never, resolveObject(update.fields, resolved))
+        metadataOf(target).schema.update(target, resolveObject(update.fields, resolved))
       }
       setHandles(Object.freeze({ ...resolved }))
       setReady(true)
-    }, [host, schema])
+    }, [host, schemas.length])
     return { handles, ready }
   },
 

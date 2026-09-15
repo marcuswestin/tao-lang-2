@@ -4,6 +4,7 @@ import type {
   TaoConfiguredDatasource,
   TaoDataConnection,
   TaoDataEntity,
+  TaoDataField,
   TaoDataSchemaDefinition,
   TaoDatasourceDeclaration,
   TaoDescriptorValue,
@@ -58,6 +59,8 @@ type FillState = {
 type ConfiguredProviderBinding = Readonly<{
   configuration: Readonly<Record<string, unknown>>
   declaration: TaoDatasourceDeclaration
+  /** storageName is the bound datasource's own name, the storage key it defaults to. */
+  storageName?: string
 }>
 type ProviderBinding = ConfiguredProviderBinding | 'test' | 'unbound' | undefined
 
@@ -135,6 +138,14 @@ export class RuntimeDataSchema {
   private generation = 0
   private pendingFills = new Set<Promise<void>>()
   private handles = new Map<string, RuntimeEntityHandle>()
+  /**
+   * linkedStores are the stores compiled into the same project as this one, which is the only set a
+   * reference may resolve into. Resolving against every schema in the process would let two projects
+   * mounted side by side — Studio does this — answer each other's references.
+   */
+  private linkedStores: readonly RuntimeDataSchema[] = [this]
+  /** referencePlaceholders are the absent rows references have named, by synthetic handle id. */
+  private referencePlaceholders = new Map<string, { field: string; value: string | number }>()
   private listeners = new Set<() => void>()
   private loadPromise: Promise<void> = Promise.resolve()
   private nextSaveSequence = 0
@@ -183,7 +194,7 @@ export class RuntimeDataSchema {
       return `${String(binding ?? 'unbound')}:${this.name}`
     }
     const declaration = binding.declaration.canonicalIdentity?.canonical ?? binding.declaration.name
-    const storageKey = this.validatedStorageKey(binding.declaration.name, binding.configuration)
+    const storageKey = this.validatedStorageKey(binding.declaration.name, binding.configuration, binding.storageName)
     return JSON.stringify([declaration, storageKey, this.name])
   }
 
@@ -285,11 +296,17 @@ export class RuntimeDataSchema {
    * how a Tao behavior test surfaces a configuration mistake that would otherwise first fire at a
    * production mount.
    */
-  validateConfigured(source: TaoConfiguredDatasource): void {
-    this.validatedStorageKey(source.declaration.name, evaluatedDatasourceConfiguration(source))
+  validateConfigured(source: TaoConfiguredDatasource, storageName?: string): void {
+    this.validatedStorageKey(source.declaration.name, evaluatedDatasourceConfiguration(source), storageName)
   }
 
-  bindConfigured(source: TaoConfiguredDatasource): void {
+  /**
+   * bindConfigured connects the datasource an app binds to this store. `storageName` is the name of the
+   * bound `datasource` declaration when there is one: it is the storage key a provider defaults to, so
+   * a store keeps its saved rows when collections or alternatives are added, and a stub standing in for
+   * the real datasource keeps rows of its own.
+   */
+  bindConfigured(source: TaoConfiguredDatasource, storageName?: string): void {
     // A rebind is compared by evaluated configuration value, not object identity: the app root
     // constructs a fresh configured value per render, while a Patch that changes `Adapter` or
     // `StorageKey` under the same declaration must still rebind.
@@ -297,15 +314,20 @@ export class RuntimeDataSchema {
     if (
       typeof this.providerBinding === 'object'
       && this.providerBinding.declaration === source.declaration
+      && this.providerBinding.storageName === storageName
       && configurationValuesEqual(this.providerBinding.configuration, configuration)
     ) {
       return
     }
-    const binding = Object.freeze({ configuration, declaration: source.declaration })
+    const binding = Object.freeze({
+      configuration,
+      declaration: source.declaration,
+      ...(storageName === undefined ? {} : { storageName }),
+    })
     // A configuration or connect failure becomes data error state behind the recovery overlay; a
     // throw would escape into the mounting layout effect, where no error boundary catches it.
     try {
-      const storageKey = this.validatedStorageKey(source.declaration.name, configuration)
+      const storageKey = this.validatedStorageKey(source.declaration.name, configuration, storageName)
       const connection = source.declaration.provider.connect(Object.freeze({
         configuration,
         schema: this.definition,
@@ -337,6 +359,8 @@ export class RuntimeDataSchema {
     this.committedData = emptyData(this.definition)
     this.handles.clear()
     this.fills.clear()
+    // A placeholder belongs to the connection that was asked for its row; a new one asks again.
+    this.referencePlaceholders.clear()
     this.error = ''
     this.errorRecoverable = false
     this.status = 'loading'
@@ -626,6 +650,17 @@ export class RuntimeDataSchema {
           fieldName: name,
         })
       }
+      // A reference arrives as the target's unique value, which is what it is stored as: the fill
+      // cannot resolve a row this store does not hold, and does not need to.
+      if (field.kind === 'reference') {
+        RuntimeAssert.input(
+          typeof value === 'string' || typeof value === 'number',
+          `Fill reference '${entityName}.${name}' expects the ${field.relation} ${field.referenceField} value.`,
+          { entityName, fieldName: name },
+        )
+        resolved[name] = value
+        continue
+      }
       if (field.kind !== 'relation') {
         RuntimeAssert.input(
           valueMatchesKind(value, field.kind),
@@ -775,10 +810,69 @@ export class RuntimeDataSchema {
     }
     const field = entity?.fields[member]
     const value = row?.[member]
+    if (field?.kind === 'reference') {
+      return this.resolveReference(field, value)
+    }
     if (field?.kind !== 'relation' || typeof value !== 'string' || !field.relation) {
       return value
     }
     return this.storedRow(field.relation, value) ? this.handle(field.relation, value) : undefined
+  }
+
+  /** linkStores records the stores one compiled project mounts, so references resolve among them. */
+  linkStores(stores: readonly RuntimeDataSchema[]): void {
+    this.linkedStores = stores.includes(this) ? stores : [this, ...stores]
+  }
+
+  /**
+   * A reference reads as a handle whenever it holds a value, whether or not its target row is present,
+   * so a guard can say which it is: the row itself when the store holds it, and otherwise a stable
+   * placeholder whose availability is `loading` while the store loads or fetches it, `error` when that
+   * fetch failed, and `missing` once there is nothing left to wait for. A cleared reference is `none`.
+   */
+  private resolveReference(field: TaoDataField, value: unknown): unknown {
+    if (value === null || value === undefined) {
+      return undefined
+    }
+    const target = this.linkedStores.find(store =>
+      field.store === undefined ? store.definition.entities[field.relation!] !== undefined : store.name === field.store
+    )
+    RuntimeAssert.input(
+      target,
+      `Reference to ${field.relation} names store '${field.store ?? ''}', which this project does not mount.`,
+      { entity: field.relation },
+    )
+    return target.referencedHandle(field.relation!, field.referenceField!, value as string | number)
+  }
+
+  /**
+   * referencedHandle returns this store's row whose unique field holds the value, or a placeholder for
+   * it. The first time a placeholder is named, a fill-capable connection is offered the one-row query
+   * that would bring it, which is how a bookmark opens a story the feed has not served yet.
+   */
+  referencedHandle(entity: string, uniqueField: string, value: string | number): RuntimeEntityHandle {
+    const row = (this.data.rows[entity] ?? []).find(candidate => candidate[uniqueField] === value)
+    if (row) {
+      return this.handle(entity, row.Id)
+    }
+    const id = `@reference:${uniqueField}=${JSON.stringify(value)}`
+    if (!this.referencePlaceholders.has(id)) {
+      this.referencePlaceholders.set(id, { field: uniqueField, value })
+      this.activateQuery(this.referencePlan(entity, uniqueField, value))
+    }
+    return this.handle(entity, id)
+  }
+
+  /** referencePlaceholderValue returns the unique value a placeholder handle stands for. */
+  referencePlaceholderValue(handle: RuntimeEntityHandle): string | number | undefined {
+    const metadata = metadataOf(handle)
+    return metadata.schema === this ? this.referencePlaceholders.get(metadata.id)?.value : undefined
+  }
+
+  /** referencePlan is the one-row query a placeholder stands for, shaped as a live query would be. */
+  private referencePlan(entity: string, uniqueField: string, value: string | number): TaoQueryPlan {
+    const evaluated = { evaluate: () => evaluated, jsValue: value }
+    return { entity, filters: [{ field: uniqueField, operator: '==', value: () => evaluated }], limit: 1 }
   }
 
   relationId(handle: RuntimeEntityHandle, expectedEntity: string, context: string): string {
@@ -808,6 +902,10 @@ export class RuntimeDataSchema {
     if (metadata.schema !== this) {
       return { status: 'missing' }
     }
+    const placeholder = this.referencePlaceholders.get(metadata.id)
+    if (placeholder) {
+      return this.placeholderAvailability(metadata.entity, placeholder)
+    }
     return RuntimeSwitch<DataStatus, TaoEntityAvailability>(this.status, {
       error: () => ({ message: this.error, status: 'error' }),
       loading: () => ({ status: 'loading' }),
@@ -821,6 +919,31 @@ export class RuntimeDataSchema {
       },
       unauthorized: () => ({ status: 'unauthorized' }),
     })
+  }
+
+  /**
+   * A placeholder is never `available`: once its row lands, the next read of the reference returns the
+   * row's own handle, so until that re-render the placeholder still reads as loading.
+   */
+  private placeholderAvailability(
+    entity: string,
+    placeholder: { field: string; value: string | number },
+  ): TaoEntityAvailability {
+    if (this.status === 'loading') {
+      return { status: 'loading' }
+    }
+    if (this.status === 'error') {
+      return { message: this.error, status: 'error' }
+    }
+    const present = (this.data.rows[entity] ?? []).some(row => row[placeholder.field] === placeholder.value)
+    const fill = this.fillState(this.referencePlan(entity, placeholder.field, placeholder.value))
+    if (present || fill?.status === 'filling') {
+      return { status: 'loading' }
+    }
+    if (fill?.status === 'failed') {
+      return { message: fill.message, status: 'error' }
+    }
+    return { status: 'missing' }
   }
 
   async settle(): Promise<void> {
@@ -1154,6 +1277,7 @@ export class RuntimeDataSchema {
   private validatedStorageKey(
     declarationName: string,
     configuration: Readonly<Record<string, unknown>>,
+    storageName?: string,
   ): string {
     const configured = configuration['StorageKey']
     if (configured !== undefined && typeof configured !== 'string') {
@@ -1161,7 +1285,7 @@ export class RuntimeDataSchema {
         datasource: declarationName,
       })
     }
-    return configured ?? this.definition.name
+    return configured ?? storageName ?? this.definition.name
   }
 
   private referenceProviderIdentity(): string {

@@ -20,6 +20,7 @@ export type TaoType =
       | 'scene'
       | 'nav'
       | 'datasource'
+      | 'data'
       | 'app'
     nominal?: AST.TypeDefinition
     slots?: ItemShape
@@ -251,6 +252,23 @@ export class Type {
     return new TypeResolutionContext().ofProperty(property)
   }
 
+  /**
+   * ofDeclarationFamily returns the family a declaration belongs to when it is *named* rather than
+   * read. The two differ wherever naming a declaration is not the same as evaluating it: a command
+   * named on a toolbar is a `command`, though invoking it yields an action, and a collection named
+   * in a datasource's membership is `data`, though reading it yields a list of rows. Reference
+   * blocks list declarations, so this is the type their entries are checked against.
+   */
+  static ofDeclarationFamily(declaration: AST.Node): TaoType {
+    if (AST.isCommandDeclaration(declaration)) {
+      return primitiveType('command')
+    }
+    if (AST.isEntityDataDeclaration(declaration)) {
+      return primitiveType('data')
+    }
+    return AST.isValueDeclaration(declaration) ? Type.ofValueDeclaration(declaration) : unresolvedType()
+  }
+
   /** ofNone is the type of absence, the value an optional member takes when it has none. */
   static ofNone(): TaoType {
     return primitiveType('none')
@@ -298,6 +316,21 @@ export class Type {
   /** visibleDeclaration resolves a type name in the lexical file/import scope of a node. */
   static visibleDeclaration(node: AST.Node, name: string): AST.TypeDeclaration | undefined {
     return visibleTypeDeclaration(node, name)
+  }
+
+  /**
+   * isAssignableToSlot is assignability at a supplied slot, where a slot that takes a list also
+   * takes a single value as a one-element list. That is what keeps `Datasource Local { … }` legal
+   * beside `Datasource { News, Personal }`: an app binding one datasource is the ordinary case, and
+   * writing braces around it would be ceremony. It is a slot rule rather than a rule of the type
+   * system, so nothing else silently widens a value into a list.
+   */
+  static isAssignableToSlot(actual: TaoType, expected: TaoType): boolean {
+    if (Type.isAssignable(actual, expected)) {
+      return true
+    }
+    return expected.kind === 'list' && expected.element !== undefined
+      && Type.isAssignable(actual, expected.element)
   }
 
   /** isAssignable returns whether an actual value type can satisfy an expected parameter/property type. */
@@ -500,7 +533,20 @@ export class Type {
   /** dataFieldRelationName returns the explicit relation target, or the field name when it is
    * the same as the entity it references. */
   static dataFieldRelationName(field: DataFieldDefinition): string {
-    return field.traits?.traits.find(trait => trait.relationName)?.relationName ?? field.name
+    const traits = field.traits?.traits ?? []
+    return traits.find(trait => trait.relationName)?.relationName
+      ?? traits.find(trait => trait.referenceName)?.referenceName
+      ?? field.name
+  }
+
+  /**
+   * dataFieldIsReference identifies the weaker cross-store link. A `relation` resolves inside one
+   * store's rows; a `reference` stores the target's `unique` value and resolves to a live handle in
+   * whichever store owns that entity, so it is the only link a bookmark in one datasource can hold
+   * to a story in another.
+   */
+  static dataFieldIsReference(field: DataFieldDefinition): boolean {
+    return (field.traits?.traits ?? []).some(trait => trait.reference)
   }
 
   /** dataFieldRelationEntity resolves a stored or inverse relationship target. */
@@ -1216,6 +1262,7 @@ function primitiveType(primitive: AST.PrimitiveType | 'none'): TaoType {
     scene: () => ({ kind: 'primitive', primitive: 'scene' }),
     nav: () => ({ kind: 'primitive', primitive: 'nav' }),
     datasource: () => ({ kind: 'primitive', primitive: 'datasource' }),
+    data: () => ({ kind: 'primitive', primitive: 'data' }),
     app: () => ({ kind: 'primitive', primitive: 'app' }),
   })
 }

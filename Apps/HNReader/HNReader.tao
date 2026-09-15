@@ -1,6 +1,7 @@
+use CloudKit from @tao/data/providers/cloudkit
 use Http from @tao/data/providers/http
 use StackNav from @tao/nav
-use Col, Row, ScrollView, Spinner, Text, TextMultiline from @tao/ui
+use Col, FormButton, Row, ScrollView, Spinner, Text, TextMultiline from @tao/ui
 
 project {
    id "hnreader"
@@ -11,24 +12,34 @@ project {
    license MIT
 }
 
-// A read-only Hacker News reader over the query-driven Http datasource. Stories and comments are
-// ordinary entities; live queries activate fills, the adapter maps each declared query shape to an
-// Algolia API request, and the store the screens read stays the only source of truth.
+// A Hacker News reader over two datasources. Stories and comments are filled from the query-driven
+// Http datasource; bookmarks are the reader's own and follow them across their devices in iCloud. Each datasource states
+// the collections it stores, the app binds both, and a bookmark names its story across the boundary
+// with a `reference`.
 app HNReader {
    Name "HNReader"
    Navigator StackNav {
       Initial FrontPage
    }
-   Datasource HNSource { }
+   // The shipped reader keeps its bookmarks under their own key. The patch derives this app's copy
+   // where it is bound; the declaration stays as it is.
+   Datasource {
+      HackerNews,
+      Personal with {
+         StorageKey "HNReaderBookmarks"
+   }  }
    Design HNDesign
 }
 
-// The stub variant swaps only the adapter, so journeys exercise the real fill machinery — loading,
-// upsert-by-unique, relation resolution — deterministically, with no network.
+// The stub variant swaps the feed and keeps the bookmarks, so journeys exercise the real fill
+// machinery — loading, upsert-by-unique, relation resolution — deterministically, with no network,
+// and a bookmark still reaches the story the feed filled.
 app HNReaderStub = HNReader with {
    Name "HNReader Stub"
-   Datasource StubSource { }
-}
+   Datasource {
+      StubNews,
+      Personal
+}  }
 
 type HNSource is Http with {
    Adapter item is HNAdapter from ./HNAdapter.ts
@@ -38,6 +49,26 @@ type HNSource is Http with {
 type StubSource is Http with {
    Adapter item is StubAdapter from ./StubAdapter.ts
 }
+
+datasource HackerNews = HNSource {
+   Data {
+      Stories,
+      Comments
+}  }
+
+datasource StubNews = StubSource {
+   Data {
+      Stories,
+      Comments
+}  }
+
+// CloudKit is Apple-native, so off a device the bookmarks still work from their local checkpoint and
+// the missing native side shows as a sync error. Checks replace it with an in-memory store.
+datasource Personal = CloudKit {
+   StorageKey "HNReaderBookmarksDev"
+   Data {
+      Bookmarks
+}  }
 
 // The generic sidecar boundary supplies an action value; the Tao command below owns the product
 // title, availability, and toolbar placement while this bridge owns only the external-application
@@ -102,12 +133,33 @@ data Comments / Comment {
    order by Ordering
 }
 
+// The reader's own rows, in the other datasource. `reference` is what a link across that boundary
+// is: the story's unique HnId is what a bookmark stores, so it names a story the feed holds without
+// the two stores needing to know about each other. A story that drops out of the feed leaves the
+// bookmark alone, reading as missing until the feed serves it again.
+data Bookmarks / Bookmark {
+   Story (reference)
+   Note text (default "")
+   CreatedAt time (default now)
+
+   order by CreatedAt
+}
+
 scene FrontPage() {
    Title "Hacker News"
    query Stories as TopStories {
       where Rank >= 1
       limit 30
    }
+   action ShowBookmarks() {
+      present BookmarkList()
+   }
+   command Bookmarks() {
+      Title "Bookmarks"
+      Icon "bookmark"
+      do ShowBookmarks()
+   }
+   Toolbar { Bookmarks }
    render Col() [screen] {
       Col() [header] {
          Text("Hacker News") [headerTitle]
@@ -156,7 +208,22 @@ scene StoryScreen(Story) {
       Enabled Story.Url is not empty
       do OpenStoryLink()
    }
-   Toolbar { Open }
+   // The write lands in the other datasource, and the story it names stays where the feed put it. The
+   // query reads that other datasource by the story's own id, so a kept story cannot be kept twice.
+   query Bookmarks as Kept {
+      where Story == Story
+   }
+   action KeepStory() {
+      create Bookmark {
+         Story
+   }  }
+   command Keep() {
+      Title "Bookmark story"
+      Icon "bookmark"
+      Enabled Kept is empty
+      do KeepStory()
+   }
+   Toolbar { Open, Keep }
    query Thread from Story.Comments { }
    render Col() [screen] {
       Col() [header] {
@@ -187,6 +254,46 @@ scene StoryScreen(Story) {
                      loop Thread / Comment {
                         CommentRow(Comment)
 }  }  }  }  }  }  }  }
+
+// The reader's own screen, reading the other datasource. Its query, its rows, and its writes never
+// touch the feed; only the story each bookmark names comes from there.
+scene BookmarkList() {
+   Title "Bookmarks"
+   query Bookmarks { }
+   render Col() [screen] {
+      Col() [header] {
+         Text("Bookmarks") [headerTitle]
+      }
+      when Bookmarks {
+         empty -> { Col() [pad 10] {
+            Text("Nothing kept yet") [notice]
+         } }
+         otherwise -> { ScrollView() {
+            Col() [feed] {
+               #bookmarks
+               loop Bookmarks / Bookmark {
+                  BookmarkRow(Bookmark)
+            }  }
+         } }
+}  }  }
+
+// A reference is a handle with availability, so the row says plainly when the feed no longer holds
+// the story it names rather than rendering an empty card. The bookmark itself is untouched: nothing
+// deletes across a datasource boundary, and the story returns as soon as the feed serves it again.
+view BookmarkRow(Bookmark) {
+   render Col() [storyCard, gap 4] {
+      guard Bookmark.Story {
+         loading -> { Text("Loading story…") [notice] }
+         missing -> { Text("This story is not in the feed right now.") [notice] }
+         error -> Message { Text(Message) [notice] }
+      }
+      TextMultiline(Bookmark.Story.Title) [storyTitle]
+      Text("{ Bookmark.Story.Score } points by { Bookmark.Story.Author }") [meta]
+
+      #removeBookmark
+      FormButton("Remove") {
+         on press -> { delete Bookmark }
+}  }  }
 
 // The store keeps the thread flat with a Depth per row (the adapter flattens the tree). One rail
 // renders per ancestor level, so replies indent under their parents with the thread lines drawn;

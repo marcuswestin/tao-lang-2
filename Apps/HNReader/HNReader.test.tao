@@ -30,4 +30,35 @@ test "hn reader" {
       expect toolbar command "Open story" disabled
       expect text "No comments yet"
    }
+
+   // The two datasources are the point of these. A bookmark is written to the reader's own store
+   // while the story it names stays in the feed, and reading it back crosses the boundary.
+   test "keeps a bookmark in its own store and reads the story back through the feed" {
+      run HNReaderStub
+      press toolbar command "Bookmarks"
+      expect navigation title "Bookmarks"
+      expect text "Nothing kept yet"
+      back
+      press "Show HN: A Tao reader"
+      press toolbar command "Bookmark story"
+      // The story screen reads the other store to know the story is already kept.
+      expect toolbar command "Bookmark story" disabled
+      back
+      press toolbar command "Bookmarks"
+      // The title and score come from the feed's store; only the bookmark row came from the
+      // reader's own.
+      expect text "Show HN: A Tao reader"
+      expect text "42 points by tester"
+      press #removeBookmark
+      expect text "Nothing kept yet"
+   }
+   test "keeps bookmarks across a relaunch while the feed fills again" {
+      run HNReaderStub
+      press "Why local-first sync wins"
+      press toolbar command "Bookmark story"
+      relaunch
+      expect text "Show HN: A Tao reader"
+      press toolbar command "Bookmarks"
+      expect text "Why local-first sync wins"
+   }
 }

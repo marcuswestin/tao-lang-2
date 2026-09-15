@@ -163,8 +163,14 @@ ConfigurationEntry:
     | key=USE_IMPORT_PATH block=ConfigurationBlock
     | label=ID ':' expression=Expression
     | name=ID ('.' nameMembers+=ID)* (value=ConfigurationValue | block=ConfigurationBlock)
-    | reference=[ValueDeclaration:ID]
+    | reference=[ListedDeclaration:ID]
     | expression=NonIdentifierConstructorEntryValue;
+
+// A reference block lists declarations rather than values, so a slot typed `list of data` names
+// data collections (`Data { Stories }`) through the same entry a `list of command` slot uses. A
+// listed declaration may carry its own patch, `Personal with { … }`, which parses as a named entry
+// holding a property patch and is read as that declaration, derived where it is listed.
+type ListedDeclaration = ValueDeclaration | EntityDataDeclaration;
 
 // A configured member takes a value, and `when` is how a value becomes conditional. This is §10's
 // live root reaching a nested slot: a navigator may follow workspace state, and so may one frame

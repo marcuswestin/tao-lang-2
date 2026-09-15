@@ -109,6 +109,7 @@ function CompileTaoJsType(type: ASTUtils.TaoType): Compiled {
         scene: () => gen`import('react').ReactNode`,
         nav: () => gen`TR.NavigationValue`,
         datasource: () => gen`any`,
+        data: () => gen`any`,
         app: () => gen`any`,
       }),
     list: type => type.element ? gen`Array<${CompileTaoJsType(type.element)}>` : gen`any[]`,
