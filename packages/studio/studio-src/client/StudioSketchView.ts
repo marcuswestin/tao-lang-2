@@ -5,6 +5,7 @@ import type {
   StudioSketchSnapUndoResult,
 } from '../StudioProjectSession'
 import type { StudioSketch, StudioSketchRect } from '../StudioSketchCatalog'
+import { canvasScale } from './matrix/StudioCanvasViewport'
 import {
   StudioSketchGeometry,
   type StudioSketchGeometryState,
@@ -833,10 +834,7 @@ function renderSketch(
     overlay.append(tree, diff, apply, cancel)
     return overlay
   }
-  const point = (event: PointerEvent): StudioSketchPoint => {
-    const bounds = board.getBoundingClientRect()
-    return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
-  }
+  const point = (event: PointerEvent): StudioSketchPoint => relativePoint(board, event)
   const beginResize = (event: PointerEvent, handle: StudioSketchResizeHandle): void => {
     if (activePointer !== undefined || !primaryPointer(event)) {
       return
@@ -971,9 +969,15 @@ function primaryPointer(event: PointerEvent): boolean {
   return event.button === 0 && event.isPrimary !== false
 }
 
+/**
+ * A pointer offset in the element's own coordinates. `getBoundingClientRect` already reports the
+ * canvas transform, so the offset it yields is in screen pixels and has to be divided by the zoom
+ * to land where the person is actually pointing on the surface.
+ */
 function relativePoint(element: HTMLElement, event: PointerEvent): StudioSketchPoint {
   const bounds = element.getBoundingClientRect()
-  return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
+  const scale = canvasScale(element)
+  return { x: (event.clientX - bounds.left) / scale, y: (event.clientY - bounds.top) / scale }
 }
 
 function rectElement(

@@ -55,6 +55,14 @@ above the canvas.
   first; a Text leaf shows Text first; Style and Actions are collapsed headers until opened.
 - Work: `StudioShell.ts` layout and CSS, `StudioApp.ts` mode wiring, panel collapse into the rail,
   inspector section policy in `TaoStudioClient.tao`. Two to three days.
+- **Landed 2026-09-07.** Entering Design collapses the file tree into the rail, which still reopens
+  it, and sizes the canvas to half the workbench, clamped so the inspector, a usable editor and the
+  dividers keep their room; leaving Design restores what was there, and the divider still overrides
+  either way. Group rows no longer scroll horizontally on their own, so every cell of every group
+  lies on the one surface and zoom-to-fit shows them together. Fixed along the way: the body panes
+  now name their grid columns, because a collapsed pane is `hidden`, which removes it as a grid item
+  and shifted every later pane one column left. Still open from this stride: the scenario strip above
+  the canvas, Files and Scenario as rail popovers, and the inspector's one-section-per-selection policy.
 
 ## Stride B — A focused view gets a frame the size it had
 
@@ -117,6 +125,14 @@ Focusing a view wraps it in a frame whose size is the occurrence's measured size
 - Work: transform layer and gesture handling in `StudioMatrixView`, coordinate helpers, zoom pill,
   keyboard bindings in `StudioApp`. Two days. Lands before Stride A's frames-on-a-surface so the
   surface is pannable from the start.
+- **Landed 2026-09-07.** `StudioCanvasViewport.ts` owns the pan and zoom state per preview host and
+  writes one transform onto the grid, which the matrix re-applies after each reconcile. Wheel and
+  two-finger scroll pan; the same with ⌘ or ctrl, and a trackpad pinch, zoom around the pointer;
+  space-drag and the middle button pan; ⌘0 fits, ⌘1 returns to 100 %, ⌘+ and ⌘− step the ladder. The
+  pill at the bottom right shows the percentage and toggles fit against 100 %. Sketch pointer
+  coordinates divide by the scale, so drawing stays accurate while zoomed. Still open from this
+  stride: zoom to selection and to the focused frame, the pill's menu, persistence of the viewport
+  across sessions, and counter-scaled stroke widths on sketch handles.
 
 ## Stride D — Focus-selection mode with a red outline on view frames
 

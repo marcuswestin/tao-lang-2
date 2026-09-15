@@ -8,6 +8,12 @@ import { StudioMatrixGrid } from './matrix/StudioMatrixGrid'
 import type { StudioMatrixGroup } from './matrix/StudioMatrixLayout'
 import { StudioMatrixSketches } from './matrix/StudioMatrixSketches'
 
+export {
+  canvasScale,
+  mountCanvasViewport,
+  type StudioCanvasViewportControls,
+  type StudioCanvasViewportState,
+} from './matrix/StudioCanvasViewport'
 export { StudioFixtureGenerationFeedback, StudioFixtureProposal } from './matrix/StudioFixtureActions'
 export {
   awaitPreviewJourneyRecordingAcknowledgement,

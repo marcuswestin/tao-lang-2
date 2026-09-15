@@ -42,6 +42,7 @@ import {
   connectPreviews,
   currentSourceIdentity,
   disconnectPreviews,
+  mountCanvasViewport,
   postEditorSelection,
   refreshCellPreviews,
   StudioActivePreview,
@@ -344,6 +345,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         StudioMatrixView.renderSketches(view.preview, project, catalog)
       },
     })
+    // The preview area is a canvas before it is a list: zoom and pan come up before anything is
+    // selected, so the whole app can be seen at once and one view brought close.
+    mountCanvasViewport({ host: view.preview })
     const canvasFocus = mountStudioCanvasFocus({
       button: view.canvasFocus,
       onError: error => showSourceActionError(view.status, error),

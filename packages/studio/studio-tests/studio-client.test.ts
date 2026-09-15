@@ -4,6 +4,7 @@ import { Errors } from '@shared'
 import { Deferred, Expect, Test, until } from '@shared/test'
 import type { StudioRenderInspection } from '@source-actions'
 import { StudioSourceMutations } from '../studio-src/client/app/StudioSourceMutations'
+import { nextStop } from '../studio-src/client/matrix/StudioCanvasViewport'
 import {
   StudioApiClient,
   StudioApiError,
@@ -2766,6 +2767,19 @@ function runEditorCommand(state: EditorState, command: Command): EditorState {
   Expect(handled).toBe(true)
   return next
 }
+
+Test('Studio canvas zoom steps land on round percentages and stop at the ends of the ladder', () => {
+  Expect(nextStop(1, 1)).toBe(1.5)
+  Expect(nextStop(1, -1)).toBe(0.75)
+  Expect(nextStop(1.2, 1)).toBe(1.5)
+  Expect(nextStop(1.2, -1)).toBe(1)
+  // A scale already sitting on a stop moves off it rather than returning itself.
+  Expect(nextStop(0.5, 1)).toBe(0.75)
+  Expect(nextStop(0.5, -1)).toBe(0.25)
+  // The ladder is bounded: zooming past either end clamps instead of running away.
+  Expect(nextStop(4, 1)).toBe(4)
+  Expect(nextStop(0.1, -1)).toBe(0.1)
+})
 
 function scenario(scenarioId: string, group: string, path: string): StudioPreviewManifestV2['scenarios'][number] {
   return {

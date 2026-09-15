@@ -34,6 +34,16 @@ export type StudioClientView = {
 type PaneName = 'bottom' | 'left' | 'preview' | 'right'
 
 const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 360, preview: 440, right: 440 }
+
+/** The shell's fixed chrome, as the stylesheet lays it out; Design mode sizes the canvas around it. */
+const dividerWidth = 4
+const editorMinimum = 240
+
+/** The pane operations the rest of the shell drives: the rail reopens the left pane, presets reshape for Design. */
+export type StudioPaneControls = Readonly<{
+  designLayout: (active: boolean) => void
+  showLeft: () => void
+}>
 const paneStorageKey = 'tao-studio:pane-sizes:v4'
 
 export const StudioPaneMinimums: Record<PaneName, number> = { bottom: 96, left: 180, preview: 280, right: 320 }
@@ -223,7 +233,7 @@ export function createStudioShell(root: HTMLElement, config: StudioClientConfig)
     ? '<div class="studio-empty">Preview host is not connected.</div>'
     : '<div class="studio-empty">Connecting preview…</div>'
   const panes = configurePanes(root)
-  configurePresets(root)
+  configurePresets(root, panes)
   configureRail(root, panes.showLeft)
   return {
     appPicker: requiredSelect(root, '.studio-app-picker'),
@@ -300,7 +310,7 @@ function drawerTab(label: string): string {
   return `<button data-drawer-tab="${label}" type="button">${label}</button>`
 }
 
-function configurePanes(root: HTMLElement): { showLeft: () => void } {
+function configurePanes(root: HTMLElement): StudioPaneControls {
   const sizes = StudioPaneSizes.load(window.localStorage)
   const lastExpanded = {
     bottom: sizes.bottom > 0 ? sizes.bottom : paneDefaults.bottom,
@@ -331,6 +341,8 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
       divider.tabIndex = 0
     }
   }
+  /** What the layout looked like before Design mode borrowed the width, so leaving can give it back. */
+  const designLayout: { active: boolean; left?: number; preview?: number } = { active: false }
   const save = (): void => StudioPaneSizes.save(window.localStorage, sizes)
   const setSize = (pane: PaneName, value: number): void => {
     if (value > 0) {
@@ -401,6 +413,32 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
     })
   }
   return {
+    /**
+     * Design mode makes the canvas the hero: the file tree folds into the rail, which can bring it
+     * straight back, and the preview takes half the window. Leaving Design restores what was there.
+     */
+    designLayout(active: boolean): void {
+      if (active === designLayout.active) {
+        return
+      }
+      designLayout.active = active
+      if (active) {
+        designLayout.left = sizes.left
+        designLayout.preview = sizes.preview
+        sizes.left = 0
+        // Collapse first, then measure: the canvas takes half of what the workbench actually has,
+        // and never more than the room left once the inspector, the dividers and a usable editor
+        // have taken theirs. A track sized past that would squeeze the editor out of the layout.
+        apply()
+        const available = center.getBoundingClientRect().width
+        const room = available - sizes.right - dividerWidth * 2 - editorMinimum
+        sizes.preview = Math.max(StudioPaneMinimums.preview, Math.min(Math.round(available / 2), Math.round(room)))
+      } else {
+        sizes.left = designLayout.left ?? sizes.left
+        sizes.preview = designLayout.preview ?? sizes.preview
+      }
+      apply()
+    },
     showLeft() {
       if (sizes.left === 0) {
         setSize('left', lastExpanded.left)
@@ -409,12 +447,13 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
   }
 }
 
-function configurePresets(root: HTMLElement): void {
+function configurePresets(root: HTMLElement, panes: StudioPaneControls): void {
   for (const button of root.querySelectorAll<HTMLButtonElement>('[data-preset]')) {
     button.addEventListener('click', () => {
       root.querySelectorAll('[data-preset]').forEach(item => item.removeAttribute('aria-current'))
       button.setAttribute('aria-current', 'true')
       root.dataset['layoutPreset'] = button.dataset['preset']
+      panes.designLayout(button.dataset['preset'] === 'design')
     })
   }
   root.querySelector<HTMLButtonElement>('[data-preset="design"]')?.click()

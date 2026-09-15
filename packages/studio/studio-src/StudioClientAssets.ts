@@ -474,6 +474,12 @@ kbd {
   background: var(--studio-bg); display: grid; grid-template-columns: 44px var(--studio-left-size) 4px minmax(420px, 1fr);
   min-height: 0; min-width: 0;
 }
+/* Each pane names its column. A collapsed pane is hidden, which takes it out of the grid entirely,
+   and auto-placement would then shift every pane after it one column to the left. */
+.studio-rail { grid-column: 1; }
+.studio-pane-left { grid-column: 2; }
+.studio-divider-left { grid-column: 3; }
+.studio-center { grid-column: 4; }
 .studio-rail { align-items: center; background: var(--studio-panel); border-right: 1px solid var(--studio-stroke); display: flex; flex-direction: column; gap: 4px; padding: 8px 0; }
 .studio-rail-button {
   align-items: center; background: transparent; border: 0; border-radius: var(--studio-radius); color: var(--studio-text-dim); cursor: pointer;
@@ -517,6 +523,13 @@ kbd {
 .studio-divider-right { grid-column: 2; grid-row: 1 / 4; }
 .studio-divider-bottom { grid-column: 1 / 4; grid-row: 2; }
 .studio-drawer { grid-column: 1 / 4; grid-row: 3; }
+/* Design mode makes the canvas the hero: it takes half the workbench, with the divider still free
+   to change that, so several views are visible around each other while the source stays in reach. */
+/* The canvas track is a fixed size rather than a maximum: beside a fraction-sized editor a minmax
+   track never grows past its floor, because free space is spent on the fraction first. */
+.tao-studio-product-host[data-layout-preset="design"] .studio-center {
+  grid-template-columns: var(--studio-right-size) 4px minmax(240px, 1fr) 4px var(--studio-preview-size);
+}
 .tao-studio-product-host[data-layout-preset="code"] .studio-center { grid-template-columns: 0 0 minmax(420px, 1fr) 0 0; }
 .tao-studio-product-host[data-layout-preset="code"] .studio-preview,
 .tao-studio-product-host[data-layout-preset="code"] .studio-divider-preview,
@@ -716,7 +729,11 @@ kbd {
 
 /* ---------- freehand sketches ---------- */
 [data-tao-studio-sketch-host] { flex: none; }
-.studio-canvas-bar { align-items: center; background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px; display: flex; gap: 12px; justify-content: space-between; padding: 8px 12px; }
+.studio-canvas-bar {
+  align-items: center; background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 8px;
+  display: flex; gap: 12px; justify-content: space-between; left: 12px; padding: 8px 12px; position: absolute; right: 12px;
+  top: 12px; z-index: 5;
+}
 .studio-canvas-bar span { color: var(--studio-text-muted); font-size: 12px; }
 .studio-canvas-focus[data-state="focused"] { background: #343a35; color: #f0f2ef; }
 [data-tao-studio-sketch-workspace] { align-items: flex-start; border: 1px dashed var(--studio-stroke-strong); border-radius: var(--studio-radius-lg); cursor: crosshair; position: relative; }
@@ -751,6 +768,24 @@ kbd {
   align-content: start; background: var(--studio-canvas); background-image: radial-gradient(rgba(255, 255, 255, .06) 1px, transparent 1px); background-size: 16px 16px;
   display: grid; gap: 22px; height: 100%; min-width: 0; overflow-x: hidden; overflow-y: auto; padding: 16px 18px 28px;
 }
+/* The canvas surface: the grid becomes one transformed plane the person pans and zooms, so every
+   scenario group is laid out at its natural size and the host clips rather than scrolls. */
+.studio-preview[data-canvas-surface="on"] { overflow: hidden; touch-action: none; }
+.studio-preview[data-canvas-surface="on"] > .studio-preview-grid {
+  background: none; height: auto; left: 0; min-height: 100%; min-width: 100%; overflow: visible; position: absolute;
+  top: 0; transform-origin: 0 0; width: max-content; will-change: transform;
+}
+.studio-preview[data-canvas-surface="on"] > .studio-preview-grid > .studio-preview-group > .studio-preview-group-cells {
+  overflow: visible;
+}
+.studio-preview[data-canvas-panning="true"] { cursor: grabbing; }
+.studio-preview[data-canvas-pan-ready="true"] { cursor: grab; }
+.studio-canvas-zoom {
+  background: var(--studio-panel-raised); border: 1px solid var(--studio-stroke); border-radius: 999px; bottom: 12px;
+  color: var(--studio-text-muted); cursor: pointer; font: 11px var(--studio-mono); padding: 5px 11px; position: absolute;
+  right: 12px; z-index: 5;
+}
+.studio-canvas-zoom:hover { color: var(--studio-text); }
 .studio-preview-group { display: grid; gap: 10px; min-width: 0; width: 100%; }
 .studio-preview-group-label { color: var(--studio-text); font-size: 12.5px; font-weight: 600; margin: 0; position: sticky; left: 0; }
 .studio-preview-group-cells {

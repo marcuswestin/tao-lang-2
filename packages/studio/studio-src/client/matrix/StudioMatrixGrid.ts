@@ -1,3 +1,4 @@
+import { applyCanvasViewport } from './StudioCanvasViewport'
 import type { StudioMatrixGroup } from './StudioMatrixLayout'
 
 /** Canvas mode state per matrix parent: the view shown alone and the way back the bar's button runs. */
@@ -88,9 +89,10 @@ function reconcileMatrix<Item>(
   })
   reconcileElementChildren(canvas, nextRows)
   if (!parent.contains(canvas)) {
-    parent.replaceChildren(canvas)
+    parent.prepend(canvas)
   }
   applyCanvasFocus(parent)
+  applyCanvasViewport(parent)
 }
 
 /**
@@ -117,6 +119,8 @@ function applyCanvasFocus(parent: HTMLElement): void {
   if (canvas === null) {
     return
   }
+  // The bar sits beside the grid rather than inside it: the grid carries the canvas transform, and
+  // a bar under that transform would shrink and drift away with the surface it describes.
   const rows = [...canvas.querySelectorAll<HTMLElement>(':scope > [data-tao-studio-group]')]
   // A focused view no scenario renders any more (renamed, removed, or its file no longer compiles)
   // leaves nothing to show alone. The app stays visible under the bar instead of the grid going blank.
@@ -124,7 +128,7 @@ function applyCanvasFocus(parent: HTMLElement): void {
   for (const row of rows) {
     row.hidden = shown && row.dataset['taoStudioGroupView'] !== focused
   }
-  const existing = canvas.querySelector<HTMLElement>(':scope > .studio-canvas-bar')
+  const existing = parent.querySelector<HTMLElement>(':scope > .studio-canvas-bar')
   if (focused === undefined) {
     existing?.remove()
     delete parent.dataset['taoStudioCanvasFocus']
@@ -144,7 +148,7 @@ function applyCanvasFocus(parent: HTMLElement): void {
   back.dataset['taoStudioCanvasBack'] = 'true'
   back.onclick = () => canvasStates.get(parent)?.exit?.()
   bar.replaceChildren(label, back)
-  canvas.prepend(bar)
+  parent.prepend(bar)
 }
 
 /**
