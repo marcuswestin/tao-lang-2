@@ -1,4 +1,4 @@
-import TR from '@runtime/TR'
+import TR from '@tao/runtime'
 
 /**
  * The Hacker News adapter: each declared query shape maps to one Algolia HN API request, and every

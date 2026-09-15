@@ -51,6 +51,8 @@ export type StudioSketch = Readonly<{
   snapped: readonly StudioSnappedRect[]
   view: string
   width: number
+  x: number
+  y: number
 }>
 
 export type StudioSketchCatalogSnapshot = Readonly<{
@@ -74,6 +76,8 @@ export type StudioSketchCatalogAction =
     project: string
     rects: readonly StudioSketchRect[]
     width: number
+    x?: number
+    y?: number
   }>
   | Readonly<{ id: string; kind: 'delete-sketch' }>
   | Readonly<{
@@ -258,12 +262,14 @@ function applyAction(
       height: action.height,
       id: action.id,
       name,
-      project: action.project,
+      project: projectIdentity(action.project),
       rectOrder: action.rects.map(rect => rect.id),
       rects: action.rects,
       snapped: [],
       view: name,
       width: action.width,
+      x: action.x ?? 0,
+      y: action.y ?? 0,
     }
     return {
       catalog: {
@@ -449,11 +455,17 @@ function validateRequest(request: StudioSketchCatalogRequest): void {
 
 function validateAction(action: Record<string, unknown>): void {
   if (action['kind'] === 'create-sketch') {
-    requireOnlyKeys(action, ['height', 'id', 'kind', 'project', 'rects', 'width'], 'create-sketch action')
+    requireOnlyKeys(action, ['height', 'id', 'kind', 'project', 'rects', 'width', 'x', 'y'], 'create-sketch action')
     requireNonEmptyString(action['id'], 'create-sketch.id')
     requireNonEmptyString(action['project'], 'create-sketch.project')
     requirePositiveFinite(action['width'], 'create-sketch.width')
     requirePositiveFinite(action['height'], 'create-sketch.height')
+    if (action['x'] !== undefined) {
+      requireNonNegativeFinite(action['x'], 'create-sketch.x')
+    }
+    if (action['y'] !== undefined) {
+      requireNonNegativeFinite(action['y'], 'create-sketch.y')
+    }
     Assert.input(Array.isArray(action['rects']), 'Studio sketch create-sketch.rects must be an array.')
     action['rects'].forEach((rect, index) => validateRect(rect, `create-sketch.rects[${index}]`))
     return
@@ -571,7 +583,7 @@ function validateSketch(value: unknown, index: number): StudioSketch {
   Assert.input(Json.isRecord(value), `Studio sketch at index ${index} must be an object.`)
   requireOnlyKeys(
     value,
-    ['height', 'id', 'name', 'project', 'rectOrder', 'rects', 'snapped', 'view', 'width'],
+    ['height', 'id', 'name', 'project', 'rectOrder', 'rects', 'snapped', 'view', 'width', 'x', 'y'],
     `sketch at index ${index}`,
   )
   const fields = validateSketchFields(value, index)
@@ -599,6 +611,8 @@ function validateSketch(value: unknown, index: number): StudioSketch {
     snapped,
     view: fields.view,
     width: fields.width,
+    x: fields.x,
+    y: fields.y,
   }
 }
 
@@ -608,13 +622,27 @@ function validateSketchFields(
 ): Omit<StudioSketch, 'rectOrder' | 'snapped'> {
   const id = requireNonEmptyString(value['id'], `sketches[${index}].id`)
   const name = requireNonEmptyString(value['name'], `sketches[${index}].name`)
-  const project = requireNonEmptyString(value['project'], `sketches[${index}].project`)
+  const project = projectIdentity(requireNonEmptyString(value['project'], `sketches[${index}].project`))
   const view = requireGeneratedViewName(value['view'], `sketches[${index}].view`)
   const width = requirePositiveFinite(value['width'], `sketches[${index}].width`)
   const height = requirePositiveFinite(value['height'], `sketches[${index}].height`)
+  const x = value['x'] === undefined ? 0 : requireNonNegativeFinite(value['x'], `sketches[${index}].x`)
+  const y = value['y'] === undefined ? 0 : requireNonNegativeFinite(value['y'], `sketches[${index}].y`)
   Assert.input(Array.isArray(value['rects']), `Studio sketch ${id} rects must be an array.`)
   const rects = value['rects'].map((rect, rectIndex) => validateRect(rect, `${id}.rects[${rectIndex}]`))
-  return { height, id, name, project, rects, view, width }
+  return { height, id, name, project, rects, view, width, x, y }
+}
+
+/**
+ * projectIdentity keeps the catalog portable. The file already lives inside the project it describes,
+ * so the only thing worth recording is which project that is -- and an absolute host path is not it:
+ * committed, it names one developer's machine and matches nowhere else the repository is checked out.
+ */
+function projectIdentity(project: string): string {
+  const trimmed = project.replace(/[/\\]+$/u, '')
+  const separator = Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf('\\'))
+  const name = trimmed.slice(separator + 1)
+  return name === '' ? trimmed : name
 }
 
 function validateSnappedRect(value: unknown, field: string): StudioSnappedRect {

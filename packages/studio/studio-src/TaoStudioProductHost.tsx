@@ -128,6 +128,8 @@ export {
 export {
   StudioDataRows,
   StudioDataTableTitle,
+  StudioDesignTokenRow,
+  StudioDesignTokenSection,
   StudioPaletteRow,
   StudioPanelSelected,
   StudioPanelSurface,

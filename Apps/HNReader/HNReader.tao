@@ -1,5 +1,7 @@
+use View1 from @/studio
 use CloudKit from @tao/data/providers/cloudkit
 use Http from @tao/data/providers/http
+use OpenUrl from @tao/linking
 use StackNav from @tao/nav
 use Col, FormButton, Row, ScrollView, Spinner, Text, TextMultiline from @tao/ui
 
@@ -16,6 +18,7 @@ project {
 // Http datasource; bookmarks are the reader's own and follow them across their devices in iCloud. Each datasource states
 // the collections it stores, the app binds both, and a bookmark names its story across the boundary
 // with a `reference`.
+folder
 app HNReader {
    Name "HNReader"
    Navigator StackNav {
@@ -70,36 +73,37 @@ datasource Personal = CloudKit {
       Bookmarks
 }  }
 
-// The generic sidecar boundary supplies an action value; the Tao command below owns the product
-// title, availability, and toolbar placement while this bridge owns only the external-application
-// edge.
-let OpenUrl is action(text) = OpenUrl from ./OpenStoryLink.ts
-
 // Hacker News's warm paper and orange, tuned for reading: white story cards on the beige ground,
 // rank and bylines in the brand orange, ink sized for scanning titles and reading comments.
 design HNDesign {
-   paper #f6f6ef
-   card #ffffff
-   ink #21211c
-   inkMuted #82827a
-   accent #ff6600
-   accentDeep #c9560c
-   line #e7e7db
-   railInk #d9d2ba
-   snow #ffffff
+   colors {
+      paper #f6f6ef
+      card #ffffff
+      ink #21211c
+      inkMuted #82827a
+      accent #ff6600
+      accentDeep #c9560c
+      line #e7e7db
+      railInk #d9d2ba
+      snow #ffffff
+   }
+   sizes {
+      sm 4.px
+      med 14.px
+   }
    screen [fill, content top stretch, bg paper]
-   header [pad 14, bg accent]
+   header [hug, pad med, bg accent]
    headerTitle [size 19, weight 800, fg snow]
    feed [fill, content top stretch, pad 10, gap 8]
    threadWrap [fill, content center top]
    thread [claim 1, compress, width max 680, content top stretch, pad 10, gap 8]
-   rail [width 4, radius 2, bg railInk]
+   rail [width sm, radius 2, bg railInk]
    storyCard [pad 12, radius 10, bg card, border line]
    rank [rigid, size 15, weight 700, fg accent]
    storyTitle [size 16, weight 600, line 22, fg ink]
    meta [size 13, line 18, fg inkMuted]
    pageTitle [size 21, weight 700, line 27, fg ink]
-   commentCard [pad 12, radius 10, bg card, border line, gap 4]
+   commentCard [pad 12, radius 10, bg card, border line, gap sm]
    author [size 13, weight 700, fg accentDeep]
    commentText [size 15, line 21, fg ink]
    notice [size 13, fg inkMuted]
@@ -107,6 +111,7 @@ design HNDesign {
    stateBox [content center, pad 24]
 }
 
+folder
 data Stories / Story {
    HnId number (unique)
    Title text
@@ -122,6 +127,7 @@ data Stories / Story {
    order by Rank
 }
 
+folder
 data Comments / Comment {
    Story
    HnId number (unique)
@@ -161,7 +167,7 @@ scene FrontPage() {
    }
    Toolbar { Bookmarks }
    render Col() [screen] {
-      Col() [header] {
+      Row() [header] {
          Text("Hacker News") [headerTitle]
       }
       guard TopStories {
@@ -189,12 +195,13 @@ scene FrontPage() {
                on select -> { present StoryScreen(Story) }
 }  }  }  }  }
 
+folder
 view StoryRow(Story) {
    render Row() [storyCard, gap 10] {
       Text("{ Story.Rank }.") [rank]
-      Col() [gap 4, claim 1, compress] {
-         TextMultiline(Story.Title) [storyTitle]
+      Col() [gap sm, claim 1, compress] {
          Text("{ Story.Score } points by { Story.Author } · { Story.CommentCount } comments") [meta]
+         TextMultiline(Story.Title) [storyTitle]
 }  }  }
 
 scene StoryScreen(Story) {
@@ -316,85 +323,3 @@ view CommentRow(Comment) {
          TextMultiline(Comment.Text) [commentText]
          Text(Comment.Author) [author]
 }  }  }
-
-// Deterministic Studio data. The ids are the stub adapter's, so selecting the stub variant fills
-// over these rows rather than showing a second copy of the feed beside them — the same
-// upsert-by-unique path the journeys exercise.
-fixture HNFrontPage {
-   Lead = create Story {
-      HnId: 101,
-      Title: "Show HN: A Tao reader",
-      Url: "https://example.com/tao-reader",
-      Score: 42,
-      Author: "tester",
-      CommentCount: 2,
-      Rank: 1
-   }
-   Runner = create Story {
-      HnId: 102,
-      Title: "Why local-first sync wins",
-      Score: 17,
-      Author: "writer",
-      CommentCount: 0,
-      Rank: 2
-   }
-   LeadQuestion = create Comment {
-      Story: Lead,
-      HnId: 1011,
-      Author: "alice",
-      Text: "Neat — does the store stay local-first?",
-      Depth: 0,
-      Ordering: 1
-   }
-   LeadAnswer = create Comment {
-      Story: Lead,
-      HnId: 1012,
-      Author: "bob",
-      Text: "Yes, queries evaluate locally.",
-      Depth: 1,
-      Ordering: 2
-}  }
-
-// The shipping app is the subject, so these open with the project rather than behind an app switch.
-// The fixture is what the cell starts from; an online scenario then fills over it through the real
-// adapter, and the offline one shows exactly these rows and says where they came from.
-scenarios HNReader "devices" {
-   fixture HNFrontPage
-   appearance light
-   network online
-   locale "en"
-   scenario "phone" {
-      device phone
-   }
-   scenario "tabletDark" {
-      device tablet 1024 x 1366
-      appearance dark
-   }
-
-   // The query's error case is the point of this one: the feed's guard takes the screen and names
-   // what it could not reach, rather than showing an empty list with no explanation.
-   scenario "offline" {
-      device phone
-      network offline
-}  }
-
-scenarios StoryRow "rows" {
-   fixture HNFrontPage
-   device phone
-   appearance light
-   network online
-   locale "en"
-   scenario "leading" {
-      render (Story: Lead)
-   }
-
-   // A rank in the hundreds and a title that wraps: the row has to stay readable when neither the
-   // number nor the headline is short.
-   scenario "wrapping" {
-      prepare {
-         update Runner {
-            Title: "A very long headline about local-first sync that has to wrap across several lines",
-            Rank: 128
-      }  }
-      render (Story: Runner)
-}  }

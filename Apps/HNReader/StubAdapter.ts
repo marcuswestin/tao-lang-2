@@ -1,4 +1,4 @@
-import TR from '@runtime/TR'
+import TR from '@tao/runtime'
 
 /**
  * A deterministic in-repo feed for journeys: the same declared shapes as the real adapter, no

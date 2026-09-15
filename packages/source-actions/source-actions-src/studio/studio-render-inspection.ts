@@ -39,7 +39,7 @@ export function inspectRender(
   const design = selectedDesign(files)
   const ownerPath = design === undefined ? undefined : AST.getDocument(design).uri.fsPath
   const local = ownerPath === undefined || ownerPath === document.uri.fsPath
-  const elementName = ASTUtils.standardDesignElementName(render)
+  const elementName = ASTUtils.design.standardElementName(render)
   const owner = renderOwnerInspection(render)
   return {
     ...(design === undefined || ownerPath === undefined

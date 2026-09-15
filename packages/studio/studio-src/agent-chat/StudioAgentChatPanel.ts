@@ -30,6 +30,21 @@ type TurnResult = {
   verdict?: { status: 'held' | 'broke' | 'unknown'; heading: string; detail?: string; broke: { name: string }[] }
 }
 
+export type AgentChatHistoryItem =
+  | { role: 'user'; text: string }
+  | {
+    role: 'assistant'
+    text: string
+    codeChanges?: { granted: boolean; requests: { reason: string; missing: string }[] }
+    message?: string
+    pendingApprovals?: Approval[]
+    status?: TurnResult['status']
+    steps?: number
+    toolCalls?: ToolCall[]
+    usage?: { inputTokens?: number; outputTokens?: number }
+    verdict?: TurnResult['verdict']
+  }
+
 export type StudioAgentChatPanelHooks = {
   openDeclaration: (name: string) => Promise<void>
   /** Names the panel can turn into links: every declaration the open app has. */
@@ -200,9 +215,12 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     for (const approval of approvals) {
       box.append(line(`${approval.toolName}${approval.reason === undefined ? '' : `: ${approval.reason}`}`))
       if (approval.diff !== undefined) {
-        const diff = document.createElement('pre')
-        diff.textContent = approval.diff
-        box.append(diff)
+        const parts = approval.diff.split(/\n\n(?=--- )/)
+        for (const part of parts) {
+          const diff = document.createElement('pre')
+          diff.textContent = part
+          box.append(diff)
+        }
       }
     }
     const buttons = document.createElement('div')
@@ -413,9 +431,89 @@ export function mountStudioAgentChatPanel(root: HTMLElement, hooks: StudioAgentC
     }
   })
 
+  function restoreHistory(items: readonly AgentChatHistoryItem[], serverMode?: 'chat' | 'scenario'): void {
+    if (serverMode !== undefined && mode.value !== serverMode) {
+      mode.value = serverMode
+    }
+    log.replaceChildren()
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]!
+      if (item.role === 'user') {
+        say('you', item.text)
+      } else {
+        const isLatest = i === items.length - 1
+        showToolCalls(item.toolCalls ?? [])
+        if (item.status === 'unavailable') {
+          log.append(line(item.message ?? 'The chat is not available.', 'error'))
+          continue
+        }
+        if (item.status === 'failed') {
+          log.append(line(`The model could not answer: ${item.message ?? 'unknown failure'}`, 'error'))
+          continue
+        }
+        if (item.text !== undefined && item.text !== '') {
+          say('agent', item.text)
+        }
+        if (item.status === 'budget-exhausted' && item.message !== undefined) {
+          log.append(line(item.message, 'warn'))
+        }
+        const usage = item.usage
+        if (usage?.inputTokens !== undefined) {
+          log.append(
+            line(`${item.steps ?? 0} steps, ${usage.inputTokens} in / ${usage.outputTokens ?? 0} out tokens`),
+          )
+        }
+        if (item.pendingApprovals !== undefined && item.pendingApprovals.length > 0) {
+          if (isLatest && item.status === 'needs-approval') {
+            askApproval(item.pendingApprovals)
+          } else {
+            const approvals = item.pendingApprovals
+            const box = card(
+              'quiet',
+              approvals.length === 1
+                ? 'Proposed change'
+                : `Proposed ${approvals.length} changes`,
+            )
+            for (const approval of approvals) {
+              box.append(line(`${approval.toolName}${approval.reason === undefined ? '' : `: ${approval.reason}`}`))
+              if (approval.diff !== undefined) {
+                const parts = approval.diff.split(/\n\n(?=--- )/)
+                for (const part of parts) {
+                  const diff = document.createElement('pre')
+                  diff.textContent = part
+                  box.append(diff)
+                }
+              }
+            }
+            log.append(box)
+          }
+        }
+        if (item.verdict !== undefined) {
+          showVerdict(item.verdict)
+        }
+        const codeChanges = item.codeChanges
+        if (codeChanges !== undefined && !codeChanges.granted && codeChanges.requests.length > 0) {
+          if (isLatest) {
+            askCodeChanges(codeChanges.requests[codeChanges.requests.length - 1]!)
+          }
+        }
+      }
+    }
+    log.scrollTop = log.scrollHeight
+  }
+
   void (async () => {
     try {
       showAvailability(await availability())
+      const historyResponse = await StudioApiClient.agentChat<{
+        history?: readonly AgentChatHistoryItem[]
+        mode?: 'chat' | 'scenario'
+      }>('history', {})
+      if (historyResponse.history && historyResponse.history.length > 0) {
+        restoreHistory(historyResponse.history, historyResponse.mode)
+      } else if (historyResponse.mode !== undefined && mode.value !== historyResponse.mode) {
+        mode.value = historyResponse.mode
+      }
     } catch {
       status.textContent = 'The chat endpoint is not reachable in this session.'
     }

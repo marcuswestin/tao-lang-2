@@ -66,33 +66,38 @@ function reconcileMatrix<Item>(
       render(frame, cell.item)
       return frame
     })
-    const sketchHost = cells.querySelector<HTMLElement>(':scope > [data-tao-studio-sketch-host]')
-      ?? document.createElement('section')
-    if (sketchHost.dataset['taoStudioSketchHost'] === undefined) {
-      sketchHost.dataset['taoStudioSketchHost'] = group.id
-      sketchHost.style.flex = '0 0 auto'
-      sketchHost.style.overflow = 'visible'
-    }
-    if (group.sketchView === undefined) {
-      delete sketchHost.dataset['taoStudioSketchView']
-    } else {
-      sketchHost.dataset['taoStudioSketchView'] = group.sketchView
-    }
-    if (group.sketchSourceVersion === undefined) {
-      delete sketchHost.dataset['taoStudioSketchSourceVersion']
-    } else {
-      sketchHost.dataset['taoStudioSketchSourceVersion'] = group.sketchSourceVersion
-    }
-    reconcileElementChildren(cells, [...nextFrames, sketchHost])
+    reconcileElementChildren(cells, nextFrames)
     reconcileElementChildren(row, [heading, cells])
     return row
   })
   reconcileElementChildren(canvas, nextRows)
   if (!parent.contains(canvas)) {
-    parent.prepend(canvas)
+    parent.append(canvas)
   }
+  retireDepartedPreviewChildren(parent, canvas)
   applyCanvasFocus(parent)
   applyCanvasViewport(parent)
+}
+
+/**
+ * The grid is appended rather than replacing the parent, because the Draw canvas is mounted beside it
+ * and a compile remount must not steal it. Everything else the preview pane held before the matrix
+ * arrived -- the connecting placeholder, and the whole-app iframe an app without scenarios ran in --
+ * has no owner once the grid is up, so it is removed here rather than left stacked over the cells.
+ * The zoom pill and the focus bar belong to the canvas surface and stay.
+ */
+function retireDepartedPreviewChildren(parent: HTMLElement, canvas: HTMLElement): void {
+  for (const child of [...parent.children]) {
+    if (
+      child === canvas
+      || child.hasAttribute('data-tao-studio-draw-canvas')
+      || child.hasAttribute('data-tao-studio-canvas-zoom')
+      || child.hasAttribute('data-tao-studio-canvas-bar')
+    ) {
+      continue
+    }
+    child.remove()
+  }
 }
 
 /**

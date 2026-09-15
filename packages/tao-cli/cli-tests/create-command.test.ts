@@ -1,5 +1,5 @@
 import { type JsonObject, ScriptedGenerationProvider } from '@generation'
-import { Errors, FS, Platform } from '@shared'
+import { Errors, FS, Platform, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { PassThrough } from 'node:stream'
 import { type CreateCommandOptions, type CreationPrompts, runCreate } from '../cli-src/create/create-command'
@@ -109,6 +109,10 @@ Describe('tao create command', () => {
       )
       Expect(captured()).toContain('tao dev a-notebook-for')
       Expect(await FS.readText(FS.resolvePath('App.tao', result.directory))).toContain('id "a-notebook-for"')
+      Expect(await FS.readText(FS.resolvePath('tsconfig.json', result.directory))).toContain('"@tao/runtime"')
+      Expect(await FS.realPath(FS.resolvePath('node_modules/@tao/runtime', result.directory))).toBe(
+        Repo.resolvePath('packages/runtime'),
+      )
     })
   })
 

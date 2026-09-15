@@ -56,6 +56,27 @@ export const StudioMatrixLayout = {
     )
     return viewNames.size === 1 ? [...viewNames][0] : undefined
   },
+  /** sketchSourceVersions maps each generated sketch view to the source version of its Tao file. */
+  sketchSourceVersions(
+    manifest: Pick<StudioPreviewManifestV2, 'scenarios' | 'sourceVersions' | 'subjects'>,
+  ): Readonly<Record<string, string>> {
+    const subjects = new Map(manifest.subjects.map(subject => [subject.subjectId, subject]))
+    const versions: Record<string, string> = {}
+    for (const scenario of manifest.scenarios) {
+      if (scenario.group !== 'sketch') {
+        continue
+      }
+      const subject = subjects.get(scenario.subjectId)
+      if (subject?.kind !== 'view') {
+        continue
+      }
+      const version = manifest.sourceVersions[scenario.source.path]
+      if (version !== undefined) {
+        versions[subject.viewName] = version
+      }
+    }
+    return versions
+  },
   /** focusable says whether canvas mode can focus a view: some group renders that view alone. */
   focusable(groups: readonly Pick<StudioMatrixGroup<unknown>, 'subjectView'>[], viewName: string): boolean {
     return groups.some(group => group.subjectView === viewName)

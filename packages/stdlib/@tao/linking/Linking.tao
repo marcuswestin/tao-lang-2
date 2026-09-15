@@ -1,0 +1,3 @@
+// `@tao/linking` hands a URL to the platform URL service and waits for that handoff.
+public
+action OpenUrl(Url text) from ./Linking.ts

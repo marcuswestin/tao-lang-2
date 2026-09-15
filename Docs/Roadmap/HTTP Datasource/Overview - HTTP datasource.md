@@ -185,7 +185,7 @@ Worth stating plainly, because each is visible in the shipped app rather than me
 - **Rows are never evicted.** A story that falls off the front page keeps its old `Rank`, so a
   refill interleaves it with new rows under duplicate ranks. Eviction is deferred above; this is
   what deferring it looks like on screen.
-- **An adapter's own unit tests have no home.** `Apps/` TypeScript sits outside every tsconfig and
-  outside the package test suites, so `HNAdapter.ts` is neither typechecked by `./agent check` nor
-  unit-testable where it lives. Its behavior is covered only indirectly, through the stub adapter's
-  journeys. Giving app sidecars a test and typecheck home is its own piece of work.
+- **An adapter's own unit tests have no home.** `Apps/tsconfig.json` now typechecks sidecar
+  `@tao/runtime` imports, but `HNAdapter.ts` is still outside the package test suites, so its
+  behavior is covered only indirectly through the stub adapter's journeys. A unit-test home for app
+  sidecars is its own piece of work.

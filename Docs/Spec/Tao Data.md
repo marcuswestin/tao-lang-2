@@ -520,7 +520,7 @@ The adapter declares the query shapes the API actually supports, authored with `
 and `TR.Http.on` in a TypeScript sidecar:
 
 ```ts
-import TR from '@runtime/TR'
+import TR from '@tao/runtime'
 
 export const HNAdapter = TR.Http.adapter({
   Story: [

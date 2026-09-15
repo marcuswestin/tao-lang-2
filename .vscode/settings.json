@@ -7,7 +7,7 @@
   "multiCommand.commands": [
     {
       "command": "multiCommand.buildExtensionThenRestartHost",
-      "interval": 3000,
+      "interval": 6000,
       "sequence": [
         "workbench.action.tasks.build",
         "workbench.action.restartExtensionHost"

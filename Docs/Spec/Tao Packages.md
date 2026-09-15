@@ -9,7 +9,7 @@ stdlib paths, bare same-package `use Foo`, local `@package[/subfolder]` imports,
 `requires`, external workspace installation, lockfiles, remotes, other
 CLI package commands, and package publishing remain future work.
 
-The implemented package surface includes `@tao/text`, `@tao/time`, and the curated
+The implemented package surface includes `@tao/text`, `@tao/time`, `@tao/linking`, and the curated
 `@tao/device/{haptic,clipboard,share}` capabilities, and requires parentheses on every view, action,
 and function declaration parameter list.
 
@@ -39,6 +39,10 @@ mutable.
 share sheet and waits for the native operation, but exposes no shared-versus-dismissed result.
 Action outcomes remain future language work rather than a reactive lookalike result.
 
+`@tao/linking` exports `OpenUrl(Url text)`. The action hands the URL to the platform URL service
+and waits for that handoff. An empty URL is a no-op. Test hosts skip the external launch so a
+journey can press the command without opening a browser.
+
 These packages are ordinary Tao declarations bound to TypeScript sidecars through the same
 expression-position `from` a third-party package would use, which is the whole mechanism — no
 compiler-known names are involved.
@@ -51,7 +55,8 @@ compiler-known names are involved.
 - The command writes the canonical layout of `Docs/Roadmap/Tao Revolution/Decisions.md` §1, as far
   as the toolchain runs it today: `App.tao` (project and app), `Data.tao`, `Chrome.tao`,
   `Design.tao`, one folder per feature with a list and a detail scene, `Scenarios.tao`,
-  `<App>.test.tao`, and the committed empty generated-package scaffold `@/.gitkeep`. The result is
+  `<App>.test.tao`, `tsconfig.json` (sidecar TypeScript resolves `@tao/*` from the CLI-bundled
+  runtime), and the committed empty generated-package scaffold `@/.gitkeep`. The result is
   formatted, validated, and its behavior tests are run before the command reports success;
   `--skip-tests` skips only the test run.
 - The project `id` is also the directory name. `--id <id>` chooses it; otherwise it is suggested
@@ -326,8 +331,8 @@ configuration and host-slot read/require sets. See `Tao Presentation and Navigat
 The compiler copies the named implementation file and follows its transitive relative static imports,
 dynamic imports, and re-exports across TypeScript, TSX, JavaScript, JSX, and JSON files. It preserves
 the relative graph under generated output and rewrites sibling `.tao` type imports to their emitted
-declarations. Installed-package imports such as `@runtime/TR` remain external and are resolved by the
-application package manager.
+declarations. Installed-package imports such as `@tao/runtime` remain external and are resolved by the
+CLI-bundled `@tao/*` modules.
 
 An explicitly ascribed action value may bind a bare function export through the same expression
 boundary (`let OpenUrl is action(text) = OpenUrl from ./OpenUrl.ts`); `do` passes plain JavaScript

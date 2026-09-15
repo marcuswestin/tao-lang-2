@@ -65,6 +65,7 @@ Describe('parser: core language syntax', () => {
 
   Test('parses content-accepting view declarations and child view invocations', async () => {
     const parseResult = await testParseCode(`
+      folder
       app MyApp { view MainView }
       view MainView() {
         render Stack(){
@@ -89,6 +90,9 @@ Describe('parser: core language syntax', () => {
     )
     Expect.Is(stack, AST.isViewDeclaration)
     Expect(AST.viewPlacesCallerContent(stack)).toBe(true)
+    const app = parseResult.entry.ast.statements.find(AST.isAppDeclaration)
+    Expect.Is(app, AST.isAppDeclaration)
+    Expect(app.visibility).toBe('folder')
     const mainView = parseResult.entry.ast.statements.find(statement =>
       AST.isViewDeclaration(statement) && statement.name === 'MainView'
     )

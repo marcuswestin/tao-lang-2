@@ -1,6 +1,7 @@
 import Runtime from '@runtime-toolchain'
 import { Errors, FS, HCI } from '@shared'
 import type { Readable, Writable } from 'node:stream'
+import { TaoAppModules } from './app-modules'
 
 /** CompileCommandResult declares the compiled app's source and generated output paths. */
 type CompileCommandResult = {
@@ -25,6 +26,7 @@ export async function runCompile(
   if (!await FS.isFile(sourcePath)) {
     Errors.throwUserInput(`No Tao app file found at ${sourcePath}`)
   }
+  await TaoAppModules.ensureForPath(sourcePath)
   const appNames = await Runtime.appNames(sourcePath)
   const appName = await selectAppName(sourcePath, appNames, options)
   const generated = await Runtime.generateApp(sourcePath, {

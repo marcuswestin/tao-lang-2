@@ -142,6 +142,37 @@ Test('StudioServer datasource publishes structured design kinds with revision-bo
   })
 })
 
+Test('StudioServer datasource tolerates unparseable project files when indexing design tokens', async () => {
+  await withTaoFiles('studio-server-unparseable-file-', {
+    'Broken.tao': `
+      folder
+      scenarios App "devices" {}
+    `,
+    'Valid.tao': `
+      design ValidDesign {
+        ink #121826
+      }
+      app Valid { view Main }
+      view Main() { render Text("Valid") }
+    `,
+  }, async (paths, root) => {
+    const session = await StudioProjectSession.open({
+      async compile() {},
+      entryPath: paths['Valid.tao'],
+      projectRoot: root,
+    })
+    const datasource = new StudioServerDatasource(session)
+    const design = await datasource.fill({ entity: 'DesignTokens' })
+    Expect(design.rows).toHaveLength(1)
+    Expect((design.rows as StudioServerDesignTokenRow[])[0]).toMatchObject({
+      DesignName: 'ValidDesign',
+      Kind: 'token',
+      Name: 'ink',
+    })
+    datasource.close()
+  })
+})
+
 Test('StudioServer Problems retains project diagnostics and revision-bound source locations', async () => {
   await withSession(async session => {
     await session.compileInitial()

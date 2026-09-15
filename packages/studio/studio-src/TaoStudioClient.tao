@@ -22,12 +22,6 @@ design StudioDesign {
    panel #090909
    ink #f4f4f4
    line #363636
-   sizes {
-      controlGap 4.px
-   }
-   styles {
-      designTokenRow [gap controlGap]
-   }
    Text [ink ink]
    TextInput [background panel, border line, ink ink]
 }
@@ -260,6 +254,10 @@ view StudioPaletteRow(Label text, Detail text, Kind text, Name text, Insert acti
 
 view StudioSourceRow(Label text, Detail text, Open action()) from ./TaoStudioProductHost.tsx
 
+view StudioDesignTokenRow(Label text, Detail text, Kind text, Open action()) from ./TaoStudioProductHost.tsx
+
+view StudioDesignTokenSection(Title text) accepts content from ./TaoStudioProductHost.tsx
+
 view ComponentPaletteItem(Name text, Label text, Kind text) {
    action Insert() {
       do InsertComponent(Name)
@@ -334,10 +332,22 @@ view DesignTokenRow(DesignToken) {
    action Open() {
       do OpenSource(Path: DesignToken.SourcePath, SourceVersion: DesignToken.SourceVersion, Start: DesignToken.Start)
    }
-   render Col() [designTokenRow] {
-      Text(DesignToken.Kind)
-      StudioSourceRow(Label: DesignToken.Name, Detail: DesignToken.Value, Open: Open)
-}  }
+   render StudioDesignTokenRow(Label: DesignToken.Name, Detail: DesignToken.Value, Kind: DesignToken.Kind, Open: Open)
+}
+
+view DesignTokenKindGroup(TokenKind text, Title text) {
+   query DesignTokens as Tokens {
+      where Kind == TokenKind
+   }
+   render Col() {
+      when Tokens {
+         empty -> { }
+         otherwise -> { StudioDesignTokenSection(Title) {
+            loop Tokens / DesignToken {
+               DesignTokenRow(DesignToken)
+            }
+         } }
+}  }  }
 
 view DesignTokensPanel() {
    query DesignTokens as Tokens
@@ -346,9 +356,15 @@ view DesignTokensPanel() {
          loading -> { Text("Loading parser-owned design values…") }
          error -> Message { Text(Message) }
       }
-      loop Tokens / DesignToken {
-         DesignTokenRow(DesignToken)
-}  }  }
+      DesignTokenKindGroup(TokenKind: "color", Title: "colors")
+      DesignTokenKindGroup(TokenKind: "bundle", Title: "bundles")
+      DesignTokenKindGroup(TokenKind: "size", Title: "sizes")
+      DesignTokenKindGroup(TokenKind: "text", Title: "text")
+      DesignTokenKindGroup(TokenKind: "screen", Title: "screens")
+      DesignTokenKindGroup(TokenKind: "style", Title: "styles")
+      DesignTokenKindGroup(TokenKind: "default", Title: "defaults")
+      DesignTokenKindGroup(TokenKind: "token", Title: "tokens")
+}  }
 
 view StudioContextPanel(Revision number, ProjectRoot text, ActiveFilePath text, ActiveFileContent text, ActiveFileVersion text, SelectionAnchor number, SelectionHead number, SelectedRenderId text, SelectedRenderPath text, SelectedRenderVersion text, ActiveCellId text, CellRevision number, ActiveScenarioId text, ViewportWidth number, ViewportHeight number, InspectorBusy boolean, InspectorCanUndo boolean, InspectorInspection text, InspectorSelection text) {
    action ApplyInspector(Action text, Proposed boolean) {

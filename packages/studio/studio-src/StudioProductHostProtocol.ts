@@ -11,7 +11,7 @@ export type StudioProductHostActions = Readonly<{
     identity: StudioProductHostCellIdentity,
     environment: StudioProductHostEnvironment,
   ) => Promise<void>
-  changeActiveFile: (content: string) => void
+  changeActiveFile: (content: string, selection?: Readonly<{ anchor: number; head: number }>) => void
   createFile: (path: string) => Promise<void>
   deleteFile: (path: string, sourceVersion: string) => Promise<void>
   insertComponent: (component: string) => void
@@ -169,10 +169,20 @@ export function subscribeStudioProductHostState(listener: () => void): () => voi
 }
 
 /** Sends a Tao-mounted editor change through the existing tab/draft controller. */
-export function requestStudioProductHostChangeActiveFile(content: string): void {
+export function requestStudioProductHostChangeActiveFile(
+  content: string,
+  selection?: Readonly<{ anchor: number; head: number }>,
+): void {
   Assert.input(typeof content === 'string', 'Tao Studio editor changes require text content.')
+  if (selection !== undefined) {
+    Assert.input(
+      Number.isInteger(selection.anchor) && Number.isInteger(selection.head)
+        && selection.anchor >= 0 && selection.head >= 0,
+      'Tao Studio editor selection offsets must be non-negative integers.',
+    )
+  }
   Assert.defined(activeActions, 'the Tao Studio editor to be ready before it forwards a change')
-  activeActions.changeActiveFile(content)
+  activeActions.changeActiveFile(content, selection)
 }
 
 export function requestStudioProductHostSelectActiveFile(anchor: number, head: number): void {

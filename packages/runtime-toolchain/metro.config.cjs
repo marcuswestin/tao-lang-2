@@ -72,7 +72,7 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       return { type: 'empty' }
     }
   }
-  if (moduleName === '@runtime/TR') {
+  if (moduleName === '@runtime/TR' || moduleName === '@tao/runtime') {
     return {
       type: 'sourceFile',
       filePath: nodePath.resolve(runtimeSourceRoot, 'TR.ts'),

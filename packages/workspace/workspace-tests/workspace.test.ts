@@ -231,6 +231,45 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
+  Test('reads project identity across the batch so an unimported generated entry still has one', async () => {
+    await withTaoFiles(
+      'tao-workspace-generated-entry-identity-',
+      {
+        'Main.tao': `
+          project {
+            id "generated-entry-identity"
+            name "Generated Entry Identity"
+            remote none
+            license MIT
+          }
+          app Sketching { view MainView }
+          view MainView() { render inject ${tsFence} return null ${fence} }
+        `,
+        // Drawn in Studio and not imported by the app yet, so its own entry graph reaches no
+        // project metadata at all.
+        '@/studio/View1.tao': `
+          use Text from @tao/ui
+          public view View1() { render Text("View1") }
+        `,
+      },
+      async (paths, rootDir) => {
+        const workspace = await Workspace.open(rootDir)
+        const alone = await workspace.validate(paths['@/studio/View1.tao']!)
+        const batched = await workspace.validateFiles([paths['Main.tao'], paths['@/studio/View1.tao']])
+
+        Expect(errorMessages(alone)).toEqual([
+          'Project identity is missing. '
+          + "Run 'tao project id <id> [path]' to create checked-in project metadata.",
+        ])
+        Expect(errorMessages(batched)).toEqual([])
+        Expect(batched.entry.path).toBe(paths['Main.tao'])
+        Expect(batched.files.map(file => file.path)).toEqual(
+          Expect['arrayContaining']([paths['Main.tao'], paths['@/studio/View1.tao']]),
+        )
+      },
+    )
+  })
+
   Test('skips hidden future-source directories while preloading LSP documents', async () => {
     await withTaoFiles(
       'tao-workspace-lsp-sketches-',

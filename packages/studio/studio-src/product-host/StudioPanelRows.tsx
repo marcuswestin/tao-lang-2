@@ -82,6 +82,78 @@ export function StudioSourceRow(props: StudioSourceRowProps): React.ReactElement
   )
 }
 
+export type StudioDesignTokenRowProps =
+  & TaoStudioHostVisualProps
+  & Readonly<{
+    Detail: string
+    Kind: string
+    Label: string
+    Open: TaoStudioHostAction
+  }>
+
+/** One parser-owned design value: name, authored detail, and a swatch when the detail is a color. */
+export function StudioDesignTokenRow(props: StudioDesignTokenRowProps): React.ReactElement {
+  const swatch = cssColor(props.Detail)
+  return (
+    <button
+      className="studio-design-token"
+      data-studio-design-kind={props.Kind}
+      onClick={() => void props.Open.invoke()}
+      style={props.Layout?.style}
+      title={props.Detail}
+      type="button"
+    >
+      <strong>{props.Label}</strong>
+      <span className="studio-design-token-value">
+        {props.Detail}
+        {swatch === undefined ? undefined : (
+          <span
+            aria-hidden="true"
+            className="studio-design-token-swatch"
+            style={{ background: swatch }}
+          />
+        )}
+      </span>
+    </button>
+  )
+}
+
+type StudioDesignTokenSectionProps =
+  & TaoStudioHostVisualProps
+  & Readonly<{
+    Title: string
+    children?: React.ReactNode
+  }>
+
+/** A kind heading plus its token rows; Tao hides the section when that kind has no rows. */
+export function StudioDesignTokenSection(props: StudioDesignTokenSectionProps): React.ReactElement {
+  return (
+    <section
+      className="studio-design-token-kind"
+      data-studio-design-kind={props.Title}
+      data-testid={props.Tag}
+      style={props.Layout?.style}
+    >
+      <h3>{props.Title}</h3>
+      {props.children}
+    </section>
+  )
+}
+
+/** Hex, rgb/hsl, or a CSS-supported color; bundle specs and other authored text stay unswatched. */
+function cssColor(value: string): string | undefined {
+  const color = value.trim()
+  if (color === '') {
+    return undefined
+  }
+  if (/^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color) || /^(?:rgba?|hsla?)\(/i.test(color)) {
+    return color
+  }
+  return typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('color', color)
+    ? color
+    : undefined
+}
+
 /** Paths under the open project read relative to it; anything else is shown as given. */
 function projectRelativeDetail(detail: string): string {
   const root = studioProductHostState().projectRoot

@@ -20,8 +20,7 @@ import {
 } from './data-stores'
 import { resolveDataWriteBindings } from './data-write-bindings'
 import { resolveDatasourceValue } from './datasource-values'
-import { standardDesignElementName } from './design'
-import { canonicalDesignVisualHead, designColorHeads, designLayoutHeads, designVisualHeads } from './design-visuals'
+import { design } from './design'
 import { guardBranches } from './guards'
 import { injectionArgumentName } from './injections'
 import {
@@ -44,7 +43,7 @@ import { renderTargetIsNav, renderTargetName, resolveRenderTarget } from './rend
 import { Type } from './Type'
 import { literalDurationOf, Units } from './Units'
 
-export { Packages, Type, Units }
+export { design, Packages, Type, Units }
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
@@ -57,7 +56,6 @@ export const ASTUtils = {
   commandStaticShortcut,
   mentionFills,
   guardBranches,
-  canonicalDesignVisualHead,
   datasourceMembershipSlot,
   datasourceCollectionNames,
   datasourceCollections,
@@ -68,9 +66,7 @@ export const ASTUtils = {
   storeOfCollection,
   storeOfDatasource,
   resolveDatasourceValue,
-  designColorHeads,
-  designLayoutHeads,
-  designVisualHeads,
+  design,
   injectionArgumentName,
   layoutEntryValues,
   layoutTermValue,
@@ -91,7 +87,6 @@ export const ASTUtils = {
   resolveRenderInvocation,
   resolveRenderTarget,
   rootAppValue,
-  standardDesignElementName,
 } as const
 
 export namespace ASTUtils {

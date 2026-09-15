@@ -1,6 +1,7 @@
 import { type DevAppSelection, type DevLoopOutcome, runDevLoop } from '@expo-dev-loop'
 import { Errors, FS, HCI, Switch } from '@shared'
 import type { Readable, Writable } from 'node:stream'
+import { TaoAppModules } from './app-modules'
 import { discoverTaoDevProjects, type TaoDevApp } from './dev-app-discovery'
 import { selectTaoDevApp, type TaoDevSelectionResult } from './dev-app-selection'
 
@@ -61,6 +62,9 @@ async function initialSelection(
   options: TaoDevCommandOptions,
 ): Promise<TaoDevSelectionResult> {
   const projects = await discoverTaoDevProjects(target)
+  for (const project of projects) {
+    await TaoAppModules.ensureProject(project.root)
+  }
   const apps = projects.flatMap(project => project.apps)
   if (apps.length === 0) {
     Errors.throwUserInput(`No runnable Tao apps found under ${target}.`)

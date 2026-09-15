@@ -1036,3 +1036,60 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** A test file with several servers and clients passes under `--concurrent` without
   each client needing its own dial bound.
 - **Source:** 2026-09-05 Dev datasource implementation.
+
+### DEVENV-056 — Visual review can lose its renderer context during preview reload
+
+- **Status:** Resolved
+- **Area:** Visual review
+- **Impact:** `tao review` could read the rendered review surface successfully and then fail before
+  writing the bundle with `Execution context was destroyed.`
+- **Evidence:** `./tao review Apps/HNReader --app HNReaderStub --output <fresh-path>` reproduced the
+  failure in `StudioCdp.rendererFingerprint` when the live preview iframe reloaded between its page
+  and child-frame probes.
+- **Workaround:** None required after the fix; before it, retrying the whole immutable capture into a
+  fresh output path could avoid the reload race.
+- **Proposed change:** Retry only Chrome's transient destroyed/missing-context failures while reading
+  the renderer fingerprint, with a short bound; preserve every other failure immediately.
+- **Dependencies:** None.
+- **Acceptance:** A focused CDP test replaces the child-frame execution context mid-fingerprint and
+  observes a successful retry; the real two-cell HNReaderStub review capture completes.
+- **Source:** 2026-09-06 two-week walkthrough verification.
+
+### DEVENV-057 — `git hash-object --stdin-paths` cannot hash a directory symlink
+
+- **Status:** Candidate
+- **Area:** Verification
+- **Impact:** `./agent verify` dies in `GreenTree.hashTree` before any gate runs when the working
+  tree contains an untracked directory symlink.
+- **Evidence:** 2026-09-07, an untracked `packages/tao-cli/modules/@tao/runtime` symlink to
+  `packages/runtime` made `git hash-object --stdin-paths` exit 128 with
+  `fatal: Unable to hash packages/tao-cli/modules/@tao/runtime`.
+- **Workaround:** Ship a real directory and a TypeScript re-export instead of a directory symlink.
+- **Proposed change:** Hash a directory symlink by its link text (or skip it after recording the
+  target) so `GreenTree` can identify the working tree.
+- **Dependencies:** None.
+- **Acceptance:** An untracked directory symlink in the worktree does not prevent `verify --changed`
+  from hashing and starting gates.
+- **Source:** 2026-09-07 `@tao/runtime` CLI module wiring.
+
+### DEVENV-058 — The CLI's bundled `@tao/*` module directory is never filled
+
+- **Status:** Candidate
+- **Area:** Packaging
+- **Impact:** `TaoAppModules.runtimeRoot()` resolves only because `packages/runtime` sits beside
+  `packages/tao-cli` in this repository. A CLI copied anywhere else links a created project at
+  nothing, so `tao create`'s `tsconfig.json` cannot resolve `@tao/runtime` and every sidecar import
+  fails to typecheck.
+- **Evidence:** 2026-09-12, `packages/tao-cli/modules/@tao/` holds only `.gitkeep`, and no `Justfile`
+  recipe or `./dev` command copies the runtime into it. `runtimeRoot` falls through to
+  `Errors.throwHostEnvironment` in that case.
+- **Workaround:** Run the CLI from the monorepo, which is the only supported way to run it today.
+- **Proposed change:** A packaging step that copies `packages/runtime` (and any other `@tao/*`
+  TypeScript module a created project imports) into `packages/tao-cli/modules/@tao/` as real
+  directories, alongside whatever recipe builds a distributable CLI. Note DEVENV-057: a directory
+  symlink there breaks `GreenTree.hashTree`, so the step has to copy rather than link.
+- **Dependencies:** DEVENV-057.
+- **Acceptance:** A CLI tree with no sibling `packages/runtime` resolves `@tao/runtime` from its own
+  carried module and links a created project at it; `cli-tests/app-modules.test.ts` already covers
+  both halves of that fallback against a synthetic tree.
+- **Source:** 2026-09-12 review of the `@tao/runtime` CLI module wiring.

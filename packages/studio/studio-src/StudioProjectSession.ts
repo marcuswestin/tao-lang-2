@@ -1527,7 +1527,7 @@ export class StudioProjectSession {
     const path = await this.#files.resolveTaoFile(current.path)
     const parsed = await this.#workspace.parse(path)
     Assert.input(
-      !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+      !Diagnostics.hasError(parsed.diagnostics.filter(diagnostic => diagnostic.filePath === path), 'lexer', 'parser'),
       `Cannot apply a Studio source action until ${current.path} parses.`,
     )
     const request = StudioSessionRequests.sourcePatchRequest(envelope)
@@ -1606,7 +1606,7 @@ export class StudioProjectSession {
     const path = await this.#files.resolveTaoFile(current.path)
     const parsed = await this.#workspace.parse(path)
     Assert.input(
-      !Diagnostics.hasError(parsed.diagnostics, 'lexer', 'parser'),
+      !Diagnostics.hasError(parsed.diagnostics.filter(diagnostic => diagnostic.filePath === path), 'lexer', 'parser'),
       `Cannot ${purpose} until ${current.path} parses.`,
     )
     return parsed

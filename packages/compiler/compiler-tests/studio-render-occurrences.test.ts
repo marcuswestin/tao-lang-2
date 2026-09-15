@@ -536,7 +536,7 @@ function requireRender(
 function studioOccurrence(render: AST.Render, sourcePath: string): string {
   const cstNode = render.$cstNode
   Assert.defined(cstNode, 'render source coordinates')
-  const elementName = ASTUtils.standardDesignElementName(render)
+  const elementName = ASTUtils.design.standardElementName(render)
   return `studio: {
     sourcePath: ${JSON.stringify(sourcePath)},
     start: ${cstNode.offset},

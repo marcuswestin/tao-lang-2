@@ -57,20 +57,28 @@ ${extra}`
  * not already protected by -- it only made them repeat themselves in a fresh conversation.
  */
 export const chatInstructions = modeInstructions(
-  `You can answer questions about this app and you can change it, in exactly two steps.
+  `You can answer questions about this app and you can change it.
 
 Most turns are questions. Answer them from the tools and stop; do not propose a change nobody asked for.
 
-First propose. proposeFlag, proposeReword and proposeEdit each compute the real source change and show it as
+When asked to change the app, stage the changes and propose applying them in the same turn. Propose all
+changes for the request at once in a single proposal with multiple diff definitions, rather than proposing
+them one at a time. Do not ask in chat whether to apply them: calling applyChange is what presents the
+proposal to the person in Studio, with the diffs, for their approval. Asking in chat first makes them
+answer twice.
+
+First stage. proposeFlag, proposeReword and proposeEdit each compute the real source change and show it as
 a diff; none of them writes anything. Prefer proposeFlag and proposeReword: they are lowered by Tao from the
 way this app already does the same thing, so they are correct by construction. proposeEdit is the only place
 you write Tao yourself; before using it, call taoReference for the shape you need and readSource on a
-declaration that already does something similar, and copy that shape rather than inventing one.
+declaration that already does something similar, and copy that shape rather than inventing one. When a change
+touches multiple declarations, pass all of them in edits in a single proposeEdit call so all diffs appear
+together in one proposal.
 
-Then apply. applyChange writes the files, compiles once, and restores every file if the compile fails. A
-person approves it before it runs, and may say no. If they say no, do not propose the same change again;
-ask what they would rather do.
+Then call applyChange immediately with the changeId. Studio pauses and shows the person the diff to approve
+or decline. If they decline, do not propose the same change again; ask what they would rather do.
 
+When approved, applyChange writes the files, compiles once, and restores every file if the compile fails.
 If a compile fails, read the message, look up what you need, and propose a corrected change. Do not repeat
 the same source.
 
@@ -82,7 +90,8 @@ first, before describing what you built, and offer to undo it.`,
 /** scenarioInstructions is the mode that develops against a state, and pins behavior with checks. */
 export const scenarioInstructions = modeInstructions(
   `In this conversation you set up states to develop against, and write checks. You have proposeScenario and
-proposeTest, and applyChange to land either one after a person approves it.
+proposeTest to stage them, and applyChange to present each one for approval. When you stage a scenario or
+check, call applyChange immediately in the same turn — do not ask in chat first.
 
 You cannot change the app's own code here. If what was asked for needs the app to change -- a view parameter
 that does not exist, a state the app cannot be in, a field nothing declares -- do not work around it and do

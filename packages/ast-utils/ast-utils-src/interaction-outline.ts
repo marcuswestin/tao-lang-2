@@ -1,5 +1,5 @@
 import { AST } from '@parser'
-import { standardDesignElementName } from './design'
+import { design } from './design'
 import { guardBranches } from './guards'
 import { type ResolvedRenderInvocation, resolveRenderInvocation } from './invocations'
 import { renderTargetIsNav, renderTargetName, resolveRenderTarget } from './render-targets'
@@ -194,7 +194,7 @@ function firstDerivedLabel(render: AST.Render, seen: Set<AST.ViewDeclaration>): 
   }
   const invocation = resolveRenderInvocation(render)
   const value = invocation.pairs.find(pair => Type.parameterName(pair.parameter) === 'Value')?.argument.value
-  const element = standardDesignElementName(render)
+  const element = design.standardElementName(render)
   if (element && textElements.has(element) && value && AST.isStringLiteral(value)) {
     return value.value
   }
@@ -279,7 +279,7 @@ function visitRender(
   descend: boolean,
   texts: OutlineTextPath[],
 ): void {
-  const element = standardDesignElementName(render)
+  const element = design.standardElementName(render)
   const invocation = resolveRenderInvocation(render)
   if (element !== undefined && textElements.has(element)) {
     const pair = invocation.pairs.find(candidate => Type.parameterName(candidate.parameter) === 'Value')

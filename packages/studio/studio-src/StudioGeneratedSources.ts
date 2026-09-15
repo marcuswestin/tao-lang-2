@@ -103,7 +103,9 @@ export class StudioGeneratedSources {
       await this.#requireContainedFile(path, roots)
       await FS.chmod(path, ownerWritableMode)
     }
-    const source = `${studioGeneratedSourceHeader}\n\n${body.trim()}\n`
+    // No blank line after the header: `tao fix` closes that gap in every Tao file, and a generated
+    // file under `@/` refuses to be rewritten, so a blank line here fails `fix` permanently instead.
+    const source = `${studioGeneratedSourceHeader}\n${body.trim()}\n`
     try {
       await writer(path, source)
     } finally {
@@ -221,7 +223,8 @@ export class StudioGeneratedSources {
 }
 
 function authoredSource(content: string): string {
-  const header = `${studioGeneratedSourceHeader}\n\n`
+  const header = `${studioGeneratedSourceHeader}\n`
   Assert.input(content.startsWith(header), 'Generated Studio source is missing its ownership header.')
-  return content.slice(header.length).replace(/^[ \t]*#studio_rect_[0-9a-f]+\n/gimu, '')
+  // A file written before the header sat flush against the source still moves out cleanly.
+  return content.slice(header.length).replace(/^\n+/u, '').replace(/^[ \t]*#studio_rect_[0-9a-f]+\n/gimu, '')
 }

@@ -6,6 +6,7 @@ function createRuntimeJestConfig(options) {
     testMatch: options.testMatch,
     moduleNameMapper: {
       '^@runtime/TR$': '<rootDir>/../runtime/TaoRuntime-src/TR.ts',
+      '^@tao/runtime$': '<rootDir>/../runtime/TaoRuntime-src/TR.ts',
       '^@runtime/(.*)$': '<rootDir>/../runtime/TaoRuntime-src/$1',
       '^@runtime-toolchain$': '<rootDir>/runtime-toolchain-src/runtime.ts',
       '^@runtime-toolchain/(.*)$': '<rootDir>/runtime-toolchain-src/$1',

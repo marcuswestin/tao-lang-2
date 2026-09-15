@@ -327,7 +327,7 @@ function validateAppPlacement(app: AST.AppValueDeclaration, file: AST.TaoFile, c
     ctx.error(app, appValidationMessages.appPackage(app.name))
     return
   }
-  if (filePath !== ctx.entryFilePath && !isTestCompanionAppFile(filePath, ctx)) {
+  if (filePath !== ctx.entryFilePath && !isCompanionAppFile(filePath, ctx)) {
     ctx.error(app, appValidationMessages.appEntryFile(app.name))
   }
 }
@@ -354,14 +354,14 @@ function isInsidePackage(filePath: string, ctx: ValidationContext): boolean {
   return false
 }
 
-// A test sidecar runs an app declared elsewhere in the project. That file is its own directory's
-// entry when the tests sit beside it, and an ancestor's once the sources are grouped into folders,
+// A test or scenarios sidecar runs an app declared elsewhere in the project. That file is its own directory's
+// entry when the companion sits beside it, and an ancestor's once the sources are grouped into folders,
 // so reachability is what this allows rather than an exact directory match.
-function isTestCompanionAppFile(filePath: string, ctx: ValidationContext): boolean {
-  if (!Packages.isTestSourcePath(ctx.entryFilePath)) {
+function isCompanionAppFile(filePath: string, ctx: ValidationContext): boolean {
+  if (!Packages.isSidecarSourcePath(ctx.entryFilePath)) {
     return false
   }
-  const testDirectory = FS.dirname(ctx.entryFilePath)
+  const sidecarDirectory = FS.dirname(ctx.entryFilePath)
   const appDirectory = FS.dirname(filePath)
-  return FS.pathIsWithin(testDirectory, appDirectory)
+  return FS.pathIsWithin(sidecarDirectory, appDirectory)
 }

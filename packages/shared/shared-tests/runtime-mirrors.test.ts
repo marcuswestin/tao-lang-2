@@ -37,10 +37,10 @@ Describe('runtime mirrors of shared code', () => {
     Expect(runtime).toBe(shared)
   })
 
-  Test('layoutHeads lists exactly designLayoutHeads', async () => {
+  Test('layoutHeads lists exactly layoutHeads in design', async () => {
     const shared = quotedWords(
-      await sourceOf('packages/ast-utils/ast-utils-src/design-visuals.ts'),
-      /export const designLayoutHeads = \[([^\]]*)\]/,
+      await sourceOf('packages/ast-utils/ast-utils-src/design.ts'),
+      /layoutHeads = \[([^\]]*)\]/,
     )
     const runtime = quotedWords(
       await sourceOf(`${runtimeSrc}/TR-design.ts`),

@@ -526,6 +526,28 @@ export class StudioCdp {
 
   /** Returns the stable browser identity recorded beside visual-review evidence. */
   async rendererFingerprint(): Promise<StudioCdpRendererFingerprint> {
+    let lastContextFailure: Error | undefined
+    const fingerprint = await Time.pollUntil(async () => {
+      try {
+        return await this.readRendererFingerprint()
+      } catch (error) {
+        if (!isTransientExecutionContextFailure(error)) {
+          throw error
+        }
+        lastContextFailure = Errors.asError(error)
+        return undefined
+      }
+    }, { intervalMs: 100, timeoutMs: 10_000 })
+    if (fingerprint !== undefined) {
+      return fingerprint
+    }
+    if (lastContextFailure !== undefined) {
+      throw lastContextFailure
+    }
+    Errors.throwHostEnvironment('Timed out while reading the Studio renderer fingerprint.')
+  }
+
+  private async readRendererFingerprint(): Promise<StudioCdpRendererFingerprint> {
     const browser = await this.client.send<{
       jsVersion?: string
       product?: string
@@ -919,6 +941,12 @@ function requireFiniteNumber(value: number, label: string): void {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function isTransientExecutionContextFailure(error: unknown): boolean {
+  const message = Errors.messageOf(error)
+  return message.includes('Execution context was destroyed')
+    || message.includes('Cannot find context with specified id')
 }
 
 function formatRemoteObject(value: unknown): string {

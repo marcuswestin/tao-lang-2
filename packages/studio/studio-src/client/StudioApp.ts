@@ -53,7 +53,7 @@ import {
 } from './StudioMatrixView'
 import type { StudioDrawerTab } from './StudioProductPanels'
 import { StudioRailPanels } from './StudioRailPanels'
-import { createStudioShell, type StudioClientConfig } from './StudioShell'
+import { createStudioShell, type StudioClientConfig, StudioWorkbenchState } from './StudioShell'
 import { showSourceActionError } from './StudioVisualEditing'
 
 export { StudioDraftStatus } from './app/StudioCompileEvents'
@@ -93,7 +93,22 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     const previews = await connectPreviews(view.preview, config.previewUrl, handshake, signal)
     partialPreviews = previews
     StudioMountSignal.throwIfAborted(signal)
-    const activePreview = new StudioActivePreview(previews)
+    const cellStorageKey = `tao-studio:active-cell:${handshake.identity.project}:${handshake.identity.appName}`
+    let initialCellId: string | undefined
+    try {
+      initialCellId = window.localStorage.getItem(cellStorageKey) ?? undefined
+    } catch {}
+    const activePreview = new StudioActivePreview(previews, {
+      initialCellId,
+      onActivate: preview => {
+        const id = preview.cell?.cellId ?? preview.cellIdentity?.cellId
+        if (id !== undefined) {
+          try {
+            window.localStorage.setItem(cellStorageKey, id)
+          } catch {}
+        }
+      },
+    })
     configureInteractionMode(view.interactionMode, previews, handshake)
     const devicePanel = createStudioDevicePanel({
       api: StudioApiClient,
@@ -226,16 +241,24 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     publish()
     view.searchInput.addEventListener('input', () => search.schedule())
     for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('[data-drawer-tab]')) {
-      button.addEventListener('click', () => drawer.select(button.dataset['drawerTab'] as StudioDrawerTab))
+      button.addEventListener('click', () => {
+        const tab = button.dataset['drawerTab'] as StudioDrawerTab
+        drawer.select(tab)
+        StudioWorkbenchState.saveDrawerTab(window.localStorage, tab)
+      })
     }
     view.rail.addEventListener('click', event => {
       const panel = (event.target as HTMLElement).closest<HTMLElement>('[data-panel]')?.dataset['panel']
-      drawer.selectRail(panel)
-      if (panel === 'search') {
-        view.searchInput.focus()
+      if (panel !== 'agent') {
+        drawer.selectRail(panel)
       }
     })
-    drawer.select('Problems')
+    const activeRailButton = view.rail.querySelector<HTMLButtonElement>('.studio-rail-button[aria-current="true"]')
+    if (activeRailButton?.dataset['panel'] !== undefined) {
+      drawer.selectRail(activeRailButton.dataset['panel'])
+    }
+    const initialDrawerTab = StudioWorkbenchState.loadDrawerTab(window.localStorage)
+    drawer.select(initialDrawerTab)
 
     const commands = mountStudioCommandPalette({
       activePreview,
@@ -250,7 +273,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       previews,
       project,
       projectFiles: () => projectFiles,
-      selectDrawer: tab => drawer.select(tab),
+      selectDrawer: tab => {
+        drawer.select(tab)
+        StudioWorkbenchState.saveDrawerTab(window.localStorage, tab)
+      },
       view,
     })
 
@@ -422,8 +448,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           viewport: environment.viewport,
         })
       },
-      changeActiveFile(content) {
-        session.replaceActiveContent(content)
+      changeActiveFile(content, selection) {
+        session.replaceActiveContent(content, selection)
       },
       async createFile(path) {
         await fileTree!.create(path)
