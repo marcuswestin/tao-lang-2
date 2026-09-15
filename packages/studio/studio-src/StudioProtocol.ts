@@ -235,8 +235,8 @@ export const StudioTransport = {
   /** webSocketUrl resolves a path against the page or server URL and swaps in the matching socket scheme. */
   webSocketUrl(path: string, base: string): string {
     const url = new URL(path, base)
-    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-    return url.toString()
+    const socketProtocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${socketProtocol}${url.toString().slice(url.protocol.length)}`
   },
 } as const
 

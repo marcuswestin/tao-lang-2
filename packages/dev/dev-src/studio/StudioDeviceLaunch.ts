@@ -60,7 +60,7 @@ export function createStudioDeviceLauncher(deps: StudioDeviceLaunchDeps = {}): S
   const simulator = deps.simulator ?? createStudioCompanionSimulator()
   const fetchImpl = deps.fetch ?? fetch
   const lanAddresses = deps.lanAddresses ?? detectLanAddresses
-  /** SDK 54 has no `/_expo/open`; once it answers 404 the launcher stops asking and goes to `/_expo/link` directly. */
+  /** Once an Expo CLI answers 404 for `/_expo/open`, the launcher stops asking and uses `/_expo/link` directly. */
   let openEndpointAbsent = false
 
   async function resolveExpoUrl(
@@ -373,7 +373,7 @@ export function linkLocalCandidate(candidates: readonly string[]): string | unde
   return candidates.find(candidate => candidate.startsWith('169.254.'))
 }
 
-/** companionDevClientUrl is the SDK 54 development-client deep link the shell opens Metro from. */
+/** companionDevClientUrl is the development-client deep link the shell opens Metro from. */
 export function companionDevClientUrl(input: { host: string; port: number; scheme: string }): string {
   return `${input.scheme}://expo-development-client/?url=${encodeURIComponent(`http://${input.host}:${input.port}`)}`
 }

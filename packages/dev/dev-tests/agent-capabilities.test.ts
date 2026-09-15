@@ -1,3 +1,4 @@
+import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { classifyCapability, readAgentCapabilities } from '../dev-src/doctor/AgentCapabilities'
 
@@ -46,6 +47,22 @@ Describe('agent capabilities', () => {
     ).toBe('available')
   })
 
+  Test('recognizes a failed CoreSimulator daemon as a host outage, not a sandbox denial', () => {
+    const simulatorProbe = {
+      ...probe,
+      name: 'CoreSimulator service',
+      remediation: 'Restart macOS.',
+    }
+    const result = classifyCapability(simulatorProbe, {
+      exitCode: 1,
+      stderr:
+        'CoreSimulatorService connection became invalid. simdiskimaged crashed or is not responding: Operation not permitted',
+      stdout: '',
+    })
+
+    Expect(result).toMatchObject({ remediation: 'Restart macOS.', status: 'unavailable' })
+  })
+
   Test('detects a sandbox only from a variable a sandboxed command sets', async () => {
     const sandboxed = await readAgentCapabilities({
       env: { CODEX_SANDBOX: 'seatbelt', PATH: '/usr/bin' },
@@ -81,6 +98,24 @@ Describe('agent capabilities', () => {
     Expect(probed).toContain('docker')
     Expect(report.checks.length).toBe(probed.length)
     Expect(report.checks.find(check => check.name === 'Docker daemon')?.status).toBe('denied')
+    Expect(report.checks.filter(check => check.status === 'available').length).toBe(report.checks.length - 1)
+  })
+
+  Test('reports a probe that cannot spawn without abandoning the other checks', async () => {
+    const report = await readAgentCapabilities({
+      env: {},
+      runProbe: async candidate => {
+        if (candidate.command === 'ps') {
+          Errors.throwHostEnvironment('posix_spawn denied by sandbox')
+        }
+        return availableProbe()
+      },
+    })
+
+    Expect(report.checks.find(check => check.name === 'process table')).toMatchObject({
+      detail: 'posix_spawn denied by sandbox',
+      status: 'denied',
+    })
     Expect(report.checks.filter(check => check.status === 'available').length).toBe(report.checks.length - 1)
   })
 })
