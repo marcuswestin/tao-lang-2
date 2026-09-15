@@ -77,6 +77,9 @@
       "@runtime/TR": [
         "./runtime/TaoRuntime-src/TR.ts"
       ],
+      "@tao/runtime": [
+        "./runtime/TaoRuntime-src/TR.ts"
+      ],
       "@runtime/*": [
         "./runtime/TaoRuntime-src/*"
       ],

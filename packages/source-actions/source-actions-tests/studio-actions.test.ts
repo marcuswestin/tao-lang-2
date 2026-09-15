@@ -1526,6 +1526,36 @@ Describe('Studio source-action patch bus', () => {
     })).rejects.toThrow('no longer exists')
   })
 
+  Test('drops the freshly drawn Placeholder import once the first snap discards its render', async () => {
+    // The exact shape StudioSketchSource.generate writes for a newly drawn sketch: Placeholder is
+    // the only use of @tao/ui, and nothing else in the file calls it.
+    const document = await parseDocument(`
+      use Placeholder from @tao/ui
+
+      public
+      view View4() {
+        render Placeholder("View4") [width 360, height 76]
+      }
+
+      scenarios View4 "sketch" {
+        device phone
+        scenario "draft" {
+          render ()
+        }
+      }
+    `)
+    const patch = await SourceActions.applyStudioPatch(document, playlistSnapRequest())
+
+    // The first snap replaces the whole Placeholder render, so nothing in the file calls it any more.
+    // Left behind, it would be the one thing keeping this Studio-owned, `tao fix`-excluded file from
+    // the canonical shape `StudioGeneratedSources` and every other Tao file are held to.
+    Expect(patch.content).toContain('use Col, Image, Row, Text from @tao/ui')
+    Expect(patch.content).not.toContain('Placeholder')
+    const reparsed = await parseRawDocument(patch.content)
+    Expect(reparsed.parseResult.lexerErrors).toEqual([])
+    Expect(reparsed.parseResult.parserErrors).toEqual([])
+  })
+
   Test('snaps a playlist into a tagged Row with nested Col while preserving unrelated source', async () => {
     const document = await parseDocument(`
       use Placeholder from @tao/ui

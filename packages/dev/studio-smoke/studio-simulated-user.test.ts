@@ -262,7 +262,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.waitFor(
         "document.querySelector('.studio-shell')?.getBoundingClientRect().width === window.innerWidth",
       )
-      await enterRunPreset(browser)
+      await enterDrawPreset(browser)
       await browser.waitFor(
         `document.querySelector('[data-tao-studio-sketch-workspace]') instanceof HTMLElement`,
       )
@@ -304,7 +304,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       )).toBe(true)
 
       await browser.goto(projectUrl)
-      await enterRunPreset(browser)
+      await enterDrawPreset(browser)
       await browser.waitFor(
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${persistedSketch.id}"]`)})
           ?.querySelector(${
@@ -376,7 +376,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(snappedCatalog.sketches[0]?.rectOrder).toEqual([persistedRect.id, ...playlistRectIds])
 
       await browser.goto(projectUrl)
-      await enterRunPreset(browser)
+      await enterDrawPreset(browser)
       await browser.waitFor(
         `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-unsnap="${persistedSketch.id}"]`)})
           instanceof HTMLButtonElement
@@ -388,15 +388,17 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(reloadedSnapCatalog.sketches[0]?.snapped.map(item => item.rect.id)).toEqual(playlistRectIds)
       Expect(await FS.readText(generatedSketchPath)).toBe(snappedSource)
 
-      // Drag the one remaining free rectangle into the existing flow, then undo that incremental Snap.
-      Expect(
-        await browser.evaluate<boolean>(
-          `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-gap-indicator]`)}) instanceof HTMLElement`,
-        ),
-      ).toBe(true)
-      const dragOneInBrowser = browser
-      const dragOneInGeneration = await markSketchBoard(dragOneInBrowser, persistedSketch.id)
-      await dragRectOntoOwnCell(dragOneInBrowser, persistedSketch.id, persistedRect.id)
+      // Snap the one remaining free rectangle into the existing flow, then undo that incremental Snap.
+      await browser.click(`[data-tao-studio-sketch-rect="${persistedRect.id}"]`)
+      await browser.waitFor(
+        `document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
+          instanceof HTMLButtonElement
+          && document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)})
+            ?.disabled === false`,
+      )
+      const incrementalSnapBrowser = browser
+      const incrementalSnapGeneration = await markSketchBoard(incrementalSnapBrowser, persistedSketch.id)
+      await browser.click(`[data-tao-studio-sketch-snap="${persistedSketch.id}"]`)
       const incrementallySnappedCatalog = await waitForSketchCatalog(
         sketchCatalogPath,
         catalog =>
@@ -404,8 +406,8 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
           && catalog.sketches[0]?.rects.length === 0
           && catalog.sketches[0]?.snapped.length === 5,
         async () => {
-          await dragOneInBrowser.captureScreenshot('studio-sketch-drag-one-in-failure')
-          return await sketchBoardDiagnostics(dragOneInBrowser, persistedSketch.id, dragOneInGeneration)
+          await incrementalSnapBrowser.captureScreenshot('studio-sketch-incremental-snap-failure')
+          return await sketchBoardDiagnostics(incrementalSnapBrowser, persistedSketch.id, incrementalSnapGeneration)
         },
       )
       Expect(await FS.readText(generatedSketchPath)).toContain(studioRectTag(persistedRect.id))
@@ -925,71 +927,20 @@ async function expectPointerReachesBoard(
 }
 
 /**
- * The Run preset gives the canvas the whole window, which is what a person sketching a phone-wide
- * view beside its cell does with the side panes; the Design preset leaves them a narrow column.
+ * The Draw preset gives the empty sketch canvas the whole window. Run keeps the live preview and
+ * hides that canvas; Design leaves both a narrow column.
  */
-async function enterRunPreset(browser: StudioCdp): Promise<void> {
-  await browser.waitFor(`document.querySelector('[data-preset="run"]') instanceof HTMLButtonElement`, {
+async function enterDrawPreset(browser: StudioCdp): Promise<void> {
+  await browser.waitFor(`document.querySelector('[data-preset="draw"]') instanceof HTMLButtonElement`, {
     timeoutMs: 30_000,
   })
-  await browser.click('[data-preset="run"]')
+  await browser.click('[data-preset="draw"]')
   await browser.waitFor(`(() => {
     const host = document.querySelector('.tao-studio-product-host')
-    const preview = document.querySelector('.studio-preview')
-    return host instanceof HTMLElement && host.dataset.layoutPreset === 'run'
-      && preview instanceof HTMLElement && preview.getBoundingClientRect().width > window.innerWidth * 0.6
+    const canvas = document.querySelector('.studio-draw-canvas')
+    return host instanceof HTMLElement && host.dataset.layoutPreset === 'draw'
+      && canvas instanceof HTMLElement && canvas.getBoundingClientRect().width > window.innerWidth * 0.6
   })()`)
-}
-
-/**
- * Drag-one-in with real pointer events: press on the free rectangle, move onto the sketch's own
- * running cell, release. The board keeps pointer capture, so the release lands on it even over the
- * cell's iframe.
- */
-async function dragRectOntoOwnCell(browser: StudioCdp, sketchId: string, rectId: string): Promise<void> {
-  const points = await browser.evaluate<{ end: { x: number; y: number }; start: { x: number; y: number } }>(`(() => {
-    const rect = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch-rect="${rectId}"]`)})
-    const board = document.querySelector(${JSON.stringify(`[data-tao-studio-sketch="${sketchId}"]`)})
-    if (!(rect instanceof HTMLElement) || !(board instanceof HTMLElement)) {
-      throw new Error('Missing Studio sketch drag-one-in source')
-    }
-    const row = board.closest('.studio-preview-group-cells')
-    const cell = row?.querySelector('.studio-preview-cell')
-    if (!(row instanceof HTMLElement) || !(cell instanceof HTMLElement)) {
-      throw new Error('Missing the running cell of the sketch row')
-    }
-    // Bounding boxes lie about visibility inside a scrolled row, so both ends of the gesture are
-    // chosen by hit-testing: a point counts only when the pointer would actually land there.
-    const visiblePoint = (element, accepts) => {
-      const bounds = element.getBoundingClientRect()
-      for (const fy of [0.5, 0.25, 0.75, 0.1, 0.9]) {
-        for (const fx of [0.5, 0.25, 0.75, 0.1, 0.9]) {
-          const point = { x: bounds.left + bounds.width * fx, y: bounds.top + bounds.height * fy }
-          if (point.x < 0 || point.y < 0 || point.x >= window.innerWidth || point.y >= window.innerHeight) continue
-          const hit = document.elementFromPoint(point.x, point.y)
-          if (hit !== null && accepts(hit)) return point
-        }
-      }
-      return undefined
-    }
-    board.scrollIntoView({ block: 'center', inline: 'nearest' })
-    const candidates = [row.scrollLeft, 0]
-    for (let offset = 40; offset <= row.scrollWidth; offset += 40) candidates.push(offset)
-    for (const scrollLeft of candidates) {
-      row.scrollLeft = scrollLeft
-      const start = visiblePoint(rect, hit => hit === rect || rect.contains(hit))
-      // Release over the cell's own chrome rather than its iframe so the captured release stays in
-      // this document.
-      const end = visiblePoint(
-        cell.querySelector('.studio-preview-cell-label') ?? cell,
-        hit => cell.contains(hit) && hit.tagName !== 'IFRAME',
-      )
-      if (start !== undefined && end !== undefined) return { end, start }
-    }
-    throw new Error('No row scroll position shows both the rectangle and its running cell: '
-      + JSON.stringify({ cell: cell.getBoundingClientRect(), rect: rect.getBoundingClientRect(), row: row.getBoundingClientRect() }))
-  })()`)
-  await browser.dragBetween(points.start, points.end, { steps: 12 })
 }
 
 async function sketchBoardDiagnostics(
@@ -1015,7 +966,7 @@ async function sketchBoardDiagnostics(
       elementAtCenter: center === undefined ? undefined : describe(center),
       error: present ? board.dataset.taoStudioSketchError : undefined,
       gesture: present ? board.dataset.taoStudioSketchGesture : undefined,
-      hostError: document.querySelector('[data-tao-studio-sketch-host][data-tao-studio-sketch-error]')
+      hostError: document.querySelector('[data-tao-studio-draw-canvas][data-tao-studio-sketch-error]')
         ?.getAttribute('data-tao-studio-sketch-error') ?? undefined,
       present,
       proposalOpen: document.querySelector('[data-tao-studio-sketch-snap-proposal]') !== null,

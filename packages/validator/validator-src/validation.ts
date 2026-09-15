@@ -8,6 +8,12 @@ export interface ValidationRunContext {
   readonly packagesContext: Packages.Context
   readonly entryFilePath: string
   readonly workspaceFiles: readonly AST.TaoFile[]
+  /**
+   * Every Tao file the surrounding batch validates, when one entry's own graph is only part of it.
+   * Project identity is checked-in metadata at a project root, not something an entry's imports
+   * decide, so it is read from here rather than from `workspaceFiles`. Defaults to `workspaceFiles`.
+   */
+  readonly projectFiles?: readonly AST.TaoFile[]
 }
 
 /** ValidationContext carries validation run state and diagnostic reporting. */

@@ -432,11 +432,19 @@ export async function snapSketchToFlow(
   const uses = document.parseResult.value.statements.filter(AST.isUseStatement)
   const uiUse = uses.find(statement => statement.importPath === '@tao/ui')
   const imported = new Set(uiUse?.importedDeclarations.map(reference => reference.$refText) ?? [])
-  if (required.some(component => !imported.has(component))) {
+  // A first snap (existing.length === 0, above) discards the whole prior render -- Placeholder and
+  // whatever it drew with -- so a straight union with the old import list would leave that behind as
+  // dead weight forever: this file is Studio-owned and excluded from `tao fix`'s own import pruning.
+  // Checking what the edited render source still calls, rather than assuming the old imports survive,
+  // keeps this file the `tao fix`-idempotent shape StudioGeneratedSources relies on.
+  const renderedSource = applySourceEdits(source, edits)
+  const stillCalled = (name: string): boolean => new RegExp(`\\b${name}\\s*\\(`).test(renderedSource)
+  const finalImports = new Set([...imported].filter(stillCalled).concat(required))
+  if (finalImports.size !== imported.size || [...finalImports].some(name => !imported.has(name))) {
     if (uiUse?.$cstNode !== undefined) {
       edits.push({
         end: uiUse.$cstNode.end,
-        replacement: `use ${[...new Set([...imported, ...required])].toSorted().join(', ')} from @tao/ui`,
+        replacement: `use ${[...finalImports].toSorted().join(', ')} from @tao/ui`,
         start: uiUse.$cstNode.offset,
       })
     } else {

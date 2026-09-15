@@ -27,6 +27,7 @@
     "expo-build-properties": "~57.0.18",
     "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.18",
+    "expo-glass-effect": "~57.0.3",
     "expo-haptics": "~57.0.3",
     "expo-secure-store": "~57.0.4",
     "expo-updates": "~57.0.22",

@@ -16,13 +16,14 @@ import { NavigationCommandButton } from './TR-navigation-command-button'
 import {
   type RuntimeHostReadChannel,
   type TaoNavigationCommand,
+  useEnclosingChrome,
   useHostSlotSnapshot,
 } from './TR-navigation-host-slots'
 import type { RuntimeStackNav } from './TR-navigation-mounts'
 import { nativeNavigationModule } from './TR-navigation-native-hosts'
 import type { PresentableEntry } from './TR-navigation-state'
 import { presentedOccurrenceRegion } from './TR-navigation-surfaces'
-import { renderPresentable } from './TR-navigation-values'
+import { isNavigation, renderPresentable } from './TR-navigation-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 
@@ -35,6 +36,8 @@ export function nativeStackAvailable(): boolean {
 
 /** NativeStackSurface delegates only presentation chrome and gestures to react-native-screens. */
 export function NativeStackSurface(props: {
+  bottomInset?: number
+  chrome?: RuntimeHostReadChannel
   entries: readonly HostEntry[]
   navigation: RuntimeStackNav
   taoProps?: TaoProps
@@ -50,6 +53,8 @@ export function NativeStackSurface(props: {
     props.entries.map((entry, index) =>
       React.createElement(NativeStackItem, {
         active: index === props.entries.length - 1,
+        bottomInset: props.bottomInset,
+        chrome: props.chrome,
         entry,
         key: entry.instanceId,
         navigation: props.navigation,
@@ -61,6 +66,8 @@ export function NativeStackSurface(props: {
 
 function NativeStackItem(props: {
   active: boolean
+  bottomInset?: number
+  chrome?: RuntimeHostReadChannel
   entry: HostEntry
   navigation: RuntimeStackNav
   taoProps?: TaoProps
@@ -75,6 +82,8 @@ function NativeStackItem(props: {
 
 function NativeStackItemContent(props: {
   active: boolean
+  bottomInset?: number
+  chrome?: RuntimeHostReadChannel
   entry: HostEntry
   navigation: RuntimeStackNav
   observable: boolean
@@ -82,12 +91,16 @@ function NativeStackItemContent(props: {
 }): React.JSX.Element {
   const module = nativeNavigationModule()!
   const slots = useHostSlotSnapshot(props.entry.host)
+  useEnclosingChrome(props.chrome, slots, props.observable && !isNavigation(props.entry.presentable))
+  // Enclosing chrome draws this screen's title, toolbar, and Back, so the native header stays hidden;
+  // the edge-swipe gesture is the screen's own and still pops.
+  const header = slots.header && !props.chrome
   const ScreenStackItem = module.ScreenStackItem!
   const Right = module.ScreenStackHeaderRightView
   const entryTaoProps = { ...props.taoProps, navigationHostActive: props.observable }
   const backCapabilities = React.useRef<TaoOutlineLiveEntry>({}).current
   const backIdentity = useOutlineNode(
-    props.observable && props.navigation.depth > 1
+    props.observable && header && props.navigation.depth > 1
       ? {
         identity: `navigation:${props.navigation.name}:native-back`,
         kind: 'action',
@@ -109,16 +122,16 @@ function NativeStackItemContent(props: {
       activityState: 2,
       children: React.createElement(
         AppSurfaceFrame,
-        { nativeInsets: true, taoProps: entryTaoProps },
+        { bottomInset: props.bottomInset, nativeInsets: true, taoProps: entryTaoProps },
         renderPresentable(props.entry.presentable, props.entry.arguments, entryTaoProps, props.entry.host),
       ),
       headerConfig: {
-        children: Right && slots.header && props.observable && slots.toolbar.length > 0
+        children: Right && header && props.observable && slots.toolbar.length > 0
           ? React.createElement(Right, null, React.createElement(NativeToolbar, { commands: slots.toolbar }))
           : null,
-        hidden: !slots.header,
-        hideBackButton: !slots.header || !props.observable,
-        title: slots.header ? slots.title ?? '' : '',
+        hidden: !header,
+        hideBackButton: !header || !props.observable,
+        title: header ? slots.title ?? '' : '',
       },
       onDismissed: (event: { nativeEvent?: { dismissCount?: number } }) => {
         const count = Math.max(1, event.nativeEvent?.dismissCount ?? 1)

@@ -26,6 +26,7 @@ import {
   StudioDefinitionNavigation,
   StudioDiagnosticNavigation,
   StudioEditorInsertion,
+  studioHostDocumentUpdate,
   StudioOpenFileLifecycle,
 } from '../studio-src/client/StudioEditor'
 import { StudioEditorTabs } from '../studio-src/client/StudioEditorTabs'
@@ -70,8 +71,10 @@ import {
   StudioGlobalLoading,
   StudioPaneMinimums,
   StudioPaneSizes,
+  studioSearchBlurIntent,
   studioShellMarkup,
   studioShellRailPanels,
+  StudioWorkbenchState,
 } from '../studio-src/client/StudioShell'
 import type { StudioDeviceStatus } from '../studio-src/device/StudioDeviceStatus'
 import { StudioClientAssets } from '../studio-src/StudioClientAssets'
@@ -151,7 +154,10 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('Mode: Edit')
   Expect(bundle).toContain('Mode: Run')
   Expect(bundle).toContain('Design tokens')
+  Expect(bundle).toContain('studio-design-token-swatch')
+  Expect(bundle).toContain('studio-design-token-kind')
   Expect(bundle).toContain('Layout presets')
+  Expect(bundle).toContain('data-preset="draw"')
   Expect(bundle).toContain('Editor breadcrumbs')
   Expect(bundle).toContain('Bottom drawer')
   Expect(bundle).toContain('Control+K')
@@ -209,6 +215,16 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(html).toContain('--studio-accent: #ff6a1f')
   Expect(html).toContain('.studio-segmented')
   Expect(html).toContain('.studio-button[data-variant="primary"]')
+  Expect(html).toContain('.studio-agent-panel')
+  Expect(html).toContain('.studio-agent-panel[data-minimized="true"]')
+  Expect(html).toContain('.studio-agent-panel[data-dragging="true"]')
+  Expect(html).toContain('.studio-agent-header')
+  Expect(html).toContain('.studio-agent-collapse')
+  Expect(html).toContain('cursor: grab')
+  Expect(html).toContain('.studio-rail-separator')
+  Expect(html).toContain('.studio-search-affordance')
+  Expect(html).toContain('.studio-search-field')
+  Expect(html).toContain('.studio-sidebar[data-search-open]')
   Expect(html).not.toMatch(/#5b8def|#315fbb|#2196f3/i)
   Expect(html).toContain('<div id="tao-studio-viewport"></div>')
   Expect(html).toContain('position: fixed !important')
@@ -222,6 +238,8 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(html).toContain('grid-template-columns: 0 0 0 0 minmax(0, 1fr)')
   Expect(html).toContain('--studio-preview-size')
   Expect(html).toContain('.tao-studio-product-host[data-layout-preset="code"]')
+  Expect(html).toContain('.tao-studio-product-host[data-layout-preset="draw"]')
+  Expect(html).toContain('.studio-draw-canvas')
   Expect(html).not.toContain('#tao-studio-root[data-layout-preset=')
   Expect(html).toContain('rel="icon" href="data:image/svg+xml,')
   Expect(html).toContain('<script type="module" src="/studio.js"></script>')
@@ -458,8 +476,12 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
         throw new StudioApiError('stale preview', 409, { code: 'stale-cell' })
       }
     },
-    changeActiveFile(content) {
-      calls.push(`change:${content}`)
+    changeActiveFile(content, selection) {
+      calls.push(
+        selection === undefined
+          ? `change:${content}`
+          : `change:${content}:${selection.anchor}:${selection.head}`,
+      )
     },
     async createFile(path) {
       calls.push(`create:${path}`)
@@ -561,12 +583,12 @@ Test('Studio ProductHost queues early Tao actions, rejects unsafe paths, and pre
     Expect(Object.isFrozen(state)).toBe(true)
     Expect(Object.isFrozen(state.activeFile)).toBe(true)
     Expect(stateUpdates).toBe(1)
-    requestStudioProductHostChangeActiveFile('changed')
+    requestStudioProductHostChangeActiveFile('changed', { anchor: 3, head: 3 })
     requestStudioProductHostSelectActiveFile(2, 5)
     Expect(calls.slice(-4)).toEqual([
       'environment:cell:1:7',
       'environment:stale:6',
-      'change:changed',
+      'change:changed:3:3',
       'select:2:5',
     ])
     Expect(calls).toContain('source:/project/Garden.tao:version:1:14')
@@ -889,6 +911,46 @@ Test('Studio pane sizes load safe defaults and persist all divider dimensions', 
   Expect(StudioPaneSizes.load(storage)).toEqual({ bottom: 180, left: 360, preview: 440, right: 440 })
 })
 
+Test('Studio workbench state loads safe defaults and persists layout presets, rail panels, and drawer tabs', () => {
+  const store = new Map<string, string>()
+  const storage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, value)
+    },
+  }
+
+  Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('design')
+  StudioWorkbenchState.saveLayoutPreset(storage, 'code')
+  Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('code')
+  StudioWorkbenchState.saveLayoutPreset(storage, 'run')
+  Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('run')
+  StudioWorkbenchState.saveLayoutPreset(storage, 'draw')
+  Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('draw')
+  store.set('tao-studio:layout-preset:v1', 'invalid')
+  Expect(StudioWorkbenchState.loadLayoutPreset(storage)).toBe('design')
+
+  Expect(StudioWorkbenchState.loadRailPanel(storage)).toBe('files')
+  StudioWorkbenchState.saveRailPanel(storage, 'data')
+  Expect(StudioWorkbenchState.loadRailPanel(storage)).toBe('data')
+  StudioWorkbenchState.saveRailPanel(storage, 'tokens')
+  Expect(StudioWorkbenchState.loadRailPanel(storage)).toBe('tokens')
+  store.set('tao-studio:rail-panel:v1', '')
+  Expect(StudioWorkbenchState.loadRailPanel(storage)).toBe('files')
+  store.set('tao-studio:rail-panel:v1', 'agent')
+  Expect(StudioWorkbenchState.loadRailPanel(storage)).toBe('files')
+  store.set('tao-studio:rail-panel:v1', 'search')
+  Expect(StudioWorkbenchState.loadRailPanel(storage)).toBe('files')
+
+  Expect(StudioWorkbenchState.loadDrawerTab(storage)).toBe('Problems')
+  StudioWorkbenchState.saveDrawerTab(storage, 'Data')
+  Expect(StudioWorkbenchState.loadDrawerTab(storage)).toBe('Data')
+  StudioWorkbenchState.saveDrawerTab(storage, 'Compile')
+  Expect(StudioWorkbenchState.loadDrawerTab(storage)).toBe('Compile')
+  store.set('tao-studio:drawer-tab:v1', 'InvalidTab')
+  Expect(StudioWorkbenchState.loadDrawerTab(storage)).toBe('Problems')
+})
+
 Test('Embedded Studio keeps one Files portal target and every contextual rail panel', () => {
   const markup = studioShellMarkup()
   Expect(studioShellRailPanels.map(item => item.panel)).toEqual([
@@ -897,7 +959,6 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
     'screens',
     'tokens',
     'data',
-    'search',
   ])
   Expect(markup.match(/class="studio-files"/g)).toHaveLength(1)
   Expect(markup.match(/class="studio-data"/g)).toHaveLength(1)
@@ -906,7 +967,19 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
     Expect(markup).toContain(`data-panel="${item.panel}"`)
   }
   Expect(markup).toContain('data-panel="agent"')
+  Expect(markup).toContain('class="studio-rail-separator"')
+  Expect(markup).toContain('class="studio-search-affordance"')
+  Expect(markup).toContain('class="studio-search-field"')
+  Expect(markup).toContain('studio-search-button')
+  Expect(markup).not.toContain('data-panel="search"')
+  Expect(markup.indexOf('class="studio-search-affordance"')).toBeLessThan(markup.indexOf('data-panel="files"'))
+  Expect(markup.indexOf('class="studio-search-field"')).toBeLessThan(markup.indexOf('class="studio-pane-header"'))
+  Expect(markup.indexOf('class="studio-search-input"')).toBeLessThan(markup.indexOf('data-studio-panel="search"'))
+  Expect(markup.indexOf('data-panel="files"')).toBeLessThan(markup.indexOf('class="studio-rail-separator"'))
+  Expect(markup.indexOf('class="studio-rail-separator"')).toBeLessThan(markup.indexOf('data-panel="agent"'))
+  Expect(markup.indexOf('data-panel="agent"')).toBeLessThan(markup.indexOf('class="studio-rail-spacer"'))
   Expect(markup).toContain('data-studio-panel="agent"')
+  Expect(markup).toContain('class="studio-agent-host"')
   Expect(markup).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u)
   Expect(markup.match(/<svg class="studio-icon"/g)?.length ?? 0).toBeGreaterThanOrEqual(
     studioShellRailPanels.length + 1,
@@ -920,6 +993,11 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
   )
   Expect(markup).toContain('studio-toolbar-context')
   Expect(markup).toContain('studio-toolbar-mode')
+  Expect(markup).toContain('data-preset="design"')
+  Expect(markup).toContain('data-preset="code"')
+  Expect(markup).toContain('data-preset="run"')
+  Expect(markup).toContain('data-preset="draw"')
+  Expect(markup.indexOf('data-preset="run"')).toBeLessThan(markup.indexOf('data-preset="draw"'))
   Expect(markup).toContain('studio-toolbar-actions')
   Expect(markup).toContain('studio-window-controls')
   Expect(markup).toContain('<select class="studio-project studio-picker"')
@@ -939,6 +1017,14 @@ Test('Embedded Studio keeps one Files portal target and every contextual rail pa
   Expect(markup.indexOf('studio-editor-pane')).toBeLessThan(markup.indexOf('studio-preview'))
   Expect(markup.indexOf('studio-editor-pane')).toBeLessThan(markup.indexOf('studio-divider-preview'))
   Expect(markup.indexOf('studio-divider-preview')).toBeLessThan(markup.indexOf('studio-preview'))
+})
+
+Test('Studio search blur keeps results when the press is inside search and restores the rail otherwise', () => {
+  Expect(studioSearchBlurIntent({ insideSearch: true, railPanel: undefined })).toBe('keep')
+  Expect(studioSearchBlurIntent({ insideSearch: true, railPanel: 'files' })).toBe('keep')
+  Expect(studioSearchBlurIntent({ insideSearch: false, railPanel: 'components' })).toBe('hand-off-rail')
+  Expect(studioSearchBlurIntent({ insideSearch: false, railPanel: 'agent' })).toBe('restore')
+  Expect(studioSearchBlurIntent({ insideSearch: false, railPanel: undefined })).toBe('restore')
 })
 
 Test('Studio toolbar keeps project and app context compact', () => {
@@ -1465,6 +1551,22 @@ Test('Studio canvas mode focuses only a group whose every scenario renders one v
   }))
   Expect(StudioMatrixLayout.focusable(groups, 'StoryRow')).toBe(true)
   Expect(StudioMatrixLayout.focusable(groups, 'CommentRow')).toBe(false)
+})
+
+Test('Studio matrix maps generated sketch views to their source versions', () => {
+  Expect(StudioMatrixLayout.sketchSourceVersions({
+    scenarios: [
+      { ...scenario('draft', 'sketch', '@/studio/View1.tao'), subjectId: 'view:View1' },
+      { ...scenario('novel', 'states', '/Garden.tao'), subjectId: 'view:StoryRow' },
+    ],
+    sourceVersions: { '@/studio/View1.tao': 'view1-3', '/Garden.tao': 'garden-9' },
+    subjects: [
+      { kind: 'view', subjectId: 'view:View1', viewName: 'View1' },
+      { kind: 'view', subjectId: 'view:StoryRow', viewName: 'StoryRow' },
+    ],
+  } as unknown as Pick<StudioPreviewManifestV2, 'scenarios' | 'sourceVersions' | 'subjects'>)).toEqual({
+    View1: 'view1-3',
+  })
 })
 
 Test('Studio review DOM publishes portable scenario identity and deterministic renderer metadata', () => {
@@ -2079,6 +2181,25 @@ Test('Studio active preview rewires added cells and falls back when the active c
   Expect(changes).toBe(5)
 })
 
+Test('Studio active preview restores initial cell id and notifies on activate', () => {
+  const first = previewConnection('preview-first', 'first', {})
+  const second = previewConnection('preview-second', 'second', {})
+  const previews = [first, second]
+
+  let activatedId: string | undefined
+  const active = new StudioActivePreview(previews, {
+    initialCellId: 'second',
+    onActivate: preview => {
+      activatedId = preview.cell?.cellId
+    },
+  })
+
+  Expect(active.current()).toBe(second)
+  active.activate(first)
+  Expect(active.current()).toBe(first)
+  Expect(activatedId).toBe('first')
+})
+
 Test('Studio source identity synchronizes immediately, after preview reloads, and stops on disconnect', () => {
   const iframe = new EventTarget() as HTMLIFrameElement
   const messages: Array<{ message: unknown; origin: string }> = []
@@ -2217,6 +2338,33 @@ Test('Studio runtime failures activate their cell and retain a replay with Studi
     resolved: 'dark',
     source: 'system',
   })
+})
+
+Test('Studio host document update keeps the caret a wholesale replace remaps', () => {
+  const source = 'view Card() {\n   Text("Hello")\n}\n'
+  const cut = 'view Card() {\n}\n'
+  const caret = 'view Card() {\n'.length
+  const remappedCursor = EditorState.create({
+    doc: source,
+    selection: { anchor: caret, head: caret },
+  }).update({ changes: { from: 0, insert: cut, to: source.length } }).state
+  Expect(remappedCursor.selection.main.anchor).toBe(0)
+  Expect(remappedCursor.selection.main.head).toBe(0)
+
+  const remappedRange = EditorState.create({
+    doc: source,
+    selection: { anchor: caret, head: caret + 16 },
+  }).update({ changes: { from: 0, insert: cut, to: source.length } }).state
+  Expect(Math.min(remappedRange.selection.main.anchor, remappedRange.selection.main.head)).toBe(0)
+  Expect(Math.max(remappedRange.selection.main.anchor, remappedRange.selection.main.head)).toBe(cut.length)
+
+  const kept = EditorState.create({
+    doc: source,
+    selection: { anchor: caret, head: caret },
+  }).update(studioHostDocumentUpdate(source.length, cut, { anchor: caret, head: caret })).state
+  Expect(kept.doc.toString()).toBe(cut)
+  Expect(kept.selection.main.anchor).toBe(14)
+  Expect(kept.selection.main.head).toBe(14)
 })
 
 Test('Studio editor Mod-/ binding toggles Tao line comments for selected lines', () => {

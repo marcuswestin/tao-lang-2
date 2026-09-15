@@ -2,7 +2,7 @@ import { EditorView } from 'codemirror'
 import { type StudioDraftFile, StudioDraftSync } from '../../StudioDraftSync'
 import { StudioTextMateLanguage } from '../../StudioTextMateLanguage'
 import { StudioApiClient, type StudioCompileState, type StudioFile } from '../StudioApiClient'
-import { StudioCodeEditor, StudioOpenFileLifecycle } from '../StudioEditor'
+import { StudioCodeEditor, studioHostDocumentUpdate, StudioOpenFileLifecycle } from '../StudioEditor'
 import { StudioEditorTabs } from '../StudioEditorTabs'
 import { showOpenFile, type StudioClientView } from '../StudioShell'
 import { showSourceActionError } from '../StudioVisualEditing'
@@ -275,12 +275,28 @@ export class StudioEditorSession {
   }
 
   /** Replaces the active document wholesale; the product host's editor pushes its text through here. */
-  replaceActiveContent(content: string): void {
+  replaceActiveContent(content: string, selection?: Readonly<{ anchor: number; head: number }>): void {
     const editor = this.editor()
-    if (editor === undefined || editor.state.doc.toString() === content) {
+    if (editor === undefined) {
       return
     }
-    editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: content } })
+    const current = editor.state.doc.toString()
+    if (selection === undefined) {
+      if (current === content) {
+        return
+      }
+      editor.dispatch({ changes: { from: 0, to: editor.state.doc.length, insert: content } })
+      return
+    }
+    const next = studioHostDocumentUpdate(editor.state.doc.length, content, selection)
+    if (
+      current === content
+      && editor.state.selection.main.anchor === next.selection.anchor
+      && editor.state.selection.main.head === next.selection.head
+    ) {
+      return
+    }
+    editor.dispatch(current === content ? { selection: next.selection } : next)
   }
 
   /** Reopens the tabs the last session left open, falling back to the entry file. */

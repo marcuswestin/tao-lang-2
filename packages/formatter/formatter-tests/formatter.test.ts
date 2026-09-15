@@ -897,6 +897,17 @@ Describe('Tao formatter project metadata', () => {
       `,
     ),
   )
+
+  Test(
+    'formats an app declaration with visibility modifier on its own line',
+    formats(
+      `folder app PackageAccess {}`,
+      `
+        folder
+        app PackageAccess { }
+      `,
+    ),
+  )
 })
 
 Describe('Tao formatter restoration policy', () => {

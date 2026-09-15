@@ -304,6 +304,47 @@ Describe('Studio agent chat server', () => {
     Expect(verdict.broke.map(test => test.name)).toEqual(['greets'])
   })
 
+  Test('a verdict stays on the turn that ran the checks and out of every later one', async () => {
+    const tests = runner([
+      { failed: 0, failures: [], passed: 2 },
+      { failed: 1, failures: [{ message: 'Expected text "Hello"', name: 'greets' }], passed: 1 },
+    ])
+    const it = chat(
+      [
+        { call: { input: {}, name: 'runTests' } },
+        {
+          call: {
+            input: { declaration: 'Greeting', replacement: 'view Greeting() {\n   render Text("Hi")\n}' },
+            name: 'proposeEdit',
+          },
+        },
+        { call: { input: { changeId: 'change-1' }, name: 'applyChange' } },
+        { text: 'Applied, but it broke a test.' },
+      ],
+      [],
+      tests,
+    )
+    await it.handle('mode', { mode: 'build' })
+    await it.handle('enable', { enabled: true })
+    const asked = await it.handle('send', { message: 'say Hi instead' }) as Record<string, unknown>
+    const approvals = asked['pendingApprovals'] as { approvalId: string }[]
+    const done = await it.handle('respond', {
+      responses: [{ approvalId: approvals[0]!.approvalId, approved: true }],
+    }) as Record<string, unknown>
+    Expect((done['verdict'] as Record<string, unknown>)['status']).toBe('broke')
+
+    // A plain question afterwards ran no checks, so it has no verdict of its own -- and the history
+    // the panel replays on reload must not show it the earlier one under this answer too.
+    const after = await it.handle('send', { message: 'what changed?' }) as Record<string, unknown>
+    Expect(after['verdict']).toBeUndefined()
+
+    const history = (await it.handle('history', {}) as Record<string, unknown>)['history'] as Record<
+      string,
+      unknown
+    >[]
+    Expect(history.filter(entry => entry['verdict'] !== undefined)).toHaveLength(1)
+  })
+
   Test('scenario mode withholds the code-change tools until a person allows them', async () => {
     const it = chat([{
       call: {
@@ -341,5 +382,17 @@ Describe('Studio agent chat server', () => {
     Expect((await it.handle('mode', { mode: 'ask' }) as { mode: string }).mode).toBe('chat')
     Expect((await it.handle('mode', { mode: 'build' }) as { mode: string }).mode).toBe('chat')
     Expect((await it.handle('mode', { mode: 'scenario' }) as { mode: string }).mode).toBe('scenario')
+  })
+
+  Test('history reports conversation history and mode across turns', async () => {
+    const it = chat([{ text: 'hello there' }])
+    await it.handle('enable', { enabled: true })
+    await it.handle('send', { message: 'hi' })
+
+    const res = await it.handle('history', {}) as { history: Array<Record<string, unknown>>; mode: string }
+    Expect(res.mode).toBe('chat')
+    Expect(res.history).toHaveLength(2)
+    Expect(res.history[0]).toMatchObject({ role: 'user', text: 'hi' })
+    Expect(res.history[1]).toMatchObject({ role: 'assistant', text: 'hello there', status: 'complete' })
   })
 })

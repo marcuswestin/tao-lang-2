@@ -1,4 +1,4 @@
-import TR from '@runtime/TR'
+import TR from '@tao/runtime'
 
 /**
  * The Hacker News adapter: each declared query shape maps to one Algolia HN API request, and every
@@ -67,6 +67,9 @@ export const HNAdapter = TR.Http.adapter({
         CommentCount: countComments(item.children),
       }])
     }),
+    // The Reading feed is this device's own record of what it opened: the rows are already in the
+    // store, so the shape is declared to say so rather than left to fail as unsupported.
+    TR.Http.on({ orderBy: 'OpenedAt', where: 'Opened' }, async () => {}),
   ],
   Comment: [
     TR.Http.on({ where: 'Story' }, async (query, { upsert }) => {

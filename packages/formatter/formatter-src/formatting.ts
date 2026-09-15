@@ -566,9 +566,10 @@ function finalizeFormattedText(text: string): string {
 /** applyTextEdits applies non-overlapping LSP text edits to the document's source text. */
 export function applyTextEdits(document: AST.Document, edits: readonly Langium.TextEdit[]): string {
   const textDocument = document.textDocument
-  const sorted = [...edits].sort(
-    (a, b) => textDocument.offsetAt(b.range.start) - textDocument.offsetAt(a.range.start),
-  )
+  const sorted = [...edits].sort((a, b) => {
+    const diff = textDocument.offsetAt(b.range.start) - textDocument.offsetAt(a.range.start)
+    return diff !== 0 ? diff : textDocument.offsetAt(b.range.end) - textDocument.offsetAt(a.range.end)
+  })
   let text = textDocument.getText()
   for (const edit of sorted) {
     const start = textDocument.offsetAt(edit.range.start)

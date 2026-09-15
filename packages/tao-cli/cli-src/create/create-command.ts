@@ -1,6 +1,7 @@
 import { Errors, FS, HCI } from '@shared'
 import Workspace from '@workspace'
 import type { Readable, Writable } from 'node:stream'
+import { TaoAppModules } from '../app-modules'
 import { runFix } from '../source-commands'
 import { findTaoTestFiles } from '../test-command'
 import { buildCreationBrief, type BuildCreationBriefOptions, type CreationBrief } from './creation-brief'
@@ -114,6 +115,7 @@ export async function runCreate(description: string, options: CreateCommandOptio
 
   const files = lowerCreationPlan(plan, { description: brief.description })
   await writeCreationFiles(directory, files)
+  await TaoAppModules.ensureProject(directory)
   await runFix(directory, { cwd })
   const problems = await validateProject(directory)
   if (problems.length > 0) {

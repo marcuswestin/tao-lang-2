@@ -13,7 +13,9 @@ import { objectSchema, refusal, TEXT } from './AgentChatSchema'
 import { requireOnly } from './AgentChatScope'
 import type { AgentChatToolCall, AgentChatWorld } from './AgentChatTools'
 import { lowerFeature, lowerReword, textCandidates } from './FeaturePlan'
-import { resolveTarget } from './SemanticSnapshot'
+import { resolveTarget, type SnapshotNode } from './SemanticSnapshot'
+
+export type DeclarationEdit = { declaration: string; replacement: string }
 
 /** A change that has been computed and shown, and is waiting to be approved. */
 export type StagedChange = {
@@ -50,9 +52,10 @@ const diffOf = StudioProjectSession.testing.sourceActionProposalDiff
 export function stageChange(
   world: AgentChatWriteWorld,
   staged: Map<string, StagedChange>,
-): (summary: string, edits: readonly { path: string; before: string; after: string }[]) => Promise<
-  Record<string, unknown>
-> {
+): (
+  summary: string,
+  edits: readonly { path: string; before: string; after: string; diff?: string }[],
+) => Promise<Record<string, unknown>> {
   // Not `staged.size`: applying removes an entry, so the next proposal reused a live id and overwrote a
   // change the model still intended to apply, silently.
   let issued = 0
@@ -63,20 +66,22 @@ export function stageChange(
     }
     issued += 1
     const id = `change-${issued}`
+    const uniquePaths = [...new Set(real.map(edit => edit.path))]
     staged.set(id, {
-      edits: real.map(edit => ({ ...edit, diff: diffOf(edit.path, edit.before, edit.after) })),
-      expect: await Promise.all(real.map(async edit => ({
-        path: edit.path,
-        sourceVersion: await world.sourceVersionOf(edit.path),
+      edits: real.map(edit => ({ ...edit, diff: edit.diff ?? diffOf(edit.path, edit.before, edit.after) })),
+      expect: await Promise.all(uniquePaths.map(async path => ({
+        path,
+        sourceVersion: await world.sourceVersionOf(path),
       }))),
       id,
       summary,
     })
     return {
       changeId: id,
-      diff: real.map(edit => `${edit.path}\n${diffOf(edit.path, edit.before, edit.after)}`).join('\n\n'),
-      files: real.map(edit => edit.path),
-      next: `Call applyChange with changeId ${id} to apply this. A person must approve it first.`,
+      diff: real.map(edit => edit.diff ?? `${edit.path}\n${diffOf(edit.path, edit.before, edit.after)}`).join('\n\n'),
+      files: uniquePaths,
+      next:
+        `Call applyChange with changeId ${id} now to present this change for approval. Do not ask in chat first; calling applyChange is what prompts the person to approve.`,
       summary,
     }
   }
@@ -110,7 +115,7 @@ export function writeTools(
   return {
     applyChange: tool({
       description:
-        'Apply a change you proposed earlier, by its changeId. Studio writes every file as one change, compiles once, and restores all of them if the compile fails. A person must approve this before it runs.',
+        'Propose applying a staged change by its changeId. Calling this tool presents the change to the person for approval with a diff — call this immediately after proposing rather than asking in chat first. When approved, Studio writes every file as one change, compiles once, and restores all of them if the compile fails.',
       execute: async ({ changeId }: { changeId: string }) => {
         const change = staged.get(changeId)
         if (change === undefined) {
@@ -160,49 +165,143 @@ export function writeTools(
 
     proposeEdit: tool({
       description:
-        "Replace one declaration's whole source text with new Tao. Use this only when no other propose tool fits: it is the one place you write Tao yourself, and Tao has a syntax you have not seen. Read the declaration first, keep the change small, and expect to be corrected by the compiler.",
-      execute: async ({ declaration, replacement }: { declaration: string; replacement: string }) => {
-        const [snapshot, files] = await Promise.all([world.snapshot(), world.files()])
-        const node = resolveTarget(snapshot, declaration)
-        if (node === undefined) {
-          return capture('proposeEdit', { declaration }, refusal(`No declaration named "${declaration}".`))
-        }
-        const source = declarationSource(files, node)
-        if (source === undefined || node.start === undefined || node.end === undefined) {
-          return capture('proposeEdit', { declaration }, refusal(`${declaration} has no source range to replace.`))
-        }
-        const before = files.find(file => file.path === source.path)?.content ?? ''
-        const merged = before.slice(0, node.start) + replacement + before.slice(node.end)
-        let after: string
-        try {
-          // Formatting is the first check: source the formatter cannot parse never reaches the project.
-          after = await Formatter.formatCode(merged)
-        } catch (error) {
+        "Replace one or more declarations' whole source text with new Tao. When a change affects multiple declarations, pass all of them together in edits so all diffs appear in a single proposal. Use this only when no other propose tool fits: it is the one place you write Tao yourself, and Tao has a syntax you have not seen. Read the declarations first, keep the changes small, and expect to be corrected by the compiler.",
+      execute: async (input: { declaration?: string; edits?: DeclarationEdit[]; replacement?: string }) => {
+        const items: readonly DeclarationEdit[] = input.edits !== undefined && input.edits.length > 0
+          ? input.edits
+          : input.declaration !== undefined && input.replacement !== undefined
+          ? [{ declaration: input.declaration, replacement: input.replacement }]
+          : []
+        if (items.length === 0) {
           return capture(
             'proposeEdit',
-            { declaration },
-            refusal(
-              `That is not valid Tao: ${String(error instanceof Error ? error.message : error)}`,
-              { youWrote: replacement },
-            ),
+            input,
+            refusal('proposeEdit requires either edits or declaration and replacement.'),
           )
         }
-        // The tool named one declaration; the edit may change nothing else. Without this gate an
-        // approved raw edit could add or remove declarations the diff alone had to catch.
-        const outOfScope = await requireOnly(before, after, [], [`${node.kind} ${node.name}`])
-        if (outOfScope !== undefined) {
-          return capture('proposeEdit', { declaration }, refusal(outOfScope))
+
+        const [snapshot, files] = await Promise.all([world.snapshot(), world.files()])
+        const resolved: {
+          declaration: string
+          node: SnapshotNode
+          replacement: string
+          source: { line: number; path: string; source: string }
+        }[] = []
+        for (const item of items) {
+          const node = resolveTarget(snapshot, item.declaration)
+          if (node === undefined) {
+            return capture('proposeEdit', input, refusal(`No declaration named "${item.declaration}".`))
+          }
+          const source = declarationSource(files, node)
+          if (source === undefined || node.start === undefined || node.end === undefined) {
+            return capture('proposeEdit', input, refusal(`${item.declaration} has no source range to replace.`))
+          }
+          resolved.push({ declaration: item.declaration, node, replacement: item.replacement, source })
         }
-        return capture(
-          'proposeEdit',
-          { declaration, replacement },
-          await stage(`replace ${declaration}`, [{ after, before, path: source.path }]),
-        )
+
+        const byPath = new Map<string, typeof resolved>()
+        for (const item of resolved) {
+          const list = byPath.get(item.source.path) ?? []
+          list.push(item)
+          byPath.set(item.source.path, list)
+        }
+
+        const stagedEdits: { after: string; before: string; diff?: string; path: string }[] = []
+
+        for (const [path, decls] of byPath) {
+          const before = files.find(file => file.path === path)?.content ?? ''
+          const sorted = [...decls].sort((a, b) => (a.node.start ?? 0) - (b.node.start ?? 0))
+          for (let index = 0; index < sorted.length - 1; index += 1) {
+            if ((sorted[index]!.node.end ?? 0) > (sorted[index + 1]!.node.start ?? 0)) {
+              return capture(
+                'proposeEdit',
+                input,
+                refusal(
+                  `Cannot replace overlapping declarations "${sorted[index]!.declaration}" and "${
+                    sorted[index + 1]!.declaration
+                  }".`,
+                ),
+              )
+            }
+          }
+
+          const descending = [...sorted].sort((a, b) => (b.node.start ?? 0) - (a.node.start ?? 0))
+          let merged = before
+          for (const item of descending) {
+            merged = merged.slice(0, item.node.start) + item.replacement + merged.slice(item.node.end)
+          }
+
+          let after: string
+          try {
+            after = await Formatter.formatCode(merged)
+          } catch (error) {
+            return capture(
+              'proposeEdit',
+              input,
+              refusal(
+                `That is not valid Tao: ${String(error instanceof Error ? error.message : error)}`,
+                { youWrote: decls.map(d => d.replacement).join('\n\n') },
+              ),
+            )
+          }
+
+          const allowed = decls.map(d => `${d.node.kind} ${d.node.name}`)
+          const outOfScope = await requireOnly(before, after, [], allowed)
+          if (outOfScope !== undefined) {
+            return capture('proposeEdit', input, refusal(outOfScope))
+          }
+
+          if (decls.length > 1) {
+            for (const item of sorted) {
+              const singleMerged = before.slice(0, item.node.start) + item.replacement + before.slice(item.node.end)
+              let singleAfter: string
+              try {
+                singleAfter = await Formatter.formatCode(singleMerged)
+              } catch {
+                singleAfter = singleMerged
+              }
+              stagedEdits.push({
+                after,
+                before,
+                diff: diffOf(path, before, singleAfter),
+                path,
+              })
+            }
+          } else {
+            stagedEdits.push({
+              after,
+              before,
+              diff: diffOf(path, before, after),
+              path,
+            })
+          }
+        }
+
+        const summary = `replace ${items.map(i => i.declaration).join(', ')}`
+        return capture('proposeEdit', input, await stage(summary, stagedEdits))
       },
-      inputSchema: objectSchema<{ declaration: string; replacement: string }>({
-        declaration: TEXT('The declaration to replace, by name.'),
-        replacement: TEXT('The complete new source for that declaration, including its header line.'),
-      }, ['declaration', 'replacement']),
+      inputSchema: objectSchema<{
+        declaration?: string
+        edits?: DeclarationEdit[]
+        replacement?: string
+      }>({
+        declaration: TEXT('The declaration to replace, by name (when replacing a single declaration).'),
+        edits: {
+          description:
+            'All declaration replacements to make at once. Prefer passing all edits here so they are proposed together in a single proposal with multiple diff definitions.',
+          items: {
+            additionalProperties: false,
+            properties: {
+              declaration: TEXT('The declaration to replace, by name.'),
+              replacement: TEXT('The complete new source for that declaration, including its header line.'),
+            },
+            required: ['declaration', 'replacement'],
+            type: 'object',
+          },
+          type: 'array',
+        },
+        replacement: TEXT('The complete new source for that declaration (when replacing a single declaration).'),
+      }, []),
     }),
 
     proposeFlag: tool({
@@ -333,7 +432,8 @@ export function writeTools(
     }),
 
     undoLastChange: tool({
-      description: 'Restore every file the last applied change touched. A person must approve this before it runs.',
+      description:
+        'Restore every file the last applied change touched. Calling this tool presents the restore to the person for approval.',
       execute: async () => {
         try {
           const result = await world.undo()

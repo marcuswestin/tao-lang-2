@@ -187,40 +187,47 @@ export class StudioServerDatasource {
       if (cached?.sourceVersion === file.sourceVersion) {
         return
       }
-      const values = await this.#session.inspectDesign({ path: file.path, sourceVersion: file.sourceVersion })
-      const nameOccurrences = new Map<string, number>()
-      const rows = values.flatMap((value): StudioServerDesignTokenRow[] => {
-        const identity = `${value.kind}:${value.name}`
-        const occurrence = nameOccurrences.get(identity) ?? 0
-        nameOccurrences.set(identity, occurrence + 1)
-        const suffix = occurrence === 0 ? '' : `:${occurrence}`
-        if (value.kind === 'token') {
+      try {
+        const values = await this.#session.inspectDesign({ path: file.path, sourceVersion: file.sourceVersion })
+        const nameOccurrences = new Map<string, number>()
+        const rows = values.flatMap((value): StudioServerDesignTokenRow[] => {
+          const identity = `${value.kind}:${value.name}`
+          const occurrence = nameOccurrences.get(identity) ?? 0
+          nameOccurrences.set(identity, occurrence + 1)
+          const suffix = occurrence === 0 ? '' : `:${occurrence}`
+          if (value.kind === 'token') {
+            return [{
+              DesignName: value.designName,
+              End: value.end,
+              Id: `${file.path}#design-token:${value.name}${suffix}`,
+              Kind: value.kind,
+              Name: value.name,
+              SourcePath: file.path,
+              Start: value.start,
+              SourceVersion: file.sourceVersion,
+              Value: value.value,
+            }]
+          }
           return [{
             DesignName: value.designName,
+            ...('entries' in value ? { Entries: value.entries } : {}),
             End: value.end,
-            Id: `${file.path}#design-token:${value.name}${suffix}`,
+            Id: `${file.path}#design-${value.kind}:${value.name}${suffix}`,
             Kind: value.kind,
             Name: value.name,
             SourcePath: file.path,
             Start: value.start,
             SourceVersion: file.sourceVersion,
-            Value: value.value,
+            Value: 'value' in value ? value.value : value.entries.join(', '),
           }]
+        })
+        this.#designTokens.set(file.path, { rows, sourceVersion: file.sourceVersion })
+      } catch {
+        // A file that fails to parse retains its previous design tokens or exposes none until it parses.
+        if (!this.#designTokens.has(file.path)) {
+          this.#designTokens.set(file.path, { rows: [], sourceVersion: file.sourceVersion })
         }
-        return [{
-          DesignName: value.designName,
-          ...('entries' in value ? { Entries: value.entries } : {}),
-          End: value.end,
-          Id: `${file.path}#design-${value.kind}:${value.name}${suffix}`,
-          Kind: value.kind,
-          Name: value.name,
-          SourcePath: file.path,
-          Start: value.start,
-          SourceVersion: file.sourceVersion,
-          Value: 'value' in value ? value.value : value.entries.join(', '),
-        }]
-      })
-      this.#designTokens.set(file.path, { rows, sourceVersion: file.sourceVersion })
+      }
     }))
     for (const path of this.#designTokens.keys()) {
       if (!currentPaths.has(path)) {

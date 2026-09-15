@@ -8,7 +8,7 @@ device, or browser capability.
 
 ## What landed
 
-- **A usable Studio workbench:** project/app sessions, Design/Code/Run layouts, semantic source
+- **A usable Studio workbench:** project/app sessions, Design/Code/Run/Draw layouts, semantic source
   lenses, scenario cells, Problems/Tests/Data/Logs/Compile drawers, element selection, focused-view
   editing, an inspector, and isolated per-project state.
 - **Visual authoring and review:** draw rough views on a freehand canvas, snap them into Tao layout,
@@ -69,14 +69,14 @@ Start with the deterministic HNReader variant so that the tour does not depend o
    bindings, change layout/style/data/action properties, wrap the selection in Row/Col/Stack, or
    remove it. Make source-changing edits only in a scratch project or disposable branch; use
    **Undo visual edit** to reverse the last one.
-7. Use **Design**, **Code**, and **Run** as workspace presets. Run deliberately hides authoring chrome
-   to maximize the live canvas; Design restores the full workbench.
+7. Use **Design**, **Code**, **Run**, and **Draw** as workspace presets. Run hides authoring chrome
+   and the drawing canvas so only the live preview remains; Draw shows an empty canvas; Design
+   restores the full workbench.
 
 The element-selection, focused-view, data-panel, scenario, layout, and Device-popover paths above
-were exercised. Freehand drawing was inspected but not persisted into the sample app: in a scratch
-project, drag empty focused-canvas space to draw a rectangle, edit its kind/content/binding, then use
-**Snap**, **Toggle direction**, **Insert separator**, and the spacer-ratio control to turn the sketch
-into Tao structure.
+were exercised. Freehand drawing lives on the Draw tab: in a scratch project, open **Draw**, drag
+empty canvas space to create a view, draw rectangles inside it, then use **Snap**, **Toggle
+direction**, **Insert separator**, and the spacer-ratio control to turn the sketch into Tao structure.
 
 ## 3. Run the app outside Studio — verified
 
@@ -98,7 +98,7 @@ query-driven HTTP datasource, switch to `HNReader` with `s` in the dev loop or r
 
 ## 4. Exercise the new app features
 
-### Focused writing — code/test-backed; not run here
+### Focused writing — verified
 
 ```sh
 ./tao dev "Apps/WordFlower/1 - Current" --app WordFlower
@@ -107,11 +107,13 @@ query-driven HTTP datasource, switch to `HNReader` with `s` in the dev loop or r
 Create or open a workspace and document, choose **Focus for 5 min** or **Focus for 25 min**, navigate
 away and back, then pause, resume, or stop the persistent focus bar. The session is stored as local
 data, survives relaunch, and resumes from the remaining duration rather than charging paused time.
+This pass verified the bar across navigation, confirmed that pause freezes the countdown, and
+restarted the app to confirm that an active session returns with elapsed time accounted for.
 
 For the synced variant, run `just start-local-instantdb`, launch `WordFlowerInstantDB` as documented
 in `Apps/WordFlower/README.md`, and finish with `just stop-local-instantdb`.
 
-### Native controls, device APIs, and navigation — not verified here
+### Native controls, device APIs, and navigation — verified representative paths
 
 Run each command, press `i` in its dev loop, and quit with `q` before starting the next:
 
@@ -123,8 +125,11 @@ Run each command, press `i` in its dev loop, and quit with `q` before starting t
 
 The first app covers button, switch, slider, picker, segmented control, date picker, and spinner.
 The second covers haptics, clipboard read/write, and sharing. The third covers typed destinations,
-dialogues, back behavior, full-bleed/chromeless screens, and restoration. This host had no available
-iOS Simulator, so these native surfaces were not opened during this pass.
+dialogues, back behavior, full-bleed/chromeless screens, and restoration. On an iPhone 17 Simulator,
+this pass changed button and switch state, invoked the haptic action, round-tripped clipboard text,
+and exercised a typed detail destination, its dialogue, native back, and a full-bleed destination.
+The remaining controls rendered, but their individual interactions, the share sheet, chromeless
+navigation, and restoration were not all exercised.
 
 ### Dev, iCloud, and CloudKit data — code/test-backed; not UI-verified here
 
@@ -140,19 +145,21 @@ these providers, and native entitlement-backed behavior was not exercised here; 
 Install the companion once, then run Studio normally:
 
 ```sh
-just studio-companion-simulator simulator="iPhone 17 Pro"
+just studio-companion-simulator simulator="iPhone 17"
 # or: just studio-companion-install device="roPhone"
 ```
 
 Open **Device** in Studio, choose **Open** (or copy/show its URL), then **Pair a device**. Confirm only
 when the same six-digit code appears on both sides; later launches reconnect from stored trust. The
-popover and pairing countdown were verified, but no device connected on this host. Use an ordinary
-terminal for a physical device because its CoreDevice connection is outside the agent sandbox.
+simulator installation, matching code, trust, connected status, applied revision, fixture rendering,
+and live scenario switching were all verified. Use an ordinary terminal for a physical device when
+its CoreDevice connection is outside the agent sandbox.
 
 Open **Agent**, choose project chat or the current scenario, ask a question, then review any proposed
-source change before applying it. The panel was present, but generation was not verified because this
-session had no `ANTHROPIC_API_KEY`; its recovery instruction is `just secrets`, followed by a Studio
-restart. Do not expose or inspect the decrypted secret.
+source change before applying it. During this pass, Studio reached `claude-sonnet-5` and attempted an
+answer, but Anthropic rejected the configured API key as invalid. Correct the secret with
+`just secrets`, restart Studio, and retry; do not print or expose the decrypted secret while
+diagnosing it.
 
 ## 6. Create, review, and rehearse shipping
 
@@ -172,14 +179,16 @@ Studio and sketch exercises above.
 Capture a local visual-review bundle:
 
 ```sh
+review_output=".artifacts/reviews/hnreader-walkthrough-$(date -u +%Y%m%dT%H%M%SZ)"
 ./tao review Apps/HNReader --app HNReaderStub \
-  --output .artifacts/reviews/hnreader-walkthrough
+  --output "$review_output"
+open "$review_output/index.html"
 ```
 
-Open its `index.html` to compare captures, use blink/opacity overlays, record per-cell decisions and
-comments, and export/import `annotations.json`. **Failed here:** the managed host's Chrome aborted
-with `SIGABRT` before exposing DevTools, so no bundle was produced. This is a known host-browser
-limitation; rerun the same command in an ordinary terminal.
+The timestamp matters because review output is immutable. Compare captures with blink/opacity
+overlays, record per-cell decisions and comments, and export/import `annotations.json`. This pass
+captured both HNReaderStub cells into the bundle. A preview reload initially invalidated Chrome's
+execution context during capture; the review harness now retries that narrow transient failure.
 
 Finally, rehearse the real release plan without mutating App Store state:
 
@@ -196,12 +205,17 @@ they were not run because they change release state.
 ## Verification boundary
 
 - **Live-verified:** Studio launch and HNReader live/stub canvases; app switching; project panels,
-  lenses, scenarios, data, drawers, selection/focus, workspace modes, and device pairing UI;
-  standalone HNReaderStub plus keyboard hints/palette; `tao create --ai none`; `tao ship --dry-run`.
-- **Present but not end-to-end verified:** freehand persistence/snap, WordFlower focused writing,
-  native component/device/navigation apps, companion rendering, Studio agent generation, and
-  Dev/iCloud/CloudKit native behavior.
-- **Attempted and failed:** `tao review`, because Chrome hit the known managed-host `SIGABRT` boundary.
+  lenses, scenarios, data, drawers, selection/focus, workspace modes, and device pairing;
+  standalone HNReaderStub plus keyboard hints/palette; WordFlower focus pause/resume/relaunch;
+  representative native component, Device Kit, and navigation paths; Companion pairing, rendering,
+  and scenario switching; `tao create --ai none`; `tao review`; `tao ship --dry-run`; and the slow
+  Studio browser-smoke lane.
+- **Present but not end-to-end verified:** freehand persistence/snap, every native control interaction,
+  sharing, chromeless navigation/restoration, a successful Studio agent answer, and Dev/iCloud/CloudKit
+  native behavior.
+- **Attempted and externally blocked:** Studio agent generation reached Anthropic, which rejected the
+  configured API key as invalid.
 - **Modest recovery performed:** repository setup and parser generation restored Studio/CLI startup;
-  the standalone Expo app then ran with the pinned Watchman on `PATH` and offline dependency checking.
-  No product-code fix was warranted by the remaining host, credential, and device limitations.
+  the standalone Expo app then ran with the pinned Watchman on `PATH` and offline dependency checking;
+  the visual-review harness gained a bounded retry and regression test for live-preview execution-context
+  replacement. The remaining limitation is external credential validity, not missing product wiring.

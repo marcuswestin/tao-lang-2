@@ -26,8 +26,8 @@ Describe('tao create lowering', () => {
           }
           await FS.copyDirectory(generated, checkedIn)
         }
-        Expect(await taoFilesUnder(generated)).toEqual(await taoFilesUnder(checkedIn))
-        for (const relativePath of await taoFilesUnder(generated)) {
+        Expect(await projectFilesUnder(generated)).toEqual(await projectFilesUnder(checkedIn))
+        for (const relativePath of await projectFilesUnder(generated)) {
           Expect(await FS.readText(FS.resolvePath(relativePath, generated))).toBe(
             await FS.readText(FS.resolvePath(relativePath, checkedIn)),
           )
@@ -116,10 +116,13 @@ Describe('tao create lowering', () => {
   })
 })
 
-async function taoFilesUnder(directory: string): Promise<string[]> {
+async function projectFilesUnder(directory: string): Promise<string[]> {
   const paths: string[] = []
-  for await (const path of FS.walk(directory, { extensions: ['.tao'] })) {
-    paths.push(FS.relativePath(directory, path))
+  for await (const path of FS.walk(directory, { extensions: ['.tao', '.json'] })) {
+    const relative = FS.relativePath(directory, path)
+    if (relative.endsWith('.tao') || relative === 'tsconfig.json') {
+      paths.push(relative)
+    }
   }
   return paths.sort()
 }

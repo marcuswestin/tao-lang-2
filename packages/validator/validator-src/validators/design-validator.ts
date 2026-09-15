@@ -6,9 +6,9 @@ import type { NodeValidationChecks } from '../node-validation'
 import type { ValidationContext } from '../validation'
 import { LayoutValidator } from './layout-validator'
 
-const visualHeads = new Set<string>(ASTUtils.designVisualHeads)
-const colorHeads = new Set<string>(ASTUtils.designColorHeads)
-const builtInHeads = new Set<string>([...ASTUtils.designVisualHeads, ...ASTUtils.designLayoutHeads])
+const visualHeads = new Set<string>(ASTUtils.design.visualHeads)
+const colorHeads = new Set<string>(ASTUtils.design.colorHeads)
+const builtInHeads = new Set<string>([...ASTUtils.design.visualHeads, ...ASTUtils.design.layoutHeads])
 
 const cssHexColor = /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i
 const taoTag = /^#[A-Za-z_][A-Za-z0-9_]*$/
@@ -20,6 +20,8 @@ const designValidationMessages = {
   bundleCycle: (design: string, path: readonly string[]) =>
     `Design '${design}' has a bundle cycle: ${path.join(' -> ')}.`,
   duplicateMember: (name: string) => `Design member '${name}' is declared more than once.`,
+  duplicateStyleProperty: (property: string, style: string) =>
+    `Style property '${property}' is already present in applied style '${style}'.`,
   duplicateTypedBlock: (design: string) => `Design '${design}' may declare each typed block only once.`,
   duplicateVisualAlias: (first: string, second: string) =>
     `Design entries '${first}' and '${second}' set the same visual property.`,
@@ -35,6 +37,8 @@ const designValidationMessages = {
   invalidSize: (name: string) => `Design size '${name}' must resolve from px/rem values in the same unit family.`,
   missingMountedDesign: (entry: string) => `Design entry '${entry}' requires an app Design selection.`,
   placeholderShipping: 'Placeholder ships as an empty box in release.',
+  precedingStyleProperty: (property: string, entry: string) =>
+    `Style property '${property}' was already declared by '${entry}'.`,
   reservedBundle: (name: string) => `Design bundle '${name}' collides with built-in clause '${name}'.`,
   unknownBundle: (design: string, name: string) => `Design '${design}' has no bundle '${name}'.`,
   unknownColor: (path: string) => `Design has no color '${path}'.`,
@@ -66,7 +70,11 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
   const members = new Map<string, AST.Node>()
   for (const member of namedMembers) {
     if (members.has(member.name)) {
-      ctx.error(member.node, designValidationMessages.duplicateMember(member.name))
+      // The compiled design is one keyed map, so the later member simply replaces the earlier one and
+      // nothing can reach it again. Static validation owns duplicates (Docs/Spec/Tao Design - WIP.md).
+      ctx.error(member.node, designValidationMessages.duplicateMember(member.name), {
+        code: designValidationCodes.duplicateMember,
+      })
     } else {
       members.set(member.name, member.node)
     }
@@ -88,11 +96,27 @@ function validateDesignDeclaration(design: AST.DesignDeclaration, ctx: Validatio
   }
   validateSizes(design, ctx)
   validateScreens(design, ctx)
-  for (const bundle of bundles.values()) {
-    if (builtInHeads.has(bundle.name)) {
-      ctx.error(bundle, designValidationMessages.reservedBundle(bundle.name))
+  // A bundle named after a built-in clause can never be reached: TR-design.ts answers the built-in
+  // head before it ever looks a bundle up, and text and style entries compile into the same bundle
+  // map. Static validation owns reserved names (Docs/Spec/Tao Design - WIP.md), so this is an error.
+  for (const member of design.block.members) {
+    if (AST.isDesignBundle(member) && builtInHeads.has(member.name)) {
+      ctx.error(member, designValidationMessages.reservedBundle(member.name), {
+        code: designValidationCodes.reservedBundle,
+      })
+    } else if (AST.isDesignStylesBlock(member) || AST.isDesignTextBlock(member)) {
+      for (const entry of member.entries) {
+        if (builtInHeads.has(entry.name)) {
+          ctx.error(entry, designValidationMessages.reservedBundle(entry.name), {
+            code: designValidationCodes.reservedBundle,
+          })
+        }
+      }
     }
+  }
+  for (const bundle of bundles.values()) {
     validateEntries(bundle.spec.entries, design, tokens, sizes, bundles, ctx)
+    validateRedundantStyleProperties(bundle.spec, bundles, ctx, design)
   }
   validateBundleCycles(design, bundles, ctx)
   for (const bundle of bundles.values()) {
@@ -175,6 +199,7 @@ function validateRenderDesign(render: AST.Render, ctx: ValidationContext): void 
   const bundles = designSpecMembers(design)
   validateDesignLayoutReferences(clause.entries, design, sizes, ctx)
   validateEntries(clause.entries, design, tokens, sizes, bundles, ctx, { validateLayout: false })
+  validateRedundantStyleProperties(clause, bundles, ctx, design)
 
   const expanded = expandEntries(clause.entries, bundles, new Set())
   if (expanded) {
@@ -371,7 +396,7 @@ function validateEffectiveConflicts(entries: readonly AST.LayoutEntry[], ctx: Va
     if (values.length < 2) {
       continue
     }
-    const canonical = ASTUtils.canonicalDesignVisualHead(head)
+    const canonical = ASTUtils.design.canonicalVisualHead(head)
     const previous = visualAliases.get(canonical)
     if (previous !== undefined && previous.head !== head) {
       ctx.error(entry, designValidationMessages.duplicateVisualAlias(previous.head, head))
@@ -382,19 +407,21 @@ function validateEffectiveConflicts(entries: readonly AST.LayoutEntry[], ctx: Va
 }
 
 function selectedWorkspaceDesigns(ctx: ValidationContext): AST.DesignDeclaration[] {
-  const designs = new Set<AST.DesignDeclaration>()
-  for (const file of ctx.workspaceFiles) {
-    for (const property of AST.streamAllContents(file).filter(AST.isAppProperty)) {
-      if (property.name !== 'Design' || !property.value || !AST.isValueReference(property.value)) {
-        continue
-      }
-      const design = property.value.target.ref
-      if (AST.isDesignDeclaration(design)) {
-        designs.add(design)
+  return ctx.memo('design-validator.selectedWorkspaceDesigns', () => {
+    const designs = new Set<AST.DesignDeclaration>()
+    for (const file of ctx.workspaceFiles) {
+      for (const property of AST.streamAllContents(file).filter(AST.isAppProperty)) {
+        if (property.name !== 'Design' || !property.value || !AST.isValueReference(property.value)) {
+          continue
+        }
+        const design = property.value.target.ref
+        if (AST.isDesignDeclaration(design)) {
+          designs.add(design)
+        }
       }
     }
-  }
-  return [...designs]
+    return [...designs]
+  })
 }
 
 function validateUniqueBlocks(design: AST.DesignDeclaration, ctx: ValidationContext): void {
@@ -629,18 +656,11 @@ function requiresSizeLookup(entry: AST.LayoutEntry): boolean {
 }
 
 function isInlineDesignExploration(entry: AST.LayoutEntry): boolean {
-  if (LayoutValidator.isLayoutEntry(entry)) {
-    return true
+  if (isVisualEntry(entry)) {
+    const values = conditionedVisualValues(entry)
+    return values !== undefined && ASTUtils.design.isInlineDesignExploration(values)
   }
-  const values = conditionedVisualValues(entry)
-  if (values === undefined) {
-    return false
-  }
-  if (!isVisualEntry(entry) || values.length !== 2) {
-    return false
-  }
-  return typeof values[1] === 'number'
-    || (typeof values[1] === 'string' && values[1].startsWith('#'))
+  return ASTUtils.design.isInlineDesignExploration(ASTUtils.layoutEntryValues(entry))
 }
 
 function entryHead(entry: AST.LayoutEntry): string {
@@ -668,4 +688,147 @@ function conditionedVisualValues(entry: AST.LayoutEntry): readonly (number | str
     return undefined
   }
   return values.slice(0, -(expected === undefined ? 2 : 4))
+}
+
+type BundleProperty = {
+  readonly condition?: string
+  /** The authored name this slot is reported under, so a diagnostic reads the way the source does. */
+  readonly property: string
+  /** The semantic slot the entry claims; two entries are redundant only when these match. */
+  readonly slot: string
+}
+
+/**
+ * layoutEntryProperties names every slot one entry claims. A visual head claims exactly one, under its
+ * canonical alias. A layout head can claim several independent ones -- `pad top 4` and `pad left 8`, or
+ * `content top` and `content left`, are legal together -- so the head alone is not the identity.
+ */
+function layoutEntryProperties(entry: AST.LayoutEntry): readonly BundleProperty[] {
+  const condition = entryConditionText(entry)
+  if (isVisualEntry(entry)) {
+    const property = ASTUtils.design.canonicalVisualHead(entryHead(entry))
+    return [{ condition, property, slot: `visual:${property}` }]
+  }
+  if (LayoutValidator.isLayoutEntry(entry)) {
+    const property = entryHead(entry)
+    return LayoutValidator.entrySlots(entry).map(slot => ({ condition, property, slot: `layout:${slot}` }))
+  }
+  return []
+}
+
+/** designIdentity keys per-design memos by declaration rather than by name: names are file-private. */
+function designIdentity(design: AST.DesignDeclaration): string {
+  return `${AST.getDocument(design).uri.toString()}#${design.$containerIndex ?? -1}#${design.name}`
+}
+
+function entryConditionText(entry: AST.LayoutEntry): string | undefined {
+  if (!entry.condition) {
+    return undefined
+  }
+  const subject = String(ASTUtils.layoutTermValue(entry.condition.subject))
+  const value = entry.condition.value ? String(ASTUtils.layoutTermValue(entry.condition.value)) : undefined
+  return value ? `when ${subject} is ${value}` : `when ${subject}`
+}
+
+function computeDesignBundleProperties(
+  bundles: ReadonlyMap<string, DesignSpecMember>,
+): Map<string, readonly BundleProperty[]> {
+  const result = new Map<string, readonly BundleProperty[]>()
+
+  function resolveBundleProperties(
+    bundleName: string,
+    path: ReadonlySet<string>,
+  ): Readonly<{ properties: readonly BundleProperty[]; truncated: boolean }> {
+    const existing = result.get(bundleName)
+    if (existing !== undefined) {
+      return { properties: existing, truncated: false }
+    }
+    const bundle = bundles.get(bundleName)
+    if (bundle === undefined || path.has(bundleName)) {
+      // A cycle is its own error. Stopping here keeps this walk finite, and the caller must not cache
+      // the short answer it produced: reached on its own, the same bundle resolves completely.
+      return { properties: [], truncated: bundle !== undefined }
+    }
+    const nextPath = new Set([...path, bundleName])
+    const properties: BundleProperty[] = []
+    const seen = new Set<string>()
+    let truncated = false
+
+    const claim = (property: BundleProperty): void => {
+      const key = bundlePropertyKey(property)
+      if (!seen.has(key)) {
+        seen.add(key)
+        properties.push(property)
+      }
+    }
+
+    for (const entry of bundle.spec.entries) {
+      const ref = bundleReference(entry, bundles)
+      if (ref !== undefined) {
+        const inherited = resolveBundleProperties(ref.name, nextPath)
+        truncated ||= inherited.truncated
+        inherited.properties.forEach(claim)
+        continue
+      }
+      layoutEntryProperties(entry).forEach(claim)
+    }
+
+    const frozen = Object.freeze(properties)
+    if (!truncated) {
+      result.set(bundleName, frozen)
+    }
+    return { properties: frozen, truncated }
+  }
+
+  for (const name of bundles.keys()) {
+    resolveBundleProperties(name, new Set())
+  }
+
+  return result
+}
+
+function bundlePropertyKey(property: BundleProperty): string {
+  return `${property.condition ?? ''}:${property.slot}`
+}
+
+function validateRedundantStyleProperties(
+  clause: AST.LayoutClause,
+  bundles: ReadonlyMap<string, DesignSpecMember>,
+  ctx: ValidationContext,
+  design: AST.DesignDeclaration,
+): void {
+  const bundlePropertiesMap = ctx.memo(
+    `design-validator.bundle-properties.${designIdentity(design)}`,
+    () => computeDesignBundleProperties(bundles),
+  )
+
+  const seenProperties = new Map<string, { node: AST.LayoutEntry; sourceStyleName?: string }>()
+
+  for (const entry of clause.entries) {
+    const bundle = bundleReference(entry, bundles)
+    const properties = bundle === undefined
+      ? layoutEntryProperties(entry)
+      : bundlePropertiesMap.get(bundle.name) ?? []
+    // One entry can claim several slots. It is redundant once, not once per slot it repeats.
+    let reported = false
+    for (const property of properties) {
+      const key = bundlePropertyKey(property)
+      const existing = seenProperties.get(key)
+      if (existing === undefined) {
+        seenProperties.set(key, { node: entry, ...(bundle === undefined ? {} : { sourceStyleName: bundle.name }) })
+        continue
+      }
+      if (reported) {
+        continue
+      }
+      reported = true
+      ctx.warning(
+        entry,
+        existing.sourceStyleName !== undefined
+          ? designValidationMessages.duplicateStyleProperty(property.property, existing.sourceStyleName)
+          : designValidationMessages.precedingStyleProperty(property.property, entryText(existing.node)),
+        { code: designValidationCodes.duplicateStyleProperty },
+      )
+    }
+  }
 }

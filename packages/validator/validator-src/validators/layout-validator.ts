@@ -49,9 +49,65 @@ export const LayoutValidator = {
     [AST.Render.$type]: validateRender,
   } satisfies NodeValidationChecks,
   effectiveWeightedRigidClaim,
+  entrySlots: layoutEntrySlots,
   isLayoutEntry,
   messages: layoutValidationMessages,
   validateEntry: validateLayoutEntry,
+}
+
+/**
+ * layoutEntrySlots names the semantic slots one layout entry claims. A head is not a slot on its own:
+ * `pad top 4` and `pad left 8` claim different sides, `content top` and `content left` different axes,
+ * and `width max 680` the maximum rather than the width itself -- all of which are legal together, and
+ * only the entries that claim a slot already claimed are actually redundant.
+ */
+function layoutEntrySlots(entry: AST.LayoutEntry): readonly string[] {
+  const head = layoutEntryHead(entry)
+  const headValue = head && layoutHeadValue(head)
+  if (!headValue) {
+    return []
+  }
+  const terms = entry.terms
+  if (headValue === 'margin' || headValue === 'pad') {
+    // The one-value form sets every side at once, so it claims all four rather than a `pad` slot.
+    if (terms.length === 1) {
+      return ['bottom', 'left', 'right', 'top'].map(side => `${headValue}:${side}`)
+    }
+    const sides: string[] = []
+    for (let index = 0; index < terms.length; index += 2) {
+      const term = terms[index]
+      const side = term && AST.isLayoutWord(term) ? padSideValue(term) : undefined
+      if (side === undefined) {
+        // Malformed spacing is already an error; claiming no slot keeps it out of redundancy too.
+        return []
+      }
+      sides.push(...padPhysicalSides(side).map(physical => `${headValue}:${physical}`))
+    }
+    return sides
+  }
+  if (headValue === 'content') {
+    const keys: string[] = []
+    for (const term of terms) {
+      const value = AST.isLayoutWord(term) ? contentTermValue(term) : undefined
+      if (value === undefined) {
+        return []
+      }
+      keys.push(`content:${contentTermConflictKey(value)}`)
+    }
+    return keys
+  }
+  if (headValue === 'aligned') {
+    const term = terms[0]
+    const value = term && AST.isLayoutWord(term) ? alignTermValue(term) : undefined
+    return value === undefined ? [] : [`aligned:${value}`]
+  }
+  // Only `width` grants the independent maximum slot; extend this alongside validateDimension when
+  // another dimension gains one.
+  if (headValue === 'width') {
+    const term = terms[0]
+    return [term !== undefined && AST.isLayoutWord(term) && layoutWordText(term) === 'max' ? 'width:max' : 'width']
+  }
+  return [headValue]
 }
 
 function validateRender(render: AST.Render, ctx: ValidationContext): void {
@@ -91,10 +147,10 @@ function isLayoutEntry(entry: AST.LayoutEntry): boolean {
 
 function isPotentialDesignEntry(entry: AST.LayoutEntry): boolean {
   const head = layoutEntryHeadText(entry)
-  return entry.terms.length === 0 || designVisualHeads.has(head)
+  return entry.terms.length === 0 || visualHeads.has(head)
 }
 
-const designVisualHeads = new Set<string>(ASTUtils.designVisualHeads)
+const visualHeads = new Set<string>(ASTUtils.design.visualHeads)
 
 function validateLayoutEntry(
   entry: AST.LayoutEntry,
@@ -311,7 +367,7 @@ function effectiveWeightedRigidClaim(entries: readonly AST.LayoutEntry[]): Weigh
     : undefined
 }
 
-const layoutHeads = ASTUtils.designLayoutHeads
+const layoutHeads = ASTUtils.design.layoutHeads
 
 const reservedDesignSizeTerms = new Set<string>([
   ...layoutHeads,

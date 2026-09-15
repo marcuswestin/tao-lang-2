@@ -68,7 +68,7 @@ export const DesignCompiler = {
 
 function compileDesignSpec(spec: AST.LayoutClause): Compiled {
   return gen`TR.Design.Spec(${
-    gen.jsLiteral(spec.entries.map(entry => normalizeDecidedVisualHead(ASTUtils.layoutEntryValues(entry))))
+    gen.jsLiteral(spec.entries.map(entry => normalizeDecidedHead(ASTUtils.layoutEntryValues(entry))))
   })`
 }
 
@@ -135,11 +135,12 @@ function designSpecSource(spec: AST.LayoutClause): Compiled {
   }`
 }
 
-/** Keeps the current runtime ABI compatible while accepting the decided §13 visual vocabulary. */
-function normalizeDecidedVisualHead(values: readonly (number | string)[]): readonly (number | string)[] {
+/** Keeps the current runtime ABI compatible while accepting decided source aliases. */
+function normalizeDecidedHead(values: readonly (number | string)[]): readonly (number | string)[] {
   const [head, ...terms] = values
-  if (typeof head !== 'string' || terms.length === 0) {
+  if (typeof head !== 'string') {
     return values
   }
-  return [ASTUtils.canonicalDesignVisualHead(head), ...terms]
+  const canonicalHead = ASTUtils.design.canonicalVisualHead(head)
+  return [canonicalHead, ...terms]
 }

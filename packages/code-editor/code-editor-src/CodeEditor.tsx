@@ -61,9 +61,16 @@ export type CodeEditorLensProps =
     refoldRevision?: number
   }>
 
+export type CodeEditorDocumentChange = Readonly<{
+  content: string
+  selection: Readonly<{ anchor: number; head: number }>
+}>
+
 export type CodeEditorProps = {
   Change: TR.ActionValue<[TR.Value<string>]>
   Content: string
+  /** Hosts that keep a hidden document model apply text and caret in one transaction. */
+  DocumentChange?: (edit: CodeEditorDocumentChange) => void
   Drop?: CodeEditorDrop
   Highlight?: (content: string) => Promise<readonly CodeEditorHighlightToken[]>
   Layout?: TR.TaoVisualLayout
@@ -120,12 +127,14 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
   const editor = React.useRef<EditorView | undefined>(undefined)
   const change = React.useRef(props.Change)
   const content = React.useRef(props.Content)
+  const documentChange = React.useRef(props.DocumentChange)
   const selectionChange = React.useRef(props.SelectionChange)
   const drop = React.useRef(props.Drop)
   const lens = React.useRef(props.Lens)
   const applyingExternalContent = React.useRef(false)
   change.current = props.Change
   content.current = props.Content
+  documentChange.current = props.DocumentChange
   selectionChange.current = props.SelectionChange
   drop.current = props.Drop
   lens.current = props.Lens
@@ -173,12 +182,24 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
         ...codeEditorBaseExtensions,
         EditorView.updateListener.of(update => {
           if (update.docChanged && !applyingExternalContent.current) {
-            void invokeEditorChange(change.current, update.state.doc.toString())
+            const next = {
+              content: update.state.doc.toString(),
+              selection: {
+                anchor: update.state.selection.main.anchor,
+                head: update.state.selection.main.head,
+              },
+            }
+            const edit = documentChange.current
+            if (edit !== undefined) {
+              edit(next)
+            } else {
+              void invokeEditorChange(change.current, next.content)
+            }
           }
           if (update.docChanged) {
             scheduleHighlight(update.view, update.state.doc.toString())
           }
-          if (update.selectionSet) {
+          if (update.selectionSet && !applyingExternalContent.current) {
             selectionChange.current?.({
               anchor: update.state.selection.main.anchor,
               head: update.state.selection.main.head,
@@ -284,7 +305,20 @@ export function CodeEditor(props: CodeEditorProps): React.ReactElement {
     }
     applyingExternalContent.current = true
     try {
-      view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: props.Content } })
+      const length = props.Content.length
+      const selection = props.Selection === undefined
+        ? {
+          anchor: Math.min(view.state.selection.main.anchor, length),
+          head: Math.min(view.state.selection.main.head, length),
+        }
+        : {
+          anchor: Math.max(0, Math.min(props.Selection.anchor, length)),
+          head: Math.max(0, Math.min(props.Selection.head ?? props.Selection.anchor, length)),
+        }
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: props.Content },
+        selection,
+      })
     } finally {
       applyingExternalContent.current = false
     }

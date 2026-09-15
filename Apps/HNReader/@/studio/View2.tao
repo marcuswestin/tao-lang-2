@@ -1,0 +1,15 @@
+// Studio-written generated source. Read-only until moved to a package.
+use Col, Text from @tao/ui
+
+public
+view View2() {
+   render Col() [pad top 23.883 right 390.469 bottom 95.484 left 23.922] {
+      #studio_rect_00640064003200320039003000630035002d0039003000640032002d0034006500340063002d0038003700610036002d003400320033003100370032003600660033003300310032
+      Text("") [hug]
+}  }
+
+scenarios View2 "sketch" {
+   device phone
+   scenario "draft" {
+      render ()
+}  }

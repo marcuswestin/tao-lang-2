@@ -1,4 +1,5 @@
 import { Assert, FS, Switch } from '@shared'
+import { PROJECT_TSCONFIG } from '../app-modules'
 import { deriveDesignColors } from './creation-colors'
 import {
   appIdentifier,
@@ -24,8 +25,9 @@ const COMMENT_WIDTH = 100
 
 /**
  * lowerCreationPlan writes the canonical project layout for a validated plan: App, Data, Chrome, Design,
- * one feature folder per entity, Scenarios, and the behavior tests. The model never authors Tao; every
- * placement here is Tao's.
+ * one feature folder per entity, Scenarios, the behavior tests, and the TypeScript project that
+ * resolves `@tao/*` from the CLI-bundled modules. The model never authors Tao; every placement here
+ * is Tao's.
  */
 export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlanOptions = {}): CreationFiles {
   const names = new ProjectNames(plan)
@@ -36,6 +38,7 @@ export function lowerCreationPlan(plan: CreationPlan, options: LowerCreationPlan
     'Design.tao': designFile(plan, names),
     'Scenarios.tao': scenariosFile(plan, names),
     [`${names.app}.test.tao`]: testFile(plan, names),
+    'tsconfig.json': PROJECT_TSCONFIG,
     // The reserved root generated package exists from day one, committed empty, so Studio and the
     // compiler have their folder before the first generated file lands.
     '@/.gitkeep': '',

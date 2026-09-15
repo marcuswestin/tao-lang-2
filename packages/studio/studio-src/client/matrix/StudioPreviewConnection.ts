@@ -181,15 +181,25 @@ export const StudioPreviewSuspension = {
   },
 } as const
 
+export type StudioActivePreviewOptions = {
+  initialCellId?: string
+  onActivate?: (preview: StudioPreviewConnection) => void
+}
+
 /** Keeps visual edits bound to the preview cell that most recently produced a trusted message. */
 export class StudioActivePreview {
   readonly #previews: readonly StudioPreviewConnection[]
   readonly #listeners = new Set<() => void>()
+  readonly #onActivate?: (preview: StudioPreviewConnection) => void
   #active: StudioPreviewConnection | undefined
 
-  constructor(previews: readonly StudioPreviewConnection[]) {
+  constructor(previews: readonly StudioPreviewConnection[], options?: StudioActivePreviewOptions) {
     this.#previews = previews
-    this.#active = previews[0]
+    this.#onActivate = options?.onActivate
+    const initial = options?.initialCellId !== undefined
+      ? previews.find(p => (p.cell?.cellId ?? p.cellIdentity?.cellId) === options.initialCellId)
+      : undefined
+    this.#active = initial ?? previews[0]
     this.reconcile()
   }
 
@@ -198,6 +208,7 @@ export class StudioActivePreview {
       this.#active = preview
       this.#markActive()
       this.#notify()
+      this.#onActivate?.(preview)
     }
   }
 
@@ -215,10 +226,11 @@ export class StudioActivePreview {
   /** Rewires a manifest-reconciled connection list and falls back when the active cell was removed. */
   reconcile(wire?: (preview: StudioPreviewConnection) => void): void {
     const previous = this.#active
-    const previousCellId = previous?.cell?.cellId
+    const previousCellId = previous?.cell?.cellId ?? previous?.cellIdentity?.cellId
     this.#active = previous !== undefined && this.#previews.includes(previous)
       ? previous
-      : this.#previews.find(preview => preview.cell?.cellId === previousCellId) ?? this.#previews[0]
+      : this.#previews.find(preview => (preview.cell?.cellId ?? preview.cellIdentity?.cellId) === previousCellId)
+        ?? this.#previews[0]
     for (const preview of this.#previews) {
       preview.activate = () => this.activate(preview)
       wire?.(preview)

@@ -2,6 +2,7 @@ import { AST, Langium, Parser } from '@parser'
 import { RuntimeToolchainPaths } from '@runtime-toolchain'
 import { RuntimeTesting } from '@runtime-toolchain/testing/runtime-testing'
 import { CLI, Errors, FS, HCI, Platform, Repo } from '@shared'
+import { TaoAppModules } from './app-modules'
 import { findTaoFiles } from './tao-files'
 import { TestOutput, type TestOutputMode } from './test-output'
 
@@ -53,6 +54,9 @@ export async function runTestCommand(
     if (testPaths.length === 0) {
       HCI.writeLine(`No Tao tests found under ${displayRoots}`)
       return
+    }
+    for (const testPath of testPaths) {
+      await TaoAppModules.ensureForPath(testPath)
     }
     HCI.logProcessInfo('test', `Found ${testPaths.length} Tao test ${testPaths.length === 1 ? 'file' : 'files'}`)
     const compiled = await validateAndCompileTaoTests(testPaths)

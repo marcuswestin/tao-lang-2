@@ -18,7 +18,7 @@ export function studioRenderIdentity(render: AST.Render, projectRoot: string): {
   renderId: string
   studioRectId?: string
 } | undefined {
-  const elementName = ASTUtils.standardDesignElementName(render)
+  const elementName = ASTUtils.design.standardElementName(render)
   const cstNode = render.$cstNode
   if (elementName === undefined || cstNode === undefined) {
     return undefined

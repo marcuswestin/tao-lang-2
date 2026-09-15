@@ -5,7 +5,7 @@ import type {
   StudioSketchSnapUndoRequest,
   StudioSketchUnsnapRequest,
 } from '../../StudioProjectSession'
-import type { StudioSketch, StudioSketchCatalogAction, StudioSketchCatalogSnapshot } from '../../StudioSketchCatalog'
+import type { StudioSketchCatalogAction, StudioSketchCatalogSnapshot } from '../../StudioSketchCatalog'
 import { StudioApiClient } from '../StudioApiClient'
 import {
   type MountedStudioSketchView,
@@ -18,9 +18,10 @@ const mountedSketches = new WeakMap<HTMLElement, MountedMatrixSketches>()
 
 type MountedMatrixSketches = {
   catalog: StudioSketchCatalogSnapshot
-  mounts: Map<HTMLElement, MountedStudioSketchView>
+  mount?: MountedStudioSketchView
   mutationLane: StudioSketchMutationLane
   project: string
+  sourceVersions: Record<string, string>
 }
 
 export type StudioSketchSnapMutationState = {
@@ -85,14 +86,43 @@ export class StudioSketchMutationLane {
   }
 }
 
-/** Sketch boards mounted into the matrix's per-group sketch hosts, keyed by the matrix parent. */
+/** Sketch boards mounted on the Draw canvas, keyed by the preview parent. */
+export const StudioDrawCanvas = {
+  /** ensure mounts the Draw-preset host beside the preview grid so a compile remount cannot steal it. */
+  ensure(parent: HTMLElement): HTMLElement {
+    const document = parent.ownerDocument
+    let host = parent.querySelector<HTMLElement>(':scope > [data-tao-studio-draw-canvas]')
+    if (host === null) {
+      host = document.createElement('section')
+      host.className = 'studio-draw-canvas'
+      host.dataset['taoStudioDrawCanvas'] = 'true'
+      host.setAttribute('aria-label', 'Draw canvas')
+      parent.append(host)
+    }
+    for (const child of [...parent.children]) {
+      if (child.classList.contains('studio-empty')) {
+        child.remove()
+      }
+    }
+    return host
+  },
+  /** retain keeps the Draw host across a preview parent replacement. */
+  retain(parent: HTMLElement, replace: () => void): void {
+    const host = parent.querySelector<HTMLElement>(':scope > [data-tao-studio-draw-canvas]')
+    replace()
+    if (host !== null && !parent.contains(host)) {
+      parent.append(host)
+    }
+  },
+} as const
+
 export const StudioMatrixSketches = {
   render: renderMatrixSketches,
   /** rerender re-lays the boards already mounted under `parent` after the grid reconciled its hosts. */
-  rerender(parent: HTMLElement): void {
+  rerender(parent: HTMLElement, sourceVersions?: Readonly<Record<string, string>>): void {
     const state = mountedSketches.get(parent)
     if (state !== undefined) {
-      renderMatrixSketches(parent, state.project, state.catalog)
+      renderMatrixSketches(parent, state.project, state.catalog, sourceVersions)
     }
   },
 } as const
@@ -101,80 +131,67 @@ function renderMatrixSketches(
   parent: HTMLElement,
   project: string,
   catalog: StudioSketchCatalogSnapshot,
+  sourceVersions?: Readonly<Record<string, string>>,
 ): void {
   const state = mountedSketches.get(parent) ?? {
     catalog,
-    mounts: new Map(),
     mutationLane: new StudioSketchMutationLane(),
     project,
+    sourceVersions: {},
   }
-  state.catalog = catalog
+  if (catalog.revision >= state.catalog.revision) {
+    state.catalog = catalog
+  }
   state.project = project
+  if (sourceVersions !== undefined) {
+    state.sourceVersions = { ...state.sourceVersions, ...sourceVersions }
+  }
   mountedSketches.set(parent, state)
-  const hosts = [...parent.querySelectorAll<HTMLElement>('[data-tao-studio-sketch-host]')]
-  for (const [host, mount] of state.mounts) {
-    if (!hosts.includes(host)) {
-      mount.dispose()
-      state.mounts.delete(host)
-    }
+  const host = StudioDrawCanvas.ensure(parent)
+  host.toggleAttribute('data-tao-studio-sketch-create-surface', true)
+  const attached = host.querySelector(':scope > [data-tao-studio-sketch-workspace]')
+  if (state.mount !== undefined && attached === null) {
+    state.mount.dispose()
+    state.mount = undefined
   }
-  const assignments = new Map<HTMLElement, StudioSketch[]>()
-  const matched = new Set<string>()
-  for (const host of hosts) {
-    const view = host.dataset['taoStudioSketchView']
-    const sketches = catalog.sketches.filter(sketch => sketch.view === view)
-    sketches.forEach(sketch => matched.add(sketch.id))
-    assignments.set(host, sketches)
-  }
-  const fallback = hosts[0]
-  if (fallback !== undefined) {
-    assignments.set(fallback, [
-      ...(assignments.get(fallback) ?? []),
-      ...catalog.sketches.filter(sketch => !matched.has(sketch.id)),
-    ])
-  }
-  for (const host of hosts) {
-    const sketches = assignments.get(host) ?? []
-    const active = host === fallback || sketches.length > 0
-    host.toggleAttribute('data-tao-studio-sketch-create-surface', host === fallback)
-    let mount = state.mounts.get(host)
-    if (!active) {
-      mount?.dispose()
-      state.mounts.delete(host)
-      continue
-    }
-    if (mount === undefined) {
-      mount = StudioSketchView.mount(host, {
-        onCreateSketch: async size => {
-          const result = await applySketchAction(state, {
-            ...size,
-            id: crypto.randomUUID(),
-            kind: 'create-sketch',
-            project: state.project,
-            rects: [],
-          })
-          delete host.dataset['taoStudioSketchError']
-          renderMatrixSketches(parent, state.project, result.catalog)
-        },
-        onError: error => {
-          host.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
-        },
-        onFlowAction: async request => await applySketchFlowAction(state, request),
-        onRectChange: async change => {
-          const result = await applySketchAction(state, sketchAction(change))
-          delete host.dataset['taoStudioSketchError']
-          return result.catalog.sketches
-        },
-        onSnap: async request => await applySketchSnap(state, request),
-        onUnsnap: async request => await applySketchUnsnap(state, request),
-        onUndoSnap: async request => await undoSketchSnap(state, request),
-        sketches,
-        sourceVersion: host.dataset['taoStudioSketchSourceVersion'],
-      })
-      state.mounts.set(host, mount)
-    } else {
-      mount.render(sketches, host.dataset['taoStudioSketchSourceVersion'])
-    }
+  if (state.mount === undefined) {
+    state.mount = StudioSketchView.mount(host, {
+      onCreateSketch: async size => {
+        const id = crypto.randomUUID()
+        const result = await applySketchAction(state, {
+          height: size.height,
+          id,
+          kind: 'create-sketch',
+          project: state.project,
+          rects: [],
+          width: size.width,
+          x: size.x,
+          y: size.y,
+        })
+        const created = result.createdSketch ?? result.catalog.sketches.find(sketch => sketch.id === id)
+        if (created !== undefined && result.generatedFile !== undefined) {
+          state.sourceVersions[created.view] = result.generatedFile.sourceVersion
+        }
+        delete host.dataset['taoStudioSketchError']
+        renderMatrixSketches(parent, state.project, result.catalog)
+      },
+      onError: error => {
+        host.dataset['taoStudioSketchError'] = error instanceof Error ? error.message : String(error)
+      },
+      onFlowAction: async request => await applySketchFlowAction(state, request),
+      onRectChange: async change => {
+        const result = await applySketchAction(state, sketchAction(change))
+        delete host.dataset['taoStudioSketchError']
+        return result.catalog.sketches
+      },
+      onSnap: async request => await applySketchSnap(state, request),
+      onUnsnap: async request => await applySketchUnsnap(state, request),
+      onUndoSnap: async request => await undoSketchSnap(state, request),
+      sketches: state.catalog.sketches,
+      sourceVersions: state.sourceVersions,
+    })
+  } else {
+    state.mount.render(state.catalog.sketches, state.sourceVersions)
   }
 }
 

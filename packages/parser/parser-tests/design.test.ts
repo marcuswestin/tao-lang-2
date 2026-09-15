@@ -1,5 +1,5 @@
 import { ASTUtils } from '@ast-utils'
-import { AST } from '@parser'
+import { AST, Parser, URI } from '@parser'
 import { Describe, Expect, Test } from '@shared/test'
 import { testParseCode } from './test-parse'
 
@@ -108,5 +108,162 @@ Describe('parser: minimal design declarations', () => {
       ]],
       ['body', [['size', 16], ['weight', 600], ['line', 22]]],
     ])
+  })
+
+  Test('resolves design bundle and token declarations for layout words through References', async () => {
+    const { services } = Parser.createContext()
+    const source = `
+      design HNDesign {
+        accent #ff6600
+        header [pad 14, bg accent]
+        headerTitle [size 19]
+      }
+      app HNReader {
+        Design HNDesign
+        view Main
+      }
+      view Main() {
+        render Col() [header] {
+          Text("Title") [headerTitle]
+        }
+      }
+      view Col() { }
+      view Text(Text text) { }
+    `
+    const doc = services.shared.workspace.LangiumDocumentFactory.fromString(source, URI.file('/test.tao'))
+    services.shared.workspace.LangiumDocuments.addDocument(doc)
+    await services.shared.workspace.DocumentBuilder.build([doc], { eagerLinking: true })
+
+    const file = doc.parseResult.value
+    Expect(AST.isTaoFile(file)).toBe(true)
+    if (!AST.isTaoFile(file)) {
+      return
+    }
+    const design = file.statements.find(AST.isDesignDeclaration)
+    const headerMember = design?.block.members.find(
+      (member): member is AST.DesignBundle => AST.isDesignBundle(member) && member.name === 'header',
+    )
+    const titleMember = design?.block.members.find(
+      (member): member is AST.DesignBundle => AST.isDesignBundle(member) && member.name === 'headerTitle',
+    )
+    const accentToken = design?.block.members.find(
+      (member): member is AST.DesignToken => AST.isDesignToken(member) && member.name === 'accent',
+    )
+
+    // [header] at render site resolves to 'header' bundle in HNDesign
+    const headerWord = AST.streamAllContents(file).find(
+      node =>
+        AST.isLayoutWord(node) && node.value === 'header'
+        && !AST.isDesignBundle(node.$container?.$container?.$container),
+    )
+    Expect(headerWord?.$cstNode).toBeDefined()
+    const headerDecls = services.language.references.References.findDeclarations(headerWord!.$cstNode!)
+    Expect(headerDecls).toEqual([headerMember])
+
+    // [headerTitle] at render site resolves to 'headerTitle' bundle in HNDesign
+    const titleWord = AST.streamAllContents(file).find(
+      node => AST.isLayoutWord(node) && node.value === 'headerTitle',
+    )
+    Expect(titleWord?.$cstNode).toBeDefined()
+    const titleDecls = services.language.references.References.findDeclarations(titleWord!.$cstNode!)
+    Expect(titleDecls).toEqual([titleMember])
+
+    // 'accent' in [pad 14, bg accent] inside the design bundle resolves to 'accent' token in HNDesign
+    const accentWord = AST.streamAllContents(file).find(
+      node => AST.isLayoutWord(node) && node.value === 'accent',
+    )
+    Expect(accentWord?.$cstNode).toBeDefined()
+    const accentDecls = services.language.references.References.findDeclarations(accentWord!.$cstNode!)
+    Expect(accentDecls).toEqual([accentToken])
+
+    // References to 'header' bundle includes declaration and render site
+    const headerRefs = services.language.references.References.findReferences(headerMember!, {
+      includeDeclaration: true,
+    }).toArray()
+    Expect(headerRefs).toHaveLength(2)
+  })
+
+  Test('keeps same-named members of two private designs apart in definitions and references', async () => {
+    const { services } = Parser.createContext()
+    // Two projects, each with its own file-private design that spells two members the same way.
+    const shipped = `
+      design Shipped {
+        colors { palette #112233 { 60 #001122 } }
+        header [pad 14, bg palette.60]
+      }
+      app Reader {
+        Design Shipped
+        view Main
+      }
+      view Main() { render Col() [header] }
+      view Col() { }
+    `
+    const draft = `
+      design Draft {
+        colors { palette #445566 { 60 #334455 } }
+        header [pad 20, bg palette.60]
+      }
+    `
+    const shippedDoc = services.shared.workspace.LangiumDocumentFactory.fromString(
+      shipped,
+      URI.file('/shipped/Main.tao'),
+    )
+    const draftDoc = services.shared.workspace.LangiumDocumentFactory.fromString(
+      draft,
+      URI.file('/draft/Draft.tao'),
+    )
+    services.shared.workspace.LangiumDocuments.addDocument(shippedDoc)
+    services.shared.workspace.LangiumDocuments.addDocument(draftDoc)
+    await services.shared.workspace.DocumentBuilder.build([shippedDoc, draftDoc], { eagerLinking: true })
+
+    const shippedFile = shippedDoc.parseResult.value
+    const draftFile = draftDoc.parseResult.value
+    Expect(AST.isTaoFile(shippedFile) && AST.isTaoFile(draftFile)).toBe(true)
+    if (!AST.isTaoFile(shippedFile) || !AST.isTaoFile(draftFile)) {
+      return
+    }
+    const shippedDesign = shippedFile.statements.filter(AST.isDesignDeclaration)[0]!
+    const draftDesign = draftFile.statements.filter(AST.isDesignDeclaration)[0]!
+    const bundle = (design: AST.DesignDeclaration, name: string): AST.DesignBundle =>
+      design.block.members.find(
+        (member): member is AST.DesignBundle => AST.isDesignBundle(member) && member.name === name,
+      )!
+    const familyMember = (design: AST.DesignDeclaration, entry: string, shade: string): AST.Node =>
+      design.block.members.find(AST.isDesignColorsBlock)!
+        .entries.find(candidate => candidate.name === entry)!
+        .family!.members.find(candidate => String(candidate.name) === shade)!
+    const words = (file: AST.TaoFile, value: string): AST.LayoutWord[] => {
+      const found: AST.LayoutWord[] = []
+      for (const node of AST.streamAllContents(file)) {
+        if (AST.isLayoutWord(node) && node.value === value) {
+          found.push(node)
+        }
+      }
+      return found
+    }
+
+    const references = services.language.references.References
+
+    // The render site resolves to the design its own app mounts, never to the other project's `header`.
+    Expect(references.findDeclarations(words(shippedFile, 'header')[0]!.$cstNode!))
+      .toEqual([bundle(shippedDesign, 'header')])
+
+    // `palette.60` inside each design names that design's own shade -- the most specific name that
+    // resolves, not the `palette` entry it hangs off, and not the other project's shade of the same
+    // name. Identity is asserted directly: deep-comparing a linked AST node walks the whole document.
+    Expect(references.findDeclarations(words(shippedFile, 'palette')[0]!.$cstNode!))
+      .toEqual([familyMember(shippedDesign, 'palette', '60')])
+    Expect(references.findDeclarations(words(draftFile, 'palette')[0]!.$cstNode!))
+      .toEqual([familyMember(draftDesign, 'palette', '60')])
+
+    // Find-references is identity-based. The shipped `header` is used once, at its render site; the
+    // draft's is declared and never used. Matching on spelling alone gave each the other's uses too.
+    Expect(
+      references.findReferences(bundle(shippedDesign, 'header'), { includeDeclaration: false })
+        .toArray().map(reference => reference.sourceUri.path),
+    ).toEqual(['/shipped/Main.tao'])
+    Expect(
+      references.findReferences(bundle(draftDesign, 'header'), { includeDeclaration: false }).toArray(),
+    ).toEqual([])
   })
 })

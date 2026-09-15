@@ -1,13 +1,14 @@
+import { FS } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
 import { designValidationCodes } from '../validator-src/diagnostic-codes'
 import Validator from '../validator-src/validator'
 import { DesignValidator } from '../validator-src/validators/design-validator'
-import { accepts, fence, rejects, tsFence } from './test-validate'
+import { accepts, app, checksFiles, fence, rejects, tsFence, visibleView } from './test-validate'
 
 const messages = DesignValidator.messages
 
 Describe('validator: minimal design', () => {
-  Test('reports inline design explorations as stable warnings during ordinary validation', async () => {
+  Test('reports raw unnamed style values as stable warnings during ordinary validation', async () => {
     const result = await Validator.validateCode(`
       view Main() { render Surface() [gap 8, size 14, fg #fff] }
       ${surfaceView}
@@ -15,7 +16,22 @@ Describe('validator: minimal design', () => {
     const diagnostics = result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.exploration)
 
     Expect(diagnostics).toHaveLength(3)
+    Expect(diagnostics.map(diagnostic => diagnostic.message)).toEqual([
+      messages.exploration('gap 8'),
+      messages.exploration('size 14'),
+      messages.exploration('fg #fff'),
+    ])
     Expect(diagnostics.every(diagnostic => diagnostic.severity === 'warning')).toBe(true)
+  })
+
+  Test('does not warn for named style values or layout keywords', async () => {
+    const result = await Validator.validateCode(designApp(
+      'workspace design Theme { sizes { sm 8.px } ink #111 }',
+      'render Surface() [gap sm, pad sm, fill, hug, claim 1, compress, centered, fg ink, weight bold]',
+    ))
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.exploration))
+      .toEqual([])
   })
 
   Test('warns when the stdlib Placeholder ships while accepting Placeholder and Spacer', async () => {
@@ -239,21 +255,36 @@ Describe('validator: minimal design', () => {
     ),
   )
 
-  Test(
-    'uses one private member namespace while allowing the represented line token',
-    rejects(
-      `
-        workspace design Theme {
-          line #ddd
-          panel #fff
-          panel [bg line]
-          fill [pad 8]
-        }
-      `,
-      messages.duplicateMember('panel'),
-      messages.reservedBundle('fill'),
-    ),
-  )
+  Test('uses one private member namespace while allowing the represented line token', async () => {
+    const result = await Validator.validateCode(`
+      workspace design Theme {
+        line #ddd
+        panel #fff
+        panel [bg line]
+        fill [pad 8]
+      }
+    `)
+
+    const duplicateMember = result.diagnostics.find(diagnostic =>
+      diagnostic.code === designValidationCodes.duplicateMember
+    )
+    const reservedBundle = result.diagnostics.find(diagnostic =>
+      diagnostic.code === designValidationCodes.reservedBundle
+    )
+    // A token may carry a visual head's name: `line` is only reserved where a bundle would shadow the
+    // built-in clause. `panel` declared twice and a `fill` bundle are both unreachable, so both fail.
+    Expect(duplicateMember?.message).toBe(messages.duplicateMember('panel'))
+    Expect(duplicateMember?.severity).toBe('error')
+    Expect(reservedBundle?.message).toBe(messages.reservedBundle('fill'))
+    Expect(reservedBundle?.severity).toBe('error')
+    Expect(
+      result.diagnostics.filter(diagnostic =>
+        diagnostic.severity === 'error'
+        && diagnostic.code !== designValidationCodes.duplicateMember
+        && diagnostic.code !== designValidationCodes.reservedBundle
+      ),
+    ).toEqual([])
+  })
 
   Test(
     'rejects malformed visual entries, unknown tokens and bundles, and cycles',
@@ -380,6 +411,250 @@ Describe('validator: minimal design', () => {
       ),
       messages.weightedRigidClaim,
     ),
+  )
+
+  Test('warns when a view style definition has a property already present in an applied style', async () => {
+    const result = await Validator.validateCode(
+      designApp(
+        `workspace design Theme {
+          accent #f60
+          header [hug, pad 14, bg accent]
+        }`,
+        'render Surface() [header, hug]',
+      ),
+    )
+    const warnings = result.diagnostics.filter(diagnostic =>
+      diagnostic.code === designValidationCodes.duplicateStyleProperty
+    )
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+    Expect(warnings).toHaveLength(1)
+    Expect(warnings[0]?.message).toBe(messages.duplicateStyleProperty('hug', 'header'))
+    Expect(warnings[0]?.severity).toBe('warning')
+  })
+
+  Test('warns when an applied style property is overridden inline by a spacing or visual entry', async () => {
+    const result = await Validator.validateCode(
+      designApp(
+        `workspace design Theme {
+          accent #f60
+          snow #fff
+          header [hug, pad 14, bg accent]
+        }`,
+        'render Surface() [header, pad 10, bg snow]',
+      ),
+    )
+    const warnings = result.diagnostics.filter(diagnostic =>
+      diagnostic.code === designValidationCodes.duplicateStyleProperty
+    )
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+    Expect(warnings).toHaveLength(2)
+    Expect(warnings[0]?.message).toBe(messages.duplicateStyleProperty('pad', 'header'))
+    Expect(warnings[1]?.message).toBe(messages.duplicateStyleProperty('bg', 'header'))
+  })
+
+  Test('warns when multiple applied styles share a property', async () => {
+    const result = await Validator.validateCode(
+      designApp(
+        `workspace design Theme {
+          styleA [hug, pad 14]
+          styleB [pad 10, radius 8]
+        }`,
+        'render Surface() [styleA, styleB]',
+      ),
+    )
+    const warnings = result.diagnostics.filter(diagnostic =>
+      diagnostic.code === designValidationCodes.duplicateStyleProperty
+    )
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+    Expect(warnings).toHaveLength(1)
+    Expect(warnings[0]?.message).toBe(messages.duplicateStyleProperty('pad', 'styleA'))
+  })
+
+  Test('warns through transitively inherited bundle properties', async () => {
+    const result = await Validator.validateCode(
+      designApp(
+        `workspace design Theme {
+          base [pad 14]
+          header [base, hug]
+        }`,
+        'render Surface() [header, pad 10]',
+      ),
+    )
+    const warnings = result.diagnostics.filter(diagnostic =>
+      diagnostic.code === designValidationCodes.duplicateStyleProperty
+    )
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+    Expect(warnings).toHaveLength(1)
+    Expect(warnings[0]?.message).toBe(messages.duplicateStyleProperty('pad', 'header'))
+  })
+
+  Test('does not warn when applied style and inline entry have disjoint properties', async () => {
+    const result = await Validator.validateCode(
+      designApp(
+        `workspace design Theme {
+          card #fff
+          line #ddd
+          storyCard [pad 12, radius 10, bg card, border line]
+        }`,
+        'render Surface() [storyCard, gap 10]',
+      ),
+    )
+    const warnings = result.diagnostics.filter(diagnostic =>
+      diagnostic.code === designValidationCodes.duplicateStyleProperty
+    )
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+    Expect(warnings).toHaveLength(0)
+  })
+
+  Test('does not warn when an inline visual entry is an interaction state condition', async () => {
+    const result = await Validator.validateCode(
+      designApp(
+        `workspace design Theme {
+          accent #f60
+          snow #fff
+          header [bg accent]
+        }`,
+        'render Surface() [header, bg snow when pressed]',
+      ),
+    )
+    const warnings = result.diagnostics.filter(diagnostic =>
+      diagnostic.code === designValidationCodes.duplicateStyleProperty
+    )
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+    Expect(warnings).toHaveLength(0)
+  })
+
+  Test('rejects a design block that re-declares a design name twice', async () => {
+    const result = await Validator.validateCode(`
+      workspace design Theme {
+        header [hug, pad 14]
+        header [pad 16]
+      }
+    `)
+    const errors = result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.duplicateMember)
+
+    // The compiled design is one keyed map, so the second `header` replaces the first outright.
+    Expect(errors).toHaveLength(1)
+    Expect(errors[0]?.message).toBe(messages.duplicateMember('header'))
+    Expect(errors[0]?.severity).toBe('error')
+  })
+
+  Test('rejects a design member that collides with a built-in clause the runtime answers first', async () => {
+    const result = await Validator.validateCode(`
+      workspace design Theme {
+        hug [pad 14]
+        styles {
+          fill [pad 8]
+        }
+      }
+    `)
+    const errors = result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.reservedBundle)
+
+    // TR-design.ts answers `hug` and `fill` as built-in heads before it looks a bundle up, so neither
+    // member could ever resolve. A style entry compiles into the same bundle map and fails the same way.
+    Expect(errors.map(diagnostic => diagnostic.message)).toEqual([
+      messages.reservedBundle('hug'),
+      messages.reservedBundle('fill'),
+    ])
+    Expect(errors.every(diagnostic => diagnostic.severity === 'error')).toBe(true)
+  })
+
+  Test('warns when a design property has redundant style properties', async () => {
+    const result = await Validator.validateCode(`
+      workspace design Theme {
+        accent #f60
+        header [hug, pad 14, bg accent, hug]
+      }
+    `)
+    const warnings = result.diagnostics.filter(diagnostic =>
+      diagnostic.code === designValidationCodes.duplicateStyleProperty
+    )
+
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+    Expect(warnings).toHaveLength(1)
+    Expect(warnings[0]?.message).toBe(messages.precedingStyleProperty('hug', 'hug'))
+    Expect(warnings[0]?.severity).toBe('warning')
+  })
+
+  Test('accepts entries that share a head but claim independent slots', async () => {
+    const result = await Validator.validateCode(`
+      workspace design Theme {
+        sides [pad top 4, pad left 8, margin top 2, margin bottom 2]
+        axes [content top, content left]
+        span [width fill, width max 680]
+        edges [aligned top, aligned left]
+      }
+    `)
+
+    // `pad top` and `pad left` are different sides, `content top` and `content left` different axes,
+    // and `width max` the independent maximum: LayoutValidator allows every pair, so none is redundant.
+    Expect(
+      result.diagnostics.filter(diagnostic => diagnostic.code === designValidationCodes.duplicateStyleProperty),
+    ).toEqual([])
+    Expect(result.diagnostics.filter(diagnostic => diagnostic.severity === 'error')).toEqual([])
+  })
+
+  Test('reports the slot a repeated side or axis actually re-claims', async () => {
+    const result = await Validator.validateCode(`
+      workspace design Theme {
+        sides [pad top 4, pad vertical 8]
+        axes [content top, content bottom]
+        span [width 200, width fill]
+      }
+    `)
+    const warnings = result.diagnostics.filter(diagnostic =>
+      diagnostic.code === designValidationCodes.duplicateStyleProperty
+    )
+
+    // `pad vertical` covers `top`, `content bottom` is the same vertical axis, and a second plain
+    // `width` is the same slot. Each entry is reported once even when it re-claims several slots.
+    Expect(warnings.map(diagnostic => diagnostic.message)).toEqual([
+      messages.precedingStyleProperty('pad', 'pad top 4'),
+      messages.precedingStyleProperty('content', 'content top'),
+      messages.precedingStyleProperty('width', 'width 200'),
+    ])
+  })
+
+  Test(
+    'keeps same-named private designs in separate files apart',
+    checksFiles({
+      'Main.tao': `
+        use FirstSurface from ./first/First
+        use SecondSurface from ./second/Second
+        ${app('render FirstSurface() render SecondSurface()')}
+      `,
+      'first/First.tao': `
+        design Theme {
+          base [pad 14]
+          header [base, pad 10]
+        }
+        ${visibleView('FirstSurface')}
+      `,
+      'second/Second.tao': `
+        design Theme {
+          base [gap 4]
+          header [base, pad 10]
+        }
+        ${visibleView('SecondSurface')}
+      `,
+    }, result => {
+      const warnings = result.diagnostics.filter(diagnostic =>
+        diagnostic.code === designValidationCodes.duplicateStyleProperty
+      )
+
+      // Both files declare their own file-private `Theme`, and one validation run walks both. Only the
+      // first one's `header` repeats `pad`; keying the bundle-property memo by design name alone hands
+      // the second file the first design's map and reports a redundancy that is not in its source.
+      Expect(warnings.map(diagnostic => `${FS.basename(diagnostic.filePath ?? '')}: ${diagnostic.message}`)).toEqual([
+        `First.tao: ${messages.duplicateStyleProperty('pad', 'base')}`,
+      ])
+    }),
   )
 })
 

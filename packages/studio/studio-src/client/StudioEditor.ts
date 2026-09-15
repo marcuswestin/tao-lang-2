@@ -92,6 +92,28 @@ export const StudioDefinitionNavigation = {
   },
 } as const
 
+/**
+ * Replaces a document and names the caret in one transaction. A wholesale insert without an explicit
+ * selection remaps a cursor to 0 and a range onto the whole new text — the host's echo of a cut.
+ */
+export function studioHostDocumentUpdate(
+  documentLength: number,
+  content: string,
+  selection: Readonly<{ anchor: number; head: number }>,
+): {
+  changes: { from: number; insert: string; to: number }
+  selection: { anchor: number; head: number }
+} {
+  const length = content.length
+  return {
+    changes: { from: 0, insert: content, to: documentLength },
+    selection: {
+      anchor: Math.max(0, Math.min(selection.anchor, length)),
+      head: Math.max(0, Math.min(selection.head, length)),
+    },
+  }
+}
+
 /** StudioEditorInsertion preserves Tao snippet indentation and selects its first required placeholder. */
 export const StudioEditorInsertion = {
   transaction(

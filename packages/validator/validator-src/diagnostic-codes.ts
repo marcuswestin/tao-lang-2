@@ -13,6 +13,9 @@ export const viewValidationCodes = {
 
 /** designValidationCodes declares stable warnings reported by the ordinary design validator. */
 export const designValidationCodes = {
+  duplicateMember: 'design-check-duplicate-member',
+  duplicateStyleProperty: 'design-check-duplicate-style-property',
   exploration: 'design-check-exploration',
   placeholderShipping: 'design-check-placeholder-shipping',
+  reservedBundle: 'design-check-reserved-bundle',
 } as const

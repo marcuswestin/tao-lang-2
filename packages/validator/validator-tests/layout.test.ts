@@ -39,6 +39,9 @@ Describe('validator: layout clauses', () => {
   const malformedCases: ReadonlyArray<readonly [clause: string, message: string]> = [
     ['gap fill', messages.malformedEntry('gap fill')],
     ['claim fill', messages.malformedEntry('claim fill')],
+    ['hug fill', messages.malformedEntry('hug fill')],
+    ['collapse', messages.unsupportedEntry('collapse')],
+    ['collapse fill', messages.unsupportedEntry('collapse fill')],
     ['unknown 1', messages.unsupportedEntry('unknown 1')],
     ['content diagonal', messages.unsupportedTerm('content diagonal', 'diagonal')],
     ['content', messages.malformedEntry('content')],
@@ -105,7 +108,13 @@ Describe('validator: layout clauses', () => {
     )
   }
 
-  for (const clause of ['claim 2, rigid, compress', 'rigid, claim 2, hug', 'claim 2, fill, rigid']) {
+  for (
+    const clause of [
+      'claim 2, rigid, compress',
+      'rigid, claim 2, hug',
+      'claim 2, fill, rigid',
+    ]
+  ) {
     Test(`accepts replacement of an otherwise incompatible winner in [${clause}]`, accepts(layoutApp(clause)))
   }
 

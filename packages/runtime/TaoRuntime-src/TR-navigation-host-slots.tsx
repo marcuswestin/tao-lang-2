@@ -93,6 +93,23 @@ export function useHostSlotSnapshot(channel: RuntimeHostReadChannel): TaoHostSlo
   return channel.read()
 }
 
+/**
+ * useEnclosingChrome forwards the visible scene's chrome into the bar an enclosing navigator draws
+ * in place of this host's header. The host still reads only the occurrence it presents; the bar
+ * renders what the host hands it.
+ */
+export function useEnclosingChrome(
+  chrome: RuntimeHostReadChannel | undefined,
+  slots: TaoHostSlotSnapshot,
+  visible: boolean,
+): void {
+  React.useLayoutEffect(() => {
+    if (chrome && visible) {
+      chrome.publish(slots)
+    }
+  })
+}
+
 /** useHostSlots publishes direct view fills after the presented view commits. */
 export function useHostSlots(channel: RuntimeHostReadChannel | undefined, values: TaoHostSlotValues): void {
   const titleValue = values['Title']?.()

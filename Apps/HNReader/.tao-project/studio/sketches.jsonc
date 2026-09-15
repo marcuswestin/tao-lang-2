@@ -1,0 +1,84 @@
+{
+  "formatVersion": 1,
+  "nextViewNumber": 3,
+  "revision": 16,
+  "sketches": [
+    {
+      "height": 259,
+      "id": "303fa2df-3191-4069-ac53-ba99b0dba036",
+      "name": "View1",
+      "project": "HNReader",
+      "rectOrder": [
+        "318c5486-6c59-4180-a16b-d03342c1447b",
+        "18ce23cd-78ee-40a2-a818-cf15273886f0"
+      ],
+      "rects": [
+        {
+          "height": 87.30078125,
+          "id": "318c5486-6c59-4180-a16b-d03342c1447b",
+          "kind": "Image",
+          "width": 122.2734375,
+          "x": 54.18359375,
+          "y": 46.50390625
+        },
+        {
+          "height": 98.40625,
+          "id": "18ce23cd-78ee-40a2-a818-cf15273886f0",
+          "kind": "Text",
+          "width": 123.09765625,
+          "x": 213.453125,
+          "y": 81.6171875
+        }
+      ],
+      "snapped": [],
+      "view": "View1",
+      "width": 373,
+      "x": 301,
+      "y": 170
+    },
+    {
+      "height": 202,
+      "id": "617a33e1-9be6-4dc0-a5a9-578502b65353",
+      "name": "View2",
+      "project": "HNReader",
+      "rectOrder": [
+        "dd2290c5-90d2-4e4c-87a6-4231726f3312",
+        "e24865bb-a14c-439e-a621-86106258ce06"
+      ],
+      "rects": [
+        {
+          "height": 62.08203125,
+          "id": "e24865bb-a14c-439e-a621-86106258ce06",
+          "kind": "Box",
+          "width": 210.3515625,
+          "x": 112.78125,
+          "y": 59.58984375
+        }
+      ],
+      "snapped": [
+        {
+          "rect": {
+            "height": 82.6328125,
+            "id": "dd2290c5-90d2-4e4c-87a6-4231726f3312",
+            "kind": "Text",
+            "width": 209.609375,
+            "x": 23.921875,
+            "y": 23.8828125
+          },
+          "target": {
+            "elementName": "Text",
+            "path": "@/studio/View2.tao",
+            "renderId": "/Users/ro/code/tao-lang-2/Apps/HNReader/@/studio/View2.tao:380:394",
+            "sourceVersion": "text-v1:487:105kqzs0z1nxv0",
+            "studioRectId": "dd2290c5-90d2-4e4c-87a6-4231726f3312",
+            "view": "View2"
+          }
+        }
+      ],
+      "view": "View2",
+      "width": 624,
+      "x": 331,
+      "y": 592
+    }
+  ]
+}

@@ -78,7 +78,7 @@ async function validateForeignActionFiles(file: AST.TaoFile, ctx: ValidationCont
     if (!foreign || !/^\.\.?\/.+\.tsx?$/.test(foreign.path)) {
       continue
     }
-    const documentDirectory = FS.dirname(AST.getDocument(foreign).uri.path)
+    const documentDirectory = FS.resolvePath(FS.dirname(AST.getDocument(foreign).uri.path))
     if (
       await FS.isDirectory(documentDirectory)
       && !await FS.exists(FS.resolvePath(foreign.path, documentDirectory))

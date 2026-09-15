@@ -21,11 +21,13 @@ function createContext(
   packagesContext: Packages.Context,
   workspaceFiles: readonly AST.TaoFile[],
   entryFilePath: string,
+  projectFiles?: readonly AST.TaoFile[],
 ): ValidationRunContext {
   return {
     entryFilePath,
     packagesContext,
     workspaceFiles,
+    ...(projectFiles === undefined ? {} : { projectFiles }),
   }
 }
 
@@ -60,6 +62,7 @@ async function validateParseResult(
     entryFilePath: context.entryFilePath,
     packagesContext: context.packagesContext,
     workspaceFiles: context.workspaceFiles,
+    ...(context.projectFiles === undefined ? {} : { projectFiles: context.projectFiles }),
   })
   validateProjectWorkspace(ctx)
   for (const file of context.workspaceFiles) {

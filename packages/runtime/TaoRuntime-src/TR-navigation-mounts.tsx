@@ -18,6 +18,7 @@ import type {
 } from './TR-navigation'
 import { BasicStackSurface } from './TR-navigation-basic-stack'
 import { RuntimeHostReadChannel } from './TR-navigation-host-slots'
+import { nativeNavigationModule } from './TR-navigation-native-hosts'
 import { nativeStackAvailable, NativeStackSurface } from './TR-navigation-native-stack'
 import { nativeSelectionTabsAvailable, renderNativeSelectionTabs } from './TR-navigation-native-tabs'
 import type {
@@ -31,6 +32,7 @@ import {
   navigationProps,
   presentedOccurrenceRegion,
 } from './TR-navigation-surfaces'
+import { SelectionToggleBar, toggleBarContentInset } from './TR-navigation-toggle-bar'
 import { RuntimeNavigationValue, takeRemovedBrowserHistoryId } from './TR-navigation-value'
 import {
   assertPatchKeys,
@@ -320,7 +322,16 @@ export class RuntimeStackNav extends RuntimeNavigationValue {
   }
 
   protected renderContent(taoProps?: TaoProps): React.ReactNode {
-    const props = { entries: this.entries, navigation: this, taoProps: navigationProps(taoProps, this) }
+    // Enclosing chrome belongs to this stack alone: the scenes it presents, and any navigator they
+    // render, draw their own chrome as usual.
+    const { navigationBottomInset, navigationChrome, ...ownProps } = taoProps ?? {}
+    const props = {
+      bottomInset: navigationBottomInset,
+      chrome: navigationChrome,
+      entries: this.entries,
+      navigation: this,
+      taoProps: navigationProps(ownProps, this),
+    }
     return this.surface === 'native'
       ? React.createElement(NativeStackSurface, props)
       : React.createElement(BasicStackSurface, props)
@@ -501,6 +512,8 @@ export class RuntimeSlotNav extends RuntimeNavigationValue {
 }
 
 type SelectionItemState = {
+  /** chrome receives the item's visible screen chrome when a toggle bar draws it. */
+  chrome: RuntimeHostReadChannel
   definition: TaoSelectionNavItemDefinition
   entries: Array<{
     arguments: TaoNavigationArguments
@@ -533,6 +546,7 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
     )
     this.activeKey = definition.initial
     this.items = Object.entries(definition.items).map(([key, item]) => ({
+      chrome: new RuntimeHostReadChannel(),
       definition: item,
       entries: [this.initialEntry(item.content)],
       key,
@@ -601,6 +615,10 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
   override ownsBackAffordance(): boolean {
     if (this.historyDepth() > this.contentHistoryDepth()) {
       return false
+    }
+    // The toggle bar's Back reaches every entry and nested navigator the active item holds.
+    if (this.display() === 'toggle') {
+      return true
     }
     const active = this.activeItem()
     if (active.entries.length > 1) {
@@ -713,7 +731,10 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
 
   protected renderContent(taoProps?: TaoProps): React.ReactNode {
     const runtime = requireReactNativeRuntime()
-    const display = String(this.descriptor.config.display.evaluate().jsValue)
+    const display = this.display()
+    if (display === 'toggle') {
+      return this.renderToggle(taoProps)
+    }
     // `automatic` prefers the platform's own tab surface. The native bar runs controlled — Tao's
     // reducer stays the source of truth — and every tab's entry stack stays mounted inside its
     // native screen, matching the JS surface's covered-content contract. Where no native host
@@ -804,9 +825,71 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
    * host's scroll frame moves inside each tab (see itemEntryLevels) whenever the bar is native.
    */
   override ownsWindowSurface(): boolean {
-    return String(this.descriptor.config.display.evaluate().jsValue) === 'automatic'
-      && this.nativeSurface
-      && nativeSelectionTabsAvailable()
+    const display = this.display()
+    return display === 'toggle'
+      || display === 'automatic' && this.nativeSurface && nativeSelectionTabsAvailable()
+  }
+
+  /**
+   * renderToggle draws every item full-bleed under one floating bar. Each item keeps its entries
+   * mounted and hidden while inactive, exactly as the tab surfaces do; the bar shows the active
+   * item's visible screen and switches to the item after it, wrapping.
+   */
+  private renderToggle(taoProps?: TaoProps): React.ReactNode {
+    const runtime = requireReactNativeRuntime()
+    const active = this.activeItem()
+    const activeIndex = this.items.indexOf(active)
+    const next = this.items.length > 1 ? this.items[(activeIndex + 1) % this.items.length] : undefined
+    const nextIcon = next ? selectionItemIconName(next.definition) : undefined
+    const observable = taoProps?.navigationHostActive !== false
+    return React.createElement(runtime.View, {
+      children: [
+        ...this.items.map(item =>
+          React.createElement(runtime.View, {
+            accessibilityElementsHidden: item !== active,
+            children: this.itemEntryLevels(item, {
+              ...taoProps,
+              navigationBottomInset: toggleBarContentInset(),
+              navigationChrome: item.chrome,
+            }, false),
+            importantForAccessibility: item === active ? 'auto' : 'no-hide-descendants',
+            key: item.key,
+            style: item === active ? toggleItemStyle : hiddenToggleItemStyle,
+          })
+        ),
+        React.createElement(SelectionToggleBar, {
+          back: () => {
+            this.back()
+          },
+          canGoBack: this.canGoBack,
+          chrome: active.chrome,
+          fallbackTitle: String(active.definition.label.evaluate().jsValue),
+          key: 'toggle-bar',
+          name: this.name,
+          // Glass follows the same switch as every native surface, so checks keep the portable bar.
+          native: this.nativeSurface && nativeNavigationModule() !== undefined,
+          ...(next
+            ? {
+              next: {
+                ...(nextIcon ? { icon: nextIcon } : {}),
+                key: next.key,
+                label: String(next.definition.label.evaluate().jsValue),
+              },
+            }
+            : {}),
+          observable,
+          select: key => {
+            this.activate(key)
+          },
+          taoProps,
+        }),
+      ],
+      style: [navigationHostStyle, mountedDesignStyle(taoProps, 'NavigationHost')],
+    })
+  }
+
+  private display(): string {
+    return String(this.descriptor.config.display.evaluate().jsValue)
   }
 
   /**
@@ -817,24 +900,31 @@ export class RuntimeSelectionNav extends RuntimeNavigationValue {
    * own screens — takes the tab's bounds instead: a scroll frame around it leaves its screens with
    * no definite height, so they measure as empty and its header draws against nothing.
    */
-  private itemEntryLevels(item: SelectionItemState, taoProps?: TaoProps): React.ReactNode {
-    const entryTaoProps = this.entryTaoProps(item, taoProps)
+  private itemEntryLevels(item: SelectionItemState, taoProps?: TaoProps, nativeInsets = true): React.ReactNode {
+    const { navigationBottomInset, navigationChrome, ...entryTaoProps } = this.entryTaoProps(item, taoProps)
     return React.createElement(
       OutlineRegionScope,
       { region: this.itemRegion(item) },
       item.entries.map((entry, index) => {
         const ownsWindow = isNavigation(entry.presentable) && entry.presentable.ownsWindowSurface()
+        // Enclosing chrome reaches only a stack that is the item's own entry, since only a stack
+        // reads its presented scene's slots. Anything rendered deeper keeps its own chrome.
+        const stack = isNavigation(entry.presentable) && entry.presentable.kind === 'stack'
+        const presentableTaoProps = stack
+          ? { ...entryTaoProps, navigationBottomInset, navigationChrome }
+          : entryTaoProps
         const level = React.createElement(NavigationLevel, {
-          children: renderPresentable(entry.presentable, entry.arguments, entryTaoProps),
+          children: renderPresentable(entry.presentable, entry.arguments, presentableTaoProps),
           fill: ownsWindow,
           hidden: index !== item.entries.length - 1,
           ...(ownsWindow ? { key: `${item.key}-${entry.instanceId}` } : {}),
           region: presentedOccurrenceRegion(this, entry, 'content'),
         })
         return ownsWindow ? level : React.createElement(AppSurfaceFrame, {
+          bottomInset: navigationBottomInset,
           children: level,
           key: `${item.key}-${entry.instanceId}`,
-          nativeInsets: true,
+          nativeInsets,
           taoProps: entryTaoProps,
         })
       }),
@@ -887,5 +977,7 @@ function selectionItemIconName(definition: TaoSelectionNavItemDefinition): strin
 }
 
 const selectionContentStyle = { flex: 1 } as const
+const toggleItemStyle = { flex: 1 } as const
+const hiddenToggleItemStyle = { display: 'none' } as const
 const selectionDrawerControlsStyle = { flexDirection: 'column' } as const
 const selectionTabControlsStyle = { flexDirection: 'row' } as const

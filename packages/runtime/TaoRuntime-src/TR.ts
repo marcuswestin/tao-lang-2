@@ -80,6 +80,7 @@ import {
   useOutlineItem,
 } from './TR-interaction-outline'
 import { LayoutControls } from './TR-layout'
+import { openUrl } from './TR-linking'
 import { NativeHosts } from './TR-native-hosts'
 import { NativeModules } from './TR-native-modules'
 import {
@@ -529,6 +530,11 @@ class TR {
   /** Share constructs the system share sheet behind `@tao/device/share`. */
   static Share(): TaoShareSheet {
     return createShareSheet(body => new RuntimeActionValue(body), TR.native)
+  }
+
+  /** openUrl delegates URL opening to React Native's Linking module. */
+  static openUrl(url: string): Promise<void> {
+    return openUrl(url, TR.native)
   }
 
   /** native is the internal lazy native-module kernel used by curated stdlib bindings. */
