@@ -284,21 +284,6 @@ export class StudioCdp {
   }
 
   /**
-   * Drags the pointer between two viewport points without scrolling anything first. Use it when the
-   * caller has already established, by hit-testing, exactly where the gesture must start and end.
-   */
-  async dragBetween(start: Point, end: Point, options: { steps?: number } = {}): Promise<void> {
-    const steps = options.steps ?? 8
-    requirePositiveInteger(steps, 'Studio browser drag steps')
-    for (
-      const [value, label] of [[start.x, 'start x'], [start.y, 'start y'], [end.x, 'end x'], [end.y, 'end y']] as const
-    ) {
-      requireFiniteNumber(value, `Studio browser drag ${label}`)
-    }
-    await this.dispatchDrag(start, end, steps)
-  }
-
-  /**
    * Chrome never synthesizes HTML5 drag-and-drop from plain mouse events, so `dispatchDrag` can
    * move a pointer-driven divider but can never fire `dragstart`/`drop`. Real DnD needs drag
    * interception: the page's own `dragstart` builds the payload, Chrome hands it back through
@@ -680,17 +665,37 @@ export class StudioCdp {
   }
 
   async evaluateInFrame<Result>(urlPrefix: string, expression: string): Promise<Result> {
-    const tree = await this.client.send<{ frameTree: FrameTree }>('Page.getFrameTree')
-    const frameId = findFrameId(tree.frameTree, urlPrefix)
-    if (frameId === undefined) {
+    let lastContextFailure: Error | undefined
+    const contextId = await Time.pollUntil(async () => {
+      try {
+        const tree = await this.client.send<{ frameTree: FrameTree }>('Page.getFrameTree')
+        const frameId = findFrameId(tree.frameTree, urlPrefix)
+        if (frameId === undefined) {
+          return undefined
+        }
+        const world = await this.client.send<{ executionContextId: number }>('Page.createIsolatedWorld', {
+          frameId,
+          grantUniveralAccess: true,
+          worldName: 'tao-studio-smoke',
+        })
+        return world.executionContextId
+      } catch (error) {
+        if (!isTransientExecutionContextFailure(error)) {
+          throw error
+        }
+        lastContextFailure = Errors.asError(error)
+        return undefined
+      }
+    }, { intervalMs: 100, timeoutMs: 10_000 })
+    if (contextId === undefined) {
+      if (lastContextFailure !== undefined) {
+        throw lastContextFailure
+      }
       Errors.throwHostEnvironment(`Studio preview frame is missing: ${urlPrefix}`)
     }
-    const world = await this.client.send<{ executionContextId: number }>('Page.createIsolatedWorld', {
-      frameId,
-      grantUniveralAccess: true,
-      worldName: 'tao-studio-smoke',
-    })
-    return await this.evaluateInContext(expression, world.executionContextId)
+    // Do not retry after Runtime.evaluate begins: the page action may already have dispatched even
+    // when navigation destroys its response context. Repeating it could duplicate a user action.
+    return await this.evaluateInContext(expression, contextId)
   }
 
   async waitFor(expression: string, options: { timeoutMs?: number } = {}): Promise<void> {
@@ -700,6 +705,9 @@ export class StudioCdp {
         last = await this.evaluate(expression)
         return !!last
       } catch (error) {
+        if (!isTransientExecutionContextFailure(error)) {
+          throw error
+        }
         last = Errors.messageOf(error)
         return false
       }

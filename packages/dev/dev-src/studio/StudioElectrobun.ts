@@ -51,6 +51,27 @@ type StudioElectrobunSources = {
   tsconfig: Record<string, unknown>
 }
 
+type MultiWindowProbeStatus = 'ready' | 'timeout'
+
+/** multiWindowProbeResult is shared by the generated native canary and its behavioral regression. */
+export function multiWindowProbeResult(
+  status: MultiWindowProbeStatus,
+  windowCount: number,
+): { message?: string; passed: boolean } {
+  if (status === 'timeout') {
+    return { message: 'The auxiliary native window never became ready.', passed: false }
+  }
+  if (windowCount < 2) {
+    return {
+      message: `The auxiliary native window became ready, but only ${windowCount} native window${
+        windowCount === 1 ? ' was' : 's were'
+      } registered.`,
+      passed: false,
+    }
+  }
+  return { passed: true }
+}
+
 /** Materializes Tao Studio's native Electrobun project. */
 export const StudioElectrobun = {
   create,
@@ -328,6 +349,8 @@ function mainSource(): string {
     } from 'electrobun/main'
     import { startStudioPackagedService } from './service.js'
 
+    ${multiWindowProbeResult.toString()}
+
     const externalStudioUrl = process.env.TAO_STUDIO_URL
     const packagedService = externalStudioUrl === undefined
       ? await startStudioPackagedService({
@@ -563,7 +586,10 @@ function mainSource(): string {
         dispatchNativeCommand(window, 'command-palette')
       })
       auxiliaryProbeWindow = createStudioWindow('Welcome', studioUrl, undefined, true)
-      results.set('multi-window', { passed: windows.size >= 2 })
+      auxiliaryProbeWindow.webview.on('dom-ready', () => {
+        results.set('multi-window', multiWindowProbeResult('ready', windows.size))
+        void finishIfComplete(results)
+      })
       results.set('native-menu', { passed: true })
       results.set('shortcut', { passed: shortcut })
 
@@ -605,6 +631,9 @@ function mainSource(): string {
         }
         if (!results.has('websocket')) results.set('websocket', { message: 'Timed out.', passed: false })
         if (!results.has('iframe')) results.set('iframe', { message: 'Timed out.', passed: false })
+        if (!results.has('multi-window')) {
+          results.set('multi-window', multiWindowProbeResult('timeout', windows.size))
+        }
         void finishProbe(results)
       }, 15_000)
     }
@@ -634,7 +663,12 @@ function mainSource(): string {
     async function finishIfComplete(
       results: Map<string, { message?: string; passed: boolean }>,
     ): Promise<void> {
-      if (results.has('browser-runtime') && results.has('websocket') && results.has('iframe')) {
+      if (
+        results.has('browser-runtime')
+        && results.has('websocket')
+        && results.has('iframe')
+        && results.has('multi-window')
+      ) {
         await finishProbe(results)
       }
     }

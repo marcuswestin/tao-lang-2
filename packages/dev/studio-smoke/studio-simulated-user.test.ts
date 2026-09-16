@@ -430,7 +430,7 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.evaluate(`(() => {
         const select = document.querySelector(${
         JSON.stringify(
-          `[data-tao-studio-sketch="${persistedSketch.id}"] select[aria-label="Snapped rectangles"]`,
+          `[data-tao-studio-sketch-snap-controls="${persistedSketch.id}"] select[aria-label="Snapped rectangles"]`,
         )
       })
         if (!(select instanceof HTMLSelectElement)) throw new Error('Missing snapped rectangle selector')
@@ -1147,23 +1147,18 @@ async function clickPreviewAndWaitForState(
 ): Promise<void> {
   const deadline = Date.now() + 15_000
   let last = ''
+  // A context can disappear after the click has dispatched. Never repeat the user action merely
+  // because its response was lost; the CDP layer resolves a stable frame before dispatch instead.
+  await browser.clickInFrame(previewUrl, selector)
   while (Date.now() < deadline) {
-    try {
-      await browser.clickInFrame(previewUrl, selector)
-      const attemptDeadline = Math.min(deadline, Date.now() + 1_000)
-      while (Date.now() < attemptDeadline) {
-        last = await browser.evaluateInFrame<string>(
-          previewUrl,
-          "document.querySelector('#state')?.textContent ?? ''",
-        )
-        if (last === expected) {
-          return
-        }
-        await Time.sleep(100)
-      }
-    } catch (error) {
-      last = Errors.messageOf(error)
+    last = await browser.evaluateInFrame<string>(
+      previewUrl,
+      "document.querySelector('#state')?.textContent ?? ''",
+    )
+    if (last === expected) {
+      return
     }
+    await Time.sleep(100)
   }
   Errors.throwHostEnvironment(
     `Timed out waiting for Studio smoke preview state ${JSON.stringify(expected)}; last=${JSON.stringify(last)}`,

@@ -24,6 +24,7 @@ class FakeCdpTransport implements StudioCdpTransport {
   }
   readonly calls: CdpCall[] = []
   readonly evaluateResults: unknown[] = []
+  readonly isolatedWorldErrors: Error[] = []
   frameTree: {
     childFrames?: Array<{ frame: { id: string; url: string } }>
     frame: { id: string; url: string }
@@ -59,6 +60,10 @@ class FakeCdpTransport implements StudioCdpTransport {
       return { frameTree: this.frameTree } as Result
     }
     if (method === 'Page.createIsolatedWorld') {
+      const error = this.isolatedWorldErrors.shift()
+      if (error !== undefined) {
+        throw error
+      }
       return { executionContextId: 42 } as Result
     }
     if (method === 'Page.captureScreenshot') {
@@ -343,6 +348,49 @@ Describe('Studio browser CDP harness', () => {
     })
     Expect(transport.calls.filter(call => call.method === 'Browser.getVersion')).toHaveLength(2)
     Expect(transport.calls.filter(call => call.method === 'Page.getFrameTree')).toHaveLength(2)
+  })
+
+  Test('retries waits only for recognized execution-context replacement', async () => {
+    const transient = new FakeCdpTransport()
+    transient.evaluateResults.push(
+      new Errors.HostEnvironmentError('Execution context was destroyed.'),
+      true,
+    )
+    const browser = StudioCdp.testing.create(transient)
+
+    await browser.waitFor('window.ready === true', { timeoutMs: 1_000 })
+    Expect(transient.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(2)
+
+    const productFailure = new FakeCdpTransport()
+    productFailure.evaluateResults.push(new Errors.HostEnvironmentError('Preview handler failed after dispatch.'))
+    await Expect(
+      StudioCdp.testing.create(productFailure).waitFor('window.ready === true', { timeoutMs: 1_000 }),
+    ).rejects.toThrow('Preview handler failed after dispatch.')
+    Expect(productFailure.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
+  })
+
+  Test('retries frame replacement only before dispatching the page action', async () => {
+    const transport = new FakeCdpTransport()
+    transport.frameTree = {
+      childFrames: [{ frame: { id: 'preview', url: 'http://127.0.0.1:55102/' } }],
+      frame: { id: 'root', url: 'http://127.0.0.1/studio' },
+    }
+    transport.isolatedWorldErrors.push(new Errors.HostEnvironmentError('Cannot find context with specified id'))
+    transport.evaluateResults.push(true)
+    const browser = StudioCdp.testing.create(transport)
+
+    await browser.clickInFrame('http://127.0.0.1:55102/', '#send-once')
+
+    Expect(transport.calls.filter(call => call.method === 'Page.createIsolatedWorld')).toHaveLength(2)
+    Expect(transport.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
+
+    const afterDispatch = new FakeCdpTransport()
+    afterDispatch.frameTree = transport.frameTree
+    afterDispatch.evaluateResults.push(new Errors.HostEnvironmentError('Execution context was destroyed.'))
+    await Expect(
+      StudioCdp.testing.create(afterDispatch).clickInFrame('http://127.0.0.1:55102/', '#send-once'),
+    ).rejects.toThrow('Execution context was destroyed.')
+    Expect(afterDispatch.calls.filter(call => call.method === 'Runtime.evaluate')).toHaveLength(1)
   })
 
   Test('dispatches physical keys with platform-primary and unmodified punctuation', async () => {
