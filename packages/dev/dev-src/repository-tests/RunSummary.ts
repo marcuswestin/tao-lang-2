@@ -114,6 +114,14 @@ const FAILURE_SIGNATURES: readonly { kind: FailureKind; pattern: RegExp }[] = [
   { kind: 'environment-setup', pattern: /pinned devenv profile is unavailable|command not found: (bun|node|just)/i },
   { kind: 'environment-setup', pattern: /^error: Cannot find (module|package)/im },
   { kind: 'optional-tooling', pattern: /\b(watchman|hutch|chrome|chromium|lsof|docker) (is )?not (installed|found)/i },
+  // macOS can reject recursive cleanup inside generated and artifact trees even though those paths
+  // are writable. Keep this narrower than EFAULT itself: a bad address from another syscall or a
+  // source path is still a repository failure that needs investigation.
+  {
+    kind: 'sandbox-restriction',
+    pattern:
+      /\b(?:EFAULT:\s*bad address in system call argument|EPERM:\s*operation not permitted),\s*(?:rm|rmdir)\s+['"][^'"\r\n]*(?:[/\\](?:_gen_[^/\\'"\r\n]+|\.artifacts)(?:[/\\]|['"]))/im,
+  },
   // Last, and anchored to a line of its own: `EPERM` inside a test's own assertion text is a
   // repository failure, not a host restriction, and it is far more common than the real thing.
   {

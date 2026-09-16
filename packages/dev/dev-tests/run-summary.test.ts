@@ -111,4 +111,20 @@ Describe('versioned run summary', () => {
     Expect(classifyFailure('Native Studio runtime exited with code 7.')).toBe('native-runtime-exit')
     Expect(classifyFailure('Native Studio runtime terminated by signal 6.')).toBe('native-runtime-exit')
   })
+
+  Test('recognizes generated-tree cleanup failures imposed by the host', () => {
+    Expect(classifyFailure(
+      "EFAULT: bad address in system call argument, rm '/repo/packages/ide-extension/_gen_ide-extension/@tao'",
+    )).toBe('sandbox-restriction')
+    Expect(classifyFailure(
+      "EPERM: operation not permitted, rmdir '/repo/packages/runtime-toolchain/.artifacts/tests/run/_gen_tao-app'",
+    )).toBe('sandbox-restriction')
+  })
+
+  Test('keeps unrelated bad-address failures assigned to the repository', () => {
+    Expect(classifyFailure("EFAULT: bad address in system call argument, read '/repo/Apps/HNReader/App.tao'"))
+      .toBe('repository')
+    Expect(classifyFailure("EFAULT: bad address in system call argument, rm '/repo/Apps/HNReader/App.tao'"))
+      .toBe('repository')
+  })
 })
