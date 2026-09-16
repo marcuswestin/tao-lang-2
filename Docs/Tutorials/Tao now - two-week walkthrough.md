@@ -196,20 +196,24 @@ Finally, rehearse the real release plan without mutating App Store state:
 ./tao ship Apps/HNReader --app HNReader --dry-run
 ```
 
-The dry run completed and listed the tag, release compile, Studio-marker check, iOS prebuild,
-archive/sign, upload, version attachment, and submission actions. Studio's orange **Beta ship** button
+The dry run completed and listed the source-version write, atomic lock update, release compile,
+Studio-marker check, iOS prebuild, archive/sign, upload, version attachment, and submission actions.
+It did not mutate source, lock, Git index, refs, App Store state, or the network. A non-dry ship may
+write source and `.tao-project/lock.jsonc`, but it never stages, commits, tags, or pushes; committing
+those files remains the developer's action. Studio's orange **Beta ship** button
 is not another preview: it performs a beta ship with confirmation bypassed, so use it only when a real
 TestFlight upload is intended. `tao ship --update` and `--rollback` are the corresponding OTA paths;
 they were not run because they change release state.
 
 ## Verification boundary
 
-- **Live-verified:** Studio launch and HNReader live/stub canvases; app switching; project panels,
+- **Walkthrough evidence at the time:** Studio launch and HNReader live/stub canvases; app switching; project panels,
   lenses, scenarios, data, drawers, selection/focus, workspace modes, and device pairing;
   standalone HNReaderStub plus keyboard hints/palette; WordFlower focus pause/resume/relaunch;
   representative native component, Device Kit, and navigation paths; Companion pairing, rendering,
   and scenario switching; `tao create --ai none`; `tao review`; `tao ship --dry-run`; and the slow
-  Studio browser-smoke lane.
+  Studio browser-smoke lane. This dated walkthrough is not final simulated-user acceptance: that
+  journey is currently quarantined from `full-verify` pending ten consecutive reliable browser runs.
 - **Present but not end-to-end verified:** freehand persistence/snap, every native control interaction,
   sharing, chromeless navigation/restoration, a successful Studio agent answer, and Dev/iCloud/CloudKit
   native behavior.

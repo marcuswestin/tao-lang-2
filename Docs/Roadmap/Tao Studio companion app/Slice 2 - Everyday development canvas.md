@@ -44,14 +44,12 @@ Every capture domain — action history, persisted state, navigation, data, sche
 registers at module scope, so a paired device always had a complete artifact to give; nothing could
 ask for one.
 
-**The frame-limit question is settled by measurement, not argument.** A capture is the first message
-on this protocol that could plausibly exceed the 256 KiB sealed-frame limit, and an oversized frame
-closes the connection. Real WordFlower captures taken from the simulator range from **7,305 bytes**
-just after launch to **18,713 bytes** with a scenario's data loaded and a navigation stack built up —
-both more than an order of magnitude below the limit, and the spread is the point: what a capture
-costs is what the app is holding, not a fixed overhead. The client still measures each frame and
-answers the request with a failure naming the size rather than sending an oversized frame, so a
-larger capture degrades to a readable error instead of a dropped session.
+**The frame-limit question is settled by measured sealed size, not payload size.** A capture is the
+first message on this protocol that could plausibly exceed the 256 KiB sealed-frame limit. The client
+accounts for envelope, nonce, authentication tag, and framing overhead before dispatch and returns a
+readable request failure instead of sending an oversized frame that would drop the session. Historical
+simulator measurements ranged from **7,305 bytes** just after launch to **18,713 bytes** with scenario
+data and navigation loaded; those figures are useful scale, not physical-device acceptance.
 
 ### The phone is a canvas that selects both ways
 
@@ -365,14 +363,12 @@ rows that never merge with anything. Fine for the stub variant and confusing any
 seed ids the live feed actually returns, or make the online scenarios start from no fixture at all
 and keep `HNFrontPage` for the offline and row-focused cells.
 
-**A companion has to be re-pointed at Studio after every restart.** Studio takes a fresh preview-Metro
-port and a fresh gateway port each launch, and the companion derives both from the bundle it loaded,
-so a phone left running against a dead Metro shows a blank white screen, dials nothing, and logs
-nothing anywhere. Recovering it means an `openurl` with the new port. Trust already survives restarts,
-so this is discovery rather than pairing: either hold the ports stable across restarts of one project
-(`StudioSmoke.reserveResources` is prior art), or have the companion re-resolve a session it already
-trusts. It is the sharpest remaining edge in daily use, and it is tracked as DEVENV-020 in
-[Developer environment upgrades](../Developer%20environment%20upgrades.md).
+**Trusted rediscovery is implemented in software.** Studio advertises the current gateway and Metro
+candidate through authenticated Bonjour, bound to its pinned identity. A companion whose session or
+network endpoint dies detaches the dead connection and rediscovers compatible cells without weakening
+trust; QR/deep-link remains the explicit fallback. This closes the former need to re-point a device
+after every Studio restart at the software boundary. A physical restart/network-change run is still
+required before calling the device workflow accepted.
 
 **`just studio-native` logs one transient `Unable to resolve "./_gen_tao-app/App"`.** Metro reaches
 the entry before the generated app is written, recovers on the next write, and leaves a red herring in

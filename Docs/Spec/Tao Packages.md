@@ -409,57 +409,60 @@ the declaration object across module boundaries and import traversal order.
   - The project repo must be clean to publish it
   - `tao publish` bumps the project version, commits it, creates a git version tag, and pushes everything
   - `tao publish` fetches the remote's version tags first, and refuses to publish a version that isn't greater than the highest published version
-- Shipping an app to the stores is a different motion with its own verb, `tao ship`, planned in
-  `Docs/Roadmap/Tao ship/`; `tao publish` distributes the project and its public API only
+- Shipping an app to the stores is a different motion with its own verb, `tao ship`, implemented as
+  a filesystem-only transaction; `tao publish` distributes the project and its public API only
   - You install a published app to your device with `tao install --app <tao project>`
 
 ## The `.tao-project` folder
 
 - The root project folder contains `.tao-project/`, with installed projects, lockfiles, and more
   - `.tao-project/installs/...`
-  - `.tao-project/installs-lock.jsonc`
-  - `.tao-project/lock.jsonc` — the project's one Tao-written lock, sectioned per concern; `tao ship`
-    writes the `ship` section with the accepted store identifiers, versions, and channels it derives
-    per app variant, never by hand (decided 2026-09-02, `Docs/Roadmap/Tao ship/`). When the installs
-    lock below is implemented it becomes a section of this file rather than a separate one.
+  - `.tao-project/lock.jsonc` — the project's only Tao-written lock, sectioned per concern; package
+    resolution owns `installs` and shipping owns `ship`. Each writer atomically merges fresh state so
+    the concerns do not overwrite one another.
   - `.tao-project/cache/...`
 
 ## Dependency version locks
 
 - Tao installs required sub-projects in `.tao-project/installs/...`
-  - And tracks the required packages and resolved versions in `.tao-project/installs-lock.jsonc`
-  - `installs-lock.jsonc` is a flat resolved graph for all dependencies
+  - And tracks the required packages and resolved versions in the `installs` section of
+    `.tao-project/lock.jsonc`
+  - `installs` is a flat resolved graph for all dependencies
     - `requires` entries declare what a project requested: `version` (a semver range) or `ref` (a git branch/commit/tag), never both
-    - Every resolved project is pinned to an immutable `resolved_commit`; `resolved_version` is also recorded when resolved from a semver range
+    - Every resolved project is pinned to an immutable `resolvedCommit`; `resolvedVersion` is also recorded when resolved from a semver range
     - A root build resolves only one version of each project, so each project id appears exactly once in `projects`
     - If two incompatible version ranges are required inside one project, `tao install` errors with a diagnostic showing the conflicting requesters and their requested versions/refs
   ```jsonc
   {
-    "lockfile_version": 1, // lockfile format version
-    "requires": { // the root project's requires
-      "tao:std": { "version": "0.0.1" },
-      "github:marcuswestin/tao-gaz": { "version": "^1.0.1" },
-      "git+https://example.com/foo/tao-bar": { "ref": "main" },
-    },
-    "projects": { // flat map of all resolved projects, any depth
-      "tao:std": {
-        "project_id": "<immutable tao project id>",
-        "resolved_version": "0.0.1",
-        "resolved_commit": "<commit sha>",
+    "schemaVersion": 1,
+    "installs": {
+      "lockfileVersion": 1,
+      "requires": { // the root project's requires
+        "tao:std": { "version": "0.0.1" },
+        "github:marcuswestin/tao-gaz": { "version": "^1.0.1" },
+        "git+https://example.com/foo/tao-bar": { "ref": "main" },
       },
-      "github:marcuswestin/tao-gaz": {
-        "project_id": "<immutable tao project id>",
-        "resolved_version": "1.0.3",
-        "resolved_commit": "<commit sha>",
-        "requires": { // this project's requires; resolutions are top-level
-          "tao:std": { "version": "^0.0.1" },
+      "projects": { // flat map of all resolved projects, any depth
+        "tao:std": {
+          "projectId": "<immutable tao project id>",
+          "resolvedVersion": "0.0.1",
+          "resolvedCommit": "<commit sha>",
+        },
+        "github:marcuswestin/tao-gaz": {
+          "projectId": "<immutable tao project id>",
+          "resolvedVersion": "1.0.3",
+          "resolvedCommit": "<commit sha>",
+          "requires": { // this project's requires; resolutions are top-level
+            "tao:std": { "version": "^0.0.1" },
+          },
+        },
+        "git+https://example.com/foo/tao-bar": {
+          "projectId": "<immutable tao project id>",
+          "resolvedCommit": "<commit sha>", // no resolvedVersion for ref requires
         },
       },
-      "git+https://example.com/foo/tao-bar": {
-        "project_id": "<immutable tao project id>",
-        "resolved_commit": "<commit sha>", // no resolved_version for ref requires
-      },
     },
+    "ship": { "apps": {} }, // independent concern, preserved by installs writes
   }
   ```
 

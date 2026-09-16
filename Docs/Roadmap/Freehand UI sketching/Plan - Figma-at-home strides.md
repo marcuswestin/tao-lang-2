@@ -20,10 +20,10 @@ before placing survivors, so a removal no longer detaches the sketch host mid-ge
 the app visible when the focused view is no longer rendered; `remove-render` refuses a `#studio_rect_`
 marker (Unsnap first) and a container's only child; `tao check` warns about a shipping `Placeholder`
 under `@/studio` too (FS-D2) while Snap's measured `width` and `height` no longer count as explorations
-there; projection order is code-point order. Still open from that review: a Snap/Unsnap rollback when
-the catalog write succeeds and the source write fails; a catalog restore that checks the revision it
-restores over; one shared `#studio_rect_` marker decoder instead of three; and whether `hover`, `down`,
-and `up` stay global keywords, which is Ro's call.
+there; projection order is code-point order. The later hardening made Snap/Unsnap, restore, sketch
+revision, and rename operations cross-process transactions with version checks. The shared marker
+decoder remains a cleanup. `hover`, `down`, and `up` are ordinary spelling-validated test words,
+not global grammar keywords.
 
 Landed: L1 (ordered scenario steps, pointer phases, action stand-ins, optional fixture,
 `Placeholder`, `Spacer`), the root `@` package with Move to package, Slice 1 Draw, Slice 2 Snap with
@@ -85,12 +85,11 @@ flight. The lane now passes Draw, four further draws, Snap, and reload in a norm
 the sketch section in the Run preset at a designer-sized viewport, and records board state, the
 element under the pointer, host errors, and a screenshot on every sketch timeout.
 
-**Open.** Drag-one-in in the real browser: the release reaches the board and requests a
-one-rectangle Snap, which the server refuses because the rectangle sits between two flowed siblings
-(`Studio Snap cannot preserve authored source for interleaved rectangle geometry`). Stride 2 owns
-inserting into an existing flow or routing it through the proposal. Then ten consecutive green
-runs, remove the `FULL_VERIFY_SKIPPED` quarantine, restore the `agent-worktree-profile` expectation,
-and close DEVENV-042. Confirm native and canary from the Terminal in the same pass.
+**Current boundary.** The product path now has a real pointer-release drag-one-in target and preserves
+authored source through the proposal/transaction path. The simulated-user lane nevertheless stays
+quarantined until the complete journey records ten consecutive reliable normal-terminal runs; only
+then may `FULL_VERIFY_SKIPPED` be removed and DEVENV-042 resolved. Native and canary evidence remains
+separate and must be confirmed from the Terminal in the same acceptance pass.
 
 **Size.** S–M remaining. **Depends on.** Nothing.
 

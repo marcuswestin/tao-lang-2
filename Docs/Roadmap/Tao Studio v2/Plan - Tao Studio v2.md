@@ -115,12 +115,15 @@ Source identity is also synchronized on tab activation, immediately when a previ
 reloads, saves, and selection changes. The load-time send assumes a synchronously installed preview
 listener; the later activation/save/selection paths republish for receivers that mount after load.
 
-The full simulated-browser journey now runs in the `full-verify` graph. It proves typed editor save, isolated
-palette-drop undo, preview insertion and undo, preview-origin move and undo, responsive layout, and a clean
-browser console. Visual actions report their completed compile revision even when the event stream wins the
-race, Undo remains available after the edited selection is cleared, replacement preview frames receive a
-fresh source identity before interacting, and only the visible editor owns an LSP view. The native capability
-probe remains complementary rather than a substitute for this editor and source-action coverage.
+The full simulated-browser journey remains explicitly quarantined from the `full-verify` graph. Focused
+browser runs have exercised typed editor save, isolated palette-drop undo, preview insertion and undo,
+preview-origin move and undo, responsive layout, and console checks, but that evidence is not final
+acceptance. It rejoins automatic verification only after the Draw/Snap/drag-one-in path completes ten
+consecutive reliable normal-terminal runs. Visual actions report their completed compile revision even when
+the event stream wins the race, Undo remains available after the edited selection is cleared, replacement
+preview frames receive a fresh source identity before interacting, and only the visible editor owns an LSP
+view. The native capability probe remains complementary rather than a substitute for this editor and
+source-action coverage.
 
 **Do not widen `previewOriginPath` to make the lane pass.** The smoke's stub preview previously built its
 identity by fetching `/api/protocol` and `/api/file`. Neither is in `previewOriginPath`, the six-endpoint

@@ -1002,8 +1002,9 @@ part has landed.
   commands, rendered inner controls, entity defaults, then other applicable commands. The first verb
   with a given visible label wins, so a verb menu never presents indistinguishable choices. Commands
   with open slots enter a pending flow that fills required slots in declaration order from mounted
-  entity targets, store search, or inline scalar input. The reducer-side request model has landed;
-  the store picker and scalar-input presentation have not.
+  entity targets, store search, or inline scalar input. The reducer and generated pending surface
+  have landed: an already-decided entity is accepted directly, otherwise entity slots use mounted
+  candidates and the store-backed picker, while scalar slots use inline input.
 - **Interaction conditions stay ordinary words.** `pressed`, `focused`, and `hovered` are postfix
   conditions; `when FocusBar is active` tests named region focus. These and the new Tao test phrases
   use spelling-validated identifier seams rather than adding reserved grammar keywords.
@@ -1664,15 +1665,27 @@ link JoinLink(Code secret) "/join/{Code}" -> {
   and severs persisted-state compatibility. Duplicate IDs are rejected when distinct dependencies
   meet locally and at publish time. Public alias chains flatten to the target's canonical identity
   while retaining one-hop lexical navigation; cycles are invalid, and a wrapper creates new identity.
+- **Release metadata is source-owned.** `project` carries a numeric three-component SemVer as
+  `version "<major>.<minor>.<patch>"` and may name `DefaultApp <AppName>`. An explicit CLI
+  `--app` selection wins over `DefaultApp`; without either, tooling presents the available apps.
+  `DefaultApp` deliberately remains source-compatible spelling but is parsed as a capitalized
+  identifier and validated in the project slot rather than becoming a grammar keyword.
 
 ---
 
 ## 11. App composition and providers
 
-- **`project { id, name, targets, languages, license }` declares the product envelope**:
+- **`project { id, name, version, DefaultApp, targets, languages, license }` declares the product envelope**:
 
 ```swift
-project { id "skillet", name "Skillet", targets phone, tablet, laptop, languages "en-US", "es" }
+project {
+   id "skillet"
+   name "Skillet"
+   version "1.0.0"
+   DefaultApp Skillet
+   targets phone, tablet, laptop
+   languages "en-US", "es"
+}
 ```
 
 - **`app Name { … }` is the one composition root** selecting design, providers, permissions,

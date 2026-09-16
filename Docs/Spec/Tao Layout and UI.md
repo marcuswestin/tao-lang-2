@@ -683,8 +683,9 @@ The old repo and old design docs explored more syntax than Tao intends to carry 
 A layout or style entry may end in a condition, and several conditioned entries may sit in one clause
 independently. The executable conditions are the scheme, `when Scheme is Light` or `when Scheme is
 Dark`; the control's own interaction state, `when pressed`, `when focused`, and `when hovered`; and
-named region focus, `when <Region> is active`, where the region is a view or `#tag` visible from the
-file. An entry whose condition names a region nothing renders is a validation error, because it would
+named region focus, `when <Region> is active`, where `<Region>` resolves to a visible named view
+declaration. Private `#tag` values remain test selectors and never name an interaction region. An
+entry whose condition names a region nothing renders is a validation error, because it would
 otherwise be a style that silently never applies.
 
 Important history:

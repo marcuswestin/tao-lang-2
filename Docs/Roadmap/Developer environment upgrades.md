@@ -721,23 +721,17 @@ an entry here may link one when the developer workflow is also affected.
 - **Area:** Test reliability
 - **Impact:** The simulated Studio journey blocks otherwise green merge verification at synthetic
   sketch interactions, so it cannot yet serve as reliable merge evidence.
-- **Evidence:** Hit-test diagnostics added to the lane on 2026-09-04 showed the failures were product
-  defects, not pointer nondeterminism. The board's absolutely positioned toolbar wrapped down over the
-  76-pixel drawing surface, so the first real pointer landed on the Unsnap button; drag-one-in relied on
-  an HTML5 drag that the move gesture's `preventDefault` suppressed, so it could never start; and a
-  catalog or manifest re-render could replace a board mid-gesture. With those fixed the lane passes
-  Draw, four further draws, Snap, and reload from a normal terminal, and stalls at drag-one-in: the
-  release reaches the board and requests the one-rectangle Snap, which the server refuses with
-  `Studio Snap cannot preserve authored source for interleaved rectangle geometry` because the free
-  rectangle sits between two flowed siblings. The failing step's diagnostics record board bounds,
-  the element under the pointer, the gesture state, host errors, and a screenshot.
+- **Evidence:** Hit-test diagnostics added to the lane on 2026-09-04 exposed real toolbar, gesture,
+  rerender, interleaved-Snap, editor-ownership, source-identity, geometry, and transaction defects.
+  Those product fixes now have focused coverage, including a real pointer-release drag-one-in target.
+  The lane has not yet supplied the required ten consecutive complete normal-terminal runs, so it
+  remains reliability evidence in progress rather than a green merge gate.
 - **Workaround:** The full-verification graph reports `studio-smoke-simulated-user` as explicitly skipped;
   `just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` reproduces it, and the deterministic catalog tests
   in the same file plus the native and canary lanes remain active.
-- **Proposed change:** Let a partial Snap insert one rectangle between existing flowed siblings, or
-  route that case through the proposal endpoint, in the Snap-trust stride of the Figma-at-home plan;
-  keep every sketch step's precondition hit-tested rather than bounding-box based. Keep mutations
-  single-shot rather than retrying requests that may already be live.
+- **Proposed change:** Run the complete journey ten consecutive times from a normal Terminal, retain
+  its hit-tested preconditions and single-shot mutations, investigate any remaining nondeterminism,
+  then remove the quarantine only when that acceptance is green.
 - **Dependencies:** Product fixes and lane diagnostics landed with the Figma-at-home strides plan.
 - **Acceptance:** `studio-smoke-simulated-user` completes the Draw, Snap, Unsnap, overlap-confirmation, and
   Undo sequence in ten consecutive normal-terminal runs before it rejoins automatic full verification.

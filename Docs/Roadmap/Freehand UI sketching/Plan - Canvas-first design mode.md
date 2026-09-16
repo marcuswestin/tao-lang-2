@@ -1,9 +1,11 @@
 # Plan — Canvas-first design mode
 
-Status: proposal, 2026-09-06. No code changed. Written after a visual inspection of Studio on
-`Apps/HNReader` (HNReaderStub, 1440×900 browser pane) and a reading of the canvas-mode proof of
-concept, the freehand decisions FS-D1–FS-D20, and `Plan - Figma-at-home strides.md`. Where this plan
-and the strides plan overlap, this one is the design intent and the strides plan keeps the order.
+Status: implementation record, reconciled 2026-09-16. Written as a proposal after a 2026-09-06
+visual inspection of Studio on `Apps/HNReader`; the inspection and proposed work below remain dated
+history, while each **Landed** paragraph records the current boundary. The responsive Design split,
+viewport reveal, preview-only transforms, iframe-safe gestures, canonical occurrence identity, real
+`owner.rect`, serialized Focus enter/leave restoration, and listener disposal have landed. The final
+simulated-user acceptance condition remains open and quarantined.
 
 ## What the inspection showed
 
@@ -90,24 +92,11 @@ Focusing a view wraps it in a frame whose size is the occurrence's measured size
   provenance where the runtime has it and from the inspector's argument drafts otherwise.
 - Work: `StudioMatrixView.focusView` gains a frame; `StudioApp` passes the rectangle; catalog gains
   `frames`; canvas bar and inspector Frame fields. Two days. Depends on nothing in Stride A.
-- Landed so far (branch `feat/canvas-first-design-mode`, 2026-09-06): `inspectRender` reports
-  `owner { view, renderId }`, the server joins it with the selecting cell's measurement when the
-  request carries the selection identity, and Focus view applies `owner.rect` as a custom viewport
-  and restores it on Back to app. Live check on HNReader: the inspect response carries `owner` but
-  no `rect` while the preview does post `preview-layout-measurements`, so the join misses. First
-  suspects: the selection identity's `manifestRevision`, `compileRevision`, or `cellRevision` are
-  absent or differ from the cell that measured (the measurement key is project, app, manifest
-  revision, cell, and instance), or the root `Row` of `StoryRow` is not among the measured renders.
-  Until that is fixed the focused frame keeps the device size.
-- Narrowed since: a session test now records a measurement for the owning view's root render and
-  asserts `inspectRender` returns `owner.rect` for the measuring cell and nothing for another preview
-  instance. It passes, so the server join and the identity guard are right and the live miss is on
-  the measurement side. The remaining suspects are that no measurement exists for the root render's
-  id at all, or that the id the runtime emits for a container render spans differently from the
-  source-side `renderIdFor` (offset and end of the `Render` CST node, block included). The next
-  live check should read the posted `preview-layout-measurements` payload and compare its ids with
-  `owner.renderId` for the same cell; `standardDesignElementName` is not the filter, since it does
-  return `Row` for a `@tao/ui` view.
+- **Landed.** Inspection and layout measurements share canonical structural occurrence identity.
+  `inspectRender` returns the owning view's real measured `owner.rect` only for the selecting cell
+  instance; Focus uses it as the custom viewport and serialized enter/leave restoration returns to
+  the prior app state. The missing-rectangle investigation above is closed rather than a current
+  product defect.
 
 ## Stride C — Zoom and pan the way Figma does
 
@@ -133,6 +122,10 @@ Focusing a view wraps it in a frame whose size is the occurrence's measured size
   coordinates divide by the scale, so drawing stays accurate while zoomed. Still open from this
   stride: zoom to selection and to the focused frame, the pill's menu, persistence of the viewport
   across sessions, and counter-scaled stroke widths on sketch handles.
+- **Hardened 2026-09-16.** Only preview cells receive the viewport transform, hit testing and pointer
+  release remain correct over iframes, reveal scrolls through the viewport coordinate space, and all
+  gesture/listener registrations are disposed with their host. Zoom-menu and persistence enhancements
+  listed above remain product follow-ups rather than correctness blockers.
 
 ## Stride D — Focus-selection mode with a red outline on view frames
 
