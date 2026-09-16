@@ -51,6 +51,25 @@ Describe('dependency tree repair', () => {
     }
   })
 
+  Test('forced repair replaces a tree even when the narrow health probe is already green', async () => {
+    const fixture = await createFixture('success')
+    try {
+      await FS.writeText(FS.resolvePath('node_modules/original/package.json', fixture.repository), '{}')
+      await FS.writeText(FS.resolvePath('.healthy', fixture.repository), '')
+      fixture.env['TAO_DEPENDENCY_REPAIR_FORCE'] = '1'
+
+      const result = await runRepair(fixture)
+
+      Expect(result.exitCode).toBe(0)
+      Expect(result.stdout).not.toContain('no repair was needed')
+      Expect((await FS.readText(fixture.attemptLog)).trim().split('\n')).toEqual(['attempt'])
+      Expect(await FS.exists(FS.resolvePath('node_modules/repaired/package.json', fixture.repository)))
+        .toBe(true)
+    } finally {
+      await FS.remove(fixture.testRoot)
+    }
+  })
+
   Test('moves a partial install aside and restores the original tree after failure', async () => {
     const fixture = await createFixture('fail')
     try {
@@ -161,7 +180,6 @@ Describe('dependency tree repair', () => {
     const fakeBin = FS.resolvePath('bin', testRoot)
     const attemptLog = FS.resolvePath('attempts.log', testRoot)
     const repairLog = FS.resolvePath('repairs.log', testRoot)
-    const healthy = FS.resolvePath('healthy', testRoot)
     try {
       await FS.writeText(
         FS.resolvePath('bun', fakeBin),
@@ -172,8 +190,8 @@ Describe('dependency tree repair', () => {
         [
           '#!/bin/zsh',
           'case "$1" in',
-          '  _dependency-health) [[ -f "$TAO_TEST_HEALTHY" ]] ;;',
-          '  repair-deps) print -r -- repair >> "$TAO_TEST_REPAIR_LOG"; : > "$TAO_TEST_HEALTHY" ;;',
+          '  _dependency-health) exit 0 ;;',
+          '  repair-deps) print -r -- "repair:$TAO_DEPENDENCY_REPAIR_FORCE" >> "$TAO_TEST_REPAIR_LOG" ;;',
           '  *) exit 97 ;;',
           'esac',
           '',
@@ -190,7 +208,6 @@ Describe('dependency tree repair', () => {
         env: {
           PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
           TAO_TEST_ATTEMPT_LOG: attemptLog,
-          TAO_TEST_HEALTHY: healthy,
           TAO_TEST_REPAIR_LOG: repairLog,
         },
       })
@@ -201,7 +218,7 @@ Describe('dependency tree repair', () => {
         'install --frozen-lockfile --force',
         `install --frozen-lockfile --force --cache-dir=${Repo.resolvePath('.artifacts/cache/bun')}`,
       ])
-      Expect(await FS.readText(repairLog)).toBe('repair\n')
+      Expect(await FS.readText(repairLog)).toBe('repair:1\n')
     } finally {
       await FS.remove(testRoot)
     }

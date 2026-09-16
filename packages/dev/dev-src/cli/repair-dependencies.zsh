@@ -25,9 +25,14 @@ typeset -r lock_file="$lock_root/dependency-repair.lock"
 typeset -r backup_parent="${TAO_DEPENDENCY_REPAIR_BACKUP_PARENT:-/private/tmp}"
 typeset -r bun_command="${TAO_DEPENDENCY_REPAIR_BUN:-bun}"
 typeset -r just_command="${TAO_DEPENDENCY_REPAIR_JUST:-just}"
+typeset -r force_repair="${TAO_DEPENDENCY_REPAIR_FORCE:-0}"
 
 if [[ ! -d "$repository_root" || ! -f "$repository_root/bun.lock" || "$repository_root" == / ]]; then
   print -u2 -- "Refusing dependency repair outside a Tao repository: $repository_root"
+  exit 2
+fi
+if [[ "$force_repair" != 0 && "$force_repair" != 1 ]]; then
+  print -u2 -- 'TAO_DEPENDENCY_REPAIR_FORCE must be 0 or 1.'
   exit 2
 fi
 
@@ -59,7 +64,8 @@ fi
 
 # The health check belongs inside the lock. A second caller that waited for a successful repair
 # observes the now-healthy tree and returns without moving it or invoking Bun again.
-if "$just_command" --justfile "$repository_root/Justfile" _dependency-health >/dev/null 2>&1; then
+if (( ! force_repair )) \
+  && "$just_command" --justfile "$repository_root/Justfile" _dependency-health >/dev/null 2>&1; then
   print -- 'Dependencies are healthy; no repair was needed.'
   exit 0
 fi
