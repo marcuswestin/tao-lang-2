@@ -148,7 +148,7 @@ Test('Studio browser assets produce a self-contained CodeMirror client and escap
   Expect(bundle).toContain('No search results.')
   Expect(bundle).not.toContain('StudioDrawerPanelSurface')
   Expect(bundle).not.toContain('StudioSearchPanelSurface')
-  Expect(moduleInputs.some(path => path.includes('/react@19.1.0/'))).toBe(true)
+  Expect(moduleInputs.some(path => path.includes('/react@19.2.3/'))).toBe(true)
   Expect(moduleInputs.some(path => path.includes('/react@19.2.8/'))).toBe(false)
   Expect(bundle).toContain('Reload preview')
   Expect(bundle).toContain('Mode: Edit')

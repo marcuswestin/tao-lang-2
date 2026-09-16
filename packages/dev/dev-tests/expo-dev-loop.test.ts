@@ -19,6 +19,7 @@ import { simulatorOpenFailure } from '../dev-src/expo-dev-loop/expo-runner/run-t
 import { handleCommandKey } from '../dev-src/expo-dev-loop/keyboard-input/CommandKeys'
 import Commands from '../dev-src/expo-dev-loop/keyboard-input/Commands'
 import Run from '../dev-src/expo-dev-loop/Run'
+import { presentIosSimulator } from '../dev-src/ios/IosSimulatorPresentation'
 
 Describe('Expo dev-loop output severity', () => {
   Test('reads a child process line by its text, not by the stream it chose', () => {
@@ -58,6 +59,45 @@ Describe('Expo dev-loop output severity', () => {
 })
 
 Describe('Expo dev-loop command helpers', () => {
+  Test('opens Simulator on older Xcodes', async () => {
+    const commands: string[][] = []
+    const run = (async (command: string, spec: CLI.CommandSpec) => {
+      commands.push([command, ...(spec.args ?? [])])
+      return { exitCode: 0, signal: null, stderr: '', stdout: '' }
+    }) as typeof CLI.run
+
+    const presented = await presentIosSimulator('SIM-OLD', run)
+
+    Expect(presented.host).toBe('Simulator')
+    Expect(commands).toEqual([
+      ['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM-OLD'],
+    ])
+  })
+
+  Test('falls back to the Xcode 27 Device Hub URL', async () => {
+    const commands: string[][] = []
+    const run = (async (command: string, spec: CLI.CommandSpec) => {
+      commands.push([command, ...(spec.args ?? [])])
+      return commands.length === 1
+        ? {
+          error: new Errors.HostEnvironmentError('Simulator.app is unavailable'),
+          exitCode: 1,
+          signal: null,
+          stderr: '',
+          stdout: '',
+        }
+        : { exitCode: 0, signal: null, stderr: '', stdout: '' }
+    }) as typeof CLI.run
+
+    const presented = await presentIosSimulator('SIM PRO/27', run)
+
+    Expect(presented.host).toBe('Device Hub')
+    Expect(commands).toEqual([
+      ['open', '-a', 'Simulator', '--args', '-CurrentDeviceUDID', 'SIM PRO/27'],
+      ['open', 'devices://device/open?id=SIM%20PRO%2F27'],
+    ])
+  })
+
   Test('recognizes the verify and device shortcut keys', () => {
     Expect(Commands.isCommandKey('v')).toBe(true)
     Expect(Commands.isCommandKey('d')).toBe(true)

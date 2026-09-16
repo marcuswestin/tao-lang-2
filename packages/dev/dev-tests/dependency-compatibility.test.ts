@@ -16,14 +16,14 @@ const PACKAGE_PATHS: Record<string, string> = {
 const INSTALLED_WORKSPACE: Record<string, Record<string, string>> = {
   'tao-dev': { react: '19.2.8' },
   'tao-runtime-toolchain': {
-    '@react-native-community/netinfo': '11.4.1',
-    '@types/react': '19.1.17',
-    react: '19.1.0',
-    'react-dom': '19.1.0',
+    '@react-native-community/netinfo': '12.0.1',
+    '@types/react': '19.2.18',
+    react: '19.2.3',
+    'react-dom': '19.2.3',
     'react-native-get-random-values': '1.11.0',
-    'react-test-renderer': '19.1.0',
+    'react-test-renderer': '19.2.3',
   },
-  'tao-studio': { '@types/react': '19.1.17', react: '19.1.0' },
+  'tao-studio': { '@types/react': '19.2.18', react: '19.2.3' },
 }
 
 /**
@@ -36,9 +36,9 @@ function facts(
 ): DependencyFacts {
   return {
     expoBundledVersions: {
-      '@react-native-community/netinfo': '11.4.1',
-      react: '19.1.0',
-      'react-dom': '19.1.0',
+      '@react-native-community/netinfo': '12.0.1',
+      react: '19.2.3',
+      'react-dom': '19.2.3',
       'react-native-get-random-values': '~1.11.0',
     },
     manifests: Object.entries(resolvedByPackage).map(([name, resolved]) => ({
@@ -46,7 +46,7 @@ function facts(
       name,
       path: PACKAGE_PATHS[name] ?? `packages/${name}/package.json`,
     })),
-    reactNativeTypesPeer: '^19.1.0',
+    reactNativeTypesPeer: '^19.1.1',
     resolvedByPackage,
     satisfies: Platform.semverSatisfies,
     ...overrides,
@@ -66,14 +66,14 @@ Describe('runtime dependency compatibility', () => {
 
     Expect(issues.length).toBe(2)
     Expect(issues[0]).toContain('tao-runtime-toolchain resolves react 19.2.8')
-    Expect(issues[0]).toContain('Expo SDK is built against react 19.1.0')
+    Expect(issues[0]).toContain('Expo SDK is built against react 19.2.3')
     Expect(issues[0]).toContain('packages/runtime-toolchain/package.json')
     Expect(issues[1]).toContain('react-dom')
   })
 
   Test('rejects a second React reaching the Studio bundle', () => {
     const issues = dependencyCompatibilityIssues(facts({
-      'tao-runtime-toolchain': { react: '19.1.0', 'react-dom': '19.1.0', 'react-test-renderer': '19.1.0' },
+      'tao-runtime-toolchain': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.3' },
       'tao-studio': { react: '19.2.8' },
     }))
 
@@ -85,7 +85,7 @@ Describe('runtime dependency compatibility', () => {
 
   Test('rejects an undocumented package carrying its own React', () => {
     const issues = dependencyCompatibilityIssues(facts({
-      'tao-runtime-toolchain': { react: '19.1.0', 'react-dom': '19.1.0', 'react-test-renderer': '19.1.0' },
+      'tao-runtime-toolchain': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.3' },
       'tao-workspace': { react: '18.3.1' },
     }))
 
@@ -96,46 +96,46 @@ Describe('runtime dependency compatibility', () => {
 
   Test('rejects a test renderer that does not match the React it renders', () => {
     const issues = dependencyCompatibilityIssues(facts({
-      'tao-runtime-toolchain': { react: '19.1.0', 'react-dom': '19.1.0', 'react-test-renderer': '19.1.1' },
+      'tao-runtime-toolchain': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.4' },
     }))
 
     Expect(issues.length).toBe(1)
-    Expect(issues[0]).toContain('react-test-renderer 19.1.1 does not match react 19.1.0')
+    Expect(issues[0]).toContain('react-test-renderer 19.2.4 does not match react 19.2.3')
   })
 
   Test('rejects React types outside the installed React Native peer range', () => {
     const issues = dependencyCompatibilityIssues(facts({
       'tao-runtime-toolchain': {
         '@types/react': '18.3.1',
-        react: '19.1.0',
-        'react-dom': '19.1.0',
-        'react-test-renderer': '19.1.0',
+        react: '19.2.3',
+        'react-dom': '19.2.3',
+        'react-test-renderer': '19.2.3',
       },
     }))
 
     Expect(issues.length).toBe(1)
     Expect(issues[0]).toContain('@types/react 18.3.1')
-    Expect(issues[0]).toContain('^19.1.0')
+    Expect(issues[0]).toContain('^19.1.1')
   })
 
   Test('rejects a native module the installed Expo SDK does not bundle', () => {
     const issues = dependencyCompatibilityIssues(facts({
       'tao-runtime-toolchain': {
         '@react-native-community/netinfo': '12.0.0',
-        react: '19.1.0',
-        'react-dom': '19.1.0',
+        react: '19.2.3',
+        'react-dom': '19.2.3',
         'react-native-get-random-values': '1.11.0',
       },
     }))
 
     Expect(issues.length).toBe(1)
     Expect(issues[0]).toContain('@react-native-community/netinfo')
-    Expect(issues[0]).toContain('bundles @react-native-community/netinfo 11.4.1')
+    Expect(issues[0]).toContain('bundles @react-native-community/netinfo 12.0.1')
   })
 
   Test('reports a declared dependency the lockfile never installed', () => {
     const issues = dependencyCompatibilityIssues(facts(
-      { 'tao-runtime-toolchain': { react: '19.1.0', 'react-dom': '19.1.0' } },
+      { 'tao-runtime-toolchain': { react: '19.2.3', 'react-dom': '19.2.3' } },
       {
         manifests: [{
           dependencies: { 'never-installed': '^1.0.0', 'tao-shared': 'workspace:*' },
@@ -171,8 +171,8 @@ Describe('runtime dependency compatibility', () => {
 
   Test('rejects a second react-dom in the Studio bundle, not only a second react', () => {
     const issues = dependencyCompatibilityIssues(facts({
-      'tao-runtime-toolchain': { react: '19.1.0', 'react-dom': '19.1.0', 'react-test-renderer': '19.1.0' },
-      'tao-studio': { react: '19.1.0', 'react-dom': '18.3.1' },
+      'tao-runtime-toolchain': { react: '19.2.3', 'react-dom': '19.2.3', 'react-test-renderer': '19.2.3' },
+      'tao-studio': { react: '19.2.3', 'react-dom': '18.3.1' },
     }))
 
     Expect(issues.length).toBe(1)

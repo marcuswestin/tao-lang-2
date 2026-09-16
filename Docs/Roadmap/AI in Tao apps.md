@@ -91,10 +91,10 @@ for every guarantee the rest of Tao already makes.
   cannot (copy, projections, lifecycle).
 - **Deferred but liked**: provenance on generated rows, AI-maintained fields (see Deferred
   ideas).
-- **Pragmatic OS posture, no hard rule.** The current slice runs entirely on today's stable
-  stack (verified: macOS 26.5 + Xcode 26.6 + Expo SDK 54 / RN 0.81, Foundation Models
-  `available`). Upgrading to a newer OS/Xcode is acceptable whenever full platform access
-  requires it. Tao apps may assume the latest iOS for now.
+- **Pragmatic OS posture, no hard rule.** The implementation spike was verified on macOS 26.5,
+  Xcode 26.6, Expo SDK 54 / RN 0.81, with Foundation Models `available`. The repository moved to
+  Expo SDK 57 / RN 0.86 on 2026-09-15 for macOS and Xcode 27 compatibility; re-run the native
+  proof before treating that host combination as verified. Tao apps may assume the latest iOS.
 
 ## The `generate` surface
 
@@ -291,7 +291,7 @@ both halves of the story exist as maintained providers of it:
 
 - **In-app (iOS)**: `@react-native-ai/apple` (Callstack) — Foundation Models via the AI SDK
   shape; structured output uses native guided generation on iOS 26+; streaming and tool calling.
-  Requires RN ≥ 0.80 + New Architecture; the repository's Expo SDK 54 / RN 0.81 qualify. Preview
+  Requires RN ≥ 0.80 + New Architecture; the repository's Expo SDK 57 / RN 0.86 qualify. Preview
   status, so it sits behind our own seam and is swappable.
 - **Studio server (macOS)**: the stable Swift helper won the implementation spike.
   `@meridius-labs/apple-on-device-ai` 1.6.2 loaded under Bun and reported Foundation Models

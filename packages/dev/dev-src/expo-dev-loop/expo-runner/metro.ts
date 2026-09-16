@@ -123,8 +123,8 @@ async function expoOpenEndpoint(
 }
 
 /**
- * fetchExpoOpenEndpoint asks Metro's `/_expo/open` for a runtime URL. Expo SDK 54's CLI no longer
- * serves the endpoint (it answers 404); callers treat that as absent and use `expoRuntimeLink`.
+ * fetchExpoOpenEndpoint asks Metro's `/_expo/open` for a runtime URL. Expo CLI versions that do not
+ * serve the endpoint answer 404; callers treat that as absent and use `expoRuntimeLink`.
  * A network failure rejects, so a caller can tell "Metro is down" from "Expo has no such route".
  */
 export async function fetchExpoOpenEndpoint(

@@ -94,6 +94,10 @@ Bonjour, the Tao relay, beta delivery, or App Store constraints.
 
 ### Live repository facts
 
+Compatibility update, 2026-09-15: Tao now pins Expo SDK 57.0.23 and React Native 0.86.3, enables
+Expo's iOS scene lifecycle support, and supports Xcode 27's Device Hub. The bullets below preserve
+the SDK 54 baseline against which Slice 1 was designed and implemented.
+
 - Tao currently pins Expo SDK 54 (`expo ~54.0.37`) and React Native 0.81.5. The runtime toolchain does not
   yet include `expo-dev-client`.
 - Studio already owns one isolated Expo/Metro process per open project, prefers port 8081, allocates another
