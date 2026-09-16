@@ -1,3 +1,4 @@
+import { Packages } from '@ast-utils'
 import { Errors, FS } from '@shared'
 
 /** InPlace groups shared Tao CLI in-place file processing types. */
@@ -59,7 +60,7 @@ async function workspaceRootForPath(path: string, options: InPlace.PathOptions =
   if (generatedProjectRoot !== undefined) {
     return generatedProjectRoot
   }
-  const projectRoot = await containingProjectRoot(await FS.isFile(root) ? FS.dirname(root) : root)
+  const projectRoot = await Packages.containingProjectRoot(await FS.isFile(root) ? FS.dirname(root) : root)
   if (projectRoot !== undefined) {
     return projectRoot
   }
@@ -87,24 +88,6 @@ function rootPackageOwner(path: string): string | undefined {
     }
   }
   return undefined
-}
-
-async function containingProjectRoot(start: string): Promise<string | undefined> {
-  let directory = start
-  while (true) {
-    if (await FS.isFile(FS.resolvePath('Project.tao', directory))) {
-      return directory
-    }
-    // Stop at a repository boundary rather than adopting an unrelated Project.tao above the checkout.
-    if (await FS.exists(FS.resolvePath('.git', directory))) {
-      return undefined
-    }
-    const parent = FS.dirname(directory)
-    if (parent === directory) {
-      return undefined
-    }
-    directory = parent
-  }
 }
 
 /** compareOnly reports whether `after` differs from `before` without writing the file. */

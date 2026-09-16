@@ -11,6 +11,12 @@ export function referencedNames(file: AST.TaoFile): Set<string> {
     if (AST.isUseStatement(node)) {
       continue
     }
+    if (AST.isEntityQueryDeclaration(node) && !node.source) {
+      // A root query names its collection syntactically: `query Notes` stores `Notes` as the
+      // query's own name, while `query Notes as CurrentNote` stores it as `sourceName`. Neither
+      // form is a Langium cross-reference, but both keep the collection import in use.
+      names.add(node.sourceName ?? node.name)
+    }
     for (const reference of AST.streamReferences(node)) {
       names.add(reference.reference.$refText)
       const target = 'ref' in reference.reference ? reference.reference.ref : undefined

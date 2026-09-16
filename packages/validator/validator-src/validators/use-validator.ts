@@ -12,6 +12,10 @@ export const useValidationMessages = {
     `Package '${name}' is ambiguous because multiple folders declare it: ${paths.join(', ')}.`,
   packageBoundary: (importPath: string) =>
     `Relative import '${importPath}' crosses a package boundary; use an @package import instead.`,
+  packagePathEscape: (importPath: string, packageName: string) =>
+    `Package import '${importPath}' must stay inside package '${packageName}'.`,
+  projectBoundary: (importPath: string) =>
+    `Import '${importPath}' crosses a project boundary; cross-project imports will require a dependency declaration in project { ... }.`,
   duplicateImport: (name: string) => `Imported name '${name}' is declared more than once in this use statement.`,
   repeatedImport: (name: string) => `Imported name '${name}' is already imported by an earlier use statement.`,
   unusedImport: (name: string) => `Imported name '${name}' is not used in this file.`,
@@ -127,6 +131,17 @@ function reportInvalidResolution(
   }
   if (resolution.invalidReason === 'package-boundary' && useStatement.importPath) {
     ctx.error(useStatement, useValidationMessages.packageBoundary(useStatement.importPath))
+    return
+  }
+  if (resolution.invalidReason === 'project-boundary' && useStatement.importPath) {
+    ctx.error(useStatement, useValidationMessages.projectBoundary(useStatement.importPath))
+    return
+  }
+  if (resolution.invalidReason === 'package-path-escape' && useStatement.importPath && resolution.packageName) {
+    ctx.error(
+      useStatement,
+      useValidationMessages.packagePathEscape(useStatement.importPath, resolution.packageName),
+    )
     return
   }
   ctx.error(useStatement, unresolvedMessage(useStatement))
