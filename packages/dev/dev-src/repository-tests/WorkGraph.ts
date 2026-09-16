@@ -379,7 +379,6 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
       for (const resource of state.node.resources ?? []) {
         heldResources.delete(resource)
       }
-      running.delete(state)
       if (timedOut) {
         state.status = 'failed'
         state.reason = `timed out after ${formatTimeout(state.node.timeoutMs ?? 0)}`
@@ -394,6 +393,10 @@ async function run(states: WorkState[], options: WorkRunOptions = {}): Promise<W
         state.failure = { kind: 'interrupted', message: INTERRUPTED_REASON }
       }
       await machineReservation?.release()
+      // Keep the node in `running` through asynchronous broker cleanup. The scheduler uses this map
+      // as its drain condition; deleting first lets the graph return and its caller remove the
+      // registry root while a reservation is still trying to lock it.
+      running.delete(state)
       emit({ kind: 'complete', state })
     })
     running.set(state, { cancel: () => cancel(), promise })

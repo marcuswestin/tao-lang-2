@@ -440,6 +440,39 @@ Describe('work graph scheduling', () => {
     Expect(released).toBe(true)
   })
 
+  Test('does not finish until a running node has released its machine reservation', async () => {
+    const state = WorkGraph.createState(workNode({ name: 'release-drain' }))
+    const release = Deferred()
+    let releaseStarted = false
+    let graphFinished = false
+    const finished = WorkGraph.run([state], {
+      jobs: 1,
+      runNode: async () => ({ exitCode: 0 }),
+      slotBroker: {
+        tryAcquire: async () => ({
+          release: async () => {
+            releaseStarted = true
+            await release.promise
+          },
+          slots: 1,
+        }),
+        waitForAvailability: async () => {},
+      },
+      watchInterrupt: () => () => {},
+    }).then(result => {
+      graphFinished = true
+      return result
+    })
+
+    await until(() => releaseStarted, { description: 'the broker release to start' })
+    await settle(2)
+    Expect(graphFinished).toBe(false)
+
+    release.resolve()
+    await finished
+    Expect(graphFinished).toBe(true)
+  })
+
   Test('reports once when a ready node is waiting for machine capacity', async () => {
     const state = WorkGraph.createState(workNode({ name: 'capacity-waiter' }))
     const events: string[] = []
