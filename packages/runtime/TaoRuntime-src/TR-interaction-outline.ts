@@ -298,22 +298,55 @@ export type TaoOutlineLiveNode =
     order: number
   }>
 
+type MeasuredOutlineNode = Readonly<{
+  bounds: TaoInteractionBounds
+  node: TaoOutlineLiveNode
+  registration: number
+}>
+
+type VisualRow = {
+  bottom: number
+  nodes: MeasuredOutlineNode[]
+  top: number
+}
+
 /**
- * visualOrder puts nodes in the order a person reads them — down the screen, then across it. A
- * keyed reorder moves a row's box without re-registering the row, so registration order alone would
- * traverse a reordered list in the order it first mounted. Registration order stays the tiebreak
- * between boxes that start at the same point, and stays the whole answer while any node is
- * unmeasured: a partially measured list has no visual order to read.
+ * visualOrder puts nodes in structural rows before reading each row from left to right. Nodes whose
+ * vertical spans share a band belong to one row even when their heights and top edges differ; a row
+ * boundary exists only where the preceding row ends before the next begins. This makes scrolling a
+ * coordinate translation rather than a reorder and keeps a tall control aligned with shorter peers.
+ * Registration order stays the final tiebreak, and stays the whole answer while any node is
+ * unmeasured: a partially measured list has no complete visual structure to read.
  */
 export function visualOrder(nodes: readonly TaoOutlineLiveNode[]): readonly TaoOutlineLiveNode[] {
   const measured = nodes.map((node, registration) => ({ bounds: node.live?.measure?.(), node, registration }))
-  const anchored = measured.flatMap(entry => entry.bounds === undefined ? [] : [{ ...entry, bounds: entry.bounds }])
+  const anchored: MeasuredOutlineNode[] = measured.flatMap(entry =>
+    entry.bounds === undefined ? [] : [{ ...entry, bounds: entry.bounds }]
+  )
   if (anchored.length !== measured.length) {
     return nodes
   }
-  return anchored
-    .sort((left, right) =>
-      left.bounds.y - right.bounds.y || left.bounds.x - right.bounds.x || left.registration - right.registration
+  const rows: VisualRow[] = []
+  for (
+    const entry of anchored.toSorted((left, right) =>
+      left.bounds.y - right.bounds.y || left.registration - right.registration
+    )
+  ) {
+    const entryBottom = entry.bounds.y + entry.bounds.height
+    const row = rows.find(candidate => entry.bounds.y < candidate.bottom && entryBottom > candidate.top)
+    if (row === undefined) {
+      rows.push({ bottom: entryBottom, nodes: [entry], top: entry.bounds.y })
+      continue
+    }
+    // Keep the band every member shares. A very tall node cannot bridge two otherwise separate rows.
+    row.top = Math.max(row.top, entry.bounds.y)
+    row.bottom = Math.min(row.bottom, entryBottom)
+    row.nodes.push(entry)
+  }
+  return rows
+    .toSorted((left, right) => left.top - right.top)
+    .flatMap(row =>
+      row.nodes.toSorted((left, right) => left.bounds.x - right.bounds.x || left.registration - right.registration)
     )
     .map(entry => entry.node)
 }

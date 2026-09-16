@@ -138,9 +138,14 @@ namespace TestCompiler {
     }
 
     export type Response = {
-      error?: string
+      error?: WorkerFailure
       id: number
       output?: Output
+    }
+
+    export type WorkerFailure = {
+      category: 'host' | 'unexpected' | 'user'
+      message: string
     }
 
     export type LineBuffer = {
@@ -173,6 +178,7 @@ export namespace Worker {
   export type ValidateOutput = TestCompiler.Worker.ValidateOutput
   export type Request = TestCompiler.Worker.Request
   export type Response = TestCompiler.Worker.Response
+  export type WorkerFailure = TestCompiler.Worker.WorkerFailure
   export type LineBuffer = TestCompiler.Worker.LineBuffer
 }
 

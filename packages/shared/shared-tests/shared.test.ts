@@ -12,6 +12,7 @@ import {
   Repo,
   Switch,
   Text,
+  Time,
 } from '../shared-src/shared'
 
 const cleanupPaths: string[] = []
@@ -20,6 +21,64 @@ AfterEach(async () => {
   for (const path of cleanupPaths.splice(0).reverse()) {
     await FS.remove(path)
   }
+})
+
+Describe('Time', () => {
+  Test('pollUntil ignores only its three sentinels and returns other falsey values', async () => {
+    const values: Array<false | null | number | undefined> = [false, undefined, null, 0]
+    let now = 0
+    const waits: number[] = []
+
+    const result = await Time.pollUntil(() => values.shift(), {
+      intervalMs: 10,
+      now: () => now,
+      sleep: async ms => {
+        waits.push(ms)
+        now += ms
+      },
+      timeoutMs: 100,
+    })
+
+    Expect(result).toBe(0)
+    Expect(waits).toEqual([10, 10, 10])
+  })
+
+  Test('pollUntil stops before another read when its caller cancels', async () => {
+    let reads = 0
+    const result = await Time.pollUntil(() => {
+      reads += 1
+      return false
+    }, {
+      intervalMs: 10,
+      stop: () => true,
+      timeoutMs: 100,
+    })
+
+    Expect(result).toBeUndefined()
+    Expect(reads).toBe(0)
+  })
+
+  Test('pollUntil clamps its final sleep to the deadline and never reads at the deadline', async () => {
+    let now = 0
+    let reads = 0
+    const waits: number[] = []
+    const result = await Time.pollUntil(() => {
+      reads += 1
+      return undefined
+    }, {
+      intervalMs: 10,
+      now: () => now,
+      sleep: async ms => {
+        waits.push(ms)
+        now += ms
+      },
+      timeoutMs: 25,
+    })
+
+    Expect(result).toBeUndefined()
+    Expect(reads).toBe(3)
+    Expect(waits).toEqual([10, 10, 5])
+  })
 })
 
 Describe('FS', () => {

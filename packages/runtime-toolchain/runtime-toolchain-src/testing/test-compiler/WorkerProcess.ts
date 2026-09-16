@@ -38,7 +38,7 @@ async function handleSessionLine(line: string): Promise<void> {
   try {
     response.output = await compileInput(request.input)
   } catch (error) {
-    response.error = Errors.formatForLog(error)
+    response.error = Protocol.failureFromError(error)
   }
   Platform.runtimeProcess.stdout.write(Protocol.responseLine(response))
 }

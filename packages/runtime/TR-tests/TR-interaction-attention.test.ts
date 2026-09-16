@@ -9,6 +9,8 @@ import {
   siblingRegionIdentity,
   type TaoInteractionOccurrence,
   type TaoOutlineEntry,
+  type TaoOutlineLiveNode,
+  visualOrder,
 } from '../TaoRuntime-src/TR-interaction-outline'
 
 function register(outline: InteractionOutline, entry: TaoOutlineEntry): () => void {
@@ -43,6 +45,41 @@ function item(
 }
 
 Describe('TR.Interaction attention', () => {
+  Test('orders structural rows independently of scrolling and unequal control heights', () => {
+    const nodes = [
+      measuredNode('right-tall', { height: 90, width: 20, x: 80, y: 10 }),
+      measuredNode('left-short', { height: 30, width: 20, x: 10, y: 40 }),
+      measuredNode('second-row', { height: 20, width: 20, x: 5, y: 110 }),
+    ]
+
+    Expect(visualOrder(nodes).map(node => node.identity)).toEqual([
+      'left-short',
+      'right-tall',
+      'second-row',
+    ])
+    const scrolled = nodes.map(node =>
+      measuredNode(node.identity, {
+        ...node.live!.measure!()!,
+        y: node.live!.measure!()!.y - 240,
+      })
+    )
+    Expect(visualOrder(scrolled).map(node => node.identity)).toEqual([
+      'left-short',
+      'right-tall',
+      'second-row',
+    ])
+  })
+
+  Test('keeps registration order when any candidate has no complete visual measurement', () => {
+    const measured = measuredNode('measured', { height: 20, width: 20, x: 80, y: 20 })
+    const unmeasured = measuredNode('unmeasured', undefined)
+
+    Expect(visualOrder([measured, unmeasured]).map(node => node.identity)).toEqual([
+      'measured',
+      'unmeasured',
+    ])
+  })
+
   Test('narrows by greedy locale-aware word-prefix subsequence and eagerly targets one result', () => {
     const outline = new InteractionOutline()
     const catalog = new CommandCatalog()
@@ -1194,3 +1231,18 @@ Describe('TR.Interaction attention', () => {
     Expect(blurs).toBe(2)
   })
 })
+
+function measuredNode(
+  identity: string,
+  bounds: ReturnType<NonNullable<NonNullable<TaoOutlineEntry['live']>['measure']>>,
+): TaoOutlineLiveNode {
+  return {
+    identity,
+    kind: 'item',
+    label: () => identity,
+    live: { measure: () => bounds },
+    mount: 1,
+    order: 1,
+    provenance: {},
+  }
+}

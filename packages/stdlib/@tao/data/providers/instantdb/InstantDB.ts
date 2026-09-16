@@ -9,7 +9,7 @@ type InstantDatabase = ReturnType<InstantSDK['init']>
 type InstantCore = InstantDatabase['core']
 type SnapshotRow = { Snapshot: string; StorageKey: string }
 type SnapshotResult = {
-  data?: { taoSnapshots: SnapshotRow[] }
+  data?: { taoSnapshots?: readonly unknown[] }
   error?: unknown
 }
 
@@ -32,22 +32,27 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
       const appId = requiredConfigurationText(providerName, context, 'AppId')
       const apiURI = optionalConfigurationText(providerName, context, 'ApiURI')
       const websocketURI = optionalConfigurationText(providerName, context, 'WebsocketURI')
-      const { i, init } = loadSDK()
-      const instantSchema = i.schema({
-        entities: {
-          taoSnapshots: i.entity({
-            StorageKey: i.string(),
-            Snapshot: i.string(),
-          }),
-        },
-        links: {},
-      })
-      const db = init({
-        appId,
-        schema: instantSchema,
-        ...(apiURI === undefined ? {} : { apiURI }),
-        ...(websocketURI === undefined ? {} : { websocketURI }),
-      })
+      let db: InstantDatabase
+      try {
+        const { i, init } = loadSDK()
+        const instantSchema = i.schema({
+          entities: {
+            taoSnapshots: i.entity({
+              StorageKey: i.string(),
+              Snapshot: i.string(),
+            }),
+          },
+          links: {},
+        })
+        db = init({
+          appId,
+          schema: instantSchema,
+          ...(apiURI === undefined ? {} : { apiURI }),
+          ...(websocketURI === undefined ? {} : { websocketURI }),
+        })
+      } catch (error) {
+        throw instantFailure('initialization', error)
+      }
       clientReferences.set(db.core, (clientReferences.get(db.core) ?? 0) + 1)
       const entityId = deterministicEntityId(`${appId}:${context.storageKey}`)
       const query = snapshotQuery(entityId)
@@ -92,42 +97,57 @@ export function InstantDBProvider(loadSDK: () => InstantSDK = instantSDK): TR.Da
                 reject(error)
               }
             }
-            stopQuery = db.core.subscribeQuery(query, result => {
-              const { error, snapshot } = readResult(result, context.storageKey)
-              if (!settled) {
-                settled = true
-                rejectPendingLoad = undefined
-                if (error !== undefined) {
-                  reject(toError(error))
-                } else {
-                  resolve(snapshot)
+            try {
+              stopQuery = db.core.subscribeQuery(query, result => {
+                const { error, snapshot } = readResult(result, context.storageKey)
+                if (!settled) {
+                  settled = true
+                  rejectPendingLoad = undefined
+                  if (error !== undefined) {
+                    reject(instantFailure('load', error))
+                  } else {
+                    resolve(snapshot)
+                  }
+                  return
                 }
-                return
-              }
-              if (observer === undefined) {
-                // The runtime subscribes one microtask after load resolves; keep the latest result
-                // from that gap — an error included — so subscribe can replay it.
-                missedResult = error !== undefined ? { error } : { snapshot }
-                return
-              }
-              if (error !== undefined) {
-                observer.error(error)
-              } else {
-                observer.snapshot(snapshot)
-              }
-            })
+                if (observer === undefined) {
+                  // The runtime subscribes one microtask after load resolves; keep the latest result
+                  // from that gap — an error included — so subscribe can replay it.
+                  missedResult = error !== undefined
+                    ? { error: instantFailure('subscription', error) }
+                    : { snapshot }
+                  return
+                }
+                if (error !== undefined) {
+                  observer.error(instantFailure('subscription', error))
+                } else {
+                  observer.snapshot(snapshot)
+                }
+              })
+            } catch (error) {
+              rejectPendingLoad = undefined
+              reject(instantFailure('subscription', error))
+            }
           }),
         // The full envelope round-trips row ids untouched, so identity tokens restore across
         // relaunches exactly as for the local snapshot providers.
         referenceToken: reference => reference.id,
         resolveReference: reference => reference.token,
         save: async snapshot => {
-          await db.transact(
-            db.tx.taoSnapshots[entityId]!.update({
-              Snapshot: snapshot,
-              StorageKey: context.storageKey,
-            }),
-          )
+          try {
+            const snapshots = db.tx['taoSnapshots']
+            if (snapshots === undefined) {
+              Errors.throwHostEnvironment('The InstantDB transaction builder is unavailable.')
+            }
+            await db.transact(
+              snapshots[entityId]!.update({
+                Snapshot: snapshot,
+                StorageKey: context.storageKey,
+              }),
+            )
+          } catch (error) {
+            throw instantFailure('save', error)
+          }
         },
         subscribe: next => {
           observer = next
@@ -158,21 +178,31 @@ function readResult(
   if (result.error !== undefined) {
     return { error: result.error }
   }
+  const row = result.data?.taoSnapshots?.[0]
+  if (row !== undefined && !isSnapshotRow(row)) {
+    return { error: new Errors.HostEnvironmentError('InstantDB returned a malformed snapshot row.') }
+  }
   try {
-    return { snapshot: snapshotFromRow(result.data?.taoSnapshots[0], storageKey) }
+    return { snapshot: snapshotFromRow(row, storageKey) }
   } catch (error) {
     return { error }
   }
 }
 
-function toError(error: unknown): Error {
-  if (error instanceof Error) {
+function isSnapshotRow(value: unknown): value is SnapshotRow {
+  return typeof value === 'object'
+    && value !== null
+    && 'Snapshot' in value
+    && typeof value.Snapshot === 'string'
+    && 'StorageKey' in value
+    && typeof value.StorageKey === 'string'
+}
+
+function instantFailure(operation: string, error: unknown): Error {
+  if (Errors.isTaoError(error)) {
     return error
   }
-  const message = typeof error === 'object' && error !== null && 'message' in error
-    ? String((error as { message: unknown }).message)
-    : String(error)
-  return new Errors.UnexpectedBehaviorError(message)
+  return new Errors.HostEnvironmentError(`InstantDB ${operation} failed.`, { cause: error })
 }
 
 function instantSDK(): InstantSDK {

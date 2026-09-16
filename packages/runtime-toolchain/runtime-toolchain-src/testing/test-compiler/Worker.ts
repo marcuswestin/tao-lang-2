@@ -22,6 +22,7 @@ type StopCommandOptions = {
 }
 
 const DEFAULT_STOP_TIMEOUT_MS = 250
+const WORKER_STDERR_LIMIT = 2_000
 
 const WORKER_PATH = FS.resolvePath(
   'runtime-toolchain-src/testing/test-compiler/WorkerProcess.ts',
@@ -38,6 +39,7 @@ export const Worker = {
 
 /** WorkerTesting exposes deterministic lifecycle seams to package tests. */
 export const WorkerTesting = {
+  formatWorkerClose,
   stopCommand,
 } as const
 
@@ -237,7 +239,7 @@ class Session {
 
   private handleOutput(stream: CLI.CommandOutputStream, chunk: Buffer): void {
     if (stream === 'stderr') {
-      this.stderr += chunk.toString('utf8')
+      this.stderr = boundedWorkerStderr(`${this.stderr}${chunk.toString('utf8')}`)
       return
     }
     for (const line of Protocol.lines(this.stdout, chunk.toString('utf8'))) {
@@ -253,7 +255,7 @@ class Session {
     }
     this.pending.delete(response.id)
     if (response.error !== undefined) {
-      pending.reject(new Errors.HostEnvironmentError(response.error))
+      pending.reject(Protocol.errorFromFailure(response.error))
       return
     }
     if (response.output === undefined) {
@@ -309,6 +311,14 @@ async function waitForCommandClose(
 function formatWorkerClose(result: CLI.CommandCloseResult, stderr: string): string {
   return [
     `Test compiler worker exited with ${result.exitCode ?? 'unknown'}.`,
-    stderr.trim(),
+    boundedWorkerStderr(stderr).trim(),
   ].filter(Boolean).join('\n')
+}
+
+function boundedWorkerStderr(stderr: string): string {
+  const safe = stderr.replaceAll(/\u001b\[[0-?]*[ -\/]*[@-~]/gu, '').replaceAll(
+    /[\u0000\u0008\u000b\u000c\u000e-\u001f\u007f]+/gu,
+    ' ',
+  )
+  return safe.length <= WORKER_STDERR_LIMIT ? safe : `…${safe.slice(-(WORKER_STDERR_LIMIT - 1))}`
 }

@@ -89,7 +89,9 @@ Describe('@tao/data providers', () => {
     connection.close?.()
 
     Expect(snapshots).toEqual(['missed', 'remote'])
-    Expect(errors).toEqual([remoteError])
+    Expect(errors).toHaveLength(1)
+    Expect(errors[0]).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect(Errors.messageOf(errors[0])).toBe('InstantDB subscription failed.')
     Expect(sdk.unsubscribeCalls).toBe(1)
     Expect(sdk.shutdownCalls).toBe(0)
     secondConnection.close?.()
@@ -97,7 +99,7 @@ Describe('@tao/data providers', () => {
     Expect(sdk.shutdownCalls).toBe(1)
   })
 
-  Test('rejects the load when the first subscription result is an error or a key collision', async () => {
+  Test('classifies InstantDB boundary failures while preserving Tao error categories', async () => {
     const sdk = fakeInstantSDK()
     const provider = InstantDBProvider(() => sdk.instantSDK as never)
     const connect = (storageKey: string): TR.DataConnection =>
@@ -109,11 +111,31 @@ Describe('@tao/data providers', () => {
 
     const failing = connect('Notes').load() as Promise<string | undefined>
     sdk.subscription?.({ error: { message: 'device is offline' } })
-    await Expect(failing).rejects.toThrow('device is offline')
+    await Expect(failing).rejects.toThrow('InstantDB load failed.')
+    await Expect(failing).rejects.toBeInstanceOf(Errors.HostEnvironmentError)
 
     const colliding = connect('Notes').load() as Promise<string | undefined>
     sdk.subscription?.({ data: { taoSnapshots: [{ Snapshot: 'x', StorageKey: 'OtherKey' }] } })
     await Expect(colliding).rejects.toThrow('deterministic snapshot key collision')
+    await Expect(colliding).rejects.toBeInstanceOf(Errors.UnexpectedBehaviorError)
+
+    const categorized = new Errors.UserInputError('A categorized author failure.')
+    const categorizedLoad = connect('Notes').load() as Promise<string | undefined>
+    sdk.subscription?.({ error: categorized })
+    await Expect(categorizedLoad).rejects.toBe(categorized)
+
+    const saving = connect('Notes')
+    sdk.failTransactionsWith(`token=hidden\u001b[31m${'x'.repeat(400)}`)
+    let saveError: unknown
+    try {
+      await saving.save('snapshot')
+    } catch (error) {
+      saveError = error
+    }
+    Expect(saveError).toBeInstanceOf(Errors.HostEnvironmentError)
+    const message = Errors.messageOf(saveError)
+    Expect(message).toBe('InstantDB save failed.')
+    Expect(message.includes('hidden')).toBe(false)
   })
 
   Test('counts core references across provider instances sharing one cached SDK core', () => {
@@ -757,6 +779,7 @@ type InstantSubscriptionResult = {
 
 /** fakeInstantSDK emulates the SDK boundary, including its one cached core per init config. */
 function fakeInstantSDK(): {
+  failTransactionsWith: (error: unknown) => void
   initConfig: Record<string, unknown> | undefined
   instantSDK: unknown
   shutdownCalls: number
@@ -769,6 +792,7 @@ function fakeInstantSDK(): {
     shutdownCalls: 0,
     subscription: undefined as ((result: InstantSubscriptionResult) => void) | undefined,
     transactions: [] as unknown[],
+    transactionFailure: undefined as unknown,
     unsubscribeCalls: 0,
   }
   const core = {
@@ -793,6 +817,9 @@ function fakeInstantSDK(): {
       return {
         core,
         transact: async (transaction: unknown) => {
+          if (state.transactionFailure !== undefined) {
+            throw state.transactionFailure
+          }
           state.transactions.push(transaction)
         },
         tx: {
@@ -806,6 +833,9 @@ function fakeInstantSDK(): {
     },
   }
   return {
+    failTransactionsWith(error: unknown) {
+      state.transactionFailure = error
+    },
     get initConfig() {
       return state.initConfig
     },
