@@ -1,7 +1,9 @@
+import { Packages } from '@ast-utils'
 import { AST, Langium } from '@parser'
 import { type Diagnostic, Diagnostics, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { LSPWorkspace, Workspace } from '@workspace'
+import { createWorkspaceLspServices } from '../workspace-src/langium-services'
 
 const tsFence = '```ts'
 const fence = '```'
@@ -294,6 +296,122 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
+  Test('keeps same-named packages local to sibling projects in one LSP workspace', async () => {
+    await withTaoFiles(
+      'tao-workspace-lsp-project-packages-',
+      {
+        'First/Main.tao': `
+          use Label from @data
+          use Text from @tao/ui
+          project { id "first" name "First" }
+          app FirstApp { view FirstView }
+          action Run() { }
+          command FirstCommand() { Title "First" Key "g" do Run() }
+          view FirstView() { render Text(Label) }
+        `,
+        'First/@data/Data.tao': 'workspace let Label = "First label"',
+        'Second/Main.tao': `
+          use Label from @data
+          use Text from @tao/ui
+          project { id "second" name "Second" }
+          app SecondApp { view SecondView }
+          action Run() { }
+          command SecondCommand() { Title "Second" Key "g" do Run() }
+          view SecondView() { render Text(Label) }
+        `,
+        'Second/@data/Data.tao': 'workspace let Label = "Second label"',
+      },
+      async (paths, rootDir) => {
+        const workspace = await LSPWorkspace.open(rootDir)
+        const documents = workspace.services.shared.workspace.LangiumDocuments
+        const first = documents.getDocument(Langium.URI.file(paths['First/Main.tao']!))!
+        const second = documents.getDocument(Langium.URI.file(paths['Second/Main.tao']!))!
+        await workspace.services.shared.workspace.DocumentBuilder.build([first, second], {
+          eagerLinking: true,
+          validation: true,
+        })
+
+        Expect(lspErrorMessages(first.diagnostics ?? [])).toEqual([])
+        Expect(lspErrorMessages(second.diagnostics ?? [])).toEqual([])
+        const firstFile = first.parseResult.value
+        const secondFile = second.parseResult.value
+        Expect.Is(firstFile, AST.isTaoFile)
+        Expect.Is(secondFile, AST.isTaoFile)
+        const firstImported = firstFile.statements.filter(AST.isUseStatement).find(use => use.importPath === '@data')
+          ?.importedDeclarations[0]?.ref
+        const secondImported = secondFile.statements.filter(AST.isUseStatement).find(use => use.importPath === '@data')
+          ?.importedDeclarations[0]?.ref
+        Expect(firstImported && AST.getDocument(firstImported).uri.path).toBe(paths['First/@data/Data.tao'])
+        Expect(secondImported && AST.getDocument(secondImported).uri.path).toBe(paths['Second/@data/Data.tao'])
+        for (const file of [firstFile, secondFile]) {
+          const text = file.statements.filter(AST.isUseStatement).find(use => use.importPath === '@tao/ui')
+            ?.importedDeclarations[0]?.ref
+          Expect(text).toBeDefined()
+        }
+      },
+    )
+  })
+
+  Test('keeps an in-workspace stdlib visible while validating a nested project', async () => {
+    await withTaoFiles(
+      'tao-workspace-lsp-contained-stdlib-',
+      {
+        'App/Main.tao': `
+          project { id "app" name "App" }
+          use StdLabel from @tao/ui
+          workspace let Selected = StdLabel
+        `,
+        'stdlib/@tao/ui/Labels.tao': 'public let StdLabel = "Stdlib"',
+      },
+      async (paths, rootDir) => {
+        const packagesContext = await Packages.createContext(rootDir, {
+          stdlibRoot: FS.resolvePath('stdlib', rootDir),
+        })
+        const services = createWorkspaceLspServices(packagesContext)
+        const documents = services.shared.workspace.LangiumDocuments
+        const factory = services.shared.workspace.LangiumDocumentFactory
+        const app = await factory.fromUri(Langium.URI.file(paths['App/Main.tao']!))
+        const label = await factory.fromUri(Langium.URI.file(paths['stdlib/@tao/ui/Labels.tao']!))
+        documents.addDocument(app)
+        documents.addDocument(label)
+        await services.shared.workspace.DocumentBuilder.build([app, label], {
+          eagerLinking: true,
+          validation: true,
+        })
+
+        Expect(lspErrorMessages(app.diagnostics ?? [])).toEqual([])
+        const file = app.parseResult.value
+        Expect.Is(file, AST.isTaoFile)
+        const imported = file.statements.find(AST.isUseStatement)?.importedDeclarations[0]?.ref
+        Expect(imported && AST.getDocument(imported).uri.path).toBe(paths['stdlib/@tao/ui/Labels.tao'])
+      },
+    )
+  })
+
+  Test('opens a nested editor folder at its inline-declared project root', async () => {
+    await withTaoFiles(
+      'tao-workspace-lsp-containing-project-',
+      {
+        'App/Main.tao': 'project { id "inline" name "Inline" }',
+        'App/@data/Data.tao': 'workspace let Label = "Local"',
+        'App/screens/View.tao': 'use Label from @data\nworkspace let Selected = Label',
+      },
+      async (paths, rootDir) => {
+        const projectRoot = FS.resolvePath('App', rootDir)
+        const workspace = await LSPWorkspace.open(FS.resolvePath('screens', projectRoot))
+        const document = workspace.services.shared.workspace.LangiumDocuments
+          .getDocument(Langium.URI.file(paths['App/screens/View.tao']!))!
+        await workspace.services.shared.workspace.DocumentBuilder.build([document], { eagerLinking: true })
+        const file = document.parseResult.value
+        Expect.Is(file, AST.isTaoFile)
+        const imported = file.statements.find(AST.isUseStatement)?.importedDeclarations[0]?.ref
+
+        Expect(workspace.root).toBe(FS.resolvePath('screens', projectRoot))
+        Expect(imported && AST.getDocument(imported).uri.path).toBe(paths['App/@data/Data.tao'])
+      },
+    )
+  })
+
   // The editor reports linking errors through Langium's document validator, not through the CLI's
   // diagnostics pass, so the bridge exemption has to hold on that path too. It once held only on the
   // CLI side, and every `Name from ./File.ts` read as a missing Tao declaration in the editor.
@@ -451,4 +569,12 @@ async function lspDiagnosticMessages(rootDir: string, entryPath: string): Promis
 
 function errorMessages(result: { diagnostics: readonly Diagnostic[] }): string[] {
   return Diagnostics.errorMessages(result.diagnostics)
+}
+
+function lspErrorMessages(
+  diagnostics: readonly { message: string | { value: string }; severity?: number }[],
+): string[] {
+  return diagnostics
+    .filter(diagnostic => diagnostic.severity === 1)
+    .map(diagnostic => typeof diagnostic.message === 'string' ? diagnostic.message : diagnostic.message.value)
 }

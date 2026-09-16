@@ -1097,3 +1097,21 @@ an entry here may link one when the developer workflow is also affected.
   carried module and links a created project at it; `cli-tests/app-modules.test.ts` already covers
   both halves of that fallback against a synthetic tree.
 - **Source:** 2026-09-12 review of the `@tao/runtime` CLI module wiring.
+
+### DEVENV-059 — `./agent capabilities` cannot inspect a managed sandbox
+
+- **Status:** Candidate
+- **Area:** Agent diagnostics
+- **Impact:** The command intended to distinguish sandbox restrictions from missing host tools can
+  fail before printing any capability report, leaving the caller without the diagnostic it requested.
+- **Evidence:** 2026-09-16, `./agent capabilities` in the managed Codex worktree failed in
+  `AgentCapabilities.ts` when `Platform.spawn` attempted `/bin/ps`: `EPERM: operation not permitted,
+  posix_spawn '/bin/ps'`.
+- **Workaround:** Run the individual repository command and classify an `EPERM` directly; use an
+  approved direct `ps` invocation only when process inspection itself is needed.
+- **Proposed change:** Make capability probes tolerate sandbox-denied subprocesses and report each
+  denial as an unavailable capability instead of aborting the entire command.
+- **Dependencies:** None.
+- **Acceptance:** `./agent capabilities` completes in the managed sandbox and reports the denied
+  process-inspection capability alongside the probes it could run.
+- **Source:** 2026-09-16 project-local package implementation.

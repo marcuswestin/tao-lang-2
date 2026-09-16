@@ -58,6 +58,26 @@ Describe('tao fix', () => {
     })
   })
 
+  Test('keeps package imports from a project declared in an ordinary source file', async () => {
+    await withTaoFixture({
+      'First/Main.tao': 'project { id "first-inline" name "First inline" }\n',
+      'First/@data/Data.tao': 'workspace data Labels / Label {\n   Value text\n}\n',
+      'First/@ui/View.tao': 'use Labels from @data\n\nworkspace scene Greeting() {\n   query Labels { }\n}\n',
+      'Second/Main.tao': 'project { id "second-inline" name "Second inline" }\n',
+      'Second/@data/Data.tao': 'workspace data Labels / Label {\n   Value text\n}\n',
+      'Second/@ui/View.tao': 'use Labels from @data\n\nworkspace scene Greeting() {\n   query Labels { }\n}\n',
+    }, async rootDir => {
+      const firstPath = FS.resolvePath('First/@ui/View.tao', rootDir)
+      const secondPath = FS.resolvePath('Second/@ui/View.tao', rootDir)
+      const results = await runFix(rootDir)
+
+      Expect(statusByFile(results, rootDir)['First/@ui/View.tao']).toBe('changed')
+      Expect(statusByFile(results, rootDir)['Second/@ui/View.tao']).toBe('changed')
+      Expect(await FS.readText(firstPath)).toContain('use Labels from @data')
+      Expect(await FS.readText(secondPath)).toContain('use Labels from @data')
+    })
+  })
+
   Test('checks generated root-package source at every inferred project root without rewriting it', async () => {
     const generated = 'view   Generated() { }'
     const nestedGenerated = 'view   Nested() { }'
