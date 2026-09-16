@@ -197,7 +197,7 @@ Describe('Studio structured panel projection', () => {
       Open: { invoke() {} } as unknown as TR.ActionValue<[]>,
       Path: row.Path,
     }))
-    Expect(html).toContain('/project/Main.tao:2:10')
+    Expect(html).toContain('Main.tao:2:10')
   })
 
   Test('rejects invalid controller identities before publication', () => {

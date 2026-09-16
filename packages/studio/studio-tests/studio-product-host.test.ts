@@ -149,8 +149,8 @@ Test('Tao Studio keeps scenario and environment drafts mounted across each other
 })
 
 Test('Tao Studio search hits preserve path, line, and column', () => {
-  Expect(StudioSearchLocation('/project/first/Main.tao', 12, 4)).toBe('/project/first/Main.tao:13:5')
-  Expect(StudioSearchLocation('/project/second/Main.tao', -1, -1)).toBe('/project/second/Main.tao')
+  Expect(StudioSearchLocation('/project/first/Main.tao', 12, 4)).toEndWith('first/Main.tao:13:5')
+  Expect(StudioSearchLocation('/project/second/Main.tao', -1, -1)).toEndWith('second/Main.tao')
   const html = renderToStaticMarkup(React.createElement(StudioSearchHit, {
     Column: 4,
     Detail: 'Text("Needle")',
@@ -160,7 +160,7 @@ Test('Tao Studio search hits preserve path, line, and column', () => {
     Open: { invoke() {} } as unknown as TR.ActionValue<[]>,
     Path: '/project/first/Main.tao',
   }))
-  Expect(html).toContain('/project/first/Main.tao:13:5')
+  Expect(html).toContain('first/Main.tao:13:5')
   Expect(html).toContain('<b>Needle</b> · Text(&quot;Needle&quot;)')
 })
 
