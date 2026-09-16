@@ -1,3 +1,3 @@
 import { registerTaoTestShard } from './tao-test-shard-runner'
 
-registerTaoTestShard(0)
+registerTaoTestShard(1)

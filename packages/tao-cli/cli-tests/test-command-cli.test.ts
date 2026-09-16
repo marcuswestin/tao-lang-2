@@ -1,5 +1,6 @@
 import { FS, Platform, Text } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { taoTestShardCount } from '../cli-src/test-command'
 import { runTaoCliForTest, withTaoFixture } from './test-cli-files'
 
 const taoApp = (name: string) => `
@@ -368,6 +369,14 @@ Describe('tao test CLI', () => {
         })
       })
     })
+  })
+
+  Test('clamps runtime shards to three, the test file count, and the available jobs', () => {
+    Expect(taoTestShardCount(30, 1)).toBe(1)
+    Expect(taoTestShardCount(30, 2)).toBe(2)
+    Expect(taoTestShardCount(30, 12)).toBe(3)
+    Expect(taoTestShardCount(1, 12)).toBe(1)
+    Expect(taoTestShardCount(2, 12)).toBe(2)
   })
 
   Test('stops every compiler worker after testing separate source directories', async () => {

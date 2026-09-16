@@ -192,10 +192,17 @@ function maxTestWorkers(): number {
  * - `TAO_TEST_NODE_PATH`: the Node executable that runs it instead of the pinned repository Node.
  * - `TAO_TEST_RUNTIME_ROOT`: the runtime-toolchain package root one run compiles into.
  * - `TAO_TEST_RUNTIME_MANIFEST`: set by this command for its child; `RuntimeTesting` owns the name.
+ * - `TAO_TEST_SHARD_COUNT`: set by this command for its Jest child to the number of static Tao test
+ *   shard entries that should share the compiled manifest.
  */
 function taoTestJobs(): number | undefined {
   const envJobs = Number(Platform.runtimeProcess.env['TAO_TEST_JOBS'] ?? '')
   return Number.isInteger(envJobs) && envJobs > 0 ? envJobs : undefined
+}
+
+/** taoTestShardCount sizes the runtime runner within its file count and reserved worker budget. */
+export function taoTestShardCount(testFileCount: number, availableJobs: number): number {
+  return Math.max(1, Math.min(3, testFileCount, availableJobs))
 }
 
 /**
@@ -209,6 +216,7 @@ async function runCompiledTaoTests(compiled: CompiledTaoTests, mode: TestOutputM
   const writer = TestOutput.createWriter(mode)
   const chunks: Buffer[] = []
   const jobs = taoTestJobs()
+  const shardCount = taoTestShardCount(compiled.testPaths.length, jobs ?? Platform.cpuCount())
   const result = await CLI.run(await testNodePath(), {
     args: [
       await testJestPath(compiled.runtimeRoot),
@@ -220,7 +228,10 @@ async function runCompiledTaoTests(compiled: CompiledTaoTests, mode: TestOutputM
       ...(jobs === undefined ? [] : [`--maxWorkers=${jobs}`]),
     ],
     cwd: compiled.runtimeRoot,
-    env: { [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath },
+    env: {
+      [RuntimeTesting.TEST_MANIFEST_ENV]: compiled.manifestPath,
+      TAO_TEST_SHARD_COUNT: String(shardCount),
+    },
     onOutput: (_stream, chunk) => {
       chunks.push(chunk)
       writer?.write(chunk)
