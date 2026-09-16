@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { CLI, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   CONVENTION_RULES,
@@ -259,6 +259,27 @@ _bench-check:
     }
   })
 
+  Test('scans untracked worktree sources while preserving ignores and repository boundaries', async () => {
+    const root = await mkTestDir('tao-repo-lint-worktree-')
+    try {
+      await CLI.mustRun('git', { args: ['init', '--quiet'], cwd: root })
+      await FS.writeText(FS.resolvePath('Justfile', root), healthyJustfile)
+      await FS.writeText(FS.resolvePath('.gitignore', root), 'packages/ignored/\n')
+      await FS.writeText(FS.resolvePath('Apps/Test Apps/README.md', root), '# Test Apps\n')
+      await FS.writeText(FS.resolvePath('Apps/WordFlower/1 - Current/WordFlower.tao', root), absorbed)
+      await FS.writeText(FS.resolvePath('Apps/WordFlower/2 - Next/WordFlower.tao-next', root), absorbed)
+      const source = `const failure = ${rawError('unclassified')}\n`
+      await FS.writeText(FS.resolvePath('Apps/Sample/NewAdapter.ts', root), source)
+      await FS.writeText(FS.resolvePath('packages/ignored/Ignored.ts', root), source)
+      await FS.writeText(FS.resolvePath('packages/tool/_gen_output/Ignored.ts', root), source)
+      await FS.writeText(FS.resolvePath('Outside.ts', root), source)
+
+      Expect(await repoLintIssues(root)).toEqual([rawErrorIssue('Apps/Sample/NewAdapter.ts')])
+    } finally {
+      await FS.remove(root)
+    }
+  })
+
   Test('ignores Tao-owned project state when checking absorbed source parity', () => {
     Expect(wordFlowerDirectoryIssues(directory(
       [
@@ -439,10 +460,11 @@ Describe('repo lint conventions', () => {
     ])
   })
 
-  Test('reports side-effect, dynamic, and CommonJS node imports', () => {
+  Test('reports side-effect, re-exported, dynamic, and CommonJS node imports', () => {
     const path = 'packages/dev/dev-src/studio/StudioNew.ts'
     const forms = [
       "import 'node:fs'",
+      "export { readFile } from 'node:fs'",
       "await import('node:path')",
       "const crypto = require('node:crypto')",
     ]
@@ -456,6 +478,15 @@ Describe('repo lint conventions', () => {
         + ' from `@shared`, and add the seam there when none fits.'
       ),
     )
+  })
+
+  Test('a node-import exemption allows one site rather than its whole file', () => {
+    const path = 'packages/dev/dev-src/studio/StudioNew.ts'
+    const source = [importFrom('node:crypto'), importFrom('node:net')].join('\n')
+    Expect(conventionRuleIssues(CONVENTION_RULES.nodeImport, [{ path, source }], [`${path}:1`])).toEqual([
+      `${path}:2 imports a \`node:\` module directly; reach for \`FS\`, \`CLI\`, \`Platform\`, or \`HCI\``
+      + ' from `@shared`, and add the seam there when none fits.',
+    ])
   })
 
   Test('leaves a type-only node import alone', () => {

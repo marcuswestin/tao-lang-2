@@ -342,44 +342,53 @@ const PLATFORM_WRAPPER_HOMES = ['packages/shared/', 'packages/runtime/']
 
 const NODE_IMPORT_ALLOWLIST = [
   // `node:crypto` hashing, until a `Platform` digest seam exists.
-  'packages/dev/dev-src/dev-data/DevDataBootstrap.ts',
-  'packages/dev/dev-src/repository-tests/GreenTree.ts',
-  'packages/dev/dev-src/repository-tests/ParserGenerate.ts',
-  'packages/dev/dev-src/repository-tests/TestLedger.ts',
-  'packages/dev/dev-src/studio/StudioCdp.ts',
-  'packages/dev/dev-src/studio/StudioElectrobun.ts',
-  'packages/dev/dev-src/studio/StudioNative.ts',
-  'packages/dev/dev-src/studio/StudioReview.ts',
-  'packages/dev/dev-tests/studio-review.test.ts',
-  'packages/tao-cli/cli-src/ship-executor.ts',
-  'packages/tao-cli/cli-src/ship-model.ts',
-  'packages/update-server/update-server-src/main.ts',
-  'packages/update-server/update-server-src/update-service.ts',
-  'packages/update-server/update-server-tests/update-server.test.ts',
+  'packages/dev/dev-src/dev-data/DevDataBootstrap.ts:1',
+  'packages/dev/dev-src/repository-tests/GreenTree.ts:2',
+  'packages/dev/dev-src/repository-tests/ParserGenerate.ts:2',
+  'packages/dev/dev-src/repository-tests/TestLedger.ts:2',
+  'packages/dev/dev-src/studio/StudioCdp.ts:2',
+  'packages/dev/dev-src/studio/StudioCdp.ts:3',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:697',
+  'packages/dev/dev-src/studio/StudioElectrobun.ts:699',
+  'packages/dev/dev-src/studio/StudioNative.ts:4',
+  'packages/dev/dev-src/studio/StudioNative.ts:5',
+  'packages/dev/dev-src/studio/StudioReview.ts:2',
+  'packages/dev/dev-tests/studio-review.test.ts:3',
+  'packages/tao-cli/cli-src/ship-executor.ts:3',
+  'packages/tao-cli/cli-src/ship-model.ts:2',
+  'packages/update-server/update-server-src/main.ts:3',
+  'packages/update-server/update-server-src/update-service.ts:2',
+  'packages/update-server/update-server-tests/update-server.test.ts:3',
   // `node:crypto` key signing for App Store Connect.
-  'packages/tao-cli/cli-src/app-store-connect-auth.ts',
-  'packages/tao-cli/cli-tests/app-store-connect-auth.test.ts',
+  'packages/tao-cli/cli-src/app-store-connect-auth.ts:2',
+  'packages/tao-cli/cli-tests/app-store-connect-auth.test.ts:3',
   // `node:net` port probes and socket connections.
-  'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts',
-  'packages/dev/dev-tests/expo-dev-loop.test.ts',
-  'packages/generation/generation-live/apple-foundation-models.live.ts',
+  'packages/dev/dev-src/expo-dev-loop/expo-runner/Ports.ts:2',
+  'packages/dev/dev-tests/expo-dev-loop.test.ts:3',
+  'packages/generation/generation-live/apple-foundation-models.live.ts:3',
+  'packages/generation/generation-live/apple-foundation-models.live.ts:4',
   // Test fixtures that emit or describe direct Node imports without executing them in Tao code.
-  'packages/dev/dev-tests/repo-lint.test.ts',
-  'packages/dev/dev-tests/work-graph.test.ts',
+  'packages/dev/dev-tests/repo-lint.test.ts:468',
+  'packages/dev/dev-tests/repo-lint.test.ts:469',
+  'packages/dev/dev-tests/work-graph.test.ts:314',
+  'packages/dev/dev-tests/work-graph.test.ts:315',
   // Stream classes a test constructs to stand in for a terminal.
-  'packages/tao-cli/cli-tests/compile-command.test.ts',
-  'packages/tao-cli/cli-tests/create-command.test.ts',
-  'packages/tao-cli/cli-tests/dev-command.test.ts',
-  'packages/tao-cli/cli-tests/test-cli-files.ts',
+  'packages/tao-cli/cli-tests/compile-command.test.ts:3',
+  'packages/tao-cli/cli-tests/create-command.test.ts:4',
+  'packages/tao-cli/cli-tests/dev-command.test.ts:3',
+  'packages/tao-cli/cli-tests/test-cli-files.ts:3',
   // Studio's `node:fs` reads close with its own sweep onto `FS`.
-  'packages/studio/studio-src/StudioClientAssets.ts',
-  'packages/studio/studio-src/device/StudioDeviceTrustStore.ts',
+  'packages/studio/studio-src/StudioClientAssets.ts:3',
+  'packages/studio/studio-src/device/StudioDeviceTrustStore.ts:5',
   // Node-loaded configuration and Expo config plugins cannot use the ESM shared wrappers.
-  'packages/runtime-toolchain/app-config.cjs',
-  'packages/runtime-toolchain/metro.config.cjs',
-  'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs',
+  'packages/runtime-toolchain/app-config.cjs:1',
+  'packages/runtime-toolchain/app-config.cjs:2',
+  'packages/runtime-toolchain/metro.config.cjs:2',
+  'packages/runtime-toolchain/metro.config.cjs:3',
+  'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:1',
+  'packages/runtime-toolchain/plugins/with-ios-fmt-compat.cjs:2',
   // A test proves the packaged CommonJS entry can resolve its generated dependency.
-  'packages/icloud-native/icloud-native-tests/icloud-native.test.ts',
+  'packages/icloud-native/icloud-native-tests/icloud-native.test.ts:210',
 ]
 
 const CONSOLE_CALL_ALLOWLIST = [
@@ -443,9 +452,9 @@ const BUN_TEST_IMPORT_PATTERN = /\bfrom\s*['"]bun:test['"]/g
  * The wrapper patterns are written so this file never matches them: each spells its target with an
  * escape or a group, and the details above name the construct without writing it.
  */
-/** A static, dynamic, or CommonJS value import from `node:`; `import type` remains type-only. */
+/** A static import/re-export, dynamic import, or CommonJS require from `node:`; `type` remains type-only. */
 const NODE_IMPORT_PATTERN =
-  /(?:^\s*import\s+(?!type\b)(?:[^'"\n]*\s+from\s+)?['"]node:|\b(?:import|require)\s*\(\s*['"]node:)/gm
+  /(?:^\s*(?:import|export)\s+(?!type\b)(?:[^'"\n]*\s+from\s+)?['"]node:|\b(?:import|require)\s*\(\s*['"]node:)/gm
 const CONSOLE_CALL_PATTERN = /(?<![\w$.\-])console\.(?:debug|error|info|log|warn)\b/g
 const PROCESS_ACCESS_PATTERN = /(?<![\w$.])process\.(?:argv|cwd|env|exitCode|exit|stderr|stdin|stdout)\b/g
 const BUN_CONVENIENCE_PATTERN = /\bBun\.(?:randomUUIDv7|semver|sleep|TOML)\b/g
@@ -462,7 +471,7 @@ type ConventionMatch = {
 /** ConventionRule is one pattern-and-allowlist convention over package source. */
 export type ConventionRule = {
   allowlist: readonly string[]
-  /** Each allowlist entry is one exact `path:line`, rather than permission for its whole file. */
+  /** When true, each allowlist entry is one exact `path:line`, rather than permission for its whole file. */
   allowlistBySite?: boolean
   detail: string
   /** Path prefixes the rule does not apply to at all, as opposed to files still allowed an exception. */
@@ -511,6 +520,7 @@ export const CONVENTION_RULES = {
   },
   nodeImport: {
     allowlist: NODE_IMPORT_ALLOWLIST,
+    allowlistBySite: true,
     detail: NODE_IMPORT_DETAIL,
     excludePathPrefixes: PLATFORM_WRAPPER_HOMES,
     pattern: NODE_IMPORT_PATTERN,
@@ -782,9 +792,12 @@ export async function repoLintIssues(repoRoot = Repo.getRoot()): Promise<string[
 const EXECUTABLE_EXTENSIONS = ['.cjs', '.js', '.jsx', '.mjs', '.ts', '.tsx']
 
 async function readExecutableFiles(repoRoot: string): Promise<SourceFile[]> {
-  const tracked = await CLI.run('git', { args: ['ls-files', '-z', '--', 'Apps', 'packages'], cwd: repoRoot })
+  const tracked = await CLI.run('git', {
+    args: ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'Apps', 'packages'],
+    cwd: repoRoot,
+  })
   const paths = tracked.exitCode === 0
-    ? tracked.stdout.split('\0').filter(path => EXECUTABLE_EXTENSIONS.some(extension => path.endsWith(extension)))
+    ? tracked.stdout.split('\0').filter(isExecutableRepositoryPath)
     : await walkedExecutablePaths(repoRoot)
   const files: SourceFile[] = []
   for (const path of paths) {
@@ -794,6 +807,12 @@ async function readExecutableFiles(repoRoot: string): Promise<SourceFile[]> {
     }
   }
   return files.sort((left, right) => left.path.localeCompare(right.path))
+}
+
+function isExecutableRepositoryPath(path: string): boolean {
+  const segments = FS.slashPath(path).split('/')
+  return EXECUTABLE_EXTENSIONS.some(extension => path.endsWith(extension))
+    && !segments.some(segment => segment === '.artifacts' || segment === 'node_modules' || segment.startsWith('_gen_'))
 }
 
 async function walkedExecutablePaths(repoRoot: string): Promise<string[]> {

@@ -167,7 +167,8 @@ export function taoForeignBindings(source: string): TaoBindingScan {
   const unreadable: number[] = []
   let injecting = false
   maskTaoComments(source).split('\n').forEach((rawLine, index) => {
-    const fences = (rawLine.match(/```/g) ?? []).length
+    const code = maskTaoStrings(rawLine)
+    const fences = (code.match(/```/g) ?? []).length
     const insideInjection = injecting
     if (fences % 2 === 1) {
       injecting = !injecting
@@ -177,7 +178,6 @@ export function taoForeignBindings(source: string): TaoBindingScan {
     }
     const line = rawLine
     const injected = TAO_INJECT_BINDING.exec(line)
-    const code = maskTaoStrings(line)
     if (injected !== null && code[injected.index] === '=') {
       bindings.push({ line: index + 1, name: 'default', path: injected[1]! })
       return

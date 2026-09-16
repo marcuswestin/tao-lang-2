@@ -85,6 +85,17 @@ Describe('tao foreign binding exclusions', () => {
     Expect(names('/*\n view Fake() from ./Somewhere.tsx\n*/\nview Real() from ./Real.tsx')).toEqual(['Real'])
   })
 
+  Test('does not treat injection fences inside strings or comments as syntax', () => {
+    const source = [
+      'Text("```")',
+      '// ```',
+      '/* ``` */',
+      'view Real() from ./Real.tsx',
+    ].join('\n')
+
+    Expect(names(source)).toEqual(['Real'])
+  })
+
   Test('skips an inline TypeScript injection, which the compiler emits as its own module', () => {
     const source = 'render inject Value ```ts\nimport { Text } from ./react-native\nreturn <Text />\n```\n'
 
