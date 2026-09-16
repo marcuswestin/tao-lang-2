@@ -1280,10 +1280,10 @@ view StudioSearchHitRow(Row StudioSearchPanelRow, Dispatch action(text, text)) {
    action Open() {
       do Dispatch(Row.Action.Name, Row.Action.Payload)
    }
-   render StudioSearchHit(Label: Row.Label, Kind: Row.Kind, Detail: Row.Detail, Path: Row.Path, Open: Open)
+   render StudioSearchHit(Label: Row.Label, Kind: Row.Kind, Detail: Row.Detail, Path: Row.Path, Line: Row.Line, Column: Row.Column, Open: Open)
 }
 
-view StudioSearchHit(Label text, Kind text, Detail text, Path text, Open action()) from ./TaoStudioProductHost.tsx
+view StudioSearchHit(Label text, Kind text, Detail text, Path text, Line number, Column number, Open action()) from ./TaoStudioProductHost.tsx
 
 function StudioPanelSelected(Tab text, Panel text) returns boolean {
    return StudioPanelSelected(Tab: Tab, Panel: Panel) from ./TaoStudioProductHost.tsx

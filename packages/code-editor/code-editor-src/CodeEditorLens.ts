@@ -1,6 +1,6 @@
 import {
   type ChangeDesc,
-  type EditorState,
+  EditorState,
   type Extension,
   type Range,
   StateEffect,
@@ -66,6 +66,7 @@ const setLensMap = StateEffect.define<CodeEditorLensMap>()
 const setLensConfig = StateEffect.define<CodeEditorLensConfig>()
 const peekLens = StateEffect.define<readonly number[]>()
 const refoldLens = StateEffect.define<null>()
+const externalEditLens = StateEffect.define<null>()
 
 const runGlyph = '⋯'
 const summaryLength = 80
@@ -121,17 +122,45 @@ const lensField = StateField.define<CodeEditorLensState>({
     if (rebuild) {
       next = build(next, transaction.state)
     }
-    if (rebuild || transaction.selection !== undefined) {
+    if (transaction.selection !== undefined) {
       // The caret is never left inside hidden text: navigation from a preview, a diagnostic, or a
-      // search, and a fold closing over the caret, all peek the region open instead.
-      const head = transaction.state.selection.main.head
-      const hit = next.spans.find(span => span.from < head && head < span.to)
+      // search peeks the region open instead. Re-folding and changing lenses deliberately do not
+      // inspect the existing caret: otherwise the region under it immediately opens again.
+      const selection = transaction.state.selection.main
+      const hit = next.spans.find(span => selectionTouchesSpan(selection.from, selection.to, span))
       if (hit !== undefined) {
         next = build({ ...next, peeks: [...next.peeks, hit.node.from] }, transaction.state)
       }
     }
     return next
   },
+})
+
+const protectHiddenSyntax = EditorState.transactionFilter.of(transaction => {
+  if (!transaction.docChanged || transaction.effects.some(effect => effect.is(externalEditLens))) {
+    return transaction
+  }
+  const spans = transaction.startState.field(lensField, false)?.spans ?? []
+  const peeks = new Set<number>()
+  transaction.changes.iterChangedRanges((fromA, toA) => {
+    if (fromA === toA) {
+      return
+    }
+    for (const span of spans) {
+      if (fromA < span.to && toA > span.from) {
+        peeks.add(span.node.from)
+      }
+    }
+  })
+  if (peeks.size === 0) {
+    return transaction
+  }
+  // CodeMirror expands Backspace/Delete across atomic replacement decorations. Cancelling that
+  // first deletion and revealing the source makes the next edit operate on syntax the person can see.
+  return {
+    effects: peekLens.of([...peeks]),
+    selection: transaction.startState.selection,
+  }
 })
 
 const lensTheme = EditorView.baseTheme({
@@ -149,6 +178,10 @@ const lensTheme = EditorView.baseTheme({
   '&light .cm-lens-glyph': { backgroundColor: 'rgba(0, 0, 0, 0.08)', color: '#3b4a3f' },
   '&dark .cm-lens-glyph': { backgroundColor: 'rgba(255, 255, 255, 0.12)', color: '#b8c4bb' },
   '.cm-lens-glyph:hover': { backgroundColor: 'rgba(120, 180, 140, 0.35)' },
+  '.cm-lens-glyph:focus-visible, .cm-lens-run:focus-visible': {
+    outline: '2px solid currentColor',
+    outlineOffset: '2px',
+  },
   '.cm-lens-run': {
     cursor: 'pointer',
     fontSize: '85%',
@@ -162,8 +195,9 @@ const lensTheme = EditorView.baseTheme({
 
 /** CodeEditorLens exposes the extension, its effects, and the pure pieces tests exercise directly. */
 export const CodeEditorLens = {
-  extension: [lensField, lensTheme] as Extension,
+  extension: [lensField, protectHiddenSyntax, lensTheme] as Extension,
   effects: {
+    externalEdit: externalEditLens,
     peek: peekLens,
     refold: refoldLens,
     setConfig: setLensConfig,
@@ -404,6 +438,9 @@ class LensGlyphWidget extends WidgetType {
 
   override toDOM(view: EditorView): HTMLElement {
     const element = document.createElement('span')
+    element.setAttribute('aria-label', `Reveal hidden ${this.facet} syntax`)
+    element.setAttribute('role', 'button')
+    element.tabIndex = 0
     element.className = 'cm-lens-glyph'
     element.dataset['facet'] = this.facet
     element.dataset['lensPeek'] = String(this.key)
@@ -412,6 +449,12 @@ class LensGlyphWidget extends WidgetType {
     element.addEventListener('mousedown', event => {
       event.preventDefault()
       view.dispatch({ effects: peekLens.of([this.key]) })
+    })
+    element.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        view.dispatch({ effects: peekLens.of([this.key]) })
+      }
     })
     return element
   }
@@ -433,6 +476,9 @@ class LensRunWidget extends WidgetType {
 
   override toDOM(view: EditorView): HTMLElement {
     const element = document.createElement('div')
+    element.setAttribute('aria-label', `Reveal ${this.lines} hidden ${this.lines === 1 ? 'line' : 'lines'}`)
+    element.setAttribute('role', 'button')
+    element.tabIndex = 0
     element.className = 'cm-lens-run'
     element.dataset['lensPeek'] = this.keys.join(',')
     element.textContent = `${runGlyph} ${this.facets.join(' ')}`.trimEnd()
@@ -441,6 +487,16 @@ class LensRunWidget extends WidgetType {
       event.preventDefault()
       view.dispatch({ effects: peekLens.of(this.keys) })
     })
+    element.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        view.dispatch({ effects: peekLens.of(this.keys) })
+      }
+    })
     return element
   }
+}
+
+function selectionTouchesSpan(from: number, to: number, span: CodeEditorLensSpan): boolean {
+  return from === to ? span.from <= from && from < span.to : from < span.to && to > span.from
 }

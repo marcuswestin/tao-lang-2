@@ -10,6 +10,7 @@ import {
 } from './client/StudioPanelProjection'
 import {
   rejectPendingStudioProductHostActions,
+  type StudioProductHostState,
   studioProductHostState,
   subscribeStudioProductHostState,
 } from './StudioProductHostProtocol'
@@ -25,6 +26,7 @@ export {
   StudioInspectorRow,
   studioNumericDraft,
   StudioNumericInput,
+  StudioRadioKeys,
   StudioScenarioControlGroup,
   StudioScenarioIdentity,
   StudioScenarioInspectorLabel,
@@ -134,6 +136,7 @@ export {
   StudioPanelSelected,
   StudioPanelSurface,
   StudioSearchHit,
+  StudioSearchLocation,
   StudioSourceRow,
 } from './product-host/StudioPanelRows'
 export {
@@ -245,6 +248,16 @@ type StudioDataSlotProps = Readonly<{
 type StudioSearchSlotProps = Readonly<{
   Rows?: TR.Value<readonly StudioSearchPanelRow[]>
 }>
+
+/** Draft-owning panel identities change with the selected scenario, not with either panel's remount. */
+export const StudioProductHostMountIdentity = {
+  environment(activeCell: StudioProductHostState['activeCell']): string {
+    return `studio-environment:${activeCell?.cellId ?? 'none'}`
+  },
+  scenario(activeCell: StudioProductHostState['activeCell']): string {
+    return `studio-scenario:${activeCell?.cellId ?? 'none'}:${activeCell?.scenarioId ?? 'none'}`
+  },
+} as const
 
 /** ProductHostBoundary is the single foreign seam between Tao-owned navigation and the product workbench. */
 export function ProductHostBoundary(props: TaoStudioProductHostProps): React.ReactElement {
@@ -372,7 +385,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       InspectorSelection: TR.Value(JSON.stringify(hostState.inspector?.selection ?? null)),
       ActiveFileContent: TR.Value(activeFile?.content ?? ''),
       ActiveFilePath: TR.Value(activeFile?.path ?? ''),
-      ActiveFileVersion: TR.Value(activeFile?.sourceVersion ?? ''),
+      ActiveFileVersion: TR.Value(activeFile?.saved === false ? '' : activeFile?.sourceVersion ?? ''),
       ActiveScenarioId: TR.Value(activeCell?.scenarioId ?? ''),
       ProjectRoot: TR.Value(hostState.projectRoot ?? ''),
       Revision: TR.Value(hostState.revision),
@@ -387,7 +400,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
     : inspector
   const refreshedEnvironment = React.isValidElement<StudioEnvironmentSlotProps>(environment)
     ? React.cloneElement(environment, {
-      key: `studio-environment:${activeCell?.cellId ?? 'none'}:${activeCell?.cellRevision ?? 0}`,
+      key: StudioProductHostMountIdentity.environment(activeCell),
       ActiveCellId: TR.Value(activeCell?.cellId ?? ''),
       CellRevision: TR.Value(activeCell?.cellRevision ?? 0),
       NetworkErrorMessage: TR.Value(activeCell?.networkErrorMessage ?? 'Injected Studio network failure'),
@@ -422,7 +435,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
     : search
   const refreshedScenario = React.isValidElement<StudioStateSlotProps>(scenario)
     ? React.cloneElement(scenario, {
-      key: `studio-scenario:${activeCell?.cellId ?? 'none'}:${activeCell?.cellRevision ?? 0}`,
+      key: StudioProductHostMountIdentity.scenario(activeCell),
       JourneyRecordable: TR.Value(activeCell?.journeyRecordable ?? false),
       JourneyRecording: TR.Value(activeCell?.journeyRecording ?? 'null'),
       ResolvedAppearance: TR.Value(activeCell?.schemeResolved ?? 'light'),
@@ -453,7 +466,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       {scenarioTarget === undefined || refreshedScenario === undefined
         ? undefined
         : createPortal(
-          <React.Fragment key={`${activeCell?.cellId ?? 'none'}:${activeCell?.cellRevision ?? 0}`}>
+          <React.Fragment key={StudioProductHostMountIdentity.scenario(activeCell)}>
             {refreshedScenario}
           </React.Fragment>,
           scenarioTarget,
@@ -461,7 +474,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
       {environmentTarget === undefined || refreshedEnvironment === undefined
         ? undefined
         : createPortal(
-          <React.Fragment key={`${activeCell?.cellId ?? 'none'}:${activeCell?.cellRevision ?? 0}`}>
+          <React.Fragment key={StudioProductHostMountIdentity.environment(activeCell)}>
             {refreshedEnvironment}
           </React.Fragment>,
           environmentTarget,

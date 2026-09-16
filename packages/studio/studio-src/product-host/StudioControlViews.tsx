@@ -86,6 +86,7 @@ type StudioChoiceProps =
 
 /** An enumeration with a few short values, shown whole so the current one is visible without opening anything. */
 export function StudioSegmented(props: StudioChoiceProps): React.ReactElement {
+  const selected = Math.max(0, props.Options.indexOf(props.Value))
   return (
     <div
       aria-label={props.Label}
@@ -94,12 +95,26 @@ export function StudioSegmented(props: StudioChoiceProps): React.ReactElement {
       role="radiogroup"
       style={props.Layout?.style}
     >
-      {props.Options.map(option => (
+      {props.Options.map((option, index) => (
         <button
           aria-checked={option === props.Value}
           key={option}
           onClick={() => void props.Change.invoke(TR.Value(option))}
+          onKeyDown={event => {
+            const next = StudioRadioKeys.nextIndex(event.key, index, props.Options.length)
+            if (next === undefined || next === index) {
+              return
+            }
+            event.preventDefault()
+            const nextOption = props.Options[next]
+            if (nextOption !== undefined) {
+              const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')
+              buttons?.[next]?.focus()
+              void props.Change.invoke(TR.Value(nextOption))
+            }
+          }}
           role="radio"
+          tabIndex={index === selected ? 0 : -1}
           type="button"
         >
           {option}
@@ -108,6 +123,24 @@ export function StudioSegmented(props: StudioChoiceProps): React.ReactElement {
     </div>
   )
 }
+
+export const StudioRadioKeys = {
+  nextIndex(key: string, current: number, count: number): number | undefined {
+    if (count <= 0) {
+      return undefined
+    }
+    if (key === 'ArrowRight' || key === 'ArrowDown') {
+      return (current + 1) % count
+    }
+    if (key === 'ArrowLeft' || key === 'ArrowUp') {
+      return (current - 1 + count) % count
+    }
+    if (key === 'Home') {
+      return 0
+    }
+    return key === 'End' ? count - 1 : undefined
+  },
+} as const
 
 /** An enumeration with many or long values; a native select keeps the field one line tall. */
 export function StudioChoice(props: StudioChoiceProps): React.ReactElement {
@@ -226,6 +259,7 @@ export function StudioNumericInput(props: StudioNumericInputProps): React.ReactE
     <label className="studio-inspector-field" data-testid={props.Tag} style={props.Layout?.style}>
       <span>{props.Label}</span>
       <input
+        aria-label={props.Label}
         aria-invalid={!parsed.valid}
         max={props.Maximum > 0 ? props.Maximum : undefined}
         min={props.Minimum}

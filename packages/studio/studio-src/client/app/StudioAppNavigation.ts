@@ -10,7 +10,7 @@ import {
   StudioDiagnosticNavigation,
   StudioSourceNavigation,
 } from '../StudioEditor'
-import type { StudioActivePreview, StudioPreviewConnection } from '../StudioMatrixView'
+import { revealCanvasNode, type StudioActivePreview, type StudioPreviewConnection } from '../StudioMatrixView'
 import type { StudioScreenItem, StudioSearchResult } from '../StudioRailPanels'
 import type { StudioOpenFile } from './StudioEditorSession'
 
@@ -18,6 +18,7 @@ export type StudioAppNavigationDeps = Readonly<{
   activePreview: StudioActivePreview
   focusEditor: () => void
   openFile: (path: string) => Promise<StudioOpenFile | undefined>
+  onReveal: () => void
   previewManifest: () => StudioPreviewManifestV2 | undefined
   previews: readonly StudioPreviewConnection[]
   project: string
@@ -61,7 +62,7 @@ export class StudioAppNavigation {
     )
     if (preview !== undefined) {
       this.#deps.activePreview.activate(preview)
-      preview.frame?.scrollIntoView({ block: 'center' })
+      revealCanvasNode(preview.frame)
     }
     const path = this.#relativePath(item.path)
     const opened = await this.#deps.openFile(path)
@@ -133,6 +134,7 @@ export class StudioAppNavigation {
       return
     }
     this.#lastDeviceSelection = selection.sequence
+    this.#deps.onReveal()
     const opened = await StudioSourceNavigation.openAndSelect({
       identity: { path: selection.sourcePath, sourceVersion: selection.sourceVersion },
       openFile: async path => await this.#deps.openFile(path),
@@ -152,6 +154,7 @@ export class StudioAppNavigation {
 
   /** Scrolls the model editor to the selection; the visible editor mirrors it and takes focus. */
   #reveal(editor: EditorView, selection: Readonly<{ anchor: number; head?: number }>): void {
+    this.#deps.onReveal()
     editor.dispatch({
       effects: EditorView.scrollIntoView(selection.anchor, { y: 'center' }),
       selection,

@@ -163,18 +163,18 @@ function projectRelativeDetail(detail: string): string {
 type StudioSearchHitProps =
   & TaoStudioHostVisualProps
   & Readonly<{
+    Column: number
     Detail: string
     Kind: string
     Label: string
+    Line: number
     Open: TaoStudioHostAction
     Path: string
   }>
 
 /** A search hit is a row: where it is, what matched, and only that. */
 export function StudioSearchHit(props: StudioSearchHitProps): React.ReactElement {
-  const separator = props.Label.lastIndexOf(':')
-  const file = separator < 0 ? props.Label : props.Label.slice(0, separator)
-  const line = separator < 0 ? '' : props.Label.slice(separator + 1)
+  const location = StudioSearchLocation(props.Path, props.Line, props.Column)
   return (
     <button
       className="studio-search-hit"
@@ -185,17 +185,19 @@ export function StudioSearchHit(props: StudioSearchHitProps): React.ReactElement
       type="button"
     >
       <span className="studio-search-hit-line">
-        {file}
-        {line === '' ? undefined : (
-          <>
-            · line <b>{line}</b>
-          </>
-        )}
+        {location}
         {props.Kind === 'text' ? undefined : <span className="studio-search-hit-kind">· {props.Kind}</span>}
       </span>
-      <span className="studio-search-hit-text">{props.Detail}</span>
+      <span className="studio-search-hit-text">
+        <b>{props.Label}</b> · {props.Detail}
+      </span>
     </button>
   )
+}
+
+export function StudioSearchLocation(path: string, line: number, column: number): string {
+  const visiblePath = projectRelativeDetail(path)
+  return line < 0 ? visiblePath : `${visiblePath}:${line + 1}${column < 0 ? '' : `:${column + 1}`}`
 }
 
 /**

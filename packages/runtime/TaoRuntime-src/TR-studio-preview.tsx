@@ -68,8 +68,12 @@ type StudioPreviewMessageEvent = {
 type StudioPreviewPointerEvent = {
   clientX?: number
   clientY?: number
+  ctrlKey?: boolean
+  deltaX?: number
+  deltaY?: number
   isComposing?: boolean
   key?: string
+  metaKey?: boolean
   preventDefault?(): void
   repeat?: boolean
   stopImmediatePropagation?(): void
@@ -118,7 +122,8 @@ export type StudioPreviewHost = {
         | 'mousemove'
         | 'mouseover'
         | 'mouseout'
-        | 'mouseup',
+        | 'mouseup'
+        | 'wheel',
       listener: (event: StudioPreviewPointerEvent) => void,
       capture?: boolean,
     ): void
@@ -139,7 +144,8 @@ export type StudioPreviewHost = {
         | 'mousemove'
         | 'mouseover'
         | 'mouseout'
-        | 'mouseup',
+        | 'mouseup'
+        | 'wheel',
       listener: (event: StudioPreviewPointerEvent) => void,
       capture?: boolean,
     ): void
@@ -658,6 +664,7 @@ export function mountStudioPreviewBridge(
   let suppressNextClick = false
   let postedHoverKey: string | undefined
   let interactionMode: 'edit' | 'run' = 'edit'
+  let canvasGesturesOwned = false
   let recording: StudioJourneyRecording | undefined
   let measurementQueued = false
   let stopped = false
@@ -847,6 +854,31 @@ export function mountStudioPreviewBridge(
     redrawOverlay()
     scheduleLayoutMeasurements()
   }
+  const onCanvasWheel = (event: StudioPreviewPointerEvent) => {
+    if (
+      !canvasGesturesOwned
+      || event.clientX === undefined
+      || event.clientY === undefined
+      || event.deltaX === undefined
+      || event.deltaY === undefined
+    ) {
+      return
+    }
+    // Cancellation is synchronous and happens only after the parent has advertised that Design
+    // owns the gesture. Run and startup retain the embedded app's native scrolling and zooming.
+    event.preventDefault?.()
+    host.parent.postMessage({
+      channel: studioProtocolChannel,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      deltaX: event.deltaX,
+      deltaY: event.deltaY,
+      identity: previewIdentity(config),
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-canvas-gesture',
+      zoom: event.ctrlKey === true || event.metaKey === true,
+    }, config.parentOrigin)
+  }
 
   const onClick = (event: StudioPreviewPointerEvent) => {
     if (event.taoStudioJourney === true) {
@@ -966,6 +998,11 @@ export function mountStudioPreviewBridge(
     if (startOrStopRecording(event)) {
       return
     }
+    const requestedCanvasOwnership = canvasGestureOwnershipFromMessage(event, config, host.parent)
+    if (requestedCanvasOwnership !== undefined) {
+      canvasGesturesOwned = requestedCanvasOwnership
+      return
+    }
     const requestedMode = interactionModeFromMessage(event, config, host.parent)
     if (requestedMode !== undefined) {
       interactionMode = requestedMode
@@ -1019,6 +1056,7 @@ export function mountStudioPreviewBridge(
   host.document.addEventListener('mouseover', onMouseOver)
   host.document.addEventListener('mouseout', onMouseOut)
   host.document.addEventListener('mouseup', onMouseUp, true)
+  host.document.addEventListener('wheel', onCanvasWheel, true)
   host.window.addEventListener('blur', disarmDrag)
   host.window.addEventListener('message', onMessage)
   host.window.addEventListener('resize', onResize)
@@ -1071,6 +1109,7 @@ export function mountStudioPreviewBridge(
     host.document.removeEventListener('mouseover', onMouseOver)
     host.document.removeEventListener('mouseout', onMouseOut)
     host.document.removeEventListener('mouseup', onMouseUp, true)
+    host.document.removeEventListener('wheel', onCanvasWheel, true)
     host.window.removeEventListener('blur', disarmDrag)
     host.window.removeEventListener('message', onMessage)
     host.window.removeEventListener('resize', onResize)
@@ -1212,6 +1251,28 @@ function isDebugStepValue(value: unknown): value is TaoDebugStep {
   const statement = value['statement']
   return (declaration === undefined && statement === undefined)
     || (typeof declaration === 'string' && typeof statement === 'string')
+}
+
+function canvasGestureOwnershipFromMessage(
+  event: StudioPreviewMessageEvent,
+  config: StudioPreviewConfig,
+  parent: StudioPreviewHost['parent'],
+): boolean | undefined {
+  if (event.origin !== config.parentOrigin || event.source !== parent || !isObject(event.data)) {
+    return undefined
+  }
+  const message = event.data
+  const identity = message['identity']
+  return message['channel'] === studioProtocolChannel
+      && message['protocolVersion'] === studioProtocolVersion
+      && message['type'] === 'set-canvas-gestures'
+      && typeof message['owned'] === 'boolean'
+      && isObject(identity)
+      && identity['appName'] === config.appName
+      && identity['project'] === config.project
+      && identity['previewInstanceId'] === config.previewInstanceId
+    ? message['owned']
+    : undefined
 }
 
 function interactionModeFromMessage(

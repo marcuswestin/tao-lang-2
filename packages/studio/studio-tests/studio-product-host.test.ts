@@ -2,11 +2,14 @@ import type TR from '@runtime/TR'
 import { Assert, FS } from '@shared'
 import { Expect, Test } from '@shared/test'
 import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { studioPaletteComponents } from '../studio-src/StudioInspector'
+import type { StudioProductHostState } from '../studio-src/StudioProductHostProtocol'
 import {
   FileCreateBar,
   FilesPanelSurface,
   productHostStyle,
+  StudioDataRows,
   StudioDesignTokenRow,
   StudioDesignTokenSection,
   StudioInspectorAction,
@@ -41,7 +44,10 @@ import {
   StudioInspectorTextUpdateDraft,
   StudioInspectorUpdateDraft,
   studioNumericDraft,
+  StudioNumericInput,
   StudioPaletteRow,
+  StudioProductHostMountIdentity,
+  StudioRadioKeys,
   StudioScenarioArgumentDrafts,
   StudioScenarioArgumentIds,
   studioScenarioArguments,
@@ -56,10 +62,32 @@ import {
   StudioScenarioJourneyPayload,
   StudioScenarioJourneyStatus,
   StudioScenarioUpdateArgumentDraft,
+  StudioSearchHit,
+  StudioSearchLocation,
+  StudioSegmented,
   TreeFileRow,
   type TreeFileRowProps,
   TreeFolder,
 } from '../studio-src/TaoStudioProductHost'
+
+function activeCell(cellRevision: number): NonNullable<StudioProductHostState['activeCell']> {
+  return {
+    cellId: 'cell:one',
+    cellRevision,
+    journeyRecordable: true,
+    journeyRecording: 'null',
+    networkLatencyMs: 0,
+    networkOutcome: 'normal',
+    scenarioId: 'scenario:one',
+    scenarioModel: 'null',
+    schemeCapability: 'reactive-browser',
+    schemeRequested: 'system',
+    schemeResolved: 'light',
+    schemeSource: 'system',
+    viewportHeight: 844,
+    viewportWidth: 390,
+  }
+}
 
 Test('Tao Studio keeps invalid numeric drafts out of typed environment actions', () => {
   Expect(studioNumericDraft('', { minimum: 1 })).toEqual({ valid: false })
@@ -71,6 +99,78 @@ Test('Tao Studio keeps invalid numeric drafts out of typed environment actions',
     valid: true,
     value: 503,
   })
+})
+
+Test('Tao Studio segmented controls implement cyclic radio navigation', () => {
+  Expect(StudioRadioKeys.nextIndex('ArrowRight', 3, 4)).toBe(0)
+  Expect(StudioRadioKeys.nextIndex('ArrowDown', 1, 4)).toBe(2)
+  Expect(StudioRadioKeys.nextIndex('ArrowLeft', 0, 4)).toBe(3)
+  Expect(StudioRadioKeys.nextIndex('ArrowUp', 2, 4)).toBe(1)
+  Expect(StudioRadioKeys.nextIndex('Home', 2, 4)).toBe(0)
+  Expect(StudioRadioKeys.nextIndex('End', 1, 4)).toBe(3)
+  Expect(StudioRadioKeys.nextIndex('Enter', 1, 4)).toBeUndefined()
+  const Change = { invoke() {} } as unknown as TR.ActionValue<[TR.Value<string>]>
+  const html = renderToStaticMarkup(React.createElement(StudioSegmented, {
+    Change,
+    Label: 'Device',
+    Options: ['phone', 'tablet', 'laptop'],
+    Value: 'tablet',
+  }))
+  Expect(html).toContain('role="radiogroup"')
+  Expect(html).toContain('aria-label="Device"')
+  Expect(html).toContain('aria-checked="true" role="radio" tabindex="0"')
+})
+
+Test('Tao Studio environment number inputs expose their field labels', () => {
+  const Change = { invoke() {} } as unknown as TR.ActionValue<[TR.Value<number>]>
+  const ChangeValid = { invoke() {} } as unknown as TR.ActionValue<[TR.Value<boolean>]>
+  const html = renderToStaticMarkup(React.createElement(StudioNumericInput, {
+    Change,
+    ChangeValid,
+    Integer: false,
+    Label: 'Width',
+    Maximum: 0,
+    Minimum: 1,
+    Value: 390,
+  }))
+  Expect(html).toContain('aria-label="Width"')
+})
+
+Test('Tao Studio keeps scenario and environment drafts mounted across each other remounting the cell', () => {
+  const before = activeCell(7)
+  const after = activeCell(8)
+  Expect(StudioProductHostMountIdentity.environment(after)).toBe(
+    StudioProductHostMountIdentity.environment(before),
+  )
+  Expect(StudioProductHostMountIdentity.scenario(after)).toBe(StudioProductHostMountIdentity.scenario(before))
+  Expect(StudioProductHostMountIdentity.scenario({ ...after, scenarioId: 'scenario:other' })).not.toBe(
+    StudioProductHostMountIdentity.scenario(before),
+  )
+})
+
+Test('Tao Studio search hits preserve path, line, and column', () => {
+  Expect(StudioSearchLocation('/project/first/Main.tao', 12, 4)).toBe('/project/first/Main.tao:13:5')
+  Expect(StudioSearchLocation('/project/second/Main.tao', -1, -1)).toBe('/project/second/Main.tao')
+  const html = renderToStaticMarkup(React.createElement(StudioSearchHit, {
+    Column: 4,
+    Detail: 'Text("Needle")',
+    Kind: 'render',
+    Label: 'Needle',
+    Line: 12,
+    Open: { invoke() {} } as unknown as TR.ActionValue<[]>,
+    Path: '/project/first/Main.tao',
+  }))
+  Expect(html).toContain('/project/first/Main.tao:13:5')
+  Expect(html).toContain('<b>Needle</b> · Text(&quot;Needle&quot;)')
+})
+
+Test('Tao Studio data rows render named columns and retain cells', () => {
+  const html = renderToStaticMarkup(React.createElement(StudioDataRows, {
+    Rows: ['{"Name":"Ada","Count":2}', '{"Name":"Grace","Count":3}'],
+  }))
+  Expect(html).toContain('<th>Name</th><th>Count</th>')
+  Expect(html).toContain('<td title="Ada">Ada</td><td title="2">2</td>')
+  Expect(html).toContain('<td title="Grace">Grace</td><td title="3">3</td>')
 })
 
 Test('Tao Studio product host retains viewport ownership over generated Tao layout', () => {
@@ -622,6 +722,8 @@ Test('Tao-owned inspector summary names the selection by project file and line, 
     .toEqual(['Source: Garden.tao', 'View: Main', 'Element: Text'])
   Expect(StudioInspectorSummaryLines('source-2', inspectorInspection(), inspectorSelection(), content, 'Garden.tao'))
     .toEqual(['Source: Garden.tao', 'Waiting for the refreshed preview', 'View: Main', 'Element: Text'])
+  Expect(StudioInspectorSummaryLines('', inspectorInspection(), inspectorSelection(), content, 'Garden.tao'))
+    .toEqual(['Source: Garden.tao', 'Save the active draft to refresh source locations', 'View: Main', 'Element: Text'])
   Expect(StudioInspectorSummaryLines('source-1', '', '', content, 'Garden.tao'))
     .toEqual(['Select a rendered element in the preview.'])
 })

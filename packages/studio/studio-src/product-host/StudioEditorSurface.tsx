@@ -210,6 +210,7 @@ export function StudioEditorSurface(): React.ReactElement {
         Layout={{ style: editorSurfaceStyle }}
         Lens={lensProps}
         Lsp={lsp}
+        RevealRevision={file.revealRevision}
         Selection={{ anchor: file.selectionAnchor, head: file.selectionHead }}
         SelectionChange={selection => requestStudioProductHostSelectActiveFile(selection.anchor, selection.head)}
         Tag="studio-active-editor"

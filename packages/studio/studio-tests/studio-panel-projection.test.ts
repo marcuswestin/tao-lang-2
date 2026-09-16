@@ -1,5 +1,10 @@
+import type TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
+import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { StudioPanelBounds, StudioPanelProjection } from '../studio-src/client/StudioPanelProjection'
+import { StudioRailPanels } from '../studio-src/client/StudioRailPanels'
+import { StudioSearchHit } from '../studio-src/product-host/StudioPanelRows'
 import type { StudioTestStatus } from '../studio-src/StudioTestRunner'
 
 const compile = {
@@ -145,19 +150,19 @@ Describe('Studio structured panel projection', () => {
       level: 'log' as const,
       timestamp,
     }))
+    const search = StudioRailPanels.search(
+      [{
+        content: 'view Main() {\n   Text("Needle")\n}',
+        path: '/project/Main.tao',
+      }],
+      [],
+      'needle',
+    )
     const panels = StudioPanelProjection.project({
       ...baseInput(),
       logs: [...logs, { arguments: ['saved', { Id: 7 }], level: 'info', timestamp: 999 }],
       logSource: { cellId: 'cell:active', cellRevision: 9 },
-      search: [{
-        detail: 'Text("Needle")',
-        end: 20,
-        kind: 'text',
-        label: 'Main.tao:2',
-        path: '/project/Main.tao',
-        sourceVersion: 'version:3',
-        start: 14,
-      }],
+      search,
     })
 
     Expect(panels.Drawer.Logs).toMatchObject({
@@ -169,20 +174,30 @@ Describe('Studio structured panel projection', () => {
     Expect(panels.Drawer.Logs.Rows.at(-1)).toEqual({ Level: 'info', Message: 'saved {"Id":7}', Timestamp: 999 })
     Expect(panels.Search.Rows[0]).toMatchObject({
       Action: { Name: 'open-search-result' },
-      Column: -1,
+      Column: 9,
       Detail: 'Text("Needle")',
-      End: 20,
+      End: 29,
       Kind: 'text',
       Label: 'Main.tao:2',
-      Line: -1,
+      Line: 1,
       Path: '/project/Main.tao',
-      SourceVersion: 'version:3',
-      Start: 14,
+      SourceVersion: '',
+      Start: 23,
     })
-    Expect(JSON.parse(panels.Search.Rows[0]!.Action.Payload)).toMatchObject({
-      path: '/project/Main.tao',
-      sourceVersion: 'version:3',
-    })
+    const actionPayload = JSON.parse(panels.Search.Rows[0]!.Action.Payload)
+    Expect(actionPayload).toMatchObject({ path: '/project/Main.tao', start: 23 })
+    Expect(actionPayload).not.toHaveProperty('sourceVersion')
+    const row = panels.Search.Rows[0]!
+    const html = renderToStaticMarkup(React.createElement(StudioSearchHit, {
+      Column: row.Column,
+      Detail: row.Detail,
+      Kind: row.Kind,
+      Label: row.Label,
+      Line: row.Line,
+      Open: { invoke() {} } as unknown as TR.ActionValue<[]>,
+      Path: row.Path,
+    }))
+    Expect(html).toContain('/project/Main.tao:2:10')
   })
 
   Test('rejects invalid controller identities before publication', () => {

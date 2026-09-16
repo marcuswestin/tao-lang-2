@@ -1,10 +1,13 @@
 import { Assert } from '@shared/core'
+import type { StudioPreviewCanvasGestureMessage } from '../../StudioProtocol'
 import type { StudioHandshake } from '../StudioApiClient'
 import {
   currentSourceIdentity,
   handlePreviewMessage,
+  postCanvasGestureOwnership,
   postEditorSelection,
   type StudioActivePreview,
+  type StudioCanvasViewportControls,
   type StudioPreviewConnection,
   StudioPreviewSourceSync,
 } from '../StudioMatrixView'
@@ -16,15 +19,18 @@ import type { StudioSourceMutations } from './StudioSourceMutations'
 
 export type StudioPreviewWiringDeps = Readonly<{
   activePreview: StudioActivePreview
+  canvasGesturesOwned: () => boolean
   drawer: StudioDrawerPanels
   handshake: StudioHandshake
   inspection: StudioInspection
   mutations: StudioSourceMutations
+  onReveal: () => void
   preview: HTMLElement
   previews: readonly StudioPreviewConnection[]
   publish: () => void
   session: StudioEditorSession
   status: HTMLElement
+  onCanvasGesture?: (preview: StudioPreviewConnection, gesture: StudioPreviewCanvasGestureMessage) => void
 }>
 
 /**
@@ -44,6 +50,7 @@ export function wireStudioPreviews(deps: StudioPreviewWiringDeps): (preview: Stu
 
   const wirePreview = (preview: StudioPreviewConnection): void => {
     StudioPreviewSourceSync.connect(preview, () => {
+      postCanvasGestureOwnership(preview, handshake, deps.canvasGesturesOwned())
       if (preview === activePreview.current()) {
         postActiveSelection(preview)
       }
@@ -119,6 +126,15 @@ export function wireStudioPreviews(deps: StudioPreviewWiringDeps): (preview: Stu
   return wirePreview
 }
 
+/** Keeps the cross-origin gesture anchored to the iframe viewport where its coordinates originated. */
+export function forwardPreviewCanvasGesture(
+  viewport: Pick<StudioCanvasViewportControls, 'iframeWheel'> | undefined,
+  preview: Pick<StudioPreviewConnection, 'iframe'>,
+  gesture: StudioPreviewCanvasGestureMessage,
+): void {
+  viewport?.iframeWheel(gesture, preview.iframe)
+}
+
 export type StudioPreviewMessagesDeps =
   & StudioPreviewWiringDeps
   & Readonly<{
@@ -126,13 +142,10 @@ export type StudioPreviewMessagesDeps =
     onInspected: () => void
   }>
 
-/** The window message bridge from the preview iframes; returns the listener's removal. */
-export function connectStudioPreviewMessages(deps: StudioPreviewMessagesDeps): () => void {
+/** One listener owns preview-originated selection so the editor receives one navigation transaction. */
+export function studioPreviewMessageListener(deps: StudioPreviewMessagesDeps): (event: MessageEvent) => void {
   const { activePreview, drawer, handshake, inspection, mutations, previews, session } = deps
-  if (previews.length === 0) {
-    return () => {}
-  }
-  const listener = (event: MessageEvent): void => {
+  return event => {
     const connection = previews.find(candidate => candidate.iframe.contentWindow === event.source)
     if (connection === undefined) {
       return
@@ -140,6 +153,7 @@ export function connectStudioPreviewMessages(deps: StudioPreviewMessagesDeps): (
     void handlePreviewMessage(event, connection, handshake, path => session.openFile(path), {
       activate: () => activePreview.activate(connection),
       applySourceAction: envelope => mutations.submitPreview(envelope),
+      canvasGesture: gesture => deps.onCanvasGesture?.(connection, gesture),
       changed() {
         drawer.renderIfLogs()
         drawer.loadDataIfVisible()
@@ -147,14 +161,22 @@ export function connectStudioPreviewMessages(deps: StudioPreviewMessagesDeps): (
       },
       inspect(selection) {
         inspection.select(selection)
-        inspection.selectSourceInEditor(selection)
         deps.publish()
         deps.onInspected()
         void inspection.inspect(selection)
         void inspection.highlightOnDevice(selection)
       },
+      reveal: deps.onReveal,
     })
   }
+}
+
+/** The window message bridge from the preview iframes; returns the listener's removal. */
+export function connectStudioPreviewMessages(deps: StudioPreviewMessagesDeps): () => void {
+  if (deps.previews.length === 0) {
+    return () => {}
+  }
+  const listener = studioPreviewMessageListener(deps)
   window.addEventListener('message', listener)
   return () => window.removeEventListener('message', listener)
 }

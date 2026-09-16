@@ -12,6 +12,49 @@ import {
 } from '../studio-src/StudioProtocol'
 
 Describe('Studio session paths and routes', () => {
+  Test('parses finite preview canvas gestures and rejects malformed geometry', () => {
+    const gesture = {
+      channel: studioProtocolChannel,
+      clientX: 12,
+      clientY: 24,
+      deltaX: 3,
+      deltaY: -8,
+      identity,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-canvas-gesture',
+      zoom: true,
+    }
+    Expect(StudioProtocol.parseMessage(gesture)).toEqual({
+      ...gesture,
+      identity: {
+        appName: identity.appName,
+        previewInstanceId: identity.previewInstanceId,
+        project: identity.project,
+      },
+    })
+    Expect(StudioProtocol.parseMessage({ ...gesture, deltaY: Number.NaN })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...gesture, zoom: 'yes' })).toBeUndefined()
+  })
+
+  Test('parses explicit parent canvas-gesture ownership and rejects ambiguous state', () => {
+    const ownership = {
+      channel: studioProtocolChannel,
+      identity,
+      owned: true,
+      protocolVersion: studioProtocolVersion,
+      type: 'set-canvas-gestures',
+    }
+    Expect(StudioProtocol.parseMessage(ownership)).toEqual({
+      ...ownership,
+      identity: {
+        appName: identity.appName,
+        previewInstanceId: identity.previewInstanceId,
+        project: identity.project,
+      },
+    })
+    Expect(StudioProtocol.parseMessage({ ...ownership, owned: 'design' })).toBeUndefined()
+  })
+
   Test('scopes every session endpoint under one opaque window id and refuses anything else', () => {
     Expect(StudioSessionPath.route('/sessions/first_session/api/protocol')).toEqual({
       pathname: '/api/protocol',

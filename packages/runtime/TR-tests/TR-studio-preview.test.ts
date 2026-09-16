@@ -101,6 +101,57 @@ Describe('Studio preview runtime bridge', () => {
       .toHaveLength(2)
     cleanup()
   })
+
+  Test('cancels iframe gestures only while the parent advertises Design canvas ownership', () => {
+    const fake = previewHost([])
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    let cancellations = 0
+    const gesture = {
+      clientX: 25,
+      clientY: 40,
+      ctrlKey: true,
+      deltaX: 3,
+      deltaY: -12,
+      preventDefault: () => {
+        cancellations += 1
+      },
+    }
+    const initialMessages = fake.messages.length
+    fake.dispatchDocument('wheel', gesture)
+    Expect(cancellations).toBe(0)
+    Expect(fake.messages).toHaveLength(initialMessages)
+
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(true, fake.parent))
+    fake.dispatchDocument('wheel', {
+      ...gesture,
+    })
+    Expect(cancellations).toBe(1)
+    Expect(fake.messages.at(-1)).toEqual({
+      message: {
+        channel: 'tao-studio',
+        clientX: 25,
+        clientY: 40,
+        deltaX: 3,
+        deltaY: -12,
+        identity: {
+          appName: 'Demo',
+          previewInstanceId: 'preview-1',
+          project: '/project',
+        },
+        protocolVersion: 1,
+        type: 'preview-canvas-gesture',
+        zoom: true,
+      },
+      targetOrigin: config.parentOrigin,
+    })
+
+    fake.dispatchWindow('message', canvasGestureOwnershipMessage(false, fake.parent))
+    fake.dispatchDocument('wheel', gesture)
+    Expect(cancellations).toBe(1)
+    Expect(fake.messages).toHaveLength(initialMessages + 1)
+    cleanup()
+    Expect(fake.listenerCount()).toBe(0)
+  })
   Test('replays text steps against the deepest exact match instead of its matching ancestors', async () => {
     const events: string[] = []
     const parent: StudioPreviewElement = {
@@ -878,6 +929,28 @@ function interactionModeMessage(mode: 'edit' | 'run', parent: StudioPreviewHost[
       mode,
       protocolVersion: 1,
       type: 'set-interaction-mode',
+    },
+    origin: config.parentOrigin,
+    source: parent,
+  }
+}
+
+function canvasGestureOwnershipMessage(owned: boolean, parent: StudioPreviewHost['parent']): {
+  data: Record<string, unknown>
+  origin: string
+  source: StudioPreviewHost['parent']
+} {
+  return {
+    data: {
+      channel: 'tao-studio',
+      identity: {
+        appName: config.appName,
+        previewInstanceId: config.previewInstanceId,
+        project: config.project,
+      },
+      owned,
+      protocolVersion: 1,
+      type: 'set-canvas-gestures',
     },
     origin: config.parentOrigin,
     source: parent,
