@@ -311,6 +311,67 @@ Describe('validator: use and imports', () => {
   )
 
   Test(
+    'allows a folder app declaration to be reached by a sibling sidecar without use statement',
+    checksFiles(
+      {
+        'Main.tao': `
+          folder
+          ${stubApp()}
+        `,
+        'Main.scenarios.tao': `
+          scenarios MyApp "devices" {
+            scenario "phone" {
+              device phone
+            }
+          }
+        `,
+      },
+      result => Expect(validationErrorMessages(result)).toEqual([]),
+      'Main.scenarios.tao',
+    ),
+  )
+
+  // An unmarked app keeps its directory reach, so a sidecar may import it by name. `file` is the one
+  // way to say otherwise, and it has to narrow that reach rather than read as "no marker at all".
+  for (
+    const appVisibilityCase of [
+      { marker: '', title: 'lets a sidecar use an unmarked app declaration from its own directory' },
+      { marker: 'file', title: 'refuses a sidecar use of a file-private app declaration' },
+    ]
+  ) {
+    Test(
+      appVisibilityCase.title,
+      checksFiles(
+        {
+          'Main.tao': `
+            ${appVisibilityCase.marker}
+            ${stubApp()}
+          `,
+          'Main.scenarios.tao': `
+            use MyApp from ./Main.tao
+
+            scenarios MyApp "devices" {
+              scenario "phone" {
+                device phone
+                run MyApp
+              }
+            }
+          `,
+        },
+        result => {
+          const errors = validationErrorMessages(result)
+          if (appVisibilityCase.marker === 'file') {
+            Expect(errors.some(message => message.includes("named 'MyApp'"))).toBe(true)
+          } else {
+            Expect(errors).toEqual([])
+          }
+        },
+        'Main.scenarios.tao',
+      ),
+    )
+  }
+
+  Test(
     'lets inline tests import visible app declarations outside the entry file',
     acceptsFiles(
       {

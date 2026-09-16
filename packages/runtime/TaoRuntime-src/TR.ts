@@ -48,6 +48,7 @@ import {
   type TaoSyncStampedValue,
   type TaoSyncValue,
 } from './TR-data-sync'
+import { Debug } from './TR-debug'
 import {
   DesignControls,
   type TaoDesign,
@@ -79,6 +80,7 @@ import {
   useOutlineItem,
 } from './TR-interaction-outline'
 import { LayoutControls } from './TR-layout'
+import { openUrl } from './TR-linking'
 import { NativeHosts } from './TR-native-hosts'
 import { NativeModules } from './TR-native-modules'
 import {
@@ -530,6 +532,11 @@ class TR {
     return createShareSheet(body => new RuntimeActionValue(body), TR.native)
   }
 
+  /** openUrl delegates URL opening to React Native's Linking module. */
+  static openUrl(url: string): Promise<void> {
+    return openUrl(url, TR.native)
+  }
+
   /** native is the internal lazy native-module kernel used by curated stdlib bindings. */
   private static readonly native = NativeModules
 
@@ -636,6 +643,9 @@ class TR {
     State: StudioStateControls,
     SubjectHost: StudioSubjectHost,
   } as const
+
+  /** Debug is the debugger controller: journal, breakpoints, and the statement gate, owned by `TR-debug.ts`. */
+  static readonly Debug = Debug
 
   /** Errors is the runtime's one error-handling surface, owned by `TR-errors.ts`. */
   static readonly Errors = ErrorControls
@@ -746,6 +756,7 @@ class RuntimeState<T> {
       committed => this.commit(committed.value),
       undefined,
       committed => this.commit(committed.previous),
+      overlay => [{ kind: 'state', target: 'state', committed: overlay.previous, pending: overlay.value }],
     )
     if (overlay) {
       overlay.value = nextValue

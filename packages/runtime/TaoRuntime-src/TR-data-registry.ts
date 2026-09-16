@@ -43,12 +43,13 @@ export function restoreEntityReference(reference: TaoEntityReferenceSnapshot): u
 export function bindConfiguredDataSchema(
   schema: TaoDataSchema,
   source: TaoConfiguredDatasource,
+  storageName?: string,
 ): void {
   if (testMode) {
     // Configuration mistakes must fail the behavior test that mounts them, not the first
     // production mount, so the runtime-owned validation runs here even though the provider is
     // never connected under test.
-    schema.validateConfigured(source)
+    schema.validateConfigured(source, storageName)
     // A snapshot provider stays replaced by the fresh test Memory store. A fill-capable provider
     // binds anyway: fills are how a query-driven datasource has any rows at all, and determinism
     // is the running app variant's responsibility — a test runs the variant whose adapter is a
@@ -57,7 +58,7 @@ export function bindConfiguredDataSchema(
       return
     }
   }
-  schema.bindConfigured(source)
+  schema.bindConfigured(source, storageName)
 }
 
 /** settleAllDataSchemas waits out every schema's load, in-flight fills, and queued saves. */

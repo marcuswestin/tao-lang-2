@@ -447,12 +447,13 @@ data Groceries / Grocery {
 }
 ```
 
-- **`local only` keeps an entity on the device** whatever datasource the app configures, so a synced
+- **`local only` keeps an entity on the device** whatever datasource the app binds, so a synced
   variant never syncs it (amended by KEY-D7). It is the narrow form of per-entity datasource
-  scoping, and it is what lets something like a writing session be data — surviving navigation and
-  relaunch — without becoming something to sync. A stored relation may not cross the boundary: the
-  two stores are separate, so a relation between them could not resolve, and it is diagnosed where
-  it is written.
+  scoping — the general form landed with the multiple-datasources work amended into §6 — and it is
+  what lets something like a writing session be data, surviving navigation and relaunch, without
+  becoming something to sync. A stored `relation` may not cross the boundary: the two stores are
+  separate, so a relation between them could not resolve, and it is diagnosed where it is written;
+  `reference` is the link that may cross.
 - **`unique`, `index`, `search`, and `order by` are declarative storage facts** stated on the entity,
   not preflight checks written in UI code:
 
@@ -833,6 +834,33 @@ imperative fetch actions:
   `error` — offline stays a non-error.
 - **Staleness is declared** (`CacheFor` on the datasource), measured on the runtime clock a check
   holds; journeys bind a deterministic stub adapter through an ordinary app variant (§11, §16).
+
+**Amended by the multiple-datasources work** (implemented; `Docs/Roadmap/Multiple datasources/`,
+forced by `Apps/HNReader`'s bookmarks). An app's data is the union of the stores its datasources
+hold, which retires the deferred "per-entity datasource scoping" and generalizes `local only`:
+
+- **A datasource states the collections it stores**, in a `Data` reference block, and an app binds
+  the set it mounts: `Datasource { HackerNews, Personal }`. The one-datasource form is unchanged and
+  holds the whole catalog.
+- **Which store holds a collection is a fact about the project, not about an app.** A query compiles
+  once and every app reads the same store, so the partition comes from the project's `Data` slots,
+  and a store is named by the collections it holds rather than by any datasource that fills it, while
+  a provider that defaults its storage key takes the bound datasource's own name;
+  two datasources declaring the same collections are alternatives for one store — a stub or preview
+  variant — and an app binds one of them. A partial overlap is a diagnostic.
+- **Membership is structural.** It never crosses the provider boundary, a patch where it is bound may not change
+  it, and `local only` is the same fact decided on the entity.
+- **A listed datasource may be derived where it is bound**: `Datasource { HackerNews, Personal with
+  { StorageKey "…" } }`. It is the ordinary `with`, applied at the binding; the declaration keeps its
+  own value, so two apps bind one datasource differently, and no separate override block exists.
+- **`reference` is the link that crosses a store boundary.** It stores the target's `unique` value
+  and reads as a handle with availability — the row when its store holds it, otherwise a placeholder
+  that is `loading` while the store fetches it by that value, `error` if the fetch fails, and
+  `missing` after — and it resolves only among its own project's stores. A stored `relation` stays
+  inside one store and now says so for a datasource boundary as well as for `local only`. A
+  reference owns nothing: no delete cascades across the boundary, and there is no inferred inverse
+  — `query Bookmarks { where Story == Story }` is it. The name is optional when the field is named
+  after the entity: `Story (reference)`.
 
 ---
 
@@ -1661,7 +1689,8 @@ app Skillet {
 
 - **App variants are keywordized bindings**: `app SkilletPreview = Skillet with { Datasource Memory }`.
   A variant swaps providers for previews, on-device builds, and tests without forking any product
-  declaration.
+  declaration. An app that mounts several stores binds the set — `Datasource { Kitchen, OnDevice }` —
+  and `Kitchen with { … }` inside that set adjusts one member app-locally (amended into §6).
 - **The standard component kits are native by default and keep an explicit basic tier.** `@tao/ui`
   and `@tao/nav` share one package shape: the package root publishes pass-through aliases to names in
   `native/`, while `basic/` publishes clause-honouring portable implementations. Thus

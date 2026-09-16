@@ -4,10 +4,15 @@ import type { StudioJsonValue } from '../StudioProtocol'
 import type { StudioTestFailure, StudioTestStatus } from '../StudioTestRunner'
 import type { StudioCompileDiagnostic, StudioCompileState } from './StudioApiClient'
 import { studioCellLabel } from './StudioEditor'
-import type { StudioRuntimeDataTable, StudioRuntimeLog } from './StudioMatrixView'
+import type {
+  StudioDebugJournalRow,
+  StudioDebugState,
+  StudioRuntimeDataTable,
+  StudioRuntimeLog,
+} from './StudioMatrixView'
 import type { StudioSearchResult } from './StudioRailPanels'
 
-export type StudioDrawerTab = 'Compile' | 'Data' | 'Logs' | 'Problems' | 'Tests'
+export type StudioDrawerTab = 'Compile' | 'Data' | 'Debug' | 'Logs' | 'Problems' | 'Tests'
 
 export const StudioPanelBounds = {
   dataRowsPerTable: 250,
@@ -20,6 +25,12 @@ type StudioPanelCellIdentity = Readonly<{ cellId: string; cellRevision: number }
 type StudioPanelActionName =
   | 'capture-fixture'
   | 'clear-logs'
+  | 'debug-break'
+  | 'debug-clear'
+  | 'debug-continue'
+  | 'debug-step-into'
+  | 'debug-step-out'
+  | 'debug-step-over'
   | 'open-diagnostic'
   | 'open-search-result'
   | 'open-test-failure'
@@ -62,6 +73,24 @@ type StudioTestFailurePanelRow = Readonly<{
   Label: string
   Line: number
   Path: string
+}>
+
+type StudioDebugJournalPanelRow = Readonly<{
+  Action: string
+  Detail: string
+  Outcome: string
+}>
+
+type StudioDebugBindingPanelRow = Readonly<{
+  Name: string
+  Value: string
+}>
+
+type StudioDebugWritePanelRow = Readonly<{
+  Committed: string
+  Kind: string
+  Pending: string
+  Target: string
 }>
 
 type StudioLogPanelRow = Readonly<{
@@ -113,6 +142,21 @@ export type StudioDrawerPanelModel = Readonly<{
     Source: string
     Tables: readonly StudioDataPanelTable[]
   }>
+  Debug: Readonly<{
+    BreakAction: StudioPanelAction
+    ClearAction: StudioPanelAction
+    ContinueAction: StudioPanelAction
+    Frames: readonly string[]
+    Journal: readonly StudioDebugJournalPanelRow[]
+    Paused: boolean
+    PausedAt: string
+    PendingWrites: readonly StudioDebugWritePanelRow[]
+    Scope: readonly StudioDebugBindingPanelRow[]
+    Source: string
+    StepIntoAction: StudioPanelAction
+    StepOutAction: StudioPanelAction
+    StepOverAction: StudioPanelAction
+  }>
   Logs: Readonly<{
     ClearAction: StudioPanelAction
     RetainedCount: number
@@ -137,6 +181,7 @@ export type StudioPanelProjectionInput = Readonly<{
   dataError?: string
   dataLoading: boolean
   dataSource?: StudioPanelCellIdentity
+  debug?: StudioDebugState
   logs: readonly StudioRuntimeLog[]
   logSource?: StudioPanelCellIdentity
   search: readonly StudioSearchResult[]
@@ -222,6 +267,7 @@ export const StudioPanelProjection = {
           Source: cellSource(input.dataSource, 'panel source cell'),
           Tables: tables,
         }),
+        Debug: debugModel(input.debug, cellSource(input.logSource, 'panel source cell')),
         Logs: Object.freeze({
           ClearAction: action('clear-logs'),
           RetainedCount: retainedLogs.length,
@@ -270,6 +316,56 @@ function problemRow(
     Path: validated.filePath ?? '',
     SourceVersion: (validated.filePath === undefined ? undefined : sourceVersions[validated.filePath]) ?? '',
   })
+}
+
+/**
+ * The Debug panel is one paused root and the journal behind it. A pause is a moment, not a list, so
+ * everything about it is flattened here into the fields the drawer reads directly.
+ */
+function debugModel(
+  debug: StudioDebugState | undefined,
+  source: string,
+): StudioDrawerPanelModel['Debug'] {
+  const pause = debug?.pause
+  return Object.freeze({
+    BreakAction: action('debug-break'),
+    ClearAction: action('debug-clear'),
+    ContinueAction: action('debug-continue'),
+    Frames: Object.freeze(pause?.frames ?? []),
+    Journal: Object.freeze(
+      (debug?.journal ?? []).map(entry =>
+        Object.freeze({
+          Action: entry.action,
+          Detail: journalDetail(entry),
+          Outcome: entry.outcome,
+        })
+      ),
+    ),
+    Paused: pause !== undefined,
+    PausedAt: pause === undefined ? '' : `${pause.action} · statement ${pause.path}`,
+    PendingWrites: Object.freeze(
+      (pause?.pendingWrites ?? []).map(write =>
+        Object.freeze({
+          Committed: write.committed,
+          Kind: write.kind,
+          Pending: write.pending,
+          Target: write.target,
+        })
+      ),
+    ),
+    Scope: Object.freeze(
+      (pause?.scope ?? []).map(binding => Object.freeze({ Name: binding.name, Value: binding.value })),
+    ),
+    Source: source,
+    StepIntoAction: action('debug-step-into'),
+    StepOutAction: action('debug-step-out'),
+    StepOverAction: action('debug-step-over'),
+  })
+}
+
+function journalDetail(entry: StudioDebugJournalRow): string {
+  const frames = entry.frames.length === 0 ? '' : ` · ${entry.frames.join(' › ')}`
+  return `${entry.failureCase === undefined ? '' : `${entry.failureCase} `}${entry.outcome}${frames}`
 }
 
 function testsModel(

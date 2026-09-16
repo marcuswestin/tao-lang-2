@@ -1,4 +1,4 @@
-import { AST } from '@parser'
+import { AST, Langium } from '@parser'
 import { type Diagnostic, Diagnostics, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test, withTaoFiles } from '@shared/test'
 import { LSPWorkspace, Workspace } from '@workspace'
@@ -231,6 +231,45 @@ Describe('directory-rooted Tao workspace pipeline', () => {
     )
   })
 
+  Test('reads project identity across the batch so an unimported generated entry still has one', async () => {
+    await withTaoFiles(
+      'tao-workspace-generated-entry-identity-',
+      {
+        'Main.tao': `
+          project {
+            id "generated-entry-identity"
+            name "Generated Entry Identity"
+            remote none
+            license MIT
+          }
+          app Sketching { view MainView }
+          view MainView() { render inject ${tsFence} return null ${fence} }
+        `,
+        // Drawn in Studio and not imported by the app yet, so its own entry graph reaches no
+        // project metadata at all.
+        '@/studio/View1.tao': `
+          use Text from @tao/ui
+          public view View1() { render Text("View1") }
+        `,
+      },
+      async (paths, rootDir) => {
+        const workspace = await Workspace.open(rootDir)
+        const alone = await workspace.validate(paths['@/studio/View1.tao']!)
+        const batched = await workspace.validateFiles([paths['Main.tao'], paths['@/studio/View1.tao']])
+
+        Expect(errorMessages(alone)).toEqual([
+          'Project identity is missing. '
+          + "Run 'tao project id <id> [path]' to create checked-in project metadata.",
+        ])
+        Expect(errorMessages(batched)).toEqual([])
+        Expect(batched.entry.path).toBe(paths['Main.tao'])
+        Expect(batched.files.map(file => file.path)).toEqual(
+          Expect['arrayContaining']([paths['Main.tao'], paths['@/studio/View1.tao']]),
+        )
+      },
+    )
+  })
+
   Test('skips hidden future-source directories while preloading LSP documents', async () => {
     await withTaoFiles(
       'tao-workspace-lsp-sketches-',
@@ -251,6 +290,37 @@ Describe('directory-rooted Tao workspace pipeline', () => {
           FS.resolvePath('Project.tao', rootDir),
           FS.resolvePath('Roadmap/Feature/Syntax Sketches/Valid.tao', rootDir),
         ])
+      },
+    )
+  })
+
+  // The editor reports linking errors through Langium's document validator, not through the CLI's
+  // diagnostics pass, so the bridge exemption has to hold on that path too. It once held only on the
+  // CLI side, and every `Name from ./File.ts` read as a missing Tao declaration in the editor.
+  Test('does not report a bridged TypeScript export as an unresolved reference in the editor', async () => {
+    await withTaoFiles(
+      'tao-workspace-lsp-bridge-',
+      {
+        'Main.tao': `
+          use Http from @tao/data/providers/http
+          type StubSource is Http with {
+            Adapter item is StubAdapter from ./StubAdapter.ts
+          }
+          let Broken = Missing
+        `,
+        'StubAdapter.ts': 'export const StubAdapter = {}\n',
+      },
+      async (paths, rootDir) => {
+        const workspace = await LSPWorkspace.open(rootDir)
+        const uri = Langium.URI.file(paths['Main.tao']!)
+        const documents = workspace.services.shared.workspace.LangiumDocuments
+        const document = documents.getDocument(uri) ?? await documents.getOrCreateDocument(uri)
+        await workspace.services.shared.workspace.DocumentBuilder.build([document], { validation: true })
+        const messages = (document.diagnostics ?? []).map(diagnostic => diagnostic.message)
+
+        Expect(messages.join('\n')).not.toContain("named 'StubAdapter'")
+        // An ordinary unresolved name on the same path is still reported.
+        Expect(messages.join('\n')).toContain("named 'Missing'")
       },
     )
   })

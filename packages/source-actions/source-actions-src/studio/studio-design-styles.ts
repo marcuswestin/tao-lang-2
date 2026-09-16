@@ -265,7 +265,7 @@ async function setElementDefault(
   entry: string,
 ): Promise<string> {
   requireIdentifier(elementName, 'element default')
-  if (ASTUtils.standardDesignElementName(render) !== elementName) {
+  if (ASTUtils.design.standardElementName(render) !== elementName) {
     Errors.throwUserInput(`Selected render is not the standard Tao element ${elementName}.`)
   }
   const source = document.textDocument.getText()
@@ -490,7 +490,7 @@ function designMemberInsertionEdit(source: string, design: AST.DesignDeclaration
   return { end: insertionOffset, replacement: `\n${member}\n`, start: insertionOffset }
 }
 
-const colorEntryHeads = new Set<string>(ASTUtils.designColorHeads)
+const colorEntryHeads = new Set<string>(ASTUtils.design.colorHeads)
 
 function formatStyleEntry(entry: StudioStyleEntry): string {
   if (!Array.isArray(entry) || entry.length === 0 || typeof entry[0] !== 'string') {

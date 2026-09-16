@@ -10,6 +10,7 @@ import {
   publishStudioProductHostState,
   registerStudioProductHostActions,
 } from '../StudioProductHostProtocol'
+import type { StudioDebugCommandMessage } from '../StudioProtocol'
 import { mountStudioAgentChat } from './app/StudioAgentPanelWiring'
 import { StudioAppNavigation } from './app/StudioAppNavigation'
 import { mountStudioBetaShip } from './app/StudioBetaShip'
@@ -42,14 +43,17 @@ import {
   connectPreviews,
   currentSourceIdentity,
   disconnectPreviews,
+  mountCanvasViewport,
+  postDebugCommand,
   postEditorSelection,
   refreshCellPreviews,
   StudioActivePreview,
+  StudioDebugEvents,
   StudioMatrixView,
 } from './StudioMatrixView'
 import type { StudioDrawerTab } from './StudioProductPanels'
 import { StudioRailPanels } from './StudioRailPanels'
-import { createStudioShell, type StudioClientConfig } from './StudioShell'
+import { createStudioShell, type StudioClientConfig, StudioWorkbenchState } from './StudioShell'
 import { showSourceActionError } from './StudioVisualEditing'
 
 export { StudioDraftStatus } from './app/StudioCompileEvents'
@@ -89,7 +93,22 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     const previews = await connectPreviews(view.preview, config.previewUrl, handshake, signal)
     partialPreviews = previews
     StudioMountSignal.throwIfAborted(signal)
-    const activePreview = new StudioActivePreview(previews)
+    const cellStorageKey = `tao-studio:active-cell:${handshake.identity.project}:${handshake.identity.appName}`
+    let initialCellId: string | undefined
+    try {
+      initialCellId = window.localStorage.getItem(cellStorageKey) ?? undefined
+    } catch {}
+    const activePreview = new StudioActivePreview(previews, {
+      initialCellId,
+      onActivate: preview => {
+        const id = preview.cell?.cellId ?? preview.cellIdentity?.cellId
+        if (id !== undefined) {
+          try {
+            window.localStorage.setItem(cellStorageKey, id)
+          } catch {}
+        }
+      },
+    })
     configureInteractionMode(view.interactionMode, previews, handshake)
     const devicePanel = createStudioDevicePanel({
       api: StudioApiClient,
@@ -222,16 +241,24 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     publish()
     view.searchInput.addEventListener('input', () => search.schedule())
     for (const button of view.drawerTabs.querySelectorAll<HTMLButtonElement>('[data-drawer-tab]')) {
-      button.addEventListener('click', () => drawer.select(button.dataset['drawerTab'] as StudioDrawerTab))
+      button.addEventListener('click', () => {
+        const tab = button.dataset['drawerTab'] as StudioDrawerTab
+        drawer.select(tab)
+        StudioWorkbenchState.saveDrawerTab(window.localStorage, tab)
+      })
     }
     view.rail.addEventListener('click', event => {
       const panel = (event.target as HTMLElement).closest<HTMLElement>('[data-panel]')?.dataset['panel']
-      drawer.selectRail(panel)
-      if (panel === 'search') {
-        view.searchInput.focus()
+      if (panel !== 'agent') {
+        drawer.selectRail(panel)
       }
     })
-    drawer.select('Problems')
+    const activeRailButton = view.rail.querySelector<HTMLButtonElement>('.studio-rail-button[aria-current="true"]')
+    if (activeRailButton?.dataset['panel'] !== undefined) {
+      drawer.selectRail(activeRailButton.dataset['panel'])
+    }
+    const initialDrawerTab = StudioWorkbenchState.loadDrawerTab(window.localStorage)
+    drawer.select(initialDrawerTab)
 
     const commands = mountStudioCommandPalette({
       activePreview,
@@ -246,7 +273,10 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
       previews,
       project,
       projectFiles: () => projectFiles,
-      selectDrawer: tab => drawer.select(tab),
+      selectDrawer: tab => {
+        drawer.select(tab)
+        StudioWorkbenchState.saveDrawerTab(window.localStorage, tab)
+      },
       view,
     })
 
@@ -344,6 +374,9 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         StudioMatrixView.renderSketches(view.preview, project, catalog)
       },
     })
+    // The preview area is a canvas before it is a list: zoom and pan come up before anything is
+    // selected, so the whole app can be seen at once and one view brought close.
+    mountCanvasViewport({ host: view.preview })
     const canvasFocus = mountStudioCanvasFocus({
       button: view.canvasFocus,
       onError: error => showSourceActionError(view.status, error),
@@ -415,8 +448,8 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
           viewport: environment.viewport,
         })
       },
-      changeActiveFile(content) {
-        session.replaceActiveContent(content)
+      changeActiveFile(content, selection) {
+        session.replaceActiveContent(content, selection)
       },
       async createFile(path) {
         await fileTree!.create(path)
@@ -497,6 +530,19 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
         }
         if (name === 'capture-fixture') {
           scenarios.focusCaptureFixture()
+          return
+        }
+        if (name.startsWith('debug-')) {
+          const preview = activePreview.current()
+          if (preview === undefined) {
+            Errors.throwUserInput('Select a connected preview cell before using the debugger.')
+          }
+          if (name === 'debug-clear') {
+            preview.debug = StudioDebugEvents.empty()
+            publish()
+            return
+          }
+          postDebugCommand(preview, handshake, debugCommandOf(name))
           return
         }
         if (name === 'clear-logs') {
@@ -587,4 +633,20 @@ export async function mountStudio(options: StudioMountOptions = {}): Promise<() 
     }
     throw error
   }
+}
+
+/** The Debug panel names its buttons in panel-action spelling; the preview knows protocol spelling. */
+function debugCommandOf(name: string): StudioDebugCommandMessage['command'] {
+  const commands: Record<string, StudioDebugCommandMessage['command']> = {
+    'debug-break': 'break',
+    'debug-continue': 'continue',
+    'debug-step-into': 'step-into',
+    'debug-step-out': 'step-out',
+    'debug-step-over': 'step-over',
+  }
+  const command = commands[name]
+  if (command === undefined) {
+    Errors.throwUserInput(`Unsupported Tao Studio debugger action: ${name}`)
+  }
+  return command
 }

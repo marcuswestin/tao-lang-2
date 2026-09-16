@@ -1,7 +1,10 @@
 import { Assert, type Diagnostic, type DiagnosticRange, Diagnostics, FS } from '@shared'
 import { Langium } from './langium-exports'
+import { bridgesToATypeScriptExport } from './linker-diagnostics'
 import { emptyPackageResolver, type PackageResolver } from './package-resolver'
 import * as AST from './parserASTExport'
+import { TaoDocumentValidator } from './tao-document-validator'
+import { TaoReferences } from './tao-references'
 import { TaoTokenBuilder } from './tao-token-builder'
 import { TaoValueConverter } from './tao-value-converter'
 import { ValueScopeProvider } from './value-scope'
@@ -16,6 +19,7 @@ export const codeProjectRoot = '/__tao__'
 const codeSourceUri = Langium.URI.file(`${codeProjectRoot}/source.tao`)
 
 export { AST, Langium, URI }
+export { TaoReferences } from './tao-references'
 export type URI = Langium.URI
 export type { PackageResolver } from './package-resolver'
 
@@ -220,7 +224,11 @@ function taoLanguageModule(packages: PackageResolver) {
       ValueConverter: () => new TaoValueConverter(),
     },
     references: {
+      References: (services: Langium.LangiumCoreServices) => new TaoReferences(services, packages),
       ScopeProvider: (services: Langium.LangiumCoreServices) => new ValueScopeProvider(services, packages),
+    },
+    validation: {
+      DocumentValidator: (services: Langium.LangiumCoreServices) => new TaoDocumentValidator(services),
     },
   }
 }
@@ -330,24 +338,6 @@ function parserDiagnostic(error: ParserError, document?: AST.Document): Diagnost
     severity: 'error',
     source: 'parser',
   }
-}
-
-/**
- * The head name of a bridged expression names a TypeScript export (Decisions §15), so it is not
- * expected to resolve in Tao scope and an unresolved reference there is not a linking error. Its
- * arguments are ordinary Tao values and still have to resolve, so only the head is exempt.
- */
-function bridgesToATypeScriptExport(reference: AST.Document['references'][number]): boolean {
-  const info = reference.error?.info
-  const container = info?.container
-  if (!container || !AST.isFromExpression(container.$container)) {
-    return false
-  }
-  const bridged = container.$container.expression
-  if (AST.isFunctionCallExpression(container)) {
-    return container === bridged && info.property === 'function'
-  }
-  return AST.isValueReference(container) && container === bridged && info.property === 'target'
 }
 
 function referenceDiagnostic(reference: AST.Document['references'][number], document: AST.Document): Diagnostic {

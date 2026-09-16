@@ -7,6 +7,8 @@ import {
   FileCreateBar,
   FilesPanelSurface,
   productHostStyle,
+  StudioDesignTokenRow,
+  StudioDesignTokenSection,
   StudioInspectorAction,
   StudioInspectorActionIds,
   StudioInspectorActionLabel,
@@ -123,6 +125,9 @@ Test('Tao Studio uses a content-only navigator and keeps recursive file CRUD in 
   Expect(source).toContain('TextInput [background panel, border line, ink ink]')
   Expect(source).toContain('do OpenScreen(View.StableId)')
   Expect(source).toContain('do OpenSource(Path: DesignToken.SourcePath')
+  Expect(source).toContain('where Kind == TokenKind')
+  Expect(source).toContain('DesignTokenKindGroup(TokenKind: "color", Title: "colors")')
+  Expect(source).toContain('DesignTokenKindGroup(TokenKind: "bundle", Title: "bundles")')
   Expect(source).toContain('view StudioTestsPanelView(')
   Expect(source).toContain('view StudioLogsPanelView(')
   Expect(source).toContain('view StudioSearchPanel(Rows list of StudioSearchPanelRow)')
@@ -215,6 +220,39 @@ Test('Tao Studio foreign file views render compact tree rows with contextual edi
     .toBe('Folder/Roadmap.tao')
   Expect(elementWith(deleting, 'role', 'alert')).toBeDefined()
   Expect(textContent(deleting)).toContain('Delete Roadmap.tao?')
+})
+
+Test('Design token rows group under a kind heading and swatch parseable colors', () => {
+  const color = StudioDesignTokenRow({
+    Detail: '#ff6600',
+    Kind: 'color',
+    Label: 'accent',
+    Open: noArgAction(),
+  })
+  const bundle = StudioDesignTokenRow({
+    Detail: 'pad 12, radius 10, bg card',
+    Kind: 'bundle',
+    Label: 'commentCard',
+    Open: noArgAction(),
+  })
+  const section = StudioDesignTokenSection({ children: 'accent row', Title: 'colors' })
+
+  Expect(property(color, 'className')).toBe('studio-design-token')
+  Expect(property(color, 'data-studio-design-kind')).toBe('color')
+  Expect(textContent(color)).toContain('accent')
+  Expect(textContent(color)).toContain('#ff6600')
+  Expect(property(elementWith(color, 'className', 'studio-design-token-swatch'), 'style')).toEqual({
+    background: '#ff6600',
+  })
+  Expect(property(bundle, 'data-studio-design-kind')).toBe('bundle')
+  Expect(textContent(bundle)).toContain('commentCard')
+  Expect(textContent(bundle)).toContain('pad 12, radius 10, bg card')
+  Expect(elements(bundle).some(element => property(element, 'className') === 'studio-design-token-swatch'))
+    .toBe(false)
+  Expect(property(section, 'className')).toBe('studio-design-token-kind')
+  Expect(property(section, 'data-studio-design-kind')).toBe('colors')
+  Expect(textContent(section)).toContain('colors')
+  Expect(textContent(section)).toContain('accent row')
 })
 
 Test('Tao-owned component rows preserve canonical drag snippets at the native boundary', () => {

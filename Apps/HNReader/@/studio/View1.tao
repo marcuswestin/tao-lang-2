@@ -1,0 +1,13 @@
+// Studio-written generated source. Read-only until moved to a package.
+use Placeholder from @tao/ui
+
+public
+view View1() {
+   render Placeholder("View1") [width 373, height 259]
+}
+
+scenarios View1 "sketch" {
+   device phone
+   scenario "draft" {
+      render ()
+}  }

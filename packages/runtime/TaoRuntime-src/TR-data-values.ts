@@ -1,7 +1,7 @@
 import { RuntimeAssert } from './TR-assert'
 import type { TaoDataEntity, TaoDataField, TaoDataSchema, TaoQueryFilter } from './TR-data'
 import { valueMatchesKind } from './TR-data-definition'
-import { entityHandle } from './TR-data-entity'
+import { entityHandle, metadataOf } from './TR-data-entity'
 import type { StoredRow } from './TR-data-persistence'
 import RuntimeSwitch from './TR-switch'
 import { Clock } from './TR-units'
@@ -89,12 +89,55 @@ function storedFieldValue(
       `Relationship '${entityName}.${fieldName}'`,
     )
   }
+  // A reference is written from a live handle like a relation, but stored as the target's unique
+  // value, so the handle may belong to a store other than the one being written.
+  if (field.kind === 'reference') {
+    return referenceValue(entityName, fieldName, field, value)
+  }
   RuntimeAssert.input(
     valueMatchesKind(value, field.kind),
     `Field '${entityName}.${fieldName}' expects ${field.kind}, got ${valueType(value)}.`,
     { entityName, fieldName },
   )
   return value
+}
+
+/**
+ * referenceValue reads the target's unique field off the handle it is given. The target's own store
+ * owns that value, so reading it through the handle keeps a reference honest when the two rows live
+ * in different datasources and no single schema can look the other one up.
+ */
+function referenceValue(
+  entityName: string,
+  fieldName: string,
+  field: TaoDataField,
+  value: unknown,
+): unknown {
+  // A cleared reference is stored as absence, and reads back as `none`.
+  if (value === null || value === undefined) {
+    return null
+  }
+  const handle = entityHandle(value)
+  RuntimeAssert.input(
+    handle,
+    `Reference '${entityName}.${fieldName}' expects a live ${field.relation} entity handle.`,
+    { entityName, fieldName },
+  )
+  const metadata = metadataOf(handle)
+  RuntimeAssert.input(
+    metadata.entity === field.relation,
+    `Reference '${entityName}.${fieldName}' expects ${field.relation}, got ${metadata.entity}.`,
+    { entityName, fieldName },
+  )
+  // A placeholder for a row its store has not served still names that row by the value it stands for.
+  const referenced = metadata.schema.referencePlaceholderValue(handle)
+    ?? metadata.schema.read(handle, field.referenceField!)
+  RuntimeAssert.input(
+    typeof referenced === 'string' || typeof referenced === 'number',
+    `Reference '${entityName}.${fieldName}' needs ${field.relation}.${field.referenceField} to have a value.`,
+    { entityName, fieldName },
+  )
+  return referenced
 }
 
 export function queryFilterValue(
@@ -110,6 +153,11 @@ export function queryFilterValue(
     { entityName, fieldName: filter.field },
   )
   const value = filter.value().evaluate().jsValue
+  // A reference compares by the value it stores, so `where Story == Story` is an equality on the
+  // target's unique field and works with the target row held in another store.
+  if (field.kind === 'reference') {
+    return referenceValue(entityName, filter.field, field, value)
+  }
   if (field.kind !== 'relation') {
     return value
   }

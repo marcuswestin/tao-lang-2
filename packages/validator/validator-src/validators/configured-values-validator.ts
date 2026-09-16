@@ -26,9 +26,17 @@ export const configuredValueValidationMessages = {
   constructorBlock: (name: string) => `${name} configuration requires a block.`,
   configurationBlock: (type: string, name: string) =>
     `${type} configuration '${name}' expects a value expression, not a reference block.`,
-  toolbarReference: 'Toolbar entries must reference commands.',
+  referenceEntry: (surface: string, expected: string) => `${surface} entries must reference ${expected}.`,
   toolbarUnfilled: (name: string, slot: string) => `Toolbar command '${name}' still needs a value for slot '${slot}'.`,
-  duplicateToolbarReference: (name: string) => `Toolbar references command '${name}' more than once.`,
+  duplicateReference: (surface: string, kind: string, name: string) =>
+    `${surface} references ${kind} '${name}' more than once.`,
+  unknownListedDeclaration: (surface: string, name: string) => `${surface} names unknown declaration '${name}'.`,
+  listedPatch: (surface: string, name: string) =>
+    `${surface} entry '${name}' cannot be derived where it is listed; only a datasource can, so derive this one with a declaration of its own.`,
+  datasourceDeclarationRequired: (surface: string, name: string) =>
+    `${surface} entry '${name}' must be a \`datasource\` declaration: a bound datasource owns a store, and only a \`datasource\` states which collections it holds.`,
+  membershipPatch: (name: string) =>
+    `Datasource '${name}' cannot patch Data where it is bound: which collections a datasource stores is structural, not configuration.`,
 } as const
 
 export const configuredValueValidationChecks = {
@@ -230,11 +238,7 @@ function validateConfigurationEntries(
     }
     state.entries.set(entry.name, entry)
     if (entry.block) {
-      if (entry.name === 'Toolbar') {
-        validateToolbarReferenceBlock(entry.block, ctx)
-      } else {
-        ctx.error(entry.block, configuredValueValidationMessages.configurationBlock(state.typeName, entry.name))
-      }
+      validateReferenceBlock(entry.block, property, entry.name, state.typeName, ctx)
       continue
     }
     if (!entry.value) {
@@ -245,32 +249,106 @@ function validateConfigurationEntries(
 }
 
 /**
- * A configured nav reads the same `Toolbar` slot a scene does, so it lists the same thing: commands.
- * There is no second toolbar vocabulary — an action has no title of its own to show.
+ * A brace-initial slot value lists declarations rather than a value, and what it may list is the
+ * slot's element type: a configured nav reads the same `Toolbar` slot a scene does, so it lists
+ * commands; a datasource's `Data` lists data collections; an app's `Datasource` lists datasources.
+ * One rule reads the contract, so a new list-typed slot needs no new validation.
  */
-function validateToolbarReferenceBlock(block: AST.ConfigurationBlock, ctx: ValidationContext): void {
-  const seen = new Set<AST.CommandDeclaration>()
+export function validateReferenceBlock(
+  block: AST.ConfigurationBlock,
+  property: AST.ConfigurationProperty,
+  surface: string,
+  typeName: string,
+  ctx: ValidationContext,
+): void {
+  const element = referenceBlockElementType(property)
+  if (!element) {
+    ctx.error(block, configuredValueValidationMessages.configurationBlock(typeName, surface))
+    return
+  }
+  const expected = referenceNoun(element)
+  const seen = new Set<AST.Node>()
   for (const entry of block.entries) {
-    const reference = entry.reference?.ref
+    const listed = ASTUtils.listedEntryOf(entry)
+    if (!listed) {
+      ctx.error(entry, configuredValueValidationMessages.referenceEntry(surface, `${expected}s`))
+      continue
+    }
+    const reference = listed.target
     if (!reference) {
-      if (!entry.reference) {
-        ctx.error(entry, configuredValueValidationMessages.toolbarReference)
+      // A bare name that does not resolve is already a linking error; a patched one is not linked.
+      if (listed.patch) {
+        ctx.error(entry, configuredValueValidationMessages.unknownListedDeclaration(surface, listed.name))
       }
       continue
     }
-    if (!AST.isCommandDeclaration(reference)) {
-      ctx.error(entry, configuredValueValidationMessages.toolbarReference)
+    if (!referenceSatisfiesElement(reference, element)) {
+      ctx.error(entry, configuredValueValidationMessages.referenceEntry(surface, `${expected}s`))
+      continue
+    }
+    if (element.kind === 'primitive' && element.primitive === 'datasource' && !AST.isDatasourceDeclaration(reference)) {
+      ctx.error(entry, configuredValueValidationMessages.datasourceDeclarationRequired(surface, listed.name))
       continue
     }
     if (seen.has(reference)) {
-      ctx.error(entry, configuredValueValidationMessages.duplicateToolbarReference(reference.name))
+      ctx.error(entry, configuredValueValidationMessages.duplicateReference(surface, expected, listed.name))
     }
     seen.add(reference)
-    const slot = ASTUtils.commandSlots(reference)[0]
-    if (slot) {
-      ctx.error(entry, configuredValueValidationMessages.toolbarUnfilled(reference.name, slot.name))
+    if (listed.patch) {
+      validateListedPatch(listed.patch, reference, surface, listed.name, ctx)
+      continue
+    }
+    // A listed command must be ready to run: a surface offers a verb, and a verb still missing a
+    // value for one of its slots has nothing to offer.
+    if (AST.isCommandDeclaration(reference)) {
+      const slot = ASTUtils.commandSlots(reference)[0]
+      if (slot) {
+        ctx.error(entry, configuredValueValidationMessages.toolbarUnfilled(reference.name, slot.name))
+      }
     }
   }
+}
+
+/**
+ * `Personal with { StorageKey "x" }` in a bound set derives that datasource where the app binds it,
+ * and the patch is checked against the datasource's own configuration contract exactly as the same
+ * `with` would be anywhere else. Membership is the one thing it may not change, because which store
+ * holds a collection is decided for the whole project.
+ */
+function validateListedPatch(
+  patch: AST.ConfigurationBlock,
+  reference: AST.Node,
+  surface: string,
+  name: string,
+  ctx: ValidationContext,
+): void {
+  if (!AST.isDatasourceDeclaration(reference)) {
+    ctx.error(patch, configuredValueValidationMessages.listedPatch(surface, name))
+    return
+  }
+  const membership = patch.entries.find(entry => entry.name === ASTUtils.datasourceMembershipSlot)
+  if (membership) {
+    ctx.error(membership, configuredValueValidationMessages.membershipPatch(name))
+  }
+  const declaration = configuredDeclarationOfValue(reference)
+  if (declaration) {
+    validateConfigurationBlock(patch, declaration, ctx, { requireConstructorProperties: false })
+  }
+}
+
+function referenceBlockElementType(property: AST.ConfigurationProperty): ASTUtils.TaoType | undefined {
+  const declared = Type.ofConfigurationProperty(property)
+  return declared.kind === 'list' ? declared.element : undefined
+}
+
+function referenceSatisfiesElement(reference: AST.Node, element: ASTUtils.TaoType): boolean {
+  return Type.isAssignable(Type.ofDeclarationFamily(reference), element)
+}
+
+function referenceNoun(element: ASTUtils.TaoType): string {
+  return element.kind === 'primitive' && element.primitive === 'data'
+    ? 'data collection'
+    : Type.displayName(element)
 }
 
 function validateKeyedConfigurationItem(
@@ -327,7 +405,7 @@ function validateConfiguredProperty(
   const expected = configurationPropertyAcceptsAbsence(property)
     ? { kind: 'union' as const, members: [Type.ofConfigurationProperty(property), Type.ofNone()] }
     : Type.ofConfigurationProperty(property)
-  if (actual.kind !== 'unresolved' && expected.kind !== 'unresolved' && !Type.isAssignable(actual, expected)) {
+  if (actual.kind !== 'unresolved' && expected.kind !== 'unresolved' && !Type.isAssignableToSlot(actual, expected)) {
     ctx.error(
       node,
       configuredValueValidationMessages.configurationType(

@@ -303,7 +303,7 @@ Describe('validator: types and expressions', () => {
     [
       'unresolved item fields',
       typeApp('type Name is text type Person is { Name } let BadPerson = Person { Missing }'),
-      "Could not resolve reference to ValueDeclaration named 'Missing'.",
+      "Could not resolve reference to ListedDeclaration named 'Missing'.",
       [typeValidationMessages.unmatchedProperty, typeValidationMessages.missingProperty('Name')],
     ],
   ]

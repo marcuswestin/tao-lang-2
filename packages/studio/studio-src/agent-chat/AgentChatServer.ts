@@ -8,7 +8,7 @@ import { authoringTools, type CodeChangeRequest } from './AgentChatAuthoring'
 import { declarationSource } from './AgentChatFacts'
 import { chatInstructions, scenarioInstructions } from './AgentChatInstructions'
 import { AgentChatProvider } from './AgentChatProvider'
-import { type AgentChatEvent, AgentChatSession, type AgentChatTurn } from './AgentChatSession'
+import { type AgentChatApproval, type AgentChatEvent, AgentChatSession, type AgentChatTurn } from './AgentChatSession'
 import { type AgentChatToolCall, type AgentChatWorld, readTools } from './AgentChatTools'
 import {
   type AgentChatWriteWorld,
@@ -71,6 +71,21 @@ function worldFor(session: StudioProjectSession): AgentChatWorld & { invalidate:
   }
 }
 
+export type AgentChatHistoryEntry =
+  | { role: 'user'; text: string }
+  | {
+    role: 'assistant'
+    text: string
+    codeChanges?: { granted: boolean; requests: readonly CodeChangeRequest[] }
+    message?: string
+    pendingApprovals?: readonly (AgentChatApproval & { diff?: string })[]
+    status?: AgentChatTurn['status']
+    steps?: number
+    toolCalls?: readonly AgentChatToolCall[]
+    usage?: { inputTokens?: number; outputTokens?: number }
+    verdict?: FeatureTestVerdict
+  }
+
 /**
  * AgentChatConversation is one chat against one project. It is deliberately server-side: the messages, the
  * approval state, and the provider key never travel to the browser.
@@ -92,7 +107,7 @@ class AgentChatConversation {
   #codeChangeRequests: CodeChangeRequest[] = []
   /** How many requests existed when this turn began, so only the new ones raise a card. */
   #requestsBeforeTurn = 0
-  #history: { role: 'user' | 'assistant'; text: string; toolCalls?: readonly AgentChatToolCall[] }[] = []
+  #history: AgentChatHistoryEntry[] = []
 
   constructor(session: StudioProjectSession, provider: AgentChatProvider) {
     this.#provider = provider
@@ -108,7 +123,7 @@ class AgentChatConversation {
     return this.#provider
   }
 
-  get history(): readonly { role: 'user' | 'assistant'; text: string; toolCalls?: readonly AgentChatToolCall[] }[] {
+  get history(): readonly AgentChatHistoryEntry[] {
     return this.#history
   }
 
@@ -194,6 +209,10 @@ class AgentChatConversation {
     // The project may have changed between turns, so each turn starts from a freshly read one.
     this.#world.invalidate()
     this.#requestsBeforeTurn = this.#codeChangeRequests.length
+    // A verdict belongs to the turn that ran the checks, and history now outlives the turn: without
+    // this, every later turn is recorded carrying it and replays the same card on reload. `respond`
+    // continues this turn deliberately, so only a new message clears it.
+    this.#lastVerdict = undefined
     this.#history.push({ role: 'user', text })
     const turn = await this.#chat.send(text, onEvent)
     return await this.#record(turn)
@@ -219,8 +238,13 @@ class AgentChatConversation {
     return {
       ...this.#reading(),
       apply: async change => {
+        const unique = new Map<string, string>()
+        for (const edit of change.edits) {
+          unique.set(edit.path, edit.after)
+        }
+        const fileEdits = [...unique.entries()].map(([path, content]) => ({ content, path }))
         const result = await this.#session.applyAgentFiles({
-          edits: change.edits.map(edit => ({ content: edit.after, path: edit.path })),
+          edits: fileEdits,
           expect: change.expect,
           writeId: crypto.randomUUID(),
         })
@@ -263,24 +287,38 @@ class AgentChatConversation {
   }
 
   async #record(turn: AgentChatTurn): Promise<Json> {
-    this.#history.push({ role: 'assistant', text: turn.text, toolCalls: turn.toolCalls })
-    await this.#log(turn)
-    return {
+    const pendingApprovals = turn.pendingApprovals.map(approval => ({
+      ...approval,
+      diff: this.#diffFor(approval.input),
+    }))
+    const codeChanges = {
+      granted: this.#codeChangesGranted,
+      requests: this.#codeChangeRequests.slice(this.#requestsBeforeTurn),
+    }
+    const verdict = this.#lastVerdict
+    this.#history.push({
+      role: 'assistant',
+      codeChanges,
       message: turn.message,
-      pendingApprovals: turn.pendingApprovals.map(approval => ({
-        ...approval,
-        diff: this.#diffFor(approval.input),
-      })),
-      codeChanges: {
-        granted: this.#codeChangesGranted,
-        requests: this.#codeChangeRequests.slice(this.#requestsBeforeTurn),
-      },
-      ...(this.#lastVerdict === undefined ? {} : { verdict: this.#lastVerdict }),
+      pendingApprovals,
       status: turn.status,
       steps: turn.steps,
       text: turn.text,
       toolCalls: turn.toolCalls,
       usage: turn.usage,
+      ...(verdict === undefined ? {} : { verdict }),
+    })
+    await this.#log(turn)
+    return {
+      codeChanges,
+      message: turn.message,
+      pendingApprovals,
+      status: turn.status,
+      steps: turn.steps,
+      text: turn.text,
+      toolCalls: turn.toolCalls,
+      usage: turn.usage,
+      ...(verdict === undefined ? {} : { verdict }),
     }
   }
 
@@ -457,7 +495,7 @@ export const AgentChat = {
       return await conversation.respond(approvalResponses(body))
     }
     if (command === 'history') {
-      return { history: conversation.history }
+      return { history: conversation.history, mode: conversation.mode }
     }
     if (command === 'names') {
       // The panel turns these into links, so an answer that names a declaration stays checkable. This must

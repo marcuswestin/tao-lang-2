@@ -30,6 +30,8 @@ export namespace Langium {
   export type DefaultSharedModuleContext = langiumLsp.DefaultSharedModuleContext
   /** DocumentFormattingParams declares an LSP document formatting request. */
   export type DocumentFormattingParams = vscodeLanguageserver.DocumentFormattingParams
+  /** FindReferencesOptions declares options for finding references. */
+  export type FindReferencesOptions = langium.FindReferencesOptions
   /** Formatter declares the Langium LSP document formatting service. */
   export type Formatter = langiumLsp.Formatter
   /** FormattingAction declares one Langium formatting whitespace instruction. */
@@ -44,6 +46,8 @@ export namespace Langium {
   export type LangiumDefaultCoreServices = langium.LangiumDefaultCoreServices
   /** LangiumDocument declares a parsed Langium document with an AST root. */
   export type LangiumDocument<T extends AstNode = AstNode> = langium.LangiumDocument<T>
+  /** LangiumDocuments declares the workspace document registry service. */
+  export type LangiumDocuments = langium.LangiumDocuments
   /** LangiumSharedCoreServices declares Langium services shared by all registered languages. */
   export type LangiumSharedCoreServices = langium.LangiumSharedCoreServices
   /** LangiumServices declares language-specific Langium core and LSP services. */
@@ -58,10 +62,14 @@ export namespace Langium {
   export type Properties<T extends AstNode> = langium.Properties<T>
   /** Reference declares a Langium cross-reference to an AST node. */
   export type Reference<T extends AstNode = AstNode> = langium.Reference<T>
+  /** ReferenceDescription declares an indexed reference description. */
+  export type ReferenceDescription = langium.ReferenceDescription
   /** ReferenceInfo declares a Langium cross-reference lookup context. */
   export type ReferenceInfo = langium.ReferenceInfo
   /** Scope declares the visible symbols for one Langium cross-reference lookup. */
   export type Scope = langium.Scope
+  /** Stream declares a lazy iterable sequence. */
+  export type Stream<T> = langium.Stream<T>
   /** TextEdit declares one LSP text replacement. */
   export type TextEdit = vscodeLanguageserver.TextEdit
   /** URI declares a Langium URI value. */

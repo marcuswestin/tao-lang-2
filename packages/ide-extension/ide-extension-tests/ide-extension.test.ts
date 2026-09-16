@@ -218,6 +218,19 @@ Describe('Tao IDE extension smoke', () => {
 
     Expect(diagnostics).toEqual([])
   })
+
+  Test('does not report linker diagnostics for bridged TypeScript export heads', async () => {
+    const diagnostics = await validateOnDiskFileWithLanguageServerServices('Main.tao', {
+      'Main.tao': `
+        type HNSource is Http with {
+          Adapter item is HNAdapter from ./HNAdapter.ts
+        }
+      `,
+      'HNAdapter.ts': 'export const HNAdapter = {}',
+    })
+
+    Expect(diagnostics.some(diagnostic => diagnostic.includes("ValueDeclaration named 'HNAdapter'"))).toBe(false)
+  })
 })
 
 async function buildCodeActionFixture(source: string): Promise<{

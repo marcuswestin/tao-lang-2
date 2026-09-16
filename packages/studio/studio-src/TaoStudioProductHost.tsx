@@ -128,6 +128,8 @@ export {
 export {
   StudioDataRows,
   StudioDataTableTitle,
+  StudioDesignTokenRow,
+  StudioDesignTokenSection,
   StudioPaletteRow,
   StudioPanelSelected,
   StudioPanelSurface,
@@ -229,6 +231,7 @@ type StudioStateSlotProps = Readonly<{
 type StudioDrawerSlotProps = Readonly<{
   Compile?: TR.Value<StudioDrawerPanelModel['Compile']>
   Data?: TR.Value<StudioDrawerPanelModel['Data']>
+  Debug?: TR.Value<StudioDrawerPanelModel['Debug']>
   Logs?: TR.Value<StudioDrawerPanelModel['Logs']>
   Problems?: TR.Value<StudioDrawerPanelModel['Problems']>
   Tab?: TR.Value<string>
@@ -404,6 +407,7 @@ export function ProductHostBoundary(props: TaoStudioProductHostProps): React.Rea
     ? React.cloneElement(drawer, {
       Compile: TR.Value(panelValues.Drawer.Compile),
       Data: TR.Value(panelValues.Drawer.Data),
+      Debug: TR.Value(panelValues.Drawer.Debug),
       Logs: TR.Value(panelValues.Drawer.Logs),
       Problems: TR.Value(panelValues.Drawer.Problems),
       Tab: TR.Value(panelValues.Drawer.Tab),

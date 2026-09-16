@@ -6,7 +6,7 @@ import { StudioScenarioControls } from '../StudioScenarioControls'
 import { invalidatePreviewJourneyRecording } from './StudioJourneyRecording'
 import { StudioMatrixGrid } from './StudioMatrixGrid'
 import { previewMatrixPlan, type StudioMatrixGroup, StudioMatrixLayout } from './StudioMatrixLayout'
-import { StudioMatrixSketches } from './StudioMatrixSketches'
+import { StudioDrawCanvas, StudioMatrixSketches } from './StudioMatrixSketches'
 import { postInteractionMode, postPreviewRuntimeUpdate } from './StudioPreviewBridge'
 import { renderCellPreview } from './StudioPreviewCellView'
 import {
@@ -42,10 +42,24 @@ export async function connectPreviews(
       )
     ))
     renderConnectionGrid(parent, manifest, connections, previewUrl)
-    StudioMatrixSketches.render(parent, handshake.identity.project, handshake.sketchCatalog)
+    StudioMatrixSketches.render(
+      parent,
+      handshake.identity.project,
+      handshake.sketchCatalog,
+      StudioMatrixLayout.sketchSourceVersions(manifest),
+    )
     return connections
   }
-  return [await connectWholeAppPreview(parent, previewUrl, origin, handshake, signal)]
+  const wholeApp = await connectWholeAppPreview(parent, previewUrl, origin, handshake, signal)
+  StudioMatrixSketches.render(
+    parent,
+    handshake.identity.project,
+    handshake.sketchCatalog,
+    handshake.previewManifest === undefined
+      ? undefined
+      : StudioMatrixLayout.sketchSourceVersions(handshake.previewManifest),
+  )
+  return [wholeApp]
 }
 
 /** Lays the connections out as scenario-group rows and stamps the canvas with the review manifest marker. */
@@ -81,7 +95,8 @@ async function connectWholeAppPreview(
   const iframe = document.createElement('iframe')
   iframe.src = StudioPreviewFrameUrl.create(previewUrl, previewInstanceId, window.location)
   iframe.title = `${handshake.identity.appName} live preview`
-  parent.replaceChildren(iframe)
+  StudioDrawCanvas.retain(parent, () => parent.replaceChildren(iframe))
+  StudioDrawCanvas.ensure(parent)
   return { iframe, interactionMode: 'edit', origin, previewInstanceId }
 }
 
@@ -177,8 +192,9 @@ export async function refreshCellPreviews(
   const plan = previewMatrixPlan(manifest.cells.length, wholeApp !== undefined)
   if (plan === 'keep-whole-app') {
     if (!parent.contains(wholeApp!.iframe)) {
-      parent.replaceChildren(wholeApp!.iframe)
+      StudioDrawCanvas.retain(parent, () => parent.replaceChildren(wholeApp!.iframe))
     }
+    StudioDrawCanvas.ensure(parent)
     return
   }
   if (plan === 'create-whole-app') {
@@ -214,7 +230,7 @@ export async function refreshCellPreviews(
   }
   previews.splice(0, previews.length, ...nextConnections)
   renderConnectionGrid(parent, manifest, nextConnections, previewUrl)
-  StudioMatrixSketches.rerender(parent)
+  StudioMatrixSketches.rerender(parent, StudioMatrixLayout.sketchSourceVersions(manifest))
 
   await Promise.all(nextConnections.map(async preview => {
     const cell = manifest.cells.find(candidate => candidate.cellId === preview.cell!.cellId)!

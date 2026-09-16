@@ -31,6 +31,46 @@ Describe('Studio session paths and routes', () => {
       .toBe('/sessions/window_one/api/files')
   })
 
+  Test('parses debugger events and commands, and refuses malformed ones', () => {
+    const cellIdentity = {
+      ...identity,
+      cellId: 'cell-phone',
+      cellRevision: 2,
+      compileRevision: 7,
+      manifestRevision: 'm-7',
+    }
+    const event = {
+      channel: studioProtocolChannel,
+      event: { kind: 'paused', pause: { frames: ['Bump'], step: { action: 'Bump', path: '1' } } },
+      identity: cellIdentity,
+      protocolVersion: studioProtocolVersion,
+      type: 'preview-debug',
+    }
+    const configure = {
+      actions: ['Bump'],
+      channel: studioProtocolChannel,
+      command: 'configure',
+      identity: cellIdentity,
+      protocolVersion: studioProtocolVersion,
+      steps: [{ action: 'Bump', path: '0' }],
+      type: 'debug-command',
+    }
+    const step = { ...configure, actions: undefined, command: 'step-over', steps: undefined }
+
+    Expect(StudioProtocol.parseMessage(event)).toMatchObject({ event: event.event, type: 'preview-debug' })
+    Expect(StudioProtocol.parseMessage(configure)).toMatchObject({
+      actions: ['Bump'],
+      command: 'configure',
+      steps: [{ action: 'Bump', path: '0' }],
+    })
+    Expect(StudioProtocol.parseMessage(step)).toMatchObject({ command: 'step-over' })
+    Expect(StudioProtocol.parseMessage({ ...step, command: 'break' })).toMatchObject({ command: 'break' })
+    Expect(StudioProtocol.parseMessage({ ...configure, command: 'evaluate' })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...configure, steps: [{ action: 'Bump' }] })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...configure, identity: { appName: 'Garden' } })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...event, event: () => undefined })).toBeUndefined()
+  })
+
   Test('matches and fills parameterised routes with the session id grammar', () => {
     const manager = StudioRoutes.manager
     Expect(StudioRoutes.match(manager.switchSession, '/api/sessions/current_window/switch'))

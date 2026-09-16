@@ -204,6 +204,17 @@ Describe('compiler: minimal design', () => {
     `,
       { validationMode: 'release' },
     )
+
+    await TestCompiler.compileCode(
+      `
+      use StackNav from @tao/nav
+      workspace design Theme { sizes { sm 8.px } }
+      app Demo { Name "Demo" Navigator StackNav { Initial Main } Design Theme }
+      scene Main() { Title "Main" render Surface() [gap sm, fill] }
+      view Surface() { render inject \`\`\`ts return null \`\`\` }
+    `,
+      { validationMode: 'release' },
+    )
   })
 
   Test('imports and exports a visible design as an ordinary runtime value', async () => {

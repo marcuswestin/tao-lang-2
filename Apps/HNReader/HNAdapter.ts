@@ -1,4 +1,4 @@
-import TR from '@runtime/TR'
+import TR from '@tao/runtime'
 
 /**
  * The Hacker News adapter: each declared query shape maps to one Algolia HN API request, and every
@@ -22,8 +22,11 @@ type ItemNode = {
   author: string | null
   children: ItemNode[]
   id: number
+  points?: number | null
   text: string | null
+  title?: string | null
   type: string
+  url?: string | null
 }
 
 export const HNAdapter = TR.Http.adapter({
@@ -47,6 +50,26 @@ export const HNAdapter = TR.Http.adapter({
         Rank: index + 1,
       })))
     }),
+    // One story by id, for a bookmark that names a story the front page has not served — a cold
+    // launch, or a story that has since fallen off. It is not on the front page, so it has no Rank.
+    TR.Http.on({ where: 'HnId' }, async (query, { upsert }) => {
+      const id = query.where['HnId'] as number
+      const item = await fetchJson<ItemNode>(`${API}/items/${id}`)
+      if (item.type !== 'story') {
+        return
+      }
+      upsert([{
+        HnId: item.id,
+        Title: item.title ?? '(untitled)',
+        Url: item.url ?? '',
+        Score: item.points ?? 0,
+        Author: item.author ?? '(unknown)',
+        CommentCount: countComments(item.children),
+      }])
+    }),
+    // The Reading feed is this device's own record of what it opened: the rows are already in the
+    // store, so the shape is declared to say so rather than left to fail as unsupported.
+    TR.Http.on({ orderBy: 'OpenedAt', where: 'Opened' }, async () => {}),
   ],
   Comment: [
     TR.Http.on({ where: 'Story' }, async (query, { upsert }) => {
@@ -88,6 +111,10 @@ function flattenComments(item: ItemNode, storyId: number): Record<string, unknow
   }
   walk(item.children, 0)
   return rows
+}
+
+function countComments(nodes: readonly ItemNode[]): number {
+  return nodes.reduce((total, node) => total + (node.type === 'comment' ? 1 : 0) + countComments(node.children), 0)
 }
 
 /**

@@ -106,6 +106,7 @@ export function publishStudioHostSnapshot(snapshot: StudioHostSnapshot): void {
       dataError: snapshot.data.error,
       dataLoading: snapshot.data.loading,
       dataSource: cellSource,
+      debug: preview?.debug,
       logs: preview?.runtimeLogs ?? [],
       logSource: cellSource,
       search: snapshot.searchResults,

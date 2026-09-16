@@ -3,6 +3,7 @@ import type { EditorView } from 'codemirror'
 import type { StudioDraftFile } from '../../StudioDraftSync'
 import { StudioInspector, type StudioInspectorSelection } from '../../StudioInspector'
 import {
+  type StudioDebugCommandMessage,
   type StudioPreviewIdentity,
   type StudioPreviewRuntimeUpdateMessage,
   StudioProtocol,
@@ -16,6 +17,7 @@ import {
 import { StudioApiClient, type StudioCellRuntimeResponse, type StudioHandshake } from '../StudioApiClient'
 import { StudioDialog } from '../StudioDialog'
 import { absoluteSourcePath, StudioSourceNavigation } from '../StudioEditor'
+import { StudioDebugEvents } from './StudioDebugEvents'
 import { invalidatePreviewJourneyRecording, StudioJourneyRecorder } from './StudioJourneyRecording'
 import type { StudioInteractionMode, StudioPreviewConnection } from './StudioPreviewConnection'
 import { StudioReviewDom } from './StudioReviewDom'
@@ -67,6 +69,32 @@ export function postInteractionMode(preview: StudioPreviewConnection, handshake:
     protocolVersion: studioProtocolVersion,
     type: 'set-interaction-mode',
   }, preview.origin)
+}
+
+/**
+ * postDebugCommand sends one debugger command to the preview holding the pause. The identity is the
+ * cell's own, so a command released in one cell cannot resume a root stopped in another.
+ */
+export function postDebugCommand(
+  preview: StudioPreviewConnection,
+  handshake: StudioHandshake,
+  command: StudioDebugCommandMessage['command'],
+): void {
+  const target = preview.iframe.contentWindow
+  if (target === null) {
+    return
+  }
+  const message: StudioDebugCommandMessage = {
+    channel: studioProtocolChannel,
+    command,
+    identity: {
+      ...(preview.cellIdentity ?? handshake.identity),
+      previewInstanceId: preview.previewInstanceId,
+    },
+    protocolVersion: studioProtocolVersion,
+    type: 'debug-command',
+  }
+  target.postMessage(message, preview.origin)
 }
 
 export function postPreviewRuntimeUpdate(
@@ -151,9 +179,11 @@ export async function handlePreviewMessage(
   // Messages Studio sends to the preview, and hover, come back through the same parser; nothing listens for them here.
   const ignored = (): void => {}
   await Switch.property<StudioWindowMessage, 'type', Promise<void> | void>(message, 'type', {
+    'debug-command': ignored,
     'highlight-source': ignored,
     'preview-applied': type => receivePreviewApplied(preview, received(message, type), handshake),
     'preview-console': type => receiveConsole(preview, received(message, type), actions),
+    'preview-debug': type => receiveDebug(preview, received(message, type), actions),
     'preview-fixture-capture-failed': type => receiveFixtureCapture(preview, received(message, type), actions),
     'preview-fixture-captured': type => receiveFixtureCapture(preview, received(message, type), actions),
     'preview-hover-source': ignored,
@@ -187,6 +217,15 @@ function receiveConsole(
     level: message.level,
     timestamp: message.timestamp,
   }].slice(-500)
+  actions.changed?.()
+}
+
+function receiveDebug(
+  preview: StudioPreviewConnection,
+  message: StudioWindowMessageOf<'preview-debug'>,
+  actions: StudioPreviewMessageActions,
+): void {
+  preview.debug = StudioDebugEvents.receive(preview.debug ?? StudioDebugEvents.empty(), message.event)
   actions.changed?.()
 }
 

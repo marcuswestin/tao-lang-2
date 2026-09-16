@@ -28,7 +28,8 @@ export function validateProjectWorkspace(ctx: ValidationContext): void {
   if (ctx.entryFilePath.startsWith(`${codeProjectRoot}/`)) {
     return
   }
-  const projects = ctx.workspaceFiles.flatMap(file =>
+  const identityFiles = ctx.projectFiles ?? ctx.workspaceFiles
+  const projects = identityFiles.flatMap(file =>
     file.statements.filter(AST.isProjectDeclaration).flatMap(project => {
       const id = AST.blockStatementOf(project, { filter: AST.isProjectId })[0]
       return id ? [{ id, project, root: FS.dirname(AST.getDocument(project).uri.path) }] : []
@@ -38,7 +39,7 @@ export function validateProjectWorkspace(ctx: ValidationContext): void {
     .filter(project => FS.pathIsWithin(ctx.entryFilePath, project.root))
     .toSorted((left, right) => right.root.length - left.root.length)[0]
   if (!owner) {
-    const entry = ctx.workspaceFiles.find(file => AST.getDocument(file).uri.path === ctx.entryFilePath)
+    const entry = identityFiles.find(file => AST.getDocument(file).uri.path === ctx.entryFilePath)
     if (entry) {
       ctx.error(entry, projectValidationMessages.missingProject())
     }

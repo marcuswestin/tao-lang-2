@@ -29,7 +29,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
       return this.createPatchBaseScope(context.container)
     }
     if (context.property === 'reference' && AST.isConfigurationEntry(context.container)) {
-      return this.createValueScope(context.container)
+      return this.createConfigurationReferenceScope(context.container)
     }
     if (context.property === 'target' && AST.isMemberAccessExpression(context.container)) {
       return this.createValueScope(context.container)
@@ -135,7 +135,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     return super.getScope(context)
   }
 
-  private createValueScope(reference: AST.Node): Langium.Scope {
+  private createValueScope(reference: AST.Node, outer?: Langium.Scope): Langium.Scope {
     const root = AST.findRoot(reference)
     if (!AST.isTaoFile(root)) {
       return this.createScopeForNodes([])
@@ -146,7 +146,7 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     // procedure and the verb in front of it.
     const owner = AST.owningCommand(reference)
     const visible = (declaration: AST.Node) => declaration !== owner
-    let scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root).filter(visible))
+    let scope = this.createScopeForNodes(AST.importableValueDeclarationsInFile(root).filter(visible), outer)
     scope = this.createScopeForNodes(
       this.importedDeclarations(reference, AST.isImportableValueDeclaration),
       scope,
@@ -379,6 +379,33 @@ export class ValueScopeProvider extends Langium.DefaultScopeProvider {
     let scope = this.createScopeForNodes(root.statements.filter(isDeclaration))
     scope = this.createScopeForNodes(this.importedDeclarations(node, isDeclaration), scope)
     return scope
+  }
+
+  /**
+   * A reference block names declarations rather than values, and which declarations it may name is
+   * the slot's element type: `Toolbar { Save }` lists commands, `Data { Stories }` lists data
+   * collections. Both reach this one scope, so the slot contract decides what is legal rather than
+   * the scope narrowing it by name. Collections layer under ordinary values because a plural
+   * collection name and a value name occupy the same table for the reader.
+   */
+  private createConfigurationReferenceScope(entry: AST.ConfigurationEntry): Langium.Scope {
+    return this.createValueScope(entry, this.createDataCollectionScope(entry))
+  }
+
+  private createDataCollectionScope(node: AST.Node): Langium.Scope {
+    const root = AST.findRoot(node)
+    if (!AST.isTaoFile(root)) {
+      return this.createScopeForNodes([])
+    }
+    const declarations = [
+      ...root.statements.filter(AST.isEntityDataDeclaration),
+      ...this.importedDeclarations(node, AST.isEntityDataDeclaration),
+    ]
+    return this.createScope(
+      declarations.map(declaration =>
+        this.descriptions.createDescription(declaration, declaration.name, AST.getDocument(declaration))
+      ),
+    )
   }
 
   private createEntityDataScope(node: AST.Node): Langium.Scope {

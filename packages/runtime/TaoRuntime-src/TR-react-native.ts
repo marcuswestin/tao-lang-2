@@ -18,6 +18,9 @@ export type ReactNativeRuntime = {
   }
   Image: React.ComponentType<any>
   KeyboardAvoidingView: React.ComponentType<any>
+  Linking?: {
+    openURL(url: string): Promise<any>
+  }
   LogBox?: { ignoreAllLogs(ignore?: boolean): void }
   Modal?: React.ComponentType<any>
   TouchableOpacity?: any

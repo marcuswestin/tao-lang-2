@@ -199,6 +199,7 @@ The stdlib host-family contract fixes the current read and requirement sets:
 | Host placement                                                                | Reads              | Requires |
 | ----------------------------------------------------------------------------- | ------------------ | -------- |
 | a `scene` entry in `StackNav`, including `Initial` and later pushes           | `Title`, `Toolbar` | `Title`  |
+| the same entry when the stack is an item of a `Display "toggle"` selection    | `Title`, `Toolbar` | `Title`  |
 | a plain `view` entry in `StackNav`                                            | neither            | neither  |
 | reserved `present ... as window` contract, including its full-screen fallback | `Title`, `Toolbar` | `Title`  |
 | `SlotNav`, `SelectionNav`, `SplitNav`; root, sheet, menu, and toast           | neither            | neither  |
@@ -276,11 +277,31 @@ The implemented declarations are:
 - `SelectionNav` requires `Initial @key`, `Display <text>`, and at least one keyed item with `Label`
   text and view-typed `Content`. An item may also supply `Icon` text as system-icon metadata.
   Selecting another key reveals its mounted item without pushing a content occurrence. Inactive
-  items stay mounted but hidden, preserving their state.
+  items stay mounted but hidden, preserving their state. `Display` chooses the surface:
+  `"automatic"` is the platform tab bar where the native kit has one, `"tabs"` and `"drawer"` are
+  Tao-drawn row and column controls, and `"toggle"` is the single bottom bar described below.
 - `SplitNav` requires keyed panes with view-typed `Content` and numeric `Width`. `Resizable` defaults
   to false. A resizable pane renders a runtime-owned drag affordance; a writable state width receives
   drag updates and a portable double-tap resets it to its declared default. A non-writable width still
   resizes for the mounted occurrence but is forgotten on remount.
+
+### The toggle bar
+
+`Display "toggle"` draws one compact bar floating over the bottom edge, the shape Safari uses on
+iPhone, and no top bar at all. Back sits on the left and walks the active item through the same
+reducer as the platform gesture and hardware Back; it is disabled when there is nothing to go back
+to. The middle is a pill holding the visible screen's `Title` and `Toolbar`. The right-hand control
+is named by the item it switches to and activates the item after the active one, wrapping, so with
+two items a tap alternates between them. Every item keeps its content mounted, and content scrolls
+beneath the bar and clears it at the end.
+
+A `StackNav` that is an item's content draws no header under a toggle bar. It still reads the scene
+it presents, and hands that scene's `Title` and `Toolbar` to the bar rather than drawing them, so the
+title, the toolbar, and Back each appear exactly once. The toolbar keeps its mobile policy — two
+direct commands, the ordered remainder behind `More` — and no command is dropped. A scene with
+`Header false` hands the bar nothing; an item whose content is a plain view, or whose screen fills no
+`Title`, shows the item's `Label`. The native kit renders the bar's surfaces as Liquid Glass on iOS 26
+and as a translucent material everywhere the effect is unavailable, with identical behavior.
 
 Persistent chrome around navigated content is not a navigation kind. A shell is a view that renders
 its navigator as ordinary content, which the next section describes.

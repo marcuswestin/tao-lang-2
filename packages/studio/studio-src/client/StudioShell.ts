@@ -1,4 +1,5 @@
 import { Assert } from '@shared/core'
+import type { StudioDrawerTab } from './StudioPanelProjection'
 
 export type StudioClientConfig = {
   previewUrl?: string
@@ -34,12 +35,23 @@ export type StudioClientView = {
 type PaneName = 'bottom' | 'left' | 'preview' | 'right'
 
 const paneDefaults: Record<PaneName, number> = { bottom: 180, left: 360, preview: 440, right: 440 }
+
+/** The shell's fixed chrome, as the stylesheet lays it out; Design mode sizes the canvas around it. */
+const dividerWidth = 4
+const editorMinimum = 240
+
+/** The pane operations the rest of the shell drives: the rail reopens the left pane, presets reshape for Design. */
+export type StudioPaneControls = Readonly<{
+  designLayout: (active: boolean) => void
+  showLeft: () => void
+}>
 const paneStorageKey = 'tao-studio:pane-sizes:v4'
 
 export const StudioPaneMinimums: Record<PaneName, number> = { bottom: 96, left: 180, preview: 280, right: 320 }
 
 /** One stroke weight on a 24-unit grid; the rail, toolbar, and tree all draw from this set. */
 export const studioIconPaths = {
+  ai: 'M3.5 19.5L8.5 4.5h1l5 15M5.5 14h7M18.5 10.5v9M18.5 3.5v4M16.5 5.5h4',
   arrowRight: 'M5 12h14M13 6l6 6-6 6',
   chevronRight: 'M9 6l6 6-6 6',
   database:
@@ -59,7 +71,7 @@ export const studioIconPaths = {
 
 export type StudioIconName = keyof typeof studioIconPaths
 
-function studioIcon(name: StudioIconName, size: 'default' | 'small' = 'default'): string {
+export function studioIcon(name: StudioIconName, size: 'default' | 'small' = 'default'): string {
   const sizeAttribute = size === 'small' ? ' data-size="small"' : ''
   return `<svg class="studio-icon"${sizeAttribute} viewBox="0 0 24 24" aria-hidden="true"><path d="${
     studioIconPaths[name]
@@ -72,12 +84,11 @@ export const studioShellRailPanels = [
   { icon: 'layers', label: 'Screens', panel: 'screens' },
   { icon: 'drop', label: 'Design tokens', panel: 'tokens' },
   { icon: 'database', label: 'Data', panel: 'data' },
-  { icon: 'search', label: 'Search', panel: 'search' },
 ] as const
 
-/** Utilities sit at the bottom of the rail; they open a left panel like the contextual panels above them. */
+/** Utilities sit below the project panels, separated by a rail divider. */
 const studioShellRailUtilities = [
-  { icon: 'spark', label: 'Agent', panel: 'agent' },
+  { icon: 'ai', label: 'Agent', panel: 'agent' },
 ] as const
 
 export const StudioPaneSizes = {
@@ -99,6 +110,64 @@ export const StudioPaneSizes = {
   },
 } as const
 
+export type StudioLayoutPreset = 'code' | 'design' | 'draw' | 'run'
+
+export type StudioWorkbenchStorage = Pick<Storage, 'getItem' | 'setItem'>
+
+const layoutPresetStorageKey = 'tao-studio:layout-preset:v1'
+const railStorageKey = 'tao-studio:rail-panel:v1'
+const drawerTabStorageKey = 'tao-studio:drawer-tab:v1'
+
+export const StudioWorkbenchState = {
+  loadLayoutPreset(storage?: Pick<Storage, 'getItem'>): StudioLayoutPreset {
+    try {
+      const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined)
+      const val = store?.getItem(layoutPresetStorageKey)
+      return val === 'code' || val === 'draw' || val === 'run' || val === 'design' ? val : 'design'
+    } catch {
+      return 'design'
+    }
+  },
+  saveLayoutPreset(storage: Pick<Storage, 'setItem'> | undefined, preset: StudioLayoutPreset): void {
+    try {
+      const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined)
+      store?.setItem(layoutPresetStorageKey, preset)
+    } catch {}
+  },
+  loadRailPanel(storage?: Pick<Storage, 'getItem'>): string {
+    try {
+      const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined)
+      const val = store?.getItem(railStorageKey)
+      return typeof val === 'string' && val !== 'agent' && val !== 'search' && val !== '' ? val : 'files'
+    } catch {
+      return 'files'
+    }
+  },
+  saveRailPanel(storage: Pick<Storage, 'setItem'> | undefined, panel: string): void {
+    try {
+      const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined)
+      store?.setItem(railStorageKey, panel)
+    } catch {}
+  },
+  loadDrawerTab(storage?: Pick<Storage, 'getItem'>): StudioDrawerTab {
+    try {
+      const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined)
+      const val = store?.getItem(drawerTabStorageKey)
+      return val === 'Compile' || val === 'Data' || val === 'Logs' || val === 'Problems' || val === 'Tests'
+        ? val
+        : 'Problems'
+    } catch {
+      return 'Problems'
+    }
+  },
+  saveDrawerTab(storage: Pick<Storage, 'setItem'> | undefined, tab: StudioDrawerTab): void {
+    try {
+      const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined)
+      store?.setItem(drawerTabStorageKey, tab)
+    } catch {}
+  },
+} as const
+
 export function studioShellMarkup(): string {
   return `
     <section class="studio-shell">
@@ -117,6 +186,7 @@ export function studioShellMarkup(): string {
             <button data-preset="design" type="button">Design</button>
             <button data-preset="code" type="button">Code</button>
             <button data-preset="run" type="button">Run</button>
+            <button data-preset="draw" type="button">Draw</button>
           </nav>
           <button class="studio-command-palette" type="button" aria-keyshortcuts="Meta+K Control+K" title="Search files, scenarios, and commands">
             ${studioIcon('search', 'small')}<span>Search files, scenarios, commands</span><kbd>⌘K</kbd>
@@ -138,25 +208,32 @@ export function studioShellMarkup(): string {
       <section class="studio-device-popover" hidden role="dialog" aria-label="Physical device"></section>
       <section class="studio-body">
         <nav class="studio-rail" aria-label="Studio panels">
+          <div class="studio-search-affordance">
+            <button class="studio-rail-button studio-search-button" type="button" title="Search" aria-label="Search project" aria-pressed="false">${
+    studioIcon('search')
+  }</button>
+          </div>
           ${studioShellRailPanels.map(item => railButton(item.panel, item.label, item.icon)).join('')}
-          <span class="studio-rail-spacer"></span>
+          <span class="studio-rail-separator" role="separator" aria-orientation="horizontal"></span>
           ${studioShellRailUtilities.map(item => railButton(item.panel, item.label, item.icon)).join('')}
+          <span class="studio-rail-spacer"></span>
         </nav>
         <aside class="studio-sidebar studio-pane-left">
+          <div class="studio-search-field">
+            <input class="studio-search-input" type="search" placeholder="Text or diagnostic" aria-label="Search project">
+          </div>
           <header class="studio-pane-header"><strong>Files</strong><button class="studio-collapse-left" type="button" aria-label="Collapse left panel">‹</button></header>
           <section class="studio-left-panel" data-studio-panel="files"><nav class="studio-files" aria-label="Project files"></nav></section>
           <section class="studio-palette studio-left-panel" data-studio-panel="components" aria-label="Component palette" hidden>
-            <h2>Components</h2><div class="studio-components"></div>
-            <h2>Project views</h2><div class="studio-project-views"></div>
+            <div class="studio-components"></div>
+            <div class="studio-project-views"></div>
           </section>
           <section class="studio-design-values studio-left-panel" data-studio-panel="tokens" hidden></section>
           <section class="studio-left-panel" data-studio-panel="screens" hidden><nav class="studio-screens" aria-label="Project screens"></nav></section>
           <section class="studio-left-panel" data-studio-panel="data" hidden><div class="studio-data"></div></section>
           <section class="studio-left-panel studio-search-panel" data-studio-panel="search" hidden>
-            <label><span>Search project</span><input class="studio-search-input" type="search" placeholder="Text or diagnostic"></label>
             <div class="studio-search-results" role="listbox"></div>
           </section>
-          <section class="studio-left-panel studio-agent-host" data-studio-panel="agent" aria-label="Agent" hidden></section>
         </aside>
         <div class="studio-divider studio-divider-left" data-divider="left" role="separator" aria-orientation="vertical"></div>
         <section class="studio-center">
@@ -188,13 +265,14 @@ export function studioShellMarkup(): string {
           <div class="studio-divider studio-divider-bottom" data-divider="bottom" role="separator" aria-orientation="horizontal"></div>
           <section class="studio-drawer">
             <nav class="studio-drawer-tabs" aria-label="Bottom drawer">
-              ${['Problems', 'Tests', 'Data', 'Logs', 'Compile'].map(drawerTab).join('')}
+              ${['Problems', 'Tests', 'Data', 'Debug', 'Logs', 'Compile'].map(drawerTab).join('')}
               <button class="studio-pane-collapse studio-collapse-bottom" type="button" aria-label="Collapse bottom drawer" title="Collapse bottom drawer">⌄</button>
             </nav>
             <div class="studio-drawer-content"></div>
           </section>
         </section>
       </section>
+      <section class="studio-agent-host" data-studio-panel="agent" aria-label="Agent"></section>
       <section class="studio-command-overlay" hidden aria-label="Command palette">
         <label><span>Command</span><input type="search" placeholder="Files, views, scenarios, commands, insertions"></label>
         <div class="studio-command-results" role="listbox"></div>
@@ -216,15 +294,20 @@ export function studioShellMarkup(): string {
   `
 }
 
-export function createStudioShell(root: HTMLElement, config: StudioClientConfig): StudioClientView {
+export function createStudioShell(
+  root: HTMLElement,
+  config: StudioClientConfig,
+  storage?: StudioWorkbenchStorage,
+): StudioClientView {
   root.innerHTML = studioShellMarkup()
   const preview = requiredElement(root, '.studio-preview')
   preview.innerHTML = config.previewUrl === undefined
     ? '<div class="studio-empty">Preview host is not connected.</div>'
     : '<div class="studio-empty">Connecting preview…</div>'
-  const panes = configurePanes(root)
-  configurePresets(root)
-  configureRail(root, panes.showLeft)
+  const panes = configurePanes(root, storage)
+  configurePresets(root, panes, storage)
+  const rail = configureRail(root, panes.showLeft, storage)
+  configureSearch(root, panes.showLeft, rail.selectRail)
   return {
     appPicker: requiredSelect(root, '.studio-app-picker'),
     breadcrumbs: requiredElement(root, '.studio-breadcrumbs'),
@@ -300,8 +383,9 @@ function drawerTab(label: string): string {
   return `<button data-drawer-tab="${label}" type="button">${label}</button>`
 }
 
-function configurePanes(root: HTMLElement): { showLeft: () => void } {
-  const sizes = StudioPaneSizes.load(window.localStorage)
+function configurePanes(root: HTMLElement, storage?: StudioWorkbenchStorage): StudioPaneControls {
+  const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined)
+  const sizes = store !== undefined ? StudioPaneSizes.load(store) : { ...paneDefaults }
   const lastExpanded = {
     bottom: sizes.bottom > 0 ? sizes.bottom : paneDefaults.bottom,
     left: sizes.left > 0 ? sizes.left : paneDefaults.left,
@@ -331,7 +415,13 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
       divider.tabIndex = 0
     }
   }
-  const save = (): void => StudioPaneSizes.save(window.localStorage, sizes)
+  /** What the layout looked like before Design mode borrowed the width, so leaving can give it back. */
+  const designLayout: { active: boolean; left?: number; preview?: number } = { active: false }
+  const save = (): void => {
+    if (store !== undefined) {
+      StudioPaneSizes.save(store, sizes)
+    }
+  }
   const setSize = (pane: PaneName, value: number): void => {
     if (value > 0) {
       lastExpanded[pane] = value
@@ -401,6 +491,32 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
     })
   }
   return {
+    /**
+     * Design mode makes the canvas the hero: the file tree folds into the rail, which can bring it
+     * straight back, and the preview takes half the window. Leaving Design restores what was there.
+     */
+    designLayout(active: boolean): void {
+      if (active === designLayout.active) {
+        return
+      }
+      designLayout.active = active
+      if (active) {
+        designLayout.left = sizes.left
+        designLayout.preview = sizes.preview
+        sizes.left = 0
+        // Collapse first, then measure: the canvas takes half of what the workbench actually has,
+        // and never more than the room left once the inspector, the dividers and a usable editor
+        // have taken theirs. A track sized past that would squeeze the editor out of the layout.
+        apply()
+        const available = center.getBoundingClientRect().width
+        const room = available - sizes.right - dividerWidth * 2 - editorMinimum
+        sizes.preview = Math.max(StudioPaneMinimums.preview, Math.min(Math.round(available / 2), Math.round(room)))
+      } else {
+        sizes.left = designLayout.left ?? sizes.left
+        sizes.preview = designLayout.preview ?? sizes.preview
+      }
+      apply()
+    },
     showLeft() {
       if (sizes.left === 0) {
         setSize('left', lastExpanded.left)
@@ -409,30 +525,162 @@ function configurePanes(root: HTMLElement): { showLeft: () => void } {
   }
 }
 
-function configurePresets(root: HTMLElement): void {
+function configurePresets(root: HTMLElement, panes: StudioPaneControls, storage?: StudioWorkbenchStorage): void {
+  const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined)
+  const initialPreset = StudioWorkbenchState.loadLayoutPreset(store)
   for (const button of root.querySelectorAll<HTMLButtonElement>('[data-preset]')) {
     button.addEventListener('click', () => {
       root.querySelectorAll('[data-preset]').forEach(item => item.removeAttribute('aria-current'))
       button.setAttribute('aria-current', 'true')
       root.dataset['layoutPreset'] = button.dataset['preset']
-    })
-  }
-  root.querySelector<HTMLButtonElement>('[data-preset="design"]')?.click()
-}
-
-function configureRail(root: HTMLElement, showLeft: () => void): void {
-  for (const button of root.querySelectorAll<HTMLButtonElement>('.studio-rail-button')) {
-    button.addEventListener('click', () => {
-      showLeft()
-      root.querySelectorAll('.studio-rail-button').forEach(item => item.removeAttribute('aria-current'))
-      button.setAttribute('aria-current', 'true')
-      requiredElement(root, '.studio-pane-header strong').textContent = button.title
-      for (const panel of root.querySelectorAll<HTMLElement>('[data-studio-panel]')) {
-        panel.hidden = panel.dataset['studioPanel'] !== button.dataset['panel']
+      const preset = button.dataset['preset'] as StudioLayoutPreset
+      panes.designLayout(preset === 'design')
+      if (preset === 'code' || preset === 'design' || preset === 'draw' || preset === 'run') {
+        StudioWorkbenchState.saveLayoutPreset(store, preset)
       }
     })
   }
-  root.querySelector<HTMLButtonElement>('.studio-rail-button')?.setAttribute('aria-current', 'true')
+  const defaultButton = root.querySelector<HTMLButtonElement>(`[data-preset="${initialPreset}"]`)
+    ?? root.querySelector<HTMLButtonElement>('[data-preset="design"]')
+  defaultButton?.click()
+}
+
+function configureRail(
+  root: HTMLElement,
+  showLeft: () => void,
+  storage?: StudioWorkbenchStorage,
+): { selectRail: (panel: string) => void } {
+  const store = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined)
+  const selectRail = (panel: string): void => {
+    const button = root.querySelector<HTMLButtonElement>(`.studio-rail-button[data-panel="${panel}"]`)
+    if (button === null || panel === 'agent' || panel === 'search') {
+      return
+    }
+    for (const item of root.querySelectorAll<HTMLButtonElement>('.studio-rail-button')) {
+      if (item.dataset['panel'] !== 'agent') {
+        item.removeAttribute('aria-current')
+      }
+    }
+    button.setAttribute('aria-current', 'true')
+    requiredElement(root, '.studio-pane-header strong').textContent = button.title
+    for (const leftPanel of root.querySelectorAll<HTMLElement>('.studio-sidebar [data-studio-panel]')) {
+      leftPanel.hidden = leftPanel.dataset['studioPanel'] !== panel
+    }
+  }
+
+  for (const button of root.querySelectorAll<HTMLButtonElement>('.studio-rail-button')) {
+    button.addEventListener('click', () => {
+      const panel = button.dataset['panel']
+      if (panel === 'agent') {
+        const collapseBtn = root.querySelector<HTMLButtonElement>('.studio-agent-collapse')
+        if (collapseBtn !== null) {
+          collapseBtn.click()
+        }
+        return
+      }
+      showLeft()
+      if (panel !== undefined) {
+        selectRail(panel)
+        StudioWorkbenchState.saveRailPanel(store, panel)
+      }
+    })
+  }
+
+  const initialPanel = StudioWorkbenchState.loadRailPanel(store)
+  selectRail(initialPanel)
+  root.querySelector<HTMLButtonElement>('.studio-rail-button[data-panel="agent"]')?.setAttribute('aria-current', 'true')
+  return { selectRail }
+}
+
+export type StudioSearchBlurIntent = 'hand-off-rail' | 'keep' | 'restore'
+
+/** Blur restores the rail pane unless the next target is a result or another left-rail button. */
+export function studioSearchBlurIntent(input: {
+  insideSearch: boolean
+  railPanel: string | undefined
+}): StudioSearchBlurIntent {
+  if (input.insideSearch) {
+    return 'keep'
+  }
+  if (input.railPanel !== undefined && input.railPanel !== 'agent') {
+    return 'hand-off-rail'
+  }
+  return 'restore'
+}
+
+/** Project search sits above the rail; focus swaps the sidecar to results, blur restores the rail pane. */
+function configureSearch(
+  root: HTMLElement,
+  showLeft: () => void,
+  selectRail: (panel: string) => void,
+): void {
+  const input = requiredInput(root, '.studio-search-input')
+  const searchButton = requiredButton(root, '.studio-search-button')
+  const searchField = requiredElement(root, '.studio-search-field')
+  const searchPanel = requiredElement(root, '.studio-sidebar [data-studio-panel="search"]')
+  const paneHeader = requiredElement(root, '.studio-pane-header')
+  const sidebar = requiredElement(root, '.studio-sidebar')
+
+  const setSearchChrome = (open: boolean): void => {
+    searchButton.setAttribute('aria-pressed', open ? 'true' : 'false')
+    paneHeader.hidden = open
+    sidebar.toggleAttribute('data-search-open', open)
+  }
+
+  const openSearch = (): void => {
+    showLeft()
+    for (const leftPanel of root.querySelectorAll<HTMLElement>('.studio-sidebar [data-studio-panel]')) {
+      leftPanel.hidden = leftPanel.dataset['studioPanel'] !== 'search'
+    }
+    setSearchChrome(true)
+  }
+
+  const closeSearch = (): void => {
+    if (searchButton.getAttribute('aria-pressed') !== 'true') {
+      return
+    }
+    setSearchChrome(false)
+    selectRail(selectedRailPanel(root))
+  }
+
+  searchButton.addEventListener('click', () => {
+    showLeft()
+    input.focus()
+  })
+  input.addEventListener('focus', () => {
+    openSearch()
+  })
+  input.addEventListener('blur', event => {
+    const next = event.relatedTarget
+    const intent = studioSearchBlurIntent({
+      insideSearch: next instanceof Node
+        && (searchPanel.contains(next) || searchField.contains(next) || searchButton.contains(next)),
+      railPanel: next instanceof Element
+        ? next.closest<HTMLElement>('.studio-rail-button[data-panel]')?.dataset['panel']
+        : undefined,
+    })
+    if (intent === 'keep') {
+      return
+    }
+    if (intent === 'hand-off-rail') {
+      setSearchChrome(false)
+      return
+    }
+    closeSearch()
+  })
+  searchPanel.addEventListener('mousedown', event => {
+    event.preventDefault()
+  })
+}
+
+function selectedRailPanel(root: HTMLElement): string {
+  for (const button of root.querySelectorAll<HTMLButtonElement>('.studio-rail-button[aria-current="true"]')) {
+    const panel = button.dataset['panel']
+    if (panel !== undefined && panel !== 'agent') {
+      return panel
+    }
+  }
+  return 'files'
 }
 
 function validSize(value: unknown, fallback: number): number {

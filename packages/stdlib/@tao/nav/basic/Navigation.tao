@@ -14,6 +14,10 @@ type SlotNav is nav with {
    nav SlotNavKind from ./NavKinds.ts
 }
 
+// `Display` picks the surface: "automatic" and "tabs" are a tab row, "drawer" is a column, and
+// "toggle" is one Safari-style bar floating over the bottom edge — Back, the visible screen's title
+// and toolbar, and a control that switches to the next item. Under "toggle" a stack inside an item
+// draws no header of its own.
 public
 type SelectionNav is nav with {
    Initial key

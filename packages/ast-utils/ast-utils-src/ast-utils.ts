@@ -1,9 +1,26 @@
+import {
+  appBoundDatasources,
+  effectiveAppConfiguration,
+  listedEntryOf,
+  referenceBlockOf,
+} from './app-configuration'
 import { rootAppValue } from './apps'
 import { resolveArgumentBindings } from './argument-bindings'
 import { commandSlots, commandStaticMemberText, commandStaticShortcut, mentionFills } from './commands'
+import {
+  datasourceCollectionNames,
+  datasourceCollections,
+  datasourceDataEntry,
+  datasourceMembershipSlot,
+  derivedDatasourceBase,
+  ownConfigurationBlock,
+  planDataStores,
+  storeOfCollection,
+  storeOfDatasource,
+} from './data-stores'
 import { resolveDataWriteBindings } from './data-write-bindings'
-import { standardDesignElementName } from './design'
-import { canonicalDesignVisualHead, designColorHeads, designLayoutHeads, designVisualHeads } from './design-visuals'
+import { resolveDatasourceValue } from './datasource-values'
+import { design } from './design'
 import { guardBranches } from './guards'
 import { injectionArgumentName } from './injections'
 import {
@@ -26,19 +43,30 @@ import { renderTargetIsNav, renderTargetName, resolveRenderTarget } from './rend
 import { Type } from './Type'
 import { literalDurationOf, Units } from './Units'
 
-export { Packages, Type, Units }
+export { design, Packages, Type, Units }
 
 /** ASTUtils groups shared semantic helpers for Tao AST consumers. */
 export const ASTUtils = {
+  appBoundDatasources,
+  effectiveAppConfiguration,
+  listedEntryOf,
+  referenceBlockOf,
   commandSlots,
   commandStaticMemberText,
   commandStaticShortcut,
   mentionFills,
   guardBranches,
-  canonicalDesignVisualHead,
-  designColorHeads,
-  designLayoutHeads,
-  designVisualHeads,
+  datasourceMembershipSlot,
+  datasourceCollectionNames,
+  datasourceCollections,
+  datasourceDataEntry,
+  derivedDatasourceBase,
+  ownConfigurationBlock,
+  planDataStores,
+  storeOfCollection,
+  storeOfDatasource,
+  resolveDatasourceValue,
+  design,
   injectionArgumentName,
   layoutEntryValues,
   layoutTermValue,
@@ -59,11 +87,15 @@ export const ASTUtils = {
   resolveRenderInvocation,
   resolveRenderTarget,
   rootAppValue,
-  standardDesignElementName,
 } as const
 
 export namespace ASTUtils {
   export type ActionInvocationPair = import('./invocations').ActionInvocationPair
+  export type AppDatasourceBinding = import('./app-configuration').AppDatasourceBinding
+  export type AppPropertySource = import('./app-configuration').AppPropertySource
+  export type EffectiveAppConfiguration = import('./app-configuration').EffectiveAppConfiguration
+  export type EffectiveAppProperty = import('./app-configuration').EffectiveAppProperty
+  export type ListedEntry = import('./app-configuration').ListedEntry
   export type ArgumentBindingDiagnostic = import('./argument-bindings').ArgumentBindingDiagnostic
   export type CommandSlot = import('./commands').CommandSlot
   export type DataWriteBindingDiagnostic = import('./data-write-bindings').DataWriteBindingDiagnostic
@@ -71,6 +103,10 @@ export namespace ASTUtils {
   export type DataWriteBindingResult = import('./data-write-bindings').DataWriteBindingResult
   export type DataEntityDefinition = import('./Type').DataEntityDefinition
   export type DataFieldDefinition = import('./Type').DataFieldDefinition
+  export type DataStore = import('./data-stores').DataStore
+  export type DataStoreKind = import('./data-stores').DataStoreKind
+  export type DataStorePlan = import('./data-stores').DataStorePlan
+  export type ResolvedDatasource = import('./datasource-values').ResolvedDatasource
   export type ItemPropertyBindingDiagnostic = import('./item-property-bindings').ItemPropertyBindingDiagnostic
   export type ItemPropertyBindingPair = import('./item-property-bindings').ItemPropertyBindingPair
   export type ItemPropertyBindingResult = import('./item-property-bindings').ItemPropertyBindingResult

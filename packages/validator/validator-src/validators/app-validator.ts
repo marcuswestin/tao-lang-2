@@ -1,6 +1,7 @@
 import { ASTUtils, Type } from '@ast-utils'
 import { AST } from '@parser'
 import type { ValidationContext } from '../validation'
+import { validateReferenceBlock } from './configured-values-validator'
 import { reportPresentationBindingDiagnostic } from './navigation-validator'
 import { primitiveSlots } from './workspace-index'
 
@@ -102,6 +103,8 @@ function validateAppDeclaration(app: AST.AppDeclaration, ctx: ValidationContext)
 
 /** SuppliedSlot names one app slot supplied as an app property, a variant patch entry, or root-view sugar. */
 type SuppliedSlot = {
+  /** block is the reference block a list-typed slot supplies instead of a value. */
+  readonly block?: AST.ConfigurationBlock
   readonly name: string
   readonly node: AST.Node
   readonly patched: boolean
@@ -157,6 +160,10 @@ function validateAppProperties(
     if (slot.sugar) {
       continue
     }
+    if (slot.block) {
+      validateReferenceBlock(slot.block, expected, slot.name, appName, ctx)
+      continue
+    }
     if (!slot.value) {
       if (slot.patched && !requireComplete) {
         continue
@@ -180,7 +187,8 @@ function validateAppProperties(
     const actual = AST.isExpression(slot.value) ? Type.ofExpression(slot.value) : { kind: 'unresolved' as const }
     const expectedType = Type.ofProperty(expected)
     if (
-      actual.kind !== 'unresolved' && expectedType.kind !== 'unresolved' && !Type.isAssignable(actual, expectedType)
+      actual.kind !== 'unresolved' && expectedType.kind !== 'unresolved'
+      && !Type.isAssignableToSlot(actual, expectedType)
     ) {
       ctx.error(
         slot.value,
@@ -224,7 +232,14 @@ function validateRootViewArguments(root: AST.AppView, ctx: ValidationContext): v
 }
 
 function suppliedSlotOfProperty(property: AST.AppProperty): SuppliedSlot {
-  return { name: property.name, node: property, patched: property.patch !== undefined, value: property.value }
+  const references = property.value ? ASTUtils.referenceBlockOf(property.value) : undefined
+  return {
+    block: references,
+    name: property.name,
+    node: property,
+    patched: property.patch !== undefined,
+    value: references ? undefined : property.value,
+  }
 }
 
 function validateAppVariant(
@@ -246,6 +261,7 @@ function validateAppVariant(
     }
     const patched = entry.value !== undefined && AST.isPropertyConfigurationPatch(entry.value)
     return [{
+      block: entry.block,
       name: entry.name,
       node: entry,
       patched,

@@ -344,10 +344,12 @@ creation or compilation fails, the session removes the new generated file and at
 prior catalog snapshot, including its revision and allocator. A generated-name collision is rejected;
 Studio never overwrites an existing `@/studio/ViewN.tao`.
 
-The browser matrix renders ordered catalog rectangles through a row-scoped TypeScript sketch workspace
-beside its keyed preview cells. A generated `sketch` scenario row is associated by its unique view
-subject matching `sketch.view`; an unmatched sketch temporarily falls back to the first matrix row.
-Handshake and catalog-change snapshots re-render the overlay in authoritative catalog order.
+The browser Draw canvas renders ordered catalog rectangles through a TypeScript sketch workspace that
+lives beside the keyed preview grid, not inside a scenario row. Each created view keeps the canvas
+origin it was drawn at, shows its view name above an off-white board, and stays mounted across the
+compile that writes `@/studio/ViewN.tao`. Handshake and catalog-change snapshots re-render the overlay
+in authoritative catalog order and ignore an older revision. The Draw layout preset shows only that
+canvas; Run hides it so a running preview has no drawing surface.
 
 The geometry model normalizes drawing in either direction, enforces a four-pixel minimum extent,
 selects the frontmost rectangle, moves and resizes through eight handles, cancels a pointer gesture back
@@ -540,8 +542,8 @@ resets that width to its declaration default on a portable double-tap, and keeps
 ephemeral. The Navigation test app's Resizable Split journey exercises the combined syntax and render path; focused
 runtime tests cover persistence edge cases, the depth cap, and resize gestures.
 
-The browser client implements the target frame: project toolbar, Design/Code/Run presets, command palette,
-icon rail with the agent as a rail panel, persisted resizable and collapsible left/right/bottom panes,
+The browser client implements the target frame: project toolbar, Design/Code/Run/Draw presets, command palette,
+icon rail with an agent toggle, a floating, draggable, and collapsible agent panel in the bottom left, persisted resizable and collapsible left/right/bottom panes,
 CodeMirror editor with breadcrumbs, scrolling scenario canvas, a one-column inspector whose Scenario pane
 holds the scenario's arguments, environment, and captured state above the four-context Selection pane, and
 bottom drawer. One token sheet in the client stylesheet styles the shell, the Tao-rendered panels (through
@@ -558,7 +560,7 @@ or fork a local bundle, update an element landing, or promote supported raw colo
 element default. The decided `background` and `ink` spellings compile through the compatible runtime
 `bg`/`fg` ABI, and Studio validates supported color paths, named or numeric sizes, symbolic or numeric
 weights, line height, spacing, and radius before dispatch; shared edits require an edit-versus-fork choice.
-Development validation reports raw inline design exploration as a warning. Release compilation promotes
+Development validation reports raw unnamed values on style keys as a warning; named tokens and layout keywords do not. Release compilation promotes
 only that diagnostic to an error, and native packaging preflights the executable Tao client under that
 release policy.
 

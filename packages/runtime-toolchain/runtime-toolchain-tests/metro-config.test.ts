@@ -63,6 +63,10 @@ Describe('Expo Metro configuration', () => {
       filePath: Repo.resolvePath('packages/runtime/TaoRuntime-src/TR.ts'),
       type: 'sourceFile',
     })
+    Expect(config.resolver.resolveRequest(context, '@tao/runtime', 'ios')).toEqual({
+      filePath: Repo.resolvePath('packages/runtime/TaoRuntime-src/TR.ts'),
+      type: 'sourceFile',
+    })
     Expect(config.resolver.resolveRequest(context, '@shared/core', 'ios')).toEqual({
       filePath: Repo.resolvePath('packages/shared/shared-src/core/shared-core.ts'),
       type: 'sourceFile',

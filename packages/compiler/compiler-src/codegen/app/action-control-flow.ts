@@ -1,11 +1,29 @@
 import { ASTUtils } from '@ast-utils'
 import { AST } from '@parser'
 
+let instrumented = false
+
+/**
+ * configureActionInstrumentation turns debugger gates on for the compilation that follows. An
+ * instrumented body awaits `TR.Debug.At` before every statement, so every action block is async.
+ */
+export function configureActionInstrumentation(enabled: boolean): void {
+  instrumented = enabled
+}
+
+/** Whether this compilation emits debugger gates. */
+export function actionInstrumentationEnabled(): boolean {
+  return instrumented
+}
+
 /** Whether executing this block can suspend its owning action transaction. */
 export function actionBlockRequiresAsync(
   block: AST.ActionBlock | undefined,
   seen: ReadonlySet<AST.ActionDeclaration> = new Set(),
 ): boolean {
+  if (instrumented) {
+    return true
+  }
   return block?.statements.some(statement => {
     if (AST.isAskStatement(statement) || AST.isGuardActionStatement(statement) || AST.isIfActionStatement(statement)) {
       return true

@@ -166,6 +166,11 @@ Landed, with `Docs/Spec/Tao Data.md` as the implemented contract:
   field (defaulted for rows other feeds fetch) and filters on it — `Rank number (default 0)` with
   `where Rank >= 1`.
 
+**No longer deferred: per-entity datasource scoping.** An app binds a set of datasources, each
+stating the collections it stores, and `reference` links a row to one held by another store.
+HNReader's bookmarks are the local favorites this list was waiting for; see
+`Docs/Roadmap/Multiple datasources/Plan - Multiple datasources.md`.
+
 The decisions above are recorded in `Decisions.md` §6 under "Amended by the HTTP datasource work".
 
 ## Known consequences of the deferrals
@@ -180,7 +185,7 @@ Worth stating plainly, because each is visible in the shipped app rather than me
 - **Rows are never evicted.** A story that falls off the front page keeps its old `Rank`, so a
   refill interleaves it with new rows under duplicate ranks. Eviction is deferred above; this is
   what deferring it looks like on screen.
-- **An adapter's own unit tests have no home.** `Apps/` TypeScript sits outside every tsconfig and
-  outside the package test suites, so `HNAdapter.ts` is neither typechecked by `./agent check` nor
-  unit-testable where it lives. Its behavior is covered only indirectly, through the stub adapter's
-  journeys. Giving app sidecars a test and typecheck home is its own piece of work.
+- **An adapter's own unit tests have no home.** `Apps/tsconfig.json` now typechecks sidecar
+  `@tao/runtime` imports, but `HNAdapter.ts` is still outside the package test suites, so its
+  behavior is covered only indirectly through the stub adapter's journeys. A unit-test home for app
+  sidecars is its own piece of work.

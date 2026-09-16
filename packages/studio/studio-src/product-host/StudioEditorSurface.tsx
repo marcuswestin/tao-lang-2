@@ -204,6 +204,7 @@ export function StudioEditorSurface(): React.ReactElement {
       <CodeEditor
         Change={change}
         Content={file.content}
+        DocumentChange={edit => requestStudioProductHostChangeActiveFile(edit.content, edit.selection)}
         Drop={paletteDrop}
         Highlight={highlightTaoSource}
         Layout={{ style: editorSurfaceStyle }}

@@ -19,6 +19,38 @@ const cover: StudioSketchRect = {
   y: 12,
 }
 
+Test('Studio sketch catalog records the project by name, never by host path', async () => {
+  await withTaoFiles('tao-studio-sketch-project-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    const provider = new StudioSketchCatalog(root)
+    // Studio hands the catalog the open project's absolute root. The catalog is committed with the
+    // project, so what lands in it has to be the same on every checkout, not one machine's path.
+    const created = await provider.apply({
+      action: {
+        height: 76,
+        id: 'sketch-row',
+        kind: 'create-sketch',
+        project: '/Users/someone/code/checkout/Apps/HNReader/',
+        rects: [cover],
+        width: 360,
+      },
+      expectedRevision: 0,
+      requestId: 'create-row',
+    })
+    Expect(created.createdSketch?.project).toBe('HNReader')
+    Expect(await FS.readText(provider.path())).not.toContain('/Users/someone')
+
+    // A catalog committed before this still loads, and reads back as the project it names.
+    await FS.writeText(
+      provider.path(),
+      (await FS.readText(provider.path())).replace(
+        '"project": "HNReader"',
+        '"project": "/Users/someone/code/checkout/Apps/HNReader"',
+      ),
+    )
+    Expect((await provider.read()).sketches[0]?.project).toBe('HNReader')
+  })
+})
+
 Test('Studio sketch catalog creates canonical ordered free geometry and reads JSONC', async () => {
   await withTaoFiles('tao-studio-sketch-catalog-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
     const provider = new StudioSketchCatalog(root)
@@ -37,7 +69,7 @@ Test('Studio sketch catalog creates canonical ordered free geometry and reads JS
       requestId: 'create-row',
     })
 
-    Expect(result.createdSketch).toMatchObject({ id: 'sketch-row', name: 'View1', view: 'View1' })
+    Expect(result.createdSketch).toMatchObject({ id: 'sketch-row', name: 'View1', view: 'View1', x: 0, y: 0 })
     Expect(result.catalog.sketches[0]?.rects.map(rect => rect.id)).toEqual(['rect-cover', 'rect-title'])
     Expect(await FS.readText(provider.path())).toBe(`{
   "formatVersion": 1,
@@ -74,7 +106,9 @@ Test('Studio sketch catalog creates canonical ordered free geometry and reads JS
       ],
       "snapped": [],
       "view": "View1",
-      "width": 360
+      "width": 360,
+      "x": 0,
+      "y": 0
     }
   ]
 }
@@ -178,6 +212,28 @@ Test('Studio sketch actions preserve row order and support edit, duplicate, and 
       x: 90,
       y: 56,
     })
+  })
+})
+
+Test('Studio sketch catalog keeps a created view at the drawn canvas origin', async () => {
+  await withTaoFiles('tao-studio-sketch-origin-', { 'Project.tao': 'project Music\n' }, async (_paths, root) => {
+    const provider = new StudioSketchCatalog(root)
+    const result = await provider.apply({
+      action: {
+        height: 76,
+        id: 'sketch-row',
+        kind: 'create-sketch',
+        project: 'music',
+        rects: [],
+        width: 360,
+        x: 80,
+        y: 40,
+      },
+      expectedRevision: 0,
+      requestId: 'create-origin',
+    })
+    Expect(result.createdSketch).toMatchObject({ height: 76, name: 'View1', width: 360, x: 80, y: 40 })
+    Expect((await provider.read()).sketches[0]).toMatchObject({ x: 80, y: 40 })
   })
 })
 

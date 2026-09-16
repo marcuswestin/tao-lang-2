@@ -15,6 +15,7 @@ import {
   StudioSketchProposal,
   StudioSketchRenderGate,
   StudioSketchSelection,
+  StudioSketchViewNames,
 } from '../studio-src/client/StudioSketchView'
 import type {
   StudioSketchSnapApplyResult,
@@ -27,8 +28,18 @@ Test('Studio outer sketch drawing normalizes 360x76 and ignores taps, cancellati
   const gesture = StudioSketchOuterDrawing.begin(undefined, 1, { x: 420, y: 100 })
   Expect(StudioSketchOuterDrawing.end(gesture, 2, { x: 60, y: 24 })).toEqual({ gesture })
   Expect(StudioSketchOuterDrawing.end(gesture, 1, { x: 60.4, y: 23.6 })).toEqual({
-    size: { height: 76, width: 360 },
+    preview: { height: 76, width: 360, x: 60, y: 24 },
+    size: { height: 76, width: 360, x: 60, y: 24 },
   })
+  Expect(StudioSketchOuterDrawing.preview(gesture, { x: 60.4, y: 23.6 })).toEqual({
+    height: 76,
+    width: 360,
+    x: 60,
+    y: 24,
+  })
+  Expect(StudioSketchOuterDrawing.preview(gesture, { x: 421, y: 101 })).toBeUndefined()
+  Expect(StudioSketchViewNames.next([])).toBe('View1')
+  Expect(StudioSketchViewNames.next([{ view: 'View1' }, { view: 'View3' }])).toBe('View4')
 
   const tap = StudioSketchOuterDrawing.begin(undefined, 3, { x: 10, y: 10 })
   Expect(StudioSketchOuterDrawing.end(tap, 3, { x: 11, y: 11 })).toEqual({})
@@ -72,6 +83,8 @@ Test('Studio sketch changes preserve optimistic and authoritative order and seri
     snapped: [],
     view: 'View1',
     width: 360,
+    x: 24,
+    y: 24,
   }
   const copy = { ...sketch.rects[0]!, id: 'copy' }
   Expect(StudioSketchChanges.equal(sketch.rects[0]!, { ...sketch.rects[0]! })).toBe(true)
@@ -382,6 +395,8 @@ function testSketch(): StudioSketch {
     snapped: [],
     view: 'View1',
     width: 360,
+    x: 24,
+    y: 24,
   }
 }
 

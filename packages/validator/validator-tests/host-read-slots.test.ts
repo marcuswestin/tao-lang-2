@@ -230,9 +230,9 @@ Describe('validator: host-read slots and commands', () => {
           render Leaf()
         }
       `,
-      configuredValueValidationMessages.toolbarReference,
+      configuredValueValidationMessages.referenceEntry('Toolbar', 'commands'),
       configuredValueValidationMessages.toolbarUnfilled('NeedsDocument', 'Document'),
-      configuredValueValidationMessages.duplicateToolbarReference('Ready'),
+      configuredValueValidationMessages.duplicateReference('Toolbar', 'command', 'Ready'),
       configuredValueValidationMessages.configurationBlock('StackNav', 'Title'),
       configuredValueValidationMessages.unknownConfiguration('StackNav', 'Bogus'),
     ),

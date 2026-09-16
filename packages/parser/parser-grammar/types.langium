@@ -55,6 +55,7 @@ TraitList:
 Trait:
     'default' (defaultValue=(StringLiteral | NumberLiteral | BooleanLiteral | NowExpression) | defaultCase=ID)
     | 'relation' relationName=ID
+    | reference?='reference' referenceName=ID?
     | 'required' sentence=STRING
     | touchOnChange?='touch' 'on' 'change'
     | owned?='owned'
@@ -88,11 +89,11 @@ NamedTypeReference:
 
 PrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'list' | 'action' | 'shortcut'
-    | 'command' | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'app';
+    | 'command' | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'data' | 'app';
 
 NonListPrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'time' | 'duration' | 'item' | 'action' | 'shortcut' | 'command'
-    | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'app';
+    | 'design' | 'view' | 'scene' | 'nav' | 'datasource' | 'data' | 'app';
 
 ConstructablePrimitiveType returns string:
     'text' | 'number' | 'boolean' | 'item' | 'list';

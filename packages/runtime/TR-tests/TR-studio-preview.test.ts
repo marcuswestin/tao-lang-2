@@ -1,5 +1,7 @@
+import TR from '@runtime/TR'
 import { Describe, Expect, Test } from '@shared/test'
 import type { ReactNode } from 'react'
+import { Debug } from '../TaoRuntime-src/TR-debug'
 import {
   collectStudioPreviewLayoutMeasurements,
   mountStudioPreviewBridge,
@@ -14,6 +16,13 @@ import {
 import { Clock } from '../TaoRuntime-src/TR-units'
 
 type Listener = (event: unknown) => void
+
+/** settled drains the microtask turns a queued action root takes to reach its first gate. */
+async function settled(): Promise<void> {
+  for (let turn = 0; turn < 8; turn += 1) {
+    await Promise.resolve()
+  }
+}
 
 type PostedMessage = {
   message: unknown
@@ -324,6 +333,69 @@ Describe('Studio preview runtime bridge', () => {
         type: 'preview-journey-replay-failed',
       },
     ])
+  })
+
+  Test('routes Studio debugger commands into the controller and forwards its events back', async () => {
+    Debug.Reset()
+    const fake = previewHost([])
+    const cleanup = mountStudioPreviewBridge(config, fake.host)
+    const identity = {
+      appName: config.appName,
+      previewInstanceId: config.previewInstanceId,
+      project: config.project,
+    }
+    const send = (rest: Record<string, unknown>, override?: Record<string, unknown>) =>
+      fake.dispatchWindow('message', {
+        data: {
+          channel: 'tao-studio',
+          identity: { ...identity, ...override },
+          protocolVersion: 1,
+          type: 'debug-command',
+          ...rest,
+        },
+        origin: config.parentOrigin,
+        source: fake.parent,
+      })
+
+    // Break needs no breakpoint: the next statement any action reaches is where it stops.
+    send({ command: 'break' })
+    let ran = false
+    const pending = TR.Action(async () => {
+      await Debug.At({ action: 'Bump', path: '0' }, {})
+      ran = true
+    }, { name: 'Bump' }).jsValue.invoke()
+    await settled()
+
+    Expect(Debug.Paused()?.step.path).toBe('0')
+    Expect(ran).toBe(false)
+    const paused = fake.messages
+      .map(post => post.message as { event?: { kind?: string }; type?: string })
+      .filter(message => message.type === 'preview-debug' && message.event?.kind === 'paused')
+    Expect(paused).toHaveLength(1)
+
+    // A command naming another project belongs to another preview and must not release this pause.
+    send({ command: 'continue' }, { project: '/elsewhere' })
+    await settled()
+    Expect(Debug.Paused()?.step.path).toBe('0')
+
+    send({ command: 'continue' })
+    await pending
+    Expect(ran).toBe(true)
+    Expect(Debug.Paused()).toBeUndefined()
+    Expect(Debug.Journal().at(-1)).toMatchObject({ action: 'Bump', outcome: 'committed' })
+
+    // Configure arrives the same way, and its breakpoint stops the action it names.
+    send({ actions: ['Later'], command: 'configure' })
+    const later = TR.Action(async () => {
+      await Debug.At({ action: 'Later', path: '0' }, {})
+    }, { name: 'Later' }).jsValue.invoke()
+    await settled()
+    Expect(Debug.Paused()?.step).toEqual({ action: 'Later', path: '0' })
+    send({ command: 'continue' })
+    await later
+
+    cleanup()
+    Debug.Reset()
   })
 
   Test('separates normal app interaction from selecting and visual editing', () => {

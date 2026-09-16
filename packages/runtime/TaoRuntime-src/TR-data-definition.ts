@@ -18,6 +18,10 @@ export function validateDefinition(definition: TaoDataSchemaDefinition): void {
         validateRelationshipFieldDefinition(definition, fieldPath, field)
         continue
       }
+      if (field.kind === 'reference') {
+        validateReferenceFieldDefinition(fieldPath, field)
+        continue
+      }
       validatePrimitiveFieldDefinition(fieldPath, field, field.kind)
     }
   }
@@ -40,10 +44,34 @@ function validateRelationshipFieldDefinition(
   )
 }
 
+/**
+ * A reference names its target by name rather than by this schema's rows, because the target may
+ * live in another store entirely. It therefore needs the target entity and the unique field it is
+ * stored as, and it owns nothing: a delete on one side of a store boundary cannot reach the other.
+ */
+function validateReferenceFieldDefinition(fieldPath: string, field: TaoDataField): void {
+  RuntimeAssert.input(field.relation, `Reference '${fieldPath}' has no target entity.`, { fieldPath })
+  RuntimeAssert.input(
+    field.referenceField,
+    `Reference '${fieldPath}' has no target unique field.`,
+    { fieldPath },
+  )
+  RuntimeAssert.input(
+    !field.onDelete,
+    `Reference '${fieldPath}' cannot cascade a delete across a datasource boundary.`,
+    { fieldPath },
+  )
+  RuntimeAssert.input(
+    !Object.prototype.hasOwnProperty.call(field, 'defaultValue') && field.defaultNow === undefined,
+    `Reference '${fieldPath}' cannot declare a default value.`,
+    { fieldPath },
+  )
+}
+
 function validatePrimitiveFieldDefinition(
   fieldPath: string,
   field: TaoDataField,
-  kind: Exclude<TaoDataField['kind'], 'relation'>,
+  kind: Exclude<TaoDataField['kind'], 'reference' | 'relation'>,
 ): void {
   RuntimeAssert.input(
     !field.onDelete && !field.relation,
@@ -69,7 +97,10 @@ function validatePrimitiveFieldDefinition(
   )
 }
 
-export function valueMatchesKind(value: unknown, kind: Exclude<TaoDataField['kind'], 'relation'>): boolean {
+export function valueMatchesKind(
+  value: unknown,
+  kind: Exclude<TaoDataField['kind'], 'reference' | 'relation'>,
+): boolean {
   return RuntimeSwitch(kind, {
     boolean: () => typeof value === 'boolean',
     number: () => typeof value === 'number' && Number.isFinite(value),

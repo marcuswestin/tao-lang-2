@@ -1,3 +1,4 @@
+import { applyCanvasViewport } from './StudioCanvasViewport'
 import type { StudioMatrixGroup } from './StudioMatrixLayout'
 
 /** Canvas mode state per matrix parent: the view shown alone and the way back the bar's button runs. */
@@ -65,32 +66,38 @@ function reconcileMatrix<Item>(
       render(frame, cell.item)
       return frame
     })
-    const sketchHost = cells.querySelector<HTMLElement>(':scope > [data-tao-studio-sketch-host]')
-      ?? document.createElement('section')
-    if (sketchHost.dataset['taoStudioSketchHost'] === undefined) {
-      sketchHost.dataset['taoStudioSketchHost'] = group.id
-      sketchHost.style.flex = '0 0 auto'
-      sketchHost.style.overflow = 'visible'
-    }
-    if (group.sketchView === undefined) {
-      delete sketchHost.dataset['taoStudioSketchView']
-    } else {
-      sketchHost.dataset['taoStudioSketchView'] = group.sketchView
-    }
-    if (group.sketchSourceVersion === undefined) {
-      delete sketchHost.dataset['taoStudioSketchSourceVersion']
-    } else {
-      sketchHost.dataset['taoStudioSketchSourceVersion'] = group.sketchSourceVersion
-    }
-    reconcileElementChildren(cells, [...nextFrames, sketchHost])
+    reconcileElementChildren(cells, nextFrames)
     reconcileElementChildren(row, [heading, cells])
     return row
   })
   reconcileElementChildren(canvas, nextRows)
   if (!parent.contains(canvas)) {
-    parent.replaceChildren(canvas)
+    parent.append(canvas)
   }
+  retireDepartedPreviewChildren(parent, canvas)
   applyCanvasFocus(parent)
+  applyCanvasViewport(parent)
+}
+
+/**
+ * The grid is appended rather than replacing the parent, because the Draw canvas is mounted beside it
+ * and a compile remount must not steal it. Everything else the preview pane held before the matrix
+ * arrived -- the connecting placeholder, and the whole-app iframe an app without scenarios ran in --
+ * has no owner once the grid is up, so it is removed here rather than left stacked over the cells.
+ * The zoom pill and the focus bar belong to the canvas surface and stay.
+ */
+function retireDepartedPreviewChildren(parent: HTMLElement, canvas: HTMLElement): void {
+  for (const child of [...parent.children]) {
+    if (
+      child === canvas
+      || child.hasAttribute('data-tao-studio-draw-canvas')
+      || child.hasAttribute('data-tao-studio-canvas-zoom')
+      || child.hasAttribute('data-tao-studio-canvas-bar')
+    ) {
+      continue
+    }
+    child.remove()
+  }
 }
 
 /**
@@ -117,6 +124,8 @@ function applyCanvasFocus(parent: HTMLElement): void {
   if (canvas === null) {
     return
   }
+  // The bar sits beside the grid rather than inside it: the grid carries the canvas transform, and
+  // a bar under that transform would shrink and drift away with the surface it describes.
   const rows = [...canvas.querySelectorAll<HTMLElement>(':scope > [data-tao-studio-group]')]
   // A focused view no scenario renders any more (renamed, removed, or its file no longer compiles)
   // leaves nothing to show alone. The app stays visible under the bar instead of the grid going blank.
@@ -124,7 +133,7 @@ function applyCanvasFocus(parent: HTMLElement): void {
   for (const row of rows) {
     row.hidden = shown && row.dataset['taoStudioGroupView'] !== focused
   }
-  const existing = canvas.querySelector<HTMLElement>(':scope > .studio-canvas-bar')
+  const existing = parent.querySelector<HTMLElement>(':scope > .studio-canvas-bar')
   if (focused === undefined) {
     existing?.remove()
     delete parent.dataset['taoStudioCanvasFocus']
@@ -144,7 +153,7 @@ function applyCanvasFocus(parent: HTMLElement): void {
   back.dataset['taoStudioCanvasBack'] = 'true'
   back.onclick = () => canvasStates.get(parent)?.exit?.()
   bar.replaceChildren(label, back)
-  canvas.prepend(bar)
+  parent.prepend(bar)
 }
 
 /**

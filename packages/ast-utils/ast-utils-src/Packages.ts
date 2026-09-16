@@ -459,12 +459,35 @@ export namespace Packages {
     declaration: AST.Declaration,
     resolution: Resolution,
   ): boolean {
+    // Scope construction must not resolve an alias initializer: doing so can re-enter the linker
+    // while the imported file's constructor and patch scopes are still being built. Primitive-head
+    // app declarations carry their app family syntactically; inferred aliases use ordinary Tao
+    // visibility (for example `workspace let App = app { ... }`).
+    if (AST.isAppDeclaration(declaration)) {
+      // An unmarked app keeps its historical directory reach, so sibling scenario and test sidecars
+      // still find it without an import. An explicit marker is read literally -- `file app Name` has
+      // to mean file-only -- which `visibilityOf` cannot say, because it maps 'file' onto undefined.
+      if (declaration.visibility === undefined) {
+        return resolution.relation === 'same-file' || resolution.relation === 'same-directory'
+      }
+      return isVisible(declaration.visibility, resolution)
+    }
     return isVisible(visibilityOf(declaration), resolution)
   }
 
   /** isTestSourcePath returns whether a path names a Tao sidecar test file. */
   export function isTestSourcePath(filePath: string): boolean {
     return FS.basename(filePath).endsWith('.test.tao')
+  }
+
+  /** isScenariosSourcePath returns whether a path names a Tao scenarios sidecar file. */
+  export function isScenariosSourcePath(filePath: string): boolean {
+    return FS.basename(filePath).endsWith('.scenarios.tao')
+  }
+
+  /** isSidecarSourcePath returns whether a path names a test or scenarios companion file. */
+  export function isSidecarSourcePath(filePath: string): boolean {
+    return isTestSourcePath(filePath) || isScenariosSourcePath(filePath)
   }
 
   function isImportableTaoSourceName(name: string): boolean {

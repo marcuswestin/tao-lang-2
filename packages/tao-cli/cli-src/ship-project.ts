@@ -1,3 +1,4 @@
+import { ASTUtils } from '@ast-utils'
 import Formatter from '@formatter'
 import { AST, Langium, Parser } from '@parser'
 import { Errors, FS, Repo } from '@shared'
@@ -109,21 +110,19 @@ async function readShipProject(
     const parsed = await workspace.parse(path)
     for (const declaration of AST.appValueDeclarationsInFile(parsed.entry.ast)) {
       const declarationSource = declaration.$cstNode?.text ?? ''
-      const inheritedSource = appSourceGraph(declaration)
-      const releaseDatasourceConfiguration = deriveHostedDatasourceConfiguration(declaration.name, inheritedSource)
-      const icloud = deriveICloudBinding(declarationSource, inheritedSource)
+      const bindings = resolvedAppDatasources(declaration)
+      const icloud = deriveICloudBinding(bindings)
       apps.push({
         baseAppName: directAppBaseName(declarationSource),
         displayName: authoredAppName(declarationSource) ?? declaration.name,
-        hasLocalDatasourceEndpoint: declaration.name.toLowerCase().includes('instantdb')
-          && /(?:ApiURI|WebsocketURI)\s+"(?:https?|wss?):\/\/localhost(?::\d+)?/u.test(inheritedSource),
+        hasLocalDatasourceEndpoint: bindings.some(hasLocalInstantEndpoint),
         ...(icloud === undefined ? {} : { icloud }),
         isVariant: AST.isAliasDeclaration(declaration)
           || (AST.isAppDeclaration(declaration) && declaration.value !== undefined),
         name: declaration.name,
-        releaseDatasourceConfiguration,
+        releaseDatasourceConfiguration: deriveHostedDatasourceConfiguration(declaration.name, bindings),
         sourcePath: path,
-        usesDevDatasource: /\bDatasource\s+Dev\b/u.test(inheritedSource),
+        usesDevDatasource: bindings.some(binding => mountsProvider(binding, 'Dev')),
       })
     }
   }
@@ -162,205 +161,79 @@ function directAppBaseName(source: string): string | undefined {
     .exec(source)?.[1]
 }
 
-function appSourceGraph(app: AST.AppValueDeclaration): string {
-  const declarations = new Set<AST.Node>()
-  const documents = new Set<AST.TaoFile>()
-  const seenApps = new Set<AST.AppValueDeclaration>()
-  let current: AST.AppValueDeclaration | undefined = app
-  while (current && !seenApps.has(current)) {
-    seenApps.add(current)
-    declarations.add(current)
-    documents.add(AST.getDocument(current).parseResult.value)
-    collectDatasourceDependencies(current, declarations, documents)
-    const expression: AST.Expression | undefined = current.value
-    const target: AST.RefinementBaseDeclaration | undefined = expression
-        && (AST.isRefinementExpression(expression) || AST.isValueReference(expression))
-      ? expression.target.ref
-      : undefined
-    current = AST.isAppValueDeclaration(target) ? target : undefined
-  }
-  const providerImports = [...documents].flatMap(file =>
-    file.statements
-      .filter(AST.isUseStatement)
-      .filter(statement => statement.importPath?.startsWith('@tao/data/providers/') === true)
-      .filter(statement =>
-        statement.importedDeclarations.some(reference => reference.ref !== undefined && declarations.has(reference.ref))
-      )
-      .flatMap(statement => statement.$cstNode?.text ?? [])
-  )
-  return [...providerImports, ...[...declarations].flatMap(declaration => declaration.$cstNode?.text ?? [])].join('\n')
+/**
+ * resolvedAppDatasources reads every datasource an app mounts, following variants, named
+ * declarations, reusable types, and patches to the provider each one actually is. Which provider an
+ * app mounts decides its entitlements, its manifest, and whether it may ship at all, so it is read
+ * from the resolved binding rather than from the shape of the source text.
+ */
+function resolvedAppDatasources(app: AST.AppValueDeclaration): readonly ASTUtils.ResolvedDatasource[] {
+  return ASTUtils.appBoundDatasources(app).flatMap(binding => {
+    // A slot supplying a value resolves that value; a reference block names declarations, and each
+    // declaration's own value is what it stands for.
+    const value = binding.value ?? binding.declaration?.value
+    return value && !AST.isAppView(value) ? [ASTUtils.resolveDatasourceValue(value, binding.patches)] : []
+  })
 }
 
-function collectDatasourceDependencies(
-  app: AST.AppValueDeclaration,
-  declarations: Set<AST.Node>,
-  documents: Set<AST.TaoFile>,
-): void {
-  const datasourceValues = AST.streamAllContents(app).filter(node =>
-    (AST.isAppProperty(node) || AST.isConfigurationEntry(node)) && node.name === 'Datasource'
-  )
-  for (const value of datasourceValues) {
-    collectReferencedDeclarations(value, declarations, documents)
-  }
+function mountsProvider(datasource: ASTUtils.ResolvedDatasource, typeName: string): boolean {
+  return datasource.typeNames.includes(typeName)
 }
 
-function collectReferencedDeclarations(
-  root: AST.Node,
-  declarations: Set<AST.Node>,
-  documents: Set<AST.TaoFile>,
-): void {
-  for (const node of [root, ...AST.streamAllContents(root)]) {
-    const target = AST.isValueReference(node) || AST.isRefinementExpression(node)
-      ? node.target.ref
-      : AST.isConfigurationReference(node)
-      ? node.target.ref
-      : AST.isConfigurationConstructor(node)
-      ? node.type.ref
-      : undefined
-    if (!target || declarations.has(target) || AST.isAppValueDeclaration(target)) {
-      continue
-    }
-    if (!AST.isDatasourceDeclaration(target) && !AST.isTypeDeclaration(target) && !AST.isAliasDeclaration(target)) {
-      continue
-    }
-    declarations.add(target)
-    documents.add(AST.getDocument(target).parseResult.value)
-    collectReferencedDeclarations(target, declarations, documents)
+function hasLocalInstantEndpoint(datasource: ASTUtils.ResolvedDatasource): boolean {
+  if (!mountsProvider(datasource, 'InstantDB')) {
+    return false
   }
+  return ['ApiURI', 'WebsocketURI'].some(name => {
+    const value = datasource.configuration.get(name)
+    return value !== undefined && /^(?:https?|wss?):\/\/localhost(?::\d+)?/u.test(value)
+  })
 }
 
 /** deriveHostedDatasourceConfiguration keeps a local InstantDB declaration intact while deriving its ship patch. */
 export function deriveHostedDatasourceConfiguration(
   appName: string,
-  source: string,
+  datasources: readonly ASTUtils.ResolvedDatasource[],
 ): Readonly<Record<string, string>> | undefined {
-  if (!appName.toLowerCase().includes('instantdb')) {
+  const local = datasources.filter(hasLocalInstantEndpoint)
+  if (local.length === 0) {
     return undefined
   }
-  const localEndpoint = /(?:ApiURI|WebsocketURI)\s+"(?:https?|wss?):\/\/localhost(?::\d+)?/u.test(source)
-  if (!localEndpoint) {
-    return undefined
-  }
-  const appIds = [...source.matchAll(/\bAppId\s+"([^"]+)"/gu)].map(match => match[1]!).filter(Boolean)
-  const uniqueAppIds = [...new Set(appIds)]
-  if (uniqueAppIds.length !== 1) {
+  const appIds = [
+    ...new Set(local.flatMap(datasource => {
+      const appId = datasource.configuration.get('AppId')
+      return appId === undefined ? [] : [appId]
+    })),
+  ]
+  if (appIds.length !== 1) {
     Errors.throwUserInput(
       `App '${appName}' uses a local InstantDB endpoint, but Tao could not derive one hosted AppId from its source.`,
     )
   }
   return {
     ApiURI: 'https://api.instantdb.com',
-    AppId: uniqueAppIds[0]!,
+    AppId: appIds[0]!,
     WebsocketURI: 'wss://api.instantdb.com/runtime/session',
   }
 }
 
 /**
- * deriveICloudBinding reports whether an app declaration mounts one of the Apple datasources —
- * directly, through a named `datasource X = ICloud { … }` or a `type X is CloudKit with { … }`,
- * through a `Datasource with { … }` patch of its base, or by inheriting its direct base app's
- * binding — with the explicit `Container` that datasource declares, if any, and the iCloud
- * service the provider needs. The ship pipeline turns the binding into the binary's iCloud
- * entitlements, defaulting the container to the bundle identifier.
+ * deriveICloudBinding reports whether an app mounts one of the Apple datasources, with the explicit
+ * `Container` that binding settles on and the iCloud service the provider needs. The ship pipeline
+ * turns it into the binary's iCloud entitlements, defaulting the container to the bundle identifier.
  */
 export function deriveICloudBinding(
-  declarationSource: string,
-  source: string,
+  datasources: readonly ASTUtils.ResolvedDatasource[],
 ): ShipICloudBinding | undefined {
-  const file = withoutLineComments(source)
-  const own = withoutLineComments(declarationSource)
   for (const provider of appleDatasourceProviders) {
-    if (!new RegExp(`\\bfrom\\s+@tao/data/providers/${provider.importPath}\\b`, 'u').test(file)) {
+    const bound = datasources.find(datasource => mountsProvider(datasource, provider.typeName))
+    if (!bound) {
       continue
     }
-    const binding = providerBinding(provider.typeName, own, file)
-    if (binding !== undefined) {
-      return { ...binding, services: [provider.service] }
-    }
+    const container = bound.configuration.get('Container')
+    return { ...container === undefined ? {} : { container }, services: [provider.service] }
   }
   return undefined
-}
-
-function providerBinding(
-  typeName: string,
-  declarationSource: string,
-  file: string,
-): { container?: string } | undefined {
-  // Every spelling that binds the provider by name: a configured `datasource X = T { … }` (with or
-  // without `with`), and a reusable `type X is T with { … }` an app then constructs.
-  const namedBindings = new Map<string, string>()
-  for (
-    const match of file.matchAll(
-      new RegExp(
-        `\\b(?:datasource\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*=|type\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+is)\\s*${typeName}\\s*(?:with\\s*)?\\{([^}]*)\\}`,
-        'gu',
-      ),
-    )
-  ) {
-    namedBindings.set(match[1] ?? match[2]!, match[3]!)
-  }
-  const bindingOf = (appSource: string): { container?: string } | undefined => {
-    const inline = new RegExp(`\\bDatasource\\s+${typeName}\\s*(?:with\\s*)?\\{([^}]*)\\}`, 'u').exec(appSource)
-    if (inline) {
-      return { ...containerOf(inline[1]!) }
-    }
-    const named = /\bDatasource\s+([A-Za-z_][A-Za-z0-9_]*)\b(?:\s*(?:with\s*)?\{([^}]*)\})?/u.exec(appSource)
-    if (named === null) {
-      return undefined
-    }
-    const [, name, patch] = named
-    if (name === 'with') {
-      // `Datasource with { … }` patches the base app's datasource; the base decides the provider
-      // and the patch may override the container.
-      const inherited = fromBase(appSource)
-      return inherited === undefined ? undefined : { ...inherited, ...containerOf(patch ?? '') }
-    }
-    const declared = namedBindings.get(name!)
-    if (declared === undefined) {
-      return undefined
-    }
-    return { ...containerOf(declared), ...containerOf(patch ?? '') }
-  }
-  const fromBase = (appSource: string): { container?: string } | undefined => {
-    const baseName = directAppBaseName(appSource)
-    if (baseName === undefined) {
-      return undefined
-    }
-    const base = appDeclarationText(file, baseName)
-    return base === undefined ? undefined : bindingOf(base)
-  }
-  return /\bDatasource\b/u.test(declarationSource) ? bindingOf(declarationSource) : fromBase(declarationSource)
-}
-
-/**
- * withoutLineComments drops `//` comments so a commented-out binding never ships an entitlement.
- * A comment starts at a line start or after whitespace, which leaves the `//` inside a URL alone.
- */
-function withoutLineComments(source: string): string {
-  return source.replace(/(^|\s)\/\/[^\n]*/gu, '$1')
-}
-
-/** appDeclarationText finds a direct app declaration's text, whether it closes on its line or later. */
-function appDeclarationText(source: string, name: string): string | undefined {
-  const opening = new RegExp(
-    `^[ \\t]*(?:(?:file|folder|package|workspace|public)\\s+)?app\\s+${name}\\s*\\{.*$`,
-    'mu',
-  ).exec(source)
-  if (opening === null) {
-    return undefined
-  }
-  if (opening[0].trimEnd().endsWith('}')) {
-    return opening[0]
-  }
-  const closing = /^\}/mu.exec(source.slice(opening.index + opening[0].length))
-  return closing === null
-    ? undefined
-    : source.slice(opening.index, opening.index + opening[0].length + closing.index + 1)
-}
-
-function containerOf(block: string): { container?: string } {
-  const container = /\bContainer\s+"([^"]+)"/u.exec(block)?.[1]
-  return container === undefined ? {} : { container }
 }
 
 function oneProjectString(

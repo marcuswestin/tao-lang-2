@@ -16,6 +16,7 @@ import {
   validateConfiguredValuesFile,
 } from './validators/configured-values-validator'
 import { dataValidationChecks, validateDataFile } from './validators/data-validator'
+import { validateDatasourceMembership } from './validators/datasource-membership-validator'
 import { declarationSlotValidationChecks } from './validators/declaration-slots-validator'
 import { DesignValidator } from './validators/design-validator'
 import { FunctionalCoreValidator } from './validators/FunctionalCoreValidator'
@@ -87,6 +88,7 @@ function validateTaoFile(file: AST.TaoFile, ctx: ValidationContext): readonly AS
   validateProjectFile(file, ctx)
   AliasesValidator.validateFile(file, ctx)
   validateDataFile(file, ctx)
+  validateDatasourceMembership(file, ctx)
   validateScenarioFile(file, ctx)
   validatePreludeFile(file, ctx)
   const nodes = AST.streamAllContents(file)

@@ -6,12 +6,13 @@ import { NavigationCommandButton } from './TR-navigation-command-button'
 import {
   type RuntimeHostReadChannel,
   type TaoNavigationCommand,
+  useEnclosingChrome,
   useHostSlotSnapshot,
 } from './TR-navigation-host-slots'
 import type { RuntimeStackNav } from './TR-navigation-mounts'
 import type { PresentableEntry } from './TR-navigation-state'
 import { NavigationLevel, presentedOccurrenceRegion } from './TR-navigation-surfaces'
-import { renderPresentable } from './TR-navigation-values'
+import { isNavigation, renderPresentable } from './TR-navigation-values'
 import { requireReactNativeRuntime } from './TR-react-native'
 import type { TaoProps } from './TR-TaoProps'
 import { Views } from './TR-views'
@@ -20,6 +21,8 @@ type HostEntry = PresentableEntry & { host: RuntimeHostReadChannel }
 
 /** BasicStackSurface is the deterministic portable stack chrome and web fallback. */
 export function BasicStackSurface(props: {
+  bottomInset?: number
+  chrome?: RuntimeHostReadChannel
   entries: readonly HostEntry[]
   navigation: RuntimeStackNav
   taoProps?: TaoProps
@@ -28,6 +31,8 @@ export function BasicStackSurface(props: {
   return React.createElement(runtime.View, {
     children: props.entries.map((entry, index) =>
       React.createElement(BasicStackLevel, {
+        bottomInset: props.bottomInset,
+        chrome: props.chrome,
         entry,
         hidden: index !== props.entries.length - 1,
         key: entry.instanceId,
@@ -40,6 +45,8 @@ export function BasicStackSurface(props: {
 }
 
 function BasicStackLevel(props: {
+  bottomInset?: number
+  chrome?: RuntimeHostReadChannel
   entry: HostEntry
   hidden: boolean
   navigation: RuntimeStackNav
@@ -49,6 +56,7 @@ function BasicStackLevel(props: {
   const observable = !props.hidden && props.taoProps?.navigationHostActive !== false
   const entryTaoProps = { ...props.taoProps, navigationHostActive: observable }
   useDocumentTitle(observable ? slots.title : undefined)
+  useEnclosingChrome(props.chrome, slots, observable && !isNavigation(props.entry.presentable))
   const runtime = requireReactNativeRuntime()
   return React.createElement(NavigationLevel, {
     fill: true,
@@ -57,8 +65,8 @@ function BasicStackLevel(props: {
     children: React.createElement(runtime.View, {
       children: [
         // `Header false` removes the bar, not the ability to leave: Back stays reachable through
-        // the reducer, the platform gesture, and the hardware key.
-        !slots.header ? null : React.createElement(runtime.View, {
+        // the reducer, the platform gesture, and the hardware key. Enclosing chrome replaces it.
+        !slots.header || props.chrome ? null : React.createElement(runtime.View, {
           children: [
             observable && props.navigation.depth > 1
               ? React.cloneElement(
@@ -93,7 +101,7 @@ function BasicStackLevel(props: {
         }),
         React.createElement(
           AppSurfaceFrame,
-          { key: 'content', taoProps: entryTaoProps },
+          { bottomInset: props.bottomInset, key: 'content', taoProps: entryTaoProps },
           renderPresentable(props.entry.presentable, props.entry.arguments, entryTaoProps, props.entry.host),
         ),
       ],

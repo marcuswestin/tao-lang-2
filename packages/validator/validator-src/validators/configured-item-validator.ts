@@ -25,6 +25,8 @@ export const configuredItemValidationMessages = {
   memberNotItem: (name: string) => `Cannot access member '${name}' on a non-item value.`,
   unknownMember: (type: string, name: string) => `Item type '${type}' has no field '${name}'.`,
   inferredConstructorContext: 'A bare item block requires a same-name type declaration.',
+  listedNotValue: (name: string) =>
+    `'${name}' names a data collection, which a list of declarations can hold but an item cannot.`,
   filledProperty: (name: string) => `Filled slot '${name}' cannot be supplied or reopened.`,
 } as const
 
@@ -110,6 +112,11 @@ function validateInferredConfiguredItem(
   value: AST.InferredConfigurationConstructor,
   ctx: ValidationContext,
 ): void {
+  // A block of bare names in a slot lists declarations rather than constructing a value; the owning
+  // slot's contract checks what it may list, so there is no same-name type for it to resolve.
+  if (AST.isAppProperty(value.$container) && ASTUtils.referenceBlockOf(value)) {
+    return
+  }
   const declaration = Type.inferredConfigurationDeclaration(value)
   if (declaration && AST.isConfigurableDeclaration(declaration)) {
     return
@@ -314,7 +321,13 @@ function configuredItemEntryType(
     return Type.ofExpression(entry.expression)
   }
   if (entry.reference) {
-    return entry.reference.ref ? Type.ofValueDeclaration(entry.reference.ref) : { kind: 'unresolved' }
+    const target = entry.reference.ref
+    // A reference entry may name a data collection so `Data { Stories }` resolves; anywhere a value is
+    // expected that name is a mistake, and saying so here keeps it from reaching the compiler.
+    if (target && !AST.isValueDeclaration(target)) {
+      ctx.error(entry, configuredItemValidationMessages.listedNotValue(entry.reference.$refText))
+    }
+    return target && AST.isValueDeclaration(target) ? Type.ofValueDeclaration(target) : { kind: 'unresolved' }
   }
   if (!entry.name || (!entry.block && !entry.value)) {
     return undefined

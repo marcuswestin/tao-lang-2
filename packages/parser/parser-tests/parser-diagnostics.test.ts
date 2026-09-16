@@ -1,6 +1,6 @@
 import { Diagnostics } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
-import { lexCodeWithErrors, parseCodeWithErrors, parses, rejectsParser } from './test-parse'
+import { lexCodeWithErrors, parseCodeWithErrors, parses, rejectsParser, testParseCode } from './test-parse'
 
 Describe('parser: diagnostics', () => {
   Test(
@@ -131,5 +131,17 @@ Describe('parser: diagnostics', () => {
     Expect(parseResult.diagnostics.length).toBeGreaterThan(0)
     Expect(Diagnostics.hasSource(parseResult.diagnostics, 'parser')).toBe(true)
     Expect(linkerMessages.some(message => parserMessages.includes(message))).toBe(false)
+  })
+
+  Test('does not report linker diagnostics for bridged TypeScript export heads', async () => {
+    const parseResult = await testParseCode(`
+      type HNSource is Http with {
+        Adapter item is HNAdapter from ./HNAdapter.ts
+      }
+    `)
+
+    Expect(parseResult.entry.document.parseResult.lexerErrors).toEqual([])
+    Expect(parseResult.entry.document.parseResult.parserErrors).toEqual([])
+    Expect(Diagnostics.messages(parseResult.diagnostics, 'linker')).toEqual([])
   })
 })

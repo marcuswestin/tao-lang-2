@@ -54,7 +54,8 @@ export const ExpressionsFormatter = {
 
   /** PropertyConfigurationPatch formats `with { ... }` as one merge-copy property value. */
   PropertyConfigurationPatch(f) {
-    f.oneSpaceAfter('with')
+    // One rule owns the gap between `with` and its block; a second rule on the same gap stacked two
+    // spaces whenever the source wrote `with{` with none.
     f.oneSpaceBeforeProperty('block')
   },
 

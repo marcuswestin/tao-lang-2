@@ -10,6 +10,7 @@ import {
   isRuntimeConfigurableDeclaration,
   isTransparentConfigurableAlias,
 } from './codegen/app/ConfigurationCompiler'
+import { withDataStorePlan } from './codegen/app/data-store-context'
 import {
   type DeclarationIdentityProject,
   withDeclarationIdentityContext,
@@ -36,7 +37,6 @@ import {
 import { compileTestPlan, type TaoTestPlan } from './test-plan-compiler'
 
 const compiledSourceOutputPathMessage = 'compiled source output path exists'
-const dataCatalogBindingName = '_TaoDataCatalog'
 // `local only` entities live in a second emitted catalog with its own connection and storage key.
 // The compiler binds it to the stdlib Local provider, which the source never names, so the owner
 // module imports that provider as a sidecar exactly as a declared datasource would.
@@ -62,6 +62,8 @@ type DataCatalogPlan = {
   /** localUserPaths are the files that reference the companion catalog's bindings. */
   localUserPaths: ReadonlySet<string>
   ownerPath: string
+  /** stores is the project's partition: one emitted schema per store the datasources declare. */
+  stores: ASTUtils.DataStorePlan
   userPaths: ReadonlySet<string>
 }
 
@@ -111,6 +113,8 @@ export type CompileOptions = {
   appDatasourceConfiguration?: Readonly<Record<string, string>>
   /** studio emits preview-only render occurrence metadata into generated Tao props. */
   studio?: boolean
+  /** debug instruments every action statement with a debugger gate. */
+  debug?: boolean
   /** release promotes only stable release-gate diagnostics; ordinary development warnings stay non-blocking. */
   validationMode?: 'development' | 'release'
 }
@@ -282,6 +286,7 @@ function compileValidatedInput(
       selectedAppName: file.path === selectedAppPath ? selectedAppName : undefined,
       studio,
       studioViews,
+      debug: options.debug === true,
     })
   )
 
@@ -428,6 +433,7 @@ type CompileSourceFileOptions = {
   selectedAppName: string | undefined
   studio: boolean
   studioViews: ReadonlyArray<{ id: string; view: AST.ViewDeclaration }>
+  debug: boolean
 }
 
 function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions): CompiledFile[] {
@@ -442,12 +448,15 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
     selectedAppName,
     studio,
     studioViews,
+    debug,
   } = options
   const imports = resolveImports(file.path, file.ast, sourceByPath, packagesContext)
   const ownsDataCatalog = dataCatalog?.ownerPath === file.path
   const needsStudioDataCatalog = studio && selectedAppName !== undefined && dataCatalog !== undefined
   if (dataCatalog && !ownsDataCatalog && (dataCatalog.userPaths.has(file.path) || needsStudioDataCatalog)) {
-    addResolvedImport(imports, dataCatalog.ownerPath, dataCatalogBindingName)
+    for (const binding of syncedCatalogBindings(dataCatalog)) {
+      addResolvedImport(imports, dataCatalog.ownerPath, binding)
+    }
   }
   if (studio && selectedAppName !== undefined) {
     for (const item of studioViews) {
@@ -494,7 +503,9 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
       return { exported: binding, binding }
     })
   if (ownsDataCatalog) {
-    exportedBindings.push({ exported: dataCatalogBindingName, binding: dataCatalogBindingName })
+    for (const binding of syncedCatalogBindings(dataCatalog)) {
+      exportedBindings.push({ exported: binding, binding })
+    }
     if (dataCatalog.localOnly) {
       exportedBindings.push({ exported: LocalDataBindings.catalog, binding: LocalDataBindings.catalog })
       exportedBindings.push({ exported: LocalDataBindings.datasource, binding: LocalDataBindings.datasource })
@@ -504,29 +515,34 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
   const module: CompiledFile = {
     sourcePath: file.path,
     relativePath: planned.modulePath,
-    code: withDeclarationIdentityContext(identityProjects, () =>
-      withInlineInjectionBindings(
-        new Map(planned.injections.map(injection => [injection.node, injection.binding])),
-        () =>
-          RuntimeGen.TaoFile(file.ast, {
-            configurationTypes: planned.declarationsPath === undefined
-              ? undefined
-              : RuntimeGen.ConfigurationTypes(file.ast),
-            dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
-            emitDataCatalog: ownsDataCatalog,
-            importLines,
-            localDataCatalog: usesLocalDataCatalog,
-            scopeBindings,
-            exportedBindings,
-            selectedAppDatasourceConfiguration,
-            selectedAppName,
-            projectRoot,
-            studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
-            studio,
-            studioViews: studio && selectedAppName !== undefined ? studioViews : [],
-            viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }),
-          }),
-      )),
+    code: withDataStorePlan(
+      dataCatalog?.stores,
+      () =>
+        withDeclarationIdentityContext(identityProjects, () =>
+          withInlineInjectionBindings(
+            new Map(planned.injections.map(injection => [injection.node, injection.binding])),
+            () =>
+              RuntimeGen.TaoFile(file.ast, {
+                configurationTypes: planned.declarationsPath === undefined
+                  ? undefined
+                  : RuntimeGen.ConfigurationTypes(file.ast),
+                dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
+                emitDataCatalog: ownsDataCatalog,
+                importLines,
+                localDataCatalog: usesLocalDataCatalog,
+                scopeBindings,
+                exportedBindings,
+                selectedAppDatasourceConfiguration,
+                selectedAppName,
+                projectRoot,
+                studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
+                studio,
+                debug,
+                studioViews: studio && selectedAppName !== undefined ? studioViews : [],
+                viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }),
+              }),
+          )),
+    ),
   }
   const declarations: CompiledFile[] = planned.declarationsPath === undefined
     ? []
@@ -867,6 +883,7 @@ function configurationAliasImportLines(
 
 function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string): DataCatalogPlan | undefined {
   const entities = sourceFiles.flatMap(file => file.ast.statements.filter(AST.isEntityDataDeclaration))
+  const datasources = sourceFiles.flatMap(file => file.ast.statements.filter(AST.isDatasourceDeclaration))
   const directUserPaths = new Set(
     sourceFiles
       .filter(fileUsesDataCatalog)
@@ -891,15 +908,35 @@ function planDataCatalog(sourceFiles: readonly ParsedFile[], entryPath: string):
       .filter(file => fileUsesDataCatalog(file) || AST.appValueDeclarationsInFile(file.ast).length > 0)
       .map(file => file.path),
   )
-  return { entities, localOnly: entities.some(Type.dataEntityIsLocalOnly), localUserPaths, ownerPath, userPaths }
+  return {
+    entities,
+    localOnly: entities.some(Type.dataEntityIsLocalOnly),
+    localUserPaths,
+    ownerPath,
+    stores: ASTUtils.planDataStores(entities, datasources),
+    userPaths,
+  }
+}
+
+/**
+ * A file uses the catalog when it reads or writes rows, and an app file uses it because mounting a
+ * store is what an app root does. The app side is read from the resolved binding rather than from a
+ * slot spelled `Datasource`, so a variant that inherits its datasources still counts as a user.
+ */
+/**
+ * The catalog bindings a module shares. Every store but the device one travels together: a file that
+ * reads rows may read any of them, and an app file mounts the ones it binds, so splitting the import
+ * per query would save nothing and make the owner module's exports depend on its readers.
+ */
+function syncedCatalogBindings(plan: DataCatalogPlan): readonly string[] {
+  return plan.stores.stores.filter(store => store.kind !== 'device').map(store => store.binding)
 }
 
 function fileUsesDataCatalog(file: ParsedFile): boolean {
-  return AST.streamAllContents(file.ast).some(node =>
-    AST.isEntityQueryDeclaration(node)
-    || AST.isCreateStatement(node)
-    || (AST.isAppProperty(node) && node.name === 'Datasource')
-  )
+  if (AST.appValueDeclarationsInFile(file.ast).some(app => ASTUtils.appBoundDatasources(app).length > 0)) {
+    return true
+  }
+  return AST.streamAllContents(file.ast).some(node => AST.isEntityQueryDeclaration(node) || AST.isCreateStatement(node))
 }
 
 function appUsesDatasource(app: AST.AppValueDeclaration): boolean {

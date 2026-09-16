@@ -416,8 +416,10 @@ function compileConfiguredItemEntry(
   if (entry.expression) {
     return { compiled: Compile.Expression(entry.expression), type: Type.ofExpression(entry.expression) }
   }
-  if (entry.reference?.ref) {
-    const declaration = resolveRef(entry.reference)
+  // A membership entry names a data collection rather than a value, and membership is compiled as
+  // the store partition rather than as anything inside the configured value.
+  if (entry.reference?.ref && AST.isValueDeclaration(entry.reference.ref)) {
+    const declaration = entry.reference.ref
     return {
       compiled: Compile.ValueDeclarationReference(declaration),
       type: Type.ofValueDeclaration(declaration),
@@ -578,7 +580,9 @@ function compileCommandBinding(command: AST.CommandDeclaration, block: AST.Confi
 
 function commandBindingExpression(entry: AST.ConfigurationEntry): Compiled | undefined {
   if (entry.reference) {
-    return Compile.ValueDeclarationReference(resolveRef(entry.reference))
+    const declaration = resolveRef(entry.reference)
+    Assert.is(declaration, AST.isValueDeclaration, 'validated command surface entry references a value')
+    return Compile.ValueDeclarationReference(declaration)
   }
   if (entry.expression) {
     return Compile.Expression(entry.expression)
@@ -649,12 +653,13 @@ function compileConfiguredTypeObject(
 ): Compiled {
   const keyedDefaults = AST.configurationKeyOf(declaration)?.block.properties ?? []
   const declaredNames = new Set(AST.configurationPropertiesOf(declaration).map(property => property.name))
-  const hostSlotEntries = block.entries.filter(entry => entry.name && !declaredNames.has(entry.name))
+  const entries = configurationEntriesFor(declaration, block)
+  const hostSlotEntries = entries.filter(entry => entry.name && !declaredNames.has(entry.name))
   const hostSlotEntrySet = new Set(hostSlotEntries)
   const configured = compileConfigurationObjectWithDefaults(
     block,
     keyedDefaults,
-    block.entries.filter(entry => !hostSlotEntrySet.has(entry)),
+    entries.filter(entry => !hostSlotEntrySet.has(entry)),
   )
   const withHostSlots = gen`{
     ...${configured},
@@ -720,8 +725,9 @@ function compileConfigurationPatchObject(
   const declaredNames = new Set(
     declaration ? AST.configurationPropertiesOf(declaration).map(property => property.name) : [],
   )
+  const entries = configurationEntriesFor(declaration, block)
   const hostSlotEntries = declaration
-    ? block.entries.filter(entry => entry.name && !declaredNames.has(entry.name))
+    ? entries.filter(entry => entry.name && !declaredNames.has(entry.name))
     : []
   const hostSlotEntrySet = new Set(hostSlotEntries)
   return gen`{
@@ -742,6 +748,21 @@ function compileConfigurationPatchObject(
   }`
 }
 
+/**
+ * A datasource's membership is structural: the compiler partitions the catalog with it and the
+ * provider never sees it, so it is dropped before a configured value is built rather than travelling
+ * as a host slot no provider reads.
+ */
+function configurationEntriesFor(
+  declaration: AST.ConfigurableDeclaration | undefined,
+  block: AST.ConfigurationBlock,
+): readonly AST.ConfigurationEntry[] {
+  if (!declaration || AST.configurationPrimitiveOf(declaration) !== 'datasource') {
+    return block.entries
+  }
+  return block.entries.filter(entry => entry.name !== ASTUtils.datasourceMembershipSlot)
+}
+
 function inferredConfigurationDeclaration(
   value: AST.InferredConfigurationConstructor,
 ): AST.ConfigurableDeclaration | undefined {
@@ -749,7 +770,8 @@ function inferredConfigurationDeclaration(
   return declaration && AST.isConfigurableDeclaration(declaration) ? declaration : undefined
 }
 
-function configuredDeclarationOfValue(
+/** configuredDeclarationOfValue returns the reusable configuration type a value is built from. */
+export function configuredDeclarationOfValue(
   declaration: AST.ValueDeclaration,
   seen: Set<AST.ValueDeclaration> = new Set(),
 ): AST.ConfigurableDeclaration | undefined {

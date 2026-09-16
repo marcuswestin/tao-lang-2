@@ -63,13 +63,17 @@ primitive nav is scene with {
    implement,
 }
 
+// `Data` is the store's membership: the data collections this datasource owns. A datasource that
+// names none owns every collection the app's other datasources leave unclaimed, which is why an app
+// with one datasource never writes the slot.
 primitive datasource with {
    implement,
+   Data list of data is [],
 }
 
 primitive app with {
    Name text,
    Navigator nav,
-   Datasource datasource is none,
+   Datasource list of datasource is [],
    Design design is none,
 }

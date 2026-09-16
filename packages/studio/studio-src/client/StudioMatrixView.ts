@@ -1,6 +1,6 @@
 /**
  * StudioMatrixView composes the preview matrix out of the modules under `./matrix/`: the pure layout,
- * the keyed grid host, the sketch boards mounted into it, one connection per cell iframe, the cell
+ * the keyed grid host, the Draw-canvas sketch boards, one connection per cell iframe, the cell
  * view and its controls, and the message bridge between the previews and the app. The app imports
  * everything preview-related from here, so the composition is also the one public surface.
  */
@@ -8,6 +8,17 @@ import { StudioMatrixGrid } from './matrix/StudioMatrixGrid'
 import type { StudioMatrixGroup } from './matrix/StudioMatrixLayout'
 import { StudioMatrixSketches } from './matrix/StudioMatrixSketches'
 
+export {
+  canvasScale,
+  mountCanvasViewport,
+  type StudioCanvasViewportControls,
+  type StudioCanvasViewportState,
+} from './matrix/StudioCanvasViewport'
+export {
+  StudioDebugEvents,
+  type StudioDebugJournalRow,
+  type StudioDebugState,
+} from './matrix/StudioDebugEvents'
 export { StudioFixtureGenerationFeedback, StudioFixtureProposal } from './matrix/StudioFixtureActions'
 export {
   awaitPreviewJourneyRecordingAcknowledgement,
@@ -24,6 +35,7 @@ export {
   configureInteractionMode,
   currentSourceIdentity,
   handlePreviewMessage,
+  postDebugCommand,
   postEditorSelection,
   requestRuntimeCapture,
 } from './matrix/StudioPreviewBridge'

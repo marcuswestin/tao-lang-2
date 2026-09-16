@@ -19,6 +19,7 @@
     "@noble/hashes": "^2.4.0",
     "@react-native-async-storage/async-storage": "^2.2.0",
     "expo-constants": "*",
+    "expo-glass-effect": "*",
     "expo-secure-store": "*",
     "react": "^19.1.0",
     "react-native": "^0.81.5",
@@ -32,6 +33,7 @@
     "@noble/curves": "2.4.0",
     "@noble/hashes": "2.4.0",
     "@types/react": "~19.1.0",
+    "expo-glass-effect": "~0.1.10",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-safe-area-context": "~5.6.0",
@@ -45,6 +47,9 @@
       "optional": true
     },
     "expo-constants": {
+      "optional": true
+    },
+    "expo-glass-effect": {
       "optional": true
     },
     "expo-secure-store": {

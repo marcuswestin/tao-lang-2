@@ -1,6 +1,7 @@
 // Studio agent chat: the change surface, and the reference a model consults before writing Tao.
 import { Errors } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { chatInstructions, scenarioInstructions } from '../studio-src/agent-chat/AgentChatInstructions'
 import { findSpec, type SpecSection } from '../studio-src/agent-chat/AgentChatReference'
 import type { AgentChatWriteWorld, StagedChange } from '../studio-src/agent-chat/AgentChatWrites'
 import { APPROVAL_REQUIRED, writeTools } from '../studio-src/agent-chat/AgentChatWrites'
@@ -79,6 +80,12 @@ Describe('Studio agent chat writes', () => {
     Expect([...APPROVAL_REQUIRED]).toEqual(['applyChange', 'undoLastChange'])
   })
 
+  Test('instructions direct proposing and applying in the same turn without asking in chat first', () => {
+    Expect(chatInstructions.includes('Do not ask in chat')).toBe(true)
+    Expect(chatInstructions.includes('call applyChange immediately')).toBe(true)
+    Expect(scenarioInstructions.includes('do not ask in chat first')).toBe(true)
+  })
+
   Test('proposing computes the change and shows a diff, and writes nothing', async () => {
     const changes = new Map<string, StagedChange>()
     const it = world()
@@ -90,6 +97,7 @@ Describe('Studio agent chat writes', () => {
 
     Expect(result['changeId']).toBe('change-1')
     Expect(String(result['diff']).includes('Hi')).toBe(true)
+    Expect(String(result['next']).includes('Do not ask in chat first')).toBe(true)
     Expect(changes.size).toBe(1)
     // Nothing reached the project: proposing is not applying.
     Expect(it.applied).toEqual([])
@@ -111,6 +119,163 @@ Describe('Studio agent chat writes', () => {
     Expect(it.applied[0]?.change.expect).toEqual([{ path: PATH, sourceVersion: 'v1' }])
     // A change that has been applied is no longer staged, so it cannot be applied twice.
     Expect(changes.size).toBe(0)
+  })
+
+  Test('proposing multiple declarations at once stages a single change with multiple diff definitions', async () => {
+    const source = `app Reader {
+   Name "Reader"
+}
+
+view FrontPage() {
+   render Text("Front")
+}
+
+view StoryScreen() {
+   render Text("Story")
+}
+`
+    const nodes = new Map<string, SnapshotNode>()
+    const spanOf = (needle: string) => {
+      const start = source.indexOf(needle)
+      return { end: start + needle.length, start }
+    }
+    nodes.set('app:Reader', { id: 'app:Reader', kind: 'app', name: 'Reader', path: PATH, ...spanOf('app Reader {') })
+    nodes.set('view:FrontPage', {
+      id: 'view:FrontPage',
+      kind: 'view',
+      name: 'FrontPage',
+      path: PATH,
+      ...spanOf('view FrontPage() {\n   render Text("Front")\n}'),
+    })
+    nodes.set('view:StoryScreen', {
+      id: 'view:StoryScreen',
+      kind: 'view',
+      name: 'StoryScreen',
+      path: PATH,
+      ...spanOf('view StoryScreen() {\n   render Text("Story")\n}'),
+    })
+
+    const changes = new Map<string, StagedChange>()
+    const it = world({
+      files: async () => [{ content: source, path: PATH }],
+      snapshot: async () => ({ appName: 'Reader', diagnostics: [], edges: [], nodes, projectRoot: '/project' }),
+    })
+    const tools = writeTools(it, changes, () => {})
+
+    const result = await call(tools, 'proposeEdit', {
+      edits: [
+        { declaration: 'FrontPage', replacement: 'view FrontPage() {\n   render Text("FrontUpdated")\n}' },
+        { declaration: 'StoryScreen', replacement: 'view StoryScreen() {\n   render Text("StoryUpdated")\n}' },
+      ],
+    })
+
+    Expect(result['changeId']).toBe('change-1')
+    Expect(changes.size).toBe(1)
+    const staged = changes.get('change-1')
+    Expect(staged?.edits.length).toBe(2)
+    Expect(staged?.edits[0]?.diff.includes('FrontUpdated')).toBe(true)
+    Expect(staged?.edits[1]?.diff.includes('StoryUpdated')).toBe(true)
+
+    // Now apply it: both views are updated in a single apply
+    const applied = await call(tools, 'applyChange', { changeId: 'change-1' })
+    Expect(applied['applied']).toBe(true)
+    Expect(it.applied.length).toBe(1)
+    Expect(it.applied[0]?.change.edits[0]?.after.includes('FrontUpdated')).toBe(true)
+    Expect(it.applied[0]?.change.edits[0]?.after.includes('StoryUpdated')).toBe(true)
+  })
+
+  Test('overlapping declaration edits in the same file are refused', async () => {
+    const source = `view Outer() {
+   view Inner() {
+      render Text("Inside")
+   }
+}`
+    const nodes = new Map<string, SnapshotNode>()
+    nodes.set('view:Outer', {
+      id: 'view:Outer',
+      kind: 'view',
+      name: 'Outer',
+      path: PATH,
+      end: source.length,
+      start: 0,
+    })
+    nodes.set('view:Inner', {
+      id: 'view:Inner',
+      kind: 'view',
+      name: 'Inner',
+      path: PATH,
+      end: source.indexOf('}') + 1,
+      start: source.indexOf('view Inner'),
+    })
+
+    const changes = new Map<string, StagedChange>()
+    const it = world({
+      files: async () => [{ content: source, path: PATH }],
+      snapshot: async () => ({ appName: 'Reader', diagnostics: [], edges: [], nodes, projectRoot: '/project' }),
+    })
+    const tools = writeTools(it, changes, () => {})
+
+    const result = await call(tools, 'proposeEdit', {
+      edits: [
+        { declaration: 'Outer', replacement: 'view Outer() { render Text("1") }' },
+        { declaration: 'Inner', replacement: 'view Inner() { render Text("2") }' },
+      ],
+    })
+
+    Expect(String(result['refused']).includes('Cannot replace overlapping declarations')).toBe(true)
+    Expect(changes.size).toBe(0)
+  })
+
+  Test('proposing declarations across multiple files stages a single change with diffs for each file', async () => {
+    const pathA = 'ViewA.tao'
+    const pathB = 'ViewB.tao'
+    const sourceA = 'view ViewA() {\n   render Text("A")\n}'
+    const sourceB = 'view ViewB() {\n   render Text("B")\n}'
+
+    const nodes = new Map<string, SnapshotNode>()
+    nodes.set('view:ViewA', {
+      id: 'view:ViewA',
+      kind: 'view',
+      name: 'ViewA',
+      path: pathA,
+      end: sourceA.length,
+      start: 0,
+    })
+    nodes.set('view:ViewB', {
+      id: 'view:ViewB',
+      kind: 'view',
+      name: 'ViewB',
+      path: pathB,
+      end: sourceB.length,
+      start: 0,
+    })
+
+    const changes = new Map<string, StagedChange>()
+    const it = world({
+      files: async () => [
+        { content: sourceA, path: pathA },
+        { content: sourceB, path: pathB },
+      ],
+      snapshot: async () => ({ appName: 'Reader', diagnostics: [], edges: [], nodes, projectRoot: '/project' }),
+    })
+    const tools = writeTools(it, changes, () => {})
+
+    const result = await call(tools, 'proposeEdit', {
+      edits: [
+        { declaration: 'ViewA', replacement: 'view ViewA() {\n   render Text("AUpdated")\n}' },
+        { declaration: 'ViewB', replacement: 'view ViewB() {\n   render Text("BUpdated")\n}' },
+      ],
+    })
+
+    Expect(result['changeId']).toBe('change-1')
+    Expect(changes.size).toBe(1)
+    const staged = changes.get('change-1')
+    Expect(staged?.edits.length).toBe(2)
+    Expect(staged?.edits.some(e => e.path === pathA && e.diff.includes('AUpdated'))).toBe(true)
+    Expect(staged?.edits.some(e => e.path === pathB && e.diff.includes('BUpdated'))).toBe(true)
+
+    const applied = await call(tools, 'applyChange', { changeId: 'change-1' })
+    Expect(applied['applied']).toBe(true)
   })
 
   Test('a change that changes nothing is refused rather than staged', async () => {

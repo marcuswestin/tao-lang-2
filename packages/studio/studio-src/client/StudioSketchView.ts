@@ -5,6 +5,7 @@ import type {
   StudioSketchSnapUndoResult,
 } from '../StudioProjectSession'
 import type { StudioSketch, StudioSketchRect } from '../StudioSketchCatalog'
+import { canvasScale } from './matrix/StudioCanvasViewport'
 import {
   StudioSketchGeometry,
   type StudioSketchGeometryState,
@@ -78,7 +79,7 @@ function settleSketchChange(sketch: StudioSketch, change: StudioSketchRectChange
 }
 
 export type StudioSketchViewOptions = Readonly<{
-  onCreateSketch?: (input: Readonly<{ height: number; width: number }>) => Promise<void> | void
+  onCreateSketch?: (input: Readonly<{ height: number; width: number; x: number; y: number }>) => Promise<void> | void
   onError?: (error: unknown) => void
   onFlowAction?: (request: StudioSketchViewFlowActionRequest) => Promise<StudioSketchSnapApplyResult>
   onRectChange?: (
@@ -91,6 +92,7 @@ export type StudioSketchViewOptions = Readonly<{
   onUndoSnap?: (request: StudioSketchViewUndoRequest) => Promise<StudioSketchSnapUndoResult>
   sketches: readonly StudioSketch[]
   sourceVersion?: string
+  sourceVersions?: Readonly<Record<string, string>>
 }>
 
 type StudioSketchViewSnapRequest = Readonly<{
@@ -126,6 +128,19 @@ type StudioSketchViewUnsnapRequest = Readonly<{
   sketchId: string
   sourceVersion: string
 }>
+
+export const StudioSketchViewNames = {
+  next(sketches: readonly Pick<StudioSketch, 'view'>[]): string {
+    let next = 1
+    for (const sketch of sketches) {
+      const match = /^View([1-9][0-9]*)$/u.exec(sketch.view)
+      if (match !== null) {
+        next = Math.max(next, Number(match[1]) + 1)
+      }
+    }
+    return `View${next}`
+  },
+} as const
 
 export const StudioSketchSelection = {
   rectIds(sketch: StudioSketch, selected: ReadonlySet<string>): readonly string[] {
@@ -280,7 +295,7 @@ export const StudioSketchDragOneIn = {
 
 export type MountedStudioSketchView = Readonly<{
   dispose(): void
-  render(sketches: readonly StudioSketch[], sourceVersion?: string): void
+  render(sketches: readonly StudioSketch[], sourceVersions?: Readonly<Record<string, string>>): void
 }>
 
 export type StudioSketchOuterGesture = Readonly<{
@@ -305,18 +320,46 @@ export const StudioSketchOuterDrawing = {
     point: StudioSketchPoint,
   ): Readonly<{
     gesture?: StudioSketchOuterGesture
-    size?: Readonly<{ height: number; width: number }>
+    preview?: Readonly<{ height: number; width: number; x: number; y: number }>
+    size?: Readonly<{ height: number; width: number; x: number; y: number }>
   }> {
     if (gesture === undefined || gesture.pointerId !== pointerId) {
       return { gesture }
     }
-    const width = Math.round(Math.abs(point.x - gesture.origin.x))
-    const height = Math.round(Math.abs(point.y - gesture.origin.y))
-    return width < StudioSketchGeometry.minimumDrawExtent || height < StudioSketchGeometry.minimumDrawExtent
+    const preview = rectFromPoints(gesture.origin, point)
+    return preview.width < StudioSketchGeometry.minimumDrawExtent
+        || preview.height < StudioSketchGeometry.minimumDrawExtent
       ? {}
-      : { size: { height, width } }
+      : { preview, size: preview }
+  },
+  preview(
+    gesture: StudioSketchOuterGesture | undefined,
+    point: StudioSketchPoint,
+  ): Readonly<{ height: number; width: number; x: number; y: number }> | undefined {
+    if (gesture === undefined) {
+      return undefined
+    }
+    const preview = rectFromPoints(gesture.origin, point)
+    return preview.width < StudioSketchGeometry.minimumDrawExtent
+        || preview.height < StudioSketchGeometry.minimumDrawExtent
+      ? undefined
+      : preview
   },
 } as const
+
+function rectFromPoints(
+  origin: StudioSketchPoint,
+  point: StudioSketchPoint,
+): Readonly<{ height: number; width: number; x: number; y: number }> {
+  const width = Math.round(Math.abs(point.x - origin.x))
+  const height = Math.round(Math.abs(point.y - origin.y))
+  return {
+    height,
+    width,
+    x: Math.round(Math.min(origin.x, point.x)),
+    y: Math.round(Math.min(origin.y, point.y)),
+  }
+}
 
 const handles: readonly StudioSketchResizeHandle[] = [
   'north-west',
@@ -337,8 +380,8 @@ export const StudioSketchView = {
     workspace.dataset['taoStudioSketchWorkspace'] = 'true'
     workspace.style.display = 'flex'
     workspace.style.gap = '16px'
-    workspace.style.minHeight = '140px'
-    workspace.style.minWidth = '400px'
+    workspace.style.minHeight = '100%'
+    workspace.style.minWidth = '100%'
     workspace.style.overflow = 'visible'
     workspace.style.padding = '24px'
     const inspector = document.createElement('aside')
@@ -347,6 +390,7 @@ export const StudioSketchView = {
     inspector.style.width = '180px'
     let sketches = options.sketches
     let currentSourceVersion = options.sourceVersion
+    let viewSourceVersions: Record<string, string> = { ...options.sourceVersions }
     const snapStates = new Map<string, StudioSketchSnapUiState>()
     let selected: Readonly<{ rectId: string; rectIds: ReadonlySet<string>; sketchId: string }> | undefined
     let outerGesture: StudioSketchOuterGesture | undefined
@@ -393,11 +437,17 @@ export const StudioSketchView = {
       }
     }
 
-    const render = (nextSketches: readonly StudioSketch[], nextSourceVersion?: string): void => {
-      const decision = StudioSketchRenderGate.request(gate, nextSketches, nextSourceVersion)
+    const render = (
+      nextSketches: readonly StudioSketch[],
+      nextSourceVersions?: Readonly<Record<string, string>>,
+    ): void => {
+      if (nextSourceVersions !== undefined) {
+        viewSourceVersions = { ...viewSourceVersions, ...nextSourceVersions }
+      }
+      const decision = StudioSketchRenderGate.request(gate, nextSketches, currentSourceVersion)
       gate = decision.state
       if (decision.render) {
-        renderNow(nextSketches, nextSourceVersion)
+        renderNow(nextSketches)
       }
     }
     const renderNow = (nextSketches: readonly StudioSketch[], nextSourceVersion?: string): void => {
@@ -415,8 +465,9 @@ export const StudioSketchView = {
           document,
           sketch,
           (() => {
-            const state = snapStates.get(sketch.id) ?? { sourceVersion: currentSourceVersion }
-            state.sourceVersion = currentSourceVersion ?? state.sourceVersion
+            const version = viewSourceVersions[sketch.view] ?? currentSourceVersion
+            const state = snapStates.get(sketch.id) ?? { sourceVersion: version }
+            state.sourceVersion = version ?? state.sourceVersion
             snapStates.set(sketch.id, state)
             return state
           })(),
@@ -430,7 +481,11 @@ export const StudioSketchView = {
           options.onSnap,
           options.onUnsnap,
           options.onUndoSnap,
-          (authoritative, version) => render(authoritative, version),
+          (authoritative, version) => {
+            viewSourceVersions[sketch.view] = version
+            currentSourceVersion = version
+            render(authoritative)
+          },
           gestureLock,
           options.onError,
         )
@@ -445,7 +500,14 @@ export const StudioSketchView = {
       outerGesture = StudioSketchOuterDrawing.begin(outerGesture, event.pointerId, relativePoint(workspace, event))
       workspace.setPointerCapture?.(event.pointerId)
       workspace.dataset['taoStudioSketchDrawing'] = 'outer'
+      gestureLock.begin()
       event.preventDefault()
+    })
+    workspace.addEventListener('pointermove', event => {
+      if (event.pointerId !== outerGesture?.pointerId) {
+        return
+      }
+      paintOuterPreview(workspace, StudioSketchOuterDrawing.preview(outerGesture, relativePoint(workspace, event)))
     })
     const finishOuter = (event: PointerEvent): void => {
       if (event.pointerId !== outerGesture?.pointerId) {
@@ -459,15 +521,43 @@ export const StudioSketchView = {
       outerGesture = undefined
       workspace.releasePointerCapture?.(event.pointerId)
       delete workspace.dataset['taoStudioSketchDrawing']
+      gestureLock.end()
       if (result.size === undefined) {
+        paintOuterPreview(workspace, undefined)
         return
       }
+      paintOuterPreview(workspace, undefined)
+      const optimisticId = crypto.randomUUID()
+      const name = StudioSketchViewNames.next(sketches)
+      sketches = [
+        ...sketches,
+        {
+          height: result.size.height,
+          id: optimisticId,
+          name,
+          project: sketches[0]?.project ?? '',
+          rectOrder: [],
+          rects: [],
+          snapped: [],
+          view: name,
+          width: result.size.width,
+          x: result.size.x,
+          y: result.size.y,
+        },
+      ]
+      render(sketches)
       try {
         const persistence = options.onCreateSketch?.(result.size)
         if (persistence instanceof Promise) {
-          void persistence.catch(error => options.onError?.(error))
+          void persistence.catch(error => {
+            sketches = sketches.filter(sketch => sketch.id !== optimisticId)
+            render(sketches)
+            options.onError?.(error)
+          })
         }
       } catch (error) {
+        sketches = sketches.filter(sketch => sketch.id !== optimisticId)
+        render(sketches)
         options.onError?.(error)
       }
     }
@@ -483,6 +573,8 @@ export const StudioSketchView = {
         // The capture was already gone.
       }
       delete workspace.dataset['taoStudioSketchDrawing']
+      paintOuterPreview(workspace, undefined)
+      gestureLock.end()
     }
     workspace.addEventListener('pointercancel', cancelOuter)
     workspace.addEventListener('lostpointercapture', cancelOuter)
@@ -526,6 +618,15 @@ function renderSketch(
   frame.style.display = 'flex'
   frame.style.flexDirection = 'column'
   frame.style.gap = '6px'
+  frame.style.left = `${sketch.x}px`
+  frame.style.position = 'absolute'
+  frame.style.top = `${sketch.y}px`
+  const name = document.createElement('span')
+  name.dataset['taoStudioSketchName'] = sketch.id
+  name.textContent = sketch.name
+  name.style.left = '0'
+  name.style.position = 'absolute'
+  name.style.top = '-20px'
   const board = document.createElement('section')
   board.dataset['taoStudioSketch'] = sketch.id
   board.style.height = `${sketch.height}px`
@@ -642,12 +743,19 @@ function renderSketch(
   snapped.addEventListener('change', updateFlowControls)
   updateFlowControls()
   toolbar.append(snap, undo, snapped, unsnap, direction, separator, spacerLabel)
-  frame.append(toolbar, board)
+  frame.append(name, board, toolbar)
   const gapIndicator = document.createElement('div')
   gapIndicator.dataset['taoStudioSketchGapIndicator'] = 'true'
   gapIndicator.textContent = 'Release over the running cell to Snap this rectangle into its flow'
   gapIndicator.hidden = true
-  /** The sketch's running cell is a sibling of the sketch host inside the same matrix row. */
+  /**
+   * The sketch's running cell is a sibling of the sketch host inside the same matrix row.
+   *
+   * UNREACHABLE ON THE DRAW CANVAS: boards now mount on `.studio-draw-canvas`, a sibling of the
+   * preview grid rather than a cell inside a matrix row, and the Draw preset hides the cells outright.
+   * `row` is therefore always null, so drag-one-in (FS-D11) can never resolve to 'snap' and the
+   * toolbar's Snap button is the only way to put a rectangle into the flow.
+   */
   const overOwnCell = (event: PointerEvent): boolean => {
     const row = board.closest('.studio-preview-group-cells')
     const target = document.elementFromPoint(event.clientX, event.clientY)
@@ -833,10 +941,7 @@ function renderSketch(
     overlay.append(tree, diff, apply, cancel)
     return overlay
   }
-  const point = (event: PointerEvent): StudioSketchPoint => {
-    const bounds = board.getBoundingClientRect()
-    return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
-  }
+  const point = (event: PointerEvent): StudioSketchPoint => relativePoint(board, event)
   const beginResize = (event: PointerEvent, handle: StudioSketchResizeHandle): void => {
     if (activePointer !== undefined || !primaryPointer(event)) {
       return
@@ -971,9 +1076,36 @@ function primaryPointer(event: PointerEvent): boolean {
   return event.button === 0 && event.isPrimary !== false
 }
 
+/**
+ * A pointer offset in the element's own coordinates. `getBoundingClientRect` already reports the
+ * canvas transform, so the offset it yields is in screen pixels and has to be divided by the zoom
+ * to land where the person is actually pointing on the surface.
+ */
 function relativePoint(element: HTMLElement, event: PointerEvent): StudioSketchPoint {
   const bounds = element.getBoundingClientRect()
-  return { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
+  const scale = canvasScale(element)
+  return { x: (event.clientX - bounds.left) / scale, y: (event.clientY - bounds.top) / scale }
+}
+
+function paintOuterPreview(
+  workspace: HTMLElement,
+  preview: Readonly<{ height: number; width: number; x: number; y: number }> | undefined,
+): void {
+  const existing = workspace.querySelector<HTMLElement>(':scope > [data-tao-studio-sketch-outer-preview]')
+  if (preview === undefined) {
+    existing?.remove()
+    return
+  }
+  const document = workspace.ownerDocument
+  const ghost = existing ?? document.createElement('div')
+  ghost.dataset['taoStudioSketchOuterPreview'] = 'true'
+  ghost.style.left = `${preview.x}px`
+  ghost.style.top = `${preview.y}px`
+  ghost.style.width = `${preview.width}px`
+  ghost.style.height = `${preview.height}px`
+  if (existing === null) {
+    workspace.append(ghost)
+  }
 }
 
 function rectElement(

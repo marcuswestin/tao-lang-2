@@ -98,8 +98,15 @@ function validatedStoredRow(entityName: string, value: unknown, definition: TaoD
   )
   for (const [name, field] of Object.entries(entity.fields)) {
     const value = row[name]
+    // A reference is stored as the target's unique value, which is whatever primitive that field
+    // holds, and the target row may be in a store this snapshot does not contain.
+    const valid = field.kind === 'relation'
+      ? typeof value === 'string'
+      : field.kind === 'reference'
+      ? value === null || typeof value === 'string' || typeof value === 'number'
+      : valueMatchesKind(value, field.kind)
     RuntimeAssert.input(
-      field.kind === 'relation' ? typeof value === 'string' : valueMatchesKind(value, field.kind),
+      valid,
       `Persisted field '${entityName}.${name}' has an invalid ${field.kind} value.`,
       { entityName, fieldName: name },
     )

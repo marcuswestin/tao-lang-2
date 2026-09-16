@@ -3,6 +3,7 @@ import { AST } from '@parser'
 import { Assert, Switch } from '@shared'
 import { type Compiled, gen, LocalDataBindings, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
+import { activeDataStorePlan } from './data-store-context'
 import { compileDeclarationIdentity } from './declaration-identity'
 
 /**
@@ -24,17 +25,31 @@ const localDatasourceIdentity = [
 export const DataCompiler = {
   /**
    * DataCatalog compiles all top-level Plural / Singular declarations into provider-neutral
-   * schemas. `local only` entities are partitioned into their own catalog with its own connection
-   * and storage key, so the app's configured Datasource never carries them.
+   * schemas, one per store. A project whose datasources declare no membership emits the single
+   * `Data` catalog it always has; one that does emits a catalog per store, and `local only`
+   * entities keep their own device catalog with its own connection and storage key so a synced
+   * datasource never carries them.
    */
   DataCatalog(entities: readonly AST.EntityDataDeclaration[]): Compiled {
-    const local = entities.filter(Type.dataEntityIsLocalOnly)
-    const synced = entities.filter(entity => !Type.dataEntityIsLocalOnly(entity))
+    const plan = activeDataStorePlan()
+    const stores = plan?.stores ?? ASTUtils.planDataStores(entities, []).stores
     return gen`
-      ${dataCatalogSchema(dataCatalogScope(), 'Data', synced)}
       ${
-      local.length === 0 ? gen.noop() : gen`
-        ${dataCatalogSchema(localDataCatalogScope(), 'LocalData', local)}
+      gen.list(
+        stores.filter(store => store.kind !== 'device'),
+        store => dataCatalogSchema(gen.scopeName({ name: store.binding }), store.name, store.collections),
+        { newLines: 1 },
+      )
+    }
+      ${
+      !stores.some(store => store.kind === 'device') ? gen.noop() : gen`
+        ${
+        dataCatalogSchema(
+          localDataCatalogScope(),
+          'LocalData',
+          stores.find(store => store.kind === 'device')?.collections ?? [],
+        )
+      }
         ${gen.scopeName({ name: LocalDataBindings.datasource })} = TR.Data.Configure(
           TR.Data.Declaration(
             'Local',
@@ -45,6 +60,13 @@ export const DataCompiler = {
         )
       `
     }
+      ${
+      // A project's stores resolve references among themselves and nowhere else.
+      stores.length > 1
+        ? gen`TR.Data.LinkStores([${
+          gen.join(stores, store => gen`${gen.scopeName({ name: store.binding })}`, { separator: ', ' })
+        }])`
+        : gen.noop()}
     `
   },
 
@@ -172,7 +194,7 @@ export const DataCompiler = {
 
 function dataCatalogSchema(
   scope: Compiled,
-  name: 'Data' | 'LocalData',
+  name: string,
   entities: readonly AST.EntityDataDeclaration[],
 ): Compiled {
   return gen`
@@ -196,7 +218,12 @@ function localDataCatalogScope(): Compiled {
 
 /** catalogScopeOf routes one entity's reads and writes to the catalog that stores it. */
 function catalogScopeOf(entity: ASTUtils.DataEntityDefinition): Compiled {
-  return Type.dataEntityIsLocalOnly(entity) ? localDataCatalogScope() : dataCatalogScope()
+  if (Type.dataEntityIsLocalOnly(entity)) {
+    return localDataCatalogScope()
+  }
+  const plan = activeDataStorePlan()
+  const store = plan ? ASTUtils.storeOfCollection(plan, entity) : undefined
+  return store ? gen.scopeName({ name: store.binding }) : dataCatalogScope()
 }
 
 function compileLimitClause(limit: AST.LimitClause | undefined): Compiled {
@@ -250,6 +277,22 @@ function compileEntityDataField(
     },`
   }
   const direct = Type.dataFieldRelationEntity(field)
+  if (direct && Type.dataFieldIsReference(field)) {
+    // A reference is stored as the target's unique value, so it survives the target living in
+    // another store; the runtime resolves it to a handle in whichever store holds that entity.
+    const unique = Type.dataFields(direct).find(candidate =>
+      (candidate.traits?.traits ?? []).some(trait => trait.unique)
+    )
+    Assert.defined(unique, 'validated reference target declares a unique field')
+    const plan = activeDataStorePlan()
+    const store = plan ? ASTUtils.storeOfCollection(plan, direct) : undefined
+    return gen`[${gen.jsLiteral(field.name)}]: {
+      kind: 'reference',
+      relation: ${gen.jsLiteral(direct.singularName)},
+      referenceField: ${gen.jsLiteral(unique.name)},
+      ${store ? gen`store: ${gen.jsLiteral(store.name)},` : ''}
+    },`
+  }
   if (direct && !Type.dataFieldIsInverseRelation(field)) {
     return gen`[${gen.jsLiteral(field.name)}]: {
       kind: 'relation',

@@ -1,4 +1,4 @@
-import { FS } from '@shared'
+import { Errors, FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   StudioCdp,
@@ -46,7 +46,11 @@ class FakeCdpTransport implements StudioCdpTransport {
       this.emit('Input.dragIntercepted', { data: FAKE_DRAG_DATA })
     }
     if (method === 'Runtime.evaluate') {
-      return { result: { value: this.evaluateResults.shift() } } as Result
+      const value = this.evaluateResults.shift()
+      if (value instanceof Error) {
+        throw value
+      }
+      return { result: { value } } as Result
     }
     if (method === 'Browser.getVersion') {
       return this.browserVersion as Result
@@ -309,6 +313,36 @@ Describe('Studio browser CDP harness', () => {
       timezone: 'America/New_York',
       userAgent: 'Fake Chrome',
     })
+  })
+
+  Test('retries a renderer fingerprint when a live preview reload destroys its context', async () => {
+    const transport = new FakeCdpTransport()
+    transport.frameTree = {
+      childFrames: [{ frame: { id: 'preview', url: 'http://127.0.0.1:55102/?preview=one' } }],
+      frame: { id: 'root', url: 'http://127.0.0.1/studio' },
+    }
+    const pageFingerprint = {
+      colorGamut: 'srgb',
+      deviceScaleFactor: 1,
+      fontFingerprint: 'page-fonts',
+      locale: 'en-US',
+      platform: 'MacIntel',
+      timezone: 'America/New_York',
+    }
+    transport.evaluateResults.push(
+      pageFingerprint,
+      new Errors.HostEnvironmentError('Execution context was destroyed.'),
+      pageFingerprint,
+      'frame-fonts',
+    )
+    const browser = StudioCdp.testing.create(transport)
+
+    Expect(await browser.rendererFingerprint()).toMatchObject({
+      fontFingerprint: '9096b87d28a06448c10deb4680d3b0082746afea84ca3cbc26e72dc84da9363e',
+      product: 'Chrome/142.0.1',
+    })
+    Expect(transport.calls.filter(call => call.method === 'Browser.getVersion')).toHaveLength(2)
+    Expect(transport.calls.filter(call => call.method === 'Page.getFrameTree')).toHaveLength(2)
   })
 
   Test('dispatches physical keys with platform-primary and unmodified punctuation', async () => {

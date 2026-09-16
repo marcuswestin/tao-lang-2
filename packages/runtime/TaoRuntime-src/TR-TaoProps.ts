@@ -21,6 +21,7 @@ import {
 } from './TR-layout'
 import type { TaoNavigationValue } from './TR-navigation'
 import type { TaoRuntimeApp } from './TR-navigation'
+import type { RuntimeHostReadChannel } from './TR-navigation-host-slots'
 import { ParentDirectionContext } from './TR-parent-direction'
 import type { TaoScheme } from './TR-scheme'
 import { studioInspectRef } from './TR-studio-device-inspect'
@@ -57,6 +58,13 @@ export type TaoProps = TaoLayoutProps & {
   navigation?: TaoNavigationValue
   /** navigationHostActive is private focus metadata propagated separately from host-slot channels. */
   navigationHostActive?: boolean
+  /**
+   * navigationChrome is the bar an enclosing navigator draws in place of a stack's header. A stack
+   * that receives one hides its own header and publishes its visible scene's chrome into it.
+   */
+  navigationChrome?: RuntimeHostReadChannel
+  /** navigationBottomInset is the height of chrome floating over the content's bottom edge. */
+  navigationBottomInset?: number
   /** response is private occurrence-owned ask metadata inherited by nested generated views. */
   response?: TaoResponseOccurrence
   /** scheme is the resolved read-only appearance environment propagated independently of layout. */

@@ -4,12 +4,15 @@ import "./blocks"
 import "./data"
 import "./terminals"
 import "./restoration"
+import "./visibility"
 
 entry AppGrammarEntrypoint:
     AppDeclaration;
 
 type AppValueDeclaration = AppDeclaration | AliasDeclaration;
 
+// An app declaration can carry visibility (for example `folder app Name`) so that sibling files,
+// scenario sidecars, and tests in the same directory reach it without an import.
 AppDeclaration:
     visibility=DeclarationVisibility? 'app' name=ID ('=' value=Expression | block=AppBlock);
 

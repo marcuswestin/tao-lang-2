@@ -27,7 +27,13 @@ Describe('Studio sketch session protocol', () => {
 
         Expect(retried).toEqual(created)
         Expect(compiles).toHaveLength(1)
-        Expect(created.createdSketch).toMatchObject({ name: 'View1', project: root, view: 'View1' })
+        // The catalog records the project by name: it is committed with the project, so an absolute
+        // host root in it would name one machine and match nowhere the repository is checked out.
+        Expect(created.createdSketch).toMatchObject({
+          name: 'View1',
+          project: FS.basename(root),
+          view: 'View1',
+        })
         Expect(created.generatedFile?.path).toBe('@/studio/View1.tao')
         Expect(await FS.readText(FS.resolvePath('@/studio/View1.tao', root))).toContain('public\nview View1()')
         Expect(events.filter(event => event.type === 'sketch-catalog-changed')).toHaveLength(1)

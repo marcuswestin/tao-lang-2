@@ -391,7 +391,7 @@ Describe('compiler: Studio render occurrences', () => {
       Expect(compiled.code).toContain('const useTaoGeneratedStudioScenario = TR.Studio.Environment.useScenario')
       Expect(compiled.code).toContain('const useTaoGeneratedStudioFixture = TR.Studio.Environment.useFixture')
       Expect(compiled.code).toContain('useTaoGeneratedStudioScenario()')
-      Expect(compiled.code).toContain('useTaoGeneratedStudioFixture(_Scope._TaoDataCatalog)')
+      Expect(compiled.code).toContain('useTaoGeneratedStudioFixture([_Scope._TaoDataCatalog])')
       // A focused view is mounted through a navigator of its own, so `present` inside it has
       // somewhere to go — the subject entry is the app definition that navigator belongs to.
       Expect(compiled.code).toContain(
@@ -538,7 +538,7 @@ function requireRender(
 function studioOccurrence(render: AST.Render, sourcePath: string): string {
   const cstNode = render.$cstNode
   Assert.defined(cstNode, 'render source coordinates')
-  const elementName = ASTUtils.standardDesignElementName(render)
+  const elementName = ASTUtils.design.standardElementName(render)
   return `studio: {
     sourcePath: ${JSON.stringify(sourcePath)},
     start: ${cstNode.offset},

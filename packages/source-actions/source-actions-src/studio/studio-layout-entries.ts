@@ -132,28 +132,22 @@ export function removeLayoutClauseEntryEdit(source: string, render: AST.Render, 
 
 export function layoutEntrySlot(values: readonly StudioLayoutTermValue[]): string {
   const head = String(values[0])
-  if ((ASTUtils.designVisualHeads as readonly string[]).includes(head)) {
-    return `visual:${ASTUtils.canonicalDesignVisualHead(head)}`
+  if ((ASTUtils.design.visualHeads as readonly string[]).includes(head)) {
+    return `visual:${ASTUtils.design.canonicalVisualHead(head)}`
   }
   // LayoutValidator currently grants the independent maximum slot only to `width max`.
   // Extend this alongside that validator when another dimension gains a maximum constraint.
   return head === 'width' && values[1] === 'max' ? 'width:max' : head
 }
 
-const studioLayoutHeads = new Set<string>(ASTUtils.designLayoutHeads)
-const studioVisualHeads = new Set<string>(ASTUtils.designVisualHeads)
+const studioLayoutHeads = new Set<string>(ASTUtils.design.layoutHeads)
 
 export function isStudioLayoutEntry(entry: readonly StudioLayoutTermValue[]): boolean {
   return typeof entry[0] === 'string' && studioLayoutHeads.has(entry[0])
 }
 
 export function isInlineDesignExploration(entry: readonly StudioLayoutTermValue[]): boolean {
-  if (isStudioLayoutEntry(entry)) {
-    return true
-  }
-  return typeof entry[0] === 'string' && studioVisualHeads.has(entry[0]) && entry.length === 2
-    && (typeof entry[1] === 'number'
-      || (typeof entry[1] === 'string' && entry[1].startsWith('#')))
+  return ASTUtils.design.isInlineDesignExploration(entry)
 }
 
 function renderLayoutInsertionOffset(render: AST.Render): number {

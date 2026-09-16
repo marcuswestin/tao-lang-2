@@ -10,8 +10,10 @@ Test('Studio writes generated public views read-only and repairs their mode on r
     const generated = new StudioGeneratedSources(root)
     const path = await generated.writeView('View1', 'public\nview View1() { render Placeholder("View 1") }')
 
+    // The header sits directly above the source: `tao fix` closes a blank line there in every Tao
+    // file, and this one is written read-only, so a blank line would fail `fix` with no way to fix it.
     Expect(await FS.readText(path)).toBe(
-      `${studioGeneratedSourceHeader}\n\npublic\nview View1() { render Placeholder("View 1") }\n`,
+      `${studioGeneratedSourceHeader}\npublic\nview View1() { render Placeholder("View 1") }\n`,
     )
     Expect(await FS.fileMode(path)).toBe(0o444)
 
