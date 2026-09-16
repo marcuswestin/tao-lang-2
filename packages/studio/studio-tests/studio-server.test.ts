@@ -604,8 +604,13 @@ Describe('Studio device routes', () => {
 
   Test('sends the device snapshot after the handshake and broadcasts every gateway change', async () => {
     const listeners = new Map<string, (status: StudioDeviceStatus) => void>()
+    const detached: string[] = []
     const gateway = {
       ...fakeGateway(status, []),
+      detachSession(sessionId: string) {
+        detached.push(sessionId)
+        return { detached: 0 }
+      },
       subscribe(sessionId: string, listener: (status: StudioDeviceStatus) => void) {
         listeners.set(sessionId, listener)
         return () => listeners.delete(sessionId)
@@ -651,6 +656,8 @@ Describe('Studio device routes', () => {
         status: connected,
         type: 'device-state',
       })
+      Expect(await manager.close('device_session')).toBe(true)
+      Expect(detached).toEqual(['device_session'])
       socket.close()
     } finally {
       server.stop()
@@ -672,6 +679,10 @@ function fakeGateway(status: StudioDeviceStatus, calls: unknown[]): StudioServer
     declinePairing(sessionId, devicePublicKey) {
       calls.push(['declinePairing', sessionId, devicePublicKey])
       return { declined: true }
+    },
+    detachSession(sessionId) {
+      calls.push(['detachSession', sessionId])
+      return { detached: 0 }
     },
     highlightSource(sessionId, occurrence) {
       calls.push(['highlightSource', sessionId, occurrence])

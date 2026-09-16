@@ -46,6 +46,7 @@ export type StudioServerDeviceGateway = Pick<
   | 'captureRuntime'
   | 'confirmPairing'
   | 'declinePairing'
+  | 'detachSession'
   | 'highlightSource'
   | 'openPairing'
   | 'requestReconnect'
@@ -176,6 +177,7 @@ export async function startStudioSessionServer(
     deviceSubscriptions.delete(sessionId)
     dataSources.get(sessionId)?.close()
     dataSources.delete(sessionId)
+    deviceGateway?.detachSession(sessionId)
   }
   const unsubscribeManager = manager.subscribe(event => {
     if (event.type === 'opened') {

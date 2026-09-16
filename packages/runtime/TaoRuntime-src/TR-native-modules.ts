@@ -6,6 +6,7 @@ type NativeModuleName =
   | 'expo-clipboard'
   | 'expo-constants'
   | 'expo-haptics'
+  | 'expo-modules-core'
   | 'expo-secure-store'
   | 'react-native'
   | 'react-native-get-random-values'
@@ -108,6 +109,7 @@ export const NativeModules = createNativeModules({
   'expo-clipboard': () => require('expo-clipboard'),
   'expo-constants': () => require('expo-constants'),
   'expo-haptics': () => require('expo-haptics'),
+  'expo-modules-core': () => require('expo-modules-core'),
   'expo-secure-store': () => require('expo-secure-store'),
   'react-native': requireReactNativeRuntime,
   'react-native-get-random-values': () => loadRandomValuesPolyfill(),

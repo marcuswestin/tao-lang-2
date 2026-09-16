@@ -929,7 +929,13 @@ Describe('Tao Companion shell configuration', () => {
     Expect(config.expo.ios?.supportsTablet).toBe(true)
     Expect(typeof config.expo.ios?.infoPlist?.['NSLocalNetworkUsageDescription']).toBe('string')
     Expect(config.expo.ios?.infoPlist?.['NSAppTransportSecurity']).toEqual({ NSAllowsLocalNetworking: true })
-    Expect(config.expo.ios?.infoPlist?.['NSBonjourServices']).toBeUndefined()
+    Expect(config.expo.ios?.infoPlist?.['NSBonjourServices']).toEqual(['_tao-studio._tcp'])
+    Expect(
+      await FS.isFile(FS.resolvePath(
+        'modules/tao-studio-discovery/ios/TaoStudioDiscoveryModule.swift',
+        packageRoot,
+      )),
+    ).toBe(true)
     Expect(config.expo.plugins?.[0]).toBe('expo-dev-client')
     Expect(config.expo.plugins?.[1]).toEqual([
       'expo-build-properties',

@@ -1,5 +1,5 @@
 import { StudioDeviceTrust } from '@runtime/TR-studio-device-trust'
-import { FS } from '@shared'
+import { CLI, FS, Repo } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import { StudioDeviceTrustStore } from '../studio-src/device/StudioDeviceTrustStore'
 
@@ -102,6 +102,38 @@ Describe('Studio device trust store', () => {
       Expect(await FS.listDir(root)).toEqual(['studio-identity.json', 'trusted-devices.json'])
       const reloaded = await StudioDeviceTrustStore.open(root)
       Expect(reloaded.trusted().map(item => item.device.name)).toEqual(['d0', 'd2', 'd3', 'd4', 'd5'])
+    })
+  })
+
+  Test('keeps one identity and every trust decision across independent processes', async () => {
+    await withRoot(async root => {
+      const modulePath = Repo.resolvePath('packages/studio/studio-src/device/StudioDeviceTrustStore.ts')
+      const trustPath = Repo.resolvePath('packages/runtime/TaoRuntime-src/TR-studio-device-trust.ts')
+      const sharedPath = Repo.resolvePath('packages/shared/shared-src/shared.ts')
+      const workers = await Promise.all(Array.from({ length: 8 }, async (_, index) => {
+        const script = `
+          import { StudioDeviceTrustStore } from ${JSON.stringify(modulePath)}
+          import { StudioDeviceTrust } from ${JSON.stringify(trustPath)}
+          import { HCI } from ${JSON.stringify(sharedPath)}
+          const store = await StudioDeviceTrustStore.open(${JSON.stringify(root)})
+          const device = StudioDeviceTrust.generateIdentity()
+          await store.trust({
+            device: { model: 'iPhone', name: ${JSON.stringify(`worker-${index}`)}, os: 'iOS' },
+            devicePublicKey: device.publicKey,
+            fingerprint: '',
+            pairedAt: '2026-09-02T10:00:00.000Z',
+          })
+          HCI.writeLine(JSON.stringify({ identity: store.publicKey(), key: device.publicKey }))
+        `
+        return await CLI.run('bun', { args: ['-e', script], stdio: 'pipe' })
+      }))
+      Expect(workers.map(worker => worker.exitCode)).toEqual(Array(8).fill(0))
+      const results = workers.map(worker => JSON.parse(worker.stdout.trim()) as { identity: string; key: string })
+      Expect(new Set(results.map(result => result.identity)).size).toBe(1)
+      const reloaded = await StudioDeviceTrustStore.open(root)
+      Expect(new Set(reloaded.trusted().map(device => device.devicePublicKey))).toEqual(
+        new Set(results.map(result => result.key)),
+      )
     })
   })
 })

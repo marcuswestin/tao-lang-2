@@ -374,7 +374,7 @@ Test('Studio API client addresses every loopback device route with the contract 
     await StudioApiClient.deviceRevoke('key-3')
     await StudioApiClient.deviceReconnect()
     await StudioApiClient.deviceSelectCell('cell-home')
-    await StudioApiClient.deviceLaunchOpen('host-1')
+    await StudioApiClient.deviceLaunchOpen('host-1', 'cable')
     let launchFailure: unknown
     try {
       await StudioApiClient.deviceLaunch()
@@ -392,7 +392,7 @@ Test('Studio API client addresses every loopback device route with the contract 
       { body: { devicePublicKey: 'key-3' }, method: 'POST', url: '/sessions/window-7/api/device/revoke' },
       { body: {}, method: 'POST', url: '/sessions/window-7/api/device/reconnect' },
       { body: { cellId: 'cell-home' }, method: 'POST', url: '/sessions/window-7/api/device/select-cell' },
-      { body: { hostId: 'host-1' }, method: 'POST', url: '/sessions/window-7/api/device/launch/open' },
+      { body: { hostId: 'host-1', route: 'cable' }, method: 'POST', url: '/sessions/window-7/api/device/launch/open' },
       { body: undefined, method: 'GET', url: '/sessions/window-7/api/device/launch' },
     ])
   } finally {

@@ -22,6 +22,7 @@ import {
 import type { Evaluable } from './TR-navigation-presentables'
 import {
   presentableRegistryVersion,
+  registerNavigationApp,
   resolvePresentable,
   unregisterNavigation,
   unregisterNavigationApp,
@@ -117,9 +118,17 @@ export class RuntimeAppDefinition implements Subscription {
 
   readonly declaration: TaoAppDeclaration
 
-  constructor(readonly definition: TaoAppDefinition) {
+  constructor(readonly definition: TaoAppDefinition, options: { deferredRegistration?: boolean } = {}) {
     this.declaration = definition.declaration ?? createAppDeclaration(definition.name)
+    if (options.deferredRegistration !== true) {
+      runtimeApps.add(this)
+    }
+  }
+
+  /** Activates a render-created Studio app only after React commits the host that owns it. */
+  commitRegistration(): void {
     runtimeApps.add(this)
+    registerNavigationApp(this)
   }
 
   /**

@@ -1,5 +1,5 @@
 import { StudioDeviceTrust, type TaoStudioDeviceIdentity } from '@runtime/TR-studio-device-trust'
-import { Errors, FS, Json } from '@shared'
+import { Errors, FS, Json, Platform, Time } from '@shared'
 // `@shared/FS` has no exclusive-create helper, and creating the identity is the one place that needs
 // one: two Studio processes starting together must not each believe they wrote the installation key.
 import * as nodeFs from 'node:fs/promises'
@@ -12,6 +12,13 @@ const storeVersion = 1
 type IdentityFile = TaoStudioDeviceIdentity & { version: typeof storeVersion }
 
 type TrustedDevicesFile = { devices: readonly StudioTrustedDevice[]; version: typeof storeVersion }
+
+type LockOwner = { pid: number; token: string }
+
+const lockDirectoryName = '.studio-device-trust.lock'
+const lockPollMs = 20
+const lockTimeoutMs = 10_000
+const incompleteLockGraceMs = 2_000
 
 /**
  * StudioDeviceTrustStore keeps one Studio installation's Ed25519 identity and the devices a person
@@ -31,21 +38,36 @@ export class StudioDeviceTrustStore {
   readonly #devices: StudioTrustedDevice[]
   readonly #devicesPath: string
   readonly #identity: TaoStudioDeviceIdentity
+  readonly #lockPath: string
   #pending: Promise<void> = Promise.resolve()
-  /** Writes still queued; only the last one to land replaces the in-memory list with the merged file. */
-  #queued = 0
 
-  private constructor(identity: TaoStudioDeviceIdentity, devices: StudioTrustedDevice[], devicesPath: string) {
+  private constructor(
+    identity: TaoStudioDeviceIdentity,
+    devices: StudioTrustedDevice[],
+    devicesPath: string,
+    lockPath: string,
+  ) {
     this.#identity = identity
     this.#devices = devices
     this.#devicesPath = devicesPath
+    this.#lockPath = lockPath
   }
 
   /** open loads or creates the identity and device list under `root`. */
   static async open(root: string): Promise<StudioDeviceTrustStore> {
     const identityPath = FS.resolvePath(identityFileName, root)
     const devicesPath = FS.resolvePath(trustedDevicesFileName, root)
-    return new StudioDeviceTrustStore(await openIdentity(identityPath), await readDevices(devicesPath), devicesPath)
+    const lockPath = FS.resolvePath(lockDirectoryName, root)
+    return await withStoreLock(
+      lockPath,
+      async () =>
+        new StudioDeviceTrustStore(
+          await openIdentity(identityPath),
+          await readDevices(devicesPath),
+          devicesPath,
+          lockPath,
+        ),
+    )
   }
 
   identity(): TaoStudioDeviceIdentity {
@@ -68,6 +90,15 @@ export class StudioDeviceTrustStore {
     return this.#devices.some(device => device.devicePublicKey === devicePublicKey)
   }
 
+  /** refresh adopts decisions made by another Studio process before an authentication decision. */
+  async refresh(): Promise<void> {
+    await this.#queue(async () => {
+      await withStoreLock(this.#lockPath, async () => {
+        this.#replace(await readDevices(this.#devicesPath))
+      })
+    })
+  }
+
   /** trust records a device, replacing any record already held for its key, and persists the list. */
   async trust(record: StudioTrustedDevice): Promise<void> {
     if (!StudioDeviceTrust.validPublicKey(record.devicePublicKey)) {
@@ -78,36 +109,30 @@ export class StudioDeviceTrustStore {
       device: { ...record.device },
       fingerprint: StudioDeviceTrust.fingerprint(record.devicePublicKey),
     }
-    const index = this.#devices.findIndex(device => device.devicePublicKey === record.devicePublicKey)
-    if (index >= 0) {
-      this.#devices[index] = stored
-    } else {
-      this.#devices.push(stored)
-    }
     await this.#save(record.devicePublicKey, stored)
   }
 
   /** revoke forgets a device; it resolves `false` when the key was not trusted. */
   async revoke(devicePublicKey: string): Promise<boolean> {
-    const index = this.#devices.findIndex(device => device.devicePublicKey === devicePublicKey)
-    if (index < 0) {
-      return false
-    }
-    this.#devices.splice(index, 1)
-    await this.#save(devicePublicKey, undefined)
-    return true
+    return await this.#save(devicePublicKey, undefined)
   }
 
   /** touch records when a trusted device last completed a handshake. */
   async touch(devicePublicKey: string, lastSeenAt: string): Promise<boolean> {
-    const index = this.#devices.findIndex(device => device.devicePublicKey === devicePublicKey)
-    if (index < 0) {
-      return false
-    }
-    const touched = { ...this.#devices[index]!, lastSeenAt }
-    this.#devices[index] = touched
-    await this.#save(devicePublicKey, touched)
-    return true
+    return await this.#queue(async () =>
+      await withStoreLock(this.#lockPath, async () => {
+        const devices = await readDevices(this.#devicesPath)
+        const index = devices.findIndex(device => device.devicePublicKey === devicePublicKey)
+        if (index < 0) {
+          this.#replace(devices)
+          return false
+        }
+        devices[index] = { ...devices[index]!, lastSeenAt }
+        await writeDevices(this.#devicesPath, devices)
+        this.#replace(devices)
+        return true
+      })
+    )
   }
 
   /** flush resolves once every queued write has landed. */
@@ -123,39 +148,43 @@ export class StudioDeviceTrustStore {
    * back from the list at write time, because writes are queued and an earlier merge may already
    * have replaced the list this one would have read.
    */
-  #save(devicePublicKey: string, record: StudioTrustedDevice | undefined): Promise<void> {
-    this.#queued += 1
-    const write = async () => {
-      const merged: StudioTrustedDevice[] = []
-      // Disk order first, so a record this process only renamed keeps its place in the list.
-      for (const device of await readDevices(this.#devicesPath)) {
-        if (device.devicePublicKey !== devicePublicKey) {
-          merged.push(device)
-        } else if (record !== undefined) {
-          merged.push(record)
+  #save(devicePublicKey: string, record: StudioTrustedDevice | undefined): Promise<boolean> {
+    return this.#queue(async () =>
+      await withStoreLock(this.#lockPath, async () => {
+        const current = await readDevices(this.#devicesPath)
+        const existed = current.some(device => device.devicePublicKey === devicePublicKey)
+        const merged = current.filter(device => device.devicePublicKey !== devicePublicKey)
+        if (record !== undefined) {
+          const priorIndex = current.findIndex(device => device.devicePublicKey === devicePublicKey)
+          if (priorIndex < 0) {
+            merged.push(record)
+          } else {
+            merged.splice(priorIndex, 0, record)
+          }
         }
-      }
-      if (record !== undefined && !merged.some(device => device.devicePublicKey === devicePublicKey)) {
-        merged.push(record)
-      }
-      try {
-        await writeAtomically(
-          this.#devicesPath,
-          { devices: merged, version: storeVersion } satisfies TrustedDevicesFile,
-        )
-      } finally {
-        this.#queued -= 1
-      }
-      // Only the last write in the queue adopts the merged list: an earlier one would drop the
-      // records the still-queued mutations are holding optimistically in memory.
-      if (this.#queued === 0) {
-        this.#devices.splice(0, this.#devices.length, ...merged)
-      }
-    }
-    const saving = this.#pending.then(write, write)
-    this.#pending = saving
-    return saving
+        await writeDevices(this.#devicesPath, merged)
+        this.#replace(merged)
+        return record === undefined ? existed : true
+      })
+    )
   }
+
+  #queue<T>(work: () => Promise<T>): Promise<T> {
+    const run = async () => {
+      return await work()
+    }
+    const result = this.#pending.then(run, run)
+    this.#pending = result.then(() => undefined, () => undefined)
+    return result
+  }
+
+  #replace(devices: readonly StudioTrustedDevice[]): void {
+    this.#devices.splice(0, this.#devices.length, ...devices)
+  }
+}
+
+async function writeDevices(path: string, devices: readonly StudioTrustedDevice[]): Promise<void> {
+  await writeAtomically(path, { devices, version: storeVersion } satisfies TrustedDevicesFile)
 }
 
 /**
@@ -235,6 +264,94 @@ async function readDevices(path: string): Promise<StudioTrustedDevice[]> {
   } catch {
     return []
   }
+}
+
+/**
+ * Serializes identity and trust decisions across Studio processes. A directory rename is the stale
+ * ownership transition: only one contender can move the old directory, and it removes that private
+ * tombstone rather than a replacement lock a new owner may already have created.
+ */
+async function withStoreLock<T>(lockPath: string, work: () => Promise<T>): Promise<T> {
+  await FS.mkdir(FS.dirname(lockPath))
+  const token = `${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
+  const ownerPath = FS.resolvePath('owner.json', lockPath)
+  const deadline = Time.nowMs() + lockTimeoutMs
+  while (true) {
+    try {
+      await nodeFs.mkdir(lockPath)
+      await nodeFs.writeFile(
+        ownerPath,
+        `${JSON.stringify({ pid: Platform.runtimeProcess.pid, token } satisfies LockOwner)}\n`,
+        { encoding: 'utf8', mode: 0o600 },
+      )
+      break
+    } catch (error) {
+      if (errorCode(error) !== 'EEXIST') {
+        throw error
+      }
+      const owner = await readLockOwner(ownerPath)
+      const age = await lockAgeMs(lockPath)
+      if (owner !== undefined && Platform.processIsAlive(owner.pid)) {
+        if (Time.nowMs() >= deadline) {
+          Errors.throwHostEnvironment('Timed out waiting for another Tao Studio process to update device trust.')
+        }
+        await Time.sleep(lockPollMs)
+        continue
+      }
+      // A creator may have made the directory but not yet written owner.json. Give that tiny window
+      // a grace period; after it, a missing owner is a crashed acquisition and can be reclaimed.
+      if (owner === undefined && age < incompleteLockGraceMs) {
+        await Time.sleep(lockPollMs)
+        continue
+      }
+      const tombstone = `${lockPath}.reclaim-${token}-${Platform.randomUUID()}`
+      try {
+        await nodeFs.rename(lockPath, tombstone)
+        await nodeFs.rm(tombstone, { force: true, recursive: true })
+      } catch (reclaimError) {
+        const code = errorCode(reclaimError)
+        if (code !== 'ENOENT' && code !== 'EEXIST') {
+          throw reclaimError
+        }
+      }
+    }
+  }
+  try {
+    return await work()
+  } finally {
+    const owner = await readLockOwner(ownerPath)
+    if (owner?.token === token) {
+      await nodeFs.rm(lockPath, { force: true, recursive: true })
+    }
+  }
+}
+
+async function readLockOwner(path: string): Promise<LockOwner | undefined> {
+  try {
+    const value: unknown = JSON.parse(await nodeFs.readFile(path, 'utf8'))
+    return Json.isRecord(value)
+        && Number.isInteger(value['pid'])
+        && (value['pid'] as number) > 0
+        && typeof value['token'] === 'string'
+      ? { pid: value['pid'] as number, token: value['token'] }
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+async function lockAgeMs(path: string): Promise<number> {
+  try {
+    return Math.max(0, Time.nowMs() - (await nodeFs.stat(path)).mtimeMs)
+  } catch {
+    return Number.POSITIVE_INFINITY
+  }
+}
+
+function errorCode(error: unknown): string | undefined {
+  return typeof error === 'object' && error !== null && 'code' in error && typeof error.code === 'string'
+    ? error.code
+    : undefined
 }
 
 function parseTrustedDevice(value: unknown): StudioTrustedDevice | undefined {
