@@ -78,6 +78,8 @@ export {
   type StudioClientConfig,
 } from './StudioClientAssets'
 
+export { AgentChatProvider } from './agent-chat/AgentChatProvider'
+
 export {
   type StudioEditorSnippet,
   StudioInspector,

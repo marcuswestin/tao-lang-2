@@ -1,5 +1,6 @@
 import { type GenerationProvider, UnavailableGenerationProvider } from '@generation'
 import { CLI, Errors, Json, Repo } from '@shared'
+import type { AgentChatProvider } from './agent-chat/AgentChatProvider'
 import { AgentChat, streamTurn } from './agent-chat/AgentChatServer'
 import type { StudioDeviceGateway } from './device/StudioDeviceGateway'
 import type { StudioDeviceLauncher } from './device/StudioDeviceLauncher'
@@ -57,6 +58,8 @@ export type StudioServerDeviceGateway = Pick<
 >
 
 export type StudioServerOptions = {
+  /** Injected only by deterministic hosts that must exercise the real agent HTTP and browser path without egress. */
+  agentProvider?: AgentChatProvider
   /**
    * Secrets the agent chat may use, handed over as a value rather than exported into the environment. Studio
    * spawns a bundler, a preview runtime and a Swift helper, and every one of them inherits an environment.
@@ -780,6 +783,7 @@ async function handleRequest(
         (await request.json()) as Record<string, unknown>,
         tests,
         options.agentSecrets,
+        options.agentProvider,
       ),
     )
   }
@@ -795,6 +799,7 @@ async function handleRequest(
         (await request.json()) as Record<string, unknown>,
         tests,
         options.agentSecrets,
+        options.agentProvider,
       ),
     )
   }
