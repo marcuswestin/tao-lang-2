@@ -12,7 +12,7 @@ open.addEventListener('click', () => {
   result.dataset['settled'] = 'false'
   result.textContent = 'pending'
   void StudioDialog.confirm({
-    detail: 'The browser fixture aborts this pending decision through the mounted ProductHost lifetime.',
+    detail: 'The browser fixture aborts this pending decision through the mounted dialog scope.',
     title: 'Apply the proposed change?',
   }).then(answer => {
     result.dataset['answer'] = String(answer)

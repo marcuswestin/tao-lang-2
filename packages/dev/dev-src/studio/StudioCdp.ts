@@ -244,6 +244,55 @@ export class StudioCdp {
     })
   }
 
+  async clickAt(selector: string, offset: Point): Promise<void> {
+    requireFiniteNumber(offset.x, 'Studio browser horizontal click offset')
+    requireFiniteNumber(offset.y, 'Studio browser vertical click offset')
+    const point = await this.evaluate<Point>(`(() => {
+      const selector = ${JSON.stringify(selector)}
+      const element = document.querySelector(selector)
+      if (!(element instanceof HTMLElement)) throw new Error('Missing clickable element: ' + selector)
+      element.scrollIntoView({ block: 'center', inline: 'center' })
+      const rect = element.getBoundingClientRect()
+      const x = rect.left + Math.max(1, Math.min(rect.width - 1, ${offset.x}))
+      const y = rect.top + Math.max(1, Math.min(rect.height - 1, ${offset.y}))
+      return { x, y }
+    })()`)
+    await this.client.send('Input.dispatchMouseEvent', {
+      button: 'left',
+      buttons: 1,
+      clickCount: 1,
+      type: 'mousePressed',
+      ...point,
+    })
+    await this.client.send('Input.dispatchMouseEvent', {
+      button: 'left',
+      buttons: 0,
+      clickCount: 1,
+      type: 'mouseReleased',
+      ...point,
+    })
+  }
+
+  async wheel(
+    selector: string,
+    delta: Point,
+    options: { primary?: boolean } = {},
+  ): Promise<void> {
+    requireFiniteNumber(delta.x, 'Studio browser horizontal wheel delta')
+    requireFiniteNumber(delta.y, 'Studio browser vertical wheel delta')
+    const point = await this.elementCenter(selector, 'wheel target')
+    const primaryModifier = options.primary === true
+      ? await this.evaluate<boolean>("navigator.platform.toLowerCase().includes('mac')") ? 4 : 2
+      : 0
+    await this.client.send('Input.dispatchMouseEvent', {
+      deltaX: delta.x,
+      deltaY: delta.y,
+      modifiers: primaryModifier,
+      type: 'mouseWheel',
+      ...point,
+    })
+  }
+
   async drag(fromSelector: string, toSelector: string, options: { steps?: number } = {}): Promise<void> {
     const steps = options.steps ?? 8
     requirePositiveInteger(steps, 'Studio browser drag steps')
@@ -716,6 +765,32 @@ export class StudioCdp {
       return
     }
     Errors.throwHostEnvironment(`Timed out waiting for browser expression: ${expression}; last=${String(last)}`)
+  }
+
+  async waitForInFrame(
+    urlPrefix: string,
+    expression: string,
+    options: { timeoutMs?: number } = {},
+  ): Promise<void> {
+    let last: unknown
+    const satisfied = await Time.pollUntil(async () => {
+      try {
+        last = await this.evaluateInFrame(urlPrefix, expression)
+        return !!last
+      } catch (error) {
+        if (!isTransientExecutionContextFailure(error)) {
+          throw error
+        }
+        last = Errors.messageOf(error)
+        return false
+      }
+    }, { intervalMs: 100, timeoutMs: options.timeoutMs ?? 15_000 })
+    if (satisfied) {
+      return
+    }
+    Errors.throwHostEnvironment(
+      `Timed out waiting for browser frame expression: ${expression}; last=${String(last)}`,
+    )
   }
 
   private async evaluateInContext<Result>(expression: string, contextId?: number): Promise<Result> {

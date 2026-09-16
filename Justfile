@@ -7,7 +7,7 @@ BUN_TMP_DIR := justfile_directory() + "/.artifacts/tmp/bun"
 LOCAL_INSTANTDB_APP_ID := "9faf89c0-c15c-49b4-bf3f-3b5b2cd9a19f"
 LOCAL_INSTANTDB_DIR := justfile_directory() + "/config/local-instantdb"
 LOCAL_INSTANTDB_COMPOSE := "docker compose --project-name tao-local-instantdb --file \"" + LOCAL_INSTANTDB_DIR + "/docker-compose.yml\""
-FULL_VERIFY_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app keyboard-navigation-smoke studio-smoke-native studio-canary"
+FULL_VERIFY_GATES := "_fix-dprint _fix-tao _fix-just-fmt _parser-gen _compile-word-flower-app _ide-extension-build _repo-lint _typecheck _test _runtime-pack-check _doctor-json dead-exports ship-bundle-proof studio-smoke studio-proof-real-app keyboard-navigation-smoke studio-dialog-browser studio-agent-browser studio-smoke-native studio-canary"
 FULL_VERIFY_SKIPPED := "studio-smoke-simulated-user=temporarily quarantined; run just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts to reproduce"
 
 # Print available recipes

@@ -11,6 +11,8 @@ import {
 import { StudioCdp } from '../dev-src/studio/StudioCdp'
 import { type StartedStudioNative, StudioNative } from '../dev-src/studio/StudioNative'
 
+const scrollingTail = Array.from({ length: 80 }, (_, index) => `// scroll proof ${index + 1}`).join('\n')
+
 const initialSource = `use Stack, Text from @tao/ui
 app Smoke { view MainView }
 view MainView() {
@@ -26,13 +28,15 @@ scenarios MainView "states" {
   device phone
   scenario "default" { render MainView() }
 }
+${scrollingTail}
 `
 
 const typedSource = initialSource.replace('Text("First")', 'Text("First typed")')
 
 Test('simulated preview stays within the preview-origin API boundary', () => {
   const html = previewHtml()
-  Expect(html).toContain("message.type !== 'highlight-source'")
+  Expect(html).toContain("message.type === 'highlight-source'")
+  Expect(html).toContain("message.type === 'set-canvas-gestures'")
   Expect(html).toContain('/api/preview/cell/bootstrap')
   Expect(html).not.toContain('/api/protocol')
   Expect(html).not.toContain('/api/file?')
@@ -160,6 +164,66 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await browser.captureScreenshot('studio-narrow-desktop')
       await browser.setViewport(1_440, 900)
 
+      await browser.click('[data-preset="design"]')
+      await browser.waitFor(`document.querySelector('.studio-pane-left')?.hasAttribute('hidden') === true`)
+      await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-zoom]')?.textContent === '100%'`)
+      await browser.waitForInFrame(
+        preview.url,
+        `document.documentElement.dataset.studioCanvasGestures === 'owned'`,
+      )
+      await browser.wheel('.studio-preview-cell iframe', { x: 0, y: -180 }, { primary: true })
+      await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-zoom]')?.textContent !== '100%'`)
+      Expect(
+        await browser.evaluate<string>(
+          "document.querySelector('.studio-preview > .studio-preview-grid')?.style.transform ?? ''",
+        ),
+      ).not.toBe('')
+      const transformedFrame = await browser.evaluate<{ height: number; width: number }>(`(() => {
+        const frame = document.querySelector('.studio-preview-cell iframe')
+        if (!(frame instanceof HTMLIFrameElement)) throw new Error('Missing transformed preview frame')
+        const rect = frame.getBoundingClientRect()
+        return { height: rect.height, width: rect.width }
+      })()`)
+      await browser.clickAt('.studio-preview-cell iframe', {
+        x: transformedFrame.width * 0.72,
+        y: transformedFrame.height * 0.62,
+      })
+      await browser.waitForInFrame(
+        preview.url,
+        `document.querySelector('#state')?.textContent === 'zoom hit 1 / background 0'`,
+      )
+      await browser.click('[data-tao-studio-canvas-zoom]')
+      await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-zoom]')?.textContent === '100%'`)
+
+      await browser.click('.studio-rail-button[data-panel="files"]')
+      await browser.waitFor(`document.querySelector('.studio-pane-left')?.hasAttribute('hidden') === false`)
+      await browser.waitFor(`document.querySelector('[data-studio-panel="files"]')?.hasAttribute('hidden') === false`)
+      const designPreviewWide = await browser.evaluate<number>(
+        "Number(document.querySelector('[data-divider=\"preview\"]')?.getAttribute('aria-valuenow'))",
+      )
+      Expect(Number.isFinite(designPreviewWide)).toBe(true)
+      await browser.setViewport(1_024, 768)
+      await browser.waitFor(
+        `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) !== ${designPreviewWide}`,
+      )
+      const designPreviewNarrow = await browser.evaluate<number>(
+        "Number(document.querySelector('[data-divider=\"preview\"]')?.getAttribute('aria-valuenow'))",
+      )
+      Expect(Number.isFinite(designPreviewNarrow)).toBe(true)
+      await browser.setViewport(1_440, 900)
+      await browser.waitFor(
+        `Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')) !== ${designPreviewNarrow}`,
+      )
+      Expect(
+        await browser.evaluate<number>(
+          "Number(document.querySelector('[data-divider=\"preview\"]')?.getAttribute('aria-valuenow'))",
+        ),
+      ).toBe(designPreviewWide)
+      await browser.click('[data-preset="run"]')
+      await browser.waitFor(
+        `document.querySelector('.tao-studio-product-host')?.getAttribute('data-layout-preset') === 'run'`,
+      )
+
       const initialPaneSizes = await browser.evaluate<{ left: number; preview: number }>(`(() => ({
         left: Number(document.querySelector('[data-divider="left"]')?.getAttribute('aria-valuenow')),
         preview: Number(document.querySelector('[data-divider="preview"]')?.getAttribute('aria-valuenow')),
@@ -211,6 +275,63 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
         .toContain('Text("First typed")')
 
+      await browser.click('[data-testid="studio-lens-preset-outline"]')
+      await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
+      await browser.clickAt('.cm-line:has(.cm-lens-glyph)', { x: 2, y: 10 })
+      await browser.pressKey('End')
+      await browser.pressKey('Backspace')
+      await browser.waitFor(`document.querySelector('.cm-lens-glyph') === null`)
+      Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
+        .toContain('Text("Second")')
+      await browser.pressShortcut('s')
+      await browser.waitFor(`document.querySelector('.studio-status')?.textContent === 'No unsaved changes.'`)
+      Expect(await FS.readText(sourcePath)).toBe(typedSource)
+      await browser.click('[data-testid="studio-lens-refold"]')
+      await browser.waitFor(`document.querySelector('.cm-line:has(.cm-lens-glyph)') instanceof HTMLElement`)
+      await browser.clickAt('.cm-line:has(.cm-lens-glyph)', { x: 2, y: 10 })
+      await browser.pressKey('End')
+      await browser.pressKey('ArrowLeft')
+      await browser.pressKey('Delete')
+      await browser.waitFor(`document.querySelector('.cm-lens-glyph') === null`)
+      Expect(await browser.evaluate<string>("document.querySelector('.cm-content')?.textContent ?? ''"))
+        .toContain('Text("Second")')
+      await browser.pressShortcut('s')
+      await browser.waitFor(`document.querySelector('.studio-status')?.textContent === 'No unsaved changes.'`)
+      Expect(await FS.readText(sourcePath)).toBe(typedSource)
+
+      const selectedText = 'Text("First typed")'
+      const currentFile = await session.readFile('Smoke.tao')
+      const selectedStart = currentFile.content.indexOf(selectedText)
+      const selectedRenderId = FS.resolvePath(currentFile.path, projectRoot)
+        + ':' + selectedStart + ':' + (selectedStart + selectedText.length)
+      const selectedInspection = await session.inspectRender({
+        path: currentFile.path,
+        renderId: selectedRenderId,
+        sourceVersion: currentFile.sourceVersion,
+      })
+      if (selectedInspection.owner === undefined) {
+        Errors.throwUnexpected('The smoke selection must have an owning view render.')
+      }
+      await browser.evaluateInFrame(
+        preview.url,
+        `window.taoSmokeOwnerRenderId = ${JSON.stringify(selectedInspection.owner.renderId)}`,
+      )
+      await clickPreviewAndWaitForState(browser, preview.url, '#measure-owner', 'measurement sent')
+      const measuredIdentity = await browser.evaluateInFrame<Record<string, unknown>>(
+        preview.url,
+        `window.taoSmokeMeasuredIdentity`,
+      )
+      const measured = await Time.pollUntil(async () => {
+        const inspection = await session.inspectRender({
+          identity: measuredIdentity as never,
+          path: currentFile.path,
+          renderId: selectedRenderId,
+          sourceVersion: currentFile.sourceVersion,
+        })
+        return inspection.owner?.rect?.width === 241.2 && inspection.owner.rect.height === 121.6
+      }, { intervalMs: 50, timeoutMs: 5_000 })
+      Expect(measured).toBe(true)
+
       await browser.click('[data-panel="components"]')
       await browser.waitFor(
         `document.querySelector('[data-tao-studio-component="Text"]') instanceof HTMLButtonElement`,
@@ -226,6 +347,43 @@ Test('simulated user exercises the browser editor or the native Electrobun shell
       await waitForPreviewSourceIdentity(browser, preview.url)
       await clickPreviewAndWaitForState(browser, preview.url, '#select-first', 'selection sent')
       await waitForInspectorReady(browser)
+      await browser.waitFor(`document.querySelector('.studio-canvas-focus')?.textContent === 'Focus MainView'`)
+
+      for (let reveal = 0; reveal < 2; reveal += 1) {
+        await browser.wheel('.cm-scroller', { x: 0, y: 8_000 })
+        await browser.waitFor(`(document.querySelector('.cm-scroller')?.scrollTop ?? 0) > 0`)
+        const away = await browser.evaluate<number>("document.querySelector('.cm-scroller')?.scrollTop ?? 0")
+        Expect(away).toBeGreaterThan(0)
+        await clickPreviewAndWaitForState(browser, preview.url, '#select-first', 'selection sent')
+        await browser.waitFor(
+          `(document.querySelector('.cm-scroller')?.scrollTop ?? 0) < ${away}`,
+        )
+      }
+
+      await browser.click('.studio-canvas-focus')
+      await browser.waitFor(
+        `document.querySelector('[data-tao-studio-canvas-back="true"]') instanceof HTMLButtonElement`,
+      )
+      await browser.waitFor(
+        `(() => {
+        const viewport = document.querySelector('.studio-preview-cell-viewport')
+        return viewport instanceof HTMLElement
+          && viewport.getBoundingClientRect().width === 242
+          && viewport.getBoundingClientRect().height === 122
+      })()`,
+        { timeoutMs: 30_000 },
+      )
+      await browser.click('[data-tao-studio-canvas-back="true"]')
+      await browser.waitFor(`document.querySelector('[data-tao-studio-canvas-back="true"]') === null`)
+      await browser.waitFor(
+        `(() => {
+        const viewport = document.querySelector('.studio-preview-cell-viewport')
+        return viewport instanceof HTMLElement
+          && viewport.getBoundingClientRect().width === 390
+          && viewport.getBoundingClientRect().height === 844
+      })()`,
+        { timeoutMs: 30_000 },
+      )
       await browser.drag(
         '[data-tao-studio-component="Text"]',
         '.studio-preview-group-label',
@@ -606,10 +764,19 @@ function smokePort(name: string, fallback: number): number {
  */
 function previewHtml(): string {
   return `<!doctype html>
-<html><body>
+<html><head><style>
+  html, body { height: 100%; margin: 0; }
+  body { position: relative; }
+  #controls { position: relative; z-index: 1; }
+  #zoom-hit-target { height: 40px; left: calc(72% - 20px); position: absolute; top: calc(62% - 20px); width: 40px; z-index: 0; }
+</style></head><body>
+  <div id="zoom-hit-target" aria-label="Zoom hit target"></div>
+  <div id="controls">
+  <button id="measure-owner">Measure Owner</button>
   <button id="select-first">Select First</button>
   <button id="move-third">Move Third between First and Second</button>
   <output id="state">ready</output>
+  </div>
   <script>
     const query = new URLSearchParams(location.search)
     const parentOrigin = query.get('taoStudioParentOrigin')
@@ -623,18 +790,54 @@ function previewHtml(): string {
       : parentOrigin + '/sessions/' + encodeURIComponent(sessionId)
     const compiledSource = ${JSON.stringify(typedSource)}
     let sourceIdentity
+    let ownsCanvasGestures = false
+    let zoomHits = 0
+    let backgroundHits = 0
+    let measurementDispatches = 0
+    let selectionDispatches = 0
+    let moveDispatches = 0
     window.addEventListener('message', event => {
       const message = event.data
       if (event.source !== parent
         || event.origin !== parentOrigin
         || message?.channel !== ${JSON.stringify(studioProtocolChannel)}
         || message?.protocolVersion !== ${studioProtocolVersion}
-        || message.type !== 'highlight-source'
         || message.identity?.previewInstanceId !== previewInstanceId) {
         return
       }
-      sourceIdentity = message.identity
-      document.documentElement.dataset.studioSourceIdentity = 'ready'
+      if (message.type === 'highlight-source') {
+        sourceIdentity = message.identity
+        document.documentElement.dataset.studioSourceIdentity = 'ready'
+      } else if (message.type === 'set-canvas-gestures') {
+        sourceIdentity = message.identity
+        ownsCanvasGestures = message.owned
+        document.documentElement.dataset.studioCanvasGestures = message.owned ? 'owned' : 'released'
+      }
+    })
+    window.addEventListener('wheel', event => {
+      if (!ownsCanvasGestures || sourceIdentity === undefined) return
+      event.preventDefault()
+      parent.postMessage({
+        channel: ${JSON.stringify(studioProtocolChannel)},
+        clientX: event.clientX,
+        clientY: event.clientY,
+        deltaX: event.deltaX,
+        deltaY: event.deltaY,
+        identity: sourceIdentity,
+        protocolVersion: ${studioProtocolVersion},
+        type: 'preview-canvas-gesture',
+        zoom: event.ctrlKey || event.metaKey,
+      }, parentOrigin)
+    }, { passive: false })
+    document.body.addEventListener('click', event => {
+      if (event.target === document.querySelector('#zoom-hit-target')) return
+      backgroundHits += 1
+      document.querySelector('#state').textContent = 'zoom hit ' + zoomHits + ' / background ' + backgroundHits
+    })
+    document.querySelector('#zoom-hit-target').addEventListener('click', event => {
+      event.stopPropagation()
+      zoomHits += 1
+      document.querySelector('#state').textContent = 'zoom hit ' + zoomHits + ' / background ' + backgroundHits
     })
     const renderRange = (path, content, label) => {
       const source = 'Text("' + label + '")'
@@ -668,6 +871,33 @@ function previewHtml(): string {
         path,
       }
     }
+    document.querySelector('#measure-owner').addEventListener('click', async () => {
+      const state = document.querySelector('#state')
+      state.textContent = 'measuring'
+      try {
+        const current = await context()
+        if (typeof window.taoSmokeOwnerRenderId !== 'string') {
+          throw new Error('Studio smoke owner render identity was not installed')
+        }
+        window.taoSmokeMeasuredIdentity = current.identity
+        parent.postMessage({
+          channel: ${JSON.stringify(studioProtocolChannel)},
+          identity: current.identity,
+          measurements: [{
+            elementName: 'Stack',
+            rect: { x: 8, y: 12, width: 241.2, height: 121.6 },
+            renderId: window.taoSmokeOwnerRenderId,
+          }],
+          protocolVersion: ${studioProtocolVersion},
+          type: 'preview-layout-measurements',
+        }, parentOrigin)
+        measurementDispatches += 1
+        state.textContent = 'measurement sent ' + measurementDispatches
+      } catch (error) {
+        state.textContent = 'measurement failed: ' + (error instanceof Error ? error.message : String(error))
+        throw error
+      }
+    })
     document.querySelector('#select-first').addEventListener('click', async () => {
       const state = document.querySelector('#state')
       state.textContent = 'selecting'
@@ -682,7 +912,8 @@ function previewHtml(): string {
           range: { end: range.end, start: range.start },
           type: 'preview-select-source',
         }, parentOrigin)
-        state.textContent = 'selection sent'
+        selectionDispatches += 1
+        state.textContent = 'selection sent ' + selectionDispatches
       } catch (error) {
         state.textContent = 'selection failed: ' + (error instanceof Error ? error.message : String(error))
         throw error
@@ -711,7 +942,8 @@ function previewHtml(): string {
           sourceActionVersion: ${studioSourceActionVersion},
           type: 'source-action',
         }, parentOrigin)
-        state.textContent = 'move sent'
+        moveDispatches += 1
+        state.textContent = 'move sent ' + moveDispatches
       } catch (error) {
         state.textContent = 'move failed: ' + (error instanceof Error ? error.message : String(error))
         throw error
@@ -1142,11 +1374,18 @@ async function waitForCompileAfter(browser: StudioCdp, previousRevision: number)
 async function clickPreviewAndWaitForState(
   browser: StudioCdp,
   previewUrl: string,
-  selector: '#move-third' | '#select-first',
-  expected: 'move sent' | 'selection sent',
+  selector: '#measure-owner' | '#move-third' | '#select-first',
+  expected: 'measurement sent' | 'move sent' | 'selection sent',
 ): Promise<void> {
   const deadline = Date.now() + 15_000
   let last = ''
+  const previous = await browser.evaluateInFrame<string>(
+    previewUrl,
+    "document.querySelector('#state')?.textContent ?? ''",
+  )
+  const previousSequence = previous.startsWith(`${expected} `)
+    ? Number(previous.slice(expected.length + 1))
+    : 0
   // A context can disappear after the click has dispatched. Never repeat the user action merely
   // because its response was lost; the CDP layer resolves a stable frame before dispatch instead.
   await browser.clickInFrame(previewUrl, selector)
@@ -1155,7 +1394,7 @@ async function clickPreviewAndWaitForState(
       previewUrl,
       "document.querySelector('#state')?.textContent ?? ''",
     )
-    if (last === expected) {
+    if (last === `${expected} ${previousSequence + 1}`) {
       return
     }
     await Time.sleep(100)

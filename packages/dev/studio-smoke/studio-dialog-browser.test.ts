@@ -15,7 +15,7 @@ type DialogBrowserState = Readonly<{
   settled: string | undefined
 }>
 
-Test('Studio dialog teardown cancels its answer and restores the live ProductHost in Chrome', async () => {
+Test('Studio dialog scope teardown cancels its answer and restores its live background in Chrome', async () => {
   const repositoryRoot = Repo.getRoot()
   const artifactRoot = Platform.runtimeProcess.env['TAO_STUDIO_SMOKE_ARTIFACT_ROOT']
     ?? FS.resolvePath('.artifacts/tests/studio-dialog-browser/local', repositoryRoot)
@@ -63,7 +63,7 @@ Test('Studio dialog teardown cancels its answer and restores the live ProductHos
       ),
     ).toBe('true')
 
-    // This remains outside the ProductHost scope, just as a host-owned teardown signal does.
+    // This remains outside the mounted dialog scope, just as a host-owned teardown signal does.
     await browser.click('#abort-dialog')
     await browser.waitFor(`document.querySelector('.studio-dialog-backdrop') === null
       && document.querySelector('#dialog-result')?.getAttribute('data-settled') === 'true'`)
@@ -145,7 +145,7 @@ const fixtureHtml = `<!doctype html>
     </style>
   </head>
   <body>
-    <button id="abort-dialog" type="button">Abort ProductHost dialog</button>
+    <button id="abort-dialog" type="button">Abort mounted dialog scope</button>
     <main id="product-host">
       <button id="open-confirm" type="button">Open confirmation</button>
       <section id="authored-background" aria-hidden="false">Authored background state</section>

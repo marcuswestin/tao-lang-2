@@ -126,6 +126,36 @@ Describe('Studio browser CDP harness', () => {
     ])
   })
 
+  Test('dispatches bounded offset clicks and physical primary-wheel gestures', async () => {
+    const transport = new FakeCdpTransport()
+    transport.evaluateResults.push({ x: 12, y: 34 }, { x: 200, y: 300 }, true)
+    const browser = StudioCdp.testing.create(transport)
+
+    await browser.clickAt('.cm-line', { x: 2, y: 10 })
+    await browser.wheel('.studio-preview-cell iframe', { x: 4, y: -180 }, { primary: true })
+
+    Expect(transport.calls.filter(call => call.method === 'Input.dispatchMouseEvent')).toEqual([
+      {
+        method: 'Input.dispatchMouseEvent',
+        params: { button: 'left', buttons: 1, clickCount: 1, type: 'mousePressed', x: 12, y: 34 },
+      },
+      {
+        method: 'Input.dispatchMouseEvent',
+        params: { button: 'left', buttons: 0, clickCount: 1, type: 'mouseReleased', x: 12, y: 34 },
+      },
+      {
+        method: 'Input.dispatchMouseEvent',
+        params: { deltaX: 4, deltaY: -180, modifiers: 4, type: 'mouseWheel', x: 200, y: 300 },
+      },
+    ])
+    await Expect(browser.clickAt('.cm-line', { x: Number.NaN, y: 0 })).rejects.toThrow(
+      'horizontal click offset must be finite',
+    )
+    await Expect(browser.wheel('.cm-scroller', { x: 0, y: Number.NaN })).rejects.toThrow(
+      'vertical wheel delta must be finite',
+    )
+  })
+
   // Chrome never synthesizes HTML5 drag-and-drop from mouse events, so a palette drag has to go
   // through drag interception: press and move to make the page start the drag, then replay the
   // intercepted payload into dragEnter/dragOver/drop over the target.
