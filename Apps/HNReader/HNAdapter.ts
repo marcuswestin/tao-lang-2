@@ -67,9 +67,6 @@ export const HNAdapter = TR.Http.adapter({
         CommentCount: countComments(item.children),
       }])
     }),
-    // The Reading feed is this device's own record of what it opened: the rows are already in the
-    // store, so the shape is declared to say so rather than left to fail as unsupported.
-    TR.Http.on({ orderBy: 'OpenedAt', where: 'Opened' }, async () => {}),
   ],
   Comment: [
     TR.Http.on({ where: 'Story' }, async (query, { upsert }) => {
@@ -137,7 +134,7 @@ function plainText(html: string): string {
 async function fetchJson<ResultT>(url: string): Promise<ResultT> {
   const response = await fetch(url)
   if (!response.ok) {
-    throw new Error(`Hacker News responded ${response.status} for ${url}.`)
+    TR.Errors.failHost(`Hacker News responded ${response.status} for ${url}.`)
   }
   return await response.json() as ResultT
 }

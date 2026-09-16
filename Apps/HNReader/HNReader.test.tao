@@ -23,23 +23,57 @@ test "hn reader" {
       back
       expect text "Why local-first sync wins"
    }
-   // The bar's right-hand control switches to Reading, which lists what this device opened and
-   // keeps the feed's place behind it.
-   test "keeps opened stories in the Reading stack" {
+   // The bar's right-hand control switches to Reading, whose order and rows survive a real relaunch
+   // because they belong to a dedicated device store rather than the refilled feed store.
+   test "keeps reading history across a relaunch in most-recent order" {
       run HNReaderStub
-      press label "Reading"
-      expect navigation title "Reading"
-      expect text "Nothing opened yet"
-      press label "Top"
       press "Show HN: A Tao reader"
       press label "Back"
+      advance 1.s
+      press "Why local-first sync wins"
+      press label "Back"
       press label "Reading"
-      expect text "Show HN: A Tao reader"
-      expect missing text "Why local-first sync wins"
-      press "Show HN: A Tao reader"
-      expect navigation title "Show HN: A Tao reader"
+      expect text "2 opened"
+      select #reading[1] {
+         expect text "Why local-first sync wins"
+      }
+      select #reading[2] {
+         expect text "Show HN: A Tao reader"
+      }
       press label "Top"
       expect navigation title "Hacker News"
+      relaunch
+      expect navigation title "Hacker News"
+      press label "Reading"
+      expect text "2 opened"
+      select #reading[1] {
+         expect text "Why local-first sync wins"
+      }
+      select #reading[2] {
+         expect text "Show HN: A Tao reader"
+      }
+   }
+   test "refreshes recency without duplicating a reading-history row" {
+      run HNReaderStub
+      press "Show HN: A Tao reader"
+      press label "Back"
+      advance 1.s
+      press "Why local-first sync wins"
+      press label "Back"
+      press label "Reading"
+      advance 1.s
+      select #reading[2] {
+         press "Show HN: A Tao reader"
+      }
+      expect navigation title "Show HN: A Tao reader"
+      press label "Back"
+      expect text "2 opened"
+      select #reading[1] {
+         expect text "Show HN: A Tao reader"
+      }
+      select #reading[2] {
+         expect text "Why local-first sync wins"
+      }
    }
    test "shows an empty thread as content, not failure" {
       run HNReaderStub
@@ -49,8 +83,8 @@ test "hn reader" {
       expect text "No comments yet"
    }
 
-   // The two datasources are the point of these. A bookmark is written to the reader's own store
-   // while the story it names stays in the feed, and reading it back crosses the boundary.
+   // This datasource boundary is the point of these. A bookmark is written to the reader's own
+   // synced store while the story it names stays in the feed; reading it back crosses between them.
    test "keeps a bookmark in its own store and reads the story back through the feed" {
       run HNReaderStub
       press toolbar command "Bookmarks"
