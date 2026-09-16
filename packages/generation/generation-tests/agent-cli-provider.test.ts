@@ -1,5 +1,5 @@
 import { FS, Platform } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   agentChildEnv,
   AgentCliGenerationProvider,
@@ -27,16 +27,20 @@ function ok(stdout: string): AgentCliRunResult {
 
 Describe('agent CLI generation provider', () => {
   Test('drives Claude Code in print mode with a JSON schema and reads its structured output', async () => {
+    const root = await mkTestDir('tao-agent-provider-')
+    const shot = FS.resolvePath('pictures/shot.png', root)
+    const other = FS.resolvePath('pictures/other.png', root)
+    await FS.writeText(shot, 'shot')
+    await FS.writeText(other, 'other')
     const runs: RecordedRun[] = []
     const provider = new AgentCliGenerationProvider({
-      allowWeb: true,
-      attachments: ['/pictures/shot.png', '/pictures/other.png'],
+      attachments: [shot, other],
       env: { CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli', PATH: '/usr/bin' },
       kind: 'claude',
       run: async (command, spec) => {
         runs.push({ command, spec })
-        if (spec.args.includes('--version')) {
-          return ok('2.1.0 (Claude Code)\n')
+        if (spec.args.includes('--help')) {
+          return ok('--json-schema --no-session-persistence --safe-mode --permission-mode --tools\n')
         }
         return ok(JSON.stringify({
           type: 'result',
@@ -61,20 +65,25 @@ Describe('agent CLI generation provider', () => {
       '--json-schema',
       JSON.stringify(schema),
       '--no-session-persistence',
+      '--safe-mode',
+      '--permission-mode',
+      'dontAsk',
+      '--tools',
+      'Read',
       '--allowedTools',
       'Read',
-      'WebFetch',
-      '--add-dir',
-      '/pictures',
     ])
     Expect(generate.spec.stdin).toContain('Create a recipe.')
     Expect(generate.spec.stdin).toContain('"Mood":"cozy"')
-    Expect(generate.spec.stdin).toContain('/pictures/shot.png')
+    Expect(generate.spec.stdin).toContain('1-shot.png')
+    Expect(generate.spec.stdin).not.toContain(shot)
+    Expect(generate.spec.cwd).toContain('tao-create-claude-')
     // The markers are present and undefined: that is what the spawn drops, where a missing key is refilled.
     Expect(Object.hasOwn(generate.spec.env ?? {}, 'CLAUDECODE') && generate.spec.env?.['CLAUDECODE'] === undefined)
       .toBe(true)
     Expect(generate.spec.env?.['CLAUDE_CODE_ENTRYPOINT']).toBeUndefined()
     Expect(generate.spec.env?.['PATH']).toBe('/usr/bin')
+    await FS.remove(root)
   })
 
   Test('falls back to JSON inside the text result and reports errors and timeouts honestly', async () => {
@@ -125,8 +134,8 @@ Describe('agent CLI generation provider', () => {
       kind: 'codex',
       run: async (command, spec) => {
         runs.push({ command, spec })
-        if (spec.args.includes('--version')) {
-          return ok('codex-cli 0.50.0\n')
+        if (spec.args.includes('--help')) {
+          return ok('--sandbox --ephemeral --ignore-user-config --ignore-rules --output-schema --output-last-message\n')
         }
         const schemaPath = spec.args[spec.args.indexOf('--output-schema') + 1]!
         Expect(JSON.parse(await FS.readText(schemaPath))).toEqual(schema)
@@ -143,13 +152,17 @@ Describe('agent CLI generation provider', () => {
 
     const generate = runs[1]!
     Expect(generate.command).toBe('codex')
-    Expect(generate.spec.args.slice(0, 5)).toEqual([
+    Expect(generate.spec.args.slice(0, 8)).toEqual([
       'exec',
       '--skip-git-repo-check',
       '--sandbox',
       'read-only',
+      '--ephemeral',
+      '--ignore-user-config',
+      '--ignore-rules',
       '--output-schema',
     ])
+    Expect(generate.spec.args).toContain('--output-last-message')
     Expect(generate.spec.args).toContain('--image')
     Expect(generate.spec.args).toContain('/pictures/shot.png')
     Expect(generate.spec.args.at(-1)).toBe('-')

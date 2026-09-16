@@ -493,9 +493,10 @@ function fixtureHandles(plan: CreationPlan, app: string): Map<string, string[]> 
     const names: string[] = []
     for (const row of plan.samples[entity.plural] ?? []) {
       const base = pascalWords(String(row[title.name] ?? '')) || `${entity.singular}Row`
-      let candidate = /^[0-9]/u.test(base) ? `Row${base}` : base
+      const legalStem = /^[0-9]/u.test(base) ? `Row${base}` : base
+      let candidate = legalStem
       for (let suffix = 2; taken.has(candidate); suffix += 1) {
-        candidate = `${base}${suffix}`
+        candidate = `${legalStem}${suffix}`
       }
       taken.add(candidate)
       names.push(candidate)

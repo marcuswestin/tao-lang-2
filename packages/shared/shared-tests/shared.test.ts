@@ -129,6 +129,19 @@ Describe('FS', () => {
     Expect(walked).toEqual(['child/file.ts'])
   })
 
+  Test('resolves real paths synchronously with the async contract', async () => {
+    const root = await tmpDir()
+    const physicalPath = FS.resolvePath('physical/file.txt', root)
+    const linkedPath = FS.resolvePath('linked-file.txt', root)
+    const missingPath = FS.resolvePath('missing.txt', root)
+    await FS.writeText(physicalPath, 'content')
+    await FS.symlink(physicalPath, linkedPath)
+
+    Expect(FS.realPathSync(linkedPath)).toBe(await FS.realPath(linkedPath))
+    Expect(() => FS.realPathSync(missingPath)).toThrow()
+    await Expect(FS.realPath(missingPath)).rejects.toThrow()
+  })
+
   Test('does not swallow read or list errors', async () => {
     const root = await tmpDir()
 

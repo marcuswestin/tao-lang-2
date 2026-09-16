@@ -56,6 +56,8 @@ export namespace Packages {
     invalidReason?: InvalidReason
     reservedPackagePath?: string
     excludedProjectRoots?: readonly string[]
+    /** Existing candidates must remain physically inside this root after symlink resolution. */
+    physicalBoundaryRoot?: string
   }
 
   /** ResolveRequest declares one import resolution request. */
@@ -133,7 +135,9 @@ export namespace Packages {
   export async function createIndex(projectRoot: string): Promise<Index> {
     const requestedRoot = FS.resolvePath(projectRoot)
     const resolvedRoot = await containingProjectRoot(requestedRoot) ?? requestedRoot
-    const projectRoots = await discoverProjectRoots(resolvedRoot)
+    const scanRoot = await FS.realPath(resolvedRoot).catch(() => resolvedRoot)
+    const discoveredProjectRoots = await discoverProjectRoots(resolvedRoot)
+    const projectRoots = discoveredProjectRoots.length === 0 ? [resolvedRoot] : discoveredProjectRoots
     const packages = new Map<string, string[]>()
     const record = (path: string) => {
       const name = FS.basename(path)
@@ -156,7 +160,8 @@ export namespace Packages {
           record(projectGeneratedPackage)
         }
       }
-      for (const path of await Repo.directoriesUnder(resolvedRoot, { namePrefix: '@' })) {
+      for (const scannedPath of await Repo.directoriesUnder(scanRoot, { namePrefix: '@' })) {
+        const path = FS.resolvePath(FS.relativePath(scanRoot, scannedPath), resolvedRoot)
         if (FS.basename(path) === '@') {
           continue
         }
@@ -218,12 +223,14 @@ export namespace Packages {
   async function discoverProjectRoots(root: string): Promise<string[]> {
     const parserContext = Parser.createContext()
     const roots = new Set<string>()
+    const scanRoot = await FS.realPath(root).catch(() => root)
     for (
-      const path of await Repo.filesUnder(root, {
+      const scannedPath of await Repo.filesUnder(scanRoot, {
         excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
         extensions: ['.tao'],
       })
     ) {
+      const path = FS.resolvePath(FS.relativePath(scanRoot, scannedPath), root)
       const source = await FS.readText(path)
       if (!source.includes('project')) {
         continue
@@ -240,11 +247,11 @@ export namespace Packages {
   }
 
   /** projectRootForPath returns the nearest project namespace owning `path`. */
-  export function projectRootForPath(index: Index, path: string): string {
+  export function projectRootForPath(index: Index, path: string): string | undefined {
     return index.projectRoots
       .filter(root => FS.pathIsWithin(path, root))
       .toSorted((left, right) => right.length - left.length)[0]
-      ?? index.projectRoot
+      ?? (FS.pathIsWithin(path, index.projectRoot) ? index.projectRoot : undefined)
   }
 
   /** resolve resolves a Tao use path using local packages, relative paths, and the stdlib root. */
@@ -269,6 +276,7 @@ export namespace Packages {
         relation: 'stdlib',
         targetPath,
         candidateMode: 'direct',
+        physicalBoundaryRoot: packageRoot,
       }
     }
     if (importPath.startsWith('@')) {
@@ -289,9 +297,12 @@ export namespace Packages {
   }
 
   function resolveBareUse(context: Context, request: ResolveRequest): Resolution {
+    const sourceProjectRoot = sourceRootForPath(context, request.fromFilePath)
+    if (sourceProjectRoot === undefined) {
+      return invalidResolution(undefined, 'project-boundary')
+    }
     const containingPackage = containingPath(request.fromFilePath, context.index)
     if (containingPackage) {
-      const sourceProjectRoot = projectRootForPath(context.index, request.fromFilePath)
       return {
         relation: 'same-package',
         targetPath: containingPackage.path,
@@ -299,6 +310,7 @@ export namespace Packages {
         packageName: containingPackage.name,
         reservedPackagePath: FS.resolvePath('@', context.index.projectRoot),
         excludedProjectRoots: nestedProjectRoots(context.index, sourceProjectRoot, containingPackage.path),
+        physicalBoundaryRoot: containingPackage.path,
       }
     }
     return {
@@ -306,6 +318,7 @@ export namespace Packages {
       reservedPackagePath: FS.resolvePath('@', context.index.projectRoot),
       targetPath: FS.dirname(request.fromFilePath),
       candidateMode: 'direct',
+      physicalBoundaryRoot: sourceProjectRoot,
     }
   }
 
@@ -315,7 +328,10 @@ export namespace Packages {
     request: ResolveRequest,
   ): Resolution {
     const packageName = nameFromImportPath(importPath)
-    const sourceProjectRoot = projectRootForPath(context.index, request.fromFilePath)
+    const sourceProjectRoot = sourceRootForPath(context, request.fromFilePath)
+    if (sourceProjectRoot === undefined) {
+      return invalidResolution(importPath, 'project-boundary', { packageName })
+    }
     const packagePaths = (context.index.packages.get(packageName) ?? [])
       .filter(path => projectRootForPath(context.index, path) === sourceProjectRoot)
     if (packagePaths.length === 0) {
@@ -344,6 +360,7 @@ export namespace Packages {
       targetPath,
       candidateMode: 'direct',
       packageName,
+      physicalBoundaryRoot: packagePath,
     }
   }
 
@@ -358,12 +375,15 @@ export namespace Packages {
   ): Resolution {
     const fromDirectory = FS.dirname(request.fromFilePath)
     const targetPath = FS.resolvePath(importPath, fromDirectory)
-    const sourceProjectRoot = projectRootForPath(context.index, request.fromFilePath)
+    const sourceProjectRoot = sourceRootForPath(context, request.fromFilePath)
+    if (sourceProjectRoot === undefined) {
+      return invalidResolution(importPath, 'project-boundary')
+    }
     if (
       FS.pathIsWithin(request.fromFilePath, context.index.projectRoot)
       && (
         !FS.pathIsWithin(targetPath, sourceProjectRoot)
-        || sourceProjectRoot !== projectRootForPath(context.index, targetPath)
+        || sourceProjectRoot !== sourceRootForPath(context, targetPath)
       )
     ) {
       return invalidResolution(importPath, 'project-boundary')
@@ -379,6 +399,7 @@ export namespace Packages {
           targetPath,
           candidateMode: 'direct',
           packageName: sourcePackage.name,
+          physicalBoundaryRoot: sourceProjectRoot,
         }
       }
       return invalidResolution(importPath, 'package-boundary')
@@ -390,6 +411,7 @@ export namespace Packages {
       targetPath,
       candidateMode: 'direct',
       packageName: sourcePackage?.name,
+      physicalBoundaryRoot: sourcePackage?.path ?? sourceProjectRoot,
     }
   }
 
@@ -408,6 +430,12 @@ export namespace Packages {
       return 'same-file'
     }
     return 'same-directory'
+  }
+
+  function sourceRootForPath(context: Context, path: string): string | undefined {
+    return FS.pathIsWithin(path, context.stdlibRoot)
+      ? context.stdlibRoot
+      : projectRootForPath(context.index, path)
   }
 
   function invalidResolution(
@@ -430,6 +458,9 @@ export namespace Packages {
   function containingPath(path: string, index: Index): Indexed | undefined {
     const matches: Indexed[] = []
     const projectRoot = projectRootForPath(index, path)
+    if (projectRoot === undefined) {
+      return undefined
+    }
     for (const [name, paths] of index.packages) {
       for (const packagePath of paths) {
         if (projectRootForPath(index, packagePath) === projectRoot && FS.pathIsWithin(path, packagePath)) {
@@ -451,19 +482,27 @@ export namespace Packages {
       return []
     }
     if (await FS.isFile(targetPath)) {
-      return canUseFileCandidate(resolution) && isImportableTaoSourcePath(targetPath) ? [targetPath] : []
+      return canUseFileCandidate(resolution) && isImportableTaoSourcePath(targetPath)
+          && await remainsInsidePhysicalBoundary(targetPath, resolution)
+        ? [targetPath]
+        : []
     }
     const fileCandidate = `${targetPath}.tao`
-    if (canUseFileCandidate(resolution) && isImportableTaoSourcePath(fileCandidate) && await FS.isFile(fileCandidate)) {
+    if (
+      canUseFileCandidate(resolution) && isImportableTaoSourcePath(fileCandidate) && await FS.isFile(fileCandidate)
+      && await remainsInsidePhysicalBoundary(fileCandidate, resolution)
+    ) {
       return [fileCandidate]
     }
-    if (!await FS.isDirectory(targetPath)) {
+    if (!await FS.isDirectory(targetPath) || !await remainsInsidePhysicalBoundary(targetPath, resolution)) {
       return []
     }
     const names = await FS.listDir(targetPath)
-    return names
+    const candidates = names
       .filter(isImportableTaoSourceName)
       .map(name => FS.resolvePath(name, targetPath))
+    const allowed = await Promise.all(candidates.map(path => remainsInsidePhysicalBoundary(path, resolution)))
+    return candidates.filter((_, index) => allowed[index])
   }
 
   /** candidateFilePaths returns Tao source paths selected by an import resolution. */
@@ -483,22 +522,44 @@ export namespace Packages {
       return []
     }
     if (await FS.isFile(targetPath)) {
-      return isImportableTaoSourcePath(targetPath) ? [targetPath] : []
+      return isImportableTaoSourcePath(targetPath) && await remainsInsidePhysicalBoundary(targetPath, resolution)
+        ? [targetPath]
+        : []
     }
     const fileCandidate = `${targetPath}.tao`
-    if (isImportableTaoSourcePath(fileCandidate) && await FS.isFile(fileCandidate)) {
+    if (
+      isImportableTaoSourcePath(fileCandidate) && await FS.isFile(fileCandidate)
+      && await remainsInsidePhysicalBoundary(fileCandidate, resolution)
+    ) {
       return [fileCandidate]
     }
-    if (!await FS.isDirectory(targetPath)) {
+    if (!await FS.isDirectory(targetPath) || !await remainsInsidePhysicalBoundary(targetPath, resolution)) {
       return []
     }
-    return (await Repo.filesUnder(targetPath, {
+    const candidates = (await Repo.filesUnder(targetPath, {
       excludeDirectoryNames: TaoFiles.discoveryExcludeDirectoryNames,
       extensions: ['.tao'],
     }))
       .filter(isImportableTaoSourcePath)
       .filter(path => !pathCrossesPackageDirectory(targetPath, path, resolution.reservedPackagePath))
       .filter(path => !isUnderExcludedProject(path, resolution))
+    const allowed = await Promise.all(candidates.map(path => remainsInsidePhysicalBoundary(path, resolution)))
+    return candidates.filter((_, index) => allowed[index])
+  }
+
+  async function remainsInsidePhysicalBoundary(path: string, resolution: Resolution): Promise<boolean> {
+    if (resolution.physicalBoundaryRoot === undefined) {
+      return true
+    }
+    try {
+      const [physicalPath, physicalRoot] = await Promise.all([
+        FS.realPath(path),
+        FS.realPath(resolution.physicalBoundaryRoot),
+      ])
+      return FS.pathIsWithin(physicalPath, physicalRoot)
+    } catch {
+      return false
+    }
   }
 
   /** targetMatches returns whether a resolution target includes a Tao file path. */
@@ -509,10 +570,24 @@ export namespace Packages {
     if (isTestSourcePath(request.filePath)) {
       return false
     }
+    if (!remainsInsidePhysicalBoundarySync(request.filePath, resolution)) {
+      return false
+    }
     if (resolution.candidateMode === 'recursive') {
       return recursiveTargetMatches(resolution, request.filePath)
     }
     return directTargetMatches(resolution, request)
+  }
+
+  function remainsInsidePhysicalBoundarySync(path: string, resolution: Resolution): boolean {
+    if (resolution.physicalBoundaryRoot === undefined) {
+      return true
+    }
+    try {
+      return FS.pathIsWithin(FS.realPathSync(path), FS.realPathSync(resolution.physicalBoundaryRoot))
+    } catch {
+      return false
+    }
   }
 
   function directTargetMatches(resolution: Resolution, request: TargetMatchRequest): boolean {

@@ -2,7 +2,9 @@ import { FS } from '@shared'
 import { Describe, Expect, mkTestDir, Test } from '@shared/test'
 import {
   acceptedShipEntry,
+  mergeProjectLocks,
   promoteShipEntry,
+  putInstallsLock,
   putShipLockEntry,
   readProjectLock,
   type ShipLockEntry,
@@ -62,5 +64,28 @@ Describe('tao ship project lock', () => {
     } finally {
       await FS.remove(root)
     }
+  })
+
+  Test('keeps installs and shipping as independent sections of the one project lock', () => {
+    const installs = {
+      lockfileVersion: 1 as const,
+      projects: {
+        design: { projectId: 'design', resolvedCommit: 'abc123', resolvedVersion: '1.2.3' },
+      },
+      requires: { design: { version: '^1.2.0' } },
+    }
+    const withInstalls = putInstallsLock({ schemaVersion: 1 }, installs)
+    const shipping = putShipLockEntry({ schemaVersion: 1 }, promoteShipEntry(suggestion()))
+
+    Expect(mergeProjectLocks(withInstalls, shipping)).toEqual({
+      installs,
+      schemaVersion: 1,
+      ship: shipping.ship,
+    })
+    Expect(mergeProjectLocks(shipping, withInstalls)).toEqual({
+      installs,
+      schemaVersion: 1,
+      ship: shipping.ship,
+    })
   })
 })

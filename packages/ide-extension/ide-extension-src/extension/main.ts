@@ -10,38 +10,89 @@ import {
   type ServerOptions,
   TransportKind,
 } from 'vscode-languageclient/node'
+import { workspaceServerPlan } from './workspace-server-roots'
 
-let client: LanguageClient | undefined
+let clients = new Map<string, LanguageClient>()
+let clientSequence = 0
+let clientReconciliation: Promise<void> = Promise.resolve()
 
 /** activate starts the bundled Tao language server client. */
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   registerTaoSourceActionCommands(context)
-  client = new LanguageClient(
-    'tao',
-    'Tao Language Server',
-    serverOptions(context),
-    clientOptions(),
-  )
-  await client.start()
+  context.subscriptions.push(vscode.workspace.onDidChangeWorkspaceFolders(() => {
+    void reconcileLanguageClients(context).catch(async error => {
+      await vscode.window.showErrorMessage(`Could not update Tao language servers: ${Errors.messageOf(error)}`)
+    })
+  }))
+  await reconcileLanguageClients(context)
+}
+
+async function reconcileLanguageClients(context: vscode.ExtensionContext): Promise<void> {
+  clientReconciliation = clientReconciliation.catch(() => undefined).then(async () => {
+    const folders = vscode.workspace.workspaceFolders ?? []
+    const plan = workspaceServerPlan(
+      [...clients.keys()],
+      folders.map(folder => folder.uri.fsPath),
+      Platform.runtimeProcess.cwd(),
+    )
+    const additions = plan.add.map(root => {
+      const client = new LanguageClient(
+        `tao-${++clientSequence}`,
+        folders.length > 1 ? `Tao Language Server (${FS.basename(root)})` : 'Tao Language Server',
+        serverOptions(context, root),
+        clientOptions(folders.find(folder => FS.resolvePath(folder.uri.fsPath) === root)),
+      )
+      clients.set(root, client)
+      return client.start().catch(error => {
+        clients.delete(root)
+        throw error
+      })
+    })
+    await Promise.all(additions)
+    const removed = plan.remove.flatMap(root => {
+      const client = clients.get(root)
+      return client === undefined ? [] : [[root, client] as const]
+    })
+    await Promise.all(removed.map(([, client]) => client.stop()))
+    for (const [root] of removed) {
+      clients.delete(root)
+    }
+  })
+  return await clientReconciliation
 }
 
 /** deactivate stops the Tao language server client. */
 export function deactivate(): Thenable<void> | undefined {
-  return client?.stop()
+  if (clients.size === 0) {
+    return undefined
+  }
+  const stopping = clientReconciliation.then(async () => {
+    await Promise.all([...clients.values()].map(client => client.stop()))
+    clients.clear()
+  })
+  return stopping
 }
 
-function serverOptions(context: vscode.ExtensionContext): ServerOptions {
+function serverOptions(context: vscode.ExtensionContext, workspaceRoot: string): ServerOptions {
   const module = context.asAbsolutePath(FS.joinPath('_gen_ide-extension/language/main.cjs'))
-  const options = serverExecutableOptions()
+  const options = serverExecutableOptions(workspaceRoot)
   return {
     run: { module, transport: TransportKind.ipc, options },
     debug: { module, transport: TransportKind.ipc, options },
   }
 }
 
-function clientOptions(): LanguageClientOptions {
+function clientOptions(folder: vscode.WorkspaceFolder | undefined): LanguageClientOptions {
   return {
-    documentSelector: [{ scheme: '*', language: 'tao' }],
+    documentSelector: [
+      folder === undefined
+        ? { scheme: 'file', language: 'tao' }
+        : {
+          scheme: 'file',
+          language: 'tao',
+          pattern: { baseUri: folder.uri.toString(), pattern: '**/*.tao' },
+        },
+    ],
   }
 }
 
@@ -101,11 +152,11 @@ function fullDocumentRange(document: vscode.TextDocument): vscode.Range {
   return new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length))
 }
 
-function serverExecutableOptions(): ExecutableOptions {
+function serverExecutableOptions(workspaceRoot: string): ExecutableOptions {
   return {
     env: {
       ...Platform.runtimeProcess.env,
-      TAO_WORKSPACE_ROOT: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? Platform.runtimeProcess.cwd(),
+      TAO_WORKSPACE_ROOT: workspaceRoot,
     },
   }
 }

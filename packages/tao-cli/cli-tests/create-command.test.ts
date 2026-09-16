@@ -14,14 +14,17 @@ const wholePlan: JsonObject = {
     plural: 'Trips',
     singular: 'Trip',
     purpose: 'One trip.',
-    fields: [{ name: 'Title', type: 'text', title: true }, { name: 'Days', type: 'number' }, {
+    fields: [{ name: 'Title', type: 'text', title: true }, { name: 'Days', type: 'number', title: false }, {
       name: 'Booked',
       type: 'yesno',
+      title: false,
     }],
   }],
   palette: { canvas: '#ffffff', ink: '#111111', accent: '#ff6600' },
 }
-const sampleRows: JsonObject = { rows: [{ Title: 'Lisbon', Days: 4, Booked: true }, { Title: 'Kyoto', Days: 10 }] }
+const sampleRows: JsonObject = {
+  rows: [{ Title: 'Lisbon', Days: 4, Booked: true }, { Title: 'Kyoto', Days: 10, Booked: false }],
+}
 
 function fakeLane(provider: ScriptedGenerationProvider, stopped: string[] = []): CreationLane {
   return {

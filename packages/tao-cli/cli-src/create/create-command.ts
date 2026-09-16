@@ -219,7 +219,6 @@ async function chooseLane(
     ? detectCreationLanes
     : async () => [...options.lanes as readonly CreationLane[]]
   const lanes = await detect({
-    allowWeb: brief.sources.some(source => source.kind === 'url'),
     attachments: brief.sources.flatMap(source => source.kind === 'image' ? [source.path] : []),
   })
   if (ai !== 'auto') {

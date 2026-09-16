@@ -1,4 +1,4 @@
-import { Errors, FS } from '@shared'
+import { Errors, FS, Platform } from '@shared'
 import { inPlace } from './in-place-files'
 
 const CLI_PACKAGE_ROOT = FS.resolvePath('..', import.meta.dir)
@@ -40,11 +40,8 @@ export const PROJECT_TSCONFIG = `{
 /**
  * TaoAppModules locates the `@tao/*` TypeScript packages the CLI hands to a project and links them in.
  *
- * Today the only source that actually exists is the workspace's own `packages/runtime`, which is what
- * every in-repo run resolves. `modules/@tao/` is the place a packaged CLI would carry its own copy, and
- * it is empty: nothing copies into it yet, so a CLI relocated out of this repository fails with the
- * message below rather than silently linking a project at nothing. See
- * `Docs/Roadmap/Developer environment upgrades.md` for the packaging step that has to fill it.
+ * In-repo runs resolve the workspace's `packages/runtime`; distributable CLI assembly calls
+ * `packageRuntime` to carry the same package as a real directory under `modules/@tao/runtime`.
  */
 export const TaoAppModules = {
   /** root is the directory a packaged CLI carries its own `@tao/*` modules in. */
@@ -68,12 +65,38 @@ export const TaoAppModules = {
     )
   },
 
+  /**
+   * packageRuntime copies the real runtime package into a relocatable CLI artifact. A future
+   * packager's complete assembly call is:
+   * `await TaoAppModules.packageRuntime(cliArtifactRoot, runtimePackageRoot)`.
+   */
+  async packageRuntime(cliPackageRoot: string, runtimePackageRoot: string): Promise<string> {
+    const source = FS.resolvePath(runtimePackageRoot)
+    if (!await FS.isFile(FS.resolvePath('TaoRuntime-src/TR.ts', source))) {
+      return Errors.throwHostEnvironment(`Cannot package @tao/runtime: ${source} has no TaoRuntime-src/TR.ts.`)
+    }
+    const destination = FS.resolvePath('modules/@tao/runtime', cliPackageRoot)
+    const temporary = `${destination}.tmp-${Platform.runtimeProcess.pid}-${Platform.randomUUID()}`
+    try {
+      await FS.copyDirectory(FS.resolvePath('TaoRuntime-src', source), FS.resolvePath('TaoRuntime-src', temporary))
+      const packageJson = FS.resolvePath('package.json', source)
+      if (await FS.isFile(packageJson)) {
+        await FS.copyFile(packageJson, FS.resolvePath('package.json', temporary))
+      }
+      await FS.remove(destination)
+      await FS.move(temporary, destination)
+    } finally {
+      await FS.remove(temporary).catch(() => undefined)
+    }
+    return destination
+  },
+
   /** ensureProject points `node_modules/@tao/runtime` at the CLI-bundled runtime. */
-  async ensureProject(projectRoot: string): Promise<void> {
+  async ensureProject(projectRoot: string, cliPackageRoot: string = CLI_PACKAGE_ROOT): Promise<void> {
     if (!await FS.isFile(FS.resolvePath('tsconfig.json', projectRoot))) {
       return
     }
-    const target = await FS.realPath(TaoAppModules.runtimeRoot())
+    const target = await FS.realPath(TaoAppModules.runtimeRoot(cliPackageRoot))
     const linkPath = FS.resolvePath('node_modules/@tao/runtime', projectRoot)
     await FS.replaceSymlink(target, linkPath)
   },

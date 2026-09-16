@@ -62,7 +62,25 @@ export type ShipLockEntry = {
   }
 }
 
+/**
+ * The package resolver owns this section as one complete snapshot. Shipping never interprets it; it only
+ * preserves it while updating the independent `ship` concern in the same Tao-written project lock.
+ */
+export type InstallsLock = {
+  lockfileVersion: 1
+  projects: Record<string, {
+    projectId: string
+    resolvedCommit: string
+    resolvedVersion?: string
+  }>
+  requires: Record<string, {
+    ref?: string
+    version?: string
+  }>
+}
+
 export type TaoProjectLock = {
+  installs?: InstallsLock
   schemaVersion: 1
   ship?: {
     apps: Record<string, ShipLockEntry>
@@ -165,6 +183,11 @@ export function putShipLockEntry(lock: TaoProjectLock, entry: ShipLockEntry): Ta
       },
     },
   }
+}
+
+/** putInstallsLock replaces the resolver-owned graph without disturbing other lock concerns. */
+export function putInstallsLock(lock: TaoProjectLock, installs: InstallsLock): TaoProjectLock {
+  return { ...lock, installs }
 }
 
 /** acceptedShipEntry refuses suggestions and declaration-stale accepted values. */

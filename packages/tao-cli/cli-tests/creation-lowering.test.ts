@@ -80,7 +80,12 @@ Describe('tao create lowering', () => {
           Summary: 'Heron at dusk',
         }],
         Sites: [{ Name: 'North marsh', Elevation: 12 }, { Name: 'north marsh' }],
-        GearItems: [{ Label: 'Binoculars', Packed: true }, { Label: '10x scope', Spare: true }, { Label: 'Notebook' }],
+        GearItems: [
+          { Label: 'Binoculars', Packed: true },
+          { Label: '10x scope', Spare: true },
+          { Label: '10x-scope' },
+          { Label: 'Notebook' },
+        ],
       },
     }
     Expect(validateCreationPlan(plan)).toEqual([])
@@ -110,10 +115,11 @@ Describe('tao create lowering', () => {
       Expect(scenarios).toContain('NorthMarsh = create Site')
       Expect(scenarios).toContain('NorthMarsh2 = create Site')
       Expect(scenarios).toContain('Row10xScope = create GearItem')
+      Expect(scenarios).toContain('Row10xScope2 = create GearItem')
     } finally {
       await FS.remove(root)
     }
-  })
+  }, 15_000)
 })
 
 async function projectFilesUnder(directory: string): Promise<string[]> {

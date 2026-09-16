@@ -1,4 +1,9 @@
-import { type Dirent, existsSync as nodeExistsSync, readFileSync as nodeReadFileSync } from 'node:fs'
+import {
+  type Dirent,
+  existsSync as nodeExistsSync,
+  readFileSync as nodeReadFileSync,
+  realpathSync as nodeRealpathSync,
+} from 'node:fs'
 import * as nodeFs from 'node:fs/promises'
 import * as nodeOs from 'node:os'
 import * as nodePath from 'node:path'
@@ -114,6 +119,11 @@ export async function isDirectory(inputPath: string): Promise<boolean> {
 /** realPath resolves symlinks and filesystem indirections for an existing path. */
 export async function realPath(inputPath: string): Promise<string> {
   return nodeFs.realpath(inputPath)
+}
+
+/** realPathSync resolves symlinks and filesystem indirections for an existing path synchronously. */
+export function realPathSync(inputPath: string): string {
+  return nodeRealpathSync(inputPath)
 }
 
 /** isEmptyDirectory checks whether a directory contains any entries. */
