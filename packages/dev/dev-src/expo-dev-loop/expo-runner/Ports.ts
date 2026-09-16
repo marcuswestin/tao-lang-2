@@ -1,18 +1,11 @@
 import { CLI, Errors, Time } from '@shared'
 import { createServer } from 'node:net'
+import { type ProcessListener as Listener, ProcessListeners } from '../../ProcessListeners'
 import { DevLoopTUI } from '../DevLoopTUI'
 
 const RELEASE_TIMEOUT_MS = 5_000
 const RELEASE_POLL_MS = 250
 
-/** Listener describes one process listening on a TCP port. */
-type Listener = {
-  command: string
-  name?: string
-  pid: number
-}
-
-type LsofListenerResult = Pick<CLI.CommandResult, 'error' | 'exitCode' | 'stderr' | 'stdout'>
 type PortProbe = (port: number) => Promise<number | undefined>
 
 export type PortReservation = {
@@ -24,9 +17,9 @@ export type PortReservation = {
 export const Ports = {
   ensureFree,
   findAvailable,
-  formatKillCommand,
-  formatListeners,
-  formatLsofListeners,
+  formatKillCommand: ProcessListeners.formatKillCommand,
+  formatListeners: ProcessListeners.formatListeners,
+  formatLsofListeners: ProcessListeners.formatLsofListeners,
   normalizeReservationError,
   reserveAvailable,
   selectAvailable,
@@ -128,7 +121,11 @@ async function ensureFree(port: number): Promise<boolean> {
     return true
   }
 
-  DevLoopTUI.logDevLoop('dev', `Port ${port} is already in use by ${formatListeners(listeners)}.`, 'warn')
+  DevLoopTUI.logDevLoop(
+    'dev',
+    `Port ${port} is already in use by ${ProcessListeners.formatListeners(listeners)}.`,
+    'warn',
+  )
   // Several worktrees of this repository share one machine, and they all reach for the same
   // conventional ports. The holder is as likely to be another checkout's dev loop as a leftover of
   // this one, so the question names that before the answer kills anything.
@@ -143,8 +140,8 @@ async function ensureFree(port: number): Promise<boolean> {
   })
   if (!shouldKill) {
     Errors.throwUserInput(
-      `Port ${port} is already in use by ${formatListeners(listeners)}. To kill it, run: ${
-        formatKillCommand(listeners)
+      `Port ${port} is already in use by ${ProcessListeners.formatListeners(listeners)}. To kill it, run: ${
+        ProcessListeners.formatKillCommand(listeners)
       }`,
     )
   }
@@ -155,74 +152,11 @@ async function ensureFree(port: number): Promise<boolean> {
   return true
 }
 
-/** formatLsofListeners reads port listeners from a completed `lsof` invocation. */
-function formatLsofListeners(result: LsofListenerResult): Listener[] | undefined {
-  const listeners = parseLsofListeners(result.stdout)
-  if (listeners.length > 0) {
-    return listeners
-  }
-  if (result.error !== undefined) {
-    return undefined
-  }
-  if (result.exitCode !== 0 && result.stdout.trim() === '' && result.stderr.trim() === '') {
-    return []
-  }
-  if (result.exitCode !== 0) {
-    return undefined
-  }
-  return listeners
-}
-
-/** formatListeners formats listening processes for terminal output. */
-function formatListeners(listeners: readonly Listener[]): string {
-  return listeners.map(formatListener).join(', ')
-}
-
-/** formatKillCommand returns the copy-pasteable graceful termination command for listeners. */
-function formatKillCommand(listeners: readonly Listener[]): string {
-  return `kill -TERM ${listeners.map(listener => listener.pid).join(' ')}`
-}
-
-function parseLsofListeners(output: string): Listener[] {
-  const listeners: Listener[] = []
-  let current: Partial<Listener> = {}
-  const flush = () => {
-    if (current.pid !== undefined) {
-      listeners.push({
-        command: current.command ?? 'unknown',
-        name: current.name,
-        pid: current.pid,
-      })
-    }
-    current = {}
-  }
-
-  for (const line of output.split(/\r?\n/)) {
-    if (line.length < 2) {
-      continue
-    }
-    const field = line[0]
-    const value = line.slice(1)
-    if (field === 'p') {
-      flush()
-      const pid = Number(value)
-      current = Number.isInteger(pid) ? { pid } : {}
-    } else if (field === 'c') {
-      current.command = value
-    } else if (field === 'n') {
-      current.name ??= value
-    }
-  }
-  flush()
-
-  return dedupeListeners(listeners)
-}
-
 async function findListeners(port: number): Promise<Listener[] | undefined> {
   const result = await CLI.run('lsof', {
     args: ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-F', 'pcn'],
   })
-  const listeners = formatLsofListeners(result)
+  const listeners = ProcessListeners.formatLsofListeners(result)
 
   if (listeners !== undefined) {
     return listeners
@@ -270,7 +204,7 @@ async function waitForRelease(port: number): Promise<void> {
   } while (Date.now() < deadline)
 
   Errors.throwUserInput(
-    `Port ${port} is still in use by ${formatListeners(remaining)} after SIGTERM.`,
+    `Port ${port} is still in use by ${ProcessListeners.formatListeners(remaining)} after SIGTERM.`,
   )
 }
 
@@ -279,18 +213,6 @@ async function listenersHaveExited(listeners: readonly Listener[]): Promise<bool
     listeners.map(listener => CLI.run('kill', { args: ['-0', String(listener.pid)] })),
   )
   return results.every(result => result.exitCode !== 0 || result.error !== undefined)
-}
-
-function dedupeListeners(listeners: readonly Listener[]): Listener[] {
-  const byPid = new Map<number, Listener>()
-  for (const listener of listeners) {
-    byPid.set(listener.pid, listener)
-  }
-  return [...byPid.values()]
-}
-
-function formatListener(listener: Listener): string {
-  return `${listener.command} pid ${listener.pid}${listener.name ? ` (${listener.name})` : ''}`
 }
 
 function formatListenerSubject(listeners: readonly Listener[]): string {

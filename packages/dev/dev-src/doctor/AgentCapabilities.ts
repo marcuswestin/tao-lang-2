@@ -52,18 +52,18 @@ const SANDBOX_SIGNALS: readonly string[] = ['SANDBOX_RUNTIME', 'CODEX_SANDBOX']
 
 const PROBES: readonly CapabilityProbe[] = [
   {
-    args: ['-o', 'pid=,ppid=,lstart=,command=', '-p', String(Platform.runtimeProcess.pid)],
+    args: ['-axo', 'pid=,ppid=,lstart=,command='],
     command: 'ps',
-    display: `ps -o pid=,ppid=,lstart=,command= -p ${Platform.runtimeProcess.pid}`,
+    display: 'ps -axo pid=,ppid=,lstart=,command=',
     name: 'process table',
-    remediation: 'Run the displayed ps shape directly; Tao project rules authorize it outside the sandbox.',
+    remediation: 'Run the displayed read-only whole-table shape directly when the active harness can broker it.',
   },
   {
     args: ['-0', String(Platform.runtimeProcess.pid)],
     command: '/bin/kill',
     display: `/bin/kill -0 ${Platform.runtimeProcess.pid}`,
     name: 'process liveness',
-    remediation: 'Run /bin/kill -0 directly; TERM and KILL are also authorized after confirming the target PID.',
+    remediation: 'Request review for /bin/kill -0 after confirming the target PID; signalling stays reviewed too.',
   },
   {
     args: ['-nP', '-iTCP:8081', '-sTCP:LISTEN', '-t'],

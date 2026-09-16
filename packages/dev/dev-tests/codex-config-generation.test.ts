@@ -8,7 +8,10 @@ const canonicalRules = `{
   "permission": {
     "bash": {
       "ps -o pid=,command= -p *": "allow",
+      "ps -axo pid=,ppid=,lstart=,command=": "allow",
       "kill -TERM *": "allow",
+      "git merge *": "allow",
+      "just studio-smoke *": "allow",
       "git status *": "allow",
     },
     "read": {
@@ -28,7 +31,13 @@ const canonicalRules = `{
         "allowUnixSockets": ["/nix/var/nix/daemon-socket/socket", "~/.local/state/watchman/test-state/sock"],
         "allowedDomains": ["registry.npmjs.org", "*.npmjs.org", "exp.host", "cache.nixos.org"],
       },
-      "excludedCommands": ["ps -o pid=,command= -p *", "kill -TERM *"],
+      "excludedCommands": [
+        "ps -o pid=,command= -p *",
+        "ps -axo pid=,ppid=,lstart=,command=",
+        "kill -TERM *",
+        "git merge *",
+        "just studio-smoke *",
+      ],
     },
   },
 }
@@ -52,6 +61,19 @@ const canonicalProfiles = `{
       "extends": "native",
       "ask": ["codesign *"],
       "allowWrite": ["~/Library/Developer/Xcode/Archives"],
+    },
+    "device-lab": {
+      "description": "Test a profile the renderer does not know by name.",
+      "extends": "local-services",
+      "allowWrite": ["~/Library/Developer/TaoDeviceLab"],
+      "unixSockets": ["~/Library/Developer/TaoDeviceLab/control.sock"],
+    },
+    "unsandboxed": {
+      "description": "Test unrestricted host access.",
+      "extends": "device-lab",
+      "allowWrite": ["~/must-not-be-rendered"],
+      "unixSockets": ["/must-not-be-rendered.sock"],
+      "sandbox": false,
     },
   },
 }
@@ -112,14 +134,31 @@ Describe('Codex config generation', () => {
         FS.resolvePath('.docker/run/docker.sock', FS.homeDir())
       ],
     ).toBe('allow')
+    Expect(parsed['permissions']['tao-release']['extends']).toBe('tao-native')
     Expect(parsed['permissions']['tao-release']['filesystem']['~/Library/Developer/Xcode/Archives']).toBe('write')
+    Expect(parsed['permissions']['tao-device-lab']['extends']).toBe('tao-local-services')
+    Expect(parsed['permissions']['tao-device-lab']['description'])
+      .toBe('Test a profile the renderer does not know by name.')
+    Expect(parsed['permissions']['tao-device-lab']['filesystem']['~/Library/Developer/TaoDeviceLab']).toBe('write')
+    Expect(
+      parsed['permissions']['tao-device-lab']['network']['unix_sockets'][
+        FS.resolvePath('Library/Developer/TaoDeviceLab/control.sock', FS.homeDir())
+      ],
+    ).toBe('allow')
+    Expect(parsed['permissions']['tao-unsandboxed']).toEqual({
+      description: 'Test unrestricted host access.',
+      extends: ':danger-full-access',
+    })
   })
 
-  Test('renders only approved host escapes as project-local command rules', () => {
+  Test('renders only fixed host command shapes as project-local command rules', () => {
     const rendered = CodexConfigGenerator.renderRules(CodexConfigGenerator.parsePermissions(canonicalRules))
 
-    Expect(rendered).toContain('pattern=["ps","-o","pid=,command=","-p"]')
-    Expect(rendered).toContain('pattern=["kill","-TERM"]')
+    Expect(rendered).toContain('pattern=["ps","-axo","pid=,ppid=,lstart=,command="]')
+    Expect(rendered).not.toContain('pattern=["ps","-o","pid=,command=","-p"]')
+    Expect(rendered).not.toContain('pattern=["kill","-TERM"]')
+    Expect(rendered).not.toContain('pattern=["git","merge"]')
+    Expect(rendered).not.toContain('pattern=["just","studio-smoke"]')
     Expect(rendered).not.toContain('git status')
   })
 
@@ -161,7 +200,7 @@ Describe('Codex config generation', () => {
       const written = await FS.readText(FS.resolvePath('.codex/config.toml', root))
       Expect(written).toContain('default_permissions = "tao-workspace"')
       Expect(await FS.readText(FS.resolvePath('.codex/rules/tao.rules', root)))
-        .toContain('pattern=["kill","-TERM"]')
+        .toContain('pattern=["ps","-axo","pid=,ppid=,lstart=,command="]')
 
       const skipped: string[] = []
       await CodexConfigGenerator.generate({
@@ -211,10 +250,15 @@ Describe('Codex config generation', () => {
     )
 
     Expect(await FS.readText(FS.resolvePath('.codex/config.toml', root))).toBe(rendered)
-    Expect(await FS.readText(FS.resolvePath('.codex/rules/tao.rules', root))).toBe(
+    const rules = await FS.readText(FS.resolvePath('.codex/rules/tao.rules', root))
+    Expect(rules).toBe(
       CodexConfigGenerator.renderRules(
         CodexConfigGenerator.parsePermissions(await FS.readText(FS.resolvePath('.rulesync/permissions.jsonc', root))),
       ),
     )
+    Expect(rules).not.toContain('pattern=["git","merge"]')
+    Expect(rules).not.toContain('pattern=["kill"')
+    Expect(rules).not.toContain('pattern=["/bin/kill"')
+    Expect(rules).not.toContain('studio-smoke')
   })
 })

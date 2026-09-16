@@ -374,6 +374,91 @@ Describe('agent worktree profile bootstrap', () => {
     )
   })
 
+  Test('a healthy dependency install runs the health probe once', async () => {
+    const repair = (await justCommands('deps')).trim().split('\n')[2]
+    Expect(repair).toBeDefined()
+    const result = await CLI.run('zsh', {
+      args: [
+        '-c',
+        [
+          'typeset -i calls=0',
+          'function just() { (( calls += 1 )); return 0 }',
+          'function bun() { return 99 }',
+          repair!,
+          'print -r -- "$calls"',
+        ].join('\n'),
+      ],
+    })
+
+    Expect(result.exitCode).toBe(0)
+    Expect(result.stdout.trim()).toBe('1')
+  })
+
+  Test('repairs a damaged dependency graph before the agent CLI build can consume it', async () => {
+    const testRoot = await mkTestDir('tao-agent-health-repair-')
+    try {
+      const fakeBin = FS.resolvePath('bin', testRoot)
+      const commandLog = FS.resolvePath('commands.log', testRoot)
+      const repaired = FS.resolvePath('repaired', testRoot)
+      await FS.writeText(
+        FS.resolvePath('bun', fakeBin),
+        [
+          '#!/bin/zsh',
+          'print -r -- "$*" >> "$TAO_TEST_COMMAND_LOG"',
+          'if [[ "$1" == run ]]; then',
+          '  [[ -f "$TAO_TEST_REPAIRED" ]] && exit 0',
+          '  print -r -- "dependency health: missing package output" >&2',
+          '  exit 1',
+          'fi',
+          'if [[ " $* " == *" --force "* ]]; then',
+          '  : > "$TAO_TEST_REPAIRED"',
+          '  exit 0',
+          'fi',
+          'exit 2',
+          '',
+        ].join('\n'),
+      )
+      await makeExecutable(FS.resolvePath('bun', fakeBin))
+
+      const script = [
+        `SCRIPT_DIR=${JSON.stringify(testRoot)}`,
+        'DEV_PACKAGE_DIR="$SCRIPT_DIR/packages/dev"',
+        'AGENT_TEMP_DIR="$SCRIPT_DIR/.artifacts/tmp"',
+        'BUN_TEMP_DIR="$AGENT_TEMP_DIR/"',
+        'INSTALL_STAMP="$SCRIPT_DIR/install.stamp"',
+        'INSTALL_LOCK="$SCRIPT_DIR/install.lock"',
+        'DEPENDENCY_HEALTH="$DEV_PACKAGE_DIR/dev-src/doctor/DependencyHealth.ts"',
+        'typeset -a BUN_INSTALL_ARGS',
+        'BUN_INSTALL_ARGS=(install --cwd "$SCRIPT_DIR")',
+        'INSTALL_ATTEMPTS=3',
+        `source ${JSON.stringify(PROFILE_SCRIPT)}`,
+        agentFunctionSource(await FS.readText(Repo.resolvePath('agent'))),
+        'ensure_dev_dependency_health',
+      ].join('\n')
+      const result = await CLI.run('zsh', {
+        args: ['-c', script],
+        cwd: testRoot,
+        env: {
+          PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+          TAO_TEST_COMMAND_LOG: commandLog,
+          TAO_TEST_REPAIRED: repaired,
+        },
+      })
+
+      Expect(result.exitCode).toBe(0)
+      Expect((await FS.readText(commandLog)).trim().split('\n')).toEqual([
+        'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
+        // The lock owner rechecks after waiting in case another bootstrap repaired the graph.
+        'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
+        `install --cwd ${testRoot} --frozen-lockfile --force`,
+        'run ' + FS.resolvePath('packages/dev/dev-src/doctor/DependencyHealth.ts', testRoot),
+      ])
+      Expect(await FS.exists(FS.resolvePath('install.stamp', testRoot))).toBe(true)
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
+
   Test('bootstraps dependencies before full verification runs its graph', async () => {
     const commands = await justCommands('full-verify')
 
@@ -584,10 +669,10 @@ async function runAgentInstall(testRoot: string, attemptOutputs: readonly string
   return { attempts: log.split('\n').filter(Boolean).length, result }
 }
 
-/** Extracts `./agent`'s installation functions so the test exercises the shipped implementation. */
+/** Extracts `./agent`'s dependency functions so the tests exercise the shipped implementation. */
 function agentFunctionSource(source: string): string {
   const start = source.indexOf('function report_install_failure()')
-  const end = source.indexOf('function install_dev_deps_if_needed()')
+  const end = source.indexOf('function needs_build()')
   Expect(start).toBeGreaterThan(0)
   Expect(end).toBeGreaterThan(start)
   return source.slice(start, end)

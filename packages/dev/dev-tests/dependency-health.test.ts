@@ -11,4 +11,25 @@ Describe('dependency health probes', () => {
   Test('every probe loads on an installed checkout', async () => {
     Expect(await dependencyHealthError()).toBeUndefined()
   })
+
+  Test('reports the underlying loader error instead of Bun location prelude', async () => {
+    const failure = await dependencyHealthError('/repo', {
+      isFile: async () => false,
+      run: async (command, spec) => {
+        const options = spec ?? {}
+        return {
+          args: [...(options.args ?? [])],
+          command,
+          cwd: options.cwd,
+          error: undefined,
+          exitCode: 1,
+          signal: null,
+          stderr: '1 | await import("ink")\n    ^\nerror: Cannot find module "ink" from "/repo/packages/dev"\n',
+          stdout: '',
+        }
+      },
+    })
+
+    Expect(failure).toBe('packages/dev: error: Cannot find module "ink" from "/repo/packages/dev"')
+  })
 })

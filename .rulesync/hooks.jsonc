@@ -3,8 +3,8 @@
   // Canonical agent lifecycle hooks for this repository, one source for two harnesses.
   // `./agent setup` renders them through rulesync's hooks feature into .claude/settings.json and
   // .codex/hooks.json. Edit this file, never the generated ones. Keep every command
-  // harness-neutral: a relative path, which rulesync prefixes with `$CLAUDE_PROJECT_DIR` for
-  // Claude Code and leaves as is for Codex, and no field one harness does not document.
+  // harness-neutral: discover the worktree root through Git so a harness launched from any
+  // repository subdirectory reaches the same script, and use no field one harness does not document.
   "hooks": {
     // Every harness reaches the repository's one setup entry, `./agent setup`, before an agent's
     // first command. Worktrunk runs it from its blocking `pre-start` hook (.config/wt.toml) and
@@ -25,7 +25,7 @@
     "sessionStart": [
       {
         "type": "command",
-        "command": "./packages/dev/dev-src/cli/agent-session-start.zsh > /dev/null",
+        "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/dev/dev-src/cli/agent-session-start.zsh\" > /dev/null",
       },
     ],
   },

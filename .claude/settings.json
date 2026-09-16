@@ -4,11 +4,7 @@
     "allow": [
       "Bash(./agent *)",
       "Bash(./dev *)",
-      "Bash(./dev studio-smoke *)",
       "Bash(./tao *)",
-      "Bash(/bin/kill -0 *)",
-      "Bash(/bin/kill -KILL *)",
-      "Bash(/bin/kill -TERM *)",
       "Bash(adb devices *)",
       "Bash(adb get-state *)",
       "Bash(bun install *)",
@@ -37,18 +33,11 @@
       "Bash(head *)",
       "Bash(jq *)",
       "Bash(just *)",
-      "Bash(just studio-proof-real-app *)",
-      "Bash(just studio-smoke *)",
-      "Bash(kill -0 *)",
-      "Bash(kill -KILL *)",
-      "Bash(kill -TERM *)",
       "Bash(ls *)",
       "Bash(lsof -nP -iTCP:* -sTCP:LISTEN -t)",
       "Bash(plutil -lint *)",
       "Bash(plutil -p *)",
       "Bash(ps -axo pid=,ppid=,lstart=,command=)",
-      "Bash(ps -o comm=,lstart= -p *)",
-      "Bash(ps -o pid=,ppid=,lstart=,command= -p *)",
       "Bash(pwd)",
       "Bash(readlink *)",
       "Bash(realpath *)",
@@ -78,29 +67,18 @@
   "sandbox": {
     "enabled": true,
     "excludedCommands": [
-      "ps -o comm=,lstart= -p *",
-      "ps -o pid=,ppid=,lstart=,command= -p *",
       "ps -axo pid=,ppid=,lstart=,command=",
-      "kill -0 *",
-      "/bin/kill -0 *",
-      "kill -TERM *",
-      "/bin/kill -TERM *",
-      "kill -KILL *",
-      "/bin/kill -KILL *",
       "adb devices *",
       "adb get-state *",
       "emulator -list-avds",
       "xcrun simctl list *",
-      "./dev studio-smoke *",
-      "just studio-smoke *",
-      "just studio-proof-real-app *",
       "gh *",
       "git fetch origin *",
       "git ls-remote origin *",
       "git push *",
       "git worktree *",
       "git merge *",
-      "git reset --merge*",
+      "git reset --merge",
       "git reset --hard HEAD"
     ],
     "filesystem": {
@@ -174,7 +152,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/packages/dev/dev-src/cli/agent-session-start.zsh > /dev/null"
+            "command": "repo_root=\"$(git rev-parse --show-toplevel)\" && \"$repo_root/packages/dev/dev-src/cli/agent-session-start.zsh\" > /dev/null"
           }
         ]
       }

@@ -1,5 +1,5 @@
 import { CLI, FS, Platform, Repo, Switch } from '@shared'
-import { Ports } from '../expo-dev-loop/expo-runner/Ports'
+import { ProcessListeners } from '../ProcessListeners'
 import {
   dependencyCompatibilityIssues,
   readDependencyFacts,
@@ -634,7 +634,7 @@ async function readPortOccupancy(port: typeof CONVENTIONAL_PORTS[number]): Promi
   const result = await CLI.run('lsof', {
     args: ['-nP', `-iTCP:${port.port}`, '-sTCP:LISTEN', '-F', 'pcn'],
   })
-  return { listeners: Ports.formatLsofListeners(result), port: port.port, purpose: port.purpose }
+  return { listeners: ProcessListeners.formatLsofListeners(result), port: port.port, purpose: port.purpose }
 }
 
 async function presentPath(repositoryRoot: string, path: string): Promise<string | undefined> {

@@ -538,29 +538,78 @@ export function crossPackageSourceImportIssues(
  * gate runner itself rather than of one node.
  */
 const DEV_ENTRY_PATH = 'packages/dev/dev-src/dev.ts'
-const DEV_LAZY_IMPORT_PREFIXES = ['./studio/', './expo-dev-loop/', '@studio']
-/** Matches a static `import` statement, wrapped or not, and never the `import(...)` call form. */
-const STATIC_IMPORT_PATTERN = /^import\b(?!\s*\()[^'"]*['"]([^'"]+)['"]/gm
+const DEV_LAZY_IMPORT_DIRECTORIES = ['studio', 'expo-dev-loop']
+/** Matches static imports and re-exports, wrapped or not, and never the `import(...)` call form. */
+const STATIC_MODULE_PATTERN = /^(?:import\b(?!\s*\()|export\b)[^'"]*['"]([^'"]+)['"]/gm
 
 /** devLazyStudioImportIssues reports static Studio or Expo imports in the `./dev` entry. */
 export function devLazyStudioImportIssues(
   files: readonly SourceFile[],
   entryPath: string = DEV_ENTRY_PATH,
 ): string[] {
-  return files
-    .filter(file => file.path === entryPath)
-    .flatMap(file =>
-      [...file.source.matchAll(STATIC_IMPORT_PATTERN)]
-        .filter(match => DEV_LAZY_IMPORT_PREFIXES.some(prefix => match[1]!.startsWith(prefix)))
-        .map(match => ({
-          detail: `statically imports \`${match[1]}\`; load it with \`await import(...)\` inside the command`
-            + ' action so the lane commands start in a checkout that has never generated the parser.',
+  const byPath = new Map(files.map(file => [file.path, file]))
+  const queue: Array<{ chain: readonly string[]; path: string }> = [{ chain: [entryPath], path: entryPath }]
+  const visited = new Set<string>()
+  const issues: Array<{ detail: string; line: number; path: string }> = []
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    if (visited.has(current.path)) {
+      continue
+    }
+    visited.add(current.path)
+    const file = byPath.get(current.path)
+    if (file === undefined) {
+      continue
+    }
+    for (const match of file.source.matchAll(STATIC_MODULE_PATTERN)) {
+      const specifier = match[1]!
+      const target = resolveLocalModule(file.path, specifier, byPath)
+      const forbidden = specifier === '@studio'
+        || ['./studio', './expo-dev-loop'].some(prefix =>
+          current.path === entryPath && (specifier === prefix || specifier.startsWith(`${prefix}/`))
+        )
+        || target !== undefined
+          && DEV_LAZY_IMPORT_DIRECTORIES.some(directory => target.startsWith(`packages/dev/dev-src/${directory}/`))
+      if (forbidden) {
+        const chain = [...current.chain, target ?? specifier]
+        issues.push({
+          detail: `statically reaches \`${target ?? specifier}\` through ${chain.join(' -> ')}; load the boundary with`
+            + ' `await import(...)` inside the command action so the lane commands start in a checkout that has never'
+            + ' generated the parser.',
           line: lineNumber(file.source, match.index),
           path: file.path,
-        }))
-    )
-    .map(issueLine)
-    .sort()
+        })
+      } else if (target !== undefined && !visited.has(target)) {
+        queue.push({ chain: [...current.chain, target], path: target })
+      }
+    }
+  }
+  return issues.map(issueLine).sort()
+}
+
+function resolveLocalModule(
+  importingPath: string,
+  specifier: string,
+  files: ReadonlyMap<string, SourceFile>,
+): string | undefined {
+  if (!specifier.startsWith('.')) {
+    return undefined
+  }
+  const parts = importingPath.split('/')
+  parts.pop()
+  for (const segment of specifier.split('/')) {
+    if (segment === '.' || segment === '') {
+      continue
+    }
+    if (segment === '..') {
+      parts.pop()
+    } else {
+      parts.push(segment)
+    }
+  }
+  const base = parts.join('/')
+  return [base, `${base}.ts`, `${base}.tsx`, `${base}/index.ts`, `${base}/index.tsx`]
+    .find(candidate => files.has(candidate))
 }
 
 function conventionIssues(

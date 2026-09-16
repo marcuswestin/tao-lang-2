@@ -131,8 +131,7 @@ studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL", "https://rele
 deps:
     mkdir -p "{{ BUN_TMP_DIR }}"
     TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile
-    if ! just _dependency-health; then TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force; fi
-    if ! just _dependency-health; then mkdir -p "{{ BUN_CACHE_DIR }}"; TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"; just _dependency-health; fi
+    if ! just _dependency-health; then TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force; if ! just _dependency-health; then mkdir -p "{{ BUN_CACHE_DIR }}"; TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"; just _dependency-health; fi; fi
 
 # Run all tests, or pass one simple test-name pattern such as `just test "formats imports"`
 test PATTERN="": _compile-word-flower-app

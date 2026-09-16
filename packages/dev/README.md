@@ -101,8 +101,10 @@ lease lets exactly one native Studio session run at a time. A second worktree's 
 wait or time out: it fails at once with the `native-host-busy` failure kind, naming the worktree and
 command that hold the host, so the summary says why before any minute is spent. Only interactive
 `just studio-native` offers to take the host over. If the registry lock under
-`~/.cache/tao/machine-lanes` is ever wedged by a holder that died, every lane on the machine fails
-with a registry-lock timeout; `rm -rf ~/.cache/tao/machine-lanes` resets it.
+`~/.cache/tao/machine-lanes` belongs to a dead process, the allocator elects one reclaimer and
+removes only that stale lock. A live or unreadable owner is preserved and the waiting lane times
+out rather than risking concurrent registry writers; use `./agent doctor` to identify the owner.
+Never delete the shared registry while another worktree may be using it.
 
 ## Choosing a lane
 

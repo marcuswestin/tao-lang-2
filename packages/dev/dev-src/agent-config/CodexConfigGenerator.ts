@@ -1,5 +1,5 @@
-import { Errors, FS, HCI, Text } from '@shared'
-import { type AgentProfiles, inheritedWritePaths, PROFILES_SOURCE, readProfiles } from './AgentProfiles'
+import { FS, HCI, Text } from '@shared'
+import { type AgentProfiles, PROFILES_SOURCE, readProfiles } from './AgentProfiles'
 
 /**
  * Codex CLI's permission profile is generated here rather than by rulesync: rulesync's Codex
@@ -15,9 +15,7 @@ const CODEX_RULES_OUTPUT = '.codex/rules/tao.rules'
 const PROFILE = 'tao-workspace'
 const PROFILE_BASE = ':workspace'
 const REVIEW_PROFILE = 'tao-review'
-const NATIVE_PROFILE = 'tao-native'
-const LOCAL_SERVICES_PROFILE = 'tao-local-services'
-const RELEASE_PROFILE = 'tao-release'
+const UNRESTRICTED_PROFILE_BASE = ':danger-full-access'
 
 /**
  * Paths and settings Codex needs that the canonical rules do not describe, because they are
@@ -80,13 +78,6 @@ function parsePermissions(source: string): CanonicalPermissions {
 
 /** renderCodexConfig renders the whole `.codex/config.toml` from the canonical rules and profiles. */
 function renderCodexConfig(permissions: CanonicalPermissions, profiles: AgentProfiles): string {
-  const overlay = (name: string) => {
-    const profile = profiles[name]
-    if (profile === undefined) {
-      Errors.throwUserInput(`${PROFILES_SOURCE} declares no '${name}' profile.`)
-    }
-    return profile
-  }
   const read = permissions.permission?.read ?? {}
   const allowWrite = permissions.claudecode?.sandbox?.filesystem?.allowWrite ?? []
   const network = permissions.claudecode?.sandbox?.network ?? {}
@@ -125,34 +116,49 @@ function renderCodexConfig(permissions: CanonicalPermissions, profiles: AgentPro
     '',
     ...networkSection(PROFILE, network, network.allowUnixSockets ?? []),
     '',
-    `[permissions.${NATIVE_PROFILE}]`,
-    `extends = ${quote(PROFILE)}`,
-    `description = ${quote(overlay('native').description)}`,
-    '',
-    ...directFilesystemSection(NATIVE_PROFILE, overlay('native').allowWrite ?? []),
-    '',
-    `[permissions.${LOCAL_SERVICES_PROFILE}]`,
-    `extends = ${quote(PROFILE)}`,
-    `description = ${quote(overlay('local-services').description)}`,
-    '',
-    ...unixSocketSection(LOCAL_SERVICES_PROFILE, overlay('local-services').unixSockets ?? [], [
-      '# Docker can control the host through mounts and networking, so it is not in the default profile.',
-    ]),
-    '',
-    `[permissions.${RELEASE_PROFILE}]`,
-    `extends = ${quote(NATIVE_PROFILE)}`,
-    `description = ${quote(overlay('release').description)}`,
-    '',
-    // Codex inherits the parent's grants through `extends`, so only the profile's own paths are spelled.
-    ...directFilesystemSection(
-      RELEASE_PROFILE,
-      inheritedWritePaths(profiles, 'release').filter(path => !inheritedWritePaths(profiles, 'native').includes(path)),
-    ),
+    ...Object.entries(profiles).flatMap(([name, profile]) => renderOverlayProfile(name, profile)),
     '',
   ].join('\n')
 }
 
-/** renderCodexRules emits only commands both auto-approved and explicitly excluded from Claude's sandbox. */
+/** Each canonical overlay becomes a matching opt-in Codex profile without a name-specific branch. */
+function renderOverlayProfile(name: string, profile: AgentProfiles[string]): string[] {
+  const codexName = overlayProfileName(name)
+  const base = profile.sandbox === false
+    ? UNRESTRICTED_PROFILE_BASE
+    : profile.extends === undefined
+    ? PROFILE
+    : overlayProfileName(profile.extends)
+  const lines = [
+    `[permissions.${codexName}]`,
+    `extends = ${quote(base)}`,
+    `description = ${quote(profile.description)}`,
+  ]
+  if (profile.sandbox === false) {
+    // AgentProfiles defines every other field as meaningless once the sandbox is disabled. Keeping
+    // this profile to a known Codex built-in avoids accidentally layering partial sandbox grants on
+    // an unrestricted profile while still requiring a person to opt in to it by name.
+    return lines
+  }
+  if ((profile.allowWrite?.length ?? 0) > 0) {
+    lines.push('', ...directFilesystemSection(codexName, profile.allowWrite ?? []))
+  }
+  if ((profile.unixSockets?.length ?? 0) > 0) {
+    lines.push('', ...unixSocketSection(codexName, profile.unixSockets ?? []))
+  }
+  return [...lines, '']
+}
+
+function overlayProfileName(name: string): string {
+  return `tao-${name}`
+}
+
+/**
+ * renderCodexRules emits only fixed command shapes that are both auto-approved and explicitly
+ * excluded from Claude's sandbox. A wildcard is not an argument validator: turning `kill -TERM *`
+ * into a Codex prefix rule would also approve negative PIDs and appended options, and approving a
+ * mutable repository entrypoint would let its current worktree contents run outside the sandbox.
+ */
 function renderCodexRules(permissions: CanonicalPermissions): string {
   const allowed = Object.entries(permissions.permission?.bash ?? {})
     .filter(([, action]) => action === 'allow')
@@ -160,12 +166,13 @@ function renderCodexRules(permissions: CanonicalPermissions): string {
   const excluded = permissions.claudecode?.sandbox?.excludedCommands ?? []
   const prefixes = allowed
     .filter(pattern => excluded.some(exclusion => commandPatternCovers(exclusion, pattern)))
-    .map(commandPatternPrefix)
+    .map(fixedCommandPattern)
     .filter((tokens): tokens is string[] => tokens !== undefined)
   const unique = new Map(prefixes.map(tokens => [JSON.stringify(tokens), tokens]))
   return [
     '# Generated by `./agent setup` from .rulesync/permissions.jsonc. Edit that file, not this one.',
-    '# These exact prefixes need host capabilities the sandbox cannot express. Every other allowed',
+    '# These fixed command shapes need host capabilities the sandbox cannot express. Every wildcard',
+    '# command and mutable repository entrypoint remains sandboxed or requires review. Every other allowed',
     '# command remains inside the active filesystem and network permission profile.',
     '',
     ...[...unique.values()].map(tokens =>
@@ -198,8 +205,8 @@ function header(): string[] {
     '# Repo-local filesystem, network, and approval settings for Tao development.',
     '# Git metadata writes outside the worktree are routed through Auto-review.',
     '#',
-    `# Generated with .codex/rules/tao.rules by \`./agent setup\` from ${PERMISSIONS_SOURCE}.`,
-    '# Edit that canonical file, not either generated Codex output:',
+    `# Generated with .codex/rules/tao.rules by \`./agent setup\` from ${PERMISSIONS_SOURCE}`,
+    `# and ${PROFILES_SOURCE}. Edit those canonical files, not either generated Codex output:`,
     "# rulesync's own Codex translator cannot express loopback binding, Unix sockets, or a",
     '# curated domain allowlist, so this profile is rendered by',
     '# packages/dev/dev-src/agent-config/CodexConfigGenerator.ts instead.',
@@ -307,8 +314,9 @@ function commandPatternCovers(exclusion: string, allowed: string): boolean {
   return samePrefix && (outer.trailingWildcard || outer.prefix.length === inner.prefix.length)
 }
 
-function commandPatternPrefix(pattern: string): string[] | undefined {
-  return parseCommandPattern(pattern)?.prefix
+function fixedCommandPattern(pattern: string): string[] | undefined {
+  const parsed = parseCommandPattern(pattern)
+  return parsed?.trailingWildcard === false ? parsed.prefix : undefined
 }
 
 /**

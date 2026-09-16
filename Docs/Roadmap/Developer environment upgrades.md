@@ -1134,3 +1134,50 @@ an entry here may link one when the developer workflow is also affected.
 - **Acceptance:** A simulated spawn failure appears as one failed capability while every other
   probe is still reported; `./agent capabilities` completes in the managed shell.
 - **Source:** 2026-09-15 HNReader simulator recovery.
+
+### DEVENV-061 — Generated-artifact cleanup is denied after files gain macOS provenance
+
+- **Status:** Candidate
+- **Area:** Generated artifacts
+- **Impact:** Repository gates cannot clean generated IDE, runtime, or Studio-test directories, and a
+  parser-generation attempt can empty `_gen_tao-parser/module` before its replacement fails. The
+  resulting `EPERM` or `EFAULT` turns cleanup into broad, unrelated test failures.
+- **Evidence:** During the 2026-09-16 verification-foundation work, `verify --changed` and
+  `verify --complete` failed recursively removing generated IDE, runtime-toolchain, and Studio
+  scratch trees; the required unsandboxed retry failed identically. `ls -l@` showed inherited
+  `com.apple.provenance` metadata throughout copied `@tao` trees. An earlier parser-generation
+  attempt had already emptied its live output before the same cleanup denial surfaced.
+- **Workaround:** For an emptied persistent generated tree, restore matching output from a checkout
+  at the same source revision and verify that its generator reports `up to date`. Focused tests that
+  do not copy and recursively remove provenance-marked trees remain usable. A fresh temporary Git
+  checkout with the exact working diff applied omits the inherited provenance metadata and can run
+  the complete gate successfully.
+- **Proposed change:** Identify why copied repository inputs retain provenance that this host refuses
+  to remove, and make generated-tree replacement transactional so a cleanup denial preserves the
+  prior output. The supported verification host/profile must be able to delete its own scratch roots.
+- **Dependencies:** None.
+- **Acceptance:** `verify --changed` and `verify --complete` can recursively clean the IDE, runtime,
+  and Studio scratch trees; a forced generator cleanup denial leaves persistent output byte-for-byte
+  intact and reports one actionable failure.
+- **Source:** 2026-09-16 September remediation Wave 1.
+
+### DEVENV-062 — The default Codex profile cannot refresh its generated Codex configuration
+
+- **Status:** Candidate
+- **Area:** Agent configuration
+- **Impact:** Canonical `.rulesync` changes can leave `.codex/config.toml` or
+  `.codex/rules/tao.rules` stale even though `./agent setup` and `just _agent-config` otherwise
+  succeed, so generated-parity tests fail after the documented regeneration command.
+- **Evidence:** During the 2026-09-16 verification-foundation work, both commands reported the Codex
+  outputs as not writable under the default Codex workspace profile; an escalated retry retained the
+  same protection boundary.
+- **Workaround:** Regenerate from a host/profile allowed to update the generated `.codex` outputs,
+  then run `codex-config-generation.test.ts` to prove exact parity.
+- **Proposed change:** Provide a repository-owned regeneration path that can replace the generated
+  Codex files without granting general writes to mutable harness configuration, or document the
+  required host/profile transition in the canonical setup workflow.
+- **Dependencies:** `.rulesync/permissions.jsonc`, `.rulesync/profiles.jsonc`, and
+  `packages/dev/dev-src/agent-config/CodexConfigGenerator.ts`.
+- **Acceptance:** Starting from deliberately stale generated Codex files, the documented setup command
+  refreshes them and the exact-parity test passes in the default supported Codex workflow.
+- **Source:** 2026-09-16 September remediation Wave 1.

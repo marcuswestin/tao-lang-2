@@ -5,6 +5,7 @@
 // the rule that the generated file is the only one this command may write.
 import { HCI } from '@shared'
 import { Describe, Expect, Test } from '@shared/test'
+import { SecretsCommand } from '../dev-src/secrets/SecretsCommand'
 import { parseEnvFile } from '../dev-src/secrets/SecretsFile'
 import {
   formatStore,
@@ -107,13 +108,24 @@ Describe('Secret store', () => {
 })
 
 Describe('Generated environment file', () => {
+  Test('decryption preserves trailing and multiline plaintext exactly', async () => {
+    const exact = '  first line\nsecond line\n'
+    const values = await SecretsCommand.testing.decryptedValues(
+      withSecret(store(), 'TOKEN', ARMOR, { now: new Date() }),
+      { decrypt: async () => exact, encrypt: async plaintext => plaintext },
+    )
+
+    Expect(values.get('TOKEN')).toBe(exact)
+  })
+
   Test('says it is generated, and where to put what is not', () => {
     const text = renderEnvFile(new Map([['TOKEN', 'abc']]), { generatedAt: new Date('2026-09-04T10:00:00Z') })
 
     Expect(text.includes('Do not edit.')).toBe(true)
     // The rule that keeps hand-entered values safe: this file is replaced wholesale, the other one is not.
     Expect(text.includes('.env.local')).toBe(true)
-    Expect(text.includes("TOKEN='abc'")).toBe(true)
+    Expect(text.includes('# tao-secret-format: json-v1')).toBe(true)
+    Expect(text.includes('TOKEN="abc"')).toBe(true)
   })
 
   Test('a value keeps its exact bytes through quoting', () => {
@@ -121,8 +133,14 @@ Describe('Generated environment file', () => {
 
     const text = renderEnvFile(new Map([['TOKEN', awkward]]), { generatedAt: new Date() })
 
-    // Single-quoted with the shell's own escape, so a reader hands back exactly what age produced.
-    Expect(text.includes(`TOKEN='has '\\''quotes'\\'' and spaces #and-a-hash'`)).toBe(true)
+    Expect(text.includes(`TOKEN="has 'quotes' and spaces #and-a-hash"`)).toBe(true)
+  })
+
+  Test('multiline and surrounding whitespace survive the generated-file round trip exactly', () => {
+    const exact = '  first line\nsecond line\n'
+    const written = renderEnvFile(new Map([['TOKEN', exact]]), { generatedAt: new Date() })
+
+    Expect(parseEnvFile(written)['TOKEN']).toBe(exact)
   })
 })
 

@@ -207,7 +207,7 @@ function fakeDependencies(overrides: Partial<FakeRepository> = {}) {
     if (joined === 'symbolic-ref --quiet HEAD') {
       return result(command, args, spec.cwd, '', repository.branch === '' ? 1 : 0)
     }
-    if (joined === 'push origin main:main' && repository.failMainPush === true) {
+    if (args[0] === 'push' && args.at(-1) === 'main:main' && repository.failMainPush === true) {
       return result(command, args, spec.cwd, '', 1)
     }
     if (
@@ -383,7 +383,9 @@ Describe('merge-with-main', () => {
     const treeProof = operations.findIndex((operation, index) => index > squash && operation === 'git write-tree')
     const verify = operations.indexOf('just verify --complete')
     const commit = operations.findIndex(operation => operation.startsWith('git commit -F'))
-    const push = operations.indexOf('git push origin main:main')
+    const push = operations.indexOf(
+      `git push origin --force-with-lease=refs/heads/main:${fake.repository.remoteMainHead} main:main`,
+    )
     const archive = operations.indexOf(
       'git push origin --force-with-lease=refs/heads/merged/example: feat/example:refs/heads/merged/example',
     )
@@ -430,11 +432,13 @@ Describe('merge-with-main', () => {
     Expect(commitMessage).toContain('Squashed commit of the following:')
   })
 
-  Test('pushes a behind remote feature branch forward instead of refusing to land', async () => {
+  Test('does not publish a behind remote feature branch before verification', async () => {
     const fake = fakeDependencies({ remoteFeatureHead: 'stale00000000000000000000000000000000000' })
 
     const dryRun = await MergeWithMainCommand.run({ repositoryRoot: fake.repository.featureRoot }, fake.dependencies)
-    Expect(dryRun.lines).toContain("PLAN  Push 'feat/example' to origin, whose branch is behind this worktree.")
+    Expect(dryRun.lines).toContain(
+      'PLAN  Keep the behind origin/feat/example unchanged until the verified archive replaces it.',
+    )
 
     const outcome = await MergeWithMainCommand.run({
       execute: true,
@@ -444,19 +448,13 @@ Describe('merge-with-main', () => {
     }, fake.dependencies)
 
     const operations = fake.calls.map(call => `${call.command} ${call.args.join(' ')}`)
-    const catchUp = operations.indexOf(
-      'git push origin --force-with-lease=refs/heads/feat/example:stale00000000000000000000000000000000000'
-        + ' feat/example:refs/heads/feat/example',
-    )
     const fullVerify = operations.indexOf('just full-verify')
-    // The archive deletion leases against the head this push created, not the stale head it replaced.
     const deleteRemote = operations.indexOf(
-      `git push origin --force-with-lease=refs/heads/feat/example:${fake.repository.featureHead}`
+      'git push origin --force-with-lease=refs/heads/feat/example:stale00000000000000000000000000000000000'
         + ' :refs/heads/feat/example',
     )
 
-    Expect(catchUp).toBeGreaterThan(0)
-    Expect(fullVerify).toBeGreaterThan(catchUp)
+    Expect(operations.filter(operation => operation.includes('feat/example:refs/heads/feat/example'))).toEqual([])
     Expect(deleteRemote).toBeGreaterThan(fullVerify)
     Expect(outcome.mode).toBe('executed')
   })
@@ -625,6 +623,30 @@ Describe('merge-with-main', () => {
     await Expect(MergeWithMainCommand.run({ abortSnapshot: snapshotPath, yes: true }, fake.dependencies))
       .rejects.toThrow('Refusing to rewrite pushed history')
     Expect(fake.calls.filter(call => call.args[0] === 'reset')).toHaveLength(resetCallsBeforeAbort)
+  })
+
+  Test('restores abort recovery when the main push lease proves main moved', async () => {
+    const movedMain = 'movedmain000000000000000000000000000000000'
+    const fake = fakeDependencies({
+      failMainPush: true,
+      remoteMainSequence: [
+        'main000000000000000000000000000000000000',
+        'main000000000000000000000000000000000000',
+        movedMain,
+      ],
+    })
+
+    await Expect(MergeWithMainCommand.run({
+      execute: true,
+      push: true,
+      repositoryRoot: fake.repository.featureRoot,
+      yes: true,
+    }, fake.dependencies)).rejects.toThrow('The remote was not changed; abort this snapshot')
+
+    const [snapshotPath, stored] = [...fake.snapshots.entries()][0]!
+    Expect((stored as MergeSnapshot).phase).toBe('committed')
+    const outcome = await MergeWithMainCommand.run({ abortSnapshot: snapshotPath, yes: true }, fake.dependencies)
+    Expect(outcome.mode).toBe('aborted')
   })
 
   Test('keeps the archived recovery boundary when preserving the worktree fails', async () => {
