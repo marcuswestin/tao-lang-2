@@ -73,8 +73,11 @@ Describe('dev data bootstrap', () => {
   })
 })
 
+// Bun can strand an in-process WebSocket dial when an unrelated concurrent test force-stops its
+// own Bun.serve instance. These integration tests deliberately retain process-level concurrency
+// inside their assertions, but own Bun servers and WebSocket clients serially at the file boundary.
 Describe('dev data server', () => {
-  Test('answers the probe and refuses streams without a well-formed app key', async () => {
+  ServerTest('answers the probe and refuses streams without a well-formed app key', async () => {
     const server = await DevDataServer.start({ rootDir: await mkTestDir('tao-dev-data-') })
     try {
       const denied = await fetch(`http://127.0.0.1:${server.port}${DevDataProtocol.probePath}`)
@@ -96,7 +99,7 @@ Describe('dev data server', () => {
     }
   })
 
-  Test('syncs saves between two connections and keeps apps and storage keys apart', async () => {
+  ServerTest('syncs saves between two connections and keeps apps and storage keys apart', async () => {
     const rootDir = await mkTestDir('tao-dev-data-')
     const server = await DevDataServer.start({ rootDir })
     const provider = DevProvider(() => host(server.port, 'Notes-a1b2c3d4', server.capability))
@@ -144,7 +147,7 @@ Describe('dev data server', () => {
     }
   })
 
-  Test('serializes independent authorities with CAS and publishes external saves and resets', async () => {
+  ServerTest('serializes independent authorities with CAS and publishes external saves and resets', async () => {
     const rootDir = await mkTestDir('tao-dev-data-authorities-')
     const firstServer = await DevDataServer.start({ rootDir })
     const secondServer = await DevDataServer.start({ rootDir })
@@ -184,7 +187,7 @@ Describe('dev data server', () => {
     }
   })
 
-  Test('serializes CAS and observes resets from an independent authority process', async () => {
+  ServerTest('serializes CAS and observes resets from an independent authority process', async () => {
     const rootDir = await mkTestDir('tao-dev-data-process-authority-')
     const readyPath = FS.resolvePath('child.json', rootDir)
     const stopPath = FS.resolvePath('stop', rootDir)
@@ -239,7 +242,7 @@ Describe('dev data server', () => {
     }
   })
 
-  Test('serves a stream saved by an earlier server and clears it on reset', async () => {
+  ServerTest('serves a stream saved by an earlier server and clears it on reset', async () => {
     const rootDir = await mkTestDir('tao-dev-data-')
     const earlier = await DevDataServer.start({ rootDir })
     const earlierConnection = DevProvider(() => host(earlier.port, 'Notes-a1b2c3d4', earlier.capability))
@@ -275,28 +278,31 @@ Describe('dev data server', () => {
     }
   })
 
-  Test('migrates an arbitrary legacy snapshot without interpreting app fields as authority metadata', async () => {
-    const rootDir = await mkTestDir('tao-dev-data-legacy-')
-    const legacy = '{"revision":7,"snapshot":"app-owned","other":true}'
-    await FS.writeText(FS.resolvePath('Notes-a1b2c3d4/Notes.json', rootDir), legacy)
-    const server = await DevDataServer.start({ rootDir })
-    const connection = DevProvider(() => host(server.port, 'Notes-a1b2c3d4', server.capability))
-      .connect({ configuration: {}, schema, storageKey: 'Notes' })
-    try {
-      Expect(await connection.load()).toBe(legacy)
-      await connection.save('{"migrated":true}')
-      Expect(await FS.readJson(FS.resolvePath('Notes-a1b2c3d4/Notes.json', rootDir))).toEqual({
-        format: 'tao-dev-data-state-v1',
-        revision: 2,
-        snapshot: '{"migrated":true}',
-      })
-    } finally {
-      connection.close?.()
-      await server.stop()
-    }
-  })
+  ServerTest(
+    'migrates an arbitrary legacy snapshot without interpreting app fields as authority metadata',
+    async () => {
+      const rootDir = await mkTestDir('tao-dev-data-legacy-')
+      const legacy = '{"revision":7,"snapshot":"app-owned","other":true}'
+      await FS.writeText(FS.resolvePath('Notes-a1b2c3d4/Notes.json', rootDir), legacy)
+      const server = await DevDataServer.start({ rootDir })
+      const connection = DevProvider(() => host(server.port, 'Notes-a1b2c3d4', server.capability))
+        .connect({ configuration: {}, schema, storageKey: 'Notes' })
+      try {
+        Expect(await connection.load()).toBe(legacy)
+        await connection.save('{"migrated":true}')
+        Expect(await FS.readJson(FS.resolvePath('Notes-a1b2c3d4/Notes.json', rootDir))).toEqual({
+          format: 'tao-dev-data-state-v1',
+          revision: 2,
+          snapshot: '{"migrated":true}',
+        })
+      } finally {
+        connection.close?.()
+        await server.stop()
+      }
+    },
+  )
 
-  Test('contains and reports an external refresh failure', async () => {
+  ServerTest('contains and reports an external refresh failure', async () => {
     const rootDir = await mkTestDir('tao-dev-data-refresh-failure-')
     const logs: string[] = []
     const server = await DevDataServer.start({ log: line => logs.push(line), rootDir })
@@ -322,7 +328,7 @@ Describe('dev data server', () => {
     }
   })
 
-  Test('rejects a save while the server is away and resumes on the server that replaces it', async () => {
+  ServerTest('rejects a save while the server is away and resumes on the server that replaces it', async () => {
     const rootDir = await mkTestDir('tao-dev-data-')
     const timers = manualTimers()
     const server = await DevDataServer.start({ rootDir })
@@ -356,7 +362,7 @@ Describe('dev data server', () => {
     }
   })
 
-  Test('publishes Dev through the provider conformance contract', async () => {
+  ServerTest('publishes Dev through the provider conformance contract', async () => {
     const server = await DevDataServer.start({ rootDir: await mkTestDir('tao-dev-data-') })
     try {
       await TR.testProvider(
@@ -372,7 +378,7 @@ Describe('dev data server', () => {
     }
   })
 
-  Test('names what a build lacks instead of dialing nowhere', async () => {
+  ServerTest('names what a build lacks instead of dialing nowhere', async () => {
     const provider = DevProvider(() => ({
       bootstrap: (): DevDataBootstrap => ({ kind: 'missing', missing: ['the Expo manifest carries no bootstrap'] }),
       connect: () => Errors.throwUnexpected('must not connect'),
@@ -382,7 +388,33 @@ Describe('dev data server', () => {
     await Expect(provider.connect({ configuration: {}, schema, storageKey: 'Notes' }).load())
       .rejects.toThrow('needs a running Tao dev server, but the Expo manifest carries no bootstrap')
   })
+
+  ServerTest('repeatedly releases each in-process WebSocket before stopping its owned server', async () => {
+    for (let iteration = 0; iteration < 8; iteration += 1) {
+      const server = await DevDataServer.start({ rootDir: await mkTestDir('tao-dev-data-ownership-') })
+      const connection = DevProvider(() => host(server.port, 'Ownership-00000000', server.capability))
+        .connect({ configuration: {}, schema, storageKey: 'Notes' })
+      try {
+        Expect(await connection.load()).toBeUndefined()
+        await connection.save(`{"iteration":${iteration}}`)
+      } finally {
+        connection.close?.()
+        await server.stop()
+      }
+    }
+  })
 })
+
+let serverTestTail = Promise.resolve()
+
+/** ServerTest gives every in-process Bun server and WebSocket test exclusive ownership until teardown finishes. */
+function ServerTest(name: string, run: () => Promise<void>): void {
+  Test(name, () => {
+    const result = serverTestTail.then(run)
+    serverTestTail = result.catch(() => undefined)
+    return result
+  })
+}
 
 /** host dials a real server on this machine through Bun's WebSocket, the way a device would. */
 function host(port: number, app: string, capability: string): DevDataHost {
@@ -400,9 +432,6 @@ function host(port: number, app: string, capability: string): DevDataHost {
       raw.onclose = event => wrapped.onclose?.(event.reason ?? '')
       return wrapped
     },
-    // Under Bun's concurrent test runner a dial can be stranded by another test's server stopping
-    // at that instant; a short bound turns that into one quick redial instead of a hung test.
-    connectTimeoutMs: 1_000,
   }
 }
 
