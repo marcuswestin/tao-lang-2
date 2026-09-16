@@ -68,9 +68,10 @@ One `tao-studio-device-v1` control protocol supports three transports:
 1. **Development bootstrap.** Studio gives the installed development client its Metro URL, candidate
    Studio gateway addresses, and an ephemeral pairing attempt. Both screens show the same short
    authentication code before Studio grants persistent device trust.
-2. **Dependable LAN path.** Studio advertises authenticated Bonjour candidates and the iOS client uses
-   Network.framework discovery, including peer-to-peer Wi-Fi where available. A trusted device verifies
-   the pinned Studio identity before adopting rediscovered endpoints.
+2. **Dependable LAN path.** Studio advertises authenticated Bonjour candidates. The current iOS module
+   discovers `_tao-studio._tcp` on the local domain through Foundation's `NetServiceBrowser` and
+   `NetService`; a trusted device verifies the pinned Studio identity before adopting rediscovered
+   endpoints. This implementation does not claim peer-to-peer Wi-Fi discovery.
 3. **Internet path.** Studio and device hold outbound authenticated WebSockets to the Tao relay. The
    relay routes encrypted, project-scoped messages without gaining source or filesystem authority.
 
@@ -78,12 +79,14 @@ A QR/deep link remains the universal fallback. It contains endpoint, session id,
 and one short-lived challenge, never a reusable credential. The device key lives in Keychain and enables
 foreground reconnection while project trust and runtime compatibility remain valid.
 
-Network.framework is Apple's recommended API for Bonjour advertise/browse/connect. Do not build new work
-on Multipeer Connectivity: its current public classes are deprecated. DeviceDiscoveryUI is not a Slice 1
+Network.framework remains the preferred candidate if Tao later adds an explicitly supported
+peer-to-peer browse/connect path; the current software does not use it. Do not build new work on
+Multipeer Connectivity: its current public classes are deprecated. DeviceDiscoveryUI is not a Slice 1
 dependency: its documented Mac app-to-app surface is Mac Catalyst, while Studio currently uses Electrobun.
-Revisit it only if a maintained Catalyst or native helper boundary makes it an actual fit. The UI always
-labels **LAN**, **peer-to-peer**, or **Tao relay**. Backgrounding pauses the control plane; foregrounding
-revalidates and catches up rather than pretending iOS guarantees a permanent socket.
+Revisit it only if a maintained Catalyst or native helper boundary makes it an actual fit. Any future
+transport UI must label **LAN**, **peer-to-peer**, or **Tao relay** truthfully. Backgrounding pauses the
+control plane; foregrounding revalidates and catches up rather than pretending iOS guarantees a permanent
+socket.
 
 The code plane stays separate: Metro/Fast Refresh for development; a signed, runtime-compatible complete
 update for a distributed preview. A control connection never grants arbitrary live code to an App Store

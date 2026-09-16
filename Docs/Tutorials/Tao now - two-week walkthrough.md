@@ -1,10 +1,11 @@
-# Tao now: a two-week walkthrough
+# Tao now: a living walkthrough
 
-This is a linear tour of the user-visible work landed from 2026-08-23 through 2026-09-06. It is
-for an experienced developer who already has this repository checked out. **Verified** means the
-step was exercised in Studio or a running Tao app while this guide was written; **not verified here**
-means the implementation and tests exist, but this host lacked the required service, credential,
-device, or browser capability.
+This began as a linear tour of the user-visible work landed from 2026-08-23 through 2026-09-06 and
+was reconciled with the current software contract on 2026-09-16. It is for an experienced developer
+who already has this repository checked out. **Verified** means the step was exercised in Studio or a
+running Tao app during the walkthrough pass; later contract corrections are not retroactively counted
+as live evidence. **Not verified here** means the implementation and tests exist, but this host lacked
+the required service, credential, device, or browser capability.
 
 ## What landed
 
@@ -20,9 +21,10 @@ device, or browser capability.
   and device kits, native navigation chrome/restoration, and keyboard-first command discovery.
 - **A broader data boundary:** provider-neutral connections now cover InstantDB, a machine-local Dev
   datasource, whole-snapshot iCloud storage, and granular CloudKit records.
-- **A developer-to-release path:** `tao create`, local visual review, Studio beta shipping, App Store
-  dry runs/releases, over-the-air updates and rollback, plus substantially stronger verification and
-  diagnostic automation.
+- **A developer-to-release path:** `tao create`, local visual review, the Studio beta-shipping entry
+  point, App Store dry-run orchestration, and implemented over-the-air update and rollback paths, plus
+  substantially stronger verification and diagnostic automation. This walkthrough did not perform an
+  App Store or TestFlight release or an installed-binary OTA.
 
 Several commits in the period were plans, internal simplifications, or verification infrastructure;
 they are useful groundwork but are not presented below as already usable product behavior.
@@ -50,8 +52,6 @@ Start with the deterministic HNReader variant so that the tour does not depend o
 ```sh
 ./dev studio Apps/HNReader --app HNReaderStub
 ```
-
-![Annotated overview of the Tao Studio workbench](<Images/Tao Studio overview.png>)
 
 1. Use the **Project** and **app** selectors at the top to change the open project or app variant.
 2. Use the left rail for **Files**, **Components**, **Screens**, **Design tokens**, **Data**,

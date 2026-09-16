@@ -32,12 +32,12 @@ roadmap's first two targets (Record journey, `tao review`).
 
 Browser evidence: the simulated smoke lane, the only real-browser proof of Draw and Snap, is
 quarantined from `full-verify` again (`just studio-smoke packages/dev/studio-smoke/studio-simulated-user.test.ts` reproduces it). The landing
-fixed a real product bug it exposed: the board's pointer handler swallowed toolbar clicks, so Snap
-could not be pressed with a mouse. After that fix the synthetic CDP drags themselves proved
-nondeterministic (one run left the catalog at revision 1 with no rectangle), and the ledger in
-`Developer environment upgrades.md` asks for a deterministic browser action boundary and ten
-consecutive green runs before the lane rejoins the graph. Native and canary lanes report
-`native-host-busy` under an agent host and pass only from an ordinary Terminal.
+and later diagnostics exposed real toolbar, gesture, rerender, interleaved-Snap, editor-ownership,
+source-identity, geometry, and transaction defects. Those product fixes now have focused coverage,
+including a real pointer-release drag-one-in target; no remaining failure has been attributed to the
+browser automation itself. The remaining gate is evidence: the complete journey must run green ten
+consecutive times in a normal Terminal before it rejoins `full-verify`. Native and canary acceptance
+remains a separate normal-Terminal gate.
 
 What the client offers today: drag on empty canvas creates a sketch; drag inside a sketch draws a
 rectangle; click selects and Shift-click extends; eight handles resize; Option-drag duplicates; the

@@ -35,11 +35,12 @@ remains on the implementation-ready Studio path.
 
 - Slices 1, 3, 4, and 5 are implemented through the current Tao/ProductHost strangler boundary. Tao owns
   Files, inventories, Search, drawer panels, detailed scenario controls, and all inspector contexts; the
-  trusted TypeScript controller and primitive leaves remain the intentional host boundary. Inspector Data
-  explicitly reports unavailable binding metadata because the render DTO has no binding graph, and Actions
-  exposes only the supported Wrap in Stack operation because there is no runtime action inventory. Slice 6 is
-  implemented for the structured design subset listed in the spec; the richer §13 behaviors explicitly
-  listed there remain deferred language work rather than inferred Studio semantics.
+  trusted TypeScript controller and primitive leaves remain the intentional host boundary. The Text section
+  consumes declaration-resolved, scope-checked binding candidates for the selected render without claiming a
+  general runtime binding graph. Actions exposes only implemented, preflighted source actions: wrap in
+  `Row`, `Col`, or `Stack`, remove a direct child, set text, and bind text; it does not invent a runtime action
+  inventory. Slice 6 is implemented for the structured design subset listed in the spec; the richer §13
+  behaviors explicitly listed there remain deferred language work rather than inferred Studio semantics.
 - Slice 2's proposed view-instance persistence is superseded: persistence is top-level only. Studio threads
   one top-level persisted collapsed-folder set through its recursive Files views.
 - Slices 7 and 8 are decision-blocked on fixture-through-action result/handle, multiplicity, transaction,

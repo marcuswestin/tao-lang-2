@@ -21,13 +21,13 @@ current implementation.
 ## The outcome
 
 ```bash
-tao ship . --app WordFlowerInstantDB
+tao ship . --app WordFlowerInstantDB --beta
 ```
 
 With the developer's Apple prerequisites, that command compiles the variant in release mode,
 derives native configuration from source and the project lock, builds a signed iOS binary locally
-through Xcode, uploads it to App Store Connect/TestFlight, and prints the
-state the developer needs next:
+through Xcode, uploads it to TestFlight through App Store Connect, and prints the state the developer
+needs next:
 
 ```text
 Compiled WordFlowerInstantDB (release)                       2s
@@ -499,8 +499,9 @@ the design lock's contract rather than inventing one:
   hidden sibling file; the sibling is the design lock's answer for suggestions that outlive a run.
 - Secrets never enter the folder. Credentials stay in the substrate's stores, as this plan
   already says; the exploration's `config` resolution for provider ids reads the same lock.
-- Package resolution owns the implemented `installs` section (`lockfileVersion`, `requires`, and
-  `projects`), while shipping owns `ship`; neither writer interprets or erases the other's concern.
+- The single lock reserves the `installs` section (`lockfileVersion`, `requires`, and `projects`) for
+  package resolution, while the implemented shipping path owns `ship`; neither concern's writer may
+  interpret or erase the other.
 
 ## The Tao Studio companion app
 

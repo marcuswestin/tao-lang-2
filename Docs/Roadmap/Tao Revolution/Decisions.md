@@ -993,9 +993,13 @@ part has landed.
 - **Keyboard and pointer input share semantic operations.** Enter activates or engages; Escape
   clears narrowing, disengages without losing the target, ascends, then opens overview; arrows move
   region or target attention; `.` opens verbs; physical `Slash` toggles hints; and `primary+K`
-  opens the palette. Engaged input, modal occurrence, target, focused scene, app command, then
-  reducer key is the dispatch order. Modifier chords invoke directly, while bare letter keys act
-  only as verb accelerators. Pointer activation first targets the same node.
+  opens the palette. In the palette and pending-slot chooser, arrows cycle the displayed choices and
+  Enter invokes or accepts the selected choice. Authored bare-letter command keys invoke only as verb
+  accelerators while the verb layer is open. A currently displayed generated hint or overview key
+  enters its assigned identity; other letters extend narrowing, including in the palette. Keyboard
+  movement may target an input without engaging it; Enter engages the already targeted input.
+  Engaged input, modal occurrence, target, focused scene, app command, then reducer key is the
+  dispatch order. Modifier chords invoke directly. Pointer activation first targets the same node.
 - **Command policy folds from authored surfaces.** An entity orders defaults with
   `commands A, B` and withholds one with `commands hide C`; a view promotes commands using
   `Commands { … }` and excludes inherited defaults with `hide C`. The folded verb order is view
@@ -1018,9 +1022,11 @@ part has landed.
   attention. Help remains unimplemented.
 - **Generated keys are deterministic runtime policy** (KEY-D13). Existing identities retain their keys across
   reorders; new identities are considered in canonical identity order and receive the first free
-  label-derived letter, then another distinctive label letter, then a two-letter sequence. Reducer
-  keys and explicit shortcuts or accelerators are never allocated. Affordances remain absent until
-  the first hardware-key dispatch, while `press key` drives that same seam in tests.
+  label-derived letter, then another distinctive label letter, then a two-letter sequence. One
+  canonical key parser and identity-to-key resolver drives validation, reducer dispatch, and every
+  displayed assignment; a shown key cannot dispatch a different identity. Reducer keys and explicit
+  shortcuts or accelerators are never allocated. Affordances remain absent until the first
+  hardware-key dispatch, while `press key` drives that same seam in tests.
 
 ### The AI surface
 

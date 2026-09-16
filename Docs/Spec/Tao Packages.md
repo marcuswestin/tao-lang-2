@@ -1,13 +1,14 @@
 # Tao Project and Packages
 
 Status: partially implemented design draft. The current implementation supports local
-`project { id "..." name "..." version "..." remote none license ... }` metadata, `tao create` and project-ID
-migration, `file`/`package`/`workspace`/`public`
+`project { id "..." name "..." version "..." DefaultApp AppName remote none license ... }` metadata,
+`tao create` and project-ID migration, `file`/`package`/`workspace`/`public`
 declaration visibility, `use ... from ...` imports for relative Tao source paths and `@tao/...`
 stdlib paths, bare same-package `use Foo`, local `@package[/subfolder]` imports, the reserved root
 `@[/subfolder]` generated package, and public self-hosted `nav` and `datasource` declarations. Import renaming,
-`requires`, external workspace installation, lockfiles, remotes, other
-CLI package commands, and package publishing remain future work.
+`requires` resolution, external workspace installation, remotes, other CLI package commands, and package
+publishing remain future work. `.tao-project/lock.jsonc` is already the single Tao-written envelope for
+shipping; its `installs` concern is reserved for the future package resolver rather than a second lockfile.
 
 The implemented package surface includes `@tao/text`, `@tao/time`, `@tao/linking`, and the curated
 `@tao/device/{haptic,clipboard,share}` capabilities, and requires parentheses on every view, action,
@@ -86,6 +87,7 @@ project {
    id "chat"
    name "Chat"
    version "0.1.0"
+   DefaultApp ChatApp
    remote none
    license MIT
 }
@@ -418,14 +420,14 @@ the declaration object across module boundaries and import traversal order.
 - The root project folder contains `.tao-project/`, with installed projects, lockfiles, and more
   - `.tao-project/installs/...`
   - `.tao-project/lock.jsonc` — the project's only Tao-written lock, sectioned per concern; package
-    resolution owns `installs` and shipping owns `ship`. Each writer atomically merges fresh state so
-    the concerns do not overwrite one another.
+    resolution will own `installs` and the implemented shipping path owns `ship`. Each writer atomically
+    merges fresh state so the concerns do not overwrite one another.
   - `.tao-project/cache/...`
 
-## Dependency version locks
+## Dependency version locks (planned)
 
-- Tao installs required sub-projects in `.tao-project/installs/...`
-  - And tracks the required packages and resolved versions in the `installs` section of
+- Tao will install required sub-projects in `.tao-project/installs/...`
+  - And track the required packages and resolved versions in the `installs` section of
     `.tao-project/lock.jsonc`
   - `installs` is a flat resolved graph for all dependencies
     - `requires` entries declare what a project requested: `version` (a semver range) or `ref` (a git branch/commit/tag), never both
