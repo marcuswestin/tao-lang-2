@@ -75,7 +75,9 @@ Describe('tao ship project discovery', () => {
         workspace app CloudBeta = CloudBase with { Name "Cloud Beta" }
       `,
       'packages/@metadata/App.tao': `
+        use Dev from @tao/data/providers/dev
         use ICloud from @tao/data/providers/icloud
+        use InstantDB from @tao/data/providers/instantdb
 
         public app TargetInstantDBBase {
           Datasource TargetStore

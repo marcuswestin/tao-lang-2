@@ -48,6 +48,35 @@ Describe('Expo runtime', () => {
     )
   })
 
+  Test('renders a variant that patches a datasource it inherits from another module', async () => {
+    await testCompileFiles(
+      'Main.tao',
+      {
+        'Main.tao': `
+          use MiddleApp from ./Middle.tao
+          app PatchedApp = MiddleApp with { Datasource with { StorageKey "patched" } }
+        `,
+        'Middle.tao': `
+          use Memory from @tao/data/providers/memory
+          use PackageApp from @feature
+          workspace app MiddleApp = PackageApp with { Datasource Memory { } }
+        `,
+        'packages/@feature/App.tao': `
+          use Text from @tao/ui
+          data Records / Record { Label text }
+          public app PackageApp { Name "Package app" view PackageHome }
+          view PackageHome() {
+            query Records { }
+            render Text("Patched app { Records.Count }")
+          }
+        `,
+      },
+      screen => {
+        ExpectScreen(screen).toHaveText('Patched app 0')
+      },
+    )
+  })
+
   Test('compiles and renders runtime stdlib imports', async () => {
     const runtimeStdlibTestsPath = Repo.resolvePath('Apps/Test Apps/Runtime Stdlib Tests/Runtime Stdlib Tests.tao')
     const screen = await compileAndRenderApp(runtimeStdlibTestsPath)

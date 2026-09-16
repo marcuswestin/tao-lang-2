@@ -385,11 +385,14 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain('TR.Data.Create(\n              _Scope._TaoDataCatalog_Bookmarks,')
     // The app mounts both, and the patch on the listed name layers an app-local copy over the bound declaration
     // without touching the declaration itself.
-    Expect(compiled.code).toContain('TR.Data.UseConfigured(\n            _Scope._TaoDataCatalog_Stories,')
-    Expect(compiled.code).toContain('TR.Data.UseConfigured(\n            _Scope._TaoDataCatalog_Bookmarks,')
+    Expect(compiled.code).toContain('TR.Data.UseAppDatasources(_TaoAppDefinition_Reader.definition)')
     // Only the named datasource is patched; the other keeps the declaration's own configuration.
-    Expect(compiled.code).toContain('_Scope._TaoDataCatalog_Stories,\n            _Scope.Feed.evaluate(),')
-    Expect(compiled.code).toContain('TR.Data.Patch(_Scope.Personal.evaluate(), {')
+    Expect(compiled.code).toContain(
+      'store: _Scope._TaoDataCatalog_Stories,\n            source: _Scope.Feed.evaluate(),',
+    )
+    Expect(compiled.code).toContain(
+      'store: _Scope._TaoDataCatalog_Bookmarks,\n            source: TR.Data.Patch(_Scope.Personal.evaluate(), {',
+    )
     Expect(compiled.code).toContain('"StorageKey": TR.Value("personal-prod")')
     // Membership is structural: it partitions the catalog and never crosses the provider boundary.
     Expect(compiled.code).not.toContain('"Data":')
@@ -425,7 +428,7 @@ Describe('compiler: language lowering', () => {
 
     Expect(compiled.code).toContain("_Scope._TaoDataCatalog = TR.Data.Schema({\n  name: 'Data',")
     Expect(compiled.code).not.toContain('_TaoDataCatalog_')
-    Expect(compiled.code).toContain('TR.Data.UseConfigured(\n            _Scope._TaoDataCatalog,')
+    Expect(compiled.code).toContain('store: _Scope._TaoDataCatalog,\n            source: _Scope.Everything.evaluate(),')
   })
 
   Test('partitions local only entities into a device-local companion catalog', async () => {
@@ -474,7 +477,8 @@ Describe('compiler: language lowering', () => {
     )
     Expect(compiled.files.some(file => file.sourcePath.endsWith('/providers/local/Local.ts'))).toBe(true)
     // Two bindings at the app root: the authored Datasource, and the companion device-local one.
-    Expect(compiled.code).toContain('TR.Data.UseConfigured(\n            _Scope._TaoDataCatalog,')
+    Expect(compiled.code).toContain('store: _Scope._TaoDataCatalog,\n            source: TR.Data.Configure(')
+    Expect(compiled.code).toContain('TR.Data.UseAppDatasources(_TaoAppDefinition_Sessions.definition)')
     Expect(compiled.code).toContain(
       'TR.Data.UseConfigured(\n            _Scope._TaoLocalDataCatalog,\n            _Scope._TaoLocalDatasource,\n          )',
     )
@@ -526,6 +530,60 @@ Describe('compiler: language lowering', () => {
     })
   })
 
+  Test("inherits, patches, or replaces a base's datasources across a module boundary", async () => {
+    await withTaoFiles('tao-cross-module-datasource-', {
+      'Project.tao': 'project { id "cross-module-datasource" name "Cross-module datasource" }',
+      'Main.tao': `
+        use Memory from @tao/data/providers/memory
+        use MiddleApp from ./Middle.tao
+        app FinalApp = MiddleApp with { Name "Final app" }
+        app PatchedApp = MiddleApp with { Datasource with { ApiURI "http://localhost:9999" } }
+        app OwnApp = MiddleApp with { Datasource Memory { } }
+      `,
+      'Middle.tao': `
+        use InstantDB from @tao/data/providers/instantdb
+        use PackageApp from @feature
+        workspace app MiddleApp = PackageApp with {
+          Name "Middle app"
+          Datasource InstantDB { AppId "local-app" ApiURI "http://localhost:9020" }
+        }
+      `,
+      'packages/@feature/App.tao': `
+        use Text from @tao/ui
+        data Records / Record { Label text }
+        public app PackageApp { Name "Package app" view PackageHome }
+        view PackageHome() { query Records { } render Text("{ Records.Count }") }
+      `,
+    }, async paths => {
+      const result = await Workspace.compile(paths['Main.tao']!, {
+        appDatasourceConfiguration: { ApiURI: 'https://api.instantdb.com', AppId: 'hosted-app' },
+        appName: 'PatchedApp',
+      })
+      const code = result.files.find(file => file.relativePath === 'App.tsx')?.code ?? ''
+      const definitionOf = (name: string) => code.slice(code.indexOf(`const _TaoAppDefinition_${name} =`))
+
+      // The base's InstantDB value is written against an import only Middle.tao has, so no variant
+      // here may recompile it.
+      Expect(code).not.toContain('__tao_type_InstantDB')
+      const final = definitionOf('FinalApp')
+      Expect(final.slice(0, final.indexOf('function TaoApp_FinalApp'))).toContain(
+        'datasources: () => _Scope.MiddleApp.definition.datasources(),',
+      )
+      // The variant's own patch, then the release override for the selected app, in that order.
+      Expect(definitionOf('PatchedApp')).toContain(
+        'datasources: () => TR.Data.PatchBindings(_Scope.MiddleApp.definition.datasources(), [[{\n'
+          + '      "ApiURI": TR.Value("http://localhost:9999"),\n'
+          + '    }, {\n'
+          + '      "ApiURI": TR.Value("https://api.instantdb.com"),\n'
+          + '      "AppId": TR.Value("hosted-app"),\n'
+          + '    }]]),',
+      )
+      Expect(definitionOf('OwnApp')).toContain(
+        'datasources: () => [{\n            store: _Scope._TaoDataCatalog,\n            source: TR.Data.Configure(_Scope.__tao_type_Memory, {',
+      )
+    })
+  })
+
   Test('emits no companion local catalog for a project without local only entities', async () => {
     const compiled = await Compiler.compileCode(`
       use Memory from @tao/data/providers/memory
@@ -571,7 +629,7 @@ Describe('compiler: language lowering', () => {
     // The app binds the stdlib declaration's own identity with an all-defaulted configuration.
     Expect(compiled.code).toContain("import { __tao_type_Dev } from './modules/external/Dev.tao'")
     Expect(compiled.code).toContain(
-      'datasource: () => TR.Data.Configure(_Scope.__tao_type_Dev, {',
+      'TR.Data.Configure(_Scope.__tao_type_Dev, {\n                ...{\n                  },',
     )
     Expect(compiled.files.some(file => file.sourcePath.endsWith('/providers/dev/Dev.tao'))).toBe(true)
     Expect(compiled.files.some(file => file.sourcePath.endsWith('/providers/dev/Dev.ts'))).toBe(true)
@@ -674,7 +732,9 @@ Describe('compiler: language lowering', () => {
     Expect(compiled.code).toContain(
       '"WebsocketURI": TR.Value("wss://api.instantdb.com/runtime/session")',
     )
-    Expect(compiled.code.match(/"AppId": TR.Value\("hosted-app"\)/gu)).toHaveLength(2)
+    // The override lands on the selected variant's binding alone; its base keeps the authored host.
+    Expect(compiled.code.match(/"AppId": TR.Value\("hosted-app"\)/gu)).toHaveLength(1)
+    Expect(compiled.code.indexOf('hosted-app')).toBeGreaterThan(compiled.code.indexOf('function TaoApp_LocalNotes'))
   })
 
   Test('reaches only a bound datasource whose contract declares the release override keys', async () => {
@@ -694,12 +754,13 @@ Describe('compiler: language lowering', () => {
       { appDatasourceConfiguration: { ApiURI: 'https://api.instantdb.com', AppId: 'hosted-app' } },
     )
 
-    const mine = compiled.code.slice(compiled.code.indexOf('_Scope._TaoDataCatalog_Pins,\n'))
+    const mine = compiled.code.slice(compiled.code.indexOf('store: _Scope._TaoDataCatalog_Pins,\n'))
+    Expect(mine).toContain('source: _Scope.Mine.evaluate(),')
     Expect(compiled.code).toContain('"AppId": TR.Value("hosted-app")')
-    Expect(mine.slice(0, mine.indexOf('TR.Data.UseConfigured'))).not.toContain('hosted-app')
+    Expect(mine.slice(0, mine.indexOf('}]'))).not.toContain('hosted-app')
   })
 
-  Test('keys restoration by every bound store and names each store after its datasource', async () => {
+  Test('lists every bound store on the app definition and names each store after its datasource', async () => {
     const compiled = await Compiler.compileCode(
       `
       use Memory from @tao/data/providers/memory
@@ -717,14 +778,14 @@ Describe('compiler: language lowering', () => {
       { appName: 'ReaderStub' },
     )
 
-    Expect(compiled.code).toContain('providerIdentity: () => TR.Data.CombinedIdentity([')
     // A derived stub is an alternative for its base's store, and keeps a storage key of its own.
     Expect(compiled.code).toContain(
-      '_Scope._TaoDataCatalog_Stories,\n            _Scope.StubFeed.evaluate(),\n            "StubFeed",',
+      'store: _Scope._TaoDataCatalog_Stories,\n            source: _Scope.StubFeed.evaluate(),\n            storageName: "StubFeed",',
     )
     Expect(compiled.code).toContain(
-      '_Scope._TaoDataCatalog_Stories,\n            _Scope.Feed.evaluate(),\n            "Feed",',
+      'store: _Scope._TaoDataCatalog_Stories,\n            source: _Scope.Feed.evaluate(),\n            storageName: "Feed",',
     )
+    Expect(compiled.code).toContain('TR.Data.UseAppDatasources(_TaoAppDefinition_ReaderStub.definition)')
   })
 
   Test('hands a Studio fixture every store an app mounts', async () => {
@@ -744,7 +805,7 @@ Describe('compiler: language lowering', () => {
     )
 
     Expect(compiled.code).toContain(
-      'TR.Studio.Environment.useFixture([_Scope._TaoDataCatalog_Bookmarks, _Scope._TaoDataCatalog_Stories])',
+      'useTaoGeneratedStudioFixture([_Scope._TaoDataCatalog_Bookmarks, _Scope._TaoDataCatalog_Stories])',
     )
     Expect(compiled.code).not.toContain('_Scope._TaoDataCatalog)')
   })
