@@ -15,6 +15,7 @@
       "just *": "allow",
       "just studio-smoke *": "allow",
       "just studio-proof-real-app *": "allow",
+      "just native-module-check": "allow",
       "bun install *": "allow",
       "bun run *": "allow",
       "bun test *": "allow",
@@ -132,6 +133,9 @@
         "./dev studio-smoke *",
         "just studio-smoke *",
         "just studio-proof-real-app *",
+        // CocoaPods and Xcode build services need host capabilities outside the shell sandbox.
+        // Keep this exact standalone check outside routine verification and broader native commands.
+        "just native-module-check",
         "gh *",
         // Git's github.com credential helper is `gh auth git-credential`, which reads
         // ~/.config/gh — denied below. `gh *` is excluded, but a helper spawned by git

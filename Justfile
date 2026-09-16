@@ -103,6 +103,10 @@ studio-canary project="Apps/HNReader" app="HNReader":
 ship-bundle-proof:
     bun run packages/runtime-toolchain/runtime-toolchain-src/testing/verify-release-bundle.ts
 
+# Compile every repository native module for the iOS simulator; intentionally outside routine verify
+native-module-check:
+    ./dev native-module-check
+
 # Run the native Studio checks that require a person; never part of test or verify
 studio-manual-checks project="Apps/HNReader" app="HNReader":
     ./dev studio-manual-checks --project "{{ project }}" --app "{{ app }}"

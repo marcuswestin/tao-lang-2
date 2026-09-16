@@ -5,6 +5,7 @@
 prefix_rule(pattern=["./dev","studio-smoke"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["just","studio-smoke"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["just","studio-proof-real-app"], decision="allow", justification="Repository-approved host command.")
+prefix_rule(pattern=["just","native-module-check"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["git","worktree","list"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["ps","-o","comm=,lstart=","-p"], decision="allow", justification="Repository-approved host command.")
 prefix_rule(pattern=["ps","-o","pid=,ppid=,lstart=,command=","-p"], decision="allow", justification="Repository-approved host command.")

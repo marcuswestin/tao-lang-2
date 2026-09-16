@@ -66,6 +66,7 @@ export type StartedCommand = {
   readonly cwd?: string
   readonly error?: Error
   readonly exitCode: number | null
+  readonly pid?: number
   readonly signalCode: Platform.ProcessSignal | null
   closeOutput: () => Promise<void>
   dispose: () => void
@@ -193,6 +194,9 @@ function startCommand(
     },
     get exitCode() {
       return child.exitCode
+    },
+    get pid() {
+      return child.pid
     },
     get signalCode() {
       return child.signalCode
