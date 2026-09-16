@@ -77,6 +77,7 @@ backup_root="$(mktemp -d "$backup_parent/tao-dependency-repair.XXXXXXXX")" || {
 typeset -r original_backup="$backup_root/original-node_modules"
 typeset -r partial_backup="$backup_root/partial-node_modules"
 integer original_moved=0
+integer install_started=0
 integer repair_active=1
 integer repair_succeeded=0
 integer restoration_attempted=0
@@ -85,7 +86,7 @@ function restore_failed_repair() {
   (( restoration_attempted == 0 )) || return 0
   restoration_attempted=1
 
-  if [[ -e "$node_modules" || -L "$node_modules" ]]; then
+  if (( original_moved || install_started )) && [[ -e "$node_modules" || -L "$node_modules" ]]; then
     if mv -- "$node_modules" "$partial_backup"; then
       print -u2 -- "Partial dependency tree retained at: $partial_backup"
     else
@@ -102,8 +103,10 @@ function restore_failed_repair() {
       print -u2 -- "Unable to restore the original dependency tree from: $original_backup"
       return 1
     fi
-  else
+  elif (( install_started )); then
     print -u2 -- 'No original dependency tree existed; node_modules remains absent.'
+  else
+    print -u2 -- 'The original dependency tree was not moved and remains unchanged.'
   fi
 }
 
@@ -140,6 +143,7 @@ if [[ -e "$node_modules" || -L "$node_modules" ]]; then
   original_moved=1
 fi
 
+install_started=1
 TMPDIR="$bun_temp_root/" "$bun_command" install \
   --cwd "$repository_root" \
   --frozen-lockfile \

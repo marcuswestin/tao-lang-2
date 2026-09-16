@@ -123,9 +123,9 @@ studio-package release_base_url=env("TAO_STUDIO_RELEASE_BASE_URL", "https://rele
 # `repair-deps` atomically moves the entire tree aside and performs one clean frozen install.
 deps:
     mkdir -p "{{ BUN_TMP_DIR }}"
-    TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile
-    if ! just _dependency-health; then TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force; fi
-    if ! just _dependency-health; then mkdir -p "{{ BUN_CACHE_DIR }}"; TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"; fi
+    if ! TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile; then echo "Initial dependency install failed; continuing with health-guided recovery." >&2; fi
+    if ! just _dependency-health; then if ! TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force; then echo "Shared-cache dependency repair failed; trying the checkout-local cache." >&2; fi; fi
+    if ! just _dependency-health; then mkdir -p "{{ BUN_CACHE_DIR }}"; if ! TMPDIR="{{ BUN_TMP_DIR }}" bun install --frozen-lockfile --force --cache-dir="{{ BUN_CACHE_DIR }}"; then echo "In-place dependency repair failed; replacing the tree if it remains unhealthy." >&2; fi; fi
     if ! just _dependency-health; then just repair-deps; fi
     just _dependency-health
 

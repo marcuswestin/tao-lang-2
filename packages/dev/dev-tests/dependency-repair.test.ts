@@ -71,6 +71,24 @@ Describe('dependency tree repair', () => {
     }
   })
 
+  Test('leaves the original tree untouched when the atomic backup move fails', async () => {
+    const fixture = await createFixture('move-fail')
+    try {
+      await FS.writeText(FS.resolvePath('node_modules/original/.env', fixture.repository), 'original')
+
+      const result = await runRepair(fixture)
+
+      Expect(result.exitCode).toBe(1)
+      Expect(result.stderr).toContain('Unable to move the damaged dependency tree')
+      Expect(result.stderr).toContain('original dependency tree was not moved and remains unchanged')
+      Expect(result.stderr).not.toContain('Partial dependency tree retained')
+      Expect(await FS.readText(FS.resolvePath('node_modules/original/.env', fixture.repository)))
+        .toBe('original')
+    } finally {
+      await FS.remove(fixture.testRoot)
+    }
+  })
+
   Test('restores the original tree when the install interrupts its parent', async () => {
     const fixture = await createFixture('interrupt')
     try {
@@ -137,9 +155,60 @@ Describe('dependency tree repair', () => {
       await FS.remove(fixture.testRoot)
     }
   })
+
+  Test('the deps recipe reaches automatic replacement after every in-place Bun attempt fails', async () => {
+    const testRoot = await mkTestDir('tao-dependency-recipe-')
+    const fakeBin = FS.resolvePath('bin', testRoot)
+    const attemptLog = FS.resolvePath('attempts.log', testRoot)
+    const repairLog = FS.resolvePath('repairs.log', testRoot)
+    const healthy = FS.resolvePath('healthy', testRoot)
+    try {
+      await FS.writeText(
+        FS.resolvePath('bun', fakeBin),
+        '#!/bin/zsh\nprint -r -- "$*" >> "$TAO_TEST_ATTEMPT_LOG"\nexit 23\n',
+      )
+      await FS.writeText(
+        FS.resolvePath('just', fakeBin),
+        [
+          '#!/bin/zsh',
+          'case "$1" in',
+          '  _dependency-health) [[ -f "$TAO_TEST_HEALTHY" ]] ;;',
+          '  repair-deps) print -r -- repair >> "$TAO_TEST_REPAIR_LOG"; : > "$TAO_TEST_HEALTHY" ;;',
+          '  *) exit 97 ;;',
+          'esac',
+          '',
+        ].join('\n'),
+      )
+      for (const command of ['bun', 'just']) {
+        const outcome = await CLI.run('chmod', { args: ['+x', FS.resolvePath(command, fakeBin)] })
+        Expect(outcome.exitCode).toBe(0)
+      }
+
+      const result = await CLI.run(await FS.realPath(Repo.resolvePath('.devenv/profile/bin/just')), {
+        args: ['deps'],
+        cwd: Repo.getRoot(),
+        env: {
+          PATH: `${fakeBin}:${Platform.runtimeProcess.env['PATH'] ?? ''}`,
+          TAO_TEST_ATTEMPT_LOG: attemptLog,
+          TAO_TEST_HEALTHY: healthy,
+          TAO_TEST_REPAIR_LOG: repairLog,
+        },
+      })
+
+      Expect(result.exitCode).toBe(0)
+      Expect((await FS.readText(attemptLog)).trim().split('\n')).toEqual([
+        'install --frozen-lockfile',
+        'install --frozen-lockfile --force',
+        `install --frozen-lockfile --force --cache-dir=${Repo.resolvePath('.artifacts/cache/bun')}`,
+      ])
+      Expect(await FS.readText(repairLog)).toBe('repair\n')
+    } finally {
+      await FS.remove(testRoot)
+    }
+  })
 })
 
-async function createFixture(mode: 'fail' | 'interrupt' | 'success' | 'wait'): Promise<RepairFixture> {
+async function createFixture(mode: 'fail' | 'interrupt' | 'move-fail' | 'success' | 'wait'): Promise<RepairFixture> {
   const testRoot = await mkTestDir('tao-dependency-repair-')
   const repository = FS.resolvePath('repository', testRoot)
   const fakeBin = FS.resolvePath('bin', testRoot)
@@ -204,6 +273,11 @@ async function createFixture(mode: 'fail' | 'interrupt' | 'success' | 'wait'): P
   }
   for (const command of ['bun', 'cat', 'find', 'just', 'ls', 'rm']) {
     const outcome = await CLI.run('chmod', { args: ['+x', FS.resolvePath(command, fakeBin)] })
+    Expect(outcome.exitCode).toBe(0)
+  }
+  if (mode === 'move-fail') {
+    await FS.writeText(FS.resolvePath('mv', fakeBin), '#!/bin/zsh\nexit 31\n')
+    const outcome = await CLI.run('chmod', { args: ['+x', FS.resolvePath('mv', fakeBin)] })
     Expect(outcome.exitCode).toBe(0)
   }
   return {
