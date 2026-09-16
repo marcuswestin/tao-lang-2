@@ -196,12 +196,15 @@ Describe('@tao/data providers', () => {
     watch.observer.changed('local-1')
     watch.observer.changed(undefined)
     watch.observer.changed('remote-2')
+    // Another device can later restore bytes equal to our old write. Seeing remote-2 ended the
+    // echo window, so this is a real remote transition rather than a forever-suppressed echo.
+    watch.observer.changed('local-1')
     watch.observer.failed('iCloud is unavailable')
     stop()
     watch.observer.changed('after-stop')
     connection.close?.()
 
-    Expect(snapshots).toEqual(['remote-1', 'remote-2'])
+    Expect(snapshots).toEqual(['remote-1', 'remote-2', 'local-1'])
     Expect(errors).toHaveLength(1)
     Expect(errors[0]).toBeInstanceOf(Errors.HostEnvironmentError)
     Expect(Errors.messageOf(errors[0])).toBe('iCloud is unavailable')
@@ -313,6 +316,66 @@ Describe('@tao/data providers', () => {
     Expect(deleted.deleted).toMatch(/^[0-9a-f]{16}[0-9a-f]{8}$/u)
   })
 
+  Test('delivers text and cleared cross-store reference values from CloudKit', async () => {
+    let zoneObserver: CloudKitZoneObserver | undefined
+    const connection = CloudKitSyncProvider(() => () => ({
+      close: () => undefined,
+      fetch: async () => undefined,
+      send: async () => undefined,
+      subscribe: observer => {
+        zoneObserver = observer
+        return () => undefined
+      },
+    })).connect({
+      configuration: {},
+      origin: 'aaaaaaaa',
+      schema: {
+        entities: {
+          Bookmark: {
+            collection: 'Bookmarks',
+            fields: {
+              Story: {
+                kind: 'reference',
+                referenceField: 'Slug',
+                relation: 'Story',
+                store: 'Stories',
+              },
+            },
+          },
+        },
+        name: 'Bookmarks',
+      },
+      storageKey: 'Bookmarks',
+    })
+    const received: TR.ChangeSet[] = []
+    connection.subscribe({
+      accepted: () => undefined,
+      failed: () => undefined,
+      online: () => undefined,
+      remote: changeSet => {
+        received.push(changeSet)
+      },
+    })
+    const stamp = TR.Sync.stampAt(1_000, 'cloudkit')
+    const record = (id: string, value: string | null): CloudKitRecord => ({
+      fields: {
+        payload: JSON.stringify({
+          entity: 'Bookmark',
+          fields: { Story: { stamp, value } },
+          row: { id, origin: 'bbbbbbbb' },
+        }),
+      },
+      name: `bbbbbbbb:Bookmark:${id}`,
+      type: 'TaoRow',
+    })
+    zoneObserver!.fetched([record('Bookmark-1', 'show-hn'), record('Bookmark-2', null)], [], async () => undefined)
+    await settle()
+
+    const values = received.flatMap(changeSet => changeSet.ops)
+      .flatMap(op => op.kind === 'upsert' ? [op.fields['Story']?.value] : [])
+    Expect(values).toEqual(['show-hn', null])
+  })
+
   Test('merges a CloudKit server conflict fieldwise and converges both devices', async () => {
     const cloud = fakeCloudKit()
     let clock = 5_000
@@ -358,6 +421,55 @@ Describe('@tao/data providers', () => {
       Pinned: true,
       Title: 'From A',
     }])
+  })
+
+  Test('keeps a change pending when CloudKit returns an unreadable conflict', async () => {
+    let zoneObserver: CloudKitZoneObserver | undefined
+    const sent: CloudKitRecord[][] = []
+    const connection = CloudKitSyncProvider(() => () => ({
+      close: () => undefined,
+      fetch: async () => undefined,
+      send: async records => {
+        sent.push([...records])
+      },
+      subscribe: observer => {
+        zoneObserver = observer
+        return () => undefined
+      },
+    })).connect({ configuration: {}, origin: 'aaaaaaaa', schema: syncSchema, storageKey: 'Notes' })
+    const accepted: string[] = []
+    const failures: unknown[] = []
+    connection.subscribe({
+      accepted: id => accepted.push(id),
+      failed: error => failures.push(error),
+      online: () => undefined,
+      remote: () => undefined,
+    })
+    const stamp = TR.Sync.stampAt(1_000, 'aaaaaaaa')
+    await connection.push({
+      id: stamp,
+      ops: [{
+        entity: 'Note',
+        fields: {
+          Pinned: { stamp, value: false },
+          Title: { stamp, value: 'Pending' },
+        },
+        kind: 'upsert',
+        row: { id: 'Note-1', origin: 'aaaaaaaa' },
+      }],
+      origin: 'aaaaaaaa',
+      stamp,
+    })
+    const name = sent[0]![0]!.name
+    zoneObserver!.sent([], [{
+      name,
+      server: { fields: { payload: 'not-json' }, name, type: 'TaoRow' },
+    }], [])
+
+    Expect(accepted).toEqual([])
+    Expect(failures).toHaveLength(1)
+    Expect(failures[0]).toBeInstanceOf(Errors.HostEnvironmentError)
+    Expect(Errors.messageOf(failures[0])).toContain('unreadable conflict')
   })
 
   Test('validates CloudKit config before touching the native module', () => {

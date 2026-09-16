@@ -8,6 +8,7 @@
   "exports": {
     ".": "./icloud-native-src/icloud-native.ts",
     "./cloudkit": "./icloud-native-src/cloudkit-native.ts",
+    "./app.plugin": "./app.plugin.js",
     "./app.plugin.js": "./app.plugin.js"
   },
   "dependencies": {

@@ -129,6 +129,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export class RuntimeDataSchema {
   readonly name: string
   private automaticResetAttempted = false
+  private automaticResetPromise: Promise<void> | undefined
   private bufferedRemoteSnapshot: { stored: string | undefined } | undefined
   private committedData: StoredData
   private error = ''
@@ -145,7 +146,7 @@ export class RuntimeDataSchema {
    */
   private linkedStores: readonly RuntimeDataSchema[] = [this]
   /** referencePlaceholders are the absent rows references have named, by synthetic handle id. */
-  private referencePlaceholders = new Map<string, { field: string; value: string | number }>()
+  private referencePlaceholders = new Map<string, { entity: string; field: string; value: string | number }>()
   private listeners = new Set<() => void>()
   private loadPromise: Promise<void> = Promise.resolve()
   private nextSaveSequence = 0
@@ -855,9 +856,11 @@ export class RuntimeDataSchema {
     if (row) {
       return this.handle(entity, row.Id)
     }
-    const id = `@reference:${uniqueField}=${JSON.stringify(value)}`
+    // Entity is part of the identity: two collections routinely use the same unique field name and
+    // value, and their cold handles must neither alias nor share one fill request.
+    const id = `@reference:${entity}.${uniqueField}=${JSON.stringify(value)}`
     if (!this.referencePlaceholders.has(id)) {
-      this.referencePlaceholders.set(id, { field: uniqueField, value })
+      this.referencePlaceholders.set(id, { entity, field: uniqueField, value })
       this.activateQuery(this.referencePlan(entity, uniqueField, value))
     }
     return this.handle(entity, id)
@@ -927,7 +930,7 @@ export class RuntimeDataSchema {
    */
   private placeholderAvailability(
     entity: string,
-    placeholder: { field: string; value: string | number },
+    placeholder: { entity: string; field: string; value: string | number },
   ): TaoEntityAvailability {
     if (this.status === 'loading') {
       return { status: 'loading' }
@@ -947,11 +950,20 @@ export class RuntimeDataSchema {
   }
 
   async settle(): Promise<void> {
-    await this.loadPromise
-    while (this.pendingFills.size > 0) {
-      await Promise.all([...this.pendingFills])
+    // A corrupt disposable snapshot can replace this load with an automatic reset and a new load.
+    // Settle owns that whole lifecycle, not merely the load that discovered the corruption.
+    while (true) {
+      await this.loadPromise
+      while (this.pendingFills.size > 0) {
+        await Promise.all([...this.pendingFills])
+      }
+      await this.saveQueue
+      const automaticReset = this.automaticResetPromise
+      if (automaticReset === undefined) {
+        return
+      }
+      await automaticReset
     }
-    await this.saveQueue
   }
 
   setStatus(status: DataStatus, message: string): void {
@@ -1094,7 +1106,13 @@ export class RuntimeDataSchema {
         // fail to parse, the second failure lands here with the attempt spent and offers the
         // ordinary overlay instead of looping.
         this.automaticResetAttempted = true
-        void this.resetAutomatically(connection, this.providerBinding)
+        const automaticReset = this.resetAutomatically(connection, this.providerBinding)
+        const trackedReset = automaticReset.finally(() => {
+          if (this.automaticResetPromise === trackedReset) {
+            this.automaticResetPromise = undefined
+          }
+        })
+        this.automaticResetPromise = trackedReset
         this.emit()
         return
       }

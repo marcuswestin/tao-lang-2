@@ -432,6 +432,34 @@ Describe('TR.Data provider foundation', () => {
     Expect(stored).toContain('Fresh')
   })
 
+  Test('settle waits for an automatic reset and the replacement load', async () => {
+    const reset = Deferred<void>()
+    let stored: string | undefined = '{"formatVersion":1,"schemaVersion":1,"nextId":2,"rows":{}}'
+    const connection: TaoDataConnection = {
+      automaticReset: true,
+      load: () => stored,
+      reset: async () => {
+        await reset.promise
+        stored = undefined
+      },
+      save: value => {
+        stored = value
+      },
+    }
+    const schema = TR.Data.Schema(noteDefinition, connection)
+    let settled = false
+    const settling = schema.settle().then(() => {
+      settled = true
+    })
+    await flushMicrotasks()
+    Expect(settled).toBe(false)
+
+    reset.resolve()
+    await settling
+    const rows = schema.query({ entity: 'Note', filters: [] }) as unknown[] & { Error: string }
+    Expect(rows.Error).toBe('')
+  })
+
   Test('spends one automatic reset per corrupt load and then reports the failure', async () => {
     const corrupt = '{"formatVersion":1,"schemaVersion":1,"nextId":2,"rows":{}}'
     let resets = 0

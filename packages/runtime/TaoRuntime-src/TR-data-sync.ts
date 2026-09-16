@@ -37,7 +37,7 @@ export type TaoSyncRowId = Readonly<{ id: string; origin: string }>
 export type TaoSyncStamp = string
 
 /** TaoSyncValue is one field value on the wire; a relation travels as the related row's identity. */
-export type TaoSyncValue = boolean | number | string | TaoSyncRowId
+export type TaoSyncValue = boolean | null | number | string | TaoSyncRowId
 
 export type TaoSyncStampedValue = Readonly<{ stamp: TaoSyncStamp; value: TaoSyncValue }>
 
@@ -142,9 +142,15 @@ export function snapshotConnectionOverSync(
   options: SnapshotOverSyncOptions,
 ): TaoDataConnection {
   const state = new SyncState(context.schema, options)
+  // The provider scope and configured storage key are the durable identity of one mounted source.
+  // The schema name used to include the collection list, so adding a collection silently abandoned
+  // the pending queue. JSON's structural spelling also keeps delimiter-bearing names distinct.
   const checkpointKey = `${checkpointKeyPrefix}:${
-    options.scope ?? 'default'
-  }:${context.schema.name}:${context.storageKey}`
+    JSON.stringify([
+      options.scope ?? 'default',
+      context.storageKey,
+    ])
+  }`
   let connection: TaoSyncConnection | undefined
   let observer: TaoDataConnectionObserver | undefined
   let stopTransport: (() => void) | undefined
@@ -190,15 +196,16 @@ export function snapshotConnectionOverSync(
     return connection
   }
 
-  // A push the transport rejects is the contract's "not taken": the change-set stays queued until
-  // the transport reports it is online again, so the rejection is expected and not a failure.
+  // A push the transport rejects is the contract's "not taken": that change-set stays queued. Keep
+  // trying the independent later commits, because a transport such as CloudKit can reject one
+  // malformed/conflicted record without ever producing a separate online transition.
   const pushPending = (): void => {
     pushes = pushes.then(async () => {
       for (const changeSet of [...state.pending()]) {
         try {
           await transport().push(changeSet)
         } catch {
-          return
+          continue
         }
       }
     })
@@ -220,10 +227,19 @@ export function snapshotConnectionOverSync(
 
   const receiveRemote = (changeSet: TaoChangeSet): Promise<void> =>
     enqueue(async () => {
+      const before = JSON.stringify(state.checkpoint())
       if (!state.fold(changeSet)) {
         return
       }
-      await persist()
+      try {
+        await persist()
+      } catch (error) {
+        // A remote fold is acknowledged only after its checkpoint is durable. Restore the exact
+        // pre-fold clock and rows too, or a later local diff can turn the unapplied remote rows into
+        // deletes and push those deletes back to the authority.
+        state.restore(before)
+        throw error
+      }
       publishIfChanged()
     })
 
@@ -410,7 +426,7 @@ class SyncState {
         for (const [name, field] of Object.entries(definition.fields)) {
           const value = field.kind === 'relation'
             ? rowIdOf(row[name] as string, this.origin)
-            : row[name] as boolean | number | string
+            : row[name] as boolean | null | number | string
           if (previous === undefined || !Object.is(previous[name], row[name])) {
             fields[name] = { stamp, value }
           }

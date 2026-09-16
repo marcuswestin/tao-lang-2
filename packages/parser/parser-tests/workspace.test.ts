@@ -148,6 +148,90 @@ Describe('minimal Tao parser', () => {
     )
   })
 
+  Test('forgets a deleted folder declaration when the same workspace parses again', async () => {
+    await withTaoFiles(
+      'tao-parser-folder-refresh-',
+      {
+        'Main.tao': `
+          use StackNav from @tao/nav
+          app Reader {
+            Name "Reader"
+            Navigator StackNav { Initial Main }
+            Datasource { Personal with { StorageKey "prod" } }
+          }
+          let Selected = Personal
+          view Main() { }
+        `,
+        'Sources.tao': `
+          use Local from @tao/data/providers/local
+          folder datasource Personal = Local { StorageKey "personal" }
+        `,
+      },
+      async (paths, rootDir) => {
+        const workspace = await Workspace.open(rootDir)
+        const first = await workspace.parse(paths['Main.tao']!)
+        const firstApp = first.entry.ast.statements.find(AST.isAppValueDeclaration)
+        Expect.Is(firstApp, AST.isAppValueDeclaration)
+        Expect(AST.visibleValueDeclarations(firstApp, AST.isDatasourceDeclaration).map(item => item.name))
+          .toContain('Personal')
+        const firstAlias = first.entry.ast.statements.find(statement =>
+          AST.isAliasDeclaration(statement) && statement.name === 'Selected'
+        )
+        Expect.Is(firstAlias, AST.isAliasDeclaration)
+        Expect.Is(firstAlias.value, AST.isValueReference)
+        Expect.Is(firstAlias.value.target.ref, AST.isDatasourceDeclaration)
+
+        await FS.remove(paths['Sources.tao']!)
+        const second = await workspace.parse(paths['Main.tao']!)
+        const secondApp = second.entry.ast.statements.find(AST.isAppValueDeclaration)
+        Expect.Is(secondApp, AST.isAppValueDeclaration)
+
+        Expect(second.files.map(file => file.path)).not.toContain(paths['Sources.tao']!)
+        Expect(AST.visibleValueDeclarations(secondApp, AST.isDatasourceDeclaration).map(item => item.name))
+          .not.toContain('Personal')
+        const secondAlias = second.entry.ast.statements.find(statement =>
+          AST.isAliasDeclaration(statement) && statement.name === 'Selected'
+        )
+        Expect.Is(secondAlias, AST.isAliasDeclaration)
+        Expect.Is(secondAlias.value, AST.isValueReference)
+        Expect(secondAlias.value.target.ref).toBeUndefined()
+      },
+    )
+  })
+
+  Test('uses ordinary folder precedence without letting a same-name type mask a datasource', async () => {
+    await withTaoFiles(
+      'tao-parser-folder-precedence-',
+      {
+        'Main.tao': `
+          use Memory from @tao/data/providers/memory
+          datasource Personal = Memory { StorageKey "local" }
+          let Selected = Personal
+        `,
+        'Sources.tao': `
+          use Local from @tao/data/providers/local
+          folder type Personal is text
+          folder datasource Personal = Local { StorageKey "folder" }
+        `,
+      },
+      async paths => {
+        const parsed = await Workspace.parse(paths['Main.tao']!)
+        const alias = parsed.entry.ast.statements.find(statement =>
+          AST.isAliasDeclaration(statement) && statement.name === 'Selected'
+        )
+        Expect.Is(alias, AST.isAliasDeclaration)
+        Expect.Is(alias.value, AST.isValueReference)
+        const ordinaryTarget = alias.value.target.ref
+        Expect.Is(ordinaryTarget, AST.isDatasourceDeclaration)
+
+        const datasourceTarget = AST.visibleValueDeclarations(alias, AST.isDatasourceDeclaration)
+          .find(declaration => declaration.name === 'Personal')
+        Expect(datasourceTarget).toBe(ordinaryTarget)
+        Expect(FS.basename(AST.getDocument(datasourceTarget!).uri.path)).toBe('Sources.tao')
+      },
+    )
+  })
+
   Test('resolves value references through nested scope shadowing', async () => {
     const parseResult = await testParseCode(`
       let Greeting = "File"

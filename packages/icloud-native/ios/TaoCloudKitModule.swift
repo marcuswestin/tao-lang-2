@@ -30,7 +30,14 @@ public final class TaoCloudKitModule: Module {
           self?.sendEvent("cloudKitEvent", body)
         }
         self.sessions[sessionId] = session
-        session.replayInbox()
+      } else {
+        throw Self.unavailable()
+      }
+    }.runOnQueue(.main)
+
+    AsyncFunction("replayInbox") { (sessionId: String) throws in
+      if #available(iOS 17.0, macOS 14.0, *) {
+        try self.session(sessionId).replayInbox()
       } else {
         throw Self.unavailable()
       }
@@ -121,7 +128,9 @@ final class CloudKitZoneSession: NSObject, CKSyncEngineDelegate {
   private var known: [String: CKRecord] = [:]
   private var zoneRetries: [String: Int] = [:]
   private var inbox: [[String: Any]] = []
-  private var nextBatch = 0
+  /// Once an inbox write fails, no later engine position may become durable in this session: the
+  /// old state must refetch the unrecorded batch after relaunch.
+  private var inboxPersistenceFailed = false
   private var stopped = false
   private let lock = NSLock()
 
@@ -141,8 +150,10 @@ final class CloudKitZoneSession: NSObject, CKSyncEngineDelegate {
     self.inboxURL = support.appendingPathComponent("\(stateFileName).inbox.json", isDirectory: false)
     super.init()
 
-    inbox = Self.loadInbox(at: inboxURL)
-    nextBatch = inbox.count
+    // Restore the durable inbox before consulting the engine checkpoint. If an existing inbox
+    // cannot be restored, initialization fails and the advanced checkpoint is never handed to
+    // CKSyncEngine, so fetched changes cannot disappear behind a corrupt replay file.
+    inbox = try Self.loadInbox(at: inboxURL)
     var configuration = CKSyncEngine.Configuration(
       database: database,
       stateSerialization: Self.loadState(at: stateURL),
@@ -233,10 +244,16 @@ final class CloudKitZoneSession: NSObject, CKSyncEngineDelegate {
 
   func acknowledge(batchId: String) throws {
     lock.lock()
-    inbox.removeAll { ($0["batchId"] as? String) == batchId }
-    let remaining = inbox
-    lock.unlock()
-    try Self.saveInbox(remaining, at: inboxURL)
+    let remaining = inbox.filter { ($0["batchId"] as? String) != batchId }
+    do {
+      // The acknowledged effect becomes authoritative only after the new inbox is durable.
+      try Self.saveInbox(remaining, at: inboxURL)
+      inbox = remaining
+      lock.unlock()
+    } catch {
+      lock.unlock()
+      throw error
+    }
   }
 
   // MARK: CKSyncEngineDelegate
@@ -244,7 +261,17 @@ final class CloudKitZoneSession: NSObject, CKSyncEngineDelegate {
   func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
     switch event {
     case .stateUpdate(let update):
-      Self.saveState(update.stateSerialization, at: stateURL)
+      lock.lock()
+      let mayAdvance = !inboxPersistenceFailed
+      lock.unlock()
+      guard mayAdvance else {
+        return
+      }
+      do {
+        try Self.saveState(update.stateSerialization, at: stateURL)
+      } catch {
+        report(["kind": "failed", "message": "CloudKit could not persist its checkpoint: \(error.localizedDescription)"])
+      }
     case .accountChange(let change):
       report(["kind": "accountChanged", "message": Self.describe(change.changeType)])
     case .fetchedDatabaseChanges(let changes):
@@ -261,26 +288,34 @@ final class CloudKitZoneSession: NSObject, CKSyncEngineDelegate {
         report(["kind": "zoneDeleted"])
       }
     case .fetchedRecordZoneChanges(let changes):
-      lock.lock()
-      for modification in changes.modifications {
-        known[modification.record.recordID.recordName] = modification.record
-      }
-      for deletion in changes.deletions {
-        known.removeValue(forKey: deletion.recordID.recordName)
-      }
-      nextBatch += 1
       let batch: [String: Any] = [
         "kind": "fetched",
-        "batchId": "batch-\(nextBatch)",
+        // A process-local counter aliases after acknowledgement/relaunch. UUID survives both and
+        // makes every durable inbox effect independently acknowledgeable.
+        "batchId": UUID().uuidString,
         "modifications": changes.modifications.map { Self.describe($0.record) },
         "deletions": changes.deletions.map { $0.recordID.recordName },
       ]
-      inbox.append(batch)
-      let snapshot = inbox
-      lock.unlock()
-      // Durable before this returns, as the engine's contract for fetched changes requires.
-      try? Self.saveInbox(snapshot, at: inboxURL)
-      report(batch)
+      lock.lock()
+      let snapshot = inbox + [batch]
+      do {
+        // Durable before the session mutates its known records or reports the batch. If this fails,
+        // the old engine state is retained and a relaunch refetches the server changes.
+        try Self.saveInbox(snapshot, at: inboxURL)
+        inbox = snapshot
+        for modification in changes.modifications {
+          known[modification.record.recordID.recordName] = modification.record
+        }
+        for deletion in changes.deletions {
+          known.removeValue(forKey: deletion.recordID.recordName)
+        }
+        lock.unlock()
+        report(batch)
+      } catch {
+        inboxPersistenceFailed = true
+        lock.unlock()
+        report(["kind": "failed", "message": "CloudKit could not persist a fetched batch: \(error.localizedDescription)"])
+      }
     case .sentDatabaseChanges(let sent):
       for failure in sent.failedZoneSaves {
         report(["kind": "failed", "message": "CloudKit could not create the record zone: \(failure.error.localizedDescription)"])
@@ -450,19 +485,57 @@ final class CloudKitZoneSession: NSObject, CKSyncEngineDelegate {
     return try? JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: data)
   }
 
-  private static func saveState(_ state: CKSyncEngine.State.Serialization, at url: URL) {
-    if let data = try? JSONEncoder().encode(state) {
-      try? data.write(to: url, options: .atomic)
-    }
+  private static func saveState(_ state: CKSyncEngine.State.Serialization, at url: URL) throws {
+    let data = try JSONEncoder().encode(state)
+    try data.write(to: url, options: .atomic)
   }
 
-  private static func loadInbox(at url: URL) -> [[String: Any]] {
-    guard let data = try? Data(contentsOf: url),
-      let batches = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
-    else {
+  private static func loadInbox(at url: URL) throws -> [[String: Any]] {
+    guard FileManager.default.fileExists(atPath: url.path) else {
       return []
     }
+
+    let data: Data
+    do {
+      data = try Data(contentsOf: url)
+    } catch {
+      throw inboxLoadError(at: url, cause: error)
+    }
+
+    let value: Any
+    do {
+      value = try JSONSerialization.jsonObject(with: data)
+    } catch {
+      throw inboxLoadError(at: url, cause: error)
+    }
+    guard let batches = value as? [[String: Any]] else {
+      throw inboxLoadError(at: url)
+    }
+
+    var batchIds = Set<String>()
+    for batch in batches {
+      guard batch["kind"] as? String == "fetched",
+        let batchId = batch["batchId"] as? String,
+        !batchId.isEmpty,
+        batch["modifications"] is [[String: Any]],
+        batch["deletions"] is [String],
+        batchIds.insert(batchId).inserted
+      else {
+        throw inboxLoadError(at: url)
+      }
+    }
     return batches
+  }
+
+  private static func inboxLoadError(at url: URL, cause: Error? = nil) -> NSError {
+    var details: [String: Any] = [
+      NSLocalizedDescriptionKey:
+        "CloudKit could not restore its durable inbox '\(url.lastPathComponent)'. Sync did not start, so its saved checkpoint was not used without those changes.",
+    ]
+    if let cause {
+      details[NSUnderlyingErrorKey] = cause
+    }
+    return NSError(domain: "TaoCloudKitInbox", code: 1, userInfo: details)
   }
 
   private static func saveInbox(_ batches: [[String: Any]], at url: URL) throws {

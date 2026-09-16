@@ -104,6 +104,12 @@ function cloudKitSyncConnection(zone: CloudKitZone, context: TR.SyncProviderCont
       return typeof value === 'object' && value !== null
         && typeof (value as TR.SyncRowId).id === 'string' && typeof (value as TR.SyncRowId).origin === 'string'
     }
+    if (definition.kind === 'reference') {
+      // A cross-store reference persists the target's unique scalar, including null when cleared.
+      // Its target store owns the primitive type, so this schema intentionally accepts both unique
+      // scalar families rather than guessing from a relation declaration it does not contain.
+      return value === null || typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value))
+    }
     return definition.kind === 'boolean'
       ? typeof value === 'boolean'
       : definition.kind === 'text'
@@ -290,7 +296,11 @@ function cloudKitSyncConnection(zone: CloudKitZone, context: TR.SyncProviderCont
       const server = imageOf(conflict.server)
       const image = images.get(conflict.name)
       if (server === undefined || image === undefined) {
-        settle(conflict.name, undefined)
+        // A malformed conflict proves neither that our record was saved nor what the authority
+        // holds. Keep every tracked change-set pending and surface the native/protocol failure.
+        observer?.failed(
+          new Errors.HostEnvironmentError(`CloudKit returned an unreadable conflict for '${conflict.name}'.`),
+        )
         continue
       }
       // The server's copy moved under our save: what it holds newer than ours lands locally as a

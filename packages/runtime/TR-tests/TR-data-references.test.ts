@@ -128,6 +128,34 @@ Describe('TR.Data references across stores', () => {
     Expect(TR.Data.EntityAvailability(failing)).toEqual({ message: 'feed unreachable', status: 'error' })
   })
 
+  Test('gives cold references in different entities independent placeholder and fill identities', async () => {
+    const requests: TaoFillRequest[] = []
+    const schema = TR.Data.Schema(
+      {
+        name: 'IndependentColdReferences',
+        schemaVersion: 1,
+        entities: {
+          Author: { collection: 'Authors', fields: { ExternalId: { kind: 'number', unique: true } } },
+          Story: { collection: 'Stories', fields: { ExternalId: { kind: 'number', unique: true } } },
+        },
+      },
+      fillConnection(async request => {
+        requests.push(request)
+      }),
+    )
+    await schema.settle()
+
+    const author = schema.referencedHandle('Author', 'ExternalId', 42)
+    const story = schema.referencedHandle('Story', 'ExternalId', 42)
+    await schema.settle()
+
+    Expect(author).not.toBe(story)
+    Expect(requests.map(request => request.descriptor)).toEqual([
+      { entity: 'Author', limit: 1, where: { ExternalId: 42 } },
+      { entity: 'Story', limit: 1, where: { ExternalId: 42 } },
+    ])
+  })
+
   Test('clears a reference to none', async () => {
     const { bookmarks, stories } = await linkedStores()
     const story = await createStory(stories, 505, 'Cleared')
