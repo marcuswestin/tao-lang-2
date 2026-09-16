@@ -4,7 +4,7 @@ import { ExpoConfig, type ExpoSessionConfig } from './expo-config'
 import { createExpoMetro, ExpoMetro, type ExpoMetroSession } from './metro'
 
 const EXPO_GO_APP_ID = 'host.exp.exponent'
-const EXPO_GO_SDK_VERSION = '54.0.0'
+const EXPO_GO_SDK_VERSION = '57.0.0'
 const EXPO_VERSIONS_URL = 'https://api.expo.dev/v2/versions/latest'
 const EXPO_GO_APK_CACHE_DIR = FS.joinPath('.artifacts/android/expo-go')
 const EXPO_ADB_USER = '0'

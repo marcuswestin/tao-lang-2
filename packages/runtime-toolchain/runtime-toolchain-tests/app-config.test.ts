@@ -37,6 +37,11 @@ const fallbackConfig: ExpoAppConfig = {
   version: '1.0.0',
 }
 
+const sceneLifecyclePlugin: [string, unknown] = [
+  'expo-build-properties',
+  { ios: { enableSceneSupport: true } },
+]
+
 const shipManifest: ShipManifest = {
   buildNumber: '202609021545',
   bundleIdentifier: 'lang.tao.wordflower.instantdb',
@@ -87,6 +92,7 @@ Describe('Expo ship host configuration', () => {
       ...fallbackConfig,
       extra: { retained: true },
       ios: { config: {} },
+      plugins: [sceneLifecyclePlugin],
     }, projectRoot)
 
     Expect(config).toEqual({
@@ -94,7 +100,7 @@ Describe('Expo ship host configuration', () => {
       slug: 'wordflower-instantdb',
       version: '1.2.3',
       icon: './assets/tao-app-icon-badged.png',
-      plugins: ['./plugins/with-ios-fmt-compat.cjs'],
+      plugins: [sceneLifecyclePlugin, './plugins/with-ios-fmt-compat.cjs'],
       splash: {
         backgroundColor: '#171b2d',
         image: './assets/tao-app-icon.png',

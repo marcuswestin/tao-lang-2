@@ -11,7 +11,7 @@
     "./app.plugin.js": "./app.plugin.js"
   },
   "dependencies": {
-    "expo": "~54.0.37",
+    "expo": "~57.0.23",
     "tao-shared": "workspace:*"
   }
 }

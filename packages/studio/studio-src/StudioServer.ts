@@ -261,8 +261,7 @@ export async function startStudioSessionServer(
             ? undefined
             : response(request, url, requestOptions, { error: 'WebSocket upgrade failed.' }, 400)
         }
-        const sessionUrl = new URL(url)
-        sessionUrl.pathname = route.pathname
+        const sessionUrl = new URL(`${route.pathname}${url.search}${url.hash}`, url.origin)
         return await handleRequest(
           resource.session,
           dataSources.get(route.sessionId)!,

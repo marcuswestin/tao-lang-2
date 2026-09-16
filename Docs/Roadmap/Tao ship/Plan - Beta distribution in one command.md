@@ -91,10 +91,9 @@ that lane, and every mechanism is one a later Tao-managed front can reuse unchan
   whose `app.json` names the app "Tao Runtime" and declares no bundle identifier, no version
   source, no updates client, no icon. There is no `eas.json` and no `expo-updates` dependency.
 - `tao dev` starts Metro with `expo start --host lan` and opens Expo Go on simulators and connected
-  phones. Physical iPhones therefore depend on the App Store Expo Go, which is SDK 54 today with
-  newer SDKs stuck in Apple's review; the day Tao moves past SDK 54, the phone lane of `tao dev`
-  needs a development build. The build this plan produces is that build's natural ancestor, so
-  slice 4 folds the two together.
+  phones. Tao moved to Expo SDK 57 on 2026-09-15, so the physical-iPhone lane can no longer depend
+  on the App Store's SDK 54 Expo Go; it now needs a development build. The build this plan produces
+  is that build's natural ancestor, so slice 4 folds the two together.
 - WordFlower already declares what the command derives from: `project { id "wordflower" name
   "WordFlower" … }`, `app WordFlower { Name … Datasource DeviceStore }`, and the sync variant
   `app WordFlowerInstantDB = WordFlower with { Name "WordFlower - InstantDB" Datasource

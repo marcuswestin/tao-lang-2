@@ -21,6 +21,14 @@
     },
     "plugins": [
       "expo-dev-client",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "enableSceneSupport": true
+          }
+        }
+      ],
       "./plugins/with-ios-fmt-compat.cjs"
     ],
     "experiments": {
