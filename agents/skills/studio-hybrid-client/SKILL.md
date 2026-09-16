@@ -8,9 +8,11 @@ description: >-
 
 Studio's browser client is two systems sharing one DOM. `TaoStudioProductHost.tsx` mounts the
 imperative shell (`mountStudio` from `./client/StudioApp`) and then portals React trees into nodes
-that shell owns. `studio-src/client/` is live code on the served bundle, not a retired client.
+that shell owns. The root product tree is itself portaled into `#tao-studio-viewport`.
+`studio-src/client/` is live code on the served bundle, not a retired client.
 
-- Never clear a container React portals into. `.studio-files`, `.studio-editor`, `.studio-components`,
+- Never clear a container React portals into. `#tao-studio-viewport`, `.studio-files`,
+  `.studio-editor`, `.studio-components`,
   `.studio-project-views`, `.studio-screens`, `.studio-design-values`, `.studio-data`,
   `.studio-drawer-content`, `.studio-search-results`, `.studio-scenario-inspector-content`,
   `.studio-inspector-tao-context`, and `.studio-inspector-tao-environment` are portal targets;
