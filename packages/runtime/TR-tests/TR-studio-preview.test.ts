@@ -525,7 +525,10 @@ Describe('Studio preview runtime bridge', () => {
     fake.dispatchWindow('message', journeyRecordingMessage(cellConfig, fake.parent, true))
     fake.dispatchDocument('click', { target: first })
     cleanup()
-    Expect(fake.messages.at(-2)?.message).toMatchObject({
+    const recorded = fake.messages
+      .map(post => post.message as { type?: string })
+      .filter(message => message.type === 'preview-journey-step-recorded')
+    Expect(recorded.at(-1)).toMatchObject({
       sequence: 1,
       step: {
         action: 'press',
@@ -535,6 +538,9 @@ Describe('Studio preview runtime bridge', () => {
       type: 'preview-journey-step-recorded',
     })
     Expect(fake.messages.at(-1)?.message).toMatchObject({ sequence: 1, status: 'invalidated' })
+    Expect(fake.messages.some(post => (post.message as { event?: { kind?: string } }).event?.kind === 'reset')).toBe(
+      true,
+    )
   })
 
   Test('captures fixture data only for an exact trusted parent request', async () => {
@@ -646,7 +652,8 @@ Describe('Studio preview runtime bridge', () => {
     Expect(fake.overlays[0]?.removed).toBe(true)
     Expect(fake.listenerCount()).toBe(0)
     fake.dispatchDocument('click', { target: render })
-    Expect(fake.messages.length).toBe(3)
+    Expect(fake.messages.length).toBe(4)
+    Expect(fake.messages.at(-1)?.message).toMatchObject({ event: { kind: 'reset' }, type: 'preview-debug' })
   })
 
   Test('accepts source highlights only from the configured parent and current source version', () => {

@@ -32,12 +32,24 @@ class ActionTransaction {
   readonly afterCommit: Array<() => void> = []
   readonly detached: Array<() => PromiseLike<unknown>> = []
   readonly frames: string[] = []
+  readonly frameTrail: string[] = []
   readonly launch = launchGeneration
   readonly resources = new Map<object, TransactionResource<any>>()
   externalEffects = false
   committed = false
   journal: TaoDebugJournalEntry | undefined
   failure: unknown
+
+  pushFrame(name: string): void {
+    this.frames.push(name)
+    if (this.frames.length >= this.frameTrail.length) {
+      this.frameTrail.splice(0, this.frameTrail.length, ...this.frames)
+    }
+  }
+
+  popFrame(): void {
+    this.frames.pop()
+  }
 
   resource<ValueT>(
     key: object,
@@ -150,8 +162,8 @@ export function runAction(
     const transaction = new ActionTransaction()
     let pending = false
     activeTransaction = transaction
-    transaction.journal = journalStart(name, arguments_)
-    transaction.frames.push(name)
+    transaction.pushFrame(name)
+    transaction.journal = journalStart(name, transaction.frameTrail)
     try {
       const result = body()
       if (isPromiseLike(result)) {
@@ -226,7 +238,7 @@ function finishRootFailure(
 
 function finishRoot(transaction: ActionTransaction, suspendedTransaction?: ActionTransaction): void {
   activeTransaction = suspendedTransaction
-  transaction.frames.pop()
+  transaction.popFrame()
   settleJournal(transaction)
   if (transaction.committed) {
     for (const effect of transaction.afterCommit) {
@@ -256,7 +268,7 @@ function settleJournal(transaction: ActionTransaction): void {
   const failure = transaction.failure
   journalSettle(transaction.journal, outcome, {
     externalEffect: transaction.externalEffects,
-    frames: transaction.frames,
+    frames: transaction.frameTrail,
     failureCase: failure instanceof TaoActionFailure ? failure.caseName : undefined,
   })
 }
@@ -294,7 +306,7 @@ function runJoinedAction(
   name: string,
   body: () => unknown,
 ): void | Promise<void> {
-  transaction.frames.push(name)
+  transaction.pushFrame(name)
   let pending = false
   try {
     const result = body()
@@ -306,14 +318,14 @@ function runJoinedAction(
           recordActionFailureFrames(error, transaction.frames)
           throw error
         },
-      ).finally(() => transaction.frames.pop())
+      ).finally(() => transaction.popFrame())
     }
   } catch (error) {
     recordActionFailureFrames(error, transaction.frames)
     throw error
   } finally {
     if (!pending) {
-      transaction.frames.pop()
+      transaction.popFrame()
     }
   }
 }

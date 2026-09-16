@@ -5,6 +5,7 @@ import { StudioApiClient } from '../StudioApiClient'
 import { StudioDialog } from '../StudioDialog'
 import { StudioScenarioControls } from '../StudioScenarioControls'
 import { StudioCellControls } from './StudioCellControls'
+import { StudioDebugEvents } from './StudioDebugEvents'
 import {
   applyConnectionSourceAction,
   configureGenerationAvailability,
@@ -180,6 +181,9 @@ export function renderCellPreview(
     }>,
   ): Promise<void> => {
     Assert.input(connection.cellIdentity, 'Studio cell identity is unavailable for remounting.')
+    // Debugger state belongs to one preview document. A replacement cannot resume that document's
+    // pause or settle its journal root, so retain neither in the new cell.
+    connection.debug = StudioDebugEvents.empty()
     const runtime = await StudioApiClient.reconfigureCell({
       ...connection.cellIdentity,
       ...configuration,

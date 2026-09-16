@@ -3,6 +3,7 @@ import { AST, codeProjectRoot, type ParsedFile } from '@parser'
 import { Assert, Diagnostics, Errors, FS } from '@shared'
 import Validator, { type ValidationResult } from '@validator'
 import { designValidationCodes } from '@validator/diagnostic-codes'
+import { withActionInstrumentation } from './codegen/app/action-control-flow'
 import {
   configurationAliasTargetTypeBindingName,
   configurationRuntimeBindingName,
@@ -513,25 +514,26 @@ function compileSourceFile(file: ParsedFile, options: CompileSourceFileOptions):
           withInlineInjectionBindings(
             new Map(planned.injections.map(injection => [injection.node, injection.binding])),
             () =>
-              RuntimeGen.TaoFile(file.ast, {
-                configurationTypes: planned.declarationsPath === undefined
-                  ? undefined
-                  : RuntimeGen.ConfigurationTypes(file.ast),
-                dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
-                emitDataCatalog: ownsDataCatalog,
-                importLines,
-                localDataCatalog: usesLocalDataCatalog,
-                scopeBindings,
-                exportedBindings,
-                selectedAppDatasourceConfiguration,
-                selectedAppName,
-                projectRoot,
-                studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
-                studio,
-                debug,
-                studioViews: studio && selectedAppName !== undefined ? studioViews : [],
-                viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }),
-              }),
+              withActionInstrumentation(debug, () =>
+                RuntimeGen.TaoFile(file.ast, {
+                  configurationTypes: planned.declarationsPath === undefined
+                    ? undefined
+                    : RuntimeGen.ConfigurationTypes(file.ast),
+                  dataEntities: ownsDataCatalog ? dataCatalog.entities : [],
+                  emitDataCatalog: ownsDataCatalog,
+                  importLines,
+                  localDataCatalog: usesLocalDataCatalog,
+                  scopeBindings,
+                  exportedBindings,
+                  selectedAppDatasourceConfiguration,
+                  selectedAppName,
+                  projectRoot,
+                  studioDataCatalog: studio && dataCatalog !== undefined && (ownsDataCatalog || needsStudioDataCatalog),
+                  studio,
+                  debug,
+                  studioViews: studio && selectedAppName !== undefined ? studioViews : [],
+                  viewRegistrations: RuntimeGen.ViewRegistrations(file.ast, { studio }),
+                })),
           )),
     ),
   }

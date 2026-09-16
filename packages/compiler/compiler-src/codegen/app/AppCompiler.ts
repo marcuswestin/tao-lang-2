@@ -3,7 +3,6 @@ import { AST } from '@parser'
 import { Assert } from '@shared'
 import { type CodegenOptions, type Compiled, gen, resolveRef } from '../codegen-util'
 import { Compile } from '../Compile'
-import { configureActionInstrumentation } from './action-control-flow'
 import { activeDataStorePlan } from './data-store-context'
 import { canonicalDeclaration, compileDeclarationIdentity } from './declaration-identity'
 import { configuredDeclarationOfValue } from './ExpressionsCompiler'
@@ -11,13 +10,11 @@ import { configuredDeclarationOfValue } from './ExpressionsCompiler'
 export const AppCompiler = {
   /** App compiles complete primitive-headed app values, including the root-view Navigator sugar. */
   App(app: AST.AppDeclaration, options: CodegenOptions = {}): Compiled {
-    configureActionInstrumentation(options.debug === true)
     return compileAppValue(app, options)
   },
 
   /** AppValue compiles an inferred `let` whose value family is app. */
   AppValue(app: AST.AppValueDeclaration): Compiled {
-    configureActionInstrumentation(false)
     return compileAppValue(app)
   },
 

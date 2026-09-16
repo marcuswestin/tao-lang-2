@@ -63,10 +63,21 @@ Describe('Studio session paths and routes', () => {
       command: 'configure',
       steps: [{ action: 'Bump', path: '0' }],
     })
+    const canonicalStep = {
+      action: 'Bump',
+      declaration: '["tao.declaration",1,"project","@workspace","Main","view","Root"]',
+      path: '0',
+      statement: 'block.statements[1].block.statements[0]',
+    }
+    Expect(StudioProtocol.parseMessage({ ...configure, steps: [canonicalStep] })).toMatchObject({
+      steps: [canonicalStep],
+    })
     Expect(StudioProtocol.parseMessage(step)).toMatchObject({ command: 'step-over' })
     Expect(StudioProtocol.parseMessage({ ...step, command: 'break' })).toMatchObject({ command: 'break' })
     Expect(StudioProtocol.parseMessage({ ...configure, command: 'evaluate' })).toBeUndefined()
     Expect(StudioProtocol.parseMessage({ ...configure, steps: [{ action: 'Bump' }] })).toBeUndefined()
+    Expect(StudioProtocol.parseMessage({ ...configure, steps: [{ ...canonicalStep, statement: undefined }] }))
+      .toBeUndefined()
     Expect(StudioProtocol.parseMessage({ ...configure, identity: { appName: 'Garden' } })).toBeUndefined()
     Expect(StudioProtocol.parseMessage({ ...event, event: () => undefined })).toBeUndefined()
   })

@@ -791,13 +791,20 @@ type StudioPreviewLogMessage = {
 }
 
 /** StudioDebugCommandMessage drives the preview's debugger: breakpoints, continue, and stepping. */
+export type StudioDebugStep = {
+  action: string
+  declaration?: string
+  path: string
+  statement?: string
+}
+
 export type StudioDebugCommandMessage = {
   actions?: readonly string[]
   channel: typeof studioProtocolChannel
   command: 'break' | 'configure' | 'continue' | 'step-over' | 'step-into' | 'step-out'
   identity: StudioPreviewIdentity
   protocolVersion: typeof studioProtocolVersion
-  steps?: ReadonlyArray<{ action: string; path: string }>
+  steps?: readonly StudioDebugStep[]
   type: 'debug-command'
 }
 
@@ -1332,13 +1339,19 @@ function parseDebugCommand(value: StudioJsonObject): StudioDebugCommandMessage |
     command,
     identity,
     protocolVersion: studioProtocolVersion,
-    ...(steps === undefined ? {} : { steps: steps as ReadonlyArray<{ action: string; path: string }> }),
+    ...(steps === undefined ? {} : { steps: steps as readonly StudioDebugStep[] }),
     type: 'debug-command',
   }
 }
 
-function isDebugStep(value: unknown): value is { action: string; path: string } {
-  return isObject(value) && typeof value['action'] === 'string' && typeof value['path'] === 'string'
+function isDebugStep(value: unknown): value is StudioDebugStep {
+  if (!isObject(value) || typeof value['action'] !== 'string' || typeof value['path'] !== 'string') {
+    return false
+  }
+  const declaration = value['declaration']
+  const statement = value['statement']
+  return (declaration === undefined && statement === undefined)
+    || (typeof declaration === 'string' && typeof statement === 'string')
 }
 
 function parsePreviewDebug(value: StudioJsonObject): StudioPreviewDebugMessage | undefined {

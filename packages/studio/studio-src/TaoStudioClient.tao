@@ -1221,7 +1221,8 @@ view StudioLogsPanelView(Logs StudioLogsPanel, Dispatch action(text, text)) {
 view StudioDebugPanelView(Debug StudioDebugPanel, Dispatch action(text, text)) {
    render Col() {
       StudioPanelCommand(Label: "Break", Command: Debug.BreakAction, Dispatch: Dispatch, Disabled: Debug.Paused)
-      StudioPanelCommand(Label: "Continue", Command: Debug.ContinueAction, Dispatch: Dispatch, Disabled: not Debug.Paused)
+      // Continue also cancels a Break armed before any action reaches a statement gate.
+      StudioPanelCommand(Label: "Continue", Command: Debug.ContinueAction, Dispatch: Dispatch, Disabled: false)
       StudioPanelCommand(Label: "Step over", Command: Debug.StepOverAction, Dispatch: Dispatch, Disabled: not Debug.Paused)
       StudioPanelCommand(Label: "Step into", Command: Debug.StepIntoAction, Dispatch: Dispatch, Disabled: not Debug.Paused)
       StudioPanelCommand(Label: "Step out", Command: Debug.StepOutAction, Dispatch: Dispatch, Disabled: not Debug.Paused)

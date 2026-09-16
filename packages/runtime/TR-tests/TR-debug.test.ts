@@ -62,10 +62,18 @@ function nextEvent(kind: TaoDebugEvent['kind']): Promise<TaoDebugEvent> {
 }
 
 Describe('Tao debugger', () => {
+  Test('retains no action journal when debugger tooling is not connected', async () => {
+    TR.Debug.Reset()
+    await TR.Action(() => undefined, { name: 'OrdinaryBuildAction' }).jsValue.invoke()
+    Expect(TR.Debug.Journal()).toEqual([])
+  })
+
   Test('runs an instrumented body straight through with no breakpoint set', async () => {
     TR.Debug.Reset()
     const schema = recordingSchema()
+    const stop = TR.Debug.onEvent(() => undefined)
     await instrumented(schema).jsValue.invoke()
+    stop()
     Expect(notes(schema)).toBe(2)
     Expect(TR.Debug.Paused()).toBeUndefined()
     const entry = TR.Debug.Journal().at(-1)
@@ -235,14 +243,106 @@ Describe('Tao debugger', () => {
     TR.Debug.Reset()
     const Failure = TR.Enum(identity('DebugFailure'), ['Rejected'])
     const stop = TR.Errors.onFailure(() => undefined)
+    const stopDebug = TR.Debug.onEvent(() => undefined)
     const failing = TR.Action(() => {
       TR.Fail(Failure['Rejected']!, 'No.')
     }, { name: 'Refuse' })
     await failing.jsValue.invoke()
     stop()
+    stopDebug()
     const entry = TR.Debug.Journal().at(-1)
     Expect(entry?.action).toBe('Refuse')
     Expect(entry?.outcome).toBe('failed')
     Expect(entry?.failureCase).toBe('Rejected')
+  })
+
+  Test('assigns a distinct monotonic root identity to repeated same-name actions', async () => {
+    TR.Debug.Reset()
+    const action = TR.Action(() => undefined, { name: 'Repeat' })
+    const stop = TR.Debug.onEvent(() => undefined)
+
+    await action.jsValue.invoke()
+    await action.jsValue.invoke()
+    stop()
+
+    const entries = TR.Debug.Journal().slice(-2)
+    Expect(entries.map(entry => entry.rootId)).toHaveLength(2)
+    Expect(entries[0]!.rootId).toBeLessThan(entries[1]!.rootId)
+  })
+
+  Test('snapshots inherited and shadowed bindings visible at a nested gate', async () => {
+    TR.Debug.Reset()
+    const parent = { Inherited: TR.Value('parent'), Shadowed: TR.Value('parent') }
+    const scope = Object.assign(Object.create(parent) as Record<string, unknown>, {
+      Local: TR.Value('local'),
+      Shadowed: TR.Value('child'),
+    })
+    TR.Debug.Break()
+    const paused = nextEvent('paused')
+    const pending = TR.Action(async () => {
+      await TR.Debug.At({ action: 'Scoped', path: '0' }, scope)
+    }, { name: 'Scoped' }).jsValue.invoke()
+
+    await paused
+    Expect(TR.Debug.Paused()?.scope).toEqual({ Inherited: 'parent', Local: 'local', Shadowed: 'child' })
+    TR.Debug.Continue()
+    await pending
+  })
+
+  Test('retains the deepest joined frame trail after frames unwind', async () => {
+    TR.Debug.Reset()
+    const inner = TR.Action(() => undefined, { name: 'Inner' })
+    const outer = TR.Action(() => inner.jsValue.invokeJoined(), { name: 'Outer' })
+    const stop = TR.Debug.onEvent(() => undefined)
+
+    await outer.jsValue.invoke()
+    stop()
+
+    Expect(TR.Debug.Journal().at(-1)?.frames).toEqual(['Outer', 'Inner'])
+  })
+
+  Test('canonical step identities do not collide when labels and display paths match', async () => {
+    TR.Debug.Reset()
+    const first = { action: 'Save', declaration: 'view:first/action:save', path: '0', statement: 'block.statements[0]' }
+    const second = {
+      action: 'Save',
+      declaration: 'view:second/action:save',
+      path: '0',
+      statement: 'block.statements[0]',
+    }
+    TR.Debug.Configure({ steps: [first] })
+
+    await TR.Action(async () => {
+      await TR.Debug.At(second, {})
+    }, { name: 'Save' }).jsValue.invoke()
+    Expect(TR.Debug.Paused()).toBeUndefined()
+
+    const paused = nextEvent('paused')
+    const pending = TR.Action(async () => {
+      await TR.Debug.At(first, {})
+    }, { name: 'Save' }).jsValue.invoke()
+    await paused
+    Expect(TR.Debug.Paused()?.step.declaration).toBe(first.declaration)
+    TR.Debug.Continue()
+    await pending
+  })
+
+  Test('reset clears a live pause without publishing a stale resumed event', async () => {
+    TR.Debug.Reset()
+    const events: TaoDebugEvent[] = []
+    const stop = TR.Debug.onEvent(event => events.push(event))
+    TR.Debug.Break()
+    const paused = nextEvent('paused')
+    const pending = TR.Action(async () => {
+      await TR.Debug.At({ action: 'Resettable', path: '0' }, {})
+    }, { name: 'Resettable' }).jsValue.invoke()
+    await paused
+
+    TR.Debug.Reset()
+    Expect(TR.Debug.Paused()).toBeUndefined()
+    await pending
+    stop()
+
+    Expect(events.map(event => event.kind)).toEqual(['journal', 'paused', 'reset'])
   })
 })

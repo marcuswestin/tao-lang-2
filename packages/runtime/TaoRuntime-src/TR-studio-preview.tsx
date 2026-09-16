@@ -1,6 +1,6 @@
 import React from 'react'
 import { RuntimeAssert } from './TR-assert'
-import { Debug } from './TR-debug'
+import { Debug, type TaoDebugStep } from './TR-debug'
 import { captureArguments, onRuntimeFailure } from './TR-error-containment'
 import { requireReactNativeRuntime } from './TR-react-native'
 import { captureRuntime, restoreRuntimeCapture, type TaoRuntimeCaptureArtifact } from './TR-runtime-capture'
@@ -1047,6 +1047,10 @@ export function mountStudioPreviewBridge(
 
   return () => {
     stopped = true
+    // A preview instance owns its debugger pause and clock hold. Releasing the bridge must release
+    // both before a replacement instance starts, without letting the old pause publish a resumed
+    // event into the replacement's drawer.
+    Debug.Reset()
     if (recording !== undefined) {
       const invalidatedRecording = recording
       flushRecordedInput()
@@ -1200,8 +1204,14 @@ function applyDebugCommand(
   return true
 }
 
-function isDebugStepValue(value: unknown): value is { action: string; path: string } {
-  return isObject(value) && typeof value['action'] === 'string' && typeof value['path'] === 'string'
+function isDebugStepValue(value: unknown): value is TaoDebugStep {
+  if (!isObject(value) || typeof value['action'] !== 'string' || typeof value['path'] !== 'string') {
+    return false
+  }
+  const declaration = value['declaration']
+  const statement = value['statement']
+  return (declaration === undefined && statement === undefined)
+    || (typeof declaration === 'string' && typeof statement === 'string')
 }
 
 function interactionModeFromMessage(
