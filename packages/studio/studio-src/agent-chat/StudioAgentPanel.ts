@@ -57,6 +57,17 @@ export const StudioAgentPosition = {
     const top = pixels((value as { top?: unknown }).top)
     return left === undefined || top === undefined ? undefined : { left, top }
   },
+  /** restore applies the state that determines size before clamping the saved position. */
+  restore(
+    stored: string | null | undefined,
+    minimized: boolean,
+    viewportSize: Readonly<{ height: number; width: number }>,
+  ): AgentPanelPosition | undefined {
+    const position = StudioAgentPosition.parse(stored)
+    return position === undefined
+      ? undefined
+      : StudioAgentPosition.clamp(position, StudioAgentPosition.defaultSize(minimized), viewportSize)
+  },
 } as const
 
 /** pixels accepts both a number and the `"123px"` CSS string earlier versions persisted. */
@@ -224,12 +235,15 @@ export function mountStudioAgentPanel(root: HTMLElement, hooks: StudioAgentChatP
       // The stored position was clamped against the display it was dragged on. A smaller one now, or
       // a smaller window, would leave the panel off-screen with no way back, so it is re-clamped here
       // and again on every resize rather than trusted as written.
+      const restoredMinimized = window.localStorage.getItem(agentMinimizedStorageKey) === 'true'
+      // Size is part of the saved state. Applying it after placement clamps a bottom-corner pill as if it
+      // were the full panel on every reload, visibly walking it upward.
+      if (restoredMinimized) {
+        setMinimized(true)
+      }
       const saved = StudioAgentPosition.parse(window.localStorage.getItem(agentPositionStorageKey))
       if (saved !== undefined) {
         place(saved)
-      }
-      if (window.localStorage.getItem(agentMinimizedStorageKey) === 'true') {
-        setMinimized(true)
       }
       window.addEventListener('resize', () => {
         if (placed !== undefined) {

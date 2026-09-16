@@ -4,7 +4,7 @@ import { Describe, Expect, Test } from '@shared/test'
 import { chatInstructions, scenarioInstructions } from '../studio-src/agent-chat/AgentChatInstructions'
 import { findSpec, type SpecSection } from '../studio-src/agent-chat/AgentChatReference'
 import type { AgentChatWriteWorld, StagedChange } from '../studio-src/agent-chat/AgentChatWrites'
-import { APPROVAL_REQUIRED, writeTools } from '../studio-src/agent-chat/AgentChatWrites'
+import { APPROVAL_REQUIRED, stageChange, writeTools } from '../studio-src/agent-chat/AgentChatWrites'
 import type { SemanticSnapshot, SnapshotNode } from '../studio-src/agent-chat/SemanticSnapshot'
 
 const PATH = 'App.tao'
@@ -101,6 +101,21 @@ Describe('Studio agent chat writes', () => {
     Expect(changes.size).toBe(1)
     // Nothing reached the project: proposing is not applying.
     Expect(it.applied).toEqual([])
+  })
+
+  Test('all staging surfaces share one change-id allocator', async () => {
+    const changes = new Map<string, StagedChange>()
+    let issued = 0
+    const issue = () => `change-${++issued}`
+    const firstSurface = stageChange(world(), changes, issue)
+    const secondSurface = stageChange(world(), changes, issue)
+
+    const first = await firstSurface('first', [{ after: 'two', before: 'one', path: PATH }])
+    const second = await secondSurface('second', [{ after: 'three', before: 'two', path: PATH }])
+
+    Expect(first['changeId']).toBe('change-1')
+    Expect(second['changeId']).toBe('change-2')
+    Expect([...changes.keys()]).toEqual(['change-1', 'change-2'])
   })
 
   Test('applying writes the staged change and records what it was computed against', async () => {
@@ -224,6 +239,33 @@ view StoryScreen() {
 
     Expect(String(result['refused']).includes('Cannot replace overlapping declarations')).toBe(true)
     Expect(changes.size).toBe(0)
+  })
+
+  Test('proposeEdit accepts an entity replacement under the semantic entity kind', async () => {
+    const source = 'data Stories / Story {\n   Title text\n}\n'
+    const nodes = new Map<string, SnapshotNode>()
+    nodes.set('entity:Stories', {
+      end: source.trimEnd().length,
+      id: 'entity:Stories',
+      kind: 'entity',
+      name: 'Stories',
+      path: PATH,
+      start: 0,
+    })
+    const changes = new Map<string, StagedChange>()
+    const it = world({
+      files: async () => [{ content: source, path: PATH }],
+      snapshot: async () => ({ appName: 'Reader', diagnostics: [], edges: [], nodes, projectRoot: '/project' }),
+    })
+
+    const result = await call(writeTools(it, changes, () => {}), 'proposeEdit', {
+      declaration: 'Stories',
+      replacement: 'data Stories / Story {\n   Title text\n   Summary text\n}',
+    })
+
+    Expect(result['refused']).toBeUndefined()
+    Expect(result['changeId']).toBe('change-1')
+    Expect(changes.get('change-1')?.edits[0]?.after.includes('Summary text')).toBe(true)
   })
 
   Test('proposing declarations across multiple files stages a single change with diffs for each file', async () => {

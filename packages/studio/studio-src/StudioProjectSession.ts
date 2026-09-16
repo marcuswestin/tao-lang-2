@@ -152,6 +152,14 @@ type SourceActionUndoCacheEntry = {
   result: StudioSourceActionUndoResult
 }
 
+type AgentUndoFile = {
+  path: string
+  beforeContent: string
+  beforeSourceVersion: string
+  appliedContent: string
+  appliedSourceVersion: string
+}
+
 const sourceActionResultLimit = 100
 
 type PreparedSketchSnap = Readonly<{
@@ -279,7 +287,7 @@ export class StudioProjectSession {
    * One entry per applied agent change, most recent last. A chat applies several changes in a conversation,
    * and a single slot would make every change but the last one unrecoverable while still offering "undo".
    */
-  #agentUndoStack: { path: string; content: string; sourceVersion: string }[][] = []
+  #agentUndoStack: AgentUndoFile[][] = []
 
   /**
    * applyAgentFiles writes several files as one mutation, compiles once, and rolls every
@@ -299,6 +307,7 @@ export class StudioProjectSession {
   ): Promise<{
     compile: StudioCompileCompletion
     rolledBack: boolean
+    sourceVersions: readonly { path: string; sourceVersion: string }[]
   }> {
     return this.#mutate(async () => {
       const before = await Promise.all(request.edits.map(async edit => {
@@ -324,13 +333,30 @@ export class StudioProjectSession {
       const compile = await this.#coordinator.noteStudioFileMutation(writes)
       if (compile.status === 'error') {
         await this.#restoreAgentFiles(before, `rollback:${request.writeId}`)
-        return { compile, rolledBack: true }
+        return {
+          compile,
+          rolledBack: true,
+          sourceVersions: before.map(file => ({ path: file.path, sourceVersion: file.sourceVersion })),
+        }
       }
-      this.#agentUndoStack.push(before)
+      this.#agentUndoStack.push(before.map((file, index) => ({
+        appliedContent: request.edits[index]!.content,
+        appliedSourceVersion: writes[index]!.sourceVersion,
+        beforeContent: file.content,
+        beforeSourceVersion: file.sourceVersion,
+        path: file.path,
+      })))
       for (const [index, write] of writes.entries()) {
         this.#emitFile(this.#files.projectFile(before[index]!.path, write.sourceVersion))
       }
-      return { compile, rolledBack: false }
+      return {
+        compile,
+        rolledBack: false,
+        sourceVersions: writes.map((write, index) => ({
+          path: before[index]!.path,
+          sourceVersion: write.sourceVersion,
+        })),
+      }
     })
   }
 
@@ -338,10 +364,39 @@ export class StudioProjectSession {
     return this.#mutate(async () => {
       const before = this.#agentUndoStack[this.#agentUndoStack.length - 1]
       Assert.input(before !== undefined, 'Nothing applied by the agent to undo.')
-      const compile = await this.#restoreAgentFiles(before, writeId)
+      // Undo is another delayed source write. A person may have edited one of these files after the agent
+      // changed it; restoring the old body without this check would erase that work under an innocent Undo.
+      for (const file of before) {
+        const current = await this.readFile(file.path)
+        if (current.sourceVersion !== file.appliedSourceVersion) {
+          throw new StudioSourceConflictError(file.path, file.appliedSourceVersion, current.sourceVersion)
+        }
+      }
+      const compile = await this.#restoreAgentFiles(
+        before.map(file => ({
+          content: file.beforeContent,
+          path: file.path,
+          sourceVersion: file.beforeSourceVersion,
+        })),
+        writeId,
+      )
       this.#agentUndoStack.pop()
       return { compile, restored: before.map(file => file.path) }
     })
+  }
+
+  /** The exact reverse patch the next agent undo would apply, shown before a person approves it. */
+  agentUndoPreview(): { diff: string; restored: readonly string[] } | undefined {
+    const files = this.#agentUndoStack[this.#agentUndoStack.length - 1]
+    if (files === undefined) {
+      return undefined
+    }
+    return {
+      diff: files.map(file => sourceActionProposalDiff(file.path, file.appliedContent, file.beforeContent)).join(
+        '\n\n',
+      ),
+      restored: files.map(file => file.path),
+    }
   }
 
   async #restoreAgentFiles(

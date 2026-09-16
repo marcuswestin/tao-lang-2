@@ -3,7 +3,7 @@
 // The loop and the tools have their own tests. This one exercises what a person actually reaches: the command
 // handler, the mode gate, the two cloud gates, and the approval round trip that runs across two HTTP calls.
 import { FS } from '@shared'
-import { Describe, Expect, Test } from '@shared/test'
+import { Deferred, Describe, Expect, Test, until } from '@shared/test'
 import { Workspace } from '@workspace'
 import { MockLanguageModelV3, simulateReadableStream } from 'ai/test'
 import { AgentChatProvider } from '../studio-src/agent-chat/AgentChatProvider'
@@ -101,7 +101,11 @@ function session(applied: { path: string; content: string }[]): StudioProjectSes
     appName: 'Reader',
     applyAgentFiles: async (request: { edits: readonly { path: string; content: string }[] }) => {
       applied.push(...request.edits)
-      return { compile: { message: 'compiled', status: 'compiled' }, rolledBack: false }
+      return {
+        compile: { message: 'compiled', status: 'compiled' },
+        rolledBack: false,
+        sourceVersions: request.edits.map(edit => ({ path: edit.path, sourceVersion: 'v1' })),
+      }
     },
     agentParse: async () => await parsed(),
     compileSnapshot: () => ({ diagnostics: [], status: 'compiled' }),
@@ -109,6 +113,7 @@ function session(applied: { path: string; content: string }[]): StudioProjectSes
     // The snapshot keeps only files under the project root, so this has to be where the source really is.
     projectRoot: ROOT,
     readFile: async (path: string) => ({ content: SOURCE, path, sourceVersion: 'v1' }),
+    agentUndoPreview: () => ({ diff: 'reverse diff', restored: [PATH] }),
     undoAgentFiles: async () => ({ compile: { message: 'compiled', status: 'compiled' }, restored: [PATH] }),
   } as unknown as StudioProjectSession
 }
@@ -137,6 +142,53 @@ function chat(
 }
 
 Describe('Studio agent chat server', () => {
+  Test('a mode change serializes behind an active turn and silences its stale stream', async () => {
+    const started = Deferred()
+    const release = Deferred()
+    const model = new MockLanguageModelV3({
+      doStream: async () => ({
+        stream: new ReadableStream<StreamPart>({
+          async start(controller) {
+            controller.enqueue({ id: '0', type: 'text-start' })
+            controller.enqueue({ delta: 'early ', id: '0', type: 'text-delta' })
+            started.resolve()
+            await release.promise
+            controller.enqueue({ delta: 'stale', id: '0', type: 'text-delta' })
+            controller.enqueue({ id: '0', type: 'text-end' })
+            controller.enqueue({
+              finishReason: { raw: undefined, unified: 'stop' },
+              type: 'finish',
+              usage: {
+                inputTokens: { cacheRead: undefined, cacheWrite: undefined, noCache: 1, total: 1 },
+                outputTokens: { reasoning: undefined, text: 2, total: 2 },
+                totalTokens: 3,
+              },
+            })
+            controller.close()
+          },
+        }) as never,
+      }),
+    })
+    const conversation = conversationForTesting(session([]), new AgentChatProvider({}, model))
+    await conversation.handle('enable', { enabled: true })
+    const seen: string[] = []
+    const sending = conversation.send('answer slowly', event => {
+      if (event.type === 'text') {
+        seen.push(event.text)
+      }
+    })
+    await started.promise
+    await until(() => seen.length === 1)
+
+    const changingMode = conversation.handle('mode', { mode: 'scenario' })
+    release.resolve()
+    const [turn] = await Promise.all([sending, changingMode]) as [Record<string, unknown>, unknown]
+
+    Expect(turn['status']).toBe('failed')
+    Expect(seen).toEqual(['early '])
+    Expect((await conversation.handle('history', {}) as { history: unknown[] }).history).toEqual([])
+  })
+
   Test('refuses to send anything until a person turns cloud use on', async () => {
     const it = chat([{ text: 'hello' }])
 
@@ -159,6 +211,28 @@ Describe('Studio agent chat server', () => {
     Expect(turn['status']).toBe('complete')
     Expect(turn['text']).toBe('It shows a greeting.')
     Expect((turn['usage'] as Record<string, unknown>)['inputTokens']).toBe(1)
+  })
+
+  Test('coverageOfTests reports the real last run from this Studio session', async () => {
+    const tests = runner([{ failed: 1, failures: [{ message: 'no greeting', name: 'greets' }], passed: 2 }])
+    const it = chat(
+      [
+        { call: { input: {}, name: 'runTests' } },
+        { call: { input: {}, name: 'coverageOfTests' } },
+        { text: 'Two pass and greets fails.' },
+      ],
+      [],
+      tests,
+    )
+    await it.handle('enable', { enabled: true })
+
+    const turn = await it.handle('send', { message: 'what is the current test status?' }) as Record<string, unknown>
+    const calls = turn['toolCalls'] as { name: string; summary: string }[]
+    const coverage = calls.find(call => call.name === 'coverageOfTests')
+
+    Expect(coverage?.summary.includes('never run in this session')).toBe(false)
+    Expect(coverage?.summary.includes('"failed":1')).toBe(true)
+    Expect(coverage?.summary.includes('greets')).toBe(true)
   })
 
   Test('an empty message is refused before a model is called', async () => {
@@ -266,6 +340,20 @@ Describe('Studio agent chat server', () => {
     Expect(applied).toEqual([])
   })
 
+  Test('undo approval shows the reverse diff before restoring files', async () => {
+    const it = chat([
+      { call: { input: {}, name: 'undoLastChange' } },
+      { text: 'Restored it.' },
+    ])
+    await it.handle('enable', { enabled: true })
+
+    const asked = await it.handle('send', { message: 'undo that' }) as Record<string, unknown>
+    const approvals = asked['pendingApprovals'] as { approvalId: string; diff?: string }[]
+
+    Expect(approvals).toHaveLength(1)
+    Expect(approvals[0]?.diff).toBe('reverse diff')
+  })
+
   Test('a change that breaks a test is reported as breaking it, not described as done', async () => {
     // The app passes before the change and fails after it, so the failure belongs to this change.
     const tests = runner([
@@ -275,7 +363,6 @@ Describe('Studio agent chat server', () => {
     const applied: { path: string; content: string }[] = []
     const it = chat(
       [
-        { call: { input: {}, name: 'runTests' } },
         {
           call: {
             input: { declaration: 'Greeting', replacement: 'view Greeting() {\n   render Text("Hi")\n}' },
@@ -290,7 +377,7 @@ Describe('Studio agent chat server', () => {
     )
     await it.handle('mode', { mode: 'build' })
     await it.handle('enable', { enabled: true })
-    // The first run is the baseline the model takes before changing anything.
+    // Studio takes the baseline immediately before applying, rather than trusting the model to remember it.
     const asked = await it.handle('send', { message: 'say Hi instead' }) as Record<string, unknown>
     const approvals = asked['pendingApprovals'] as { approvalId: string }[]
 
@@ -304,6 +391,64 @@ Describe('Studio agent chat server', () => {
     Expect(verdict.broke.map(test => test.name)).toEqual(['greets'])
   })
 
+  Test('a source edit during post-change tests makes the exact change verdict stale', async () => {
+    let version = 'v1'
+    let run = 0
+    const applied: { path: string; content: string }[] = []
+    const base = session(applied) as unknown as Record<string, unknown>
+    const project = {
+      ...base,
+      applyAgentFiles: async (request: { edits: readonly { path: string; content: string }[] }) => {
+        applied.push(...request.edits)
+        version = 'v2'
+        return {
+          compile: { message: 'compiled', status: 'compiled' },
+          rolledBack: false,
+          sourceVersions: request.edits.map(edit => ({ path: edit.path, sourceVersion: version })),
+        }
+      },
+      readFile: async (path: string) => ({ content: SOURCE, path, sourceVersion: version }),
+    } as unknown as StudioProjectSession
+    const tests = {
+      run: async () => {
+        run += 1
+        if (run === 2) {
+          version = 'v3-manual'
+        }
+        return { failed: 0, failures: [], passed: 2, status: 'passed' }
+      },
+    }
+    const conversation = conversationForTesting(
+      project,
+      new AgentChatProvider(
+        {},
+        scripted([
+          {
+            call: {
+              input: { declaration: 'Greeting', replacement: 'view Greeting() {\n   render Text("Hi")\n}' },
+              name: 'proposeEdit',
+            },
+          },
+          { call: { input: { changeId: 'change-1' }, name: 'applyChange' } },
+          { text: 'Changed it.' },
+        ]),
+      ),
+    )
+    await conversation.handle('enable', { enabled: true })
+    const asked = await conversation.handle('send', { message: 'say Hi' }, tests as never) as Record<string, unknown>
+    const approvals = asked['pendingApprovals'] as { approvalId: string }[]
+
+    const done = await conversation.handle('respond', {
+      responses: [{ approvalId: approvals[0]!.approvalId, approved: true }],
+    }, tests as never) as Record<string, unknown>
+
+    const verdict = done['verdict'] as Record<string, unknown>
+    Expect(verdict['status']).toBe('unknown')
+    Expect(verdict['versionStatus']).toBe('stale')
+    Expect(verdict['afterVersions']).toEqual([{ path: PATH, sourceVersion: 'v2' }])
+    Expect(verdict['currentVersions']).toEqual([{ path: PATH, sourceVersion: 'v3-manual' }])
+  })
+
   Test('a verdict stays on the turn that ran the checks and out of every later one', async () => {
     const tests = runner([
       { failed: 0, failures: [], passed: 2 },
@@ -311,7 +456,6 @@ Describe('Studio agent chat server', () => {
     ])
     const it = chat(
       [
-        { call: { input: {}, name: 'runTests' } },
         {
           call: {
             input: { declaration: 'Greeting', replacement: 'view Greeting() {\n   render Text("Hi")\n}' },
@@ -343,6 +487,59 @@ Describe('Studio agent chat server', () => {
       unknown
     >[]
     Expect(history.filter(entry => entry['verdict'] !== undefined)).toHaveLength(1)
+  })
+
+  Test('each of two applied changes in one user turn gets its own bound baseline and verdict', async () => {
+    const tests = runner([
+      { failed: 0, failures: [], passed: 2 },
+      { failed: 1, failures: [{ message: 'first broke', name: 'first' }], passed: 1 },
+      { failed: 1, failures: [{ message: 'first broke', name: 'first' }], passed: 1 },
+      {
+        failed: 2,
+        failures: [{ message: 'first broke', name: 'first' }, { message: 'second broke', name: 'second' }],
+        passed: 0,
+      },
+    ])
+    const it = chat(
+      [
+        {
+          call: {
+            input: { declaration: 'Greeting', replacement: 'view Greeting() {\n   render Text("One")\n}' },
+            name: 'proposeEdit',
+          },
+        },
+        { call: { input: { changeId: 'change-1' }, name: 'applyChange' } },
+        {
+          call: {
+            input: { declaration: 'Greeting', replacement: 'view Greeting() {\n   render Text("Two")\n}' },
+            name: 'proposeEdit',
+          },
+        },
+        { call: { input: { changeId: 'change-2' }, name: 'applyChange' } },
+        { text: 'Both changes were measured.' },
+      ],
+      [],
+      tests,
+    )
+    await it.handle('enable', { enabled: true })
+    const firstAsk = await it.handle('send', { message: 'make two changes' }) as Record<string, unknown>
+    const firstApproval = (firstAsk['pendingApprovals'] as { approvalId: string }[])[0]!
+
+    const secondAsk = await it.handle('respond', {
+      responses: [{ approvalId: firstApproval.approvalId, approved: true }],
+    }) as Record<string, unknown>
+    const firstVerdict = secondAsk['verdict'] as Record<string, unknown>
+    const secondApproval = (secondAsk['pendingApprovals'] as { approvalId: string }[])[0]!
+    const done = await it.handle('respond', {
+      responses: [{ approvalId: secondApproval.approvalId, approved: true }],
+    }) as Record<string, unknown>
+    const secondVerdict = done['verdict'] as Record<string, unknown>
+
+    Expect(firstVerdict['changeId']).toBe('change-1')
+    Expect(firstVerdict['status']).toBe('broke')
+    Expect(secondVerdict['changeId']).toBe('change-2')
+    Expect(secondVerdict['status']).toBe('broke')
+    Expect((secondVerdict['broke'] as { name: string }[]).map(failure => failure.name)).toEqual(['second'])
   })
 
   Test('scenario mode withholds the code-change tools until a person allows them', async () => {

@@ -56,6 +56,32 @@ Test('Studio project session resolves one current Tao app and serves contained v
   })
 })
 
+Test('Agent undo shows its reverse diff and refuses to overwrite a later manual edit', async () => {
+  await withStudioProject(async (session, paths) => {
+    const original = await session.readFile('Garden.tao')
+    const appliedContent = original.content.replace('Text("Before")', 'Text("Agent")')
+    const applied = await session.applyAgentFiles({
+      edits: [{ content: appliedContent, path: 'Garden.tao' }],
+      expect: [{ path: 'Garden.tao', sourceVersion: original.sourceVersion }],
+      writeId: 'agent-apply',
+    })
+
+    Expect(applied.rolledBack).toBe(false)
+    const preview = session.agentUndoPreview()
+    Expect(preview?.restored).toEqual(['Garden.tao'])
+    Expect(preview?.diff.includes('Text("Agent")')).toBe(true)
+    Expect(preview?.diff.includes('Text("Before")')).toBe(true)
+
+    const manualContent = appliedContent.replace('Text("Agent")', 'Text("Manual")')
+    await FS.writeText(paths['Garden.tao'], manualContent)
+
+    await Expect(session.undoAgentFiles('agent-undo')).rejects.toThrow(
+      'Studio source changed before the edit was applied',
+    )
+    Expect(await FS.readText(paths['Garden.tao'])).toBe(manualContent)
+  })
+})
+
 Test('Studio project open repairs generated Studio sources to read-only mode', async () => {
   await withTaoFiles('tao-studio-generated-open-', {
     '@/studio/View1.tao': 'public view View1() { }\n',
